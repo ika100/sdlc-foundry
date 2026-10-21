@@ -57,6 +57,7 @@ The `/svc:*` orchestrators route to `<plugin>:<role>` through `cplat shape` (`sc
 
 - `.github/workflows/ci.yml`: a `smoke-test-<id>` job that renders the template (`--skip-tasks`, plus the optional-feature variants) and runs the real build/test/lint with the toolchain.
 - `devbox.json` (platform): a `smoke-<id>` recipe, added to `smoke`.
+- The shape's own workflows: every job `runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}`, the devbox install step guarded with `if: runner.environment == 'github-hosted'`, and a `docker` matrix that `vars.CI_DOCKER_MATRIX` can replace ([self-hosted runners](self-hosted-runners.md), checked by `tests/cplat/test_ci_templates.py`).
 - Docs: `docs/AGENTS.md` (agents + model rationale), `docs/ADOPTING.md` (migration section), README tables, `docs/CHANGELOG.md`, and an ADR for any decision the PRD left open (stack choices).
 
 ## 6. Keeping dependency pins current

@@ -99,12 +99,21 @@ def test_plans_cover_the_criteria_of_their_spec():
 SPEC_FILES = ["docs/specs/README.md", "scripts/spec-check.sh", ".github/workflows/specs.yml"]
 
 
+def _as_rendered(shape_id, rel):
+    """The file as the template writes it: templates without a suffix render every file, so GitHub expressions are escaped there."""
+    text = (template(shape_id) / rel).read_text()
+    if yaml.safe_load((template(shape_id) / "copier.yml").read_text()).get("_templates_suffix", ".jinja") == "":
+        text = text.replace("${{ '{{' }}", "${{").replace("{{ '}}' }}", "}}")
+        assert "{{" not in text.replace("${{", "").replace("}}", "") and "{%" not in text and "{#" not in text, f"{shape_id} renders {rel}"
+    return text
+
+
 @pytest.mark.parametrize("rel", SPEC_FILES)
 def test_every_template_ships_the_same_spec_files(rel):
-    copies = {(template(s) / rel).read_text() for s in IDS}
+    copies = {_as_rendered(s, rel) for s in IDS}
     assert len(copies) == 1, f"{rel} differs between templates"
     text = copies.pop()
-    assert "{{" not in text and "{%" not in text and "{#" not in text  # rendered verbatim by templates without a suffix
+    assert "{%" not in text and "{#" not in text
 
 
 def test_the_spec_workflow_warns_and_uses_pinned_actions():

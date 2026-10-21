@@ -91,3 +91,66 @@ def test_the_web_baseline_finds_a_planted_secret_quietly(tmp_path):
     assert clean.returncode == 0 and "No plugins" not in clean.stdout + clean.stderr
     leak = hook("leak.ts")
     assert leak.returncode == 1 and "AWS" in leak.stdout
+
+
+# ---------------- spec 064: self-hosted CI runners through repository variables ----------------
+
+ALL_TEMPLATES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "gitops-app"]
+RUNNER = re.compile(r"runs-on: \$\{\{ ('\{\{' \}\} )?vars\.CI_RUNNER \|\| 'ubuntu-latest' ")
+
+
+def _workflows(template: str) -> list[Path]:
+    return sorted((TEMPLATES / template / ".github" / "workflows").glob("*.yml"))
+
+
+@pytest.mark.parametrize("template", ALL_TEMPLATES)
+def test_jobs_run_on_the_ci_runner_variable(template):
+    """AC-064.1: no job is pinned to ubuntu-latest; the repository variable CI_RUNNER picks the runner, GitHub-hosted by default."""
+    for wf in _workflows(template):
+        text = wf.read_text()
+        assert "runs-on: ubuntu-latest" not in text, f"{wf.relative_to(TEMPLATES)} still pins ubuntu-latest"
+        for line in re.findall(r"^\s*runs-on: .*$", text, re.M):
+            assert RUNNER.search(line) or "matrix.runner" in line, f"{wf.relative_to(TEMPLATES)}: {line.strip()}"
+
+
+@pytest.mark.parametrize("template", ALL_TEMPLATES)
+def test_devbox_is_installed_only_on_github_hosted_runners(template):
+    """AC-064.2: self-hosted runner images ship devbox; the install action (systemd Nix daemon) only runs on GitHub-hosted runners."""
+    for wf in _workflows(template):
+        steps = re.split(r"\n(?=\s+- )", wf.read_text())
+        for step in (s for s in steps if "jetify-com/devbox-install-action" in s):
+            assert "if: runner.environment == 'github-hosted'" in step, f"{wf.relative_to(TEMPLATES)}: devbox install without the guard"
+
+
+@pytest.mark.parametrize("template", IMAGE_TEMPLATES)
+def test_docker_matrix_can_come_from_a_repository_variable(template):
+    """AC-064.3: CI_DOCKER_MATRIX replaces the docker job's architecture matrix; without it the default (amd64, + arm64 on main/tags) stays."""
+    text = (TEMPLATES / template / ".github" / "workflows" / "ci.yml").read_text()
+    include = re.search(r"^\s*include: (.*)$", text, re.M).group(1)
+    assert "fromJSON(vars.CI_DOCKER_MATRIX || (github.event_name == 'push'" in include, include
+    assert '"arch":"arm64","runner":"ubuntu-24.04-arm"' in include and include.count("(") == include.count(")")
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not shutil.which("uv"), reason="needs uv")
+@pytest.mark.parametrize("template", ["service-python", "library-python", "service-go"])
+def test_rendered_workflows_keep_the_expressions(template, tmp_path):
+    """AC-064.1 AC-064.2 AC-064.3: the Jinja escaping survives rendering, both for templates that render every file and for `.jinja` ones."""
+    import yaml
+
+    repo = _render(template, tmp_path / "todo-api", "todo-api")
+    text = (repo / ".github" / "workflows" / "ci.yml").read_text()
+    yaml.safe_load(text)
+    assert "runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}" in text and "'{{'" not in text
+    assert "if: runner.environment == 'github-hosted'" in text
+    if template != "library-python":
+        assert "fromJSON(vars.CI_DOCKER_MATRIX || (github.event_name" in text
+
+
+def test_self_hosted_runner_guide_covers_variables_image_and_arc():
+    """AC-064.4: the guide names the variables, the runner image's needs and the ARC lessons."""
+    guide = (ROOT / "docs" / "self-hosted-runners.md").read_text()
+    for needle in ("CI_RUNNER", "CI_DOCKER_MATRIX", "single-user Nix", "`xz`", "`gh`", "Docker in Docker",
+                   "runner-image/Dockerfile", "repository-level runners", "runnerScaleSetName", "Administration: read and write",
+                   "`/nix`", "/var/lib/docker", "`/tmp` as a memory", "Isolation"):
+        assert needle in guide, needle

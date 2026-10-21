@@ -36,30 +36,33 @@ concurrency:
 jobs:
   quality:
     name: quality (spotless + checkstyle + compile)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
         with:
           enable-cache: true
       - run: devbox run quality
 
   test:
     name: test (mvn verify + JaCoCo)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
         with:
           enable-cache: true
       - run: devbox run test
 
   security:
     name: security (OWASP dependency-check + detect-secrets)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
         with:
           enable-cache: true
       - run: devbox run security
@@ -68,7 +71,7 @@ jobs:
 
   pr-title:
     name: pr-title (conventional commits)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     if: github.event_name == 'pull_request'
     steps:
       - name: Validate PR title
@@ -86,7 +89,7 @@ jobs:
 
   branch-name:
     name: branch-name (naming convention)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     if: github.event_name == 'pull_request'
     continue-on-error: true
     steps:
@@ -113,7 +116,8 @@ jobs:
       matrix:
         # Each architecture builds natively (no QEMU). Developers on Apple silicon run arm64 k3d/Docker nodes and cannot
         # pull an amd64-only image ("no match for platform in manifest"), so main/tags publish both; PR builds are amd64 only.
-        include: ${{ fromJSON(github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && '[{"arch":"amd64","runner":"ubuntu-latest"},{"arch":"arm64","runner":"ubuntu-24.04-arm"}]' || '[{"arch":"amd64","runner":"ubuntu-latest"}]') }}
+        # vars.CI_DOCKER_MATRIX (JSON, e.g. '[{"arch":"amd64","runner":"lan-myrepo"}]') replaces the matrix on self-hosted runners
+        include: ${{ fromJSON(vars.CI_DOCKER_MATRIX || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && '[{"arch":"amd64","runner":"ubuntu-latest"},{"arch":"arm64","runner":"ubuntu-24.04-arm"}]' || '[{"arch":"amd64","runner":"ubuntu-latest"}]')) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -190,7 +194,7 @@ jobs:
     name: docker (publish multi-arch manifest)
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: docker
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write
@@ -234,7 +238,7 @@ jobs:
     # Spec 062 / ADR-027: the gitops-app's pin-dev workflow opens a PR pinning dev to sha-<7> and merges it after CI.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: docker-publish
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
     steps:

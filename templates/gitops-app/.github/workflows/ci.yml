@@ -20,27 +20,29 @@ concurrency:
 jobs:
   quality:
     name: quality (render-check + kustomize build + kubeconform + labels)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
         with:
           enable-cache: true
       - run: devbox run quality
 
   security:
     name: security (detect-secrets)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
         with:
           enable-cache: true
       - run: devbox run security
 
   pr-title:
     name: pr-title (conventional commits)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     if: github.event_name == 'pull_request'
     steps:
       - name: Validate PR title

@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **064 — self-hosted CI runners without editing workflows** ([guide](self-hosted-runners.md)). Every template job runs on `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`, the devbox install step runs only on GitHub-hosted runners (self-hosted images ship devbox), and service `docker` jobs take their architecture matrix from `vars.CI_DOCKER_MATRIX` when it is set. Nothing changes for repositories without the variables. **To move a repository to self-hosted runners:** `/shared:update-service`, then `gh variable set CI_RUNNER --body <runner label>` (and `CI_DOCKER_MATRIX` for service shapes).
+
 ## [4.1.0] — 2026-10-09
 
 **Second end-to-end run, fixed.** A second feature on the existing todo product with v4.0.0 ([run log](e2e/2026-10-09-todo-second-feature.md)) found four high issues; this release fixes them (specs 060–063):
