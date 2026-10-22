@@ -6,6 +6,22 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [4.3.0] — 2026-10-22
+
+**Ship runs lose minutes, not an hour, to CI, and they carry their gitops changes.**
+- **`cplat ship land`** stops at the first red check and reruns a stale or stuck run once.
+- **`devbox run ci`** runs CI's gates locally, and `ship pr` refuses to push while it is red.
+- **CI runs once per change** (push only on `main` and tags).
+- **The secrets scan answers the same everywhere**: pinned scanners, the standard filters, no gibberish filter.
+- **Plans carry gitops tasks**, which ship opens and merges around the deploy.
+- **The templates ask for fewer permissions** on the routine steps.
+
+**Action for existing repos:**
+1. Run `/plugin marketplace update` (svc 3.2.0, shared 0.12.1).
+2. Run `/shared:update-service` in every repo.
+3. Run `devbox run secrets-baseline`, audit what it adds, and commit the baseline. It is project-owned, so the update does not replace it.
+4. Repos with extra CI jobs add them to their `ci` script.
+
 - **Templates: fewer permission prompts.** The generated `.claude/settings.json` allows the routine, reversible steps the SDLC flows take: `cplat` (it guards its own outward steps: it pushes feature branches only and merges only on green CI), signed-off commits (`git commit -s -m`, which the DCO requires and the old `git commit -m *` rule never matched), `git pull --ff-only`, removing agent worktree branches, `gh pr create/checks/diff/comment`, `gh run rerun/cancel/watch`, `gh workflow run`, `gh issue comment`, CI log and check-run reads, `kubectl --context <ctx> get/describe/logs`, and local `docker build/run --rm/rm/rmi`. Still asked: force push, push to main, reset/clean/rebase/amend, deleting other branches, `kubectl delete`/rollout, manual merges, releases, `docker push`, closing issues. **Action:** `/shared:update-service`.
 - **`devbox run ci`: the CI gate locally (#105), svc 3.2.0.** Every template has a `ci` script with the gates its CI workflow runs (`quality` + `test` + `security`; gitops-apps: `validate` + `security`), and `shapes.py` requires it. `/svc:build` Phase 3 ends with one `devbox run ci` on the staged tree, and `/svc:ship` runs it before `ship pr` and after every CI fix. A red check is then found before the push, not after a CI round on the runners. **Action:** `/shared:update-service`; repos with extra CI jobs (e.g. `chart-lint`) add them to their `ci` script.
 - **Templates: CI runs once per change (#104).** `ci.yml` in every template triggers `push` only on `main` (and `v*.*.*` tags). Feature, fix and other branches run CI through `pull_request` alone; before, every commit on an open PR ran each job twice, which queued PR jobs behind the duplicates on small self-hosted runner sets. In gitops-apps, pin-dev keeps running CI through `workflow_call`. **Action:** `/shared:update-service`.
