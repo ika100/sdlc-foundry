@@ -131,11 +131,21 @@ def test_docker_matrix_can_come_from_a_repository_variable(template):
     assert '"arch":"arm64","runner":"ubuntu-24.04-arm"' in include and include.count("(") == include.count(")")
 
 
+@pytest.mark.parametrize("template", IMAGE_TEMPLATES)
+def test_docker_cache_only_on_github_hosted_runners(template):
+    """AC-064.5: the docker job reads and writes the GitHub Actions cache only on GitHub-hosted runners."""
+    text = (TEMPLATES / template / ".github" / "workflows" / "ci.yml").read_text()
+    lines = re.findall(r"^\s*cache-(?:from|to): .*$", text, re.M)
+    assert len(lines) == 2, lines
+    for line in lines:
+        assert "runner.environment == 'github-hosted' && format('type=gha," in line and "|| ''" in line, line
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(not shutil.which("uv"), reason="needs uv")
 @pytest.mark.parametrize("template", ["service-python", "library-python", "service-go"])
 def test_rendered_workflows_keep_the_expressions(template, tmp_path):
-    """AC-064.1 AC-064.2 AC-064.3: the Jinja escaping survives rendering, both for templates that render every file and for `.jinja` ones."""
+    """AC-064.1 AC-064.2 AC-064.3 AC-064.5: the Jinja escaping survives rendering, both for templates that render every file and for `.jinja` ones."""
     import yaml
 
     repo = _render(template, tmp_path / "todo-api", "todo-api")
@@ -145,6 +155,7 @@ def test_rendered_workflows_keep_the_expressions(template, tmp_path):
     assert "if: runner.environment == 'github-hosted'" in text
     if template != "library-python":
         assert "fromJSON(vars.CI_DOCKER_MATRIX || (github.event_name" in text
+        assert "cache-from: ${{ runner.environment == 'github-hosted' && format('type=gha,scope={0}', matrix.arch) || '' }}" in text
 
 
 def test_self_hosted_runner_guide_covers_variables_image_and_arc():

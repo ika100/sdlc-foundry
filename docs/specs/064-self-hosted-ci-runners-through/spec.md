@@ -22,6 +22,7 @@ Every template workflow hard-codes `runs-on: ubuntu-latest` and installs Nix and
 - **AC-064.2** Given a job with the `devbox-install-action` step, when it runs on a self-hosted runner, then the step is skipped (`if: runner.environment == 'github-hosted'`) and the job uses the devbox of the runner image.
 - **AC-064.3** Given a service shape's `docker` job, when the repository variable `CI_DOCKER_MATRIX` holds a JSON matrix, then that matrix replaces the default architecture matrix (amd64, plus native arm64 on `main` and tags); without it the default stays.
 - **AC-064.4** Given `docs/self-hosted-runners.md`, when an owner reads it, then it names both variables with examples, what a runner image needs (devbox with single-user Nix, xz, gh, Docker for `docker` jobs and `services:`), a reference image, and the ARC lessons: per-repository scale sets on personal accounts, unique scale-set names, the credential, cache volumes for `/nix`, Docker and `/tmp`, and the isolation trade-off of shared caches.
+- **AC-064.5** Given a service shape's `docker` job, when it runs on a self-hosted runner, then the build neither reads nor writes the GitHub Actions cache (`cache-from`/`cache-to` only when `runner.environment == 'github-hosted'`): exporting every layer (`mode=max`) over the site's uplink took 4–6 minutes per build on the lan runners and once hung; GitHub-hosted runners keep the cache.
 
 ## Non-goals
 
@@ -36,3 +37,4 @@ Every template workflow hard-codes `runs-on: ubuntu-latest` and installs Nix and
 - 2026-10-21 approved
 - 2026-10-21 building
 - 2026-10-21 done
+- 2026-10-22 amended: AC-064.5, no GitHub Actions cache for image builds on self-hosted runners (ai-ops #20 on lan-ai-ops)

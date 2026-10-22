@@ -67,7 +67,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [061-plan-checks-leave-completed-plans-alone](specs/061-plan-checks-leave-completed-plans-alone/spec.md) — Plan checks leave completed plans alone | P1 | done | 4 |  |
 | [062-dev-runs-every-merged-build](specs/062-dev-runs-every-merged-build/spec.md) — dev runs every merged build | P1 | done | 6 |  |
 | [063-acceptance-test-diff-looks-only-at-test](specs/063-acceptance-test-diff-looks-only-at-test/spec.md) — Acceptance-test diff looks only at test files | P1 | done | 4 |  |
-| [064-self-hosted-ci-runners-through](specs/064-self-hosted-ci-runners-through/spec.md) — Self-hosted CI runners through repository variables | P1 | done | 4 |  |
+| [064-self-hosted-ci-runners-through](specs/064-self-hosted-ci-runners-through/spec.md) — Self-hosted CI runners through repository variables | P1 | done | 5 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
