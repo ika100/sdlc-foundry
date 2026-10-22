@@ -17,7 +17,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 - **071 — `cplat adopt --type <shape>`.** Brings a repo that was not created from a template onto the platform in one commit without overwriting its files.
 - **Fix:** `/shared:update-service` works in a git worktree (it refused a `.git` file).
 
-- **064 — self-hosted CI runners without editing workflows** ([guide](self-hosted-runners.md)). Every template job runs on `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`, the devbox install step runs only on GitHub-hosted runners (self-hosted images ship devbox), and service `docker` jobs take their architecture matrix from `vars.CI_DOCKER_MATRIX` when it is set. Nothing changes for repositories without the variables. **To move a repository to self-hosted runners:** `/shared:update-service`, then `gh variable set CI_RUNNER --body <runner label>` (and `CI_DOCKER_MATRIX` for service shapes).
+- **064 — self-hosted CI runners without editing workflows** ([guide](self-hosted-runners.md)). Every template job runs on `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`, the devbox install step runs only on GitHub-hosted runners (self-hosted images ship devbox), and service `docker` jobs take their architecture matrix from `vars.CI_DOCKER_MATRIX` when it is set. Nothing changes for repositories without the variables. **To move a repository to self-hosted runners:** `/shared:update-service`, then `gh variable set CI_RUNNER --body <runner label>` (and `CI_DOCKER_MATRIX` for service shapes). On self-hosted runners the `docker` job no longer reads or writes the GitHub Actions cache (AC-064.5): exporting every layer over a home uplink cost 4–6 min per build.
 
 ## [4.1.0] — 2026-10-09
 

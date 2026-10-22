@@ -138,8 +138,10 @@ jobs:
           context: .
           platforms: linux/${{ '{{' }} matrix.arch {{ '}}' }}
           outputs: type=image,name=ghcr.io/${{ '{{' }} github.repository {{ '}}' }},push-by-digest=true,name-canonical=true,push=${{ '{{' }} env.PUBLISH {{ '}}' }}
-          cache-from: type=gha,scope=${{ '{{' }} matrix.arch {{ '}}' }}
-          cache-to: type=gha,mode=max,scope=${{ '{{' }} matrix.arch {{ '}}' }}
+          # the GitHub Actions cache only on GitHub-hosted runners: on self-hosted ones exporting every layer over the
+          # site's uplink costs more than it saves (docs/self-hosted-runners.md)
+          cache-from: ${{ '{{' }} runner.environment == 'github-hosted' && format('type=gha,scope={0}', matrix.arch) || '' {{ '}}' }}
+          cache-to: ${{ '{{' }} runner.environment == 'github-hosted' && format('type=gha,mode=max,scope={0}', matrix.arch) || '' {{ '}}' }}
 
       - name: Scan the image for fixable HIGH/CRITICAL vulnerabilities
         if: env.PUBLISH == 'true'

@@ -69,7 +69,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [061-plan-checks-leave-completed-plans-alone](specs/061-plan-checks-leave-completed-plans-alone/spec.md) — Plan checks leave completed plans alone | P1 | done | 4 |  |
 | [062-dev-runs-every-merged-build](specs/062-dev-runs-every-merged-build/spec.md) — dev runs every merged build | P1 | done | 6 |  |
 | [063-acceptance-test-diff-looks-only-at-test](specs/063-acceptance-test-diff-looks-only-at-test/spec.md) — Acceptance-test diff looks only at test files | P1 | done | 4 |  |
-| [064-self-hosted-ci-runners-through](specs/064-self-hosted-ci-runners-through/spec.md) — Self-hosted CI runners through repository variables | P1 | done | 4 |  |
+| [064-self-hosted-ci-runners-through](specs/064-self-hosted-ci-runners-through/spec.md) — Self-hosted CI runners through repository variables | P1 | done | 5 |  |
 | [066-unattended-runs-stop-only-when-done](specs/066-unattended-runs-stop-only-when-done/spec.md) — Unattended runs stop only when done or blocked | P1 | done | 3 |  |
 | [068-done-means-verified](specs/068-done-means-verified/spec.md) — Done means verified | P1 | done | 3 |  |
 | [069-external-services-in-services-yaml](specs/069-external-services-in-services-yaml/spec.md) — External services in services.yaml | P1 | done | 4 |  |

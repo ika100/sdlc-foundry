@@ -55,6 +55,10 @@ and `gha-runner-scale-set`) runs ephemeral runner pods that scale to zero. Thing
   - Docker's `/var/lib/docker` (spell the dind sidecar out: the chart's `containerMode: dind` cannot mount a volume;
     guard it with a lock so only one daemon uses it) and the package manager's cache: the image build drops from
     ~10 min to ~30 s with buildx `driver: docker`.
+  - The template's `docker` job uses the GitHub Actions cache (`type=gha`) only on GitHub-hosted runners. On a
+    self-hosted runner the export of every layer (`mode=max`) goes over the site's uplink: 4–6 min per build on the
+    lan runners, and one export hung. Without a persistent Docker volume the build simply starts cold (~4 min for a
+    Go service).
   - `/tmp` as a memory `emptyDir` when tests write SQLite or other fsync-heavy files and the node's disk syncs slowly
     (~7 ms per synced write on a ZFS-backed VM disk made pytest 3× slower).
 - **Isolation.** Cache volumes are shared between jobs, so a job can leave something behind for the next one. Keep
