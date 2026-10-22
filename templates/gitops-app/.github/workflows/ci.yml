@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [main, 'feature/**', 'fix/**', 'chore/**', 'docs/**', 'promote/**', 'compose/**']
+    # other branches get CI from their PR (and pin-dev through workflow_call) only; a push trigger on them too ran
+    # every job twice (sdlc-foundry #104)
+    branches: [main]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, edited]   # edited: a corrected PR title is checked again
