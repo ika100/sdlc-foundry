@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [4.2.1] — 2026-10-22
+
+**External Helm charts keep their release name.** Taking over a chart that already ran no longer fails with `spec.selector: field is immutable`. **Action:** `/shared:update-service` in gitops-apps with a `helm` external entry. No plugin changes.
+
 - **Fix (069): external Helm charts keep their release name.** The chart Application sets `helm.releaseName` to the service name (`external.helm.releaseName` overrides it). Before, Argo named the release after the Application (`<svc>-<env>-chart`), which changes the chart's selector labels, so taking over a chart that already ran failed with `spec.selector: field is immutable`. **Action:** `/shared:update-service` in gitops-apps with a `helm` external entry, then `uv run scripts/render.py`.
 
 ## [4.2.0] — 2026-10-22
