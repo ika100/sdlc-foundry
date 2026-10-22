@@ -3,16 +3,8 @@ name: ci
 on:
   push:
     paths-ignore: ['**.md', 'docs/**', '.claude/**']
-    branches:
-      - main
-      - 'feature/**'
-      - 'fix/**'
-      - 'chore/**'
-      - 'docs/**'
-      - 'refactor/**'
-      - 'perf/**'
-      - 'test/**'
-      - 'release/**'
+    # branches run CI through pull_request only: a push trigger on them too ran every job twice (sdlc-foundry #104)
+    branches: [main]
     tags:
       - 'v*.*.*'
   pull_request:

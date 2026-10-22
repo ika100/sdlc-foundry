@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Templates: CI runs once per change (#104).** `ci.yml` in every template triggers `push` only on `main` (and `v*.*.*` tags). Feature, fix and other branches run CI through `pull_request` alone; before, every commit on an open PR ran each job twice, which queued PR jobs behind the duplicates on small self-hosted runner sets. In gitops-apps, pin-dev keeps running CI through `workflow_call`. **Action:** `/shared:update-service`.
 - **CI: template pin bumps no longer get stranded.** `bump-template-pins` opens its pull request with a GitHub App token (repository variable `BUMP_APP_CLIENT_ID`, secret `BUMP_APP_PRIVATE_KEY`; `BUMP_TOKEN` still works), so CI runs on it, and the job now fails when it cannot open the pull request instead of passing with a warning. Two weekly bumps had been pushed without a pull request.
 - **Docs: the kro spike is kept.** [`docs/spikes/kro.md`](spikes/kro.md) is now on main and linked from ADR-020; rendered manifests stay the only addon backend.
 
