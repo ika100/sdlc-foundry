@@ -2,8 +2,8 @@ name: ci
 
 on:
   push:
-    # branches run CI through pull_request (and pin-dev through workflow_call) only; a push trigger on them too ran every
-    # job twice (sdlc-foundry #104)
+    # other branches get CI from their PR (and pin-dev through workflow_call) only; a push trigger on them too ran
+    # every job twice (sdlc-foundry #104)
     branches: [main]
   pull_request:
     branches: [main]
