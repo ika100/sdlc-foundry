@@ -309,3 +309,18 @@ def test_update_that_brings_pin_dev_names_the_token_step(tmp_path, capsys):
     assert update.main(["--repo", str(repo), "--skip-tasks"]) == 0
     out = capsys.readouterr().out
     assert "pin-dev:" in ci.read_text() and "gh secret set GITOPS_TOKEN -R" in out and "acme/shop" in out
+
+
+def test_update_runs_in_a_git_worktree(tmp_path):
+    """A worktree has a .git file, not a directory; update-service must still accept it."""
+    import update
+    main_repo = tmp_path / "svc"
+    main_repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=main_repo, check=True)
+    (main_repo / ".copier-answers.yml").write_text("_src_path: gh:ika100/sdlc-foundry/templates/service-go\nproject_name: svc\n")
+    subprocess.run(["git", "add", "-A"], cwd=main_repo, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"], cwd=main_repo, check=True)
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "worktree", "add", "-q", "-b", "chore/x", str(wt)], cwd=main_repo, check=True)
+    assert (wt / ".git").is_file()
+    assert update.resolve(["--repo", str(wt), "--dry-run"])["shape"] == "service-go"

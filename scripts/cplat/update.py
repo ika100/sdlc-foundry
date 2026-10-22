@@ -35,7 +35,7 @@ def detect_shape(repo: Path) -> str:
 def resolve(argv: list[str]) -> dict:
     ns = build_parser().parse_args(argv)
     repo = Path(ns.repo).resolve()
-    if not (repo / ".git").is_dir():
+    if not (repo / ".git").exists():   # a file in a git worktree
         raise PlatformError(f"{repo} is not a git repository")
     if not (repo / ".copier-answers.yml").is_file():
         raise PlatformError("no .copier-answers.yml in the repo", hint="see docs/ADOPTING.md → 'Adopt the template for skeleton updates'")
