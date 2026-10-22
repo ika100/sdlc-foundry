@@ -1,7 +1,7 @@
 ---
 spec_id: 073-secrets-scan-agrees-locally-and-in-ci
 title: Secrets scan agrees locally and in CI
-status: approved
+status: done
 priority: P1
 tracks: [103]
 ---
@@ -39,3 +39,5 @@ None.
 
 - 2026-10-22 created from issue #103
 - 2026-10-22 approved
+- 2026-10-22 building
+- 2026-10-22 done

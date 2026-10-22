@@ -1,7 +1,7 @@
 ---
 spec_id: 075-devbox-run-ci-is-the-ci-gate
 title: devbox run ci is the CI gate, locally
-status: approved
+status: done
 priority: P1
 tracks: [105]
 ---
@@ -39,3 +39,5 @@ None.
 
 - 2026-10-22 created from issue #105
 - 2026-10-22 approved
+- 2026-10-22 building
+- 2026-10-22 done

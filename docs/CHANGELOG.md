@@ -20,6 +20,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
   - The templates pin `detect-secrets@1.5.0` and `trivy@0.74.0`.
   - The template baselines list the standard filters. Before, `filters_used: []` turned them all off, so `# pragma: allowlist secret` had no effect. They no longer carry the gibberish filter, which only some machines can apply.
   - New recipe `devbox run secrets-baseline` refreshes the baseline with fixed flags.
+  - `secrets-scan` passes the same `--disable-filter`, so a hook that rewrites the baseline (line numbers moved) does not add the gibberish filter back.
   - The Python templates call the devbox binary instead of `uv run`.
   - **Action:** run `/shared:update-service`. The baseline is project-owned, so then run `devbox run secrets-baseline` and commit the result. (#103)
 - **Docs (074): a persistent Docker volume is the build cache on self-hosted runners.** `docs/self-hosted-runners.md` recommends one dind `/var/lib/docker` volume per runner set and explains why there is no registry cache (it uploads every layer on each main build). The trigger change is #107 above; spec 074 records both. (#104)
@@ -31,7 +32,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
   - `ship deploy` merges the `after-release` PRs once dev runs the pin, then waits for every app they name. A SyncError stops the deploy.
   - The run ends with the human steps as a checklist.
   - The architect plans CRD field removals as expand/contract.
-  - Validating Components against the service branch's CRD in gitops CI is a follow-up. (#106)
+  - Validating Components against the service branch's CRD in gitops CI is the follow-up #110. (#106)
 
 ## [4.2.1] — 2026-10-22
 

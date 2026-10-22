@@ -1,7 +1,7 @@
 ---
 spec_id: 072-ship-land-fails-fast-and-heals-stuck-checks
 title: Ship land fails fast and heals stuck checks
-status: approved
+status: done
 priority: P1
 tracks: [102]
 ---
@@ -42,3 +42,5 @@ None.
 
 - 2026-10-22 created from issue #102
 - 2026-10-22 approved
+- 2026-10-22 building
+- 2026-10-22 done

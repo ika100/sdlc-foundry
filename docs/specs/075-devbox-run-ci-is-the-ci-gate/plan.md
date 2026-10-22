@@ -28,7 +28,7 @@ tasks:
 
 ## t1 — ci recipe and shape contract
 
-**Covers:** AC-075.1 (the recipes themselves are written with spec 073's t1)
+**Covers:** AC-075.1 — the recipes, the shape contract and the /svc:build gate landed first as #108; this spec adds secrets-baseline to the contract and the test
 
 ## t2 — ship pr runs devbox run ci
 

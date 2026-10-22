@@ -23,7 +23,7 @@ tasks:
 
 ## t1 — CI push triggers
 
-**Covers:** AC-074.1
+**Covers:** AC-074.1 — landed first as #107; this spec's test checks it.
 
 ## t2 — Runner guide
 

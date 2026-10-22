@@ -1,7 +1,7 @@
 ---
 spec_id: 076-ship-carries-the-gitops-changes-of-a-spec
 title: Ship carries the gitops changes of a spec
-status: approved
+status: done
 priority: P1
 tracks: [106]
 ---
@@ -42,3 +42,5 @@ None.
 
 - 2026-10-22 created from issue #106
 - 2026-10-22 approved
+- 2026-10-22 building
+- 2026-10-22 done

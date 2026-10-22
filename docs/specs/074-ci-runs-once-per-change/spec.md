@@ -1,7 +1,7 @@
 ---
 spec_id: 074-ci-runs-once-per-change
 title: CI runs once per change
-status: approved
+status: done
 priority: P1
 tracks: [104]
 ---
@@ -38,3 +38,5 @@ None.
 
 - 2026-10-22 created from issue #104
 - 2026-10-22 approved
+- 2026-10-22 building
+- 2026-10-22 done

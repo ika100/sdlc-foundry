@@ -74,6 +74,11 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [068-done-means-verified](specs/068-done-means-verified/spec.md) — Done means verified | P1 | done | 3 |  |
 | [069-external-services-in-services-yaml](specs/069-external-services-in-services-yaml/spec.md) — External services in services.yaml | P1 | done | 4 |  |
 | [070-headless-runs-resume-until-finished](specs/070-headless-runs-resume-until-finished/spec.md) — Headless runs resume until finished | P1 | done | 4 |  |
+| [072-ship-land-fails-fast-and-heals-stuck-checks](specs/072-ship-land-fails-fast-and-heals-stuck-checks/spec.md) — Ship land fails fast and heals stuck checks | P1 | done | 5 | #102 |
+| [073-secrets-scan-agrees-locally-and-in-ci](specs/073-secrets-scan-agrees-locally-and-in-ci/spec.md) — Secrets scan agrees locally and in CI | P1 | done | 3 | #103 |
+| [074-ci-runs-once-per-change](specs/074-ci-runs-once-per-change/spec.md) — CI runs once per change | P1 | done | 2 | #104 |
+| [075-devbox-run-ci-is-the-ci-gate](specs/075-devbox-run-ci-is-the-ci-gate/spec.md) — devbox run ci is the CI gate, locally | P1 | done | 3 | #105 |
+| [076-ship-carries-the-gitops-changes-of-a-spec](specs/076-ship-carries-the-gitops-changes-of-a-spec/spec.md) — Ship carries the gitops changes of a spec | P1 | done | 6 | #106 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
