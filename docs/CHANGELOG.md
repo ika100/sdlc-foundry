@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Templates: fewer permission prompts.** The generated `.claude/settings.json` allows the routine, reversible steps the SDLC flows take: `cplat` (it guards its own outward steps: it pushes feature branches only and merges only on green CI), signed-off commits (`git commit -s -m`, which the DCO requires and the old `git commit -m *` rule never matched), `git pull --ff-only`, removing agent worktree branches, `gh pr create/checks/diff/comment`, `gh run rerun/cancel/watch`, `gh workflow run`, `gh issue comment`, CI log and check-run reads, `kubectl --context <ctx> get/describe/logs`, and local `docker build/run --rm/rm/rmi`. Still asked: force push, push to main, reset/clean/rebase/amend, deleting other branches, `kubectl delete`/rollout, manual merges, releases, `docker push`, closing issues. **Action:** `/shared:update-service`.
 - **CI: template pin bumps no longer get stranded.** `bump-template-pins` opens its pull request with a GitHub App token (repository variable `BUMP_APP_CLIENT_ID`, secret `BUMP_APP_PRIVATE_KEY`; `BUMP_TOKEN` still works), so CI runs on it, and the job now fails when it cannot open the pull request instead of passing with a warning. Two weekly bumps had been pushed without a pull request.
 - **Docs: the kro spike is kept.** [`docs/spikes/kro.md`](spikes/kro.md) is now on main and linked from ADR-020; rendered manifests stay the only addon backend.
 
