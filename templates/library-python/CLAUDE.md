@@ -29,6 +29,7 @@ Canonical `devbox run` scripts:
 | `secrets-scan` | detect-secrets |
 | `bandit` | bandit |
 | `security` | audit + secrets-scan + bandit |
+| `ci` | `quality` + `test` + `security`: the gates CI runs; run it before every push |
 
 **Rule for every agent: never call `ruff`, `mypy`, `pytest`, `pip`, or `uv add` directly. Always `devbox run <script>`.**
 

@@ -33,6 +33,7 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 | `audit` | With `NVD_API_KEY` set: OWASP Dependency-Check (fails at CVSS ≥ 7). Without it: `trivy fs` for HIGH/CRITICAL (accepted risks go in `.trivyignore`, each with a reason) |
 | `secrets-scan` | detect-secrets against `.secrets.baseline.json` |
 | `security` | `audit` + `secrets-scan` |
+| `ci` | `quality` + `test` + `security`: the gates CI runs; run it before every push |
 | `image-build` | `docker build` → `{{ project_name }}:scan` (multi-stage, distroless) |
 | `image-scan` | trivy against `{{ project_name }}:scan` |
 

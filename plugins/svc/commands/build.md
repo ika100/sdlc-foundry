@@ -97,6 +97,8 @@ Reconcile: quality failures → coder (lint/type only), tester bugs → coder; a
 
 After the fan-out, run `cplat spec test-diff $RED` once more (the quality agent ran `lint-fix` too); exit 1 stops the build as in Phase 2.
 
+**CI gate:** stage the tree (`git add -u`, plus new files the build created) and run `devbox run ci` once: the same gates the CI workflow runs, so a red check is found here and not after a push. Red → the coder of the touched task (lint, test or baseline fixes only; acceptance tests stay fixed), at most 2 rounds; then escalate. Commit what it changed.
+
 ## Phase 4 — Verify against the spec
 
 1. `cplat spec trace <id> --json` must pass.

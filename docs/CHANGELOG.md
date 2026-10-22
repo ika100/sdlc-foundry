@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **`devbox run ci`: the CI gate locally (#105), svc 3.2.0.** Every template has a `ci` script with the gates its CI workflow runs (`quality` + `test` + `security`; gitops-apps: `validate` + `security`), and `shapes.py` requires it. `/svc:build` Phase 3 ends with one `devbox run ci` on the staged tree, and `/svc:ship` runs it before `ship pr` and after every CI fix. A red check is then found before the push, not after a CI round on the runners. **Action:** `/shared:update-service`; repos with extra CI jobs (e.g. `chart-lint`) add them to their `ci` script.
 - **CI: template pin bumps no longer get stranded.** `bump-template-pins` opens its pull request with a GitHub App token (repository variable `BUMP_APP_CLIENT_ID`, secret `BUMP_APP_PRIVATE_KEY`; `BUMP_TOKEN` still works), so CI runs on it, and the job now fails when it cannot open the pull request instead of passing with a warning. Two weekly bumps had been pushed without a pull request.
 - **Docs: the kro spike is kept.** [`docs/spikes/kro.md`](spikes/kro.md) is now on main and linked from ADR-020; rendered manifests stay the only addon backend.
 

@@ -42,14 +42,15 @@ Then `cplat ship phase pr`.
 ## Phase `pr`
 
 1. Write the PR body to `.git/PR_BODY.md` with the template of build.md Phase 7 (summary, spec/plan/verification links, the criteria table from verification.md, `Closes #N` lines, testing done, checklist).
-2. `cplat ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .git/PR_BODY.md` — pushes the feature branch and opens the PR (or reuses the open one).
+2. `devbox run ci` must be green on the committed tree (build Phase 3 ran it; run it again if anything changed since). Red → fix before pushing, as in `land`.
+3. `cplat ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .git/PR_BODY.md` — pushes the feature branch and opens the PR (or reuses the open one).
 
 ## Phase `land`
 
 `cplat ship land` waits until no check is pending.
 
 - **GREEN** → it merges the PR (squash; with `--no-merge` it stops and the run is done) and moves to `deploy`.
-- **RED** (exit 1) → it prints the failed checks and their log tails. Hand them to the coder agent (`agents.coder`) of the task whose files are involved, with `<project-map>`: "fix these CI failures; never edit, skip or weaken an acceptance test". Run `devbox run quality && devbox run test-fast`, commit `fix(ci): <what>`, then `cplat ship pr --title <same title> --body-file .git/PR_BODY.md` (pushes) and `cplat ship land` again. After **3** red rounds (`fix_rounds` in `cplat ship status`), escalate with the last failure.
+- **RED** (exit 1) → it prints the failed checks and their log tails. Hand them to the coder agent (`agents.coder`) of the task whose files are involved, with `<project-map>`: "fix these CI failures; never edit, skip or weaken an acceptance test". Run `devbox run ci`, commit `fix(ci): <what>`, then `cplat ship pr --title <same title> --body-file .git/PR_BODY.md` (pushes) and `cplat ship land` again. After **3** red rounds (`fix_rounds` in `cplat ship status`), escalate with the last failure.
 - An error (no checks reported, timeout, merge refused) → read its hint; a transient one (runner busy) → `cplat ship land` once more; otherwise escalate.
 
 ## Phase `deploy`
