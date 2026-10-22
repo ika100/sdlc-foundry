@@ -23,7 +23,7 @@
       "quality":      "devbox run lint && devbox run typecheck",
       "audit":        "if [ -n \"$NVD_API_KEY\" ]; then mvn -B org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7 -DnvdApiKey=$NVD_API_KEY; else echo 'NVD_API_KEY not set: auditing dependencies with trivy instead of OWASP Dependency-Check'; mvn -B -q dependency:resolve && trivy fs --offline-scan --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --skip-dirs target --skip-dirs .devbox .; fi",
       "secrets-scan": "git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline.json --disable-filter detect_secrets.filters.gibberish.should_exclude_secret",
-      "secrets-baseline": "detect-secrets scan --baseline .secrets.baseline.json --disable-filter detect_secrets.filters.gibberish.should_exclude_secret",
+      "secrets-baseline": "grep -qs is_line_allowlisted .secrets.baseline.json || detect-secrets scan --disable-filter detect_secrets.filters.gibberish.should_exclude_secret > .secrets.baseline.json; detect-secrets scan --baseline .secrets.baseline.json --disable-filter detect_secrets.filters.gibberish.should_exclude_secret",
       "security":     "devbox run audit && devbox run secrets-scan",
       "ci":           "devbox run quality && devbox run test && devbox run security",
       "image-build":  "docker build -t {{ project_name }}:scan .",

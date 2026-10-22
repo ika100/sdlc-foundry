@@ -76,7 +76,10 @@ def test_the_pragma_works_with_the_template_baseline(tmp_path):
 def test_secrets_baseline_recipe_refreshes_with_fixed_flags(shape):
     """AC-073.3: one recipe refreshes the baseline (keeping audits), without gibberish; agents are told to use it."""
     cmd = recipe(shape, "secrets-baseline")
-    assert cmd.startswith("detect-secrets scan --baseline .secrets.baseline.json") and f"--disable-filter {GIBBERISH}" in cmd
+    fresh, refresh = cmd.split("; ")
+    assert fresh.startswith("grep -qs is_line_allowlisted .secrets.baseline.json || detect-secrets scan")   # repairs a broken one
+    assert refresh.startswith("detect-secrets scan --baseline .secrets.baseline.json")                          # keeps audits
+    assert all(f"--disable-filter {GIBBERISH}" in c for c in (fresh, refresh))
     scan = recipe(shape, "secrets-scan")
     assert "uv run" not in scan                                   # the pinned devbox binary, not a second copy
     assert f"--disable-filter {GIBBERISH}" in scan                # a hook that rewrites the baseline must not add it back

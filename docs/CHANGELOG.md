@@ -19,10 +19,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 - **Fix (073): the secrets scan gives the same answer locally and in CI.**
   - The templates pin `detect-secrets@1.5.0` and `trivy@0.74.0`.
   - The template baselines list the standard filters. Before, `filters_used: []` turned them all off, so `# pragma: allowlist secret` had no effect. They no longer carry the gibberish filter, which only some machines can apply.
-  - New recipe `devbox run secrets-baseline` refreshes the baseline with fixed flags.
+  - New recipe `devbox run secrets-baseline` refreshes the baseline with fixed flags, keeping audits. It regenerates a baseline without the standard filters (or a missing one) from scratch first.
   - `secrets-scan` passes the same `--disable-filter`, so a hook that rewrites the baseline (line numbers moved) does not add the gibberish filter back.
   - The Python templates call the devbox binary instead of `uv run`.
-  - **Action:** run `/shared:update-service`. The baseline is project-owned, so then run `devbox run secrets-baseline` and commit the result. (#103)
+  - **Action:** run `/shared:update-service`, then `devbox run secrets-baseline`. The baseline is project-owned. Audit what it adds: hits the gibberish filter used to hide on some machines show up once. Then commit it. (#103)
 - **Docs (074): a persistent Docker volume is the build cache on self-hosted runners.** `docs/self-hosted-runners.md` recommends one dind `/var/lib/docker` volume per runner set and explains why there is no registry cache (it uploads every layer on each main build). The trigger change is #107 above; spec 074 records both. (#104)
 - **Feat (075): `cplat ship pr` enforces `devbox run ci`.** It runs the recipe before pushing and refuses while it is red, printing the tail; spec 075 records this together with #108. (#105)
 - **Feat (076): ship carries a spec's gitops changes.**
