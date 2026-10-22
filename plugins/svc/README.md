@@ -29,6 +29,7 @@ Orchestrators (`/svc:*`) and the shape-agnostic product-manager, architect and r
 | `/svc:spec <desc>` | product-manager writes `docs/specs/<NNN>-<slug>/spec.md`; you answer its open questions; `--amend <id> <change>`, `approve <id>`, `--from-plan <plan> <repo-id>` |
 | `/svc:plan <id>` | architect writes `design.md` + `plan.md` for an approved spec, checked by `cplat spec check` |
 | `/svc:build <id>` | Failing acceptance tests first → parallel coders until green → quality ‖ tests ‖ security → reviewer verifies against the spec → image → PR. Resumable |
+| `/svc:ship <id> [--no-merge]` | Unattended from an approved spec to `dev`: plan → build → PR (`cplat ship pr`) → merge only after every check passed (`cplat ship land`, CI fix loop) → wait for the pin PR and Argo (`cplat ship deploy`). Resumable; the shared plugin's Stop hook keeps the run going until it is done or escalated ([ADR-028](../../docs/adr/028-unattended-delivery-without-branch-protection.md)) |
 | `/svc:verify [<id>]` | Trace + reviewer against the spec; writes `verification.md`, changes no code |
 | `/svc:specs [--all\|index\|migrate]` | Spec status with the next command; refresh the backlog table; migrate legacy `STORY-NNN` stories |
 | `/svc:quick-task <desc>` | Lightweight, no spec: coder → quality → tester → PR (stops if the change alters a spec criterion) |

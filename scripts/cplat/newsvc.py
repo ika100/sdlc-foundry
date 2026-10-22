@@ -224,13 +224,16 @@ def execute(req: dict) -> Report:
             r.did.append("protected main: " + ", ".join(req["entry"].get("ci_checks") or []) + " must pass before merging")
         else:
             reason = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
-            r.did.append(f"WARNING: could not protect main ({reason[0]}); private repos on free plans cannot use branch protection")
+            r.did.append(f"WARNING: could not protect main ({reason[0]}); private repos on free plans cannot use branch protection. "
+                         "Merges still wait for green CI: pin-dev and /svc:ship merge only after every check passed (spec 065, ADR-028)")
             r.next_steps.append("protect main by hand when your plan allows it: " + " ".join(shlex.quote(c) for c in protect))
         if req["shape"] == "gitops-app":
-            failed = [c for c in pin_settings_cmds(slug) if run(c, check=False).returncode != 0]
-            if failed:
-                r.did.append("WARNING: could not turn on auto-merge for pin PRs (needs admin rights on the repo)")
-                r.next_steps.append("let pin PRs merge themselves (spec 062): " + " && ".join(" ".join(shlex.quote(x) for x in c) for c in failed))
+            auto, actions = pin_settings_cmds(slug)
+            if run(actions, check=False).returncode != 0:
+                r.did.append("WARNING: could not let Actions open pull requests (needs admin rights on the repo); pin-dev cannot open pin PRs")
+                r.next_steps.append("let pin-dev open PRs (spec 062): " + " ".join(shlex.quote(x) for x in actions))
+            elif run(auto, check=False).returncode != 0:
+                r.did.append("pin PRs merge after green CI; auto-merge is not available on this plan, pin-dev merges itself (spec 065)")
             else:
                 r.did.append("allows pin PRs to merge themselves after CI (auto-merge on, Actions may open PRs)")
         r.undo.append(f"gh repo delete {slug} --yes   (needs the delete_repo scope: gh auth refresh -s delete_repo)")

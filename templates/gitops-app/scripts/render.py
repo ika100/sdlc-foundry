@@ -37,6 +37,26 @@ services.yaml entry (written by `/gitops:compose`, every value explicit and revi
     expose: {host: todo-api}           # optional: publish through the Gateway (needs app.yaml `hosts`)
     environments: [dev]
 
+External entry (spec 069, ADR-029): a service whose manifests this generator cannot express (CronJobs, volumes,
+a login proxy, a Helm chart with CRDs). The package is still owned by this repo or pinned to the service repo's chart;
+render.py only wires it into the environments and pins its image, so pin-dev, /gitops:promote and /shared:status work:
+  - name: stock-manager
+    repo: org/stock-manager
+    image: ghcr.io/org/stock-manager
+    external:
+      kustomize: external/stock-manager   # a kustomize package under applications/<app>/ ({env} allowed in the path)
+      namespace: stock-manager            # optional: instead of <app>-<env>
+    environments: [dev]
+  - name: ai-ops
+    repo: org/ai-ops
+    image: ghcr.io/org/ai-ops
+    external:
+      helm: {repoURL: https://github.com/org/ai-ops, path: charts/ai-ops, revision: main, imageTag: image.tag}
+      namespace: ai-ops
+      values: {replicas: 1}               # helm values for every environment
+      envValues: {prod: {replicas: 2}}    # merged over `values` per environment
+    environments: [dev]
+
 applications/<app>/app.yaml (optional):
   gateway: {name: traefik-gateway, namespace: kube-system}
   hosts: {dev: "{service}.{app}-dev.localhost"}     # per env; no entry = not exposed in that env
@@ -60,7 +80,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 ENVS = ["dev", "staging", "prod"]
-MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml"}
+MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml", "application.yaml"}
+# Keys an external entry may carry: its package owns ports, probes, secrets and exposure (spec 069).
+EXTERNAL_KEYS = {"name", "repo", "shape", "image", "external", "environments"}
 MANAGED_PREFIXES = ("externalsecret-",)
 # Addon contract (ADR-020): what a service gets when it `uses` an addon. Services never see the implementation.
 ADDONS = {
@@ -121,6 +143,9 @@ def load_services(app_dir: Path) -> list[dict]:
         raise RenderError(f"duplicate service names in {app_dir.name}/services.yaml")
     for s in services:
         n = s.get("name", "<no name>")
+        if "external" in s:
+            validate_external(app_dir, s)
+            continue
         if "port" not in s or "probes" not in s:
             raise RenderError(
                 f"service '{n}' uses the v1 format (remote kustomize base). v2 needs port/probes/...: "
@@ -135,6 +160,83 @@ def load_services(app_dir: Path) -> list[dict]:
         if bad:
             raise RenderError(f"service '{n}': unknown environments {bad} (valid: {ENVS})")
     return services
+
+
+def validate_external(app_dir: Path, s: dict) -> None:
+    n = s["name"]
+    if "image" not in s:
+        raise RenderError(f"service '{n}': missing 'image' (the pin applies to it)")
+    extra = sorted(set(s) - EXTERNAL_KEYS)
+    if extra:
+        raise RenderError(f"service '{n}' is external: {', '.join(extra)} belong in its package, not in services.yaml")
+    ext = s["external"] or {}
+    kinds = [k for k in ("kustomize", "helm") if k in ext]
+    if len(kinds) != 1:
+        raise RenderError(f"service '{n}': external needs exactly one of `kustomize: <path>` or `helm: {{repoURL, path}}`")
+    bad = [e for e in s.get("environments", ["dev"]) if e not in ENVS]
+    if bad:
+        raise RenderError(f"service '{n}': unknown environments {bad} (valid: {ENVS})")
+    if "kustomize" in ext:
+        for env in s.get("environments", ["dev"]):
+            pkg = app_dir / str(ext["kustomize"]).format(env=env)
+            if not (pkg / "kustomization.yaml").is_file():
+                raise RenderError(f"service '{n}': {pkg.relative_to(ROOT)}/kustomization.yaml does not exist")
+    else:
+        helm = ext["helm"] or {}
+        for k in ("repoURL", "path"):
+            if not helm.get(k):
+                raise RenderError(f"service '{n}': external.helm needs `{k}`")
+    ns = ext.get("namespace")
+    if ns is not None and not SECRET_NAME.match(str(ns)):
+        raise RenderError(f"service '{n}': external.namespace '{ns}' must be a lowercase DNS label")
+
+
+def deep_merge(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for k, v in (over or {}).items():
+        out[k] = deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def set_path(doc: dict, dotted: str, value) -> dict:
+    """`image.tag` -> {"image": {"tag": value}} merged into doc."""
+    keys = dotted.split(".")
+    nested: dict = {keys[-1]: value}
+    for k in reversed(keys[:-1]):
+        nested = {k: nested}
+    return deep_merge(doc, nested)
+
+
+def external_files(app: str, svc: dict, env: str, tag: str, server: str) -> dict[str, dict]:
+    """The overlay of an external service: its package (kustomize) or an Argo Application for its chart (helm)."""
+    ext = svc["external"]
+    image = {"name": svc["image"], "newTag": tag}
+    kust: dict = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization"}
+    if "kustomize" in ext:
+        kust["resources"] = ["../../../" + str(ext["kustomize"]).format(env=env).strip("/")]
+        if ext.get("namespace"):
+            kust["namespace"] = ext["namespace"]
+        kust["images"] = [image]
+        return {"kustomization.yaml": kust}
+    helm = ext["helm"]
+    values = deep_merge(ext.get("values") or {}, (ext.get("envValues") or {}).get(env) or {})
+    values = set_path(values, str(helm.get("imageTag") or "image.tag"), tag)
+    application = {
+        "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+        "metadata": {"name": f"{svc['name']}-{env}-chart", "namespace": "argocd",
+                     "labels": {"app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}},
+        "spec": {
+            "project": "default",
+            "source": {"repoURL": helm["repoURL"], "path": helm["path"], "targetRevision": str(helm.get("revision") or "main"),
+                       "helm": {"valuesObject": values}},
+            "destination": {"server": server, "namespace": ext.get("namespace") or f"{app}-{env}"},
+            "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
+                           "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]},
+        },
+    }
+    kust["resources"] = ["application.yaml"]
+    kust["images"] = [image]        # not used by kustomize here; it is where pin.py, promote and status read the pin
+    return {"application.yaml": application, "kustomization.yaml": kust}
 
 
 def validate_secrets(s: dict) -> None:
@@ -583,6 +685,11 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             if env not in envs_of(s):
                 continue
             base = app_dir / "overlays" / env / s["name"]
+            if "external" in s:
+                tag = existing_tag(base / "kustomization.yaml") or "latest"
+                for fname, doc in external_files(app, s, env, tag, server).items():
+                    out[base / fname] = dump(doc)
+                continue
             files = {"deployment.yaml": deployment(app, s, env, obs_enabled(cfg)), "service.yaml": service(app, s)}
             route = httproute(app, s, env, cfg)
             if route:

@@ -524,14 +524,56 @@ def test_the_pin_workflow_opens_an_auto_merging_pr_checked_by_ci(gitops_repo):
     assert on["repository_dispatch"]["types"] == ["pin-dev"]
     perms = wf["permissions"]
     assert perms["contents"] == "write" and perms["pull-requests"] == "write" and perms["actions"] == "write"
-    run = "\n".join(s.get("run", "") for job in wf["jobs"].values() for s in job["steps"])
+    run = "\n".join(s.get("run", "") for job in wf["jobs"].values() for s in job.get("steps") or [])
     assert "scripts/pin.py dev" in run and "render.py --check" in run
-    assert "gh pr create" in run and "gh workflow run ci.yml --ref" in run and "gh pr merge" in run and "--auto" in run
+    assert "gh pr create" in run and "gh pr merge" in run
+    assert wf["jobs"]["ci"]["uses"] == "./.github/workflows/ci.yml"     # spec 065: CI runs on the pin branch, then merge
     assert "workflow_dispatch" in (_workflow(gitops_repo, "ci.yml").get("on") or _workflow(gitops_repo, "ci.yml")[True])
 
 
+def _ci_on(repo):
+    wf = _workflow(repo, "ci.yml")
+    return wf.get("on", wf.get(True))
+
+
+def test_pin_prs_merge_after_green_ci_without_branch_protection(gitops_repo):
+    """AC-065.1: pin-dev runs the gitops CI on the pin branch and merges the PR itself only when that CI passed."""
+    wf = _workflow(gitops_repo, "pin-dev.yml")
+    jobs = wf["jobs"]
+    assert jobs["ci"]["needs"] == "pin" and jobs["ci"]["with"]["ref"] == "${{ needs.pin.outputs.branch }}"
+    assert jobs["merge"]["needs"] == ["pin", "ci"]
+    merge = jobs["merge"]["steps"][0]
+    assert merge["env"]["CI_RESULT"] == "${{ needs.ci.result }}"
+    script = merge["run"]
+    gate = script.index('if [ "$CI_RESULT" != "success" ]')
+    first_merge = script.index('gh pr merge "$PR" --squash --delete-branch')
+    assert gate < first_merge, "the merge must come after the CI result check"
+    assert "--admin" not in script and "push origin main" not in script
+    ci_call = _ci_on(gitops_repo)["workflow_call"]["inputs"]["ref"]
+    assert ci_call["type"] == "string"
+    ci = _workflow(gitops_repo, "ci.yml")
+    for name in ("quality", "security"):
+        checkout = ci["jobs"][name]["steps"][0]
+        assert checkout["uses"].startswith("actions/checkout@") and checkout["with"]["ref"] == "${{ inputs.ref }}"
+    assert "inputs.ref" in ci["concurrency"]["group"]          # two pins never share (and cancel) one concurrency group
+
+
+def test_a_red_pin_stays_open_with_a_comment(gitops_repo):
+    """AC-065.2: a failed CI leaves the PR open, comments the run and fails the workflow; dev keeps the old image."""
+    script = _workflow(gitops_repo, "pin-dev.yml")["jobs"]["merge"]["steps"][0]["run"]
+    red = script[script.index('if [ "$CI_RESULT" != "success" ]'):script.index("fi\n")]
+    assert "gh pr comment" in red and "$RUN_URL" in red and "exit 1" in red and "gh pr merge" not in red
+
+
+def test_protected_repos_fall_back_to_auto_merge(gitops_repo):
+    """AC-065.3: where branch protection blocks the direct merge, CI runs on the PR and auto-merge waits for it."""
+    script = _workflow(gitops_repo, "pin-dev.yml")["jobs"]["merge"]["steps"][0]["run"]
+    tail = script[script.index('if gh pr merge "$PR" --squash --delete-branch; then'):]
+    assert 'gh workflow run ci.yml --ref "$BRANCH"' in tail and 'gh pr merge "$PR" --auto --squash --delete-branch' in tail
+
+
 def test_a_failing_pin_never_reaches_main(gitops_repo):
-    """AC-062.6: the pin only lands through the PR's auto-merge, which waits for the required checks."""
+    """AC-062.6: the pin only lands through the PR, merged after CI passed (spec 065), never pushed to main."""
     text = (gitops_repo / ".github" / "workflows" / "pin-dev.yml").read_text()
     assert "HEAD:main" not in text and "push origin main" not in text and "--admin" not in text
     assert "pin/dev-" in text and ("Signed-off-by" in text or "--signoff" in text)
@@ -556,3 +598,104 @@ def test_status_shows_the_intended_pin_when_dev_is_unhealthy(gitops_repo, gh, mo
     assert dev["tag"] == "sha-abc1234" and dev["argo"] == "Synced/Degraded" and dev["pin_pr"] == "#12 sha-def5678"
     table = status.render_table(app, rows, {"platform": "4.1.0"}, "k3d-x")
     assert "pin PR" in table and "#12 sha-def5678" in table and "Degraded" in table
+
+
+# ---------------- spec 069: external services ----------------
+
+STOCK = """  - name: stock-manager
+    repo: acme/stock-manager
+    image: ghcr.io/acme/stock-manager
+    external:
+      kustomize: external/stock-manager
+      namespace: stock-manager
+    environments: [dev]
+"""
+AIOPS = """  - name: ai-ops
+    repo: acme/ai-ops
+    image: ghcr.io/acme/ai-ops
+    external:
+      helm: {repoURL: https://github.com/acme/ai-ops, path: charts/ai-ops, revision: main, imageTag: image.tag}
+      namespace: ai-ops
+      values: {replicas: 1, autonomy: {ceiling: L1}}
+      envValues: {staging: {replicas: 2}}
+    environments: [dev]
+"""
+
+
+def add_external(repo, *entries):
+    pkg = repo / "applications/todo/external/stock-manager"
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "kustomization.yaml").write_text("resources: [cronjobs.yaml]\n")
+    (pkg / "cronjobs.yaml").write_text("apiVersion: batch/v1\nkind: CronJob\nmetadata: {name: daily}\n")
+    f = repo / "applications/todo/services.yaml"
+    f.write_text("services:\n" + "".join(entries))
+    out = subprocess.run(["uv", "run", "scripts/render.py"], cwd=repo, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    commit(repo, "external")
+
+
+def overlay(repo, env, svc, name="kustomization.yaml"):
+    return yaml.safe_load((repo / f"applications/todo/overlays/{env}/{svc}/{name}").read_text())
+
+
+def test_an_external_kustomize_package_is_wired_and_pinned_like_a_service(gitops_repo):
+    """AC-069.1: the overlay includes the package, sets its namespace and pins the image; the ApplicationSet lists it."""
+    add_external(gitops_repo, STOCK)
+    k = overlay(gitops_repo, "dev", "stock-manager")
+    assert k["resources"] == ["../../../external/stock-manager"] and k["namespace"] == "stock-manager"
+    assert k["images"] == [{"name": "ghcr.io/acme/stock-manager", "newTag": "latest"}]
+    appset = (gitops_repo / "applications/todo/applicationset.yaml").read_text()
+    assert "name: stock-manager" in appset
+    assert not (gitops_repo / "applications/todo/overlays/dev/stock-manager/deployment.yaml").exists()
+
+
+def test_an_external_helm_chart_gets_an_argo_application_with_the_pinned_tag(gitops_repo):
+    """AC-069.2: a chart from the service repo, values per environment, the image tag at imageTag."""
+    add_external(gitops_repo, AIOPS)
+    app = overlay(gitops_repo, "dev", "ai-ops", "application.yaml")
+    assert app["kind"] == "Application" and app["metadata"]["namespace"] == "argocd" and app["metadata"]["name"] == "ai-ops-dev-chart"
+    src = app["spec"]["source"]
+    assert src["repoURL"] == "https://github.com/acme/ai-ops" and src["path"] == "charts/ai-ops" and src["targetRevision"] == "main"
+    assert src["helm"]["valuesObject"] == {"replicas": 1, "autonomy": {"ceiling": "L1"}, "image": {"tag": "latest"}}
+    assert app["spec"]["destination"]["namespace"] == "ai-ops" and "ServerSideApply=true" in app["spec"]["syncPolicy"]["syncOptions"]
+    assert overlay(gitops_repo, "dev", "ai-ops")["resources"] == ["application.yaml"]
+
+
+def test_pin_and_promote_move_external_services(gitops_repo, gh):
+    """AC-069.3: pin.py (pin-dev) and /gitops:promote pin external services; render --check stays green."""
+    add_external(gitops_repo, STOCK, AIOPS)
+    for svc in ("stock-manager", "ai-ops"):
+        out = run_pin(gitops_repo, "dev", svc, "sha-abc1234")
+        assert out.returncode == 0, out.stderr
+    assert overlay(gitops_repo, "dev", "stock-manager")["images"][0]["newTag"] == "sha-abc1234"
+    assert overlay(gitops_repo, "dev", "ai-ops", "application.yaml")["spec"]["source"]["helm"]["valuesObject"]["image"]["tag"] == "sha-abc1234"
+    assert render_check(gitops_repo).returncode == 0
+    commit(gitops_repo, "pin")
+    assert promote.main(["ai-ops", "dev", "staging", "--sha", SHA, "--no-verify", "--repo-dir", str(gitops_repo)]) == 0
+    staged = overlay(gitops_repo, "staging", "ai-ops", "application.yaml")["spec"]["source"]["helm"]["valuesObject"]
+    assert staged["image"]["tag"] == "sha-" + SHA[:7] and staged["replicas"] == 2
+    assert render_check(gitops_repo).returncode == 0
+
+
+def test_status_reads_the_pin_of_external_services(gitops_repo):
+    """AC-069.3: /shared:status shows external services with their pin."""
+    import status
+    add_external(gitops_repo, STOCK)
+    assert run_pin(gitops_repo, "dev", "stock-manager", "sha-abc1234").returncode == 0
+    assert status.pinned_tag(gitops_repo / "applications/todo", "dev", "stock-manager") == "sha-abc1234"
+
+
+@pytest.mark.parametrize("entry, error", [
+    (STOCK.replace("    environments", "    port: 8080\n    environments"), "port belong in its package"),
+    (STOCK.replace("external/stock-manager", "external/missing"), "kustomization.yaml does not exist"),
+    (AIOPS.replace("path: charts/ai-ops, ", ""), "external.helm needs `path`"),
+    (STOCK.replace("      kustomize: external/stock-manager\n", ""), "exactly one of"),
+])
+def test_external_entries_are_validated(gitops_repo, entry, error):
+    """AC-069.4: wrong external entries fail render with a message that names the problem."""
+    pkg = gitops_repo / "applications/todo/external/stock-manager"
+    pkg.mkdir(parents=True)
+    (pkg / "kustomization.yaml").write_text("resources: []\n")
+    (gitops_repo / "applications/todo/services.yaml").write_text("services:\n" + entry)
+    out = subprocess.run(["uv", "run", "scripts/render.py"], cwd=gitops_repo, capture_output=True, text=True)
+    assert out.returncode == 1 and error in out.stderr

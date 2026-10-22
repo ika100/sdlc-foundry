@@ -49,6 +49,7 @@ Common workflows:
 | Write a feature spec (first step) | `/svc:spec <description>` |
 | Plan the approved spec | `/svc:plan <NNN>` |
 | Build it: tests first, verified | `/svc:build <NNN>` |
+| All of it unattended: build, PR, merge on green CI, dev | `/svc:ship <NNN>` (headless: `cplat headless "/svc:ship <NNN>"`) |
 | Where specs stand | `/svc:specs` |
 | Release | `/svc:release` |
 | Quality + security audit | `/shared:check-quality` |

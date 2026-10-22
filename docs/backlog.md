@@ -37,6 +37,8 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [043-python-templates-pass-their-own-quality](specs/043-python-templates-pass-their-own-quality/spec.md) — Python templates pass their own quality gate | P0 | done | 4 |  |
 | [044-parallel-coders-build-on-the-feature](specs/044-parallel-coders-build-on-the-feature/spec.md) — Parallel coders build on the feature branch | P0 | done | 4 |  |
 | [045-multi-repo-builds-handle-the-gitops-app](specs/045-multi-repo-builds-handle-the-gitops-app/spec.md) — Multi-repo builds handle the gitops-app entry | P0 | done | 4 |  |
+| [065-merges-wait-for-green-ci-without-branch](specs/065-merges-wait-for-green-ci-without-branch/spec.md) — Merges wait for green CI without branch protection | P0 | done | 5 |  |
+| [067-ship-an-approved-spec-to-dev](specs/067-ship-an-approved-spec-to-dev/spec.md) — Ship an approved spec to dev unattended | P0 | done | 5 |  |
 | [004-preflight-check-of-the-setup](specs/004-preflight-check-of-the-setup/spec.md) — Preflight check of the setup | P1 | done | 2 |  |
 | [007-a-shape-is-added-by-following-a](specs/007-a-shape-is-added-by-following-a/spec.md) — A shape is added by following a documented contract | P1 | done | 3 |  |
 | [011-java-spring-boot-template](specs/011-java-spring-boot-template/spec.md) — Java (Spring Boot) template | P1 | done | 3 |  |
@@ -68,6 +70,10 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [062-dev-runs-every-merged-build](specs/062-dev-runs-every-merged-build/spec.md) — dev runs every merged build | P1 | done | 6 |  |
 | [063-acceptance-test-diff-looks-only-at-test](specs/063-acceptance-test-diff-looks-only-at-test/spec.md) — Acceptance-test diff looks only at test files | P1 | done | 4 |  |
 | [064-self-hosted-ci-runners-through](specs/064-self-hosted-ci-runners-through/spec.md) — Self-hosted CI runners through repository variables | P1 | done | 4 |  |
+| [066-unattended-runs-stop-only-when-done](specs/066-unattended-runs-stop-only-when-done/spec.md) — Unattended runs stop only when done or blocked | P1 | done | 3 |  |
+| [068-done-means-verified](specs/068-done-means-verified/spec.md) — Done means verified | P1 | done | 3 |  |
+| [069-external-services-in-services-yaml](specs/069-external-services-in-services-yaml/spec.md) — External services in services.yaml | P1 | done | 4 |  |
+| [070-headless-runs-resume-until-finished](specs/070-headless-runs-resume-until-finished/spec.md) — Headless runs resume until finished | P1 | done | 4 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
@@ -78,6 +84,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [057-spec-check-says-what-happened](specs/057-spec-check-says-what-happened/spec.md) — spec-check says what happened | P2 | done | 2 |  |
 | [058-reference-skills-stay-out-of-the-command](specs/058-reference-skills-stay-out-of-the-command/spec.md) — Reference skills stay out of the command list | P2 | done | 2 |  |
 | [059-security-scans-are-quiet-and-the-base](specs/059-security-scans-are-quiet-and-the-base/spec.md) — Security scans are quiet and the base image is tracked | P2 | done | 2 |  |
+| [071-adopt-an-existing-repo](specs/071-adopt-an-existing-repo/spec.md) — Adopt an existing repo | P2 | done | 4 |  |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)

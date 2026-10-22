@@ -7,6 +7,12 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened, edited]   # edited: a corrected PR title is checked again
   workflow_dispatch:
+  workflow_call:          # spec 065: pin-dev runs these checks on its pin branch, then merges (no branch protection needed)
+    inputs:
+      ref:
+        description: "branch or SHA to check out; empty: the triggering ref"
+        type: string
+        default: ''
 
 # Least privilege by default; jobs that publish packages declare what they need.
 permissions:
@@ -14,7 +20,7 @@ permissions:
 
 # A newer push to the same pull request cancels the older run (main and tags always run to completion).
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'edited' && '-edited' || '' }}   # a title edit never cancels a running build
+  group: ci-${{ inputs.ref || github.event.pull_request.number || github.ref }}${{ github.event.action == 'edited' && '-edited' || '' }}   # a title edit never cancels a running build
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -23,6 +29,8 @@ jobs:
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
       - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
         with:
@@ -34,6 +42,8 @@ jobs:
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
       - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
         if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
         with:

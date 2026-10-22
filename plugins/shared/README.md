@@ -25,6 +25,13 @@ Common agents and commands used by every shape's plugin. Pre-approves `gh repo c
 
 Claude Code on claude.ai and in Cowork does not install plugins that ship a `bin/` directory; this plugin is meant for the Claude Code CLI and desktop app, where the platform's git, devbox and gh workflows run anyway.
 
+Unattended delivery ([ADR-028](../../docs/adr/028-unattended-delivery-without-branch-protection.md)) adds three commands that do not belong to one slash command: `cplat ship …` (the state and steps of `/svc:ship`), `cplat headless "<prompt>"` (fresh `claude -p` sessions until a ship run is done, with a quiet window, log and notification) and `cplat adopt --type <shape>` (bring a repo that was not created from a template onto the platform without overwriting its files). See [docs/unattended-delivery.md](../../docs/unattended-delivery.md).
+
+## Hooks
+
+- `SessionStart`: checks devbox and runs `devbox install` when the repo has a `devbox.json`.
+- `Stop`: while a `/svc:ship` run is unfinished (`<git dir>/cplat-ship.json`), `cplat ship gate` blocks the stop with the next step and what is still red; it allows it when the run is done, escalated or blocked 8 times. Without a run it exits in shell (spec 066).
+
 ## Pre-approved operations (settings.json)
 
 To make `/shared:new-service` flow without prompts:

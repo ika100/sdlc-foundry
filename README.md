@@ -99,6 +99,7 @@ See `docs/ADOPTING.md` for the full migration guide.
 | `/svc:spec <desc>` | svc | Feature spec with acceptance criteria `AC-<NNN>.<n>`; asks you its open questions; `approve <id>`, `--amend <id>`, `--from-plan` for multi-repo plans |
 | `/svc:plan <id>` | svc | Architect: `design.md` + `plan.md` for an approved spec, checked by `cplat spec` |
 | `/svc:build <id>` | svc | Failing acceptance tests → parallel coders → quality ‖ tests ‖ security → reviewer verifies the spec → image → PR (shape-aware, resumable) |
+| `/svc:ship <id> [--no-merge]` | svc | Unattended: plan → build → PR → merge after green CI → wait until `dev` runs it; resumable, kept going by the Stop hook ([ADR-028](docs/adr/028-unattended-delivery-without-branch-protection.md)) |
 | `/svc:verify [<id>]` · `/svc:specs` | svc | Check code against a spec · list specs with the next step, migrate legacy stories |
 | `/svc:quick-task <desc>` | svc | Lightweight: coder → quality → tester → PR |
 | `/svc:fix-bug <desc>` | svc | Diagnose → fix → regression test → PR |

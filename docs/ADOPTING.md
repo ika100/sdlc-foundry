@@ -94,6 +94,8 @@ Both commands route through the marketplace plugins.
 
 ### Step 5 (optional) — Adopt the template for skeleton updates
 
+**Shortcut (spec 071):** `cplat adopt --type <shape> [--data key=value]` does steps 1–5 in one commit on `chore/adopt-platform`: it renders the shape's template with answers from the repo (name and org from `origin`, the description from the README), adds only the files the repo lacks (`CLAUDE.md`, `.claude/settings.json`, CI, `docs/specs/` …, never starter code), merges `devbox.json` (your recipes win) and `.gitignore`, keeps every other file and lists those that differ from the template, and writes `.copier-answers.yml` and `.platform-version`. Then make the `devbox run` recipes fit the repo and continue with `/svc:spec`. `--dry-run` shows the plan. The manual way:
+
 If you also want skeleton updates (CI workflow, devbox recipes, Dockerfile, CLAUDE.md) to flow from the platform template via `/shared:update-service`:
 
 1. Pick your shape's template under `templates/` (`service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`) and create `.copier-answers.yml` at the repo root recording the answers your repo *would* have given — the questions are the top-level keys of that template's `copier.yml`. For `service-python`:
@@ -167,7 +169,8 @@ Specs, plans and builds can run without anyone at the keyboard (`claude -p`, `/l
 - **Background agents:** headless Claude Code stops background subagents after 600 s ("Background tasks still running after 600s; terminating"). `/app:build` runs its repo agents in the foreground, so it is not affected; for your own long headless runs set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`.
 - **Permissions:** nobody answers prompts, so run with `--permission-mode acceptEdits` plus the template allowlist, or `bypassPermissions` in a throwaway workspace.
 - **Workspace trust:** in a workspace that was never opened interactively, Claude Code ignores the project's `permissions.allow` list but still applies its `ask` list. Open the repo once interactively (accept the trust dialog) to use the template allowlist.
-- **Pull requests:** `gh pr create` is in the `ask` list on purpose. Unattended pipelines push the branch and end with the exact `gh pr create` command to run (spec 051).
+- **Pull requests:** `gh pr create` is in the `ask` list on purpose. Unattended pipelines push the branch and end with the exact `gh pr create` command to run (spec 051). `/svc:ship` is the exception: `cplat ship` pushes the spec's feature branch, opens the PR and merges it after green CI itself ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md)).
+- **Keeping a run going:** `cplat headless "/svc:ship <NNN>"` runs `claude -p` with `--permission-mode dontAsk` (the allowlist, nothing else, no prompts) and resumes an unfinished ship run in fresh sessions; `--quiet 23:30-07:00` keeps it out of a window, for example nightly jobs that share the subscription. The guide: [unattended-delivery.md](unattended-delivery.md).
 
 ## Troubleshooting
 

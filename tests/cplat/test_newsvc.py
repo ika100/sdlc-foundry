@@ -218,7 +218,41 @@ def test_settings_failure_warns_with_the_commands(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(newsvc.core, "has_gh", lambda: True)
     assert newsvc.main(["pin-app2", "d", "--gitops", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
     out = capsys.readouterr().out
-    assert "could not turn on auto-merge" in out and "gh api -X PATCH repos/acme/pin-app2 -F allow_auto_merge=true" in out
+    assert "auto-merge is not available on this plan, pin-dev merges itself" in out and "could not let Actions" not in out
+
+
+def test_actions_permission_failure_names_the_command(tmp_path, monkeypatch, capsys):
+    """AC-065.4: without permission for Actions to open PRs, pin-dev cannot work: warn with the exact command."""
+    import subprocess
+    real = newsvc.run
+
+    def fake(cmd, **kw):
+        if cmd[0] == "gh":
+            rc = 1 if any("actions/permissions/workflow" in c for c in cmd) else 0
+            return subprocess.CompletedProcess(cmd, rc, "", "HTTP 403" if rc else "")
+        return real(cmd, **kw)
+    monkeypatch.setattr(newsvc, "run", fake)
+    monkeypatch.setattr(newsvc.core, "has_gh", lambda: True)
+    assert newsvc.main(["pin-app3", "d", "--gitops", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
+    out = capsys.readouterr().out
+    assert "could not let Actions open pull requests" in out and "repos/acme/pin-app3/actions/permissions/workflow" in out
+
+
+def test_free_plan_warning_says_merges_still_wait_for_ci(tmp_path, monkeypatch, capsys):
+    """AC-065.4: an unprotected main is reported together with what still guards merges."""
+    import subprocess
+    real = newsvc.run
+
+    def fake(cmd, **kw):
+        if cmd[0] == "gh":
+            rc = 1 if any("branches/main/protection" in c for c in cmd) else 0
+            return subprocess.CompletedProcess(cmd, rc, "", "HTTP 403: Upgrade to GitHub Pro" if rc else "")
+        return real(cmd, **kw)
+    monkeypatch.setattr(newsvc, "run", fake)
+    monkeypatch.setattr(newsvc.core, "has_gh", lambda: True)
+    assert newsvc.main(["free-svc", "d", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
+    out = capsys.readouterr().out
+    assert "could not protect main" in out and "merge only after every check passed" in out
 
 
 def test_a_linked_service_names_the_one_token_step(tmp_path, capsys):

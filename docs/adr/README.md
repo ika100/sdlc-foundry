@@ -33,3 +33,5 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [025](025-issue-triage.md) | Issue triage: `/shared:triage` classifies, discusses and routes issues; labels are the state |
 | [026](026-feature-specs.md) | Feature specs drive the build: spec folders, AC ids, tests first, `cplat spec` |
 | [027](027-dev-follows-main-through-pin-prs.md) | dev follows main: service CI asks the gitops-app for an auto-merging pin PR to `sha-<7>` |
+| [028](028-unattended-delivery-without-branch-protection.md) | Unattended delivery without branch protection: merges wait for green CI in code, `/svc:ship`, a Stop hook, headless resumes |
+| [029](029-external-services.md) | External services in services.yaml: hand-written kustomize packages or Helm charts, wired and pinned by render |

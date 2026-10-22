@@ -19,6 +19,10 @@ The `svc`, `web`, `svc-java`, `svc-go`, `gitops` and `shared` plugins ship a `ho
 
 A consumer repo that installs any of these plugins is therefore devbox-aware out of the box; a repo with no `devbox.json` sees the hook as a silent no-op.
 
+### Stop hook (shared plugin)
+
+While a `/svc:ship` run is unfinished, the shared plugin's `Stop` hook keeps the session going (spec 066, [ADR-028](adr/028-unattended-delivery-without-branch-protection.md)). It looks for `<git dir>/cplat-ship.json` in shell first, so sessions without a run never start Python. With a run it calls `cplat ship gate`, which blocks the stop with the next step, and in the build phase the untraced criteria and the red `devbox run test-fast` output. It lets the session stop when the run is done, when the orchestrator escalated (`cplat ship escalate '<reason>'`: merge conflict, a changed acceptance test, a CRITICAL finding, a decision the spec does not answer, the user asked to stop), or after 8 blocked stops in a row (recorded as the escalation).
+
 ---
 
 ## Permissions allowlist
@@ -99,6 +103,8 @@ Both `/svc:quick-task` and `/svc:build` include:
 - **Phase 0** (pre-flight): if on `main`, create `feature/<slug>` branch before any work starts.
 - **Final PR phase**: after all quality/test/security gates pass, push the branch and open a PR. Both push and PR creation are in the `ask` permission list — user must confirm.
 
+`/svc:ship` goes further without asking (spec 067): `cplat ship pr` pushes only the spec's feature branch and opens the PR, `cplat ship land` merges it after every reported check passed (never with a pending, failed or missing check), and `cplat ship deploy` waits for the gitops-app's pin PR. None of it needs branch protection or auto-merge, which private repos on GitHub Free lack ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md)); the gitops-app's `pin-dev` workflow merges pin PRs the same way (spec 065).
+
 ### Automatic issue linking and closing
 
 The PR phase explicitly scans for GitHub issue references — `#NNN` patterns — in:
@@ -128,6 +134,12 @@ The `/svc:release` pipeline adds a second safety net: **Phase 7** scans all comm
                 failing tests per AC     code until they pass                 lint, coverage, CVEs            verification.md   Dockerfile image
 
 /svc:verify ──►  cplat spec trace + reviewer (no code changes)
+
+/svc:ship   ──►  [plan] ──► [build Phases 0–6] ──► cplat ship pr ──► cplat ship land ──► cplat ship deploy
+                                                                         │  red: logs → coder → push │  pin PR merged,
+                                                                         │  (max 3 rounds)           │  Argo healthy
+                                                                         └── merge only when every check passed (no branch protection needed)
+                 Stop hook: no stop until done or `cplat ship escalate`; `cplat headless` resumes it in fresh sessions
 
 /svc:fix-bug       ──►  coder (diagnose) ──►  coder (fix) ──►  tester (verify)
                                   └──────────── loop (max 3) ──────────────┘

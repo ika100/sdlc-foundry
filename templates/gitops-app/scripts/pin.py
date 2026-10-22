@@ -6,7 +6,8 @@
 
   uv run scripts/pin.py <env> <service> <tag>      e.g. dev todo-api sha-abc1234
 
-Sets `newTag` in applications/<app>/overlays/<env>/<service>/kustomization.yaml. Only immutable tags are accepted
+Sets `newTag` in applications/<app>/overlays/<env>/<service>/kustomization.yaml (and, for an external Helm service,
+the image tag in its application.yaml, spec 069). Only immutable tags are accepted
 (`sha-<7 hex>` from a build of main, or a release `X.Y.Z`), only for a composed service, and only in an environment
 the service runs in. render.py keeps the pin on every re-render. The pin-dev workflow runs this for every merge to a
 service's main; promotions to staging and prod stay `/gitops:promote`.
@@ -50,6 +51,11 @@ def main(argv: list[str]) -> int:
     old = doc["images"][0].get("newTag")
     doc["images"][0]["newTag"] = tag
     path.write_text(yaml.safe_dump(doc, sort_keys=False))
+    if svc.get("external"):   # spec 069: an external chart carries the tag in its Application too; re-render it
+        import render
+        for p, content in render.render_app(app_dir, render.answers()).items():
+            if p.parent == path.parent and (not p.is_file() or p.read_text() != content):
+                p.write_text(content)
     print(f"{name} in {env}: {old} -> {tag}")
     return 0
 

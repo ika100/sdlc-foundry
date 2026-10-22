@@ -6,6 +6,16 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**Unattended delivery on GitHub Free** ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md), [guide](unattended-delivery.md), from a [review of three lan repos](e2e/2026-10-22-review-unattended-delivery.md)). Approve a spec, then `/svc:ship <NNN>` plans, builds, opens the PR, merges it after green CI and waits until `dev` runs it, without branch protection or auto-merge. **Plugins:** svc 3.1.0, shared 0.12.0.
+
+- **065 — merges wait for green CI without branch protection.** The gitops-app's `pin-dev` runs `ci.yml` (now also a reusable workflow with a `ref` input) on the pin branch and merges the pin PR only when it passed; a red CI comments the run and leaves the PR open. Where protection refuses the direct merge it falls back to auto-merge. `/shared:new-service` says what still guards merges on the free plan. **Action:** `/shared:update-service` in each gitops-app.
+- **066 — unattended runs stop only when done.** A `Stop` hook in the shared plugin keeps an unfinished `/svc:ship` run going (next step, untraced criteria, red tests) until it is done, escalated (`cplat ship escalate`) or blocked 8 times.
+- **067 — `/svc:ship <spec> [--no-merge]`.** Plan → build → `cplat ship pr` → `cplat ship land` (merge only when every reported check passed; red → log tails → fix loop, at most 3 rounds) → `cplat ship deploy` (the merged pin PR of the merge commit, optionally Argo `Synced/Healthy`). Resumable from the state in the git directory.
+- **068 — done means verified.** `cplat spec set-status <id> done` needs `verification.md` with `**Result:** pass` (product specs excepted); `--unverified --reason` records an exception; `/svc:specs` shows `/svc:verify` for done specs without evidence.
+- **069 — external services** ([ADR-029](adr/029-external-services.md)). A services.yaml entry with `external: {kustomize: <path>}` or `external: {helm: {repoURL, path, revision, imageTag}}` is wired into the environments and pinned like any service, so pin-dev, `/gitops:promote` and `/shared:status` cover services with CronJobs, volumes or charts. **Action:** `/shared:update-service` in each gitops-app (render.py, pin.py).
+- **070 — `cplat headless "<prompt>"`.** Fresh `claude -p --permission-mode dontAsk` sessions until a ship run is done or escalated, `--quiet HH:MM-HH:MM`, a log, `summary.log` and a desktop notification.
+- **071 — `cplat adopt --type <shape>`.** Brings a repo that was not created from a template onto the platform in one commit without overwriting its files.
+
 - **064 — self-hosted CI runners without editing workflows** ([guide](self-hosted-runners.md)). Every template job runs on `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`, the devbox install step runs only on GitHub-hosted runners (self-hosted images ship devbox), and service `docker` jobs take their architecture matrix from `vars.CI_DOCKER_MATRIX` when it is set. Nothing changes for repositories without the variables. **To move a repository to self-hosted runners:** `/shared:update-service`, then `gh variable set CI_RUNNER --body <runner label>` (and `CI_DOCKER_MATRIX` for service shapes).
 
 ## [4.1.0] — 2026-10-09

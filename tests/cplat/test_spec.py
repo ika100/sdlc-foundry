@@ -194,9 +194,55 @@ def test_transitions(tmp_path):
     with pytest.raises(core.PlatformError, match="not allowed"):
         spec.set_status(s, "approved", None)  # only through approve
     spec.approve(s, None)
+    (s.dir / "verification.md").write_text(PASSING)
     for st in ("building", "done", "draft"):  # done -> draft is an amendment
         spec.set_status(spec.read(s.dir), st, "amend" if st == "draft" else None)
     assert spec.read(s.dir).status == "draft"
+
+
+PASSING = "# Verification — 007 Price alerts\n\n**Result:** pass\n"
+
+
+# ---------------- spec 068: done means verified ----------------
+
+def test_done_needs_a_passing_verification(tmp_path):
+    """AC-068.1: a build spec cannot become done without verification.md saying pass."""
+    s = make(tmp_path, status="building")
+    with pytest.raises(core.PlatformError, match="has no verification.md") as e:
+        spec.set_status(s, "done", None)
+    assert "/svc:verify 007" in e.value.hint
+    (s.dir / "verification.md").write_text(PASSING.replace("pass", "fail"))
+    with pytest.raises(core.PlatformError, match="does not say"):
+        spec.set_status(spec.read(s.dir), "done", None)
+    (s.dir / "verification.md").write_text(PASSING)
+    spec.set_status(spec.read(s.dir), "done", None)
+    assert spec.read(s.dir).status == "done"
+
+
+def test_an_unverified_done_is_an_explicit_recorded_exception(tmp_path):
+    """AC-068.2: --unverified needs a reason, and the reason lands in the changelog."""
+    s = make(tmp_path, status="building")
+    with pytest.raises(core.PlatformError, match="needs --reason"):
+        spec.set_status(s, "done", None, unverified=True)
+    spec.set_status(spec.read(s.dir), "done", "infra-only change, checked on lan", unverified=True)
+    body = spec.read(s.dir).body
+    assert "done: unverified: infra-only change, checked on lan" in body
+
+
+def test_product_specs_need_no_verification(tmp_path):
+    """AC-068.1: product specs (gitops-app) are verified in their component repos."""
+    s = make(tmp_path, status="building")
+    s.meta["shape"] = "gitops-app"
+    spec.set_status(s, "done", None)
+    assert spec.read(s.dir).status == "done"
+
+
+def test_done_without_verification_points_to_verify(tmp_path):
+    """AC-068.3: specs that were closed without evidence show `/svc:verify` as their next step; verified ones show none."""
+    s = make(tmp_path, status="done")
+    assert spec.next_step(s) == "/svc:verify 007"
+    (s.dir / "verification.md").write_text(PASSING)
+    assert spec.next_step(spec.read(s.dir)) == "—"
 
 
 @pytest.mark.parametrize("kw, step", [
@@ -204,7 +250,7 @@ def test_transitions(tmp_path):
     ({}, "/svc:spec approve 007"),
     ({"status": "approved", "plan": False}, "/svc:plan 007"),
     ({"status": "building"}, "/svc:build 007"),
-    ({"status": "done"}, "—"),
+    ({"status": "done"}, "/svc:verify 007"),
 ])
 def test_next_step(tmp_path, kw, step):
     assert spec.next_step(make(tmp_path, **kw)) == step

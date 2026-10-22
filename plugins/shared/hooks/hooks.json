@@ -12,6 +12,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$(git rev-parse --git-common-dir 2>/dev/null)/cplat-ship.json\"; [ -f \"$f\" ] || exit 0; exec \"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" ship gate",
+            "timeout": 960,
+            "statusMessage": "Checking the ship run (spec 066)"
+          }
+        ]
+      }
     ]
   }
 }

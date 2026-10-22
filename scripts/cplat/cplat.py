@@ -20,6 +20,9 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py triage list|show|setup-labels|apply ...   issue intake for /shared:triage (labels and comments only after you confirm; never closes)
   cplat.py status [--context KUBE_CONTEXT]   one table: pins per env, service CI, Argo sync/health
   cplat.py spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
+  cplat.py ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /svc:ship: spec → merged PR → dev (ADR-028)
+  cplat.py headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume (spec 070)
+  cplat.py adopt --type SHAPE [--data KEY=VALUE]   bring an existing repo onto the platform template (spec 071)
 """
 from __future__ import annotations
 
@@ -45,6 +48,9 @@ COMMANDS = {
     "feedback": "feedback",
     "triage": "triage",
     "spec": "spec",
+    "ship": "ship",
+    "headless": "headless",
+    "adopt": "adopt",
 }
 
 

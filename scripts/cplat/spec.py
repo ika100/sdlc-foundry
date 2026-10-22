@@ -535,11 +535,33 @@ def approve(spec: Spec, shape: str | None) -> None:
     save(spec.dir / "spec.md", spec.meta, add_changelog(spec.body, "approved"))
 
 
-def set_status(spec: Spec, status: str, reason: str | None) -> None:
+VERDICT = re.compile(r"^\*\*Result:\*\*\s*(pass|fail)\b", re.M)
+
+
+def verification_result(spec: Spec) -> str | None:
+    """`pass` / `fail` from verification.md (written by the reviewer), None when there is none."""
+    f = spec.dir / "verification.md"
+    if not f.is_file():
+        return None
+    m = VERDICT.search(f.read_text())
+    return m.group(1) if m else "fail"
+
+
+def set_status(spec: Spec, status: str, reason: str | None, *, unverified: bool = False) -> None:
     if status not in TRANSITIONS.get(spec.status, set()):
         allowed = ", ".join(sorted(TRANSITIONS.get(spec.status, set()))) or "none"
         raise PlatformError(f"{spec.id}: '{spec.status}' -> '{status}' is not allowed (allowed: {allowed})",
                             hint="draft -> approved goes through `cplat spec approve`")
+    if status == "done" and spec.meta.get("shape") != "gitops-app":   # spec 068: done means verified
+        result = verification_result(spec)
+        if result != "pass" and not unverified:
+            why = "has no verification.md" if result is None else "verification.md does not say **Result:** pass"
+            raise PlatformError(f"{spec.id} {why}; done means a reviewer checked every criterion",
+                                hint=f"run `/svc:verify {spec.number}` (or `--unverified --reason <why>` to record an exception)")
+        if result != "pass":
+            if not reason:
+                raise PlatformError("--unverified needs --reason: the exception is recorded in the spec's changelog")
+            reason = f"unverified: {reason}"
     spec.meta["status"] = status
     save(spec.dir / "spec.md", spec.meta, add_changelog(spec.body, status + (f": {reason}" if reason else "")))
 
@@ -569,6 +591,8 @@ def next_step(spec: Spec) -> str:
         return f"{prefix}:plan {n}"
     if spec.status in {"approved", "building"}:
         return f"{prefix}:build {n}"
+    if spec.status == "done" and not product and verification_result(spec) != "pass":
+        return f"/svc:verify {n}"   # spec 068: done without evidence
     return "—"
 
 
@@ -799,6 +823,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("id")
     p.add_argument("status", choices=STATUSES)
     p.add_argument("--reason")
+    p.add_argument("--unverified", action="store_true", help="done without a passing verification.md (needs --reason)")
     p = sub.add_parser("task-done")
     p.add_argument("id")
     p.add_argument("task")
@@ -842,7 +867,7 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "set-status":
         spec = find(root, ns.id)
-        set_status(spec, ns.status, ns.reason)
+        set_status(spec, ns.status, ns.reason, unverified=ns.unverified)
         print(f"{spec.id}: {ns.status}")
         return 0
     if ns.cmd == "task-done":
