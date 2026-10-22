@@ -33,6 +33,7 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 | `audit` | `govulncheck ./...` |
 | `secrets-scan` | detect-secrets against `.secrets.baseline.json` |
 | `security` | `audit` + `secrets-scan` |
+| `ci` | `quality` + `test` + `security`: the gates CI runs; run it before every push |
 | `image-build` | Build local image `{{ project_name }}:scan` |
 | `image-scan` | trivy against `{{ project_name }}:scan` |
 

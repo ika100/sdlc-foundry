@@ -27,6 +27,7 @@
       "audit":        "pnpm audit --prod --audit-level high",
       "secrets-scan": "git ls-files -z ':!pnpm-lock.yaml' | xargs -0 detect-secrets-hook --baseline .secrets.baseline.json",
       "security":     "devbox run audit && devbox run secrets-scan",
+      "ci":           "devbox run quality && devbox run test && devbox run security",
       "image-build":  "docker build -t {{ project_name }}:scan .",
       "image-scan":   "trivy image --severity CRITICAL,HIGH --format table {{ project_name }}:scan"
     }

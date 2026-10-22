@@ -32,6 +32,7 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 | `secrets-scan` | `detect-secrets-hook` against `.secrets.baseline.json` |
 | `bandit` | `bandit -r src/ -q` |
 | `security` | `audit` + `secrets-scan` + `bandit` |
+| `ci` | `quality` + `test` + `security`: the gates CI runs; run it before every push |
 | `image-build` | Build local container image `{{ project_name }}:scan` |
 | `image-scan` | `trivy image --severity CRITICAL,HIGH` against `{{ project_name }}:scan` |
 {%- if needs_migrations %}

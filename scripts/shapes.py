@@ -86,7 +86,7 @@ def check_files(shapes: list[dict]) -> list[str]:
     return errs
 
 
-CORE_RECIPES = ["lint", "lint-fix", "quality", "test", "test-fast", "security"]
+CORE_RECIPES = ["lint", "lint-fix", "quality", "test", "test-fast", "security", "ci"]
 DEPLOY_RECIPES = ["image-build", "image-scan"]
 CONTRACT_AGENTS = ["coder", "tester"]
 DEPLOY_AGENTS = ["deployment", "observability", "release"]

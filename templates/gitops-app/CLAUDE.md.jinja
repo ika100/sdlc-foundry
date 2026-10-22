@@ -58,6 +58,7 @@ Argo must be able to read this repo. Then, once per cluster, a human runs `KUBE_
 | `bootstrap` | **human, once per cluster**: `KUBE_CONTEXT=<ctx> devbox run bootstrap` applies the root Application |
 | `cluster-up` / `cluster-down` | local k3d cluster with ArgoCD, Gateway API and credentials |
 | `security` | detect-secrets |
+| `ci` | `validate` + `security`: the gates CI runs; run it before every push |
 
 **Rule for every agent: never call `kustomize`, `kubeconform`, `kubectl`, or `detect-secrets` directly. Always `devbox run <script>`. Never `kubectl apply` — Argo owns reconciliation.**
 

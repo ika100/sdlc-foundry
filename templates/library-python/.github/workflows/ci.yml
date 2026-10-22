@@ -2,16 +2,8 @@ name: ci
 
 on:
   push:
-    branches:
-      - main
-      - 'feature/**'
-      - 'fix/**'
-      - 'chore/**'
-      - 'docs/**'
-      - 'refactor/**'
-      - 'perf/**'
-      - 'test/**'
-      - 'release/**'
+    # other branches get CI from their PR only: a push trigger on them too ran every job twice (sdlc-foundry #104)
+    branches: [main]
     tags:
       - 'v*.*.*'
   pull_request:

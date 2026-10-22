@@ -26,6 +26,7 @@
       "secrets-scan":   "git ls-files -z ':!*.lock' | xargs -0 uv run detect-secrets-hook --baseline .secrets.baseline.json",
       "bandit":         "uv run bandit -r src/ -q",
       "security":       "devbox run audit && devbox run secrets-scan && devbox run bandit",
+      "ci":             "devbox run quality && devbox run test && devbox run security",
 {%- if needs_migrations %}
       "migrate":        "uv run alembic upgrade head",
       "migrate-new":    "uv run alembic revision --autogenerate -m",
