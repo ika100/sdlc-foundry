@@ -39,6 +39,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [045-multi-repo-builds-handle-the-gitops-app](specs/045-multi-repo-builds-handle-the-gitops-app/spec.md) — Multi-repo builds handle the gitops-app entry | P0 | done | 4 |  |
 | [065-merges-wait-for-green-ci-without-branch](specs/065-merges-wait-for-green-ci-without-branch/spec.md) — Merges wait for green CI without branch protection | P0 | done | 5 |  |
 | [067-ship-an-approved-spec-to-dev](specs/067-ship-an-approved-spec-to-dev/spec.md) — Ship an approved spec to dev unattended | P0 | done | 5 |  |
+| [077-ship-deploy-reports-what-really-runs](specs/077-ship-deploy-reports-what-really-runs/spec.md) — Ship deploy reports what really runs | P0 | done | 4 | #113, #114, #115 |
 | [004-preflight-check-of-the-setup](specs/004-preflight-check-of-the-setup/spec.md) — Preflight check of the setup | P1 | done | 2 |  |
 | [007-a-shape-is-added-by-following-a](specs/007-a-shape-is-added-by-following-a/spec.md) — A shape is added by following a documented contract | P1 | done | 3 |  |
 | [011-java-spring-boot-template](specs/011-java-spring-boot-template/spec.md) — Java (Spring Boot) template | P1 | done | 3 |  |
@@ -74,11 +75,16 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [068-done-means-verified](specs/068-done-means-verified/spec.md) — Done means verified | P1 | done | 3 |  |
 | [069-external-services-in-services-yaml](specs/069-external-services-in-services-yaml/spec.md) — External services in services.yaml | P1 | done | 4 |  |
 | [070-headless-runs-resume-until-finished](specs/070-headless-runs-resume-until-finished/spec.md) — Headless runs resume until finished | P1 | done | 4 |  |
-| [072-ship-land-fails-fast-and-heals-stuck-checks](specs/072-ship-land-fails-fast-and-heals-stuck-checks/spec.md) — Ship land fails fast and heals stuck checks | P1 | done | 5 | #102 |
+| [072-ship-land-fails-fast-and-heals-stuck-checks](specs/072-ship-land-fails-fast-and-heals-stuck-checks/spec.md) — Ship land fails fast and heals stuck checks | P1 | done | 4 | #102 |
 | [073-secrets-scan-agrees-locally-and-in-ci](specs/073-secrets-scan-agrees-locally-and-in-ci/spec.md) — Secrets scan agrees locally and in CI | P1 | done | 3 | #103 |
 | [074-ci-runs-once-per-change](specs/074-ci-runs-once-per-change/spec.md) — CI runs once per change | P1 | done | 2 | #104 |
 | [075-devbox-run-ci-is-the-ci-gate](specs/075-devbox-run-ci-is-the-ci-gate/spec.md) — devbox run ci is the CI gate, locally | P1 | done | 3 | #105 |
 | [076-ship-carries-the-gitops-changes-of-a-spec](specs/076-ship-carries-the-gitops-changes-of-a-spec/spec.md) — Ship carries the gitops changes of a spec | P1 | done | 6 | #106 |
+| [078-one-image-tag-format](specs/078-one-image-tag-format/spec.md) — One image tag format: the full commit sha | P1 | done | 3 | #116 |
+| [079-cplat-pr-wait](specs/079-cplat-pr-wait/spec.md) — cplat pr wait: one CI waiter for every PR | P1 | done | 3 | #117 |
+| [080-lean-build-and-headless](specs/080-lean-build-and-headless/spec.md) — Lean build QA and headless runs that stop when stuck | P1 | done | 2 | #118, #119 |
+| [081-gates-that-can-fail](specs/081-gates-that-can-fail/spec.md) — Gates that can fail: pinned tools and a doctor check | P1 | done | 3 | #120, #123, #126 |
+| [082-sessions-do-not-collide](specs/082-sessions-do-not-collide/spec.md) — Sessions do not collide: claimed issues and specs required | P1 | done | 2 | #121, #122 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
@@ -90,6 +96,8 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [058-reference-skills-stay-out-of-the-command](specs/058-reference-skills-stay-out-of-the-command/spec.md) — Reference skills stay out of the command list | P2 | done | 2 |  |
 | [059-security-scans-are-quiet-and-the-base](specs/059-security-scans-are-quiet-and-the-base/spec.md) — Security scans are quiet and the base image is tracked | P2 | done | 2 |  |
 | [071-adopt-an-existing-repo](specs/071-adopt-an-existing-repo/spec.md) — Adopt an existing repo | P2 | done | 4 |  |
+| [083-platform-drift-in-status](specs/083-platform-drift-in-status/spec.md) — Platform drift in /shared:status | P2 | done | 1 | #125 |
+| [084-platform-ci-in-minutes](specs/084-platform-ci-in-minutes/spec.md) — Platform CI in minutes | P2 | done | 2 | #124, #127 |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)

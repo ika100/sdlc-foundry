@@ -674,7 +674,7 @@ def test_pin_and_promote_move_external_services(gitops_repo, gh):
     commit(gitops_repo, "pin")
     assert promote.main(["ai-ops", "dev", "staging", "--sha", SHA, "--no-verify", "--repo-dir", str(gitops_repo)]) == 0
     staged = overlay(gitops_repo, "staging", "ai-ops", "application.yaml")["spec"]["source"]["helm"]["valuesObject"]
-    assert staged["image"]["tag"] == "sha-" + SHA[:7] and staged["replicas"] == 2
+    assert staged["image"]["tag"] == "sha-" + SHA and staged["replicas"] == 2   # spec 078: the full sha
     assert render_check(gitops_repo).returncode == 0
 
 

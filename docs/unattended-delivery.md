@@ -11,7 +11,7 @@ unattended: /svc:ship <NNN>
               build    failing acceptance tests → coders until green → QA → reviewer (verification.md) → image
               pr       cplat ship pr: pushes feature/<spec>, opens the PR
               land     cplat ship land: waits for every check; red → logs → coder → push (≤ 3 rounds); green → squash merge
-              deploy   cplat ship deploy: the service's CI publishes sha-<7>, pin-dev merges the pin PR after CI, Argo syncs
+              deploy   cplat ship deploy: the service's CI publishes sha-<40>, pin-dev merges the pin PR after CI, Argo syncs
 you:        check dev  →  /gitops:promote <svc> dev staging   (reviewed PR, as before)
 ```
 

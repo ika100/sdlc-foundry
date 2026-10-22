@@ -15,10 +15,10 @@ cplat shape
 ```
 
 ```bash
-cplat ship start <spec> [--no-merge]
+cplat ship start <spec> [--no-merge] [--take-over]
 ```
 
-`unsupported` or no shape → stop (gitops-app repos ship through `/app:build`). `ship start` refuses an unapproved spec: show its hint and stop. It prints the phase and the next step; a re-run **resumes** at that phase. Print both outputs verbatim.
+`unsupported` or no shape → stop (gitops-app repos ship through `/app:build`). `ship start` refuses an unapproved spec, an issue the spec tracks that another branch has claimed (spec 082: `--take-over` only when the user says so), and a repo linked to a gitops-app without the secret `GITOPS_TOKEN` (spec 077). In each case, show its hint and stop. It prints the phase and the next step; a re-run **resumes** at that phase. Print both outputs verbatim.
 
 **While the run is not finished, the shared plugin's Stop hook refuses to let the session end** and tells you the next step, with the failing tests in the build phase. That is intended: keep working. You may stop only after `cplat ship escalate '<reason>'` (see Escalate) or when the run is done.
 
@@ -48,7 +48,7 @@ Then `cplat ship phase pr`.
 
 ## Phase `land`
 
-`cplat ship land` waits for the PR's checks and prints each one as it concludes. The first red check ends the wait (spec 072); a run whose check stays in progress after the run completed, or whose jobs stay queued for `--queue-timeout` (300 s) while nothing of the PR runs, is rerun once; the second time it is an error naming the runner set. When all are green it marks each `before-merge` gitops PR ready, waits for its checks and merges it, then merges the PR.
+`cplat ship land` waits for the PR's checks and prints each one as it concludes. The first red check ends the wait (spec 072); a run whose check stays in progress after the run completed, or whose jobs stay queued for `--queue-timeout` (300 s) while nothing of the PR runs, is rerun once; the second time it is an error naming the runner set. A job that failed on a transient error (a download, a registry, the network) is rerun once before it counts as red (spec 079). Outside a ship run, wait for any PR with `cplat pr wait <pr> [-R owner/repo] [--merge]`; never write a polling loop. When all are green it marks each `before-merge` gitops PR ready, waits for its checks and merges it, then merges the PR.
 
 - **GREEN** → it merges the PR (squash; with `--no-merge` it stops and the run is done) and moves to `deploy`.
 - **RED** (exit 1) → it prints the failed checks and their log tails. Hand them to the coder agent (`agents.coder`) of the task whose files are involved, with `<project-map>`: "fix these CI failures; never edit, skip or weaken an acceptance test". Run `devbox run ci`, commit `fix(ci): <what>`, then `cplat ship pr --title <same title> --body-file .git/PR_BODY.md` (pushes) and `cplat ship land` again. After **3** red rounds (`fix_rounds` in `cplat ship status`), escalate with the last failure.
@@ -56,7 +56,7 @@ Then `cplat ship phase pr`.
 
 ## Phase `deploy`
 
-`cplat ship deploy` (add `--context <kube-context>` when the user named one or `kubectl config current-context` works and points at the product's cluster) waits until the gitops-app merged the pin PR for the merge commit (ADR-027) and, with a context, Argo CD reports `<service>-dev` Synced/Healthy. A red check on the open pin PR fails it at once. Then it merges the `after-release` gitops PRs in plan order and, with a context, waits for Synced/Healthy of `<service>-dev` and every app the gitops tasks name (`apps:`); a SyncError or Degraded app is an error. A repo without a gitops-app link finishes here with a note. A closed pin PR, a red pin CI or an unhealthy app → escalate with the hint. Its last lines list the plan's `human_steps` as a checklist: copy them into the final report.
+`cplat ship deploy` (add `--context <kube-context>` when the user named one or `kubectl config current-context` works and points at the product's cluster) waits until the gitops-app merged the pin PR for the merge commit (ADR-027) and, with a context, Argo CD runs that build: `<service>-dev` counts only once `status.summary.images` shows the merged build's tag, never on the old image (spec 077). A red service CI on main, a failed pin-dev run, or no pin-dev run 5 min after main's CI passed (no `GITOPS_TOKEN`) fails it at once; a stuck pin-dev run is rerun once. Then it merges the `after-release` gitops PRs in plan order and, with a context, waits for Synced/Healthy of `<service>-dev` and every app the gitops tasks name (`apps:`), once they reached the merged gitops commit; a SyncError or Degraded app is an error. A repo without a gitops-app link finishes here with a note. A closed pin PR, a red pin CI or an unhealthy app → escalate with the hint. Its last lines list the plan's `human_steps` as a checklist: copy them into the final report.
 
 ## Finish
 
@@ -70,7 +70,7 @@ Then `cplat ship phase pr`.
 | Plan | <n> tasks |
 | Build | <m>/<m> criteria met (verification.md) |
 | PR | <url> — merged after <k> CI round(s) |
-| dev | <service>:sha-<7> (pin PR <url>) · Argo <state> | not linked |
+| dev | <service>:sha-<40> (pin PR <url>) · Argo <state> | not linked |
 
 Next: check the feature in dev; promote with /gitops:promote <service> dev staging in the gitops-app repo.
 ```

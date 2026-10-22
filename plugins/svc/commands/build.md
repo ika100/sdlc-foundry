@@ -85,19 +85,19 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`; comm
 
 `TOUCHED_FILES=$(git diff --name-only $BASE_REF..HEAD)`.
 
-## Phase 3 — QA fan-out (quality ‖ tester ‖ security)
+## Phase 3 — QA: one CI gate, agents only where it is red (spec 080)
 
-Spawn all three **in one message**, each with `<project-map>` and `<touched-files>`:
+1. Stage the tree (`git add -u`, plus new files the build created), then run `devbox run lint-fix` and `devbox run ci`: the gates the CI workflow runs, in its order, each once.
+2. **Red** → spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the output's tail:
+   - lint or type check → **quality** (`agents.quality`): lint/type fixes only;
+   - tests → the **coder** of the task whose files are involved: acceptance tests stay fixed;
+   - security → **security** (`agents.security`): a CRITICAL finding stops the build and escalates; HIGH is documented and the build continues.
 
-1. **quality** (`agents.quality`): "Run `devbox run lint-fix` then `devbox run quality`. Report remaining violations."
-2. **tester** (`agents.tester`): "Normal mode. The acceptance tests exist; do not change them. Add unit/integration tests for internals the touched files need, run `devbox run test`, report pass/fail, coverage and open bugs."
-3. **security** (`agents.security`): "Run `devbox run security`. If a Dockerfile changed, also `devbox run image-build && devbox run image-scan`. Document findings in `docs/security/scan-<today>.md`."
-
-Reconcile: quality failures → coder (lint/type only), tester bugs → coder; at most 2 cycles each. **CRITICAL** security findings → stop and escalate. **HIGH** → document and continue. Refresh `TOUCHED_FILES` if files changed.
-
-After the fan-out, run `cplat spec test-diff $RED` once more (the quality agent ran `lint-fix` too); exit 1 stops the build as in Phase 2.
-
-**CI gate:** stage the tree (`git add -u`, plus new files the build created) and run `devbox run ci` once: the same gates the CI workflow runs, so a red check is found here and not after a push. Red → the coder of the touched task (lint, test or baseline fixes only; acceptance tests stay fixed), at most 2 rounds; then escalate. Commit what it changed.
+   Run `devbox run ci` again; at most 2 rounds, then escalate.
+3. **Green** → spawn agents only where needed:
+   - **tester** (`agents.tester`, normal mode) only when the touched files add internals that no unit test covers: it adds those tests and runs `devbox run test`;
+   - **security** only when a Dockerfile changed (`devbox run image-build && devbox run image-scan`), writing `docs/security/scan-<today>.md`.
+4. `cplat spec test-diff $RED` once more (`lint-fix` may have reformatted); exit 1 stops the build as in Phase 2. Commit what changed.
 
 ## Phase 4 — Verify against the spec
 
@@ -167,7 +167,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 |---|---|
 | Acceptance tests | <n> tests for <m> criteria, red at <short sha> |
 | Implementation | <n> tasks (<p> parallel, <s> sequential), <files> files |
-| QA | quality PASS · tests N (X% cov) · security PASS/WARN |
+| QA | `devbox run ci` green in <n> round(s) · agents: <none | which> |
 | Verification | <m>/<m> criteria met (verification.md) |
 | Image | built and smoke-started | skipped |
 | PR | <URL> |

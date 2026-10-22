@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Agents for Next.js (App Router, pnpm, TypeScript) web repos: coder, tester (Vitest/Playwright), deployment, observability, and release. Used by the /svc:* orchestrators when the repo shape is web-nextjs. Requires devbox recipes from the web-nextjs Copier template.",
   "author": {
     "name": "Eike Hensler",

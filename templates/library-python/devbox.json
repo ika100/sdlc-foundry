@@ -3,9 +3,9 @@
   "packages": [
     "python@{{ python_version }}",
     "uv@latest",
-    "ruff@latest",
-    "mypy@latest",
-    "pip-audit@latest",
+    "ruff@0.16.10",
+    "mypy@2.1.0",
+    "pip-audit@2.10.1",
     "detect-secrets@1.5.0",
     "git@latest",
     "gh@latest"

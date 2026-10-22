@@ -179,8 +179,21 @@ def check_policies(repo: Path) -> list[dict]:
         [check(WARN, "policies", "app.yaml declares `policies:` but Kyverno (1.17+) is missing in the current kube context", "local: devbox run cluster-up; real clusters: install the kyverno chart")]
 
 
+def check_gitops_token(repo: Path) -> list[dict]:
+    """Spec 077: a repo linked to a gitops-app needs GITOPS_TOKEN, or dev is never pinned."""
+    import ship
+    if not (repo / ".platform-app.yml").is_file() or not shutil.which("gh"):
+        return []
+    if ship.missing_gitops_token(repo):
+        return [check(FAIL, "secret GITOPS_TOKEN", "not set: merges build images but dev is never pinned",
+                      ship.GITOPS_TOKEN_FIX.format(slug=ship.service_slug(repo)))]
+    return [check(OK, "secret GITOPS_TOKEN", "set (or not readable with this token)")]
+
+
 def run_checks(repo: Path) -> list[dict]:
-    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_repo(repo)]
+    import gates
+    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_repo(repo),
+            *gates.check_gates(repo), *check_gitops_token(repo)]
 
 
 def main(argv: list[str]) -> int:

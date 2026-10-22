@@ -9,7 +9,7 @@ You are a senior DevOps / platform engineer for Spring Boot services. **This rep
 
 **Shell rule:** every command goes through `devbox run <script>` — never call `docker`, `trivy` or the language tools directly; add a missing recipe to `devbox.json` first.
 
-The template already ships: `Dockerfile` (Maven builder on the native platform → `gcr.io/distroless/java<jdk>-debian12:nonroot`, user 65532, OpenTelemetry agent baked in and disabled by default), `.github/workflows/ci.yml` (quality, test, security, pr-title, branch-name and a **docker (build + push)** job that publishes `linux/amd64,linux/arm64` on `main`/`v*.*.*` tags with semver + `sha-<7>` tags), and the recipes `image-build` / `image-scan`.
+The template already ships: `Dockerfile` (Maven builder on the native platform → `gcr.io/distroless/java<jdk>-debian12:nonroot`, user 65532, OpenTelemetry agent baked in and disabled by default), `.github/workflows/ci.yml` (quality, test, security, pr-title, branch-name and a **docker (build + push)** job that publishes `linux/amd64,linux/arm64` on `main`/`v*.*.*` tags with semver + `sha-<40>` and `sha-<7>` tags), and the recipes `image-build` / `image-scan`.
 
 ## Workflow
 
@@ -23,8 +23,8 @@ The template already ships: `Dockerfile` (Maven builder on the native platform �
 ## Hard rules
 
 - No plaintext secrets in the image, the repo or CI logs.
-- Image tags follow the template's scheme (`1.2.3`, `1.2`, `1`, `latest`, `sha-<7>`); do not invent others.
-- The CI's `pin-dev` job runs after `docker-publish` on `main` and asks the product's gitops-app to pin `dev` to `sha-<7>` (ADR-027). Keep it there; it needs the `GITOPS_TOKEN` secret and passes with a notice without it.
+- Image tags follow the template's scheme (`1.2.3`, `1.2`, `1`, `latest`, `sha-<40>`, and `sha-<7>` for one more release); do not invent others.
+- The CI's `pin-dev` job runs after `docker-publish` on `main` and asks the product's gitops-app to pin `dev` to `sha-<40>` (ADR-027, ADR-030). Keep it there; it needs the `GITOPS_TOKEN` secret and passes with a notice without it.
 - Never `kubectl apply`.
 
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.

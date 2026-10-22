@@ -95,8 +95,8 @@ Whenever a `Dockerfile` exists, the CI workflow includes a `docker (build + push
 | Trigger | Tags pushed |
 |---|---|
 | PR | Build only — no push |
-| Merge to `main` | `latest`, `sha-<short>` |
-| Version tag `v1.2.3` | `1.2.3`, `1.2`, `1`, `latest`, `sha-<short>` |
+| Merge to `main` | `latest`, `sha-<40>`, `sha-<short>` |
+| Version tag `v1.2.3` | `1.2.3`, `1.2`, `1`, `latest`, `sha-<40>`, `sha-<short>` |
 
 Registry: `{{ docker_registry }}/{{ project_name }}`. Authentication via `GITHUB_TOKEN`.
 

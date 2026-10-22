@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, edited]   # edited: a corrected PR title is checked again
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]   # edited: a corrected title; labeled: no-spec (spec 082)
 
 # Least privilege by default; jobs that publish packages declare what they need.
 permissions:
@@ -152,7 +152,7 @@ jobs:
           mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: pytest
-        run: uv run --with pytest --with pyyaml --with ruamel.yaml pytest tests/cplat -q
+        run: uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto
 
   smoke-test-templates:
     name: smoke-test Copier templates
@@ -160,6 +160,7 @@ jobs:
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false   # spec 084: independent variants; one flaky job must not cancel the rest
       matrix:
         template: [service-python, library-python]
     steps:
@@ -314,6 +315,7 @@ jobs:
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false   # spec 084: independent variants; one flaky job must not cancel the rest
       matrix:
         observability: [true, false]
     steps:
@@ -368,7 +370,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.java == 'true'
     runs-on: ubuntu-latest
+    env:
+      MAVEN_OPTS: -Daether.connector.http.retryHandler.count=3   # spec 084: a dropped download is retried, not a red job
     strategy:
+      fail-fast: false   # spec 084: independent variants; one flaky job must not cancel the rest
       matrix:
         include:
           - {observability: true, database: false}
@@ -457,6 +462,22 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: python3 scripts/check-dco.py
 
+  spec-required:
+    name: spec-required (platform changes start with a spec)
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: a PR that closes an issue and changes the platform has a spec, or the no-spec label
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: python3 scripts/check-spec-required.py
+
   pr-title:
     name: pr-title (conventional commits)
     runs-on: ubuntu-latest
@@ -480,7 +501,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [changes, validate-manifests, validate-shapes, platform-tests, smoke-test-templates, smoke-test-gitops-app, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, pr-title]
+    needs: [changes, validate-manifests, validate-shapes, platform-tests, smoke-test-templates, smoke-test-gitops-app, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: every needed job passed or was skipped

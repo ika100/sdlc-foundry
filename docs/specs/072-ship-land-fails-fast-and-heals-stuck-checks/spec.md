@@ -22,7 +22,7 @@ As the orchestrator of an unattended ship run, I want a red check reported the m
 - **AC-072.2** Given a check still `in_progress` whose workflow run is `completed`, when land polls, then it reruns that run once (`gh run rerun <id>`) and says so; if the same run is stale again, then land stops with an error naming the run.
 - **AC-072.3** Given a check `queued` for longer than `--queue-timeout` (default 300 s), when land polls, then it cancels and reruns that run once; if it is queued that long again, then land stops with an error that names the run and its runner labels ("picks up no jobs"). A check cancelled by this healing is not reported as red.
 - **AC-072.4** Given land is waiting, when a check concludes, then one line per check (`pass`/`fail`/`skipping`, name) is printed as it happens.
-- **AC-072.5** Given `cplat ship deploy` waits for an open pin PR in a gitops repo, when a check on it fails or gets stuck, then the deploy fails at once with the log tail, or heals the check, exactly as land does.
+- ~~**AC-072.5** Given `cplat ship deploy` waits for an open pin PR in a gitops repo, when a check on it fails or gets stuck, then the deploy fails at once with the log tail, or heals the check, exactly as land does.~~ Withdrawn 2026-10-22: pin PRs carry no checks (pin-dev runs CI inside its own run, #113); replaced by AC-077.1.
 
 ## Non-goals
 
@@ -44,3 +44,4 @@ None.
 - 2026-10-22 approved
 - 2026-10-22 building
 - 2026-10-22 done
+- 2026-10-22 AC-072.5 withdrawn: pin PRs have no checks; spec 077 watches the pin-dev run instead (#113)

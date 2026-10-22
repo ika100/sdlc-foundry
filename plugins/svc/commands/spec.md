@@ -32,7 +32,7 @@ Print cplat output verbatim; never validate a spec yourself.
 
 ## B. New spec
 
-1. Derive a short title (≤ 60 chars, the feature's name, not the whole request) and any `#N` issue numbers in the request. Run `cplat spec new "<title>" [--tracks N …] [--no-shape]`; it prints `docs/specs/<spec_id>/spec.md`.
+1. Derive a short title (≤ 60 chars, the feature's name, not the whole request) and any `#N` issue numbers in the request. Run `cplat spec new "<title>" [--tracks N …] [--no-shape]`; it prints `docs/specs/<spec_id>/spec.md` and claims each tracked issue for `feature/<spec_id>` (spec 082). An issue another branch has claimed stops it: tell the user who has it; `--take-over` only on their word.
 2. `git checkout -b feature/<spec_id>` (from `main`).
 3. **product-manager** agent (`agents.product-manager` from the routing; `svc:product-manager` in a repo without a shape), prompt: `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the `<project-map>` (`ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`), and the list of other specs (`cplat spec list --all`).
 4. `cplat spec check <spec_id>`. On errors, send them back to the product-manager once; if they persist, stop and show them.

@@ -84,11 +84,22 @@ def test_an_escalated_run_is_not_resumed_and_says_why(repo, tmp_path, monkeypatc
 
 
 def test_runs_are_capped(repo, tmp_path, monkeypatch, capsys):
-    """AC-070.2: a run that never finishes stops after --max-runs sessions."""
+    """AC-070.2: a run that never finishes (but keeps committing) stops after --max-runs sessions."""
     ship.start(repo, "7", True)
-    fake_claude(tmp_path, monkeypatch, "true")
+    fake_claude(tmp_path, monkeypatch, "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m step")
     assert headless.main(["/svc:ship 7", "--repo", str(repo), "--max-runs", "3"]) == 1
     assert runs(repo) == 3 and "stopped after 3 runs" in capsys.readouterr().out
+
+
+def test_two_idle_sessions_stop_the_loop_and_escalate(repo, tmp_path, monkeypatch, capsys):
+    """AC-080.2: sessions that change nothing (same phase, HEAD, fix rounds, state) stop after two, not --max-runs."""
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"], cwd=repo, check=True)
+    ship.start(repo, "7", True)
+    fake_claude(tmp_path, monkeypatch, "true")
+    assert headless.main(["/svc:ship 7", "--repo", str(repo), "--max-runs", "6"]) == 1
+    out = capsys.readouterr().out
+    assert runs(repo) == 2 and "no progress" in out
+    assert "no progress" in ship.load_state(repo)["escalated"]
 
 
 def test_a_plain_prompt_without_ship_state_runs_once(repo, tmp_path, monkeypatch):

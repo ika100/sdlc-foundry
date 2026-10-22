@@ -62,13 +62,13 @@ def release_versions(repo_slug: str) -> list[str]:
 
 
 def pick_tag(svc: dict, to_env: str, ns: argparse.Namespace) -> tuple[str, str]:
-    """Returns (image_tag, human description). Staging = sha-<7> of a main build; prod = X.Y.Z (the vX.Y.Z git tag without 'v')."""
+    """Returns (image_tag, human description). Staging = sha-<40> of a main build (spec 078); prod = X.Y.Z (the vX.Y.Z git tag without 'v')."""
     slug = svc["repo"]
     if to_env == "staging":
         sha = ns.sha or head_sha(slug)
         if not re.fullmatch(r"[0-9a-f]{40}", sha):
             raise PlatformError(f"--sha must be a full 40-character commit SHA, got '{sha}'")
-        return f"sha-{sha[:7]}", f"commit {sha[:7]}"
+        return f"sha-{sha}", f"commit {sha[:7]}"
     wanted = ns.version
     if wanted:
         m = SEMVER.match(wanted)
@@ -122,8 +122,10 @@ def main(argv: list[str]) -> int:
         tag, what = pick_tag(svc, to, ns)
         if not ns.no_verify and to == "staging":
             have = image_tags(svc["image"])
+            if tag not in have and f"sha-{tag[4:11]}" in have:    # built before spec 078: only the short tag exists
+                tag = f"sha-{tag[4:11]}"
             if tag not in have:
-                raise PlatformError(f"image {svc['image']}:{tag} does not exist yet", hint=f"wait for CI on {svc['repo']}'s main to finish (it publishes sha-<7> tags), or pass --sha of a built commit")
+                raise PlatformError(f"image {svc['image']}:{tag} does not exist yet", hint=f"wait for CI on {svc['repo']}'s main to finish (it publishes sha-<40> tags), or pass --sha of a built commit")
         elif not ns.no_verify and to == "prod" and tag not in image_tags(svc["image"]):
             raise PlatformError(f"image {svc['image']}:{tag} does not exist", hint=f"the release v{tag} must have been built by CI in {svc['repo']}")
         plan.append((n, tag))

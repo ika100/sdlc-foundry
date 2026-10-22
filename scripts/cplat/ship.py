@@ -42,6 +42,11 @@ NO_CHECKS_GRACE = 300                 # seconds to wait for the first check to b
 QUEUE_TIMEOUT = 300                   # seconds a run may have only queued jobs before it is cancelled and rerun
 RERUN_GRACE = 120                     # seconds a check cancelled for a rerun is not counted as red
 QUEUED = {"QUEUED", "PENDING", "WAITING", "REQUESTED"}   # `gh pr checks` states of a job no runner took yet
+# spec 079: log lines of a red job that mean the network or a registry failed, not the change; such a job is rerun once
+TRANSIENT = re.compile(r"Failed to read artifact descriptor|Could not resolve (dependencies|host)|Could not transfer artifact|"
+                       r"\b50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)\b|HTTP (status )?50[234]\b|"
+                       r"connection reset|Connection reset by peer|TLS handshake timeout|i/o timeout|ETIMEDOUT|ECONNRESET",
+                       re.I)
 
 
 def gh(args: list[str], *, cwd: Path, check: bool = True) -> str:
@@ -122,12 +127,16 @@ def describe(st: dict) -> str:
 
 # ---------------- start / phase / escalate / finish ----------------
 
-def start(repo: Path, ref: str, merge: bool) -> dict:
+def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
     sp = specmod.find(repo, ref)
     st = load_state(repo)
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated"):
         raise PlatformError(f"another ship run is in progress: {st['spec']} (phase {st['phase']})",
                             hint="finish it, or end it with `cplat ship finish`")
+    if sp.meta.get("tracks"):                  # spec 082: refuse an issue another branch is building
+        import claim
+        for note in claim.claim(repo, sp.meta["tracks"], f"feature/{sp.id}", take_over=take_over, what=f"ship {sp.id}"):
+            say(note)
     if st and st["spec"] == sp.id:
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
         st["blocks"] = 0
@@ -136,6 +145,9 @@ def start(repo: Path, ref: str, merge: bool) -> dict:
     if sp.status in {"draft", "superseded"}:
         raise PlatformError(f"{sp.id} is '{sp.status}'; only an approved spec is shipped",
                             hint=f"answer its questions and approve it: `/svc:spec approve {sp.number}`")
+    if missing_gitops_token(repo):
+        raise PlatformError("this repo is linked to a gitops-app, but the secret GITOPS_TOKEN is not set: dev would never "
+                            "be pinned (spec 077)", hint=GITOPS_TOKEN_FIX.format(slug=service_slug(repo)))
     if sp.status == "done":
         phase = "pr"
     elif sp.plan and not specmod.check_plan(sp, *sp.plan):
@@ -146,6 +158,22 @@ def start(repo: Path, ref: str, merge: bool) -> dict:
           "started": dt.datetime.now().isoformat(timespec="seconds")}
     save_state(repo, st)
     return st
+
+
+GITOPS_TOKEN_FIX = ("create a fine-grained token with Contents read and write on the gitops-app repo, then: "
+                    "gh secret set GITOPS_TOKEN -R {slug}")
+
+
+def missing_gitops_token(repo: Path) -> bool:
+    """True only when the repo is linked and `gh secret list` worked and has no GITOPS_TOKEN (unknown → False)."""
+    if not gitops_apps(repo):
+        return False
+    out = gh(["secret", "list", "--json", "name"], cwd=repo, check=False)
+    try:
+        names = {x["name"] for x in json.loads(out)}
+    except (ValueError, TypeError, KeyError):
+        return False
+    return "GITOPS_TOKEN" not in names
 
 
 def set_phase(repo: Path, phase: str) -> dict:
@@ -162,6 +190,13 @@ def escalate(repo: Path, reason: str) -> dict:
     st = require_state(repo)
     st["escalated"] = reason
     save_state(repo, st)
+    try:
+        tracks = specmod.find(repo, st["spec"]).meta.get("tracks") or []
+    except PlatformError:
+        tracks = []
+    if tracks:                                 # spec 082: a stopped run does not keep the issue
+        import claim
+        claim.release(repo, tracks, f"ship {st['spec']} escalated: {reason}")
     return st
 
 
@@ -261,9 +296,29 @@ class CheckWatch:
         self.healed: dict[tuple[str, str], tuple[str, float]] = {}   # run → (stale | queued, when)
 
     def _own_cancel(self, c: dict) -> bool:
-        """A check this watch cancelled to rerun a stuck run is not red."""
+        """A check of a run this watch just reran (stuck queue cancelled, or a transient failure) is not red yet."""
         h = self.healed.get(run_of(c) or ("", ""))
-        return c.get("bucket") == "cancel" and bool(h) and h[0] == "queued" and now() - h[1] < RERUN_GRACE
+        if not h or now() - h[1] >= RERUN_GRACE:
+            return False
+        return (h[0] == "queued" and c.get("bucket") == "cancel") or (h[0] == "transient" and c.get("bucket") in FAILED)
+
+    def _transient(self, failed: list[dict]) -> list[dict]:
+        """Rerun, once per run, the failed jobs of a run whose log shows a transient error (spec 079); returns the rest."""
+        final = []
+        for c in failed:
+            r = run_of(c)
+            if not r or r in self.healed:
+                final.append(c)
+                continue
+            log = gh(["run", "view", r[1], "-R", r[0], "--log-failed"], cwd=self.repo, check=False)
+            hit = TRANSIENT.search("\n".join(log.splitlines()[-80:]))
+            if not hit:
+                final.append(c)
+                continue
+            say(f"  rerun    run {r[1]}: {c['name']} failed on a transient error ({hit.group(0)})")
+            gh(["run", "rerun", r[1], "-R", r[0], "--failed"], cwd=self.repo, check=False)
+            self.healed[r] = ("transient", now())
+        return final
 
     def poll(self) -> tuple[str, list[dict], list[dict]]:
         """("pending" | "green" | "red", checks, failed checks)."""
@@ -274,9 +329,10 @@ class CheckWatch:
             if b != "pending" and c not in own and self.reported.get(c["name"]) != b:
                 self.reported[c["name"]] = b
                 say(f"  {b:<8} {c['name']}")
-        failed = [c for c in cs if c.get("bucket") in FAILED and c not in own]
+        failed = self._transient([c for c in cs if c.get("bucket") in FAILED and c not in own])
         if failed:
             return "red", cs, failed
+        own = [c for c in cs if self._own_cancel(c)]
         pending = [c for c in cs if c.get("bucket") == "pending" or c in own]
         if cs and not pending:
             return "green", cs, []
@@ -530,8 +586,9 @@ def service_name(repo: Path) -> str:
 
 def deploy(repo: Path, timeout: float, interval: float, context: str | None,
            queue_timeout: float = QUEUE_TIMEOUT) -> tuple[bool, list[str]]:
-    """Wait for each gitops-app's pin PR for the merge commit (spec 062) to merge, then for Argo to report it healthy;
-    then merge the after-release gitops PRs and wait for every app they name (spec 076)."""
+    """Wait for each gitops-app's pin PR for the merge commit (spec 062) to merge, watching the service's main CI and
+    the pin-dev run so a red or missing one fails at once (spec 077); then for Argo to run that build; then merge the
+    after-release gitops PRs and wait for every app they name (spec 076)."""
     import shapecmd
     st = require_state(repo)
     if st["phase"] == "done":
@@ -550,23 +607,35 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     lines: list[str] = []
     begin = now()
     pending = list(apps)
-    watches: dict[str, CheckWatch] = {}
+    runs: dict[str, RunWatch] = {}
+    green_at: float | None = None          # when the service's main CI for the merge commit was seen green
     while pending:
+        ci, ci_runs = main_ci(repo, sha)
+        if ci == "red":
+            return False, lines + [f"the service's CI on main is red for {short}; nothing was pinned"] + run_logs(repo, ci_runs)
+        if ci == "green" and green_at is None:
+            green_at = now()
         for app in list(pending):
             prs = json.loads(gh(["pr", "list", "-R", app, "--state", "all", "--head", branch, "--json", "number,state,url"],
                                 cwd=repo, check=False) or "[]")
             pr = prs[0] if prs else None
             if pr and pr["state"] == "MERGED":
-                lines.append(f"{app}: dev pinned to {svc}:sha-{short} ({pr['url']})")
+                lines.append(f"{app}: dev pinned to {svc}:sha-{sha} ({pr['url']})")
                 pending.remove(app)
-            elif pr and pr["state"] == "CLOSED":
+                continue
+            if pr and pr["state"] == "CLOSED":
                 raise PlatformError(f"{app}: the pin PR {pr['url']} was closed without merging (a newer build superseded it, "
                                     "or its CI failed)", hint="read the PR's comments; `cplat ship escalate 'pin failed'`")
-            elif pr:                                   # open: a red check fails now, a stuck one is healed (spec 072)
-                w = watches.setdefault(app, CheckWatch(repo, pr["url"], queue_timeout))
-                status, cs, failed = w.poll()
-                if status == "red":
-                    return False, lines + [f"{app}: the pin PR's CI is red"] + red(repo, pr["url"], cs, failed)
+            if app not in runs and (rid := pin_run(repo, app, svc, sha)):
+                runs[app] = RunWatch(repo, app, rid, queue_timeout)
+            if app in runs:
+                if runs[app].poll() == "red":
+                    return False, lines + [f"{app}: the pin-dev run for {short} failed; dev keeps the previous image"] + \
+                        run_logs(repo, [(app, runs[app].rid)])
+            elif green_at is not None and now() - green_at > NO_CHECKS_GRACE:
+                raise PlatformError(f"{app}: no pin-dev run for {svc} {short} {NO_CHECKS_GRACE}s after the service's CI on "
+                                    "main passed", hint=f"is the secret GITOPS_TOKEN set? gh secret list -R {service_slug(repo)} "
+                                                        "(spec 062); then rerun the main CI run")
         if not pending:
             break
         if now() - begin > timeout:
@@ -574,51 +643,159 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
                                 hint="check the service's CI on main (docker-publish, pin-dev: is GITOPS_TOKEN set?) "
                                      "and the gitops-app's pin-dev workflow")
         sleep(interval)
+    images = {f"sha-{sha}", f"sha-{short}"}
     if context:
-        lines += _healthy(context, [f"{svc}-dev"], timeout - (now() - begin), interval)
+        lines += _healthy(context, {f"{svc}-dev": {"images": images}}, timeout - (now() - begin), interval)
     ok, more = merge_gitops(repo, st, "after-release", timeout, interval, queue_timeout)
     lines += more
     if not ok:
         return False, lines
     affected = list(dict.fromkeys(a for t in gitops_tasks(repo, st) for a in t.get("apps") or []))
     if context and (affected or more):
-        lines += _healthy(context, list(dict.fromkeys([f"{svc}-dev", *affected])), timeout, interval)
+        want: dict[str, dict] = {f"{svc}-dev": {"images": images}}
+        rev = last_gitops_merge(repo, st)
+        for a in affected:
+            want.setdefault(a, rev)
+        lines += _healthy(context, want, timeout, interval)
     elif not context:
         lines.append("Argo health not checked (pass --context <kube-context>)")
-    st["deployed"] = f"sha-{short}"
+    st["deployed"] = f"sha-{sha}"
     return _done(repo, st, lines)
 
 
-def _healthy(context: str, apps: list[str], timeout: float, interval: float) -> list[str]:
+def service_slug(repo: Path) -> str:
+    url = run(["git", "remote", "get-url", "origin"], cwd=repo, check=False).stdout.strip()
+    m = re.search(r"github\.com[:/](.+?)(?:\.git)?$", url)
+    return m.group(1) if m else repo.name
+
+
+def main_ci(repo: Path, sha: str) -> tuple[str, list[tuple[str, str]]]:
+    """("red" | "green" | "pending" | "none", failed (slug, run id)) for the push runs of the merge commit on main."""
+    slug = service_slug(repo)
+    out = gh(["run", "list", "-R", slug, "--commit", sha, "--event", "push", "--json", "databaseId,status,conclusion"],
+             cwd=repo, check=False)
+    try:
+        rs = json.loads(out or "[]")
+    except ValueError:
+        return "pending", []
+    if not rs:
+        return "none", []
+    failed = [(slug, str(r["databaseId"])) for r in rs if r.get("conclusion") in {"failure", "cancelled", "timed_out"}]
+    if failed:
+        return "red", failed
+    return ("green" if all(r.get("status") == "completed" for r in rs) else "pending"), []
+
+
+def pin_run(repo: Path, app: str, svc: str, sha: str) -> str | None:
+    """The gitops-app's pin-dev run for this build, found by its run name (`pin-dev <service> <tag>`, spec 077)."""
+    out = gh(["run", "list", "-R", app, "--workflow", "pin-dev", "--limit", "30", "--json", "databaseId,displayTitle"],
+             cwd=repo, check=False)
+    try:
+        rs = json.loads(out or "[]")
+    except ValueError:
+        return None
+    names = {f"pin-dev {svc} sha-{sha}", f"pin-dev {svc} sha-{sha[:7]}"}
+    hit = [r for r in rs if r.get("displayTitle") in names]
+    return str(hit[0]["databaseId"]) if hit else None
+
+
+class RunWatch:
+    """One workflow run across polls (spec 077): red when it concludes failed; a run that stays queued for
+    `queue_timeout` is cancelled and rerun once, the second time it is an error."""
+
+    def __init__(self, repo: Path, slug: str, rid: str, queue_timeout: float):
+        self.repo, self.slug, self.rid, self.queue_timeout = repo, slug, rid, queue_timeout
+        self.queued_since: float | None = None
+        self.healed = False
+
+    def poll(self) -> str:
+        out = gh(["run", "view", self.rid, "-R", self.slug, "--json", "status,conclusion"], cwd=self.repo, check=False)
+        try:
+            r = json.loads(out or "{}")
+        except ValueError:
+            return "pending"
+        if r.get("status") == "completed":
+            return "green" if r.get("conclusion") in {"success", "skipped"} else "red"
+        if r.get("status") != "queued":
+            self.queued_since = None
+            return "pending"
+        self.queued_since = self.queued_since or now()
+        if now() - self.queued_since > self.queue_timeout:
+            if self.healed:
+                raise PlatformError(f"run {self.rid} ({self.slug}) queued again after a cancel and rerun: the runner set "
+                                    f"{runner_labels(self.slug, self.rid) or '?'} picks up no jobs", hint="escalate")
+            say(f"  rerun    run {self.rid} ({self.slug}): queued for {int(now() - self.queued_since)}s (cancel + rerun)")
+            cancel_and_rerun(self.repo, self.slug, self.rid)
+            self.healed, self.queued_since = True, None
+        return "pending"
+
+
+def run_logs(repo: Path, runs: list[tuple[str, str]], limit: int = 60) -> list[str]:
+    out: list[str] = []
+    for slug, rid in runs:
+        log = gh(["run", "view", rid, "-R", slug, "--log-failed"], cwd=repo, check=False)
+        tail = [ln for ln in log.splitlines() if ln.strip()][-limit:]
+        out += [f"--- run {rid} ({slug}) ---", *tail]
+    return out
+
+
+def last_gitops_merge(repo: Path, st: dict) -> dict:
+    """The merge commit (and repo) of the last gitops PR this run merged: the revision the named apps must reach."""
+    merged = [i for i in (st.get("gitops") or {}).values() if i.get("merged") and i.get("pr")]
+    if not merged:
+        return {}
+    view = json.loads(gh(["pr", "view", merged[-1]["pr"], "--json", "mergeCommit"], cwd=repo, check=False) or "{}")
+    oid = (view.get("mergeCommit") or {}).get("oid")
+    return {"revision": oid, "slug": merged[-1].get("repo", "")} if oid else {}
+
+
+def _healthy(context: str, want: dict[str, dict], timeout: float, interval: float) -> list[str]:
     lines = []
-    for app in apps:
-        health = argo_health(context, app, timeout, interval)
+    for app, need in want.items():
+        health = argo_health(context, app, timeout, interval, **need)
         lines.append(f"Argo CD {app}: {health}")
         if health != "Synced/Healthy":
             raise PlatformError(f"{app} is {health}", hint=f"/shared:status --context {context} in the gitops-app repo; escalate")
     return lines
 
 
-def argo_health(context: str, app: str, timeout: float, interval: float) -> str:
-    """`Synced/Healthy`, a sync error (stops at once), or the last state seen when the time is up."""
+def argo_health(context: str, app: str, timeout: float, interval: float, images: set[str] | None = None,
+                revision: str | None = None, slug: str = "") -> str:
+    """`Synced/Healthy` once the app runs the wanted build (spec 077: an image tag in `status.summary.images`, or a
+    revision at least `revision`), a sync error of that build (stops at once), or the last state when the time is up."""
     begin = now()
     state = "missing"
     while True:
         p = run(["kubectl", "--context", context, "-n", "argocd", "get", "application", app, "-o", "json"], check=False)
         if p.returncode == 0:
             s = json.loads(p.stdout).get("status", {})
-            errors = [c for c in s.get("conditions") or [] if str(c.get("type", "")).endswith("Error")]
-            op = s.get("operationState") or {}
-            if errors:
-                return f"{errors[0]['type']}: {errors[0].get('message', '')}".strip()
-            if op.get("phase") in {"Failed", "Error"}:
-                return f"sync {op['phase']}: {op.get('message', '')}".strip()
-            state = f"{s.get('sync', {}).get('status', '?')}/{s.get('health', {}).get('status', '?')}"
-            if state == "Synced/Healthy" or s.get("health", {}).get("status") == "Degraded":
-                return state
+            have = s.get("summary", {}).get("images") or []
+            rev = s.get("sync", {}).get("revision", "")
+            if images and not any(img.rsplit(":", 1)[-1] in images for img in have):
+                state = f"waiting for {sorted(images)[0][:11]}… (runs {', '.join(have) or 'nothing'})"
+            elif revision and rev != revision and not _ahead(slug, revision, rev):
+                state = f"waiting for revision {revision[:7]} (at {rev[:7] or '?'})"
+            else:
+                errors = [c for c in s.get("conditions") or [] if str(c.get("type", "")).endswith("Error")]
+                op = s.get("operationState") or {}
+                if errors:
+                    return f"{errors[0]['type']}: {errors[0].get('message', '')}".strip()
+                if op.get("phase") in {"Failed", "Error"}:
+                    return f"sync {op['phase']}: {op.get('message', '')}".strip()
+                state = f"{s.get('sync', {}).get('status', '?')}/{s.get('health', {}).get('status', '?')}"
+                if state == "Synced/Healthy" or s.get("health", {}).get("status") == "Degraded":
+                    return state
         if now() - begin > max(timeout, 0):
             return state
         sleep(interval)
+
+
+def _ahead(slug: str, base: str, rev: str) -> bool:
+    """Whether Argo's revision `rev` already contains `base` (a later commit on the gitops repo's main)."""
+    if not rev or not slug:
+        return False
+    out = gh(["api", f"repos/{slug}/compare/{base}...{rev}", "--jq", ".status"], cwd=Path("."), check=False).strip()
+    return out in {"ahead", "identical"}
 
 
 def _done(repo: Path, st: dict, lines: list[str]) -> tuple[bool, list[str]]:
@@ -687,6 +864,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("start")
     p.add_argument("spec")
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
+    p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("phase")
@@ -730,7 +908,7 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        print(describe(start(repo, ns.spec, not ns.no_merge)))
+        print(describe(start(repo, ns.spec, not ns.no_merge, ns.take_over)))
         return 0
     if ns.cmd == "status":
         st = require_state(repo)

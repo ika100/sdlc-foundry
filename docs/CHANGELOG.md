@@ -6,6 +6,34 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (077): `cplat ship deploy` reports what really runs.** (#113, #114, #115)
+  - It watches the service's CI on main and the gitops-app's pin-dev run, found by its new run name `pin-dev <service> <tag>`.
+  - A red main CI or a failed pin-dev run fails it at once, with the log tail. A stuck pin-dev run is rerun once.
+  - No pin-dev run 5 min after main's CI passed is an error that names `GITOPS_TOKEN`.
+  - Pin PRs carry no checks, so spec 072's AC-072.5 could never fire; it is withdrawn.
+  - Argo counts only once `<service>-dev` runs the merged image (`status.summary.images`). The apps named by gitops tasks count once they reached the merged gitops commit.
+  - `cplat ship start` and `cplat doctor` refuse a linked repo without `GITOPS_TOKEN`, and the template's pin-dev job now warns instead of a notice.
+- **Change (078): image tags are the full commit sha** ([ADR-030](adr/030-image-tags-are-the-full-commit-sha.md)). (#116)
+  - The template CI pushes `sha-<40>`, plus `sha-<7>` for one more release, and asks pin-dev for `sha-<40>`.
+  - `pin-dev.yml` and `pin.py` accept both formats; the pin branch keeps the short sha.
+  - `/gitops:promote` pins `sha-<40>`, or `sha-<7>` for images built before.
+- **Feat (079): `cplat pr wait <pr> [-R owner/repo] [--merge]`** waits for any PR with the ship watch, merges on green, and replaces hand-written polling loops. A job that failed on a transient error (artifact download, resolve failure, HTTP 502/503/504, connection reset, TLS timeout) is rerun once before it counts; `ship land` does the same. (#117)
+- **Feat (080): leaner builds and unattended runs.** (#118, #119)
+  - `/svc:build` Phase 3 runs `devbox run lint-fix` and `devbox run ci` once and spawns only the agent that owns a red gate: the tester only for internals without unit tests, security only for a changed Dockerfile.
+  - `cplat headless` stops after two sessions in a row that change nothing, and escalates the run.
+- **Feat (081): gates that can fail.** (#120, #123, #126)
+  - The templates pin every gate tool: kustomize, kubeconform, ruff, mypy, pip-audit, golangci-lint, govulncheck, maven. `bump_template_pins.py` bumps them (minor/patch) in its weekly PR.
+  - `cplat doctor` gets a gates section: the secrets baseline has its filters, scanners are pinned, `ci` and `secrets-baseline` exist, `ci` chains the CI workflow's gates, and CI jobs run the template gates.
+  - `cplat adopt` lists the template gates the repo's CI lacks.
+- **Feat (082): sessions do not collide.** (#121, #122)
+  - `cplat spec new --tracks` and `cplat ship start` claim each tracked issue: an `in-progress` label, the user as assignee, and a comment naming the branch. An issue claimed for another branch stops them (`--take-over` moves the claim); an escalation releases it.
+  - The platform CI requires a spec (or the `no-spec` label) for a PR that closes an issue and changes `scripts/`, `plugins/` or `templates/`.
+- **Feat (083): `/shared:status` shows each service repo's platform version**, marked `(behind)` when it is older than the installed platform. (#125)
+- **CI (084): the platform's own CI takes minutes.** (#124, #127)
+  - `pytest tests/cplat` runs in parallel (`-n auto`): 163 s → 29 s locally.
+  - The smoke-test matrices no longer cancel healthy siblings (`fail-fast: false`).
+  - The Java smoke jobs retry downloads.
+
 ## [4.3.0] — 2026-10-22
 
 **Ship runs lose minutes, not an hour, to CI, and they carry their gitops changes.**

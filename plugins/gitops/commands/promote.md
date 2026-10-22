@@ -15,7 +15,7 @@ cplat promote <ARGS>
 3. **Run** with `--pr`. 
 4. **Report** the script's output. Rollback = revert the merged PR.
 
-Rules (enforced by the script; do not work around them): staging pins `sha-<7>` of a build of the service's main; prod pins the release image `X.Y.Z` (the `vX.Y.Z` git tag without the `v`); promotion only moves forward; dev follows main through automatic pin PRs (spec 062), so there is no promotion into dev. Only `applications/` changes; never `kubectl apply`; never auto-merge.
+Rules (enforced by the script; do not work around them): staging pins `sha-<40>` (the full commit sha; `sha-<7>` for images built before 4.4.0) of a build of the service's main; prod pins the release image `X.Y.Z` (the `vX.Y.Z` git tag without the `v`); promotion only moves forward; dev follows main through automatic pin PRs (spec 062), so there is no promotion into dev. Only `applications/` changes; never `kubectl apply`; never auto-merge.
 
 Running from a service repo? If `.platform-app.yml` exists, clone the listed gitops-app repo (`gh repo clone <org>/<repo>`) and run the command there.
 

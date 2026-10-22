@@ -32,7 +32,7 @@ step "license and copyright metadata (REUSE)"
 uvx --quiet --from "reuse[charset-normalizer]" reuse lint | tail -3
 
 step "cplat tests (Kyverno CLI tests skip without the kyverno binary)"
-uv run --with pytest --with pyyaml --with ruamel.yaml pytest tests/cplat -q
+uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto
 
 if [ "${1:-}" = "--site" ]; then
   step "documentation site (unit tests + build with link validation)"

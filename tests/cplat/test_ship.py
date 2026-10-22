@@ -37,9 +37,22 @@ class FakeGh:
         self.pr_state = "OPEN"
         self.pin_prs: dict[str, list[dict]] = {}
         self.calls: list[list[str]] = []
+        self.secrets = ["GITOPS_TOKEN"]
+        self.main_runs: list[dict] = []                 # spec 077: push runs of the merge commit on the service's main
+        self.pin_runs: dict[str, list[dict]] = {}       # gitops-app -> pin-dev runs (databaseId, displayTitle)
+        self.run_views: dict[str, list[dict]] = {}      # run id -> successive `run view --json status,conclusion`
 
     def __call__(self, args, *, cwd, check=True):
         self.calls.append(args)
+        if args[:2] == ["secret", "list"]:
+            return json.dumps([{"name": n} for n in self.secrets])
+        if args[:2] == ["run", "list"] and "--commit" in args:
+            return json.dumps(self.main_runs)
+        if args[:2] == ["run", "list"] and "pin-dev" in args:
+            return json.dumps(self.pin_runs.get(args[args.index("-R") + 1], []))
+        if args[:2] == ["run", "view"] and "status,conclusion" in args:
+            seq = self.run_views.get(args[2], [{"status": "in_progress"}])
+            return json.dumps(seq.pop(0) if len(seq) > 1 else seq[0])
         if args[:2] == ["pr", "list"] and "-R" in args:
             return json.dumps(self.pin_prs.get(args[args.index("-R") + 1], []))
         if args[:2] == ["pr", "list"]:
@@ -186,7 +199,7 @@ def test_deploy_waits_for_the_pin_pr_of_the_merge_commit(repo, gh):
         ship.sleep = real
     assert ok and "dev pinned to shop-api:sha-0123456" in lines[0]
     assert any(a[:2] == ["pr", "list"] and "pin/dev-shop-api-0123456" in a for a in gh.calls)
-    assert ship.load_state(repo)["phase"] == "done" and ship.load_state(repo)["deployed"] == "sha-0123456"
+    assert ship.load_state(repo)["phase"] == "done" and ship.load_state(repo)["deployed"] == f"sha-{SHA}"   # spec 078: the full sha
 
 
 def test_a_closed_pin_pr_fails_the_deploy(repo, gh):

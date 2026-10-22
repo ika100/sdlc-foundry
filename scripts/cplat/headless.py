@@ -103,6 +103,13 @@ def unfinished(repo: Path) -> dict | None:
     return None
 
 
+def progress_key(repo: Path, st: dict) -> tuple:
+    """What a session can change: phase, HEAD, fix rounds and the rest of the ship state (spec 080)."""
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
+    rest = {k: v for k, v in st.items() if k not in {"updated", "blocks"}}
+    return st.get("phase"), head, st.get("fix_rounds", 0), repr(sorted(rest.items()))
+
+
 def run_once(cmd: list[str], repo: Path, log: Path, minutes: float) -> int:
     with log.open("a") as fh:
         fh.write(f"\n=== {clock():%Y-%m-%d %H:%M:%S} {shlex.join(cmd)}\n")
@@ -144,6 +151,7 @@ def main(argv: list[str]) -> int:
     log = log_dir(repo) / f"{clock():%Y-%m-%d_%H%M%S}.log"
     begin: dt.datetime | None = None    # the budget starts with the first session, not while waiting out a quiet window
     runs, code = 0, 0
+    last: tuple | None = None
     result = "finished"
     while runs < ns.max_runs:
         wait = seconds_left_in_window(window, clock())
@@ -165,6 +173,12 @@ def main(argv: list[str]) -> int:
         if st is None:
             result = describe_end(repo, code)
             break
+        key = progress_key(repo, st)
+        if key == last:
+            result = f"no progress: two runs in a row ended in phase {st['phase']} with nothing changed"
+            ship.escalate(repo, result)
+            break
+        last = key
         print(f"run {runs} ended in phase {st['phase']} (exit {code}); resuming", flush=True)
     else:
         result = f"stopped after {ns.max_runs} runs, ship run still unfinished"

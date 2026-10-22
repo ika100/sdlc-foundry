@@ -303,7 +303,7 @@ def test_every_merge_to_main_asks_the_gitops_app_to_pin_dev(shape, tmp_path):
     job = wf["jobs"]["pin-dev"]
     assert job["needs"] == "docker-publish" and "refs/heads/main" in job["if"] and "tags" not in job["if"]
     run = "\n".join(s.get("run", "") for s in job["steps"])
-    assert "repos/$app/dispatches" in run and "event_type=pin-dev" in run and "sha-${GITHUB_SHA::7}" in run
+    assert "repos/$app/dispatches" in run and "event_type=pin-dev" in run and "sha-${GITHUB_SHA}\"" in run   # spec 078
     assert ".platform-app.yml" in run and "::notice::" in run and "gh secret set GITOPS_TOKEN" in run
     assert "secrets.GITOPS_TOKEN" in str(job["steps"])
     assert job["name"] not in (next(s for s in SHAPES if s["id"] == shape).get("ci_checks") or [])   # never a required check

@@ -167,7 +167,7 @@ Wiring and exposure are decided here, in the product repo — not in the service
 /gitops:compose set taskboard-web --env FEATURE_X=on     # later: change a service that is already composed
 ```
 
-`--expose` publishes `taskboard-web` through the Gateway: after the PR merges, `http://taskboard-web.taskboard-dev.localhost:8088/` (the local cluster's port, or the next free one that `cluster-up` prints; `*.localhost` needs no DNS setup) serves the UI. Edit `replicas`, `resources` or `secretRefs` in `services.yaml` any time and run `devbox run render` (or ask Claude). Merge the PR; Argo creates the Applications. **dev** follows each service's `main`: every merge opens a pin PR to its `sha-<7>` in this repo that merges itself after CI ([ADR-027](adr/027-dev-follows-main-through-pin-prs.md); set the `GITOPS_TOKEN` secret that `/shared:new-service` names).
+`--expose` publishes `taskboard-web` through the Gateway: after the PR merges, `http://taskboard-web.taskboard-dev.localhost:8088/` (the local cluster's port, or the next free one that `cluster-up` prints; `*.localhost` needs no DNS setup) serves the UI. Edit `replicas`, `resources` or `secretRefs` in `services.yaml` any time and run `devbox run render` (or ask Claude). Merge the PR; Argo creates the Applications. **dev** follows each service's `main`: every merge opens a pin PR to its `sha-<40>` in this repo that merges itself after CI ([ADR-027](adr/027-dev-follows-main-through-pin-prs.md); set the `GITOPS_TOKEN` secret that `/shared:new-service` names).
 
 ---
 
@@ -177,7 +177,7 @@ Wiring and exposure are decided here, in the product repo — not in the service
 /gitops:promote taskboard-api taskboard-web dev staging
 ```
 
-One PR that adds **staging** to both services and pins each to the `sha-<7>` image built from its `main` — the script checks that the image exists in GHCR first, so a promotion can never point at a build that CI has not finished. Merge → Argo creates and rolls staging.
+One PR that adds **staging** to both services and pins each to the `sha-<40>` image built from its `main` — the script checks that the image exists in GHCR first, so a promotion can never point at a build that CI has not finished. Merge → Argo creates and rolls staging.
 
 For **prod** you pin a release: in each service repo run `/svc:release` (quality gate → test gate → security gate → version bump → changelog PR → tag `vX.Y.Z` → CI pushes semver images). Then:
 

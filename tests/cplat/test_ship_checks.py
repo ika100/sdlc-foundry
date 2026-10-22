@@ -163,18 +163,101 @@ def test_each_conclusion_is_printed_once_as_it_happens(repo, gh):
     assert [s.split() for s in gh.said] == [["pass", "quality"], ["pass", "test"], ["skipping", "branch-name"]]
 
 
-def test_deploy_fails_at_once_on_a_red_pin_pr(repo, gh):
-    """AC-072.5: an open pin PR with a red check fails the deploy with the log, without waiting for the timeout."""
+def to_deploy(repo):
     (repo / ".platform-app.yml").write_text(f"gitops_apps:\n  - {GITOPS}\n")
     st = ship.start(repo, "7", True)
     st.update(phase="deploy", merge_sha=SHA)
     ship.save_state(repo, st)
-    pin = f"https://github.com/{GITOPS}/pull/9"
-    gh.pin_prs[GITOPS] = [{"number": 9, "state": "OPEN", "url": pin}]
-    gh.gitops_checks = [[{"name": "quality", "state": "FAILURE", "bucket": "fail", "link": GLINK}]]
+
+
+def test_deploy_fails_at_once_on_a_red_pin_dev_run(repo, gh):
+    """AC-077.1 (replaces the PR-check version of AC-072.5): pin PRs carry no checks; the pin-dev run found by its name
+    fails the deploy at once with its log."""
+    to_deploy(repo)
+    gh.pin_prs[GITOPS] = [{"number": 9, "state": "OPEN", "url": f"https://github.com/{GITOPS}/pull/9"}]
+    gh.pin_runs[GITOPS] = [{"databaseId": 77, "displayTitle": f"pin-dev other sha-{SHA}"},
+                           {"databaseId": 78, "displayTitle": f"pin-dev shop-api sha-{SHA}"}]
+    gh.run_views["78"] = [{"status": "in_progress"}, {"status": "completed", "conclusion": "failure"}]
     ok, lines = ship.deploy(repo, timeout=1800, interval=20, context=None)
-    assert not ok and "pin PR's CI is red" in " ".join(lines)
-    assert ["run", "view", "77", "-R", GITOPS, "--log-failed"] in gh.calls
+    assert not ok and "pin-dev run for 0123456 failed" in " ".join(lines)
+    assert ["run", "view", "78", "-R", GITOPS, "--log-failed"] in gh.calls
+
+
+def test_a_stuck_pin_dev_run_is_rerun_once(repo, gh):
+    """AC-077.1: a pin-dev run queued beyond the queue timeout is cancelled and rerun once, then it is an error."""
+    to_deploy(repo)
+    gh.pin_runs[GITOPS] = [{"databaseId": 78, "displayTitle": f"pin-dev shop-api sha-{SHA}"}]
+    gh.run_views["78"] = [{"status": "queued"}]
+    gh.run_status["78"] = ["completed"]
+    with pytest.raises(core.PlatformError, match="picks up no jobs"):
+        ship.deploy(repo, timeout=7200, interval=20, context=None, queue_timeout=300)
+    assert [c[:2] for c in gh.calls if c[:2] in (["run", "cancel"], ["run", "rerun"])] == [["run", "cancel"], ["run", "rerun"]]
+
+
+def test_a_red_main_ci_fails_the_deploy_at_once(repo, gh):
+    """AC-077.2: the service's own CI on main failed → nothing will be pinned; say so now."""
+    to_deploy(repo)
+    gh.main_runs = [{"databaseId": 5, "status": "completed", "conclusion": "failure"}]
+    ok, lines = ship.deploy(repo, timeout=1800, interval=20, context=None)
+    assert not ok and "CI on main is red" in lines[0]
+
+
+def test_no_pin_dev_run_after_a_green_main_names_the_token(repo, gh):
+    """AC-077.2: main CI green but no pin-dev run within the grace period → the GITOPS_TOKEN step."""
+    to_deploy(repo)
+    gh.main_runs = [{"databaseId": 5, "status": "completed", "conclusion": "success"}]
+    with pytest.raises(core.PlatformError, match="no pin-dev run") as e:
+        ship.deploy(repo, timeout=1800, interval=20, context=None)
+    assert "GITOPS_TOKEN" in e.value.hint
+
+
+def test_ship_start_refuses_a_linked_repo_without_gitops_token(repo, gh):
+    """AC-077.4: linked to a gitops-app and no GITOPS_TOKEN → start stops with the fix; an unreadable list is not a no."""
+    (repo / ".platform-app.yml").write_text(f"gitops_apps:\n  - {GITOPS}\n")
+    gh.secrets = []
+    with pytest.raises(core.PlatformError, match="GITOPS_TOKEN is not set") as e:
+        ship.start(repo, "7", True)
+    assert "gh secret set GITOPS_TOKEN -R acme/shop-api" in e.value.hint
+    gh.secrets = ["GITOPS_TOKEN"]
+    assert ship.start(repo, "7", True)["phase"] == "build"
+
+
+def test_templates_warn_when_the_token_is_missing():
+    """AC-077.4: the service CI's pin-dev job warns, not a notice nobody sees."""
+    for t in ("service-go", "service-java", "service-python", "web-nextjs"):
+        text = (core.PLATFORM_ROOT / "templates" / t / ".github" / "workflows" / "ci.yml").read_text()
+        assert '::warning::GITOPS_TOKEN is not set' in text, t
+
+
+def test_pin_dev_names_its_run_for_deploy():
+    """AC-077.1: ship deploy finds the run by `pin-dev <service> <tag>`."""
+    text = (core.PLATFORM_ROOT / "templates" / "gitops-app" / ".github" / "workflows" / "pin-dev.yml").read_text()
+    assert "run-name: pin-dev ${{ github.event.client_payload.service }} ${{ github.event.client_payload.tag }}" in text
+
+
+def test_argo_old_image_is_waiting_not_healthy(monkeypatch):
+    """AC-077.3: Synced/Healthy on the old image is not done; the new image then is."""
+    seq = [{"sync": {"status": "Synced"}, "health": {"status": "Healthy"}, "summary": {"images": ["ghcr.io/a/b:sha-old0000"]}},
+           {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}, "summary": {"images": [f"ghcr.io/a/b:sha-{SHA}"]}}]
+    clock = {"t": 0.0}
+    monkeypatch.setattr(ship, "now", lambda: clock["t"])
+    monkeypatch.setattr(ship, "sleep", lambda s: clock.__setitem__("t", clock["t"] + s))
+    calls = []
+    monkeypatch.setattr(ship, "run", lambda cmd, **kw: calls.append(cmd) or subprocess.CompletedProcess(
+        cmd, 0, json.dumps({"status": seq.pop(0) if len(seq) > 1 else seq[0]}), ""))
+    new = seq.pop()                                   # Argo has not polled yet: the old image for the whole wait
+    assert ship.argo_health("lan", "b-dev", 40, 20, images={f"sha-{SHA}"}).startswith("waiting for")
+    seq[:] = [new]
+    assert ship.argo_health("lan", "b-dev", 600, 20, images={f"sha-{SHA}"}) == "Synced/Healthy"
+
+
+def test_argo_revision_must_reach_the_gitops_merge(monkeypatch, gh):
+    """AC-077.3: a named app counts only once it is at, or past, the merged gitops commit."""
+    st = {"sync": {"status": "Synced", "revision": "aaa1111"}, "health": {"status": "Healthy"}}
+    monkeypatch.setattr(ship, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, json.dumps({"status": st}), ""))
+    assert ship.argo_health("lan", "cfg", 0, 20, revision="bbb2222", slug=GITOPS).startswith("waiting for revision")
+    st["sync"]["revision"] = "bbb2222"
+    assert ship.argo_health("lan", "cfg", 0, 20, revision="bbb2222", slug=GITOPS) == "Synced/Healthy"
 
 
 # ---------------- spec 075 ----------------
@@ -289,7 +372,7 @@ def argo(monkeypatch, states):
     monkeypatch.setattr(ship, "run", fake)
 
 
-HEALTHY = {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}}
+HEALTHY = {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}, "summary": {"images": [f"ghcr.io/acme/shop-api:sha-{SHA}"]}}
 
 
 def _to_deploy(repo, gh, **kw):

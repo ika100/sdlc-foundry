@@ -1,6 +1,6 @@
 {
   "name": "svc-go",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Agents for Go service repos (chi, slog, golangci-lint, distroless): coder, tester, deployment, observability, and release. Used by the /svc:* orchestrators when the repo shape is service-go. Requires devbox recipes from the service-go Copier template.",
   "author": {
     "name": "Eike Hensler",

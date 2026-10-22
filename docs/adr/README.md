@@ -35,3 +35,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [027](027-dev-follows-main-through-pin-prs.md) | dev follows main: service CI asks the gitops-app for an auto-merging pin PR to `sha-<7>` |
 | [028](028-unattended-delivery-without-branch-protection.md) | Unattended delivery without branch protection: merges wait for green CI in code, `/svc:ship`, a Stop hook, headless resumes |
 | [029](029-external-services.md) | External services in services.yaml: hand-written kustomize packages or Helm charts, wired and pinned by render |
+| [030](030-image-tags-are-the-full-commit-sha.md) | Image tags are the full commit sha (`sha-<40>`); `sha-<7>` is accepted for one release |

@@ -42,6 +42,21 @@ def ci_state(slug: str) -> str:
     return "running" if status != "completed" else ("ok" if concl == "success" else concl or "?")
 
 
+def platform_of(slug: str, latest: str) -> str:
+    """Spec 083: the service repo's stamped platform version, marked when it is behind `latest`."""
+    out = sh(["gh", "api", f"repos/{slug}/contents/.platform-version", "-H", "Accept: application/vnd.github.raw"])
+    if out is None:
+        return "none"
+    m = re.search(r"^platform:\s*(\d+\.\d+\.\d+)", out, re.M)
+    if not m:
+        return "none"
+    v = m.group(1)
+    try:
+        return f"{v} (behind)" if core.vtuple(v) < core.vtuple(latest) else v
+    except ValueError:
+        return v
+
+
 def argo_state(context: str | None) -> dict[str, str]:
     if not context:
         return {}
@@ -72,29 +87,33 @@ def collect(repo: Path, app: str | None, context: str | None) -> tuple[str, list
     data = yaml.safe_load((app_dir / "services.yaml").read_text()) or {}
     argo = argo_state(context)
     pins = pin_prs(repo)
+    latest = core.platform_version()
     rows = []
     for s in data.get("services") or []:
         envs = s.get("environments") or ["dev"]
         ci = ci_state(s["repo"]) if s.get("repo") else "?"
+        plat = platform_of(s["repo"], latest) if s.get("repo") else "-"
         for env in ENVS:
             if env not in envs:
                 continue
             rows.append({"service": s["name"], "env": env, "tag": pinned_tag(app_dir, env, s["name"]) or "?",
                          "ci": ci, "argo": argo.get(f"{s['name']}-{env}", "-" if not context else "missing"),
-                         "exposed": bool(s.get("expose")), "pin_pr": pins.get(s["name"], "-") if env == "dev" else "-"})
+                         "exposed": bool(s.get("expose")), "pin_pr": pins.get(s["name"], "-") if env == "dev" else "-",
+                         "platform": plat})
     cfg_file = app_dir / "app.yaml"
     declared = list(((yaml.safe_load(cfg_file.read_text()) or {}).get("addons") or {})) if cfg_file.is_file() else []
     for name in declared:   # an addon runs in every environment where a service uses it
         for env in ENVS:
             if any((name == "observability" or name in (s.get("uses") or [])) and env in (s.get("environments") or ["dev"]) for s in data.get("services") or []):
                 rows.append({"service": f"{name} (addon)", "env": env, "tag": "-", "ci": "-",
-                             "argo": argo.get(f"addon-{name}-{env}", "-" if not context else "missing"), "exposed": False, "pin_pr": "-"})
+                             "argo": argo.get(f"addon-{name}-{env}", "-" if not context else "missing"), "exposed": False, "pin_pr": "-",
+                             "platform": "-"})
     return app_dir.name, rows
 
 
 def render_table(app: str, rows: list[dict], stamp: dict, context: str | None) -> str:
     head = f"## {app} (gitops-app) — platform {core.platform_version()} available, repo stamped {stamp.get('platform', 'none')}"
-    cols = ["service", "env", "tag", "ci", "argo", "pin_pr"]
+    cols = ["service", "env", "tag", "ci", "argo", "pin_pr", "platform"]
     title = {"pin_pr": "pin PR"}
     widths = {c: max(len(title.get(c, c)), *(len(str(r.get(c, "-"))) for r in rows)) if rows else len(title.get(c, c)) for c in cols}
     lines = [head, ""] + ["  " + "  ".join(title.get(c, c).ljust(widths[c]) for c in cols), "  " + "  ".join("-" * widths[c] for c in cols)]

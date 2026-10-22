@@ -1,6 +1,6 @@
 {
   "name": "gitops",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Agents and commands for the GitOps repo: ArgoCD ApplicationSet management, per-environment overlays, and promotion workflows. Pairs with the svc plugin's `deployable-service` topic convention.",
   "author": {
     "name": "Eike Hensler",

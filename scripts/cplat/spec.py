@@ -838,6 +838,7 @@ def main(argv: list[str]) -> int:
                    help="this repo's slice of a product plan (docs/plan/<id>.md in the gitops-app repo)")
     p.add_argument("--priority", default="P1", choices=sorted(PRIORITIES))
     p.add_argument("--tracks", type=int, nargs="*", default=[])
+    p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this spec (spec 082)")
     p.add_argument("--parent")
     p.add_argument("--no-shape", action="store_true", help="do not record the repo's shape")
     p = sub.add_parser("check", help="validate specs and plans (all if none given)")
@@ -881,6 +882,10 @@ def main(argv: list[str]) -> int:
         else:
             spec = new(root, " ".join(ns.title), shape=shape, priority=ns.priority, tracks=ns.tracks, parent=ns.parent)
         print(spec.dir.relative_to(root) / "spec.md")
+        if spec.meta.get("tracks"):
+            import claim
+            for note in claim.claim(root, spec.meta["tracks"], f"feature/{spec.id}", take_over=ns.take_over, what=spec.id):
+                print(note)
         return 0
     if ns.cmd == "check":
         specs = [find(root, i) for i in ns.ids] if ns.ids else all_specs(root)

@@ -32,6 +32,7 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 - **Template Jinja gotcha.** GitHub Actions uses `${{ var }}` syntax, which Copier (Jinja) would otherwise interpret. The escape pattern is `${{ '{{' }} var {{ '}}' }}` — already applied in the existing CI workflows. Don't unescape it.
 - **Don't put project-specific content in plugin agents.** Agents are shared across repos. Anything project-specific belongs in the Copier template (which gets parameterised per-repo) or in the consumer's own `CLAUDE.md`.
 - **Platform changes start with a spec.** Run `/svc:spec <description>` here (no shape needed for spec, plan, verify, specs), write an ADR for decisions that outlive the change, and keep `cplat spec check` green.
+- **Wait for CI with `cplat pr wait <pr> [-R owner/repo] [--merge]`** (spec 079), never a hand-written polling loop: it reports each check, stops at the first red one and reruns stuck or transient runs once.
 - **No backwards-compat hacks for old marketplace ref.** When breaking, ship a new major version and document the migration in `docs/CHANGELOG.md`.
 
 ## Common changes

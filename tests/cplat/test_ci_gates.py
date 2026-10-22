@@ -139,3 +139,12 @@ def test_build_and_ship_run_devbox_ci_before_pushing():
     ship = (ROOT / "plugins" / "svc" / "commands" / "ship.md").read_text()
     phase3 = build.split("## Phase 3", 1)[1].split("## Phase 4", 1)[0]
     assert "devbox run ci" in phase3 and "devbox run ci" in ship
+
+
+def test_build_phase_3_runs_ci_once_and_spawns_only_for_red():
+    """AC-080.1: Phase 3 starts with `devbox run ci`; agents only for a red gate or a real need."""
+    build = (ROOT / "plugins" / "svc" / "commands" / "build.md").read_text()
+    phase3 = build.split("## Phase 3", 1)[1].split("## Phase 4", 1)[0]
+    assert "devbox run lint-fix` and `devbox run ci`" in phase3
+    assert "spawn only the agent that owns the red gate" in phase3 and "Spawn all three" not in phase3
+    assert "only when the touched files add internals" in phase3 and "only when a Dockerfile changed" in phase3

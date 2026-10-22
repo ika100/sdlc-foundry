@@ -13,12 +13,19 @@ versions and receive the update pull requests on day one. This script instead:
   bump_template_pins.py [TEMPLATE...]   default: every template listed in UPDATERS
   bump_template_pins.py --list          show what would be handled
 
+Spec 081: it also bumps the devbox pins of the gate tools (GATE_TOOLS) in every template's devbox.json, minor/patch
+only (a 0.x tool stays within its 0.minor), using the version resolver devbox itself uses.
+
 Lines it cannot map back (Jinja on the line, or ambiguous) are reported, never guessed.
 """
 from __future__ import annotations
 
 import argparse
 import difflib
+import json
+import re
+import urllib.parse
+import urllib.request
 import shutil
 import subprocess
 import sys
@@ -52,6 +59,48 @@ JINJA = ("{{", "{%", "{#")
 # Lines that move together with something else by hand and are never bumped here (a consistency check requires
 # package.json packageManager to equal the pnpm pin in devbox.json).
 PROTECTED = ("\"packageManager\"",)
+
+
+# spec 081: devbox packages whose output decides a gate; they are pinned in the templates and bumped here
+GATE_TOOLS = ("detect-secrets", "trivy", "kustomize", "kubeconform", "ruff", "mypy", "pip-audit", "golangci-lint",
+              "govulncheck", "maven")
+RESOLVE = "https://search.devbox.sh/v2/resolve?name={name}&version={version}"
+
+
+def resolve(name: str, version: str) -> str | None:   # tests replace this
+    try:
+        url = RESOLVE.format(name=urllib.parse.quote(name), version=urllib.parse.quote(version))
+        with urllib.request.urlopen(url, timeout=20) as r:
+            return json.load(r).get("version")
+    except (OSError, ValueError):
+        return None
+
+
+def same_line(version: str) -> str:
+    """The version prefix a bump stays within: the major, or 0.<minor> for a 0.x tool."""
+    parts = version.split(".")
+    return parts[0] if parts[0] != "0" or len(parts) < 2 else f"0.{parts[1]}"
+
+
+def bump_devbox(templates_dir: Path) -> tuple[list[str], list[str]]:
+    """Bump every pinned gate tool in templates/*/devbox.json[.jinja]; returns (changes, notes)."""
+    changes, notes, cache = [], [], {}
+    for f in sorted(templates_dir.glob("*/devbox.json*")):
+        text = f.read_text()
+        for name, have in re.findall(r'"([a-z0-9-]+)@(\d[\w.]*)"', text):
+            if name not in GATE_TOOLS:
+                continue
+            key = (name, same_line(have))
+            if key not in cache:
+                cache[key] = resolve(*key)
+            new = cache[key]
+            if not new:
+                notes.append(f"{f.parent.name}: could not resolve {name}@{key[1]}")
+            elif new != have:
+                text = text.replace(f'"{name}@{have}"', f'"{name}@{new}"')
+                changes.append(f"{f.parent.name}: {name} {have} -> {new}")
+        f.write_text(text)
+    return changes, notes
 
 
 def source_of(template_dir: Path, rel: str) -> Path | None:
@@ -156,6 +205,12 @@ def main(argv: list[str]) -> int:
     import core
     copier = core.find_copier()
     total = 0
+    if not args.templates:
+        changes, notes = bump_devbox(ROOT / "templates")
+        total += len(changes)
+        print(f"devbox gate tools: {len(changes)} pin(s) bumped" + "".join(f"\n  {c}" for c in changes))
+        for n in notes:
+            print(f"  note: {n}")
     for n in names:
         tool = UPDATERS[n]["commands"][0][0]
         if shutil.which(tool) is None:
