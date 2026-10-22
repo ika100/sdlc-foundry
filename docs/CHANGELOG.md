@@ -6,6 +6,22 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [4.4.0] — 2026-10-22
+
+**Deploys report what really runs, every PR wait is one tested command, and builds and CI do each thing once.**
+- **`cplat ship deploy`** fails at once on a red main CI, a failed pin-dev run or a missing `GITOPS_TOKEN`. It counts Argo only once dev runs the merged image.
+- **Image tags are the full commit sha** (ADR-030); `sha-<7>` still works for one release.
+- **`cplat pr wait`** waits for any PR and reruns stuck or transiently failed jobs once.
+- **Leaner flow:** `/svc:build` runs the CI gate once, and `cplat headless` stops after two idle sessions.
+- **Real gates:** gate tools are pinned, `cplat doctor` checks the gates, and sessions claim the issues they work on.
+- **Visible drift:** `/shared:status` shows each repo's platform version.
+- **Faster platform CI:** platform tests run in about 30 s.
+
+**Action for existing repos:**
+1. Run `/plugin marketplace update` (svc 3.3.0, shared 0.13.0, gitops 1.4.2, svc-go/svc-java/web 0.2.6).
+2. Run `/shared:update-service` in every repo. Service repos then dispatch `sha-<40>`. Update gitops-apps first, so their pin-dev accepts the full sha and names its run.
+3. Run `cplat doctor` once per repo: the new gates section names anything to fix.
+
 - **Fix (077): `cplat ship deploy` reports what really runs.** (#113, #114, #115)
   - It watches the service's CI on main and the gitops-app's pin-dev run, found by its new run name `pin-dev <service> <tag>`.
   - A red main CI or a failed pin-dev run fails it at once, with the log tail. A stuck pin-dev run is rerun once.
