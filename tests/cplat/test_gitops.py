@@ -657,6 +657,7 @@ def test_an_external_helm_chart_gets_an_argo_application_with_the_pinned_tag(git
     src = app["spec"]["source"]
     assert src["repoURL"] == "https://github.com/acme/ai-ops" and src["path"] == "charts/ai-ops" and src["targetRevision"] == "main"
     assert src["helm"]["valuesObject"] == {"replicas": 1, "autonomy": {"ceiling": "L1"}, "image": {"tag": "latest"}}
+    assert src["helm"]["releaseName"] == "ai-ops"   # not the Application name: chart selectors use the release name
     assert app["spec"]["destination"]["namespace"] == "ai-ops" and "ServerSideApply=true" in app["spec"]["syncPolicy"]["syncOptions"]
     assert overlay(gitops_repo, "dev", "ai-ops")["resources"] == ["application.yaml"]
 

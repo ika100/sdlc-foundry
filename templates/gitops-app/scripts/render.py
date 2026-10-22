@@ -51,7 +51,7 @@ render.py only wires it into the environments and pins its image, so pin-dev, /g
     repo: org/ai-ops
     image: ghcr.io/org/ai-ops
     external:
-      helm: {repoURL: https://github.com/org/ai-ops, path: charts/ai-ops, revision: main, imageTag: image.tag}
+      helm: {repoURL: https://github.com/org/ai-ops, path: charts/ai-ops, revision: main, imageTag: image.tag}  # releaseName: defaults to the service name
       namespace: ai-ops
       values: {replicas: 1}               # helm values for every environment
       envValues: {prod: {replicas: 2}}    # merged over `values` per environment
@@ -228,7 +228,7 @@ def external_files(app: str, svc: dict, env: str, tag: str, server: str) -> dict
         "spec": {
             "project": "default",
             "source": {"repoURL": helm["repoURL"], "path": helm["path"], "targetRevision": str(helm.get("revision") or "main"),
-                       "helm": {"valuesObject": values}},
+                       "helm": {"releaseName": str(helm.get("releaseName") or svc["name"]), "valuesObject": values}},
             "destination": {"server": server, "namespace": ext.get("namespace") or f"{app}-{env}"},
             "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
                            "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]},
