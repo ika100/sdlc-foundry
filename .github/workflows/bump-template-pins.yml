@@ -3,8 +3,10 @@
 # the rendered manifest (minor/patch only) and copies the changes back; the pull request then runs the normal CI,
 # whose smoke tests generate and build every template with the new versions.
 #
-# One-time setup: the default GITHUB_TOKEN may not be allowed to open pull requests, and pull requests it opens do not start CI. Add a repository secret
-# BUMP_TOKEN (a fine-grained token with Contents + Pull requests: read/write on this repository) so the PR is checked.
+# One-time setup: the default GITHUB_TOKEN may not be allowed to open pull requests, and pull requests it opens do not start CI.
+# Preferred: a GitHub App installed on this repository with Contents + Pull requests: read/write; set the repository variable
+# BUMP_APP_CLIENT_ID and the secret BUMP_APP_PRIVATE_KEY. Fallback: a secret BUMP_TOKEN (fine-grained token, same permissions).
+# The job fails when it cannot open the pull request, so a bumped branch is never left behind unnoticed.
 name: bump-template-pins
 
 on:
@@ -27,9 +29,18 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: GitHub App token
+        id: app-token
+        if: vars.BUMP_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.BUMP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BUMP_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.BUMP_TOKEN || github.token }}
+          token: ${{ steps.app-token.outputs.token || secrets.BUMP_TOKEN || github.token }}
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -47,8 +58,8 @@ jobs:
         run: uv run --with pyyaml --with ruamel.yaml scripts/bump_template_pins.py | tee "$RUNNER_TEMP/bump.log"
       - name: Open a pull request when something changed
         env:
-          GH_TOKEN: ${{ secrets.BUMP_TOKEN || github.token }}
-          HAS_BUMP_TOKEN: ${{ secrets.BUMP_TOKEN != '' }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.BUMP_TOKEN || github.token }}
+          HAS_BUMP_TOKEN: ${{ steps.app-token.outputs.token != '' || secrets.BUMP_TOKEN != '' }}
         run: |
           if git diff --quiet; then echo "Everything is current."; exit 0; fi
           branch="chore/bump-template-pins-$(date +%Y%m%d)"
@@ -66,12 +77,13 @@ jobs:
             echo '```'
             if [ "$HAS_BUMP_TOKEN" != "true" ]; then
               echo
-              echo "No BUMP_TOKEN secret is set, so CI did not start for this pull request: close and reopen it to run the checks."
+              echo "Neither a GitHub App (BUMP_APP_CLIENT_ID) nor a BUMP_TOKEN secret is set, so CI did not start for this pull request: close and reopen it to run the checks."
             fi
           } > "$RUNNER_TEMP/body.md"
           if ! gh pr create --title "chore(deps): bump template dependency pins" --body-file "$RUNNER_TEMP/body.md"; then
             # the default token may not be allowed to open pull requests (repository setting); the branch is pushed
             url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
-            echo "::warning::Could not open the pull request. Open it here: ${url}  (or add a BUMP_TOKEN secret)"
+            echo "::error::Could not open the pull request. Open it here: ${url}  (or set up the GitHub App or BUMP_TOKEN, see the top of this workflow)"
             echo "Pins bumped on branch \`${branch}\`. [Open the pull request](${url})." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi

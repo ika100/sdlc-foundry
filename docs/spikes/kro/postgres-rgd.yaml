@@ -1,0 +1,40 @@
+# kro spike: the `postgres` addon contract implemented as a ResourceGraphDefinition (ADR-020).
+# Services are unchanged: they read the Secret named in status.secretName (<instance>-app, written by CloudNativePG).
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: postgres
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: Postgres
+    spec:
+      version: integer | default=17
+      instances: integer | default=1
+      storage: string | default="1Gi"
+      database: string | required=true
+    status:
+      ready: ${cluster.status.phase == "Cluster in healthy state"}
+      secretName: ${schema.metadata.name + "-app"}
+  resources:
+    - id: cluster
+      readyWhen:
+        - ${cluster.status.phase == "Cluster in healthy state"}
+      template:
+        apiVersion: postgresql.cnpg.io/v1
+        kind: Cluster
+        metadata:
+          name: ${schema.metadata.name}
+        spec:
+          instances: ${schema.spec.instances}
+          imageName: ${"ghcr.io/cloudnative-pg/postgresql:" + string(schema.spec.version)}
+          storage:
+            size: ${schema.spec.storage}
+          enableSuperuserAccess: false
+          bootstrap:
+            initdb:
+              database: ${schema.spec.database}
+              owner: ${schema.spec.database}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}

@@ -6,6 +6,9 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **CI: template pin bumps no longer get stranded.** `bump-template-pins` opens its pull request with a GitHub App token (repository variable `BUMP_APP_CLIENT_ID`, secret `BUMP_APP_PRIVATE_KEY`; `BUMP_TOKEN` still works), so CI runs on it, and the job now fails when it cannot open the pull request instead of passing with a warning. Two weekly bumps had been pushed without a pull request.
+- **Docs: the kro spike is kept.** [`docs/spikes/kro.md`](spikes/kro.md) is now on main and linked from ADR-020; rendered manifests stay the only addon backend.
+
 ## [4.2.1] — 2026-10-22
 
 **External Helm charts keep their release name.** Taking over a chart that already ran no longer fails with `spec.selector: field is immutable`. **Action:** `/shared:update-service` in gitops-apps with a `helm` external entry. No plugin changes.

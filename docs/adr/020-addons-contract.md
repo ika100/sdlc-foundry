@@ -15,7 +15,7 @@ Services need a database (later metrics, queues). Hand-written operator manifest
 3. **Implementation today: rendered manifests.** `render.py` writes `applications/<app>/addons/<env>/<addon>/cluster.yaml` (+ kustomization) only for environments where a service uses the addon, and a `<app>-addons-<env>` ApplicationSet. `render.py`'s `ADDONS` table is the contract; adding an addon means adding an entry and its manifest function.
 4. **Operators are cluster prerequisites.** `cluster-up` installs CloudNativePG locally (k3s `HelmChart`, pinned) when `addons.postgres` is declared; real clusters install it themselves, as with ESO and the Gateway. `cplat doctor` warns when the CRD is missing.
 5. **Data safety.** The addon Application has `prune: false`, and removing an addon only makes its Application disappear: the database and its volume stay until a human deletes them. `cplat addon remove` refuses while a service still uses the addon.
-6. **Alternative backends** (kro, Crossplane) must implement the same contract; `docs/spikes/kro.md` evaluates kro.
+6. **Alternative backends** (kro, Crossplane) must implement the same contract. The [kro spike](../spikes/kro.md) (2026-10-07) found no code saved and new Argo ordering traps, so rendered manifests stay the only backend; revisit when kro reaches v1 and several addons share one graph.
 
 ## Not included
 
