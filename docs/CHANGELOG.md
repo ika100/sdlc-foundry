@@ -6,6 +6,25 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [4.2.0] — 2026-10-22
+
+**From an approved spec to `dev`, unattended, on GitHub Free.** Approving a spec is the only step left for you:
+- **`/svc:ship <NNN>`** plans, builds test-first, opens the PR, merges it once CI is green, and waits until `dev` runs it.
+- **`cplat headless`** keeps starting fresh sessions until the run is done.
+- **CI gates every merge in code**, so branch protection and auto-merge are not needed.
+- **Also new:**
+  - an `external` entry type for services the generator cannot express (CronJobs, volumes, Helm charts);
+  - `cplat adopt` for repos that were not created from a template;
+  - self-hosted CI runners set through repository variables.
+
+**Action for existing products:**
+1. Run `/plugin marketplace update`.
+2. Run `/shared:update-service` in the gitops-app (pin-dev merge job, external entries) and in every service (CI runner variables).
+3. Make sure Actions may open PRs in the gitops-app: `gh api -X PUT repos/<org>/<gitops>/actions/permissions/workflow -F can_approve_pull_request_reviews=true -f default_workflow_permissions=write`.
+4. Open each repo interactively once before its first `cplat headless` run.
+
+**Plugins:** svc 3.1.0, shared 0.12.0.
+
 **Unattended delivery on GitHub Free** ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md), [guide](unattended-delivery.md), from a [review of three lan repos](e2e/2026-10-22-review-unattended-delivery.md)). Approve a spec, then `/svc:ship <NNN>` plans, builds, opens the PR, merges it after green CI and waits until `dev` runs it, without branch protection or auto-merge. **Plugins:** svc 3.1.0, shared 0.12.0.
 
 - **065 — merges wait for green CI without branch protection.** The gitops-app's `pin-dev` runs `ci.yml` (now also a reusable workflow with a `ref` input) on the pin branch and merges the pin PR only when it passed; a red CI comments the run and leaves the PR open. Where protection refuses the direct merge it falls back to auto-merge. `/shared:new-service` says what still guards merges on the free plan. **Action:** `/shared:update-service` in each gitops-app.
