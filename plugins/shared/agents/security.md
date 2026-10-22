@@ -34,7 +34,7 @@ Run `pip-audit --fix` **only when explicitly instructed** — and even then add 
 devbox run secrets-scan
 ```
 
-(`secrets-scan` runs `detect-secrets scan --all-files --baseline .secrets.baseline.json` — creates or updates the baseline.)
+(`secrets-scan` runs `detect-secrets-hook` against `.secrets.baseline.json`, exactly as CI does. A false positive: add `# pragma: allowlist secret` to the line, or refresh the baseline with `devbox run secrets-baseline` and mark the entry `"is_secret": false`. Never run `detect-secrets scan` by hand: its flags differ between machines and CI then disagrees.)
 
 Report any **new** potential secrets found compared to the existing baseline (file:line, type of secret). Note: detect-secrets produces false positives — flag findings and let the user confirm.
 

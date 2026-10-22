@@ -58,7 +58,7 @@
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "0.12.0",
+      "version": "0.12.1",
       "description": "Common quality and security agents plus the /new-service bootstrap command (shape-aware via shapes.yml).",
       "category": "agents",
       "tags": ["quality", "security", "bootstrap"]

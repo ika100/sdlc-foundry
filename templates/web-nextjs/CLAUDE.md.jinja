@@ -38,6 +38,7 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 | `audit` | `pnpm audit --prod --audit-level high` |
 | `secrets-scan` | detect-secrets against `.secrets.baseline.json` |
 | `security` | `audit` + `secrets-scan` |
+| `secrets-baseline` | refresh `.secrets.baseline.json` with fixed flags (never run `detect-secrets scan` by hand) |
 | `ci` | `quality` + `test` + `security`: the gates CI runs; run it before every push |
 | `image-build` | Build local image `{{ project_name }}:scan` |
 | `image-scan` | trivy against `{{ project_name }}:scan` |

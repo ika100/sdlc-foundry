@@ -11,6 +11,27 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 - **Templates: CI runs once per change (#104).** `ci.yml` in every template triggers `push` only on `main` (and `v*.*.*` tags). Feature, fix and other branches run CI through `pull_request` alone; before, every commit on an open PR ran each job twice, which queued PR jobs behind the duplicates on small self-hosted runner sets. In gitops-apps, pin-dev keeps running CI through `workflow_call`. **Action:** `/shared:update-service`.
 - **CI: template pin bumps no longer get stranded.** `bump-template-pins` opens its pull request with a GitHub App token (repository variable `BUMP_APP_CLIENT_ID`, secret `BUMP_APP_PRIVATE_KEY`; `BUMP_TOKEN` still works), so CI runs on it, and the job now fails when it cannot open the pull request instead of passing with a warning. Two weekly bumps had been pushed without a pull request.
 - **Docs: the kro spike is kept.** [`docs/spikes/kro.md`](spikes/kro.md) is now on main and linked from ADR-020; rendered manifests stay the only addon backend.
+- **Feat (072): `cplat ship land` reports a red check at once and heals stuck checks.**
+  - It stops waiting at the first failed check and prints its log.
+  - It prints one line per check as each one concludes.
+  - A stale check (still in progress after its run completed) is rerun once. So is a run with only queued jobs for `--queue-timeout` (300 s) while nothing else of the PR runs. A second time is an error that names the runner set.
+  - `ship deploy` applies the same rules to the open pin PR. (#102)
+- **Fix (073): the secrets scan gives the same answer locally and in CI.**
+  - The templates pin `detect-secrets@1.5.0` and `trivy@0.74.0`.
+  - The template baselines list the standard filters. Before, `filters_used: []` turned them all off, so `# pragma: allowlist secret` had no effect. They no longer carry the gibberish filter, which only some machines can apply.
+  - New recipe `devbox run secrets-baseline` refreshes the baseline with fixed flags.
+  - The Python templates call the devbox binary instead of `uv run`.
+  - **Action:** run `/shared:update-service`. The baseline is project-owned, so then run `devbox run secrets-baseline` and commit the result. (#103)
+- **Docs (074): a persistent Docker volume is the build cache on self-hosted runners.** `docs/self-hosted-runners.md` recommends one dind `/var/lib/docker` volume per runner set and explains why there is no registry cache (it uploads every layer on each main build). The trigger change is #107 above; spec 074 records both. (#104)
+- **Feat (075): `cplat ship pr` enforces `devbox run ci`.** It runs the recipe before pushing and refuses while it is red, printing the tail; spec 075 records this together with #108. (#105)
+- **Feat (076): ship carries a spec's gitops changes.**
+  - Plans can have gitops tasks (`repo:`, `order: before-merge | after-release`, `files`, `apps`) and `human_steps`; `cplat spec check` validates them.
+  - `cplat ship gitops prepare|pr <task>` opens each task as a draft PR during the build.
+  - `ship land` merges the `before-merge` PRs before the service PR.
+  - `ship deploy` merges the `after-release` PRs once dev runs the pin, then waits for every app they name. A SyncError stops the deploy.
+  - The run ends with the human steps as a checklist.
+  - The architect plans CRD field removals as expand/contract.
+  - Validating Components against the service branch's CRD in gitops CI is a follow-up. (#106)
 
 ## [4.2.1] — 2026-10-22
 

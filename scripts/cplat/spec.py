@@ -257,6 +257,11 @@ def check_plan(spec: Spec, meta: dict, _body: str) -> list[str]:
         covered |= set(t.get("covers") or [])
         if "done" in t and not isinstance(t["done"], bool):
             errs.append(f"task {tid}: done must be true/false")
+        if "repo" in t:
+            errs += _gitops_task_errors(spec, t)
+    steps = meta.get("human_steps")
+    if steps is not None and not (isinstance(steps, list) and all(isinstance(s, str) and s.strip() for s in steps)):
+        errs.append("human_steps must be a list of non-empty strings")
     for a in sorted(active - covered):
         errs.append(f"{a} is not covered by any task")
     if errs:
@@ -273,6 +278,27 @@ def check_plan(spec: Spec, meta: dict, _body: str) -> list[str]:
                 both = sorted(set(a["files"]) & set(b["files"]))
                 if both:
                     errs.append(f"tasks {a['id']} and {b['id']} are parallel_safe at the same level but share {', '.join(both)}")
+    return errs
+
+
+GITOPS_ORDERS = ("before-merge", "after-release")
+
+
+def _gitops_task_errors(spec: Spec, t: dict) -> list[str]:
+    """Spec 076: a task with `repo:` changes a linked gitops-app repo; ship opens and merges it around the deploy."""
+    tid, errs = t.get("id", "<no id>"), []
+    if t.get("order") not in GITOPS_ORDERS:
+        errs.append(f"task {tid}: a gitops task needs order: {' | '.join(GITOPS_ORDERS)}")
+    if not t.get("files"):
+        errs.append(f"task {tid}: a gitops task needs the files it changes in {t['repo']}")
+    apps = t.get("apps", [])
+    if not (isinstance(apps, list) and all(isinstance(a, str) for a in apps)):
+        errs.append(f"task {tid}: apps must be a list of Argo CD application names")
+    link = spec.dir.parents[2] / ".platform-app.yml"
+    linked = re.findall(r"^\s*-\s*([^\s#]+/[^\s#]+)", link.read_text(), re.M) if link.is_file() else []
+    if t["repo"] not in linked:
+        errs.append(f"task {tid}: repo {t['repo']} is not a gitops-app of this repo (.platform-app.yml lists: "
+                    f"{', '.join(linked) or 'none'})")
     return errs
 
 

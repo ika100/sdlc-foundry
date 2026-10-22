@@ -35,19 +35,20 @@ Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec. Archi
 
 ## Phase `build`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/build.md` and follow its Phases 0–6 for this spec: red acceptance tests, coders until they pass, QA fan-out, verification, image, `set-status done`. Skip its Phase 7 (the PR is ours). Its stop-and-escalate rules stay rules here: a merge conflict between task branches, a changed acceptance test (`cplat spec test-diff` exit 1), a CRITICAL security finding, a decision the spec does not answer, a verification that still fails after its cycles. Each one → escalate.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/build.md` and follow its Phases 0–6 for this spec: red acceptance tests, coders until they pass, QA fan-out, verification, image, `set-status done`. Skip its Phase 7 (the PR is ours).
+
+**Gitops tasks** (plan tasks with `repo:`, spec 076) are not given to the service coders. For each, in plan order: `cplat ship gitops prepare <task>` (prints a checkout of that repo on `spec/<spec>-<task>`), make the change there through the gitops plugin's conventions (`devbox run validate` in that checkout), commit `feat(<scope>): <what>`, write a short body and `cplat ship gitops pr <task> --title <title> --body-file <file>` (a draft PR; its CI runs now). `cplat ship land` merges the `before-merge` ones, `cplat ship deploy` the `after-release` ones. Its stop-and-escalate rules stay rules here: a merge conflict between task branches, a changed acceptance test (`cplat spec test-diff` exit 1), a CRITICAL security finding, a decision the spec does not answer, a verification that still fails after its cycles. Each one → escalate.
 
 Then `cplat ship phase pr`.
 
 ## Phase `pr`
 
 1. Write the PR body to `.git/PR_BODY.md` with the template of build.md Phase 7 (summary, spec/plan/verification links, the criteria table from verification.md, `Closes #N` lines, testing done, checklist).
-2. `devbox run ci` must be green on the committed tree (build Phase 3 ran it; run it again if anything changed since). Red → fix before pushing, as in `land`.
-3. `cplat ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .git/PR_BODY.md` — pushes the feature branch and opens the PR (or reuses the open one).
+2. `cplat ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .git/PR_BODY.md` — runs `devbox run ci` (the CI workflow's gates; red → nothing is pushed: fix it through the coder and call it again), then pushes the feature branch and opens the PR (or reuses the open one). It refuses while a gitops task has no PR.
 
 ## Phase `land`
 
-`cplat ship land` waits until no check is pending.
+`cplat ship land` waits for the PR's checks and prints each one as it concludes. The first red check ends the wait (spec 072); a run whose check stays in progress after the run completed, or whose jobs stay queued for `--queue-timeout` (300 s) while nothing of the PR runs, is rerun once; the second time it is an error naming the runner set. When all are green it marks each `before-merge` gitops PR ready, waits for its checks and merges it, then merges the PR.
 
 - **GREEN** → it merges the PR (squash; with `--no-merge` it stops and the run is done) and moves to `deploy`.
 - **RED** (exit 1) → it prints the failed checks and their log tails. Hand them to the coder agent (`agents.coder`) of the task whose files are involved, with `<project-map>`: "fix these CI failures; never edit, skip or weaken an acceptance test". Run `devbox run ci`, commit `fix(ci): <what>`, then `cplat ship pr --title <same title> --body-file .git/PR_BODY.md` (pushes) and `cplat ship land` again. After **3** red rounds (`fix_rounds` in `cplat ship status`), escalate with the last failure.
@@ -55,7 +56,7 @@ Then `cplat ship phase pr`.
 
 ## Phase `deploy`
 
-`cplat ship deploy` (add `--context <kube-context>` when the user named one or `kubectl config current-context` works and points at the product's cluster) waits until the gitops-app merged the pin PR for the merge commit (ADR-027) and, with a context, Argo CD reports `<service>-dev` Synced/Healthy. A repo without a gitops-app link finishes here with a note. A closed pin PR, a red pin CI or an unhealthy app → escalate with the hint.
+`cplat ship deploy` (add `--context <kube-context>` when the user named one or `kubectl config current-context` works and points at the product's cluster) waits until the gitops-app merged the pin PR for the merge commit (ADR-027) and, with a context, Argo CD reports `<service>-dev` Synced/Healthy. A red check on the open pin PR fails it at once. Then it merges the `after-release` gitops PRs in plan order and, with a context, waits for Synced/Healthy of `<service>-dev` and every app the gitops tasks name (`apps:`); a SyncError or Degraded app is an error. A repo without a gitops-app link finishes here with a note. A closed pin PR, a red pin CI or an unhealthy app → escalate with the hint. Its last lines list the plan's `human_steps` as a checklist: copy them into the final report.
 
 ## Finish
 

@@ -3,8 +3,8 @@
   "packages": [
     "nodejs@{{ node_major }}",
     "pnpm@11.22.0",
-    "detect-secrets@latest",
-    "trivy@latest",
+    "detect-secrets@1.5.0",
+    "trivy@0.74.0",
     "git@latest",
     "gh@latest"
   ],
@@ -25,9 +25,10 @@
       "e2e":          "pnpm e2e",
 {%- endif %}
       "audit":        "pnpm audit --prod --audit-level high",
-      "secrets-scan": "git ls-files -z ':!pnpm-lock.yaml' | xargs -0 detect-secrets-hook --baseline .secrets.baseline.json",
+      "secrets-scan": "git ls-files -z ':!pnpm-lock.yaml' | xargs -0 detect-secrets-hook --baseline .secrets.baseline.json --disable-filter detect_secrets.filters.gibberish.should_exclude_secret",
+      "secrets-baseline": "detect-secrets scan --baseline .secrets.baseline.json --exclude-files 'pnpm-lock\\.yaml$' --disable-filter detect_secrets.filters.gibberish.should_exclude_secret",
       "security":     "devbox run audit && devbox run secrets-scan",
-      "ci":           "devbox run quality && devbox run test && devbox run security",
+      "ci":           "devbox run install && devbox run quality && devbox run test && devbox run security",
       "image-build":  "docker build -t {{ project_name }}:scan .",
       "image-scan":   "trivy image --severity CRITICAL,HIGH --format table {{ project_name }}:scan"
     }

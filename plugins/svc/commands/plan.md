@@ -52,6 +52,7 @@ Next: review the plan, then /svc:build <NNN>
 
 ## Rules
 
+- Gitops changes are plan tasks with `repo:` and `order: before-merge` | `after-release` (see the plan reference); removing CRD fields or namespaces is planned expand/contract, over two releases.
 - Plan only an approved spec; never change the spec. If the architect needs a decision, it goes back to the user through `/svc:spec --amend`.
 - Commits stay local; `/svc:build` pushes.
 
