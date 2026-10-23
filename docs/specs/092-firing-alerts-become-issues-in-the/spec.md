@@ -1,7 +1,7 @@
 ---
 spec_id: 092-firing-alerts-become-issues-in-the
 title: Firing alerts become issues in the owning repo
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -86,3 +86,4 @@ Failure of the poll itself
 
 - 2026-10-23 created
 - 2026-10-23 amended: open questions answered (metrics source, Alertmanager source, all environments, issue-write token with doctor warning, defaults confirmed). Aligned with the 088 issue convention: `[auto] ` titles, `Signature: alert:<16 hex>`, labels `triage`/`auto-filed`/`alert`, counted repeat comments, `wontfix` suppression. AC-092.7, .12 and .14 withdrawn; AC-092.19 to .25 added.
+- 2026-10-23 approved

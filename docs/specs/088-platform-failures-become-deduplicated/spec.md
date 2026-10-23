@@ -1,7 +1,7 @@
 ---
 spec_id: 088-platform-failures-become-deduplicated
 title: Platform failures become deduplicated issues
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -62,3 +62,4 @@ As the authors of specs 091 and 092, I want one signature-and-dedupe convention 
 
 - 2026-10-23 created
 - 2026-10-23 amended: open questions answered with the suggested answers; AC-088.4 and AC-088.11 clarified (no filing outside a recorded run; `filed` section, run id without link); AC-088.14 added (cap of 10 new issues per 24 h per machine)
+- 2026-10-23 approved

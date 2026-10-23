@@ -1,7 +1,7 @@
 ---
 spec_id: 090-a-weekly-retro-proposes-the-next-specs
 title: A weekly retro proposes the next specs
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -60,3 +60,4 @@ As the platform maintainer, I want the retro to run every week without me starti
 
 - 2026-10-23 created
 - 2026-10-23 open questions answered: schedule in the runs repo with a headless Claude run (AC-090.12, new AC-090.14), previous retro issue closed (new AC-090.13), `retro` label without triage and `/svc:spec` line per proposal (AC-090.7, AC-090.10), limits and window confirmed; AC-090.2 to AC-090.4 aligned with 087, 088 and 089; the public issue no longer links the run store (AC-090.11)
+- 2026-10-23 approved

@@ -1,7 +1,7 @@
 ---
 spec_id: 096-platform-updates-roll-out-to-every-repo
 title: Platform updates roll out to every repo
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -63,3 +63,4 @@ As a repo owner, I want a fleet update never to merge a change that throws away 
 
 - 2026-10-23 created
 - 2026-10-23 amended with the user's answers: on demand only and no issue for open PRs; AC-096.4 and AC-096.5 withdrawn for AC-096.15 and AC-096.16 (merge only when spec 086's list of replaced or dropped customisations is empty); one repo at a time (AC-096.17); run record kind `fleet` (AC-096.12).
+- 2026-10-23 approved

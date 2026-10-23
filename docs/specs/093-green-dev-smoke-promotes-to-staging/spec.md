@@ -1,7 +1,7 @@
 ---
 spec_id: 093-green-dev-smoke-promotes-to-staging
 title: Green dev smoke promotes to staging
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -72,3 +72,4 @@ As an operator, I want to switch automatic promotion off for one service or a wh
 
 - 2026-10-23 created
 - 2026-10-23 amended: open questions answered. AC-093.2 withdrawn and replaced by AC-093.15 (off for existing gitops-apps, on for new ones). AC-093.1, AC-093.3, AC-093.6, AC-093.8, AC-093.9, AC-093.11 and AC-093.14 clarified to match spec 091 (promotion and staging smoke run in `cplat ship`; `devbox run smoke` with `SMOKE_BASE_URL`; smoke outcome and `smoke-failure` issue convention) and spec 092 (`alert` label). AC-093.16 added: a new ADR amends ADR-027 for staging.
+- 2026-10-23 approved

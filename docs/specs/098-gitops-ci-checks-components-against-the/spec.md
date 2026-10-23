@@ -1,7 +1,7 @@
 ---
 spec_id: 098-gitops-ci-checks-components-against-the
 title: Gitops CI checks Components against the service branch CRDs
-status: draft
+status: approved
 priority: P1
 tracks: [110]
 ---
@@ -62,3 +62,4 @@ As a founder, I want `cplat doctor` to tell me when the gitops-app cannot read i
 
 - 2026-10-23 created
 - 2026-10-23 amended: open questions answered; the secret is named `SERVICE_REPOS_READ_TOKEN` in AC-098.10 and AC-098.16; marker form and AC-098.3 scope confirmed
+- 2026-10-23 approved
