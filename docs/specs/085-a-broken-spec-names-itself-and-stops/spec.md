@@ -24,7 +24,7 @@ As a maintainer reading the spec list, index or CI output, I want a broken spec 
 
 Throughout, "broken" means a spec's `spec.md` or `plan.md` front matter cannot be read: it is not valid YAML, it is missing the `---` fences, or it is not a mapping of keys to values. "Names itself" means the message contains the file's path relative to the repo root, the line number in that file, and a fix hint.
 
-- **AC-085.1** Given a spec whose `spec.md` has `title: a: b` on line 3, when any `cplat spec` command reads that spec, then the command fails with an error that contains the path `docs/specs/<id>/spec.md`, line 3, and the hint to put values containing `: ` in quotes. No YAML stack trace is printed.
+- **AC-085.1** Given a spec whose `spec.md` has `title: a: b` on line 3, when any `cplat spec` command reads that spec, then the command fails with an error that contains the path `docs/specs/<id>/spec.md`, line 3, and the hint `values that contain ': ' must be quoted, e.g. title: "a: b"`. No YAML stack trace is printed.
 - **AC-085.2** Given a spec whose `spec.md` has no front-matter fences, or front matter that is valid YAML but not a mapping (for example a plain list), when any `cplat spec` command reads it, then the error names the file, line 1 and what the front matter must look like (`---`, `key: value` lines, `---`).
 - **AC-085.3** Given a spec whose `plan.md` front matter is broken and whose `spec.md` is fine, when a command reads that spec, then the error names `docs/specs/<id>/plan.md` and the line, the same way as AC-085.1.
 - **AC-085.4** Given one broken spec and other valid specs in the same repo, when `cplat spec approve`, `set-status`, `task-done`, `hash`, `trace` or `check` is run for a valid spec, then it gives the same result and exit code as it would with no broken spec in the repo. The broken spec's files are not modified.
@@ -46,11 +46,12 @@ Throughout, "broken" means a spec's `spec.md` or `plan.md` front matter cannot b
 
 ## Open questions
 
-- Should a broken spec fail `cplat spec ci` even without `--strict`? Today, non-strict CI only warns, so a repo that has not switched to `--strict` would get its first red spec check from this change. (suggested: yes, always an error, because a spec that cannot be read is never a style problem; affects AC-085.8)
-- Confirm: `cplat spec list` still exits 0 when a spec is broken, because it is read-only and is used to find the next step; `check` and `ci` are the commands that fail. (suggested: yes; affects AC-085.9)
-- Confirm: the index keeps a broken spec as a row with status `broken`, and does not drop it or refuse to write the table. (suggested: keep the row; affects AC-085.10)
-- Confirm the exact fix hint users see for AC-085.1: "values that contain ': ' must be quoted, e.g. title: \"a: b\"". (suggested: this wording; affects AC-085.1, AC-085.3)
+- ~~Should a broken spec fail `cplat spec ci` even without `--strict`?~~ Answered: yes, it is always an error and exits 1, see AC-085.8.
+- ~~Confirm: `cplat spec list` still exits 0 when a spec is broken.~~ Answered: yes, see AC-085.9.
+- ~~Confirm: the index keeps a broken spec as a row with status `broken`.~~ Answered: yes, see AC-085.10.
+- ~~Confirm the exact fix hint users see.~~ Answered: `values that contain ': ' must be quoted, e.g. title: "a: b"`, see AC-085.1 and AC-085.3.
 
 ## Changelog
 
 - 2026-10-23 created
+- 2026-10-23 amended: open questions answered (all recommended answers accepted); AC-085.1 now states the exact fix hint

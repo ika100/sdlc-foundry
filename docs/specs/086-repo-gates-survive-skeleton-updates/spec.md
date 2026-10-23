@@ -33,10 +33,11 @@ As the fleet update (spec 096), I want the update report to say exactly which re
 - **AC-086.9** Given a repo whose `ci` recipe runs a gate that the CI workflow does not, when `cplat doctor` runs, then the warning's fix says to move that gate into `ci-extra`.
 - **AC-086.10** Given a repo whose committed `.claude/settings.json` has permission entries (allow, ask or deny) that the template never had, when `/shared:update-service` runs, then those entries are still there afterwards, the template's entries are updated, and the report lists the kept entries.
 - **AC-086.11** Given a permission entry that the template had at the repo's previous platform version and has removed since, when `/shared:update-service` runs, then the entry is removed even if the repo still has it, and the report lists it as removed by the platform.
-- **AC-086.12** Given a repo that changed parts of `.claude/settings.json` other than permission entries, or changed a skeleton file it has a companion for (the CI workflow), when `/shared:update-service` runs, then the template's version wins and the report names, per file, what was replaced and where the repo's addition belongs instead (`ci-extra`, a workflow file of the repo's own, its own permission entries).
-- **AC-086.13** Given an update run with `--json`, when it finishes, then its output lists every repo customisation the update replaced or dropped (replaced recipes, permission entries removed, settings replaced, modified skeleton files); the list is empty exactly when nothing the repo had added was lost.
+- **AC-086.12** Given a repo that changed parts of `.claude/settings.json` other than permission entries, or changed a skeleton file it has a companion for (the CI workflow, `CLAUDE.md`), when `/shared:update-service` runs, then the template's version wins and the report names, per file, what was replaced and where the repo's addition belongs instead (`ci-extra`, a workflow file of the repo's own, its own permission entries, the project notes file of AC-086.16).
+- **AC-086.13** Given an update run with `--json`, when it finishes, then its output lists every repo customisation the update replaced or dropped (replaced recipes, permission entries removed, settings replaced, modified skeleton files); the list is empty exactly when nothing the repo had added was lost (the fleet update of spec 096 merges only when it is empty).
 - **AC-086.14** Given a workflow file in the repo's CI workflows that the template does not ship, when `/shared:update-service` runs, then that file is unchanged and not listed as modified.
-- **AC-086.15** Given a new repo of any shape, when it is created, then its `CLAUDE.md` has a section that names the skeleton files updates overwrite and, for each, the repo-owned place for additions: `ci-extra` for gates, its own recipes in `devbox.json`, its own permission entries in `.claude/settings.json`, its own workflow files for extra CI jobs.
+- **AC-086.15** Given a new repo of any shape, when it is created, then its `CLAUDE.md` has a section that names the skeleton files updates overwrite and, for each, the repo-owned place for additions: `ci-extra` for gates, its own recipes in `devbox.json`, its own permission entries in `.claude/settings.json`, its own workflow files for extra CI jobs, the project notes file (AC-086.16) for project guidance.
+- **AC-086.16** Given a repo of any shape, when it is created, then it has a repo-owned project notes file, created empty, that the template's `CLAUDE.md` loads so agents read it in every session, including unattended ones; when `/shared:update-service` runs, the notes file is never changed, and a repo that lacks it still gets a working `CLAUDE.md` with no error about the missing file.
 
 ## Non-goals
 
@@ -47,10 +48,11 @@ As the fleet update (spec 096), I want the update report to say exactly which re
 
 ## Open questions
 
-- Confirm: when the update finds repo gates in the old `ci` recipe and no `ci-extra`, it moves them into a new `ci-extra` automatically instead of only reporting them (suggested: yes, move automatically, so the fleet update in 096 can merge without losing a gate; affects AC-086.6).
-- Confirm: in a repo without `ci-extra`, the `ci-extra` CI check still appears and passes with a notice, instead of being skipped (suggested: yes, appear and pass, so every repo shows the same checks and `cplat pr wait` needs no special case; affects AC-086.3).
-- `CLAUDE.md` is template-owned, so project notes added to it are lost on every update. Should this spec also give it a repo-owned companion (a project notes file that the template's `CLAUDE.md` loads and updates never touch, seeded empty at creation)? (suggested: yes, as one new criterion here, since agents read these notes in every unattended run; otherwise a follow-up spec; affects a new criterion and AC-086.15)
+- ~~Confirm: when the update finds repo gates in the old `ci` recipe and no `ci-extra`, it moves them into a new `ci-extra` automatically instead of only reporting them?~~ Answered: yes, moved automatically, see AC-086.6.
+- ~~Confirm: in a repo without `ci-extra`, the `ci-extra` CI check still appears and passes with a notice, instead of being skipped?~~ Answered: yes, it appears and passes with a notice, see AC-086.3.
+- ~~Should this spec also give `CLAUDE.md` a repo-owned companion (a project notes file that the template's `CLAUDE.md` loads and updates never touch, seeded empty at creation)?~~ Answered: yes, see AC-086.16 (and AC-086.12, AC-086.15).
 
 ## Changelog
 
 - 2026-10-23 created
+- 2026-10-23 open questions answered: repo gates move into `ci-extra` automatically (AC-086.6); the `ci-extra` check always appears (AC-086.3); new AC-086.16 adds a repo-owned project notes file loaded by `CLAUDE.md`, named in AC-086.12 and AC-086.15; AC-086.13 states it is the fleet update's merge signal (spec 096)

@@ -27,10 +27,13 @@ As the platform maintainer, I want every conflict and re-plan recorded against t
 - **AC-094.6** Given a task that was already re-planned once, when its branch conflicts again, then the build stops and escalates, and the message names the task, the conflicting files, the task it collided with both times and the re-plan commit.
 - **AC-094.7** Given the architect answers a re-plan with blockers or with a plan that still fails `cplat spec check` after one retry, when the build reads the answer, then the build stops and escalates with the architect's blockers or the check errors, and the plan on the feature branch is the last valid one.
 - **AC-094.8** Given a build in which at least one re-plan happened, when the Final Report is printed, then its Implementation row states the number of re-plans and, per re-planned task, the conflicting files and whether the re-run merged cleanly.
-- **AC-094.9** Given a run record store configured (spec 087), when a conflict occurs, then the run's record gains one plan-accuracy event per conflicting task with the spec, the task id, the task it collided with, the conflicting file paths, the agent and model that wrote the plan, and the outcome (`re-planned`, `resolved` or `escalated`), in the form spec 089 defines.
-- **AC-094.10** Given no run record store is configured or it cannot be reached, when a conflict occurs, then the re-plan proceeds exactly as with a store (the record is buffered or skipped as spec 087 defines) and the build is not blocked.
+- **AC-094.9** Given a run record store configured (spec 087), when a conflict occurs, then the run's record gains one `merge-conflict` plan-accuracy event per conflicting task as AC-089.3 defines it (spec, task id, the task it collided with, the conflicting paths, the plan author's agent and model), with outcome `re-planned` once the amended plan is committed, updated in place to `resolved` when the re-run merges cleanly or `escalated` when the build stops; each amended plan counts one re-plan for the architect as AC-089.14 defines.
+- **AC-094.10** Given no run record store is configured or it cannot be reached, when a conflict occurs, then the re-plan proceeds exactly as with a store (the record is buffered as spec 087 defines) and the build is not blocked.
 - **AC-094.11** Given a build interrupted after a re-plan commit but before the re-planned task merged, when `/svc:build <id>` resumes, then it schedules from the amended plan, keeps every `done` task, and counts the earlier re-plan, so a further conflict of that task escalates as in AC-094.6.
 - **AC-094.12** Given a conflict while merging, when the build handles it, then neither the orchestrator nor any agent edits conflicting hunks by hand; the only way forward is the amended plan and a fresh run of the task.
+- **AC-094.13** Given a build that has already re-planned 3 times (counting re-plans before an interruption), when another task branch conflicts, then the build stops and escalates without a fourth re-plan, and the message says the cap of 3 re-plans per build was reached and lists the earlier re-plan commits.
+- **AC-094.14** Given an attended (interactive) build, when a task branch conflicts, then the re-plan and the re-run happen without asking the user, exactly as in an unattended run, and the Final Report says that the plan was amended (AC-094.8).
+- **AC-094.15** Given the platform's orchestration guide and the build command's rules, when a reader looks up merge conflicts, then both say a conflict is re-planned once per task (at most 3 re-plans per build), then escalated, and is never resolved by hand; neither still says that every conflict is escalated.
 
 ## Non-goals
 
@@ -42,11 +45,12 @@ As the platform maintainer, I want every conflict and re-plan recorded against t
 
 ## Open questions
 
-- Confirm: the re-plan limit is one per task (a task that conflicts again after its re-plan escalates) and there is no separate limit per build. (suggested: yes, plus a cap of 3 re-plans per build, after which the next conflict escalates, so a plan that is wrong everywhere does not loop through the architect; affects AC-094.6, new criterion for the cap)
-- Confirm: after a conflict the rest of the batch keeps merging, rather than the whole batch being set aside. (suggested: keep merging, since clean merges are kept work and the re-plan sees the real state; affects AC-094.2)
-- Should the re-plan also run in an attended (interactive) build without asking, or only in unattended runs? (suggested: always, without asking, and say so in the Final Report; the plan change is visible in its own commit and reversible; affects AC-094.1, AC-094.3)
-- The platform's orchestration guide and the build rules currently say "merge conflicts are escalated, never auto-resolved". Confirm they are reworded to "re-planned once, then escalated; never resolved by hand" as part of this spec. (suggested: yes; affects AC-094.12)
+- ~~Confirm: the re-plan limit is one per task, and is there a limit per build?~~ Answered: one re-plan per task (AC-094.6) plus a cap of 3 re-plans per build (AC-094.13).
+- ~~Confirm: after a conflict the rest of the batch keeps merging?~~ Answered: yes, the rest of the batch keeps merging (AC-094.2).
+- ~~Should the re-plan also run without asking in an attended build?~~ Answered: yes, always without asking, and the Final Report says so (AC-094.14, AC-094.8).
+- ~~Confirm: the orchestration guide and build rules are reworded?~~ Answered: yes, "re-planned once, then escalated; never resolved by hand" (AC-094.15).
 
 ## Changelog
 
 - 2026-10-23 created
+- 2026-10-23 open questions answered: one re-plan per task and at most 3 per build (AC-094.13), the batch keeps merging, re-plans without asking in attended builds too (AC-094.14), guide and build rules reworded (AC-094.15); AC-094.9 clarified to reference 089's `merge-conflict` event (AC-089.3) and re-plan count (AC-089.14)
