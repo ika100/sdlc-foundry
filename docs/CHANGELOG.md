@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (079): a registry rate limit is transient.** `cplat pr wait` and `cplat ship land` rerun a job whose log says `invalid response status 429` once before it counts.
+
 ## [4.4.0] — 2026-10-22
 
 **Deploys report what really runs, every PR wait is one tested command, and builds and CI do each thing once.**

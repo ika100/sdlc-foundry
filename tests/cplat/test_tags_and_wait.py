@@ -138,6 +138,15 @@ def test_a_transient_failure_that_fails_again_is_red(fake, tmp_path):
     assert not ok and sum(c[:2] == ["run", "rerun"] for c in fake.calls) == 1
 
 
+def test_a_registry_rate_limit_is_transient(fake, tmp_path):
+    """AC-079.2: a registry 429 (`invalid response status 429`) is rerun once like any other transient failure."""
+    assert ship.TRANSIENT.search("ERROR: failed to solve: ghcr.io/acme/base: invalid response status 429 Too Many Requests")
+    fake.checks = [[check("image", "fail")], [check("image", "fail")], [check("image", "pending")], [check("image", "pass")]]
+    fake.logs["42"] = ["error: unexpected status from HEAD request: invalid response status 429"]
+    ok, _ = prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 600, 10, 300)
+    assert ok and sum(c[:2] == ["run", "rerun"] for c in fake.calls) == 1
+
+
 def test_a_real_failure_is_not_rerun(fake, tmp_path):
     """AC-079.2: an assertion failure is the change's fault: red at once."""
     fake.checks = [[check("test", "fail")]]

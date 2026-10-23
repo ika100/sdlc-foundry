@@ -45,7 +45,7 @@ QUEUED = {"QUEUED", "PENDING", "WAITING", "REQUESTED"}   # `gh pr checks` states
 # spec 079: log lines of a red job that mean the network or a registry failed, not the change; such a job is rerun once
 TRANSIENT = re.compile(r"Failed to read artifact descriptor|Could not resolve (dependencies|host)|Could not transfer artifact|"
                        r"\b50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)\b|HTTP (status )?50[234]\b|"
-                       r"connection reset|Connection reset by peer|TLS handshake timeout|i/o timeout|ETIMEDOUT|ECONNRESET",
+                       r"invalid response status 429|connection reset|Connection reset by peer|TLS handshake timeout|i/o timeout|ETIMEDOUT|ECONNRESET",
                        re.I)
 
 
