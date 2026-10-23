@@ -9,6 +9,7 @@ tasks:
   covers: [AC-085.1, AC-085.2, AC-085.3, AC-085.4, AC-085.5, AC-085.6, AC-085.11, AC-085.12]
   parallel_safe: false
   depends_on: []
+  done: true
 - id: t2
   title: Report broken specs in check, ci, list and index
   files: [scripts/cplat/spec.py, docs/CHANGELOG.md]
