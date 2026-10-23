@@ -39,6 +39,7 @@ tasks:
   covers: [AC-098.10, AC-098.16]
   parallel_safe: true
   depends_on: []
+  done: true
 ---
 
 # Plan — 098 Gitops CI checks Components against the service branch CRDs

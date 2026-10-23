@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feature (098): gitops CI checks Components against the service branch's CRDs.** (#110)
+  - `cplat ship gitops pr` adds one `Service-ref: <owner>/<repo>@<branch>` line to every gitops PR it opens or reuses.
+  - On pull requests the gitops-app CI reads the CRDs of that branch and validates the Components under `applications/` against them, instead of the public catalog. Without a marker nothing changes.
+  - `cplat doctor` warns when a gitops-app lacks the `SERVICE_REPOS_READ_TOKEN` secret.
+  - **Action:** add the secret `SERVICE_REPOS_READ_TOKEN` (fine-grained, Contents: read on the service repos) to every gitops-app, then run `/shared:update-service` there.
+
 ## [4.4.0] — 2026-10-22
 
 **Deploys report what really runs, every PR wait is one tested command, and builds and CI do each thing once.**

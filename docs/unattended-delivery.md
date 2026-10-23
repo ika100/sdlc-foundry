@@ -53,6 +53,7 @@ Outside a Claude session `cplat` is not on the PATH: use the plugin's launcher (
 | The repo is a platform repo (`.copier-answers.yml`) | shape routing, recipes, allowlist | `/shared:doctor`; existing repos: `cplat adopt --type <shape>` |
 | CI on pull requests reports checks | `land` never merges without a check | a PR shows checks; self-hosted runners: `vars.CI_RUNNER` ([guide](self-hosted-runners.md)) |
 | `.platform-app.yml` and the `GITOPS_TOKEN` secret | the service's CI asks the gitops-app for the dev pin (ADR-027) | the `pin-dev` job on `main` does not print a notice |
+| The `SERVICE_REPOS_READ_TOKEN` secret in each gitops-app (spec 098) | `cplat ship gitops pr` marks its PRs with `Service-ref: <owner>/<repo>@<branch>`; the gitops CI reads that branch's CRDs with this token (fine-grained, Contents: read on the service repos) and validates the Components against them. Without it a marked PR fails its check | `cplat doctor` in the gitops-app (a warning when missing) |
 | The service is in the gitops-app's `services.yaml` | pin-dev pins only composed services; for services the generator cannot express, use an `external` entry ([ADR-029](adr/029-external-services.md)) | `/shared:status` in the gitops-app |
 | Actions may open PRs in the gitops-app | pin-dev opens the pin PR | `gh api repos/<org>/<gitops>/actions/permissions/workflow` |
 | Optional: a kube context | `cplat ship deploy --context <ctx>` also waits for Argo `Synced/Healthy` | `kubectl --context <ctx> -n argocd get applications` |
