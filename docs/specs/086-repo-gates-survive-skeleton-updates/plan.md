@@ -30,6 +30,7 @@ tasks:
     covers: [AC-086.15, AC-086.16]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: settingsmerge.py keeps repo permission entries and drops platform-removed ones
     files: [scripts/cplat/settingsmerge.py]

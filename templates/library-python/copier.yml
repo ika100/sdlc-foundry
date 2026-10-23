@@ -9,6 +9,7 @@ _templates_suffix: ""
 _answers_file: .copier-answers.yml
 
 _skip_if_exists:
+  - .claude/project-notes.md   # repo-owned notes, loaded by CLAUDE.md (spec 086)
   - README.md                # project-owned after creation (spec 060)
   - .github/ISSUE_TEMPLATE/**
   - pyproject.toml
