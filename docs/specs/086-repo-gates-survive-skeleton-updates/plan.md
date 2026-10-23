@@ -16,6 +16,7 @@ tasks:
     covers: [AC-086.1, AC-086.2, AC-086.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Every template's CI workflow has a ci-extra check
     files: [templates/service-python/.github/workflows/ci.yml, templates/library-python/.github/workflows/ci.yml, templates/gitops-app/.github/workflows/ci.yml, templates/service-go/.github/workflows/ci.yml, templates/service-java/.github/workflows/ci.yml, templates/web-nextjs/.github/workflows/ci.yml, shapes.yml]
