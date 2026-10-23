@@ -52,6 +52,29 @@ jobs:
           enable-cache: true
       - run: devbox run security
 
+  ci-extra:
+    name: ci-extra
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Is a ci-extra recipe defined?
+        id: recipe
+        run: |
+          if grep -qs '"ci-extra"[[:space:]]*:' devbox.json; then
+            echo "defined=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "defined=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no ci-extra recipe is defined in devbox.json: nothing to run (spec 086)"
+          fi
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted' && steps.recipe.outputs.defined == 'true'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
+        with:
+          enable-cache: true
+      - run: devbox run ci-extra
+        if: steps.recipe.outputs.defined == 'true'
+
   pr-title:
     name: pr-title (conventional commits)
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}

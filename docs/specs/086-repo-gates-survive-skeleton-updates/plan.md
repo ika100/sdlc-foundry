@@ -23,6 +23,7 @@ tasks:
     covers: [AC-086.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Project notes file and the "Where your additions go" section in every template
     files: [templates/service-python/CLAUDE.md, templates/library-python/CLAUDE.md, templates/gitops-app/CLAUDE.md.jinja, templates/service-go/CLAUDE.md.jinja, templates/service-java/CLAUDE.md.jinja, templates/web-nextjs/CLAUDE.md.jinja, templates/service-python/.claude/project-notes.md, templates/library-python/.claude/project-notes.md, templates/gitops-app/.claude/project-notes.md, templates/service-go/.claude/project-notes.md, templates/service-java/.claude/project-notes.md, templates/web-nextjs/.claude/project-notes.md, templates/service-python/copier.yml, templates/library-python/copier.yml, templates/gitops-app/copier.yml, templates/service-go/copier.yml, templates/service-java/copier.yml, templates/web-nextjs/copier.yml]
