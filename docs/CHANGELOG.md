@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- Fix (085): a broken spec names its file, line and fix and no longer blocks other specs (#129)
+
 ## [4.4.0] — 2026-10-22
 
 **Deploys report what really runs, every PR wait is one tested command, and builds and CI do each thing once.**
