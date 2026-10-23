@@ -37,6 +37,7 @@ tasks:
     covers: [AC-086.10, AC-086.11, AC-086.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: Docs, the update-service command and the shared plugin version
     files: [docs/ADOPTING.md, docs/templates.md, docs/CHANGELOG.md, plugins/shared/commands/update-service.md, plugins/shared/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
