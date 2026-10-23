@@ -36,3 +36,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [028](028-unattended-delivery-without-branch-protection.md) | Unattended delivery without branch protection: merges wait for green CI in code, `/svc:ship`, a Stop hook, headless resumes |
 | [029](029-external-services.md) | External services in services.yaml: hand-written kustomize packages or Helm charts, wired and pinned by render |
 | [030](030-image-tags-are-the-full-commit-sha.md) | Image tags are the full commit sha (`sha-<40>`); `sha-<7>` is accepted for one release |
+| [031](031-repo-owned-companions-for-skeleton-files.md) | Skeleton files stay platform-owned; repo additions go in repo-owned companions (`ci-extra`, own permissions, own workflows, project notes) that updates never touch |
