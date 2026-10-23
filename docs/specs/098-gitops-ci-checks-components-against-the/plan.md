@@ -29,6 +29,7 @@ tasks:
   covers: [AC-098.16]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t5
   title: Document the marker, the CRD check and the token
   files: [templates/gitops-app/CLAUDE.md.jinja, templates/gitops-app/README.md.jinja, docs/unattended-delivery.md,
