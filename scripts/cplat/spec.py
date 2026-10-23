@@ -677,8 +677,15 @@ def summary(root: Path, spec: Spec) -> dict:
             "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
 
 
+def broken_summary(root: Path, b: BrokenSpec) -> dict:
+    return {"id": b.id, "title": "", "status": "broken", "priority": "", "acs": 0, "open_questions": 0,
+            "tasks": 0, "tasks_done": 0, "tracks": [], "next": f"fix {b.rel} line {b.line}: {b.hint}",
+            "path": str(b.dir.relative_to(root))}
+
+
 def index_table(root: Path) -> str:
-    rows = sorted((summary(root, s) for s in all_specs(root)),
+    specs, bad = scan(root)
+    rows = sorted([*(summary(root, s) for s in specs), *(broken_summary(root, b) for b in bad)],
                   key=lambda r: (r["status"] in {"done", "superseded"}, r["priority"], r["id"]))
     lines = ["| Spec | Priority | Status | Criteria | Tracks |", "|---|---|---|---|---|"]
     for r in rows:
@@ -854,12 +861,15 @@ def ci(root: Path, strict: bool) -> int:
         print("spec-check: no docs/specs/ yet, nothing to check")
         return 0
     problems = ci_problems(root)
+    bad = scan(root)[1]
     level = "error" if strict else "warning"
+    for b in bad:
+        print(f"::error file={b.rel},line={b.line},title=spec {b.id}::{b.problem} (fix: {b.hint})")
     for s, msg in problems:
         print(f"::{level} file={(s.dir / 'spec.md').relative_to(root)},title=spec {s.id}::{msg}")
-    n = len(all_specs(root))
-    print(f"spec-check: {n} spec(s), {len(problems)} problem(s)" + ("" if strict or not problems else " (warnings only; fix them before this check becomes required)"))
-    return 1 if strict and problems else 0
+    n = len(all_specs(root)) + len(bad)
+    print(f"spec-check: {n} spec(s), {len(problems) + len(bad)} problem(s)" + ("" if strict or not problems else " (warnings only; fix them before this check becomes required)"))
+    return 1 if bad or (strict and problems) else 0
 
 
 # ---------------- CLI ----------------
@@ -934,9 +944,15 @@ def main(argv: list[str]) -> int:
                 print(note)
         return 0
     if ns.cmd == "check":
-        specs = [find(root, i) for i in ns.ids] if ns.ids else all_specs(root)
+        bad = []
+        if ns.ids:
+            specs = [find(root, i) for i in ns.ids]
+        else:
+            specs, bad = scan(root)
         shape = repo_shape(root)
-        return _print_errors({s.id: check(s, require=ns.require, shape=shape) for s in specs})
+        results = {s.id: check(s, require=ns.require, shape=shape) for s in specs}
+        results.update({b.id: [b.one_line()] for b in bad})
+        return _print_errors(results)
     if ns.cmd == "approve":
         spec = find(root, ns.id)
         approve(spec, repo_shape(root))
@@ -970,7 +986,9 @@ def main(argv: list[str]) -> int:
         print(write_index(root).relative_to(root))
         return 0
     if ns.cmd == "list":
-        rows = [summary(root, s) for s in all_specs(root) if ns.all or s.status not in {"done", "superseded"}]
+        specs, bad = scan(root)
+        rows = [summary(root, s) for s in specs if ns.all or s.status not in {"done", "superseded"}]
+        rows += [broken_summary(root, b) for b in bad]
         if ns.json:
             print(json.dumps(rows, indent=2))
         elif not rows:

@@ -16,6 +16,7 @@ tasks:
   covers: [AC-085.7, AC-085.8, AC-085.9, AC-085.10]
   parallel_safe: false
   depends_on: [t1]
+  done: true
 ---
 
 Contract: [design.md](design.md). Acceptance tests live in `tests/cplat/` (pytest) and name the AC ids; coders do not edit them.
