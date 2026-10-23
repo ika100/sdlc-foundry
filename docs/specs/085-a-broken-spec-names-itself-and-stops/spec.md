@@ -1,7 +1,7 @@
 ---
 spec_id: 085-a-broken-spec-names-itself-and-stops
 title: A broken spec names itself and stops nothing else
-status: building
+status: done
 priority: P1
 tracks: [129]
 ---
@@ -57,3 +57,4 @@ Throughout, "broken" means a spec's `spec.md` or `plan.md` front matter cannot b
 - 2026-10-23 amended: open questions answered (all recommended answers accepted); AC-085.1 now states the exact fix hint
 - 2026-10-23 approved
 - 2026-10-23 building
+- 2026-10-23 done
