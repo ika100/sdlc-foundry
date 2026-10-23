@@ -24,6 +24,7 @@ tasks:
   covers: [AC-098.3, AC-098.10, AC-098.13, AC-098.14, AC-098.15, AC-098.17]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t4
   title: cplat doctor checks SERVICE_REPOS_READ_TOKEN in gitops-apps
   files: [scripts/cplat/doctor.py]
