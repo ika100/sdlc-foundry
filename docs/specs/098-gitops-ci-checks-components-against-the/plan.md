@@ -12,6 +12,7 @@ tasks:
   done: true
 - id: t2
   title: check-service-crds.py validates Components against the service ref's CRDs
+  done: true
   files: [templates/gitops-app/scripts/check-service-crds.py]
   covers: [AC-098.3, AC-098.4, AC-098.5, AC-098.6, AC-098.7, AC-098.8, AC-098.9, AC-098.10, AC-098.11, AC-098.12,
     AC-098.13]
