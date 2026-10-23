@@ -9,6 +9,7 @@ tasks:
     covers: [AC-086.7, AC-086.8, AC-086.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Every template's ci recipe ends by running ci-extra
     files: [templates/service-python/devbox.json, templates/library-python/devbox.json, templates/gitops-app/devbox.json, templates/service-go/devbox.json.jinja, templates/service-java/devbox.json.jinja, templates/web-nextjs/devbox.json.jinja]
