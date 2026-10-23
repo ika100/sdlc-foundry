@@ -9,6 +9,7 @@ tasks:
   covers: [AC-098.1, AC-098.2]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t2
   title: check-service-crds.py validates Components against the service ref's CRDs
   files: [templates/gitops-app/scripts/check-service-crds.py]
