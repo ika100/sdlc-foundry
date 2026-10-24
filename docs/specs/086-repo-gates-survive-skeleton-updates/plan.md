@@ -50,6 +50,7 @@ tasks:
     covers: [AC-086.4, AC-086.6, AC-086.10, AC-086.11, AC-086.12, AC-086.13, AC-086.14, AC-086.16]
     parallel_safe: true
     depends_on: [t1, t5]
+    done: true
   - id: t8
     title: The shape contract enforces ci-extra and the notes file; cplat shape check
     files: [scripts/shapes.py, scripts/cplat/shapecmd.py, scripts/cplat/cplat.py]

@@ -4,12 +4,17 @@ from __future__ import annotations
 import argparse
 import datetime
 import fnmatch
+import json
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 import yaml
 
 import core
+import gates
+import settingsmerge
 from core import PLATFORM_ROOT, PlatformError, Report, run
 
 
@@ -96,49 +101,105 @@ def _cmd(v) -> str:
     return " && ".join(v) if isinstance(v, list) else str(v)
 
 
-def merge_devbox(project: dict, template: dict) -> tuple[dict, list[str], list[tuple[str, str]]]:
+def merge_devbox(project: dict, template: dict, baseline: dict | None = None) -> tuple[dict, list[str], list[tuple[str, str]]]:
     """Spec 060: the template's devbox.json wins; recipes, packages and env vars only the project has are kept.
-    Returns (merged, kept labels, replaced (label, project's old value))."""
+    Returns (merged, kept labels, replaced (label, project's old value)). With a baseline (the template at the repo's
+    previous platform version, spec 086), an entry equal to the baseline's is a template change, not a replaced one."""
     import copy
     merged = copy.deepcopy(template)
     kept: list[str] = []
     replaced: list[tuple[str, str]] = []
+    base = baseline or {}
 
     mine = (project.get("shell") or {}).get("scripts") or {}
     theirs = (template.get("shell") or {}).get("scripts") or {}
+    bscripts = (base.get("shell") or {}).get("scripts") or {}
     for name, cmd in mine.items():
         if name not in theirs:
             merged.setdefault("shell", {}).setdefault("scripts", {})[name] = cmd
             kept.append(f"scripts {name}")
-        elif _cmd(cmd) != _cmd(theirs[name]):
+        elif _cmd(cmd) != _cmd(theirs[name]) and not (name in bscripts and _cmd(bscripts[name]) == _cmd(cmd)):
             replaced.append((f"scripts {name}", _cmd(cmd)))
 
-    pkgs, tpkgs = project.get("packages"), template.get("packages")
+    pkgs, tpkgs, bpkgs = project.get("packages"), template.get("packages"), base.get("packages")
     if isinstance(pkgs, list) and isinstance(tpkgs, list):
         tnames = {p.split("@", 1)[0]: p for p in tpkgs}
+        bnames = {p.split("@", 1)[0]: p for p in bpkgs} if isinstance(bpkgs, list) else {}
         for p in pkgs:
             name = p.split("@", 1)[0]
             if name not in tnames:
                 merged["packages"].append(p)
                 kept.append(f"packages {p}")
-            elif p != tnames[name]:
+            elif p != tnames[name] and bnames.get(name) != p:
                 replaced.append((f"packages {name}", p))
     elif isinstance(pkgs, dict) and isinstance(tpkgs, dict):
+        bd = bpkgs if isinstance(bpkgs, dict) else {}
         for name, ver in pkgs.items():
             if name not in tpkgs:
                 merged["packages"][name] = ver
                 kept.append(f"packages {name}")
-            elif ver != tpkgs[name]:
+            elif ver != tpkgs[name] and not (name in bd and bd[name] == ver):
                 replaced.append((f"packages {name}", str(ver)))
 
     tenv = template.get("env") or {}
+    benv = base.get("env") or {}
     for name, val in (project.get("env") or {}).items():
         if name not in tenv:
             merged.setdefault("env", {})[name] = val
             kept.append(f"env {name}")
-        elif val != tenv[name]:
+        elif val != tenv[name] and not (name in benv and benv[name] == val):
             replaced.append((f"env {name}", str(val)))
     return merged, kept, replaced
+
+
+def render_baseline(template: str, old: str | None, answers: str, dest: Path) -> Path | None:
+    """The template as rendered at platform `old` with the repo's pre-update answers, or None when it cannot be (spec 086)."""
+    if not old:
+        return None
+    try:
+        src = dest / "src"
+        src.mkdir(parents=True, exist_ok=True)
+        archive = subprocess.run(["git", "archive", f"v{old}", f"templates/{template}"], cwd=PLATFORM_ROOT, capture_output=True, check=True)
+        subprocess.run(["tar", "-x", "-C", str(src)], input=archive.stdout, capture_output=True, check=True)
+        data = dest / "answers.yml"
+        data.write_text(answers)
+        out = dest / "out"
+        out.mkdir()
+        subprocess.run([*core.find_copier(), "copy", str(src / "templates" / template), str(out), "--data-file", str(data),
+                        "--overwrite", "--defaults", "--trust", "--skip-tasks"], capture_output=True, check=True)
+        return out
+    except Exception:   # the baseline is advisory: the update never fails because of it
+        return None
+
+
+def move_ci_gates(project: dict, template: dict, baseline: dict | None) -> tuple[list[str], list[str]]:
+    """-> (moved, dropped): gates of the project's old `ci` the new template `ci` does not run (and the baseline `ci`
+    did not run). `moved` when the project has no `ci-extra`, else `dropped`."""
+    def scripts(d: dict | None) -> dict:
+        return {k: _cmd(v) for k, v in ((d or {}).get("shell") or {}).get("scripts", {}).items()}
+    mine, theirs, base = scripts(project), scripts(template), scripts(baseline)
+    merged = {**mine, **theirs}
+    known = {gates._real(g, theirs) for g in gates.chain(theirs.get("ci", ""))}
+    if baseline is not None:
+        known |= {gates._real(g, base) for g in gates.chain(base.get("ci", ""))}
+    missing: list[str] = []
+    for g in gates.chain(mine.get("ci", "")):
+        if g != gates.CI_EXTRA and g not in missing and gates._real(g, merged) not in known:
+            missing.append(g)
+    return (missing, []) if gates.CI_EXTRA not in mine else ([], missing)
+
+
+def _ci_is_template_change(project: dict, template: dict, baseline: dict | None, taken: list[str]) -> bool:
+    """True when the project's `ci`, minus the gates moved or dropped, is the old template's `ci` (spec 086)."""
+    def ci(d: dict | None) -> str:
+        return _cmd((((d or {}).get("shell") or {}).get("scripts") or {}).get("ci", ""))
+    mine = ci(project)
+    steps = [g for g in gates.chain(mine) if g not in taken]
+    if mine != " && ".join(f"devbox run {g}" for g in gates.chain(mine)):
+        return False
+    if baseline is not None:
+        return steps == gates.chain(ci(baseline))
+    return steps == [g for g in gates.chain(ci(template)) if g != gates.CI_EXTRA]
 
 
 def _readme_changed(template: str, old: str | None) -> bool:
@@ -150,21 +211,28 @@ def _readme_changed(template: str, old: str | None) -> bool:
     return rc != 0
 
 
-def merge_devbox_file(repo: Path, before: str | None) -> tuple[list[str], list[tuple[str, str]], str | None]:
-    """Merge the project's devbox.json (before the update) into the rendered one. Rewrites only when something is kept."""
-    import json
+def merge_devbox_file(repo: Path, before: str | None, baseline: dict | None = None
+                      ) -> tuple[list[str], list[tuple[str, str]], str | None, list[str], list[str]]:
+    """Merge the project's devbox.json (before the update) into the rendered one. Rewrites only when something is kept or moved.
+    Returns (kept, replaced, note, moved to ci-extra, dropped gates)."""
     path = repo / "devbox.json"
     if before is None or not path.is_file():
-        return [], [], None
+        return [], [], None, [], []
     try:
         project = json.loads(before)
     except ValueError:
-        return [], [], "devbox.json was not valid JSON: replaced by the template's file — re-add your recipes from `git show HEAD~1:devbox.json`"
+        return [], [], "devbox.json was not valid JSON: replaced by the template's file — re-add your recipes from `git show HEAD~1:devbox.json`", [], []
     text = path.read_text()
-    merged, kept, replaced = merge_devbox(project, json.loads(text))
-    if kept:
-        path.write_text(_insert_kept(text, json.loads(text), merged))
-    return kept, replaced, None
+    template = json.loads(text)
+    merged, kept, replaced = merge_devbox(project, template, baseline)
+    moved, dropped = move_ci_gates(project, template, baseline)
+    if moved:
+        merged.setdefault("shell", {}).setdefault("scripts", {})[gates.CI_EXTRA] = " && ".join(f"devbox run {g}" for g in moved)
+    if kept or moved:
+        path.write_text(_insert_kept(text, template, merged))
+    if _ci_is_template_change(project, template, baseline, moved + dropped):
+        replaced = [(k, v) for k, v in replaced if k != "scripts ci"]
+    return kept, replaced, None, moved, dropped
 
 
 def _close(text: str, start: int) -> int:
@@ -257,6 +325,61 @@ def plan(req: dict) -> Report:
     return r
 
 
+def _load_json(path: Path) -> dict | None:
+    try:
+        v = json.loads(path.read_text())
+        return v if isinstance(v, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _current_ci_extra(devbox_before: str | None) -> str:
+    try:
+        return _cmd(((json.loads(devbox_before or "{}").get("shell") or {}).get("scripts") or {}).get(gates.CI_EXTRA, ""))
+    except ValueError:
+        return ""
+
+
+def _ci_extra_line(current: str, names: list[str]) -> str:
+    return '"ci-extra": "' + " && ".join(([current] if current else []) + [f"devbox run {g}" for g in names]) + '"'
+
+
+WHERE_RECIPE = "re-add it under a new recipe name; gates belong in the ci-extra recipe"
+WHERE_FILES = {
+    ".github/workflows/ci.yml": "gates belong in the ci-extra recipe, extra jobs in a workflow file of your own in .github/workflows/",
+    settingsmerge.REL: "only your own permission entries (allow, ask, deny) are kept; other settings are the platform's",
+    "CLAUDE.md": "project guidance belongs in .claude/project-notes.md (CLAUDE.md loads it; updates never change it)",
+}
+NOT_CUSTOMISATION = ("devbox.json", settingsmerge.REL, ".copier-answers.yml", ".platform-version")
+
+
+def _where_file(path: str) -> str:
+    return WHERE_FILES.get(path) or f"it has no repo-owned companion: keep yours with git checkout HEAD~1 -- {path} and propose the change with /shared:report-issue"
+
+
+def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], dropped_gates: list[str], settings: dict,
+          base_root: Path | None, current_extra: str) -> list[dict]:
+    """Everything the repo had added that the update overwrote (spec 086): empty exactly when nothing was lost."""
+    lost: list[dict] = [{"kind": "recipe", "file": "devbox.json", "entry": k, "was": v, "where": WHERE_RECIPE} for k, v in replaced]
+    lost += [{"kind": "gate", "file": "devbox.json", "entry": g, "was": None,
+              "where": "add it to ci-extra: " + _ci_extra_line(current_extra, [g])} for g in dropped_gates]
+    lost += [{"kind": "setting", "file": settingsmerge.REL, "entry": e["key"], "was": e["was"], "where": WHERE_FILES[settingsmerge.REL]}
+             for e in settings["replaced"]]
+    for path in modified:
+        if path in NOT_CUSTOMISATION:
+            continue
+        if base_root is not None:
+            mine = run(["git", "show", f"HEAD:{path}"], cwd=repo, check=False)
+            theirs = base_root / path
+            try:
+                if mine.returncode == 0 and theirs.is_file() and theirs.read_text() == mine.stdout:
+                    continue   # the repo never touched it: a template change
+            except (OSError, UnicodeDecodeError):
+                pass
+        lost.append({"kind": "file", "file": path, "entry": None, "was": None, "where": _where_file(path)})
+    return lost
+
+
 def execute(req: dict) -> Report:
     repo: Path = req["repo"]
     r = plan(req)
@@ -267,6 +390,8 @@ def execute(req: dict) -> Report:
         r.did.append(f"created branch {branch}")
     before = (repo / ".copier-answers.yml").read_text()
     devbox_before = (repo / "devbox.json").read_text() if (repo / "devbox.json").is_file() else None
+    settings_file = repo / settingsmerge.REL
+    settings_before = settings_file.read_text() if settings_file.is_file() else None
     ci_file = repo / ".github" / "workflows" / "ci.yml"
     had_pin_dev = (ci_file.is_file() and "\n  pin-dev:" in ci_file.read_text()) or (repo / ".github/workflows/pin-dev.yml").is_file()
 
@@ -275,7 +400,6 @@ def execute(req: dict) -> Report:
     for kv in req["data"]:
         cmd += ["--data", kv]
     run(cmd, cwd=repo)
-    kept, replaced, devbox_note = merge_devbox_file(repo, devbox_before)
     dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
     if dropped:
         r.did.append(f"left out {len(dropped)} new starter file(s) in project-owned paths (app code, tests, docs): {', '.join(dropped[:4])}{' ...' if len(dropped) > 4 else ''}")
@@ -287,24 +411,59 @@ def execute(req: dict) -> Report:
         shutil.rmtree(repo / "k8s")
         r.did.append("removed k8s/ (v1 manifests; import them with `compose add <service> --from-k8s` if you have not yet)")
 
+    tmp = tempfile.TemporaryDirectory()
+    try:
+        return _finish(req, r, before, devbox_before, settings_before, had_pin_dev, cur, branch, Path(tmp.name))
+    finally:
+        tmp.cleanup()
+
+
+def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settings_before: str | None, had_pin_dev: bool,
+            cur: str, branch: str, tmp: Path) -> Report:
+    repo: Path = req["repo"]
+    answers = repo / ".copier-answers.yml"
+    base_root: Path | None = None
+    if run(["git", "status", "--porcelain"], cwd=repo).stdout.strip():   # a no-op update renders no baseline
+        base_root = render_baseline(req["template"], req["old"], before, tmp)
+    base_devbox = _load_json(base_root / "devbox.json") if base_root else None
+    base_settings = _load_json(base_root / settingsmerge.REL) if base_root else None
+    kept, replaced, devbox_note, moved, dropped_gates = merge_devbox_file(repo, devbox_before, base_devbox)
+    settings, settings_note = settingsmerge.merge_settings_file(repo, settings_before, base_settings)
+
     new_keys = sorted(set(re.findall(r"^([a-z_]+):", answers.read_text(), re.M)) - set(re.findall(r"^([a-z_]+):", before, re.M)))
     changed = [ln[3:] for ln in run(["git", "status", "--porcelain"], cwd=repo).stdout.splitlines()]
     modified = [ln[3:] for ln in run(["git", "status", "--porcelain"], cwd=repo).stdout.splitlines() if ln[:2].strip() == "M"
                 and not (ln[3:] == "devbox.json" and not replaced and not devbox_note)]   # merged, nothing lost (spec 060)
     if kept:
         r.did.append("kept in devbox.json: " + "; ".join(kept))
+    if moved:
+        r.did.append("moved to ci-extra: " + ", ".join(moved))
+    if settings["kept"]:
+        r.did.append("kept in .claude/settings.json: " + "; ".join(f"{k['list']} {k['entry']}" for k in settings["kept"]))
+    if settings["removed_by_platform"]:
+        r.did.append("removed by the platform from .claude/settings.json: " + "; ".join(f"{k['list']} {k['entry']}" for k in settings["removed_by_platform"]))
     if not changed:
         if cur in ("main", "master"):  # do not leave an empty review branch behind
             run(["git", "checkout", "-q", cur], cwd=repo)
             run(["git", "branch", "-D", branch], cwd=repo)
         r.did.append(f"already up to date with platform {req['new']} — nothing changed")
         return r
+    current_extra = _current_ci_extra(devbox_before)
+    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra)
     run(["git", "add", "-A"], cwd=repo)
     run(["git", *core.git_identity(repo), "commit", "-q", "-m", f"chore: update skeleton from platform {req['new']}"], cwd=repo)
     r.did.append(f"re-applied the template; {len(changed)} file(s) changed, committed on {branch if cur in ('main','master') else cur}")
     notes = core.changelog_between(req["old"], req["new"])
     r.data = {"changed": changed, "modified": modified, "new_answers": new_keys, "changelog": notes,
-              "devbox": {"kept": kept, "replaced": [{"entry": k, "was": v} for k, v in replaced]}}
+              "baseline": req["old"] if base_root else None,
+              "devbox": {"kept": kept, "replaced": [{"entry": k, "was": v} for k, v in replaced],
+                         "moved_to_ci_extra": moved, "dropped_gates": dropped_gates},
+              "settings": settings, "lost": lost}
+    if dropped_gates:
+        r.next_steps.append(f"dropped from ci (ci-extra exists and was left unchanged): {', '.join(dropped_gates)}; add them with "
+                            + _ci_extra_line(current_extra, dropped_gates))
+    if settings_note:
+        r.next_steps.append(settings_note)
     if replaced:
         r.next_steps.append("replaced in devbox.json (the template's version wins): " +
                             "; ".join(f"{k} (was {v!r})" for k, v in replaced) + " — re-add yours under a new recipe name if you need it")
@@ -315,8 +474,8 @@ def execute(req: dict) -> Report:
     if (repo / "README.md").is_file() and _readme_changed(req["template"], req["old"]):
         r.next_steps.append(f"README.md kept (project-owned, spec 060); the template's current version: "
                             f"git -C {PLATFORM_ROOT} show HEAD:templates/{req['template']}/README.md.jinja")
-    if modified:
-        r.next_steps.append("review MODIFIED skeleton files for lost local customisations: " + ", ".join(modified[:12]) + " — keep yours with `git checkout HEAD~1 -- <file>`")
+    for e in lost:
+        r.next_steps.append(f"replaced {e['file']}{' ' + e['entry'] if e['entry'] else ''}: the template's version wins; {e['where']}")
     if new_keys:
         r.next_steps.append("new template answers took their defaults: " + ", ".join(new_keys))
     if notes:
