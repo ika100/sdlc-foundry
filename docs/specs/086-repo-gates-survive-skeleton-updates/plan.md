@@ -55,6 +55,7 @@ tasks:
     covers: [AC-086.5, AC-086.15, AC-086.16]
     parallel_safe: true
     depends_on: [t1, t2, t3, t4]
+    done: true
 ---
 
 # Plan — 086 Repo gates survive skeleton updates

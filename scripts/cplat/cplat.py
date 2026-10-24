@@ -12,6 +12,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py update-service [--data KEY=VALUE] [--dry-run]
   cplat.py doctor [--json]
   cplat.py shape [--repo DIR]          shape + agent routing for the /svc:* orchestrators
+  cplat.py shape check                 the platform's shape contract (run in the platform repo)
   cplat.py compose add|remove <service…> [--expose] [--env K=V] [--from-k8s] [--pr]   (run inside a gitops-app repo)
   cplat.py promote <service…|--all> <from> <to> [--version V] [--sha S] [--pr]
   cplat.py addon add|remove|list [postgres]   backing services of the application (app.yaml)

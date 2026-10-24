@@ -14,6 +14,7 @@ Run with: uv run scripts/shapes.py <cmd>   (PEP 723 inline deps)
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -21,6 +22,8 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+# Must equal scripts/cplat/gates.py CI_EXTRA_STEP (a test asserts it): the decoded last step of every template's `ci` recipe (spec 086).
+CI_EXTRA_STEP = "if grep -qs '\"ci-extra\"[[:space:]]*:' devbox.json; then devbox run ci-extra; fi"
 REQUIRED = ["id", "plugin", "template", "deployable", "library", "detection", "status"]
 STATUSES = {"stable", "planned", "deprecated"}
 PRD = ROOT / "docs" / "requirements" / "platform-vision.md"
@@ -99,6 +102,40 @@ def _template_file(tdir: Path, name: str) -> Path | None:
     return None
 
 
+def _check_ci_extra(sid: str, tdir: Path, devbox: Path | None, claude: Path | None) -> list[str]:
+    """Spec 086: the template hooks the repo-owned ci-extra recipe and ships the project notes file."""
+    errs: list[str] = []
+    if devbox is not None:
+        text = devbox.read_text()
+        if re.search(r'"ci-extra"\s*:', text):
+            errs.append(f"{sid}: devbox.json defines ci-extra; it is the repo's own recipe (spec 086)")
+        m = re.search(r'^\s*"ci":\s*"(.*)",?$', text, re.M)
+        try:
+            ci = json.loads(f'"{m.group(1)}"') if m else ""
+        except ValueError:
+            ci = ""
+        if not ci.endswith(" && " + CI_EXTRA_STEP):
+            errs.append(f"{sid}: the ci recipe must end with ` && {CI_EXTRA_STEP}` (spec 086)")
+    wf = tdir / ".github" / "workflows" / "ci.yml"
+    if wf.is_file():
+        blocks = re.split(r"^  (?=[\w-]+:\s*$)", wf.read_text().split("\njobs:\n", 1)[-1], flags=re.M)
+        ok = any(re.search(r"^    name: ci-extra\s*$", b, re.M) and re.search(r"^\s+(?:- )?run: devbox run ci-extra\s*$", b, re.M)
+                 for b in blocks)
+        if not ok:
+            errs.append(f"{sid}: ci.yml has no ci-extra job running devbox run ci-extra (spec 086)")
+    notes = tdir / ".claude" / "project-notes.md"
+    if not notes.is_file() or notes.stat().st_size != 0:
+        errs.append(f"{sid}: template has no .claude/project-notes.md, or it is not empty (spec 086)")
+    skip = (yaml.safe_load((tdir / "copier.yml").read_text()) or {}).get("_skip_if_exists") or []
+    if ".claude/project-notes.md" not in skip:
+        errs.append(f"{sid}: copier.yml must list .claude/project-notes.md in _skip_if_exists (spec 086)")
+    if claude is not None:
+        ct = claude.read_text()
+        if "## Where your additions go" not in ct or not re.search(r"^@\.claude/project-notes\.md$", ct, re.M):
+            errs.append(f"{sid}: CLAUDE.md must import @.claude/project-notes.md and have a '## Where your additions go' section (spec 086)")
+    return errs
+
+
 def check_contract(shapes: list[dict]) -> list[str]:
     """PRD §4.1 contract: every non-planned shape ships the template, plugin and detection artifacts."""
     errs: list[str] = []
@@ -139,6 +176,7 @@ def check_contract(shapes: list[dict]) -> list[str]:
         if s.get("deployable") and sid != "gitops-app" and ci.is_file() and not re.search(
                 r"^  pin-dev:\n(?:    .*\n)*?    needs: docker-publish$", ci.read_text(), re.M):
             errs.append(f"{sid}: ci.yml needs a `pin-dev` job after docker-publish (dev follows main, spec 062)")
+        errs += _check_ci_extra(sid, tdir, devbox, claude)
         skip = (yaml.safe_load((tdir / "copier.yml").read_text()) or {}).get("_skip_if_exists") or []
         if "README.md" not in skip:
             errs.append(f"{sid}: copier.yml must list README.md in _skip_if_exists (project-owned after creation, spec 060)")
