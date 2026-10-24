@@ -9,6 +9,7 @@ tasks:
   covers: [AC-088.4, AC-088.5, AC-088.6, AC-088.7, AC-088.8, AC-088.9, AC-088.10, AC-088.11, AC-088.12, AC-088.13, AC-088.14]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t2
   title: runs.current and the suppressed note in filed
   files: [scripts/cplat/runs.py]
