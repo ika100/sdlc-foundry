@@ -57,6 +57,15 @@ Outside a Claude session `cplat` is not on the PATH: use the plugin's launcher (
 | Actions may open PRs in the gitops-app | pin-dev opens the pin PR | `gh api repos/<org>/<gitops>/actions/permissions/workflow` |
 | Optional: a kube context | `cplat ship deploy --context <ctx>` also waits for Argo `Synced/Healthy` | `kubectl --context <ctx> -n argocd get applications` |
 
+## Run records
+
+Every run is recorded as one JSON record in a private GitHub repo (spec 087, [ADR-032](adr/032-private-run-store.md)).
+
+- **Setup:** `cplat runs init <owner/name>` creates the repo private (or checks an existing one) and prints `export CPLAT_RUNS_REPO=<owner/name>`. Put that line in the shell profile your Claude sessions read.
+- **A record holds** kind, repo, spec, phases with durations, CI rounds, reruns, the escalation reason and cause, and the outcome. **It never holds** secrets (redacted), file contents or logs.
+- **Offline:** without a store, or when it is unreachable, records wait in a local buffer (1000) and one warning line says so. The run itself is never affected. `cplat runs flush` writes the buffer; `cplat doctor` shows what is waiting.
+- **Read it:** `cplat runs report [--json] [--since DAYS]`.
+
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`, spec 068) are the review. Use `/svc:ship <NNN> --no-merge` to read the PR yourself first.

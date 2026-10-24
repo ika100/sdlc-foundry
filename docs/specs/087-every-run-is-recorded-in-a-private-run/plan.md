@@ -51,6 +51,7 @@ tasks:
   covers: []
   parallel_safe: true
   depends_on: []
+  done: true
 ---
 
 The contract for every task is [design.md](design.md). ADR: [032](../../adr/032-private-run-store.md). Recording must
