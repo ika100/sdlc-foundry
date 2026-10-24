@@ -1,7 +1,7 @@
 ---
 spec_id: 089-agent-quality-is-measured-per-agent-and
 title: Agent quality is measured per agent and shape
-status: approved
+status: building
 priority: P1
 ---
 
@@ -64,3 +64,4 @@ The record contract. This spec adds two sections to the 087 run record (`build` 
 - 2026-10-23 merge-conflict event fields and outcomes defined for spec 094 (AC-089.3), re-plan count added (AC-089.14)
 - 2026-10-23 amended: open questions answered (model alias plus full id, severities, red-CI attribution, 30-day window, quick-task/fix-bug out); aligned with the 087 record contract (`agents` and `replans` sections, outcomes, `--since <days>`, `--repo`, `run_id` links)
 - 2026-10-23 approved
+- 2026-10-24 building
