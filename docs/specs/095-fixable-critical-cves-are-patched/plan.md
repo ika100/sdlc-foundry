@@ -37,6 +37,7 @@ tasks:
     covers: [AC-095.2, AC-095.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: service-java template gets deps-findings and deps-bump (maven)
     files: [templates/service-java/devbox.json.jinja, templates/service-java/scripts/deps.sh, templates/service-java/scripts/PomDeps.java]
