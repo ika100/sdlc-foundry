@@ -104,7 +104,8 @@ def _signature_names(names: dict[str, str] | None) -> dict[str, str]:
             short = key.split("/", 1)[1]
             if len(short) >= 3:
                 out.setdefault(short, value)
-    return out
+    # another repo's owner/name or branch is a path in its failure text: both read the same in a signature
+    return {k: ("<path>" if v in ("<repo>", "<branch>") else v) for k, v in out.items()}
 
 
 def normalise(text: str, names: dict[str, str] | None = None) -> str:
@@ -557,7 +558,9 @@ def file(draft: Draft, *, run_id: str | None = None, timeout: float = TIMEOUT_S,
     """File, comment on, suppress or keep pending. Never raises. With record=True and a run id the result goes to
     `runs.filed`."""
     rid = run_id or draft.run_id
-    out, _ = _file_with_reason(draft, rid, timeout, cap, window)
+    # A live call (record=True) is a new occurrence even inside the same run; only a retry (record=False, from
+    # retry_filing or a caller that repeats a filing) is idempotent per run and signature.
+    out, _ = _file_with_reason(draft, None if record else rid, timeout, cap, window)
     if record and rid and out.result != "off":
         try:
             runs.filed(rid, draft.signature, out.url, out.result, filer="autoissue",
