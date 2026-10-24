@@ -18,6 +18,7 @@ tasks:
     AC-094.12, AC-094.13]
   parallel_safe: true
   depends_on: [t1]
+  done: true
 - id: t3
   title: Build and architect prompts run the re-plan loop
   files: [plugins/svc/commands/build.md, plugins/svc/agents/architect.md]
