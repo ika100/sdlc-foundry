@@ -18,7 +18,7 @@ tasks:
   covers: [AC-090.1, AC-090.2, AC-090.3, AC-090.4, AC-090.5, AC-090.11]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t3
   title: Proposal format, validation, rendering and the agent prompt
   files: [scripts/cplat/retro_proposals.py, scripts/cplat/assets/retro-prompt.md]
