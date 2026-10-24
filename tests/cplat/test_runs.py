@@ -480,8 +480,10 @@ def test_a_bug_in_recording_never_fails_the_run(clock, monkeypatch, capsys):
     assert runs.finish("no-such-run", "done") is None
 
 
-def test_a_ship_run_behaves_the_same_without_a_reachable_store(repo, gh, store, capsys):
+def test_a_ship_run_behaves_the_same_without_a_reachable_store(repo, gh, store, capsys, monkeypatch):
     """AC-087.7: land/merge results and stdout are unchanged when the store is down; only one stderr warning is added."""
+    said: list[str] = []
+    monkeypatch.setattr(ship, "say", said.append)   # ship's own progress lines are not the recording's output
     store.reachable = False
     to_land(repo, gh, merge=False)
     gh.checks = [[check("test", "pass")]]
