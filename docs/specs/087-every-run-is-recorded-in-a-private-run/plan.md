@@ -44,6 +44,7 @@ tasks:
   covers: [AC-087.11]
   parallel_safe: true
   depends_on: [t1, t2]
+  done: true
 - id: t7
   title: Docs for the run store
   files: [docs/CHANGELOG.md, docs/unattended-delivery.md, plugins/shared/README.md, plugins/svc/README.md]
