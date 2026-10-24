@@ -1,7 +1,8 @@
 ---
 spec_id: 089-agent-quality-is-measured-per-agent-and
 spec_hash: 773376832bcd
-summary: agents / replans / agent_metrics sections in the 087 run record, cplat runs agent recording CLI, in-code recording in ship land and spec test-diff, cplat runs report --agents [--by-version]
+summary: agents / replans / agent_metrics sections in the 087 run record, cplat runs agent recording CLI, in-code recording
+  in ship land and spec test-diff, cplat runs report --agents [--by-version]
 tasks:
 - id: t1
   title: Run record hooks for agent metrics and the report flags
@@ -9,6 +10,7 @@ tasks:
   covers: [AC-089.1, AC-089.10, AC-089.11, AC-089.12]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t2
   title: Agent metric recording (runs_agents) and the cplat runs agent CLI
   files: [scripts/cplat/runs_agents.py]
