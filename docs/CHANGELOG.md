@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (089): agent quality is measured per agent, shape and model.**
+  - A build record gets `agents` and `replans` sections (fix rounds, red CI, review findings, refused test diffs, out-of-plan files, merge conflicts, tester misses), recorded by `cplat ship land`, `cplat spec test-diff` and the new `cplat runs agent` calls in the build prompts.
+  - `cplat runs report --agents [--by-version] [--agent NAME] [--shape SHAPE] [--json]` ranks agents by rework and cites an example run for the top causes. A metric a run never reached shows as `n/a`, not 0.
+  - Recording never stops a build: a failed or malformed call only marks the record's agent metrics incomplete.
 - Fix (085): a broken spec names its file, line and fix and no longer blocks other specs (#129)
 - **Repo gates survive skeleton updates (086).** Gates go in the repo-owned `ci-extra` recipe, which `devbox run ci` and a `ci-extra` CI check run; the update keeps your `.claude/settings.json` permission entries, `.claude/project-notes.md` holds project guidance, and the update report lists every customisation it overwrote (`lost` in `--json`).
   - **Action for existing repos:** run `/shared:update-service`. Gates you had in `ci` move to `ci-extra` automatically.
