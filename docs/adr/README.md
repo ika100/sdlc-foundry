@@ -39,3 +39,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [031](031-repo-owned-companions-for-skeleton-files.md) | Skeleton files stay platform-owned; repo additions go in repo-owned companions (`ci-extra`, own permissions, own workflows, project notes) that updates never touch |
 | [032](032-private-run-store.md) | Every run is recorded in a private run store: one file per run, one commit per flush, buffered locally when unreachable |
 | [033](033-auto-filed-issues-with-signatures.md) | Failures become auto-filed issues, deduplicated by one `Signature: <kind>:<16 hex>` body line; one module (`autoissue`) for platform failures, smoke failures and alerts |
+| [035](035-alert-poll-on-the-gitops-runner.md) | Alerts reach GitHub through a scheduled `cplat alerts poll` on the gitops-app's self-hosted runner; rules in `app.yaml`, lifecycle state in the issues, a dedicated `ALERTS_TOKEN` for service repos |
