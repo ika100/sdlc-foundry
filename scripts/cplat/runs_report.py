@@ -11,6 +11,9 @@ import math
 import statistics
 from collections import Counter
 
+import core
+import feedback
+
 UNKNOWN = "unknown"
 FILED_RESULTS = ("new", "+1", "suppressed", "pending")
 TOP_REASONS = 10
@@ -57,8 +60,8 @@ def _count_sorted(counter: Counter) -> dict:
     return dict(sorted(counter.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
-def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buffered: int, since_days: int,
-              repo: str | None, store: str, now: datetime.datetime) -> dict:
+def select(records: list[dict], *, since_days: int, repo: str | None, now: datetime.datetime) -> list[dict]:
+    """Window, repo filter and run_id dedupe, shared by both reports."""
     cutoff = now - datetime.timedelta(days=since_days)
     seen: set[str] = set()
     kept: list[dict] = []
@@ -74,6 +77,12 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         if repo is not None and r.get("repo") != repo:
             continue
         kept.append(r)
+    return kept
+
+
+def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buffered: int, since_days: int,
+              repo: str | None, store: str, now: datetime.datetime) -> dict:
+    kept = select(records, since_days=since_days, repo=repo, now=now)
 
     follow = {(f.get("run_id"), f.get("signature")): f for f in sorted(followups, key=lambda f: str(f.get("at", "")))}
     kinds: dict[str, Counter] = {}
@@ -155,5 +164,219 @@ def render_text(agg: dict) -> str:
     lines.append(f"Reruns by reason: {_pairs(agg['reruns']['by_reason'])}")
     lines.append(f"Reruns by check: {_pairs(agg['reruns']['by_check'])}")
     lines.append("Filed issues: " + ", ".join(f"{k} {n}" for k, n in agg["filed"].items()))
+    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
+    return "\n".join(lines)
+
+
+# ---------------- agent report (spec 089) ----------------
+
+ROLE_METRICS = {"architect": ("out_of_plan", "merge_conflicts", "replans"),
+                "coder": ("fix_rounds", "red_ci", "findings", "refused_test_diffs"),
+                "quality": ("refused_test_diffs",), "tester": ("tester_events",)}
+FIX_CAUSES = ("lint/type", "test", "ci", "verification")
+SEVERITIES = ("not met", "partial", "deviation")
+TESTER_REASONS = ("untraced", "wrong failure")
+FEW_RUNS = 5
+TOP_CAUSES = 3
+
+
+def _r(x: float) -> float:
+    return round(x, 3)
+
+
+def _s(value) -> str:
+    return feedback.redact(str(value))[:200]
+
+
+def _pattern(path) -> str:
+    path = str(path)
+    parent, _, name = path.rpartition("/")
+    dot = name.rfind(".")
+    suffix = name[dot:] if dot > 0 else ""
+    if suffix:
+        return f"{parent}/*{suffix}" if parent else f"*{suffix}"
+    return f"{parent}/*" if parent else "*"
+
+
+def _labels(ev: dict) -> list[str]:
+    k = ev.get("kind")
+    if k == "out-of-plan":
+        return [f"out-of-plan {_pattern(ev.get('path'))}"]
+    if k == "merge-conflict":
+        return [f"merge-conflict {p}" for p in sorted({_pattern(x) for x in _list(ev.get("paths"))})]
+    if k == "fix-round":
+        return [f"fix-round {ev.get('cause')}"]
+    if k == "red-ci":
+        return [f"red-ci {ev.get('check')}"]
+    if k == "finding":
+        return [f"{ev.get('severity')} {ev.get('criterion') or ev.get('task')}"]
+    if k == "refused-test-diff":
+        return [f"refused-test-diff {ev.get('file')}"]
+    if k == "tester":
+        return [f"{ev.get('reason')} {ev.get('criterion') if ev.get('reason') == 'untraced' else ev.get('test')}"]
+    return []
+
+
+def _avg(total: float, runs: int) -> float | None:
+    return _r(total / runs) if runs else None
+
+
+def _metrics(role: str, group: list[tuple[dict, list[dict]]]) -> dict:
+    """group: [(record, events of the row's entries in it)]. Per-metric averages over the runs that measured it."""
+    def measured(metric):
+        return [evs for r, evs in group if metric in _list((r.get("agent_metrics") or {}).get("measured"))]
+
+    def count(evs, kind, **where):
+        return sum(1 for e in evs if e.get("kind") == kind and all(e.get(k) == v for k, v in where.items()))
+
+    out: dict = {}
+    for metric in ROLE_METRICS.get(role, ()):
+        runs_ = measured(metric)
+        n = len(runs_)
+        if metric == "out_of_plan":
+            out[metric] = {"runs": n, "avg": _avg(sum(count(e, "out-of-plan") for e in runs_), n)}
+        elif metric == "merge_conflicts":
+            total = sum(count(e, "merge-conflict") for e in runs_)
+            res = sum(count(e, "merge-conflict", outcome="resolved") for e in runs_)
+            out[metric] = {"runs": n, "avg": _avg(total, n), "resolved_share": _r(res / total) if total else None}
+        elif metric == "replans":
+            out[metric] = {"runs": n, "avg": _avg(sum(count(e, "re-plan") for e in runs_), n)}
+        elif metric == "fix_rounds":
+            out[metric] = {"runs": n, "avg": _avg(sum(count(e, "fix-round") for e in runs_), n),
+                           "by_cause": {c: _avg(sum(count(e, "fix-round", cause=c) for e in runs_), n) for c in FIX_CAUSES}}
+        elif metric == "red_ci":
+            out[metric] = {"runs": n, "avg": _avg(sum(count(e, "red-ci") for e in runs_), n)}
+        elif metric == "findings":
+            def sev(p, s_):
+                return _avg(sum(count(e, "finding", **{"pass": p, "severity": s_}) for e in runs_), n)
+            out[metric] = {"runs": n,
+                           "avg": _avg(sum(count(e, "finding", **{"pass": "first"}) for e in runs_), n),
+                           "by_severity": {s_: sev("first", s_) for s_ in SEVERITIES},
+                           "after_fix": {"avg": _avg(sum(count(e, "finding", **{"pass": "after fix"}) for e in runs_), n),
+                                         "by_severity": {s_: sev("after fix", s_) for s_ in SEVERITIES}}}
+        elif metric == "refused_test_diffs":
+            out[metric] = {"runs": n, "avg": _avg(sum(count(e, "refused-test-diff") for e in runs_), n)}
+        elif metric == "tester_events":
+            out[metric] = {"runs": n, "avg": _avg(sum(count(e, "tester") for e in runs_), n),
+                           "by_reason": {t: _avg(sum(count(e, "tester", reason=t) for e in runs_), n) for t in TESTER_REASONS}}
+    return out
+
+
+def _rework(metrics: dict) -> float:
+    total = sum((m.get("avg") or 0) for m in metrics.values())
+    total += ((metrics.get("findings") or {}).get("after_fix") or {}).get("avg") or 0
+    return _r(total)
+
+
+def _top_causes(group: list[tuple[dict, list[dict]]]) -> list[dict]:
+    counts: Counter = Counter()
+    latest: dict[str, tuple] = {}
+    for r, evs in group:
+        key = (str(r.get("ended_at") or ""), str(r.get("run_id") or ""))
+        for e in evs:
+            for lab in _labels(e):
+                lab = _s(lab)
+                counts[lab] += 1
+                if lab not in latest or key > latest[lab][0]:
+                    latest[lab] = (key, r.get("run_id"))
+    top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_CAUSES]
+    return [{"cause": lab, "count": n, "run_id": latest[lab][1]} for lab, n in top]
+
+
+def _vkey(v):
+    try:
+        return (0, core.vtuple(v), "")
+    except (ValueError, AttributeError):
+        return (1, (), str(v))
+
+
+def aggregate_agents(records: list[dict], *, malformed: int, buffered: int, since_days: int, repo: str | None,
+                     agent: str | None, shape: str | None, by_version: bool, store: str, now: datetime.datetime) -> dict:
+    kept = select(records, since_days=since_days, repo=repo, now=now)
+    groups: dict[tuple, dict] = {}
+    for r in kept:
+        entries = [e for e in _list(r.get("agents")) if isinstance(e, dict)
+                   and all(isinstance(e.get(f), str) for f in ("agent", "shape", "model"))]
+        version = (r.get("platform_version") if isinstance(r.get("platform_version"), str) else UNKNOWN) if by_version else None
+        per_key: dict[tuple, list[dict]] = {}
+        ids: dict[tuple, list[str]] = {}
+        for e in entries:
+            a = e["agent"]
+            if agent is not None and (a != agent if ":" in agent else a.rpartition(":")[2] != agent):
+                continue
+            if shape is not None and e["shape"] != shape:
+                continue
+            k = (a, e["shape"], e["model"], version)
+            per_key.setdefault(k, []).extend(x for x in _list(e.get("events")) if isinstance(x, dict))
+            if isinstance(e.get("model_id"), str):
+                ids.setdefault(k, []).append(e["model_id"])
+        for k, evs in per_key.items():
+            g = groups.setdefault(k, {"group": [], "ids": set()})
+            g["group"].append((r, evs))
+            g["ids"].update(ids.get(k, []))
+    rows = []
+    for (a, sh, model, version), g in groups.items():
+        group = g["group"]
+        metrics = _metrics(a.rpartition(":")[2], group)
+        rows.append({
+            "agent": _s(a), "shape": _s(sh), "model": _s(model), "platform_version": version,
+            "model_ids": sorted(_s(i) for i in g["ids"]),
+            "runs": len(group), "few_runs": len(group) < FEW_RUNS,
+            "incomplete_runs": sum(1 for r, _ in group if (r.get("agent_metrics") or {}).get("complete") is False),
+            "rework": _rework(metrics), "metrics": metrics, "top_causes": _top_causes(group),
+        })
+    ident = lambda r: (r["agent"], r["shape"], r["model"])  # noqa: E731
+    if by_version:
+        worst: dict[tuple, float] = {}
+        for r in rows:
+            worst[ident(r)] = max(worst.get(ident(r), 0.0), r["rework"])
+        rows.sort(key=lambda r: (-worst[ident(r)], *ident(r), _vkey(r["platform_version"])))
+    else:
+        rows.sort(key=lambda r: (-r["rework"], *ident(r)))
+    return {
+        "window": {"since": (now.date() - datetime.timedelta(days=since_days)).isoformat(), "until": now.date().isoformat(),
+                   "days": since_days, "repo": repo, "agent": agent, "shape": shape, "by_version": by_version,
+                   "store": store, "records": len(kept), "malformed": malformed},
+        "rows": rows,
+        "buffered": buffered,
+    }
+
+
+def _a(x) -> str:
+    return "n/a" if x is None else f"{x:.2f}"
+
+
+def render_agents_text(agg: dict) -> str:
+    w = agg["window"]
+    head = (f"Agents {w['since']} to {w['until']} ({w['days']} days) in {w['store']}"
+            + (f", repo {w['repo']}" if w.get("repo") else "") + (f", agent {w['agent']}" if w.get("agent") else "")
+            + (f", shape {w['shape']}" if w.get("shape") else "")
+            + f": {w['records']} record(s); {w['malformed']} malformed line(s) skipped")
+    lines = [head]
+    for r in agg["rows"]:
+        m = r["metrics"]
+        title = f"{r['agent']} {r['shape']} {r['model']}" + (f" {r['platform_version']}" if r.get("platform_version") else "")
+        lines.append(f"{title}: {r['runs']} run(s)" + (", few runs" if r["few_runs"] else "")
+                     + (f", {r['incomplete_runs']} incomplete" if r["incomplete_runs"] else "") + f", rework {r['rework']:.2f}")
+        if "out_of_plan" in m:
+            share = m["merge_conflicts"]["resolved_share"]
+            pct = "n/a" if share is None else f"{round(share * 100)}%"
+            lines.append(f"  out-of-plan files {_a(m['out_of_plan']['avg'])} · merge conflicts {_a(m['merge_conflicts']['avg'])} "
+                         f"(resolved {pct}) · re-plans {_a(m['replans']['avg'])}")
+        elif "fix_rounds" in m:
+            fr, f = m["fix_rounds"], m["findings"]
+            lines.append(f"  fix rounds {_a(fr['avg'])} (" + ", ".join(f"{c} {_a(fr['by_cause'][c])}" for c in FIX_CAUSES)
+                         + f") · red-CI rounds {_a(m['red_ci']['avg'])} · findings {_a(f['avg'])} ("
+                         + ", ".join(f"{s_} {_a(f['by_severity'][s_])}" for s_ in SEVERITIES)
+                         + f"; after fix {_a(f['after_fix']['avg'])}) · refused test diffs {_a(m['refused_test_diffs']['avg'])}")
+        elif "tester_events" in m:
+            t = m["tester_events"]
+            lines.append(f"  tester events {_a(t['avg'])} (" + ", ".join(f"{x} {_a(t['by_reason'][x])}" for x in TESTER_REASONS) + ")")
+        elif "refused_test_diffs" in m:
+            lines.append(f"  refused test diffs {_a(m['refused_test_diffs']['avg'])}")
+        causes = "; ".join(f"{c['count']}× {c['cause']} ({c['run_id']})" for c in r["top_causes"]) or "none"
+        lines.append(f"  causes: {causes}")
+    if not agg["rows"]:
+        lines.append("  none")
     lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
     return "\n".join(lines)
