@@ -23,6 +23,7 @@ It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subage
 ## Phase 0 — Pre-flight
 
 0. `cplat runs begin build --spec <id>` (spec 087). Inside `/svc:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat runs end --outcome done`. Recording never fails a build: a warning line about a buffered record is not an error.
+   **Agent metrics (spec 089):** after every subagent you spawn, in any phase, run `cplat runs agent spawned <role> [--model-id <id>]` (`<role>` is the role name, e.g. `coder`; `--model-id` only when you know the model id). The calls below record what only you can judge. They never fail the build, and a `WARNING: agent metric not recorded` line is not an error.
 1. `git status --porcelain`. A dirty tree on a spec whose status is not `building` stops the build: commit or stash first (the clean-tree rule). On a `building` spec it is an **interrupted build** (spec 047):
    - Staged entries that differ from both `HEAD` and the working tree are stale (left by the interrupted coder): `git restore --staged <files>` and name them.
    - The first task in `plan.md` that is not `done` is the interrupted one. Ask, then commit the remaining changes as `wip(<task-id>): interrupted` (in an unattended run, commit without asking and say so).
@@ -46,6 +47,7 @@ Do not wait for CI on `main`.
 Then:
 - `cplat spec trace <id>` must pass; otherwise send the missing ids back to the tester (once).
 - `devbox run test-fast`: the new tests fail, nothing else newly fails. A test that errors for another reason goes back to the tester.
+- Then record the tester's misses with one call, also when there were none: `cplat runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...` (one `--untraced` for each criterion id sent back, one `--wrong-failure` for each test sent back).
 - `cplat spec trace <id> --json` → hold `TRACE` (criterion → test files) for Phase 2.
 - `RED=$(git log -1 --format=%H --grep 'acceptance tests for')` — the commit the acceptance tests are measured against from now on (spec 048).
 
@@ -75,18 +77,18 @@ Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and
 ### 2.4 Run batches
 
 **Parallel batch (≥ 2 tasks):** one coder per task **in a single message**, each with `isolation: "worktree"`. Collect `(branch, worktree_path)` from those that changed something. Then for each, in order:
-1. `git merge --no-ff --no-edit <branch>` — a conflict means the plan's `files` were wrong: `git merge --abort`, stop and escalate. Never resolve it yourself.
-2. `devbox run lint-fix`, stage; then `cplat spec test-diff $RED`: acceptance tests may only have changed in formatting. Exit 1 means a test was weakened or changed: stop and show the user the file and the reason (spec 048); never decide yourself that it is a false alarm — since spec 063 it only looks at test files, so a failure is real. Then `devbox run quality` — failures go back to that task's coder (lint/type fixes only).
-3. `devbox run test-fast` — integration failures go back to the coder with the output.
+1. `PRE=$(git rev-parse HEAD)`, then `git merge --no-ff --no-edit <branch>` — a conflict means the plan's `files` were wrong: run `cplat runs agent conflict <task>`, then `git merge --abort`, stop and escalate. Never resolve it yourself. After a clean merge: `cplat runs agent merged <task> --since $PRE [--helper <path>]...` (one `--helper` for each new test helper the coder reported).
+2. `devbox run lint-fix`, stage; then `cplat spec test-diff $RED --task <task>`: acceptance tests may only have changed in formatting. Exit 1 means a test was weakened or changed: stop and show the user the file and the reason (spec 048); never decide yourself that it is a false alarm — since spec 063 it only looks at test files, so a failure is real. Then `devbox run quality` — failures go back to that task's coder (lint/type fixes only; record each hand-back with `cplat runs agent fix-round lint/type --task <task>`).
+3. `devbox run test-fast` — integration failures go back to the coder with the output (`cplat runs agent fix-round test --task <task>`).
 4. `git worktree remove <path>`; `git branch -d <branch>`.
 
-**Sequential task:** one coder without isolation on `$FEATURE_BRANCH`; commit for it if it did not.
+**Sequential task:** `PRE=$(git rev-parse HEAD)`, then one coder without isolation on `$FEATURE_BRANCH`; commit for it if it did not, then `cplat runs agent merged <task> --since $PRE [--helper <path>]...`. Run `cplat spec test-diff $RED --task <task>` (exit 1 stops the build, as in the parallel batch) and record hand-backs as above.
 
 After each task is merged and green: `cplat spec task-done <id> <task-id>`; commit the plan change together with the batch: `chore(plan): <spec_id> <task ids> done`.
 
 ### 2.5 All green
 
-`devbox run test-fast`: every acceptance test passes. Failing ones go to the coder of a task that `covers` that criterion (at most 2 rounds); then escalate.
+`devbox run test-fast`: every acceptance test passes. Failing ones go to the coder of a task that `covers` that criterion (at most 2 rounds, each recorded with `cplat runs agent fix-round test --task <task>`); then escalate.
 
 `TOUCHED_FILES=$(git diff --name-only $BASE_REF..HEAD)`.
 
@@ -97,22 +99,22 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`; comm
 1. Stage the tree (`git add -u`, plus new files the build created), then run `devbox run lint-fix` and `devbox run ci`: the gates the CI workflow runs, in its order, each once.
 2. **Red** → spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the output's tail:
    - lint or type check → **quality** (`agents.quality`): lint/type fixes only;
-   - tests → the **coder** of the task whose files are involved: acceptance tests stay fixed;
+   - tests → the **coder** of the task whose files are involved: acceptance tests stay fixed; record it with `cplat runs agent fix-round ci --task <task>`;
    - security → run `cplat deps patch` first (ADR-033): it bumps every fixable dependency finding, re-runs the gates and commits, or reverts. Exit 0 → the gate is green, go to step 3. Exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed: in a `/svc:ship` run `cplat ship escalate '<reason>' --cause <CAUSE>`, alone `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`. Exit 4 → not a dependency finding (secrets, bandit, image scan): the **security** agent (`agents.security`) handles it as before: a CRITICAL secrets or bandit finding escalates at once; HIGH is documented and the build continues. A red gate after a bump is never handed to a coder, and acceptance tests stay fixed. Patch rounds (at most 2, counted by cplat) are separate from the 2 fix rounds below.
 
    Run `devbox run ci` again; at most 2 rounds, then escalate.
 3. **Green** → spawn agents only where needed:
    - **tester** (`agents.tester`, normal mode) only when the touched files add internals that no unit test covers: it adds those tests and runs `devbox run test`;
    - **security** only when a Dockerfile changed (`devbox run image-build && devbox run image-scan`), writing `docs/security/scan-<today>.md`.
-4. `cplat spec test-diff $RED` once more (`lint-fix` may have reformatted); exit 1 stops the build as in Phase 2. Commit what changed.
+4. `cplat spec test-diff $RED` once more (`lint-fix` may have reformatted), with `--by quality` when the quality agent changed files in this phase's rounds; exit 1 stops the build as in Phase 2. Commit what changed.
 
 ## Phase 4 — Verify against the spec
 
 `cplat runs phase build:verify`
 
 1. `cplat spec trace <id> --json` must pass.
-2. **reviewer** (`agents.reviewer`), prompt: `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON and the Phase 3 test summary.
-3. `RESULT: fail` → send each `NOT MET` item to the coder of a task covering that criterion, re-run `devbox run test-fast` and the reviewer. At most 2 cycles; then stop and escalate with `verification.md`.
+2. **reviewer** (`agents.reviewer`), prompt: `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON and the Phase 3 test summary. After each reviewer pass (cycle `<n>` = 1, 2): `cplat runs agent findings --cycle <n> [--deviation <AC or task>]...` for the deviations it judged not acceptable.
+3. `RESULT: fail` → send each `NOT MET` item to the coder of a task covering that criterion (`cplat runs agent fix-round verification --task <task>` for each), re-run `devbox run test-fast` and the reviewer. At most 2 cycles; then stop and escalate with `verification.md`.
 4. Commit `docs/specs/<spec_id>/verification.md`: `docs(spec): verify <spec_id>`.
 
 ## Phase 5 — Container image

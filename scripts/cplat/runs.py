@@ -14,8 +14,13 @@ A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (o
 `open_store()` (transport: runs_store). Without a reachable private store the line waits in a local buffer
 (1000 records). Recording never raises into a caller and never changes an exit code or stdout.
 
+  mutate(run_id, change) -> "ok"|"none"|"error" / current_run(repo) / mark_incomplete(run_id, section, problem)
+                                                                     hooks for agent metrics (spec 089, runs_agents)
+
   cplat runs init <owner/name> | flush | report [--json] [--since DAYS] [--repo R]
+              [--agents [--by-version] [--agent NAME] [--shape SHAPE]]
   cplat runs begin <kind> [--spec S] | phase <name> | end --outcome O [--reason R] [--cause C]
+  cplat runs agent <event> ...                                       agent metrics of the current run (spec 089)
 """
 from __future__ import annotations
 
@@ -293,18 +298,80 @@ def attach_point(repo_dir: Path) -> str | None:
         return None
 
 
-def _mutate(run_id: str | None, change: Callable[[dict], None]) -> None:
+def mutate(run_id: str | None, change: Callable[[dict], None]) -> str:
+    """Apply `change` to the active record under the lock: "ok" | "none" (no run_id, unknown or finished: no-op) |
+    "error" (change or write raised; nothing written). Never raises."""
     if not run_id:
-        return
+        return "none"
     try:
         with _locked():
             rec = _read_active(run_id)
             if rec is None:
-                return
+                return "none"
             change(rec)
             _write_active(rec)
+        return "ok"
+    except Exception:  # noqa: BLE001
+        return "error"
+
+
+def _mutate(run_id: str | None, change: Callable[[dict], None]) -> None:
+    mutate(run_id, change)
+
+
+def current_run(repo_dir: Path) -> str | None:
+    """run_id of the pointer `<git common dir>/cplat-run.json` when that run is still active, else attach_point."""
+    try:
+        rid = (_read_pointer(_pointer(Path(repo_dir))) or {}).get("run_id")
+        if rid and _read_active(rid) is not None:
+            return rid
+        return attach_point(Path(repo_dir))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+MAX_PROBLEMS = 10
+
+
+def _add_problem(rec: dict, section: str, problem: str) -> None:
+    sec = rec.get(section)
+    if not isinstance(sec, dict):
+        sec = rec[section] = {"schema": 1, "complete": False, "measured": [], "problems": []}
+    sec["complete"] = False
+    problems = sec.setdefault("problems", [])
+    if problem not in problems and len(problems) < MAX_PROBLEMS:
+        problems.append(problem)
+
+
+def _incomplete_path(run_id: str) -> Path:
+    return state_dir() / "active" / f"{run_id}.incomplete.jsonl"
+
+
+def mark_incomplete(run_id: str | None, section: str, problem: str) -> None:
+    """Note on the side file (plain append) and in the active record that `section` is incomplete. Never raises."""
+    try:
+        if not run_id or not re.fullmatch(r"[\w.-]+", run_id):
+            return
+        path = _incomplete_path(run_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a") as f:
+            f.write(json.dumps({"section": section, "problem": problem}) + "\n")
+        mutate(run_id, lambda rec: _add_problem(rec, section, problem))
     except Exception:  # noqa: BLE001
         pass
+
+
+def _merge_incomplete(rec: dict) -> None:
+    try:
+        lines = _incomplete_path(rec["run_id"]).read_text().splitlines()
+    except OSError:
+        return
+    for line in lines:
+        try:
+            obj = json.loads(line)
+            _add_problem(rec, str(obj["section"]), str(obj["problem"]))
+        except Exception:  # noqa: BLE001
+            continue
 
 
 def phase(run_id: str | None, name: str) -> None:
@@ -393,6 +460,8 @@ def _scrub(value, chain: tuple[str, ...] = ()):
         if chain and (chain[0] in _IDENTIFIERS or chain == ("ships",) or (chain[0] == "phases" and chain[-1] in ("started_at", "ended_at"))
                       or chain == ("filed", "url")):
             return value
+        if chain in (("agents", "events", "spec"), ("replans", "spec")):
+            return value
         return feedback.redact(value)[:MAX_TEXT]
     return value
 
@@ -427,9 +496,11 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
             for k, v in (fields or {}).items():
                 if k not in RESERVED:
                     rec[k] = v
+            _merge_incomplete(rec)
             rec = _scrub(rec)
             dropped = _buffer_add(rec)
             _active_path(run_id).unlink(missing_ok=True)
+            _incomplete_path(run_id).unlink(missing_ok=True)
     except Exception as e:  # noqa: BLE001
         return _emit(_warning(f"recording failed: {type(e).__name__}: {e}", buffered_count(), dropped))
     try:
@@ -624,6 +695,8 @@ def _read_pointer(path: Path | None) -> dict | None:
 
 
 def _report(ns: argparse.Namespace) -> int:
+    if not ns.agents and (ns.by_version or ns.agent or ns.shape):
+        raise PlatformError("--by-version, --agent and --shape need --agents", hint="cplat runs report --agents ...")
     slug = configured_repo()
     if slug is None:
         raise PlatformError("no run store configured (CPLAT_RUNS_REPO is not set)",
@@ -637,6 +710,12 @@ def _report(ns: argparse.Namespace) -> int:
     except runs_store.StoreError as e:
         raise PlatformError(f"run store {slug} is unreachable: {e}", hint=f"gh repo view {slug}   (is gh logged in, and may it read the repo?)") from None
     records, follows, malformed = runs_report.parse([text for _, text in files])
+    if ns.agents:
+        agg = runs_report.aggregate_agents(records, malformed=malformed, buffered=buffered_count(), since_days=ns.since,
+                                           repo=ns.repo, agent=ns.agent, shape=ns.shape, by_version=ns.by_version,
+                                           store=slug, now=now)
+        print(json.dumps(agg, indent=2) if ns.json else runs_report.render_agents_text(agg))
+        return 0
     agg = runs_report.aggregate(records, follows, malformed=malformed, buffered=buffered_count(), since_days=ns.since,
                                 repo=ns.repo, store=slug, now=now)
     print(json.dumps(agg, indent=2) if ns.json else runs_report.render_text(agg))
@@ -659,6 +738,10 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--json", action="store_true")
     r.add_argument("--since", type=_positive, default=30, metavar="DAYS")
     r.add_argument("--repo", metavar="OWNER/NAME")
+    r.add_argument("--agents", action="store_true", help="per agent, shape and model (spec 089)")
+    r.add_argument("--by-version", action="store_true", help="with --agents: one row per platform version")
+    r.add_argument("--agent", metavar="NAME", help="with --agents: only this agent (or role)")
+    r.add_argument("--shape", metavar="SHAPE", help="with --agents: only this shape")
     b = sub.add_parser("begin", help="start a run record (for markdown commands)")
     b.add_argument("kind")
     b.add_argument("--spec")
@@ -674,6 +757,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["agent"]:
+        import runs_agents
+        return runs_agents.main(argv[1:])
     ns = build_parser().parse_args(argv)
     if ns.cmd == "init":
         for line in init(ns.slug):
@@ -693,6 +779,16 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+def _init_agents(kind: str, run_id: str | None) -> None:
+    if kind != "build" or not run_id:
+        return
+    try:
+        import runs_agents
+        runs_agents.init(run_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _recording_command(ns: argparse.Namespace) -> None:
     repo_dir = Path(ns.dir)
     pointer = _pointer(repo_dir)
@@ -702,6 +798,7 @@ def _recording_command(ns: argparse.Namespace) -> None:
         if rid:
             spec = (active(rid) or {}).get("spec") or "run"
             _atomic_write(pointer, json.dumps({"run_id": rid, "kind": ns.kind, "attached": True}))
+            _init_agents(ns.kind, rid)
             print(f"run {rid} (attached to ship {spec})")
             return
         if current and not current.get("attached"):
@@ -709,6 +806,7 @@ def _recording_command(ns: argparse.Namespace) -> None:
         rid = start(ns.kind, repo=repo_slug(repo_dir), spec=ns.spec)
         if rid and pointer:
             _atomic_write(pointer, json.dumps({"run_id": rid, "kind": ns.kind, "attached": False}))
+        _init_agents(ns.kind, rid)
         print(f"run {rid}")
     elif ns.cmd == "phase":
         if current:

@@ -94,6 +94,8 @@ The orchestrator:
 
 **Merge conflicts are escalated, never auto-resolved.** A conflict means the architect's `files` declarations were inaccurate — the fix is to update the plan, not to paper over it.
 
+Merge conflicts, files outside the plan and hand-backs are recorded per agent, shape and model (spec 089); `cplat runs report --agents` shows which agent causes rework and whether a release changed it (`--by-version`).
+
 ---
 
 ## Feature branch and PR lifecycle

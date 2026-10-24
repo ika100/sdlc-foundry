@@ -71,6 +71,19 @@ Every run is recorded as one JSON record in a private GitHub repo (spec 087, [AD
 - **Offline:** without a store, or when it is unreachable, records wait in a local buffer (1000) and one warning line says so. The run itself is never affected. `cplat runs flush` writes the buffer; `cplat doctor` shows what is waiting.
 - **Read it:** `cplat runs report [--json] [--since DAYS]`.
 
+### Agent metrics
+
+A build record also says how each agent did (spec 089), per agent, shape and model: `cplat runs report --agents [--json] [--since DAYS] [--repo R] [--agent NAME] [--shape SHAPE]`.
+
+- **What is counted, against whom:**
+  - coder: hand-backs (`fix rounds` by cause lint/type, test, ci, verification), red PR CI rounds (`cplat ship land` records them, always against the coder), review findings (first pass and after a fix) and refused acceptance-test diffs;
+  - architect: files outside the plan, merge conflicts (and the share that was resolved) and re-plans;
+  - quality: refused test diffs; tester: untraced criteria and tests that failed for the wrong reason.
+- **Not measured:** a metric whose point the run never reached (an escalated Phase 0, a ship that never built, a record from before spec 089) is `n/a`, never 0, and is left out of the averages.
+- **`few runs`** marks a row with fewer than 5 runs: do not read a trend into it.
+- **Releases:** `--by-version` splits every row by platform version, versions side by side, so you can compare before and after a release.
+- **Incomplete:** a recording call that failed or was malformed never stops the build; it marks the run `incomplete` (counted in the row) and the report still shows what was recorded.
+
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`, spec 068) are the review. Use `/svc:ship <NNN> --no-merge` to read the PR yourself first.
