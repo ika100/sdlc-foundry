@@ -924,7 +924,7 @@ def gate(repo: Path, hook_input: dict, max_blocks: int, run_tests: bool = True) 
               f"Next: {next_step(st)}."]
     if st["phase"] == "build" and run_tests:
         reason += build_status(repo, st["spec"])
-    reason.append("Keep going. Only if a rule needs the user (merge conflict, a changed acceptance test, a CRITICAL finding, "
+    reason.append("Keep going. Only if a rule needs the user (a merge conflict after its re-plan, a changed acceptance test, a CRITICAL finding, "
                   "a decision the spec does not answer) or the user asked you to stop: run "
                   "`cplat ship escalate '<reason>'`, then stop.")
     return {"decision": "block", "reason": "\n".join(reason)}

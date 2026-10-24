@@ -30,6 +30,7 @@ tasks:
   covers: [AC-094.14, AC-094.15]
   parallel_safe: true
   depends_on: []
+  done: true
 ---
 
 The contract for every task is [design.md](design.md): the `cplat build` subcommands, their output lines and exit

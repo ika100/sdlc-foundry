@@ -15,7 +15,7 @@ unattended: /svc:ship <NNN>
 you:        check dev  →  /gitops:promote <svc> dev staging   (reviewed PR, as before)
 ```
 
-The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict, a changed acceptance test, a CRITICAL security finding, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
+The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict after its re-plan (a task is re-planned once, a build at most 3 times), a changed acceptance test, a CRITICAL security finding, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
 
 ## Run it without a terminal session
 

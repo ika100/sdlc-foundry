@@ -31,13 +31,13 @@ cplat ship start <spec> [--no-merge] [--take-over]
 
 ## Phase `plan`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec. After the architect returns, run `cplat runs agent spawned architect [--model-id <id>]` (spec 089). Architect `BLOCKERS` → escalate with them. A plan that already has `done` tasks is not re-planned (escalate instead: re-planning loses progress). Then `cplat ship phase build`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec. After the architect returns, run `cplat runs agent spawned architect [--model-id <id>]` (spec 089). Architect `BLOCKERS` → escalate with them. A plan that already has `done` tasks is not re-planned (escalate instead: re-planning loses progress); the build's own re-plan after a merge conflict (build.md 2.4a) is the exception. Then `cplat ship phase build`.
 
 ## Phase `build`
 
 Read `${CLAUDE_PLUGIN_ROOT}/commands/build.md` and follow its Phases 0–6 for this spec: red acceptance tests, coders until they pass, QA fan-out, verification, image, `set-status done`. Skip its Phase 7 (the PR is ours).
 
-**Gitops tasks** (plan tasks with `repo:`, spec 076) are not given to the service coders. For each, in plan order: `cplat ship gitops prepare <task>` (prints a checkout of that repo on `spec/<spec>-<task>`), make the change there through the gitops plugin's conventions (`devbox run validate` in that checkout), commit `feat(<scope>): <what>`, write a short body and `cplat ship gitops pr <task> --title <title> --body-file <file>` (a draft PR; its CI runs now). `cplat ship land` merges the `before-merge` ones, `cplat ship deploy` the `after-release` ones. Its stop-and-escalate rules stay rules here: a merge conflict between task branches, a changed acceptance test (`cplat spec test-diff` exit 1), a CRITICAL security finding, a decision the spec does not answer, a verification that still fails after its cycles. Each one → escalate.
+**Gitops tasks** (plan tasks with `repo:`, spec 076) are not given to the service coders. For each, in plan order: `cplat ship gitops prepare <task>` (prints a checkout of that repo on `spec/<spec>-<task>`), make the change there through the gitops plugin's conventions (`devbox run validate` in that checkout), commit `feat(<scope>): <what>`, write a short body and `cplat ship gitops pr <task> --title <title> --body-file <file>` (a draft PR; its CI runs now). `cplat ship land` merges the `before-merge` ones, `cplat ship deploy` the `after-release` ones. Its stop-and-escalate rules stay rules here: a merge conflict that `cplat build merge` escalates (a task's second conflict, or the cap of 3 re-plans) or a re-plan the architect cannot make, a changed acceptance test (`cplat spec test-diff` exit 1), a CRITICAL security finding, a decision the spec does not answer, a verification that still fails after its cycles. Each one → escalate.
 
 Then `cplat ship phase pr`.
 

@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (094): a merge conflict re-plans instead of escalating.**
+  - `cplat build merge` aborts a conflicting merge and sets the task aside; `cplat build replan-commit` accepts the architect's amendment only when it changes `files` / `depends_on` / `parallel_safe` of open tasks.
+  - A task is re-planned once and a build at most 3 times, then it escalates. Conflicts are never resolved by hand.
+  - The Final Report says when the plan was amended.
 - **Feat (089): agent quality is measured per agent, shape and model.**
   - A build record gets `agents` and `replans` sections (fix rounds, red CI, review findings, refused test diffs, out-of-plan files, merge conflicts, tester misses), recorded by `cplat ship land`, `cplat spec test-diff` and the new `cplat runs agent` calls in the build prompts.
   - `cplat runs report --agents [--by-version] [--agent NAME] [--shape SHAPE] [--json]` ranks agents by rework and cites an example run for the top causes. A metric a run never reached shows as `n/a`, not 0.
