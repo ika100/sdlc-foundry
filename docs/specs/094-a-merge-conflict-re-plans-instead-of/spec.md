@@ -1,7 +1,7 @@
 ---
 spec_id: 094-a-merge-conflict-re-plans-instead-of
 title: A merge conflict re-plans instead of escalating
-status: approved
+status: building
 priority: P2
 ---
 
@@ -55,3 +55,4 @@ As the platform maintainer, I want every conflict and re-plan recorded against t
 - 2026-10-23 created
 - 2026-10-23 open questions answered: one re-plan per task and at most 3 per build (AC-094.13), the batch keeps merging, re-plans without asking in attended builds too (AC-094.14), guide and build rules reworded (AC-094.15); AC-094.9 clarified to reference 089's `merge-conflict` event (AC-089.3) and re-plan count (AC-089.14)
 - 2026-10-23 approved
+- 2026-10-24 building
