@@ -31,6 +31,7 @@ DEFAULT_TEST_GLOBS = ["tests/**/*"]
 FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 SPEC_ID = re.compile(r"^(\d{3,})-[a-z0-9][a-z0-9-]*$")
 AC_LINE = re.compile(r"^\s*[-*]\s+(~~)?\*\*(AC-(\d{3,})\.(\d+))\*\*")
+SMOKE_MARK = re.compile(r"\(smoke\)\s*$")   # spec 091: a criterion line ending with (smoke) is checkable against a deployment
 SECTION = re.compile(r"^## +(.+?)\s*$", re.M)
 START, END = "<!-- spec-index:start -->", "<!-- spec-index:end -->"
 
@@ -104,6 +105,7 @@ class AC:
     id: str
     spec_no: str
     withdrawn: bool
+    smoke: bool = False
 
 
 @dataclass
@@ -128,10 +130,15 @@ class Spec:
 
     def acs(self) -> list[AC]:
         text = sections(self.body).get("acceptance criteria", "")
-        return [AC(m.group(2), m.group(3), bool(m.group(1))) for m in map(AC_LINE.match, text.splitlines()) if m]
+        return [AC(m.group(2), m.group(3), bool(m.group(1)), bool(SMOKE_MARK.search(ln)))
+                for ln in text.splitlines() if (m := AC_LINE.match(ln))]
 
     def active_acs(self) -> list[str]:
         return [a.id for a in self.acs() if not a.withdrawn]
+
+    def smoke_acs(self) -> list[str]:
+        """Active criteria marked `(smoke)` (spec 091), in order."""
+        return [a.id for a in self.acs() if a.smoke and not a.withdrawn]
 
     def open_questions(self) -> list[str]:
         text = sections(self.body).get("open questions", "")
@@ -216,6 +223,18 @@ def test_globs(shape: str | None) -> list[str]:
     return (entry or {}).get("test_globs") or DEFAULT_TEST_GLOBS
 
 
+def smoke_tag(shape: str | None) -> re.Pattern | None:
+    """The shape's smoke-test tag (spec 091); None for shapes without deployment. No shape: service-python's."""
+    entry = next((s for s in core.registry.load() if s["id"] == (shape or "service-python")), None)
+    tag = (entry or {}).get("smoke_tag")
+    return re.compile(tag) if tag else None
+
+
+def smoke_globs(shape: str | None) -> list[str]:
+    entry = next((s for s in core.registry.load() if s["id"] == shape), None) if shape else None
+    return (entry or {}).get("smoke_globs") or test_globs(shape)
+
+
 # ---------------- check ----------------
 
 def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -> list[str]:
@@ -244,6 +263,9 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
     for a in acs:
         if a.spec_no != spec.number:
             errs.append(f"{a.id} belongs to spec {a.spec_no}, not {spec.number} (ids are AC-{spec.number}.<n>)")
+    eff_shape = meta.get("shape") or shape
+    if eff_shape in known and smoke_tag(eff_shape) is None:
+        errs += [f"{ac}: (smoke) needs a deployable shape ({eff_shape} has no smoke tests)" for ac in spec.smoke_acs()]
     rank = RANK.get(spec.status, -1)  # superseded has no rank: it never satisfies --require
     if require and rank < RANK[require]:
         errs.append(f"status is '{spec.status}', needs '{require}' or later"
@@ -367,6 +389,24 @@ def trace(root: Path, spec: Spec, globs: list[str]) -> dict[str, list[str]]:
         pat = re.compile(re.escape(ac) + r"(?!\d)")
         out[ac] = [str(p.relative_to(root)) for p, t in texts.items() if pat.search(t)]
     return out
+
+
+def smoke_trace(root: Path, spec: Spec, globs: list[str], tag: re.Pattern) -> dict[str, list[str]]:
+    """Smoke criterion -> files that name its id and carry the smoke tag (file level, spec 091)."""
+    files = sorted({p for g in globs for p in root.glob(g) if p.is_file() and not _ignored(p.relative_to(root))})
+    texts = {p: t for p in files if tag.search(t := p.read_text(errors="ignore"))}
+    out: dict[str, list[str]] = {}
+    for ac in spec.smoke_acs():
+        pat = re.compile(re.escape(ac) + r"(?!\d)")
+        out[ac] = [str(p.relative_to(root)) for p, t in texts.items() if pat.search(t)]
+    return out
+
+
+def _smoke_traced(root: Path, spec: Spec, shape: str | None) -> dict[str, list[str]]:
+    tag = smoke_tag(shape)
+    if not spec.smoke_acs() or tag is None:
+        return {}
+    return smoke_trace(root, spec, smoke_globs(shape), tag)
 
 
 def _ignored(rel: Path) -> bool:
@@ -852,6 +892,7 @@ def ci_problems(root: Path) -> list[tuple[Spec, str]]:
         own_shape = s.meta.get("shape") or shape
         if s.status in {"building", "done"} and own_shape != "gitops-app":
             out += [(s, f"{ac} is not named by any test") for ac, files in trace(root, s, test_globs(own_shape)).items() if not files]
+            out += [(s, f"{ac} smoke: no smoke-tagged test") for ac, files in _smoke_traced(root, s, own_shape).items() if not files]
     return out
 
 
@@ -975,13 +1016,21 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "trace":
         spec = find(root, ns.id)
-        result = trace(root, spec, test_globs(spec.meta.get("shape") or repo_shape(root)))
-        missing = [a for a, f in result.items() if not f]
+        own_shape = spec.meta.get("shape") or repo_shape(root)
+        result = trace(root, spec, test_globs(own_shape))
+        smoke = _smoke_traced(root, spec, own_shape)
+        missing = [a for a, f in result.items() if not f or (a in smoke and not smoke[a])]
         if ns.json:
-            print(json.dumps({"spec": spec.id, "criteria": result, "missing": missing}, indent=2))
+            doc = {"spec": spec.id, "criteria": result, "missing": missing}
+            if smoke:
+                doc["smoke"] = smoke
+            print(json.dumps(doc, indent=2))
         else:
             for ac, found in result.items():
-                print(f"{'ok  ' if found else 'MISS'} {ac}  {', '.join(found) or '(no test names it)'}")
+                if ac in smoke and not smoke[ac]:
+                    print(f"MISS {ac}  smoke: no smoke-tagged test")
+                else:
+                    print(f"{'ok  ' if found else 'MISS'} {ac}  {', '.join(found) or '(no test names it)'}")
             print(f"{len(result) - len(missing)}/{len(result)} criteria traced to tests")
         return 1 if missing else 0
     if ns.cmd == "index":

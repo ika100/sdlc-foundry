@@ -1,7 +1,9 @@
 ---
 spec_id: 091-ship-checks-the-spec-in-dev-with-smoke
 spec_hash: e7aac0176c41
-summary: (smoke) criterion marker traced against a per-shape smoke tag; devbox run smoke (SMOKE_BASE_URL, one output contract) in every deployable template incl. standard Playwright for web; smoke.py runs it with retry/limit, record section and smoke issue; ship deploy runs smoke against the gitops-app's dev URL, escalates red as code, resumes smoke-only
+summary: (smoke) criterion marker traced against a per-shape smoke tag; devbox run smoke (SMOKE_BASE_URL, one output contract)
+  in every deployable template incl. standard Playwright for web; smoke.py runs it with retry/limit, record section and smoke
+  issue; ship deploy runs smoke against the gitops-app's dev URL, escalates red as code, resumes smoke-only
 tasks:
 - id: t1
   title: (smoke) marker, smoke trace and per-shape smoke tags
@@ -9,6 +11,7 @@ tasks:
   covers: [AC-091.1, AC-091.5]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t2
   title: smoke module and cplat smoke CLI
   files: [scripts/cplat/smoke.py, scripts/cplat/cplat.py]
@@ -66,8 +69,8 @@ tasks:
   depends_on: []
 - id: t10
   title: ship command, docs and the gitops-app urls key
-  files: [plugins/svc/commands/ship.md, docs/CHANGELOG.md, docs/unattended-delivery.md, 'templates/gitops-app/applications/{{ app_name }}/app.yaml.jinja',
-    templates/gitops-app/scripts/render.py]
+  files: [plugins/svc/commands/ship.md, docs/CHANGELOG.md, docs/unattended-delivery.md, 'templates/gitops-app/applications/{{
+      app_name }}/app.yaml.jinja', templates/gitops-app/scripts/render.py]
   covers: [AC-091.6, AC-091.9, AC-091.11, AC-091.12, AC-091.15]
   parallel_safe: true
   depends_on: []
