@@ -15,7 +15,11 @@ unattended: /svc:ship <NNN>
 you:        check dev  →  /gitops:promote <svc> dev staging   (reviewed PR, as before)
 ```
 
-The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict, a changed acceptance test, a CRITICAL security finding, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
+The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict, a changed acceptance test, a security finding with no fix released, or a bump that breaks a gate, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
+
+### Dependency patches
+
+When the security gate is red because of dependencies with a released fix, the run bumps them itself (`cplat deps patch`, spec 095), re-runs the gates and commits the bump, or reverts it exactly. The PR body lists each bump under "Dependency patches" (a major bump is marked) and the run record has a `patches` section. At most 2 rounds; a finding without a fix, or a bump that breaks a gate, escalates.
 
 ## Run it without a terminal session
 

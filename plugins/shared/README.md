@@ -7,7 +7,7 @@ Common agents and commands used by every shape's plugin. Pre-approves `gh repo c
 | Agent | Model | Purpose |
 |---|---|---|
 | `quality` | sonnet | `devbox run quality` for the repo's shape (ruff + mypy, ESLint + tsc, Spotless + Checkstyle, golangci-lint, kustomize/kubeconform, …). |
-| `security` | sonnet | `devbox run security` (pip-audit / pnpm audit / OWASP DC / govulncheck + detect-secrets) and trivy when a Dockerfile is present. |
+| `security` | sonnet | `devbox run security` (pip-audit / pnpm audit / OWASP DC / govulncheck + detect-secrets) and trivy when a Dockerfile is present. It never bumps dependencies: `/svc:build` and `/svc:ship` patch fixable findings with `cplat deps patch` (spec 095). |
 
 ## Commands
 

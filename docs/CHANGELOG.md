@@ -32,6 +32,9 @@ Format: each section lists changes for a tagged release. Plugin and template ver
   - `cplat runs init <owner/name>` creates the private repo; then `export CPLAT_RUNS_REPO=<owner/name>` in your shell profile. `cplat runs flush` writes the buffer, `cplat runs report [--json]` shows durations, outcomes and causes.
   - `cplat doctor` has a `run store` check: a public store fails, a missing, unreachable or backlogged one warns.
   - Recording never fails a run: without a store, records wait in a local buffer (1000) and one warning line says so.
+- **Feature (095): fixable dependency CVEs are patched by the run.** [ADR-034](adr/034-fixable-dependency-findings-are-patched-by-the-run.md)
+  - Every shape has the recipes `deps-findings` and `deps-bump` (`/shared:update-service` adds them). `cplat deps findings|patch|report` bumps each fixable package when the security gate is red, re-runs the gates, and commits or reverts exactly.
+  - At most 2 patch rounds; a finding with no fix, or a bump that breaks a gate, escalates. The PR body gets a Dependency patches table (a "major bump" is marked) and the run record a `patches` section.
 - **Fix (079): a registry rate limit is transient.** `cplat pr wait` and `cplat ship land` rerun a job whose log says `invalid response status 429` once before it counts.
 
 ## [4.4.0] — 2026-10-22
