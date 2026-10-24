@@ -24,6 +24,7 @@ tasks:
   covers: [AC-089.9, AC-089.11, AC-089.12, AC-089.13, AC-089.14]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t4
   title: ship land records red-CI rounds against the coder
   files: [scripts/cplat/ship.py]
@@ -37,6 +38,7 @@ tasks:
   covers: [AC-089.7, AC-089.10]
   parallel_safe: true
   depends_on: [t2]
+  done: true
 - id: t6
   title: Build, ship and app-build prompts record agent signals
   files: [plugins/svc/commands/build.md, plugins/svc/commands/ship.md, plugins/app/commands/build.md]
