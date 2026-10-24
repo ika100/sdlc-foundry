@@ -39,6 +39,7 @@ tasks:
   covers: [AC-091.2, AC-091.3, AC-091.4]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t6
   title: service-go smoke recipe, summary program and example test
   files: [templates/service-go/devbox.json.jinja, templates/service-go/scripts/smoke.sh, templates/service-go/scripts/smoke-summary.go,
