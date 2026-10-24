@@ -44,6 +44,7 @@ tasks:
     covers: [AC-095.2, AC-095.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: Shape contract requires the deps recipes, and forbids them in gitops-app
     files: [scripts/shapes.py]
