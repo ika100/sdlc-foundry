@@ -13,6 +13,7 @@ import os
 import pytest
 
 _RESULTS: dict[str, str] = {}
+_EXIT: list[int] = []
 
 
 def _base_url() -> str:
@@ -63,6 +64,10 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     """Runs after pytest's own summary line, so the result lines are the last thing printed."""
     if not config.getoption("--smoke-report", default=False):
         return
+    if _EXIT and _EXIT[0] not in (pytest.ExitCode.OK, pytest.ExitCode.TESTS_FAILED):
+        # the runner itself broke: there are no reliable result lines
+        print("FAIL  (smoke recipe)", flush=True)
+        return
     if not _RESULTS:
         print("0 smoke tests", flush=True)
         return
@@ -77,3 +82,4 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     no_tests = exitstatus == pytest.ExitCode.NO_TESTS_COLLECTED
     if session.config.getoption("--smoke-report") and no_tests:
         session.exitstatus = pytest.ExitCode.OK
+    _EXIT.append(int(session.exitstatus))

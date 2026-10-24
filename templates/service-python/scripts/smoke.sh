@@ -18,7 +18,7 @@ trap 'rm -f "$out"' EXIT
 uv run python -m pytest tests/ -p scripts.smoke_pytest -m smoke --smoke-report --no-cov -p no:cacheprovider 2>&1 | tee "$out"
 rc="${PIPESTATUS[0]}"
 
-if ! grep -qE '^(smoke: [0-9]+ passed, [0-9]+ failed, [0-9]+ skipped|0 smoke tests)$' "$out"; then
+if ! grep -qE '^(smoke: [0-9]+ passed, [0-9]+ failed, [0-9]+ skipped|0 smoke tests|FAIL  \(smoke recipe\))$' "$out"; then
   echo "FAIL  (smoke recipe)"
   [ "$rc" -eq 0 ] && rc=1
 fi
