@@ -922,6 +922,8 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("test-diff", help="acceptance tests changed only in formatting since BASE? (exit 1 otherwise)")
     p.add_argument("base", help="the commit with the red acceptance tests (Phase 1)")
     p.add_argument("files", nargs="*")
+    p.add_argument("--by", default="coder", help="the agent that changed the tests (coder or quality), for agent metrics")
+    p.add_argument("--task", help="the task being built, for agent metrics")
     p = sub.add_parser("ci", help="check every spec and trace built ones; GitHub annotations (warnings unless --strict)")
     p.add_argument("--strict", action="store_true")
     p = sub.add_parser("migrate", help="convert STORY-NNN stories in docs/backlog.md into spec folders")
@@ -1005,6 +1007,13 @@ def main(argv: list[str]) -> int:
             print(f"{f}: formatting only" if ok else f"{f}: changed — {why}")
         if not result:
             print("no acceptance test changed")
+        try:  # agent metrics (spec 089): never changes the result
+            import runs
+            import runs_agents
+            runs_agents.refused_test_diff(runs.current_run(root), root, [(f, why) for f, (ok, why) in result.items() if not ok],
+                                          by=ns.by, task=ns.task)
+        except Exception:  # noqa: BLE001
+            pass
         return 0 if all(ok for ok, _ in result.values()) else 1
     if ns.cmd == "ci":
         return ci(root, ns.strict)
