@@ -31,6 +31,7 @@ tasks:
   covers: [AC-091.2, AC-091.3, AC-091.4]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t5
   title: service-java smoke recipe, summary program and example test
   files: [templates/service-java/devbox.json.jinja, templates/service-java/scripts/smoke.sh, templates/service-java/scripts/SmokeSummary.java,
