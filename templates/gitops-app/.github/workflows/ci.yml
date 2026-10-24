@@ -37,6 +37,12 @@ jobs:
         if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
         with:
           enable-cache: true
+      - name: service CRDs (Service-ref marker, spec 098)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          SERVICE_REPOS_READ_TOKEN: ${{ secrets.SERVICE_REPOS_READ_TOKEN }}
+        run: devbox run service-crds
       - run: devbox run quality
 
   security:

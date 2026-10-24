@@ -9,6 +9,11 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 - Fix (085): a broken spec names its file, line and fix and no longer blocks other specs (#129)
 - **Repo gates survive skeleton updates (086).** Gates go in the repo-owned `ci-extra` recipe, which `devbox run ci` and a `ci-extra` CI check run; the update keeps your `.claude/settings.json` permission entries, `.claude/project-notes.md` holds project guidance, and the update report lists every customisation it overwrote (`lost` in `--json`).
   - **Action for existing repos:** run `/shared:update-service`. Gates you had in `ci` move to `ci-extra` automatically.
+- **Feature (098): gitops CI checks Components against the service branch's CRDs.** (#110)
+  - `cplat ship gitops pr` adds one `Service-ref: <owner>/<repo>@<branch>` line to every gitops PR it opens or reuses.
+  - On pull requests the gitops-app CI reads the CRDs of that branch and validates the Components under `applications/` against them, instead of the public catalog. Without a marker nothing changes.
+  - `cplat doctor` warns when a gitops-app lacks the `SERVICE_REPOS_READ_TOKEN` secret.
+  - **Action:** add the secret `SERVICE_REPOS_READ_TOKEN` (fine-grained, Contents: read on the service repos) to every gitops-app, then run `/shared:update-service` there.
 
 ## [4.4.0] — 2026-10-22
 
