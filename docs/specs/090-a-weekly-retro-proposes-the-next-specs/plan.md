@@ -60,7 +60,7 @@ tasks:
   covers: [AC-090.1]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 human_steps:
 - Give the run store repo its own self-hosted runner (an ARC scale set; personal accounts only have repo-level runners)
   with devbox, and set the repo variable CI_RUNNER to its name

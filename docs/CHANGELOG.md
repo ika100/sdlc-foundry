@@ -6,6 +6,11 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (090): a weekly retro proposes the next specs.** [ADR-035](adr/035-weekly-retro-evidence-checked-proposals.md)
+  - `cplat retro [--week W] [--json] [--out DIR]` builds one report of the last complete week from the run store, the auto-filed platform issues and the agent metrics of spec 089, each figure next to the previous week. By hand it prints and writes nothing.
+  - `cplat runs init` adds a workflow to the run store repo that runs it Mondays 06:00 UTC: report, then headless Claude proposes at most 5 specs and 3 agent prompt changes, then `cplat retro post` checks every proposal against the report's evidence (an unsupported one is refused and counted) and posts.
+  - The posted `retro` issue in `ika100/sdlc-foundry` has counts only (no repo, spec or store names, reasons as `reason 1`); the issue of an earlier week is commented on and closed. The full report is committed under `retros/` in the store.
+  - **Action:** set the store repo secrets `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and `RETRO_GH_TOKEN` (fine-grained: Issues read/write on the platform repo, Contents read/write on the store), give the store a self-hosted runner (`CI_RUNNER`), run `gh auth refresh -h github.com -s workflow`, then `cplat runs init <owner/name>` again. `cplat doctor` warns about whatever is missing.
 - **Feature (088): platform failures become deduplicated issues.** [ADR-033](adr/033-auto-filed-issues-with-signatures.md)
   - `cplat ship escalate --cause platform` and a crash of any `cplat` command inside a recorded run file the failure in `ika100/sdlc-foundry`. Causes `code`, `decision` and `environment` are only recorded; a missing or unknown cause becomes `unknown`.
   - Each issue carries one `Signature: platform:<16 hex>` line and the label `auto-filed`; a repeat adds a +1 comment to the oldest open issue, and a repeat after close files a new issue linking the old one (nothing after `wontfix`). Repo, spec and branch names are removed.
