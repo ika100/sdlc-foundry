@@ -200,7 +200,10 @@ def resolve_ref(repo: Repo, branch: str) -> str:
     except ApiError:
         emit(f"WARNING: branch {branch} no longer exists in {repo.slug}; validating against its default branch {default}")
         branch = default
-        info = repo.get(f"/branches/{urllib.parse.quote(branch, safe='')}")
+        try:
+            info = repo.get(f"/branches/{urllib.parse.quote(branch, safe='')}")
+        except ApiError as e:   # the default branch is unreadable too: fail with the formatted reason, never a traceback
+            raise Fail(f"ERROR: cannot read {repo.slug}: {e.reason}") from None
     repo.sha = info["commit"]["sha"]
     return branch
 
