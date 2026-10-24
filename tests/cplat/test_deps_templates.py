@@ -176,7 +176,7 @@ def test_go_transitive_bump_adds_one_indirect_require(tmp_path):  # AC-095.2
     work.mkdir()
     shutil.copytree(TEMPLATES / "service-go" / "scripts", work / "scripts")
     (work / "go.mod").write_text("module example.com/app\n\ngo 1.22\n\nrequire golang.org/x/net v0.20.0\n")
-    (work / "main.go").write_text('package main\n\nimport _ "golang.org/x/net/html"\n\nfunc main() {}\n')
+    (work / "main.go").write_text('package main\n\nimport _ "golang.org/x/net/html/charset"\n\nfunc main() {}\n')
     if sh(["go", "mod", "tidy"], work).returncode:
         pytest.skip("cannot resolve with go (offline?)")
     proc = sh(["bash", "scripts/deps.sh", "bump", "golang.org/x/text", "v0.16.0"], work)
