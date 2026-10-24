@@ -14,6 +14,9 @@ import yaml
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 GATES = ("quality", "test", "security")
+CI_EXTRA = "ci-extra"
+# The step every template's `ci` recipe ends with (spec 086), decoded: runs the repo's own `ci-extra` recipe when it exists.
+CI_EXTRA_STEP = "if grep -qs '\"ci-extra\"[[:space:]]*:' devbox.json; then devbox run ci-extra; fi"
 GIBBERISH = "detect_secrets.filters.gibberish.should_exclude_secret"
 
 
@@ -57,8 +60,15 @@ def workflow_gates(repo: Path) -> list[str]:
     return out
 
 
+def chain(cmd: str) -> list[str]:
+    """The `devbox run <name>` steps of a recipe, in order."""
+    return re.findall(r"devbox run ([\w-]+)", cmd)
+
+
 def _real(name: str, scripts: dict[str, str], seen: tuple = ()) -> str:
-    """A recipe that is only `devbox run X` is the gate X (gitops-app: quality = validate)."""
+    """A recipe that is only `devbox run X` is the gate X (gitops-app: quality = validate). `ci-extra` stays itself."""
+    if name == CI_EXTRA:
+        return name
     m = re.fullmatch(r"devbox run ([\w-]+)", scripts.get(name, "").strip())
     return _real(m.group(1), scripts, (*seen, name)) if m and m.group(1) not in seen else name
 
@@ -100,11 +110,32 @@ def check_gates(repo: Path) -> list[dict]:
                _check(OK, "gate recipes", "ci, secrets-baseline"))
     wf = workflow_gates(repo)
     if "ci" in scripts and wf:
-        chained = [_real(g, scripts) for g in re.findall(r"devbox run ([\w-]+)", scripts["ci"])]
+        chained = chain(scripts["ci"])
+        real = [_real(g, scripts) for g in chained]
         want = [_real(g, scripts) for g in wf]
-        out.append(_check(OK, "gate ci = CI workflow", " → ".join(chained)) if chained == want else
-                   _check(WARN, "gate ci = CI workflow", f"`devbox run ci` runs {' → '.join(chained) or 'nothing'}, the "
-                          f"workflow runs {' → '.join(want)}", "make the ci recipe chain the workflow's gates in its order"))
+        name = "gate ci = CI workflow"
+        if CI_EXTRA in scripts and CI_EXTRA not in want:
+            out.append(_check(WARN, name, "CI does not run ci-extra: no job of .github/workflows/ci.yml runs devbox run ci-extra",
+                              "/shared:update-service"))
+        elif real == want:
+            if CI_EXTRA in scripts:
+                inner = " → ".join(chain(scripts[CI_EXTRA])) or scripts[CI_EXTRA]
+            else:
+                inner = "not defined"
+            shown = [f"{g} ({inner})" if g == CI_EXTRA else g for g in chained]
+            out.append(_check(OK, name, " → ".join(shown)))
+        else:
+            extra = [g for g, r in zip(chained, real) if r not in want and r != CI_EXTRA]
+            if extra:
+                cur = scripts.get(CI_EXTRA, "").strip()
+                value = " && ".join([*([cur] if cur else []), *(f"devbox run {g}" for g in extra)])
+                out.append(_check(WARN, name, f"`devbox run ci` runs {' → '.join(chained) or 'nothing'}, the "
+                                  f"workflow runs {' → '.join(want)}",
+                                  f'move {", ".join(extra)} into ci-extra: "ci-extra": "{value}" '
+                                  "(updates replace the ci recipe; CI runs ci-extra)"))
+            else:
+                out.append(_check(WARN, name, f"`devbox run ci` runs {' → '.join(real) or 'nothing'}, the "
+                                  f"workflow runs {' → '.join(want)}", "make the ci recipe chain the workflow's gates in its order"))
     gaps = ci_gaps(repo)
     if gaps:
         out.append(_check(WARN, "gate CI jobs", "no CI job runs " + ", ".join(f"`devbox run {g}`" for g in gaps),

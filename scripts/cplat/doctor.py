@@ -190,6 +190,29 @@ def check_gitops_token(repo: Path) -> list[dict]:
     return [check(OK, "secret GITOPS_TOKEN", "set (or not readable with this token)")]
 
 
+SERVICE_REPOS_TOKEN_FIX = ("create a fine-grained token with Contents: read on every service repo in services.yaml, then: "
+                           "gh secret set SERVICE_REPOS_READ_TOKEN -R {slug}")
+
+
+def check_service_repos_token(repo: Path) -> list[dict]:
+    """Spec 098: a gitops-app needs SERVICE_REPOS_READ_TOKEN to check PRs that carry a Service-ref marker. Warns only."""
+    import ship
+    name = "secret SERVICE_REPOS_READ_TOKEN"
+    shape = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False).stdout.strip()
+    if shape != "gitops-app":
+        return []
+    try:
+        names = {s.get("name") for s in json.loads(ship.gh(["secret", "list", "--json", "name"], cwd=repo, check=False) or "")}
+    except Exception:  # noqa: BLE001 - any unreadable list is a warning, never a failure
+        names = None
+    fix = SERVICE_REPOS_TOKEN_FIX.format(slug=ship.service_slug(repo))
+    if names is None:
+        return [check(WARN, name, "could not be read with this gh login", fix)]
+    if "SERVICE_REPOS_READ_TOKEN" not in names:
+        return [check(WARN, name, "not set: gitops PRs with a Service-ref marker (opened by /svc:ship) fail their CRD check", fix)]
+    return [check(OK, name, "set: gitops CI can read the service repos named by Service-ref markers")]
+
+
 def check_run_store() -> dict:
     """The private run store (spec 087): only a public store fails."""
     import runs
@@ -213,7 +236,8 @@ def check_run_store() -> dict:
 def run_checks(repo: Path) -> list[dict]:
     import gates
     return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_repo(repo),
-            *gates.check_gates(repo), *check_gitops_token(repo), check_run_store()]
+            *gates.check_gates(repo), *check_gitops_token(repo),
+            *check_service_repos_token(repo), check_run_store()]
 
 
 def main(argv: list[str]) -> int:

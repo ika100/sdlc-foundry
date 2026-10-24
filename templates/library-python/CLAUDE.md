@@ -30,7 +30,7 @@ Canonical `devbox run` scripts:
 | `bandit` | bandit |
 | `security` | audit + secrets-scan + bandit |
 | `secrets-baseline` | refresh `.secrets.baseline.json` with fixed flags (never run `detect-secrets scan` by hand) |
-| `ci` | `quality` + `test` + `security`: the gates CI runs; run it before every push |
+| `ci` | `quality` + `test` + `security`: the gates CI runs, then `ci-extra` when your repo defines it; run it before every push |
 
 **Rule for every agent: never call `ruff`, `mypy`, `pytest`, `pip`, or `uv add` directly. Always `devbox run <script>`.**
 
@@ -60,6 +60,18 @@ Common workflows:
 
 A feature starts with a spec, not code ([ADR-026](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/026-feature-specs.md)): `/svc:spec <description>` writes `docs/specs/<NNN>-<slug>/spec.md` with acceptance criteria `AC-<NNN>.<n>` and asks you its open questions; approve it (`/svc:spec approve <NNN>`), plan it (`/svc:plan <NNN>`), then build it (`/svc:build <NNN>`): acceptance tests are written from the criteria first and fail, the code makes them pass, a reviewer checks the result against the spec, and the PR lists every criterion. Tests that name a criterion are the spec in code: never weaken them; change the spec instead (`/svc:spec --amend <NNN> <change>`). `/svc:specs` shows where each spec stands; `devbox run spec-check` validates every spec and traces built ones to their tests (also the warn-only `specs` CI workflow). Small changes (`/svc:quick-task`) and bug fixes (`/svc:fix-bug`) need no spec, but stop when they would change a criterion.
 
+## Where your additions go
+
+Updates (`/shared:update-service`) overwrite the skeleton files below. Put your own work next to them, where an update keeps it:
+
+| Updates overwrite | Your additions go in |
+|---|---|
+| the template's recipes in `devbox.json` (including `ci`) | gates: the `ci-extra` recipe (`devbox run ci` and the `ci-extra` CI check run it); other tools: recipes of your own in `devbox.json` (kept) |
+| `.github/workflows/ci.yml` | a workflow file of your own in `.github/workflows/` |
+| `.claude/settings.json` | your own permission entries (allow, ask, deny) in it; they are kept |
+| `CLAUDE.md` | `.claude/project-notes.md` |
+| other skeleton files (Dockerfile, lint config ...) | nowhere: propose the change to the platform (`/shared:report-issue`) |
+
 ## Conventions
 
 - Library, not a service — no HTTP entry point, no `/health` endpoint
@@ -67,3 +79,9 @@ A feature starts with a spec, not code ([ADR-026](https://github.com/ika100/sdlc
 - Tests in `tests/`, fixtures in `conftest.py`
 - Branch naming: `feature/`, `fix/`, `chore/`, `docs/`, `refactor/`, `release/`
 - Conventional commits in PR titles
+
+## Project notes
+
+Project-specific guidance for Claude Code goes in `.claude/project-notes.md`, which is loaded below and never changed by updates.
+
+@.claude/project-notes.md

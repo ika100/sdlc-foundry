@@ -52,13 +52,37 @@ _Dumper.add_representer(str, _literal)
 _Dumper.add_representer(list, _seq)
 
 
-def load(path: Path) -> tuple[dict, str]:
+QUOTE_HINT = "quote the value on that line, e.g. title: \"a: b\""
+COLON_HINT = "values that contain ': ' must be quoted, e.g. title: \"a: b\""
+FENCE_HINT = "front matter must be: a `---` line, `key: value` lines, a `---` line"
+
+
+class BrokenSpec(PlatformError):
+    """A spec.md or plan.md whose front matter cannot be read; names the file, the line and the fix."""
+
+    def __init__(self, sdir: Path, rel: str, line: int, problem: str, hint: str):
+        super().__init__(f"{rel}, line {line}: {problem}", hint=hint)
+        self.dir, self.id, self.rel, self.line, self.problem = sdir, sdir.name, rel, line, problem
+
+    def one_line(self) -> str:
+        return f"{self.rel}, line {self.line}: {self.problem} (fix: {self.hint})"
+
+
+def load(path: Path, root: Path | None = None) -> tuple[dict, str]:
+    rel = str(path.relative_to(root)) if root else str(path)
     m = FRONT.match(path.read_text())
     if not m:
-        raise PlatformError(f"{path}: missing YAML front matter (--- ... ---)")
-    meta = yaml.safe_load(m.group(1))
+        raise BrokenSpec(path.parent, rel, 1, "missing front matter", FENCE_HINT)
+    try:
+        meta = yaml.safe_load(m.group(1))
+    except yaml.YAMLError as e:
+        mark = getattr(e, "problem_mark", None) or getattr(e, "context_mark", None)
+        line = mark.line + 2 if mark else 1
+        problem = str(getattr(e, "problem", None) or "invalid YAML").strip()
+        hint = COLON_HINT if problem == "mapping values are not allowed here" else QUOTE_HINT
+        raise BrokenSpec(path.parent, rel, line, f"front matter is not valid YAML: {problem}", hint) from None
     if not isinstance(meta, dict):
-        raise PlatformError(f"{path}: front matter is not a mapping")
+        raise BrokenSpec(path.parent, rel, 1, "front matter is not a mapping of keys to values", FENCE_HINT)
     return meta, m.group(2)
 
 
@@ -125,30 +149,47 @@ def specs_dir(root: Path) -> Path:
     return root / SPECS_DIR
 
 
-def all_specs(root: Path) -> list[Spec]:
+def scan(root: Path) -> tuple[list[Spec], list[BrokenSpec]]:
+    """Readable specs and the broken ones (never drops either)."""
     d = specs_dir(root)
-    return [read(p) for p in sorted(d.iterdir()) if (p / "spec.md").is_file()] if d.is_dir() else []
+    good: list[Spec] = []
+    bad: list[BrokenSpec] = []
+    for p in sorted(d.iterdir()) if d.is_dir() else []:
+        if (p / "spec.md").is_file():
+            try:
+                good.append(read(p))
+            except BrokenSpec as e:
+                bad.append(e)
+    return good, bad
+
+
+def all_specs(root: Path) -> list[Spec]:
+    return scan(root)[0]
 
 
 def read(sdir: Path) -> Spec:
-    meta, body = load(sdir / "spec.md")
-    plan = load(sdir / "plan.md") if (sdir / "plan.md").is_file() else None
+    root = sdir.parents[2]
+    meta, body = load(sdir / "spec.md", root)
+    plan = load(sdir / "plan.md", root) if (sdir / "plan.md").is_file() else None
     return Spec(sdir, meta, body, plan)
 
 
 def find(root: Path, ref: str) -> Spec:
     """A spec by full id (`007-price-alerts`), number (`007`, `7`) or slug."""
-    specs = all_specs(root)
+    specs, bad = scan(root)
     num = ref.zfill(3) if ref.isdigit() else None
-    hits = [s for s in specs if s.id == ref or s.number == num or s.id.split("-", 1)[1] == ref]
+    hits = [s for s in [*specs, *bad] if s.id == ref or s.id.split("-", 1)[0] == num or s.id.split("-", 1)[-1] == ref]
     if len(hits) != 1:
-        known = ", ".join(s.id for s in specs) or "none"
+        known = ", ".join(sorted(s.id for s in [*specs, *bad])) or "none"
         raise PlatformError(f"no single spec matches '{ref}' (specs: {known})", hint="run `cplat spec list`")
+    if isinstance(hits[0], BrokenSpec):
+        raise hits[0]
     return hits[0]
 
 
 def next_number(root: Path) -> int:
-    nums = [int(s.number) for s in all_specs(root)]
+    specs, bad = scan(root)
+    nums = [int(s.id.split("-", 1)[0]) for s in [*specs, *bad]]
     backlog = root / BACKLOG
     if backlog.is_file():  # continue after legacy STORY-NNN ids so old references stay unique
         nums += [int(n) for n in re.findall(r"STORY-(\d+)", backlog.read_text())]
@@ -462,7 +503,12 @@ def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: lis
     if parent:
         meta["parent"] = parent
     save(sdir / "spec.md", meta, skeleton(number, title))
-    return read(sdir)
+    spec = read(sdir)
+    back = spec.meta.get("title")
+    if not isinstance(back, str) or back != title:
+        raise PlatformError(f"{sdir.name}: the title {title!r} did not read back as typed (got {back!r})",
+                            hint="quote it differently or report this as a platform defect")
+    return spec
 
 
 def addon_env(app_root: Path, addon: str) -> list[str]:
@@ -631,8 +677,15 @@ def summary(root: Path, spec: Spec) -> dict:
             "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
 
 
+def broken_summary(root: Path, b: BrokenSpec) -> dict:
+    return {"id": b.id, "title": "", "status": "broken", "priority": "", "acs": 0, "open_questions": 0,
+            "tasks": 0, "tasks_done": 0, "tracks": [], "next": f"fix {b.rel} line {b.line}: {b.hint}",
+            "path": str(b.dir.relative_to(root))}
+
+
 def index_table(root: Path) -> str:
-    rows = sorted((summary(root, s) for s in all_specs(root)),
+    specs, bad = scan(root)
+    rows = sorted([*(summary(root, s) for s in specs), *(broken_summary(root, b) for b in bad)],
                   key=lambda r: (r["status"] in {"done", "superseded"}, r["priority"], r["id"]))
     lines = ["| Spec | Priority | Status | Criteria | Tracks |", "|---|---|---|---|---|"]
     for r in rows:
@@ -808,12 +861,15 @@ def ci(root: Path, strict: bool) -> int:
         print("spec-check: no docs/specs/ yet, nothing to check")
         return 0
     problems = ci_problems(root)
+    bad = scan(root)[1]
     level = "error" if strict else "warning"
+    for b in bad:
+        print(f"::error file={b.rel},line={b.line},title=spec {b.id}::{b.problem} (fix: {b.hint})")
     for s, msg in problems:
         print(f"::{level} file={(s.dir / 'spec.md').relative_to(root)},title=spec {s.id}::{msg}")
-    n = len(all_specs(root))
-    print(f"spec-check: {n} spec(s), {len(problems)} problem(s)" + ("" if strict or not problems else " (warnings only; fix them before this check becomes required)"))
-    return 1 if strict and problems else 0
+    n = len(all_specs(root)) + len(bad)
+    print(f"spec-check: {n} spec(s), {len(problems) + len(bad)} problem(s)" + ("" if strict or not problems else " (warnings only; fix them before this check becomes required)"))
+    return 1 if bad or (strict and problems) else 0
 
 
 # ---------------- CLI ----------------
@@ -888,9 +944,15 @@ def main(argv: list[str]) -> int:
                 print(note)
         return 0
     if ns.cmd == "check":
-        specs = [find(root, i) for i in ns.ids] if ns.ids else all_specs(root)
+        bad = []
+        if ns.ids:
+            specs = [find(root, i) for i in ns.ids]
+        else:
+            specs, bad = scan(root)
         shape = repo_shape(root)
-        return _print_errors({s.id: check(s, require=ns.require, shape=shape) for s in specs})
+        results = {s.id: check(s, require=ns.require, shape=shape) for s in specs}
+        results.update({b.id: [b.one_line()] for b in bad})
+        return _print_errors(results)
     if ns.cmd == "approve":
         spec = find(root, ns.id)
         approve(spec, repo_shape(root))
@@ -924,7 +986,9 @@ def main(argv: list[str]) -> int:
         print(write_index(root).relative_to(root))
         return 0
     if ns.cmd == "list":
-        rows = [summary(root, s) for s in all_specs(root) if ns.all or s.status not in {"done", "superseded"}]
+        specs, bad = scan(root)
+        rows = [summary(root, s) for s in specs if ns.all or s.status not in {"done", "superseded"}]
+        rows += [broken_summary(root, b) for b in bad]
         if ns.json:
             print(json.dumps(rows, indent=2))
         elif not rows:

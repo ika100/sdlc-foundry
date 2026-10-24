@@ -39,6 +39,10 @@ Argo must be able to read this repo. Then, once per cluster, a human runs `KUBE_
 
 **To try the product on your machine:** `devbox run cluster-up` creates a k3d cluster `{{ app_name }}-local` (port 8088 → the Gateway), installs ArgoCD and External Secrets Operator and enables the Gateway API, gives Argo your `gh` token for this private repo, pre-creates `{{ app_name }}-{dev,staging,prod}` with a GHCR pull secret, applies the root Application and prints the URLs of exposed services. `devbox run cluster-down` removes it. Needs Docker running; the `gh` token needs `repo` and `read:packages`.
 
+## Service-ref marker (spec 098)
+
+A gitops PR opened by `/svc:ship` carries one body line `Service-ref: <owner>/<repo>@<branch>`: the service repo and its ship branch. On pull requests CI then reads that branch's CRDs (`crds/` and untemplated CRDs in `templates/` of the service's chart) through the GitHub API and validates every Component under `applications/` against them, instead of the public CRD catalog. Without a marker nothing changes. A malformed or duplicate marker, a repo that is not in `services.yaml`, a missing secret or an unreadable repo fails the check; a branch that is gone falls back to the service's default branch. Edit the PR body to correct the marker; the check runs again. The secret `SERVICE_REPOS_READ_TOKEN` (fine-grained token, Contents: read on every service repo) is only used by the `service CRDs` CI step; `cplat doctor` warns when it is missing: `gh secret set SERVICE_REPOS_READ_TOKEN -R <this repo>`.
+
 ## Pin policy
 
 - `dev`: follows `main`. Each merge to a service's main opens a `pin/dev-<service>-<sha7>` PR here (`.github/workflows/pin-dev.yml`, ADR-027) that runs CI on the pin branch and merges itself only when it passed (no branch protection needed, ADR-028); a red CI leaves it open with a comment and dev on the old image. Until a service's first pin its dev overlay uses the `latest` tag. Pin by hand: `devbox run pin -- dev <service> sha-<7>`.
@@ -59,7 +63,8 @@ Argo must be able to read this repo. Then, once per cluster, a human runs `KUBE_
 | `cluster-up` / `cluster-down` | local k3d cluster with ArgoCD, Gateway API and credentials |
 | `security` | detect-secrets |
 | `secrets-baseline` | refresh `.secrets.baseline.json` with fixed flags (never run `detect-secrets scan` by hand) |
-| `ci` | `validate` + `security`: the gates CI runs; run it before every push |
+| `service-crds` | spec 098: reads the PR body's `Service-ref` marker and validates the Components under `applications/` against the CRDs of that service branch (a no-op without a marker) |
+| `ci` | `service-crds` + `validate` + `security`: the gates CI runs, then `ci-extra` when your repo defines it; run it before every push |
 
 **Rule for every agent: never call `kustomize`, `kubeconform`, `kubectl`, or `detect-secrets` directly. Always `devbox run <script>`. Never `kubectl apply` — Argo owns reconciliation.**
 
@@ -81,7 +86,25 @@ Plugins enabled in `.claude/settings.json`: `gitops` (compose, promote), `app` (
 
 A feature starts with a spec, not code ([ADR-026](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/026-feature-specs.md)): `/app:spec <description>` writes the product spec in `docs/specs/<NNN>-<slug>/spec.md` (it asks you its open questions and your approval); `/app:plan <NNN>` assigns every criterion to a component repo with the contract between them (`docs/plan/<spec_id>.md`, checked by `devbox run plan-check`); `/app:build <NNN>` builds every ready repo in parallel, each from its own slice of the spec (`/svc:spec --from-plan` → `/svc:plan` → `/svc:build`), and stops at open PRs. Each repo's PR lists the criteria it meets. `devbox run spec-check` validates the specs here (also the warn-only `specs` CI workflow).
 
+## Where your additions go
+
+Updates (`/shared:update-service`) overwrite the skeleton files below. Put your own work next to them, where an update keeps it:
+
+| Updates overwrite | Your additions go in |
+|---|---|
+| the template's recipes in `devbox.json` (including `ci`) | gates: the `ci-extra` recipe (`devbox run ci` and the `ci-extra` CI check run it); other tools: recipes of your own in `devbox.json` (kept) |
+| `.github/workflows/ci.yml` | a workflow file of your own in `.github/workflows/` |
+| `.claude/settings.json` | your own permission entries (allow, ask, deny) in it; they are kept |
+| `CLAUDE.md` | `.claude/project-notes.md` |
+| other skeleton files (Dockerfile, lint config ...) | nowhere: propose the change to the platform (`/shared:report-issue`) |
+
 ## Conventions
 
 - Branches: `compose/<slug>`, `promote/<slug>`, `feature/<slug>`, `chore/<slug>`. Never commit to `main` directly.
 - Conventional Commits for commit messages and PR titles.
+
+## Project notes
+
+Project-specific guidance for Claude Code goes in `.claude/project-notes.md`, which is loaded below and never changed by updates.
+
+@.claude/project-notes.md

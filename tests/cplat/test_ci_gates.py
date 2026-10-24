@@ -120,6 +120,8 @@ def test_devbox_ci_runs_the_workflow_gates_in_job_order(shape):
     assert gates, shape
 
     def real(name):   # `quality` that is only `devbox run validate` is the same gate as `validate`
+        if name == "ci-extra":   # the repo's own recipe (spec 086): no template defines it
+            return name
         m = re.fullmatch(r"devbox run ([\w-]+)", recipe(shape, name))
         return real(m.group(1)) if m else name
     chained = re.findall(r"devbox run ([\w-]+)", recipe(shape, "ci"))

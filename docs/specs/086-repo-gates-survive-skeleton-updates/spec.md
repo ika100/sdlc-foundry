@@ -1,7 +1,7 @@
 ---
 spec_id: 086-repo-gates-survive-skeleton-updates
 title: Repo gates survive skeleton updates
-status: approved
+status: done
 priority: P1
 tracks: [132]
 ---
@@ -57,3 +57,5 @@ As the fleet update (spec 096), I want the update report to say exactly which re
 - 2026-10-23 created
 - 2026-10-23 open questions answered: repo gates move into `ci-extra` automatically (AC-086.6); the `ci-extra` check always appears (AC-086.3); new AC-086.16 adds a repo-owned project notes file loaded by `CLAUDE.md`, named in AC-086.12 and AC-086.15; AC-086.13 states it is the fleet update's merge signal (spec 096)
 - 2026-10-23 approved
+- 2026-10-23 building
+- 2026-10-24 done

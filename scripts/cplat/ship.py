@@ -567,6 +567,28 @@ def gitops_prepare(repo: Path, task_id: str) -> Path:
     return d
 
 
+SERVICE_REF = re.compile(r"^\s*service-ref\s*:", re.I | re.M)   # candidate lines of the spec 098 marker
+
+
+def with_service_ref(body: str, ref: str) -> str:
+    """`body` with exactly one line `Service-ref: <ref>` (ref = "<owner>/<repo>@<branch>").
+
+    Every candidate line is removed; the marker takes the place of the first one. Without a candidate it is appended
+    after one blank line. Every other line is kept byte-for-byte. Idempotent."""
+    line, out, placed = f"Service-ref: {ref}\n", [], False
+    for raw in body.splitlines(keepends=True):
+        if not SERVICE_REF.match(raw):
+            out.append(raw)
+        elif not placed:
+            out.append(line)
+            placed = True
+    if placed:
+        return "".join(out)
+    if not body.strip():
+        return line
+    return body + ("" if body.endswith("\n") else "\n") + "\n" + line
+
+
 def gitops_pr(repo: Path, task_id: str, title: str, body_file: Path) -> dict:
     """Push the task's gitops branch and open (or reuse) its draft PR."""
     st = require_state(repo)
@@ -582,13 +604,19 @@ def gitops_pr(repo: Path, task_id: str, title: str, body_file: Path) -> dict:
     if ahead in {"", "0"}:
         raise PlatformError(f"{d} has no commit on {info['branch']}", hint="change the task's files there and commit first")
     run(["git", "push", "-q", "-u", "origin", info["branch"]], cwd=d)
+    ref, marked = f"{service_slug(repo)}@{st['branch']}", d.parent / f"{task_id}-body.md"
     existing = json.loads(gh(["pr", "list", "-R", t["repo"], "--head", info["branch"], "--state", "open",
-                              "--json", "number,url"], cwd=repo) or "[]")
+                              "--json", "number,url,body"], cwd=repo) or "[]")
     if existing:
         info["pr"] = existing[0]["url"]
+        body = existing[0].get("body") or ""
+        if with_service_ref(body, ref) != body:
+            marked.write_text(with_service_ref(body, ref))
+            gh(["pr", "edit", info["pr"], "--body-file", str(marked)], cwd=repo)
     else:
+        marked.write_text(with_service_ref(body_file.read_text(), ref))
         out = gh(["pr", "create", "-R", t["repo"], "--draft", "--base", "main", "--head", info["branch"],
-                  "--title", title, "--body-file", str(body_file)], cwd=repo)
+                  "--title", title, "--body-file", str(marked)], cwd=repo)
         info["pr"] = out.strip().splitlines()[-1]
     save_state(repo, st)
     return info
