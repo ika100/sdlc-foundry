@@ -1,7 +1,7 @@
 ---
 spec_id: 087-every-run-is-recorded-in-a-private-run
 title: Every run is recorded in a private run store
-status: building
+status: done
 priority: P0
 ---
 
@@ -107,3 +107,4 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 - 2026-10-23 amended: folded in the user's answers (buffer cap of 1000, `cplat runs init`, 20 s bound, 30-day / top-10 report, public store fails doctor, resumed run is linked); added `escalation.cause` and `filed` with retried pending filings for 088, in-place events until run end for 089, and the `fleet`, `retro` and `product-ship` kinds for 090, 096 and 097 (`kind` is open-ended); withdrew AC-087.2, AC-087.12 and AC-087.13 in favour of AC-087.16 to AC-087.18
 - 2026-10-23 approved
 - 2026-10-24 building
+- 2026-10-24 done
