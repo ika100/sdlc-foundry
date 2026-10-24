@@ -1,4 +1,4 @@
-"""`cplat deps`: fixable dependency findings of a red security gate are patched by the run (spec 095, ADR-033).
+"""`cplat deps`: fixable dependency findings of a red security gate are patched by the run (spec 095, ADR-034).
 
   cplat deps findings [--json] [--dir D]    the findings that turn the security gate red, one line per package
   cplat deps patch [--dir D]                bump every fixable package, re-run the gates, commit or revert (exit 0, 3 escalate, 4 not ours)

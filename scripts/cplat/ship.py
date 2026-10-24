@@ -30,7 +30,9 @@ import sys
 import time
 from pathlib import Path
 
+import autoissue
 import core
+import feedback
 import runs
 import spec as specmod
 from core import PlatformError, run
@@ -233,10 +235,47 @@ def set_phase(repo: Path, phase: str) -> dict:
     return st
 
 
-def escalate(repo: Path, reason: str, cause: str = "unknown") -> dict:
+ESCALATION_CAUSES = ("platform", "code", "decision", "environment")
+_ALLOWED = ", ".join(ESCALATION_CAUSES)
+
+
+def _coerce_cause(cause: str | None) -> tuple[str, str | None]:
+    """(cause, message): anything outside ESCALATION_CAUSES is `unknown` with a message (spec 088, AC-088.3)."""
+    if cause in ESCALATION_CAUSES:
+        return cause, None
+    if cause is None or not str(cause).strip() or str(cause).strip() == "unknown":
+        return "unknown", f"cause missing: recorded as unknown; allowed causes: {_ALLOWED}"
+    return "unknown", f"cause '{cause}' is missing or not known: recorded as unknown; allowed causes: {_ALLOWED}"
+
+
+def _file_platform_failure(repo: Path, st: dict, reason: str, command: str | None, evidence: str, report: list[str]) -> None:
+    """File or +1 the failure before save_state ends the run record. Never raises (AC-088.12)."""
+    try:
+        rid = _ensure_run(repo, st)
+        cmd = command or "/svc:ship"
+        names = autoissue.private_names(runs.repo_slug(repo), st.get("spec"), st.get("branch"))
+        draft = autoissue.Draft(
+            kind="platform",
+            signature=autoissue.signature("platform", cmd, st.get("phase") or "none", reason, names=names),
+            reason=reason, command=cmd, phase=st.get("phase") or "none", evidence=feedback.tail(evidence),
+            run_id=rid, shape=core.read_stamp(repo).get("shape", "none"), names=names,
+            environment=feedback.diagnostics(repo))
+        report.extend(autoissue.file(draft, run_id=rid).lines)
+    except Exception as e:  # noqa: BLE001  (an escalation always completes)
+        report.append(f"issue: not filed: {type(e).__name__}: {e}")
+
+
+def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str | None = None, evidence: str = "",
+             report: list[str] | None = None) -> dict:
     st = require_state(repo)
+    report = report if report is not None else []
+    cause, message = _coerce_cause(cause)
+    if message:
+        report.append(message)
     st["escalated"] = reason
     st["cause"] = cause
+    if cause == "platform":
+        _file_platform_failure(repo, st, reason, command, evidence, report)
     save_state(repo, st)
     try:
         tracks = specmod.find(repo, st["spec"]).meta.get("tracks") or []
@@ -926,7 +965,7 @@ def gate(repo: Path, hook_input: dict, max_blocks: int, run_tests: bool = True) 
         reason += build_status(repo, st["spec"])
     reason.append("Keep going. Only if a rule needs the user (merge conflict, a changed acceptance test, a CRITICAL finding, "
                   "a decision the spec does not answer) or the user asked you to stop: run "
-                  "`cplat ship escalate '<reason>'`, then stop.")
+                  "`cplat ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop.")
     return {"decision": "block", "reason": "\n".join(reason)}
 
 
@@ -985,7 +1024,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("--context", help="kube context: also wait for Argo CD to report <service>-dev Synced/Healthy")
     p = sub.add_parser("escalate")
     p.add_argument("reason", nargs="+")
-    p.add_argument("--cause", choices=runs.CAUSES, default="unknown", help="why it stopped (run record, spec 087)")
+    p.add_argument("--cause", default=None, help=f"who must act: {_ALLOWED} (run record; `platform` is filed as an issue, spec 088)")
+    p.add_argument("--command", default=None, help="the failing command (cause platform; default /svc:ship)")
+    p.add_argument("--evidence-file", default=None, help="failing output for the issue (cause platform); - reads stdin")
     sub.add_parser("finish")
     p = sub.add_parser("gate")
     p.add_argument("--max-blocks", type=int, default=DEFAULT_MAX_BLOCKS)
@@ -1034,8 +1075,20 @@ def main(argv: list[str]) -> int:
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "escalate":
-        st = escalate(repo, " ".join(ns.reason), ns.cause)
-        print(f"ship {st['spec']}: escalated ({st['escalated']}); the session may stop. Resume with /svc:ship {st['spec']}")
+        evidence = ""
+        if ns.evidence_file:
+            try:
+                evidence = sys.stdin.read() if ns.evidence_file == "-" else Path(ns.evidence_file).read_text(errors="replace")
+            except (OSError, ValueError):
+                evidence = ""
+        report: list[str] = []
+        st = escalate(repo, " ".join(ns.reason), ns.cause, command=ns.command, evidence=evidence, report=report)
+        shown = st["escalated"]
+        if st.get("cause") == "platform":     # the output goes where the issue goes: no repo, spec, branch or secret
+            shown = autoissue.scrub(shown, autoissue.private_names(runs.repo_slug(repo), st.get("spec"), st.get("branch")))
+        print(f"ship {st['spec']}: escalated ({shown}); the session may stop. Resume with /svc:ship {st['spec']}")
+        for line in report:
+            print(line)
         return 0
     if ns.cmd == "finish":
         print(f"ship run ended; state archived to {finish(repo)}")

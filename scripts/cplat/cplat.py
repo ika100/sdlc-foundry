@@ -25,7 +25,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py pr wait <number|url> [-R owner/repo] [--merge]   wait for a PR's CI, heal stuck or transient runs, merge on green (spec 079)
   cplat.py headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume (spec 070)
   cplat.py runs init|flush|report|begin|phase|end|agent ...   private run records and agent metrics (specs 087, 089)
-  cplat.py deps findings|patch|report ...   patch fixable dependency findings of a red security gate (spec 095, ADR-033)
+  cplat.py deps findings|patch|report ...   patch fixable dependency findings of a red security gate (spec 095, ADR-034)
   cplat.py fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release (spec 096)
   cplat.py adopt --type SHAPE [--data KEY=VALUE]   bring an existing repo onto the platform template (spec 071)
 """
@@ -63,6 +63,24 @@ COMMANDS = {
 }
 
 
+_REPORT_HINT = ("  This looks like a platform bug. Run `/shared:report-issue` (or `cplat feedback --title ...`) to file it; "
+                "nothing is sent without your OK.")
+
+
+def _file_crash(argv: list[str], exc: Exception) -> list[str]:
+    """Spec 088: inside a recorded run the crash is filed or +1'd at once; otherwise (or if the hook fails) the hint."""
+    try:
+        import autoissue   # lazily: a broken import must not stop cplat from starting
+        import runs
+        cwd = Path.cwd()
+        rid = runs.current(cwd)
+        if rid:
+            return autoissue.file_crash(argv, exc, rid, cwd).lines
+    except Exception:  # noqa: BLE001  (the hook never changes a crash's exit code)
+        pass
+    return [_REPORT_HINT]
+
+
 def main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help") or argv[0] not in COMMANDS:
         print(__doc__)
@@ -77,8 +95,8 @@ def main(argv: list[str]) -> int:
         return 1
     except Exception as e:  # noqa: BLE001  (an unexpected crash is a platform defect, not a user error)
         print(f"ERROR: unexpected failure in `cplat {argv[0]}`: {type(e).__name__}: {e}", file=sys.stderr)
-        print("  This looks like a platform bug. Run `/shared:report-issue` (or `cplat feedback --title ...`) to file it; "
-              "nothing is sent without your OK.", file=sys.stderr)
+        for line in _file_crash(argv, e):
+            print(line, file=sys.stderr)
         if os.environ.get("CPLAT_DEBUG"):
             raise
         return 70

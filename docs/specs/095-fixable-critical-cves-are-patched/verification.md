@@ -49,7 +49,7 @@ maven 3.9.16 devbox env.
 ## Deviations from the plan
 
 - `docs/AGENTS.md` changed (commit 652d1ee) but is in no task's `files`. It is the same wording fix as `docs/unattended-delivery.md` ("a CRITICAL finding" → "a security finding with no fix released or a bump that breaks a gate"). Acceptable: it keeps the orchestration doc consistent.
-- `docs/adr/033-…md` was added in the plan commit (fc9746b), before the build. The plan and design link it. Acceptable.
+- `docs/adr/034-…md` (first numbered 033, renumbered after spec 088 took 033) was added in the plan commit (fc9746b), before the build. The plan and design link it. Acceptable.
 - Every task t1–t9 has `done: true`.
 
 ## Contract

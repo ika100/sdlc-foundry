@@ -1,4 +1,4 @@
-"""Pure part of `cplat deps` (spec 095, ADR-033): version order, per-tool report parsers at the gate's threshold, grouping.
+"""Pure part of `cplat deps` (spec 095, ADR-034): version order, per-tool report parsers at the gate's threshold, grouping.
 
 No subprocess calls. The only file reads are the manifests in `declared`.
 """

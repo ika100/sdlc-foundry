@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feature (088): platform failures become deduplicated issues.** [ADR-033](adr/033-auto-filed-issues-with-signatures.md)
+  - `cplat ship escalate --cause platform` and a crash of any `cplat` command inside a recorded run file the failure in `ika100/sdlc-foundry`. Causes `code`, `decision` and `environment` are only recorded; a missing or unknown cause becomes `unknown`.
+  - Each issue carries one `Signature: platform:<16 hex>` line and the label `auto-filed`; a repeat adds a +1 comment to the oldest open issue, and a repeat after close files a new issue linking the old one (nothing after `wontfix`). Repo, spec and branch names are removed.
+  - At most 10 new issues per 24 h per machine; filings that fail or hit the cap stay pending and are retried at `cplat runs flush`.
+  - `CPLAT_AUTO_ISSUES=off` sends nothing and prints the draft; `CPLAT_FEEDBACK_REPO=<owner/name>` files elsewhere.
+  - **Action:** run `cplat triage setup-labels` once to create `auto-filed`.
 - **Feat (089): agent quality is measured per agent, shape and model.**
   - A build record gets `agents` and `replans` sections (fix rounds, red CI, review findings, refused test diffs, out-of-plan files, merge conflicts, tester misses), recorded by `cplat ship land`, `cplat spec test-diff` and the new `cplat runs agent` calls in the build prompts.
   - `cplat runs report --agents [--by-version] [--agent NAME] [--shape SHAPE] [--json]` ranks agents by rework and cites an example run for the top causes. A metric a run never reached shows as `n/a`, not 0.
@@ -26,7 +32,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
   - `cplat runs init <owner/name>` creates the private repo; then `export CPLAT_RUNS_REPO=<owner/name>` in your shell profile. `cplat runs flush` writes the buffer, `cplat runs report [--json]` shows durations, outcomes and causes.
   - `cplat doctor` has a `run store` check: a public store fails, a missing, unreachable or backlogged one warns.
   - Recording never fails a run: without a store, records wait in a local buffer (1000) and one warning line says so.
-- **Feature (095): fixable dependency CVEs are patched by the run.** [ADR-033](adr/033-fixable-dependency-findings-are-patched-by-the-run.md)
+- **Feature (095): fixable dependency CVEs are patched by the run.** [ADR-034](adr/034-fixable-dependency-findings-are-patched-by-the-run.md)
   - Every shape has the recipes `deps-findings` and `deps-bump` (`/shared:update-service` adds them). `cplat deps findings|patch|report` bumps each fixable package when the security gate is red, re-runs the gates, and commits or reverts exactly.
   - At most 2 patch rounds; a finding with no fix, or a bump that breaks a gate, escalates. The PR body gets a Dependency patches table (a "major bump" is marked) and the run record a `patches` section.
 - **Fix (079): a registry rate limit is transient.** `cplat pr wait` and `cplat ship land` rerun a job whose log says `invalid response status 429` once before it counts.

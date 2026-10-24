@@ -68,7 +68,7 @@ tasks:
     done: true
 ---
 
-The contract for every task is [design.md](design.md). ADR: [033](../../adr/033-fixable-dependency-findings-are-patched-by-the-run.md).
+The contract for every task is [design.md](design.md). ADR: [034](../../adr/034-fixable-dependency-findings-are-patched-by-the-run.md).
 `ship.py`, `runs.py` and `update.py` are not touched (specs 088, 089 and 096 change them in parallel). A patch in
 `land` already counts in `fix_rounds`, because `cplat ship land` counts every red PR check.
 
@@ -132,7 +132,7 @@ pass on fixture reports of each of the four tools.
   heading. `--update-pr` reads `pr` from `<git common dir>/cplat-ship.json` and runs `gh pr edit <pr> --body-file F`
   through `core.run`.
 - `cplat.py`: add `"deps": "deps"` to `COMMANDS` and the docstring line
-  `cplat.py deps findings|patch|report ...   patch fixable dependency findings of a red security gate (spec 095, ADR-033)`.
+  `cplat.py deps findings|patch|report ...   patch fixable dependency findings of a red security gate (spec 095, ADR-034)`.
   These are the only edits to cplat.py.
 
 **Done when:** the acceptance tests for AC-095.4, .6, .11, .12, .13, .14, .16 and .17 pass with fake `devbox`/`git`
@@ -302,7 +302,7 @@ section, and what still stops a run.
 - `docs/unattended-delivery.md` line 18: replace "a CRITICAL security finding" with "a security finding with no fix
   released, or a bump that breaks a gate". Add a short "Dependency patches" paragraph.
 - `docs/adr/README.md`: the index row
-  `| [033](033-fixable-dependency-findings-are-patched-by-the-run.md) | Fixable dependency findings are patched by the run: deps recipes per shape, cplat deps patch, 2 rounds, exact revert |`.
+  `| [034](034-fixable-dependency-findings-are-patched-by-the-run.md) | Fixable dependency findings are patched by the run: deps recipes per shape, cplat deps patch, 2 rounds, exact revert |`.
   If another spec took 033 first, renumber this ADR and its links in design.md and plan.md.
 - `plugins/svc/README.md` and `plugins/shared/README.md`: one line where build/ship and the security agent are
   described.

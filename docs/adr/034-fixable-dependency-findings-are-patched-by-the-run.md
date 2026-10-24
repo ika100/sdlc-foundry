@@ -1,4 +1,4 @@
-# ADR-033 — Fixable dependency findings are patched by the run
+# ADR-034 — Fixable dependency findings are patched by the run
 
 **Status:** accepted (2026-10-24, spec 095)
 

@@ -8,7 +8,7 @@
   a dependency finding (handle the red gate as today). A new module keeps `ship.py`, `runs.py` and `update.py` free of
   edits, because specs 088, 089 and 096 change them in parallel. `ship.py` needs no change: a red PR check already
   counts as a `fix_rounds` round in `cplat ship land`, so a patch in `land` counts toward the limit of 3 (AC-095.15).
-  ADR: [docs/adr/033-fixable-dependency-findings-are-patched-by-the-run.md](../../adr/033-fixable-dependency-findings-are-patched-by-the-run.md).
+  ADR: [docs/adr/034-fixable-dependency-findings-are-patched-by-the-run.md](../../adr/034-fixable-dependency-findings-are-patched-by-the-run.md).
 - **Two recipes per shape are the contract: `deps-findings` and `deps-bump`** (AC-095.3). Both are `bash scripts/deps.sh
   findings|bump`, so the logic sits in a platform-owned file, not in a one-line recipe. cplat never calls
   `uv`/`pnpm`/`go`/`mvn`/`trivy` itself. `gitops-app` gets neither recipe and `cplat deps` refuses it (AC-095.16).

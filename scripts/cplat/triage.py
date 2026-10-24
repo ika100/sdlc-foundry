@@ -25,6 +25,7 @@ LABELS = {
     "question": ("d876e3", "A question, answered in the issue"),
     "duplicate": ("cfd3d7", "Already reported"),
     "wontfix": ("ffffff", "Out of scope, will not be done"),
+    "auto-filed": ("c5def5", "Filed automatically by the platform (spec 088)"),
 }
 DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix"}
 BODY_LIMIT = 4000
