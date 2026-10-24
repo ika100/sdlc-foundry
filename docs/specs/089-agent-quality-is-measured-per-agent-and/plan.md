@@ -43,6 +43,7 @@ tasks:
   covers: [AC-089.1, AC-089.2, AC-089.3, AC-089.4, AC-089.6, AC-089.7, AC-089.8]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t7
   title: Docs for agent metrics
   files: [docs/CHANGELOG.md, docs/unattended-delivery.md, docs/AGENTS.md]
