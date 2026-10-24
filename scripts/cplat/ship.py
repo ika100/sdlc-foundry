@@ -486,6 +486,11 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     if state.get("state") == "CLOSED":
         raise PlatformError(f"{pr} was closed without merging", hint="reopen it, or `cplat ship escalate 'PR closed'`")
     status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout, st.get("run_id")), timeout, interval)
+    try:  # agent metrics (spec 089): never changes the result
+        import runs_agents
+        runs_agents.red_ci(st.get("run_id"), repo, [c["name"] for c in failed] if status == "red" else [])
+    except Exception:  # noqa: BLE001
+        pass
     if status == "red":
         st["fix_rounds"] = st.get("fix_rounds", 0) + 1
         save_state(repo, st)

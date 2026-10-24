@@ -30,6 +30,7 @@ tasks:
   covers: [AC-089.5, AC-089.10]
   parallel_safe: true
   depends_on: [t2]
+  done: true
 - id: t5
   title: spec test-diff records refused test diffs
   files: [scripts/cplat/spec.py]
