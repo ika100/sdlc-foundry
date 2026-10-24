@@ -166,7 +166,7 @@ def test_patch_bumps_to_the_lowest_fixed_version_reruns_the_gates_and_continues(
     assert rc == 0, out
     assert w.bump_calls() == [("urllib3", "1.26.18")]
     assert w.gate_steps() == ["quality", "test", "security"]  # ci-extra only runs when the repo defines it
-    assert "urllib3 1.26.18" in (w.repo / "uv.lock").read_text()
+    assert 'name = "urllib3"\nversion = "1.26.18"' in (w.repo / "uv.lock").read_text()
     assert "PATCHED: urllib3 1.26.5 -> 1.26.18 (GHSA-1, UNRATED)" in out
     assert "GREEN: every gate passed after patch round 1 of 2" in out
     assert "ESCALATE" not in out
