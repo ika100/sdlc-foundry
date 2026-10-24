@@ -101,7 +101,8 @@ Print a one-line verdict:
 ## Rules
 
 - **Always go through devbox.** Tooling versions and flags must come from `devbox.json`.
-- **CRITICAL findings block release** — escalate to user immediately.
+- **Dependency findings with a fix.** In `/svc:build` and `/svc:ship` the run patches them itself (`cplat deps patch`, ADR-033); this agent never bumps. In `/svc:release` and `/shared:check-quality` a red security gate still blocks, and the agent only reports.
+- **CRITICAL findings with no fix released** block release — report them to the orchestrator for escalation.
 - **HIGH findings** are documented but do not block the build pipeline.
 - **Do not** modify application code, dependencies, or Dockerfile.
 - Always write the scan report file — even if all checks pass (provides audit trail).

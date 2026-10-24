@@ -98,7 +98,7 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`; comm
 2. **Red** → spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the output's tail:
    - lint or type check → **quality** (`agents.quality`): lint/type fixes only;
    - tests → the **coder** of the task whose files are involved: acceptance tests stay fixed;
-   - security → **security** (`agents.security`): a CRITICAL finding stops the build and escalates; HIGH is documented and the build continues.
+   - security → run `cplat deps patch` first (ADR-033): it bumps every fixable dependency finding, re-runs the gates and commits, or reverts. Exit 0 → the gate is green, go to step 3. Exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed: in a `/svc:ship` run `cplat ship escalate '<reason>' --cause <CAUSE>`, alone `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`. Exit 4 → not a fixable dependency finding: the **security** agent (`agents.security`) documents it as before; HIGH is documented and the build continues. A red gate after a bump is never handed to a coder, and acceptance tests stay fixed. Patch rounds (at most 2, counted by cplat) are separate from the 2 fix rounds below.
 
    Run `devbox run ci` again; at most 2 rounds, then escalate.
 3. **Green** → spawn agents only where needed:
@@ -160,12 +160,14 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 
    <acceptance tests per criterion; N tests total, X% coverage; security PASS/WARN>
 
+   <output of `cplat deps report`: the "Dependency patches" section, after the criteria table; empty when nothing was bumped>
+
    ## Checklist
 
    - [x] Acceptance tests were written from the approved spec before the code
    - [x] `devbox run quality` passes
    - [x] `devbox run test` passes with coverage ≥ 80%
-   - [x] `devbox run security` passes (no CRITICAL findings)
+   - [x] `devbox run security` passes (fixable dependency findings patched, see Dependency patches)
    - [x] No secrets, credentials, or API keys committed
    ```
 
@@ -186,6 +188,8 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 | Verification | <m>/<m> criteria met (verification.md) |
 | Image | built and smoke-started | skipped |
 | PR | <URL> |
+
+<the Dependency patches table from `cplat deps report`, when the run bumped anything>
 
 ### Next steps
 <gitops change needed (services.yaml / /gitops:promote after release), HIGH findings, sequential fallback, `/svc:specs migrate` hint>
