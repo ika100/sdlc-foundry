@@ -67,6 +67,17 @@ Every run is recorded as one JSON record in a private GitHub repo (spec 087, [AD
 - **Offline:** without a store, or when it is unreachable, records wait in a local buffer (1000) and one warning line says so. The run itself is never affected. `cplat runs flush` writes the buffer; `cplat doctor` shows what is waiting.
 - **Read it:** `cplat runs report [--json] [--since DAYS]`.
 
+## Auto-filed platform issues
+
+When a run stops because the platform itself misbehaves, the failure is filed as an issue in `ika100/sdlc-foundry` (spec 088, [ADR-033](adr/033-auto-filed-issues-with-signatures.md)).
+
+- **What is filed:** an escalation with `--cause platform`, and a crash (stack trace) of any `cplat` command inside a recorded run. **Never filed:** causes `code`, `decision`, `environment` and `unknown`, and crashes outside a recorded run (those print the `/shared:report-issue` hint).
+- **One issue per failure:** the body has a `Signature:` line. A repeat adds a +1 comment (occurrence number, date, platform version, shape, run id) to the oldest open issue. After the issue was closed, a repeat files a new issue that says `Seen again after #<n> was closed`, unless the closed one is labelled `wontfix`: then nothing is filed and the run record notes `suppressed by #<n>`.
+- **Redaction:** tokens, passwords, e-mail addresses and home paths are removed, and your repo, spec and branch are replaced by `<repo>`, `<spec>` and `<branch>`. The issue names the run id but never links the private run store.
+- **Cap:** at most 10 new issues per 24 h per machine. +1 comments are not capped.
+- **Offline:** if filing fails (`gh` missing or not logged in, no network) or the cap is reached, the escalation still completes with the same exit status, prints `not filed: <reason>`, and the filing is retried at the next `cplat runs flush`.
+- **Off switch:** `CPLAT_AUTO_ISSUES=off` sends nothing and prints the draft instead. `CPLAT_FEEDBACK_REPO=<owner/name>` files in another repo. Run `cplat triage setup-labels` once so the `auto-filed` label exists.
+
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`, spec 068) are the review. Use `/svc:ship <NNN> --no-merge` to read the PR yourself first.
