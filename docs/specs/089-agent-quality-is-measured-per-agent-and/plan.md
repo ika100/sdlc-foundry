@@ -50,6 +50,7 @@ tasks:
   covers: []
   parallel_safe: true
   depends_on: []
+  done: true
 ---
 
 The contract for every task is [design.md](design.md): the record sections, event kinds, the `runs_agents` API, the
