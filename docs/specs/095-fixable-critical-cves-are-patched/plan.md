@@ -23,6 +23,7 @@ tasks:
     covers: [AC-095.2, AC-095.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: web-nextjs template gets deps-findings and deps-bump (pnpm)
     files: [templates/web-nextjs/devbox.json.jinja, templates/web-nextjs/scripts/deps.sh, templates/web-nextjs/scripts/deps-override.mjs]
