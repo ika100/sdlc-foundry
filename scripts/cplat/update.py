@@ -191,8 +191,11 @@ def move_ci_gates(project: dict, template: dict, baseline: dict | None) -> tuple
 
 def _ci_is_template_change(project: dict, template: dict, baseline: dict | None, taken: list[str]) -> bool:
     """True when the project's `ci`, minus the gates moved or dropped, is the old template's `ci` (spec 086)."""
+    suffix = " && " + gates.CI_EXTRA_STEP
+
     def ci(d: dict | None) -> str:
-        return _cmd((((d or {}).get("shell") or {}).get("scripts") or {}).get("ci", ""))
+        cmd = _cmd((((d or {}).get("shell") or {}).get("scripts") or {}).get("ci", ""))
+        return cmd[:-len(suffix)] if cmd.endswith(suffix) else cmd   # a `ci` from this platform version ends with the step
     mine = ci(project)
     steps = [g for g in gates.chain(mine) if g not in taken]
     if mine != " && ".join(f"devbox run {g}" for g in gates.chain(mine)):
@@ -358,13 +361,17 @@ def _where_file(path: str) -> str:
 
 
 def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], dropped_gates: list[str], settings: dict,
-          base_root: Path | None, current_extra: str) -> list[dict]:
+          base_root: Path | None, current_extra: str, notes: list[str | None] = ()) -> list[dict]:
     """Everything the repo had added that the update overwrote (spec 086): empty exactly when nothing was lost."""
     lost: list[dict] = [{"kind": "recipe", "file": "devbox.json", "entry": k, "was": v, "where": WHERE_RECIPE} for k, v in replaced]
     lost += [{"kind": "gate", "file": "devbox.json", "entry": g, "was": None,
               "where": "add it to ci-extra: " + _ci_extra_line(current_extra, [g])} for g in dropped_gates]
     lost += [{"kind": "setting", "file": settingsmerge.REL, "entry": e["key"], "was": e["was"], "where": WHERE_FILES[settingsmerge.REL]}
              for e in settings["replaced"]]
+    for note, path in zip(notes, ("devbox.json", settingsmerge.REL)):
+        if note:   # invalid JSON: the template's file replaced the repo's, and its entries are gone
+            m = re.search(r"re-add.*", note)
+            lost.append({"kind": "file", "file": path, "entry": None, "was": None, "where": m.group(0) if m else note})
     for path in modified:
         if path in NOT_CUSTOMISATION:
             continue
@@ -449,7 +456,7 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
         r.did.append(f"already up to date with platform {req['new']} — nothing changed")
         return r
     current_extra = _current_ci_extra(devbox_before)
-    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra)
+    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra, [devbox_note, settings_note])
     run(["git", "add", "-A"], cwd=repo)
     run(["git", *core.git_identity(repo), "commit", "-q", "-m", f"chore: update skeleton from platform {req['new']}"], cwd=repo)
     r.did.append(f"re-applied the template; {len(changed)} file(s) changed, committed on {branch if cur in ('main','master') else cur}")
