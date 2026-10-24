@@ -9,7 +9,7 @@ tasks:
   covers: [AC-096.3, AC-096.6, AC-096.7, AC-096.8, AC-096.14, AC-096.15, AC-096.16]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t2
   title: cplat fleet update - discovery, target check, ordered loop, dry run, report, exit code, run record
   files: [scripts/cplat/fleet.py]
