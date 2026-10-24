@@ -22,6 +22,7 @@ It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subage
 
 ## Phase 0 — Pre-flight
 
+0. `cplat runs begin build --spec <id>` (spec 087). Inside `/svc:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat runs end --outcome done`. Recording never fails a build: a warning line about a buffered record is not an error.
 1. `git status --porcelain`. A dirty tree on a spec whose status is not `building` stops the build: commit or stash first (the clean-tree rule). On a `building` spec it is an **interrupted build** (spec 047):
    - Staged entries that differ from both `HEAD` and the working tree are stale (left by the interrupted coder): `git restore --staged <files>` and name them.
    - The first task in `plan.md` that is not `done` is the interrupted one. Ask, then commit the remaining changes as `wip(<task-id>): interrupted` (in an unattended run, commit without asking and say so).
@@ -36,6 +37,8 @@ Do not wait for CI on `main`.
 
 ## Phase 1 — Acceptance tests (red)
 
+`cplat runs phase build:tests`
+
 **Skip** (resume) when `cplat spec trace <id>` already passes: every criterion has a test.
 
 **tester** agent (`agents.tester`), prompt: "**Acceptance mode.** `SPEC_DIR: docs/specs/<spec_id>/`" + `<project-map>`. It writes criterion-tagged tests against the spec and `design.md`'s contract, confirms they fail because the behaviour is missing, and commits only test files.
@@ -47,6 +50,8 @@ Then:
 - `RED=$(git log -1 --format=%H --grep 'acceptance tests for')` — the commit the acceptance tests are measured against from now on (spec 048).
 
 ## Phase 2 — Implement (parallel via git worktrees)
+
+`cplat runs phase build:implement`
 
 ### 2.1 Schedule
 
@@ -87,6 +92,8 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`; comm
 
 ## Phase 3 — QA: one CI gate, agents only where it is red (spec 080)
 
+`cplat runs phase build:qa`
+
 1. Stage the tree (`git add -u`, plus new files the build created), then run `devbox run lint-fix` and `devbox run ci`: the gates the CI workflow runs, in its order, each once.
 2. **Red** → spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the output's tail:
    - lint or type check → **quality** (`agents.quality`): lint/type fixes only;
@@ -101,6 +108,8 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`; comm
 
 ## Phase 4 — Verify against the spec
 
+`cplat runs phase build:verify`
+
 1. `cplat spec trace <id> --json` must pass.
 2. **reviewer** (`agents.reviewer`), prompt: `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON and the Phase 3 test summary.
 3. `RESULT: fail` → send each `NOT MET` item to the coder of a task covering that criterion, re-run `devbox run test-fast` and the reviewer. At most 2 cycles; then stop and escalate with `verification.md`.
@@ -108,15 +117,21 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`; comm
 
 ## Phase 5 — Container image
 
+`cplat runs phase build:image`
+
 Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` is false. Otherwise **deployment** (`agents.deployment`) with `<project-map>` + `<touched-files>`: verify or update the image only — Dockerfile (numeric `USER`, read-only-filesystem friendly), the CI docker job, needed `devbox run` recipes; **never Kubernetes manifests** (the product's gitops-app repo owns them, ADR-017). Run `devbox run image-build` and smoke-start the image. If the port, probe paths or user changed, say that the gitops `services.yaml` entry must change. Ask for gitops changes **only for** wiring the spec's *Provided by the product* list (in the Product context of a repo spec sliced from a product plan) does not already contain: env variables, addons and exposure listed there exist (spec 052).
 
 ## Phase 6 — Close the spec
+
+`cplat runs phase build:close`
 
 1. `cplat spec set-status <id> done`.
 2. `cplat spec index` (refreshes the table in `docs/backlog.md`). If it refuses because the backlog still holds legacy `STORY-NNN` stories, skip it and mention `/svc:specs migrate` in the Final Report.
 3. Commit: `docs(spec): <spec_id> done`.
 
 ## Phase 7 — Pull request
+
+`cplat runs phase build:pr`
 
 1. **Issues:** `tracks:` from the spec plus `#NNN` in `git log $BASE_REF..HEAD --format=%B`; keep those `gh issue view <n> --json state -q .state` reports `OPEN`. Build the `Closes #N` lines or `N/A`.
 2. `git push -u origin $FEATURE_BRANCH` (asks for confirmation).
@@ -178,6 +193,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 
 ## Rules
 
+- **Every stop and the end are recorded** with `cplat runs end` (Phase 0), so no run goes missing.
 - **Only approved specs are built**, and only as planned. A decision the spec does not answer stops the build: `/svc:spec --amend`, then `/svc:plan` again.
 - **Acceptance tests are fixed** once Phase 1 committed them. If one is wrong, stop and take it to the user; a changed test is a changed spec.
 - **Push only in Phase 7**; `git push` and `gh pr create` require confirmation.

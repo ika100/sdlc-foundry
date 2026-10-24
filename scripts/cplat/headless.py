@@ -23,6 +23,7 @@ import subprocess
 import time
 from pathlib import Path
 
+import runs as runlog
 import ship
 from core import PlatformError
 
@@ -110,13 +111,13 @@ def progress_key(repo: Path, st: dict) -> tuple:
     return st.get("phase"), head, st.get("fix_rounds", 0), repr(sorted(rest.items()))
 
 
-def run_once(cmd: list[str], repo: Path, log: Path, minutes: float) -> int:
+def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str | None = None) -> int:
     with log.open("a") as fh:
         fh.write(f"\n=== {clock():%Y-%m-%d %H:%M:%S} {shlex.join(cmd)}\n")
         fh.flush()
         try:
             p = subprocess.run(cmd, cwd=repo, stdout=fh, stderr=subprocess.STDOUT, timeout=minutes * 60,
-                               env={**os.environ, "CPLAT_HEADLESS": "1"})
+                               env={**os.environ, "CPLAT_HEADLESS": "1", **({"CPLAT_RUN_PARENT": run_id} if run_id else {})})
             return p.returncode
         except subprocess.TimeoutExpired:
             fh.write(f"\n=== timed out after {minutes:.0f} min\n")
@@ -148,6 +149,35 @@ def main(argv: list[str]) -> int:
     if ns.dry_run:
         print(shlex.join(cmd))
         return 0
+    rid = runlog.start("headless", repo=runlog.repo_slug(repo), mode="headless")
+    state = {"sessions": 0, "result": "", "code": EXIT_STOPPED}
+    try:
+        return _drive(ns, repo, prompt, window, cmd, rid, state)
+    except BaseException as e:
+        state["result"] = f"error: {e}"
+        runlog.finish(rid, "failed", fields={"command": prompt, "sessions": state["sessions"], "stop_reason": "error"})
+        rid = None
+        raise
+    finally:
+        if rid:
+            reason, outcome = stop_of(state["result"], state["code"])
+            runlog.finish(rid, outcome, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason})
+
+
+def stop_of(result: str, code: int) -> tuple[str, str]:
+    """(stop_reason, outcome) of a headless invocation, from its result line (spec 087)."""
+    if result == "finished" or result.startswith("shipped"):
+        return "done", "done"
+    if result.startswith("needs you") or result.startswith("no progress"):
+        return "escalated", "escalated"
+    if result.startswith("stopped after") or "time budget" in result:
+        return "out of runs", "failed"
+    if "quiet window" in result:
+        return "quiet window", "abandoned"
+    return "error", "failed"
+
+
+def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[str], rid: str | None, state: dict) -> int:
     log = log_dir(repo) / f"{clock():%Y-%m-%d_%H%M%S}.log"
     begin: dt.datetime | None = None    # the budget starts with the first session, not while waiting out a quiet window
     runs, code = 0, 0
@@ -158,6 +188,7 @@ def main(argv: list[str]) -> int:
         if wait:
             if ns.no_wait:
                 result = f"inside the quiet window {ns.quiet}: not started"
+                state.update(result=result, code=EXIT_QUIET)
                 return finish(repo, log, result, EXIT_QUIET)
             print(f"inside the quiet window {ns.quiet}: waiting {wait / 60:.0f} min", flush=True)
             sleep(wait)
@@ -167,8 +198,9 @@ def main(argv: list[str]) -> int:
             result = f"time budget of {ns.max_minutes:.0f} min used up"
             break
         runs += 1
+        state["sessions"] = runs
         print(f"run {runs}/{ns.max_runs}: {prompt}  (log: {log})", flush=True)
-        code = run_once(cmd, repo, log, left)
+        code = run_once(cmd, repo, log, left, rid)
         st = unfinished(repo)
         if st is None:
             result = describe_end(repo, code)
@@ -183,6 +215,7 @@ def main(argv: list[str]) -> int:
     else:
         result = f"stopped after {ns.max_runs} runs, ship run still unfinished"
     ok = result == "finished" or result.startswith("shipped")
+    state.update(result=result, code=EXIT_DONE if ok else EXIT_STOPPED)
     return finish(repo, log, result, EXIT_DONE if ok else EXIT_STOPPED)
 
 

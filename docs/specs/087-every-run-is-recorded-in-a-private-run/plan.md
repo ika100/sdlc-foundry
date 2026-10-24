@@ -37,6 +37,7 @@ tasks:
   covers: [AC-087.5, AC-087.6]
   parallel_safe: true
   depends_on: [t1, t2]
+  done: true
 - id: t6
   title: Doctor run store check
   files: [scripts/cplat/doctor.py]

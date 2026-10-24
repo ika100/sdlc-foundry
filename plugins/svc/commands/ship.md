@@ -18,7 +18,7 @@ cplat shape
 cplat ship start <spec> [--no-merge] [--take-over]
 ```
 
-`unsupported` or no shape → stop (gitops-app repos ship through `/app:build`). `ship start` refuses an unapproved spec, an issue the spec tracks that another branch has claimed (spec 082: `--take-over` only when the user says so), and a repo linked to a gitops-app without the secret `GITOPS_TOKEN` (spec 077). In each case, show its hint and stop. It prints the phase and the next step; a re-run **resumes** at that phase. Print both outputs verbatim.
+`unsupported` or no shape → stop (gitops-app repos ship through `/app:build`). `ship start` refuses an unapproved spec, an issue the spec tracks that another branch has claimed (spec 082: `--take-over` only when the user says so; it also ends another spec's unfinished run, recorded as `abandoned`), and a repo linked to a gitops-app without the secret `GITOPS_TOKEN` (spec 077). In each case, show its hint and stop. It prints the phase and the next step; a re-run **resumes** at that phase. Print both outputs verbatim.
 
 **While the run is not finished, the shared plugin's Stop hook refuses to let the session end** and tells you the next step, with the failing tests in the build phase. That is intended: keep working. You may stop only after `cplat ship escalate '<reason>'` (see Escalate) or when the run is done.
 
@@ -60,6 +60,8 @@ Then `cplat ship phase pr`.
 
 ## Finish
 
+The run record (spec 087) is written when the run reaches `done` or escalates; a warning line about a buffered record is not an error.
+
 `cplat ship status`, then `cplat ship finish`, then print:
 
 ```
@@ -77,6 +79,6 @@ Next: check the feature in dev; promote with /gitops:promote <service> dev stagi
 
 ## Escalate
 
-`cplat ship escalate '<one line: what needs the user and where>'`, then print the reason, the state (`cplat ship status`) and what the user should decide. The run resumes where it stopped with `/svc:ship <spec>`. If the user asks you to stop or pause, escalate with `paused by the user`.
+`cplat ship escalate '<one line: what needs the user and where>' [--cause platform|code|decision|environment]` (the cause says who must act: the platform, the code, a decision of the user, or the environment; a missing cause is recorded as `unknown`), then print the reason, the state (`cplat ship status`) and what the user should decide. The run resumes where it stopped with `/svc:ship <spec>`. If the user asks you to stop or pause, escalate with `paused by the user`.
 
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), escalate, summarize it in two lines and offer `/shared:report-issue`. Never file anything without the user's OK.
