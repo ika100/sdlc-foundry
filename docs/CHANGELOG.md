@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- Fix (085): a broken spec names its file, line and fix and no longer blocks other specs (#129)
 - **Feature (098): gitops CI checks Components against the service branch's CRDs.** (#110)
   - `cplat ship gitops pr` adds one `Service-ref: <owner>/<repo>@<branch>` line to every gitops PR it opens or reuses.
   - On pull requests the gitops-app CI reads the CRDs of that branch and validates the Components under `applications/` against them, instead of the public catalog. Without a marker nothing changes.
