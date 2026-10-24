@@ -64,8 +64,8 @@ def utcnow() -> datetime.datetime:   # tests replace this
     return datetime.datetime.now(datetime.timezone.utc)
 
 
-def monotonic() -> float:            # tests replace this
-    return time.monotonic()
+def monotonic() -> float:            # tests replace this; shares runs_store's clock so call timeouts and budget agree
+    return runs_store.monotonic()
 
 
 def _iso(when: datetime.datetime) -> str:

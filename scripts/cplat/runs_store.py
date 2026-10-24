@@ -28,6 +28,10 @@ class StoreUnreachable(StoreError):
     """gh missing, not logged in, timeout, 5xx, rejected write."""
 
 
+def monotonic() -> float:   # the one clock of the 20 s budget (runs reads it too; tests replace it)
+    return time.monotonic()
+
+
 def gh(args: list[str], *, input: str | None = None, timeout: float = 10.0) -> tuple[int, str, str]:
     """`gh <args>` -> (exit code, stdout, stderr). Never raises: a timeout is (124, "", "timeout"), a missing gh 127."""
     try:
@@ -75,7 +79,7 @@ class GitHubStore:
     def _call(self, args: list[str], *, body: dict | None = None, deadline: float | None = None) -> tuple[int, str, str]:
         timeout = 10.0
         if deadline is not None:
-            timeout = min(10.0, deadline - time.monotonic())
+            timeout = min(10.0, deadline - monotonic())
             if timeout < 1.0:
                 return 124, "", "timeout"
         if body is not None:

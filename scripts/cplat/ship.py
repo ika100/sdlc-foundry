@@ -171,8 +171,6 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
             raise PlatformError(f"another ship run is in progress: {st['spec']} (phase {st['phase']})",
                                 hint="finish it, or end it with `cplat ship finish`, or take it over: "
                                      f"cplat ship start {sp.id} --take-over")
-        if not st.get("recorded"):
-            runs.finish(st.get("run_id"), "abandoned")
     if sp.meta.get("tracks"):                  # spec 082: refuse an issue another branch is building
         import claim
         for note in claim.claim(repo, sp.meta["tracks"], f"feature/{sp.id}", take_over=take_over, what=f"ship {sp.id}"):
@@ -200,6 +198,8 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
         phase = "build"
     else:
         phase = "plan"
+    if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated") and not st.get("recorded"):
+        runs.finish(st.get("run_id"), "abandoned")   # take-over: only after every check that can still refuse
     st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "blocks": 0, "fix_rounds": 0,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "recorded": False}
     save_state(repo, st)
@@ -661,14 +661,16 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     lines: list[str] = []
     begin = now()
     pending = list(apps)
-    runs: dict[str, RunWatch] = {}
+    watches: dict[str, RunWatch] = {}
     green_at: float | None = None          # when the service's main CI for the merge commit was seen green
     while pending:
         ci, ci_runs = main_ci(repo, sha)
         if ci == "red":
+            runs.ci_round(st.get("run_id"))
             return False, lines + [f"the service's CI on main is red for {short}; nothing was pinned"] + run_logs(repo, ci_runs)
         if ci == "green" and green_at is None:
             green_at = now()
+            runs.ci_round(st.get("run_id"))
         for app in list(pending):
             prs = json.loads(gh(["pr", "list", "-R", app, "--state", "all", "--head", branch, "--json", "number,state,url"],
                                 cwd=repo, check=False) or "[]")
@@ -680,12 +682,12 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
             if pr and pr["state"] == "CLOSED":
                 raise PlatformError(f"{app}: the pin PR {pr['url']} was closed without merging (a newer build superseded it, "
                                     "or its CI failed)", hint="read the PR's comments; `cplat ship escalate 'pin failed'`")
-            if app not in runs and (rid := pin_run(repo, app, svc, sha)):
-                runs[app] = RunWatch(repo, app, rid, queue_timeout, st.get("run_id"))
-            if app in runs:
-                if runs[app].poll() == "red":
+            if app not in watches and (rid := pin_run(repo, app, svc, sha)):
+                watches[app] = RunWatch(repo, app, rid, queue_timeout, st.get("run_id"))
+            if app in watches:
+                if watches[app].poll() == "red":
                     return False, lines + [f"{app}: the pin-dev run for {short} failed; dev keeps the previous image"] + \
-                        run_logs(repo, [(app, runs[app].rid)])
+                        run_logs(repo, [(app, watches[app].rid)])
             elif green_at is not None and now() - green_at > NO_CHECKS_GRACE:
                 raise PlatformError(f"{app}: no pin-dev run for {svc} {short} {NO_CHECKS_GRACE}s after the service's CI on "
                                     "main passed", hint=f"is the secret GITOPS_TOKEN set? gh secret list -R {service_slug(repo)} "
@@ -762,6 +764,7 @@ class RunWatch:
         self.run_id = run_id
         self.queued_since: float | None = None
         self.healed = False
+        self.counted = False
 
     def poll(self) -> str:
         out = gh(["run", "view", self.rid, "-R", self.slug, "--json", "status,conclusion"], cwd=self.repo, check=False)
@@ -770,6 +773,9 @@ class RunWatch:
         except ValueError:
             return "pending"
         if r.get("status") == "completed":
+            if not self.counted:                   # spec 087: one CI round per concluded pin-dev run
+                self.counted = True
+                runs.ci_round(self.run_id)
             return "green" if r.get("conclusion") in {"success", "skipped"} else "red"
         if r.get("status") != "queued":
             self.queued_since = None
