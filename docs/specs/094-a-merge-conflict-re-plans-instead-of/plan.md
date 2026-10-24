@@ -23,6 +23,7 @@ tasks:
   covers: [AC-094.1, AC-094.2, AC-094.3, AC-094.5, AC-094.7, AC-094.8, AC-094.12, AC-094.14, AC-094.15]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t4
   title: Docs, ship prompt and ship gate say conflicts are re-planned once
   files: [docs/AGENTS.md, docs/unattended-delivery.md, docs/CHANGELOG.md, plugins/svc/commands/ship.md, scripts/cplat/ship.py]
