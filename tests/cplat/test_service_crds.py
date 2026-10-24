@@ -571,7 +571,7 @@ def test_ac_098_17_triggers_and_job_names_are_unchanged():
     wf = ci()
     triggers = wf.get("on", wf.get(True))
     assert triggers["push"]["branches"] == ["main"] and "workflow_dispatch" in triggers and "workflow_call" in triggers
-    assert set(wf["jobs"]) == {"quality", "security", "pr-title"}
+    assert set(wf["jobs"]) == {"quality", "security", "ci-extra", "pr-title"}  # ci-extra: spec 086
     assert any(s.get("run") == "devbox run quality" for s in quality_steps())
 
 
