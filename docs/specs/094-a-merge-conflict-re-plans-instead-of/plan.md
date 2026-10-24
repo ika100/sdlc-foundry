@@ -10,6 +10,7 @@ tasks:
   covers: [AC-094.3, AC-094.4, AC-094.5, AC-094.6, AC-094.7, AC-094.9, AC-094.10, AC-094.11, AC-094.12, AC-094.13]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t2
   title: cplat build CLI with schedule and the conflict-safe merge (buildcmd.py)
   files: [scripts/cplat/buildcmd.py, scripts/cplat/cplat.py]
