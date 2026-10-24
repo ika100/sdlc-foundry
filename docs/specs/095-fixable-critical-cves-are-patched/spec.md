@@ -1,7 +1,7 @@
 ---
 spec_id: 095-fixable-critical-cves-are-patched
 title: Fixable dependency CVEs are patched without asking
-status: building
+status: done
 priority: P1
 ---
 
@@ -62,3 +62,4 @@ As the platform owner, I want each automatic patch recorded, so that the weekly 
 - 2026-10-23 amended with the user's answers: scope widened from CRITICAL to every fixable finding that turns the security gate red (title updated; AC-095.1, .5, .7, .8, .9, .10 withdrawn; AC-095.12 to .16 added); major bumps allowed and marked (AC-095.17); patches recorded in the run record's `patches` section (AC-095.11 clarified); repos at rest moved to a follow-up spec.
 - 2026-10-23 approved
 - 2026-10-24 building
+- 2026-10-24 done
