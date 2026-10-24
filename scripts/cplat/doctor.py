@@ -213,6 +213,53 @@ def check_service_repos_token(repo: Path) -> list[dict]:
     return [check(OK, name, "set: gitops CI can read the service repos named by Service-ref markers")]
 
 
+ALERTS_TOKEN_FIX = ("create a fine-grained token with Issues: read and write on every service repo in services.yaml, then: "
+                    "gh secret set ALERTS_TOKEN -R {slug}")
+
+
+def check_alerts_token(repo: Path) -> list[dict]:
+    """Spec 092: the alert poll files issues in the service repos with ALERTS_TOKEN; without it they land in the gitops repo."""
+    import yaml
+
+    import ship
+    name = "secret ALERTS_TOKEN"
+    shape = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False).stdout.strip()
+    if shape != "gitops-app":
+        return []
+
+    def load(path: Path) -> dict:
+        try:
+            data = yaml.safe_load(path.read_text())
+        except (OSError, yaml.YAMLError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    polled = has_repo = False
+    for app in sorted((repo / "applications").glob("*/app.yaml")):
+        obs = (load(app).get("addons") or {})
+        if not isinstance(obs, dict) or "observability" not in obs:
+            continue
+        conf = obs["observability"] if isinstance(obs["observability"], dict) else {}
+        if conf.get("alerts") is False:
+            continue
+        polled = True
+        services = load(app.parent / "services.yaml").get("services") or []
+        has_repo = has_repo or any(isinstance(s, dict) and s.get("repo") for s in services)
+    if not (polled and has_repo):
+        return []
+    try:
+        names = {s.get("name") for s in json.loads(ship.gh(["secret", "list", "--json", "name"], cwd=repo, check=False) or "")}
+    except Exception:  # noqa: BLE001 - any unreadable list is a warning, never a failure
+        names = None
+    slug = ship.service_slug(repo)
+    fix = ALERTS_TOKEN_FIX.format(slug=slug)
+    if names is None:
+        return [check(WARN, name, "could not be read with this gh login", fix)]
+    if "ALERTS_TOKEN" not in names:
+        return [check(WARN, name, f"not set: alert issues for the service repos land in {slug} instead", fix)]
+    return [check(OK, name, "set: alert issues go to the service repos")]
+
+
 def check_run_store() -> dict:
     """The private run store (spec 087): only a public store fails."""
     import runs
@@ -237,7 +284,7 @@ def run_checks(repo: Path) -> list[dict]:
     import gates
     return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_repo(repo),
             *gates.check_gates(repo), *check_gitops_token(repo),
-            *check_service_repos_token(repo), check_run_store()]
+            *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store()]
 
 
 def main(argv: list[str]) -> int:
