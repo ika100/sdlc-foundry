@@ -32,7 +32,7 @@ tasks:
   covers: [AC-090.3, AC-090.10, AC-090.13]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t5
   title: Retro schedule asset and its installation by cplat runs init
   files: [scripts/cplat/retro_setup.py, scripts/cplat/assets/workflows/cplat-retro.yml, scripts/cplat/runs.py, scripts/pin-actions.py]
