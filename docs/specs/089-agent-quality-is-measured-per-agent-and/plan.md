@@ -17,6 +17,7 @@ tasks:
   covers: [AC-089.1, AC-089.2, AC-089.3, AC-089.4, AC-089.5, AC-089.6, AC-089.7, AC-089.8, AC-089.9, AC-089.10, AC-089.14]
   parallel_safe: true
   depends_on: [t1]
+  done: true
 - id: t3
   title: Agent report aggregation and rendering
   files: [scripts/cplat/runs_report.py]
