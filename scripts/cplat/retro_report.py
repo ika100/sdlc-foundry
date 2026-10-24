@@ -303,38 +303,54 @@ def _leaves(tree, path=""):
         yield path, tree
 
 
-def _evidence(rep: dict) -> dict:
-    ev: dict = {"records": rep["records"]["current"]}
+def _index(rep: dict, side: str = "current") -> dict:
+    """The evidence index (`ref -> number`) of one side of the figures: the covered week, or the week before."""
+    ev: dict = {}
+
+    def put(ref, value):
+        if value is not None:
+            ev[ref] = value
+    put("records", rep["records"][side])
     kinds = _alias(list(rep["runs"]), "kind")
     for kind, outs in rep["runs"].items():
         for o, f in outs.items():
-            ev[f"runs.{kinds[kind]}.{o}"] = f["current"]
+            put(f"runs.{kinds[kind]}.{o}", f[side])
     names = _alias(list(rep["phases"]), "phase")
     for name, st in rep["phases"].items():
         for k in ("count", "median_s", "max_s"):
-            if st[k]["current"] is not None:
-                ev[f"phases.{names[name]}.{k}"] = st[k]["current"]
+            put(f"phases.{names[name]}.{k}", st[k][side])
     for k, f in rep["ci"].items():
-        if f["current"] is not None:
-            ev[f"ci.{k}"] = f["current"]
+        put(f"ci.{k}", f[side])
     for cause, e in rep["escalations"].items():
-        ev[f"escalations.{cause}"] = e["count"]["current"]
-        for r in e["reasons"]:
-            ev[f"escalations.{cause}.reason{r['rank']}"] = r["runs"]
+        put(f"escalations.{cause}", e["count"][side])
+        if side == "current":
+            for r in e["reasons"]:
+                put(f"escalations.{cause}.reason{r['rank']}", r["runs"])
     for k, f in rep["reruns"]["by_reason"].items():
-        ev[f"reruns.{k}"] = f["current"]
+        put(f"reruns.{k}", f[side])
     for c in rep["reruns"]["by_check"]:
-        ev[f"reruns.check{c['rank']}"] = c["count"]["current"]
+        put(f"reruns.check{c['rank']}", c["count"][side])
     for shape, f in rep["repos"]["by_shape"].items():
-        ev[f"repos.{shape}"] = f["current"]
-    for i in rep["issues"]:
-        ev[f"issues.#{i['number']}"] = i["occurrences_week"]
+        put(f"repos.{shape}", f[side])
+    if side == "current":
+        for i in rep["issues"]:
+            put(f"issues.#{i['number']}", i["occurrences_week"])
     for r in rep["agents"]["rows"]:
         base = f"agents.{r['agent']}|{r['shape']}|{r['model']}"
-        ev[f"{base}.runs"] = r["runs"]["current"]
-        for path, v in _leaves(r["metrics"]):
-            ev[f"{base}.{path}"] = v
+        put(f"{base}.runs", r["runs"][side])
+        tree = r["metrics"] if side == "current" else r["previous"]
+        for path, v in _leaves(tree or {}):
+            put(f"{base}.{path}", v)
     return ev
+
+
+def _evidence(rep: dict) -> dict:
+    return _index(rep, "current")
+
+
+def previous_index(report: dict) -> dict:
+    """The same refs with the previous week's value, where the report has one."""
+    return _index(report, "previous")
 
 
 def build(records: list[dict], *, auto_issues: list[dict], open_issues: list[dict], specs: list[dict], week: str, store: str,

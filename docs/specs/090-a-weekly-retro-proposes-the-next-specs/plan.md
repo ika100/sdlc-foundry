@@ -25,7 +25,7 @@ tasks:
   covers: [AC-090.7, AC-090.8, AC-090.9, AC-090.12]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t4
   title: GitHub access for the retro (issues, retro issues, label)
   files: [scripts/cplat/retro_github.py]
