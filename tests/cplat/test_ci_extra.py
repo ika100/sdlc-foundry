@@ -186,9 +186,7 @@ def test_shape_check_rejects_a_workflow_without_the_ci_extra_check(broken_root):
     f = tdir / ".github" / "workflows" / "ci.yml"
 
     def drop(_):
-        y = yaml.safe_load(f.read_text().replace("${{", "{{"))
-        y["jobs"].pop("ci-extra", None)
-        f.write_text(yaml.safe_dump(y))
+        f.write_text(re.sub(r"^  ci-extra:\n(?:(?!  \S).*\n)*", "", f.read_text(), flags=re.M))
     errs = new_errors(shapes, entry, tdir, drop)
     assert any("ci.yml has no ci-extra job running devbox run ci-extra" in e for e in errs), errs
 

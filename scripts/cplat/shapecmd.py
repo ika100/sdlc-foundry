@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import core
@@ -32,6 +33,12 @@ def route(repo: Path) -> dict:
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["check"]:  # the platform's shape contract (spec 086)
+        scripts = str(PLATFORM_ROOT / "scripts")
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        import shapes
+        return shapes.main(["check"])
     ap = argparse.ArgumentParser(prog="cplat shape", description=__doc__)
     ap.add_argument("--repo", default=".")
     ns = ap.parse_args(argv)

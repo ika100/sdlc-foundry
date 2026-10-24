@@ -7,6 +7,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 ## [Unreleased]
 
 - Fix (085): a broken spec names its file, line and fix and no longer blocks other specs (#129)
+- **Repo gates survive skeleton updates (086).** Gates go in the repo-owned `ci-extra` recipe, which `devbox run ci` and a `ci-extra` CI check run; the update keeps your `.claude/settings.json` permission entries, `.claude/project-notes.md` holds project guidance, and the update report lists every customisation it overwrote (`lost` in `--json`).
+  - **Action for existing repos:** run `/shared:update-service`. Gates you had in `ci` move to `ci-extra` automatically.
 
 ## [4.4.0] — 2026-10-22
 
