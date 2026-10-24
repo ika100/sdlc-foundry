@@ -11,7 +11,7 @@ tasks:
   covers: [AC-090.11, AC-090.14]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t2
   title: Pure weekly report (build, evidence index, private and public rendering)
   files: [scripts/cplat/retro_report.py]
