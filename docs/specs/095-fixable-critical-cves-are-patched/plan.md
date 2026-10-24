@@ -9,12 +9,14 @@ tasks:
     covers: [AC-095.2, AC-095.12, AC-095.13, AC-095.16, AC-095.17]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cplat deps findings, patch and report
     files: [scripts/cplat/deps.py, scripts/cplat/cplat.py]
     covers: [AC-095.4, AC-095.6, AC-095.11, AC-095.12, AC-095.13, AC-095.14, AC-095.15, AC-095.16, AC-095.17]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: Python templates get deps-findings and deps-bump (uv)
     files: [templates/service-python/devbox.json, templates/service-python/scripts/deps.sh, templates/service-python/scripts/deps_pyproject.py, templates/library-python/devbox.json, templates/library-python/scripts/deps.sh, templates/library-python/scripts/deps_pyproject.py]
