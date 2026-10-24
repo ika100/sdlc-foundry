@@ -54,6 +54,9 @@ class World:
         self.sleeps: list[float] = []
         self.mp.setattr(prmod, "wait", self.wait)
         self.mp.setattr(update, "render_baseline", lambda *a, **k: self.seed[1])
+        # The README note depends on the platform checkout having the v<old> tag (a shallow CI clone has none),
+        # so pin it: the follow-up order must not depend on how the platform was checked out.
+        self.mp.setattr(update, "_readme_changed", lambda *a, **k: False)
 
     # ---- building the fleet ----
     def add(self, slug, version=OLD, *, platform=True, src=None, archived=False, fork=False, mutate=None, stamp=True,
