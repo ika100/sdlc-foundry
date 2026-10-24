@@ -16,30 +16,35 @@ tasks:
   covers: [AC-088.4, AC-088.8, AC-088.11, AC-088.12]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t3
   title: auto-filed triage label
   files: [scripts/cplat/triage.py]
   covers: [AC-088.10]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t4
   title: ship escalate files cause platform and coerces unknown causes
   files: [scripts/cplat/ship.py]
   covers: [AC-088.1, AC-088.2, AC-088.3, AC-088.9, AC-088.11, AC-088.12, AC-088.13, AC-088.14]
   parallel_safe: true
   depends_on: [t1]
+  done: true
 - id: t5
   title: cplat crash hook files inside a recorded run
   files: [scripts/cplat/cplat.py]
   covers: [AC-088.4]
   parallel_safe: true
   depends_on: [t1, t2]
+  done: true
 - id: t6
   title: ship command text and docs for auto-filed issues
   files: [plugins/svc/commands/ship.md, docs/CHANGELOG.md, docs/unattended-delivery.md]
   covers: [AC-088.1]
   parallel_safe: true
   depends_on: []
+  done: true
 ---
 
 The contract for every task is [design.md](design.md). ADR: [033](../../adr/033-auto-filed-issues-with-signatures.md).

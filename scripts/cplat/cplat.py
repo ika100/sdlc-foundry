@@ -59,6 +59,24 @@ COMMANDS = {
 }
 
 
+_REPORT_HINT = ("  This looks like a platform bug. Run `/shared:report-issue` (or `cplat feedback --title ...`) to file it; "
+                "nothing is sent without your OK.")
+
+
+def _file_crash(argv: list[str], exc: Exception) -> list[str]:
+    """Spec 088: inside a recorded run the crash is filed or +1'd at once; otherwise (or if the hook fails) the hint."""
+    try:
+        import autoissue   # lazily: a broken import must not stop cplat from starting
+        import runs
+        cwd = Path.cwd()
+        rid = runs.current(cwd)
+        if rid:
+            return autoissue.file_crash(argv, exc, rid, cwd).lines
+    except Exception:  # noqa: BLE001  (the hook never changes a crash's exit code)
+        pass
+    return [_REPORT_HINT]
+
+
 def main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help") or argv[0] not in COMMANDS:
         print(__doc__)
@@ -73,8 +91,8 @@ def main(argv: list[str]) -> int:
         return 1
     except Exception as e:  # noqa: BLE001  (an unexpected crash is a platform defect, not a user error)
         print(f"ERROR: unexpected failure in `cplat {argv[0]}`: {type(e).__name__}: {e}", file=sys.stderr)
-        print("  This looks like a platform bug. Run `/shared:report-issue` (or `cplat feedback --title ...`) to file it; "
-              "nothing is sent without your OK.", file=sys.stderr)
+        for line in _file_crash(argv, e):
+            print(line, file=sys.stderr)
         if os.environ.get("CPLAT_DEBUG"):
             raise
         return 70
