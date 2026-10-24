@@ -43,6 +43,7 @@ tasks:
     covers: [AC-086.12, AC-086.13]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: update-service renders a baseline, moves gates into ci-extra, merges settings and reports what was lost
     files: [scripts/cplat/update.py]
