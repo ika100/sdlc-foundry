@@ -121,7 +121,7 @@ def test_since_widens_and_narrows_the_window():
     recs = dataset() + [dataset()[0]]
     assert row(agg(recs), "svc:coder")["runs"] == 2
     assert row(agg(recs, since_days=90), "svc:coder")["runs"] == 3
-    assert agg(recs, since_days=1)["rows"] == []
+    assert [(r["agent"], r["runs"]) for r in agg(recs, since_days=1)["rows"]] == [("svc:architect", 2)]   # a3 and a4 only
 
 
 def test_incomplete_runs_are_counted_in_the_row():

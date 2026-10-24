@@ -425,6 +425,8 @@ def test_the_prompt_records_each_reviewer_pass():
 # ---------------- AC-089.7 refused acceptance-test diffs ----------------
 
 def go_test_repo(repo):
+    sp = repo / "docs" / "specs" / SPEC_ID / "spec.md"       # test-diff guards the tests of a spec being built
+    sp.write_text(sp.read_text().replace("status: approved", "status: building"))
     (repo / "pkg").mkdir()
     (repo / "pkg" / "x_test.go").write_text("package pkg\n// AC-007.1\nfunc TestA() { want(1) }\n")
     commit(repo, "red")
