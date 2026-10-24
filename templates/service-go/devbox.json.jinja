@@ -13,8 +13,9 @@
   "shell": {
     "scripts": {
       "dev":          "go run ./cmd/{{ project_name }}",
-      "test":         "go test -race -cover ./...",
-      "test-fast":    "go test ./...",
+      "test":         "SMOKE_BASE_URL= go test -race -cover ./...",
+      "test-fast":    "SMOKE_BASE_URL= go test ./...",
+      "smoke":        "bash scripts/smoke.sh",
       "spec-check":   "bash scripts/spec-check.sh",
       "lint":         "golangci-lint run",
       "lint-fix":     "gofmt -w . && goimports -w . && golangci-lint run --fix",

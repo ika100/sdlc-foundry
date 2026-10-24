@@ -47,6 +47,7 @@ tasks:
   covers: [AC-091.2, AC-091.3, AC-091.4]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t7
   title: web-nextjs standard Playwright scaffold and browser smoke recipe
   files: [templates/web-nextjs/copier.yml, templates/web-nextjs/devbox.json.jinja, templates/web-nextjs/package.json.jinja,
