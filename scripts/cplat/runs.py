@@ -8,6 +8,7 @@ Public API for the callers (ship, pr wait, headless, doctor) and for later specs
   flush(budget=, strict=) -> FlushResult                             buffer (and pending filings) -> store
   store_status() / buffered_count() / pending_count()                for `cplat doctor`
   attach_point(repo) / link_parent(run_id)                           nested runs and headless parents
+  current(repo_dir) -> run_id | None                                 the recorded run a command in repo_dir runs inside
   init(slug)                                                         create the private store repo
 
 A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (owner/name), reached through
@@ -298,6 +299,32 @@ def attach_point(repo_dir: Path) -> str | None:
         return None
 
 
+def current(repo_dir: Path) -> str | None:
+    """The recorded run a command in repo_dir runs inside (spec 088), or None.
+
+    Candidates in order: the repo's ship run, the `cplat runs begin` pointer, $CPLAT_RUN_PARENT. The first one with an
+    active record wins. Never raises."""
+    try:
+        candidates: list[str | None] = [attach_point(repo_dir)]
+        try:
+            pointer = _read_pointer(_pointer(Path(repo_dir)))
+            candidates.append((pointer or {}).get("run_id"))
+        except Exception:  # noqa: BLE001
+            pass
+        candidates.append(os.environ.get("CPLAT_RUN_PARENT"))
+        for rid in candidates:
+            if rid and active(rid) is not None:
+                return rid
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _suppressed_note(url: str | None) -> str | None:
+    m = re.search(r"(\d+)\D*$", url or "")
+    return f"suppressed by #{m.group(1)}" if m else None
+
+
 def mutate(run_id: str | None, change: Callable[[dict], None]) -> str:
     """Apply `change` to the active record under the lock: "ok" | "none" (no run_id, unknown or finished: no-op) |
     "error" (change or write raised; nothing written). Never raises."""
@@ -435,6 +462,9 @@ def filed(run_id: str | None, signature: str, url: str | None, result: str, *, f
 
     def change(rec: dict) -> None:
         entry = {"signature": signature, "url": url, "result": result}
+        # 087's own contract has no note; a filer (088) asks for it by naming itself
+        if result == "suppressed" and filer and _suppressed_note(url):
+            entry["note"] = _suppressed_note(url)
         for i, f in enumerate(rec["filed"]):
             if f.get("signature") == signature:
                 rec["filed"][i] = entry
@@ -572,11 +602,15 @@ def _retry_filings(deadline: float, budget: float) -> None:
                 for f in rec["filed"]:
                     if f.get("signature") == entry["signature"]:
                         f.update({"url": url, "result": result})
+                        if result == "suppressed" and _suppressed_note(url):
+                            f["note"] = _suppressed_note(url)
                 _write_active(rec)
             else:
                 follow = _scrub({"schema": SCHEMA, "followup": "filed", "run_id": entry["run_id"], "signature": entry["signature"],
                                  "url": url, "result": result, "at": _iso(utcnow())})
                 follow["url"] = url
+                if result == "suppressed" and _suppressed_note(url):
+                    follow["note"] = _suppressed_note(url)
                 _buffer_add(follow)
 
 

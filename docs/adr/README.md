@@ -38,3 +38,5 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [030](030-image-tags-are-the-full-commit-sha.md) | Image tags are the full commit sha (`sha-<40>`); `sha-<7>` is accepted for one release |
 | [031](031-repo-owned-companions-for-skeleton-files.md) | Skeleton files stay platform-owned; repo additions go in repo-owned companions (`ci-extra`, own permissions, own workflows, project notes) that updates never touch |
 | [032](032-private-run-store.md) | Every run is recorded in a private run store: one file per run, one commit per flush, buffered locally when unreachable |
+| [033](033-auto-filed-issues-with-signatures.md) | Failures become auto-filed issues, deduplicated by one `Signature: <kind>:<16 hex>` body line; one module (`autoissue`) for platform failures, smoke failures and alerts |
+| [034](034-fixable-dependency-findings-are-patched-by-the-run.md) | Fixable dependency findings are patched by the run: deps recipes per shape, cplat deps patch, 2 rounds, exact revert |

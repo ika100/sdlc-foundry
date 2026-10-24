@@ -15,7 +15,11 @@ unattended: /svc:ship <NNN>
 you:        check dev  →  /gitops:promote <svc> dev staging   (reviewed PR, as before)
 ```
 
-The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict after its re-plan (a task is re-planned once, a build at most 3 times), a changed acceptance test, a CRITICAL security finding, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
+The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict after its re-plan (a task is re-planned once, a build at most 3 times), a changed acceptance test, a security finding with no fix released, or a bump that breaks a gate, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
+
+### Dependency patches
+
+When the security gate is red because of dependencies with a released fix, the run bumps them itself (`cplat deps patch`, spec 095), re-runs the gates and commits the bump, or reverts it exactly. The PR body lists each bump under "Dependency patches" (a major bump is marked) and the run record has a `patches` section. At most 2 rounds; a finding without a fix, or a bump that breaks a gate, escalates.
 
 ## Run it without a terminal session
 
@@ -79,6 +83,17 @@ A build record also says how each agent did (spec 089), per agent, shape and mod
 - **`few runs`** marks a row with fewer than 5 runs: do not read a trend into it.
 - **Releases:** `--by-version` splits every row by platform version, versions side by side, so you can compare before and after a release.
 - **Incomplete:** a recording call that failed or was malformed never stops the build; it marks the run `incomplete` (counted in the row) and the report still shows what was recorded.
+
+## Auto-filed platform issues
+
+When a run stops because the platform itself misbehaves, the failure is filed as an issue in `ika100/sdlc-foundry` (spec 088, [ADR-033](adr/033-auto-filed-issues-with-signatures.md)).
+
+- **What is filed:** an escalation with `--cause platform`, and a crash (stack trace) of any `cplat` command inside a recorded run. **Never filed:** causes `code`, `decision`, `environment` and `unknown`, and crashes outside a recorded run (those print the `/shared:report-issue` hint).
+- **One issue per failure:** the body has a `Signature:` line. A repeat adds a +1 comment (occurrence number, date, platform version, shape, run id) to the oldest open issue. After the issue was closed, a repeat files a new issue that says `Seen again after #<n> was closed`, unless the closed one is labelled `wontfix`: then nothing is filed and the run record notes `suppressed by #<n>`.
+- **Redaction:** tokens, passwords, e-mail addresses and home paths are removed, and your repo, spec and branch are replaced by `<repo>`, `<spec>` and `<branch>`. The issue names the run id but never links the private run store.
+- **Cap:** at most 10 new issues per 24 h per machine. +1 comments are not capped.
+- **Offline:** if filing fails (`gh` missing or not logged in, no network) or the cap is reached, the escalation still completes with the same exit status, prints `not filed: <reason>`, and the filing is retried at the next `cplat runs flush`.
+- **Off switch:** `CPLAT_AUTO_ISSUES=off` sends nothing and prints the draft instead. `CPLAT_FEEDBACK_REPO=<owner/name>` files in another repo. Run `cplat triage setup-labels` once so the `auto-filed` label exists.
 
 ## Safety on the free plan
 

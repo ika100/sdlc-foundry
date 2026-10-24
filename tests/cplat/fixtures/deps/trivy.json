@@ -1,0 +1,9 @@
+{"SchemaVersion": 2, "Results": [
+  {"Target": "pom.xml", "Class": "lang-pkgs", "Type": "pom", "Vulnerabilities": [
+    {"PkgName": "org.apache.commons:commons-text", "InstalledVersion": "1.9", "FixedVersion": "1.10.0", "VulnerabilityID": "CVE-2022-42889", "Severity": "CRITICAL"},
+    {"PkgName": "org.apache.logging.log4j:log4j-core", "InstalledVersion": "2.14.1", "FixedVersion": "2.17.1, 2.12.4, 2.3.2", "VulnerabilityID": "CVE-2021-44228", "Severity": "HIGH"},
+    {"PkgName": "com.acme:medium", "InstalledVersion": "1.0", "FixedVersion": "1.1", "VulnerabilityID": "CVE-2020-0001", "Severity": "MEDIUM"},
+    {"PkgName": "com.acme:nofix", "InstalledVersion": "3.1", "VulnerabilityID": "CVE-2020-0002", "Severity": "HIGH"},
+    {"PkgName": "com.acme:major", "InstalledVersion": "1.4.0", "FixedVersion": "2.0.1", "VulnerabilityID": "CVE-2020-0003", "Severity": "CRITICAL"}]},
+  {"Target": "clean", "Class": "lang-pkgs", "Type": "pom"}
+]}

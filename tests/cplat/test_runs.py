@@ -703,13 +703,14 @@ def test_a_missing_or_unknown_cause_is_stored_as_unknown(repo, store):
     assert causes == ["unknown", "unknown"]
 
 
-def test_the_cause_must_be_one_of_the_known_ones(repo):
-    """AC-087.16: `--cause` only accepts platform, code, decision, environment, unknown."""
+def test_the_cause_must_be_one_of_the_known_ones(repo, store, capsys):
+    """AC-087.16 AC-088.3: the known causes are stored as given; any other is stored as `unknown` with a message (no argparse error)."""
     ship.start(repo, "7", True)
-    with pytest.raises(SystemExit):
-        ship.main(["--repo", str(repo), "escalate", "why", "--cause", "bogus"])
-    assert ship.load_state(repo).get("escalated") is None
-    for cause in ("platform", "code", "decision", "environment", "unknown"):
+    assert ship.main(["--repo", str(repo), "escalate", "why", "--cause", "bogus"]) == 0
+    out = capsys.readouterr().out
+    assert ship.load_state(repo)["cause"] == "unknown" and ship.load_state(repo)["escalated"] == "why"
+    assert "bogus" in out and all(c in out for c in ("platform", "code", "decision", "environment"))
+    for cause in ("code", "decision", "environment", "unknown"):
         assert ship.main(["--repo", str(repo), "escalate", "why", "--cause", cause]) == 0
         assert ship.load_state(repo)["cause"] == cause
 
