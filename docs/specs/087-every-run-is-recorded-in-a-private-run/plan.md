@@ -15,6 +15,7 @@ tasks:
   covers: [AC-087.8, AC-087.9, AC-087.20]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t3
   title: Report aggregation and rendering
   files: [scripts/cplat/runs_report.py]
