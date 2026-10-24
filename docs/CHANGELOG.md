@@ -12,6 +12,13 @@ Format: each section lists changes for a tagged release. Plugin and template ver
   - At most 10 new issues per 24 h per machine; filings that fail or hit the cap stay pending and are retried at `cplat runs flush`.
   - `CPLAT_AUTO_ISSUES=off` sends nothing and prints the draft; `CPLAT_FEEDBACK_REPO=<owner/name>` files elsewhere.
   - **Action:** run `cplat triage setup-labels` once to create `auto-filed`.
+- **Feature (092): firing alerts become issues in the owning repo.** [ADR-035](adr/035-alert-poll-on-the-gitops-runner.md)
+  - `.github/workflows/alerts.yml` in a gitops-app runs `cplat alerts poll` every 15 minutes at the repo's pinned platform version, only on the self-hosted runner (`CI_RUNNER`); `gh workflow run alerts.yml -f dry_run=true` shows what would happen.
+  - Rules go under the `observability` addon in app.yaml (`rules`, `alerts`, `queryURL`, `querySecret`, `alertmanagerURL`; `devbox run quality` validates them); `ServiceDown` is built in.
+  - Issues follow the 088 convention with an `env:<env>` label in the service's `repo` (else the gitops repo): a comment when it fires again after a resolve, a comment and close when it resolves while untriaged, a reopen within 7 days, nothing after `wontfix`.
+  - At most 10 new issues per poll; the rest become one summary issue.
+  - Three failed polls in a row file an "alert poll is failing" issue.
+  - **Action:** set the secret `ALERTS_TOKEN` (fine-grained, Issues: read and write on the service repos); `cplat doctor` warns when it is missing. Run `/shared:update-service` in gitops-app repos.
 - **Feat (089): agent quality is measured per agent, shape and model.**
   - A build record gets `agents` and `replans` sections (fix rounds, red CI, review findings, refused test diffs, out-of-plan files, merge conflicts, tester misses), recorded by `cplat ship land`, `cplat spec test-diff` and the new `cplat runs agent` calls in the build prompts.
   - `cplat runs report --agents [--by-version] [--agent NAME] [--shape SHAPE] [--json]` ranks agents by rework and cites an example run for the top causes. A metric a run never reached shows as `n/a`, not 0.
