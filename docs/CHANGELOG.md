@@ -6,6 +6,9 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feature (096): platform updates roll out to every repo.** `cplat fleet update` / `/shared:fleet` brings every stamped platform repo of your account to the installed release, one repo at a time, one PR each.
+  - A PR is squash-merged only when the update is routine: nothing the repo added was overwritten (spec 086's `lost` is empty), the major version is unchanged, there is no conflict and CI is green. Every other PR stays open with the label `platform-update: needs review` and a comment giving the reason.
+  - `--dry-run` shows what would happen, `--only <owner/name>` limits the run, and each run leaves a `fleet` record in the run store.
 - Fix (085): a broken spec names its file, line and fix and no longer blocks other specs (#129)
 - **Repo gates survive skeleton updates (086).** Gates go in the repo-owned `ci-extra` recipe, which `devbox run ci` and a `ci-extra` CI check run; the update keeps your `.claude/settings.json` permission entries, `.claude/project-notes.md` holds project guidance, and the update report lists every customisation it overwrote (`lost` in `--json`).
   - **Action for existing repos:** run `/shared:update-service`. Gates you had in `ci` move to `ci-extra` automatically.
