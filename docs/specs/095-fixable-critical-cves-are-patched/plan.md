@@ -51,6 +51,7 @@ tasks:
     covers: [AC-095.3, AC-095.16]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: build, ship and security prose call cplat deps
     files: [plugins/svc/commands/build.md, plugins/svc/commands/ship.md, plugins/shared/agents/security.md]
