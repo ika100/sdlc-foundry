@@ -30,6 +30,7 @@ tasks:
     covers: [AC-095.2, AC-095.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: service-go template gets deps-findings and deps-bump (go modules)
     files: [templates/service-go/devbox.json.jinja, templates/service-go/scripts/deps.sh]
