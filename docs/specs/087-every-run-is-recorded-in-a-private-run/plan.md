@@ -9,6 +9,7 @@ tasks:
   covers: [AC-087.5, AC-087.6, AC-087.7, AC-087.8, AC-087.9, AC-087.10, AC-087.15, AC-087.19, AC-087.20, AC-087.21, AC-087.22, AC-087.23]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t2
   title: GitHub run store transport over gh api
   files: [scripts/cplat/runs_store.py]
