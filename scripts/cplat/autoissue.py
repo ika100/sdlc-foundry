@@ -240,10 +240,14 @@ class Tracker(Protocol):
 
 # ---------------- GitHub ----------------
 
-def gh(args: list[str], *, input: str | None = None, timeout: float = 10.0) -> tuple[int, str, str]:
-    """(exit code, stdout, stderr). Never raises: a timeout is 124, a missing binary 127. Tests replace this."""
+def gh(args: list[str], *, input: str | None = None, timeout: float = 10.0, token: str | None = None) -> tuple[int, str, str]:
+    """(exit code, stdout, stderr). Never raises: a timeout is 124, a missing binary 127. Tests replace this.
+    With `token` the child env gets GH_TOKEN=token and no GITHUB_TOKEN (spec 092 writes other repos with it)."""
+    kw: dict = {}
+    if token:
+        kw["env"] = {**{k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}, "GH_TOKEN": token}
     try:
-        p = subprocess.run(["gh", *args], input=input, capture_output=True, text=True, timeout=timeout, check=False)
+        p = subprocess.run(["gh", *args], input=input, capture_output=True, text=True, timeout=timeout, check=False, **kw)
         return p.returncode, p.stdout, p.stderr
     except subprocess.TimeoutExpired:
         return 124, "", "timeout"
@@ -300,16 +304,25 @@ def _has_signature(body: str, sig: str) -> bool:
 
 
 class GhTracker:
-    """The Tracker over `gh api` and `gh issue`."""
+    """The Tracker over `gh api` and `gh issue`. `token` (spec 092) makes every call use that GH_TOKEN; `open_issues`,
+    `close`, `reopen` and `ensure_labels` are used by the alert poll of spec 092 only."""
+
+    def __init__(self, token: str | None = None):
+        self.token = token
+
+    def _gh(self, args: list[str], **kw) -> tuple[int, str, str]:
+        if self.token:               # only then, so 088's fake `gh` functions (no `token` parameter) keep working
+            kw["token"] = self.token
+        return gh(args, **kw)
 
     def find(self, repo: str, signature: str, timeout: float) -> list[Issue]:
-        code, out, err = gh(["api", "--paginate", f"repos/{repo}/issues?labels=auto-filed&state=open&per_page=100"], timeout=timeout)
+        code, out, err = self._gh(["api", "--paginate", f"repos/{repo}/issues?labels=auto-filed&state=open&per_page=100"], timeout=timeout)
         _check(code, err)
         found = {i.number: i for i in map(_to_issue, (x for x in _items(out) if "pull_request" not in x)) if _has_signature(i.body, signature)}
         if found:
             return list(found.values())          # an open duplicate decides; closed ones do not matter
         query = f'repo:{repo} is:issue in:body "Signature: {signature}"'
-        code, out, err = gh(["api", "-X", "GET", "search/issues", "-f", f"q={query}", "-f", "per_page=100"], timeout=timeout)
+        code, out, err = self._gh(["api", "-X", "GET", "search/issues", "-f", f"q={query}", "-f", "per_page=100"], timeout=timeout)
         _check(code, err)
         for item in _items(out):
             if "pull_request" not in item:
@@ -319,7 +332,7 @@ class GhTracker:
         return list(found.values())
 
     def comments(self, repo: str, number: int, timeout: float) -> list[str]:
-        code, out, err = gh(["api", "--paginate", f"repos/{repo}/issues/{number}/comments?per_page=100"], timeout=timeout)
+        code, out, err = self._gh(["api", "--paginate", f"repos/{repo}/issues/{number}/comments?per_page=100"], timeout=timeout)
         _check(code, err)
         return [str(c.get("body") or "") for c in _items(out)]
 
@@ -327,15 +340,15 @@ class GhTracker:
         args = ["issue", "create", "-R", repo, "--title", title, "--body-file", "-"]
         for label in labels:
             args += ["--label", label]
-        code, out, err = gh(args, input=body, timeout=timeout)
+        code, out, err = self._gh(args, input=body, timeout=timeout)
         if code != 0 and "not found" in err.lower():
             self._create_labels(repo, labels, timeout)
-            code, out, err = gh(args, input=body, timeout=timeout)
+            code, out, err = self._gh(args, input=body, timeout=timeout)
         _check(code, err)
         return self._last_line(out)
 
     def comment(self, repo: str, number: int, body: str, timeout: float) -> str:
-        code, out, err = gh(["issue", "comment", str(number), "-R", repo, "--body-file", "-"], input=body, timeout=timeout)
+        code, out, err = self._gh(["issue", "comment", str(number), "-R", repo, "--body-file", "-"], input=body, timeout=timeout)
         _check(code, err)
         return self._last_line(out)
 
@@ -346,13 +359,32 @@ class GhTracker:
             raise TrackerError("GitHub answered without a URL")
         return lines[-1]
 
-    @staticmethod
-    def _create_labels(repo: str, labels: list[str], timeout: float) -> None:
+    def _create_labels(self, repo: str, labels: list[str], timeout: float) -> None:
         known = {**triage.LABELS, **EXTRA_LABELS}
         for label in labels:
             if label in known:
                 color, description = known[label]
-                gh(["label", "create", label, "-R", repo, "--color", color, "--description", description, "--force"], timeout=timeout)
+                self._gh(["label", "create", label, "-R", repo, "--color", color, "--description", description, "--force"], timeout=timeout)
+
+    def open_issues(self, repo: str, labels: list[str], timeout: float) -> list[Issue]:
+        code, out, err = self._gh(["api", "--paginate", f"repos/{repo}/issues?labels={','.join(labels)}&state=open&per_page=100"], timeout=timeout)
+        _check(code, err)
+        return [_to_issue(x) for x in _items(out) if "pull_request" not in x]
+
+    def close(self, repo: str, number: int, timeout: float) -> None:
+        code, _, err = self._gh(["issue", "close", str(number), "-R", repo, "--reason", "completed"], timeout=timeout)
+        _check(code, err)
+
+    def reopen(self, repo: str, number: int, timeout: float) -> None:
+        code, _, err = self._gh(["issue", "reopen", str(number), "-R", repo], timeout=timeout)
+        _check(code, err)
+
+    def ensure_labels(self, repo: str, labels: dict[str, tuple[str, str]], timeout: float) -> None:
+        for name, (color, description) in labels.items():
+            code, _, err = self._gh(["label", "create", name, "-R", repo, "--color", color, "--description", description], timeout=timeout)
+            if code != 0 and "already exists" in err.lower():
+                continue
+            _check(code, err)
 
 
 def tracker() -> Tracker:
