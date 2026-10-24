@@ -1,0 +1,13 @@
+{"dependencies": [
+  {"name": "requests", "version": "2.31.0", "vulns": []},
+  {"name": "urllib3", "version": "1.26.5", "vulns": [
+    {"id": "GHSA-aaaa-1111-bbbb", "fix_versions": ["1.26.18", "2.0.7"], "aliases": ["CVE-2023-43804"], "description": "cookie leak"},
+    {"id": "PYSEC-2024-2", "fix_versions": ["1.26.19"], "aliases": [], "description": "proxy header"}]},
+  {"name": "idna", "version": "3.6", "vulns": [
+    {"id": "PYSEC-2024-60", "fix_versions": ["3.7"], "aliases": ["CVE-2024-3651"], "description": "dos"}]},
+  {"name": "flask", "version": "1.0.2", "vulns": [
+    {"id": "GHSA-flask-0001", "fix_versions": ["2.0.0"], "aliases": [], "description": "major only"}]},
+  {"name": "certifi", "version": "2024.1.1", "vulns": [
+    {"id": "PYSEC-2099-1", "fix_versions": [], "aliases": [], "description": "no fix"}]},
+  {"name": "myproj", "skip_reason": "Dependency not found on PyPI and could not be audited: myproj"}
+]}

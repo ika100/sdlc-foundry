@@ -25,6 +25,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py pr wait <number|url> [-R owner/repo] [--merge]   wait for a PR's CI, heal stuck or transient runs, merge on green (spec 079)
   cplat.py headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume (spec 070)
   cplat.py runs init|flush|report|begin|phase|end|agent ...   private run records and agent metrics (specs 087, 089)
+  cplat.py deps findings|patch|report ...   patch fixable dependency findings of a red security gate (spec 095, ADR-034)
   cplat.py fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release (spec 096)
   cplat.py adopt --type SHAPE [--data KEY=VALUE]   bring an existing repo onto the platform template (spec 071)
 """
@@ -57,6 +58,7 @@ COMMANDS = {
     "headless": "headless",
     "adopt": "adopt",
     "runs": "runs",
+    "deps": "deps",
     "fleet": "fleet",
 }
 
