@@ -59,8 +59,30 @@ def write_plan(repo, text):
     plan_path(repo).write_text(text)
 
 
+def _flow_tasks(text):
+    """Re-render the `tasks:` list in the one-line flow form of PLAN (`spec task-done` rewrites it as block YAML)."""
+    import yaml
+    _, front, body = text.split("---\n", 2)
+    meta = yaml.safe_load(front)
+    head = front[: front.index("tasks:")]
+    keys = ("id", "title", "repo", "files", "covers", "parallel_safe", "depends_on", "done")
+
+    def val(v):
+        if isinstance(v, list):
+            return "[" + ", ".join(str(x) for x in v) + "]"
+        return str(v).lower() if isinstance(v, bool) else str(v)
+
+    rows = []
+    for t in meta["tasks"]:
+        order = [k for k in keys if k in t] + [k for k in t if k not in keys]
+        rows.append("  - {" + ", ".join(f"{k}: {val(t[k])}" for k in order) + "}")
+    return "---\n" + head + "tasks:\n" + "\n".join(rows) + "\n---\n" + body
+
+
 def edit_plan(repo, old, new):
     text = plan_path(repo).read_text()
+    if old not in text:
+        text = _flow_tasks(text)
     assert old in text
     write_plan(repo, text.replace(old, new))
 
@@ -298,7 +320,7 @@ def test_the_amended_plan_is_checked_and_committed_with_the_conflict_in_the_mess
     assert "Replan-Task: t2 with=t1 branch=br-t2 paths=a.py" in msg
     assert "Signed-off-by:" in msg
     assert out.splitlines()[0] == f"RE-PLANNED t2 in {sha[:7]} (re-plans: 1 of 3)" or out.startswith(f"RE-PLANNED t2 in {sha[:8]}") or out.startswith("RE-PLANNED t2 in ")
-    assert cplat.main(["spec", "check", "007", "--repo", str(world)]) == 0 or spec.check(spec.read(world / SPEC_DIR)) == []
+    assert cplat.main(["spec", "--repo", str(world), "check", "007"]) == 0 or spec.check(spec.read(world / SPEC_DIR)) == []
     assert jbuild(capsys, world, "state")["pending"] == []
 
 
