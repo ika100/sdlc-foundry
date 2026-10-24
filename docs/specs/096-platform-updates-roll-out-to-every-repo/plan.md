@@ -23,7 +23,7 @@ tasks:
   covers: [AC-096.1]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 ---
 
 The contract for every task is [design.md](design.md). No ADR. Acceptance tests live in `tests/cplat/test_fleet.py`
