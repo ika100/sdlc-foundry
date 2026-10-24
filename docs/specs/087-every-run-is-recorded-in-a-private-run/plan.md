@@ -22,6 +22,7 @@ tasks:
   covers: [AC-087.14, AC-087.17, AC-087.18]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t4
   title: Ship and pr wait record their runs
   files: [scripts/cplat/ship.py, scripts/cplat/pr.py]
