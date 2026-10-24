@@ -18,6 +18,7 @@ Common agents and commands used by every shape's plugin. Pre-approves `gh repo c
 | `/shared:new-app <app.yml> [--resume] [--public] [--no-github]` | Creates a whole product: the gitops-app repo plus every component repo from a manifest, then opens one pull request that composes the deployable ones. A failure midway reports what exists; `--resume` continues. |
 | `/shared:triage [<issue-number> \| --new \| --waiting]` | Reads new GitHub issues, discusses gaps with you (and, with your OK, the reporter), and routes each to a spec, `/svc:quick-task`, `/svc:fix-bug` or a reply. Labels and comments only after you confirm; never closes issues. |
 | `/shared:update-service [--ref <tag>] [--data k=v]` | Re-applies the template skeleton to an existing repo on a review branch (project-owned files untouched). |
+| `/shared:fleet [--only owner/name] [--ref <tag>] [--dry-run]` | Brings every repo built from the platform to the installed release: one PR per repo, squash-merged on green CI only when routine, else labelled `platform-update: needs review` with the reason (spec 096). |
 
 ## `cplat` on the PATH (bin/)
 
