@@ -53,12 +53,14 @@ tasks:
     covers: [AC-095.4, AC-095.6, AC-095.12, AC-095.13, AC-095.15, AC-095.16, AC-095.17]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: Docs for automatic dependency patches
     files: [docs/CHANGELOG.md, docs/unattended-delivery.md, docs/adr/README.md, plugins/svc/README.md, plugins/shared/README.md]
     covers: []
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 The contract for every task is [design.md](design.md). ADR: [033](../../adr/033-fixable-dependency-findings-are-patched-by-the-run.md).
