@@ -16,7 +16,7 @@ tasks:
   covers: [AC-096.1, AC-096.2, AC-096.9, AC-096.10, AC-096.11, AC-096.12, AC-096.13, AC-096.14, AC-096.17]
   parallel_safe: true
   depends_on: [t1]
-  done: false
+  done: true
 - id: t3
   title: Register the command, /shared:fleet and docs
   files: [scripts/cplat/cplat.py, plugins/shared/commands/fleet.md, plugins/shared/README.md, docs/CHANGELOG.md]
