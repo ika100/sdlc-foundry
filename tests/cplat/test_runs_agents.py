@@ -177,7 +177,7 @@ def conflicted(repo):
     git(repo, "checkout", "-q", "main")
     (repo / "a.py").write_text("two\n")
     commit(repo, "t1")
-    subprocess.run(["git", "merge", "task-t3"], cwd=repo, capture_output=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "merge", "task-t3"], cwd=repo, capture_output=True)   # CI has no git identity
 
 
 def test_a_merge_conflict_is_one_architect_event_with_its_evidence(repo, store):
