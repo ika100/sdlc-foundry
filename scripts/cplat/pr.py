@@ -12,6 +12,7 @@ import argparse
 import json
 from pathlib import Path
 
+import runs
 import ship
 from core import PlatformError, run
 
@@ -24,14 +25,31 @@ def url_of(pr: str, slug: str | None) -> str:
     return pr.lstrip("#")
 
 
-def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float) -> tuple[bool, list[str]]:
+def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float,
+         slug: str | None = None) -> tuple[bool, list[str]]:
+    """Spec 087: counts toward the repo's unfinished ship run, else records its own `pr-wait` run."""
+    rid = runs.attach_point(repo)
+    own = None if rid else runs.start("pr-wait", repo=slug or runs.repo_slug(repo))
+    try:
+        ok, lines = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own)
+    except BaseException:
+        if own:
+            runs.finish(own, "failed")
+        raise
+    if own:
+        runs.finish(own, "done" if ok else "failed")
+    return ok, lines
+
+
+def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float,
+          run_id: str | None) -> tuple[bool, list[str]]:
     view = json.loads(ship.gh(["pr", "view", pr, "--json", "state,url"], cwd=repo) or "{}")
     url = view.get("url") or pr
     if view.get("state") == "MERGED":
         return True, [f"{url} is already merged"]
     if view.get("state") == "CLOSED":
         raise PlatformError(f"{url} was closed without merging")
-    status, cs, failed = ship.wait_checks(ship.CheckWatch(repo, url, queue_timeout), timeout, interval)
+    status, cs, failed = ship.wait_checks(ship.CheckWatch(repo, url, queue_timeout, run_id), timeout, interval)
     if status == "red":
         return False, ship.red(repo, url, cs, failed)
     lines = [f"GREEN: all {len(cs)} check(s) passed on {url}"]
@@ -56,6 +74,6 @@ def main(argv: list[str]) -> int:
     p.add_argument("--queue-timeout", type=float, default=ship.QUEUE_TIMEOUT)
     p.add_argument("--repo", default=".")
     ns = ap.parse_args(argv)
-    ok, lines = wait(Path(ns.repo).resolve(), url_of(ns.pr, ns.slug), ns.merge, ns.timeout, ns.interval, ns.queue_timeout)
+    ok, lines = wait(Path(ns.repo).resolve(), url_of(ns.pr, ns.slug), ns.merge, ns.timeout, ns.interval, ns.queue_timeout, ns.slug)
     print("\n".join(lines))
     return 0 if ok else 1

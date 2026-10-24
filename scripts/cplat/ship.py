@@ -31,6 +31,7 @@ import time
 from pathlib import Path
 
 import core
+import runs
 import spec as specmod
 from core import PlatformError, run
 
@@ -86,7 +87,42 @@ def load_state(repo: Path) -> dict | None:
         return None
 
 
+def _utc_iso(local_iso: str | None) -> str | None:
+    try:
+        return dt.datetime.fromisoformat(local_iso).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError):
+        return None
+
+
+def _ensure_run(repo: Path, st: dict) -> str | None:
+    """The state's run_id; a run without one (or whose active record is gone and not yet recorded) is (re)started."""
+    rid = st.get("run_id")
+    if rid and (st.get("recorded") or runs.active(rid) is not None):
+        return rid
+    st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st.get("spec"), run_id=rid,
+                              started_at=_utc_iso(st.get("started")))
+    return st["run_id"]
+
+
+def _record(repo: Path, st: dict) -> None:
+    """Spec 087: phases and the one end record of a ship run. Never raises."""
+    rid = _ensure_run(repo, st)
+    if not rid or st.get("recorded"):
+        return
+    runs.phase(rid, st["phase"])
+    if st.get("escalated"):
+        runs.finish(rid, "escalated", escalation={"reason": st["escalated"], "cause": st.get("cause") or "unknown"})
+        st["recorded"] = True
+    elif st["phase"] == "done":
+        runs.finish(rid, "done")
+        st["recorded"] = True
+
+
 def save_state(repo: Path, state: dict) -> None:
+    try:
+        _record(repo, state)
+    except Exception:  # noqa: BLE001  (recording never changes a run)
+        pass
     state["updated"] = dt.datetime.now().isoformat(timespec="seconds")
     state_path(repo).write_text(json.dumps(state, indent=2) + "\n")
 
@@ -131,16 +167,26 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
     sp = specmod.find(repo, ref)
     st = load_state(repo)
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated"):
-        raise PlatformError(f"another ship run is in progress: {st['spec']} (phase {st['phase']})",
-                            hint="finish it, or end it with `cplat ship finish`")
+        if not take_over:
+            raise PlatformError(f"another ship run is in progress: {st['spec']} (phase {st['phase']})",
+                                hint="finish it, or end it with `cplat ship finish`, or take it over: "
+                                     f"cplat ship start {sp.id} --take-over")
+        if not st.get("recorded"):
+            runs.finish(st.get("run_id"), "abandoned")
     if sp.meta.get("tracks"):                  # spec 082: refuse an issue another branch is building
         import claim
         for note in claim.claim(repo, sp.meta["tracks"], f"feature/{sp.id}", take_over=take_over, what=f"ship {sp.id}"):
             say(note)
     if st and st["spec"] == sp.id:
+        if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
+            old = st.get("run_id")
+            st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st["spec"], resumes=old)
+            st["recorded"] = False
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
+        st.pop("cause", None)
         st["blocks"] = 0
         save_state(repo, st)
+        runs.link_parent(st.get("run_id"))
         return st
     if sp.status in {"draft", "superseded"}:
         raise PlatformError(f"{sp.id} is '{sp.status}'; only an approved spec is shipped",
@@ -155,8 +201,9 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
     else:
         phase = "plan"
     st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "blocks": 0, "fix_rounds": 0,
-          "started": dt.datetime.now().isoformat(timespec="seconds")}
+          "started": dt.datetime.now().isoformat(timespec="seconds"), "recorded": False}
     save_state(repo, st)
+    runs.link_parent(st.get("run_id"))
     return st
 
 
@@ -186,9 +233,10 @@ def set_phase(repo: Path, phase: str) -> dict:
     return st
 
 
-def escalate(repo: Path, reason: str) -> dict:
+def escalate(repo: Path, reason: str, cause: str = "unknown") -> dict:
     st = require_state(repo)
     st["escalated"] = reason
+    st["cause"] = cause
     save_state(repo, st)
     try:
         tracks = specmod.find(repo, st["spec"]).meta.get("tracks") or []
@@ -203,6 +251,8 @@ def escalate(repo: Path, reason: str) -> dict:
 def finish(repo: Path) -> Path:
     f = state_path(repo)
     st = require_state(repo)
+    if not st.get("recorded"):
+        runs.finish(st.get("run_id"), "abandoned")
     done = f.with_name(f"cplat-ship-{st['spec']}-{dt.datetime.now():%Y%m%d%H%M%S}.json")
     f.rename(done)
     return done
@@ -288,8 +338,8 @@ class CheckWatch:
     and a stale run (check in progress, run completed) or a stuck one (only queued jobs for `queue_timeout`) is healed
     once; the second time it is an error."""
 
-    def __init__(self, repo: Path, pr: str, queue_timeout: float):
-        self.repo, self.pr, self.queue_timeout = repo, pr, queue_timeout
+    def __init__(self, repo: Path, pr: str, queue_timeout: float, run_id: str | None = None):
+        self.repo, self.pr, self.queue_timeout, self.run_id = repo, pr, queue_timeout, run_id
         self.reported: dict[str, str] = {}
         self.queued_since: dict[tuple[str, str], float] = {}
         self.stale_seen: dict[tuple[str, str], int] = {}
@@ -317,6 +367,7 @@ class CheckWatch:
                 continue
             say(f"  rerun    run {r[1]}: {c['name']} failed on a transient error ({hit.group(0)})")
             gh(["run", "rerun", r[1], "-R", r[0], "--failed"], cwd=self.repo, check=False)
+            runs.rerun(self.run_id, ", ".join(sorted(x["name"] for x in failed if run_of(x) == r)), "transient")
             self.healed[r] = ("transient", now())
         return final
 
@@ -357,6 +408,7 @@ class CheckWatch:
                                         "completed, also after a rerun", hint=f"gh run view {rid} -R {slug}; escalate")
                 say(f"  rerun    run {rid}: {names} in progress, but the run completed (stale)")
                 gh(["run", "rerun", rid, "-R", slug], cwd=self.repo, check=False)
+                runs.rerun(self.run_id, ", ".join(sorted(c["name"] for c in cs)), "stale")
                 self.healed[r] = ("stale", now())
                 self.stale_seen.pop(r, None)
                 continue
@@ -374,6 +426,7 @@ class CheckWatch:
                                     hint="check the ARC listener and runner pods of that scale set; escalate")
             say(f"  rerun    run {rid}: only queued jobs for {int(now() - since)}s (cancel + rerun)")
             cancel_and_rerun(self.repo, slug, rid)
+            runs.rerun(self.run_id, ", ".join(sorted(c["name"] for c in cs)), "stuck")
             self.healed[r] = ("queued", now())
             self.queued_since.pop(r, None)
 
@@ -401,6 +454,7 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
     while True:
         status, cs, failed = watch.poll()
         if status != "pending":
+            runs.ci_round(watch.run_id)
             return status, cs, failed
         waited = now() - begin
         if not cs and waited > NO_CHECKS_GRACE:
@@ -431,7 +485,7 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
         return _merged(repo, st, (state.get("mergeCommit") or {}).get("oid", ""), ["already merged"])
     if state.get("state") == "CLOSED":
         raise PlatformError(f"{pr} was closed without merging", hint="reopen it, or `cplat ship escalate 'PR closed'`")
-    status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout), timeout, interval)
+    status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout, st.get("run_id")), timeout, interval)
     if status == "red":
         st["fix_rounds"] = st.get("fix_rounds", 0) + 1
         save_state(repo, st)
@@ -558,7 +612,7 @@ def merge_gitops(repo: Path, st: dict, order: str, timeout: float, interval: flo
         if view.get("state") != "MERGED":
             if view.get("isDraft"):
                 gh(["pr", "ready", pr], cwd=repo, check=False)
-            status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout), timeout, interval)
+            status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout, st.get("run_id")), timeout, interval)
             if status == "red":
                 return False, lines + [f"gitops task {t['id']} ({order}) is red; nothing more was merged"] + red(repo, pr, cs, failed)
             res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"], cwd=repo, check=False)
@@ -627,7 +681,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
                 raise PlatformError(f"{app}: the pin PR {pr['url']} was closed without merging (a newer build superseded it, "
                                     "or its CI failed)", hint="read the PR's comments; `cplat ship escalate 'pin failed'`")
             if app not in runs and (rid := pin_run(repo, app, svc, sha)):
-                runs[app] = RunWatch(repo, app, rid, queue_timeout)
+                runs[app] = RunWatch(repo, app, rid, queue_timeout, st.get("run_id"))
             if app in runs:
                 if runs[app].poll() == "red":
                     return False, lines + [f"{app}: the pin-dev run for {short} failed; dev keeps the previous image"] + \
@@ -703,8 +757,9 @@ class RunWatch:
     """One workflow run across polls (spec 077): red when it concludes failed; a run that stays queued for
     `queue_timeout` is cancelled and rerun once, the second time it is an error."""
 
-    def __init__(self, repo: Path, slug: str, rid: str, queue_timeout: float):
+    def __init__(self, repo: Path, slug: str, rid: str, queue_timeout: float, run_id: str | None = None):
         self.repo, self.slug, self.rid, self.queue_timeout = repo, slug, rid, queue_timeout
+        self.run_id = run_id
         self.queued_since: float | None = None
         self.healed = False
 
@@ -726,6 +781,7 @@ class RunWatch:
                                     f"{runner_labels(self.slug, self.rid) or '?'} picks up no jobs", hint="escalate")
             say(f"  rerun    run {self.rid} ({self.slug}): queued for {int(now() - self.queued_since)}s (cancel + rerun)")
             cancel_and_rerun(self.repo, self.slug, self.rid)
+            runs.rerun(self.run_id, "pin-dev", "stuck")
             self.healed, self.queued_since = True, None
         return "pending"
 
@@ -890,6 +946,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--context", help="kube context: also wait for Argo CD to report <service>-dev Synced/Healthy")
     p = sub.add_parser("escalate")
     p.add_argument("reason", nargs="+")
+    p.add_argument("--cause", choices=runs.CAUSES, default="unknown", help="why it stopped (run record, spec 087)")
     sub.add_parser("finish")
     p = sub.add_parser("gate")
     p.add_argument("--max-blocks", type=int, default=DEFAULT_MAX_BLOCKS)
@@ -938,7 +995,7 @@ def main(argv: list[str]) -> int:
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "escalate":
-        st = escalate(repo, " ".join(ns.reason))
+        st = escalate(repo, " ".join(ns.reason), ns.cause)
         print(f"ship {st['spec']}: escalated ({st['escalated']}); the session may stop. Resume with /svc:ship {st['spec']}")
         return 0
     if ns.cmd == "finish":

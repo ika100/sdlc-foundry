@@ -30,6 +30,7 @@ tasks:
   covers: [AC-087.1, AC-087.3, AC-087.4, AC-087.5, AC-087.16]
   parallel_safe: true
   depends_on: [t1, t2]
+  done: true
 - id: t5
   title: Headless records; build and ship commands call cplat runs
   files: [scripts/cplat/headless.py, plugins/svc/commands/build.md, plugins/svc/commands/ship.md]
