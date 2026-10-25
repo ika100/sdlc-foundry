@@ -25,9 +25,7 @@ It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subage
 0. `cplat runs begin build --spec <id>` (spec 087). Inside `/svc:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat runs end --outcome done`. Recording never fails a build: a warning line about a buffered record is not an error.
    **Agent metrics (spec 089):** after every subagent you spawn, in any phase, run `cplat runs agent spawned <role> [--model-id <id>]` (`<role>` is the role name, e.g. `coder`; `--model-id` only when you know the model id). The calls below record what only you can judge. They never fail the build, and a `WARNING: agent metric not recorded` line is not an error.
 1. `git status --porcelain`. A dirty tree on a spec whose status is not `building` stops the build: commit or stash first (the clean-tree rule). On a `building` spec it is an **interrupted build** (spec 047):
-   - Staged entries that differ from both `HEAD` and the working tree are stale (left by the interrupted coder): `git restore --staged <files>` and name them.
-   - The first task in `plan.md` that is not `done` is the interrupted one. Ask, then commit the remaining changes as `wip(<task-id>): interrupted` (in an unattended run, commit without asking and say so).
-   - That task runs again in Phase 2 with `git show HEAD` (the WIP diff) in its coder prompt, so the coder finishes or redoes it.
+   - Dirty tree on a `building` spec (an interrupted build, spec 047) → read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (stale staged files: `git restore --staged`; the WIP commit is `wip(<task-id>): interrupted`).
 2. `cplat spec check <id> --require approved` must pass, and `docs/specs/<spec_id>/plan.md` must exist. Otherwise stop with the fix: `/svc:spec approve <NNN>`, `/svc:plan <NNN>`, or for `spec_hash` drift `/svc:plan <NNN>` again.
 3. Switch to `feature/<spec_id>` (create it from `main` if missing). `$FEATURE_BRANCH` = it.
 4. `BASE_REF=$(git merge-base main HEAD)` — the build's diff baseline, stable across re-runs.
@@ -63,8 +61,7 @@ From `plan.md`: **skip tasks with `done: true`**. Run `cplat build schedule <id>
 
 Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and run a throwaway Agent with `isolation: "worktree"` whose one task is to report `git rev-parse HEAD` in its worktree.
 
-- It errors ("Cannot create agent worktree", "not in a git repository") → run every task sequentially on `$FEATURE_BRANCH` and note it in the Final Report (restart the session for parallelism).
-- It reports a HEAD other than `$FEATURE_HEAD` → coders would not see the spec, the plan or the acceptance tests. Run every task sequentially and say in the Final Report: `worktree base is <sha>, not the feature head; set worktree.baseRef: "head" in .claude/settings.json (/shared:update-service)`.
+- It errors ("Cannot create agent worktree", "not in a git repository") or reports a HEAD other than `$FEATURE_HEAD` → read `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md` and follow it (every task runs sequentially; `worktree.baseRef: "head"`).
 - It reports `$FEATURE_HEAD` → parallel batches are safe: every task branch starts at the feature head, so merging it brings only that task's commits.
 
 ### 2.3 Coder prompt (every task)
@@ -72,7 +69,7 @@ Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and
 - `<project-map>` and the **brief**, copied from `spec.md`, `plan.md` and `design.md` that you read once in Phase 0 (never tell the coder to read them): `Criteria` (id and full text of every criterion in the task's `covers`), `Task` (the task's `id`, prose section verbatim, `files`; touch nothing else except new test helpers you must report), `Contract` (the `design.md` sections the task touches, verbatim, or `none`), `Tests` (the test files from `TRACE`), `Commands` (`cplat quiet test-fast`, `cplat quiet quality`).
 - **Done when:** the acceptance tests naming the task's `covers` criteria pass (`cplat quiet test-fast`); list those test files from `TRACE`. A criterion that also depends on a not-yet-done task may still fail: the coder says which and why.
 - "Never edit, skip or weaken the acceptance tests."
-- A task that was re-planned after a merge conflict (`cplat build state <id> --json`: a `replans[].tasks[]` entry that is not merged) also gets: "This task was re-planned after a merge conflict on `<paths>` with `<with>`. Start from the feature branch, which already contains every merged task. Your earlier attempt is a reference only. Do not merge or cherry-pick it:" followed by the output of `git diff HEAD...<branch>`, with `<branch>` from that state output.
+- A task that was re-planned after a merge conflict (a `replans[].tasks[]` entry in `cplat build state <id> --json` that is not merged) → read `${CLAUDE_PLUGIN_ROOT}/references/build-replan.md` and add its text to the coder prompt ("Your earlier attempt is a reference only", the `git diff HEAD...<branch>`; the feature branch already contains every merged task).
 - Parallel batch only: "You are in an isolated worktree. Commit locally (`git add` + `git commit -s -m '<type>(<scope>): <title>'`, task id in the body; the sign-off `-s` is required) before returning. Do not push. Do not switch branches."
 
 ### 2.4 Run batches
@@ -89,12 +86,7 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`, then
 
 ### 2.4a Re-plan after a conflict
 
-After a batch in which `cplat build merge` set a task aside (exit 3), re-plan **without asking the user**, in an attended build as well as an unattended one:
-
-1. Spawn the **architect** (`agents.architect`) with the prompt `**Re-plan mode.**` + `<project-map>` + `SPEC_DIR` + the output of `cplat build state <id>` (the pending conflicts: task, the task it collided with, the paths) + "Change only `files`, `depends_on` and `parallel_safe` of tasks that are not done; anything else is a BLOCKER." Then `cplat runs agent spawned architect`.
-2. `cplat build replan-commit <id>`. On exit 1, send its errors to the architect once and call it again.
-3. The architect reports a BLOCKER, or the second call also exits 1 → `cplat build replan-abort <id> --reason '<the blockers or errors>'`, then `cplat runs end --outcome escalated --reason '<its ESCALATE line>'` and stop.
-4. Exit 0 → continue from the schedule it printed. The set-aside task runs again on top of the merged work (coder prompt in 2.3).
+`cplat build merge` exit 3 (a task set aside) or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references/build-replan.md` and follow it (`cplat build replan-commit`, errors to the architect once, a BLOCKER → `cplat build replan-abort`): re-plan **without asking the user**, in an attended build as well as an unattended one.
 
 ### 2.5 All green
 
@@ -112,7 +104,7 @@ When every acceptance test passes, run `cplat runs gate acceptance passed`. Befo
 2. **Red** → spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>`, the output's tail and the log path `cplat quiet` printed (brief headings `Criteria`, `Task`, `Contract`, `Tests`, `Commands`, as in 2.3):
    - lint or type check → **quality** (`agents.quality`): lint/type fixes only;
    - tests → the **coder** of the task whose files are involved: acceptance tests stay fixed; record it with `cplat runs agent fix-round ci --task <task>`;
-   - security → run `cplat deps patch` first (ADR-034): it bumps every fixable dependency finding, re-runs the gates and commits, or reverts. Exit 0 → the gate is green, go to step 3. Exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed: in a `/svc:ship` run `cplat ship escalate '<reason>' --cause <CAUSE>`, alone `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`. Exit 4 → not a dependency finding (secrets, bandit, image scan): the **security** agent (`agents.security`) handles it as before: a CRITICAL secrets or bandit finding escalates at once; HIGH is documented and the build continues. A red gate after a bump is never handed to a coder, and acceptance tests stay fixed. Patch rounds (at most 2, counted by cplat) are separate from the 2 fix rounds below.
+   - security → run `cplat deps patch` first (ADR-034); the security gate is red → read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → the gate is green, go to step 3; exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed (`cplat ship escalate '<reason>' --cause <CAUSE>` in a ship run, else `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`); exit 4 → the **security** agent). A red gate after a bump is never handed to a coder, and acceptance tests stay fixed.
 
    Run `cplat quiet ci` again; at most 2 rounds, then escalate.
 

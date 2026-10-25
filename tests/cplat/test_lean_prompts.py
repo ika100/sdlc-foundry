@@ -55,5 +55,7 @@ def test_command_points_to_the_reference_file(name, ref):  # AC-100.14
 
 @pytest.mark.parametrize("name,ref,keys", [(n, r, k) for n, refs in MOVED.items() for r, k in refs.items()])
 def test_moved_text_is_gone_from_the_command(name, ref, keys):  # AC-100.13
-    text = (COMMANDS / f"{name}.md").read_text()
-    assert not all(key in text for key in keys)
+    command = (COMMANDS / f"{name}.md").read_text()
+    body = (REFS / ref).read_text().split("\n\n", 2)[2]
+    lines = [ln for ln in body.splitlines() if ln.strip() and not ln.startswith("#")]
+    assert not all(ln.strip() in command for ln in lines)

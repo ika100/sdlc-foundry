@@ -1,0 +1,5 @@
+# Ship: gitops tasks
+
+Read from `/svc:ship` Phase `build` when the plan has tasks with `repo:`.
+
+**Gitops tasks** (plan tasks with `repo:`, spec 076) are not given to the service coders. For each, in plan order: `cplat ship gitops prepare <task>` (prints a checkout of that repo on `spec/<spec>-<task>`), make the change there through the gitops plugin's conventions (`devbox run validate` in that checkout), commit `feat(<scope>): <what>`, write a short body and `cplat ship gitops pr <task> --title <title> --body-file <file>` (a draft PR; its CI runs now). `cplat ship land` merges the `before-merge` ones, `cplat ship deploy` the `after-release` ones. Its stop-and-escalate rules stay rules here: a merge conflict that `cplat build merge` escalates (a task's second conflict, or the cap of 3 re-plans) or a re-plan the architect cannot make, a changed acceptance test (`cplat spec test-diff` exit 1), a security finding `cplat deps patch` cannot fix (its exit 3), a decision the spec does not answer, a verification that still fails after its cycles. Each one → escalate.

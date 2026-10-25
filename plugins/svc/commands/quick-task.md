@@ -116,7 +116,7 @@ Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report which part fai
 
 **`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and cplat has moved the body to `.git/PR_BODY.md`. End the report with that exact command as its last line.
 
-**If Phase 0 found we were already on `main` and did not create a branch:** warn "Skipping PR creation — working directly on main." and skip Phase 3.
+**If Phase 0 found `main` and made no branch:** read `${CLAUDE_PLUGIN_ROOT}/references/quick-task-on-main.md` and follow it.
 
 ---
 
