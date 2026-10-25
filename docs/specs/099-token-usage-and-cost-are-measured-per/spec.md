@@ -1,7 +1,7 @@
 ---
 spec_id: 099-token-usage-and-cost-are-measured-per
 title: Token usage and cost are measured per run
-status: building
+status: done
 priority: P1
 tracks: [140]
 ---
@@ -73,3 +73,4 @@ The usage section. At run end, the 087 run record gains a `usage` section with `
 - 2026-10-25 amended: folded in the user's answers. Output is labelled "as reported", and output cost is a lower bound. Only the agent type is stored as the role. There is one cache write price per model, and an unpriced model sets `cost_complete: false`. Collection takes at most 10 s, and the record gains gate results. The benchmark is defined on the sdlc-test sample service repo, with a reset after `ship` (AC-099.15). AC-099.5 is withdrawn in favour of AC-099.14, which splits shared main-session calls evenly under `main (shared)`.
 - 2026-10-25 approved
 - 2026-10-25 building
+- 2026-10-25 done

@@ -106,9 +106,13 @@ def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | No
                          now: datetime.datetime, malformed: int) -> dict:
     kept = runs_report.select(records, since_days=since_days, repo=repo, now=now)
     cells: dict[tuple[str, str], list[dict]] = {}
+    tables: set[str] = set()
     for r in kept:
         if r.get("kind") != "benchmark":
             continue
+        table = r["usage"].get("price_table") if isinstance(r.get("usage"), dict) else None
+        if isinstance(table, str):
+            tables.add(table)
         b = r.get("benchmark") if isinstance(r.get("benchmark"), dict) else {}
         cells.setdefault((runs_report._text(b.get("workflow")), runs_report._text(r.get("platform_version"))), []).append(r)
     out: dict[str, dict] = {}
@@ -122,6 +126,7 @@ def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | No
     return {
         "window": {"since": (now.date() - datetime.timedelta(days=since_days)).isoformat(), "until": now.date().isoformat(),
                    "days": since_days, "repo": repo, "store": store, "records": len(kept), "malformed": malformed},
+        "price_tables": sorted(tables),
         "benchmarks": out,
     }
 
@@ -131,7 +136,8 @@ def render_benchmarks_text(agg: dict) -> str:
     lines = [f"Benchmarks {w['since']} to {w['until']} ({w['days']} days) in {w['store']}"
              + (f", repo {w['repo']}" if w.get("repo") else "")
              + f": {w['records']} record(s); {w['malformed']} malformed line(s) skipped",
-             "Cost is an estimate; output as reported, output cost is a lower bound."]
+             f"Cost is an estimate (prices of {', '.join(agg.get('price_tables') or []) or 'none'}); "
+             "output as reported, output cost is a lower bound."]
     for workflow, versions in agg["benchmarks"].items():
         for version, row in versions.items():
             lines.append(f"  {workflow} {version}: {row['runs']} run(s), median {row['tokens_median']} tokens, "

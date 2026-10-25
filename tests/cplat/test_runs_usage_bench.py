@@ -146,7 +146,7 @@ def test_report_benchmarks_shows_runs_median_and_outcomes_per_workflow_and_versi
     assert out["benchmarks"]["ship"]["4.6.0"]["runs"] == 1 and "window" in out
     assert runs.main(["report", "--benchmarks"]) == 0
     text = capsys.readouterr().out
-    assert "ship" in text and "4.5.0" in text and "estimate" in text.lower()
+    assert "ship" in text and "4.5.0" in text and "estimate" in text.lower() and "2026-10-25" in text  # AC-099.7: names the price table date
 
 
 def test_benchmarks_cannot_be_combined_with_agents(store):
