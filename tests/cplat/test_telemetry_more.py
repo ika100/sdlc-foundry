@@ -1,5 +1,4 @@
 """Spec 101: further acceptance tests the plan adds to test_telemetry.py (addon found from a service repo, when finish compares)."""
-import subprocess
 
 import pytest
 

@@ -11,28 +11,28 @@ tasks:
     covers: [AC-101.1, AC-101.2, AC-101.3, AC-101.4, AC-101.5, AC-101.6, AC-101.7]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: headless and runs benchmark start sessions with session_env; telemetry section in the record
     files: [scripts/cplat/headless.py, scripts/cplat/runs_bench.py, scripts/cplat/runs.py]
     covers: [AC-101.1, AC-101.2, AC-101.5]
     parallel_safe: false
     depends_on: [t1]
-    done: false
+    done: true
   - id: t3
     title: telemetry.compare — PromQL totals by run id, usage.otel note, nothing else changes
     files: [scripts/cplat/telemetry.py, scripts/cplat/runs.py]
     covers: [AC-101.9, AC-101.10, AC-101.11]
     parallel_safe: false
     depends_on: [t2]
-    done: false
+    done: true
   - id: t4
     title: Grafana dashboard JSON and its provisioning in local-cluster.sh
     files: [templates/gitops-app/observability/dashboards/claude-code-usage.json, templates/gitops-app/scripts/local-cluster.sh]
     covers: [AC-101.8]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t5
     title: Docs — unattended-delivery.md telemetry section, shared README, CHANGELOG
     files: [docs/unattended-delivery.md, plugins/shared/README.md, docs/CHANGELOG.md]
