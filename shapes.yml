@@ -11,6 +11,11 @@ shapes:
     test_globs: ["tests/**/*.py"]   # where `cplat spec trace` looks for AC ids (ADR-026)
     smoke_tag: 'pytest\.mark\.smoke\b'   # regex: a test file naming a (smoke) criterion must match it (spec 091)
     ci_checks: ["quality (ruff + mypy)", "test (pytest + coverage)", "security (pip-audit + detect-secrets + bandit)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: pytest
+      mandatory:
+        api-contract: ["**/openapi*", "**/api/**", "**/routes*", "**/schemas*"]
+        migrations: ["migrations/**", "**/migrations/**"]
     library: false
     detection:
       copier_src: templates/service-python
@@ -37,6 +42,8 @@ shapes:
     deployable: false
     test_globs: ["tests/**/*.py"]   # where `cplat spec trace` looks for AC ids (ADR-026)
     ci_checks: ["quality (ruff + mypy)", "test (pytest + coverage)", "security (pip-audit + detect-secrets + bandit)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: pytest
     library: true
     detection:
       copier_src: templates/library-python
@@ -56,6 +63,10 @@ shapes:
     smoke_tag: '@smoke\b'   # regex: a test file naming a (smoke) criterion must match it (spec 091)
     smoke_globs: ["e2e/**/*.ts"]   # where trace looks for smoke tests (default: test_globs)
     ci_checks: ["quality (eslint + tsc)", "test (vitest + coverage)", "security (pnpm audit + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: vitest
+      mandatory:
+        routes-config: ["app/**/page.*", "app/**/route.*", "pages/**", "next.config.*", "tsconfig*.json", "vite*.config.*"]
     library: false
     detection:
       copier_src: templates/web-nextjs
@@ -83,6 +94,10 @@ shapes:
     deployable: false
     test_globs: ["tests/**/*"]   # where `cplat spec trace` looks for AC ids (ADR-026)
     ci_checks: ["quality (render-check + kustomize build + kubeconform + labels)", "security (detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: null
+      mandatory:
+        environments: ["environments/**", "apps/**", "base/**"]
     library: false
     detection:
       copier_src: templates/gitops-app
@@ -100,6 +115,11 @@ shapes:
     test_globs: ["src/test/**/*.java"]   # where `cplat spec trace` looks for AC ids (ADR-026)
     smoke_tag: '@Tag\(\s*"smoke"\s*\)'   # regex: a test file naming a (smoke) criterion must match it (spec 091)
     ci_checks: ["quality (spotless + checkstyle + compile)", "test (mvn verify + JaCoCo)", "security (OWASP dependency-check + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: null
+      mandatory:
+        api-contract: ["**/openapi*", "**/api/**", "**/routes*", "**/schemas*"]
+        migrations: ["migrations/**", "**/migrations/**"]
     library: false
     detection:
       copier_src: templates/service-java
@@ -129,6 +149,11 @@ shapes:
     test_globs: ["**/*_test.go"]   # where `cplat spec trace` looks for AC ids (ADR-026)
     smoke_tag: 'func\s+TestSmoke\w*\s*\('   # regex: a test file naming a (smoke) criterion must match it (spec 091)
     ci_checks: ["quality (golangci-lint + go build)", "test (go test -race -cover)", "security (govulncheck + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: null
+      mandatory:
+        api-contract: ["**/openapi*", "**/api/**", "**/routes*", "**/schemas*"]
+        migrations: ["migrations/**", "**/migrations/**"]
     library: false
     detection:
       copier_src: templates/service-go

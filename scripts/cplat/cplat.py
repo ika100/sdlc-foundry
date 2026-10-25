@@ -24,6 +24,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /svc:ship: spec → merged PR → dev (ADR-028)
   cplat.py pr wait|open …   wait <number|url> [-R owner/repo] [--merge]: CI watch (spec 079); open --title T: commit -s, push, PR in one step (spec 100)
   cplat.py quiet <devbox-script>   run it with output in a log: one line on success, the tail and log path on failure (spec 100)
+  cplat.py validate plan|run|final [--base REF] [--full] [--risk low|medium|high]   change-aware validation of the inner loop (spec 103)
   cplat.py app-ship start|status|phase|publish|next|repo|entry|complete|escalate|finish|gate ...   /app:ship: a product spec → every repo → dev (spec 097)
   cplat.py smoke run [--env dev] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment (spec 091)
   cplat.py headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume (spec 070)
@@ -72,6 +73,7 @@ COMMANDS = {
     "retro": "retro",
     "build": "buildcmd",
     "quiet": "quiet",
+    "validate": "validate",
     "alerts": "alerts",
     "budget": "budget",
 }

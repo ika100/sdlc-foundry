@@ -83,8 +83,26 @@ def validate(shapes: list[dict]) -> list[str]:
         checks = s.get("ci_checks")
         if s.get("status") != "planned" and (not isinstance(checks, list) or not checks):
             errs.append(f"{sid}: ci_checks must list the CI job names new repos require on main (spec 054)")
+        errs += _validation_errors(sid, s)
         if s.get("library") and s.get("deployable"):
             errs.append(f"{sid}: a library cannot be deployable")
+    return errs
+
+
+def _validation_errors(sid: str, s: dict) -> list[str]:
+    """Spec 103: `validation.selector` (pytest | vitest | null) and `validation.mandatory` (category -> globs)."""
+    v = s.get("validation")
+    if v is None:
+        return []
+    if not isinstance(v, dict):
+        return [f"{sid}: validation must be a map with selector and mandatory (spec 103)"]
+    errs: list[str] = []
+    if v.get("selector") not in ("pytest", "vitest", None):
+        errs.append(f"{sid}: validation.selector must be pytest, vitest or null (spec 103)")
+    m = v.get("mandatory", {})
+    if not isinstance(m, dict) or not all(isinstance(k, str) and k and isinstance(g, list) and g
+                                          and all(isinstance(x, str) and x for x in g) for k, g in m.items()):
+        errs.append(f"{sid}: validation.mandatory must map a category to a non-empty list of globs (spec 103)")
     return errs
 
 
