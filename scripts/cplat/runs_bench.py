@@ -48,24 +48,39 @@ def _remote_main(url: str) -> str:
     return out.split()[0] if out.split() else ""
 
 
-def reset_sample(repo: str, rev: str, clone: Path) -> None:
-    """Close the open PRs (and delete their branches), delete the other branches and the tags that are not ancestors of
-    `rev` (with their releases), force main back to `rev` and check it. Raises RuntimeError with the reason."""
-    url = f"https://github.com/{repo}"
+def _open_prs(repo: str) -> list[int]:
     try:
         prs = json.loads(_ok(["gh", "pr", "list", "--repo", repo, "--state", "open", "--json", "number", "--limit", "100"]) or "[]")
     except ValueError:
         prs = []
-    for pr in prs if isinstance(prs, list) else []:
-        if isinstance(pr, dict) and isinstance(pr.get("number"), int):
-            _ok(["gh", "pr", "close", str(pr["number"]), "--repo", repo, "--delete-branch"])
-    for line in _ok(["git", "ls-remote", "--heads", url], clone).splitlines():
-        ref = line.split()[-1] if line.split() else ""
-        if ref.startswith("refs/heads/") and ref != "refs/heads/main":
+    return [pr["number"] for pr in prs if isinstance(pr, dict) and isinstance(pr.get("number"), int)] if isinstance(prs, list) else []
+
+
+def _refs(url: str, kind: str, clone: Path) -> list[str]:
+    lines = _ok(["git", "ls-remote", f"--{kind}", url], clone).splitlines()
+    return [line.split()[-1] for line in lines if line.split()]
+
+
+def snapshot(repo: str, clone: Path) -> dict:
+    """The PRs, branches and tags that exist before a run: the reset after the run leaves them alone."""
+    url = f"https://github.com/{repo}"
+    return {"prs": set(_open_prs(repo)), "refs": set(_refs(url, "heads", clone)) | set(_refs(url, "tags", clone))}
+
+
+def reset_sample(repo: str, rev: str, clone: Path, keep: dict | None = None) -> None:
+    """Close the open PRs (and delete their branches), delete the other branches and the tags that are not ancestors of
+    `rev` (with their releases), force main back to `rev` and check it. PRs and refs in `keep` (a `snapshot` taken before
+    the run) are left alone. Raises RuntimeError with the reason."""
+    url = f"https://github.com/{repo}"
+    keep_prs, keep_refs = (keep or {}).get("prs", set()), (keep or {}).get("refs", set())
+    for number in _open_prs(repo):
+        if number not in keep_prs:
+            _ok(["gh", "pr", "close", str(number), "--repo", repo, "--delete-branch"])
+    for ref in _refs(url, "heads", clone):
+        if ref.startswith("refs/heads/") and ref != "refs/heads/main" and ref not in keep_refs:
             _ok(["git", "push", url, "--delete", ref], clone)
-    for line in _ok(["git", "ls-remote", "--tags", url], clone).splitlines():
-        ref = line.split()[-1] if line.split() else ""
-        if not ref.startswith("refs/tags/") or ref.endswith("^{}"):
+    for ref in _refs(url, "tags", clone):
+        if not ref.startswith("refs/tags/") or ref.endswith("^{}") or ref in keep_refs:
             continue
         tag = ref[len("refs/tags/"):]
         code, out, _ = run(["gh", "api", f"repos/{repo}/compare/{tag}...{rev}", "-q", ".status"])
@@ -137,6 +152,7 @@ def main(argv: list[str]) -> int:
         _prepare(url, rev, task, clone)
         if main_now != rev:
             reset_sample(repo, rev, clone)
+        keep = snapshot(repo, clone)
     except RuntimeError as e:
         raise PlatformError(f"sample repo {repo} could not be prepared: {e}") from None
 
@@ -152,7 +168,7 @@ def main(argv: list[str]) -> int:
     finally:
         runs.phase(rid, "benchmark:reset")
         try:
-            reset_sample(repo, rev, clone)
+            reset_sample(repo, rev, clone, keep)
             reset = "done"
         except Exception as e:  # noqa: BLE001
             reset, note = "failed", f"{type(e).__name__}: {e}"[:200]

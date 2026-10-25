@@ -183,3 +183,36 @@ def test_a_failed_reset_exits_non_zero_names_the_repo_and_still_writes_the_recor
         runs.main(["benchmark", "ship"])
     (r,) = benchmark_records(store)
     assert r["benchmark"]["reset"] == "failed" and r["benchmark"]["reset_note"]
+
+
+def test_reset_leaves_prs_branches_and_tags_that_existed_before_the_run(monkeypatch, tmp_path):
+    """AC-099.15: the reset after a run only undoes what the run created; an open Dependabot PR survives."""
+    import runs_bench
+    rev = tasks()["sample"]["rev"]
+    log: list[str] = []
+    heads = f"{rev}\trefs/heads/main\nx\trefs/heads/dependabot/all\ny\trefs/heads/feature/900\n"
+    tags = "z\trefs/tags/v0.1.0\nw\trefs/tags/v0.2.0\n"
+
+    def fake(cmd, cwd=None):
+        cmd = [str(c) for c in cmd]
+        log.append(" ".join(cmd))
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return 0, '[{"number": 4}, {"number": 7}]', ""
+        if "--heads" in cmd:
+            return 0, heads, ""
+        if "--tags" in cmd:
+            return 0, tags, ""
+        if cmd[:2] == ["gh", "api"]:
+            return 0, "diverged", ""
+        if "ls-remote" in cmd:
+            return 0, f"{rev}\trefs/heads/main\n", ""
+        return 0, "", ""
+    monkeypatch.setattr(runs_bench, "run", fake)
+    keep = {"prs": {4}, "refs": {"refs/heads/main", "refs/heads/dependabot/all", "refs/tags/v0.1.0"}}
+    runs_bench.reset_sample("ika100/todo-api", rev, tmp_path, keep)
+    closed = [line for line in log if line.startswith("gh pr close")]
+    deleted = [line for line in log if " --delete " in line]
+    assert closed == ["gh pr close 7 --repo ika100/todo-api --delete-branch"]
+    assert any(line.endswith("refs/heads/feature/900") for line in deleted)
+    assert any(line.endswith("refs/tags/v0.2.0") for line in deleted)
+    assert not any("dependabot" in line or "v0.1.0" in line for line in deleted)
