@@ -11,14 +11,14 @@ tasks:
     covers: [AC-106.4, AC-106.5]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: promote — digest check for staging→prod, all services first, dry-run output, override, --no-verify notice, PR body and evidence line
     files: [scripts/cplat/promote.py, scripts/cplat/evidence.py]
     covers: [AC-106.1, AC-106.2, AC-106.3, AC-106.4, AC-106.5, AC-106.6, AC-106.7, AC-106.8, AC-106.9, AC-106.11]
     parallel_safe: false
     depends_on: [t1]
-    done: false
+    done: true
   - id: t3
     title: release-image job re-tags sha-<40> in the four image templates (no rebuild on v*.*.* tags)
     files: [templates/service-python/.github/workflows/ci.yml, templates/service-java/.github/workflows/ci.yml,
@@ -26,14 +26,14 @@ tasks:
     covers: [AC-106.10]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t4
     title: Docs — /gitops:promote command text, unattended-delivery.md, CHANGELOG
     files: [plugins/gitops/commands/promote.md, docs/unattended-delivery.md, docs/CHANGELOG.md]
     covers: [AC-106.12]
     parallel_safe: false
     depends_on: [t2, t3]
-    done: false
+    done: true
 ---
 
 # Plan — 106 Prod runs the exact image staging tested

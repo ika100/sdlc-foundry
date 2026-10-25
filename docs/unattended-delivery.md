@@ -164,6 +164,12 @@ A deploy counts only after every step below. Each step is enforced by `code` (a 
 
 A replay of `cplat ship deploy` skips the dev smoke only when the record holds a pass for the digest dev runs now (`test_a_replay_with_the_same_digest_does_not_smoke_dev_again_ac_105_7`). `cplat promote … staging prod` prints the checked digest and flags `digest differs from what staging runs`.
 
+### Prod runs what staging tested
+
+`cplat promote <svc> staging prod` compares the registry digest of the `sha-<40>` image staging runs with the release `X.Y.Z` image (spec 106) before it writes anything, for all services first. Equal digests: the promotion goes on and the evidence and the PR body say `image digest: <digest> (same in staging and prod)`. A mismatch refuses with "prod would not run what staging tested", both tags and both digests, and the fix: re-publish the release from the tested image (the release job re-tags the `sha-<40>` image instead of rebuilding it), or promote the release whose image is the staging one. A missing tag, a failed lookup (`gh auth refresh -s read:packages`) and a staging tag that is not a `sha-<40>` build refuse too.
+
+`--dry-run` prints `staging: <tag> <digest>`, `prod: <tag> <digest>` and `match` or `mismatch` per service (`data.digests` with `--json`); a mismatch exits 1. `--accept-digest-mismatch "<reason>"` (a sentence of 3 or more words ending in `.`, `!` or `?`) accepts a mismatch only, and is recorded in the output and the PR body. `--no-verify` skips the check and prints `image identity not verified (--no-verify)`.
+
 ## Budgets and repeated failures
 
 Every unattended run tree shares one budget (spec 102, [ADR-043](adr/043-one-budget-per-run-tree.md)): wall-clock minutes, agent invocations (sessions and subagents), CI reruns and estimated cost. The outermost run owns it (`cplat headless`, `/app:ship`, or a ship or build started by hand); every ship, build and CI wait below it counts against the same budget.
