@@ -6,6 +6,21 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [4.5.0] — 2026-10-25
+
+**Every run is recorded with its token usage and cost, platform failures become issues, and unattended sessions can finally edit files.**
+- **Run store and feedback loops (087–089):** each ship, build, headless and PR-wait run is recorded in a private run store; platform failures become deduplicated issues; agent quality is measured per agent, shape and model.
+- **Token usage and cost (099):** `cplat runs usage`, usage and gates in every run record, cost per delivered run in `cplat runs report`, and `cplat runs benchmark` against `ika100/todo-api` for a repeatable baseline.
+- **More autonomy (094–096):** a merge conflict re-plans, fixable CVEs are patched by the run, `cplat fleet update` rolls platform updates out to every repo.
+- **Safer repos (085, 086, 098):** a broken spec names itself and blocks nothing else, repo gates survive skeleton updates, gitops CI checks Components against the service branch's CRDs.
+- **Fixes:** headless sessions run with `acceptEdits` (in `dontAsk` they could edit nothing); `/svc:quick-task`, `/svc:fix-bug` and `/svc:release` no longer stop before the PR.
+
+**Action for existing repos:**
+1. Run `/plugin marketplace update` (svc 3.4.0, shared 0.14.0, app 1.0.2).
+2. Run `/shared:update-service` in every repo (or `cplat fleet update`), gitops-apps first.
+3. Optional: `cplat runs init <owner/name>` with a **private** repo to keep run records; until then they are buffered locally.
+4. Claude Code 2.1.132 or later is needed for usage per run (`$CLAUDE_CODE_SESSION_ID`).
+
 - **Fix: `/svc:quick-task`, `/svc:fix-bug` and `/svc:release` no longer claim that push and `gh pr create` need confirmation.** Both are allowlisted since 4.4.0; the stale text made a headless quick-task stop after green tests without committing (found by the 099 benchmark).
 - **Fix (070): headless sessions can edit files.** `cplat headless` runs `claude -p --permission-mode acceptEdits` instead of `dontAsk`. No allowlist grants `Edit` or `Write`, so every unattended session (headless, `/svc:ship` via the Stop hook, `cplat runs benchmark`) could plan but never change a file. Edits stay inside the repo; every other tool is still limited to the committed allowlist and nothing prompts. AC-070.1 is replaced by AC-070.5.
 - **Fix (099): the benchmark checks trust and its result.** One fixed clone per workflow under `<state>/benchmark/<workflow>`, refused until the folder is trusted in Claude Code; a run is `done` only with a new open PR (quick-task, build) or merged PR (ship); the reset leaves PRs, branches and tags that existed before the run alone.
