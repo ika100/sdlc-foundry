@@ -76,7 +76,8 @@ _NORMALISE_STEPS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?"), "<date>"),
     (re.compile(r"\d{8}T\d{6}Z"), "<date>"),
     (re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b"), "<time>"),
-    (re.compile(rf"(?:(?:~|\.{{1,2}})?(?:/{_PATH_SEG}){{2,}}|{_PATH_SEG}(?:/{_PATH_SEG})+)"), "<path>"),
+    # a test id (`tests/test_a.py::test_x`, spec 091) is a name, not a volatile path: it keeps its file
+    (re.compile(rf"(?:(?:~|\.{{1,2}})?(?:/{_PATH_SEG}){{2,}}|{_PATH_SEG}(?:/{_PATH_SEG})+)(?![\w.@+/-]|::)"), "<path>"),
     (re.compile(r"\b\d{3}-[a-z][a-z0-9-]*\b"), "<spec>"),
     (re.compile(r"\b\d+(?:\.\d+)?\s?(?:ms|s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?)\b"
                 r"(?:\s\d+(?:\.\d+)?\s?(?:ms|s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?)\b)*"), "<duration>"),
