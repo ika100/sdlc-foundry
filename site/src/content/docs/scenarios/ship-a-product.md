@@ -37,6 +37,14 @@ The plan also carries the product wiring: exposing `shop-web`, `API_URL` for it,
 devbox run cluster-up      # k3d, ArgoCD, Gateway API, your GitHub credentials, the root Application
 ```
 
+To run the whole thing unattended, ship the approved spec instead of building it:
+
+```text
+/app:ship 001                                                  # spec and plan PR merged on green, every repo shipped in plan order
+```
+
+`/app:ship` runs one `/svc:ship` per repository, starting each once the repositories it depends on passed their gate (a service is Synced/Healthy in dev and, if exposed, passes its smoke test). Pull requests in `shop` merge one at a time. A repository that escalates stops only its dependents, and it needs a kube context for the product's cluster ([ADR-042](/sdlc-foundry/reference/adr/042/)).
+
 ## What you get
 
 - Two repositories that build, test, scan and publish `linux/amd64` and `linux/arm64` images on every merge to `main`, with `main` protected by those checks.

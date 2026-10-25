@@ -42,7 +42,7 @@ This supports an audit; it is not a certification. You remain responsible for yo
 ### Finance and operations
 
 - **CI minutes:** pull requests run only what a change needs; documentation-only changes run the cheap validation jobs, superseded runs are cancelled and dependency updates arrive monthly in groups.
-- **Agent cost:** always-on prompt text shrank by 28 percent and the product-manager agent runs on a smaller model; scripts replace long prompts, so common commands spend fewer tokens.
+- **Agent cost:** always-on prompt text shrank by 28 percent and the product-manager agent runs on a smaller model; scripts replace long prompts, so common commands spend fewer tokens. Headless runs start on a Sonnet coordinator: a small task measured about $0.48 before and $0.15 after, a full build $1.94 and $1.26 (estimated list prices, one benchmark repository).
 - **No platform to license or host:** it is a repository, a CLI and plugins.
 
 ## Evidence

@@ -19,6 +19,8 @@ Pick the command by size:
 
 The commands detect the repository's shape (Python, Java, Go, Next.js) and route to the matching coder, tester, deployment, observability and release agents. Every phase runs `devbox run <recipe>`, so CI and agents see the same results.
 
+To go from an approved spec to a running feature without babysitting, use `/svc:ship <NNN>`: it plans, builds, merges on green CI and waits until dev runs it. A criterion written with `(smoke)` at the end is then checked against the deployed dev service with `devbox run smoke`; a red smoke escalates and files a `smoke-failure` issue instead of promoting ([ADR-040](/sdlc-foundry/reference/adr/040/)). Runs start on a Sonnet coordinator, so a small change costs cents, not dollars.
+
 ## What you get
 
 - A branch with a conventional commit history and a pull request whose body lists exactly which checks ran.

@@ -15,6 +15,8 @@ description: "Move a verified image through dev, staging and production with one
 
 Automatic staging promotion is on in new gitops-apps. Switch it off with `promotion: {staging: manual}` in `app.yaml`, or per service in `services.yaml`. Production is never automatic: `/gitops:promote shop-api staging prod` first prints an evidence summary (smoke in dev and staging, open issues).
 
+If the staging smoke is red, the platform files a `smoke-failure` issue and leaves staging as it is; it does not roll back.
+
 ## Steps
 
 ```text
