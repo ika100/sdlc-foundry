@@ -73,7 +73,7 @@ def select(records: list[dict], *, since_days: int, repo: str | None, now: datet
                 continue
             seen.add(rid)
         ended = _ts(r.get("ended_at"))
-        if ended is not None and ended < cutoff:
+        if ended is not None and (ended < cutoff or ended > now):
             continue
         if repo is not None and r.get("repo") != repo:
             continue

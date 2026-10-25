@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (087): `cplat runs report` has an upper bound.** Records ended after the window's `until` (future-dated) no longer count.
 - **Fix: skeleton updates keep the repo's secrets baseline.** `.secrets.baseline.json` records a repo's own false positives; `/shared:update-service` replaced it with the template's, so the secrets scan failed again after every update. It is now repo-owned (`_skip_if_exists`) and only added when a repo has none.
 - **Fix: template allowlists cover headless commits and plugin reads.** `git commit -q -m` was missing (the other flag orders were there), and `Read(~/.claude/plugins/**)` lets agents read the plugins' reference files (for example the spec-format plan and design formats) outside the repo. Each stopped a headless `/svc:plan` + `/svc:build` in the 099 benchmark. A test now checks every template.
 - **Fix (099): the build benchmark plans first.** `/svc:build` needs a `plan.md`, so `cplat runs benchmark build` runs `/svc:plan 900` and then `/svc:build 900` as two phases of one run (task_version 3); a failed step stops the run and `result_check` names it.

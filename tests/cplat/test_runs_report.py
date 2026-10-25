@@ -186,3 +186,10 @@ def test_a_follow_up_replaces_the_pending_result():
     follow = {"schema": 1, "followup": "filed", "run_id": "r5", "signature": "s2", "url": "u", "result": "+1", "at": "2026-10-23T11:00:00Z"}
     agg = runs_report.aggregate([record], [follow], malformed=0, buffered=0, since_days=30, repo=None, store="acme/runs", now=NOW)
     assert agg["filed"] == {"new": 0, "+1": 1, "suppressed": 0, "pending": 0}
+
+
+def test_records_ended_after_until_are_excluded():
+    """AC-087: the window has an upper bound; a future-dated record does not count."""
+    recs = [{"run_id": "a", "ended_at": "2026-10-23T10:00:00Z"}, {"run_id": "b", "ended_at": "2026-11-30T10:00:00Z"}]
+    kept = runs_report.select(recs, since_days=30, repo=None, now=NOW)
+    assert [r["run_id"] for r in kept] == ["a"]
