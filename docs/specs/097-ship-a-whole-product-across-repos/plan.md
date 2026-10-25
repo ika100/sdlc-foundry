@@ -11,48 +11,56 @@ tasks:
   covers: [AC-097.1, AC-097.4, AC-097.12, AC-097.18]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t2
   title: appship_merge — merge slot in plan order, conflict escalation, land a gitops-app PR on green
   files: [scripts/cplat/appship_merge.py]
   covers: [AC-097.3, AC-097.8, AC-097.9]
   parallel_safe: true
   depends_on: [t1]
+  done: true
 - id: t3
   title: appship_sched — ready/running/blocked, gate classes and gate evaluation, repo start/result/escalate
   files: [scripts/cplat/appship_sched.py]
   covers: [AC-097.6, AC-097.7, AC-097.10, AC-097.19]
   parallel_safe: true
   depends_on: [t1]
+  done: true
 - id: t4
   title: appship_report — repo state table and the final report
   files: [scripts/cplat/appship_report.py]
   covers: [AC-097.10, AC-097.20]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t5
   title: cplat ship start --product (parent run, default context, merges through the slot, smoke reason)
   files: [scripts/cplat/ship.py]
   covers: [AC-097.7, AC-097.9, AC-097.12]
   parallel_safe: true
   depends_on: [t2]
+  done: true
 - id: t6
   title: cplat app-ship CLI with publish, entry pr/land and complete
   files: [scripts/cplat/appship.py, scripts/cplat/cplat.py]
   covers: [AC-097.1, AC-097.2, AC-097.3, AC-097.4, AC-097.8, AC-097.10, AC-097.12, AC-097.18, AC-097.20]
   parallel_safe: true
   depends_on: [t1, t2, t3, t4]
+  done: true
 - id: t7
   title: Stop hook entry for the product ship
   files: [plugins/shared/hooks/hooks.json]
   covers: [AC-097.4]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t8
   title: /app:ship command (the coordinator prompt)
   files: [plugins/app/commands/ship.md]
   covers: [AC-097.2, AC-097.6, AC-097.7, AC-097.8, AC-097.10, AC-097.20]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t9
   title: Docs, svc ship note and version bumps
   files: [plugins/app/README.md, plugins/svc/commands/ship.md, docs/CHANGELOG.md, .claude-plugin/marketplace.json, plugins/app/.claude-plugin/plugin.json,
@@ -60,6 +68,7 @@ tasks:
   covers: []
   parallel_safe: true
   depends_on: []
+  done: true
 ---
 
 # Plan — 097 Ship a whole product across repos
