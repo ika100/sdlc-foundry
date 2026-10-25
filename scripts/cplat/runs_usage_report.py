@@ -109,7 +109,7 @@ def plugins_label(info: dict) -> str:
 def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | None, store: str,
                          now: datetime.datetime, malformed: int) -> dict:
     kept = runs_report.select(records, since_days=since_days, repo=repo, now=now)
-    cells: dict[tuple[str, str, str], list[dict]] = {}
+    cells: dict[tuple[str, str, str, str], list[dict]] = {}
     tables: set[str] = set()
     for r in kept:
         if r.get("kind") != "benchmark":
@@ -119,14 +119,21 @@ def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | No
             tables.add(table)
         b = r.get("benchmark") if isinstance(r.get("benchmark"), dict) else {}
         label = plugins_label(b.get("plugins")) if isinstance(b.get("plugins"), dict) else "installed"
-        cells.setdefault((runs_report._text(b.get("workflow")), runs_report._text(r.get("platform_version")), label), []).append(r)
+        model = b.get("coordinator_model") if isinstance(b.get("coordinator_model"), str) else "unknown"  # before spec 100
+        cells.setdefault((runs_report._text(b.get("workflow")), runs_report._text(r.get("platform_version")), label, model),
+                         []).append(r)
     out: dict[str, dict] = {}
-    for (workflow, version, label) in sorted(cells):
-        rs = cells[(workflow, version, label)]
-        totals = [t for t in map(_totals, rs) if t is not None]
-        g = _group(totals)
-        out.setdefault(workflow, {})[version if label == "installed" else f"{version} [{label}]"] = {
-            "runs": len(rs), "tokens_median": g["tokens_median"], "cost_usd_median": g["cost_usd_median"],
+    for (workflow, version, label, model) in sorted(cells):
+        rs = cells[(workflow, version, label, model)]
+        done = [t for t in map(_totals, (r for r in rs if r.get("outcome") == "done")) if t is not None]
+        rest = [t for t in map(_totals, (r for r in rs if r.get("outcome") != "done")) if t is not None]
+        g, f = _group(done), _group(rest)
+        key = (version if label == "installed" else f"{version} [{label}]") + f" ({model})"
+        out.setdefault(workflow, {})[key] = {
+            "coordinator_model": model, "runs": len(rs), "done": len(done),
+            "tokens_median": g["tokens_median"], "cost_usd_median": g["cost_usd_median"],   # over done runs only
+            "not_done": {"runs": len(rest), "tokens_median": f["tokens_median"], "cost_usd_median": f["cost_usd_median"]}
+            if rest else None,
             "outcomes": runs_report._count_sorted(Counter(runs_report._text(r.get("outcome")) for r in rs))}
     return {
         "window": {"since": (now.date() - datetime.timedelta(days=since_days)).isoformat(), "until": now.date().isoformat(),
@@ -145,8 +152,13 @@ def render_benchmarks_text(agg: dict) -> str:
              "output as reported, output cost is a lower bound."]
     for workflow, versions in agg["benchmarks"].items():
         for version, row in versions.items():
-            lines.append(f"  {workflow} {version}: {row['runs']} run(s), median {row['tokens_median']} tokens, "
-                         f"{_money(row['cost_usd_median'])} (est.), outcomes {runs_report._pairs(row['outcomes'])}")
+            nd = row["not_done"]
+            median = (f"median of {row['done']} done {round(row['tokens_median'])} tokens, "
+                      f"{_money(row['cost_usd_median'])} (est.)" if row["done"] else "no done run")
+            lines.append(f"  {workflow} {version}: {row['runs']} run(s), {median}, "
+                         f"outcomes {runs_report._pairs(row['outcomes'])}"
+                         + (f"; not done: {nd['runs']} run(s), median {round(nd['tokens_median'])} tokens, "
+                            f"{_money(nd['cost_usd_median'])} (est.)" if nd else ""))
     if not agg["benchmarks"]:
         lines.append("  none")
     return "\n".join(lines)

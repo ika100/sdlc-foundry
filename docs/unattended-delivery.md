@@ -65,6 +65,21 @@ Outside a Claude session `cplat` is not on the PATH: use the plugin's launcher (
 | Actions may open PRs in the gitops-app | pin-dev opens the pin PR | `gh api repos/<org>/<gitops>/actions/permissions/workflow` |
 | Optional: a kube context | `cplat ship deploy --context <ctx>` also waits for Argo `Synced/Healthy` | `kubectl --context <ctx> -n argocd get applications` |
 
+## Feedback loops
+
+Eight loops bring what happens in runs and in running systems back as data or as deduplicated issues. They file and propose; you route issues in `/shared:triage` and approve specs.
+
+| Loop | Signal | Lands in | Setup |
+|---|---|---|---|
+| [Run records](#run-records) (087, 099) | phases, CI rounds, escalations, tokens and cost of every run | the private run store | `cplat runs init <owner/name>` |
+| [Agent quality](#agent-metrics) (089) | fix rounds, red CI, review findings, re-plans per agent, shape and model | the run store | none |
+| [Weekly retro](#weekly-retro) (090) | the last complete week against the one before | a `Weekly retro` issue with evidence-checked spec proposals | store workflow, runner and two secrets |
+| [Platform failures](#auto-filed-platform-issues) (088) | escalations with cause `platform`, `cplat` crashes | one issue per signature in `ika100/sdlc-foundry` | `cplat triage setup-labels` |
+| [Smoke in dev](#smoke-in-dev) (091) | `(smoke)` criteria against the deployed service | the run record; a `smoke-failure` issue in the service repo | `expose:` and `hosts.dev` in `app.yaml` |
+| [Firing alerts](adr/038-alert-poll-on-the-gitops-runner.md) (092) | alert rules of the `observability` addon and `ServiceDown` | an issue with an `env:` label in the owning repo | `ALERTS_TOKEN` in the gitops-app, self-hosted runner |
+| Report an issue (`/shared:report-issue`) | anything a person or agent hits, secrets removed | an issue, filed after your OK | `gh` logged in |
+| Triage (`/shared:triage`, spec 035) | new issues from all of the above | a spec, quick-task, fix-bug or reply | none |
+
 ## Run records
 
 Every run is recorded as one JSON record in a private GitHub repo (spec 087, [ADR-032](adr/032-private-run-store.md)).

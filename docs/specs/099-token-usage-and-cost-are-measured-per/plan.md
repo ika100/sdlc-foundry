@@ -1,6 +1,6 @@
 ---
 spec_id: 099-token-usage-and-cost-are-measured-per
-spec_hash: e51ac22a7f79
+spec_hash: 0edb9313f81f
 summary: usage section (totals, by_phase/role/model, estimated cost) in the 087 run record from local session
   transcripts; gates in ship/build records; cplat runs usage, cplat runs gate, cplat runs benchmark, report usage and
   --benchmarks

@@ -7,6 +7,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 ## [Unreleased]
 
 - **Docs: optional live view with dot-agent-deck** ([guide](agent-deck.md), #145). Setup checked against dot-agent-deck v0.48.1: what it shows and controls, what stays with the run store and the gates, the hooks it writes into `~/.claude/settings.json`, local data and remote-host security, limitations. Nothing in the platform depends on it.
+- **Fix (099): `cplat runs report --benchmarks` separates coordinator models and failed runs.** Each row is one workflow, platform version and coordinator model (`unknown` for records from before spec 100); the median covers done runs only, and runs that did not finish are counted with their own median. The JSON key gains ` (<model>)` and each row `coordinator_model`, `done` and `not_done`.
 
 ## [4.6.0] — 2026-10-25
 

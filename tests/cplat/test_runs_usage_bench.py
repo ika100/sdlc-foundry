@@ -131,13 +131,13 @@ def test_a_moved_sample_repo_is_refused_without_reset_first(world, store):
 
 def test_report_benchmarks_shows_runs_median_and_outcomes_per_workflow_and_version(store, capsys):
     """AC-099.13: `report --benchmarks`: per workflow and platform version the runs, median tokens and cost, and the outcomes."""
-    def bench(rid, day, outcome, tokens, cost, version="4.5.0"):
+    def bench(rid, day, outcome, tokens, cost, version="4.5.0", model=None):
         z = {"calls": 1, "failed_calls": 0, "input": tokens, "output": 0, "cache_read": 0, "cache_write": 0, "cost_usd": cost}
         u = {"sessions": ["s"], "price_table": "2026-10-25", "incomplete": None,
              "totals": {**z, "cost_complete": True, "models_without_price": []}, "by_phase": {}, "by_role": {}, "by_model": {}}
         r = rec(rid, f"2026-10-{day}T10:00:00Z", kind="benchmark", outcome=outcome, usage=u,
                 benchmark={"workflow": "ship", "task_version": 1, "sample_repo": "ika100/todo-api", "sample_rev": "a" * 40,
-                           "reset": "done", "reset_note": None})
+                           "reset": "done", "reset_note": None, **({"coordinator_model": model} if model else {})})
         r["platform_version"] = version
         put(store, r)
     bench("b1", 20, "done", 1000, 1.0)
@@ -146,12 +146,53 @@ def test_report_benchmarks_shows_runs_median_and_outcomes_per_workflow_and_versi
     bench("b4", 22, "done", 10, 0.01, version="4.6.0")
     put(store, rec("plain", "2026-10-22T10:00:00Z"))                                    # not a benchmark
     out = report_json(capsys, "--benchmarks")
-    row = out["benchmarks"]["ship"]["4.5.0"]
-    assert row == {"runs": 3, "tokens_median": 3000, "cost_usd_median": pytest.approx(3.0), "outcomes": {"done": 2, "failed": 1}}
-    assert out["benchmarks"]["ship"]["4.6.0"]["runs"] == 1 and "window" in out
+    row = out["benchmarks"]["ship"]["4.5.0 (unknown)"]
+    assert row["runs"] == 3 and row["outcomes"] == {"done": 2, "failed": 1}
+    assert out["benchmarks"]["ship"]["4.6.0 (unknown)"]["runs"] == 1 and "window" in out
     assert runs.main(["report", "--benchmarks"]) == 0
     text = capsys.readouterr().out
     assert "ship" in text and "4.5.0" in text and "estimate" in text.lower() and "2026-10-25" in text  # AC-099.7: names the price table date
+
+
+def test_report_benchmarks_groups_by_coordinator_model_and_medians_done_runs_only(store, capsys):
+    """AC-099.13: one row per coordinator model; the median covers done runs, failed runs are shown on their own."""
+    def bench(rid, outcome, tokens, cost, model):
+        z = {"calls": 1, "failed_calls": 0, "input": tokens, "output": 0, "cache_read": 0, "cache_write": 0, "cost_usd": cost}
+        u = {"sessions": ["s"], "price_table": "2026-10-25", "incomplete": None,
+             "totals": {**z, "cost_complete": True, "models_without_price": []}, "by_phase": {}, "by_role": {}, "by_model": {}}
+        r = rec(rid, "2026-10-22T10:00:00Z", kind="benchmark", outcome=outcome, usage=u,
+                benchmark={"workflow": "build", "task_version": 4, "sample_repo": "ika100/todo-api", "sample_rev": "a" * 40,
+                           "reset": "done", "reset_note": None, "coordinator_model": model})
+        r["platform_version"] = "4.5.0"
+        put(store, r)
+    bench("o1", "done", 2000, 2.0, "opus")
+    bench("o2", "done", 4000, 4.0, "opus")
+    bench("s1", "done", 1000, 1.0, "sonnet")
+    bench("s2", "done", 1200, 1.2, "sonnet")
+    bench("s3", "failed", 9000, 0.4, "sonnet")
+    out = report_json(capsys, "--benchmarks")
+    opus, sonnet = out["benchmarks"]["build"]["4.5.0 (opus)"], out["benchmarks"]["build"]["4.5.0 (sonnet)"]
+    assert opus["coordinator_model"] == "opus" and opus["runs"] == 2 and opus["cost_usd_median"] == pytest.approx(3.0)
+    assert sonnet["runs"] == 3 and sonnet["done"] == 2 and sonnet["outcomes"] == {"done": 1 + 1, "failed": 1}
+    assert sonnet["tokens_median"] == 1100 and sonnet["cost_usd_median"] == pytest.approx(1.1)   # s3 (failed) left out
+    assert sonnet["not_done"] == {"runs": 1, "tokens_median": 9000, "cost_usd_median": pytest.approx(0.4)}
+    assert opus["not_done"] is None
+    assert runs.main(["report", "--benchmarks"]) == 0
+    text = capsys.readouterr().out
+    assert "build 4.5.0 (sonnet): 3 run(s), median of 2 done" in text and "not done: 1 run(s)" in text
+    assert "build 4.5.0 (opus)" in text
+
+
+def test_report_benchmarks_says_no_done_run_when_every_run_failed(store, capsys):
+    """AC-099.13: a group without a done run has no median, only its failed runs."""
+    u = {"sessions": ["s"], "price_table": "2026-10-25", "incomplete": None, "by_phase": {}, "by_role": {}, "by_model": {},
+         "totals": {"calls": 1, "failed_calls": 0, "input": 3, "output": 0, "cache_read": 0, "cache_write": 0, "cost_usd": 0.1,
+                    "cost_complete": True, "models_without_price": []}}
+    put(store, rec("f1", "2026-10-22T10:00:00Z", kind="benchmark", outcome="failed", usage=u,
+                   benchmark={"workflow": "quick-task", "task_version": 2, "coordinator_model": "sonnet"}))
+    assert runs.main(["report", "--benchmarks"]) == 0
+    text = capsys.readouterr().out
+    assert "no done run" in text and "None" not in text and "not done: 1 run(s)" in text
 
 
 def test_benchmarks_cannot_be_combined_with_agents(store):
