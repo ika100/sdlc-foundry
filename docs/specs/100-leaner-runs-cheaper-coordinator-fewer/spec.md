@@ -1,7 +1,7 @@
 ---
 spec_id: 100-leaner-runs-cheaper-coordinator-fewer
 title: 'Leaner runs: cheaper coordinator, fewer turns, smaller context'
-status: building
+status: done
 priority: P1
 tracks: [139]
 ---
@@ -87,3 +87,4 @@ Baselines (platform 4.5.0, installed svc 3.4.0, sample `ika100/todo-api`, prices
 - 2026-10-25 draft: amend: build baseline moves to spec 900 v4 (median of two Opus runs)
 - 2026-10-25 approved
 - 2026-10-25 building
+- 2026-10-25 done

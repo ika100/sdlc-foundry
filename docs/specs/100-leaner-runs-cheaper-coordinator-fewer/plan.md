@@ -83,7 +83,7 @@ tasks:
     depends_on: [b3]
     done: true
   - id: b4
-    title: Final benchmarks against the targets ($0.30 quick-task, $1.15 build)
+    title: Final benchmarks against the targets ($0.30 quick-task, $1.36 (v4 baseline, see the spec) build)
     files: [docs/specs/100-leaner-runs-cheaper-coordinator-fewer/benchmarks.md]
     covers: [AC-100.15, AC-100.16, AC-100.17]
     parallel_safe: false
@@ -303,7 +303,7 @@ present in its reference file, every reference file named by a trigger line).
 **Files:** docs/specs/100-leaner-runs-cheaper-coordinator-fewer/benchmarks.md
 **Covers:** AC-100.15, AC-100.16, AC-100.17
 **Goal:** prove the targets with all accepted steps: quick-task done, PR, gates pass, est. ≤ $0.30; build done, PR,
-gates and reviewer pass, est. ≤ $1.15.
+gates and reviewer pass, est. ≤ $1.36 (v4 baseline, see the spec).
 
 **Implementation notes:**
 - Common rules. If a target is missed, record it with the per-role cost split and stop for the user; do not tune
