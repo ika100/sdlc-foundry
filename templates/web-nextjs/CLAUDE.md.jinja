@@ -32,9 +32,8 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 | `lint-fix` | `eslint . --fix` |
 | `typecheck` | `tsc --noEmit` |
 | `quality` | `lint` then `typecheck` — the gate CI runs |
-{%- if needs_e2e %}
-| `e2e` | Playwright tests in `e2e/` |
-{%- endif %}
+| `e2e` | Playwright tests in `e2e/` (installs Chromium; starts the app unless `SMOKE_BASE_URL` is set) |
+| `smoke` | the `@smoke` Playwright tests against a running deployment: `SMOKE_BASE_URL=https://<host> devbox run smoke` (`test` and `ci` never run them) |
 | `audit` | `pnpm audit --prod --audit-level high` |
 | `secrets-scan` | detect-secrets against `.secrets.baseline.json` |
 | `security` | `audit` + `secrets-scan` |
@@ -96,7 +95,7 @@ Updates (`/shared:update-service`) overwrite the skeleton files below. Put your 
 {%- if needs_observability %}
 - **Observability:** `/api/metrics` (Prometheus), OpenTelemetry via `instrumentation.ts` when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 {%- endif %}
-- **Tests:** Vitest + Testing Library in `tests/` (`*.test.ts[x]`){% if needs_e2e %}; Playwright specs in `e2e/`{% endif %}.
+- **Tests:** Vitest + Testing Library in `tests/` (`*.test.ts[x]`); Playwright specs in `e2e/` (smoke tests carry `@smoke` in their title).
 - **Docs:** feature specs in `docs/specs/` (index in `docs/backlog.md`), ADRs in `docs/adr/`.
 
 ## Docker image pipeline

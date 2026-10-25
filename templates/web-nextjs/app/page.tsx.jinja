@@ -38,7 +38,7 @@ export default function HomePage() {
             Prometheus metrics at <code>/api/metrics</code>; OpenTelemetry traces start when <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> is set.
           </FeatureCard>{% endif %}
           <FeatureCard icon={<FlaskIcon />} title="Tested">
-            Vitest unit tests with a coverage gate{% if needs_e2e %} and Playwright end-to-end checks{% endif %}, run through <code>devbox run test</code>.
+            Vitest unit tests with a coverage gate and Playwright end-to-end checks, run through <code>devbox run test</code>.
           </FeatureCard>
           <FeatureCard icon={<BoxIcon />} title="Container-ready">
             Multi-stage Docker build with a standalone server that runs as a non-root user.
