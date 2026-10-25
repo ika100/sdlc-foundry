@@ -65,7 +65,7 @@ human_steps:
 - "Rerun `devbox run cluster-up` in existing local clusters with `ui: lgtm` so the lgtm Service exposes Prometheus on 9090"
 ---
 
-The contract for every task is [design.md](design.md). ADR: [035](../../adr/035-alert-poll-on-the-gitops-runner.md)
+The contract for every task is [design.md](design.md). ADR: [036](../../adr/036-alert-poll-on-the-gitops-runner.md)
 (the number may change at merge if a parallel spec takes it first). No test may reach GitHub, Prometheus,
 Alertmanager or a cluster:
 - GitHub access goes through `alertissues.tracker()` / `autoissue.gh()`.
@@ -233,7 +233,7 @@ how to declare rules, and how to dry-run it.
 - `docs/self-hosted-runners.md`: the runner must reach the query API (`lgtm.observability.svc:9090` in-cluster). For
   `querySecret`, the ServiceAccount needs `get` on that Secret.
 - `docs/CHANGELOG.md`, one bullet under `## [Unreleased]` in the style of the 088 entry:
-  **Feature (092): firing alerts become issues in the owning repo.** [ADR-035](adr/035-alert-poll-on-the-gitops-runner.md). Sub-bullets:
+  **Feature (092): firing alerts become issues in the owning repo.** [ADR-036](adr/036-alert-poll-on-the-gitops-runner.md). Sub-bullets:
   - the poll and the runner requirement
   - rules in app.yaml and `ServiceDown`
   - the 088 convention with `env:<env>`, fired again / resolved / closed while untriaged / reopen within 7 days, and

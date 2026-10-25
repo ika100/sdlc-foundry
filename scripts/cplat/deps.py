@@ -279,6 +279,19 @@ def _cmd_patch(ns: argparse.Namespace) -> int:
                     st["bumps"] += round_bumps
                     _save_state(repo, st)
                 raise
+            if red and red[0] == "security" and new == []:
+                # every dependency finding is gone; the gate is red for another reason (bandit, secrets): the bumps were good
+                st["bumps"] += round_bumps
+                for b in round_bumps:
+                    b["outcome"] = "patched"
+                    _record(run_id, b)
+                done_this_call += round_bumps
+                _save_state(repo, st)
+                for b in done_this_call:
+                    print(f"PATCHED: {b['package']} {b['from']} -> {b['to']} ({', '.join(b['advisories'])}, {b['severity']})"
+                          + (" major bump" if b["major"] else ""))
+                print("NOT A DEPENDENCY FINDING: the security gate is still red for another reason (secrets, bandit, or a scanner error)")
+                return 4
             if red is None or (new and all(_fixable(f) for f in new)):
                 st["bumps"] += round_bumps
                 for b in round_bumps:

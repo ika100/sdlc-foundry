@@ -1,4 +1,4 @@
-"""`alertissues`: firing alerts become GitHub issues, and stop being issues when they stop firing (spec 092, ADR 035).
+"""`alertissues`: firing alerts become GitHub issues, and stop being issues when they stop firing (spec 092, ADR 036).
 
 `reconcile()` takes the alerts of one application's poll and does every GitHub action: file in the owning repo (fallback:
 the gitops-app repo), comment `Fired again`, reopen within 7 days, honour `wontfix`, cap new issues per poll with a summary

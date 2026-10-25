@@ -1,4 +1,4 @@
-"""`alertsources`: where firing alerts come from (spec 092, ADR 035).
+"""`alertsources`: where firing alerts come from (spec 092, ADR 036).
 
 Reads `applications/<app>/{app.yaml,services.yaml}`, evaluates the declared rules and the built-in `ServiceDown` against a
 Prometheus query API, reads an optional Alertmanager, and maps every series to a service, its repo and an environment.

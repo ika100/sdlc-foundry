@@ -5,8 +5,8 @@
                                                          same subscription); wait for it to end, or --no-wait to exit
   cplat headless --dry-run "/svc:fix-bug ..."            print the claude command
 
-Each run is a fresh `claude -p` session with the repo's committed permission allowlist and `--permission-mode dontAsk`:
-anything not allowlisted is refused instead of prompting, so nobody has to watch. A run ends when Claude stops, the
+Each run is a fresh `claude -p` session with `--permission-mode acceptEdits` and the repo's committed permission allowlist:
+file edits inside the repo are accepted, any other tool not allowlisted is refused instead of prompting, so nobody has to watch. A run ends when Claude stops, the
 time is up, or the context runs out; if `cplat ship` state says the run is unfinished and not escalated, the next run
 resumes it from disk (spec status, plan.md `done` flags, the ship state). Logs: ~/.cache/sdlc-foundry/headless/<repo>/.
 """
@@ -21,6 +21,7 @@ import shlex
 import shutil
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 import runs as runlog
@@ -65,7 +66,7 @@ def seconds_left_in_window(window: tuple[dt.time, dt.time] | None, at: dt.dateti
 
 def claude_cmd(prompt: str, model: str | None) -> list[str]:
     exe = os.environ.get("CPLAT_CLAUDE") or "claude"
-    cmd = [exe, "-p", prompt, "--permission-mode", "dontAsk", "--output-format", "text"]
+    cmd = [exe, "-p", prompt, "--permission-mode", "acceptEdits", "--output-format", "text"]
     if model:
         cmd += ["--model", model]
     return cmd
@@ -200,7 +201,11 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         runs += 1
         state["sessions"] = runs
         print(f"run {runs}/{ns.max_runs}: {prompt}  (log: {log})", flush=True)
-        code = run_once(cmd, repo, log, left, rid)
+        sid = str(uuid.uuid4())
+        if rid:
+            import runs_usage
+            runs_usage.register(rid, mode="own", session=sid)
+        code = run_once(cmd + ["--session-id", sid], repo, log, left, rid)
         st = unfinished(repo)
         if st is None:
             result = describe_end(repo, code)

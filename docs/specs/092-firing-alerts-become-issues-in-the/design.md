@@ -6,8 +6,8 @@
   `cplat alerts poll`, in `scripts/cplat/alerts.py`. The template's `scripts/alert-poll.sh` fetches the platform at
   `.platform-version`'s `ref`, as `scripts/spec-check.sh` already does, and runs `uv run cplat.py alerts poll`. So the
   poll imports `autoissue` (088) itself: one signature function, one `scrub`, one `GhTracker`, no copy in the template.
-  ADR: [docs/adr/035-alert-poll-on-the-gitops-runner.md](../../adr/035-alert-poll-on-the-gitops-runner.md). The number
-  035 is tentative: parallel specs 090/091/094/095 may also add ADRs, so it may be renumbered at merge to the next free
+  ADR: [docs/adr/036-alert-poll-on-the-gitops-runner.md](../../adr/036-alert-poll-on-the-gitops-runner.md). The number
+  036 is tentative: parallel specs 090/091/094/095 may also add ADRs, so it may be renumbered at merge to the next free
   number on `origin/main`.
 - **A dedicated lifecycle module, not `autoissue.file()`.** `file()` comments on every repeat and offers no
   resolve, close or reopen. 092 needs those: no comment while still firing (AC-092.11), "fired again" only after a
@@ -475,7 +475,7 @@ jobs:
   poll:
     name: ${{ vars.CI_RUNNER == '' && 'alert poll skipped: needs the self-hosted runner (set the CI_RUNNER variable)' || 'alert poll' }}
     if: vars.CI_RUNNER != ''
-    runs-on: ${{ vars.CI_RUNNER }}           # never a GitHub-hosted runner (ADR-035)
+    runs-on: ${{ vars.CI_RUNNER }}           # never a GitHub-hosted runner (ADR-036)
     steps:
       - uses: actions/checkout@<the pinned sha ci.yml uses> # v7.0.1
       - name: Poll

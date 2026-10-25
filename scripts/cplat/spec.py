@@ -645,8 +645,50 @@ def task_done(spec: Spec, task_id: str) -> None:
     task = next((t for t in meta.get("tasks") or [] if t.get("id") == task_id), None)
     if task is None:
         raise PlatformError(f"{spec.id}: unknown task '{task_id}'")
-    task["done"] = True
-    save(spec.dir / "plan.md", meta, body)
+    path = spec.dir / "plan.md"
+    text = path.read_text()
+    edited = _set_done_in_text(text, task_id)
+    if edited is None:       # an unusual layout: fall back to re-serialising the front matter
+        task["done"] = True
+        save(path, meta, body)
+    elif edited != text:
+        path.write_text(edited)
+
+
+def _set_done_in_text(text: str, task_id: str) -> str | None:
+    """Set `done: true` on one task by editing only its line(s); None when the layout is not recognised."""
+    m = re.match(r"---\n(.*?\n)---\n", text, flags=re.S)
+    if not m:
+        return None
+    lines = m.group(1).splitlines(keepends=True)
+    ident = rf"(?:id:\s*{re.escape(task_id)}\b|\{{[^\n]*?\bid:\s*{re.escape(task_id)}\b)"
+    start = next((i for i, ln in enumerate(lines) if re.match(rf"\s*-\s+{ident}", ln)), None)
+    if start is None:
+        return None
+    if re.match(r"\s*-\s+\{", lines[start]):     # flow mapping on one line
+        ln = lines[start]
+        if re.search(r"\bdone:\s*\w+", ln):
+            lines[start] = re.sub(r"(\bdone:\s*)\w+", r"\1true", ln, count=1)
+        else:
+            close = ln.rstrip().rfind("}")
+            if close < 0:
+                return None
+            lines[start] = ln[:close].rstrip() + ", done: true" + ln[close:]
+    else:                                                                          # block mapping
+        indent = re.match(r"\s*", lines[start]).group(0)
+        end = start + 1
+        while end < len(lines) and re.match(rf"{indent}\s+\S", lines[end]) and not re.match(rf"{indent}-\s", lines[end]):
+            end += 1
+        for i in range(start + 1, end):
+            if re.match(r"\s+done:\s*\S", lines[i]):
+                lines[i] = re.sub(r"(done:\s*)\S+", r"\1true", lines[i], count=1)
+                break
+        else:
+            key_indent = indent + "  "
+            if not lines[end - 1].endswith("\n"):
+                lines[end - 1] += "\n"
+            lines.insert(end, f"{key_indent}done: true\n")
+    return text[:m.start(1)] + "".join(lines) + text[m.end(1):]
 
 
 # ---------------- list / index ----------------

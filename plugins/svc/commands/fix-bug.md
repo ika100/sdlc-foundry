@@ -89,7 +89,7 @@ After the tester confirms the bug is resolved:
    git push -u origin <current-branch>
    ```
 
-3. Create the PR (requires user confirmation — `gh pr create` is in the `ask` list):
+3. Create the PR (`gh pr create` is allowlisted, so this also runs in a headless session):
    ```bash
    gh pr create \
      --title "fix(<scope>): <same description as the commit>" \

@@ -6,13 +6,49 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (094): `cplat spec task-done` no longer rewrites plan.md.** It sets `done: true` on the task's own line(s) and keeps the rest of the file byte for byte (no block-YAML re-serialisation, no rewrapped summary).
+- **Fix (095): a good dependency bump is not reverted for an unrelated red check.** When the bump clears every dependency finding but the security gate stays red for another reason (bandit, secrets), `cplat deps patch` keeps the bump, prints it and exits 4 so the coder takes over, instead of reverting and blaming it. Unrated fixable findings were already bumped (severity does not select, AC-095.12).
+- **Fix (088): redaction edge cases.** A run of 40+ repeated characters is only kept as padding when it is not glued to other word characters (`ghp_AAAA...` is redacted again), and a private name is replaced as a whole word (`todo` no longer matches inside `todo-api` or `mytodo`). The gh error mapping now has a test.
+- **Fix (087): `cplat runs report` has an upper bound.** Records ended after the window's `until` (future-dated) no longer count.
+- **Fix: skeleton updates keep the repo's secrets baseline.** `.secrets.baseline.json` records a repo's own false positives; `/shared:update-service` replaced it with the template's, so the secrets scan failed again after every update. It is now repo-owned (`_skip_if_exists`) and only added when a repo has none.
+- **Fix: template allowlists cover headless commits and plugin reads.** `git commit -q -m` was missing (the other flag orders were there), and `Read(~/.claude/plugins/**)` lets agents read the plugins' reference files (for example the spec-format plan and design formats) outside the repo. Each stopped a headless `/svc:plan` + `/svc:build` in the 099 benchmark. A test now checks every template.
+- **Fix (099): the build benchmark plans first.** `/svc:build` needs a `plan.md`, so `cplat runs benchmark build` runs `/svc:plan 900` and then `/svc:build 900` as two phases of one run (task_version 3); a failed step stops the run and `result_check` names it.
+- **Fix: `cplat update-service` refreshes `devbox.lock`.** After merging `devbox.json` it runs `devbox install`, so the lock matches and the next devbox run no longer dirties the tree (a headless `/svc:quick-task` stopped on that). Without devbox, or when the install fails, the report names the step.
+- **Fix: templates drop the `Bash(kubectl --context * get|describe|logs *)` rules.** The wildcard before the subcommand also approved any options placed there; `kubectl get|describe|logs *` already cover the read-only calls (with `--context` after the subcommand). `/shared:update-service` removes the old rules from each repo.
+## [4.5.0] — 2026-10-25
+
+**Every run is recorded with its token usage and cost, platform failures become issues, and unattended sessions can finally edit files.**
+- **Run store and feedback loops (087–089):** each ship, build, headless and PR-wait run is recorded in a private run store; platform failures become deduplicated issues; agent quality is measured per agent, shape and model.
+- **Token usage and cost (099):** `cplat runs usage`, usage and gates in every run record, cost per delivered run in `cplat runs report`, and `cplat runs benchmark` against `ika100/todo-api` for a repeatable baseline.
+- **More autonomy (094–096):** a merge conflict re-plans, fixable CVEs are patched by the run, `cplat fleet update` rolls platform updates out to every repo.
+- **Safer repos (085, 086, 098):** a broken spec names itself and blocks nothing else, repo gates survive skeleton updates, gitops CI checks Components against the service branch's CRDs.
+- **Fixes:** headless sessions run with `acceptEdits` (in `dontAsk` they could edit nothing); `/svc:quick-task`, `/svc:fix-bug` and `/svc:release` no longer stop before the PR.
+
+**Action for existing repos:**
+1. Run `/plugin marketplace update` (svc 3.4.0, shared 0.14.0, app 1.0.2).
+2. Run `/shared:update-service` in every repo (or `cplat fleet update`), gitops-apps first.
+3. Optional: `cplat runs init <owner/name>` with a **private** repo to keep run records; until then they are buffered locally.
+4. Claude Code 2.1.132 or later is needed for usage per run (`$CLAUDE_CODE_SESSION_ID`).
+
+- **Fix: `/svc:quick-task`, `/svc:fix-bug` and `/svc:release` no longer claim that push and `gh pr create` need confirmation.** Both are allowlisted since 4.4.0; the stale text made a headless quick-task stop after green tests without committing (found by the 099 benchmark).
+- **Fix (070): headless sessions can edit files.** `cplat headless` runs `claude -p --permission-mode acceptEdits` instead of `dontAsk`. No allowlist grants `Edit` or `Write`, so every unattended session (headless, `/svc:ship` via the Stop hook, `cplat runs benchmark`) could plan but never change a file. Edits stay inside the repo; every other tool is still limited to the committed allowlist and nothing prompts. AC-070.1 is replaced by AC-070.5.
+- **Fix (099): the benchmark checks trust and its result.** One fixed clone per workflow under `<state>/benchmark/<workflow>`, refused until the folder is trusted in Claude Code; a run is `done` only with a new open PR (quick-task, build) or merged PR (ship); the reset leaves PRs, branches and tags that existed before the run alone.
+- **Feat (099): token usage and cost are measured per run.** [ADR-035](adr/035-token-usage-from-session-transcripts.md)
+  - A run record gets a `usage` section (totals and breakdown by phase, role and model), read from the local Claude Code session transcripts. **Needs Claude Code 2.1.132 or later** (`CLAUDE_CODE_SESSION_ID`). Costs are **estimates** from the price table in the repo; output tokens are shown as reported, so output cost is a lower bound.
+  - `cplat runs usage <run_id>` / `--session <id>` [`--json`] prints the breakdown. `cplat runs gate <acceptance|security> <passed|failed>` records the gate results that `/svc:build` states; a ship or build record carries `gates`.
+  - `cplat runs report` adds a `usage` view per kind: delivered runs with total and median, next to failed, escalated, abandoned and gate-failed runs.
+  - `cplat runs benchmark <quick-task|build|ship> [--reset-first]` runs a fixed task headless against the sample repo `ika100/todo-api`; `cplat runs report --benchmarks` compares workflows per platform version.
+- **Feat (094): a merge conflict re-plans instead of escalating.**
+  - `cplat build merge` aborts a conflicting merge and sets the task aside; `cplat build replan-commit` accepts the architect's amendment only when it changes `files` / `depends_on` / `parallel_safe` of open tasks.
+  - A task is re-planned once and a build at most 3 times, then it escalates. Conflicts are never resolved by hand.
+  - The Final Report says when the plan was amended.
 - **Feature (088): platform failures become deduplicated issues.** [ADR-033](adr/033-auto-filed-issues-with-signatures.md)
   - `cplat ship escalate --cause platform` and a crash of any `cplat` command inside a recorded run file the failure in `ika100/sdlc-foundry`. Causes `code`, `decision` and `environment` are only recorded; a missing or unknown cause becomes `unknown`.
   - Each issue carries one `Signature: platform:<16 hex>` line and the label `auto-filed`; a repeat adds a +1 comment to the oldest open issue, and a repeat after close files a new issue linking the old one (nothing after `wontfix`). Repo, spec and branch names are removed.
   - At most 10 new issues per 24 h per machine; filings that fail or hit the cap stay pending and are retried at `cplat runs flush`.
   - `CPLAT_AUTO_ISSUES=off` sends nothing and prints the draft; `CPLAT_FEEDBACK_REPO=<owner/name>` files elsewhere.
   - **Action:** run `cplat triage setup-labels` once to create `auto-filed`.
-- **Feature (092): firing alerts become issues in the owning repo.** [ADR-035](adr/035-alert-poll-on-the-gitops-runner.md)
+- **Feature (092): firing alerts become issues in the owning repo.** [ADR-036](adr/036-alert-poll-on-the-gitops-runner.md)
   - `.github/workflows/alerts.yml` in a gitops-app runs `cplat alerts poll` every 15 minutes at the repo's pinned platform version, only on the self-hosted runner (`CI_RUNNER`); `gh workflow run alerts.yml -f dry_run=true` shows what would happen.
   - Rules go under the `observability` addon in app.yaml (`rules`, `alerts`, `queryURL`, `querySecret`, `alertmanagerURL`; `devbox run quality` validates them); `ServiceDown` is built in.
   - Issues follow the 088 convention with an `env:<env>` label in the service's `repo` (else the gitops repo): a comment when it fires again after a resolve, a comment and close when it resolves while untriaged, a reopen within 7 days, nothing after `wontfix`.

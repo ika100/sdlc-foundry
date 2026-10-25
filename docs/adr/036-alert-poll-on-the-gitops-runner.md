@@ -1,4 +1,4 @@
-# ADR-035 — Alerts reach GitHub through a scheduled poll on the gitops-app's self-hosted runner
+# ADR-036 — Alerts reach GitHub through a scheduled poll on the gitops-app's self-hosted runner
 
 **Status:** accepted (2026-10-24, spec 092)
 
