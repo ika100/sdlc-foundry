@@ -146,6 +146,22 @@ After dev is healthy, `cplat ship deploy` checks the spec in dev (spec 091, [ADR
 - **By hand:** `cplat smoke run [--env dev] [--base-url URL] [--spec SPEC] [--json]` in a service repo (exit 0 passed, 1 red, 3 not run); it files no issue.
 - **The dev URL** comes from the linked gitops-app: the service must have `expose:` and a `hosts.dev` template in `app.yaml`. An optional `urls.dev` in `app.yaml` overrides it (`{host}` is the host from `hosts`). For `*.localhost` hosts the port is `LOCAL_HTTP_PORT`, default 8088.
 
+## Deploy gate
+
+A deploy counts only after every step below. Each step is enforced by `code` (a test pins it) or by an `agent` (a rule in a prompt, no test). Spec 105 added the digest, the failure classes and the environment retries.
+
+| step | enforced by | check | test |
+|---|---|---|---|
+| pin confirmed | code | the pin PR for the merge commit is merged and its pin-dev run is not red | `test_deploy_fails_at_once_on_a_red_pin_dev_run` |
+| Argo healthy | code | Argo CD runs the pinned build and reports Synced/Healthy | `test_argo_old_image_is_waiting_not_healthy` |
+| smoke | code | the spec's smoke tests pass in dev and the record names the image digest the cluster runs | `test_deploy_runs_every_smoke_test_against_the_published_dev_url_ac_091_6`, `test_the_smoke_record_holds_the_digest_dev_runs_ac_105_1` |
+| retry | code | an application failure is retried once, an environment failure up to three times in total, 30 s apart | `test_an_application_failure_keeps_the_single_retry_ac_105_5`, `test_an_environment_failure_is_tried_three_times_30_seconds_apart_ac_105_5` |
+| escalation | code | a red smoke escalates: cause `code` with an issue, cause `environment` without one | `test_an_application_failure_still_escalates_with_cause_code_ac_105_5`, `test_a_persistent_environment_failure_escalates_without_an_issue_ac_105_5` |
+| digest match | code | staging is pinned only while the registry digest of the tag equals the smoked digest | `test_a_changed_digest_pins_nothing_and_says_so_ac_105_2` |
+| promotion | code | a smoke that was not run is reported `NOT VERIFIED` and promotes nothing | `test_a_not_run_smoke_reports_not_verified_and_promotes_nothing_ac_105_6`, `test_a_dev_smoke_that_was_not_run_promotes_nothing_ac_093_3` |
+
+A replay of `cplat ship deploy` skips the dev smoke only when the record holds a pass for the digest dev runs now (`test_a_replay_with_the_same_digest_does_not_smoke_dev_again_ac_105_7`). `cplat promote … staging prod` prints the checked digest and flags `digest differs from what staging runs`.
+
 ## Budgets and repeated failures
 
 Every unattended run tree shares one budget (spec 102, [ADR-043](adr/043-one-budget-per-run-tree.md)): wall-clock minutes, agent invocations (sessions and subagents), CI reruns and estimated cost. The outermost run owns it (`cplat headless`, `/app:ship`, or a ship or build started by hand); every ship, build and CI wait below it counts against the same budget.

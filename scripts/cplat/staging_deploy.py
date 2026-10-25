@@ -13,6 +13,7 @@ from pathlib import Path
 
 import autoissue
 import core
+import registry
 import runs
 import smoke
 import staging
@@ -119,6 +120,17 @@ def promote(repo: Path, st: dict, apps: list[str], svc: str, dev: smoke.SmokeRes
     if len(apps) > 1:
         lines.append(f"staging: promoting in {d.app} only, the first linked gitops-app that lists {svc}")
     tag, app = d.tag, d.app
+    if not dev.digest:                   # spec 105: pin only the build that was smoked, and that needs its digest
+        return True, skip(repo, st, "the dev smoke recorded no image digest", [])
+    try:
+        current = registry.digest(f"ghcr.io/{ship.service_slug(repo).lower()}", tag)
+    except PlatformError as e:
+        return True, skip(repo, st, f"digest of {tag} not verified: {e}", [])
+    if current != dev.digest:
+        reason = f"digest changed since smoke: {dev.digest} -> {current}"
+        _section(repo, st).update(state="skipped", reason=reason, row=f"Promotion (staging): not promoted: {reason}")
+        _record(repo, st, result="skipped")
+        return _escalate(repo, st, reason, "decision", [f"Promotion (staging): not promoted: {reason}"])
     sp = ship._smoke_spec(repo, st)
     rid = ship._ensure_run(repo, st)
     _section(repo, st).update(state="dispatched", reason=None, app=app, tag=tag, previous=d.previous, pr=None, row=None)

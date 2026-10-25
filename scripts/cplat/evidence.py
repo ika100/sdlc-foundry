@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 
+import registry
 import runs
 from core import PlatformError, run
 
@@ -50,6 +51,7 @@ class Evidence:
     issues: list[dict] = field(default_factory=list)
     issues_error: str | None = None
     warning: str | None = None
+    staging_digest: str | None = None
 
     def lines(self) -> list[str]:
         short = lambda s: (s or "unknown")[:7]   # noqa: E731
@@ -66,6 +68,10 @@ class Evidence:
                        else "- staging runs: no pinned build")
         for env, rec in (("dev", self.dev), ("staging", self.staging)):
             out.append(f"- smoke ({env}): " + ", ".join(p for p in (rec.get("text"), rec.get("at_text"), rec.get("link")) if p))
+            if env == "dev" and rec.get("digest"):
+                out.append(f"- digest checked in dev: {rec['digest']}")
+                if self.staging_digest and self.staging_digest != rec["digest"]:
+                    out.append(f"- WARNING: digest differs from what staging runs ({self.staging_digest})")
         if self.issues_error is not None:
             out.append(f"- open issues: unknown ({self.issues_error})")
         elif self.issues:
@@ -77,7 +83,8 @@ class Evidence:
     def data(self) -> dict:
         return {"service": self.service, "version": self.version, "commit": self.commit, "evidence_commit": self.evidence_commit,
                 "note": self.note, "staging_tag": self.staging_tag, "staging_commit": self.staging_commit, "dev": self.dev,
-                "staging": self.staging, "issues": self.issues, "issues_error": self.issues_error, "warning": self.warning}
+                "staging": self.staging, "issues": self.issues, "issues_error": self.issues_error, "warning": self.warning,
+                "staging_digest": self.staging_digest}
 
 
 def _api(repo: str, ref: str) -> dict:
@@ -141,7 +148,7 @@ def _stamp(at: str | None) -> str | None:
 def _entry(sec: dict, path: str, store: str, fallback: str | None) -> dict:
     at = sec.get("at") or fallback
     return {"outcome": sec.get("outcome"), "text": _word(sec), "at": at, "at_text": _stamp(at), "reason": sec.get("reason"),
-            "path": path, "rank": "", "link": f"https://github.com/{store}/blob/HEAD/{path}"}
+            "digest": sec.get("digest"), "path": path, "rank": "", "link": f"https://github.com/{store}/blob/HEAD/{path}"}
 
 
 def _records(svc_repo: str, shas: set[str], days: int) -> tuple[dict | None, dict | None, str | None]:
@@ -198,6 +205,11 @@ def summary(svc: dict, version: str, staging_tag: str | None, *, days: int = 30)
         absent = f"no record ({why})" if why else "no record"
         ev.dev = dev or {"outcome": None, "text": absent}
         ev.staging = stg or {"outcome": None, "text": absent}
+        if ev.dev.get("digest") and staging_tag:
+            try:
+                ev.staging_digest = registry.digest(str(svc.get("image")), staging_tag)
+            except Exception:  # noqa: BLE001  (an unreadable digest only leaves the flag out)
+                pass
         ev.issues, ev.issues_error = _issues(repo)
         ev.warning = _warning(ev, why)
     except Exception as e:  # noqa: BLE001  (the summary never blocks a promotion)

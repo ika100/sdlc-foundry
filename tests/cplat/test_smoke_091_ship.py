@@ -46,6 +46,9 @@ class World:
         self.mp.setattr(smoke, "reachable", lambda url, timeout=10.0: reachable)
         self.mp.setattr(smoke, "gh", GitopsApi(services, APP))
         self.mp.delenv("LOCAL_HTTP_PORT", raising=False)
+        import cluster, registry                      # spec 105: dev runs one digest, the registry agrees (tests override)
+        self.mp.setattr(cluster, "running_digest", lambda context, namespace, service: "sha256:" + "1" * 64)
+        self.mp.setattr(registry, "digest", lambda image, tag: "sha256:" + "1" * 64)
         to_deploy(self.repo)
         self.gh.pin_prs[GITOPS] = [{"number": 9, "state": "MERGED", "url": f"https://github.com/{GITOPS}/pull/9"}]
         argo(self.mp, {"shop-api-dev": HEALTHY})

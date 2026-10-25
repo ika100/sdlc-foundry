@@ -33,6 +33,7 @@ from pathlib import Path
 
 import autoissue
 import budget
+import cluster
 import core
 import feedback
 import runs
@@ -860,6 +861,8 @@ def _smoke_state(repo: Path, st: dict, result: smoke.SmokeResult, row: str, file
     """The run record's `smoke` section and the state's summary. Never raises (a recording never changes the deploy)."""
     try:
         st["smoke"] = {"outcome": result.outcome, "row": row, "url": result.base_url, "reason": result.reason,
+                       "digest": result.digest, "passed": result.passed, "failed": result.failed, "skipped": result.skipped,
+                       "criteria": dict(result.criteria),
                        "signature": autoissue.signature("smoke", service_slug(repo), "dev", "\n".join(sorted(result.failing)))}
         runs.set_section(_ensure_run(repo, st), "smoke", {**result.section(filed), "image": st.get("deployed"),
                                                            "at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
@@ -872,6 +875,8 @@ def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[s
     """Record the smoke result, then end the deploy: after green or not run staging is promoted when the gitops-app asks for it
     (spec 093) and the run is done; escalated (cause code) when red."""
     lines = [*lines, *result.lines()]
+    if result.outcome == "not-run":
+        lines.append("NOT VERIFIED: the deploy was not checked by smoke tests, so nothing is promoted to staging")
     if result.outcome == "not-run" or result.ok:
         _smoke_state(repo, st, result, result.row(), None)
         lines.append(f"Smoke (dev): {result.row()}")
@@ -880,6 +885,19 @@ def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[s
         return _done(repo, st, lines) if ok else (False, lines)
     sp = _smoke_spec(repo, st)
     sid = sp.id if sp else st["spec"]
+    if result.failure_class == "environment":      # spec 105: the environment is broken, not the code: no issue, no promotion
+        row = result.row()
+        _smoke_state(repo, st, result, row, None)
+        save_state(repo, st)
+        reason = f"smoke red in dev: environment ({result.base_url})"
+        skipped = staging_deploy.skip(repo, st, "dev smoke red", [])
+        save_state(repo, st)
+        escalate(repo, reason, "environment", report=lines)
+        lines.append(f"ship {st['spec']}: escalated ({reason}); dev keeps running {st.get('deployed')}. "
+                     f"Resume with /svc:ship {st['spec']}")
+        lines += skipped
+        lines.append(f"Smoke (dev): {row}")
+        return False, lines
     out = smoke.file_issue(result, service_slug=service_slug(repo), spec_id=sid, image=st.get("deployed"),
                            run_id=st.get("run_id"), shape=core.read_stamp(repo).get("shape", "none"))
     lines += out.lines
@@ -910,12 +928,38 @@ def _smoke_not_run(repo: Path, st: dict, reason: str, lines: list[str], apps: li
 
 
 def _smoke_step(repo: Path, st: dict, apps: list[str], svc: str, lines: list[str], base_url: str | None,
-                context: str | None = None, interval: float = 20) -> tuple[bool, list[str]]:
+                context: str | None = None, interval: float = 20, resume: bool = False) -> tuple[bool, list[str]]:
+    """`resume`: smoke only after a red run; without a kube context the digest stays unrecorded (nothing is then promoted)."""
     url, why = (base_url, None) if base_url else smoke.dev_url(repo, apps, svc)
     if not url:
         return _smoke_not_run(repo, st, why or "no dev URL", lines, apps, svc, context, interval)
+    digest = cluster.running_digest(context, dev_namespace(repo, apps, svc), svc) if context else None
+    if not digest and (context or not resume):
+        return _smoke_not_run(repo, st, "image digest unknown", lines, apps, svc, context, interval)
+    prior = st.get("smoke") or {}
+    if digest and prior.get("outcome") == "passed" and prior.get("digest") == digest:      # spec 105: a replay of a pass for this digest
+        sec = {k: prior.get(k, 0) for k in ("passed", "failed", "skipped")}
+        result = smoke.SmokeResult(env="dev", outcome="passed", base_url=prior.get("url") or url, digest=digest,
+                                   criteria=dict(prior.get("criteria") or {}), **sec)
+        return _smoke_finish(repo, st, result, [*lines, f"smoke (dev) already passed for {digest}: not run again"],
+                             apps, svc, context, interval)
     result = smoke.run_smoke(repo, url, spec=_smoke_spec(repo, st), probe=smoke.liveness_probe(repo))
+    result.digest = digest
     return _smoke_finish(repo, st, result, lines, apps, svc, context, interval)
+
+
+def dev_namespace(repo: Path, apps: list[str], svc: str) -> str:
+    """The namespace dev runs in: `<gitops-app dir>-dev` of the app that lists the service (fallback `<service>-dev`)."""
+    try:
+        me = service_slug(repo)
+        for slug in apps:
+            for a in smoke._app_dirs(slug, repo) or []:
+                entries = (smoke._read(slug, f"applications/{a}/services.yaml", repo) or {}).get("services") or []
+                if any(isinstance(e, dict) and (e.get("repo") == me or e.get("name") == svc) for e in entries):
+                    return f"{a}-dev"
+    except Exception:  # noqa: BLE001
+        pass
+    return f"{svc}-dev"
 
 
 def deploy(repo: Path, timeout: float, interval: float, context: str | None,
@@ -937,7 +981,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
                                "automatically; compose it with /gitops:compose and link it (spec 062)"])
     if st.get("deployed") and (st.get("smoke") or {}).get("outcome") in {"red", "timed-out"}:
         return _smoke_step(repo, st, apps, service_name(repo), ["resuming: smoke only, against what dev runs now"], base_url,
-                           context, interval)
+                           context, interval, resume=True)
     stg = st.get("staging") or {}
     if st.get("deployed") and (stg.get("state") == "pin-failed" or (stg.get("smoke") or {}).get("outcome") in {"red", "timed-out"}):
         ok, more = staging_deploy.resume(repo, st, apps, service_name(repo), context, interval)

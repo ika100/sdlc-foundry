@@ -381,6 +381,7 @@ def first_run_that_fails_at_the_pin(sw, monkeypatch, **kw):
     assert sw.deploy() == 1
     assert len(sw.fake.calls) == 1 and sw.state()["smoke"]["outcome"] == "passed"
     sw.api.dispatch_error = None
+    ship.start(sw.repo, "7", True)           # a replay after an escalation is a resumed run with a record of its own (087)
     return dg
 
 

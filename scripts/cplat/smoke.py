@@ -33,6 +33,8 @@ from core import PlatformError, run
 
 OUTCOMES = ("passed", "passed-on-retry", "red", "timed-out", "not-run")
 LIMIT_S, RETRY_DELAY_S, TAIL_LINES = 600, 30, 60
+ENV_ATTEMPTS = 3                    # spec 105: an environment failure is tried up to 3 times in total
+GATEWAY = {502, 503, 504}
 RECIPE_FAILED = "(smoke recipe)"
 TIMED_OUT = "(timed out)"
 DEFAULT_LOCAL_PORT = 8088
@@ -82,6 +84,9 @@ class SmokeResult:
     reason: str | None = None
     tail: str = ""
     criteria: dict[str, str] = field(default_factory=dict)
+    digest: str | None = None            # spec 105: the image digest the cluster ran when the smoke started
+    failure_class: str | None = None     # spec 105: "environment" | "application" for a red run
+    attempts: int = 1
 
     @property
     def ok(self) -> bool:
@@ -113,6 +118,8 @@ class SmokeResult:
             out.append(f"retried after {RETRY_DELAY_S}s: " + (f"{len(self.failing)} failing again" if not self.ok else "passed"))
         out += [f"criterion {ac} (smoke): {v}" for ac, v in self.criteria.items()]
         if not self.ok:
+            if self.failure_class:
+                out.append(f"failure class: {self.failure_class}")
             out.append("failing: " + ", ".join(self.failing))
             out.append(f"--- smoke output (last {TAIL_LINES} lines, secrets redacted) ---")
             out += self.tail.splitlines()
@@ -122,7 +129,8 @@ class SmokeResult:
         return {"env": self.env, "outcome": self.outcome, "base_url": self.base_url, "passed": self.passed,
                 "failed": self.failed, "skipped": self.skipped, "total": self.passed + self.failed + self.skipped,
                 "duration_s": round(self.duration_s, 1), "retried": self.retried, "flaky": list(self.flaky),
-                "reason": self.reason, "criteria": dict(self.criteria), "failing": list(self.failing), "filed": filed}
+                "reason": self.reason, "criteria": dict(self.criteria), "failing": list(self.failing), "filed": filed,
+                "digest": self.digest, "class": self.failure_class, "attempts": self.attempts}
 
 
 # ---------------- the recipe ----------------
@@ -195,6 +203,31 @@ def reachable(url: str, timeout: float = 10.0) -> str | None:
     return None
 
 
+def status(url: str, timeout: float = 10.0) -> int | str:
+    """The HTTP status `url` answers with, or the error text when it does not answer (tests replace this)."""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=timeout) as r:
+            return int(r.status)
+    except urllib.error.HTTPError as e:
+        return int(e.code)
+    except urllib.error.URLError as e:
+        return str(e.reason)
+    except Exception as e:  # noqa: BLE001  (timeouts, TLS, resets: all mean unreachable)
+        return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+
+
+def classify(base_url: str, attempt: Attempt) -> str:
+    """Spec 105: `environment` when the base URL does not answer (or answers 502/503/504) and every test of the attempt
+    failed; otherwise `application`."""
+    if not attempt.tests or any(k != "FAIL" for k, _ in attempt.tests):
+        return "application"
+    try:
+        answer = status(base_url)
+    except Exception:  # noqa: BLE001  (a probe never changes the outcome)
+        return "application"
+    return "environment" if isinstance(answer, str) or answer in GATEWAY else "application"
+
+
 # ---------------- results ----------------
 
 def not_run(env: str, reason: str, smoke_acs: list[str]) -> SmokeResult:
@@ -247,16 +280,26 @@ def run_smoke(repo: Path, base_url: str, *, env: str = "dev", spec: specmod.Spec
         return _result(repo, spec, env, base_url, first, "timed-out", duration_s=monotonic() - t0, reason=f"timed out after {int(timeout)}s")
     if first.exit_code == 0 and not first.failed:
         return _result(repo, spec, env, base_url, first, "passed", duration_s=monotonic() - t0)
+    cls = classify(base_url, first)
     if not retry:
-        return _result(repo, spec, env, base_url, first, "red", duration_s=monotonic() - t0)
-    sleep(retry_delay)
-    second = run_recipe(repo, base_url, timeout)
-    took = monotonic() - t0
-    if second.exit_code is None:
-        return _result(repo, spec, env, base_url, second, "timed-out", duration_s=took, retried=True, reason=f"timed out after {int(timeout)}s")
-    if second.exit_code == 0 and not second.failed:
-        return _result(repo, spec, env, base_url, second, "passed-on-retry", duration_s=took, retried=True, flaky=_failing(first))
-    return _result(repo, spec, env, base_url, second, "red", duration_s=took, retried=True)
+        return _result(repo, spec, env, base_url, first, "red", duration_s=monotonic() - t0, failure_class=cls)
+    attempts, last, flaky = 1, first, _failing(first)
+    while attempts < (ENV_ATTEMPTS if cls == "environment" else 2):
+        if attempts >= 2 and monotonic() - t0 + retry_delay > timeout:
+            break                                  # no attempt starts past the limit (AC-091.8)
+        sleep(retry_delay)
+        last = run_recipe(repo, base_url, timeout)
+        attempts += 1
+        took = monotonic() - t0
+        if last.exit_code is None:
+            return _result(repo, spec, env, base_url, last, "timed-out", duration_s=took, retried=True, attempts=attempts,
+                           reason=f"timed out after {int(timeout)}s")
+        if last.exit_code == 0 and not last.failed:
+            return _result(repo, spec, env, base_url, last, "passed-on-retry", duration_s=took, retried=True, flaky=flaky,
+                           attempts=attempts)
+        cls = classify(base_url, last)
+    return _result(repo, spec, env, base_url, last, "red", duration_s=monotonic() - t0, retried=True, attempts=attempts,
+                   failure_class=cls)
 
 
 # ---------------- the dev URL ----------------
@@ -340,7 +383,7 @@ def issue_draft(result: SmokeResult, *, service_slug: str, spec_id: str | None, 
                 shape: str) -> autoissue.Draft:
     failing = sorted(result.failing)
     details = (f"- spec: {spec_id or 'none'}\n- image: {image or 'unknown'}\n- environment: {result.env}\n"
-               f"- base URL: {result.base_url}\n- failing tests:\n" + "\n".join(f"  - {i}" for i in failing))
+               f"- base URL: {result.base_url}\n- failure class: {result.failure_class or 'unknown'}\n- failing tests:\n" + "\n".join(f"  - {i}" for i in failing))
     return autoissue.Draft(
         kind="smoke", signature=autoissue.signature("smoke", service_slug, result.env, "\n".join(failing)),
         reason=f"Smoke red in {result.env}: " + ", ".join(failing), command="cplat ship deploy", phase="deploy",

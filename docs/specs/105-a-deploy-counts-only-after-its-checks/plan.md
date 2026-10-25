@@ -11,35 +11,35 @@ tasks:
     covers: [AC-105.1, AC-105.2]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: Smoke records the digest; staging promotion and promote evidence compare digests; not-run never promotes
     files: [scripts/cplat/ship.py, scripts/cplat/smoke.py, scripts/cplat/staging_deploy.py, scripts/cplat/promote.py]
     covers: [AC-105.1, AC-105.2, AC-105.3, AC-105.6]
     parallel_safe: false
     depends_on: [t1]
-    done: false
+    done: true
   - id: t3
     title: Failure classes, environment retries (3 × 30 s), escalation cause environment without an issue
     files: [scripts/cplat/smoke.py, scripts/cplat/ship.py]
     covers: [AC-105.4, AC-105.5]
     parallel_safe: false
     depends_on: [t2]
-    done: false
+    done: true
   - id: t4
     title: Replays re-smoke unless the record holds a pass for the same digest
     files: [scripts/cplat/ship.py]
     covers: [AC-105.7]
     parallel_safe: false
     depends_on: [t3]
-    done: false
+    done: true
   - id: t5
     title: Deploy gate table in unattended-delivery.md and its test; CHANGELOG
     files: [docs/unattended-delivery.md, tests/cplat/test_deploy_gate_table.py, docs/CHANGELOG.md]
     covers: [AC-105.8]
     parallel_safe: false
     depends_on: [t4]
-    done: false
+    done: true
 ---
 
 # Plan — 105 A deploy counts only after its checks pass
