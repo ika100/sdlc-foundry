@@ -567,6 +567,9 @@ def test_transcript_figures_phases_and_roles_do_not_change(clock, store, project
     """AC-101.11: with OTel figures the record's transcript-derived totals, by_phase, by_role and by_model equal a run without them."""
     with_otel = finished(clock, store, projects, monkeypatch, CANNED)["usage"]
     store.files.clear()
+    # setup: separate claims per run (099 shares calls between overlapping claims)
+    import runs_usage
+    runs_usage._save([])
     without = finished(clock, store, projects, monkeypatch, None)["usage"]
     with_otel = {k: v for k, v in with_otel.items() if k != "otel"}
     assert with_otel == without
