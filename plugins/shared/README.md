@@ -28,6 +28,20 @@ Claude Code on claude.ai and in Cowork does not install plugins that ship a `bin
 
 Unattended delivery ([ADR-028](../../docs/adr/028-unattended-delivery-without-branch-protection.md)) adds three commands that do not belong to one slash command: `cplat ship …` (the state and steps of `/svc:ship`), `cplat headless "<prompt>"` (fresh `claude -p` sessions until a ship run is done, with a quiet window, log and notification) and `cplat adopt --type <shape>` (bring a repo that was not created from a template onto the platform without overwriting its files). Runs of `cplat ship`, `pr wait` and `headless` are recorded in a private run store (spec 087): `cplat runs init|flush|report`. See [docs/unattended-delivery.md](../../docs/unattended-delivery.md).
 
+Other commands that have no slash command of their own:
+
+| Command | Purpose |
+|---|---|
+| `cplat pr open` | Commit (`-s`), push and open the PR in one step; idempotent, the body is read from `.pr-body.md` (spec 100). |
+| `cplat pr wait <pr> [-R owner/repo] [--merge]` | Wait for the PR's current head: report each check, stop at the first red one, rerun stuck or transient runs once, squash-merge on green with `--merge` (spec 079). |
+| `cplat quiet <script>` | Run a devbox script: one line when green, the tail and the log path when red (spec 100). |
+| `cplat headless "<prompt>" [--model M]` | Fresh `claude -p` sessions until a ship run is done; the coordinator runs on Sonnet unless `--model` or `coordinator_model` says otherwise ([ADR-036](../../docs/adr/036-coordinator-model-default-and-settings.md)). |
+| `cplat smoke run` | Run the repo's smoke tests against an environment (`SMOKE_BASE_URL`, spec 091). |
+| `cplat alerts poll` | Evaluate the alert sources and turn firing alerts into deduplicated issues (spec 092). |
+| `cplat retro [--week W] [--json] [--out DIR]` | The weekly report from the run store; by hand it prints and writes nothing. `cplat runs init` installs the Monday workflow that posts it with spec proposals (spec 090). |
+| `cplat app-ship …` | The state and steps of `/app:ship`: one `cplat ship` per component repo in plan order (spec 097). |
+| `cplat runs benchmark <workflow> [--model M] [--plugins DIR]` | Run a fixed task against the sample repo and record its usage; `cplat runs report --benchmarks` compares the runs (spec 099/100). |
+
 ## Hooks
 
 - `SessionStart`: checks devbox and runs `devbox install` when the repo has a `devbox.json`.
