@@ -115,6 +115,7 @@ class Seams:
         smoke = smoke_mod()
         monkeypatch.setattr(smoke, "sleep", self.sleeps.append)
         monkeypatch.setattr(smoke, "reachable", lambda url, timeout=10.0: None)
+        monkeypatch.setattr(smoke, "status", lambda url, *a, **k: 200)   # spec 105: no real network probe in unit tests
 
 
 @pytest.fixture()
