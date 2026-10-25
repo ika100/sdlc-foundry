@@ -13,9 +13,19 @@ Prices of 2026-10-25 (estimates; output tokens as reported, so output cost is a 
 | 1 | build v4 | `20261025T134409Z-7971f596` | done | PR (closed by reset) | acc passed, sec passed | pass | 71 | 2,380,239 | $1.25 | sonnet | worktree @3f5201b |  |
 | baseline v4 | build v4 | `20261025T135136Z-d3ddd653` | done | PR (closed by reset) | acc passed, sec passed | pass | 107 | 3,467,205 | $2.12 | opus | worktree @3f5201b |  |
 | 1 | build v4 | `20261025T140715Z-578ba653` | done | PR (closed by reset) | acc passed, sec passed | pass | 66 | 2,280,157 | $1.20 | sonnet | worktree @3f5201b |  |
+| 2 | quick-task v2 | `20261025T142815Z-b2f8093c` | failed | — | n/a (quick-task: quality + tests ran) | — | 6 | 222,476 | $0.14 | sonnet | worktree @ccbc6da | failed: the session could not write .git/PR_BODY.md (fixed in 113030f: .pr-body.md) |
+| 2 | quick-task v2 | `20261025T153130Z-674b051e` | done | PR (closed by reset) | n/a (quick-task: quality + tests ran) | — | 7 | 251,537 | $0.08 | sonnet | worktree @2b660e1 |  |
+| 2 | build v4 | `20261025T153255Z-44f7c252` | done | PR (closed by reset) | acc passed, sec passed | pass | 56 | 1,698,198 | $1.00 | sonnet | worktree @2b660e1 |  |
+| 2 | build v4 | `20261025T154213Z-71619373` | done | PR (closed by reset) | acc passed, sec passed | pass | 81 | 2,575,727 | $1.32 | sonnet | worktree @2b660e1 |  |
 
 ## Step 1 — coordinator on Sonnet: accepted
 
 - **quick-task:** $0.48 → **$0.16** (one run, done, PR). Meets AC-100.15's ≤ $0.30 already.
 - **build v4** (same worktree plugins, only the model differs): Opus median **$1.94** ($1.75, $2.12; 10 and 15 min), Sonnet median **$1.22** ($1.25, $1.20; 7 and 8 min): **−37%**, all four runs done with a PR and both gates passed. Relative to the v4 baseline the 30% build target of AC-100.16 is ≤ **$1.36**.
 - Two prompt fixes were needed for a Sonnet coordinator (208c9f2): `build.md` no longer says push and PR need confirmation, and tester/coder agents write files with Write/Edit, never via a shell heredoc.
+
+## Step 2 — one `cplat pr open` for commit, push and PR: accepted
+
+- **quick-task:** $0.16 → **$0.08** (7 calls, done, PR).
+- **build v4:** median $1.22 → **$1.16** ($1.00, $1.32; both done with a PR, both gates passed). Within the noise of two runs, no regression.
+- Fixes found by b2: the PR body is written to `.pr-body.md` (Claude Code refuses edits under `.git/`), and `--plugins` benchmarks point `CPLAT_PLATFORM` at the checkout so its `cplat` runs (2b660e1). Two build runs failed on the account's session limit (not counted).
