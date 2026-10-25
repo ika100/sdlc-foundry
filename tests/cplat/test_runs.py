@@ -128,7 +128,7 @@ def store(mem, monkeypatch):
 def stored(s):
     """Records in the store (follow-up lines excluded), oldest first."""
     out = [json.loads(text) for path, text in sorted(s.files.items()) if ".filed." not in path]
-    return sorted(out, key=lambda r: r["ended_at"])
+    return sorted(out, key=lambda r: (r["ended_at"], bool(r.get("resumes"))))   # frozen clock: a resumed run comes after its parent
 
 
 def followups(s):

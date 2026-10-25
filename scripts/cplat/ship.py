@@ -34,6 +34,7 @@ import autoissue
 import core
 import feedback
 import runs
+import smoke
 import spec as specmod
 from core import PlatformError, run
 
@@ -157,6 +158,8 @@ def describe(st: dict) -> str:
     for k in ("branch", "pr", "merge_sha", "deployed"):
         if st.get(k):
             lines.append(f"  {k}: {st[k]}")
+    if (st.get("smoke") or {}).get("row"):
+        lines.append(f"  smoke: {st['smoke']['row']}")
     if st.get("fix_rounds"):
         lines.append(f"  CI fix rounds: {st['fix_rounds']}")
     lines.append(f"next: {next_step(st)}")
@@ -710,8 +713,68 @@ def service_name(repo: Path) -> str:
     return m.group(1) if m else repo.name
 
 
+def _smoke_spec(repo: Path, st: dict) -> specmod.Spec | None:
+    try:
+        return specmod.find(repo, st["spec"])
+    except PlatformError:
+        return None
+
+
+def _smoke_state(repo: Path, st: dict, result: smoke.SmokeResult, row: str, filed: dict | None) -> None:
+    """The run record's `smoke` section and the state's summary. Never raises (a recording never changes the deploy)."""
+    try:
+        st["smoke"] = {"outcome": result.outcome, "row": row, "url": result.base_url,
+                       "signature": autoissue.signature("smoke", service_slug(repo), "dev", "\n".join(sorted(result.failing)))}
+        runs.set_section(_ensure_run(repo, st), "smoke", result.section(filed))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[str]) -> tuple[bool, list[str]]:
+    """Record the smoke result, then end the deploy: done when green or not run, escalated (cause code) when red."""
+    lines = [*lines, *result.lines()]
+    if result.outcome == "not-run" or result.ok:
+        _smoke_state(repo, st, result, result.row(), None)
+        lines.append(f"Smoke (dev): {result.row()}")
+        ok, lines = _done(repo, st, lines)
+        return ok, lines
+    sp = _smoke_spec(repo, st)
+    sid = sp.id if sp else st["spec"]
+    out = smoke.file_issue(result, service_slug=service_slug(repo), spec_id=sid, image=st.get("deployed"),
+                           run_id=st.get("run_id"), shape=core.read_stamp(repo).get("shape", "none"))
+    lines += out.lines
+    if out.url:
+        issue = out.url
+    else:
+        m = re.search(r"not filed: ([^;]*)", " ".join(out.lines))
+        issue = f"not filed: {m.group(1).strip()}" if m else None
+    filed = {"signature": out.signature, "url": out.url, "result": out.result}
+    row = result.row(issue)
+    _smoke_state(repo, st, result, row, filed)
+    save_state(repo, st)
+    reason = f"smoke red in dev: {len(result.failing)} failing ({sid})"
+    escalate(repo, reason, "code", report=lines)
+    lines.append(f"ship {st['spec']}: escalated ({reason}); dev keeps running {st.get('deployed')}. "
+                 f"Resume with /svc:ship {st['spec']}")
+    lines.append(f"Smoke (dev): {row}")
+    return False, lines
+
+
+def _smoke_not_run(repo: Path, st: dict, reason: str, lines: list[str]) -> tuple[bool, list[str]]:
+    sp = _smoke_spec(repo, st)
+    return _smoke_finish(repo, st, smoke.not_run("dev", reason, sp.smoke_acs() if sp else []), lines)
+
+
+def _smoke_step(repo: Path, st: dict, apps: list[str], svc: str, lines: list[str], base_url: str | None) -> tuple[bool, list[str]]:
+    url, why = (base_url, None) if base_url else smoke.dev_url(repo, apps, svc)
+    if not url:
+        return _smoke_not_run(repo, st, why or "no dev URL", lines)
+    result = smoke.run_smoke(repo, url, spec=_smoke_spec(repo, st), probe=smoke.liveness_probe(repo))
+    return _smoke_finish(repo, st, result, lines)
+
+
 def deploy(repo: Path, timeout: float, interval: float, context: str | None,
-           queue_timeout: float = QUEUE_TIMEOUT) -> tuple[bool, list[str]]:
+           queue_timeout: float = QUEUE_TIMEOUT, base_url: str | None = None) -> tuple[bool, list[str]]:
     """Wait for each gitops-app's pin PR for the merge commit (spec 062) to merge, watching the service's main CI and
     the pin-dev run so a red or missing one fails at once (spec 077); then for Argo to run that build; then merge the
     after-release gitops PRs and wait for every app they name (spec 076)."""
@@ -720,11 +783,14 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     if st["phase"] == "done":
         return True, ["already done"]
     if not shapecmd.route(repo)["deployable"]:
-        return _done(repo, st, ["not deployable (library): nothing to deploy"])
+        return _smoke_not_run(repo, st, "not deployable (library)", ["not deployable (library): nothing to deploy"])
     apps = gitops_apps(repo)
     if not apps:
-        return _done(repo, st, ["no .platform-app.yml: this repo is not linked to a gitops-app, so dev is not pinned "
-                                "automatically; compose it with /gitops:compose and link it (spec 062)"])
+        return _smoke_not_run(repo, st, "the repo is not linked to a gitops-app",
+                              ["no .platform-app.yml: this repo is not linked to a gitops-app, so dev is not pinned "
+                               "automatically; compose it with /gitops:compose and link it (spec 062)"])
+    if st.get("deployed") and (st.get("smoke") or {}).get("outcome") in {"red", "timed-out"}:
+        return _smoke_step(repo, st, apps, service_name(repo), ["resuming: smoke only, against what dev runs now"], base_url)
     sha = st.get("merge_sha") or ""
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise PlatformError("the run has no merge commit", hint="land the PR first: cplat ship land")
@@ -788,7 +854,10 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     elif not context:
         lines.append("Argo health not checked (pass --context <kube-context>)")
     st["deployed"] = f"sha-{sha}"
-    return _done(repo, st, lines)
+    save_state(repo, st)
+    if not context:
+        return _smoke_not_run(repo, st, "no kube context, so Argo health was not checked (pass --context <kube-context>)", lines)
+    return _smoke_step(repo, st, apps, svc, lines, base_url)
 
 
 def service_slug(repo: Path) -> str:
@@ -1022,6 +1091,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--interval", type=float, default=20)
     p.add_argument("--queue-timeout", type=float, default=QUEUE_TIMEOUT)
     p.add_argument("--context", help="kube context: also wait for Argo CD to report <service>-dev Synced/Healthy")
+    p.add_argument("--base-url", default=None, help="run the smoke tests against this URL instead of the gitops-app's dev URL")
     p = sub.add_parser("escalate")
     p.add_argument("reason", nargs="+")
     p.add_argument("--cause", default=None, help=f"who must act: {_ALLOWED} (run record; `platform` is filed as an issue, spec 088)")
@@ -1071,7 +1141,7 @@ def main(argv: list[str]) -> int:
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "deploy":
-        ok, lines = deploy(repo, ns.timeout, ns.interval, ns.context, ns.queue_timeout)
+        ok, lines = deploy(repo, ns.timeout, ns.interval, ns.context, ns.queue_timeout, ns.base_url)
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "escalate":
