@@ -66,23 +66,27 @@ def slot(gitops_dir: Path, repo_id: str, plan_index: int, timeout: float, interv
         begin = time.monotonic()
         with open(state.common_dir(gitops_dir) / LOCK_FILE, "a") as lock:
             while True:
+                who = "another merge holds the slot"
                 try:
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    held = False
+                else:
+                    held = True
+                if held:
                     ahead = _ahead(gitops_dir, repo_id, plan_index)
                     if ahead is None:
-                        try:
-                            yield
-                        finally:
-                            fcntl.flock(lock, fcntl.LOCK_UN)
-                        return
+                        break
                     fcntl.flock(lock, fcntl.LOCK_UN)
                     who = f"{ahead['repo']} (plan position {ahead['plan_index']}) is waiting before it"
-                except BlockingIOError:
-                    who = "another merge holds the slot"
                 if time.monotonic() - begin > timeout:
                     raise PlatformError(f"the gitops merge slot did not free up for {repo_id} within {int(timeout)}s: {who}",
                                         hint="run the command again; the repo ahead of it merges first")
                 sleep(interval)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
     finally:
         _deregister(gitops_dir, repo_id)
 
