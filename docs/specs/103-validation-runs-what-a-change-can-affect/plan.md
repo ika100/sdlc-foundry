@@ -46,7 +46,7 @@ tasks:
     covers: [AC-103.9]
     parallel_safe: false
     depends_on: [t4, t5]
-    done: false
+    done: true
 ---
 
 # Plan — 103 Validation runs what a change can affect

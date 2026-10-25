@@ -38,6 +38,8 @@ Orchestrators (`/svc:*`) and the shape-agnostic product-manager, architect and r
 
 quick-task, fix-bug and build end with `cplat pr open`, which commits (`-s`), pushes and opens the PR in one step (idempotent; the body goes to `.pr-body.md`). Agents get a compact brief (criteria, task, contract, tests, commands) and run green scripts through `cplat quiet <script>`, which prints one line on success and the tail plus the log path on failure (spec 100). With a criterion ending in `(smoke)`, `/svc:ship` runs the repo's `devbox run smoke` against dev after the deploy (spec 091; by hand: `cplat smoke run`), and with `promotion: {staging: auto}` in the gitops-app it promotes a green build to staging (spec 093).
 
+Fix rounds of build and ship validate with `cplat validate run`, which runs only the checks a change can affect; the final gate before the PR always runs `devbox run ci` in full (spec 103, [guide](../../docs/unattended-delivery.md#change-aware-validation-in-fix-rounds)).
+
 ## Coordinator model
 
 Headless sessions (`cplat headless`, `cplat runs benchmark`) start the coordinator on **Sonnet** ([ADR-036](../../docs/adr/036-coordinator-model-default-and-settings.md)). Override per run with `cplat headless --model sonnet|opus|haiku`, or set `coordinator_model` in `.platform-settings.yml` (repo) or `~/.config/sdlc-foundry/settings.yml` (user), also per workflow. The agents in the table above keep their own model. `cplat runs benchmark <workflow> --model M --plugins <worktree>/plugins` measures a model or unreleased plugins (and their `cplat`) before a release.
