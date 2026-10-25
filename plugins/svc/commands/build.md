@@ -150,8 +150,8 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 `cplat runs phase build:pr`
 
 1. **Issues:** `tracks:` from the spec plus `#NNN` in `git log $BASE_REF..HEAD --format=%B`; keep those `gh issue view <n> --json state -q .state` reports `OPEN`. Build the `Closes #N` lines or `N/A`.
-2. `git push -u origin $FEATURE_BRANCH` (asks for confirmation).
-3. `gh pr create` (asks for confirmation), title `feat(<scope>): <spec title, ≤72 chars>` (Conventional Commits), body:
+2. `git push -u origin $FEATURE_BRANCH` (allowlisted for the feature branch; do it, don't ask).
+3. `gh pr create` (allowlisted; do it, don't ask), title `feat(<scope>): <spec title, ≤72 chars>` (Conventional Commits), body:
 
    ```markdown
    ## Summary
@@ -218,7 +218,7 @@ The bracketed part of the Implementation row is added, attended builds too, only
 - **Every stop and the end are recorded** with `cplat runs end` (Phase 0), so no run goes missing.
 - **Only approved specs are built**, and only as planned. A decision the spec does not answer stops the build: `/svc:spec --amend`, then `/svc:plan` again.
 - **Acceptance tests are fixed** once Phase 1 committed them. If one is wrong, stop and take it to the user; a changed test is a changed spec.
-- **Push only in Phase 7**; `git push` and `gh pr create` require confirmation.
+- **Push only in Phase 7**; `git push` of the feature branch and `gh pr create` are allowlisted, so a headless build ends at an open PR without asking.
 - **A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** `cplat build merge` aborts the merge and sets the task aside; the architect amends only the plan and the task runs again on top of the merged work, without asking. Never edit conflicting hunks.
 - **Every shell command goes through `devbox run <script>`** (see `CLAUDE.md`), except git, gh and `cplat`.
 - **No `--no-verify`, no `--no-gpg-sign`.**

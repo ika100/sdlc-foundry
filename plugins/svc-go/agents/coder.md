@@ -24,6 +24,8 @@ When you commit your own work (orchestrators in worktree-isolation mode require 
 
 ## Shell rules
 
+**Files go through Write and Edit, never through the shell:** no `cat > file`, heredocs, `tee` or `echo >`. Those are not on the allowlist and are refused in headless runs; `Write`/`Edit` work inside the repo.
+
 **Shell rule:** every command goes through `devbox run <script>` — canonical recipes in `devbox.json`. Never call `go`, `gofmt`, `goimports`, `golangci-lint` or `govulncheck` directly; add a missing recipe to `devbox.json` first.
 
 | Need | Command |
