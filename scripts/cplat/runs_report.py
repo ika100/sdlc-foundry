@@ -64,6 +64,8 @@ def _count_sorted(counter: Counter) -> dict:
 def select(records: list[dict], *, since_days: int, repo: str | None, now: datetime.datetime) -> list[dict]:
     """Window, repo filter and run_id dedupe, shared by both reports."""
     cutoff = now - datetime.timedelta(days=since_days)
+    # `until` is the day of `now` (the window prints it as a date): that whole day counts, later records do not
+    upper = datetime.datetime.combine(now.date() + datetime.timedelta(days=1), datetime.time(), tzinfo=now.tzinfo)
     seen: set[str] = set()
     kept: list[dict] = []
     for r in records:
@@ -73,7 +75,7 @@ def select(records: list[dict], *, since_days: int, repo: str | None, now: datet
                 continue
             seen.add(rid)
         ended = _ts(r.get("ended_at"))
-        if ended is not None and (ended < cutoff or ended > now):
+        if ended is not None and (ended < cutoff or ended >= upper):
             continue
         if repo is not None and r.get("repo") != repo:
             continue
