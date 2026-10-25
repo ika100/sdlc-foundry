@@ -1,6 +1,6 @@
 ---
 spec_id: 105-a-deploy-counts-only-after-its-checks
-spec_hash: 34a1ca298aca
+spec_hash: eb1fd0242dc4
 summary: Smoke records the image digest the cluster runs, staging promotion and the prod evidence compare digests,
   smoke failures are classed environment or application with retries per class, not-run never promotes, replays
   re-smoke a changed digest, and the deploy gate is one documented, tested table
