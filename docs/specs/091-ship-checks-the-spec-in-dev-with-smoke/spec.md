@@ -51,7 +51,7 @@ As a spec author, I want to mark which criteria are smoke-checkable, so that the
   - no kube context was given, so Argo health was not checked;
   - the service has no dev URL (not exposed in dev);
   - the repo is not linked to a gitops-app.
-- **AC-091.12** Given a run escalated on red smoke, when `/svc:ship <spec>` resumes it, then deploy runs only smoke again, without waiting for the pin again, against what dev runs now. A pass finishes the run; a red result follows AC-091.9 and AC-091.14 again.
+- **AC-091.12** Given a run escalated on red smoke, when `/svc:ship <spec>` resumes it, then deploy runs only smoke again, without waiting for the pin again, against what dev runs now. A pass finishes the run; a red result follows AC-091.9 and AC-091.14 again. Since spec 105 a pass needs the image digest read from the cluster (AC-105.1), so a resume without a kube context records `not-run` (`image digest unknown`) instead of a pass.
 - ~~**AC-091.13**~~ withdrawn 2026-10-23: replaced by AC-091.15, which uses spec 087's record fields and states that "not run" never counts as passed.
 - **AC-091.14** Given red smoke in dev, when the run escalates (escalation cause `code`, so nothing is filed in the platform repo, spec 088), then one issue is filed or +1'd in the service repo following spec 088's convention:
   - the body has exactly one line `Signature: smoke:<16 lowercase hex characters>`, computed from the service repo, the environment `dev` and the sorted ids of the failing tests, with the volatile parts of spec 088 (hashes, numbers, dates) left out;
@@ -95,3 +95,4 @@ As a spec author, I want to mark which criteria are smoke-checkable, so that the
 - 2026-10-23 approved
 - 2026-10-24 building
 - 2026-10-25 done
+- 2026-10-25 amended: AC-091.12 defers to AC-105.1, so a resumed smoke without a kube context is `not-run`, not a pass (spec 105).

@@ -1,6 +1,6 @@
 ---
 spec_id: 091-ship-checks-the-spec-in-dev-with-smoke
-spec_hash: e7aac0176c41
+spec_hash: eb21170765d6
 summary: (smoke) criterion marker traced against a per-shape smoke tag; devbox run smoke (SMOKE_BASE_URL, one output contract)
   in every deployable template incl. standard Playwright for web; smoke.py runs it with retry/limit, record section and smoke
   issue; ship deploy runs smoke against the gitops-app's dev URL, escalates red as code, resumes smoke-only
