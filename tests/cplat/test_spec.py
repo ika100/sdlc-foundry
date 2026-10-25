@@ -677,3 +677,26 @@ def test_the_slice_lists_what_the_product_provides(tmp_path, product):
 def test_no_gitops_operations_means_no_provided_section(tmp_path, product):
     """AC-052.1"""
     assert "Provided by the product" not in spec.slice_from_plan(product / "docs" / "plan" / "012-billing.md", "shop-api")["context"]
+
+
+@pytest.mark.parametrize("front, expect", [
+    ("tasks:\n  - {id: t1, title: a, files: [x.py], done: false}\n  - {id: t2, title: b, files: [y.py]}\n",
+     "tasks:\n  - {id: t1, title: a, files: [x.py], done: true}\n  - {id: t2, title: b, files: [y.py]}\n"),
+    ("tasks:\n  - {id: t1, title: a, files: [x.py]}\n  - {id: t2, title: b}\n",
+     "tasks:\n  - {id: t1, title: a, files: [x.py], done: true}\n  - {id: t2, title: b}\n"),
+    ("summary: a long summary that stays on one line and is never rewrapped by the tool because nobody asked it to do so at all\n"
+     "tasks:\n- id: t1\n  title: a\n  done: false\n- id: t2\n  title: b\n",
+     "summary: a long summary that stays on one line and is never rewrapped by the tool because nobody asked it to do so at all\n"
+     "tasks:\n- id: t1\n  title: a\n  done: true\n- id: t2\n  title: b\n"),
+    ("tasks:\n- id: t1\n  title: a\n- id: t2\n  title: b\n", "tasks:\n- id: t1\n  title: a\n  done: true\n- id: t2\n  title: b\n"),
+])
+def test_task_done_changes_only_the_done_flag_of_that_task(tmp_path, front, expect):
+    """AC-094: `spec task-done` leaves plan.md byte for byte as it was, except the task's done flag."""
+    s = make(tmp_path, status="approved")
+    p = s.dir / "plan.md"
+    head, rest = p.read_text().split("tasks:", 1)
+    body = rest.split("---\n", 2)[-1] if rest.count("---\n") else ""
+    p.write_text(f"{head.rstrip()}\n{front}---\n{body}")
+    before = p.read_text()
+    spec.task_done(spec.read(s.dir), "t1")
+    assert p.read_text() == before.replace(front, expect)

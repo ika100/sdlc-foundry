@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (094): `cplat spec task-done` no longer rewrites plan.md.** It sets `done: true` on the task's own line(s) and keeps the rest of the file byte for byte (no block-YAML re-serialisation, no rewrapped summary).
 - **Fix (095): a good dependency bump is not reverted for an unrelated red check.** When the bump clears every dependency finding but the security gate stays red for another reason (bandit, secrets), `cplat deps patch` keeps the bump, prints it and exits 4 so the coder takes over, instead of reverting and blaming it. Unrated fixable findings were already bumped (severity does not select, AC-095.12).
 - **Fix (088): redaction edge cases.** A run of 40+ repeated characters is only kept as padding when it is not glued to other word characters (`ghp_AAAA...` is redacted again), and a private name is replaced as a whole word (`todo` no longer matches inside `todo-api` or `mytodo`). The gh error mapping now has a test.
 - **Fix (087): `cplat runs report` has an upper bound.** Records ended after the window's `until` (future-dated) no longer count.
