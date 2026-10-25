@@ -1,6 +1,6 @@
 ---
 spec_id: 101-run-usage-is-exported-live-to
-spec_hash: 4f3ef3ba0368
+spec_hash: bfe98a36d34f
 summary: telemetry.py sets Claude Code's native OTLP export for headless and benchmark sessions (explicit endpoint,
   else the gitops-app's lgtm addon through a port-forward on a configured context), local-only unless opted in,
   content logging forced off, run attributes added; a post-run PromQL comparison note; a provisioned Grafana dashboard
