@@ -1,4 +1,4 @@
-# ADR-035 — Smoke tests run against a deployed environment through one recipe and one output contract
+# ADR-036 — Smoke tests run against a deployed environment through one recipe and one output contract
 
 **Status:** accepted (2026-10-24, spec 091)
 

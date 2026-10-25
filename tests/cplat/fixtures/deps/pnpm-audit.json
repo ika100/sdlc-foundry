@@ -1,0 +1,12 @@
+{"advisories": {
+  "1": {"module_name": "qs", "severity": "high", "patched_versions": ">=6.11.3", "github_advisory_id": "GHSA-qs00-0000-0001",
+        "findings": [{"version": "6.11.0", "paths": [".>express>qs"]}, {"version": "6.9.0", "paths": [".>old>qs"]}]},
+  "2": {"module_name": "lodash", "severity": "moderate", "patched_versions": ">=4.17.21", "github_advisory_id": "GHSA-lodash-moderate",
+        "findings": [{"version": "4.17.0", "paths": [".>lodash"]}]},
+  "3": {"module_name": "minimist", "severity": "critical", "patched_versions": "<0.0.0", "github_advisory_id": "GHSA-mini-0000-0003",
+        "findings": [{"version": "1.2.0", "paths": [".>minimist"]}]},
+  "4": {"module_name": "semver", "severity": "high", "patched_versions": ">=5.7.2 <6.0.0", "github_advisory_id": "GHSA-semv-0000-0004",
+        "findings": [{"version": "5.7.0", "paths": [".>semver"]}]},
+  "5": {"module_name": "next", "severity": "critical", "patched_versions": ">=15.0.0", "github_advisory_id": null,
+        "findings": [{"version": "14.2.0", "paths": [".>next"]}]}
+}}

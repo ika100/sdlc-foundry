@@ -1,5 +1,5 @@
 # Copier template: web-nextjs
-# Next.js (App Router only, ADR-004) web frontend: pnpm (ADR-003), Vitest + Playwright (ADR-002, ADR-035),
+# Next.js (App Router only, ADR-004) web frontend: pnpm (ADR-003), Vitest + Playwright (ADR-002, ADR-036),
 # pinned Node LTS (ADR-005), canonical devbox recipes, Docker, agentic setup.
 #
 # Usage:
@@ -14,6 +14,7 @@ _answers_file: .copier-answers.yml
 
 # Project-owned once generated: /shared:update-service must not overwrite these.
 _skip_if_exists:
+  - .secrets.baseline.json    # repo-owned once created: it records the repo's own false positives (seeded when missing)
   - .claude/project-notes.md   # repo-owned notes, loaded by CLAUDE.md (spec 086)
   - README.md                # project-owned after creation (spec 060)
   - .github/ISSUE_TEMPLATE/**

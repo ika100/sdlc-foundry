@@ -21,7 +21,7 @@ A consumer repo that installs any of these plugins is therefore devbox-aware out
 
 ### Stop hook (shared plugin)
 
-While a `/svc:ship` run is unfinished, the shared plugin's `Stop` hook keeps the session going (spec 066, [ADR-028](adr/028-unattended-delivery-without-branch-protection.md)). It looks for `<git dir>/cplat-ship.json` in shell first, so sessions without a run never start Python. With a run it calls `cplat ship gate`, which blocks the stop with the next step, and in the build phase the untraced criteria and the red `devbox run test-fast` output. It lets the session stop when the run is done, when the orchestrator escalated (`cplat ship escalate '<reason>'`: merge conflict, a changed acceptance test, a CRITICAL finding, a decision the spec does not answer, the user asked to stop), or after 8 blocked stops in a row (recorded as the escalation).
+While a `/svc:ship` run is unfinished, the shared plugin's `Stop` hook keeps the session going (spec 066, [ADR-028](adr/028-unattended-delivery-without-branch-protection.md)). It looks for `<git dir>/cplat-ship.json` in shell first, so sessions without a run never start Python. With a run it calls `cplat ship gate`, which blocks the stop with the next step, and in the build phase the untraced criteria and the red `devbox run test-fast` output. It lets the session stop when the run is done, when the orchestrator escalated (`cplat ship escalate '<reason>'`: a merge conflict after its re-plan (or the 4th re-plan of a build), a changed acceptance test, a security finding with no fix released or a bump that breaks a gate, a decision the spec does not answer, the user asked to stop), or after 8 blocked stops in a row (recorded as the escalation).
 
 ---
 
@@ -89,10 +89,10 @@ The orchestrator:
 1. **Topologically sorts** tasks by `depends_on`.
 2. At each dependency level, **greedily groups `parallel_safe: true` tasks into batches** whose `files` sets are disjoint.
 3. For each batch ≥ 2: spawns one coder per task **in one assistant turn** (multiple Agent tool calls in parallel), each in its own worktree. Each coder commits inside its worktree before returning.
-4. **Merges sequentially** back onto the base branch with `git merge --no-ff`. After each merge: `devbox run lint-fix`, then `cplat spec test-diff <red commit>` (acceptance tests may only be reformatted), `devbox run quality` and `devbox run test-fast`. On failure, hand back to that task's coder for lint/type fixes only. Each merged task is marked `done` in the plan.
+4. **Merges sequentially** back onto the base branch with `cplat build merge` (`git merge --no-ff`). After each merge: `devbox run lint-fix`, then `cplat spec test-diff <red commit>` (acceptance tests may only be reformatted), `devbox run quality` and `devbox run test-fast`. On failure, hand back to that task's coder for lint/type fixes only. Each merged task is marked `done` in the plan and committed on its own (one commit per task), so the next merge starts from a clean tree.
 5. Cleans up worktrees and branches as it merges.
 
-**Merge conflicts are escalated, never auto-resolved.** A conflict means the architect's `files` declarations were inaccurate — the fix is to update the plan, not to paper over it.
+**A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** A conflict means the architect's `files` declarations were inaccurate, so the fix is to update the plan. `cplat build merge` aborts the merge and sets the task aside; the architect amends only `files` / `depends_on` / `parallel_safe` of tasks that are not done; the task runs again on top of the merged work. This happens without asking, attended or not.
 
 Merge conflicts, files outside the plan and hand-backs are recorded per agent, shape and model (spec 089); `cplat runs report --agents` shows which agent causes rework and whether a release changed it (`--by-version`).
 

@@ -1,4 +1,4 @@
-"""`smoke`: run a repo's smoke tests against a deployed environment (spec 091, ADR-035).
+"""`smoke`: run a repo's smoke tests against a deployed environment (spec 091, ADR-036).
 
 Every deployable template ships `devbox run smoke`, which prints the same result lines whatever the runner (`PASS|FAIL|SKIP  <id>`
 and `smoke: <p> passed, <f> failed, <s> skipped`). This module reads only those lines, so it has no per-shape code. Ship deploy

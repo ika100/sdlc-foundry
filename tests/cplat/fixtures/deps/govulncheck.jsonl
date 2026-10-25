@@ -1,0 +1,40 @@
+{
+  "config": {"protocol_version": "v1.0.0", "scanner_name": "govulncheck"}
+}
+{
+  "osv": {"id": "GO-2024-2687", "summary": "http2 dos"}
+}
+{
+  "finding": {
+    "osv": "GO-2024-2687",
+    "fixed_version": "v0.23.0",
+    "trace": [{"module": "golang.org/x/net", "version": "v0.20.0", "package": "golang.org/x/net/http2", "function": "Serve"}]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2024-1111",
+    "fixed_version": "v0.30.0",
+    "trace": [{"module": "golang.org/x/text", "version": "v0.14.0", "package": "golang.org/x/text/language"}]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2024-0001",
+    "fixed_version": "go1.22.5",
+    "trace": [{"module": "stdlib", "version": "go1.22.1", "package": "net/http", "function": "ReadRequest"}]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2024-3333",
+    "trace": [{"module": "github.com/acme/lib", "version": "v1.2.0", "package": "github.com/acme/lib", "function": "Do"}]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2024-4444",
+    "fixed_version": "v2.0.0",
+    "trace": [{"module": "github.com/acme/major", "version": "v1.2.0", "package": "github.com/acme/major", "function": "Run"}]
+  }
+}

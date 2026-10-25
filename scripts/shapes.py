@@ -103,6 +103,7 @@ def check_files(shapes: list[dict]) -> list[str]:
 
 CORE_RECIPES = ["lint", "lint-fix", "quality", "test", "test-fast", "security", "secrets-baseline", "ci"]   # ci, secrets-baseline: specs 073, 075
 DEPLOY_RECIPES = ["image-build", "image-scan"]
+DEPS_RECIPES = ["deps-findings", "deps-bump"]   # spec 095: the recipes `cplat deps` calls
 CONTRACT_AGENTS = ["coder", "tester"]
 DEPLOY_AGENTS = ["deployment", "observability", "release"]
 
@@ -167,6 +168,15 @@ def check_contract(shapes: list[dict]) -> list[str]:
             for r in need:
                 if f'"{r}"' not in text:
                     errs.append(f"{sid}: devbox.json missing canonical recipe '{r}'")
+            # spec 095: every dependency-owning shape bumps through the platform recipes; gitops-app never does
+            for r in DEPS_RECIPES:
+                if sid == "gitops-app":
+                    if f'"{r}"' in text:
+                        errs.append(f"{sid}: devbox.json must not define '{r}': gitops-app repos never bump dependencies (spec 095)")
+                elif f'"{r}"' not in text:
+                    errs.append(f"{sid}: devbox.json missing deps recipe '{r}' (spec 095)")
+            if sid != "gitops-app" and not (tdir / "scripts" / "deps.sh").is_file():
+                errs.append(f"{sid}: template has no scripts/deps.sh (spec 095)")
         claude = _template_file(tdir, "CLAUDE.md")
         if claude is None:
             errs.append(f"{sid}: template has no CLAUDE.md")

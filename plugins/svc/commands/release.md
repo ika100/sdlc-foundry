@@ -80,7 +80,7 @@ Use the **release agent** with instruction:
 
 Wait for the release agent to complete. Extract the version string (e.g. `v0.3.0`) and the PR URL from the agent's output.
 
-The PR creation step requires user confirmation (it is in the `ask` permission list). Wait for the user to approve.
+`gh pr create` is allowlisted, so the PR is created without a prompt; the merge and the tag follow in Phase 5.
 
 Print `## Phase 4 complete — release/vX.Y.Z branch pushed, PR opened: <URL>`.
 

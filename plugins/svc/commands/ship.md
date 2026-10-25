@@ -31,19 +31,19 @@ cplat ship start <spec> [--no-merge] [--take-over]
 
 ## Phase `plan`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec. After the architect returns, run `cplat runs agent spawned architect [--model-id <id>]` (spec 089). Architect `BLOCKERS` → escalate with them. A plan that already has `done` tasks is not re-planned (escalate instead: re-planning loses progress). Then `cplat ship phase build`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec. After the architect returns, run `cplat runs agent spawned architect [--model-id <id>]` (spec 089). Architect `BLOCKERS` → escalate with them. A plan that already has `done` tasks is not re-planned (escalate instead: re-planning loses progress); the build's own re-plan after a merge conflict (build.md 2.4a) is the exception. Then `cplat ship phase build`.
 
 ## Phase `build`
 
 Read `${CLAUDE_PLUGIN_ROOT}/commands/build.md` and follow its Phases 0–6 for this spec: red acceptance tests, coders until they pass, QA fan-out, verification, image, `set-status done`. Skip its Phase 7 (the PR is ours).
 
-**Gitops tasks** (plan tasks with `repo:`, spec 076) are not given to the service coders. For each, in plan order: `cplat ship gitops prepare <task>` (prints a checkout of that repo on `spec/<spec>-<task>`), make the change there through the gitops plugin's conventions (`devbox run validate` in that checkout), commit `feat(<scope>): <what>`, write a short body and `cplat ship gitops pr <task> --title <title> --body-file <file>` (a draft PR; its CI runs now). `cplat ship land` merges the `before-merge` ones, `cplat ship deploy` the `after-release` ones. Its stop-and-escalate rules stay rules here: a merge conflict between task branches, a changed acceptance test (`cplat spec test-diff` exit 1), a CRITICAL security finding, a decision the spec does not answer, a verification that still fails after its cycles. Each one → escalate.
+**Gitops tasks** (plan tasks with `repo:`, spec 076) are not given to the service coders. For each, in plan order: `cplat ship gitops prepare <task>` (prints a checkout of that repo on `spec/<spec>-<task>`), make the change there through the gitops plugin's conventions (`devbox run validate` in that checkout), commit `feat(<scope>): <what>`, write a short body and `cplat ship gitops pr <task> --title <title> --body-file <file>` (a draft PR; its CI runs now). `cplat ship land` merges the `before-merge` ones, `cplat ship deploy` the `after-release` ones. Its stop-and-escalate rules stay rules here: a merge conflict that `cplat build merge` escalates (a task's second conflict, or the cap of 3 re-plans) or a re-plan the architect cannot make, a changed acceptance test (`cplat spec test-diff` exit 1), a security finding `cplat deps patch` cannot fix (its exit 3), a decision the spec does not answer, a verification that still fails after its cycles. Each one → escalate.
 
 Then `cplat ship phase pr`.
 
 ## Phase `pr`
 
-1. Write the PR body to `.git/PR_BODY.md` with the template of build.md Phase 7 (summary, spec/plan/verification links, the criteria table from verification.md, `Closes #N` lines, testing done, checklist).
+1. Write the PR body to `.git/PR_BODY.md` with the template of build.md Phase 7 (summary, spec/plan/verification links, the criteria table from verification.md, `Closes #N` lines, testing done, checklist), then `cplat deps report --body-file .git/PR_BODY.md` to add the Dependency patches section when the build bumped anything.
 2. `cplat ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .git/PR_BODY.md` — runs `devbox run ci` (the CI workflow's gates; red → nothing is pushed: fix it through the coder, record it with `cplat runs agent fix-round ci`, and call it again), then pushes the feature branch and opens the PR (or reuses the open one). It refuses while a gitops task has no PR.
 
 ## Phase `land`
@@ -52,6 +52,7 @@ Then `cplat ship phase pr`.
 
 - **GREEN** → it merges the PR (squash; with `--no-merge` it stops and the run is done) and moves to `deploy`.
 - **RED** (exit 1) → `cplat ship land` records the round against the coder itself (spec 089), so there is no `cplat runs agent` call here. It prints the failed checks and their log tails. Hand them to the coder agent (`agents.coder`) of the task whose files are involved, with `<project-map>`: "fix these CI failures; never edit, skip or weaken an acceptance test". Run `devbox run ci`, commit `fix(ci): <what>`, then `cplat ship pr --title <same title> --body-file .git/PR_BODY.md` (pushes) and `cplat ship land` again. After **3** red rounds (`fix_rounds` in `cplat ship status`), escalate with the last failure.
+- **RED, the security check** (spec 095) → other red checks go to the coder first. Then `cplat deps patch`: exit 0 → `cplat deps report --body-file .git/PR_BODY.md --update-pr`, then `cplat ship pr --title <same title> --body-file .git/PR_BODY.md` and `cplat ship land`; exit 3 → `cplat ship escalate '<reason>' --cause <CAUSE>` with the `ESCALATE` and `CAUSE` lines it printed; exit 4 → the coder as above. The round counts toward the 3 (`fix_rounds`).
 - An error (no checks reported, timeout, merge refused) → read its hint; a transient one (runner busy) → `cplat ship land` once more; otherwise escalate.
 
 ## Phase `deploy`
@@ -73,6 +74,8 @@ The run record (spec 087) is written when the run reaches `done` or escalates; a
 | Build | <m>/<m> criteria met (verification.md) |
 | PR | <url> — merged after <k> CI round(s) |
 | dev | <service>:sha-<40> (pin PR <url>) · Argo <state> | not linked |
+
+Dependency patches: the bumps of `cplat deps report` (package, from → to, CVE), a major bump marked "major bump"; leave out when none.
 
 Next: check the feature in dev; promote with /gitops:promote <service> dev staging in the gitops-app repo.
 ```

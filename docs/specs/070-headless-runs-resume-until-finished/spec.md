@@ -17,10 +17,11 @@ As a founder, I want to start `/svc:ship <spec>` unattended and have it resumed 
 
 ## Acceptance criteria
 
-- **AC-070.1** Given `cplat headless <prompt>`, when it runs, then each session is `claude -p <prompt> --permission-mode dontAsk` in the repo, so only the repo's committed allowlist applies; a repo without `.claude/settings.json` is refused.
+- ~~**AC-070.1**~~ withdrawn 2026-10-25: replaced by AC-070.5 (dontAsk sessions could never edit a file).
 - **AC-070.2** Given a ship run that is unfinished and not escalated when a session ends, when runs are left (`--max-runs`, `--max-minutes` counted from the first session), then the next session starts with the same prompt; an escalated, finished or capped run ends the loop.
 - **AC-070.3** Given `--quiet HH:MM-HH:MM` (may wrap midnight), when a session would start inside it, then the run waits for the window to end, or exits with code 3 with `--no-wait`.
 - **AC-070.4** Given the end of a run, when it reports, then one `HEADLESS <repo>: <result>` line goes to stdout and to `summary.log` next to the session logs, a desktop notification is sent where available, and the exit code is 0 for shipped or finished, 1 otherwise.
+- **AC-070.5** Given `cplat headless <prompt>`, when it runs, then each session is `claude -p <prompt> --permission-mode acceptEdits` in the repo: file edits inside the repo folder are allowed, Bash and every other tool stay limited to the repo's committed allowlist, and anything else is refused because the session cannot prompt; a repo without `.claude/settings.json` is refused.
 
 ## Non-goals
 
@@ -41,3 +42,7 @@ None.
 - 2026-10-22 approved
 - 2026-10-22 building
 - 2026-10-22 done
+- 2026-10-25 draft: amend: headless sessions use acceptEdits so they can edit files (found by the 099 benchmark)
+- 2026-10-25 approved
+- 2026-10-25 building
+- 2026-10-25 done

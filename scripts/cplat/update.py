@@ -6,6 +6,7 @@ import datetime
 import fnmatch
 import json
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -78,6 +79,9 @@ def project_owned_patterns(template: str) -> list[str]:
         return []
 
 
+SEEDS = {".secrets.baseline.json"}   # repo-owned once they exist, but the skeleton needs them: added when missing, never replaced
+
+
 def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
     """copier creates files that do not exist yet even inside `_skip_if_exists` paths. For an update that is wrong: a repo that
     evolved its own app code or tests must not receive new starter files (and tests that assert the starter UI). Remove them."""
@@ -86,7 +90,7 @@ def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
         if not line.startswith("??"):
             continue
         path = line[3:]
-        if any(fnmatch.fnmatch(path, pattern) for pattern in patterns):
+        if path not in SEEDS and any(fnmatch.fnmatch(path, pattern) for pattern in patterns):
             (repo / path).unlink()
             dropped.append(path)
     for directory in sorted({str(Path(d).parent) for d in dropped}, key=len, reverse=True):   # tidy empty directories
@@ -212,6 +216,20 @@ def _readme_changed(template: str, old: str | None) -> bool:
         return True
     rc = run(["git", "diff", "--quiet", f"v{old}", "--", path], cwd=PLATFORM_ROOT, check=False).returncode
     return rc != 0
+
+
+def refresh_devbox_lock(repo: Path, changed: list[str]) -> str | None:   # tests replace this
+    """devbox.lock must match the merged devbox.json, or the next `devbox install` rewrites it and every run starts with a dirty
+    tree. Returns a next step when the lock could not be refreshed here."""
+    if "devbox.json" not in changed or not (repo / "devbox.lock").is_file():
+        return None
+    step = "run `devbox install` and commit devbox.lock in this branch, or the next devbox run rewrites it"
+    if shutil.which("devbox") is None:
+        return "devbox is not installed here: " + step
+    proc = run(["devbox", "install"], cwd=repo, check=False, timeout=1800)
+    if proc.returncode != 0:
+        return f"`devbox install` failed (exit {proc.returncode}), so devbox.lock may not match devbox.json: " + step
+    return None
 
 
 def merge_devbox_file(repo: Path, before: str | None, baseline: dict | None = None
@@ -457,6 +475,11 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
         return r
     current_extra = _current_ci_extra(devbox_before)
     lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra, [devbox_note, settings_note])
+    lock_step = refresh_devbox_lock(repo, changed)
+    if lock_step:
+        r.next_steps.append(lock_step)
+    elif "devbox.json" in changed and (repo / "devbox.lock").is_file():
+        r.did.append("refreshed devbox.lock for the merged devbox.json")
     run(["git", "add", "-A"], cwd=repo)
     run(["git", *core.git_identity(repo), "commit", "-q", "-m", f"chore: update skeleton from platform {req['new']}"], cwd=repo)
     r.did.append(f"re-applied the template; {len(changed)} file(s) changed, committed on {branch if cur in ('main','master') else cur}")

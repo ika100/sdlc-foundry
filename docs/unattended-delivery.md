@@ -15,7 +15,11 @@ unattended: /svc:ship <NNN>
 you:        check dev  →  /gitops:promote <svc> dev staging   (reviewed PR, as before)
 ```
 
-The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict, a changed acceptance test, a CRITICAL security finding, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
+The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict after its re-plan (a task is re-planned once, a build at most 3 times), a changed acceptance test, a security finding with no fix released, or a bump that breaks a gate, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
+
+### Dependency patches
+
+When the security gate is red because of dependencies with a released fix, the run bumps them itself (`cplat deps patch`, spec 095), re-runs the gates and commits the bump, or reverts it exactly. The PR body lists each bump under "Dependency patches" (a major bump is marked) and the run record has a `patches` section. At most 2 rounds; a finding without a fix, or a bump that breaks a gate, escalates.
 
 ## Run it without a terminal session
 
@@ -25,7 +29,7 @@ cplat headless "/svc:ship 012" --quiet 23:30-07:00     # never start inside that
 cplat headless "/svc:ship 012" --max-runs 6 --max-minutes 240 --model opus
 ```
 
-Each session is `claude -p <prompt> --permission-mode dontAsk`: the repo's committed allowlist (`.claude/settings.json`) applies, and everything else is refused instead of prompting. `git push origin main` and `gh pr create` are `ask` rules there, so they are refused; `cplat ship` does the narrow pushes and the PR itself. Logs are in `~/.cache/sdlc-foundry/headless/<repo>/`; `summary.log` has one line per run, and a desktop notification says how it ended (exit 0 shipped, 1 needs you, 3 inside the quiet window with `--no-wait`).
+Each session is `claude -p <prompt> --permission-mode acceptEdits`: file edits inside the repo are accepted, the repo's committed allowlist (`.claude/settings.json`) governs every other tool, and everything else is refused instead of prompting. (Until 4.5.0 this was `dontAsk`, which also refused every file edit, because no allowlist grants `Edit` or `Write`.) `git push origin main` and `gh pr create` are `ask` rules there, so they are refused; `cplat ship` does the narrow pushes and the PR itself. Logs are in `~/.cache/sdlc-foundry/headless/<repo>/`; `summary.log` has one line per run, and a desktop notification says how it ended (exit 0 shipped, 1 needs you, 3 inside the quiet window with `--no-wait`).
 
 Open the repo interactively once before the first headless run: Claude Code ignores a project's allowlist in a workspace it has not trusted yet ([ADOPTING.md → Unattended runs](ADOPTING.md#unattended-runs)).
 
@@ -66,6 +70,15 @@ Every run is recorded as one JSON record in a private GitHub repo (spec 087, [AD
 - **A record holds** kind, repo, spec, phases with durations, CI rounds, reruns, the escalation reason and cause, and the outcome. **It never holds** secrets (redacted), file contents or logs.
 - **Offline:** without a store, or when it is unreachable, records wait in a local buffer (1000) and one warning line says so. The run itself is never affected. `cplat runs flush` writes the buffer; `cplat doctor` shows what is waiting.
 - **Read it:** `cplat runs report [--json] [--since DAYS]`.
+
+### Token usage and cost
+
+A record also holds a `usage` section (spec 099, [ADR-035](adr/035-token-usage-from-session-transcripts.md)): calls and tokens (input, output, cache read, cache write) and an estimated cost, in total and by phase, role and model. It is read from the local Claude Code session transcripts, so it needs Claude Code 2.1.132 or later and the machine that ran the session. Nothing but numbers and names of phases, roles and models is stored.
+
+- **Read it:** `cplat runs usage <run_id>` (or `--session <id>`, `--json`); `cplat runs report` adds usage per kind.
+- **As reported:** output tokens are shown as the transcripts report them, so the output cost is a lower bound. Costs are estimates from the price table in the repo (its date is printed); a model without a price shows `unknown` and marks the cost incomplete.
+- **Delivered vs. gate-failed:** a run is delivered when its outcome is `done` and neither gate (`cplat runs gate acceptance|security`, set by `/svc:build`) failed. A `done` run with a failed gate counts as gate-failed, next to the failed, escalated and abandoned runs.
+- **Benchmark:** `cplat runs benchmark <quick-task|build|ship>` runs one fixed task headless against `ika100/todo-api` at a pinned revision (`build` is two phases: `/svc:plan 900`, then `/svc:build 900`) and appends a `benchmark` record; `cplat runs report --benchmarks` shows median tokens and cost per workflow and platform version. `ship` merges and deploys to the sample's dev, so the command resets the sample repo to the pinned revision afterwards (force-push of its main branch); `--reset-first` repairs a sample left in a bad state by an earlier failed reset. Benchmark runs never count in the normal report. Each workflow reuses one clone, `~/.local/state/sdlc-foundry/runs/benchmark/<workflow>`, reset before every run; Claude Code ignores a repo's permission rules in an untrusted folder, so trust it once (`cd` there, run `claude`, accept the dialog) — the benchmark refuses to start until you have. A run counts as `done` only when it produced its result: a new open PR for `quick-task` and `build`, a new merged PR for `ship`; otherwise it is `failed` and `result_check` says why. The reset leaves PRs, branches and tags that existed before the run alone.
 
 ### Agent metrics
 

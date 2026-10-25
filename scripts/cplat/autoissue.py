@@ -92,7 +92,8 @@ def _replace_names(text: str, names: dict[str, str] | None) -> str:
     for key in sorted(mapping, key=len, reverse=True):
         if key:
             value = mapping[key]
-            text = re.sub(re.escape(key), value.replace("\\", "\\\\"), text, flags=re.I)
+            # a name is not part of a longer name: `todo` stays in `todo-api` and `mytodo`
+            text = re.sub(rf"(?<![\w-]){re.escape(key)}(?![\w-])", value.replace("\\", "\\\\"), text, flags=re.I)
     return text
 
 
@@ -146,7 +147,7 @@ def private_names(repo: str | None, spec: str | None, branch: str | None) -> dic
     return names
 
 
-_RUN_OF_ONE_CHAR = re.compile(r"(.)\1{39,}", re.S)
+_RUN_OF_ONE_CHAR = re.compile(r"(?<!\w)(.)\1{39,}(?!\w)", re.S)    # not glued to other word characters
 _SIG_START = re.compile(r"^([ \t]*)Signature:", re.M)
 
 
