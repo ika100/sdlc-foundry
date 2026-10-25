@@ -11,35 +11,35 @@ tasks:
     covers: [AC-103.3]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: validate.py planner — diff, checks from devbox.json, rules full/mandatory/docs-only/mapped/no rule, risk adds only
     files: [scripts/cplat/validate.py, scripts/cplat/cplat.py]
     covers: [AC-103.1, AC-103.2, AC-103.3, AC-103.4, AC-103.5, AC-103.9]
     parallel_safe: false
     depends_on: [t1]
-    done: false
+    done: true
   - id: t3
     title: Local evidence and reuse, validate run, validation section and misses (validate final, ship.run_ci)
     files: [scripts/cplat/validate.py, scripts/cplat/ship.py, scripts/cplat/runs.py, scripts/cplat/runs_report.py]
     covers: [AC-103.6, AC-103.7, AC-103.8, AC-103.10]
     parallel_safe: false
     depends_on: [t2]
-    done: false
+    done: true
   - id: t4
     title: build and ship fix rounds call cplat validate run; final gate stays cplat quiet ci
     files: [plugins/svc/commands/build.md, plugins/svc/commands/ship.md, plugins/svc/references/ship-land-red.md]
     covers: [AC-103.8]
     parallel_safe: false
     depends_on: [t3]
-    done: false
+    done: true
   - id: t5
     title: runs benchmark --compare-validation
     files: [scripts/cplat/runs_bench.py, scripts/cplat/runs_usage_report.py]
     covers: [AC-103.11]
     parallel_safe: false
     depends_on: [t3]
-    done: false
+    done: true
   - id: t6
     title: Docs — unattended-delivery.md, svc README, ADR index, CHANGELOG
     files: [docs/unattended-delivery.md, plugins/svc/README.md, docs/adr/README.md, docs/CHANGELOG.md]
