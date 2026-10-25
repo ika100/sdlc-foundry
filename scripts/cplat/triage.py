@@ -116,9 +116,13 @@ def show(ns: argparse.Namespace) -> dict:
     }
 
 
+def repo_labels(ns: argparse.Namespace) -> set[str]:
+    return {x["name"] for x in json.loads(gh(["label", "list", *_repo_args(ns), "--limit", "200", "--json", "name"]) or "[]")}
+
+
 def setup_labels(ns: argparse.Namespace) -> Report:
     r = Report(title="triage labels")
-    existing = {x["name"] for x in json.loads(gh(["label", "list", *_repo_args(ns), "--limit", "200", "--json", "name"]) or "[]")}
+    existing = repo_labels(ns)
     for name, (color, desc) in LABELS.items():
         if name in existing:
             r.did.append(f"{name}: already exists")
@@ -141,9 +145,20 @@ def apply(ns: argparse.Namespace) -> Report:
     if not (ns.add or ns.remove or comment):
         raise PlatformError("nothing to do", hint="pass --add/--remove LABEL and/or --comment-file FILE")
     r = Report(title=f"triage #{ns.number}" + ("  (dry run)" if ns.dry_run else ""))
+    # Only real changes: gh fails on removing a label the repo lacks, and the undo must not add back what was never there.
+    add, remove = ns.add, ns.remove
+    if add or remove:
+        have = _labels(json.loads(gh(["issue", "view", str(ns.number), *_repo_args(ns), "--json", "labels"]) or "{}") or {})
+        add, remove = [x for x in add if x not in have], [x for x in remove if x in have]
+        missing = sorted(set(add) - repo_labels(ns))
+        if missing:
+            raise PlatformError(f"label(s) missing in the repo: {', '.join(missing)}", hint="run `cplat triage setup-labels` first")
+        unchanged = [f"+{x}" for x in ns.add if x not in add] + [f"-{x}" for x in ns.remove if x not in remove]
+        if unchanged:
+            (r.will_do if ns.dry_run else r.did).append("labels already as asked: " + ", ".join(unchanged))
     steps = []
-    if ns.add or ns.remove:
-        steps.append(("labels", "[outward] labels: " + ", ".join([f"+{x}" for x in ns.add] + [f"-{x}" for x in ns.remove])))
+    if add or remove:
+        steps.append(("labels", "[outward] labels: " + ", ".join([f"+{x}" for x in add] + [f"-{x}" for x in remove])))
     if comment:
         steps.append(("comment", f"[outward] comment ({len(comment)} characters)"))
     if ns.dry_run:
@@ -151,19 +166,19 @@ def apply(ns: argparse.Namespace) -> Report:
         if comment:
             r.will_do.append("comment text:\n" + comment)
         return r
-    if ns.add or ns.remove:
+    if add or remove:
         args = ["issue", "edit", str(ns.number), *_repo_args(ns)]
-        for x in ns.add:
+        for x in add:
             args += ["--add-label", x]
-        for x in ns.remove:
+        for x in remove:
             args += ["--remove-label", x]
         gh(args)
         r.did.append(steps[0][1].replace("[outward] ", ""))
     if comment:
         gh(["issue", "comment", str(ns.number), *_repo_args(ns), "--body", comment])
         r.did.append("posted the comment")
-    if ns.add or ns.remove:
-        r.undo.append(f"gh issue edit {ns.number} " + " ".join([f"--remove-label {x}" for x in ns.add] + [f"--add-label {x}" for x in ns.remove]))
+    if add or remove:
+        r.undo.append(f"gh issue edit {ns.number} " + " ".join([f"--remove-label {x}" for x in add] + [f"--add-label {x}" for x in remove]))
     if comment:
         r.undo.append("delete the comment in the browser (issue comments cannot be removed with gh)")
     return r
@@ -173,8 +188,11 @@ def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
     if ns.action == "list":
         items = [summary(i) for i in queue(fetch_issues(ns), new=ns.new, waiting=ns.waiting)]
+        missing = sorted(set(LABELS) - repo_labels(ns))
+        if missing:
+            print(f"note: label(s) missing in the repo: {', '.join(missing)}; run `cplat triage setup-labels`", file=sys.stderr)
         if ns.json:
-            print(json.dumps({"issues": items}, indent=2))
+            print(json.dumps({"issues": items, "missing_labels": missing}, indent=2))
         elif not items:
             print("No issues waiting." if not ns.waiting else "No issues waiting for the reporter.")
         else:

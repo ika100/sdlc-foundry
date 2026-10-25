@@ -110,6 +110,7 @@ def test_setup_labels_creates_only_the_missing_ones(monkeypatch, capsys):
 # ---------------- apply ----------------
 
 def test_apply_edits_labels_and_comments_and_never_closes(gh, tmp_path, capsys):
+    gh.view, gh.labels = issue(12, ["triage"]), list(triage.LABELS)
     note = tmp_path / "c.md"
     note.write_text("Tracked as spec 040-price-alerts")
     assert run("apply", "12", "--add", "tracked", "--add", "enhancement", "--remove", "triage", "--comment-file", str(note)) == 0
@@ -121,10 +122,41 @@ def test_apply_edits_labels_and_comments_and_never_closes(gh, tmp_path, capsys):
 
 
 def test_apply_dry_run_sends_nothing(gh, tmp_path, capsys):
+    gh.view, gh.labels = issue(12), list(triage.LABELS)
     note = tmp_path / "c.md"
     note.write_text("hello")
     assert run("apply", "12", "--add", "needs-info", "--comment-file", str(note), "--dry-run") == 0
-    assert gh.calls == [] and "dry run" in capsys.readouterr().out
+    assert not [c for c in gh.calls if c[:2] in (["issue", "edit"], ["issue", "comment"])] and "dry run" in capsys.readouterr().out
+
+
+def test_apply_changes_only_labels_that_differ_and_undoes_only_those(gh, capsys):
+    gh.view, gh.labels = issue(12, ["enhancement", "in-progress"]), list(triage.LABELS)
+    assert run("apply", "12", "--add", "tracked", "--add", "enhancement", "--remove", "triage") == 0
+    assert next(c for c in gh.calls if c[:2] == ["issue", "edit"]) == ["issue", "edit", "12", "--add-label", "tracked"]
+    out = capsys.readouterr().out
+    assert "labels already as asked: +enhancement, -triage" in out
+    assert "gh issue edit 12 --remove-label tracked\n" in out + "\n" and "--add-label triage" not in out
+
+
+def test_apply_with_nothing_left_to_change_edits_nothing(gh):
+    gh.view, gh.labels = issue(12, ["tracked"]), list(triage.LABELS)
+    assert run("apply", "12", "--add", "tracked", "--remove", "triage") == 0
+    assert not [c for c in gh.calls if c[:2] == ["issue", "edit"]]
+
+
+def test_apply_names_labels_missing_in_the_repo(gh):
+    gh.view, gh.labels = issue(12), ["bug", "enhancement"]
+    with pytest.raises(core.PlatformError, match="missing in the repo: tracked") as err:
+        run("apply", "12", "--add", "tracked", "--remove", "triage")
+    assert "setup-labels" in err.value.hint
+    assert not [c for c in gh.calls if c[:2] == ["issue", "edit"]]
+
+
+def test_list_reports_missing_labels(gh, capsys):
+    gh.labels = ["bug"]
+    assert run("list", "--json") == 0
+    out = capsys.readouterr()
+    assert "tracked" in json.loads(out.out)["missing_labels"] and "setup-labels" in out.err
 
 
 @pytest.mark.parametrize("argv,msg", [
