@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Docs: optional live view with dot-agent-deck** ([guide](agent-deck.md), #145). Setup checked against dot-agent-deck v0.48.1: what it shows and controls, what stays with the run store and the gates, the hooks it writes into `~/.claude/settings.json`, local data and remote-host security, limitations. Nothing in the platform depends on it.
+
 ## [4.6.0] — 2026-10-25
 
 **Runs cost a third less, ship checks the spec in dev and promotes to staging, and a whole product ships across its repos.**

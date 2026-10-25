@@ -131,6 +131,10 @@ After dev is healthy, `cplat ship deploy` checks the spec in dev (spec 091, [ADR
 - **By hand:** `cplat smoke run [--env dev] [--base-url URL] [--spec SPEC] [--json]` in a service repo (exit 0 passed, 1 red, 3 not run); it files no issue.
 - **The dev URL** comes from the linked gitops-app: the service must have `expose:` and a `hosts.dev` template in `app.yaml`. An optional `urls.dev` in `app.yaml` overrides it (`{host}` is the host from `hosts`). For `*.localhost` hosts the port is `LOCAL_HTTP_PORT`, default 8088.
 
+## Watching runs live (optional)
+
+To see running sessions, their status and a way to step in while a run works, you can use [dot-agent-deck](agent-deck.md) next to the platform. It is optional and only shows activity: outcomes, costs and gates still come from the run store, CI and the ship gates.
+
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`, spec 068) are the review. Use `/svc:ship <NNN> --no-merge` to read the PR yourself first.
