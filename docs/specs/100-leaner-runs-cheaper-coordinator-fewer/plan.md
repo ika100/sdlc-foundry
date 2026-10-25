@@ -11,78 +11,91 @@ tasks:
     covers: [AC-100.1, AC-100.2, AC-100.3, AC-100.4, AC-100.5, AC-100.6]
     parallel_safe: false
     depends_on: []
+    done: true
   - id: t2
     title: Benchmark with the worktree's plugins (--plugins, headless --plugin-dir)
     files: [scripts/cplat/headless.py, scripts/cplat/runs_bench.py, scripts/cplat/runs_usage_report.py, scripts/cplat/runs.py]
     covers: [AC-100.17]
     parallel_safe: false
     depends_on: [t1]
+    done: true
   - id: b1
     title: Benchmark step 1 (quick-task and build) and record it
     files: [docs/specs/100-leaner-runs-cheaper-coordinator-fewer/benchmarks.md]
     covers: [AC-100.1, AC-100.17]
     parallel_safe: false
     depends_on: [t1, t2]
+    done: true
   - id: t3
     title: cplat pr open (commit -s, push, PR, closes, WIP note, ready-PR fallback)
     files: [scripts/cplat/pr_open.py, scripts/cplat/pr.py, scripts/cplat/cplat.py]
     covers: [AC-100.7, AC-100.8, AC-100.9]
     parallel_safe: false
     depends_on: [b1]
+    done: true
   - id: t4
     title: quick-task, fix-bug and build finish with one cplat pr open call
     files: [plugins/svc/commands/quick-task.md, plugins/svc/commands/fix-bug.md, plugins/svc/commands/build.md]
     covers: [AC-100.7]
     parallel_safe: false
     depends_on: [t3]
+    done: true
   - id: b2
     title: Benchmark step 2 and record it
     files: [docs/specs/100-leaner-runs-cheaper-coordinator-fewer/benchmarks.md]
     covers: [AC-100.17]
     parallel_safe: false
     depends_on: [t4]
+    done: true
   - id: t5
     title: cplat quiet <devbox-script> and quiet pytest in the Python templates
     files: [scripts/cplat/quiet.py, scripts/cplat/cplat.py, templates/service-python/devbox.json, templates/library-python/devbox.json]
     covers: [AC-100.12]
     parallel_safe: false
     depends_on: [b2]
+    done: true
   - id: t6
     title: Compact briefs and quiet commands in quick-task, fix-bug and build
     files: [plugins/svc/commands/quick-task.md, plugins/svc/commands/fix-bug.md, plugins/svc/commands/build.md]
     covers: [AC-100.10, AC-100.11, AC-100.12]
     parallel_safe: true
     depends_on: [t5]
+    done: true
   - id: t7
     title: Coder, tester and quality agents start from the brief and use cplat quiet
     files: [plugins/svc/agents/coder.md, plugins/svc/agents/tester.md, plugins/shared/agents/quality.md, plugins/svc-go/agents/coder.md, plugins/svc-go/agents/tester.md, plugins/svc-java/agents/coder.md, plugins/svc-java/agents/tester.md, plugins/web/agents/coder.md, plugins/web/agents/tester.md]
     covers: [AC-100.10, AC-100.12]
     parallel_safe: true
     depends_on: [t5]
+    done: true
   - id: b3
     title: Benchmark step 3 and record it
     files: [docs/specs/100-leaner-runs-cheaper-coordinator-fewer/benchmarks.md]
     covers: [AC-100.17]
     parallel_safe: false
     depends_on: [t6, t7]
+    done: true
   - id: t8
     title: Move rare branches of build, ship and quick-task into plugins/svc/references/
     files: [plugins/svc/commands/build.md, plugins/svc/commands/ship.md, plugins/svc/commands/quick-task.md, plugins/svc/references/build-resume.md, plugins/svc/references/build-worktree-fallback.md, plugins/svc/references/build-replan.md, plugins/svc/references/build-security-red.md, plugins/svc/references/ship-gitops.md, plugins/svc/references/ship-land-red.md, plugins/svc/references/quick-task-on-main.md]
     covers: [AC-100.13, AC-100.14]
     parallel_safe: false
     depends_on: [b3]
+    done: true
   - id: b4
     title: Final benchmarks against the targets ($0.30 quick-task, $1.15 build)
     files: [docs/specs/100-leaner-runs-cheaper-coordinator-fewer/benchmarks.md]
     covers: [AC-100.15, AC-100.16, AC-100.17]
     parallel_safe: false
     depends_on: [t8]
+    done: true
   - id: t9
     title: Versions, changelog, docs and ADR index
     files: [.claude-plugin/marketplace.json, plugins/svc/.claude-plugin/plugin.json, plugins/shared/.claude-plugin/plugin.json, plugins/svc-go/.claude-plugin/plugin.json, plugins/svc-java/.claude-plugin/plugin.json, plugins/web/.claude-plugin/plugin.json, docs/CHANGELOG.md, docs/unattended-delivery.md, docs/adr/README.md]
     covers: [AC-100.3, AC-100.4]
     parallel_safe: false
     depends_on: [b4]
+    done: true
 ---
 
 # Plan — 100 Leaner runs
