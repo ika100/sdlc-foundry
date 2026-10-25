@@ -52,6 +52,7 @@ class Store(Protocol):
     def create_private(self) -> None: ...
     def put(self, files: dict[str, str], message: str, deadline: float | None = None) -> None: ...
     def read(self, days: list[datetime.date], deadline: float | None = None) -> list[tuple[str, str]]: ...
+    def read_file(self, path: str, deadline: float | None = None) -> str | None: ...
 
 
 def _last_line(text: str) -> str:
@@ -158,6 +159,16 @@ class GitHubStore:
                 raise StoreUnreachable("unexpected answer from gh api") from None
         raise StoreUnreachable("concurrent writes")
 
+    def read_file(self, path: str, deadline: float | None = None) -> str | None:
+        """The text of one file of the default branch, or None when it does not exist."""
+        code, out, err = self._call(["api", f"repos/{self.slug}/contents/{path}", "-H", "Accept: application/vnd.github.raw+json"],
+                                    deadline=deadline)
+        if code == 0:
+            return out
+        if "404" in err or "Not Found" in err:
+            return None
+        raise StoreUnreachable(_last_line(err or out))
+
     def read(self, days: list[datetime.date], deadline: float | None = None) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
         owner, _, name = self.slug.partition("/")
@@ -189,5 +200,6 @@ class _ApiError(Exception):
         super().__init__(text)
         self.code, self.reason = code, _last_line(text)
         low = text.lower()
-        self.race = any(m in low for m in ("not a fast forward", "http 422", "http 409")) and "readme" not in low
+        self.race = any(m in low for m in ("not a fast forward", "http 422", "http 409")) and "readme" not in low \
+            and "workflow" not in low
         self.empty_repo = "404" in low or "409" in low or "empty" in low or "not found" in low

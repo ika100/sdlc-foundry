@@ -1,0 +1,50 @@
+# Verification — 091 Ship checks the spec in dev with smoke tests
+
+**Result:** pass
+**Commit:** 2c9ee4b · **Base:** origin/main (513b5c0) · **Red tests:** 00296e3 · **Trace:** 14/14 active criteria named by tests (AC-091.10, AC-091.13 withdrawn)
+
+Test run (orchestrator): `devbox run ci-local` 1849 passed, twice. Maven, Go and Playwright never ran locally. For
+service-java, service-go and web-nextjs, the runtime evidence for AC-091.2 and AC-091.4 is the template jobs in
+`.github/workflows/ci.yml`. They start each image and require `smoke: 1 passed, 0 failed, 0 skipped`. **Do not merge until those jobs are green.**
+
+| Criterion | Verdict | Tests | Implementation | Notes |
+|---|---|---|---|---|
+| AC-091.1 | met | `tests/cplat/test_smoke_091_spec.py::test_trace_misses_a_smoke_criterion_with_only_plain_tests_ac_091_1`, `::test_trace_json_lists_the_smoke_files_and_the_missing_one_ac_091_1`, `::test_check_accepts_the_marker_on_active_criteria_ac_091_1`, `::test_ci_names_the_smoke_criterion_of_a_building_spec_ac_091_1` | `scripts/cplat/spec.py:34` (marker), `:394` (`smoke_trace`), `:1061-1077` (trace MISS line, exit 1), `:937` (ci), `:266` (check) | The tests cover sub-bullets and withdrawn criteria, and the case where plain tests name the id but no test is smoke-tagged |
+| AC-091.2 | met | `tests/cplat/test_smoke_091_templates.py::test_python_smoke_runs_only_smoke_tests_against_the_url_ac_091_2`, `::test_python_smoke_exits_non_zero_when_a_test_fails_ac_091_2`, `::test_python_smoke_without_smoke_tests_exits_zero_ac_091_2`, `::test_update_delivers_the_smoke_script_and_recipe_ac_091_2`; CI template jobs | `templates/service-python/scripts/smoke_pytest.py:45-85`, `templates/*/scripts/smoke.sh`, `templates/service-go/scripts/smoke-summary.go`, `templates/service-java/scripts/SmokeSummary.java`, `templates/web-nextjs/scripts/smoke-summary.mjs` | Python is run for real against an HTTP server. For java, go and web the acceptance tests only check that the files contain the right text (`test_smoke_script_prints_the_contract_lines_ac_091_2`). The real check is the CI step in `.github/workflows/ci.yml` (go, java, web). I read the go, java and web scripts and found no contract violation |
+| AC-091.3 | met | `test_smoke_091_templates.py::test_smoke_without_a_base_url_runs_nothing_and_names_the_variable_ac_091_3` (4 shapes x unset/empty) | e.g. `templates/service-go/scripts/smoke.sh:7-11` | Shims prove no runner starts. Exit code 2, and the exact message goes to stderr |
+| AC-091.4 | met | `::test_each_fresh_skeleton_has_one_example_smoke_test_ac_091_4`, `::test_test_and_ci_never_send_smoke_tests_to_a_deployment_ac_091_4`, `::test_python_tests_skip_smoke_without_a_base_url_ac_091_4`, `::test_go_and_java_tests_skip_without_a_base_url_ac_091_4`; CI template jobs (`devbox run ci` / quality+test) | `templates/service-go/devbox.json.jinja:16`, `templates/service-go/internal/server/smoke_test.go:14-16`, `templates/web-nextjs/e2e/smoke.spec.ts.jinja:3` | "ci passes" for java, go and web rests on the PR's CI |
+| AC-091.5 | met | `test_smoke_091_spec.py::test_tester_agents_state_the_smoke_rules_ac_091_5`, `::test_spec_format_testing_reference_states_the_data_rule_ac_091_5`, `::test_build_command_hands_smoke_criteria_to_the_tester_ac_091_5` | `plugins/*/agents/tester.md`, `plugins/svc/skills/spec-format/references/testing.md`, `plugins/svc/commands/build.md` | This criterion is about agent behaviour, so the tests can only check the prompt text. The hard requirement "at least one smoke-tagged test" is enforced by the AC-091.1 trace and by `spec ci` |
+| AC-091.6 | met | `test_smoke_091_ship.py::test_deploy_runs_every_smoke_test_against_the_published_dev_url_ac_091_6`, `::test_deploy_succeeds_only_if_smoke_passes_ac_091_6`, `::test_a_base_url_option_overrides_the_computed_url_ac_091_6`; `test_smoke_091_run.py::test_dev_url_is_computed_from_the_gitops_app_ac_091_11` | `scripts/cplat/ship.py:856-860` (smoke after the deploy is confirmed), `:769-773`, `scripts/cplat/smoke.py:289-323` (dev URL), `:213-224` (criteria) | |
+| AC-091.7 | met | `test_smoke_091_run.py::test_a_first_failure_is_retried_once_after_30_seconds_ac_091_7`, `::test_a_pass_on_the_retry_is_passed_on_retry_and_flaky_ac_091_7`; `test_smoke_091_ship.py::test_a_pass_on_retry_is_reported_and_recorded_as_flaky_ac_091_7` | `scripts/cplat/smoke.py:250-259` | |
+| AC-091.8 | met | `test_smoke_091_run.py::test_a_run_that_does_not_finish_is_stopped_and_red_ac_091_8`, `::test_the_limit_defaults_are_ten_minutes_thirty_seconds_sixty_lines_ac_091_8`; `test_smoke_091_ship.py::test_a_run_that_hits_the_limit_is_red_without_a_retry_ac_091_8` | `scripts/cplat/smoke.py:155-182` (killpg), `:246-247` | The 600 s limit applies to each attempt. A failing first attempt plus a retry can take up to about 20.5 min. This is acceptable: it matches the design ("per smoke run") and a timed-out attempt is never retried |
+| AC-091.9 | met | `test_smoke_091_ship.py::test_red_smoke_stops_the_run_with_evidence_and_an_issue_ac_091_9`, `::test_red_smoke_escalates_as_code_and_rolls_nothing_back_ac_091_9`; `test_smoke_091_run.py::test_the_tail_has_sixty_lines_and_no_secrets_ac_091_9` | `scripts/cplat/ship.py:734-760`, `scripts/cplat/smoke.py:208-210` | The tail is the last 60 non-blank lines of the whole output, not 60 lines per failing test. Acceptable |
+| AC-091.11 | met | `test_smoke_091_ship.py::test_without_a_kube_context_smoke_is_not_run_ac_091_11`, `::test_a_service_not_exposed_in_dev_is_not_run_ac_091_11`, `::test_a_repo_not_linked_to_a_gitops_app_is_not_run_ac_091_11`, `::test_an_unreachable_dev_url_is_not_run_and_not_escalated_ac_091_11` | `scripts/cplat/ship.py:785-791`, `:857-858`, `:763-765` | |
+| AC-091.12 | met | `test_smoke_091_ship.py::test_resuming_after_red_smoke_runs_only_smoke_again_ac_091_12`, `::test_a_resumed_red_result_files_again_as_a_plus_one_ac_091_12` | `scripts/cplat/ship.py:792-793` | The tests prove that a resumed run calls no kubectl and lists no pin PRs |
+| AC-091.14 | met | `test_smoke_091_ship.py::test_red_smoke_files_one_issue_in_the_service_repo_ac_091_14`, `::test_a_failing_filing_changes_nothing_about_the_run_ac_091_14`; `test_smoke_091_run.py::test_the_draft_follows_the_convention_ac_091_14`, `::test_a_repeat_after_the_issue_was_closed_opens_a_new_one_unless_wontfix_ac_091_14`, `::test_the_cap_of_ten_new_issues_applies_ac_091_14`, `::test_file_issue_survives_a_crash_in_filing_ac_091_14` | `scripts/cplat/smoke.py:339-359`, `scripts/cplat/ship.py:740-751` | Needs the out-of-plan `autoissue` and `feedback` fixes (see below) |
+| AC-091.15 | met | `test_smoke_091_ship.py::test_the_run_record_of_a_passed_run_has_the_smoke_section_ac_091_15`, `::test_the_record_carries_the_red_section_and_the_filed_entry_ac_091_15`, `::test_not_run_never_counts_as_passed_in_the_row_ac_091_15`; `test_smoke_091_run.py::test_the_section_of_a_not_run_is_empty_and_unchecked_ac_091_15` | `scripts/cplat/smoke.py:86-125`, `scripts/cplat/ship.py:723-731` | |
+| AC-091.16 | met | `test_smoke_091_templates.py::test_a_fresh_web_repo_has_the_playwright_scaffold_by_default_ac_091_16`, `::test_update_brings_the_scaffold_to_a_web_repo_that_opted_out_ac_091_16`, `::test_web_smoke_runs_in_the_browser_runner_ac_091_16` | `templates/web-nextjs/playwright.config.ts.jinja`, `templates/web-nextjs/scripts/smoke.sh:19-23`, `scripts/cplat/update.py` (Playwright added) | Playwright running in the browser is proven only by the web CI job |
+
+## Changes to the acceptance tests after red (00296e3)
+
+- `3872b70` `tests/cplat/test_smoke_091_ship.py:167`: `"line 88"` became `"line 28"`. The tail keeps lines 31 to 90 of 90, so the old assertion could never pass. `"line 28"` lies outside the tail. The test still proves the cut, and line 89 still carries the secret that must be redacted. **Acceptable.**
+- `2c9ee4b` `tests/cplat/test_smoke_091_run.py:212`: `timeout=1` became `timeout=5`. The fake still sleeps 30 s. The test still requires `timed-out`, `failing == ["(timed out)"]` and an elapsed time under 20 s, so it still proves the process group was killed. The longer timeout only removes a race in the test harness. **Acceptable.**
+
+## Non-goals
+
+There is no smoke in staging or prod, and nothing promotes. `env` is only a parameter for spec 093. Nothing rolls back: `ship.py:752` escalates and keeps `deployed`. There is no library smoke (`smoke_tag` is None, `spec.py:266`), no scheduled run and no load testing. ✔
+
+## Deviations from the plan
+
+- `scripts/cplat/autoissue.py:79` (no task): a path followed by `::` is no longer collapsed to `<path>`, so failing tests in different files get different signatures. This is needed for AC-091.14. The lookahead only blocks partial matches that backtracking would produce, so other kinds of signatures stay the same. **Acceptable.**
+- `scripts/cplat/feedback.py:32` (no task): `sha-<40hex>` image tags are no longer redacted as `<long-string>`. This is needed for the image tag in the issue body (AC-091.14). **Acceptable.**
+- `tests/cplat/test_runs.py:141`: a tie-break in the harness for a flaky test under a frozen clock. Not an acceptance test. **Acceptable.**
+- `docs/adr/040-*.md`, `docs/adr/README.md`: the ADR was renumbered to 040. **Acceptable.**
+- `.github/workflows/ci.yml`: the service-python job runs `python -m pytest -p scripts.smoke_pytest` and a smoke step against uvicorn. This is within t11's files. ✔
+- `templates/web-nextjs/tests/page.test.tsx.jinja` is listed in t7 but did not change. This is harmless.
+- All 11 tasks are `done: true`.
+
+## Contract
+
+The build matches `design.md` in these places: the marker and the trace output, the per-shape tags, the guard text and exit code 2, the result and summary lines, the `SmokeResult`/`Attempt` API, the deploy lines, the not-run reasons, the resume line, the issue draft fields and the `smoke` record section.
+
+There is one small addition. `dev_url` has an extra reason, `could not read the gitops-app <slug>`, for when no linked app can be read. **Acceptable.** ✔

@@ -6,7 +6,7 @@
                                     different commits in different workflows (spec 055: the templates use the platform's
                                     pins), or a workflow has no top-level `permissions:` (offline; CI guard)
 
-Default PATHs: .github templates. Dependabot's github-actions ecosystem keeps SHA pins up to date and understands the
+Default PATHs: .github templates scripts/cplat/assets. Dependabot's github-actions ecosystem keeps SHA pins up to date and understands the
 `# vX` comment. Local (`./`) and `docker://` references are ignored.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ def resolve(action: str, ref: str, cache: dict[tuple[str, str], str]) -> str:
 
 def main(argv: list[str]) -> int:
     check = "--check" in argv
-    paths = [a for a in argv if not a.startswith("--")] or [".github", "templates"]
+    paths = [a for a in argv if not a.startswith("--")] or [".github", "templates", "scripts/cplat/assets"]
     cache: dict[tuple[str, str], str] = {}
     unpinned = 0
     pins: dict[str, set[str]] = {}

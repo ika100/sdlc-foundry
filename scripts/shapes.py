@@ -68,6 +68,18 @@ def validate(shapes: list[dict]) -> list[str]:
         globs = s.get("test_globs")
         if s.get("status") != "planned" and (not isinstance(globs, list) or not globs or not all(isinstance(g, str) and g for g in globs)):
             errs.append(f"{sid}: test_globs must list where tests live (ADR-026: `cplat spec trace` searches them for AC ids)")
+        tag, sglobs = s.get("smoke_tag"), s.get("smoke_globs")
+        if s.get("deployable") and s.get("status") != "planned":
+            try:
+                if not isinstance(tag, str) or not tag:
+                    raise ValueError("missing")
+                re.compile(tag)
+            except (ValueError, re.error) as e:
+                errs.append(f"{sid}: smoke_tag must be a regex that marks smoke tests (spec 091): {e}")
+        elif tag is not None or sglobs is not None:
+            errs.append(f"{sid}: only deployable shapes have smoke_tag / smoke_globs (spec 091)")
+        if sglobs is not None and (not isinstance(sglobs, list) or not sglobs or not all(isinstance(g, str) and g for g in sglobs)):
+            errs.append(f"{sid}: smoke_globs must be a non-empty list of globs")
         checks = s.get("ci_checks")
         if s.get("status") != "planned" and (not isinstance(checks, list) or not checks):
             errs.append(f"{sid}: ci_checks must list the CI job names new repos require on main (spec 054)")
@@ -90,7 +102,7 @@ def check_files(shapes: list[dict]) -> list[str]:
 
 
 CORE_RECIPES = ["lint", "lint-fix", "quality", "test", "test-fast", "security", "secrets-baseline", "ci"]   # ci, secrets-baseline: specs 073, 075
-DEPLOY_RECIPES = ["image-build", "image-scan"]
+DEPLOY_RECIPES = ["image-build", "image-scan", "smoke"]   # smoke: spec 091
 DEPS_RECIPES = ["deps-findings", "deps-bump"]   # spec 095: the recipes `cplat deps` calls
 CONTRACT_AGENTS = ["coder", "tester"]
 DEPLOY_AGENTS = ["deployment", "observability", "release"]
@@ -165,6 +177,8 @@ def check_contract(shapes: list[dict]) -> list[str]:
                     errs.append(f"{sid}: devbox.json missing deps recipe '{r}' (spec 095)")
             if sid != "gitops-app" and not (tdir / "scripts" / "deps.sh").is_file():
                 errs.append(f"{sid}: template has no scripts/deps.sh (spec 095)")
+            if s["deployable"] and sid != "gitops-app" and not (tdir / "scripts" / "smoke.sh").is_file():
+                errs.append(f"{sid}: template has no scripts/smoke.sh (spec 091)")
         claude = _template_file(tdir, "CLAUDE.md")
         if claude is None:
             errs.append(f"{sid}: template has no CLAUDE.md")

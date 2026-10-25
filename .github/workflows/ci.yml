@@ -202,7 +202,25 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
           uv run mypy src
-          uv run pytest -q
+          if [ "${{ matrix.template }}" = "service-python" ]; then
+            SMOKE_BASE_URL='' uv run python -m pytest tests/ -p scripts.smoke_pytest -q -rs | tee /tmp/pytest.out
+            grep -q "SMOKE_BASE_URL is not set" /tmp/pytest.out   # spec 091: the example smoke test is skipped here
+          else
+            uv run pytest -q
+          fi
+      # Spec 091: the real smoke runner against a running instance of the service
+      - name: Smoke tests against a running service
+        if: matrix.template == 'service-python'
+        working-directory: /tmp/test-service-python
+        run: |
+          set +e
+          bash scripts/smoke.sh 2>/tmp/guard.err; rc=$?
+          set -e
+          test "$rc" = 2 && grep -q SMOKE_BASE_URL /tmp/guard.err
+          uv run uvicorn test_svc.main:app --port 18080 &
+          for _ in $(seq 1 30); do curl -sf localhost:18080/health && break; sleep 1; done
+          SMOKE_BASE_URL=http://127.0.0.1:18080 bash scripts/smoke.sh | tee /tmp/smoke.out
+          grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
 
   smoke-test-gitops-app:
     name: smoke-test gitops-app template
@@ -279,7 +297,8 @@ jobs:
             test -f /tmp/test-web/$f || { echo "missing $f"; exit 1; }
           done
           test ! -e /tmp/test-web/k8s || { echo "service templates must not ship k8s/ (ADR-017)"; exit 1; }
-          test ! -e /tmp/test-web/e2e
+          test -f /tmp/test-web/e2e/smoke.spec.ts
+          test -f /tmp/test-web/playwright.config.ts
       - name: Shape is detected as web-nextjs
         run: test "$(bash scripts/detect-shape.sh /tmp/test-web)" = "web-nextjs"
       - name: Install, lint, typecheck, test, build
@@ -295,12 +314,17 @@ jobs:
         run: |
           docker build -t smoke:web .
           docker run -d --name smoke --read-only --tmpfs /tmp --tmpfs /app/.next/cache -p 3000:3000 smoke:web
-          for _ in $(seq 1 30); do curl -sf localhost:3000/api/health && exit 0; sleep 2; done
-          docker logs smoke; exit 1
-      - name: Variant — e2e on, observability off
+          up=false
+          for _ in $(seq 1 30); do curl -sf localhost:3000/api/health && { up=true; break; }; sleep 2; done
+          $up || { docker logs smoke; exit 1; }
+          # spec 091: the browser smoke tests against the running image (smoke.sh calls pnpm, as devbox provides it in a repo)
+          npm install -g pnpm@11.22.0 >/dev/null
+          SMOKE_BASE_URL=http://localhost:3000 bash scripts/smoke.sh | tee /tmp/smoke.out
+          grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
+      - name: Variant — observability off
         run: |
           copier copy ./templates/web-nextjs /tmp/test-web2 --defaults --trust --skip-tasks \
-            --data project_name=test-web2 --data needs_e2e=true --data needs_observability=false
+            --data project_name=test-web2 --data needs_observability=false
           test -f /tmp/test-web2/e2e/smoke.spec.ts
           test -f /tmp/test-web2/playwright.config.ts
           test ! -e /tmp/test-web2/instrumentation.ts
@@ -362,8 +386,12 @@ jobs:
         run: |
           docker build --build-arg VERSION=v0.0.0 -t smoke:go .
           docker run -d --name smoke --read-only -p 8080:8080 smoke:go
-          for _ in $(seq 1 20); do curl -sf localhost:8080/health && exit 0; sleep 2; done
-          docker logs smoke; exit 1
+          up=false
+          for _ in $(seq 1 20); do curl -sf localhost:8080/health && { up=true; break; }; sleep 2; done
+          $up || { docker logs smoke; exit 1; }
+          # spec 091: the smoke tests against the running image
+          SMOKE_BASE_URL=http://localhost:8080 bash scripts/smoke.sh | tee /tmp/smoke.out
+          grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
 
   smoke-test-service-java:
     name: smoke-test service-java template (obs=${{ matrix.observability }}, db=${{ matrix.database }})
@@ -422,8 +450,12 @@ jobs:
           fi
           # shellcheck disable=SC2086
           docker run -d --name smoke --read-only --tmpfs /tmp -p 8080:8080 -e OTEL_SDK_DISABLED=true $db_env smoke:java
-          for _ in $(seq 1 40); do curl -sf localhost:8080/actuator/health/readiness && exit 0; sleep 3; done
-          docker logs smoke; exit 1
+          up=false
+          for _ in $(seq 1 40); do curl -sf localhost:8080/actuator/health/readiness && { up=true; break; }; sleep 3; done
+          $up || { docker logs smoke; exit 1; }
+          # spec 091: the smoke tests against the running image
+          SMOKE_BASE_URL=http://localhost:8080 bash scripts/smoke.sh | tee /tmp/smoke.out
+          grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
 
   site:
     name: documentation site builds

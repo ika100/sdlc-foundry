@@ -213,14 +213,56 @@ def check_service_repos_token(repo: Path) -> list[dict]:
     return [check(OK, name, "set: gitops CI can read the service repos named by Service-ref markers")]
 
 
-def check_run_store() -> dict:
-    """The private run store (spec 087): only a public store fails."""
-    import runs
-    name = "run store"
+ALERTS_TOKEN_FIX = ("create a fine-grained token with Issues: read and write on every service repo in services.yaml, then: "
+                    "gh secret set ALERTS_TOKEN -R {slug}")
+
+
+def check_alerts_token(repo: Path) -> list[dict]:
+    """Spec 092: the alert poll files issues in the service repos with ALERTS_TOKEN; without it they land in the gitops repo."""
+    import yaml
+
+    import ship
+    name = "secret ALERTS_TOKEN"
+    shape = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False).stdout.strip()
+    if shape != "gitops-app":
+        return []
+
+    def load(path: Path) -> dict:
+        try:
+            data = yaml.safe_load(path.read_text())
+        except (OSError, yaml.YAMLError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    polled = has_repo = False
+    for app in sorted((repo / "applications").glob("*/app.yaml")):
+        obs = (load(app).get("addons") or {})
+        if not isinstance(obs, dict) or "observability" not in obs:
+            continue
+        conf = obs["observability"] if isinstance(obs["observability"], dict) else {}
+        if conf.get("alerts") is False:
+            continue
+        polled = True
+        services = load(app.parent / "services.yaml").get("services") or []
+        has_repo = has_repo or any(isinstance(s, dict) and s.get("repo") for s in services)
+    if not (polled and has_repo):
+        return []
     try:
-        st = runs.store_status(timeout=10.0)
-    except Exception as e:  # noqa: BLE001
-        return check(WARN, name, f"could not check: {e}", "cplat runs flush")
+        names = {s.get("name") for s in json.loads(ship.gh(["secret", "list", "--json", "name"], cwd=repo, check=False) or "")}
+    except Exception:  # noqa: BLE001 - any unreadable list is a warning, never a failure
+        names = None
+    slug = ship.service_slug(repo)
+    fix = ALERTS_TOKEN_FIX.format(slug=slug)
+    if names is None:
+        return [check(WARN, name, "could not be read with this gh login", fix)]
+    if "ALERTS_TOKEN" not in names:
+        return [check(WARN, name, f"not set: alert issues for the service repos land in {slug} instead", fix)]
+    return [check(OK, name, "set: alert issues go to the service repos")]
+
+
+def run_store_check(st) -> dict:
+    """Map a run store status (runs.StoreStatus) to a check; `cplat retro` takes its hint from here."""
+    name = "run store"
     if st.state == "unset":
         return check(WARN, name, "not configured", "cplat runs init <owner/name>")
     if st.state == "public":
@@ -233,11 +275,50 @@ def check_run_store() -> dict:
     return check(OK, name, st.slug)
 
 
+def check_run_store() -> dict:
+    """The private run store (spec 087): only a public store fails."""
+    import runs
+    try:
+        st = runs.store_status(timeout=10.0)
+    except Exception as e:  # noqa: BLE001
+        return check(WARN, "run store", f"could not check: {e}", "cplat runs flush")
+    return run_store_check(st)
+
+
+def check_retro_schedule() -> list[dict]:
+    """The weekly retro schedule and its secrets in the run store repo (spec 090). Never fails."""
+    import autoissue
+    import retro_setup
+    import runs
+    name = "retro schedule"
+    try:
+        st = runs.store_status(timeout=10.0)
+        if st.state != "ok":
+            return []
+        slug = st.slug
+        miss = retro_setup.missing(runs.open_store(slug), slug)
+    except Exception as e:  # noqa: BLE001
+        return [check(WARN, name, f"could not check: {e}", "cplat runs init <owner/name>")]
+    if miss is None:
+        return [check(WARN, name, f"secrets of {slug} could not be read with this gh login", "gh auth status")]
+    if not miss:
+        return [check(OK, name, f"{slug}: weekly retro scheduled (Mondays 06:00 UTC)")]
+    fixes = []
+    if any(m.startswith("no retro schedule") for m in miss):
+        fixes.append(f"cplat runs init {slug}")
+    if any("Claude" in m for m in miss):
+        fixes.append(f"claude setup-token, then gh secret set CLAUDE_CODE_OAUTH_TOKEN -R {slug}")
+    if any(retro_setup.GH_SECRET in m for m in miss):
+        fixes.append(f"gh secret set RETRO_GH_TOKEN -R {slug}   (fine-grained: Issues read/write on "
+                     f"{autoissue.default_repo()}, Contents read/write on {slug})")
+    return [check(WARN, name, f"{slug}: " + "; ".join(miss), " ; ".join(fixes))]
+
+
 def run_checks(repo: Path) -> list[dict]:
     import gates
     return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_repo(repo),
             *gates.check_gates(repo), *check_gitops_token(repo),
-            *check_service_repos_token(repo), check_run_store()]
+            *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule()]
 
 
 def main(argv: list[str]) -> int:

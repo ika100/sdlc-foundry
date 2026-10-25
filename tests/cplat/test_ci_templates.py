@@ -110,7 +110,8 @@ def test_jobs_run_on_the_ci_runner_variable(template):
         text = wf.read_text()
         assert "runs-on: ubuntu-latest" not in text, f"{wf.relative_to(TEMPLATES)} still pins ubuntu-latest"
         for line in re.findall(r"^\s*runs-on: .*$", text, re.M):
-            assert RUNNER.search(line) or "matrix.runner" in line, f"{wf.relative_to(TEMPLATES)}: {line.strip()}"
+            bare = line.strip() == "runs-on: ${{ vars.CI_RUNNER }}" and "if: vars.CI_RUNNER != ''" in text  # spec 092: self-hosted only
+            assert RUNNER.search(line) or "matrix.runner" in line or bare, f"{wf.relative_to(TEMPLATES)}: {line.strip()}"
 
 
 @pytest.mark.parametrize("template", ALL_TEMPLATES)

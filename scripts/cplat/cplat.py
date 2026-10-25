@@ -22,11 +22,14 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py status [--context KUBE_CONTEXT]   one table: pins per env, service CI, Argo sync/health
   cplat.py spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
   cplat.py ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /svc:ship: spec → merged PR → dev (ADR-028)
+  cplat.py smoke run [--env dev] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment (spec 091)
   cplat.py pr wait <number|url> [-R owner/repo] [--merge]   wait for a PR's CI, heal stuck or transient runs, merge on green (spec 079)
   cplat.py headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume (spec 070)
   cplat.py build schedule|merge|state|replan-commit|replan-abort|resolved ...   /svc:build Phase 2: schedule, merge, re-plan on conflict (spec 094)
   cplat.py runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost (specs 087, 089, 099)
+  cplat.py retro [--week W] [--json] [--out DIR] | propose --dir DIR | post [--dir DIR]   weekly platform retro (spec 090)
   cplat.py deps findings|patch|report ...   patch fixable dependency findings of a red security gate (spec 095, ADR-034)
+  cplat.py alerts poll [--dry-run] [--app APP]   firing alerts become issues (spec 092; run by the gitops-app's alerts workflow)
   cplat.py fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release (spec 096)
   cplat.py adopt --type SHAPE [--data KEY=VALUE]   bring an existing repo onto the platform template (spec 071)
 """
@@ -55,13 +58,16 @@ COMMANDS = {
     "triage": "triage",
     "spec": "spec",
     "ship": "ship",
+    "smoke": "smoke",
     "pr": "pr",
     "headless": "headless",
     "adopt": "adopt",
     "runs": "runs",
     "deps": "deps",
     "fleet": "fleet",
+    "retro": "retro",
     "build": "buildcmd",
+    "alerts": "alerts",
 }
 
 

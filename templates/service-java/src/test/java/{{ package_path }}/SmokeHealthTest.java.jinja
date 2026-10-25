@@ -1,0 +1,37 @@
+package {{ package_name }};
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+
+/**
+ * Smoke test (spec 091): {@code SMOKE_BASE_URL=https://<host> devbox run smoke} runs it against a
+ * deployment. It reaches the service only through its URL and is skipped without SMOKE_BASE_URL.
+ */
+@Tag("smoke")
+@EnabledIfEnvironmentVariable(named = "SMOKE_BASE_URL", matches = ".+")
+class SmokeHealthTest {
+
+  @Test
+  void livenessIsUpAtTheBaseUrl() throws IOException, InterruptedException {
+    String base = System.getenv("SMOKE_BASE_URL").replaceAll("/+$", "");
+    HttpRequest request =
+        HttpRequest.newBuilder(URI.create(base + "/actuator/health/liveness"))
+            .timeout(Duration.ofSeconds(10))
+            .GET()
+            .build();
+    HttpResponse<String> response =
+        HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+    assertEquals(200, response.statusCode());
+    assertTrue(response.body().contains("UP"), response.body());
+  }
+}
