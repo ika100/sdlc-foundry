@@ -1,6 +1,6 @@
 ---
 spec_id: 100-leaner-runs-cheaper-coordinator-fewer
-spec_hash: 1a06ecb18fdb
+spec_hash: 877fbf61dce6
 summary: Coordinator on Sonnet by default (flag > project > user settings), benchmark with the worktree's plugins,
   cplat pr open for the finishing step, compact briefs and cplat quiet, rare command branches moved to reference
   files; each step benchmarked before the next

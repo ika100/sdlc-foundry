@@ -60,7 +60,8 @@ Acceptance by benchmark
 
 Baselines (platform 4.5.0, installed svc 3.4.0, sample `ika100/todo-api`, prices of 2026-10-25):
 - `quick-task` v2 @ `17eb5e4`: run `20261025T113632Z-73dcf110`, done, 22 calls, 674,791 tokens, **$0.48** est. (coordinator 14 calls, $0.36).
-- `build` v3 @ `ef04f90`: run `20261025T123218Z-f4e36dbe`, done, 81 calls, 2,617,700 tokens, **$1.64** est. (plan $0.48, build $1.17; coordinator 49 calls, $1.03; Opus $1.41, Sonnet $0.24). The build target of AC-100.16 is therefore at most **$1.15**.
+- `build` v3 @ `ef04f90`: run `20261025T123218Z-f4e36dbe`, done, 81 calls, 2,617,700 tokens, **$1.64** est. (plan $0.48, build $1.17; coordinator 49 calls, $1.03; Opus $1.41, Sonnet $0.24). Superseded by the v4 baseline below.
+- `build` **v4** @ `ef04f90` (spec 900 v4 states AC-900.2 unambiguously; same worktree plugins as the step runs, coordinator `--model opus`): runs `20261025T133329Z-d19e689b` $1.75 and `20261025T135136Z-d3ddd653` $2.12, both done with a PR and both gates passed: median **$1.94**. The build target of AC-100.16 is therefore at most **$1.36**.
 
 ## Non-goals
 
@@ -81,5 +82,8 @@ Baselines (platform 4.5.0, installed svc 3.4.0, sample `ika100/todo-api`, prices
 
 - 2026-10-25 created
 - 2026-10-25 amended: open questions answered and folded into AC-100.3, AC-100.4, AC-100.5, AC-100.13
+- 2026-10-25 approved
+- 2026-10-25 building
+- 2026-10-25 draft: amend: build baseline moves to spec 900 v4 (median of two Opus runs)
 - 2026-10-25 approved
 - 2026-10-25 building
