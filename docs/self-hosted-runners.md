@@ -35,7 +35,7 @@ The workflows assume what a GitHub-hosted Ubuntu runner has, except where noted:
 - **Docker** for the `docker` job of service shapes and for workflow `services:`: a Docker daemon next to the runner
   (Docker in Docker on Kubernetes).
 
-- **Network access to the query API** for the gitops-app's alert poll (`alerts.yml`, spec 092, [ADR-036](adr/036-alert-poll-on-the-gitops-runner.md)):
+- **Network access to the query API** for the gitops-app's alert poll (`alerts.yml`, spec 092, [ADR-038](adr/038-alert-poll-on-the-gitops-runner.md)):
   the runner must reach Prometheus (`lgtm.observability.svc:9090` in-cluster) and `gh`. The poll never runs on
   GitHub-hosted runners. For an app.yaml `querySecret`, the runner's ServiceAccount needs `get` on that Secret.
 

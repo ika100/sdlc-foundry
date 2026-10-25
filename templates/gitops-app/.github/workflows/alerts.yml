@@ -1,4 +1,4 @@
-# Alert issues (spec 092, ADR-036): every 15 minutes, firing alerts become issues in the owning repo.
+# Alert issues (spec 092, ADR-038): every 15 minutes, firing alerts become issues in the owning repo.
 # Runs only on the self-hosted runner (CI_RUNNER): the cluster's query API is not reachable from GitHub-hosted runners.
 # Start by hand with dry_run to see what would be filed: gh workflow run alerts.yml -f dry_run=true
 name: alerts

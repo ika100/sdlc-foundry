@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# alert-poll (spec 092, ADR-036): turn firing alerts into issues with the platform's `cplat alerts poll`, at the version
+# alert-poll (spec 092, ADR-038): turn firing alerts into issues with the platform's `cplat alerts poll`, at the version
 # this repo was generated from (`ref:` in .platform-version). Runs from .github/workflows/alerts.yml on the self-hosted runner.
 # ALERTS_DRY_RUN=1 prints what would be filed, commented, reopened or closed and changes nothing.
 # ALERTS_PLATFORM=<dir> uses a local platform checkout (platform development, tests).
