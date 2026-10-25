@@ -144,7 +144,7 @@ def next_step(st: dict) -> str:
         "build": f"build it: follow /svc:build {sid} (Phases 0–6) until every acceptance test passes and verification.md says pass, "
                  "then `cplat ship phase pr`. Gitops tasks (plan tasks with `repo:`): `cplat ship gitops prepare <task>`, "
                  "change and commit in that checkout, then `cplat ship gitops pr <task> --title <title> --body-file <file>`",
-        "pr": "open the PR: write the body to .git/PR_BODY.md, then `cplat ship pr --title <title> --body-file .git/PR_BODY.md`",
+        "pr": "open the PR: write the body to .pr-body.md, then `cplat ship pr --title <title> --body-file .pr-body.md`",
         "land": "wait for CI and merge: `cplat ship land`; on red checks fix the failures on the feature branch, push "
                 "(`cplat ship pr ...` again) and land again",
         "deploy": "wait for dev: `cplat ship deploy`",
@@ -518,7 +518,7 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     st = require_state(repo)
     pr = st.get("pr")
     if not pr:
-        raise PlatformError("the run has no PR yet", hint="cplat ship pr --title <title> --body-file .git/PR_BODY.md")
+        raise PlatformError("the run has no PR yet", hint="cplat ship pr --title <title> --body-file .pr-body.md")
     state = json.loads(gh(["pr", "view", pr, "--json", "state,mergeCommit"], cwd=repo) or "{}")
     if state.get("state") == "MERGED":
         return _merged(repo, st, (state.get("mergeCommit") or {}).get("oid", ""), ["already merged"])
@@ -1055,7 +1055,7 @@ def main(argv: list[str]) -> int:
         print(describe(set_phase(repo, ns.phase)))
         return 0
     if ns.cmd == "pr":
-        st = open_pr(repo, ns.title, Path(ns.body_file))
+        st = open_pr(repo, ns.title, core.stage_pr_body(repo, ns.body_file))
         print(f"PR: {st['pr']}\n{describe(st)}")
         return 0
     if ns.cmd == "gitops" and ns.gcmd == "prepare":
@@ -1063,7 +1063,7 @@ def main(argv: list[str]) -> int:
               f"then `cplat ship gitops pr {ns.task} --title <title> --body-file <file>`")
         return 0
     if ns.cmd == "gitops":
-        info = gitops_pr(repo, ns.task, ns.title, Path(ns.body_file))
+        info = gitops_pr(repo, ns.task, ns.title, core.stage_pr_body(repo, ns.body_file))
         print(f"gitops PR ({info['order']}): {info['pr']}")
         return 0
     if ns.cmd == "land":

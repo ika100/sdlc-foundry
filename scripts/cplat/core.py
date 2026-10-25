@@ -157,6 +157,24 @@ class Report:
             print(self.text(dry_run))
 
 
+PR_BODY = ".pr-body.md"   # where agents write a PR body: Claude Code never lets edits into .git/, even under acceptEdits
+
+
+def stage_pr_body(repo: Path, given: str | Path) -> Path:
+    """The PR body the model wrote, moved out of the work tree into .git/PR_BODY.md (so no commit picks it up) and returned.
+    A file already under .git/ is used as it is; `.git/PR_BODY.md` is still found when the default `.pr-body.md` is missing."""
+    path = Path(given) if Path(given).is_absolute() else repo / given
+    git_dir = repo / ".git"
+    staged = git_dir / "PR_BODY.md"
+    if not path.is_file() and Path(given).name == PR_BODY and staged.is_file():
+        return staged
+    if not path.is_file() or not git_dir.is_dir() or git_dir in path.resolve().parents:
+        return path
+    staged.write_text(path.read_text())
+    path.unlink()
+    return staged
+
+
 def git_identity(repo: Path) -> list[str]:
     """`-c user.name=… -c user.email=…` fallbacks so commits never fail on a missing identity."""
     name = run(["git", "config", "user.name"], cwd=repo, check=False).stdout.strip() or "claude-bootstrap"

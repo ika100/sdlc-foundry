@@ -13,6 +13,7 @@ import json
 import sys
 from pathlib import Path
 
+import core
 import pr_open
 import runs
 import ship
@@ -77,7 +78,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--repo", default=".")
     o = sub.add_parser("open", help="commit -s, push and open the PR in one step (spec 100)")
     o.add_argument("--title", required=True)
-    o.add_argument("--body-file", default=".git/PR_BODY.md")
+    o.add_argument("--body-file", default=core.PR_BODY)
     o.add_argument("--message")
     o.add_argument("--base", default="main")
     o.add_argument("--issues", default="")

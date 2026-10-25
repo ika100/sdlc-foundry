@@ -1,6 +1,6 @@
 """`pr open`: commit (signed off), push and open the pull request in one command (spec 100, ADR-037).
 
-  cplat pr open --title "<type>(<scope>): <subject>" [--body-file .git/PR_BODY.md] [--message <commit subject>]
+  cplat pr open --title "<type>(<scope>): <subject>" [--body-file .pr-body.md] [--message <commit subject>]
                 [--base main] [--issues "#12 #7"] [--spec <id>] [--no-pr] [--json]
 
 Fixed operations only: `git add -A`, `git commit -s`, `git push -u origin <branch>` (never forced, never amended) and
@@ -33,7 +33,7 @@ class Refused(PlatformError):
 @dataclass
 class Opts:
     title: str
-    body_file: str = ".git/PR_BODY.md"
+    body_file: str = core.PR_BODY
     message: str | None = None
     base: str = "main"
     issues: str = ""
@@ -124,7 +124,8 @@ def _closes(repo: Path, o: Opts, base_ref: str, have_gh: bool, body_path: Path) 
 def open_pr(repo: Path, o: Opts) -> Result:
     if not _ok(["git", "rev-parse", "--is-inside-work-tree"], repo):
         raise Refused("not a git repository")
-    body_path = repo / o.body_file
+    body_path = core.stage_pr_body(repo, o.body_file)
+    o.body_file = str(body_path.relative_to(repo)) if repo in body_path.parents else str(body_path)
     if not body_path.is_file():
         raise Refused(f"the PR body file {o.body_file} does not exist", hint="write the PR body there first")
     branch = _out(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo)

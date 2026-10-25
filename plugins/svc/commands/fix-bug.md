@@ -78,7 +78,7 @@ If the tester reports the bug is NOT fixed:
 
 After the tester confirms the bug is resolved:
 
-Write a short PR body to `.git/PR_BODY.md` (summary of the bug and the fix, the regression test, `{{CLOSES}}` on its own line under "Related issues"), then make **one** Bash call:
+Write a short PR body with the Write tool to `.pr-body.md` in the repo root (never into `.git/`: Claude Code refuses edits there; cplat moves it out of the work tree before it commits) (summary of the bug and the fix, the regression test, `{{CLOSES}}` on its own line under "Related issues"), then make **one** Bash call:
 
 ```bash
 cplat pr open --title "fix(<scope>): <imperative description of the fix>" [--issues "#NNN …"]
@@ -88,7 +88,7 @@ It commits everything with `-s`, pushes the branch, finds the open issues to clo
 
 Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report which part failed and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
 
-**`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and the body is in `.git/PR_BODY.md`. End the report with that exact command as its last line.
+**`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and cplat has moved the body to `.git/PR_BODY.md`. End the report with that exact command as its last line.
 
 **If Phase 0 found we were already on `main`:** warn "Skipping PR creation — working directly on main." and skip Phase 4.
 

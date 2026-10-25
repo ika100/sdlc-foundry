@@ -74,7 +74,7 @@ If still failing after 2 cycles, escalate to the user.
 
 After the tester passes:
 
-Write the PR body to `.git/PR_BODY.md` (the lines under "Related issues / stories" stay `{{CLOSES}}`; the command fills them):
+Write the PR body with the Write tool to `.pr-body.md` in the repo root (never into `.git/`: Claude Code refuses edits there; cplat moves the file out of the work tree before it commits) (the lines under "Related issues / stories" stay `{{CLOSES}}`; the command fills them):
 
 ```markdown
 ## Summary
@@ -113,7 +113,7 @@ Use `fix:` for bug fixes, `chore:` for tooling, `docs:` for documentation, etc.;
 
 Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report which part failed and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
 
-**`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and the body is in `.git/PR_BODY.md`. End the report with that exact command as its last line.
+**`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and cplat has moved the body to `.git/PR_BODY.md`. End the report with that exact command as its last line.
 
 **If Phase 0 found we were already on `main` and did not create a branch:** warn "Skipping PR creation — working directly on main." and skip Phase 3.
 
