@@ -36,7 +36,7 @@ The scope. Change-aware selection applies to the checks a build or ship runs on 
 
 ## Non-goals
 
-- A full code intelligence or dependency graph (issue #143). This spec uses the mapping the repo declares and what the diff shows, and uses richer impact data only when it is available.
+- A full code intelligence or dependency graph (issue #139). This spec uses the mapping the repo declares and what the diff shows, and uses richer impact data only when it is available.
 - Removing, weakening or shortening any check, or changing the CI of the pull request (spec 074, spec 075).
 - Choosing agents or models per task, budgets and stopping repeated failures (spec 102), measuring usage (spec 099).
 - Sharing evidence between machines or a remote cache.
