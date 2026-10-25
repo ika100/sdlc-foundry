@@ -27,15 +27,15 @@ As a platform maintainer, I want OTel totals compared with transcript totals, so
 ## Acceptance criteria
 
 - **AC-101.1** Given an OTLP endpoint is configured by a cplat setting or environment variable, when `cplat headless` or `cplat runs benchmark` starts a Claude Code session, then that session's native telemetry is on and exports to the endpoint.
-- **AC-101.2** Given the product's gitops-app has the observability addon and no endpoint is configured, when a session is started, then telemetry is on and exports to the addon's collector.
+- **AC-101.2** Given the product's gitops-app has the observability addon, when a session is started, then telemetry is on and exports to the addon's collector, unless an endpoint is explicitly configured, in which case that endpoint is used and the collector is not.
 - **AC-101.3** Given telemetry is on, when a session is started, then everything it exports carries the resource attributes cplat run id, workflow or kind, repo and platform version.
 - **AC-101.4** Given no endpoint is configured and no observability addon is present, when a session is started, then telemetry stays off and the command shows no error, no warning and no added delay.
 - **AC-101.5** Given the endpoint is unreachable or rejects data, when a run executes, then the run completes with the same result and its run record is still written; at most one warning is shown.
-- **AC-101.6** Given an endpoint that is not on localhost or inside the cluster, when a session is started without the explicit opt-in, then telemetry stays off and one message names the endpoint and the opt-in; with the opt-in it exports.
+- **AC-101.6** Given an endpoint that is not on localhost or inside the cluster, when a session is started without its own explicit opt-in setting (never implied by setting the endpoint), then the endpoint is refused, telemetry stays off and one message names the endpoint and hints at the opt-in; with the opt-in it exports.
 - **AC-101.7** Given telemetry is on, when a session runs, then no prompt text, tool input or tool output is exported, and prompt logging is off even if the user's own environment turned it on; only counts, model, cost and the attributes of AC-101.3 are exported.
 - **AC-101.8** Given the observability addon is installed, when Grafana is opened, then a provisioned dashboard shows tokens and estimated cost per run, per model and per day, and the coordinator's share of tokens and cost.
-- **AC-101.9** Given a run with OTel figures available, when its record is written, then the record notes the OTel totals, the transcript totals and their difference per token type.
-- **AC-101.10** Given a run without OTel figures (telemetry off, endpoint down or figures not queryable), when its record is written, then it has no difference note, the transcript totals are unchanged, and `cplat runs report` output is the same as before this spec.
+- **AC-101.9** Given a run with OTel figures available, when its record is written after the run, then the OTel totals are queried from the addon's Mimir by cplat run id and the record notes them, the transcript totals and their difference per token type.
+- **AC-101.10** Given a run without OTel figures (telemetry off, Mimir not reachable or no figures for the run id), when its record is written, then it has no difference note, the transcript totals are unchanged, and `cplat runs report` output is the same as before this spec.
 - **AC-101.11** Given any run, when phases and agent roles are reported, then they come from the transcripts only; OTel never changes the record's transcript-derived figures.
 
 ## Non-goals
@@ -48,10 +48,11 @@ As a platform maintainer, I want OTel totals compared with transcript totals, so
 
 ## Open questions
 
-- Where do OTel totals for the difference note (AC-101.9) come from when only the addon's backend holds them: is querying that backend after the run acceptable, or only figures available locally? (suggested: query the addon's Mimir after the run when reachable, otherwise omit; affects AC-101.9, AC-101.10)
-- Confirm: the opt-in for a non-private endpoint is a separate explicit setting, never implied by setting the endpoint. (suggested: yes; affects AC-101.6)
-- Confirm: an explicit endpoint wins over the addon's collector when both exist. (suggested: yes; affects AC-101.1, AC-101.2)
+- ~~Source of OTel totals for the difference note?~~ Answered: query the addon's Mimir for the run id after the run when reachable, otherwise omit the note, see AC-101.9 and AC-101.10.
+- ~~Confirm: separate explicit opt-in for a non-private endpoint?~~ Answered: yes, see AC-101.6.
+- ~~Confirm: explicit endpoint wins over the addon's collector?~~ Answered: yes, see AC-101.2.
 
 ## Changelog
 
 - 2026-10-25 created
+- 2026-10-25 amended: folded the user's answers into AC-101.2, AC-101.6, AC-101.9 and AC-101.10; open questions closed
