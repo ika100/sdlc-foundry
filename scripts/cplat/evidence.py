@@ -52,6 +52,7 @@ class Evidence:
     issues_error: str | None = None
     warning: str | None = None
     staging_digest: str | None = None
+    shared_digest: str | None = None     # spec 106: staging and prod run this one image
 
     def lines(self) -> list[str]:
         short = lambda s: (s or "unknown")[:7]   # noqa: E731
@@ -72,6 +73,8 @@ class Evidence:
                 out.append(f"- digest checked in dev: {rec['digest']}")
                 if self.staging_digest and self.staging_digest != rec["digest"]:
                     out.append(f"- WARNING: digest differs from what staging runs ({self.staging_digest})")
+        if self.shared_digest:
+            out.append(f"- image digest: {self.shared_digest} (same in staging and prod)")
         if self.issues_error is not None:
             out.append(f"- open issues: unknown ({self.issues_error})")
         elif self.issues:
@@ -84,7 +87,7 @@ class Evidence:
         return {"service": self.service, "version": self.version, "commit": self.commit, "evidence_commit": self.evidence_commit,
                 "note": self.note, "staging_tag": self.staging_tag, "staging_commit": self.staging_commit, "dev": self.dev,
                 "staging": self.staging, "issues": self.issues, "issues_error": self.issues_error, "warning": self.warning,
-                "staging_digest": self.staging_digest}
+                "staging_digest": self.staging_digest, "shared_digest": self.shared_digest}
 
 
 def _api(repo: str, ref: str) -> dict:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
 import yaml
@@ -11,6 +12,7 @@ import yaml
 import core
 import evidence
 import gitops
+import registry
 from core import PlatformError, Report, run
 
 ORDER = ["dev", "staging", "prod"]
@@ -29,6 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", help="prod: release to pin (vX.Y.Z); default: newest release tag with a published image")
     p.add_argument("--sha", help="staging: full commit SHA to pin; default: head of the service's main branch")
     p.add_argument("--no-verify", action="store_true", help="do not check that the image tag exists in GHCR")
+    p.add_argument("--accept-digest-mismatch", metavar="REASON", default=None,
+                   help="prod: promote although the release image is not the one staging tested; REASON is a sentence")
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--pr", action="store_true")
@@ -93,6 +97,37 @@ def _staging_tag(app_dir: Path, name: str) -> str | None:
         return None
 
 
+SHA_TAG = re.compile(r"^sha-[0-9a-f]{40}$")
+
+
+def _reason_ok(reason: str) -> bool:
+    return len(reason.split()) >= 3 and reason.rstrip()[-1:] in ".!?"
+
+
+def _check_digests(svc: dict, staging_tag: str | None, release_tag: str) -> dict:
+    """Spec 106: the digest of the staging build tag against the release tag. Returns the record, or `problem` for a refusal
+    the override does not cover (`fatal`) or covers (`mismatch`). A failed lookup raises (RegistryError is a PlatformError)."""
+    rec = {"staging_tag": staging_tag, "staging_digest": None, "release_tag": release_tag, "release_digest": None, "result": "refused"}
+    if not staging_tag or not SHA_TAG.match(staging_tag):
+        rec["problem"] = f"{svc['name']}: the staging image cannot be identified: {staging_tag or 'no pinned build'}"
+        rec["fatal"] = True
+        return rec
+    got = registry.digests(svc["image"], [staging_tag, release_tag])
+    rec["staging_digest"], rec["release_digest"] = got[staging_tag], got[release_tag]
+    for kind, tag in (("staging", staging_tag), ("release", release_tag)):
+        if got[tag] is None:
+            rec["problem"] = f"{svc['name']}: the {kind} image tag {tag} is not published in {svc['image']}"
+            rec["fatal"] = True
+            return rec
+    if got[staging_tag] == got[release_tag]:
+        rec["result"] = "match"
+    else:
+        rec["result"] = "mismatch"
+        rec["problem"] = (f"{svc['name']}: prod would not run what staging tested: staging {staging_tag} is {got[staging_tag]}, "
+                          f"release {release_tag} is {got[release_tag]}")
+    return rec
+
+
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
     if len(ns.items) < (2 if ns.all else 3):
@@ -107,6 +142,9 @@ def main(argv: list[str]) -> int:
         raise PlatformError(f"cannot promote {frm} → {to}", hint="promotion only moves forward: dev → staging → prod (dev tracks the service's main branch)")
     if to == "dev":
         raise PlatformError("dev is not a promotion target")
+    if ns.accept_digest_mismatch is not None and not _reason_ok(ns.accept_digest_mismatch):
+        raise PlatformError("--accept-digest-mismatch needs a reason of at least one sentence (3 or more words, ending in . ! or ?)",
+                            hint='e.g. --accept-digest-mismatch "The release was rebuilt on purpose."')
     if ns.version and len(names) > 1:
         raise PlatformError("--version applies to a single service")
 
@@ -123,6 +161,11 @@ def main(argv: list[str]) -> int:
             raise PlatformError(f"no service is in {frm}")
     r = Report(title=f"promote {', '.join(names)}: {frm} → {to} ({app_dir.name})")
     plan: list[tuple[str, str]] = []
+    checks: dict[str, dict] = {}
+    problems: list[str] = []
+    overridden = False
+    if to == "prod" and ns.no_verify:
+        print("image identity not verified (--no-verify)", file=sys.stderr if ns.json else sys.stdout)
     summaries: dict[str, evidence.Evidence] = {}
     for n in names:
         svc = by_name.get(n)
@@ -139,10 +182,38 @@ def main(argv: list[str]) -> int:
                 raise PlatformError(f"image {svc['image']}:{tag} does not exist yet", hint=f"wait for CI on {svc['repo']}'s main to finish (it publishes sha-<40> tags), or pass --sha of a built commit")
         elif not ns.no_verify and to == "prod" and tag not in image_tags(svc["image"]):
             raise PlatformError(f"image {svc['image']}:{tag} does not exist", hint=f"the release v{tag} must have been built by CI in {svc['repo']}")
+        staging_tag = _staging_tag(app_dir, n) if to == "prod" else None
+        rec = None
+        if to == "prod" and not ns.no_verify:
+            rec = checks[n] = _check_digests(svc, staging_tag, tag)
+            if rec.get("problem") and (rec.get("fatal") or ns.accept_digest_mismatch is None):
+                problems.append(rec["problem"])
+            elif rec["result"] == "mismatch":
+                overridden = True
         if to == "prod":    # spec 093: what the release has been through; it never blocks
-            summaries[n] = evidence.summary(svc, f"v{tag}", _staging_tag(app_dir, n))
+            summaries[n] = evidence.summary(svc, f"v{tag}", staging_tag)
+            if rec and rec["result"] == "match":
+                summaries[n].shared_digest = rec["staging_digest"]
         plan.append((n, tag))
         r.will_do.append(f"{n}: {to} → {svc['image']}:{tag} ({what})" + ("   [PRODUCTION]" if to == "prod" else ""))
+    if checks:
+        r.data["digests"] = {n: {k: v for k, v in c.items() if k not in ("problem", "fatal")} for n, c in checks.items()}
+        for n, c in checks.items():
+            r.will_do.append(f"{n} staging: {c['staging_tag']} {c['staging_digest'] or 'not found'}")
+            r.will_do.append(f"{n} prod: {c['release_tag']} {c['release_digest'] or 'not found'}   [{c['result']}]")
+    accepted = ""
+    if overridden:
+        accepted = "\n".join(f"digest mismatch accepted: {ns.accept_digest_mismatch}   ({n}: staging {c['staging_digest']}, "
+                             f"release {c['release_digest']})" for n, c in checks.items() if c["result"] == "mismatch")
+        r.will_do.append(accepted)
+    if problems:
+        if ns.dry_run:
+            r.will_do += [f"REFUSED: {m}" for m in problems]
+            r.emit(True, ns.json)
+            return 1
+        raise PlatformError("\n".join(problems), hint="re-publish the release from the tested image with the release job (it re-tags "
+                            "the staging sha-<40> image), or promote the release whose image is the staging one; "
+                            "a mismatch alone can be accepted with --accept-digest-mismatch \"<reason>\"")
     r.will_do.append("add the environment to the service's `environments`, regenerate manifests, pin the tag")
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch promote/…)")
@@ -169,10 +240,14 @@ def main(argv: list[str]) -> int:
         doc["images"][0]["newTag"] = tag
         k.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False))
     gitops.render(repo)  # idempotent: proves the pin survives a re-render
+    if accepted:
+        r.did.append(accepted)
     r.did.append("pinned " + ", ".join(f"{n}={t}" for n, t in plan))
     if ns.pr:
         title = f"chore(promote): {' '.join(n for n, _ in plan)} {frm}→{to}"
         body = "\n".join(f"- {n}: `{t}`" for n, t in plan) + ("\n\n**Production promotion — review carefully.**" if to == "prod" else "")
+        if accepted:
+            body += "\n\n" + accepted
         if summaries:
             body += "\n\n## Evidence\n\n" + "\n\n".join("\n".join(ev.lines()) for ev in summaries.values())
         r.did.append("opened " + gitops.open_pr(repo, f"promote/{gitops.slug('-'.join(n for n, _ in plan))}-{to}", title, body))

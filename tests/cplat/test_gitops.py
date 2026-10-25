@@ -78,6 +78,14 @@ def gh(monkeypatch):
     return fake
 
 
+def matching_registry(monkeypatch, fake):
+    """Spec 106: every tag the fake GHCR knows (and the full-sha staging build) is one image, so prod promotions find matching digests."""
+    import registry
+    tags = sorted(set().union(*fake.image_tags.values()) | {"sha-" + SHA})
+    version = [{"name": "sha256:" + "1" * 64, "metadata": {"container": {"tags": tags}}}]
+    monkeypatch.setattr(registry, "gh", lambda args: json.dumps(version))
+
+
 def services(repo):
     return yaml.safe_load((repo / "applications/todo/services.yaml").read_text())["services"]
 
@@ -187,7 +195,9 @@ def test_promote_refuses_an_image_that_does_not_exist(gitops_repo, gh):
         promote.main(["todo-web", "dev", "staging", "--sha", "b" * 40, "--repo-dir", str(gitops_repo)])
 
 
-def test_prod_pins_release_without_v_and_picks_newest_with_an_image(gitops_repo, gh):
+def test_prod_pins_release_without_v_and_picks_newest_with_an_image(gitops_repo, gh, monkeypatch):
+    matching_registry(monkeypatch, gh)
+    gh.image_tags["todo-api"].add("sha-" + SHA)
     composed(gitops_repo, "todo-api")
     promote.main(["todo-api", "dev", "staging", "--repo-dir", str(gitops_repo)])
     commit(gitops_repo, "promote")
@@ -196,7 +206,9 @@ def test_prod_pins_release_without_v_and_picks_newest_with_an_image(gitops_repo,
     assert pin(gitops_repo, "prod", "todo-api") == "1.3.0"
 
 
-def test_prod_with_explicit_version(gitops_repo, gh):
+def test_prod_with_explicit_version(gitops_repo, gh, monkeypatch):
+    matching_registry(monkeypatch, gh)
+    gh.image_tags["todo-api"].add("sha-" + SHA)
     composed(gitops_repo, "todo-api")
     promote.main(["todo-api", "dev", "staging", "--repo-dir", str(gitops_repo)])
     commit(gitops_repo, "promote")

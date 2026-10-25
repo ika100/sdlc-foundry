@@ -14,7 +14,7 @@ import pytest
 import core
 import gitops
 import promote
-from test_gitops import commit, composed, gh, gitops_repo  # noqa: F401  (fixtures)
+from test_gitops import SHA, commit, composed, gh, gitops_repo, matching_registry  # noqa: F401  (fixtures)
 
 SVC = {"name": "shop-api", "repo": "acme/shop-api", "image": "ghcr.io/acme/shop-api"}
 E = "a" * 40                         # the commit v1.4.0 points at
@@ -291,7 +291,9 @@ def test_a_plain_commit_has_no_evidence_commit_line_ac_093_11(ev):  # AC-093.11
 # ---------------- promote … staging prod uses it ----------------
 
 @pytest.fixture()
-def at_staging(gitops_repo, gh, ev, capsys):
+def at_staging(gitops_repo, gh, ev, capsys, monkeypatch):
+    matching_registry(monkeypatch, gh)      # spec 106: prod needs a full-sha staging build whose digest matches the release
+    gh.image_tags["todo-api"].add("sha-" + SHA)
     composed(gitops_repo, "todo-api")
     promote.main(["todo-api", "dev", "staging", "--repo-dir", str(gitops_repo)])
     commit(gitops_repo, "promote")
