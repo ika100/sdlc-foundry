@@ -51,6 +51,10 @@ step "Start the local cluster with a registry (the template's own script, Gatewa
 (cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
 
 step "Build and push the images"
+# Rendered with --skip-tasks, so the web repo has no pnpm-lock.yaml yet; the template's bootstrap would run
+# `pnpm install`. Create the lock the same way (inside the image's own node base) because the Dockerfile requires it (spec 104).
+node_image=$(sed -n 's/^FROM \(node:[^ ]*\).*/\1/p' "$work/e2e-web/Dockerfile" | head -1)
+docker run --rm -v "$work/e2e-web:/app" -w /app "$node_image" sh -c 'corepack enable && pnpm install --lockfile-only --silent' >/dev/null
 for svc in e2e-api e2e-web; do
   docker build -q -t "localhost:$regport/$svc:latest" "$work/$svc" >/dev/null
   docker push -q "localhost:$regport/$svc:latest" >/dev/null
