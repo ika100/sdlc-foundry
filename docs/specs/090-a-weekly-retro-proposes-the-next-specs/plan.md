@@ -53,7 +53,7 @@ tasks:
   covers: [AC-090.1, AC-090.5, AC-090.6, AC-090.7, AC-090.9, AC-090.10, AC-090.11, AC-090.12, AC-090.13]
   parallel_safe: true
   depends_on: [t1, t2, t3, t4, t6]
-  done: false
+  done: true
 - id: t8
   title: Register cplat retro and document the retro
   files: [scripts/cplat/cplat.py, docs/CHANGELOG.md, docs/unattended-delivery.md, docs/self-hosted-runners.md]
