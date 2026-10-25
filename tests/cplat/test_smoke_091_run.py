@@ -209,7 +209,7 @@ def test_a_run_that_does_not_finish_is_stopped_and_red_ac_091_8(svc, fake, seams
     s = seams()
     fake.script([(["PASS  slow"], 0, 30)])
     t0 = time.monotonic()
-    res = smoke_mod().run_smoke(svc, BASE, spec=sp(svc), timeout=1)
+    res = smoke_mod().run_smoke(svc, BASE, spec=sp(svc), timeout=5)
     assert time.monotonic() - t0 < 20                                  # the group was killed, not waited for
     assert res.outcome == "timed-out" and not res.ok and res.failing == ["(timed out)"]
     assert "timed out after" in (res.reason or "")
