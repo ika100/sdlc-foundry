@@ -6,12 +6,12 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-dev --no-install-project 2>/dev/null || uv sync --no-dev --no-install-project
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
 
 COPY src ./src
 COPY README.md ./
-RUN uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev
+RUN uv sync --locked --no-dev
 
 
 FROM python:{{ python_version }}-slim AS runtime

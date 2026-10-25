@@ -29,6 +29,8 @@ _skip_if_exists:
 
 _exclude:
   - "copier.yml"
+  - "{% if not needs_observability %}src/{{ module_name }}/metrics.py{% endif %}"
+  - "{% if not needs_observability %}tests/test_metrics.py{% endif %}"
   - "{% if not needs_migrations %}alembic.ini{% endif %}"
   - "{% if not needs_migrations %}migrations{% endif %}"
 

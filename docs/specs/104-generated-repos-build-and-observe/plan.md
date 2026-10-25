@@ -11,7 +11,7 @@ tasks:
     covers: [AC-104.1, AC-104.2, AC-104.3]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: MetricsMiddleware (route template, unmatched, 500 + error type, /metrics skipped), /ping count removed
     files: ["templates/service-python/src/{{ module_name }}/metrics.py", "templates/service-python/src/{{ module_name }}/main.py",
@@ -19,21 +19,21 @@ tasks:
     covers: [AC-104.4, AC-104.5, AC-104.6, AC-104.7, AC-104.8]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t3
     title: Observability off excludes metrics.py, the middleware, /metrics and prometheus-client
     files: [templates/service-python/copier.yml, "templates/service-python/src/{{ module_name }}/main.py"]
     covers: [AC-104.9]
     parallel_safe: false
     depends_on: [t2]
-    done: false
+    done: true
   - id: t4
     title: Platform tests and the lockfile-mismatch steps in the template smoke CI jobs; CHANGELOG migration note
     files: [tests/cplat/test_generated_repos.py, .github/workflows/ci.yml, docs/CHANGELOG.md]
     covers: [AC-104.10]
     parallel_safe: false
     depends_on: [t1, t3]
-    done: false
+    done: true
 ---
 
 # Plan — 104 Generated repos build and observe reliably

@@ -208,6 +208,17 @@ jobs:
           else
             uv run pytest -q
           fi
+      # Spec 104: the image build installs with --locked, so a pyproject.toml the lock does not satisfy must fail.
+      - name: Strict install rejects a stale lock
+        if: matrix.template == 'service-python'
+        run: |
+          test -f /tmp/test-service-python/uv.lock
+          cp -r /tmp/test-service-python /tmp/stale-lock
+          cd /tmp/stale-lock
+          sed -i 's/^dependencies = \[/dependencies = [\n    "httpx-stale-lock-check>=0",/' pyproject.toml
+          if uv sync --locked --no-dev --no-install-project; then
+            echo "uv sync --locked accepted a stale lock"; exit 1
+          fi
       # Spec 091: the real smoke runner against a running instance of the service
       - name: Smoke tests against a running service
         if: matrix.template == 'service-python'
@@ -309,6 +320,17 @@ jobs:
           npx -y pnpm@11.22.0 typecheck
           npx -y pnpm@11.22.0 test
           npx -y pnpm@11.22.0 build
+      # Spec 104: the image build installs with --frozen-lockfile, so a package.json the lock does not satisfy must fail.
+      - name: Strict install rejects a stale lock
+        run: |
+          test -f /tmp/test-web/pnpm-lock.yaml
+          cp -r /tmp/test-web /tmp/stale-lock
+          cd /tmp/stale-lock
+          rm -rf node_modules
+          sed -i 's/"dependencies": {/"dependencies": {\n    "is-odd": "3.0.1",/' package.json
+          if npx -y pnpm@11.22.0 install --frozen-lockfile; then
+            echo "pnpm install --frozen-lockfile accepted a stale lock"; exit 1
+          fi
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-web
         run: |
