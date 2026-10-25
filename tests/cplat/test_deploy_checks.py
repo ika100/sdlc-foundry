@@ -165,6 +165,17 @@ def test_a_changed_digest_pins_nothing_and_says_so_ac_105_2(sw, capsys, monkeypa
     assert sw.dispatches() == [] and sw.state()["cause"] == "decision"
 
 
+def test_an_unreadable_registry_digest_pins_nothing_ac_105_2(sw, capsys, monkeypatch):  # AC-105.2
+    """AC-105.2: the registry digest cannot be read before the pin: staging is skipped with the reason, nothing is pinned."""
+    dg = staged(sw, monkeypatch)
+    dg.unreadable = True
+    sw.fake.script([PASS_ALL])
+    assert sw.deploy() == 0
+    assert sw.dispatches() == []
+    assert any(ln.startswith("Promotion (staging): not promoted: digest of") and "not verified" in ln for ln in lines_of(capsys))
+    assert sw.record()["promotion"]["staging"]["result"] == "skipped"
+
+
 # ---------------- AC-105.3: the prod evidence names the checked digest ----------------
 
 def test_the_evidence_shows_the_checked_digest_ac_105_3(ev, monkeypatch):  # AC-105.3
@@ -299,6 +310,22 @@ def test_environment_retries_stay_inside_the_limit_ac_105_5(svc, fake, seams, mo
     fake.script([FAIL_ALL])
     res = smoke.run_smoke(svc, BASE, spec=sp(svc), timeout=50)
     assert res.attempts == 2 and len(fake.calls) == 2 and sum(s.sleeps) <= 50
+
+
+def test_an_environment_retry_gets_only_the_time_left_ac_105_5(svc, fake, seams, monkeypatch):  # AC-105.5
+    """AC-105.5: each retry runs with what is left of the limit, so the last attempt cannot run past it."""
+    s = seams()
+    smoke = mod("smoke")
+    clock = [0.0]
+    monkeypatch.setattr(smoke, "sleep", lambda sec: (s.sleeps.append(sec), clock.__setitem__(0, clock[0] + sec)))
+    monkeypatch.setattr(smoke, "monotonic", lambda: clock[0])
+    budgets = []
+    real = smoke.run_recipe
+    monkeypatch.setattr(smoke, "run_recipe", lambda repo, url, timeout: (budgets.append(timeout), real(repo, url, timeout))[1])
+    probe(monkeypatch, "Connection refused")
+    fake.script([FAIL_ALL])
+    smoke.run_smoke(svc, BASE, spec=sp(svc), timeout=100)
+    assert budgets == [100, 70, 40]
 
 
 def test_an_application_failure_keeps_the_single_retry_ac_105_5(svc, fake, seams, monkeypatch):  # AC-105.5

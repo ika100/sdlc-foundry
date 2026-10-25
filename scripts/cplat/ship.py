@@ -928,14 +928,13 @@ def _smoke_not_run(repo: Path, st: dict, reason: str, lines: list[str], apps: li
 
 
 def _smoke_step(repo: Path, st: dict, apps: list[str], svc: str, lines: list[str], base_url: str | None,
-                context: str | None = None, interval: float = 20, resume: bool = False) -> tuple[bool, list[str]]:
-    """`resume`: smoke only after a red run; without a kube context the digest stays unrecorded (nothing is then promoted)."""
+                context: str | None = None, interval: float = 20) -> tuple[bool, list[str]]:
     url, why = (base_url, None) if base_url else smoke.dev_url(repo, apps, svc)
     if not url:
         return _smoke_not_run(repo, st, why or "no dev URL", lines, apps, svc, context, interval)
     digest = cluster.running_digest(context, dev_namespace(repo, apps, svc), svc) if context else None
-    if not digest and (context or not resume):
-        return _smoke_not_run(repo, st, "image digest unknown", lines, apps, svc, context, interval)
+    if not digest:
+        return _smoke_not_run(repo, st, "image digest unknown" + ("" if context else " (pass --context <kube-context>)"), lines, apps, svc, context, interval)
     prior = st.get("smoke") or {}
     if digest and prior.get("outcome") == "passed" and prior.get("digest") == digest:      # spec 105: a replay of a pass for this digest
         sec = {k: prior.get(k, 0) for k in ("passed", "failed", "skipped")}
@@ -981,7 +980,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
                                "automatically; compose it with /gitops:compose and link it (spec 062)"])
     if st.get("deployed") and (st.get("smoke") or {}).get("outcome") in {"red", "timed-out"}:
         return _smoke_step(repo, st, apps, service_name(repo), ["resuming: smoke only, against what dev runs now"], base_url,
-                           context, interval, resume=True)
+                           context, interval)
     stg = st.get("staging") or {}
     if st.get("deployed") and (stg.get("state") == "pin-failed" or (stg.get("smoke") or {}).get("outcome") in {"red", "timed-out"}):
         ok, more = staging_deploy.resume(repo, st, apps, service_name(repo), context, interval)

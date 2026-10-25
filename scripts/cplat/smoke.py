@@ -288,7 +288,7 @@ def run_smoke(repo: Path, base_url: str, *, env: str = "dev", spec: specmod.Spec
         if attempts >= 2 and monotonic() - t0 + retry_delay > timeout:
             break                                  # no attempt starts past the limit (AC-091.8)
         sleep(retry_delay)
-        last = run_recipe(repo, base_url, timeout)
+        last = run_recipe(repo, base_url, max(timeout - (monotonic() - t0), 1))   # only the time left of the limit
         attempts += 1
         took = monotonic() - t0
         if last.exit_code is None:

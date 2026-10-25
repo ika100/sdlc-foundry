@@ -30,6 +30,11 @@ def gh(args: list[str]) -> str:
     return run(["gh", *args]).stdout
 
 
+def image_name(entry: dict | None, repo_slug: str) -> str:
+    """The image of a service: the gitops entry's `image` when it has one, else `ghcr.io/<repo slug lowercased>`."""
+    return str((entry or {}).get("image") or f"ghcr.io/{repo_slug.lower()}")
+
+
 def digest(image: str, tag: str) -> str:
     m = re.match(r"^ghcr\.io/([^/]+)/(.+)$", image)
     if not m:

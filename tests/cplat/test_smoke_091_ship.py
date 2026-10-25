@@ -319,6 +319,7 @@ def resume(world):
 
 
 def test_resuming_after_red_smoke_runs_only_smoke_again_ac_091_12(world, capsys):  # AC-091.12
+    # AC-091.12 amended by spec 105 (fd19e44): a resume without a kube context is not-run, never a pass.
     world.install()
     world.fake.script([FAIL_ONE])
     assert world.deploy() == 1
@@ -328,9 +329,27 @@ def test_resuming_after_red_smoke_runs_only_smoke_again_ac_091_12(world, capsys)
     resume(world)
     assert world.deploy(context=None) == 0
     out = lines_of(capsys)
-    assert "resuming: smoke only, against what dev runs now" in out and "Smoke (dev): 2/2 passed" in out
+    assert "resuming: smoke only, against what dev runs now" in out
+    assert any("NOT VERIFIED" in ln for ln in out) and "smoke not run: image digest unknown (pass --context <kube-context>)" in out
     assert not any(ln.startswith("Argo CD") for ln in out) and not any(c[:2] == ["pr", "list"] for c in world.gh.calls)
     assert world.state()["phase"] == "done"
+    r = world.record()
+    assert r["outcome"] == "done" and r["resumes"] == first and r["smoke"]["outcome"] == "not-run"
+
+
+def test_resuming_after_red_smoke_with_a_context_runs_only_smoke_again_ac_091_12(world, capsys):  # AC-091.12
+    # AC-091.12 amended by spec 105 (fd19e44): with a context and a readable digest the resume still passes after smoke only.
+    world.install()
+    world.fake.script([FAIL_ONE])
+    assert world.deploy() == 1
+    first = world.record()["run_id"]
+    capsys.readouterr()
+    world.fake.script([PASS_ALL])
+    resume(world)
+    assert world.deploy(context="lan") == 0
+    out = lines_of(capsys)
+    assert "resuming: smoke only, against what dev runs now" in out and "Smoke (dev): 2/2 passed" in out
+    assert not any(ln.startswith("Argo CD") for ln in out) and not any("NOT VERIFIED" in ln for ln in out)
     r = world.record()
     assert r["outcome"] == "done" and r["resumes"] == first and r["smoke"]["outcome"] == "passed"
 
@@ -341,7 +360,7 @@ def test_a_resumed_red_result_files_again_as_a_plus_one_ac_091_12(world, capsys)
     world.deploy()
     capsys.readouterr()
     resume(world)
-    assert world.deploy(context=None) == 1
+    assert world.deploy(context="lan") == 1     # AC-091.12 amended by spec 105 (fd19e44): a resume needs a context
     out = lines_of(capsys)
     assert f"issue: https://github.com/{SLUG}/issues/1 +1" in out
     assert len(world.tr.created()) == 1 and len(world.tr.commented()) == 1

@@ -207,7 +207,7 @@ def summary(svc: dict, version: str, staging_tag: str | None, *, days: int = 30)
         ev.staging = stg or {"outcome": None, "text": absent}
         if ev.dev.get("digest") and staging_tag:
             try:
-                ev.staging_digest = registry.digest(str(svc.get("image")), staging_tag)
+                ev.staging_digest = registry.digest(registry.image_name(svc, repo), staging_tag)
             except Exception:  # noqa: BLE001  (an unreadable digest only leaves the flag out)
                 pass
         ev.issues, ev.issues_error = _issues(repo)

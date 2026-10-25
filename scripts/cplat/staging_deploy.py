@@ -123,7 +123,8 @@ def promote(repo: Path, st: dict, apps: list[str], svc: str, dev: smoke.SmokeRes
     if not dev.digest:                   # spec 105: pin only the build that was smoked, and that needs its digest
         return True, skip(repo, st, "the dev smoke recorded no image digest", [])
     try:
-        current = registry.digest(f"ghcr.io/{ship.service_slug(repo).lower()}", tag)
+        found = staging._find(repo, apps, svc)
+        current = registry.digest(registry.image_name(found[2] if found else None, ship.service_slug(repo)), tag)
     except PlatformError as e:
         return True, skip(repo, st, f"digest of {tag} not verified: {e}", [])
     if current != dev.digest:
