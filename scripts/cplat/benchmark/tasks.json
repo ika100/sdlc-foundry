@@ -12,7 +12,7 @@
       "max_minutes": 30
     },
     "build": {
-      "task_version": 3,
+      "task_version": 4,
       "spec_file": "spec-900.md",
       "spec_id": "900-count-todos-with-get-todos-count",
       "max_runs": 2,
@@ -29,7 +29,7 @@
       ]
     },
     "ship": {
-      "task_version": 2,
+      "task_version": 3,
       "spec_file": "spec-900.md",
       "spec_id": "900-count-todos-with-get-todos-count",
       "prompt": "/svc:ship 900",

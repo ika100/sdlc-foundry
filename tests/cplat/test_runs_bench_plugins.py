@@ -114,3 +114,12 @@ def test_headless_refuses_a_plugin_dir_without_manifest(repo, tmp_path, monkeypa
 
 
 from test_headless import repo  # noqa: E402,F401  (fixture)
+
+
+def test_the_benchmark_passes_an_explicit_coordinator_model(world, store):
+    """`cplat runs benchmark <wf> --model opus` runs the coordinator on that model and records it (baseline comparisons)."""
+    assert runs.main(["benchmark", "quick-task", "--model", "opus"]) == 0
+    argv = world.headless_calls[-1]
+    assert argv[argv.index("--model") + 1] == "opus"
+    (r,) = benchmark_records(store)
+    assert r["benchmark"]["coordinator_model"] == "opus"

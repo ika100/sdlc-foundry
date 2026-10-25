@@ -22,7 +22,7 @@ A small endpoint that returns the number saves that.
 ## Acceptance criteria
 
 - **AC-900.1** Given three todos, when a caller sends `GET /todos/count`, then the response is `200` with the JSON body `{"count": 3}` and `Content-Type: application/json`.
-- **AC-900.2** Given no todos, when a caller sends `GET /todos/count`, then the response is `200` with the JSON body `{"count": 0}`; the route does not clash with `PATCH /todos/{id}` or `DELETE /todos/{id}`.
+- **AC-900.2** Given no todos, when a caller sends `GET /todos/count`, then the response is `200` with the JSON body `{"count": 0}`. The new route does not shadow the id routes: `PATCH /todos/count` with a valid body (`{"done": true}`) and `DELETE /todos/count` answer `404` with the existing `todo_not_found` error, exactly as for any unknown id. The existing endpoints do not change.
 
 ## Non-goals
 

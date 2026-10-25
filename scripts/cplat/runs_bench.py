@@ -211,6 +211,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("workflow", choices=["quick-task", "build", "ship"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
+    ap.add_argument("--model", help="coordinator model for the run (sonnet, opus, haiku); else the settings files, else sonnet")
     ap.add_argument("--plugins", metavar="DIR", help="run with the plugins in DIR (this worktree's plugins/) instead of the installed ones")
     ns = ap.parse_args(argv)
     tasks = json.loads((BENCH_DIR / "tasks.json").read_text())
@@ -237,7 +238,8 @@ def main(argv: list[str]) -> int:
         raise PlatformError(f"sample repo {repo} could not be prepared: {e}") from None
 
     plugin_flags, plugin_info = plugin_args(ns.plugins, clone) if ns.plugins else ([], None)
-    model, _ = settings.coordinator_model(clone, steps(task)[0][1], None)
+    model, _ = settings.coordinator_model(clone, steps(task)[0][1], ns.model)
+    model_flags = ["--model", ns.model] if ns.model else []
     rid = runs.start("benchmark", repo=repo, mode="headless")
     if rid:
         runs_usage.register(rid, mode="own", project_dir=str(runs_usage.projects_root() / transcripts.cwd_slug(clone)))
@@ -247,7 +249,7 @@ def main(argv: list[str]) -> int:
         for name, prompt in steps(task):   # e.g. build: plan, then build; each its own phase, a failed step stops the run
             runs.phase(rid, f"benchmark:{name}")
             outcome = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]),
-                                     "--max-minutes", str(task["max_minutes"]), *plugin_flags, prompt], rid)
+                                     "--max-minutes", str(task["max_minutes"]), *model_flags, *plugin_flags, prompt], rid)
             if outcome != "done":
                 check = f"step {name} did not finish"
                 break
