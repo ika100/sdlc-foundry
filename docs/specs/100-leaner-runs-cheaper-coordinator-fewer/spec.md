@@ -58,7 +58,9 @@ Acceptance by benchmark
 - **AC-100.16** Given the `build` benchmark (plan and build of the fixed spec 900), when it runs after all four steps, then the run is done, a PR is opened, all gates pass, the reviewer passes, and the estimated cost is at least 30% below the build baseline recorded in this spec.
 - **AC-100.17** Given each step delivered on its own, when its quick-task and build benchmarks run, then the run ids and estimated costs are recorded in the verification, and a step that lowers cost but fails a gate or changes the outcome is rolled back and not accepted.
 
-Build baseline: not yet measured (being measured now; recorded here when known).
+Baselines (platform 4.5.0, installed svc 3.4.0, sample `ika100/todo-api`, prices of 2026-10-25):
+- `quick-task` v2 @ `17eb5e4`: run `20261025T113632Z-73dcf110`, done, 22 calls, 674,791 tokens, **$0.48** est. (coordinator 14 calls, $0.36).
+- `build` v3 @ `ef04f90`: run `20261025T123218Z-f4e36dbe`, done, 81 calls, 2,617,700 tokens, **$1.64** est. (plan $0.48, build $1.17; coordinator 49 calls, $1.03; Opus $1.41, Sonnet $0.24). The build target of AC-100.16 is therefore at most **$1.15**.
 
 ## Non-goals
 
