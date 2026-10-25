@@ -89,6 +89,7 @@ tasks:
   covers: [AC-091.2, AC-091.3, AC-091.4, AC-091.16]
   parallel_safe: true
   depends_on: [t1, t4, t5, t6, t7]
+  done: true
 ---
 
 The contract for every task is [design.md](design.md). ADR: [036](../../adr/036-smoke-tests-against-a-deployed-environment.md).
