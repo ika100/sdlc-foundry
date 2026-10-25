@@ -98,6 +98,7 @@ Document every override in `overrides/<service-name>/README.md` with: who pinned
 ## Rules
 
 - **Never edit service-repo manifests from here.** Open a PR in the service repo instead.
+- **Promotion** (spec 093, ADR-041): staging follows a green dev smoke through the gitops-app's self-merging `pin-staging` PR when `promotion.staging: auto`; switch it off with `promotion: {staging: manual}` in `app.yaml` or per service in `services.yaml`. Prod is only ever pinned by `/gitops:promote`, after an evidence summary.
 - **Argo manages reconciliation** — do not `kubectl apply` services manually unless rescuing a broken cluster state.
 - **GitHub token** for the scmProvider lives in a `github-token` secret in the `argocd` namespace. If absent, the ApplicationSet won't discover anything. Provision out-of-band.
 - **Convention over configuration** — the topic + overlay path contract is the only way services join the fleet. Don't add bespoke per-service Applications without a documented reason.

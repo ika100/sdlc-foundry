@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 import core
+import evidence
 import gitops
 from core import PlatformError, Report, run
 
@@ -83,6 +84,15 @@ def pick_tag(svc: dict, to_env: str, ns: argparse.Namespace) -> tuple[str, str]:
     raise PlatformError(f"no release of {slug} has a published image", hint=f"cut one with /svc:release in {slug} (CI publishes X.Y.Z images on v*.*.* tags)")
 
 
+def _staging_tag(app_dir: Path, name: str) -> str | None:
+    """The newTag staging runs now (the local overlay), or None when the service is not pinned there."""
+    try:
+        doc = yaml.safe_load((app_dir / "overlays" / "staging" / name / "kustomization.yaml").read_text())
+        return str(doc["images"][0]["newTag"])
+    except (OSError, yaml.YAMLError, KeyError, IndexError, TypeError):
+        return None
+
+
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
     if len(ns.items) < (2 if ns.all else 3):
@@ -113,6 +123,7 @@ def main(argv: list[str]) -> int:
             raise PlatformError(f"no service is in {frm}")
     r = Report(title=f"promote {', '.join(names)}: {frm} → {to} ({app_dir.name})")
     plan: list[tuple[str, str]] = []
+    summaries: dict[str, evidence.Evidence] = {}
     for n in names:
         svc = by_name.get(n)
         if svc is None:
@@ -128,11 +139,17 @@ def main(argv: list[str]) -> int:
                 raise PlatformError(f"image {svc['image']}:{tag} does not exist yet", hint=f"wait for CI on {svc['repo']}'s main to finish (it publishes sha-<40> tags), or pass --sha of a built commit")
         elif not ns.no_verify and to == "prod" and tag not in image_tags(svc["image"]):
             raise PlatformError(f"image {svc['image']}:{tag} does not exist", hint=f"the release v{tag} must have been built by CI in {svc['repo']}")
+        if to == "prod":    # spec 093: what the release has been through; it never blocks
+            summaries[n] = evidence.summary(svc, f"v{tag}", _staging_tag(app_dir, n))
         plan.append((n, tag))
         r.will_do.append(f"{n}: {to} → {svc['image']}:{tag} ({what})" + ("   [PRODUCTION]" if to == "prod" else ""))
     r.will_do.append("add the environment to the service's `environments`, regenerate manifests, pin the tag")
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch promote/…)")
+    if summaries:
+        r.data["evidence"] = {n: ev.data() for n, ev in summaries.items()}
+        if not ns.json:
+            print("\n\n".join("\n".join(ev.lines()) for ev in summaries.values()) + "\n")
     if ns.dry_run:
         r.emit(True, ns.json)
         return 0
@@ -156,11 +173,13 @@ def main(argv: list[str]) -> int:
     if ns.pr:
         title = f"chore(promote): {' '.join(n for n, _ in plan)} {frm}→{to}"
         body = "\n".join(f"- {n}: `{t}`" for n, t in plan) + ("\n\n**Production promotion — review carefully.**" if to == "prod" else "")
+        if summaries:
+            body += "\n\n## Evidence\n\n" + "\n\n".join("\n".join(ev.lines()) for ev in summaries.values())
         r.did.append("opened " + gitops.open_pr(repo, f"promote/{gitops.slug('-'.join(n for n, _ in plan))}-{to}", title, body))
         r.next_steps.append("review and merge; Argo rolls the environment after the merge")
     else:
         r.next_steps.append("review `git diff`, run `devbox run validate`, then commit (or re-run with --pr)")
     r.undo.append("revert the merged PR (Argo converges back); nothing else to clean up")
-    r.data = {"pins": dict(plan)}
+    r.data["pins"] = dict(plan)
     r.emit(False, ns.json)
     return 0

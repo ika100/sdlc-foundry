@@ -378,6 +378,25 @@ def validate_policies(cfg: dict) -> None:
         raise RenderError("app.yaml: policies.registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
 
 
+def validate_promotion(services: list[dict], cfg: dict) -> None:
+    """`promotion` in app.yaml and on services (spec 093): staging may be auto; prod is never automatic."""
+    for where, conf in [("app.yaml", cfg.get("promotion"))] + [
+            (f"services.yaml ({s.get('name')})", s.get("promotion")) for s in services]:
+        if conf is None:
+            continue
+        if not isinstance(conf, dict):
+            raise RenderError(f"{where}: promotion must be a mapping, e.g. {{staging: auto}}")
+        for k, v in conf.items():
+            if k == "prod":
+                if v != "manual":
+                    raise RenderError(f"{where}: promotion.prod: prod is promoted only by /gitops:promote, never automatically "
+                                      "(spec 093); remove the key or set it to manual")
+            elif k != "staging":
+                raise RenderError(f"{where}: promotion.{k} is not a setting (only staging; dev always follows main)")
+            elif v not in ("auto", "manual"):
+                raise RenderError(f"{where}: promotion.staging must be auto or manual, got '{v}'")
+
+
 def allowed_registries(services: list[dict], cfg: dict, conf: dict) -> list[str]:
     """Image prefixes the guard rails accept: where our services' images live, the addons' images, and app.yaml extras."""
     prefixes = {s["image"].rsplit("/", 1)[0] + "/" for s in services}
@@ -643,6 +662,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
     cfg = (yaml.safe_load(cfg_file.read_text()) or {}) if cfg_file.is_file() else {}
     validate_addons(services, cfg)
     validate_policies(cfg)
+    validate_promotion(services, cfg)
     org = ans.get("github_org", "ika100")
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
     gitops_repo = f"https://github.com/{org}/{ans.get('project_name', app + '-gitops')}"

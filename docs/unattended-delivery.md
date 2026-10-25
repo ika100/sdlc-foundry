@@ -12,7 +12,8 @@ unattended: /svc:ship <NNN>
               pr       cplat ship pr: pushes feature/<spec>, opens the PR
               land     cplat ship land: waits for every check; red → logs → coder → push (≤ 3 rounds); green → squash merge
               deploy   cplat ship deploy: the service's CI publishes sha-<40>, pin-dev merges the pin PR after CI, Argo syncs
-you:        check dev  →  /gitops:promote <svc> dev staging   (reviewed PR, as before)
+              staging  a green dev smoke dispatches pin-staging (self-merging PR), Argo syncs, staging smoke (spec 093)
+you:        check staging  →  /gitops:promote <svc> staging prod   (evidence summary, reviewed PR)
 ```
 
 The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict after its re-plan (a task is re-planned once, a build at most 3 times), a changed acceptance test, a security finding with no fix released, or a bump that breaks a gate, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.

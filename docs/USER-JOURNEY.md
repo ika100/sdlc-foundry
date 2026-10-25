@@ -179,6 +179,8 @@ Wiring and exposure are decided here, in the product repo — not in the service
 
 One PR that adds **staging** to both services and pins each to the `sha-<40>` image built from its `main` — the script checks that the image exists in GHCR first, so a promotion can never point at a build that CI has not finished. Merge → Argo creates and rolls staging.
 
+After the first promotion, staging follows dev by itself: when a build passes its smoke tests in dev, `/svc:ship` has the gitops-app's `pin-staging` workflow open a PR that merges itself once CI passes (spec 093, ADR-041), then smokes staging. Turn it off with `promotion: {staging: manual}` in `app.yaml` or on a service in `services.yaml`.
+
 For **prod** you pin a release: in each service repo run `/svc:release` (quality gate → test gate → security gate → version bump → changelog PR → tag `vX.Y.Z` → CI pushes semver images). Then:
 
 ```
@@ -186,7 +188,7 @@ For **prod** you pin a release: in each service repo run `/svc:release` (quality
 /gitops:promote taskboard-web staging prod v1.2.0     # or an explicit version
 ```
 
-Prod pins the release image `1.2.0` (the `v1.2.0` git tag without the `v`, exactly what CI publishes). The command prints **ABOUT TO PROMOTE TO PRODUCTION** and waits for a yes before opening the PR. Nothing auto-merges; rolling back is reverting the promote PR.
+Prod pins the release image `1.2.0` (the `v1.2.0` git tag without the `v`, exactly what CI publishes). The command prints **ABOUT TO PROMOTE TO PRODUCTION** and waits for a yes before opening the PR. The summary of what the release has been through (smoke in dev and staging, open issues) is shown first. A prod PR never merges itself; rolling back is reverting the promote PR.
 
 ---
 

@@ -52,6 +52,11 @@ secretStore:
 #     queryURL: https://prom.example.com/api/prom
 #     querySecret: obs-query
 #     alertmanagerURL: https://am.example.com
+# promotion: (spec 093) `staging: auto` = a green dev smoke in `cplat ship` promotes staging through the self-merging
+#          `pin-staging.yml` PR; `staging: manual` = only `/gitops:promote`; unset = manual. A service entry in services.yaml
+#          may override it. Prod is always manual (`/gitops:promote <svc> staging prod`); `promotion.prod` is rejected unless `manual`.
+promotion:
+  staging: auto
 gateway:
   name: traefik-gateway
   namespace: kube-system
