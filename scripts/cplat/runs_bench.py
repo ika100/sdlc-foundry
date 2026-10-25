@@ -6,6 +6,7 @@ The tasks and the pinned sample revision are in benchmark/tasks.json. Every git 
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import shutil
@@ -13,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 import runs
+import runs_report
 import runs_usage
 import runs_usage_report
 import settings
@@ -197,6 +199,54 @@ def plugin_args(plugins: str, clone: Path) -> tuple[list[str], dict]:
     return args, {"dir": str(folder), "commit": commit, "dirty": dirty}
 
 
+def _children(rid: str | None) -> dict[str, dict]:
+    """Finished runs started inside benchmark run `rid` (`benchmark_of`), from the local buffer and the run store. Never raises."""
+    found: dict[str, dict] = {}
+    if not rid:
+        return found
+    try:
+        for r in runs._read_buffer():
+            if isinstance(r, dict) and r.get("benchmark_of") == rid and r.get("run_id"):
+                found[r["run_id"]] = r
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import runs_report
+        slug = runs.configured_repo()
+        if slug:
+            today = runs.utcnow().date()
+            files = runs.open_store(slug).read([today - datetime.timedelta(days=1), today])
+            for r in runs_report.parse([text for _, text in files])[0]:
+                if r.get("benchmark_of") == rid and r.get("run_id"):
+                    found[r["run_id"]] = r
+    except Exception:  # noqa: BLE001
+        pass
+    return found
+
+
+def _pass_summary(label: str, rid: str | None, started: str, ended: str, new: list[dict]) -> dict:
+    """Duration, tokens, cost and the validation checks of one pass of `--compare-validation`."""
+    usage = None
+    try:
+        active = runs.active(rid)
+        if active is not None:
+            usage = runs_usage.for_run({**active, "started_at": started}, ended_at=ended)
+    except Exception:  # noqa: BLE001
+        pass
+    tokens, cost, _ = _summary(usage)
+    a, b = runs_report._ts(started), runs_report._ts(ended)
+    checks = [{"name": c.get("name"), "decision": c.get("decision"), "rule": c.get("rule")}
+              for r in new if isinstance(r.get("validation"), dict) for c in r["validation"].get("checks") or [] if isinstance(c, dict)]
+    return {"pass": label, "duration_s": (b - a).total_seconds() if a and b else None, "tokens": tokens, "cost_usd": cost,
+            "checks": checks}
+
+
+def _required_missing(selective: dict) -> list[str]:
+    """Checks a rule requires (mandatory categories; lint, typecheck and security always) that the change-aware pass did not run or reuse."""
+    return sorted({f"{c['name']} ({c['rule']})" for c in selective["checks"] if c["decision"] == "skipped"
+                   and (str(c["rule"]).startswith("mandatory:") or c["name"] in ("lint", "typecheck", "security"))})
+
+
 def steps(task: dict) -> list[tuple[str, str]]:
     """The task's prompts as (phase name, prompt): `steps` for a workflow that needs several commands, else `prompt` alone."""
     if task.get("steps"):
@@ -217,6 +267,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
     ap.add_argument("--model", help="coordinator model for the run (sonnet, opus, haiku); else the settings files, else sonnet")
     ap.add_argument("--plugins", metavar="DIR", help="run with the plugins in DIR (this worktree's plugins/) instead of the installed ones")
+    ap.add_argument("--compare-validation", action="store_true",
+                    help="run the task twice, change-aware validation on and then off (CPLAT_VALIDATION=full), and compare (spec 103)")
     ns = ap.parse_args(argv)
     tasks = json.loads((BENCH_DIR / "tasks.json").read_text())
     repo, rev = tasks["sample"]["repo"], tasks["sample"]["rev"]
@@ -249,19 +301,47 @@ def main(argv: list[str]) -> int:
     if rid:
         runs_usage.register(rid, mode="own", project_dir=str(runs_usage.projects_root() / transcripts.cwd_slug(clone)))
     outcome, reset, note, check = "failed", "not run", None, None
-    usage = None
+    usage, compare = None, None
     try:
-        for name, prompt in steps(task):   # e.g. build: plan, then build; each its own phase, a failed step stops the run
-            runs.phase(rid, f"benchmark:{name}")
-            outcome = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]),
+        def one_pass(suffix: str = "") -> tuple[str, str | None]:
+            out, why = "failed", None
+            for name, prompt in steps(task):   # e.g. build: plan, then build; each its own phase, a failed step stops the run
+                runs.phase(rid, f"benchmark:{name}{suffix}")
+                out = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]),
                                      "--max-minutes", str(task["max_minutes"]), *model_flags, *plugin_flags, prompt], rid, platform)
-            if outcome != "done":
-                check = f"step {name} did not finish"
-                break
-        if outcome == "done":
+                if out != "done":
+                    return out, f"step {name} did not finish"
             missing = result(ns.workflow, repo, keep)
-            if missing:
-                outcome, check = "failed", missing
+            return ("failed", missing) if missing else (out, why)
+
+        if not ns.compare_validation:
+            outcome, check = one_pass()
+        else:
+            passes, seen = [], set(_children(rid))
+            for label, mode in (("selective", None), ("full", "full")):
+                if label == "full":   # the sample repo back to the pinned state for the second pass
+                    reset_sample(repo, rev, clone, keep)
+                    _prepare(url, rev, task, clone)
+                saved = os.environ.get("CPLAT_VALIDATION")
+                if mode:
+                    os.environ["CPLAT_VALIDATION"] = mode
+                else:
+                    os.environ.pop("CPLAT_VALIDATION", None)
+                started = runs._iso(runs.utcnow())
+                try:
+                    outcome, check = one_pass(f":{label}")
+                finally:
+                    if saved is None:
+                        os.environ.pop("CPLAT_VALIDATION", None)
+                    else:
+                        os.environ["CPLAT_VALIDATION"] = saved
+                children = _children(rid)
+                new = [children[k] for k in sorted(children) if k not in seen]
+                seen |= set(children)
+                passes.append({**_pass_summary(label, rid, started, runs._iso(runs.utcnow()), new), "outcome": outcome})
+                if outcome != "done":
+                    break
+            compare = {"passes": passes, "required_missing": _required_missing(passes[0])}
     finally:
         runs.phase(rid, "benchmark:reset")
         try:
@@ -278,7 +358,8 @@ def main(argv: list[str]) -> int:
         runs.finish(rid, outcome, fields={"benchmark": {
             "workflow": ns.workflow, "task_version": task["task_version"], "sample_repo": repo, "sample_rev": rev,
             "reset": reset, "reset_note": note, "result_check": check,
-            "plugins": plugin_info, "coordinator_model": model}})
+            "plugins": plugin_info, "coordinator_model": model,
+            **({"validation_compare": compare} if compare else {})}})
     if reset == "failed":
         raise PlatformError(f"reset of sample repo {repo} failed: {note}; the benchmark record was written",
                             hint=f"cplat runs benchmark {ns.workflow} --reset-first")
@@ -286,4 +367,11 @@ def main(argv: list[str]) -> int:
     print(f"benchmark {ns.workflow} v{task['task_version']} on {repo}@{rev[:7]}: {outcome}, {tokens} tokens, "
           f"est. USD {cost} (prices of {prices}); reset {reset}" + (f"; {check}" if check else ""))
     print(f"plugins {runs_usage_report.plugins_label(plugin_info) if plugin_info else 'installed'}, coordinator {model}")
+    if compare:
+        for p in compare["passes"]:
+            print(f"  validation {p['pass']}: {p['outcome']}, duration {p['duration_s']}s, {p['tokens']} tokens, est. USD {p['cost_usd']}; "
+                  + (", ".join(f"{c['name']} {c['decision']} ({c['rule']})" for c in p["checks"]) or "no validation section"))
+        if compare["required_missing"]:
+            print("  validation: required check(s) did not run in the change-aware pass: " + ", ".join(compare["required_missing"]))
+            return 1
     return 0 if outcome == "done" else 1
