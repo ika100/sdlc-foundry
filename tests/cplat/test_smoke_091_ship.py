@@ -164,7 +164,7 @@ def test_red_smoke_stops_the_run_with_evidence_and_an_issue_ac_091_9(world, caps
              f"ship {SPEC_ID}: escalated ({REASON}); dev keeps running sha-{SHA}. Resume with /svc:ship {SPEC_ID}",
              f"Smoke (dev): red (1 failing, issue https://github.com/{SLUG}/issues/1)")
     text = "\n".join(out)
-    assert SECRET not in text and "line 88" not in text and "line 90" in text           # redacted, and cut to the last 60 lines
+    assert SECRET not in text and "line 28" not in text and "line 90" in text           # redacted, and cut to the last 60 lines
     assert world.sleeps == [30]
 
 
