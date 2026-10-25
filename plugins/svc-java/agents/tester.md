@@ -27,6 +27,10 @@ When the orchestrator gives you a spec folder (`docs/specs/<NNN>-<slug>/`) and s
 
 Acceptance tests are the spec in executable form: do not weaken them later to make a build pass. If one turns out to contradict the spec or the contract, report it; the orchestrator decides.
 
+## Smoke criteria
+
+A criterion whose line ends with `(smoke)` is also checked in dev after deploy by `devbox run smoke`, which sets `SMOKE_BASE_URL`. Write its smoke test in addition to the acceptance test, in a file that names the id. `@Tag("smoke")` plus `@EnabledIfEnvironmentVariable(named = "SMOKE_BASE_URL", matches = ".+")`, requests with `java.net.http.HttpClient`, no Spring context. The test reaches the service only through the base URL (no app import, no test client, no database), creates its own data with unique names (`smoke-<uuid>`), never changes or deletes data it did not create, and is repeatable against a shared environment. One smoke test per criterion, with a clearly named test.
+
 ## Shell rules
 
 **Shell rule:** every command goes through `devbox run <script>` — never call `mvn` or `java` directly; add a missing recipe to `devbox.json` first.

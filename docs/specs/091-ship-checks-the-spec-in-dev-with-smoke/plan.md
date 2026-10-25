@@ -66,6 +66,7 @@ tasks:
   covers: [AC-091.2, AC-091.16]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t9
   title: tester agents and spec format write smoke tests for (smoke) criteria
   files: [plugins/svc/agents/tester.md, plugins/svc-java/agents/tester.md, plugins/svc-go/agents/tester.md, plugins/web/agents/tester.md,
