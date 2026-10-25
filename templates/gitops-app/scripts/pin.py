@@ -10,7 +10,8 @@ Sets `newTag` in applications/<app>/overlays/<env>/<service>/kustomization.yaml 
 the image tag in its application.yaml, spec 069). Only immutable tags are accepted
 (`sha-<40 hex>` from a build of main, or `sha-<7>` from one before spec 078, or a release `X.Y.Z`), only for a composed service, and only in an environment
 the service runs in. render.py keeps the pin on every re-render. The pin-dev workflow runs this for every merge to a
-service's main; promotions to staging and prod stay `/gitops:promote`.
+service's main. Staging is pinned by the pin-staging workflow after a green dev smoke (spec 093); prod only by
+`/gitops:promote`.
 """
 import re
 import sys
