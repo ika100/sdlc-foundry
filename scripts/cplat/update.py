@@ -79,6 +79,9 @@ def project_owned_patterns(template: str) -> list[str]:
         return []
 
 
+SEEDS = {".secrets.baseline.json"}   # repo-owned once they exist, but the skeleton needs them: added when missing, never replaced
+
+
 def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
     """copier creates files that do not exist yet even inside `_skip_if_exists` paths. For an update that is wrong: a repo that
     evolved its own app code or tests must not receive new starter files (and tests that assert the starter UI). Remove them."""
@@ -87,7 +90,7 @@ def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
         if not line.startswith("??"):
             continue
         path = line[3:]
-        if any(fnmatch.fnmatch(path, pattern) for pattern in patterns):
+        if path not in SEEDS and any(fnmatch.fnmatch(path, pattern) for pattern in patterns):
             (repo / path).unlink()
             dropped.append(path)
     for directory in sorted({str(Path(d).parent) for d in dropped}, key=len, reverse=True):   # tidy empty directories
