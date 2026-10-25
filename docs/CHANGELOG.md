@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Chore (099): the benchmark sample is pinned to `ika100/todo-api@9cba320`** (its 4.6.0 skeleton and the Dependabot bump) instead of resetting them away; every workflow's `task_version` goes up by one, so its records say which sample revision they ran on.
+
 - **Fix: platform updates no longer flag every template change as a local customisation.** The spec 086 baseline (the template at the repo's previous version) is archived from the checkout `cplat` runs from, and the marketplace clone is shallow and has no tags. The baseline was silently missing, so `cplat fleet update` and `/shared:update-service` listed the template's own changes between versions as overwritten customisations and left every PR open. A missing release tag is now fetched from origin first.
 - **Fix: a fresh gitops-app repo passes its own secrets scan.** Three template lines (`CLAUDE.md`, `README.md`, `scripts/render.py`) tripped detect-secrets' keyword detector; they carry `pragma: allowlist secret` now, and a test renders every template and runs its `secrets-scan`. Repos updated from before 4.6.0 still run `devbox run secrets-baseline` once (their baseline has no filters, see 4.6.0).
 - **Feat (105): a deploy counts only after its checks pass.** [guide](unattended-delivery.md#deploy-gate)

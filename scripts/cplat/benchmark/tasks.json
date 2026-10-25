@@ -2,17 +2,17 @@
   "version": 1,
   "sample": {
     "repo": "ika100/todo-api",
-    "rev": "1e004f26bdca01b45a665c7127f47c6ed1640031"
+    "rev": "9cba3200187bf79c068489c6d1870da714deb68b"
   },
   "workflows": {
     "quick-task": {
-      "task_version": 2,
+      "task_version": 3,
       "prompt": "/svc:quick-task Make GET /todos answer with the response header `Cache-Control: no-store`. Change only src/todo_api/todos/router.py (add the header to the JSONResponse of list_todos) and add one test for it in tests/test_todos_api.py. No new dependency.",
       "max_runs": 1,
       "max_minutes": 30
     },
     "build": {
-      "task_version": 4,
+      "task_version": 5,
       "spec_file": "spec-900.md",
       "spec_id": "900-count-todos-with-get-todos-count",
       "max_runs": 2,
@@ -29,7 +29,7 @@
       ]
     },
     "ship": {
-      "task_version": 3,
+      "task_version": 4,
       "spec_file": "spec-900.md",
       "spec_id": "900-count-todos-with-get-todos-count",
       "prompt": "/svc:ship 900",
