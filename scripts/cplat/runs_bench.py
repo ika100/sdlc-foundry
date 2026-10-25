@@ -1,5 +1,5 @@
-"""`cplat runs benchmark <quick-task|build|ship> [--reset-first]` (spec 099, ADR-035): one fixed task on a fresh clone of the
-sample repo, run through `cplat headless`, recorded as a run of kind `benchmark` with its usage, and the sample repo reset.
+"""`cplat runs benchmark <quick-task|build|ship> [--reset-first]` (spec 099, ADR-035): one fixed task on a clean clone of the
+sample repo (one fixed, trusted folder per workflow), run through `cplat headless`, recorded as a run of kind `benchmark` with its usage, and the sample repo reset.
 
 The tasks and the pinned sample revision are in benchmark/tasks.json. Every git / gh call goes through `run`, which tests replace.
 """
@@ -61,10 +61,46 @@ def _refs(url: str, kind: str, clone: Path) -> list[str]:
     return [line.split()[-1] for line in lines if line.split()]
 
 
+def _newest_pr(repo: str) -> int:
+    try:
+        prs = json.loads(_ok(["gh", "pr", "list", "--repo", repo, "--state", "all", "--json", "number", "--limit", "1"]) or "[]")
+    except ValueError:
+        prs = []
+    return max((pr["number"] for pr in prs if isinstance(pr, dict) and isinstance(pr.get("number"), int)), default=0) \
+        if isinstance(prs, list) else 0
+
+
 def snapshot(repo: str, clone: Path) -> dict:
     """The PRs, branches and tags that exist before a run: the reset after the run leaves them alone."""
     url = f"https://github.com/{repo}"
-    return {"prs": set(_open_prs(repo)), "refs": set(_refs(url, "heads", clone)) | set(_refs(url, "tags", clone))}
+    return {"prs": set(_open_prs(repo)), "refs": set(_refs(url, "heads", clone)) | set(_refs(url, "tags", clone)),
+            "newest_pr": _newest_pr(repo)}
+
+
+EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged"}
+
+
+def result(workflow: str, repo: str, keep: dict) -> str | None:
+    """Why the run did not deliver, or None when it did: quick-task and build end at a new open PR, ship at a new merged one."""
+    state = EXPECTED[workflow]
+    try:
+        prs = json.loads(_ok(["gh", "pr", "list", "--repo", repo, "--state", state, "--json", "number", "--limit", "20"]) or "[]")
+    except (ValueError, RuntimeError) as e:
+        return f"could not check the result: {e}"[:200]
+    new = [pr for pr in prs if isinstance(pr, dict) and isinstance(pr.get("number"), int) and pr["number"] > keep.get("newest_pr", 0)] \
+        if isinstance(prs, list) else []
+    return None if new else f"no new {state} PR in {repo}"
+
+
+def trusted(clone: Path) -> bool:   # tests replace this
+    """Claude Code only applies the repo's permission rules in a folder whose trust dialog was accepted (read-only check)."""
+    config = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home()) / ".claude.json"
+    try:
+        projects = json.loads(config.read_text()).get("projects") or {}
+    except (OSError, ValueError, AttributeError):
+        return False
+    entry = projects.get(str(clone)) or projects.get(str(clone.resolve())) or {}
+    return isinstance(entry, dict) and entry.get("hasTrustDialogAccepted") is True
 
 
 def reset_sample(repo: str, rev: str, clone: Path, keep: dict | None = None) -> None:
@@ -94,10 +130,17 @@ def reset_sample(repo: str, rev: str, clone: Path, keep: dict | None = None) -> 
 
 
 def _prepare(url: str, rev: str, task: dict, clone: Path) -> None:
+    """Clone once, then reuse the folder (its trust stays): back to `rev` with no local branches and no untracked files."""
     clone.parent.mkdir(parents=True, exist_ok=True)
-    _ok(["git", "clone", url, str(clone)])
+    if not (clone / ".git").exists():
+        _ok(["git", "clone", url, str(clone)])
+    _ok(["git", "fetch", "--prune", "origin"], clone)
     run(["git", "fetch", "origin", rev], clone)   # the pinned commit may no longer be on a branch
-    _ok(["git", "checkout", "-B", "main", rev], clone)
+    _ok(["git", "checkout", "-f", "-B", "main", rev], clone)
+    for branch in _ok(["git", "for-each-ref", "--format=%(refname:short)", "refs/heads"], clone).split():
+        if branch != "main":
+            _ok(["git", "branch", "-D", branch], clone)
+    _ok(["git", "clean", "-ffdx", "-e", ".devbox", "-e", ".venv"], clone)
     if task.get("spec_file"):
         target = clone / "docs" / "specs" / task["spec_id"] / "spec.md"
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -147,9 +190,12 @@ def main(argv: list[str]) -> int:
     if main_now != rev and not ns.reset_first:
         raise PlatformError(f"sample repo {repo}: main is at {main_now[:7] or 'nothing'}, not the pinned {rev[:7]}",
                             hint=f"cplat runs benchmark {ns.workflow} --reset-first")
-    clone = runs.state_dir() / "benchmark" / f"{ns.workflow}-{runs.utcnow():%Y%m%dT%H%M%SZ}"
+    clone = runs.state_dir() / "benchmark" / ns.workflow
     try:
         _prepare(url, rev, task, clone)
+        if not trusted(clone):
+            raise PlatformError(f"the benchmark folder {clone} is not trusted in Claude Code, so its permission rules would be ignored",
+                                hint=f"cd {clone} && claude   (accept the trust dialog, then /exit), and run the benchmark again")
         if main_now != rev:
             reset_sample(repo, rev, clone)
         keep = snapshot(repo, clone)
@@ -160,11 +206,15 @@ def main(argv: list[str]) -> int:
     if rid:
         runs_usage.register(rid, mode="own", project_dir=str(runs_usage.projects_root() / transcripts.cwd_slug(clone)))
     runs.phase(rid, "benchmark:run")
-    outcome, reset, note = "failed", "not run", None
+    outcome, reset, note, check = "failed", "not run", None, None
     usage = None
     try:
         outcome = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]), "--max-minutes", str(task["max_minutes"]),
                                  task["prompt"]], rid)
+        if outcome == "done":
+            missing = result(ns.workflow, repo, keep)
+            if missing:
+                outcome, check = "failed", missing
     finally:
         runs.phase(rid, "benchmark:reset")
         try:
@@ -180,11 +230,11 @@ def main(argv: list[str]) -> int:
             pass
         runs.finish(rid, outcome, fields={"benchmark": {
             "workflow": ns.workflow, "task_version": task["task_version"], "sample_repo": repo, "sample_rev": rev,
-            "reset": reset, "reset_note": note}})
+            "reset": reset, "reset_note": note, "result_check": check}})
     if reset == "failed":
         raise PlatformError(f"reset of sample repo {repo} failed: {note}; the benchmark record was written",
                             hint=f"cplat runs benchmark {ns.workflow} --reset-first")
     tokens, cost, prices = _summary(usage)
     print(f"benchmark {ns.workflow} v{task['task_version']} on {repo}@{rev[:7]}: {outcome}, {tokens} tokens, "
-          f"est. USD {cost} (prices of {prices}); reset {reset}")
+          f"est. USD {cost} (prices of {prices}); reset {reset}" + (f"; {check}" if check else ""))
     return 0 if outcome == "done" else 1

@@ -29,6 +29,7 @@ class World:
         self.main = None                     # None = the pinned revision
         self.reachable = True
         self.push_ok = True
+        self.delivered_pr = None             # the PR number a successful run opened (or merged)
 
     def rev(self):
         return tasks()["sample"]["rev"]
@@ -50,6 +51,8 @@ class World:
                 return 1, "", "remote: permission denied"
             self.main = None
             return 0, "", ""
+        if cmd[:3] == ["gh", "pr", "list"] and self.delivered_pr and cmd[cmd.index("--state") + 1] in ("open", "merged", "all"):
+            return 0, json.dumps([{"number": self.delivered_pr}]), ""
         if cmd[0] == "gh":
             return 0, "[]", ""
         return 0, "", ""
@@ -67,12 +70,14 @@ def world(clock, store, projects, monkeypatch):
     w = World()
     w.headless_calls = []
     monkeypatch.setattr(runs_bench, "run", w.run)
+    monkeypatch.setattr(runs_bench, "trusted", lambda clone: True)
 
     def fake_headless(argv):
         w.headless_calls.append(argv)
         clone = Path(argv[argv.index("--repo") + 1])
         write_session(projects, "bench-session", [call("b1", 5), call("b2", 6)], slug=transcripts.cwd_slug(clone))
         clock.now += dt.timedelta(seconds=30)
+        w.delivered_pr = 12
         w.env = {k: __import__("os").environ.get(k) for k in ("CPLAT_RUN_PARENT", "CPLAT_BENCHMARK")}
         return 0
     monkeypatch.setattr(headless, "main", fake_headless)
@@ -216,3 +221,23 @@ def test_reset_leaves_prs_branches_and_tags_that_existed_before_the_run(monkeypa
     assert any(line.endswith("refs/heads/feature/900") for line in deleted)
     assert any(line.endswith("refs/tags/v0.2.0") for line in deleted)
     assert not any("dependabot" in line or "v0.1.0" in line for line in deleted)
+
+
+def test_an_untrusted_benchmark_folder_is_refused_before_any_session(world, store, monkeypatch):
+    """An untrusted folder would ignore the repo's permission rules: refuse with the trust hint, no record, no session."""
+    import runs_bench
+    monkeypatch.setattr(runs_bench, "trusted", lambda clone: False)
+    with pytest.raises(PlatformError, match="not trusted") as e:
+        runs.main(["benchmark", "quick-task"])
+    assert "claude" in (e.value.hint or "") and str(runs.state_dir() / "benchmark" / "quick-task") in str(e.value)
+    assert benchmark_records(store) == [] and world.headless_calls == []
+
+
+def test_a_session_that_ends_without_its_pr_is_recorded_as_failed(world, store, monkeypatch):
+    """A headless run that exits 0 but opened no PR did not deliver: outcome failed, the record says why."""
+    import headless
+    monkeypatch.setattr(headless, "main", lambda argv: 0)
+    assert runs.main(["benchmark", "quick-task"]) == 1
+    (r,) = benchmark_records(store)
+    assert r["outcome"] == "failed" and r["benchmark"]["result_check"] == "no new open PR in ika100/todo-api"
+    assert r["benchmark"]["reset"] == "done"
