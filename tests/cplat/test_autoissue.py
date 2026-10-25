@@ -715,3 +715,32 @@ def test_a_capped_filing_is_kept_pending_in_the_run_record(ai, tr, store):
     runs.finish(rid, "escalated", escalation={"reason": "r", "cause": "platform"})
     (r,) = stored(store)
     assert r["filed"][0]["result"] == "pending" and r["filed"][0]["signature"] == d.signature
+
+
+def test_scrub_redacts_a_token_shaped_string_glued_to_a_long_run(ai):
+    """AC-088.9: padding survives, but a run glued to other word characters is still redacted."""
+    pad = "B" * 50
+    assert ai.scrub(f"x\n{pad}\ny") == f"x\n{pad}\ny"
+    assert "A" * 40 not in ai.scrub("token ghp_" + "A" * 40)
+    assert "0" * 40 not in ai.scrub("abcDEF123" + "0" * 40 + "xyz")
+
+
+def test_a_repo_name_is_not_replaced_inside_a_longer_name(ai):
+    """AC-088.9: bare `todo` is replaced as a word only, not inside `todo-api` or `mytodo`."""
+    out = ai.scrub("todo, todo-api and mytodo", {"todo": "<repo>"})
+    assert out == "<repo>, todo-api and mytodo"
+    assert ai.normalise("todo-api failed in todo", {"acme/todo": "<repo>"}) == "todo-api failed in <path>"
+
+
+@pytest.mark.parametrize("code, err, message", [
+    (127, "", "gh is missing"),
+    (124, "timeout", "timed out"),
+    (4, "", "gh is not logged in"),
+    (1, "To get started with GitHub CLI, run: gh auth login", "gh is not logged in"),
+    (1, "HTTP 403\n\nrate limit exceeded\n", "GitHub refused: rate limit exceeded"),
+    (1, "", "GitHub refused: no details"),
+])
+def test_gh_errors_map_to_a_tracker_error_message(ai, code, err, message):
+    """AC-088: every gh failure becomes a TrackerError with a short, specific message."""
+    with pytest.raises(ai.TrackerError, match=message):
+        ai._check(code, err)
