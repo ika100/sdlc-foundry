@@ -82,6 +82,7 @@ tasks:
   covers: [AC-091.6, AC-091.9, AC-091.11, AC-091.12, AC-091.15]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t11
   title: smoke is a required deploy recipe; platform CI runs each template's smoke against its started image
   files: [scripts/shapes.py, .github/workflows/ci.yml]

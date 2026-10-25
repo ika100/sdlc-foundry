@@ -102,7 +102,7 @@ def check_files(shapes: list[dict]) -> list[str]:
 
 
 CORE_RECIPES = ["lint", "lint-fix", "quality", "test", "test-fast", "security", "secrets-baseline", "ci"]   # ci, secrets-baseline: specs 073, 075
-DEPLOY_RECIPES = ["image-build", "image-scan"]
+DEPLOY_RECIPES = ["image-build", "image-scan", "smoke"]   # smoke: spec 091
 DEPS_RECIPES = ["deps-findings", "deps-bump"]   # spec 095: the recipes `cplat deps` calls
 CONTRACT_AGENTS = ["coder", "tester"]
 DEPLOY_AGENTS = ["deployment", "observability", "release"]
@@ -177,6 +177,8 @@ def check_contract(shapes: list[dict]) -> list[str]:
                     errs.append(f"{sid}: devbox.json missing deps recipe '{r}' (spec 095)")
             if sid != "gitops-app" and not (tdir / "scripts" / "deps.sh").is_file():
                 errs.append(f"{sid}: template has no scripts/deps.sh (spec 095)")
+            if s["deployable"] and sid != "gitops-app" and not (tdir / "scripts" / "smoke.sh").is_file():
+                errs.append(f"{sid}: template has no scripts/smoke.sh (spec 091)")
         claude = _template_file(tdir, "CLAUDE.md")
         if claude is None:
             errs.append(f"{sid}: template has no CLAUDE.md")
