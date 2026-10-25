@@ -41,6 +41,7 @@ jobs:
           SMOKE: ${{ github.event.client_payload.smoke }}
           RECORD: ${{ github.event.client_payload.record }}
         run: |
+          # shellcheck disable=SC2016  # backticks in the printf formats are Markdown for the PR body, not shell expansion
           set -euo pipefail
           [[ "$SERVICE" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "::error::invalid service '$SERVICE'"; exit 1; }
           [[ "$TAG" =~ ^sha-[0-9a-f]{40}$ ]] || { echo "::error::invalid tag '$TAG' (expected sha-<40 hex>)"; exit 1; }
@@ -63,9 +64,7 @@ jobs:
             printf -- '- new tag: `%s`\n' "$TAG"
             printf -- '- staging ran before: `%s`\n' "$old"
             printf -- '- dev smoke: %s (spec %s), run record: %s\n\n' "$SMOKE" "$SPEC" "${RECORD:-not stored}"
-            # shellcheck disable=SC2016  # the backticks are Markdown in the PR body, not shell expansion
             printf 'Merges itself when the gitops-app CI passes. If CI fails, the PR stays open and staging keeps `%s`.\n' "$old"
-            # shellcheck disable=SC2016
             printf 'Revert this PR to put staging back on `%s`.\n' "$old"
           } > "$body"
           url=$(gh pr create --base main --head "$branch" --title "chore(staging): promote $SERVICE to $TAG (automatic, spec 093)" \
