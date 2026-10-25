@@ -186,7 +186,8 @@ def test_finishing_step_of_the_commands_is_one_cplat_pr_open(name):
     """AC-100.7: the coordinator commands finish with `cplat pr open`, not separate git push / gh pr create."""
     text = (ROOT / "plugins" / "svc" / "commands" / f"{name}.md").read_text()
     assert text.count("cplat pr open") >= 1
-    assert "git push" not in text and "gh pr create" not in text
+    steps = "\n".join(ln for ln in text.splitlines() if "pr: ready" not in ln)  # the spec 051 paragraph names the command
+    assert "git push" not in steps and "gh pr create" not in steps
     assert not re.search(r"git commit (?!-s)(-m|-q)", text), "every commit needs the DCO sign-off (-s)"
 
 

@@ -73,7 +73,7 @@ Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and
 - **Done when:** the acceptance tests naming the task's `covers` criteria pass (`devbox run test-fast`); list those test files from `TRACE`. A criterion that also depends on a not-yet-done task may still fail: the coder says which and why.
 - "Never edit, skip or weaken the acceptance tests."
 - A task that was re-planned after a merge conflict (`cplat build state <id> --json`: a `replans[].tasks[]` entry that is not merged) also gets: "This task was re-planned after a merge conflict on `<paths>` with `<with>`. Start from the feature branch, which already contains every merged task. Your earlier attempt is a reference only. Do not merge or cherry-pick it:" followed by the output of `git diff HEAD...<branch>`, with `<branch>` from that state output.
-- Parallel batch only: "You are in an isolated worktree. Commit locally (`git add` + `git commit -m '<type>(<scope>): <title>'`, task id in the body) before returning. Do not push. Do not switch branches."
+- Parallel batch only: "You are in an isolated worktree. Commit locally (`git add` + `git commit -s -m '<type>(<scope>): <title>'`, task id in the body; the sign-off `-s` is required) before returning. Do not push. Do not switch branches."
 
 ### 2.4 Run batches
 
@@ -149,9 +149,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 
 `cplat runs phase build:pr`
 
-1. **Issues:** `tracks:` from the spec plus `#NNN` in `git log $BASE_REF..HEAD --format=%B`; keep those `gh issue view <n> --json state -q .state` reports `OPEN`. Build the `Closes #N` lines or `N/A`.
-2. `git push -u origin $FEATURE_BRANCH` (allowlisted for the feature branch; do it, don't ask).
-3. `gh pr create` (allowlisted; do it, don't ask), title `feat(<scope>): <spec title, ≤72 chars>` (Conventional Commits), body:
+1. Write the PR body to `.git/PR_BODY.md` (`{{CLOSES}}` stands where the issue lines go; the command fills them from the spec's `tracks:` and the branch's commits):
 
    ```markdown
    ## Summary
@@ -170,7 +168,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 
    ## Related issues
 
-   <Closes lines or N/A>
+   {{CLOSES}}
 
    ## Testing done
 
@@ -187,9 +185,15 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
    - [x] No secrets, credentials, or API keys committed
    ```
 
-**When `gh pr create` is not allowed** (headless run, untrusted workspace, or the user declines; spec 051): this is not an error. The branch is pushed; write the PR body to `.git/PR_BODY.md` and end the report with the exact command as its last line: `gh pr create --base main --head <branch> --title "<title>" --body-file .git/PR_BODY.md`.
+2. Make **one** Bash call; it commits what is left with `-s`, pushes the feature branch, opens the PR and adds "Contains WIP commits from an interrupted build: squash-merge." to the body when the branch has `wip(` commits (spec 047):
 
-4. Print the PR URL. If the branch has `wip(` commits (an interrupted build, spec 047), the PR body ends with: "Contains WIP commits from an interrupted build: squash-merge."
+   ```bash
+   cplat pr open --spec <spec_id> --title "feat(<scope>): <spec title, ≤72 chars>"
+   ```
+
+   Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report which part failed and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
+
+   **`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and the body is in `.git/PR_BODY.md`. End the report with that exact command as its last line.
 
 ## Final Report
 
@@ -218,7 +222,7 @@ The bracketed part of the Implementation row is added, attended builds too, only
 - **Every stop and the end are recorded** with `cplat runs end` (Phase 0), so no run goes missing.
 - **Only approved specs are built**, and only as planned. A decision the spec does not answer stops the build: `/svc:spec --amend`, then `/svc:plan` again.
 - **Acceptance tests are fixed** once Phase 1 committed them. If one is wrong, stop and take it to the user; a changed test is a changed spec.
-- **Push only in Phase 7**; `git push` of the feature branch and `gh pr create` are allowlisted, so a headless build ends at an open PR without asking.
+- **Push only in Phase 7**; `cplat pr open` pushes the feature branch and opens the PR (or ends at a ready PR), so a headless build needs no further prompt.
 - **A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** `cplat build merge` aborts the merge and sets the task aside; the architect amends only the plan and the task runs again on top of the merged work, without asking. Never edit conflicting hunks.
 - **Every shell command goes through `devbox run <script>`** (see `CLAUDE.md`), except git, gh and `cplat`.
 - **No `--no-verify`, no `--no-gpg-sign`.**

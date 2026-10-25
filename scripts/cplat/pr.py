@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
+import pr_open
 import runs
 import ship
 from core import PlatformError, run
@@ -73,7 +75,32 @@ def main(argv: list[str]) -> int:
     p.add_argument("--interval", type=float, default=20)
     p.add_argument("--queue-timeout", type=float, default=ship.QUEUE_TIMEOUT)
     p.add_argument("--repo", default=".")
+    o = sub.add_parser("open", help="commit -s, push and open the PR in one step (spec 100)")
+    o.add_argument("--title", required=True)
+    o.add_argument("--body-file", default=".git/PR_BODY.md")
+    o.add_argument("--message")
+    o.add_argument("--base", default="main")
+    o.add_argument("--issues", default="")
+    o.add_argument("--spec")
+    o.add_argument("--no-pr", action="store_true")
+    o.add_argument("--json", action="store_true")
+    o.add_argument("--repo", default=".")
     ns = ap.parse_args(argv)
+    if ns.cmd == "open":
+        return _open(ns)
     ok, lines = wait(Path(ns.repo).resolve(), url_of(ns.pr, ns.slug), ns.merge, ns.timeout, ns.interval, ns.queue_timeout, ns.slug)
     print("\n".join(lines))
     return 0 if ok else 1
+
+
+def _open(ns: argparse.Namespace) -> int:
+    opts = pr_open.Opts(ns.title, ns.body_file, ns.message, ns.base, ns.issues, ns.spec, ns.no_pr)
+    try:
+        res = pr_open.open_pr(Path(ns.repo).resolve(), opts)
+    except pr_open.Refused as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        if e.hint:
+            print(f"  fix: {e.hint}", file=sys.stderr)
+        return 2
+    print(json.dumps(res.as_json()) if ns.json else "\n".join(res.lines()))
+    return res.exit

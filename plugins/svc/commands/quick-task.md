@@ -74,71 +74,46 @@ If still failing after 2 cycles, escalate to the user.
 
 After the tester passes:
 
-1. Check for uncommitted changes:
-   ```bash
-   git status --porcelain
-   ```
-   If non-empty, commit everything with a conventional commit message:
-   ```bash
-   git add -A
-   git commit -m "feat(<scope>): <imperative description of the task>"
-   ```
-   Use `fix:` for bug fixes, `chore:` for tooling, `docs:` for documentation, etc.
+Write the PR body to `.git/PR_BODY.md` (the lines under "Related issues / stories" stay `{{CLOSES}}`; the command fills them):
 
-2. Extract GitHub issue references so the PR can close them on merge.
+```markdown
+## Summary
 
-   First, scan `$ARGUMENTS` and the last 10 commit messages for `#NNN` patterns:
-   ```bash
-   git log --format='%B' -10
-   ```
-   Collect every distinct `#NNN` found (e.g. `#42`, `#7`). Then verify each one is a real, open issue:
-   ```bash
-   gh issue view <NNN> --json state,number -q '"\(.number) \(.state)"'
-   ```
-   Keep only issues whose state is `OPEN`. Build a `CLOSES` list (e.g. `Closes #42\nCloses #7`). If no open issues are found, set `CLOSES` to `N/A`.
+<2–4 sentence description of the change: what it does, how it works, and why it was needed. For a new feature, describe what the feature is and how a user or operator would interact with it (e.g. which endpoint, flag, or behaviour was added). For a fix, describe what was broken and how it was resolved.>
 
-3. Push the branch (allowlisted for `feature/*`, `fix/*`, `chore/*` and the other branch prefixes; only force-pushes and `git push origin main` ask):
-   ```bash
-   git push -u origin <current-branch>
-   ```
+## Type of change
 
-4. Create the PR (`gh pr create` is allowlisted, so this also runs in a headless session). Build the body explicitly so `Closes #NNN` appears as live text (not an HTML comment) and GitHub auto-closes the linked issues on merge:
-   ```bash
-   gh pr create \
-     --title "<type>(<scope>): <same description as the commit>" \
-     --body "$(cat <<'EOF'
-   ## Summary
+- [x] <tick the matching type from: feat / fix / refactor / perf / test / docs / chore / ci / revert>
 
-   <2–4 sentence description of the change: what it does, how it works, and why it was needed. For a new feature, describe what the feature is and how a user or operator would interact with it (e.g. which endpoint, flag, or behaviour was added). For a fix, describe what was broken and how it was resolved.>
+## Related issues / stories
 
-   ## Type of change
+{{CLOSES}}
 
-   - [x] <tick the matching type from: feat / fix / refactor / perf / test / docs / chore / ci / revert>
+## Testing done
 
-   ## Related issues / stories
+<tester output summary: N tests, X% coverage>
 
-   <CLOSES — e.g. "Closes #42" or "N/A">
+## Checklist
 
-   ## Testing done
+- [x] `devbox run quality` passes (ruff + mypy)
+- [x] `devbox run test` passes with coverage ≥ 80%
+- [x] No secrets, credentials, or API keys committed
+- [ ] Docs: <tick only if public-facing behaviour changed AND the docs were updated; otherwise write "n/a, no public-facing change">
 
-   <tester output summary: N tests, X% coverage>
+Not run by quick-task: `devbox run security` (use `/shared:check-quality` for a full audit before merging risky changes).
+```
 
-   ## Checklist
+Then make **one** Bash call (it commits everything with `-s`, finds the open issues to close, pushes the branch and opens the PR):
 
-   - [x] `devbox run quality` passes (ruff + mypy)
-   - [x] `devbox run test` passes with coverage ≥ 80%
-   - [x] No secrets, credentials, or API keys committed
-   - [ ] Docs: <tick only if public-facing behaviour changed AND the docs were updated; otherwise write "n/a, no public-facing change">
+```bash
+cplat pr open --title "<type>(<scope>): <imperative description of the task>" [--issues "#NNN …"]
+```
 
-   Not run by quick-task: `devbox run security` (use `/shared:check-quality` for a full audit before merging risky changes).
-   EOF
-   )"
-   ```
-   The `--title` must match Conventional Commits format to pass the `pr-title` CI check. Replace `<CLOSES>` with the actual closing keywords determined in step 2.
+Use `fix:` for bug fixes, `chore:` for tooling, `docs:` for documentation, etc.; the title must be a Conventional Commits title (the `pr-title` CI check). Pass `--issues` for `#NNN` references in `$ARGUMENTS`.
 
-**When `gh pr create` is not allowed** (headless run, untrusted workspace, or the user declines; spec 051): this is not an error. The branch is pushed; write the PR body to `.git/PR_BODY.md` and end the report with the exact command as its last line: `gh pr create --base main --head <branch> --title "<title>" --body-file .git/PR_BODY.md`.
+Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report which part failed and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
 
-5. Print the PR URL.
+**`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and the body is in `.git/PR_BODY.md`. End the report with that exact command as its last line.
 
 **If Phase 0 found we were already on `main` and did not create a branch:** warn "Skipping PR creation — working directly on main." and skip Phase 3.
 
