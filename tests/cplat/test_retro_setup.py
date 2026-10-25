@@ -68,7 +68,7 @@ def test_only_the_proposal_step_sees_the_claude_credential_and_it_sees_no_github
     prop = step_running("retro propose --dir")
     assert prop["env"]["GH_TOKEN"] == "" and "secrets.CLAUDE_CODE_OAUTH_TOKEN" in prop["env"]["CLAUDE_CODE_OAUTH_TOKEN"]
     for s in steps():
-        if s is not prop:
+        if s != prop:
             assert "CLAUDE_CODE_OAUTH_TOKEN" not in json.dumps(s.get("env", {}))
 
 
