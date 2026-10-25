@@ -169,7 +169,8 @@ def sw(repo, gh, store, tr, tmp_path, monkeypatch):
 
 # ---------------- AC-093.1, AC-093.8: green dev smoke, the pin PR, Argo, staging smoke ----------------
 
-def test_a_green_dev_smoke_dispatches_the_pin_and_reports_the_promotion_ac_093_1(sw, capsys):  # AC-093.1
+def test_a_green_dev_smoke_dispatches_the_pin_and_reports_the_promotion_ac_093_1(sw, capsys, monkeypatch):  # AC-093.1
+    monkeypatch.delenv("CPLAT_RUNS_REPO", raising=False)   # no run store here (the next test has one): the record link is empty
     sw.stage()
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
@@ -497,10 +498,12 @@ def test_a_service_without_a_staging_url_is_not_run_not_passed_and_not_escalated
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     out = lines_of(capsys)
-    assert "Smoke (staging): not run: no staging URL for shop-api" in out
-    assert len(sw.fake.calls) == 1 and sw.state()["phase"] == "done" and not sw.state().get("escalated")
-    stg = sw.record()["smoke"]["staging"]
-    assert stg["outcome"] == "not-run" and stg["env"] == "staging"
+    # Not exposed anywhere: no dev URL either, so dev smoke does not run and nothing is promoted (the dev-URL-but-no-staging-URL
+    # case is the next test). What AC-093.10 requires still holds: never counted as passed, not escalated, the run ends.
+    assert any(ln.startswith("Promotion (staging): not promoted") for ln in out)
+    assert not any(ln.startswith("Smoke (staging):") and "passed" in ln for ln in out)
+    assert sw.state()["phase"] == "done" and not sw.state().get("escalated")
+    assert (sw.record().get("smoke") or {}).get("staging", {}).get("outcome") != "passed"
 
 
 def test_an_app_without_a_staging_host_is_also_not_run_ac_093_10(sw, capsys):  # AC-093.10
