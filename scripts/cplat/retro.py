@@ -1,4 +1,4 @@
-"""cplat retro: the weekly platform retro (spec 090, ADR-036).
+"""cplat retro: the weekly platform retro (spec 090, ADR-039).
 
   cplat retro [--week W] [--json] [--out DIR]       build the report of the last complete week (reads only)
   cplat retro propose --dir DIR [--model M] [--max-minutes N]   headless Claude writes DIR/proposals.json (always exit 0)

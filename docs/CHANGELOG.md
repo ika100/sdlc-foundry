@@ -6,7 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
-- **Feat (090): a weekly retro proposes the next specs.** [ADR-036](adr/036-weekly-retro-evidence-checked-proposals.md)
+- **Feat (090): a weekly retro proposes the next specs.** [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)
   - `cplat retro [--week W] [--json] [--out DIR]` builds one report of the last complete week from the run store, the auto-filed platform issues and the agent metrics of spec 089, each figure next to the previous week. By hand it prints and writes nothing.
   - `cplat runs init` adds a workflow to the run store repo that runs it Mondays 06:00 UTC: report, then headless Claude proposes at most 5 specs and 3 agent prompt changes, then `cplat retro post` checks every proposal against the report's evidence (an unsupported one is refused and counted) and posts.
   - The posted `retro` issue in `ika100/sdlc-foundry` has counts only (no repo, spec or store names, reasons as `reason 1`); the issue of an earlier week is commented on and closed. The full report is committed under `retros/` in the store.

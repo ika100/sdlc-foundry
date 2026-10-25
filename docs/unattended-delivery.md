@@ -95,7 +95,7 @@ A build record also says how each agent did (spec 089), per agent, shape and mod
 
 ### Weekly retro
 
-Every Monday the platform looks back at the last complete week and proposes what to build next (spec 090, [ADR-036](adr/036-weekly-retro-evidence-checked-proposals.md)).
+Every Monday the platform looks back at the last complete week and proposes what to build next (spec 090, [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)).
 
 - **Three steps, one directory:** `cplat retro --out DIR` builds the report (`report.json`, `report.md`, `prompt.md`), `cplat retro propose --dir DIR` lets headless Claude write `proposals.json`, `cplat retro post --dir DIR` checks and posts. A failed proposal step still posts the report with `Proposals: not generated (<reason>)`.
 - **The report** covers ISO week Monday to Sunday UTC, every figure next to the week before: runs per kind and outcome, phase durations, CI rounds and reruns, escalations by cause with the top reasons, reruns by check, platform issues counted again in the week, and the per-agent metrics of spec 089.

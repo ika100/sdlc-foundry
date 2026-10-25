@@ -1,4 +1,4 @@
-"""Proposals of the weekly retro (spec 090, ADR-036): format, evidence check against the report, covers, limits, rendering.
+"""Proposals of the weekly retro (spec 090, ADR-039): format, evidence check against the report, covers, limits, rendering.
 
 Pure apart from `load` and `prompt`, which read a file. The agent writes `proposals.json`; nothing in it is trusted until
 `validate` has checked it against the same `report.json`.

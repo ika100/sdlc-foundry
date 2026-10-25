@@ -17,7 +17,7 @@
 - **Evidence is a reference into the report, not free text.** The report carries a flat `evidence` index
   (`ref → value`). A proposal cites `{"ref", "value"}` pairs. `post` accepts a proposal only when at least one pair
   exists in the index with that value. It refuses and names the rest: one bad proposal is dropped, the report is still
-  posted. ADR: [docs/adr/036-weekly-retro-evidence-checked-proposals.md](../../adr/036-weekly-retro-evidence-checked-proposals.md).
+  posted. ADR: [docs/adr/039-weekly-retro-evidence-checked-proposals.md](../../adr/039-weekly-retro-evidence-checked-proposals.md).
 - **Public is counts, private is detail (AC-090.11).** One report, two renderings:
   - `render_private` is committed to the store. It has the repo list, escalation reason texts, check names, consumer
     spec ids and the 089 top causes.

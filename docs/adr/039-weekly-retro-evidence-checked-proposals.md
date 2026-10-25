@@ -1,4 +1,4 @@
-# ADR-036 — The weekly retro: a deterministic report in code, agent proposals checked against it
+# ADR-039 — The weekly retro: a deterministic report in code, agent proposals checked against it
 
 **Status:** accepted (2026-10-24, spec 090)
 
