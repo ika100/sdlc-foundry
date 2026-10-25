@@ -12,6 +12,7 @@ tasks:
   covers: [AC-093.13, AC-093.15]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t2
   title: pin-staging workflow in the gitops-app template
   files: [templates/gitops-app/.github/workflows/pin-staging.yml, templates/gitops-app/scripts/pin.py]
@@ -62,6 +63,7 @@ tasks:
   covers: [AC-093.16]
   parallel_safe: true
   depends_on: []
+  done: true
 ---
 
 The contract for every task is [design.md](design.md). ADR: [041](../../adr/041-staging-follows-green-dev-smoke.md).
