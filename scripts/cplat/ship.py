@@ -36,6 +36,7 @@ import feedback
 import runs
 import smoke
 import spec as specmod
+import staging_deploy
 from core import PlatformError, run
 
 PHASES = ["plan", "build", "pr", "land", "deploy", "done"]
@@ -160,6 +161,11 @@ def describe(st: dict) -> str:
             lines.append(f"  {k}: {st[k]}")
     if (st.get("smoke") or {}).get("row"):
         lines.append(f"  smoke: {st['smoke']['row']}")
+    if (st.get("staging") or {}).get("row"):
+        row = f"  staging: {st['staging']['row']}"
+        if (st["staging"].get("smoke") or {}).get("row"):
+            row += f"; smoke {st['staging']['smoke']['row']}"
+        lines.append(row)
     if st.get("fix_rounds"):
         lines.append(f"  CI fix rounds: {st['fix_rounds']}")
     lines.append(f"next: {next_step(st)}")
@@ -725,19 +731,23 @@ def _smoke_state(repo: Path, st: dict, result: smoke.SmokeResult, row: str, file
     try:
         st["smoke"] = {"outcome": result.outcome, "row": row, "url": result.base_url,
                        "signature": autoissue.signature("smoke", service_slug(repo), "dev", "\n".join(sorted(result.failing)))}
-        runs.set_section(_ensure_run(repo, st), "smoke", result.section(filed))
+        runs.set_section(_ensure_run(repo, st), "smoke", {**result.section(filed), "image": st.get("deployed"),
+                                                           "at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
     except Exception:  # noqa: BLE001
         pass
 
 
-def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[str]) -> tuple[bool, list[str]]:
-    """Record the smoke result, then end the deploy: done when green or not run, escalated (cause code) when red."""
+def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[str], apps: list[str] | None = None,
+                  svc: str | None = None, context: str | None = None, interval: float = 20) -> tuple[bool, list[str]]:
+    """Record the smoke result, then end the deploy: after green or not run staging is promoted when the gitops-app asks for it
+    (spec 093) and the run is done; escalated (cause code) when red."""
     lines = [*lines, *result.lines()]
     if result.outcome == "not-run" or result.ok:
         _smoke_state(repo, st, result, result.row(), None)
         lines.append(f"Smoke (dev): {result.row()}")
-        ok, lines = _done(repo, st, lines)
-        return ok, lines
+        ok, more = staging_deploy.promote(repo, st, apps or [], svc or service_name(repo), result, context, interval)
+        lines += more
+        return _done(repo, st, lines) if ok else (False, lines)
     sp = _smoke_spec(repo, st)
     sid = sp.id if sp else st["spec"]
     out = smoke.file_issue(result, service_slug=service_slug(repo), spec_id=sid, image=st.get("deployed"),
@@ -753,24 +763,29 @@ def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[s
     _smoke_state(repo, st, result, row, filed)
     save_state(repo, st)
     reason = f"smoke red in dev: {len(result.failing)} failing ({sid})"
+    skipped = staging_deploy.skip(repo, st, "dev smoke red", [])
+    save_state(repo, st)
     escalate(repo, reason, "code", report=lines)
     lines.append(f"ship {st['spec']}: escalated ({reason}); dev keeps running {st.get('deployed')}. "
                  f"Resume with /svc:ship {st['spec']}")
+    lines += skipped
     lines.append(f"Smoke (dev): {row}")
     return False, lines
 
 
-def _smoke_not_run(repo: Path, st: dict, reason: str, lines: list[str]) -> tuple[bool, list[str]]:
+def _smoke_not_run(repo: Path, st: dict, reason: str, lines: list[str], apps: list[str] | None = None, svc: str | None = None,
+                   context: str | None = None, interval: float = 20) -> tuple[bool, list[str]]:
     sp = _smoke_spec(repo, st)
-    return _smoke_finish(repo, st, smoke.not_run("dev", reason, sp.smoke_acs() if sp else []), lines)
+    return _smoke_finish(repo, st, smoke.not_run("dev", reason, sp.smoke_acs() if sp else []), lines, apps, svc, context, interval)
 
 
-def _smoke_step(repo: Path, st: dict, apps: list[str], svc: str, lines: list[str], base_url: str | None) -> tuple[bool, list[str]]:
+def _smoke_step(repo: Path, st: dict, apps: list[str], svc: str, lines: list[str], base_url: str | None,
+                context: str | None = None, interval: float = 20) -> tuple[bool, list[str]]:
     url, why = (base_url, None) if base_url else smoke.dev_url(repo, apps, svc)
     if not url:
-        return _smoke_not_run(repo, st, why or "no dev URL", lines)
+        return _smoke_not_run(repo, st, why or "no dev URL", lines, apps, svc, context, interval)
     result = smoke.run_smoke(repo, url, spec=_smoke_spec(repo, st), probe=smoke.liveness_probe(repo))
-    return _smoke_finish(repo, st, result, lines)
+    return _smoke_finish(repo, st, result, lines, apps, svc, context, interval)
 
 
 def deploy(repo: Path, timeout: float, interval: float, context: str | None,
@@ -790,7 +805,12 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
                               ["no .platform-app.yml: this repo is not linked to a gitops-app, so dev is not pinned "
                                "automatically; compose it with /gitops:compose and link it (spec 062)"])
     if st.get("deployed") and (st.get("smoke") or {}).get("outcome") in {"red", "timed-out"}:
-        return _smoke_step(repo, st, apps, service_name(repo), ["resuming: smoke only, against what dev runs now"], base_url)
+        return _smoke_step(repo, st, apps, service_name(repo), ["resuming: smoke only, against what dev runs now"], base_url,
+                           context, interval)
+    stg = st.get("staging") or {}
+    if st.get("deployed") and (stg.get("state") == "pin-failed" or (stg.get("smoke") or {}).get("outcome") in {"red", "timed-out"}):
+        ok, more = staging_deploy.resume(repo, st, apps, service_name(repo), context, interval)
+        return _done(repo, st, more) if ok else (False, more)
     sha = st.get("merge_sha") or ""
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise PlatformError("the run has no merge commit", hint="land the PR first: cplat ship land")
@@ -856,8 +876,9 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     st["deployed"] = f"sha-{sha}"
     save_state(repo, st)
     if not context:
-        return _smoke_not_run(repo, st, "no kube context, so Argo health was not checked (pass --context <kube-context>)", lines)
-    return _smoke_step(repo, st, apps, svc, lines, base_url)
+        return _smoke_not_run(repo, st, "no kube context, so Argo health was not checked (pass --context <kube-context>)", lines,
+                              apps, svc, context, interval)
+    return _smoke_step(repo, st, apps, svc, lines, base_url, context, interval)
 
 
 def service_slug(repo: Path) -> str:

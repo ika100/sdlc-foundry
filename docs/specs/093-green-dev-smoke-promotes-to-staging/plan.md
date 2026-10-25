@@ -19,12 +19,14 @@ tasks:
   covers: [AC-093.1, AC-093.5, AC-093.6, AC-093.7]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t3
   title: staging.py decides whether a build is promoted
   files: [scripts/cplat/staging.py]
   covers: [AC-093.1, AC-093.3, AC-093.4, AC-093.5, AC-093.7, AC-093.15]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t4
   title: evidence.py builds the prod evidence summary from the run store
   files: [scripts/cplat/evidence.py]
@@ -38,12 +40,14 @@ tasks:
   covers: [AC-093.1, AC-093.6, AC-093.8, AC-093.9, AC-093.10]
   parallel_safe: true
   depends_on: [t3]
+  done: true
 - id: t6
   title: ship deploy promotes after a green dev smoke, resumes staging, records image and time
   files: [scripts/cplat/ship.py]
   covers: [AC-093.1, AC-093.3, AC-093.6, AC-093.8, AC-093.9]
   parallel_safe: true
   depends_on: [t5]
+  done: true
 - id: t7
   title: promote to prod shows the evidence summary and puts it in the PR body
   files: [scripts/cplat/promote.py, plugins/gitops/commands/promote.md]
@@ -262,7 +266,7 @@ never auto-merged.
 ADR-041 for staging.
 
 **Implementation notes:**
-- README: add a row after 040, in the same style: `[041](041-staging-follows-green-dev-smoke.md) | Staging follows a
+- README: add a row after 040, in the same style: `[041](041-staging-follows-green-dev-smoke.md)` | `Staging follows a
   green dev smoke through a self-merging pin-staging PR (app-wide setting, per-service override); prod stays a manual
   /gitops:promote with an evidence summary`.
 - ADR-027: add `**Amended by:** [ADR-041](041-staging-follows-green-dev-smoke.md) (decision 4, for staging)` under
