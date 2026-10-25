@@ -167,6 +167,13 @@ def _run_headless(argv: list[str], rid: str | None) -> str:
                 os.environ[k] = v
 
 
+def steps(task: dict) -> list[tuple[str, str]]:
+    """The task's prompts as (phase name, prompt): `steps` for a workflow that needs several commands, else `prompt` alone."""
+    if task.get("steps"):
+        return [(s["name"], s["prompt"]) for s in task["steps"]]
+    return [("run", task["prompt"])]
+
+
 def _summary(usage: dict | None) -> tuple[int, str, str]:
     t = (usage or {}).get("totals") or {}
     tokens = sum(int(t.get(f) or 0) for f in ("input", "output", "cache_read", "cache_write"))
@@ -205,12 +212,16 @@ def main(argv: list[str]) -> int:
     rid = runs.start("benchmark", repo=repo, mode="headless")
     if rid:
         runs_usage.register(rid, mode="own", project_dir=str(runs_usage.projects_root() / transcripts.cwd_slug(clone)))
-    runs.phase(rid, "benchmark:run")
     outcome, reset, note, check = "failed", "not run", None, None
     usage = None
     try:
-        outcome = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]), "--max-minutes", str(task["max_minutes"]),
-                                 task["prompt"]], rid)
+        for name, prompt in steps(task):   # e.g. build: plan, then build; each its own phase, a failed step stops the run
+            runs.phase(rid, f"benchmark:{name}")
+            outcome = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]),
+                                     "--max-minutes", str(task["max_minutes"]), prompt], rid)
+            if outcome != "done":
+                check = f"step {name} did not finish"
+                break
         if outcome == "done":
             missing = result(ns.workflow, repo, keep)
             if missing:

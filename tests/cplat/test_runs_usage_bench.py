@@ -241,3 +241,22 @@ def test_a_session_that_ends_without_its_pr_is_recorded_as_failed(world, store, 
     (r,) = benchmark_records(store)
     assert r["outcome"] == "failed" and r["benchmark"]["result_check"] == "no new open PR in ika100/todo-api"
     assert r["benchmark"]["reset"] == "done"
+
+
+def test_build_plans_first_then_builds_as_two_phases(world, store):
+    """/svc:build needs a plan.md: the build benchmark runs /svc:plan, then /svc:build, each as its own phase."""
+    assert runs.main(["benchmark", "build"]) == 0
+    assert [argv[-1] for argv in world.headless_calls] == ["/svc:plan 900", "/svc:build 900"]
+    (r,) = benchmark_records(store)
+    names = [p["name"] for p in r["phases"]]
+    assert names[:2] == ["benchmark:plan", "benchmark:build"] and names[-1] == "benchmark:reset"
+
+
+def test_a_failed_step_stops_the_run_and_says_which(world, store, monkeypatch):
+    import headless
+    calls = []
+    monkeypatch.setattr(headless, "main", lambda argv: calls.append(argv[-1]) or 1)
+    assert runs.main(["benchmark", "build"]) == 1
+    (r,) = benchmark_records(store)
+    assert calls == ["/svc:plan 900"] and r["outcome"] == "failed"
+    assert r["benchmark"]["result_check"] == "step plan did not finish" and r["benchmark"]["reset"] == "done"

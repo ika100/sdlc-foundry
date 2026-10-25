@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (099): the build benchmark plans first.** `/svc:build` needs a `plan.md`, so `cplat runs benchmark build` runs `/svc:plan 900` and then `/svc:build 900` as two phases of one run (task_version 3); a failed step stops the run and `result_check` names it.
 - **Fix: `cplat update-service` refreshes `devbox.lock`.** After merging `devbox.json` it runs `devbox install`, so the lock matches and the next devbox run no longer dirties the tree (a headless `/svc:quick-task` stopped on that). Without devbox, or when the install fails, the report names the step.
 - **Fix: templates drop the `Bash(kubectl --context * get|describe|logs *)` rules.** The wildcard before the subcommand also approved any options placed there; `kubectl get|describe|logs *` already cover the read-only calls (with `--context` after the subcommand). `/shared:update-service` removes the old rules from each repo.
 ## [4.5.0] — 2026-10-25

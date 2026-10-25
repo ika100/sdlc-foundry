@@ -1,6 +1,9 @@
 {
   "version": 1,
-  "sample": {"repo": "ika100/todo-api", "rev": "17eb5e49eebcad9b76b4ee7d67ee13798333b85c"},
+  "sample": {
+    "repo": "ika100/todo-api",
+    "rev": "17eb5e49eebcad9b76b4ee7d67ee13798333b85c"
+  },
   "workflows": {
     "quick-task": {
       "task_version": 2,
@@ -9,12 +12,21 @@
       "max_minutes": 30
     },
     "build": {
-      "task_version": 2,
+      "task_version": 3,
       "spec_file": "spec-900.md",
       "spec_id": "900-count-todos-with-get-todos-count",
-      "prompt": "/svc:build 900",
       "max_runs": 2,
-      "max_minutes": 120
+      "max_minutes": 120,
+      "steps": [
+        {
+          "name": "plan",
+          "prompt": "/svc:plan 900"
+        },
+        {
+          "name": "build",
+          "prompt": "/svc:build 900"
+        }
+      ]
     },
     "ship": {
       "task_version": 2,
