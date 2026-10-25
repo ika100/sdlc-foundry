@@ -97,12 +97,12 @@ After the tester passes:
    ```
    Keep only issues whose state is `OPEN`. Build a `CLOSES` list (e.g. `Closes #42\nCloses #7`). If no open issues are found, set `CLOSES` to `N/A`.
 
-3. Push the branch (requires user confirmation — `git push` is in the `ask` list):
+3. Push the branch (allowlisted for `feature/*`, `fix/*`, `chore/*` and the other branch prefixes; only force-pushes and `git push origin main` ask):
    ```bash
    git push -u origin <current-branch>
    ```
 
-4. Create the PR (requires user confirmation — `gh pr create` is in the `ask` list). Build the body explicitly so `Closes #NNN` appears as live text (not an HTML comment) and GitHub auto-closes the linked issues on merge:
+4. Create the PR (`gh pr create` is allowlisted, so this also runs in a headless session). Build the body explicitly so `Closes #NNN` appears as live text (not an HTML comment) and GitHub auto-closes the linked issues on merge:
    ```bash
    gh pr create \
      --title "<type>(<scope>): <same description as the commit>" \

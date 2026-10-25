@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix: `/svc:quick-task`, `/svc:fix-bug` and `/svc:release` no longer claim that push and `gh pr create` need confirmation.** Both are allowlisted since 4.4.0; the stale text made a headless quick-task stop after green tests without committing (found by the 099 benchmark).
 - **Fix (070): headless sessions can edit files.** `cplat headless` runs `claude -p --permission-mode acceptEdits` instead of `dontAsk`. No allowlist grants `Edit` or `Write`, so every unattended session (headless, `/svc:ship` via the Stop hook, `cplat runs benchmark`) could plan but never change a file. Edits stay inside the repo; every other tool is still limited to the committed allowlist and nothing prompts. AC-070.1 is replaced by AC-070.5.
 - **Fix (099): the benchmark checks trust and its result.** One fixed clone per workflow under `<state>/benchmark/<workflow>`, refused until the folder is trusted in Claude Code; a run is `done` only with a new open PR (quick-task, build) or merged PR (ship); the reset leaves PRs, branches and tags that existed before the run alone.
 - **Feat (099): token usage and cost are measured per run.** [ADR-035](adr/035-token-usage-from-session-transcripts.md)
