@@ -9,11 +9,16 @@ Each run is a fresh `claude -p` session with `--permission-mode acceptEdits` and
 file edits inside the repo are accepted, any other tool not allowlisted is refused instead of prompting, so nobody has to watch. A run ends when Claude stops, the
 time is up, or the context runs out; if `cplat ship` state says the run is unfinished and not escalated, the next run
 resumes it from disk (spec status, plan.md `done` flags, the ship state). Logs: ~/.cache/sdlc-foundry/headless/<repo>/.
+
+The coordinator model (spec 100) is always passed as `--model`: the flag, else `coordinator_model` in the repo's
+`.platform-settings.yml`, else in ~/.config/sdlc-foundry/settings.yml (see settings.py), else sonnet; only sonnet, opus
+and haiku are accepted. `--plugin-dir PATH` (repeatable) loads a plugin from a folder for the sessions.
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import platform
 import re
@@ -25,6 +30,7 @@ import uuid
 from pathlib import Path
 
 import runs as runlog
+import settings
 import ship
 from core import PlatformError
 
@@ -64,12 +70,25 @@ def seconds_left_in_window(window: tuple[dt.time, dt.time] | None, at: dt.dateti
     return (end_at - at).total_seconds()
 
 
-def claude_cmd(prompt: str, model: str | None) -> list[str]:
+def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None = None) -> list[str]:
     exe = os.environ.get("CPLAT_CLAUDE") or "claude"
     cmd = [exe, "-p", prompt, "--permission-mode", "acceptEdits", "--output-format", "text"]
     if model:
         cmd += ["--model", model]
+    for d in plugin_dirs or []:
+        cmd += ["--plugin-dir", d]
+    if plugin_dirs:   # plugins loaded in place are not under ~/.claude/plugins, so their files need their own Read rule
+        rules = [f"Read(/{d}/**)" for d in plugin_dirs]
+        cmd += ["--settings", json.dumps({"permissions": {"allow": rules}})]
     return cmd
+
+
+def plugin_dirs_of(paths: list[str]) -> list[str]:
+    dirs = [str(Path(p).resolve()) for p in paths]
+    for d in dirs:
+        if not (Path(d) / ".claude-plugin" / "plugin.json").is_file():
+            raise PlatformError(f"--plugin-dir {d} has no .claude-plugin/plugin.json")
+    return dirs
 
 
 def log_dir(repo: Path) -> Path:
@@ -135,7 +154,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--max-minutes", type=float, default=240, help="wall-clock budget for all sessions together (from the first start)")
     ap.add_argument("--quiet", help="HH:MM-HH:MM: never start a session inside this window")
     ap.add_argument("--no-wait", action="store_true", help="inside the quiet window: exit (code 3) instead of waiting")
-    ap.add_argument("--model")
+    ap.add_argument("--model", help="coordinator model: sonnet (default), opus or haiku; else the settings files")
+    ap.add_argument("--plugin-dir", action="append", default=[], help="load a plugin from this folder (repeatable)")
     ap.add_argument("--dry-run", action="store_true")
     ns = ap.parse_args(argv)
     repo = Path(ns.repo).resolve()
@@ -146,23 +166,27 @@ def main(argv: list[str]) -> int:
                             hint="/shared:update-service (or cplat adopt) brings it")
     prompt = " ".join(ns.prompt)
     window = parse_window(ns.quiet)
-    cmd = claude_cmd(prompt, ns.model)
+    model, source = settings.coordinator_model(repo, prompt, ns.model)
+    cmd = claude_cmd(prompt, model, plugin_dirs_of(ns.plugin_dir))
     if ns.dry_run:
         print(shlex.join(cmd))
+        print(f"coordinator: {model} ({source})")
         return 0
+    print(f"coordinator: {model} ({source})", flush=True)
+    state_fields = {"coordinator_model": model, "coordinator_model_source": source}
     rid = runlog.start("headless", repo=runlog.repo_slug(repo), mode="headless")
     state = {"sessions": 0, "result": "", "code": EXIT_STOPPED}
     try:
         return _drive(ns, repo, prompt, window, cmd, rid, state)
     except BaseException as e:
         state["result"] = f"error: {e}"
-        runlog.finish(rid, "failed", fields={"command": prompt, "sessions": state["sessions"], "stop_reason": "error"})
+        runlog.finish(rid, "failed", fields={"command": prompt, "sessions": state["sessions"], "stop_reason": "error", **state_fields})
         rid = None
         raise
     finally:
         if rid:
             reason, outcome = stop_of(state["result"], state["code"])
-            runlog.finish(rid, outcome, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason})
+            runlog.finish(rid, outcome, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason, **state_fields})
 
 
 def stop_of(result: str, code: int) -> tuple[str, str]:

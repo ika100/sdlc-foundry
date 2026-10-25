@@ -23,7 +23,7 @@ A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (o
   cplat runs begin <kind> [--spec S] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
   cplat runs agent <event> ...                                       agent metrics of the current run (spec 089)
   cplat runs usage <run_id> | --session <id> [--json]                tokens and estimated cost per run (spec 099)
-  cplat runs benchmark <quick-task|build|ship> [--reset-first]       fixed task on the sample repo (spec 099)
+  cplat runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR] fixed task on the sample repo (spec 099)
 
 Usage (spec 099, ADR-035): `start` registers the Claude Code session as a claim, `finish` adds the `usage` section
 from the local transcripts (runs_usage) and fills missing `gates` of ship / build runs with "not run".

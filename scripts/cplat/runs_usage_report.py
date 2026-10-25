@@ -102,10 +102,14 @@ def render_usage_lines(agg_usage: dict) -> list[str]:
 
 # ---------------- benchmarks ----------------
 
+def plugins_label(info: dict) -> str:
+    return f"local {str(info.get('commit') or '')[:7]}" + ("+dirty" if info.get("dirty") else "")
+
+
 def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | None, store: str,
                          now: datetime.datetime, malformed: int) -> dict:
     kept = runs_report.select(records, since_days=since_days, repo=repo, now=now)
-    cells: dict[tuple[str, str], list[dict]] = {}
+    cells: dict[tuple[str, str, str], list[dict]] = {}
     tables: set[str] = set()
     for r in kept:
         if r.get("kind") != "benchmark":
@@ -114,13 +118,14 @@ def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | No
         if isinstance(table, str):
             tables.add(table)
         b = r.get("benchmark") if isinstance(r.get("benchmark"), dict) else {}
-        cells.setdefault((runs_report._text(b.get("workflow")), runs_report._text(r.get("platform_version"))), []).append(r)
+        label = plugins_label(b.get("plugins")) if isinstance(b.get("plugins"), dict) else "installed"
+        cells.setdefault((runs_report._text(b.get("workflow")), runs_report._text(r.get("platform_version")), label), []).append(r)
     out: dict[str, dict] = {}
-    for (workflow, version) in sorted(cells):
-        rs = cells[(workflow, version)]
+    for (workflow, version, label) in sorted(cells):
+        rs = cells[(workflow, version, label)]
         totals = [t for t in map(_totals, rs) if t is not None]
         g = _group(totals)
-        out.setdefault(workflow, {})[version] = {
+        out.setdefault(workflow, {})[version if label == "installed" else f"{version} [{label}]"] = {
             "runs": len(rs), "tokens_median": g["tokens_median"], "cost_usd_median": g["cost_usd_median"],
             "outcomes": runs_report._count_sorted(Counter(runs_report._text(r.get("outcome")) for r in rs))}
     return {

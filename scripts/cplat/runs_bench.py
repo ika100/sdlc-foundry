@@ -1,4 +1,4 @@
-"""`cplat runs benchmark <quick-task|build|ship> [--reset-first]` (spec 099, ADR-035): one fixed task on a clean clone of the
+"""`cplat runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR]` (spec 099, ADR-035): one fixed task on a clean clone of the
 sample repo (one fixed, trusted folder per workflow), run through `cplat headless`, recorded as a run of kind `benchmark` with its usage, and the sample repo reset.
 
 The tasks and the pinned sample revision are in benchmark/tasks.json. Every git / gh call goes through `run`, which tests replace.
@@ -14,6 +14,8 @@ from pathlib import Path
 
 import runs
 import runs_usage
+import runs_usage_report
+import settings
 import transcripts
 from core import PlatformError
 
@@ -167,6 +169,30 @@ def _run_headless(argv: list[str], rid: str | None) -> str:
                 os.environ[k] = v
 
 
+def plugin_args(plugins: str, clone: Path) -> tuple[list[str], dict]:
+    """`--plugin-dir` args for the plugins the clone enables, and the record's `plugins` section (spec 100)."""
+    folder = Path(plugins).resolve()
+    try:
+        enabled = json.loads((clone / ".claude" / "settings.json").read_text()).get("enabledPlugins") or {}
+    except (OSError, ValueError, AttributeError):
+        enabled = {}
+    names = [k.split("@")[0] for k, v in enabled.items() if v is True]
+    args: list[str] = []
+    for name in names:
+        manifest = folder / name / ".claude-plugin" / "plugin.json"
+        try:
+            ok = json.loads(manifest.read_text()).get("name") == name
+        except (OSError, ValueError, AttributeError):
+            ok = False
+        if not ok:
+            raise PlatformError(f"--plugins {folder}: the sample enables plugin '{name}', but {manifest} is missing or names another plugin")
+        args += ["--plugin-dir", str(folder / name)]
+    code, out, _ = run(["git", "-C", str(folder), "rev-parse", "HEAD"])
+    commit = out.strip() if code == 0 else ""
+    dirty = bool(run(["git", "-C", str(folder), "status", "--porcelain"])[1].strip()) if commit else False
+    return args, {"dir": str(folder), "commit": commit, "dirty": dirty}
+
+
 def steps(task: dict) -> list[tuple[str, str]]:
     """The task's prompts as (phase name, prompt): `steps` for a workflow that needs several commands, else `prompt` alone."""
     if task.get("steps"):
@@ -185,6 +211,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("workflow", choices=["quick-task", "build", "ship"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
+    ap.add_argument("--plugins", metavar="DIR", help="run with the plugins in DIR (this worktree's plugins/) instead of the installed ones")
     ns = ap.parse_args(argv)
     tasks = json.loads((BENCH_DIR / "tasks.json").read_text())
     repo, rev = tasks["sample"]["repo"], tasks["sample"]["rev"]
@@ -209,6 +236,8 @@ def main(argv: list[str]) -> int:
     except RuntimeError as e:
         raise PlatformError(f"sample repo {repo} could not be prepared: {e}") from None
 
+    plugin_flags, plugin_info = plugin_args(ns.plugins, clone) if ns.plugins else ([], None)
+    model, _ = settings.coordinator_model(clone, steps(task)[0][1], None)
     rid = runs.start("benchmark", repo=repo, mode="headless")
     if rid:
         runs_usage.register(rid, mode="own", project_dir=str(runs_usage.projects_root() / transcripts.cwd_slug(clone)))
@@ -218,7 +247,7 @@ def main(argv: list[str]) -> int:
         for name, prompt in steps(task):   # e.g. build: plan, then build; each its own phase, a failed step stops the run
             runs.phase(rid, f"benchmark:{name}")
             outcome = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]),
-                                     "--max-minutes", str(task["max_minutes"]), prompt], rid)
+                                     "--max-minutes", str(task["max_minutes"]), *plugin_flags, prompt], rid)
             if outcome != "done":
                 check = f"step {name} did not finish"
                 break
@@ -241,11 +270,13 @@ def main(argv: list[str]) -> int:
             pass
         runs.finish(rid, outcome, fields={"benchmark": {
             "workflow": ns.workflow, "task_version": task["task_version"], "sample_repo": repo, "sample_rev": rev,
-            "reset": reset, "reset_note": note, "result_check": check}})
+            "reset": reset, "reset_note": note, "result_check": check,
+            "plugins": plugin_info, "coordinator_model": model}})
     if reset == "failed":
         raise PlatformError(f"reset of sample repo {repo} failed: {note}; the benchmark record was written",
                             hint=f"cplat runs benchmark {ns.workflow} --reset-first")
     tokens, cost, prices = _summary(usage)
     print(f"benchmark {ns.workflow} v{task['task_version']} on {repo}@{rev[:7]}: {outcome}, {tokens} tokens, "
           f"est. USD {cost} (prices of {prices}); reset {reset}" + (f"; {check}" if check else ""))
+    print(f"plugins {runs_usage_report.plugins_label(plugin_info) if plugin_info else 'installed'}, coordinator {model}")
     return 0 if outcome == "done" else 1

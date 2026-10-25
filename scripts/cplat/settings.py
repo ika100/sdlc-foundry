@@ -1,0 +1,71 @@
+"""Settings files (spec 100, ADR-036): a project file and a user file with the same schema, both optional.
+
+  <repo>/.platform-settings.yml                          committed, project-owned
+  ${XDG_CONFIG_HOME:-~/.config}/sdlc-foundry/settings.yml   personal
+
+`coordinator_model` is a model name (every workflow) or a map `{default: ..., <workflow>: ...}`. Precedence: the
+`--model` flag, project (workflow, then general), user (workflow, then general), then `sonnet`.
+"""
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+import yaml
+
+from core import PlatformError
+
+MODELS = ("sonnet", "opus", "haiku")
+DEFAULT_MODEL = "sonnet"
+PROJECT_FILE = ".platform-settings.yml"
+
+
+def user_file() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / "sdlc-foundry" / "settings.yml"
+
+
+def workflow_of(prompt: str) -> str | None:
+    m = re.match(r"^/(?:[a-z0-9-]+:)?([a-z0-9-]+)", prompt.strip())
+    return m.group(1) if m else None
+
+
+def _check(value: object, where: str) -> str:
+    if value not in MODELS:
+        raise PlatformError(f"unknown coordinator model '{value}' in {where}: use sonnet, opus or haiku")
+    return value  # type: ignore[return-value]
+
+
+def _read(path: Path) -> tuple[str | None, dict[str, str]]:
+    """(general model, per-workflow models) of one file, every value validated."""
+    if not path.is_file():
+        return None, {}
+    try:
+        data = yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError) as e:
+        raise PlatformError(f"{path} cannot be read: {e}") from None
+    value = data.get("coordinator_model") if isinstance(data, dict) else None
+    if value is None:
+        return None, {}
+    if isinstance(value, str):
+        return _check(value, f"{path} (coordinator_model)"), {}
+    if not isinstance(value, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
+        raise PlatformError(f"{path}: coordinator_model must be a model name or a map of model names")
+    mapped = {k: _check(v, f"{path} (coordinator_model.{k})") for k, v in value.items()}
+    return mapped.pop("default", None), mapped
+
+
+def coordinator_model(repo: Path, prompt: str, flag: str | None) -> tuple[str, str]:
+    """(model, source) for a headless run; raises PlatformError for an unknown name anywhere."""
+    if flag is not None:
+        _check(flag, "--model")
+    files = [("project", *_read(repo / PROJECT_FILE)), ("user", *_read(user_file()))]
+    if flag is not None:
+        return flag, "flag"
+    workflow = workflow_of(prompt)
+    for source, general, by_workflow in files:
+        hit = by_workflow.get(workflow) if workflow else None
+        if hit or general:
+            return (hit or general), source  # type: ignore[return-value]
+    return DEFAULT_MODEL, "default"
