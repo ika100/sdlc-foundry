@@ -18,12 +18,14 @@ tasks:
   covers: [AC-091.6, AC-091.7, AC-091.8, AC-091.9, AC-091.11, AC-091.14, AC-091.15]
   parallel_safe: true
   depends_on: [t1]
+  done: true
 - id: t3
   title: ship deploy runs smoke in dev, escalates red, resumes smoke-only
   files: [scripts/cplat/ship.py]
   covers: [AC-091.6, AC-091.7, AC-091.8, AC-091.9, AC-091.11, AC-091.12, AC-091.14, AC-091.15]
   parallel_safe: true
   depends_on: [t2]
+  done: true
 - id: t4
   title: service-python smoke recipe, pytest plugin and example test
   files: [templates/service-python/devbox.json, templates/service-python/scripts/smoke.sh, templates/service-python/scripts/smoke_pytest.py,
@@ -57,6 +59,7 @@ tasks:
   covers: [AC-091.2, AC-091.3, AC-091.4, AC-091.16]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t8
   title: update-service adds Playwright to web repos that opted out
   files: [scripts/cplat/update.py]
