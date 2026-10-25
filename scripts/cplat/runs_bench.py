@@ -1,0 +1,174 @@
+"""`cplat runs benchmark <quick-task|build|ship> [--reset-first]` (spec 099, ADR-035): one fixed task on a fresh clone of the
+sample repo, run through `cplat headless`, recorded as a run of kind `benchmark` with its usage, and the sample repo reset.
+
+The tasks and the pinned sample revision are in benchmark/tasks.json. Every git / gh call goes through `run`, which tests replace.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import runs
+import runs_usage
+import transcripts
+from core import PlatformError
+
+BENCH_DIR = Path(__file__).resolve().parent / "benchmark"
+GIT_IDENTITY = ["-c", "user.name=cplat-benchmark", "-c", "user.email=benchmark@invalid"]
+
+
+def run(cmd: list[str], cwd: Path | str | None = None) -> tuple[int, str, str]:   # tests replace this
+    try:
+        p = subprocess.run([str(c) for c in cmd], cwd=cwd, capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.SubprocessError) as e:
+        return 127, "", f"{type(e).__name__}: {e}"
+    return p.returncode, p.stdout, p.stderr
+
+
+def _why(out: str, err: str) -> str:
+    lines = [ln.strip() for ln in (err or out or "").strip().splitlines() if ln.strip()]
+    return (lines[-1] if lines else "no output")[:200]
+
+
+def _ok(cmd: list[str], cwd: Path | str | None = None) -> str:
+    code, out, err = run(cmd, cwd)
+    if code != 0:
+        raise RuntimeError(f"`{' '.join(str(c) for c in cmd[:3])}` failed: {_why(out, err)}")
+    return out
+
+
+def _remote_main(url: str) -> str:
+    code, out, err = run(["git", "ls-remote", url, "refs/heads/main"])
+    if code != 0:
+        raise RuntimeError(_why(out, err))
+    return out.split()[0] if out.split() else ""
+
+
+def reset_sample(repo: str, rev: str, clone: Path) -> None:
+    """Close the open PRs (and delete their branches), delete the other branches and the tags that are not ancestors of
+    `rev` (with their releases), force main back to `rev` and check it. Raises RuntimeError with the reason."""
+    url = f"https://github.com/{repo}"
+    try:
+        prs = json.loads(_ok(["gh", "pr", "list", "--repo", repo, "--state", "open", "--json", "number", "--limit", "100"]) or "[]")
+    except ValueError:
+        prs = []
+    for pr in prs if isinstance(prs, list) else []:
+        if isinstance(pr, dict) and isinstance(pr.get("number"), int):
+            _ok(["gh", "pr", "close", str(pr["number"]), "--repo", repo, "--delete-branch"])
+    for line in _ok(["git", "ls-remote", "--heads", url], clone).splitlines():
+        ref = line.split()[-1] if line.split() else ""
+        if ref.startswith("refs/heads/") and ref != "refs/heads/main":
+            _ok(["git", "push", url, "--delete", ref], clone)
+    for line in _ok(["git", "ls-remote", "--tags", url], clone).splitlines():
+        ref = line.split()[-1] if line.split() else ""
+        if not ref.startswith("refs/tags/") or ref.endswith("^{}"):
+            continue
+        tag = ref[len("refs/tags/"):]
+        code, out, _ = run(["gh", "api", f"repos/{repo}/compare/{tag}...{rev}", "-q", ".status"])
+        if code == 0 and out.strip() in ("ahead", "identical"):
+            continue
+        run(["gh", "release", "delete", tag, "--repo", repo, "--yes"])   # a tag may have no release
+        _ok(["git", "push", url, "--delete", ref], clone)
+    _ok(["git", "push", "--force", url, f"{rev}:refs/heads/main"], clone)
+    if _remote_main(url) != rev:
+        raise RuntimeError(f"main of {repo} is not at {rev[:7]} after the reset")
+
+
+def _prepare(url: str, rev: str, task: dict, clone: Path) -> None:
+    clone.parent.mkdir(parents=True, exist_ok=True)
+    _ok(["git", "clone", url, str(clone)])
+    run(["git", "fetch", "origin", rev], clone)   # the pinned commit may no longer be on a branch
+    _ok(["git", "checkout", "-B", "main", rev], clone)
+    if task.get("spec_file"):
+        target = clone / "docs" / "specs" / task["spec_id"] / "spec.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(BENCH_DIR / task["spec_file"], target)
+        _ok(["git", "add", "docs/specs"], clone)
+        _ok(["git", *GIT_IDENTITY, "commit", "-m", f"docs(spec): {task['spec_id']} (benchmark)"], clone)
+
+
+def _run_headless(argv: list[str], rid: str | None) -> str:
+    import headless
+    saved = {k: os.environ.get(k) for k in ("CPLAT_RUN_PARENT", "CPLAT_BENCHMARK")}
+    if rid:
+        os.environ["CPLAT_RUN_PARENT"] = os.environ["CPLAT_BENCHMARK"] = rid
+    try:
+        return "done" if headless.main(argv) == 0 else "failed"
+    except Exception as e:  # noqa: BLE001  (the benchmark is recorded as failed)
+        print(f"benchmark: headless stopped with {type(e).__name__}: {e}", flush=True)
+        return "failed"
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def _summary(usage: dict | None) -> tuple[int, str, str]:
+    t = (usage or {}).get("totals") or {}
+    tokens = sum(int(t.get(f) or 0) for f in ("input", "output", "cache_read", "cache_write"))
+    cost = t.get("cost_usd")
+    return tokens, f"{cost:.2f}" if isinstance(cost, (int, float)) else "unknown", str((usage or {}).get("price_table"))
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="cplat runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("workflow", choices=["quick-task", "build", "ship"])
+    ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
+    ns = ap.parse_args(argv)
+    tasks = json.loads((BENCH_DIR / "tasks.json").read_text())
+    repo, rev = tasks["sample"]["repo"], tasks["sample"]["rev"]
+    task = tasks["workflows"][ns.workflow]
+    url = f"https://github.com/{repo}"
+    try:
+        main_now = _remote_main(url)
+    except RuntimeError as e:
+        raise PlatformError(f"sample repo {repo} cannot be reached: {e}") from None
+    if main_now != rev and not ns.reset_first:
+        raise PlatformError(f"sample repo {repo}: main is at {main_now[:7] or 'nothing'}, not the pinned {rev[:7]}",
+                            hint=f"cplat runs benchmark {ns.workflow} --reset-first")
+    clone = runs.state_dir() / "benchmark" / f"{ns.workflow}-{runs.utcnow():%Y%m%dT%H%M%SZ}"
+    try:
+        _prepare(url, rev, task, clone)
+        if main_now != rev:
+            reset_sample(repo, rev, clone)
+    except RuntimeError as e:
+        raise PlatformError(f"sample repo {repo} could not be prepared: {e}") from None
+
+    rid = runs.start("benchmark", repo=repo, mode="headless")
+    if rid:
+        runs_usage.register(rid, mode="own", project_dir=str(runs_usage.projects_root() / transcripts.cwd_slug(clone)))
+    runs.phase(rid, "benchmark:run")
+    outcome, reset, note = "failed", "not run", None
+    usage = None
+    try:
+        outcome = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]), "--max-minutes", str(task["max_minutes"]),
+                                 task["prompt"]], rid)
+    finally:
+        runs.phase(rid, "benchmark:reset")
+        try:
+            reset_sample(repo, rev, clone)
+            reset = "done"
+        except Exception as e:  # noqa: BLE001
+            reset, note = "failed", f"{type(e).__name__}: {e}"[:200]
+        try:
+            active = runs.active(rid)
+            if active is not None:
+                usage = runs_usage.for_run(active, ended_at=runs._iso(runs.utcnow()))
+        except Exception:  # noqa: BLE001
+            pass
+        runs.finish(rid, outcome, fields={"benchmark": {
+            "workflow": ns.workflow, "task_version": task["task_version"], "sample_repo": repo, "sample_rev": rev,
+            "reset": reset, "reset_note": note}})
+    if reset == "failed":
+        raise PlatformError(f"reset of sample repo {repo} failed: {note}; the benchmark record was written",
+                            hint=f"cplat runs benchmark {ns.workflow} --reset-first")
+    tokens, cost, prices = _summary(usage)
+    print(f"benchmark {ns.workflow} v{task['task_version']} on {repo}@{rev[:7]}: {outcome}, {tokens} tokens, "
+          f"est. USD {cost} (prices of {prices}); reset {reset}")
+    return 0 if outcome == "done" else 1

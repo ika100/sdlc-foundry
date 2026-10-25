@@ -21,6 +21,7 @@ import shlex
 import shutil
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 import runs as runlog
@@ -200,7 +201,11 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         runs += 1
         state["sessions"] = runs
         print(f"run {runs}/{ns.max_runs}: {prompt}  (log: {log})", flush=True)
-        code = run_once(cmd, repo, log, left, rid)
+        sid = str(uuid.uuid4())
+        if rid:
+            import runs_usage
+            runs_usage.register(rid, mode="own", session=sid)
+        code = run_once(cmd + ["--session-id", sid], repo, log, left, rid)
         st = unfinished(repo)
         if st is None:
             result = describe_end(repo, code)

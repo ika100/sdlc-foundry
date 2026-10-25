@@ -19,9 +19,14 @@ A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (o
                                                                      hooks for agent metrics (spec 089, runs_agents)
 
   cplat runs init <owner/name> | flush | report [--json] [--since DAYS] [--repo R]
-              [--agents [--by-version] [--agent NAME] [--shape SHAPE]]
-  cplat runs begin <kind> [--spec S] | phase <name> | end --outcome O [--reason R] [--cause C]
+              [--agents [--by-version] [--agent NAME] [--shape SHAPE] | --benchmarks]
+  cplat runs begin <kind> [--spec S] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
   cplat runs agent <event> ...                                       agent metrics of the current run (spec 089)
+  cplat runs usage <run_id> | --session <id> [--json]                tokens and estimated cost per run (spec 099)
+  cplat runs benchmark <quick-task|build|ship> [--reset-first]       fixed task on the sample repo (spec 099)
+
+Usage (spec 099, ADR-035): `start` registers the Claude Code session as a claim, `finish` adds the `usage` section
+from the local transcripts (runs_usage) and fills missing `gates` of ship / build runs with "not run".
 """
 from __future__ import annotations
 
@@ -50,6 +55,8 @@ SCHEMA = 1
 KINDS = ("ship", "build", "headless", "pr-wait", "fleet", "retro", "product-ship")   # documentation; any valid kind works
 OUTCOMES = ("done", "escalated", "failed", "abandoned")
 CAUSES = ("platform", "code", "decision", "environment", "unknown")
+GATES = ("acceptance", "security")
+GATE_RESULTS = ("passed", "failed")
 RERUN_REASONS = ("stale", "stuck", "transient")
 FILED_RESULTS = ("new", "+1", "suppressed", "pending")
 BUFFER_CAP = 1000
@@ -57,13 +64,14 @@ BUDGET_SECONDS = 20.0
 BATCH = 200
 MAX_TEXT = 500
 RESERVED = {"schema", "run_id", "kind", "repo", "spec", "platform_version", "mode", "started_at", "ended_at", "phases",
-            "ci_rounds", "reruns", "escalation", "filed", "outcome", "resumes", "parent"}
+            "ci_rounds", "reruns", "escalation", "filed", "outcome", "resumes", "parent", "usage", "gates"}
 FILERS: dict[str, Callable[[dict, float], tuple[str, str]]] = {}   # name -> retry(entry, timeout) -> (url, result)
 
 _KIND_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _SLUG_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 _MODULE_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
-_IDENTIFIERS = {"run_id", "resumes", "parent", "repo", "spec", "platform_version", "started_at", "ended_at"}
+_IDENTIFIERS = {"run_id", "resumes", "parent", "repo", "spec", "platform_version", "started_at", "ended_at",
+                "benchmark_of"}
 
 
 def utcnow() -> datetime.datetime:   # tests replace this
@@ -237,13 +245,30 @@ def start(kind: str, *, repo: str | None = None, spec: str | None = None, mode: 
             "escalation": None, "filed": [], "outcome": None, "resumes": resumes,
             "parent": parent or os.environ.get("CPLAT_RUN_PARENT") or None,
         }
+        if os.environ.get("CPLAT_BENCHMARK"):
+            rec["benchmark_of"] = os.environ["CPLAT_BENCHMARK"]
         with _locked():
             if _read_active(run_id) is None:
                 _write_active(rec)
     except Exception:  # noqa: BLE001  (recording never changes a run)
         return None
     link_parent(run_id)
+    _register_claim(kind, run_id, rec["started_at"])
     return run_id
+
+
+def _register_claim(kind: str, run_id: str, started_at: str) -> None:
+    """Spec 099: claim the Claude Code session this run was started in. Never raises."""
+    session = os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip()
+    if not session or kind in ("headless", "benchmark"):
+        return
+    try:
+        import runs_usage
+        cwd = Path.cwd()
+        top = core.run(["git", "rev-parse", "--show-toplevel"], cwd=cwd, check=False).stdout.strip()
+        runs_usage.register(run_id, mode="claim", session=session, started_at=started_at, dir=top or str(cwd))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def link_parent(run_id: str | None) -> None:
@@ -487,6 +512,8 @@ def _scrub(value, chain: tuple[str, ...] = ()):
     if isinstance(value, list):
         return [_scrub(v, chain) for v in value]
     if isinstance(value, str):
+        if chain[:2] == ("usage", "sessions"):
+            return value
         if chain and (chain[0] in _IDENTIFIERS or chain == ("ships",) or (chain[0] == "phases" and chain[-1] in ("started_at", "ended_at"))
                       or chain == ("filed", "url")):
             return value
@@ -508,13 +535,15 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
     were dropped; otherwise None. Never raises."""
     if not run_id:
         return None
-    t0, dropped = monotonic(), 0
+    dropped = 0
+    now = _iso(utcnow())
+    usage = _collect_usage(run_id, now)
+    t0 = monotonic()
     try:
         with _locked():
             rec = _read_active(run_id)
             if rec is None:
                 return None
-            now = _iso(utcnow())
             for p in rec["phases"]:
                 if p.get("ended_at") is None:
                     p["ended_at"] = now
@@ -526,6 +555,11 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
             for k, v in (fields or {}).items():
                 if k not in RESERVED:
                     rec[k] = v
+            if usage is not None:
+                rec["usage"] = usage
+            if rec.get("kind") in ("ship", "build"):
+                gates = rec["gates"] if isinstance(rec.get("gates"), dict) else {}
+                rec["gates"] = {g: gates.get(g, "not run") for g in GATES}
             _merge_incomplete(rec)
             rec = _scrub(rec)
             dropped = _buffer_add(rec)
@@ -542,6 +576,21 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
     if still or dropped:
         return _emit(_warning(why or "recording failed: record not written", buffered_count(), dropped))
     return None
+
+
+def _collect_usage(run_id: str, now: str) -> dict | None:
+    """The `usage` section of an active run, read from a copy outside the lock. Never raises."""
+    try:
+        rec = _read_active(run_id)
+        if rec is None:
+            return None
+        for p in rec.get("phases") or []:
+            if p.get("ended_at") is None:
+                p["ended_at"] = now
+        import runs_usage
+        return runs_usage.for_run(rec, ended_at=now)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _safe_buffer() -> list[dict]:
@@ -729,6 +778,8 @@ def _read_pointer(path: Path | None) -> dict | None:
 
 
 def _report(ns: argparse.Namespace) -> int:
+    if ns.benchmarks and ns.agents:
+        raise PlatformError("--benchmarks and --agents cannot be combined", hint="run them as two reports")
     if not ns.agents and (ns.by_version or ns.agent or ns.shape):
         raise PlatformError("--by-version, --agent and --shape need --agents", hint="cplat runs report --agents ...")
     slug = configured_repo()
@@ -744,6 +795,12 @@ def _report(ns: argparse.Namespace) -> int:
     except runs_store.StoreError as e:
         raise PlatformError(f"run store {slug} is unreachable: {e}", hint=f"gh repo view {slug}   (is gh logged in, and may it read the repo?)") from None
     records, follows, malformed = runs_report.parse([text for _, text in files])
+    if ns.benchmarks:
+        import runs_usage_report
+        agg = runs_usage_report.aggregate_benchmarks(records, since_days=ns.since, repo=ns.repo, store=slug, now=now,
+                                                     malformed=malformed)
+        print(json.dumps(agg, indent=2) if ns.json else runs_usage_report.render_benchmarks_text(agg))
+        return 0
     if ns.agents:
         agg = runs_report.aggregate_agents(records, malformed=malformed, buffered=buffered_count(), since_days=ns.since,
                                            repo=ns.repo, agent=ns.agent, shape=ns.shape, by_version=ns.by_version,
@@ -776,16 +833,20 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--by-version", action="store_true", help="with --agents: one row per platform version")
     r.add_argument("--agent", metavar="NAME", help="with --agents: only this agent (or role)")
     r.add_argument("--shape", metavar="SHAPE", help="with --agents: only this shape")
+    r.add_argument("--benchmarks", action="store_true", help="benchmark runs per workflow and platform version (spec 099)")
     b = sub.add_parser("begin", help="start a run record (for markdown commands)")
     b.add_argument("kind")
     b.add_argument("--spec")
     ph = sub.add_parser("phase", help="open a phase of the current run")
     ph.add_argument("name")
+    g = sub.add_parser("gate", help="record the result of a gate of the current run")
+    g.add_argument("gate", choices=GATES)
+    g.add_argument("result", choices=GATE_RESULTS)
     e = sub.add_parser("end", help="end the current run")
     e.add_argument("--outcome", required=True, choices=OUTCOMES)
     e.add_argument("--reason", default="")
     e.add_argument("--cause", default=None)
-    for s in (b, ph, e):
+    for s in (b, ph, g, e):
         s.add_argument("--dir", default=".")
     return p
 
@@ -794,6 +855,12 @@ def main(argv: list[str]) -> int:
     if argv[:1] == ["agent"]:
         import runs_agents
         return runs_agents.main(argv[1:])
+    if argv[:1] == ["usage"]:
+        import runs_usage_cli
+        return runs_usage_cli.main(argv[1:])
+    if argv[:1] == ["benchmark"]:
+        import runs_bench
+        return runs_bench.main(argv[1:])
     ns = build_parser().parse_args(argv)
     if ns.cmd == "init":
         for line in init(ns.slug):
@@ -845,6 +912,9 @@ def _recording_command(ns: argparse.Namespace) -> None:
     elif ns.cmd == "phase":
         if current:
             phase(current.get("run_id"), ns.name)
+    elif ns.cmd == "gate":
+        if current:
+            _mutate(current.get("run_id"), lambda rec: rec.setdefault("gates", {}).__setitem__(ns.gate, ns.result))
     elif ns.cmd == "end":
         if not current:
             return
