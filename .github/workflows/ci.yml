@@ -215,10 +215,22 @@ jobs:
           test -f /tmp/test-service-python/uv.lock
           cp -r /tmp/test-service-python /tmp/stale-lock
           cd /tmp/stale-lock
-          sed -i 's/^dependencies = \[/dependencies = [\n    "httpx-stale-lock-check>=0",/' pyproject.toml
-          if uv sync --locked --no-dev --no-install-project; then
+          sed -i 's/^dependencies = \[/dependencies = [\n    "six>=1",/' pyproject.toml
+          if uv sync --locked --no-dev --no-install-project >/tmp/stale.out 2>&1; then
             echo "uv sync --locked accepted a stale lock"; exit 1
           fi
+          grep -q "needs to be updated" /tmp/stale.out || { cat /tmp/stale.out; echo "failed for another reason"; exit 1; }
+      # Spec 104: observability off renders a service that passes its own tests
+      - name: Observability off renders and tests
+        if: matrix.template == 'service-python'
+        run: |
+          copier copy ./templates/service-python /tmp/test-obs-off --defaults --trust --skip-tasks \
+            --data project_name=test-obs-off --data module_name=test_off --data needs_observability=false \
+            --data description="Smoke test"
+          cd /tmp/test-obs-off
+          uv sync --all-extras
+          test ! -e src/test_off/metrics.py
+          SMOKE_BASE_URL='' uv run python -m pytest tests/test_health.py -q
       # Spec 091: the real smoke runner against a running instance of the service
       - name: Smoke tests against a running service
         if: matrix.template == 'service-python'
@@ -231,7 +243,7 @@ jobs:
           uv run uvicorn test_svc.main:app --port 18080 &
           for _ in $(seq 1 30); do curl -sf localhost:18080/health && break; sleep 1; done
           SMOKE_BASE_URL=http://127.0.0.1:18080 bash scripts/smoke.sh | tee /tmp/smoke.out
-          grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
+          grep -qx "smoke: 2 passed, 0 failed, 0 skipped" /tmp/smoke.out
 
   smoke-test-gitops-app:
     name: smoke-test gitops-app template
@@ -328,9 +340,10 @@ jobs:
           cd /tmp/stale-lock
           rm -rf node_modules
           sed -i 's/"dependencies": {/"dependencies": {\n    "is-odd": "3.0.1",/' package.json
-          if npx -y pnpm@11.22.0 install --frozen-lockfile; then
+          if npx -y pnpm@11.22.0 install --frozen-lockfile >/tmp/stale.out 2>&1; then
             echo "pnpm install --frozen-lockfile accepted a stale lock"; exit 1
           fi
+          grep -q "ERR_PNPM_OUTDATED_LOCKFILE" /tmp/stale.out || { cat /tmp/stale.out; echo "failed for another reason"; exit 1; }
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-web
         run: |
