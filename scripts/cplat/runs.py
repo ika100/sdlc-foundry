@@ -710,6 +710,8 @@ def init(slug: str) -> list[str]:
     if vis != "private":
         raise PlatformError(f"{slug} is {vis}: the run store must be private; nothing was changed",
                             hint=f"gh repo edit {slug} --visibility private --accept-visibility-change-consequences, or choose another name")
+    import retro_setup
+    lines += retro_setup.install_schedule(store, slug)
     lines.append(f"export CPLAT_RUNS_REPO={slug}   # add this to your shell profile")
     return lines
 
