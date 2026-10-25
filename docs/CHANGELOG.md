@@ -6,6 +6,14 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (100): leaner runs — cheaper coordinator, fewer turns, smaller context.** [ADR-036](adr/036-coordinator-model-default-and-settings.md), [ADR-037](adr/037-cplat-bundles-honour-the-allowlist.md)
+  - **Behaviour change:** headless sessions start the coordinator on **Sonnet** (`cplat headless --model sonnet|opus|haiku`; `coordinator_model` in `.platform-settings.yml` or `~/.config/sdlc-foundry/settings.yml`, also per workflow). Architect, reviewer and product-manager keep their own model.
+  - `cplat pr open` commits (`-s`), pushes and opens the PR in one step (idempotent; ends at a ready PR when `gh pr create` is not allowed). quick-task, fix-bug and build use it; PR bodies go to `.pr-body.md` (cplat moves them out of the work tree; Claude Code refuses edits under `.git/`).
+  - `cplat quiet <script>`: one line on success, the tail and the log path on failure. Agent briefs carry the criteria, task, contract, tests and commands; agents read spec/plan/design only for what the brief lacks. The Python templates' `test-fast` is `-q --tb=line`.
+  - Rare branches of build, ship and quick-task live in `plugins/svc/references/`, read when the branch is taken.
+  - `cplat runs benchmark … --model M --plugins <worktree>/plugins` measures unreleased plugins (and their `cplat`).
+  - Measured (benchmark on `ika100/todo-api`, estimated list prices): quick-task **$0.48 → $0.15**, build **$1.94 → $1.26** (median of two), every run done with a PR and green gates. Most of it comes from the Sonnet coordinator and `cplat pr open`. Details: docs/specs/100-leaner-runs-cheaper-coordinator-fewer/benchmarks.md.
+  - Found on the way: `build.md` told the coordinator that push/PR need confirmation; testers wrote files through shell heredocs (now Write/Edit only).
 - **Feat (097): `/app:ship` ships a whole product across repos.** [ADR-042](adr/042-product-ship-coordinates-repo-ships.md)
   - `cplat app-ship` (state in the gitops-app's git dir, never committed) coordinates one `cplat ship` per component repo: the spec/plan PR is merged on green first, repos run in plan order (at most `--max`, default 3) once their dependencies passed their gate (exposed service: Synced/Healthy and passing smoke; internal service: Synced/Healthy; library: merged PR), and the gitops-app's PRs merge one at a time through a merge slot. `cplat ship start --product DIR` links a repo ship to the product run. A repo that escalates stops its dependents only. One `product-ship` run record is written at the run end.
   - New command `/app:ship <spec> [--max N] [--context C]`; a second Stop hook entry keeps the session going until the run is done or escalated. `/app:build` is unchanged. It refuses without a kube context for the product's cluster.
