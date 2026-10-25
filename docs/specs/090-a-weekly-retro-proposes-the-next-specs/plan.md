@@ -72,7 +72,7 @@ human_steps:
 
 The contract for every task is [design.md](design.md): the CLI, `report.json`, the evidence index, `proposals.json`,
 the post order, the store layout and the workflow asset. ADR:
-[036](../../adr/039-weekly-retro-evidence-checked-proposals.md). The acceptance tests in `tests/cplat/` exist before
+[039](../../adr/039-weekly-retro-evidence-checked-proposals.md). The acceptance tests in `tests/cplat/` exist before
 coding starts. They fake `runs.open_store` (the `MemStore` of `test_runs.py`, extended with `read_file`),
 `runs_store.gh`, `retro_github.tracker()` and `runs.utcnow`. No test touches GitHub.
 
