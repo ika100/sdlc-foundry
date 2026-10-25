@@ -78,7 +78,7 @@ def world(clock, store, projects, monkeypatch):
         write_session(projects, "bench-session", [call("b1", 5), call("b2", 6)], slug=transcripts.cwd_slug(clone))
         clock.now += dt.timedelta(seconds=30)
         w.delivered_pr = 12
-        w.env = {k: __import__("os").environ.get(k) for k in ("CPLAT_RUN_PARENT", "CPLAT_BENCHMARK")}
+        w.env = {k: __import__("os").environ.get(k) for k in ("CPLAT_RUN_PARENT", "CPLAT_BENCHMARK", "CPLAT_PLATFORM")}
         return 0
     monkeypatch.setattr(headless, "main", fake_headless)
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "")

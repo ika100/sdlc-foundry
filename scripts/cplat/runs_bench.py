@@ -151,11 +151,15 @@ def _prepare(url: str, rev: str, task: dict, clone: Path) -> None:
         _ok(["git", *GIT_IDENTITY, "commit", "-m", f"docs(spec): {task['spec_id']} (benchmark)"], clone)
 
 
-def _run_headless(argv: list[str], rid: str | None) -> str:
+def _run_headless(argv: list[str], rid: str | None, platform: Path | None = None) -> str:
+    """`platform`: the checkout whose plugins run (--plugins). Its `cplat` must run too: the installed shared plugin's bin/ comes
+    first on the session's PATH, so the launcher is pointed there with CPLAT_PLATFORM."""
     import headless
-    saved = {k: os.environ.get(k) for k in ("CPLAT_RUN_PARENT", "CPLAT_BENCHMARK")}
+    saved = {k: os.environ.get(k) for k in ("CPLAT_RUN_PARENT", "CPLAT_BENCHMARK", "CPLAT_PLATFORM")}
     if rid:
         os.environ["CPLAT_RUN_PARENT"] = os.environ["CPLAT_BENCHMARK"] = rid
+    if platform:
+        os.environ["CPLAT_PLATFORM"] = str(platform)
     try:
         return "done" if headless.main(argv) == 0 else "failed"
     except Exception as e:  # noqa: BLE001  (the benchmark is recorded as failed)
@@ -238,6 +242,7 @@ def main(argv: list[str]) -> int:
         raise PlatformError(f"sample repo {repo} could not be prepared: {e}") from None
 
     plugin_flags, plugin_info = plugin_args(ns.plugins, clone) if ns.plugins else ([], None)
+    platform = Path(ns.plugins).resolve().parent if ns.plugins else None   # <checkout>/plugins → <checkout>
     model, _ = settings.coordinator_model(clone, steps(task)[0][1], ns.model)
     model_flags = ["--model", ns.model] if ns.model else []
     rid = runs.start("benchmark", repo=repo, mode="headless")
@@ -249,7 +254,7 @@ def main(argv: list[str]) -> int:
         for name, prompt in steps(task):   # e.g. build: plan, then build; each its own phase, a failed step stops the run
             runs.phase(rid, f"benchmark:{name}")
             outcome = _run_headless(["--repo", str(clone), "--max-runs", str(task["max_runs"]),
-                                     "--max-minutes", str(task["max_minutes"]), *model_flags, *plugin_flags, prompt], rid)
+                                     "--max-minutes", str(task["max_minutes"]), *model_flags, *plugin_flags, prompt], rid, platform)
             if outcome != "done":
                 check = f"step {name} did not finish"
                 break

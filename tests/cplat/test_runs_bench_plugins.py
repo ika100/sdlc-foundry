@@ -123,3 +123,14 @@ def test_the_benchmark_passes_an_explicit_coordinator_model(world, store):
     assert argv[argv.index("--model") + 1] == "opus"
     (r,) = benchmark_records(store)
     assert r["benchmark"]["coordinator_model"] == "opus"
+
+
+def test_the_sessions_run_the_checkouts_cplat_too(plugins_world, store):
+    """With --plugins the session's `cplat` must be that checkout's (b2: the installed 4.5.0 cplat had no `pr open`); the
+    launcher prefers CPLAT_PLATFORM, so the benchmark sets it for the run and restores it afterwards."""
+    import os
+    w = plugins_world
+    before = os.environ.get("CPLAT_PLATFORM")
+    assert runs.main(["benchmark", "quick-task", "--plugins", str(w.plugins)]) == 0
+    assert w.env["CPLAT_PLATFORM"] == str(w.plugins.resolve().parent)
+    assert os.environ.get("CPLAT_PLATFORM") == before
