@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (091): `cplat ship deploy` uses the configured kube context.** Headless coordinators rarely pass `--context`, so a ship against a real cluster skipped Argo, smoke and the digest check (found in the ship benchmark on the LAN cluster). Without `--context` or a product link, deploy now takes `CPLAT_KUBE_CONTEXT`, then `kube_context:` in `.platform-settings.yml`, then the user settings file, and prints which one. It never guesses from kubectl.
+
 - **Chore (099): the benchmark sample is pinned to `ika100/todo-api@9cba320`** (its 4.6.0 skeleton and the Dependabot bump) instead of resetting them away; every workflow's `task_version` goes up by one, so its records say which sample revision they ran on.
 
 - **Fix: platform updates no longer flag every template change as a local customisation.** The spec 086 baseline (the template at the repo's previous version) is archived from the checkout `cplat` runs from, and the marketplace clone is shallow and has no tags. The baseline was silently missing, so `cplat fleet update` and `/shared:update-service` listed the template's own changes between versions as overwritten customisations and left every PR open. A missing release tag is now fetched from origin first.

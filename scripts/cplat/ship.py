@@ -969,6 +969,11 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     import shapecmd
     st = require_state(repo)
     context = context or (st.get("product") or {}).get("context")
+    if not context:                            # headless coordinators rarely pass --context: take the configured one
+        import settings
+        context, source = settings.kube_context(repo)
+        if context:
+            say(f"kube context: {context} ({source})")
     if st["phase"] == "done":
         return True, ["already done"]
     if not shapecmd.route(repo)["deployable"]:

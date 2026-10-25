@@ -73,6 +73,28 @@ def coordinator_model(repo: Path, prompt: str, flag: str | None) -> tuple[str, s
     return DEFAULT_MODEL, "default"
 
 
+def kube_context(repo: Path) -> tuple[str | None, str | None]:
+    """(context, source) for commands that talk to the product's cluster when no --context is given: CPLAT_KUBE_CONTEXT,
+    then `kube_context:` in the project file, then the user file; (None, None) when none is set. Never guessed."""
+    env = os.environ.get("CPLAT_KUBE_CONTEXT", "").strip()
+    if env:
+        return env, "CPLAT_KUBE_CONTEXT"
+    for source, path in (("project", repo / PROJECT_FILE), ("user", user_file())):
+        if not path.is_file():
+            continue
+        try:
+            data = yaml.safe_load(path.read_text())
+        except (OSError, yaml.YAMLError) as e:
+            raise PlatformError(f"{path} cannot be read: {e}") from None
+        value = data.get("kube_context") if isinstance(data, dict) else None
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value.strip():
+            raise PlatformError(f"{path}: kube_context must be the name of a kube context")
+        return value.strip(), source
+    return None, None
+
+
 BUDGET_KEYS = ("minutes", "invocations", "reruns", "cost")
 
 

@@ -135,6 +135,8 @@ When a run stops because the platform itself misbehaves, the failure is filed as
 
 ## Smoke in dev
 
+The deploy step needs the product's kube context to check Argo, run smoke and read the image digest. Pass `--context`, or set it once: `export CPLAT_KUBE_CONTEXT=<context>` or `kube_context: <context>` in `.platform-settings.yml` or `~/.config/sdlc-foundry/settings.yml`. Without one, smoke is reported as not run.
+
 After dev is healthy, `cplat ship deploy` checks the spec in dev (spec 091, [ADR-040](adr/040-smoke-tests-against-a-deployed-environment.md)).
 
 - **The marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL. The tester writes a smoke-tagged test for it (`cplat spec trace` reports `smoke: no smoke-tagged test` until there is one).
