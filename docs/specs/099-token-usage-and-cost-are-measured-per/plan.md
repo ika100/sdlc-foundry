@@ -275,7 +275,7 @@ green.
 - unattended-delivery.md, next to the run-record and report section: what `usage` holds; that output is "as
   reported" and output cost is a lower bound; delivered vs. gate-failed; how to run a benchmark and what the reset
   does to ika100/todo-api.
-- ADR index row: `| [035](035-token-usage-from-session-transcripts.md) | Token usage is measured from the local
+- ADR index row: `| [035](../../adr/035-token-usage-from-session-transcripts.md) | Token usage is measured from the local
   session transcripts: sessions claimed via CLAUDE_CODE_SESSION_ID, shared calls split evenly, costs estimated from a
   price table in the repo |`.
 
