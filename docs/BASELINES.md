@@ -2,6 +2,18 @@
 
 Measured on the todo end-to-end run (2026-10-06/07, Apple silicon laptop, GitHub-hosted runners). Re-measure after each v2 phase and update the right-hand column.
 
+## Token usage and cost per run (2026-10-25)
+
+Measured with `cplat runs benchmark` (spec 099) on `ika100/todo-api`, Claude Code session transcripts, estimated at list prices (output tokens as the transcripts report them, so output cost is a lower bound). Every run counted here finished with a PR and green gates; failed runs and their causes are in [spec 100's benchmarks](specs/100-leaner-runs-cheaper-coordinator-fewer/benchmarks.md).
+
+| Workflow | Before spec 100 (Opus coordinator) | After spec 100 | |
+|---|---|---|---|
+| quick-task (one small change) | $0.48, 22 calls | **$0.15**, 8 calls | −69% |
+| build (plan + build of a two-criterion spec, median of two runs) | $1.94 | **$1.26** | −35% |
+| A 10-spec delivery round before measuring (085–098, one session) | about $105, 2,287 calls, 42% of it coordination | — | |
+
+Re-measure with `cplat runs benchmark quick-task|build` after changes to the commands, agents or `cplat`; `cplat runs report --benchmarks` shows the median per workflow and platform version.
+
 ## Prompt/token footprint (static)
 
 | Item | v1.1.1 | v2 target |

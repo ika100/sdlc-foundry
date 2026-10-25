@@ -17,6 +17,7 @@ const PAGES = [
   { src: 'docs/AGENTS.md', slug: 'guides/agents', title: 'The agent orchestration model', order: 4 },
   { src: 'docs/ARCHITECTURE.md', slug: 'guides/architecture', title: 'Architecture', order: 5 },
   { src: 'docs/templates.md', slug: 'guides/add-a-shape', title: 'Adding a new shape', order: 6 },
+  { src: 'docs/unattended-delivery.md', slug: 'guides/unattended-delivery', title: 'Unattended delivery, run records and cost', order: 7 },
   { src: 'docs/requirements/platform-vision.md', slug: 'vision/design-history', title: 'Design history: the original vision PRD', order: 9 },
   { src: 'docs/requirements/end-to-end-scenario.md', slug: 'vision/end-to-end-scenario', title: 'Design history: the end-to-end scenario', order: 10 },
   { src: 'docs/BASELINES.md', slug: 'reference/baselines', title: 'Measured baselines', order: 20 },
