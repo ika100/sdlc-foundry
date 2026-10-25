@@ -54,7 +54,7 @@ The contract enforced by this convention:
 - Every service has `k8s/overlays/prod/kustomization.yaml`.
 - Argo `Application` name == GitHub repo name.
 
-Promotion across environments (staging → prod) is the one explicit, human-approved step — `/gitops:promote` pins an image tag in the target overlay and opens a PR. Argo reconciles after merge.
+Promotion to production (staging → prod) is the one explicit, human-approved step — `/gitops:promote` pins an image tag in the target overlay, shows an evidence summary and opens a PR. Staging follows a green dev smoke by itself through the gitops-app's self-merging `pin-staging` PR (spec 093, ADR-041; `promotion: {staging: manual}` switches it off). Argo reconciles after merge.
 
 ## What this is NOT
 

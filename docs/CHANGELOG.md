@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (093): a green dev smoke promotes staging.** [ADR-041](adr/041-staging-follows-green-dev-smoke.md) With `promotion: {staging: auto}` in `app.yaml` (or on a service in `services.yaml`), `cplat ship deploy` dispatches the gitops-app's new `pin-staging.yml`, which opens a self-merging PR, then waits for Argo and runs the staging smoke (red: `smoke-failure` issue, cause `code`, no rollback). `cplat promote … staging prod` prints an evidence summary from the run store first, with a WARNING when the release has no green staging smoke. Prod stays manual. Migration: existing gitops-apps stay off; run `/shared:update-service` to get `pin-staging.yml`, then add `promotion: {staging: auto}` to `app.yaml`. New gitops-apps have it on.
 - **Fix: templates allow `git commit *`.** Listing flag orders (`-m`, `-s -m`, `-q -m` …) kept missing the next one (`-am`, `-a -s -m`), and each stopped a headless build. Commits stay local; `git commit --amend` still asks, and pushes keep their own rules.
 - **Feat (090): a weekly retro proposes the next specs.** [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)
   - `cplat retro [--week W] [--json] [--out DIR]` builds one report of the last complete week from the run store, the auto-filed platform issues and the agent metrics of spec 089, each figure next to the previous week. By hand it prints and writes nothing.

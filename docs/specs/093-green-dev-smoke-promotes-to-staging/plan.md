@@ -31,6 +31,7 @@ tasks:
   covers: [AC-093.11, AC-093.12]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t5
   title: staging_deploy.py dispatches, waits, checks Argo, runs staging smoke, files and escalates
   files: [scripts/cplat/staging_deploy.py]
@@ -49,6 +50,7 @@ tasks:
   covers: [AC-093.11, AC-093.12, AC-093.13, AC-093.14]
   parallel_safe: true
   depends_on: [t4]
+  done: true
 - id: t8
   title: docs, agents and ship command describe automatic staging and manual prod
   files: [docs/USER-JOURNEY.md, docs/HOW-IT-WORKS.md, templates/gitops-app/CLAUDE.md.jinja, plugins/gitops/agents/deployment.md,
@@ -57,6 +59,7 @@ tasks:
   covers: [AC-093.14]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t9
   title: ADR-041 listed in the index, ADR-027 links to it
   files: [docs/adr/README.md, docs/adr/027-dev-follows-main-through-pin-prs.md, docs/adr/041-staging-follows-green-dev-smoke.md]
