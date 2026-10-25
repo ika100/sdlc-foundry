@@ -161,7 +161,7 @@ A root that covers several ships multiplies the defaults: `cplat headless "/svc:
 
 Limits are checked at safe points (before a session, a subagent or a CI rerun, at the end of a phase, before a product ship starts a repo). A run that hits one starts nothing new, escalates with cause `decision` and reason `budget exhausted: <limit>`, and stays resumable: run it again with a higher limit, and the usage continues from where it stopped. Running work is never killed, and no gate is skipped or counted as passed (`not run`).
 
-A stage that fails three times in a row with the same error (timestamps, paths, ids and line numbers removed) and no fewer failing checks stops with `no progress: <stage>`. Every escalation leaves a recovery snapshot in `<git dir>/cplat-recovery.json` (stage, a redacted excerpt, changed files, criteria, earlier attempts; never uploaded), and `cplat budget resume` shows which stages are still verified for the current HEAD, so a resumed run starts at the failing one.
+A stage that fails twice in a row with the same error (timestamps, paths, ids, line numbers and durations removed) and no fewer failing checks stops with `no progress: <stage>`. Every escalation leaves a recovery snapshot in `<git dir>/cplat-recovery.json` (stage, a redacted excerpt, changed files, criteria, earlier attempts; never uploaded), and `cplat budget resume` shows which stages are still verified for the current HEAD, so a resumed run starts at the failing one.
 
 ## Watching runs live (optional)
 

@@ -5,7 +5,7 @@
 - **One ledger per run tree, outside the run records.** Run records (spec 087) are written once at `finish`, and a
   resumed run is a new record (`resumes`), so they cannot carry usage across a resume. The budget lives in a small
   local ledger, `runs.state_dir()/budgets/<key>.json`, keyed by the work it covers: `<repo slug or dir>:<spec or
-  prompt>` of the root run. A new root for the same work while the ledger is not `done` continues it (AC-102.6); a
+  spec id>` of the root run (`budget.work_key`: the GitHub slug or the absolute repo path, and the resolved spec ids, sorted and joined with `+`; the prompt only when no spec resolves). A new root for the same work while the ledger is not `done` continues it (AC-102.6); a
   tree that ends `done` closes the ledger, so the next run of that work starts fresh. ADR:
   [043](../../adr/043-one-budget-per-run-tree.md).
 - **The root owns the budget, children find it through `parent`.** Roots are the runs with no parent: `cplat
@@ -40,9 +40,9 @@
   (AC-102.7). Gates not reached stay `not run` (the existing `runs.finish` fill, AC-102.8); the outcome is never
   `done`.
 - **No progress** (AC-102.9): `budget.attempt(repo, stage, error, failing)` appends the attempt to the ship state (or
-  the ledger without a ship) and returns the stop reason when the last 3 attempts of that stage are equivalent with no
-  progress between them. Normalisation removes ISO timestamps, clock times, absolute and relative paths, hex ids of 7+
-  characters, UUIDs, `line N`/`:N` numbers and collapses whitespace. Progress is fewer failing checks, or a check of
+  the ledger without a ship) and returns the stop reason when the last 2 attempts of that stage are equivalent with no
+  progress between them (the third attempt is never made). Normalisation removes ISO timestamps, clock times, absolute and relative paths, hex ids of 7+
+  characters, UUIDs, `line N`/`:N` numbers and durations (`3.21s`, `15ms`) and collapses whitespace. Progress is fewer failing checks, or a check of
   the previous attempt's failing set that passes now. Callers: `ship.land` (stage `ci`, error = failing check names +
   their log tail) and `cplat budget attempt <stage> --failing N [--names a,b] --error-file F` for build's fix loop
   (exit 3 with the reason on a stop). The 3-fix-round rule of `cplat ship` and the two-idle-session stop of headless
