@@ -20,7 +20,7 @@ A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (o
 
   cplat runs init <owner/name> | flush | report [--json] [--since DAYS] [--repo R]
               [--agents [--by-version] [--agent NAME] [--shape SHAPE] | --benchmarks]
-  cplat runs begin <kind> [--spec S] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
+  cplat runs begin <kind> [--spec S] [--budget KEY=VALUE] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
   cplat runs agent <event> ...                                       agent metrics of the current run (spec 089)
   cplat runs usage <run_id> | --session <id> [--json]                tokens and estimated cost per run (spec 099)
   cplat runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR] fixed task on the sample repo (spec 099)
@@ -538,6 +538,7 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
     dropped = 0
     now = _iso(utcnow())
     usage = _collect_usage(run_id, now)
+    _budget_closed(run_id, usage, outcome)
     t0 = monotonic()
     try:
         with _locked():
@@ -576,6 +577,15 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
     if still or dropped:
         return _emit(_warning(why or "recording failed: record not written", buffered_count(), dropped))
     return None
+
+
+def _budget_closed(run_id: str, usage: dict | None, outcome: str) -> None:
+    """Spec 102: the `budget` section of a run in a budgeted tree, and the ledger carries its spending. Never raises."""
+    try:
+        import budget
+        budget.on_finish(run_id, usage, outcome)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _collect_usage(run_id: str, now: str) -> dict | None:
@@ -839,6 +849,8 @@ def build_parser() -> argparse.ArgumentParser:
     b = sub.add_parser("begin", help="start a run record (for markdown commands)")
     b.add_argument("kind")
     b.add_argument("--spec")
+    b.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
+                   help="replace a limit of the run's budget: minutes, invocations, reruns, cost (a number or off; spec 102)")
     ph = sub.add_parser("phase", help="open a phase of the current run")
     ph.add_argument("name")
     g = sub.add_parser("gate", help="record the result of a gate of the current run")
@@ -875,6 +887,8 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "report":
         return _report(ns)
+    if ns.cmd == "begin":
+        _budget_options(ns)                    # a bad --budget is the one error `begin` reports
     try:
         _recording_command(ns)
     except Exception:  # noqa: BLE001  (begin/phase/end never fail a command)
@@ -888,6 +902,27 @@ def _init_agents(kind: str, run_id: str | None) -> None:
     try:
         import runs_agents
         runs_agents.init(run_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _budget_options(ns: argparse.Namespace) -> dict:
+    import budget
+    return budget.parse_options(getattr(ns, "budget", None))
+
+
+def _open_budget(rid: str | None, repo_dir: Path, ns: argparse.Namespace, opts: dict) -> None:
+    try:
+        import budget
+        budget.open_root(rid, f"{repo_slug(repo_dir)}:{ns.spec or ns.kind}", options=opts, repo=repo_dir.resolve())
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _record_stage(repo_dir: Path, gate: str, result: str) -> None:
+    try:
+        import budget
+        budget.record_stage(repo_dir.resolve(), gate, result)
     except Exception:  # noqa: BLE001
         pass
 
@@ -906,7 +941,9 @@ def _recording_command(ns: argparse.Namespace) -> None:
             return
         if current and not current.get("attached"):
             finish(current.get("run_id"), "abandoned")
+        opts = _budget_options(ns)
         rid = start(ns.kind, repo=repo_slug(repo_dir), spec=ns.spec)
+        _open_budget(rid, repo_dir, ns, opts)
         if rid and pointer:
             _atomic_write(pointer, json.dumps({"run_id": rid, "kind": ns.kind, "attached": False}))
         _init_agents(ns.kind, rid)
@@ -917,6 +954,7 @@ def _recording_command(ns: argparse.Namespace) -> None:
     elif ns.cmd == "gate":
         if current:
             _mutate(current.get("run_id"), lambda rec: rec.setdefault("gates", {}).__setitem__(ns.gate, ns.result))
+            _record_stage(repo_dir, ns.gate, ns.result)
     elif ns.cmd == "end":
         if not current:
             return

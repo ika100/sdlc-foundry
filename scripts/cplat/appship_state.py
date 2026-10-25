@@ -13,6 +13,7 @@ from pathlib import Path
 
 import yaml
 
+import budget
 import runs
 import ship
 import spec as specmod
@@ -178,8 +179,15 @@ def resolve_context(repo: Path, context: str | None) -> str:
     return ctx
 
 
-def start(repo: Path, ref: str, max_: int | None = None, context: str | None = None) -> dict:
+def _open_budget(repo: Path, st: dict, options: dict) -> None:
+    """Spec 102: the product run owns the budget of its repo ships: the ship defaults times the plan's repos."""
+    budget.open_root(st.get("run_id"), f"{slug(repo)}:{st['spec']}", ships=len(plan_repos(repo, st['spec'])), options=options, repo=repo)
+
+
+def start(repo: Path, ref: str, max_: int | None = None, context: str | None = None,
+          budget_options: list[str] | dict | None = None) -> dict:
     import shapecmd
+    options = budget.parse_options(budget_options)
     try:
         shape = shapecmd.route(repo)["shape"]
     except PlatformError:
@@ -213,6 +221,7 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
         refresh_repos(repo, st)
         with _locked(repo):
             save_state(repo, st)
+        _open_budget(repo, st, options)
         return st
     phase = "publish" if plan_path(repo, sp.id).is_file() else "plan"
     st = {"spec": sp.id, "phase": phase, "max": max_ or DEFAULT_MAX, "context": ctx, "recorded": False,
@@ -223,6 +232,7 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
     state_path(repo).parent.mkdir(parents=True, exist_ok=True)
     with _locked(repo):
         save_state(repo, st)
+    _open_budget(repo, st, options)
     return st
 
 

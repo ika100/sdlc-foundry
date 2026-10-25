@@ -33,6 +33,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py deps findings|patch|report ...   patch fixable dependency findings of a red security gate (spec 095, ADR-034)
   cplat.py alerts poll [--dry-run] [--app APP]   firing alerts become issues (spec 092; run by the gitops-app's alerts workflow)
   cplat.py fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release (spec 096)
+  cplat.py budget show|gate|attempt|stage|resume ...   one budget per run tree, no-progress stops, verified stages for resume (spec 102)
   cplat.py adopt --type SHAPE [--data KEY=VALUE]   bring an existing repo onto the platform template (spec 071)
 """
 from __future__ import annotations
@@ -72,6 +73,7 @@ COMMANDS = {
     "build": "buildcmd",
     "quiet": "quiet",
     "alerts": "alerts",
+    "budget": "budget",
 }
 
 

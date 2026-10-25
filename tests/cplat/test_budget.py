@@ -29,6 +29,7 @@ from test_headless import fake_claude, repo as hl_repo, set_state  # noqa: F401 
 from test_runs import buffered_lines, clock, drop_tracks, mem, store, stored  # noqa: F401  (fixtures)
 from test_appship_097 import w  # noqa: F401  (fixture)
 from test_ship import check, git, gh, repo, to_land  # noqa: F401  (fixtures)
+from test_ship_checks import gh as checks_gh, running  # noqa: F401  (fixture)
 
 ROOT = core.PLATFORM_ROOT
 CPLAT = ROOT / "scripts" / "cplat" / "cplat.py"
@@ -214,6 +215,22 @@ def test_ci_reruns_are_counted_and_refused_when_used_up(here, gh, budget):
     rid = start_ship(here, "--budget", "reruns=1")
     assert budget.allow_rerun(rid) is True
     assert budget.allow_rerun(rid) is False
+
+
+def test_a_refused_ci_rerun_ends_the_wait_red_and_escalates_the_ship(here, checks_gh, budget, store):
+    """AC-102.3: `ship land` asks the budget before a rerun; a refusal is a red result `budget exhausted: reruns`, no rerun, cause decision."""
+    to_land(here, checks_gh)
+    rid = ship.load_state(here)["run_id"]
+    assert ship.main(["--repo", str(here), "start", "7", "--budget", "reruns=0"]) == 0
+    checks_gh.checks = [[running("quality")]]
+    checks_gh.run_status["42"] = ["completed"]
+    ok, lines = ship.land(here, timeout=3600, interval=20)
+    assert not ok and lines[0] == "budget exhausted: reruns"
+    assert not any(c[:2] == ["run", "rerun"] for c in checks_gh.calls)
+    st = ship.load_state(here)
+    assert st["escalated"] == "budget exhausted: reruns" and st["cause"] == "decision" and st["run_id"] == rid
+    (r,) = stored(store)
+    assert r["budget"]["limit"] == "reruns" and r["outcome"] == "escalated"
 
 
 def test_the_gate_hook_exits_2_for_a_subagent_when_the_budget_is_used_up(here, gh, budget, clock, capsys):

@@ -4,7 +4,8 @@
 
 The same watch as `cplat ship land` (spec 072): one line per concluded check, the first red check ends the wait, a
 stale or stuck run is rerun once, and a job that failed on a transient error (a download, a registry, the network)
-is rerun once before it counts. Exit 0: green (and merged with --merge); 1: red, with the failing log tails.
+is rerun once before it counts. Every rerun is asked of the run's budget first (spec 102): a refusal ends the wait red with
+`budget exhausted: reruns`. Exit 0: green (and merged with --merge); 1: red, with the failing log tails.
 """
 from __future__ import annotations
 
@@ -57,6 +58,12 @@ def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, que
         status, cs, failed = ship.wait_checks(watch, timeout, interval)
         if status == "red" or not merge or not watch.head or watch.head_sha() in (None, watch.head):
             break   # a push during the last poll means the green belongs to an old head: wait again
+    if status == "red" and watch.refused:      # spec 102: the budget refused a rerun; a ship run is escalated
+        lines = ship.red(repo, url, cs, failed)
+        st = ship.load_state(repo) if run_id and runs.attach_point(repo) == run_id else None
+        if st:
+            return False, ship.refused(repo, st, watch.refused, lines)
+        return False, [watch.refused, *lines]
     if status == "red":
         return False, ship.red(repo, url, cs, failed)
     lines = [f"GREEN: all {len(cs)} check(s) passed on {url}"]

@@ -1,7 +1,7 @@
 """Spec 099 (ADR-035): which calls of which Claude Code sessions belong to a run.
 
   register(run_id, mode=, session=, project_dir=, started_at=, dir=)   record a claim / owned source; never raises
-  for_run(rec, ended_at=, budget_s=10.0) -> dict | None                the `usage` section; never raises
+  for_run(rec, ended_at=, budget_s=10.0, peek=False) -> dict | None    the `usage` section; never raises (peek: claims stay open)
   for_session(session_id) -> dict                                      all calls of one session; LookupError if absent
   projects_root() -> Path                                              tests replace this
 
@@ -149,7 +149,7 @@ def _wrap(items: list[tuple], sessions: list[str], reasons: list[str], with_phas
     return {"sessions": sessions, "price_table": prices.taken, "incomplete": "; ".join(reasons) or None, **out}
 
 
-def for_run(rec: dict, *, ended_at: str, budget_s: float = 10.0) -> dict | None:
+def for_run(rec: dict, *, ended_at: str, budget_s: float = 10.0, peek: bool = False) -> dict | None:
     items: list[tuple] = []
     sessions: list[str] = []
     reasons: list[str] = []
@@ -189,7 +189,8 @@ def for_run(rec: dict, *, ended_at: str, budget_s: float = 10.0) -> dict | None:
             reasons.insert(0, f"{malformed} malformed lines")
         if out_of_time():
             reasons.append("time budget of 10 s used up")
-        _mark_ended(run_id, ended_at)
+        if not peek:
+            _mark_ended(run_id, ended_at)
     except Exception as exc:  # noqa: BLE001
         reasons.append(f"error: {type(exc).__name__}")
     try:

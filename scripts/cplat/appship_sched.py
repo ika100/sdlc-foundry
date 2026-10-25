@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 import appship_state as state
+import budget
 import core
 import runs
 import ship
@@ -132,6 +133,10 @@ def _start_entry(gitops_dir: Path, spec_id: str) -> Path:
 def start_repo(gitops_dir: Path, repo_id: str) -> Path:
     st = state.require_state(gitops_dir)
     repo = _plan_entry(gitops_dir, st, repo_id)
+    if limit := budget.check(st.get("run_id"), "repo ship start"):          # spec 102: a safe point
+        reason = budget.stop(st.get("run_id"), limit, "repo ship start", st["phase"])
+        state.escalate(gitops_dir, reason, "decision")
+        raise PlatformError(reason, hint=f"no repo ship is started; resume with /app:ship {st['spec']} (--budget {limit}=N raises the limit)")
     if repo.get("shape") == "gitops-app":
         path = _start_entry(gitops_dir, st["spec"])
     else:

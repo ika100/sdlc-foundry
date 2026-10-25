@@ -106,7 +106,7 @@ When every acceptance test passes, run `cplat runs gate acceptance passed`. Befo
    - tests → the **coder** of the task whose files are involved: acceptance tests stay fixed; record it with `cplat runs agent fix-round ci --task <task>`;
    - security → run `cplat deps patch` first (ADR-034); the security gate is red → read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → the gate is green, go to step 3; exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed (`cplat ship escalate '<reason>' --cause <CAUSE>` in a ship run, else `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`); exit 4 → the **security** agent). A red gate after a bump is never handed to a coder, and acceptance tests stay fixed.
 
-   Run `cplat quiet ci` again; at most 2 rounds, then escalate.
+   Run `cplat quiet ci` again; at most 2 rounds, then escalate. After each red round run `cplat budget attempt ci --failing <n> --names <a,b> --error-file <the gate's log>`: exit 3 means the same failure came back three times without progress (it prints the reason and escalates a ship run), so stop. When a gate passes or fails, record it with `cplat budget stage <acceptance|quality|tests|security|verify|image|ci> passed|failed` (spec 102).
 
    When `cplat quiet ci` is green, run `cplat runs gate security passed`. When the security gate stays red (escalation, or a HIGH finding documented while the build goes on), run `cplat runs gate security failed` first (spec 099).
 3. **Green** → spawn agents only where needed:

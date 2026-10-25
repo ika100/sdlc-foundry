@@ -2,7 +2,7 @@
 
 Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-app-ship.json (never committed).
 
-  cplat app-ship start <spec> [--max N] [--context C]   refuse or begin/resume; prints phase, repo table and the next step
+  cplat app-ship start <spec> [--max N] [--context C] [--budget KEY=VALUE]   refuse or begin/resume; prints phase, repo table and the next step
   cplat app-ship status [--json]                        the state and what the scheduler does next
   cplat app-ship phase <plan|publish|repos|complete|done>
   cplat app-ship publish [--timeout S]                  spec and plan on main: PR merged on green checks (nothing to do when they are)
@@ -29,6 +29,7 @@ import appship_merge
 import appship_report
 import appship_sched
 import appship_state as state
+import budget
 import core
 import ship
 import spec as specmod
@@ -214,6 +215,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("spec")
     p.add_argument("--max", type=int, default=None)
     p.add_argument("--context", default=None)
+    p.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
+                   help="replace a limit of the product's budget (ship defaults times the plan's repos; spec 102)")
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("phase")
@@ -261,7 +264,10 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        show(state.start(repo, ns.spec, ns.max, ns.context))
+        st = state.start(repo, ns.spec, ns.max, ns.context, ns.budget)
+        show(st)
+        if line := budget.limits_line(st.get("run_id")):
+            print(line)
         return 0
     if ns.cmd == "status":
         st = state.require_state(repo)

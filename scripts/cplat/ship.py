@@ -4,7 +4,7 @@
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat ship start <spec> [--no-merge] [--product DIR]   begin or resume; prints the state and the next step
+  cplat ship start <spec> [--no-merge] [--product DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
                                          (--product: /app:ship only, links the run to a product ship, spec 097)
   cplat ship status [--json]             the state of the current run
   cplat ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
@@ -32,6 +32,7 @@ import time
 from pathlib import Path
 
 import autoissue
+import budget
 import core
 import feedback
 import runs
@@ -184,7 +185,14 @@ def product_link(product: Path) -> dict:
     return {"dir": str(product), "run_id": pst.get("run_id"), "context": pst.get("context")}
 
 
-def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: Path | None = None) -> dict:
+def _open_budget(repo: Path, st: dict, options: dict) -> None:
+    """Spec 102: a ship run is a root (one budget per run tree) unless it runs under headless or a product ship."""
+    budget.open_root(st.get("run_id"), f"{runs.repo_slug(repo)}:{st['spec']}", options=options, repo=repo)
+
+
+def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: Path | None = None,
+          budget_options: list[str] | dict | None = None) -> dict:
+    options = budget.parse_options(budget_options)
     link = product_link(product) if product else None
     sp = specmod.find(repo, ref)
     st = load_state(repo)
@@ -210,6 +218,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         st["blocks"] = 0
         save_state(repo, st)
         runs.link_parent(st.get("run_id"))
+        _open_budget(repo, st, options)
         return st
     if sp.status in {"draft", "superseded"}:
         raise PlatformError(f"{sp.id} is '{sp.status}'; only an approved spec is shipped",
@@ -231,6 +240,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         st["product"] = link
     save_state(repo, st)
     runs.link_parent(st.get("run_id"))
+    _open_budget(repo, st, options)
     return st
 
 
@@ -257,7 +267,19 @@ def set_phase(repo: Path, phase: str) -> dict:
     st["phase"] = phase
     st["blocks"] = 0
     save_state(repo, st)
+    if phase != "done" and (limit := budget.check(st.get("run_id"), "phase end")):   # spec 102: a safe point
+        reason = budget_stop(repo, st, limit, "phase end")
+        raise PlatformError(reason, hint=f"stop here; resume with /svc:ship {st['spec']}, raising the limit if you want "
+                                         f"(--budget {limit}=N)")
     return st
+
+
+def budget_stop(repo: Path, st: dict, limit: str, point: str) -> str:
+    """Spec 102: record the stop in the run's `budget` section and escalate the ship (cause decision). Returns the reason."""
+    reason = budget.stop(st.get("run_id"), limit, point, st.get("phase"))
+    if not st.get("escalated"):
+        escalate(repo, reason, "decision", stage=st.get("phase"))
+    return reason
 
 
 ESCALATION_CAUSES = ("platform", "code", "decision", "environment")
@@ -291,7 +313,7 @@ def _file_platform_failure(repo: Path, st: dict, reason: str, command: str | Non
 
 
 def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str | None = None, evidence: str = "",
-             report: list[str] | None = None) -> dict:
+             report: list[str] | None = None, stage: str | None = None) -> dict:
     st = require_state(repo)
     report = report if report is not None else []
     cause, message = _coerce_cause(cause)
@@ -301,6 +323,7 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
     st["cause"] = cause
     if cause == "platform":
         _file_platform_failure(repo, st, reason, command, evidence, report)
+    budget.snapshot(repo, stage or st.get("phase") or "none", evidence or reason, [])   # spec 102: local only
     save_state(repo, st)
     try:
         tracks = specmod.find(repo, st["spec"]).meta.get("tracks") or []
@@ -410,6 +433,8 @@ class CheckWatch:
         self.healed: dict[tuple[str, str], tuple[str, float]] = {}   # run → (stale | queued, when)
         self.head: str | None = None                                  # the PR head commit being watched
         self.run_sha: dict[str, str | None] = {}                      # run id → the commit it ran on
+        self.refused: str | None = None                               # spec 102: the budget refused a rerun
+        self.refused_checks: list[dict] = []
 
     def head_sha(self) -> str | None:
         out = gh(["pr", "view", self.pr, "--json", "headRefOid"], cwd=self.repo, check=False)
@@ -466,6 +491,10 @@ class CheckWatch:
             if not hit:
                 final.append(c)
                 continue
+            if not budget.allow_rerun(self.run_id):
+                self.refused = budget.REFUSED_RERUN
+                final.append(c)
+                continue
             say(f"  rerun    run {r[1]}: {c['name']} failed on a transient error ({hit.group(0)})")
             gh(["run", "rerun", r[1], "-R", r[0], "--failed"], cwd=self.repo, check=False)
             runs.rerun(self.run_id, ", ".join(sorted(x["name"] for x in failed if run_of(x) == r)), "transient")
@@ -489,6 +518,8 @@ class CheckWatch:
         if cs and not pending:
             return "green", cs, []
         self._heal(pending)
+        if self.refused:
+            return "red", cs, self.refused_checks
         return "pending", cs, []
 
     def _heal(self, pending: list[dict]) -> None:
@@ -507,6 +538,9 @@ class CheckWatch:
                 if self.healed.get(r, ("",))[0] == "stale":
                     raise PlatformError(f"check(s) {names} of run {rid} ({slug}) stay in progress although the run "
                                         "completed, also after a rerun", hint=f"gh run view {rid} -R {slug}; escalate")
+                if not budget.allow_rerun(self.run_id):
+                    self.refused, self.refused_checks = budget.REFUSED_RERUN, cs
+                    continue
                 say(f"  rerun    run {rid}: {names} in progress, but the run completed (stale)")
                 gh(["run", "rerun", rid, "-R", slug], cwd=self.repo, check=False)
                 runs.rerun(self.run_id, ", ".join(sorted(c["name"] for c in cs)), "stale")
@@ -525,6 +559,9 @@ class CheckWatch:
                 raise PlatformError(f"jobs of run {rid} ({slug}) queued for {int(now() - since)}s again after a cancel "
                                     f"and rerun: the runner set {labels} picks up no jobs",
                                     hint="check the ARC listener and runner pods of that scale set; escalate")
+            if not budget.allow_rerun(self.run_id):
+                self.refused, self.refused_checks = budget.REFUSED_RERUN, cs
+                continue
             say(f"  rerun    run {rid}: only queued jobs for {int(now() - since)}s (cancel + rerun)")
             cancel_and_rerun(self.repo, slug, rid)
             runs.rerun(self.run_id, ", ".join(sorted(c["name"] for c in cs)), "stuck")
@@ -574,6 +611,13 @@ def red(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> list[str]:
     return lines + failure_logs(repo, failed)
 
 
+def refused(repo: Path, st: dict, reason: str, lines: list[str]) -> list[str]:
+    """Spec 102: the budget refused a CI rerun. The wait ends red; the ship is escalated (cause decision)."""
+    limit = reason.rsplit(": ", 1)[-1]
+    escalate(repo, budget.stop(st.get("run_id"), limit, "ci rerun", st.get("phase")), "decision", evidence="\n".join(lines), stage="ci")
+    return [reason, *lines]
+
+
 def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUEUE_TIMEOUT) -> tuple[bool, list[str]]:
     """Wait for the PR's checks: the first red one ends the wait; all green → merge the before-merge gitops PRs, then
     the PR (unless --no-merge). Returns (merged_or_green, report lines)."""
@@ -586,7 +630,8 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
         return _merged(repo, st, (state.get("mergeCommit") or {}).get("oid", ""), ["already merged"])
     if state.get("state") == "CLOSED":
         raise PlatformError(f"{pr} was closed without merging", hint="reopen it, or `cplat ship escalate 'PR closed'`")
-    status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout, st.get("run_id")), timeout, interval)
+    watch = CheckWatch(repo, pr, queue_timeout, st.get("run_id"))
+    status, cs, failed = wait_checks(watch, timeout, interval)
     try:  # agent metrics (spec 089): never changes the result
         import runs_agents
         runs_agents.red_ci(st.get("run_id"), repo, [c["name"] for c in failed] if status == "red" else [])
@@ -595,7 +640,15 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     if status == "red":
         st["fix_rounds"] = st.get("fix_rounds", 0) + 1
         save_state(repo, st)
-        return False, red(repo, pr, cs, failed)
+        lines = red(repo, pr, cs, failed)
+        if watch.refused:
+            return False, refused(repo, st, watch.refused, lines)
+        text = "\n".join(lines)
+        why = budget.attempt(repo, "ci", text, len(failed), [c["name"] for c in failed])   # spec 102: no progress
+        if why:
+            escalate(repo, why, "code", evidence=text, stage="ci")
+            lines.append(why)
+        return False, lines
     lines = [f"GREEN: all {len(cs)} check(s) passed on {pr}"]
     if not st.get("merge", True):
         st["phase"] = "done"
@@ -746,7 +799,10 @@ def merge_gitops(repo: Path, st: dict, order: str, timeout: float, interval: flo
         if view.get("state") != "MERGED":
             if view.get("isDraft"):
                 gh(["pr", "ready", pr], cwd=repo, check=False)
-            status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout, st.get("run_id")), timeout, interval)
+            watch = CheckWatch(repo, pr, queue_timeout, st.get("run_id"))
+            status, cs, failed = wait_checks(watch, timeout, interval)
+            if status == "red" and watch.refused:
+                return False, lines + refused(repo, st, watch.refused, red(repo, pr, cs, failed))
             if status == "red":
                 return False, lines + [f"gitops task {t['id']} ({order}) is red; nothing more was merged"] + red(repo, pr, cs, failed)
             if st.get("product"):            # spec 097: one merge at a time, in the product plan's order
@@ -909,6 +965,8 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
                 watches[app] = RunWatch(repo, app, rid, queue_timeout, st.get("run_id"))
             if app in watches:
                 if watches[app].poll() == "red":
+                    if watches[app].refused:
+                        return False, lines + refused(repo, st, watches[app].refused, run_logs(repo, [(app, watches[app].rid)]))
                     return False, lines + [f"{app}: the pin-dev run for {short} failed; dev keeps the previous image"] + \
                         run_logs(repo, [(app, watches[app].rid)])
             elif green_at is not None and now() - green_at > NO_CHECKS_GRACE:
@@ -992,6 +1050,7 @@ class RunWatch:
         self.queued_since: float | None = None
         self.healed = False
         self.counted = False
+        self.refused: str | None = None                    # spec 102: the budget refused the rerun
 
     def poll(self) -> str:
         out = gh(["run", "view", self.rid, "-R", self.slug, "--json", "status,conclusion"], cwd=self.repo, check=False)
@@ -1012,6 +1071,9 @@ class RunWatch:
             if self.healed:
                 raise PlatformError(f"run {self.rid} ({self.slug}) queued again after a cancel and rerun: the runner set "
                                     f"{runner_labels(self.slug, self.rid) or '?'} picks up no jobs", hint="escalate")
+            if not budget.allow_rerun(self.run_id):
+                self.refused = budget.REFUSED_RERUN
+                return "red"
             say(f"  rerun    run {self.rid} ({self.slug}): queued for {int(now() - self.queued_since)}s (cancel + rerun)")
             cancel_and_rerun(self.repo, self.slug, self.rid)
             runs.rerun(self.run_id, "pin-dev", "stuck")
@@ -1155,6 +1217,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
     p.add_argument("--product", default=None, help="the gitops-app clone of the product ship this run belongs to (/app:ship only, spec 097)")
+    p.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
+                   help="replace a limit of the run's budget: minutes, invocations, reruns, cost (a number or off; spec 102)")
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("phase")
@@ -1202,8 +1266,10 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        print(describe(start(repo, ns.spec, not ns.no_merge, ns.take_over,
-                              Path(ns.product).resolve() if ns.product else None)))
+        st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.product).resolve() if ns.product else None, ns.budget)
+        print(describe(st))
+        if line := budget.limits_line(st.get("run_id")):
+            print(line)
         return 0
     if ns.cmd == "status":
         st = require_state(repo)

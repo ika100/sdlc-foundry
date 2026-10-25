@@ -6,9 +6,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if ! command -v devbox >/dev/null 2>&1; then echo 'devbox not found on PATH — install: curl -fsSL https://get.jetify.com/devbox/install.sh | bash'; exit 0; fi; if [ -f devbox.json ]; then devbox install >/dev/null 2>&1 || true; fi",
+            "command": "if ! command -v devbox >/dev/null 2>&1; then echo 'devbox not found on PATH \u2014 install: curl -fsSL https://get.jetify.com/devbox/install.sh | bash'; exit 0; fi; if [ -f devbox.json ]; then devbox install >/dev/null 2>&1 || true; fi",
             "timeout": 60,
             "statusMessage": "Checking devbox environment"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "d=\"$(git rev-parse --git-common-dir 2>/dev/null)\"; [ -n \"$CPLAT_RUN_PARENT\" ] || [ -f \"$d/cplat-ship.json\" ] || [ -f \"$d/cplat-app-ship.json\" ] || [ -f \"$d/cplat-run.json\" ] || exit 0; exec \"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" budget gate --invocation",
+            "timeout": 30,
+            "statusMessage": "Checking the run's budget (spec 102)"
           }
         ]
       }

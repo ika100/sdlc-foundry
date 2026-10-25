@@ -3,6 +3,8 @@
   <repo>/.platform-settings.yml                          committed, project-owned
   ${XDG_CONFIG_HOME:-~/.config}/sdlc-foundry/settings.yml   personal
 
+`budget` (spec 102) is a map of per-ship limits `{minutes, invocations, reruns, cost}`, each a number or `off`; project over user.
+
 `coordinator_model` is a model name (every workflow) or a map `{default: ..., <workflow>: ...}`. Precedence: the
 `--model` flag, project (workflow, then general), user (workflow, then general), then `sonnet`.
 """
@@ -69,3 +71,33 @@ def coordinator_model(repo: Path, prompt: str, flag: str | None) -> tuple[str, s
         if hit or general:
             return (hit or general), source  # type: ignore[return-value]
     return DEFAULT_MODEL, "default"
+
+
+BUDGET_KEYS = ("minutes", "invocations", "reruns", "cost")
+
+
+def budget_defaults(repo: Path) -> dict:
+    """Per-ship budget limits from the settings files (spec 102): project over user; a value is a number or None (off)."""
+    out: dict = {}
+    for path in (user_file(), repo / PROJECT_FILE):          # the project file is read last: it wins
+        if not path.is_file():
+            continue
+        try:
+            data = yaml.safe_load(path.read_text())
+        except (OSError, yaml.YAMLError) as e:
+            raise PlatformError(f"{path} cannot be read: {e}") from None
+        block = data.get("budget") if isinstance(data, dict) else None
+        if block is None:
+            continue
+        if not isinstance(block, dict):
+            raise PlatformError(f"{path}: budget must be a map of {', '.join(BUDGET_KEYS)}")
+        for key, value in block.items():
+            if key not in BUDGET_KEYS:
+                raise PlatformError(f"{path}: unknown budget limit '{key}'", hint="use " + ", ".join(BUDGET_KEYS))
+            if value in ("off", None):
+                out[key] = None
+            elif isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+                out[key] = value
+            else:
+                raise PlatformError(f"{path}: budget.{key} must be a number or off, got '{value}'")
+    return out
