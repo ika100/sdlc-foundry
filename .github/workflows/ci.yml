@@ -317,7 +317,8 @@ jobs:
           up=false
           for _ in $(seq 1 30); do curl -sf localhost:3000/api/health && { up=true; break; }; sleep 2; done
           $up || { docker logs smoke; exit 1; }
-          # spec 091: the browser smoke tests against the running image
+          # spec 091: the browser smoke tests against the running image (smoke.sh calls pnpm, as devbox provides it in a repo)
+          npm install -g pnpm@11.22.0 >/dev/null
           SMOKE_BASE_URL=http://localhost:3000 bash scripts/smoke.sh | tee /tmp/smoke.out
           grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
       - name: Variant — observability off
