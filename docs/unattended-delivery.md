@@ -106,7 +106,7 @@ When a run stops because the platform itself misbehaves, the failure is filed as
 
 ## Smoke in dev
 
-After dev is healthy, `cplat ship deploy` checks the spec in dev (spec 091, [ADR-036](adr/036-smoke-tests-against-a-deployed-environment.md)).
+After dev is healthy, `cplat ship deploy` checks the spec in dev (spec 091, [ADR-040](adr/040-smoke-tests-against-a-deployed-environment.md)).
 
 - **The marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL. The tester writes a smoke-tagged test for it (`cplat spec trace` reports `smoke: no smoke-tagged test` until there is one).
 - **The recipe:** every deployable template has `devbox run smoke`. It runs only the smoke-tagged tests against `SMOKE_BASE_URL` (exit 2 without it) and prints `PASS|FAIL|SKIP  <path>::<name>` lines, then `smoke: <p> passed, <f> failed, <s> skipped` (or `0 smoke tests`). Web repos use standard Playwright tests in `e2e/` tagged `@smoke`.

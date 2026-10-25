@@ -2,7 +2,7 @@
 
 Specs 093 (staging auto-promotion) and 097 (app ship) build on the interfaces below: the marker, the recipe, the
 output lines, `smoke.run_smoke()`, `cplat smoke run`, the record section and the issue signature. Change them only
-with a new spec. ADR: [036](../../adr/036-smoke-tests-against-a-deployed-environment.md).
+with a new spec. ADR: [040](../../adr/040-smoke-tests-against-a-deployed-environment.md).
 
 ## Decisions
 

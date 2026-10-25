@@ -92,7 +92,7 @@ tasks:
   done: true
 ---
 
-The contract for every task is [design.md](design.md). ADR: [036](../../adr/036-smoke-tests-against-a-deployed-environment.md).
+The contract for every task is [design.md](design.md). ADR: [040](../../adr/040-smoke-tests-against-a-deployed-environment.md).
 The result-line format of `devbox run smoke` (`PASS|FAIL|SKIP  <path>::<name>`, `smoke: <p> passed, <f> failed, <s> skipped`,
 `0 smoke tests`) is shared by t2 and t4–t7: keep it byte-exact. No test may reach GitHub, a cluster or a real devbox:
 `smoke.run_recipe`, `smoke.reachable`, `smoke.gh`, `smoke.sleep`, `smoke.monotonic`, `ship.gh` and the autoissue
@@ -420,7 +420,7 @@ shape's smoke tag exactly as `shapes.yml` matches it.
   - `cplat smoke run`
   - the deploy behaviour (retry, 600 s, escalation `code`, `smoke-failure` issue, resume)
   - the record section
-  - ADR-036
+  - ADR-040
   - migration: run `/shared:update-service`, then `cplat triage setup-labels` if `smoke-failure` is missing
 - `app.yaml.jinja`: a commented `urls:` block explaining `{host}`. `render.py` docstring: `urls:` is read by
   `cplat smoke`, not by render. Check that render ignores unknown `app.yaml` keys; if it validates keys, allow `urls`.

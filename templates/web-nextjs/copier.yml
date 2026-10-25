@@ -1,5 +1,5 @@
 # Copier template: web-nextjs
-# Next.js (App Router only, ADR-004) web frontend: pnpm (ADR-003), Vitest + Playwright (ADR-002, ADR-036),
+# Next.js (App Router only, ADR-004) web frontend: pnpm (ADR-003), Vitest + Playwright (ADR-002, ADR-040),
 # pinned Node LTS (ADR-005), canonical devbox recipes, Docker, agentic setup.
 #
 # Usage:
