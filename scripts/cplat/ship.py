@@ -355,6 +355,11 @@ def run_ci(repo: Path) -> None:
     say("running `devbox run ci` before pushing …")
     res = run(["devbox", "run", "ci"], cwd=repo, check=False, timeout=3600)
     if res.returncode != 0:
+        try:
+            import validate
+            validate.record_final_gate(repo)   # spec 103: a check the loop skipped or reused that is red now is a miss
+        except Exception:  # noqa: BLE001  (recording never changes the gate)
+            pass
         tail = [ln for ln in (res.stdout + res.stderr).splitlines() if ln.strip()][-40:]
         raise PlatformError("`devbox run ci` is red; nothing was pushed:\n" + "\n".join(tail),
                             hint="hand the failure to the coder agent, commit the fix, then `cplat ship pr` again")

@@ -129,7 +129,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         d = sorted(durations[name])
         phases[name] = {"count": len(d), "median_s": float(statistics.median(d)), "p90_s": float(d[math.ceil(0.9 * len(d)) - 1])}
     top = sorted(reasons.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_REASONS]
-    return {
+    out = {
         "window": {"since": (now.date() - datetime.timedelta(days=since_days)).isoformat(), "until": now.date().isoformat(),
                    "days": since_days, "repo": repo, "store": store, "records": len(kept), "malformed": malformed},
         "runs": {k: _count_sorted(kinds[k]) for k in sorted(kinds)},
@@ -141,6 +141,28 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         "buffered": buffered,
         "usage": runs_usage_report.aggregate_usage(kept),
     }
+    validation = aggregate_validation(kept)
+    if validation["rules"]:   # spec 103: only when a run recorded a validation section
+        out["validation"] = validation
+    return out
+
+
+def aggregate_validation(kept: list[dict]) -> dict:
+    """Spec 103: decisions per rule and misses per rule over the `validation` sections of the runs."""
+    rules: dict[str, Counter] = {}
+    misses: Counter = Counter()
+    for r in kept:
+        v = r.get("validation")
+        if not isinstance(v, dict):
+            continue
+        for c in _list(v.get("checks")):
+            if isinstance(c, dict):
+                rules.setdefault(_text(c.get("rule")), Counter())[_text(c.get("decision"))] += 1
+        for m in _list(v.get("misses")):
+            if isinstance(m, dict):
+                misses[_text(m.get("rule"))] += 1
+    return {"rules": {k: {d: rules[k].get(d, 0) for d in ("run", "reused", "skipped")} for k in sorted(rules)},
+            "misses": _count_sorted(misses)}
 
 
 def _dur(seconds: float) -> str:
@@ -169,6 +191,11 @@ def render_text(agg: dict) -> str:
     lines.append(f"Reruns by check: {_pairs(agg['reruns']['by_check'])}")
     lines.append("Filed issues: " + ", ".join(f"{k} {n}" for k, n in agg["filed"].items()))
     lines += runs_usage_report.render_usage_lines(agg["usage"])
+    validation = agg.get("validation") or {}
+    if validation.get("rules"):
+        lines.append("Validation checks per rule: " + "; ".join(
+            f"{rule} " + ", ".join(f"{d} {n}" for d, n in counts.items()) for rule, counts in validation["rules"].items()))
+        lines.append(f"Validation misses per rule: {_pairs(validation['misses'])}")
     lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
     return "\n".join(lines)
 

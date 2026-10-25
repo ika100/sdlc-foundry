@@ -48,7 +48,7 @@ MANDATORY = {   # category -> globs (spec 103 rule 2); shapes.yml adds per-shape
                  "**/package-lock.json", "**/go.sum"],
     "ci-workflow": [".github/workflows/**"],
     "secrets": [".secrets.baseline.json", "**/auth*", "**/security*", "**/*secret*"],
-    "spec": ["docs/specs/**"],
+    "spec": ["docs/specs/*/spec.md"],   # the criteria; plan.md is mapping data, other spec files fall to `no rule`
 }
 TEST_NAME = re.compile(r"(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]*\.(test|spec)\.[jt]sx?|[^/]*Test\.java)$")
 
