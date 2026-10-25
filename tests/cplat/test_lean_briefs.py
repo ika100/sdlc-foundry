@@ -93,8 +93,7 @@ def test_ac_100_12_agents_run_quiet_commands(path):
 @pytest.mark.parametrize("shape", ["service-python", "library-python"])
 def test_ac_100_12_python_test_fast_is_quiet(shape):
     """AC-100.12: pytest -q --tb=line in the Python templates."""
-    d = json.loads(text(ROOT / "templates" / shape / "devbox.json"))
-    cmdline = d["shell"]["scripts"]["test-fast"]
+    cmdline = re.search(r'"test-fast":\s*"([^"]*)"', text(ROOT / "templates" / shape / "devbox.json")).group(1)
     assert "-q" in cmdline.split() and "--tb=line" in cmdline
 
 

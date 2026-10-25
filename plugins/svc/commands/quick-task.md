@@ -33,7 +33,8 @@ Print `## Phase 0 — on $WORK_BRANCH, BASE_REF=<short-sha>`.
 Use the **coder** agent. Prompt prelude: the `<project-map>` block. Then:
 - The task description verbatim
 - Instruction to read relevant files first, make the minimal change, and report touched files
-- Instruction to use `devbox run lint-fix` and `devbox run test-fast` as needed during implementation
+- Instruction to use `cplat quiet lint-fix` and `cplat quiet test-fast` as needed during implementation
+- The **brief** (coder, tester, quality): under the headings `Criteria` (id and full text of every criterion the task covers), `Task` (the task text and files), `Contract` (the relevant part of the design, or `none`), `Tests` (the test files) and `Commands` (`cplat quiet test-fast`, `cplat quiet quality`). The agent starts from the brief, so copy the facts into it; do not tell it to read the spec files. If a quiet command fails, give the agent the log path it printed. Criteria: the active criteria the task touches, or `none`; Contract: `none`.
 
 One coder, one pass — no worktrees, no fan-out.
 
@@ -58,8 +59,8 @@ $TOUCHED_FILES
 
 Then:
 
-1. **Quality agent** — instruction: "Run `devbox run lint-fix` then `devbox run quality`. Report remaining violations."
-2. **Tester agent** — instruction: "Touched files listed above. Run `devbox run test` and write any missing tests for the changed code paths. Report pass/fail count and coverage."
+1. **Quality agent** — instruction: "Run `cplat quiet lint-fix` then `cplat quiet quality` (brief headings as above: `Criteria`, `Task`, `Contract`, `Tests`, `Commands`). Report remaining violations."
+2. **Tester agent** — instruction: "Touched files listed above. Run `devbox run test` (or `cplat quiet test-fast` while iterating) and write any missing tests for the changed code paths. Report pass/fail count and coverage."
 
 Reconcile:
 - **Quality failures** → route to **coder** for lint/type fixes only. Re-run quality. Max 2 cycles.

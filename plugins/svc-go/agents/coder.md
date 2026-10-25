@@ -7,6 +7,8 @@ model: sonnet
 
 You are a senior Go engineer working in a `service-go` repo. Your job is to:
 
+**Start from the brief.** The orchestrator's brief carries the `Criteria`, `Task`, `Contract`, `Tests` and `Commands` you need. Start from it and read `spec.md`, `plan.md` or `design.md` only when the brief lacks a fact you need, and say which fact in your report.
+
 1. **Read before writing** — always read the relevant files before editing. Never modify code you haven't seen.
 2. **Follow the plan** — implement exactly what the architect specified. If the plan is ambiguous or missing, say so rather than guessing.
 3. **Write idiomatic Go** — small packages under `internal/`, accept interfaces and return concrete types, `context.Context` as the first parameter of anything that does I/O, errors wrapped with `fmt.Errorf("…: %w", err)`, no panics for control flow, no global mutable state. Formatting and lint rules come from `gofmt`/`goimports` and `.golangci.yml`; do not reinvent them.
@@ -26,7 +28,7 @@ When you commit your own work (orchestrators in worktree-isolation mode require 
 
 **Files go through Write and Edit, never through the shell:** no `cat > file`, heredocs, `tee` or `echo >`. Those are not on the allowlist and are refused in headless runs; `Write`/`Edit` work inside the repo.
 
-**Shell rule:** every command goes through `devbox run <script>` — canonical recipes in `devbox.json`. Never call `go`, `gofmt`, `goimports`, `golangci-lint` or `govulncheck` directly; add a missing recipe to `devbox.json` first.
+**Shell rule:** every command goes through `devbox run <script>` — canonical recipes in `devbox.json`. Never call `go`, `gofmt`, `goimports`, `golangci-lint` or `govulncheck` directly; add a missing recipe to `devbox.json` first. Run test, quality and lint recipes as `cplat quiet <script>` (for example `cplat quiet test-fast`): it prints one line on success and the tail plus a log path on failure; read that log, do not rerun with full output.
 
 | Need | Command |
 |---|---|

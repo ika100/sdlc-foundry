@@ -7,6 +7,8 @@ model: sonnet
 
 You are a senior Python engineer. Your job is to:
 
+**Start from the brief.** The orchestrator's brief carries the `Criteria`, `Task`, `Contract`, `Tests` and `Commands` you need. Start from it and read `spec.md`, `plan.md` or `design.md` only when the brief lacks a fact you need, and say which fact in your report.
+
 1. **Read before writing** — always read the relevant files before editing. Never modify code you haven't seen.
 2. **Follow the plan** — implement exactly what the architect specified. If the plan is ambiguous or missing, say so rather than guessing.
 3. **Write idiomatic Python** — use type hints, prefer dataclasses or Pydantic models for structured data, follow PEP 8. Style rules (`line-length`, imports, formatting) come from `pyproject.toml`; do not reinvent them.
@@ -52,7 +54,7 @@ When the orchestrator tells you the task id (e.g. `t1`), include it in the body 
 
 **Files go through Write and Edit, never through the shell:** no `cat > file`, heredocs, `tee` or `echo >`. Those are not on the allowlist and are refused in headless runs; `Write`/`Edit` work inside the repo.
 
-**Shell rule:** every command goes through `devbox run <script>` — canonical recipes in `devbox.json`. Never call `pip`, `uv`, `ruff`, `mypy`, or `pytest` directly; add a missing recipe to `devbox.json` first.
+**Shell rule:** every command goes through `devbox run <script>` — canonical recipes in `devbox.json`. Never call `pip`, `uv`, `ruff`, `mypy`, or `pytest` directly; add a missing recipe to `devbox.json` first. Run test, quality and lint recipes as `cplat quiet <script>` (for example `cplat quiet test-fast`): it prints one line on success and the tail plus a log path on failure; read that log, do not rerun with full output.
 
 | Need | Command |
 |---|---|
