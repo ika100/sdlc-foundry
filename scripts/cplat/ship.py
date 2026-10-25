@@ -4,7 +4,8 @@
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat ship start <spec> [--no-merge]   begin or resume; prints the state and the next step
+  cplat ship start <spec> [--no-merge] [--product DIR]   begin or resume; prints the state and the next step
+                                         (--product: /app:ship only, links the run to a product ship, spec 097)
   cplat ship status [--json]             the state of the current run
   cplat ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
   cplat ship pr --title T --body-file F  run `devbox run ci`, push the feature branch and open (or reuse) its PR
@@ -103,7 +104,7 @@ def _ensure_run(repo: Path, st: dict) -> str | None:
     if rid and (st.get("recorded") or runs.active(rid) is not None):
         return rid
     st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st.get("spec"), run_id=rid,
-                              started_at=_utc_iso(st.get("started")))
+                              started_at=_utc_iso(st.get("started")), parent=(st.get("product") or {}).get("run_id"))
     return st["run_id"]
 
 
@@ -168,7 +169,17 @@ def describe(st: dict) -> str:
 
 # ---------------- start / phase / escalate / finish ----------------
 
-def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
+def product_link(product: Path) -> dict:
+    """Spec 097: the product run a repo ship belongs to (parent record, default kube context, gitops merge slot)."""
+    import appship_state
+    pst = appship_state.load_state(product)
+    if not pst:
+        raise PlatformError(f"no product ship run in {product}", hint="start it in the gitops-app repo: /app:ship <spec>")
+    return {"dir": str(product), "run_id": pst.get("run_id"), "context": pst.get("context")}
+
+
+def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: Path | None = None) -> dict:
+    link = product_link(product) if product else None
     sp = specmod.find(repo, ref)
     st = load_state(repo)
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated"):
@@ -183,8 +194,11 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
     if st and st["spec"] == sp.id:
         if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
             old = st.get("run_id")
-            st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st["spec"], resumes=old)
+            st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st["spec"], resumes=old,
+                                      parent=link["run_id"] if link else None)
             st["recorded"] = False
+        if link:
+            st["product"] = link
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
         st.pop("cause", None)
         st["blocks"] = 0
@@ -207,6 +221,8 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
         runs.finish(st.get("run_id"), "abandoned")   # take-over: only after every check that can still refuse
     st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "blocks": 0, "fix_rounds": 0,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "recorded": False}
+    if link:
+        st["product"] = link
     save_state(repo, st)
     runs.link_parent(st.get("run_id"))
     return st
@@ -690,8 +706,19 @@ def merge_gitops(repo: Path, st: dict, order: str, timeout: float, interval: flo
             status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout, st.get("run_id")), timeout, interval)
             if status == "red":
                 return False, lines + [f"gitops task {t['id']} ({order}) is red; nothing more was merged"] + red(repo, pr, cs, failed)
-            res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"], cwd=repo, check=False)
-            if res.returncode != 0:
+            if st.get("product"):            # spec 097: one merge at a time, in the product plan's order
+                import appship_merge
+                gitops_dir, me = Path(st["product"]["dir"]), service_name(repo)
+                try:
+                    with appship_merge.slot(gitops_dir, me, appship_merge.plan_index(gitops_dir, me), timeout, interval):
+                        appship_merge.merge(gitops_dir, pr, me, cwd=repo)
+                except appship_merge.Conflict as e:
+                    escalate(repo, str(e), "decision")
+                    return False, lines + [str(e)]
+                res = None
+            else:
+                res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"], cwd=repo, check=False)
+            if res is not None and res.returncode != 0:
                 detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
                 raise PlatformError(f"merging gitops PR {pr} failed: {detail[0]}", hint="escalate: a conflict is a human decision")
         info["merged"] = True
@@ -723,7 +750,7 @@ def _smoke_spec(repo: Path, st: dict) -> specmod.Spec | None:
 def _smoke_state(repo: Path, st: dict, result: smoke.SmokeResult, row: str, filed: dict | None) -> None:
     """The run record's `smoke` section and the state's summary. Never raises (a recording never changes the deploy)."""
     try:
-        st["smoke"] = {"outcome": result.outcome, "row": row, "url": result.base_url,
+        st["smoke"] = {"outcome": result.outcome, "row": row, "url": result.base_url, "reason": result.reason,
                        "signature": autoissue.signature("smoke", service_slug(repo), "dev", "\n".join(sorted(result.failing)))}
         runs.set_section(_ensure_run(repo, st), "smoke", result.section(filed))
     except Exception:  # noqa: BLE001
@@ -780,6 +807,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     after-release gitops PRs and wait for every app they name (spec 076)."""
     import shapecmd
     st = require_state(repo)
+    context = context or (st.get("product") or {}).get("context")
     if st["phase"] == "done":
         return True, ["already done"]
     if not shapecmd.route(repo)["deployable"]:
@@ -1068,6 +1096,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("spec")
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
+    p.add_argument("--product", default=None, help="the gitops-app clone of the product ship this run belongs to (/app:ship only, spec 097)")
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("phase")
@@ -1115,7 +1144,8 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        print(describe(start(repo, ns.spec, not ns.no_merge, ns.take_over)))
+        print(describe(start(repo, ns.spec, not ns.no_merge, ns.take_over,
+                              Path(ns.product).resolve() if ns.product else None)))
         return 0
     if ns.cmd == "status":
         st = require_state(repo)
