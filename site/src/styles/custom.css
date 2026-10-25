@@ -111,3 +111,16 @@
     animation: none !important;
   }
 }
+
+/* ---------- wide diagrams from docs/img: readable size, scrolled sideways in the content column ---------- */
+.sl-markdown-content p:has(> img[src*='/img/sdlc-map.svg']) {
+  overflow-x: auto;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.75rem;
+}
+
+.sl-markdown-content img[src*='/img/sdlc-map.svg'] {
+  display: block;
+  max-width: none;
+  width: 1240px;
+}

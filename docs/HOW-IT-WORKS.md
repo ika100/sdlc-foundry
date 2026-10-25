@@ -6,6 +6,8 @@ What actually happens when you use the platform — read this when a command sur
 
 ![Swimlane map of the delivery flow and its feedback loops](img/sdlc-map.svg)
 
+[Open the map full size](img/sdlc-map.svg)
+
 You decide at three points: route an issue, approve its spec, promote to prod. `/svc:ship` runs everything in the green band: agents do the judgement work (spec, design, code, review), `cplat` every step that can be code (checks, pushes, waits, merges, pins, smoke tests). Red CI goes back to the coder that owns the files, a merge conflict back to the architect; after three red rounds, or on a decision the spec does not answer, the run escalates to you. `/app:ship` does the same for a product, repo by repo in plan order.
 
 ## Feedback loops

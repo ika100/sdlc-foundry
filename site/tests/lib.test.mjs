@@ -34,10 +34,10 @@ test('a link to nothing is reported, not silently kept', () => {
   assert.deepEqual(unresolved, ['docs/a.md: nope.md']);
 });
 
-test('images copied into the site get site paths; plain links to them still go to GitHub', () => {
+test('images and links to files copied into the site get site paths', () => {
   const opts = { ...ctx({}, { 'docs/img/map.svg': 'file' }), assetFor: (p) => (p === 'docs/img/map.svg' ? 'img/map.svg' : null) };
   const { text, unresolved } = rewriteLinks('![map](img/map.svg) and [source](img/map.svg)', 'docs/HOW-IT-WORKS.md', opts);
-  assert.equal(text, '![map](/sdlc-foundry/img/map.svg) and [source](https://github.com/ika100/sdlc-foundry/blob/main/docs/img/map.svg)');
+  assert.equal(text, '![map](/sdlc-foundry/img/map.svg) and [source](/sdlc-foundry/img/map.svg)');
   assert.deepEqual(unresolved, []);
 });
 
