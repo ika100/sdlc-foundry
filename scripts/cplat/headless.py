@@ -144,7 +144,7 @@ def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str 
         fh.flush()
         try:
             p = subprocess.run(cmd, cwd=repo, stdout=fh, stderr=subprocess.STDOUT, timeout=minutes * 60,
-                               env={**os.environ, "CPLAT_HEADLESS": "1", **({"CPLAT_RUN_PARENT": run_id} if run_id else {}), **otel})
+                               env=telemetry.merge_env({**os.environ, "CPLAT_HEADLESS": "1", **({"CPLAT_RUN_PARENT": run_id} if run_id else {})}, otel))
             return p.returncode
         except subprocess.TimeoutExpired:
             fh.write(f"\n=== timed out after {minutes:.0f} min\n")

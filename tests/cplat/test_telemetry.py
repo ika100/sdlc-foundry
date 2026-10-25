@@ -105,7 +105,7 @@ def test_endpoint_by_env_turns_telemetry_on():  # AC-101.1
     finally:
         del os.environ["CPLAT_OTLP_ENDPOINT"]
     assert env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
-    assert env["OTEL_METRICS_EXPORTER"] == "otlp" and env["OTEL_LOGS_EXPORTER"] == "otlp"
+    assert env["OTEL_METRICS_EXPORTER"] == "otlp" and env["OTEL_LOGS_EXPORTER"] == "none"
     assert env["OTEL_EXPORTER_OTLP_PROTOCOL"] == "http/protobuf"
     assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == ENDPOINT
     assert env["OTEL_METRIC_EXPORT_INTERVAL"] == "10000"

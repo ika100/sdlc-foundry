@@ -108,3 +108,45 @@ def test_compare_never_takes_more_than_its_budget(monkeypatch, tmp_path):
     monkeypatch.setattr(telemetry, "http_get", slow)
     assert telemetry.compare("run-1", {"totals": {}}) is None
     assert timeouts and all(t <= telemetry.COMPARE_SECONDS for t in timeouts)
+
+
+# ---------------- AC-101.7 (metrics only, no identity switches, user OTEL_* cannot widen) ----------------
+
+def test_only_metrics_are_exported(repo, monkeypatch):
+    """AC-101.7: no logs/events and no traces exporter; metrics stay on."""
+    import telemetry
+    monkeypatch.setenv("CPLAT_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+    env, _, _ = telemetry.session_env(repo, "r1", "ship")
+    assert env["OTEL_LOGS_EXPORTER"] == "none" and env["OTEL_TRACES_EXPORTER"] == "none" and env["OTEL_METRICS_EXPORTER"] == "otlp"
+
+
+@pytest.mark.parametrize("name", ["SESSION_ID", "ACCOUNT_UUID", "VERSION", "ENTRYPOINT", "REPOSITORY"])
+def test_each_identity_switch_is_false(repo, monkeypatch, name):
+    """AC-101.7: every switchable identity attribute is off; resource attributes stay on so cplat_run_id is a label."""
+    import telemetry
+    monkeypatch.setenv("CPLAT_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+    env, _, _ = telemetry.session_env(repo, "r1", "ship")
+    assert env[f"OTEL_METRICS_INCLUDE_{name}"] == "false" and env["OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES"] == "true"
+
+
+USER_OTEL = {"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "https://evil.example.com", "OTEL_EXPORTER_OTLP_HEADERS": "authorization=x",
+             "OTEL_TRACES_EXPORTER": "otlp", "CLAUDE_CODE_OTEL_FLUSH_TIMEOUT_MS": "1"}
+
+
+def test_user_otel_variables_do_not_reach_a_session_with_telemetry(repo, monkeypatch):
+    """AC-101.7: with telemetry on, the user's OTEL_* / CLAUDE_CODE_OTEL_* variables are dropped; ours and the user's resource pairs stay."""
+    import telemetry
+    monkeypatch.setenv("CPLAT_OTLP_ENDPOINT", "http://127.0.0.1:4318")
+    monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "team=blue")
+    otel, _, _ = telemetry.session_env(repo, "r1", "ship")
+    merged = telemetry.merge_env({**USER_OTEL, "PATH": "/bin", "OTEL_RESOURCE_ATTRIBUTES": "team=blue"}, otel)
+    assert "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT" not in merged and "OTEL_EXPORTER_OTLP_HEADERS" not in merged
+    assert "CLAUDE_CODE_OTEL_FLUSH_TIMEOUT_MS" not in merged and merged["OTEL_TRACES_EXPORTER"] == "none"
+    assert merged["PATH"] == "/bin" and merged["OTEL_RESOURCE_ATTRIBUTES"].endswith("team=blue")
+
+
+def test_user_otel_variables_are_untouched_with_telemetry_off():
+    """AC-101.4/101.7: telemetry off: the environment is exactly as it was."""
+    import telemetry
+    base = {**USER_OTEL, "PATH": "/bin"}
+    assert telemetry.merge_env(base, {}) == base

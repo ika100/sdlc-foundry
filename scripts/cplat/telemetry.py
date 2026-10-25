@@ -30,6 +30,8 @@ import settings
 
 CONTENT_SWITCHES = ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_TOOL_DETAILS", "OTEL_LOG_TOOL_CONTENT",
                     "OTEL_LOG_ASSISTANT_RESPONSES", "OTEL_LOG_RAW_API_BODIES")
+IDENTITY_SWITCHES = ("OTEL_METRICS_INCLUDE_SESSION_ID", "OTEL_METRICS_INCLUDE_ACCOUNT_UUID", "OTEL_METRICS_INCLUDE_VERSION",
+                     "OTEL_METRICS_INCLUDE_ENTRYPOINT", "OTEL_METRICS_INCLUDE_REPOSITORY")
 NAMESPACE, TARGET, OTLP_PORT, QUERY_PORT = "observability", "svc/lgtm", 4318, 9090
 COMPARE_SECONDS = 5.0
 TYPES = {"input": "input", "output": "output", "cacheRead": "cache_read", "cacheCreation": "cache_write"}
@@ -196,13 +198,24 @@ def session_env(repo: Path, run_id: str | None, kind: str) -> tuple[dict[str, st
         forward = Forward.to(str(ctx), OTLP_PORT)
         endpoint = f"http://127.0.0.1:{forward.local_port}"
     env = {
-        "CLAUDE_CODE_ENABLE_TELEMETRY": "1", "OTEL_METRICS_EXPORTER": "otlp", "OTEL_LOGS_EXPORTER": "otlp",
+        "CLAUDE_CODE_ENABLE_TELEMETRY": "1", "OTEL_METRICS_EXPORTER": "otlp", "OTEL_LOGS_EXPORTER": "none",
+        "OTEL_TRACES_EXPORTER": "none", "OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES": "true",
+        **{k: "false" for k in IDENTITY_SWITCHES},
         "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf", "OTEL_EXPORTER_OTLP_ENDPOINT": endpoint,
         "OTEL_METRIC_EXPORT_INTERVAL": "10000", "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "cumulative",
         **{k: "0" for k in CONTENT_SWITCHES},
         "OTEL_RESOURCE_ATTRIBUTES": _attributes(repo, run_id, kind),
     }
     return env, note, forward
+
+
+def merge_env(base: dict[str, str], otel: dict[str, str]) -> dict[str, str]:
+    """The session's environment: `base` unchanged when telemetry is off; else without the user's own OTEL_* / CLAUDE_CODE_OTEL_*
+    variables (endpoints, headers, exporters, content switches), plus ours. Their OTEL_RESOURCE_ATTRIBUTES pairs are already in ours."""
+    if not otel:
+        return dict(base)
+    kept = {k: v for k, v in base.items() if not k.startswith(("OTEL_", "CLAUDE_CODE_OTEL_"))}
+    return {**kept, **otel}
 
 
 def reset() -> None:
