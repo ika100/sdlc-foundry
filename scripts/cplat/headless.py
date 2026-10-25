@@ -183,7 +183,9 @@ def main(argv: list[str]) -> int:
     state_fields = {"coordinator_model": model, "coordinator_model_source": source}
     options = budget.parse_options(ns.budget)
     rid = runlog.start("headless", repo=runlog.repo_slug(repo), mode="headless")
-    budget.open_root(rid, f"{runlog.repo_slug(repo)}:{prompt}", ships=budget.ships_in(prompt), options=options, repo=repo)
+    budget.open_root(rid, budget.work_key(repo, budget.spec_refs(prompt), prompt), ships=budget.ships_in(prompt), options=options, repo=repo)
+    if line := budget.limits_line(rid):
+        print(line, flush=True)
     state = {"sessions": 0, "result": "", "code": EXIT_STOPPED}
     try:
         return _drive(ns, repo, prompt, window, cmd, rid, state)
@@ -195,7 +197,8 @@ def main(argv: list[str]) -> int:
     finally:
         if rid:
             reason, outcome = stop_of(state["result"], state["code"])
-            runlog.finish(rid, outcome, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason, **state_fields})
+            esc = {"reason": state["result"], "cause": "decision"} if reason == "budget" else None
+            runlog.finish(rid, outcome, escalation=esc, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason, **state_fields})
 
 
 def stop_of(result: str, code: int) -> tuple[str, str]:
@@ -217,6 +220,7 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
     log = log_dir(repo) / f"{clock():%Y-%m-%d_%H%M%S}.log"
     begin: dt.datetime | None = None    # the budget starts with the first session, not while waiting out a quiet window
     runs, code = 0, 0
+    snapped = False                    # spec 102: a stop that already wrote the recovery snapshot
     last: tuple | None = None
     result = "finished"
     while runs < ns.max_runs:
@@ -238,6 +242,9 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
             result = budget.stop(rid, limit, "session")
             if (open_ship := unfinished(repo)) is not None:
                 ship.budget_stop(repo, open_ship, limit, "session")
+            else:
+                budget.snapshot(repo, "headless", result, [])
+            snapped = True
             break
         budget.count_invocation(rid)
         runs += 1
@@ -256,12 +263,15 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         if key == last:
             result = f"no progress: two runs in a row ended in phase {st['phase']} with nothing changed"
             ship.escalate(repo, result)
+            snapped = True
             break
         last = key
         print(f"run {runs} ended in phase {st['phase']} (exit {code}); resuming", flush=True)
     else:
         result = f"stopped after {ns.max_runs} runs, ship run still unfinished"
     ok = result == "finished" or result.startswith("shipped")
+    if not snapped and (result.startswith("stopped after") or "time budget" in result):
+        budget.snapshot(repo, (unfinished(repo) or {}).get("phase") or "headless", result, [])
     state.update(result=result, code=EXIT_DONE if ok else EXIT_STOPPED)
     return finish(repo, log, result, EXIT_DONE if ok else EXIT_STOPPED)
 

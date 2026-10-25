@@ -26,6 +26,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -39,7 +40,7 @@ LIMITS = ("minutes", "invocations", "reruns", "cost")
 DEFAULTS = {"minutes": 180, "invocations": 60, "reruns": 6, "cost": 15}
 STAGES = ("acceptance", "quality", "tests", "security", "verify", "image", "ci")
 RECOVERY_FILE = "cplat-recovery.json"
-STOP_AFTER = 3                      # equivalent failures without progress
+STOP_AFTER = 2                      # equivalent failures without progress
 EXCERPT_LINES = 40
 REFUSED_RERUN = "budget exhausted: reruns"
 UNKNOWN = "unknown"
@@ -78,6 +79,35 @@ def parse_options(items: list[str] | dict | None) -> dict:
 def defaults(repo: Path | None = None) -> dict:
     """The per-ship limits: the platform defaults, overridden by `budget:` in the settings files (settings.py)."""
     return {**DEFAULTS, **(settings.budget_defaults(repo) if repo else {})}
+
+
+def repo_key(repo: Path) -> str:
+    """The GitHub slug of origin, else the absolute path of the repo."""
+    try:
+        url = run(["git", "config", "--get", "remote.origin.url"], cwd=repo, check=False).stdout.strip()
+        m = re.search(r"github\.com[:/]+([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", url)
+        if m:
+            return f"{m.group(1)}/{m.group(2)}"
+    except Exception:  # noqa: BLE001
+        pass
+    return str(Path(repo).resolve())
+
+
+def work_key(repo: Path, refs: list[str] | str | None, fallback: str) -> str:
+    """`<repo key>:<spec id>`; several specs are their full ids sorted and joined with `+`; `fallback` when none resolves."""
+    import spec as specmod
+    ids = set()
+    for ref in ([refs] if isinstance(refs, str) else refs or []):
+        try:
+            ids.add(specmod.find(Path(repo), ref).id)
+        except Exception:  # noqa: BLE001
+            pass
+    return f"{repo_key(repo)}:{'+'.join(sorted(ids)) if ids else fallback}"
+
+
+def spec_refs(prompt: str) -> list[str]:
+    args = re.sub(r"^\s*/\S+", "", prompt)
+    return [t for t in re.split(r"[\s,]+", args) if re.match(r"\d", t)]
 
 
 def ships_in(prompt: str) -> int:
@@ -167,6 +197,22 @@ def find(run_id: str | None) -> tuple[Path, dict] | None:
     return None
 
 
+def _fold_previous(data: dict, now: str) -> None:
+    """A continued ledger whose last root never closed: its minutes up to the stop (not the idle time since) and counters carry over."""
+    prev = data.get("current")
+    if not prev:
+        return
+    start = _when(prev.get("started_at"))
+    end = _when((data.get("stop") or {}).get("at")) or _when(now)
+    c = data["carried"]
+    if start and end:
+        c["minutes"] = round(c.get("minutes", 0) + max(0.0, (end - start).total_seconds() / 60), 1)
+    for k in ("invocations", "reruns"):
+        c[k] = c.get(k, 0) + data["used"].get(k, 0)
+    data["used"] = {"invocations": 0, "reruns": 0}
+    data["current"] = None
+
+
 def open_root(run_id: str | None, key: str, *, ships: int = 1, options: list[str] | dict | None = None,
               repo: Path | None = None) -> None:
     """Open the ledger of a root run, or continue the unfinished ledger of the same work (AC-102.6).
@@ -187,20 +233,23 @@ def open_root(run_id: str | None, key: str, *, ships: int = 1, options: list[str
     try:
         now = _iso(runs.utcnow())
         path = _path(key)
+        # a root started by hand inside a Claude Code session is that session's invocation; headless counts its own sessions
+        started_in_session = 1 if rec.get("mode") != "headless" and os.environ.get("CLAUDE_CODE_SESSION_ID") else 0
         with runs._locked():
             data = _read(path)
             if data is not None and run_id in (data.get("roots") or []):
                 pass
             elif data is not None and data.get("state") != "done":
+                _fold_previous(data, now)
                 data["roots"].append(run_id)
                 data["state"], data["stop"] = "open", None
                 data["current"] = {"run_id": run_id, "started_at": now}
-                data["used"]["invocations"] = data["used"].get("invocations", 0) + (0 if rec.get("mode") == "headless" else 1)
+                data["used"]["invocations"] = data["used"].get("invocations", 0) + started_in_session
             else:
                 limits = {k: (None if v is None else _number(v * max(1, ships))) for k, v in base.items()}
                 limits.update({k: v for k, v in opts.items()})
                 data = {"key": key, "limits": limits, "carried": {"minutes": 0, "invocations": 0, "reruns": 0, "cost": 0},
-                        "used": {"invocations": 0 if rec.get("mode") == "headless" else 1, "reruns": 0}, "roots": [run_id],
+                        "used": {"invocations": started_in_session, "reruns": 0}, "roots": [run_id],
                         "current": {"run_id": run_id, "started_at": now}, "started_at": now,
                         "changes": [], "state": "open", "stop": None, "attempts": {}, "stages": {}}
                 opts = {}
@@ -221,9 +270,9 @@ def _cost_of(rec: dict) -> float | str:
         sec = runs_usage.for_run(rec, ended_at=_iso(runs.utcnow()), budget_s=3.0, peek=True)
     except TypeError:
         return UNKNOWN
-    if sec is None:
-        return 0.0
-    totals = sec.get("totals") or {}
+    totals = (sec or {}).get("totals")
+    if not totals:                       # unreadable usage is unknown, never 0 (AC-102.5)
+        return UNKNOWN
     if not totals.get("cost_complete", False) and totals.get("calls"):
         return UNKNOWN
     return float(totals.get("cost_usd") or 0.0)
@@ -353,7 +402,7 @@ def stop(run_id: str | None, limit: str, point: str, phase: str | None = None) -
         if phase is None:
             open_ones = [p["name"] for p in (runs.active(run_id) or {}).get("phases") or [] if p.get("ended_at") is None]
             phase = open_ones[-1] if open_ones else point
-        info = {"limit": limit, "point": point, "phase": phase}
+        info = {"limit": limit, "point": point, "phase": phase, "at": _iso(runs.utcnow())}
         data = _modify(found[0], lambda d: d.update(stop=info, state="stopped")) or found[1]
         value = section(data, limit, phase, point)
         for rid in dict.fromkeys([run_id, root_of(run_id)]):
@@ -375,7 +424,7 @@ def on_finish(run_id: str | None, usage: dict | None, outcome: str) -> None:
         stopped = data.get("stop") or {}
         if run_id == root or stopped:
             runs.set_section(run_id, "budget", section(data, stopped.get("limit"), stopped.get("phase"), stopped.get("point")))
-        cost: float | str = 0.0
+        cost: float | str = UNKNOWN
         totals = (usage or {}).get("totals")
         if totals:
             cost = float(totals.get("cost_usd") or 0.0) if totals.get("cost_complete", True) else UNKNOWN
@@ -445,6 +494,7 @@ def _holder(repo: Path):
 _NORMALISE = [
     (re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?"), ""),
     (re.compile(r"\b\d{1,2}:\d{2}:\d{2}(?:[.,]\d+)?\b"), ""),
+    (re.compile(r"\b\d+(?:\.\d+)?\s?(?:ms|s|m)\b"), ""),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I), "<id>"),
     (re.compile(r"(?:\.{0,2}/)?(?:[\w.~@+-]+/)+[\w.~@+-]+"), "<path>"),
     (re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{7,}\b"), "<id>"),

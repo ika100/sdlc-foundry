@@ -30,7 +30,7 @@ def isolated_run_store(monkeypatch, tmp_path_factory):
     """Spec 087: run records go to a per-test state dir and never to a real store, whatever the developer's shell exports.
     (Only the environment is touched here: the `runs` module itself is not imported.)"""
     monkeypatch.setenv("CPLAT_RUNS_DIR", str(tmp_path_factory.mktemp("runs-state")))
-    for name in ("CPLAT_RUNS_REPO", "CPLAT_RUN_PARENT", "CPLAT_HEADLESS"):
+    for name in ("CPLAT_RUNS_REPO", "CPLAT_RUN_PARENT", "CPLAT_HEADLESS", "CLAUDE_CODE_SESSION_ID"):
         monkeypatch.delenv(name, raising=False)
 
 

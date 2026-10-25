@@ -187,7 +187,7 @@ def product_link(product: Path) -> dict:
 
 def _open_budget(repo: Path, st: dict, options: dict) -> None:
     """Spec 102: a ship run is a root (one budget per run tree) unless it runs under headless or a product ship."""
-    budget.open_root(st.get("run_id"), f"{runs.repo_slug(repo)}:{st['spec']}", options=options, repo=repo)
+    budget.open_root(st.get("run_id"), budget.work_key(repo, st["spec"], st["spec"]), options=options, repo=repo)
 
 
 def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: Path | None = None,

@@ -181,7 +181,7 @@ def resolve_context(repo: Path, context: str | None) -> str:
 
 def _open_budget(repo: Path, st: dict, options: dict) -> None:
     """Spec 102: the product run owns the budget of its repo ships: the ship defaults times the plan's repos."""
-    budget.open_root(st.get("run_id"), f"{slug(repo)}:{st['spec']}", ships=len(plan_repos(repo, st['spec'])), options=options, repo=repo)
+    budget.open_root(st.get("run_id"), budget.work_key(repo, st["spec"], st["spec"]), ships=len(plan_repos(repo, st['spec'])), options=options, repo=repo)
 
 
 def start(repo: Path, ref: str, max_: int | None = None, context: str | None = None,
@@ -262,7 +262,9 @@ def escalate(repo: Path, reason: str, cause: str | None = None) -> dict:
                 why = f"{bad[0]}: {reason}"
         st["escalated"] = why
         st["cause"] = final
-    return update(repo, change)
+    st = update(repo, change)
+    budget.snapshot(repo, st.get("phase") or "none", st.get("escalated") or reason, [])   # spec 102: local only
+    return st
 
 
 def finish(repo: Path) -> Path:

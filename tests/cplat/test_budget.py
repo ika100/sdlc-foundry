@@ -15,6 +15,8 @@ Assumptions beyond the design text (kept in one place):
 - The recovery snapshot is JSON with the keys `stage`, `excerpt`, `changed_files`, `criteria`, `attempts`.
 """
 import json
+import os
+import stat
 import subprocess
 import sys
 
@@ -405,10 +407,9 @@ def test_three_equivalent_failures_without_progress_stop_the_run(here, gh, budge
     """AC-102.9: failures that differ only by timestamp, path, line number and hex id are equivalent; the third stops with `no progress: ci`."""
     start_ship(here)
     assert budget.attempt(here, "ci", err(1), 2) is None
-    assert budget.attempt(here, "ci", err(2), 2) is None
-    reason = budget.attempt(here, "ci", err(3), 2)
+    reason = budget.attempt(here, "ci", err(2), 2)     # boundary corrected per AC-102.9 (2, not 3)
     assert reason and reason.startswith("no progress: ci")
-    assert "3" in reason and "FAIL TestPriceAlert" in reason and "want 3 got 4" in reason
+    assert "2" in reason and "FAIL TestPriceAlert" in reason and "want 3 got 4" in reason
     for noise in ("deadbeef", "/tmp/pytest", "alerts_test.go:4", "2026-10-25"):
         assert noise not in reason
 
@@ -416,8 +417,9 @@ def test_three_equivalent_failures_without_progress_stop_the_run(here, gh, budge
 def test_progress_starts_the_count_again(here, gh, budget):
     """AC-102.9: fewer failing checks between attempts is progress; the run is not stopped."""
     start_ship(here)
-    got = [budget.attempt(here, "ci", err(1), 3), budget.attempt(here, "ci", err(2), 3),
-           budget.attempt(here, "ci", err(3), 2), budget.attempt(here, "ci", err(4), 2)]
+    # boundary corrected per AC-102.9 (2, not 3): every attempt has fewer failures than the one before
+    got = [budget.attempt(here, "ci", err(1), 4), budget.attempt(here, "ci", err(2), 3),
+           budget.attempt(here, "ci", err(3), 2), budget.attempt(here, "ci", err(4), 1)]
     assert got == [None, None, None, None]
 
 
@@ -433,8 +435,8 @@ def test_the_attempt_command_exits_3_and_escalates_with_the_reason(here, gh, bud
     start_ship(here)
     capsys.readouterr()
     args = ["attempt", "tests", "--failing", "2", "--names", "TestPriceAlert,TestRate"]
-    codes = [budget.main([*args, "--error", err(i)]) for i in (1, 2, 3)]
-    assert codes == [0, 0, 3]
+    codes = [budget.main([*args, "--error", err(i)]) for i in (1, 2)]   # boundary corrected per AC-102.9 (2, not 3)
+    assert codes == [0, 3]
     assert "no progress: tests" in capsys.readouterr().out + ship.load_state(here)["escalated"]
     assert ship.load_state(here)["escalated"].startswith("no progress: tests")
 
@@ -444,7 +446,7 @@ def test_the_attempt_command_reads_the_error_from_a_file_and_names_progress(here
     start_ship(here)
     f = here / "err.txt"
     codes = []
-    for n in (3, 3, 2, 2):
+    for n in (4, 3, 2, 1):                 # boundary corrected per AC-102.9 (2, not 3)
         f.write_text(err(n))
         codes.append(budget.main(["attempt", "tests", "--failing", str(n), "--error-file", str(f)]))
     assert codes == [0, 0, 0, 0]
@@ -602,3 +604,116 @@ def test_nothing_is_skipped_without_any_recorded_result(here, gh, budget, capsys
     got = decisions(resume(budget, capsys))
     assert set(got) == {"acceptance", "quality", "tests", "security", "verify", "image", "ci"}
     assert all("skip" not in line and "missing" in line for line in got.values())
+
+
+# ---------------- review fixes ----------------
+
+def snapshot_of(repo):
+    return json.loads((repo / ".git" / "cplat-recovery.json").read_text())
+
+
+def test_a_budget_stopped_ship_restarted_through_headless_continues_the_same_ledger(hl_repo, tmp_path, monkeypatch, clock, usage):
+    """AC-102.6 AC-102.7: one ledger key per work: the ship's stop and a later `cplat headless "/svc:ship 7"` share the ledger."""
+    assert ship.main(["--repo", str(hl_repo), "start", "7", "--budget", "minutes=10"]) == 0
+    clock.tick(11 * 60)
+    with pytest.raises(core.PlatformError):
+        ship.set_phase(hl_repo, "pr")
+    fake_claude(tmp_path, monkeypatch, "true")
+    assert headless.main(["/svc:ship 7", "--repo", str(hl_repo)]) == 1
+    assert len(ledgers()) == 1 and ledger()["limits"]["minutes"] == 10 and ledger()["key"].endswith(":007-price-alerts")
+
+
+def test_headless_and_runs_begin_print_the_limits_at_start(hl_repo, tmp_path, monkeypatch, capsys, budget):
+    """AC-102.1: `cplat headless` and `cplat runs begin build` print the same limits line as `ship start`."""
+    fake_claude(tmp_path, monkeypatch, "true")
+    assert headless.main(["/svc:ship 7", "--repo", str(hl_repo)]) == 0
+    assert "budget: minutes 180, invocations 60, reruns 6, cost $15" in capsys.readouterr().out
+    assert runs.main(["begin", "build", "--spec", "007-price-alerts", "--dir", str(hl_repo), "--budget", "minutes=45"]) == 0
+    assert "budget: minutes 45," in capsys.readouterr().out
+
+
+def test_a_headless_budget_stop_is_an_escalation_with_the_decision_cause(hl_repo, tmp_path, monkeypatch):
+    """AC-102.4: the headless record of a budget stop has escalation cause decision and the reason."""
+    ship.start(hl_repo, "7", True)
+    fake_claude(tmp_path, monkeypatch, "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m step")
+    assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--max-runs", "5", "--budget", "invocations=1"]) == 1
+    (h,) = [r for r in buffered_lines() if r["kind"] == "headless"]
+    assert h["escalation"] == {"reason": "budget exhausted: invocations", "cause": "decision"}
+
+
+def test_unreadable_usage_is_an_unknown_cost_never_zero(here, gh, budget, monkeypatch, capsys):
+    """AC-102.5: no usage at all (None) or one without totals makes the cost `unknown`."""
+    import runs_usage
+    start_ship(here)
+    for answer in (None, {"sessions": []}, {"totals": None}):
+        monkeypatch.setattr(runs_usage, "for_run", lambda rec, answer=answer, **kw: answer)
+        assert show(budget, capsys)["used"]["cost"] == "unknown"
+
+
+def test_runs_end_escalated_writes_a_snapshot(here, gh, budget):
+    """AC-102.10: `cplat runs end --outcome escalated` leaves the local recovery snapshot."""
+    assert runs.main(["begin", "build", "--spec", "007-price-alerts", "--dir", str(here)]) == 0
+    assert runs.main(["end", "--outcome", "escalated", "--reason", "need a human", "--cause", "decision", "--dir", str(here)]) == 0
+    assert "need a human" in snapshot_of(here)["excerpt"]
+
+
+def test_an_app_ship_escalation_writes_a_snapshot(w, budget):
+    """AC-102.10: `cplat app-ship escalate` leaves the recovery snapshot in the gitops-app clone."""
+    w.started()
+    assert w.app("escalate", "a repo spec asks a question", "--cause", "decision").rc == 0
+    assert "a repo spec asks a question" in snapshot_of(w.gitops)["excerpt"]
+
+
+def test_headless_stops_write_a_snapshot(hl_repo, tmp_path, monkeypatch):
+    """AC-102.10: budget, max-runs, max-minutes and no-progress stops of headless each leave the snapshot."""
+    gitdir = hl_repo / ".git" / "cplat-recovery.json"
+    fake_claude(tmp_path, monkeypatch, "true")
+    assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--budget", "invocations=0"]) == 1
+    assert "budget exhausted: invocations" in snapshot_of(hl_repo)["excerpt"]
+    gitdir.unlink()
+    assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--max-minutes", "1"]) == 1
+    assert "time budget" in snapshot_of(hl_repo)["excerpt"]
+    gitdir.unlink()
+    ship.start(hl_repo, "7", True)
+    fake_claude(tmp_path, monkeypatch, "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m step")
+    assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--max-runs", "1", "--budget", "invocations=60"]) == 1
+    assert "stopped after 1 runs" in snapshot_of(hl_repo)["excerpt"]
+    gitdir.unlink()
+    fake_claude(tmp_path, monkeypatch, "true")
+    assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--budget", "invocations=60"]) == 1
+    assert "no progress" in snapshot_of(hl_repo)["excerpt"]
+
+
+def test_the_hook_blocks_only_on_a_real_refusal(tmp_path):
+    """AC-102.3: a gate that exits 2 without `budget exhausted`, or fails any other way, does not block a subagent."""
+    cmd = json.loads((ROOT / "plugins" / "shared" / "hooks" / "hooks.json").read_text())["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    (tmp_path / "bin").mkdir()
+
+    def hook(body):
+        f = tmp_path / "bin" / "cplat"
+        f.write_text("#!/bin/sh\n" + body + "\n")
+        f.chmod(f.stat().st_mode | stat.S_IEXEC)
+        env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(tmp_path), "CPLAT_RUN_PARENT": "x"}
+        return subprocess.run(["bash", "-c", cmd], env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert hook("echo 'usage: cplat budget' >&2; exit 2").returncode == 0
+    assert hook("exit 1").returncode == 0
+    refused = hook("echo 'budget exhausted: minutes' >&2; exit 2")
+    assert refused.returncode == 2 and "budget exhausted: minutes" in refused.stderr
+
+
+def test_idle_time_between_a_stop_and_the_resume_is_not_counted(here, gh, budget, clock, usage):
+    """AC-102.6: the minutes used up to the stop are carried; the clock restarts at the resume."""
+    rid = start_ship(here)
+    key = budget.find(rid)[1]["key"]
+    clock.tick(30 * 60)
+    budget.stop(rid, "minutes", "phase end", "build")
+    clock.tick(600 * 60)
+    new = runs.start("ship", repo="x")
+    budget.open_root(new, key)
+    assert 30 <= budget.used_of(budget.find(new)[1], cost=False)["minutes"] < 31
+
+
+def test_durations_do_not_make_failures_differ(budget):
+    """AC-102.9: `in 3.21s` and `in 4.07s` are the same pytest summary."""
+    assert budget.normalise("== 1 failed, 5 passed in 3.21s ==") == budget.normalise("== 1 failed, 5 passed in 4.07s ==")
+    assert budget.normalise("took 15ms") == budget.normalise("took 230 ms")

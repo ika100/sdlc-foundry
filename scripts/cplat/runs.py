@@ -914,7 +914,23 @@ def _budget_options(ns: argparse.Namespace) -> dict:
 def _open_budget(rid: str | None, repo_dir: Path, ns: argparse.Namespace, opts: dict) -> None:
     try:
         import budget
-        budget.open_root(rid, f"{repo_slug(repo_dir)}:{ns.spec or ns.kind}", options=opts, repo=repo_dir.resolve())
+        budget.open_root(rid, budget.work_key(repo_dir, ns.spec, ns.kind), options=opts, repo=repo_dir.resolve())
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _limits_line(rid: str | None) -> str | None:
+    try:
+        import budget
+        return budget.limits_line(rid)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _snapshot(repo_dir: Path, reason: str) -> None:
+    try:
+        import budget
+        budget.snapshot(repo_dir.resolve(), "end", reason, [])
     except Exception:  # noqa: BLE001
         pass
 
@@ -948,6 +964,9 @@ def _recording_command(ns: argparse.Namespace) -> None:
             _atomic_write(pointer, json.dumps({"run_id": rid, "kind": ns.kind, "attached": False}))
         _init_agents(ns.kind, rid)
         print(f"run {rid}")
+        line = _limits_line(rid)
+        if line:
+            print(line)
     elif ns.cmd == "phase":
         if current:
             phase(current.get("run_id"), ns.name)
@@ -960,6 +979,8 @@ def _recording_command(ns: argparse.Namespace) -> None:
             return
         if not current.get("attached"):
             esc = {"reason": ns.reason, "cause": ns.cause or "unknown"} if ns.outcome == "escalated" else None
+            if esc:
+                _snapshot(repo_dir, ns.reason)
             finish(current.get("run_id"), ns.outcome, escalation=esc)
         if pointer:
             pointer.unlink(missing_ok=True)
