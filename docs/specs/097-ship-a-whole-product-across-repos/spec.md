@@ -1,7 +1,7 @@
 ---
 spec_id: 097-ship-a-whole-product-across-repos
 title: Ship a whole product across repos
-status: building
+status: done
 priority: P1
 ---
 
@@ -71,3 +71,4 @@ As a founder, I want one command that takes an approved product spec through eve
 - 2026-10-23 amended: no start without a kube context (AC-097.18); AC-097.5 and AC-097.11 withdrawn and replaced by AC-097.19 and AC-097.20 with fallback gates for libraries and services not exposed in `dev`; product-wide smoke added to Non-goals; AC-097.12 clarified to one record at run end only.
 - 2026-10-23 approved
 - 2026-10-25 building
+- 2026-10-25 done
