@@ -233,7 +233,7 @@ how to declare rules, and how to dry-run it.
 - `docs/self-hosted-runners.md`: the runner must reach the query API (`lgtm.observability.svc:9090` in-cluster). For
   `querySecret`, the ServiceAccount needs `get` on that Secret.
 - `docs/CHANGELOG.md`, one bullet under `## [Unreleased]` in the style of the 088 entry:
-  **Feature (092): firing alerts become issues in the owning repo.** [ADR-036](adr/036-alert-poll-on-the-gitops-runner.md). Sub-bullets:
+  **Feature (092): firing alerts become issues in the owning repo.** [ADR-036](../../adr/036-alert-poll-on-the-gitops-runner.md). Sub-bullets:
   - the poll and the runner requirement
   - rules in app.yaml and `ServiceDown`
   - the 088 convention with `env:<env>`, fired again / resolved / closed while untriaged / reopen within 7 days, and
