@@ -22,6 +22,9 @@ Prices of 2026-10-25 (estimates; output tokens as reported, so output cost is a 
 | 3 | build v4 @ef04f90 | `20261025T161313Z-84282c71` | failed | — | acc not run, sec not run | not reached | 27 | 841,667 | $0.59 | sonnet | worktree @dcf7612 | failed: `git commit -am` not allowlisted (fixed: templates allow `git commit *`, #173, todo-api#22) |
 | 3 | build v4 @1e004f2 | `20261025T162946Z-6ac9e1cf` | done | PR (closed by reset) | acc passed, sec passed | pass | 65 | 2,181,191 | $1.14 | sonnet | worktree @1c19108 | sample @1e004f2 (git commit * allowed) |
 | 3 | build v4 @1e004f2 | `20261025T163707Z-e6e75020` | done | PR (closed by reset) | acc passed, sec passed | pass | 68 | 2,163,118 | $1.17 | sonnet | worktree @1c19108 | sample @1e004f2 |
+| 4 | quick-task v2 @1e004f2 | `20261025T165405Z-8cb3357c` | done | PR (closed by reset) | n/a (quick-task: quality + tests ran) | — | 8 | 302,856 | $0.15 | sonnet | worktree @09121f8 |  |
+| 4 | build v4 @1e004f2 | `20261025T165559Z-37076823` | done | PR (closed by reset) | acc passed, sec passed | pass | 69 | 2,186,363 | $1.19 | sonnet | worktree @09121f8 |  |
+| 4 | build v4 @1e004f2 | `20261025T170445Z-7913b9a4` | done | PR (closed by reset) | acc passed, sec passed | pass | 76 | 2,422,331 | $1.33 | sonnet | worktree @09121f8 |  |
 
 ## Step 1 — coordinator on Sonnet: accepted
 
@@ -40,3 +43,16 @@ Prices of 2026-10-25 (estimates; output tokens as reported, so output cost is a 
 - **quick-task:** $0.13 (one run; step 2 had $0.08, step 1 $0.16 — single quick-task runs vary by about ±$0.05).
 - **build v4:** $1.04 (sample @ef04f90), $1.14 and $1.17 (sample @1e004f2): median **$1.14** vs $1.16 in step 2, all done with a PR and both gates passed. Flat, not a regression (the rule needs both workflows to cost more).
 - The benchmark spec is tiny, so agents read little either way; the briefs target larger specs (the 085–098 round read spec.md 220 times).
+
+## Step 4 — rare branches in reference files: accepted, marked `regression` (within noise)
+
+- **quick-task:** $0.15 (step 3: $0.13). **build v4:** $1.19 and $1.33, median **$1.26** (step 3: $1.14). Both a little higher than step 3, so by the rule the step is marked `regression` for the reviewer; the outcome held in every run (done, PR, both gates passed), so it is not rolled back. The command files shrank only modestly (build.md 20.8 → 19.3 KB, ship.md 10.1 → 8.8 KB) because existing tests require phrases in the pointer lines; the difference is inside the ±$0.10 spread of single build runs.
+
+## Final (AC-100.15, AC-100.16)
+
+| | Baseline (Opus coordinator) | After steps 1–4 | Target | Met |
+|---|---|---|---|---|
+| quick-task | $0.48 | **$0.15** | ≤ $0.30 | yes |
+| build v4 (median of 2) | $1.94 | **$1.26** | ≤ $1.36 | yes |
+
+Nearly all of the saving comes from step 1 (Sonnet coordinator) and step 2 (one `cplat pr open`); steps 3 and 4 are neutral on this small benchmark task.
