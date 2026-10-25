@@ -2,12 +2,16 @@
 
 ## Verified assumptions (Claude Code monitoring docs, code.claude.com/docs/en/monitoring-usage, 2026-10-25)
 
-- Telemetry: `CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_METRICS_EXPORTER=otlp`, `OTEL_LOGS_EXPORTER=otlp`,
-  `OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_PROTOCOL` (no default; must be set). Holds.
+- Telemetry: `CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_METRICS_EXPORTER=otlp` (the logs exporter is optional; metrics
+  export without it), `OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_PROTOCOL` (no default; must be set). Holds.
 - Metrics `claude_code.token.usage` (attribute `type`: `input`, `output`, `cacheRead`, `cacheCreation`; `model`;
   `agent.name`) and `claude_code.cost.usage` (USD; `model`, `agent.name`); event `claude_code.api_request` per call.
   Holds.
-- `OTEL_RESOURCE_ATTRIBUTES` adds `key=value` pairs (no spaces in values) to every datapoint and event. Holds.
+- `OTEL_RESOURCE_ATTRIBUTES` adds `key=value` pairs (no spaces in values) to every datapoint and event; on metric
+  datapoints because `OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES` defaults to `true` (cplat sets it explicitly), so
+  `cplat_run_id` is a series label, not only a `target_info` attribute. Holds.
+- Identity: `session.id`, `user.account_uuid`/`user.account_id`, `app.version`, `app.entrypoint` and `vcs.*` have
+  `OTEL_METRICS_INCLUDE_*` switches; `user.id`, `user.email`, `organization.id` and `terminal.type` have none.
 - Subagent type: `agent.name` on metrics and `api_*` events; absent for the main session. Holds (answers the open
   point: the coordinator is the series without `agent.name`).
 - Content is off by default (`OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_TOOL_DETAILS`, `OTEL_LOG_TOOL_CONTENT`,
@@ -33,12 +37,16 @@
 - **Locality rule** (AC-101.6): an endpoint whose host is `localhost`, `127.0.0.0/8`, `::1`, a `*.svc` /
   `*.svc.cluster.local` name or a `*.localhost` name is local. Any other host needs `telemetry.allow_remote: true` (or
   `CPLAT_OTLP_ALLOW_REMOTE=1`); without it telemetry stays off with one line naming the endpoint and that setting.
-- **Variables set** (AC-101.3, AC-101.7): `CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_METRICS_EXPORTER=otlp`,
-  `OTEL_LOGS_EXPORTER=otlp`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
-  `OTEL_METRIC_EXPORT_INTERVAL=10000`, `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative`, the five
-  `OTEL_LOG_*` content switches `=0` (overriding the user's environment), and
+- **Variables set** (AC-101.3, AC-101.7, metrics only): `CLAUDE_CODE_ENABLE_TELEMETRY=1`, `OTEL_METRICS_EXPORTER=otlp`,
+  `OTEL_LOGS_EXPORTER=none`, `OTEL_TRACES_EXPORTER=none`, `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`,
+  `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_METRIC_EXPORT_INTERVAL=10000`,
+  `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative`, the five `OTEL_LOG_*` content switches `=0`,
+  `OTEL_METRICS_INCLUDE_{SESSION_ID,ACCOUNT_UUID,VERSION,ENTRYPOINT,REPOSITORY}=false`,
+  `OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES=true`, and
   `OTEL_RESOURCE_ATTRIBUTES=cplat.run_id=<id>,cplat.kind=<workflow or kind>,cplat.repo=<slug>,cplat.platform_version=<v>`
-  (values percent-encoded; the user's own `OTEL_RESOURCE_ATTRIBUTES` pairs are kept after ours).
+  (values percent-encoded; the user's own pairs are kept after ours). `telemetry.merge_env` drops every inherited
+  `OTEL_*` and `CLAUDE_CODE_OTEL_*` variable first, so the user's per-signal endpoints or headers cannot redirect or
+  widen the export; with telemetry off the environment is left exactly as it was.
 - **Failure never changes a run** (AC-101.5): the export is Claude Code's own and runs in the background. cplat checks
   the endpoint once per command with a 1 s TCP connect; unreachable → one warning line, the variables are still set
   (Claude Code drops what it cannot send), and the run goes on. A failed port-forward is the same single warning
