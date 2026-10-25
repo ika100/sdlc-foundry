@@ -26,6 +26,7 @@ cplat ship start <spec> [--no-merge] [--take-over]
 
 - Never ask the user. Where `/svc:plan` or `/svc:build` say "ask", take the unattended choice they name; where they name none, escalate.
 - Interrupted build: commit the leftovers as `wip(<task-id>): interrupted` without asking (build Phase 0).
+- `cplat ship start` puts you on the feature branch (creates or switches to it); never create, reset or switch branches yourself.
 - `git push` and `gh pr create` are **not** run by you: `cplat ship pr` does both (it pushes only the spec's feature branch).
 - Every shell command goes through `devbox run <script>`, except git, gh and cplat.
 

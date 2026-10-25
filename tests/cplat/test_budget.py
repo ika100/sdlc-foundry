@@ -461,7 +461,7 @@ def snapshot_file(repo):
 def test_the_snapshot_holds_stage_excerpt_files_criteria_and_attempts(here, gh, budget):
     """AC-102.10: stage, redacted excerpt (last 40 lines), changed files, AC ids, earlier attempts; no full log."""
     start_ship(here)
-    git(here, "checkout", "-qb", "feature/007-price-alerts")
+    git(here, "checkout", "-qB", "feature/007-price-alerts")   # setup: `ship start` may already have created it
     (here / "alerts.go").write_text("package alerts\n")
     (here / "alerts_test.go").write_text("// covers AC-007.2\n")
     budget.attempt(here, "ci", err(1), 2)

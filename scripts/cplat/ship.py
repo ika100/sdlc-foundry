@@ -245,6 +245,26 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     return st
 
 
+def on_branch(repo: Path, branch: str) -> str:
+    """Switch to the run's feature branch before the merge: the existing local one, else the remote one, else a new one
+    from the current HEAD. Code, so a coordinator never improvises it (a refused `git checkout -B` stopped a headless ship)."""
+    def git(*args: str):
+        return run(["git", *args], cwd=repo, check=False)
+    if git("branch", "--show-current").stdout.strip() == branch:
+        return f"branch: {branch}"
+    if git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").returncode == 0:
+        args, how = ["switch", branch], "switched to"
+    elif git("rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}").returncode == 0:
+        args, how = ["switch", "-c", branch, "--track", f"origin/{branch}"], "switched to (tracking origin)"
+    else:
+        args, how = ["switch", "-c", branch], "created"
+    p = git(*args)
+    if p.returncode != 0:
+        raise PlatformError(f"cannot switch to {branch}: {(p.stderr or p.stdout).strip()}",
+                            hint=f"commit or stash local changes, then rerun; or `git switch {branch}` yourself")
+    return f"branch: {how} {branch}"
+
+
 GITOPS_TOKEN_FIX = ("create a fine-grained token with Contents read and write on the gitops-app repo, then: "
                     "gh secret set GITOPS_TOKEN -R {slug}")
 
@@ -1325,6 +1345,8 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "start":
         st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.product).resolve() if ns.product else None, ns.budget)
+        if st["phase"] in ("plan", "build", "pr"):
+            say(on_branch(repo, st["branch"]))
         print(describe(st))
         if line := budget.limits_line(st.get("run_id")):
             print(line)
