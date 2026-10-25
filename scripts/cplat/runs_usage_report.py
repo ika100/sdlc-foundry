@@ -109,7 +109,7 @@ def plugins_label(info: dict) -> str:
 def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | None, store: str,
                          now: datetime.datetime, malformed: int) -> dict:
     kept = runs_report.select(records, since_days=since_days, repo=repo, now=now)
-    cells: dict[tuple[str, str, str, str], list[dict]] = {}
+    cells: dict[tuple[str, str, str, str, str], list[dict]] = {}
     tables: set[str] = set()
     for r in kept:
         if r.get("kind") != "benchmark":
@@ -120,15 +120,16 @@ def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | No
         b = r.get("benchmark") if isinstance(r.get("benchmark"), dict) else {}
         label = plugins_label(b.get("plugins")) if isinstance(b.get("plugins"), dict) else "installed"
         model = b.get("coordinator_model") if isinstance(b.get("coordinator_model"), str) else "unknown"  # before spec 100
-        cells.setdefault((runs_report._text(b.get("workflow")), runs_report._text(r.get("platform_version")), label, model),
+        arm = b.get("arm") if isinstance(b.get("arm"), str) and b.get("arm") else "baseline"   # before spec 107
+        cells.setdefault((runs_report._text(b.get("workflow")), runs_report._text(r.get("platform_version")), label, model, arm),
                          []).append(r)
     out: dict[str, dict] = {}
-    for (workflow, version, label, model) in sorted(cells):
-        rs = cells[(workflow, version, label, model)]
+    for (workflow, version, label, model, arm) in sorted(cells):
+        rs = cells[(workflow, version, label, model, arm)]
         done = [t for t in map(_totals, (r for r in rs if r.get("outcome") == "done")) if t is not None]
         rest = [t for t in map(_totals, (r for r in rs if r.get("outcome") != "done")) if t is not None]
         g, f = _group(done), _group(rest)
-        key = (version if label == "installed" else f"{version} [{label}]") + f" ({model})"
+        key = (version if label == "installed" else f"{version} [{label}]") + f" ({model}) {{{arm}}}"
         out.setdefault(workflow, {})[key] = {
             "coordinator_model": model, "runs": len(rs), "done": len(done),
             "tokens_median": g["tokens_median"], "cost_usd_median": g["cost_usd_median"],   # over done runs only

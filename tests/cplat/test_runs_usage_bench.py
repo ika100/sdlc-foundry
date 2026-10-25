@@ -146,9 +146,10 @@ def test_report_benchmarks_shows_runs_median_and_outcomes_per_workflow_and_versi
     bench("b4", 22, "done", 10, 0.01, version="4.6.0")
     put(store, rec("plain", "2026-10-22T10:00:00Z"))                                    # not a benchmark
     out = report_json(capsys, "--benchmarks")
-    row = out["benchmarks"]["ship"]["4.5.0 (unknown)"]
+    # key gains the arm (spec 107, AC-107.10)
+    row = out["benchmarks"]["ship"]["4.5.0 (unknown) {baseline}"]
     assert row["runs"] == 3 and row["outcomes"] == {"done": 2, "failed": 1}
-    assert out["benchmarks"]["ship"]["4.6.0 (unknown)"]["runs"] == 1 and "window" in out
+    assert out["benchmarks"]["ship"]["4.6.0 (unknown) {baseline}"]["runs"] == 1 and "window" in out
     assert runs.main(["report", "--benchmarks"]) == 0
     text = capsys.readouterr().out
     assert "ship" in text and "4.5.0" in text and "estimate" in text.lower() and "2026-10-25" in text  # AC-099.7: names the price table date
@@ -171,7 +172,8 @@ def test_report_benchmarks_groups_by_coordinator_model_and_medians_done_runs_onl
     bench("s2", "done", 1200, 1.2, "sonnet")
     bench("s3", "failed", 9000, 0.4, "sonnet")
     out = report_json(capsys, "--benchmarks")
-    opus, sonnet = out["benchmarks"]["build"]["4.5.0 (opus)"], out["benchmarks"]["build"]["4.5.0 (sonnet)"]
+    # key gains the arm (spec 107, AC-107.10)
+    opus, sonnet = out["benchmarks"]["build"]["4.5.0 (opus) {baseline}"], out["benchmarks"]["build"]["4.5.0 (sonnet) {baseline}"]
     assert opus["coordinator_model"] == "opus" and opus["runs"] == 2 and opus["cost_usd_median"] == pytest.approx(3.0)
     assert sonnet["runs"] == 3 and sonnet["done"] == 2 and sonnet["outcomes"] == {"done": 1 + 1, "failed": 1}
     assert sonnet["tokens_median"] == 1100 and sonnet["cost_usd_median"] == pytest.approx(1.1)   # s3 (failed) left out
@@ -179,8 +181,8 @@ def test_report_benchmarks_groups_by_coordinator_model_and_medians_done_runs_onl
     assert opus["not_done"] is None
     assert runs.main(["report", "--benchmarks"]) == 0
     text = capsys.readouterr().out
-    assert "build 4.5.0 (sonnet): 3 run(s), median of 2 done" in text and "not done: 1 run(s)" in text
-    assert "build 4.5.0 (opus)" in text
+    assert "build 4.5.0 (sonnet) {baseline}: 3 run(s), median of 2 done" in text and "not done: 1 run(s)" in text
+    assert "build 4.5.0 (opus) {baseline}" in text
 
 
 def test_report_benchmarks_says_no_done_run_when_every_run_failed(store, capsys):
