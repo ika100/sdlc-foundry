@@ -356,9 +356,10 @@ def test_a_remote_endpoint_is_refused_without_opt_in(repo, monkeypatch, url):  #
 
 def test_setting_the_endpoint_never_implies_the_opt_in(repo):  # AC-101.6
     """AC-101.6: a remote endpoint in the settings file without `allow_remote` is refused."""
-    project_settings(repo, endpoint="https://otel.example.com:4318")
+    url = "https://otel.example.com:4318"
+    project_settings(repo, endpoint=url)
     env, note, _ = session(repo)
-    assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env and note and "otel.example.com" in note
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env and note and url in note   # the message names the refused endpoint
 
 
 def test_a_remote_endpoint_exports_with_the_opt_in_by_setting(repo):  # AC-101.6
