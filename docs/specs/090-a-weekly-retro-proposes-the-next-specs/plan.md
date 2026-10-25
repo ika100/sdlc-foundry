@@ -46,7 +46,7 @@ tasks:
   covers: [AC-090.6, AC-090.14]
   parallel_safe: true
   depends_on: [t5]
-  done: false
+  done: true
 - id: t7
   title: The cplat retro command (report, propose, post)
   files: [scripts/cplat/retro.py]
