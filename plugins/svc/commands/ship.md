@@ -44,7 +44,7 @@ Then `cplat ship phase pr`.
 ## Phase `pr`
 
 1. Write the PR body with the Write tool to `.pr-body.md` in the repo root (never into `.git/`: Claude Code refuses edits there; cplat moves the file out of the work tree before it commits) with the template of build.md Phase 7 (summary, spec/plan/verification links, the criteria table from verification.md, `Closes #N` lines, testing done, checklist), then `cplat deps report --body-file .git/PR_BODY.md` to add the Dependency patches section when the build bumped anything.
-2. `cplat ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md` — runs `devbox run ci` (the CI workflow's gates; red → nothing is pushed: fix it through the coder, record it with `cplat runs agent fix-round ci`, and call it again), then pushes the feature branch and opens the PR (or reuses the open one). It refuses while a gitops task has no PR.
+2. `cplat ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md` — runs `devbox run ci` (the CI workflow's gates; red → nothing is pushed: fix it through the coder, record it with `cplat runs agent fix-round ci`, and call it again; between rounds `cplat validate run` checks only what the fix can affect, `cplat ship pr` always runs the whole `devbox run ci`), then pushes the feature branch and opens the PR (or reuses the open one). It refuses while a gitops task has no PR.
 
 ## Phase `land`
 
