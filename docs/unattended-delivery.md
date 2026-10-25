@@ -71,6 +71,15 @@ Every run is recorded as one JSON record in a private GitHub repo (spec 087, [AD
 - **Offline:** without a store, or when it is unreachable, records wait in a local buffer (1000) and one warning line says so. The run itself is never affected. `cplat runs flush` writes the buffer; `cplat doctor` shows what is waiting.
 - **Read it:** `cplat runs report [--json] [--since DAYS]`.
 
+### Token usage and cost
+
+A record also holds a `usage` section (spec 099, [ADR-035](adr/035-token-usage-from-session-transcripts.md)): calls and tokens (input, output, cache read, cache write) and an estimated cost, in total and by phase, role and model. It is read from the local Claude Code session transcripts, so it needs Claude Code 2.1.132 or later and the machine that ran the session. Nothing but numbers and names of phases, roles and models is stored.
+
+- **Read it:** `cplat runs usage <run_id>` (or `--session <id>`, `--json`); `cplat runs report` adds usage per kind.
+- **As reported:** output tokens are shown as the transcripts report them, so the output cost is a lower bound. Costs are estimates from the price table in the repo (its date is printed); a model without a price shows `unknown` and marks the cost incomplete.
+- **Delivered vs. gate-failed:** a run is delivered when its outcome is `done` and neither gate (`cplat runs gate acceptance|security`, set by `/svc:build`) failed. A `done` run with a failed gate counts as gate-failed, next to the failed, escalated and abandoned runs.
+- **Benchmark:** `cplat runs benchmark <quick-task|build|ship>` runs one fixed task headless against `ika100/todo-api` at a pinned revision and appends a `benchmark` record; `cplat runs report --benchmarks` shows median tokens and cost per workflow and platform version. `ship` merges and deploys to the sample's dev, so the command resets the sample repo to the pinned revision afterwards (force-push of its main branch); `--reset-first` repairs a sample left in a bad state by an earlier failed reset. Benchmark runs never count in the normal report.
+
 ### Agent metrics
 
 A build record also says how each agent did (spec 089), per agent, shape and model: `cplat runs report --agents [--json] [--since DAYS] [--repo R] [--agent NAME] [--shape SHAPE]`.

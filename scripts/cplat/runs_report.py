@@ -13,6 +13,7 @@ from collections import Counter
 
 import core
 import feedback
+import runs_usage_report
 
 UNKNOWN = "unknown"
 FILED_RESULTS = ("new", "+1", "suppressed", "pending")
@@ -136,6 +137,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         "reruns": {"by_reason": _count_sorted(by_reason), "by_check": _count_sorted(by_check)},
         "filed": dict(filed),
         "buffered": buffered,
+        "usage": runs_usage_report.aggregate_usage(kept),
     }
 
 
@@ -164,6 +166,7 @@ def render_text(agg: dict) -> str:
     lines.append(f"Reruns by reason: {_pairs(agg['reruns']['by_reason'])}")
     lines.append(f"Reruns by check: {_pairs(agg['reruns']['by_check'])}")
     lines.append("Filed issues: " + ", ".join(f"{k} {n}" for k, n in agg["filed"].items()))
+    lines += runs_usage_report.render_usage_lines(agg["usage"])
     lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
     return "\n".join(lines)
 

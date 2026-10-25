@@ -100,6 +100,8 @@ After a batch in which `cplat build merge` set a task aside (exit 3), re-plan **
 
 `devbox run test-fast`: every acceptance test passes. Failing ones go to the coder of a task that `covers` that criterion (at most 2 rounds, each recorded with `cplat runs agent fix-round test --task <task>`); then escalate.
 
+When every acceptance test passes, run `cplat runs gate acceptance passed`. Before escalating because they still fail after the fix rounds, run `cplat runs gate acceptance failed` (spec 099).
+
 `TOUCHED_FILES=$(git diff --name-only $BASE_REF..HEAD)`.
 
 ## Phase 3 — QA: one CI gate, agents only where it is red (spec 080)
@@ -113,6 +115,8 @@ After a batch in which `cplat build merge` set a task aside (exit 3), re-plan **
    - security → run `cplat deps patch` first (ADR-034): it bumps every fixable dependency finding, re-runs the gates and commits, or reverts. Exit 0 → the gate is green, go to step 3. Exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed: in a `/svc:ship` run `cplat ship escalate '<reason>' --cause <CAUSE>`, alone `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`. Exit 4 → not a dependency finding (secrets, bandit, image scan): the **security** agent (`agents.security`) handles it as before: a CRITICAL secrets or bandit finding escalates at once; HIGH is documented and the build continues. A red gate after a bump is never handed to a coder, and acceptance tests stay fixed. Patch rounds (at most 2, counted by cplat) are separate from the 2 fix rounds below.
 
    Run `devbox run ci` again; at most 2 rounds, then escalate.
+
+   When `devbox run ci` is green, run `cplat runs gate security passed`. When the security gate stays red (escalation, or a HIGH finding documented while the build goes on), run `cplat runs gate security failed` first (spec 099).
 3. **Green** → spawn agents only where needed:
    - **tester** (`agents.tester`, normal mode) only when the touched files add internals that no unit test covers: it adds those tests and runs `devbox run test`;
    - **security** only when a Dockerfile changed (`devbox run image-build && devbox run image-scan`), writing `docs/security/scan-<today>.md`.

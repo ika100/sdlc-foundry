@@ -6,6 +6,11 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (099): token usage and cost are measured per run.** [ADR-035](adr/035-token-usage-from-session-transcripts.md)
+  - A run record gets a `usage` section (totals and breakdown by phase, role and model), read from the local Claude Code session transcripts. **Needs Claude Code 2.1.132 or later** (`CLAUDE_CODE_SESSION_ID`). Costs are **estimates** from the price table in the repo; output tokens are shown as reported, so output cost is a lower bound.
+  - `cplat runs usage <run_id>` / `--session <id>` [`--json`] prints the breakdown. `cplat runs gate <acceptance|security> <passed|failed>` records the gate results that `/svc:build` states; a ship or build record carries `gates`.
+  - `cplat runs report` adds a `usage` view per kind: delivered runs with total and median, next to failed, escalated, abandoned and gate-failed runs.
+  - `cplat runs benchmark <quick-task|build|ship> [--reset-first]` runs a fixed task headless against the sample repo `ika100/todo-api`; `cplat runs report --benchmarks` compares workflows per platform version.
 - **Feat (094): a merge conflict re-plans instead of escalating.**
   - `cplat build merge` aborts a conflicting merge and sets the task aside; `cplat build replan-commit` accepts the architect's amendment only when it changes `files` / `depends_on` / `parallel_safe` of open tasks.
   - A task is re-planned once and a build at most 3 times, then it escalates. Conflicts are never resolved by hand.

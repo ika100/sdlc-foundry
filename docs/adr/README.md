@@ -40,3 +40,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [032](032-private-run-store.md) | Every run is recorded in a private run store: one file per run, one commit per flush, buffered locally when unreachable |
 | [033](033-auto-filed-issues-with-signatures.md) | Failures become auto-filed issues, deduplicated by one `Signature: <kind>:<16 hex>` body line; one module (`autoissue`) for platform failures, smoke failures and alerts |
 | [034](034-fixable-dependency-findings-are-patched-by-the-run.md) | Fixable dependency findings are patched by the run: deps recipes per shape, cplat deps patch, 2 rounds, exact revert |
+| [035](035-token-usage-from-session-transcripts.md) | Token usage is measured from the local session transcripts: sessions claimed via CLAUDE_CODE_SESSION_ID, shared calls split evenly, costs estimated from a price table in the repo |

@@ -1,0 +1,62 @@
+{
+ "taken": "2026-10-25",
+ "source": "https://www.anthropic.com/pricing",
+ "unit": "USD per million tokens",
+ "note": "cache_write is the 5-minute cache write price. UNVERIFIED: the 5.x and fable entries are best-known values; check against the pricing page.",
+ "models": {
+  "claude-opus-4-5": {
+   "input": 5.0,
+   "cache_write": 6.25,
+   "cache_read": 0.5,
+   "output": 25.0
+  },
+  "claude-opus-5": {
+   "input": 5.0,
+   "cache_write": 6.25,
+   "cache_read": 0.5,
+   "output": 25.0
+  },
+  "claude-opus-5-5": {
+   "input": 5.0,
+   "cache_write": 6.25,
+   "cache_read": 0.5,
+   "output": 25.0
+  },
+  "claude-sonnet-4-5": {
+   "input": 3.0,
+   "cache_write": 3.75,
+   "cache_read": 0.3,
+   "output": 15.0
+  },
+  "claude-sonnet-5": {
+   "input": 3.0,
+   "cache_write": 3.75,
+   "cache_read": 0.3,
+   "output": 15.0
+  },
+  "claude-sonnet-5-5": {
+   "input": 3.0,
+   "cache_write": 3.75,
+   "cache_read": 0.3,
+   "output": 15.0
+  },
+  "claude-haiku-4-5": {
+   "input": 1.0,
+   "cache_write": 1.25,
+   "cache_read": 0.1,
+   "output": 5.0
+  },
+  "claude-haiku-5-5": {
+   "input": 1.0,
+   "cache_write": 1.25,
+   "cache_read": 0.1,
+   "output": 5.0
+  },
+  "claude-fable-5-1": {
+   "input": 3.0,
+   "cache_write": 3.75,
+   "cache_read": 0.3,
+   "output": 15.0
+  }
+ }
+}
