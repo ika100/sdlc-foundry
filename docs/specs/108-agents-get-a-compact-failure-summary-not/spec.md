@@ -1,7 +1,7 @@
 ---
 spec_id: 108-agents-get-a-compact-failure-summary-not
 title: Agents get a compact failure summary, not the full log
-status: draft
+status: approved
 priority: P2
 tracks: [139]
 ---
@@ -32,8 +32,8 @@ The scope. A summary is made for every failing command that `cplat quiet` runs (
 - **AC-108.7** Given a summarized failure, then the full log stays on the machine at the path in the header, and the agent brief and agent instructions say to open it only when the summary is not enough. Secrets in the summary are redacted as in spec 087. Neither the summary nor the log goes to the run store.
 - **AC-108.8** Given a ship fix round started by a failing CI check, when the fixing agent is briefed, then the failing check's log is saved on the machine, and the brief holds the summary of it and the log path, not the raw CI log.
 - **AC-108.9** Given a failure that counts toward the no-progress stop (AC-102.9) or is written to a recovery snapshot (AC-102.10), then the normalized message there is the one in the summary, and the snapshot's excerpt is the summary.
-- **AC-108.10** Given a project setting or a flag that turns summaries off, then failures are reported as today (the last 40 lines and the log path), and the output says that summaries are off.
-- **AC-108.11** Given `cplat runs benchmark` (spec 099) for a fixed task that starts with one failing test and one lint finding, when it runs once with summaries and once with them off (AC-108.10), then it reports for both runs the outcome, the number of fix rounds, the tokens and cost of the fixing agents' calls and the run total, and writes them into the benchmark's record. It exits non-zero if the run with summaries is not done, a gate fails, or it needs more fix rounds than the run without.
+- **AC-108.10** Given a project with no setting for summaries, then summaries are on. Given the project setting turns summaries off, or `cplat quiet` is run with `--raw`, then failures are reported as today (the last 40 lines and the log path), and the output says that summaries are off.
+- **AC-108.11** Given `cplat runs benchmark` (spec 099) for a new fixed benchmark task, added by this spec, that starts with one failing test and one lint finding, when it runs once with summaries and once with them off (AC-108.10), then it reports for both runs the outcome, the number of fix rounds, the tokens and cost of the fixing agents' calls and the run total, and writes them into the benchmark's record. There is no savings target: it exits non-zero only if the run with summaries is not done, a gate fails, or it needs more fix rounds than the run without (as in AC-103.11).
 
 ## Non-goals
 
@@ -46,13 +46,15 @@ The scope. A summary is made for every failing command that `cplat quiet` runs (
 
 ## Open questions
 
-- What are the size limits of a summary? (suggested: at most 20 entries per check, 10 excerpt lines per entry, 80 lines in total; affects AC-108.2, AC-108.5)
-- Which tool formats must be recognized in the first version? (suggested: the default test, lint, type check and image build tools of the six templates, everything else falls back to the last 40 lines; affects AC-108.4)
-- Are CI failures in ship fix rounds in scope, or only local commands? (suggested: both; affects AC-108.8)
-- How are summaries turned off, and are they on by default? (suggested: on by default, off with a project setting and a `--raw` flag on `cplat quiet`; affects AC-108.10, AC-108.11)
-- Does the benchmark need a savings target? (suggested: no, the numbers are reported and the run with summaries must not need more fix rounds, as in AC-103.11; affects AC-108.11)
-- Confirm: the benchmark gets a new fixed task that starts with a failing test and a lint finding, because the existing tasks may not need a fix round. (affects AC-108.11)
+- ~~What are the size limits of a summary?~~ Answered: at most 20 entries per check, 10 excerpt lines per entry, 80 lines in total, see AC-108.2 and AC-108.5.
+- ~~Which tool formats must be recognized in the first version?~~ Answered: the default test, lint, type check and image build tools of the six templates, everything else falls back to the last 40 lines, see AC-108.4.
+- ~~Are CI failures in ship fix rounds in scope, or only local commands?~~ Answered: both, see AC-108.8.
+- ~~How are summaries turned off, and are they on by default?~~ Answered: on by default, off with a project setting and a `--raw` flag on `cplat quiet`, see AC-108.10 and AC-108.11.
+- ~~Does the benchmark need a savings target?~~ Answered: no, the numbers are reported and the run with summaries must not need more fix rounds, as in AC-103.11, see AC-108.11.
+- ~~Confirm: the benchmark gets a new fixed task that starts with a failing test and a lint finding.~~ Answered: yes, a new fixed benchmark task, see AC-108.11.
 
 ## Changelog
 
 - 2026-10-25 created
+- 2026-10-25 open questions answered (suggested answers)
+- 2026-10-25 approved
