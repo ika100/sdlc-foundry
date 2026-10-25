@@ -6,6 +6,9 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (097): `/app:ship` ships a whole product across repos.** [ADR-042](adr/042-product-ship-coordinates-repo-ships.md)
+  - `cplat app-ship` (state in the gitops-app's git dir, never committed) coordinates one `cplat ship` per component repo: the spec/plan PR is merged on green first, repos run in plan order (at most `--max`, default 3) once their dependencies passed their gate (exposed service: Synced/Healthy and passing smoke; internal service: Synced/Healthy; library: merged PR), and the gitops-app's PRs merge one at a time through a merge slot. `cplat ship start --product DIR` links a repo ship to the product run. A repo that escalates stops its dependents only. One `product-ship` run record is written at the run end.
+  - New command `/app:ship <spec> [--max N] [--context C]`; a second Stop hook entry keeps the session going until the run is done or escalated. `/app:build` is unchanged. It refuses without a kube context for the product's cluster.
 - **Fix: templates allow `git commit *`.** Listing flag orders (`-m`, `-s -m`, `-q -m` …) kept missing the next one (`-am`, `-a -s -m`), and each stopped a headless build. Commits stay local; `git commit --amend` still asks, and pushes keep their own rules.
 - **Feat (090): a weekly retro proposes the next specs.** [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)
   - `cplat retro [--week W] [--json] [--out DIR]` builds one report of the last complete week from the run store, the auto-filed platform issues and the agent metrics of spec 089, each figure next to the previous week. By hand it prints and writes nothing.

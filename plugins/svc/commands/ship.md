@@ -18,7 +18,7 @@ cplat shape
 cplat ship start <spec> [--no-merge] [--take-over]
 ```
 
-`unsupported` or no shape → stop (gitops-app repos ship through `/app:build`). `ship start` refuses an unapproved spec, an issue the spec tracks that another branch has claimed (spec 082: `--take-over` only when the user says so; it also ends another spec's unfinished run, recorded as `abandoned`), and a repo linked to a gitops-app without the secret `GITOPS_TOKEN` (spec 077). In each case, show its hint and stop. It prints the phase and the next step; a re-run **resumes** at that phase. Print both outputs verbatim.
+`unsupported` or no shape → stop (gitops-app repos ship through `/app:build`). `ship start` refuses an unapproved spec, an issue the spec tracks that another branch has claimed (spec 082: `--take-over` only when the user says so; it also ends another spec's unfinished run, recorded as `abandoned`), and a repo linked to a gitops-app without the secret `GITOPS_TOKEN` (spec 077). In each case, show its hint and stop. (`--product <dir>` is passed by `/app:ship` only: it links the run to a product ship, giving it a parent record, the product's kube context and the gitops merge slot.) It prints the phase and the next step; a re-run **resumes** at that phase. Print both outputs verbatim.
 
 **While the run is not finished, the shared plugin's Stop hook refuses to let the session end** and tells you the next step, with the failing tests in the build phase. That is intended: keep working. You may stop only after `cplat ship escalate '<reason>'` (see Escalate) or when the run is done.
 

@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "3.4.0",
+      "version": "3.4.1",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": ["python", "fastapi", "devbox", "k8s"]
@@ -26,7 +26,7 @@
     {
       "name": "app",
       "source": "./plugins/app",
-      "version": "1.0.2",
+      "version": "1.1.0",
       "description": "Spec-driven features across a product's repos: /app:spec, /app:plan (criteria per repo, contract), /app:build (ready repos in parallel through their own specs), /app:specs.",
       "category": "agents",
       "tags": ["planning", "multi-repo", "gitops"]
@@ -58,7 +58,7 @@
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "description": "Common quality and security agents plus the /new-service bootstrap command (shape-aware via shapes.yml).",
       "category": "agents",
       "tags": ["quality", "security", "bootstrap"]
