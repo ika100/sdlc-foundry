@@ -35,8 +35,16 @@ The workflows assume what a GitHub-hosted Ubuntu runner has, except where noted:
 - **Docker** for the `docker` job of service shapes and for workflow `services:`: a Docker daemon next to the runner
   (Docker in Docker on Kubernetes).
 
+- **Network access to the query API** for the gitops-app's alert poll (`alerts.yml`, spec 092, [ADR-038](adr/038-alert-poll-on-the-gitops-runner.md)):
+  the runner must reach Prometheus (`lgtm.observability.svc:9090` in-cluster) and `gh`. The poll never runs on
+  GitHub-hosted runners. For an app.yaml `querySecret`, the runner's ServiceAccount needs `get` on that Secret.
+
 A reference image (official runner + xz, gh, single-user Nix, devbox) is
 [`runner-image/Dockerfile` in stock-manager-gitops](https://github.com/ika100/stock-manager-gitops/blob/main/runner-image/Dockerfile).
+
+The run store repo needs its own runner for the weekly retro (spec 090). A personal account has repository-level runners
+only, so give the store a scale set of its own with devbox in the image and set the store's repo variable `CI_RUNNER` to
+its name. The workflow installs Claude Code when the image lacks it.
 
 ## Runners on Kubernetes (ARC)
 

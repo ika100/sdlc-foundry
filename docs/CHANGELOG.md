@@ -6,6 +6,11 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (090): a weekly retro proposes the next specs.** [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)
+  - `cplat retro [--week W] [--json] [--out DIR]` builds one report of the last complete week from the run store, the auto-filed platform issues and the agent metrics of spec 089, each figure next to the previous week. By hand it prints and writes nothing.
+  - `cplat runs init` adds a workflow to the run store repo that runs it Mondays 06:00 UTC: report, then headless Claude proposes at most 5 specs and 3 agent prompt changes, then `cplat retro post` checks every proposal against the report's evidence (an unsupported one is refused and counted) and posts.
+  - The posted `retro` issue in `ika100/sdlc-foundry` has counts only (no repo, spec or store names, reasons as `reason 1`); the issue of an earlier week is commented on and closed. The full report is committed under `retros/` in the store.
+  - **Action:** set the store repo secrets `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and `RETRO_GH_TOKEN` (fine-grained: Issues read/write on the platform repo, Contents read/write on the store), give the store a self-hosted runner (`CI_RUNNER`), run `gh auth refresh -h github.com -s workflow`, then `cplat runs init <owner/name>` again. `cplat doctor` warns about whatever is missing.
 - **Feature (091): ship checks the spec in dev with smoke tests.** A criterion ending in `(smoke)` is checked in dev after deploy: every deployable template has `devbox run smoke` (`SMOKE_BASE_URL`, one output contract), web repos get the standard Playwright scaffold (`needs_e2e` is ignored), and `cplat smoke run` runs it by hand. `cplat ship deploy` runs smoke against the gitops-app's dev URL (one retry after 30 s, 600 s limit); red smoke escalates with cause `code`, files a `smoke-failure` issue in the service repo and resumes smoke-only; the run record gets a `smoke` section ([ADR-040](adr/040-smoke-tests-against-a-deployed-environment.md)). Migration: run `/shared:update-service`, then `cplat triage setup-labels` if the `smoke-failure` label is missing.
 - **Fix (094): `cplat spec task-done` no longer rewrites plan.md.** It sets `done: true` on the task's own line(s) and keeps the rest of the file byte for byte (no block-YAML re-serialisation, no rewrapped summary).
 - **Fix (095): a good dependency bump is not reverted for an unrelated red check.** When the bump clears every dependency finding but the security gate stays red for another reason (bandit, secrets), `cplat deps patch` keeps the bump, prints it and exits 4 so the coder takes over, instead of reverting and blaming it. Unrated fixable findings were already bumped (severity does not select, AC-095.12).
@@ -49,6 +54,13 @@ Format: each section lists changes for a tagged release. Plugin and template ver
   - At most 10 new issues per 24 h per machine; filings that fail or hit the cap stay pending and are retried at `cplat runs flush`.
   - `CPLAT_AUTO_ISSUES=off` sends nothing and prints the draft; `CPLAT_FEEDBACK_REPO=<owner/name>` files elsewhere.
   - **Action:** run `cplat triage setup-labels` once to create `auto-filed`.
+- **Feature (092): firing alerts become issues in the owning repo.** [ADR-038](adr/038-alert-poll-on-the-gitops-runner.md)
+  - `.github/workflows/alerts.yml` in a gitops-app runs `cplat alerts poll` every 15 minutes at the repo's pinned platform version, only on the self-hosted runner (`CI_RUNNER`); `gh workflow run alerts.yml -f dry_run=true` shows what would happen.
+  - Rules go under the `observability` addon in app.yaml (`rules`, `alerts`, `queryURL`, `querySecret`, `alertmanagerURL`; `devbox run quality` validates them); `ServiceDown` is built in.
+  - Issues follow the 088 convention with an `env:<env>` label in the service's `repo` (else the gitops repo): a comment when it fires again after a resolve, a comment and close when it resolves while untriaged, a reopen within 7 days, nothing after `wontfix`.
+  - At most 10 new issues per poll; the rest become one summary issue.
+  - Three failed polls in a row file an "alert poll is failing" issue.
+  - **Action:** set the secret `ALERTS_TOKEN` (fine-grained, Issues: read and write on the service repos); `cplat doctor` warns when it is missing. Run `/shared:update-service` in gitops-app repos.
 - **Feat (089): agent quality is measured per agent, shape and model.**
   - A build record gets `agents` and `replans` sections (fix rounds, red CI, review findings, refused test diffs, out-of-plan files, merge conflicts, tester misses), recorded by `cplat ship land`, `cplat spec test-diff` and the new `cplat runs agent` calls in the build prompts.
   - `cplat runs report --agents [--by-version] [--agent NAME] [--shape SHAPE] [--json]` ranks agents by rework and cites an example run for the top causes. A metric a run never reached shows as `n/a`, not 0.
