@@ -123,6 +123,7 @@ jobs:
   docker:
     name: docker (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    if: github.ref_type != 'tag'   # spec 106: a release tag re-tags the tested sha image (release-image), it never rebuilds
     needs: [quality, test]
     permissions:
       contents: read
@@ -208,9 +209,60 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  release-image:
+    name: release-image (re-tag the image main already built and tested)
+    # Spec 106: a v*.*.* tag never rebuilds. It gives the sha-<40> image of the tagged commit its X.Y.Z, X.Y and X tags
+    # (same manifest, same digest), so prod runs what staging tested.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [quality, test]
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      NO_IMAGE: no published sha-<40> image
+    steps:
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve the tested sha image
+        id: tested
+        run: |
+          src="${IMAGE}:sha-${GITHUB_SHA}"
+          if ! docker buildx imagetools inspect "$src" --raw > manifest.json; then
+            echo "::error::${NO_IMAGE} for ${GITHUB_SHA}: merge to main and wait for its CI before tagging"
+            exit 1
+          fi
+          echo "digest=sha256:$(sha256sum manifest.json | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Scan the image for fixable HIGH/CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ghcr.io/${{ github.repository }}@${{ steps.tested.outputs.digest }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          # releases are blocked by findings; the scanned image is the one that gets the release tags
+          exit-code: '1'
+
+      - name: Tag the tested image X.Y.Z, X.Y and X
+        env:
+          DIGEST: ${{ steps.tested.outputs.digest }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          docker buildx imagetools create -t "${IMAGE}:${version}" -t "${IMAGE}:${version%.*}" -t "${IMAGE}:${version%%.*}" "${IMAGE}@${DIGEST}"
+
   docker-publish:
     name: docker (publish multi-arch manifest)
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: docker
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     permissions:

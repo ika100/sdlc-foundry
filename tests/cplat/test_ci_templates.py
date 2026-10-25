@@ -10,6 +10,7 @@ IMAGE_TEMPLATES = ["service-python", "service-java", "service-go", "web-nextjs"]
 
 def trivy_steps(template: str) -> list[str]:
     text = (TEMPLATES / template / ".github" / "workflows" / "ci.yml").read_text()
+    text = text.split("\n  release-image:")[0] + "\n  docker-publish:" + text.split("\n  docker-publish:")[1]   # spec 106: the release gate scans by digest, not per arch
     steps = re.split(r"\n(?=      - )", text)
     return [s for s in steps if "aquasecurity/trivy-action" in s]
 
