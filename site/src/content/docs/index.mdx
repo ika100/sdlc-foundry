@@ -34,6 +34,17 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
   </Card>
 </CardGrid>
 
+## From an issue to production
+
+You decide at three points: route an issue, approve its spec, promote to prod. `/svc:ship` runs everything in the green band, and every run, failure and alert comes back as an issue for the next round.
+
+<figure class="map">
+  <div class="map-scroll">
+    <img src="/sdlc-foundry/img/sdlc-map.svg" width="1440" height="650" alt="Swimlane map of the delivery flow and its feedback loops: you route an issue and approve the spec; agents write spec, plan, red tests, code and verification; cplat runs the gates, opens the PR, merges on green, runs the smoke tests in dev and promotes to staging; prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts come back as deduplicated issues that you route in triage." />
+  </div>
+  <figcaption>[How it works](/sdlc-foundry/guides/how-it-works/#the-map) explains the map and lists the feedback loops · [open it full size](/sdlc-foundry/img/sdlc-map.svg)</figcaption>
+</figure>
+
 ## One declaration, a running stack
 
 <div class="split">

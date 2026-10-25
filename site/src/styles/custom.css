@@ -119,8 +119,32 @@
   border-radius: 0.75rem;
 }
 
-.sl-markdown-content img[src*='/img/sdlc-map.svg'] {
+.sl-markdown-content p > img[src*='/img/sdlc-map.svg'] {
   display: block;
   max-width: none;
   width: 1240px;
+}
+
+/* the same map on the landing page: the splash column is wider, so it fills it and scrolls only below 1080px */
+.map {
+  margin-block: 1.5rem;
+}
+
+.map-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.75rem;
+}
+
+.map-scroll img {
+  display: block;
+  width: 100%;
+  min-width: 1080px;
+  max-width: none;
+}
+
+.map figcaption {
+  margin-top: 0.6rem;
+  color: var(--sl-color-gray-2);
+  font-size: var(--sl-text-sm);
 }
