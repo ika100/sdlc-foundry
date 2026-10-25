@@ -538,6 +538,7 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
     dropped = 0
     now = _iso(utcnow())
     usage = _collect_usage(run_id, now)
+    _add_otel(run_id, usage)
     _budget_closed(run_id, usage, outcome)
     t0 = monotonic()
     try:
@@ -577,6 +578,22 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
     if still or dropped:
         return _emit(_warning(why or "recording failed: record not written", buffered_count(), dropped))
     return None
+
+
+def _add_otel(run_id: str, usage: dict | None) -> None:
+    """Spec 101: `usage.otel` when the run had telemetry on (a `telemetry` section, or an explicit endpoint in the environment).
+    5 s at most; no figures, no key. Never raises."""
+    try:
+        if usage is None:
+            return
+        rec = _read_active(run_id) or {}
+        if not (rec.get("telemetry") or os.environ.get("CPLAT_OTLP_ENDPOINT")):
+            return
+        import telemetry
+        if note := telemetry.compare(run_id, usage):
+            usage["otel"] = note
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _budget_closed(run_id: str, usage: dict | None, outcome: str) -> None:

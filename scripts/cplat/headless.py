@@ -37,6 +37,7 @@ import budget
 import runs as runlog
 import settings
 import ship
+import telemetry
 from core import PlatformError
 
 EXIT_DONE, EXIT_STOPPED, EXIT_QUIET = 0, 1, 3
@@ -137,12 +138,13 @@ def progress_key(repo: Path, st: dict) -> tuple:
 
 
 def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str | None = None) -> int:
-    with log.open("a") as fh:
+    prompt = cmd[cmd.index("-p") + 1] if "-p" in cmd[:-1] else ""
+    with log.open("a") as fh, telemetry.session(repo, run_id, settings.workflow_of(prompt) or "headless") as otel:
         fh.write(f"\n=== {clock():%Y-%m-%d %H:%M:%S} {shlex.join(cmd)}\n")
         fh.flush()
         try:
             p = subprocess.run(cmd, cwd=repo, stdout=fh, stderr=subprocess.STDOUT, timeout=minutes * 60,
-                               env={**os.environ, "CPLAT_HEADLESS": "1", **({"CPLAT_RUN_PARENT": run_id} if run_id else {})})
+                               env={**os.environ, "CPLAT_HEADLESS": "1", **({"CPLAT_RUN_PARENT": run_id} if run_id else {}), **otel})
             return p.returncode
         except subprocess.TimeoutExpired:
             fh.write(f"\n=== timed out after {minutes:.0f} min\n")
@@ -171,6 +173,7 @@ def main(argv: list[str]) -> int:
     if not (repo / ".claude" / "settings.json").is_file():
         raise PlatformError("no .claude/settings.json: an unattended run needs the repo's committed permission allowlist",
                             hint="/shared:update-service (or cplat adopt) brings it")
+    telemetry.reset()
     prompt = " ".join(ns.prompt)
     window = parse_window(ns.quiet)
     model, source = settings.coordinator_model(repo, prompt, ns.model)

@@ -69,3 +69,12 @@ def clock(monkeypatch):
     monkeypatch.setattr(runs, "utcnow", c.utcnow)
     monkeypatch.setattr(runs, "monotonic", c.monotonic)
     return c
+
+
+@pytest.fixture(autouse=True)
+def no_leaking_telemetry_settings(monkeypatch):
+    """Spec 101: the shell's OpenTelemetry settings never leak into a test (they would turn export on for fake sessions)."""
+    import os
+    for name in list(os.environ):
+        if name.startswith(("OTEL_", "CPLAT_OTLP_")) or name in ("CPLAT_KUBE_CONTEXT", "CLAUDE_CODE_ENABLE_TELEMETRY"):
+            monkeypatch.delenv(name, raising=False)
