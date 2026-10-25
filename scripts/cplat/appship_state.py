@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import fcntl
+import io
 import json
 import re
 from collections.abc import Callable, Iterator
@@ -23,6 +24,13 @@ STATE_LOCK = "cplat-app-ship.state.lock"
 DEFAULT_MAX = 3
 DEFAULT_MAX_BLOCKS = 8
 PASSED = ("passed", "done-before")
+
+
+def slug(repo: Path) -> str | None:
+    """owner/name from the configured origin URL (not `get-url`, which applies `insteadOf` rewrites)."""
+    url = run(["git", "config", "--get", "remote.origin.url"], cwd=repo, check=False).stdout.strip()
+    m = re.search(r"github\.com[:/]+([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", url)
+    return f"{m.group(1)}/{m.group(2)}" if m else runs.repo_slug(repo)
 
 
 # ---------------- state file ----------------
@@ -49,7 +57,7 @@ def _ensure_run(repo: Path, st: dict) -> str | None:
     rid = st.get("run_id")
     if rid and (st.get("recorded") or runs.active(rid) is not None):
         return rid
-    st["run_id"] = runs.start("product-ship", repo=runs.repo_slug(repo), spec=st.get("spec"), run_id=rid,
+    st["run_id"] = runs.start("product-ship", repo=slug(repo), spec=st.get("spec"), run_id=rid,
                               started_at=ship._utc_iso(st.get("started")))
     return st["run_id"]
 
@@ -187,10 +195,10 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated"):
         raise PlatformError(f"another product ship run is in progress: {st['spec']} (phase {st['phase']})",
                             hint="finish it with `cplat app-ship finish`")
-    slug = runs.repo_slug(repo)
+    origin = slug(repo)
     if st and st["spec"] == sp.id:
         if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
-            st["run_id"] = runs.start("product-ship", repo=slug, spec=sp.id, resumes=st.get("run_id"))
+            st["run_id"] = runs.start("product-ship", repo=origin, spec=sp.id, resumes=st.get("run_id"))
             st["recorded"] = False
         st["escalated"] = st["cause"] = None
         st["blocks"] = 0
@@ -290,7 +298,8 @@ def gate(repo: Path, hook_input: dict, max_blocks: int = DEFAULT_MAX_BLOCKS) -> 
     if not st or st.get("escalated") or st["phase"] == "done":
         return None
     if st.get("blocks", 0) >= max_blocks:
-        escalate(repo, f"gave up after {max_blocks} attempts to stop in phase {st['phase']}", "environment")
+        with contextlib.redirect_stderr(io.StringIO()):     # the hook's output is its answer only
+            escalate(repo, f"gave up after {max_blocks} attempts to stop in phase {st['phase']}", "environment")
         return None
     blocks = st.get("blocks", 0) + 1
     st = update(repo, lambda s: s.__setitem__("blocks", s.get("blocks", 0) + 1))

@@ -113,7 +113,7 @@ def _org(gitops_dir: Path) -> str:
         org = (yaml.safe_load(answers.read_text()) or {}).get("github_org")
     except (OSError, yaml.YAMLError):
         org = None
-    return str(org or (runs.repo_slug(gitops_dir) or "/").split("/")[0])
+    return str(org or (state.slug(gitops_dir) or "/").split("/")[0])
 
 
 def _start_entry(gitops_dir: Path, spec_id: str) -> Path:
@@ -172,7 +172,7 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
     sh = ship.load_state(clone) if clone.is_dir() else None
     if not sh:
         raise PlatformError(f"no ship run in {clone}", hint=f"start it: cplat ship start <spec> --product {gitops_dir}")
-    slug = runs.repo_slug(gitops_dir)
+    slug = state.slug(gitops_dir)
     want = f"{slug}:{st['spec']}"
     parent = specmod.find(clone, sh["spec"]).meta.get("parent")
     if parent != want:
