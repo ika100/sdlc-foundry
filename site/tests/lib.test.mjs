@@ -34,6 +34,13 @@ test('a link to nothing is reported, not silently kept', () => {
   assert.deepEqual(unresolved, ['docs/a.md: nope.md']);
 });
 
+test('images copied into the site get site paths; plain links to them still go to GitHub', () => {
+  const opts = { ...ctx({}, { 'docs/img/map.svg': 'file' }), assetFor: (p) => (p === 'docs/img/map.svg' ? 'img/map.svg' : null) };
+  const { text, unresolved } = rewriteLinks('![map](img/map.svg) and [source](img/map.svg)', 'docs/HOW-IT-WORKS.md', opts);
+  assert.equal(text, '![map](/sdlc-foundry/img/map.svg) and [source](https://github.com/ika100/sdlc-foundry/blob/main/docs/img/map.svg)');
+  assert.deepEqual(unresolved, []);
+});
+
 test('wiki links link to known pages and fall back to plain text', () => {
   const out = convertWikiLinks('See [[ARCHITECTURE]] and [[Unknown]].', (n) => (n === 'ARCHITECTURE' ? '/sdlc-foundry/guides/architecture/' : null));
   assert.equal(out, 'See [ARCHITECTURE](/sdlc-foundry/guides/architecture/) and Unknown.');

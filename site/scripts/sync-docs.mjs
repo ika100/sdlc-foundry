@@ -51,11 +51,18 @@ function description(markdown) {
   return para ? para.replace(/\s+/g, ' ').replace(/[`*_[\]]|\([^)]*\)/g, '').trim().slice(0, 160) : undefined;
 }
 
+// images of the docs (docs/img/) are served by the site as /img/<name>
+const IMG = path.join(ROOT, 'docs', 'img');
+const PUBLIC_IMG = path.join(ROOT, 'site', 'public', 'img');
+fs.rmSync(PUBLIC_IMG, { recursive: true, force: true });
+if (fs.existsSync(IMG)) fs.cpSync(IMG, PUBLIC_IMG, { recursive: true });
+const assetFor = (repoPath) => (repoPath.startsWith('docs/img/') && exists(repoPath) === 'file' ? `img/${repoPath.slice('docs/img/'.length)}` : null);
+
 let problems = [];
 for (const page of PAGES) {
   const src = fs.readFileSync(path.join(ROOT, page.src), 'utf8');
   let body = convertWikiLinks(stripFirstHeading(src), (n) => names.get(n.toLowerCase()));
-  const { text, unresolved } = rewriteLinks(body, page.src, { pageFor: (p) => bySrc.get(p), exists, base: BASE });
+  const { text, unresolved } = rewriteLinks(body, page.src, { pageFor: (p) => bySrc.get(p), exists, base: BASE, assetFor });
   problems = problems.concat(unresolved);
   const out = path.join(OUT, `${page.slug}.md`);
   fs.mkdirSync(path.dirname(out), { recursive: true });

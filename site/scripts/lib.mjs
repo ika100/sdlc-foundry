@@ -42,11 +42,12 @@ export function convertWikiLinks(markdown, resolveName) {
 /**
  * Rewrite relative Markdown links of a repository file.
  * - links to files that become site pages -> site paths (with the base path)
+ * - images that are copied into the site (`assetFor`) -> site paths
  * - other repository files/directories -> GitHub URLs
  * - external, mailto and #anchor links are left alone
  * `exists(repoPath)` returns 'file' | 'dir' | null. Unresolvable links are reported in `unresolved`.
  */
-export function rewriteLinks(markdown, sourceRepoPath, { pageFor, exists, base }) {
+export function rewriteLinks(markdown, sourceRepoPath, { pageFor, exists, base, assetFor = () => null }) {
   const unresolved = [];
   const dir = path.posix.dirname(sourceRepoPath);
   const text = mapProse(markdown, (seg) =>
@@ -59,6 +60,8 @@ export function rewriteLinks(markdown, sourceRepoPath, { pageFor, exists, base }
       const hash = fragment ? `#${fragment}` : '';
       const page = pageFor(repoPath);
       if (page) return `${label}(${base}/${page}/${hash})`;
+      const asset = label.startsWith('!') ? assetFor(repoPath) : null;
+      if (asset) return `${label}(${base}/${asset}${title})`;
       const kind = exists(repoPath);
       if (!kind) {
         unresolved.push(`${sourceRepoPath}: ${target}`);

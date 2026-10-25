@@ -2,6 +2,26 @@
 
 What actually happens when you use the platform — read this when a command surprises you. For the guided tour see [USER-JOURNEY](USER-JOURNEY.md); for decisions see the ADRs.
 
+## The map
+
+![Swimlane map of the delivery flow and its feedback loops](img/sdlc-map.svg)
+
+You decide at three points: route an issue, approve its spec, promote to prod. `/svc:ship` runs everything in the green band: agents do the judgement work (spec, design, code, review), `cplat` every step that can be code (checks, pushes, waits, merges, pins, smoke tests). Red CI goes back to the coder that owns the files, a merge conflict back to the architect; after three red rounds, or on a decision the spec does not answer, the run escalates to you. `/app:ship` does the same for a product, repo by repo in plan order.
+
+## Feedback loops
+
+What happens in runs and in running systems comes back as data or as a deduplicated issue. The loops file and propose; you route issues in `/shared:triage` and approve specs. Setup for each: [unattended delivery](unattended-delivery.md).
+
+| Loop | Signal | Lands in |
+|---|---|---|
+| [Run records](unattended-delivery.md#run-records) (087, 099) | phases, CI rounds, escalations, tokens and cost of every run | the private run store, `cplat runs report` |
+| [Agent quality](unattended-delivery.md#agent-metrics) (089) | fix rounds, red CI, review findings, re-plans per agent, shape and model | the run store, `cplat runs report --agents` |
+| [Weekly retro](unattended-delivery.md#weekly-retro) (090) | the last complete week against the one before | a `Weekly retro` issue with evidence-checked spec proposals |
+| [Platform failures](unattended-delivery.md#auto-filed-platform-issues) (088) | an escalation with cause `platform`, a `cplat` crash | one issue per signature in `ika100/sdlc-foundry` |
+| [Smoke in dev](unattended-delivery.md#smoke-in-dev) (091) | the spec's `(smoke)` criteria against the deployed service | a `smoke-failure` issue in the service repo |
+| [Firing alerts](adr/038-alert-poll-on-the-gitops-runner.md) (092) | alert rules of the `observability` addon and `ServiceDown` | an issue with an `env:` label in the owning repo |
+| `/shared:report-issue` | anything a person or agent hits, secrets removed | an issue, filed after your OK |
+
 ## The moving parts
 
 ```mermaid

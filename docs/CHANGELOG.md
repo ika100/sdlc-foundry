@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Docs: the SDLC map for 4.6.0** ([How it works](HOW-IT-WORKS.md#the-map)). A swimlane map of the delivery flow (you, agents, `cplat`, GitHub/Argo, with dev smoke and auto-staging inside the unattended band) and a lane for the feedback loops, plus a table of the loops. The docs site sync now serves images from `docs/img/`.
 - **Docs: optional live view with dot-agent-deck** ([guide](agent-deck.md), #145). Setup checked against dot-agent-deck v0.48.1: what it shows and controls, what stays with the run store and the gates, the hooks it writes into `~/.claude/settings.json`, local data and remote-host security, limitations. Nothing in the platform depends on it.
 
 ## [4.6.0] — 2026-10-25
