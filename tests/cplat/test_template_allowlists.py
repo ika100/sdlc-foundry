@@ -1,6 +1,6 @@
 """Every template's Claude Code allowlist covers the steps headless sessions take: each commit flag order the commands use, and
-reading the plugins' own reference files (outside the repo). Found by the spec-099 benchmark: one missing order (`-q -m`) or
-the missing plugin read stopped a whole headless build."""
+reading the plugins' own reference files (outside the repo). Found by the 099/100 benchmarks: every missing flag order
+(`-q -m`, then `-am`, `-a -s -m`) or the missing plugin read stopped a whole headless build."""
 from pathlib import Path
 
 import pytest
@@ -8,8 +8,7 @@ import pytest
 import core
 
 TEMPLATES = sorted(p for p in (core.PLATFORM_ROOT / "templates").glob("*/.claude/settings.json*"))
-NEEDED = ["Bash(git commit -m *)", "Bash(git commit -q -m *)", "Bash(git commit -s -m *)", "Bash(git commit -q -s -m *)",
-          "Bash(git commit -s -q -m *)", "Read(~/.claude/plugins/**)"]
+NEEDED = ["Bash(git commit *)", "Read(~/.claude/plugins/**)"]   # any flag order: -am, -a -s -m, -q -m … all stopped a build
 
 
 @pytest.mark.parametrize("settings", TEMPLATES, ids=lambda p: p.parts[-3])

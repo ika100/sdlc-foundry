@@ -18,9 +18,7 @@
     "defaultMode": "default",
     "allow": [
       "Bash(cplat *)",
-      "Bash(git commit -s -m *)",
-      "Bash(git commit -q -s -m *)",
-      "Bash(git commit -s -q -m *)",
+      "Bash(git commit *)",
       "Bash(git pull --ff-only)",
       "Bash(git pull --ff-only *)",
       "Bash(git pull -q --ff-only)",
@@ -70,9 +68,6 @@
       "Bash(git worktree list)",
 
       "Bash(git add *)",
-      "Bash(git commit -m *)",
-      "Bash(git commit --message *)",
-      "Bash(git commit -q -m *)",
       "Read(~/.claude/plugins/**)",
       "Bash(git merge --no-ff *)",
       "Bash(git merge --no-ff --no-edit *)",

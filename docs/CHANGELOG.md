@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix: templates allow `git commit *`.** Listing flag orders (`-m`, `-s -m`, `-q -m` …) kept missing the next one (`-am`, `-a -s -m`), and each stopped a headless build. Commits stay local; `git commit --amend` still asks, and pushes keep their own rules.
 - **Feat (090): a weekly retro proposes the next specs.** [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)
   - `cplat retro [--week W] [--json] [--out DIR]` builds one report of the last complete week from the run store, the auto-filed platform issues and the agent metrics of spec 089, each figure next to the previous week. By hand it prints and writes nothing.
   - `cplat runs init` adds a workflow to the run store repo that runs it Mondays 06:00 UTC: report, then headless Claude proposes at most 5 specs and 3 agent prompt changes, then `cplat retro post` checks every proposal against the report's evidence (an unsupported one is refused and counted) and posts.
