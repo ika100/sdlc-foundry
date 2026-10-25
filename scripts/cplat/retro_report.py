@@ -1,4 +1,4 @@
-"""The weekly retro report (spec 090, ADR-035): a pure function over run records, platform issues and agent metrics.
+"""The weekly retro report (spec 090, ADR-036): a pure function over run records, platform issues and agent metrics.
 
 No I/O. `build` gives the `report.json` dict; the renderings are text for the maintainer (`render_text`,
 `render_private`, committed to the private run store) and the public issue body (`render_public`: counts and

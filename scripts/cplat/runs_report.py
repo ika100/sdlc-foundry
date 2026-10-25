@@ -13,6 +13,7 @@ from collections import Counter
 
 import core
 import feedback
+import runs_usage_report
 
 UNKNOWN = "unknown"
 FILED_RESULTS = ("new", "+1", "suppressed", "pending")
@@ -63,6 +64,8 @@ def _count_sorted(counter: Counter) -> dict:
 def select(records: list[dict], *, since_days: int, repo: str | None, now: datetime.datetime) -> list[dict]:
     """Window, repo filter and run_id dedupe, shared by both reports."""
     cutoff = now - datetime.timedelta(days=since_days)
+    # `until` is the day of `now` (the window prints it as a date): that whole day counts, later records do not
+    upper = datetime.datetime.combine(now.date() + datetime.timedelta(days=1), datetime.time(), tzinfo=now.tzinfo)
     seen: set[str] = set()
     kept: list[dict] = []
     for r in records:
@@ -72,7 +75,7 @@ def select(records: list[dict], *, since_days: int, repo: str | None, now: datet
                 continue
             seen.add(rid)
         ended = _ts(r.get("ended_at"))
-        if ended is not None and ended < cutoff:
+        if ended is not None and (ended < cutoff or ended >= upper):
             continue
         if repo is not None and r.get("repo") != repo:
             continue
@@ -136,6 +139,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         "reruns": {"by_reason": _count_sorted(by_reason), "by_check": _count_sorted(by_check)},
         "filed": dict(filed),
         "buffered": buffered,
+        "usage": runs_usage_report.aggregate_usage(kept),
     }
 
 
@@ -164,6 +168,7 @@ def render_text(agg: dict) -> str:
     lines.append(f"Reruns by reason: {_pairs(agg['reruns']['by_reason'])}")
     lines.append(f"Reruns by check: {_pairs(agg['reruns']['by_check'])}")
     lines.append("Filed issues: " + ", ".join(f"{k} {n}" for k, n in agg["filed"].items()))
+    lines += runs_usage_report.render_usage_lines(agg["usage"])
     lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
     return "\n".join(lines)
 

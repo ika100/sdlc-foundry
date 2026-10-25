@@ -16,6 +16,16 @@ def no_real_issue_claims(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_devbox_install(monkeypatch):
+    """`cplat update-service` refreshes devbox.lock with `devbox install`; tests never download packages. Tests of the refresh
+    itself call the saved original, `update.REAL_REFRESH_DEVBOX_LOCK`."""
+    import update
+    if not hasattr(update, "REAL_REFRESH_DEVBOX_LOCK"):
+        update.REAL_REFRESH_DEVBOX_LOCK = update.refresh_devbox_lock
+    monkeypatch.setattr(update, "refresh_devbox_lock", lambda repo, changed: None)
+
+
+@pytest.fixture(autouse=True)
 def isolated_run_store(monkeypatch, tmp_path_factory):
     """Spec 087: run records go to a per-test state dir and never to a real store, whatever the developer's shell exports.
     (Only the environment is touched here: the `runs` module itself is not imported.)"""

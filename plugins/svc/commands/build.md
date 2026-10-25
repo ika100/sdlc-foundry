@@ -57,7 +57,7 @@ Then:
 
 ### 2.1 Schedule
 
-From `plan.md`: **skip tasks with `done: true`**. Topologically sort the rest by `depends_on`, group into levels, and within a level batch `parallel_safe` tasks with disjoint `files` (a task joins a batch only if its files are disjoint from every other task in it; otherwise it runs alone). Print the schedule as a table.
+From `plan.md`: **skip tasks with `done: true`**. Run `cplat build schedule <id>` and print its output verbatim: the remaining tasks in levels, batched by `parallel_safe` with disjoint `files`, gitops tasks apart, and the re-plans used so far. Run the batches in that order.
 
 ### 2.2 Worktree probe
 
@@ -72,23 +72,35 @@ Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and
 - `<project-map>`; `SPEC_DIR`; the task's `id`, prose section verbatim, `files` (touch nothing else except new test helpers you must report).
 - **Done when:** the acceptance tests naming the task's `covers` criteria pass (`devbox run test-fast`); list those test files from `TRACE`. A criterion that also depends on a not-yet-done task may still fail: the coder says which and why.
 - "Never edit, skip or weaken the acceptance tests."
+- A task that was re-planned after a merge conflict (`cplat build state <id> --json`: a `replans[].tasks[]` entry that is not merged) also gets: "This task was re-planned after a merge conflict on `<paths>` with `<with>`. Start from the feature branch, which already contains every merged task. Your earlier attempt is a reference only. Do not merge or cherry-pick it:" followed by the output of `git diff HEAD...<branch>`, with `<branch>` from that state output.
 - Parallel batch only: "You are in an isolated worktree. Commit locally (`git add` + `git commit -m '<type>(<scope>): <title>'`, task id in the body) before returning. Do not push. Do not switch branches."
 
 ### 2.4 Run batches
 
 **Parallel batch (≥ 2 tasks):** one coder per task **in a single message**, each with `isolation: "worktree"`. Collect `(branch, worktree_path)` from those that changed something. Then for each, in order:
-1. `PRE=$(git rev-parse HEAD)`, then `git merge --no-ff --no-edit <branch>` — a conflict means the plan's `files` were wrong: run `cplat runs agent conflict <task>`, then `git merge --abort`, stop and escalate. Never resolve it yourself. After a clean merge: `cplat runs agent merged <task> --since $PRE [--helper <path>]...` (one `--helper` for each new test helper the coder reported).
+1. `cplat build merge <id> <task> <branch> [--helper <path>]...` (one `--helper` for each new test helper the coder reported). It merges with `--no-ff`, records `merged` (spec 089) and, on a conflict, does what `cplat runs agent conflict <task>` and `git merge --abort` would (it aborts the merge first, then records the conflict) and sets the task aside. Exit 0 → continue with step 2. Exit 3 → the task is set aside: leave its worktree and branch in place and continue with the next branch of the batch. Exit 4 → `cplat runs end --outcome escalated --reason '<the ESCALATE line>'` and stop. Never resolve a conflict yourself.
 2. `devbox run lint-fix`, stage; then `cplat spec test-diff $RED --task <task>`: acceptance tests may only have changed in formatting. Exit 1 means a test was weakened or changed: stop and show the user the file and the reason (spec 048); never decide yourself that it is a false alarm — since spec 063 it only looks at test files, so a failure is real. Then `devbox run quality` — failures go back to that task's coder (lint/type fixes only; record each hand-back with `cplat runs agent fix-round lint/type --task <task>`).
 3. `devbox run test-fast` — integration failures go back to the coder with the output (`cplat runs agent fix-round test --task <task>`).
-4. `git worktree remove <path>`; `git branch -d <branch>`.
+4. `git worktree remove <path>`; `git branch -d <branch>`. A set-aside branch is removed by `cplat build resolved`, not here.
 
 **Sequential task:** `PRE=$(git rev-parse HEAD)`, then one coder without isolation on `$FEATURE_BRANCH`; commit for it if it did not, then `cplat runs agent merged <task> --since $PRE [--helper <path>]...`. Run `cplat spec test-diff $RED --task <task>` (exit 1 stops the build, as in the parallel batch) and record hand-backs as above.
 
-After each task is merged and green: `cplat spec task-done <id> <task-id>`; commit the plan change together with the batch: `chore(plan): <spec_id> <task ids> done`.
+After each task is merged and green: `cplat spec task-done <id> <task-id>`, then `cplat build resolved <id> <task-id>` (removes the branch and worktree of a re-planned task; it does nothing for any other). Then commit `chore(plan): <spec_id> <task id> done` with that task's lint-fix changes: one commit per task, so the next merge starts from a clean tree.
+
+### 2.4a Re-plan after a conflict
+
+After a batch in which `cplat build merge` set a task aside (exit 3), re-plan **without asking the user**, in an attended build as well as an unattended one:
+
+1. Spawn the **architect** (`agents.architect`) with the prompt `**Re-plan mode.**` + `<project-map>` + `SPEC_DIR` + the output of `cplat build state <id>` (the pending conflicts: task, the task it collided with, the paths) + "Change only `files`, `depends_on` and `parallel_safe` of tasks that are not done; anything else is a BLOCKER." Then `cplat runs agent spawned architect`.
+2. `cplat build replan-commit <id>`. On exit 1, send its errors to the architect once and call it again.
+3. The architect reports a BLOCKER, or the second call also exits 1 → `cplat build replan-abort <id> --reason '<the blockers or errors>'`, then `cplat runs end --outcome escalated --reason '<its ESCALATE line>'` and stop.
+4. Exit 0 → continue from the schedule it printed. The set-aside task runs again on top of the merged work (coder prompt in 2.3).
 
 ### 2.5 All green
 
 `devbox run test-fast`: every acceptance test passes. Failing ones go to the coder of a task that `covers` that criterion (at most 2 rounds, each recorded with `cplat runs agent fix-round test --task <task>`); then escalate.
+
+When every acceptance test passes, run `cplat runs gate acceptance passed`. Before escalating because they still fail after the fix rounds, run `cplat runs gate acceptance failed` (spec 099).
 
 `TOUCHED_FILES=$(git diff --name-only $BASE_REF..HEAD)`.
 
@@ -103,6 +115,8 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`; comm
    - security → run `cplat deps patch` first (ADR-034): it bumps every fixable dependency finding, re-runs the gates and commits, or reverts. Exit 0 → the gate is green, go to step 3. Exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed: in a `/svc:ship` run `cplat ship escalate '<reason>' --cause <CAUSE>`, alone `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`. Exit 4 → not a dependency finding (secrets, bandit, image scan): the **security** agent (`agents.security`) handles it as before: a CRITICAL secrets or bandit finding escalates at once; HIGH is documented and the build continues. A red gate after a bump is never handed to a coder, and acceptance tests stay fixed. Patch rounds (at most 2, counted by cplat) are separate from the 2 fix rounds below.
 
    Run `devbox run ci` again; at most 2 rounds, then escalate.
+
+   When `devbox run ci` is green, run `cplat runs gate security passed`. When the security gate stays red (escalation, or a HIGH finding documented while the build goes on), run `cplat runs gate security failed` first (spec 099).
 3. **Green** → spawn agents only where needed:
    - **tester** (`agents.tester`, normal mode) only when the touched files add internals that no unit test covers: it adds those tests and runs `devbox run test`;
    - **security** only when a Dockerfile changed (`devbox run image-build && devbox run image-scan`), writing `docs/security/scan-<today>.md`.
@@ -185,7 +199,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 | Phase | Output |
 |---|---|
 | Acceptance tests | <n> tests for <m> criteria, red at <short sha> |
-| Implementation | <n> tasks (<p> parallel, <s> sequential), <files> files |
+| Implementation | <n> tasks (<p> parallel, <s> sequential), <files> files[ · plan amended <n>× after merge conflicts: <task>: <files> (re-run merged cleanly)] |
 | QA | `devbox run ci` green in <n> round(s) · agents: <none | which> |
 | Verification | <m>/<m> criteria met (verification.md) |
 | Image | built and smoke-started | skipped |
@@ -197,13 +211,15 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 <gitops change needed (services.yaml / /gitops:promote after release), HIGH findings, sequential fallback, `/svc:specs migrate` hint>
 ```
 
+The bracketed part of the Implementation row is added, attended builds too, only when `cplat build state <id>` shows a re-plan count of 1 or more: one `<task>: <files>` entry per re-planned task.
+
 ## Rules
 
 - **Every stop and the end are recorded** with `cplat runs end` (Phase 0), so no run goes missing.
 - **Only approved specs are built**, and only as planned. A decision the spec does not answer stops the build: `/svc:spec --amend`, then `/svc:plan` again.
 - **Acceptance tests are fixed** once Phase 1 committed them. If one is wrong, stop and take it to the user; a changed test is a changed spec.
 - **Push only in Phase 7**; `git push` and `gh pr create` require confirmation.
-- **Never resolve merge conflicts automatically**; they mean the plan's `files` were wrong.
+- **A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** `cplat build merge` aborts the merge and sets the task aside; the architect amends only the plan and the task runs again on top of the merged work, without asking. Never edit conflicting hunks.
 - **Every shell command goes through `devbox run <script>`** (see `CLAUDE.md`), except git, gh and `cplat`.
 - **No `--no-verify`, no `--no-gpg-sign`.**
 

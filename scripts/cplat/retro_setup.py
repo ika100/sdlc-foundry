@@ -1,4 +1,4 @@
-"""The weekly retro schedule (spec 090, ADR-035): the workflow asset in the run store repo and what doctor checks."""
+"""The weekly retro schedule (spec 090, ADR-036): the workflow asset in the run store repo and what doctor checks."""
 from __future__ import annotations
 
 import json

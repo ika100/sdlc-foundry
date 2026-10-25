@@ -170,7 +170,7 @@ Specs, plans and builds can run without anyone at the keyboard (`claude -p`, `/l
 - **Permissions:** nobody answers prompts, so run with `--permission-mode acceptEdits` plus the template allowlist, or `bypassPermissions` in a throwaway workspace.
 - **Workspace trust:** in a workspace that was never opened interactively, Claude Code ignores the project's `permissions.allow` list but still applies its `ask` list. Open the repo once interactively (accept the trust dialog) to use the template allowlist.
 - **Pull requests:** `gh pr create` is in the `ask` list on purpose. Unattended pipelines push the branch and end with the exact `gh pr create` command to run (spec 051). `/svc:ship` is the exception: `cplat ship` pushes the spec's feature branch, opens the PR and merges it after green CI itself ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md)).
-- **Keeping a run going:** `cplat headless "/svc:ship <NNN>"` runs `claude -p` with `--permission-mode dontAsk` (the allowlist, nothing else, no prompts) and resumes an unfinished ship run in fresh sessions; `--quiet 23:30-07:00` keeps it out of a window, for example nightly jobs that share the subscription. The guide: [unattended-delivery.md](unattended-delivery.md).
+- **Keeping a run going:** `cplat headless "/svc:ship <NNN>"` runs `claude -p` with `--permission-mode acceptEdits` (edits inside the repo, otherwise the allowlist, nothing else, no prompts) and resumes an unfinished ship run in fresh sessions; `--quiet 23:30-07:00` keeps it out of a window, for example nightly jobs that share the subscription. The guide: [unattended-delivery.md](unattended-delivery.md).
 
 ## Troubleshooting
 

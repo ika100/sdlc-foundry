@@ -1,4 +1,4 @@
-"""GitHub access of the weekly retro (spec 090, ADR-035): the platform repo's issues over `gh`.
+"""GitHub access of the weekly retro (spec 090, ADR-036): the platform repo's issues over `gh`.
 
 Everything goes through `gh()` and `tracker()`, so tests fake GitHub. Failures raise `autoissue.TrackerError`.
 """
