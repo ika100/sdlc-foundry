@@ -1,7 +1,7 @@
 ---
 spec_id: 101-run-usage-is-exported-live-to
 title: Run usage is exported live to OpenTelemetry
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -56,3 +56,4 @@ As a platform maintainer, I want OTel totals compared with transcript totals, so
 
 - 2026-10-25 created
 - 2026-10-25 amended: folded the user's answers into AC-101.2, AC-101.6, AC-101.9 and AC-101.10; open questions closed
+- 2026-10-25 approved

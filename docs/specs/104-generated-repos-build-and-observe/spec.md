@@ -1,7 +1,7 @@
 ---
 spec_id: 104-generated-repos-build-and-observe
 title: Generated repos build and observe reliably
-status: draft
+status: approved
 priority: P1
 tracks: [143]
 ---
@@ -36,18 +36,20 @@ As a platform maintainer, I want the platform's own tests to generate a repo and
 ## Non-goals
 
 - Database statement, lock and pool deadlines: application behaviour of the sample (`ika100/todo-api`), not template behaviour. They belong to a spec in that repo.
-- The sample's frontend bundle and secret check (`ika100/todo-web`). Whether the `web-nextjs` template should ship one is open question 2.
+- The sample's frontend bundle and secret check (`ika100/todo-web`). Whether the `web-nextjs` template should ship one is a separate spec, once the sample's check has proven itself.
 - `service-java` and `service-go` build and metrics behaviour; issue 143 covers only the Python sample.
 - New observability stacks, tracing changes, new dashboards or alert rules.
 - Rewriting existing generated repos' own application code; only template-owned files change.
 
 ## Open questions
 
-- Do `service-java` and `service-go` have the same lockfile fallback or unrecorded metrics, and should this spec cover them? (suggested: no, check them in a follow-up spec; affects new criteria)
-- Should `web-nextjs` ship a CI check that fails when a secret or a server-only value appears in the production bundle, with a documented allow-list? (suggested: no for now, a separate spec once the sample's check has proven itself; affects a new criterion)
-- Confirm: the metric label for unmatched paths is one shared value, and the route pattern replaces the concrete path. (suggested: yes; affects AC-104.5)
-- Confirm: the added CI time of the generated-repo checks is capped at 2 minutes. (suggested: yes; affects AC-104.10)
+- ~~Do `service-java` and `service-go` have the same lockfile fallback or unrecorded metrics, and should this spec cover them?~~ Answered: no, they are checked in a follow-up spec (non-goal).
+- ~~Should `web-nextjs` ship a CI check that fails when a secret or a server-only value appears in the production bundle?~~ Answered: not now; a separate spec once the sample's check has proven itself (non-goal).
+- ~~Confirm: the metric label for unmatched paths is one shared value, and the route pattern replaces the concrete path.~~ Answered: yes, see AC-104.5.
+- ~~Confirm: the added CI time of the generated-repo checks is capped at 2 minutes.~~ Answered: yes, see AC-104.10.
 
 ## Changelog
 
 - 2026-10-25 created
+- 2026-10-25 amended: folded in the user's answers (Java/Go and the bundle check stay out of scope).
+- 2026-10-25 approved

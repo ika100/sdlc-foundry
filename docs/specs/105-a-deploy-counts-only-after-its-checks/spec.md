@@ -1,7 +1,7 @@
 ---
 spec_id: 105-a-deploy-counts-only-after-its-checks
 title: A deploy counts only after its checks pass
-status: draft
+status: approved
 priority: P1
 tracks: [155]
 ---
@@ -41,12 +41,14 @@ As a maintainer of the platform, I want one place that says which gate steps the
 
 ## Open questions
 
-- Is the digest check worth its cost now, or is the tag (`sha-<40>`, built once by CI) enough evidence? (suggested: yes, add it; if no, withdraw AC-105.1 to AC-105.3; affects those)
-- Should an `environment` failure ever file an issue? (suggested: no, escalate only; a persistent one is an operator problem; affects AC-105.5)
-- Confirm: 3 attempts, 30 seconds apart, for environment failures. (suggested: yes; affects AC-105.5)
-- Confirm: the classification by symptom (unreachable URL or gateway errors on every test) is good enough; a smarter classifier is out of scope. (suggested: yes; affects AC-105.4)
-- Should AC-105.6 make `not-run` for a service that has dev exposure a failure instead of a "NOT VERIFIED" note? (suggested: no, keep the 091 behaviour; affects AC-105.6)
+- ~~Is the digest check worth its cost now, or is the tag enough evidence?~~ Answered: add it, see AC-105.1 to AC-105.3.
+- ~~Should an `environment` failure ever file an issue?~~ Answered: no, escalate only, see AC-105.5.
+- ~~Confirm: 3 attempts, 30 seconds apart, for environment failures.~~ Answered: yes, see AC-105.5.
+- ~~Confirm: the classification by symptom is good enough; a smarter classifier is out of scope.~~ Answered: yes, see AC-105.4.
+- ~~Should AC-105.6 make `not-run` for a service that has dev exposure a failure instead of a "NOT VERIFIED" note?~~ Answered: no, keep the 091 behaviour, see AC-105.6.
 
 ## Changelog
 
 - 2026-10-25 created
+- 2026-10-25 amended: folded in the user's answers (digest check added, environment failures escalate without an issue, 3 attempts 30 s apart, symptom classification, `not-run` stays a note).
+- 2026-10-25 approved
