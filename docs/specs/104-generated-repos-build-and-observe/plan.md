@@ -14,7 +14,7 @@ tasks:
     done: false
   - id: t2
     title: MetricsMiddleware (route template, unmatched, 500 + error type, /metrics skipped), /ping count removed
-    files: [templates/service-python/src/{{ module_name }}/metrics.py, templates/service-python/src/{{ module_name }}/main.py,
+    files: ["templates/service-python/src/{{ module_name }}/metrics.py", "templates/service-python/src/{{ module_name }}/main.py",
       templates/service-python/tests/test_metrics.py]
     covers: [AC-104.4, AC-104.5, AC-104.6, AC-104.7, AC-104.8]
     parallel_safe: true
@@ -22,7 +22,7 @@ tasks:
     done: false
   - id: t3
     title: Observability off excludes metrics.py, the middleware, /metrics and prometheus-client
-    files: [templates/service-python/copier.yml, templates/service-python/src/{{ module_name }}/main.py]
+    files: [templates/service-python/copier.yml, "templates/service-python/src/{{ module_name }}/main.py"]
     covers: [AC-104.9]
     parallel_safe: false
     depends_on: [t2]
