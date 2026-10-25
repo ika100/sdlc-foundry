@@ -76,6 +76,8 @@ def test_build_and_ship_pass_full_and_record_final_results():
     build, shipmd = [(PLUGINS / "commands" / n).read_text() for n in ("build.md", "ship.md")]
     assert "`--full`" in build and "cplat validate run" in build and "cplat validate final --check" in build
     assert "`--full`" in shipmd
+    red = next(line for line in build.splitlines() if line.startswith("2. **Red**"))
+    assert "cplat validate final --check" in red   # the first red final gate records its misses too
 
 
 def test_ship_land_records_a_red_ci_check_as_a_miss_when_the_loop_skipped_it(env, monkeypatch):

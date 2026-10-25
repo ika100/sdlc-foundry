@@ -101,7 +101,7 @@ When every acceptance test passes, run `cplat runs gate acceptance passed`. Befo
 `cplat runs phase build:qa`
 
 1. Stage the tree (`git add -u`, plus new files the build created), then run `devbox run lint-fix` and `devbox run ci`, both as `cplat quiet lint-fix` and `cplat quiet ci`: the gates the CI workflow runs, in its order, each once.
-2. **Red** → spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>`, the output's tail and the log path `cplat quiet` printed (brief headings `Criteria`, `Task`, `Contract`, `Tests`, `Commands`, as in 2.3):
+2. **Red** → first record each failed check with `cplat validate final --check <name> failed` (a miss when the loop skipped or reused it); then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>`, the output's tail and the log path `cplat quiet` printed (brief headings `Criteria`, `Task`, `Contract`, `Tests`, `Commands`, as in 2.3):
    - lint or type check → **quality** (`agents.quality`): lint/type fixes only;
    - tests → the **coder** of the task whose files are involved: acceptance tests stay fixed; record it with `cplat runs agent fix-round ci --task <task>`;
    - security → run `cplat deps patch` first (ADR-034); the security gate is red → read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → the gate is green, go to step 3; exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed (`cplat ship escalate '<reason>' --cause <CAUSE>` in a ship run, else `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`); exit 4 → the **security** agent). A red gate after a bump is never handed to a coder, and acceptance tests stay fixed.
