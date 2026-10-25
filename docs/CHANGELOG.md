@@ -6,6 +6,11 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (090): a weekly retro proposes the next specs.** [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)
+  - `cplat retro [--week W] [--json] [--out DIR]` builds one report of the last complete week from the run store, the auto-filed platform issues and the agent metrics of spec 089, each figure next to the previous week. By hand it prints and writes nothing.
+  - `cplat runs init` adds a workflow to the run store repo that runs it Mondays 06:00 UTC: report, then headless Claude proposes at most 5 specs and 3 agent prompt changes, then `cplat retro post` checks every proposal against the report's evidence (an unsupported one is refused and counted) and posts.
+  - The posted `retro` issue in `ika100/sdlc-foundry` has counts only (no repo, spec or store names, reasons as `reason 1`); the issue of an earlier week is commented on and closed. The full report is committed under `retros/` in the store.
+  - **Action:** set the store repo secrets `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and `RETRO_GH_TOKEN` (fine-grained: Issues read/write on the platform repo, Contents read/write on the store), give the store a self-hosted runner (`CI_RUNNER`), run `gh auth refresh -h github.com -s workflow`, then `cplat runs init <owner/name>` again. `cplat doctor` warns about whatever is missing.
 - **Fix (094): `cplat spec task-done` no longer rewrites plan.md.** It sets `done: true` on the task's own line(s) and keeps the rest of the file byte for byte (no block-YAML re-serialisation, no rewrapped summary).
 - **Fix (095): a good dependency bump is not reverted for an unrelated red check.** When the bump clears every dependency finding but the security gate stays red for another reason (bandit, secrets), `cplat deps patch` keeps the bump, prints it and exits 4 so the coder takes over, instead of reverting and blaming it. Unrated fixable findings were already bumped (severity does not select, AC-095.12).
 - **Fix (088): redaction edge cases.** A run of 40+ repeated characters is only kept as padding when it is not glued to other word characters (`ghp_AAAA...` is redacted again), and a private name is replaced as a whole word (`todo` no longer matches inside `todo-api` or `mytodo`). The gh error mapping now has a test.

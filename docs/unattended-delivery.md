@@ -93,6 +93,17 @@ A build record also says how each agent did (spec 089), per agent, shape and mod
 - **Releases:** `--by-version` splits every row by platform version, versions side by side, so you can compare before and after a release.
 - **Incomplete:** a recording call that failed or was malformed never stops the build; it marks the run `incomplete` (counted in the row) and the report still shows what was recorded.
 
+### Weekly retro
+
+Every Monday the platform looks back at the last complete week and proposes what to build next (spec 090, [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)).
+
+- **Three steps, one directory:** `cplat retro --out DIR` builds the report (`report.json`, `report.md`, `prompt.md`), `cplat retro propose --dir DIR` lets headless Claude write `proposals.json`, `cplat retro post --dir DIR` checks and posts. A failed proposal step still posts the report with `Proposals: not generated (<reason>)`.
+- **The report** covers ISO week Monday to Sunday UTC, every figure next to the week before: runs per kind and outcome, phase durations, CI rounds and reruns, escalations by cause with the top reasons, reruns by check, platform issues counted again in the week, and the per-agent metrics of spec 089.
+- **Proposals are checked:** each cites evidence refs of the report with their exact values. A proposal without a matching ref, with a bad format, or over the limit (5 specs, 3 prompt changes) is refused and counted. A finding an open spec or issue already covers is shown as `amends spec NNN` or `see #N`.
+- **Public and private:** the issue `Weekly retro <week>` in `ika100/sdlc-foundry` has counts and placeholders only. A leak check stops the post if a repo, spec or store name remains. The full report goes to `retros/<week>.md` and `.json` in the run store. An earlier week's open retro issue is commented on and closed.
+- **Setup:** `cplat runs init <owner/name>` adds `.github/workflows/cplat-retro.yml` to the store (it needs `gh auth refresh -h github.com -s workflow` once). Give the store repo a self-hosted runner (variable `CI_RUNNER`) and the secrets `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`) and `RETRO_GH_TOKEN` (fine-grained: Issues read/write on the platform repo, Contents read/write on the store). `cplat doctor` warns about what is missing.
+- **By hand:** `cplat retro` prints the report and writes nothing; `cplat retro --week 2026-W42` picks another complete week.
+
 ## Auto-filed platform issues
 
 When a run stops because the platform itself misbehaves, the failure is filed as an issue in `ika100/sdlc-foundry` (spec 088, [ADR-033](adr/033-auto-filed-issues-with-signatures.md)).

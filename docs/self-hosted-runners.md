@@ -42,6 +42,10 @@ The workflows assume what a GitHub-hosted Ubuntu runner has, except where noted:
 A reference image (official runner + xz, gh, single-user Nix, devbox) is
 [`runner-image/Dockerfile` in stock-manager-gitops](https://github.com/ika100/stock-manager-gitops/blob/main/runner-image/Dockerfile).
 
+The run store repo needs its own runner for the weekly retro (spec 090). A personal account has repository-level runners
+only, so give the store a scale set of its own with devbox in the image and set the store's repo variable `CI_RUNNER` to
+its name. The workflow installs Claude Code when the image lacks it.
+
 ## Runners on Kubernetes (ARC)
 
 [Actions Runner Controller](https://github.com/actions/actions-runner-controller) (charts `gha-runner-scale-set-controller`
