@@ -4,7 +4,7 @@ description: "Build an approved, planned spec: failing acceptance tests first �
 
 You are the **build orchestrator** ([ADR-026](../../../docs/adr/026-feature-specs.md)). The approved spec defines done: you turn its criteria into failing tests, have coders make them pass, and prove the result against the spec before opening one PR. Delegate all code and test writing to subagents.
 
-**Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). A `--full` argument is passed to every `cplat validate run`.
+**Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → pass it to `cplat validate run`.
 
 Work through the phases in order. After each, print `## Phase N complete — <one line>`. A re-run of `/svc:build <id>` **resumes**: phases whose result already exists are skipped (each phase says how it detects that).
 
@@ -101,12 +101,12 @@ When every acceptance test passes, run `cplat runs gate acceptance passed`. Befo
 `cplat runs phase build:qa`
 
 1. Stage the tree (`git add -u`, plus new files the build created), then run `devbox run lint-fix` and `devbox run ci`, both as `cplat quiet lint-fix` and `cplat quiet ci`: the gates the CI workflow runs, in its order, each once.
-2. **Red** → first record each failed check with `cplat validate final --check <name> failed` (a miss when the loop skipped or reused it); then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>`, the output's tail and the log path `cplat quiet` printed (brief headings `Criteria`, `Task`, `Contract`, `Tests`, `Commands`, as in 2.3):
+2. **Red** → first record each failed check with `cplat validate final --check <name> failed`; then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>`, the output's tail and the log path `cplat quiet` printed (brief headings `Criteria`, `Task`, `Contract`, `Tests`, `Commands`, as in 2.3):
    - lint or type check → **quality** (`agents.quality`): lint/type fixes only;
    - tests → the **coder** of the task whose files are involved: acceptance tests stay fixed; record it with `cplat runs agent fix-round ci --task <task>`;
    - security → run `cplat deps patch` first (ADR-034); the security gate is red → read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → the gate is green, go to step 3; exit 3 → escalate with the `ESCALATE` reason and the `CAUSE` it printed (`cplat ship escalate '<reason>' --cause <CAUSE>` in a ship run, else `cplat runs end --outcome escalated --reason '<reason>' --cause <CAUSE>`); exit 4 → the **security** agent). A red gate after a bump is never handed to a coder, and acceptance tests stay fixed.
 
-   Between fix rounds run `cplat validate run` (spec 103: only the checks the fix can affect); then run `cplat quiet ci` again, the final gate that always runs whole, recording failed checks the same way; at most 2 rounds, then escalate. After each red round run `cplat budget attempt ci --failing <n> --names <a,b> --error-file <the gate's log>`: exit 3 means the same failure came back twice without progress (it prints the reason and escalates a ship run), so stop. When a gate passes or fails, record it with `cplat budget stage <acceptance|quality|tests|security|verify|image|ci> passed|failed` (spec 102).
+   Between fix rounds: `cplat validate run` (spec 103), then `cplat quiet ci` (the final gate, always whole; record failures as above); at most 2 rounds, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`; record gate results with `cplat budget stage <name> passed|failed` (spec 102).
 
    When `cplat quiet ci` is green, run `cplat runs gate security passed`. When the security gate stays red (escalation, or a HIGH finding documented while the build goes on), run `cplat runs gate security failed` first (spec 099).
 3. **Green** → spawn agents only where needed:
