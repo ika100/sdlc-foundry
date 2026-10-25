@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (070): headless sessions can edit files.** `cplat headless` runs `claude -p --permission-mode acceptEdits` instead of `dontAsk`. No allowlist grants `Edit` or `Write`, so every unattended session (headless, `/svc:ship` via the Stop hook, `cplat runs benchmark`) could plan but never change a file. Edits stay inside the repo; every other tool is still limited to the committed allowlist and nothing prompts. AC-070.1 is replaced by AC-070.5.
+- **Fix (099): the benchmark checks trust and its result.** One fixed clone per workflow under `<state>/benchmark/<workflow>`, refused until the folder is trusted in Claude Code; a run is `done` only with a new open PR (quick-task, build) or merged PR (ship); the reset leaves PRs, branches and tags that existed before the run alone.
 - **Feat (099): token usage and cost are measured per run.** [ADR-035](adr/035-token-usage-from-session-transcripts.md)
   - A run record gets a `usage` section (totals and breakdown by phase, role and model), read from the local Claude Code session transcripts. **Needs Claude Code 2.1.132 or later** (`CLAUDE_CODE_SESSION_ID`). Costs are **estimates** from the price table in the repo; output tokens are shown as reported, so output cost is a lower bound.
   - `cplat runs usage <run_id>` / `--session <id>` [`--json`] prints the breakdown. `cplat runs gate <acceptance|security> <passed|failed>` records the gate results that `/svc:build` states; a ship or build record carries `gates`.

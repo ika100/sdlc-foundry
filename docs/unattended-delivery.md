@@ -29,7 +29,7 @@ cplat headless "/svc:ship 012" --quiet 23:30-07:00     # never start inside that
 cplat headless "/svc:ship 012" --max-runs 6 --max-minutes 240 --model opus
 ```
 
-Each session is `claude -p <prompt> --permission-mode dontAsk`: the repo's committed allowlist (`.claude/settings.json`) applies, and everything else is refused instead of prompting. `git push origin main` and `gh pr create` are `ask` rules there, so they are refused; `cplat ship` does the narrow pushes and the PR itself. Logs are in `~/.cache/sdlc-foundry/headless/<repo>/`; `summary.log` has one line per run, and a desktop notification says how it ended (exit 0 shipped, 1 needs you, 3 inside the quiet window with `--no-wait`).
+Each session is `claude -p <prompt> --permission-mode acceptEdits`: file edits inside the repo are accepted, the repo's committed allowlist (`.claude/settings.json`) governs every other tool, and everything else is refused instead of prompting. (Until 4.5.0 this was `dontAsk`, which also refused every file edit, because no allowlist grants `Edit` or `Write`.) `git push origin main` and `gh pr create` are `ask` rules there, so they are refused; `cplat ship` does the narrow pushes and the PR itself. Logs are in `~/.cache/sdlc-foundry/headless/<repo>/`; `summary.log` has one line per run, and a desktop notification says how it ended (exit 0 shipped, 1 needs you, 3 inside the quiet window with `--no-wait`).
 
 Open the repo interactively once before the first headless run: Claude Code ignores a project's allowlist in a workspace it has not trusted yet ([ADOPTING.md → Unattended runs](ADOPTING.md#unattended-runs)).
 

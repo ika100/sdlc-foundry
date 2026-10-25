@@ -46,10 +46,10 @@ def set_state(repo, **kw):
 
 
 def test_the_command_is_unattended_with_the_repo_allowlist(repo, capsys):
-    """AC-070.1: claude -p in dontAsk mode: allowlisted tools run, everything else is refused, nothing prompts."""
+    """AC-070.5: claude -p in acceptEdits mode: edits in the repo and allowlisted tools run, everything else is refused, nothing prompts."""
     assert headless.main(["/svc:ship", "7", "--repo", str(repo), "--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("claude -p '/svc:ship 7' --permission-mode dontAsk")
+    assert out.startswith("claude -p '/svc:ship 7' --permission-mode acceptEdits")
 
 
 def test_a_repo_without_an_allowlist_is_refused(repo):
