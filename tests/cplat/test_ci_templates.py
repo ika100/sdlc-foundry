@@ -93,6 +93,22 @@ def test_the_web_baseline_finds_a_planted_secret_quietly(tmp_path):
     assert leak.returncode == 1 and "AWS" in leak.stdout
 
 
+@pytest.mark.slow
+@pytest.mark.skipif(not shutil.which("uvx"), reason="needs uvx")
+@pytest.mark.parametrize("template", BASELINE_TEMPLATES)
+def test_a_fresh_render_passes_its_own_secrets_scan(template, tmp_path):
+    """A new repo's first CI run passes `security`: the smoke tests never run the scan, and the gitops-app render failed it."""
+    repo = _render(template, tmp_path / "todo", "todo")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    files = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True).stdout.split()
+    scan = _json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]["secrets-scan"]
+    flags = scan.split("detect-secrets-hook", 1)[1].split()
+    out = subprocess.run(["uvx", "--from", "detect-secrets==1.5.0", "detect-secrets-hook", *flags, *files],
+                         cwd=repo, capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout[-3000:]
+
+
 # ---------------- spec 064: self-hosted CI runners through repository variables ----------------
 
 ALL_TEMPLATES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "gitops-app"]

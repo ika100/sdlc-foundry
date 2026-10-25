@@ -13,7 +13,7 @@ devbox run quality                    # validate overlays + ApplicationSets
 /gitops:promote my-api dev staging    # pin staging to the dev image
 ```
 
-Service PRs opened by `/svc:ship` carry a `Service-ref: <owner>/<repo>@<branch>` line in their body; CI then validates the Components against that branch's CRDs. This needs the secret `SERVICE_REPOS_READ_TOKEN` (Contents: read on the service repos): `gh secret set SERVICE_REPOS_READ_TOKEN -R <this repo>`; `cplat doctor` checks it.
+Service PRs opened by `/svc:ship` carry a `Service-ref: <owner>/<repo>@<branch>` line in their body; CI then validates the Components against that branch's CRDs. This needs the secret `SERVICE_REPOS_READ_TOKEN` (Contents: read on the service repos): `gh secret set SERVICE_REPOS_READ_TOKEN -R <this repo>`; `cplat doctor` checks it. <!-- pragma: allowlist secret -->
 
 Firing alerts become issues (spec 092): `.github/workflows/alerts.yml` polls every 15 minutes, only on the self-hosted runner (`CI_RUNNER`). Declare rules under the `observability` addon in `app.yaml` (`ServiceDown` is built in; `alerts: false` turns the poll off). Issues go to each service's `repo`, which needs the secret `ALERTS_TOKEN` (Issues: read and write; `cplat doctor` checks it), else to this repo. Try it: `gh workflow run alerts.yml -f dry_run=true`. See `CLAUDE.md`.
 

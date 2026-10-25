@@ -94,7 +94,7 @@ MANAGED_PREFIXES = ("externalsecret-",)
 ADDONS = {
     "postgres": {
         "secret": "{app}-postgres-app",    # connection Secret written by the operator (CloudNativePG)
-        "env": {"DATABASE_URL": "uri", "PGHOST": "host", "PGPORT": "port", "PGDATABASE": "dbname", "PGUSER": "user", "PGPASSWORD": "password"},
+        "env": {"DATABASE_URL": "uri", "PGHOST": "host", "PGPORT": "port", "PGDATABASE": "dbname", "PGUSER": "user", "PGPASSWORD": "password"},  # pragma: allowlist secret
         "defaults": {"version": 17, "instances": 1, "storage": "1Gi"},
     },
     # OpenTelemetry base (ADR-021): applies to every service, no `uses`. A collector per environment receives OTLP and scrapes

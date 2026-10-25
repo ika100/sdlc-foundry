@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix: platform updates no longer flag every template change as a local customisation.** The spec 086 baseline (the template at the repo's previous version) is archived from the checkout `cplat` runs from, and the marketplace clone is shallow and has no tags. The baseline was silently missing, so `cplat fleet update` and `/shared:update-service` listed the template's own changes between versions as overwritten customisations and left every PR open. A missing release tag is now fetched from origin first.
+- **Fix: a fresh gitops-app repo passes its own secrets scan.** Three template lines (`CLAUDE.md`, `README.md`, `scripts/render.py`) tripped detect-secrets' keyword detector; they carry `pragma: allowlist secret` now, and a test renders every template and runs its `secrets-scan`. Repos updated from before 4.6.0 still run `devbox run secrets-baseline` once (their baseline has no filters, see 4.6.0).
 - **Feat (102): runs stay within a budget and stop repeating failures.** [ADR-043](adr/043-one-budget-per-run-tree.md), [guide](unattended-delivery.md#budgets-and-repeated-failures)
   - **Behaviour change:** every unattended run tree has one budget, on by default: per ship 180 min, 60 agent invocations, 6 CI reruns, $15 estimated cost, multiplied by the ships a root covers. `--budget KEY=VALUE` (or `off`) on `cplat headless`, `ship start`, `app-ship start`, `runs begin`; `budget:` in the settings files. A stop escalates with cause `decision` and is resumable; usage continues across resumes.
   - New shared-plugin `PreToolUse` hook on `Task|Agent` counts and, when the budget is used up, refuses subagents inside a recorded run.

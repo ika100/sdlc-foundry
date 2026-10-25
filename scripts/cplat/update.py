@@ -156,15 +156,27 @@ def merge_devbox(project: dict, template: dict, baseline: dict | None = None) ->
     return merged, kept, replaced
 
 
-def render_baseline(template: str, old: str | None, answers: str, dest: Path) -> Path | None:
+def _archive(tag: str, path: str, root: Path) -> bytes:
+    """`git archive <tag> <path>` in the platform checkout. The marketplace clone cplat runs from is shallow and has no
+    tags, so a missing tag is fetched from origin first; without it every difference would count as a customisation."""
+    cmd = ["git", "archive", tag, path]
+    got = subprocess.run(cmd, cwd=root, capture_output=True)
+    if got.returncode != 0:
+        subprocess.run(["git", "fetch", "-q", "--depth", "1", "origin", f"refs/tags/{tag}:refs/tags/{tag}"], cwd=root,
+                       capture_output=True, check=True)
+        got = subprocess.run(cmd, cwd=root, capture_output=True, check=True)
+    return got.stdout
+
+
+def render_baseline(template: str, old: str | None, answers: str, dest: Path, root: Path = PLATFORM_ROOT) -> Path | None:
     """The template as rendered at platform `old` with the repo's pre-update answers, or None when it cannot be (spec 086)."""
     if not old:
         return None
     try:
         src = dest / "src"
         src.mkdir(parents=True, exist_ok=True)
-        archive = subprocess.run(["git", "archive", f"v{old}", f"templates/{template}"], cwd=PLATFORM_ROOT, capture_output=True, check=True)
-        subprocess.run(["tar", "-x", "-C", str(src)], input=archive.stdout, capture_output=True, check=True)
+        archive = _archive(f"v{old}", f"templates/{template}", root)
+        subprocess.run(["tar", "-x", "-C", str(src)], input=archive, capture_output=True, check=True)
         data = dest / "answers.yml"
         data.write_text(answers)
         out = dest / "out"
