@@ -62,6 +62,7 @@ class MemStore:
         self.created = False
         self.files: dict[str, str] = {}
         self.puts: list[dict] = []
+        self.messages: list[str] = []       # commit message of each put
         self.cost = 0.0                     # fake seconds that each call takes
         self.clock = None
 
@@ -85,14 +86,23 @@ class MemStore:
         if not self.reachable or self.reject:
             raise runs_store.StoreUnreachable("write rejected")
         self.puts.append(dict(files))
+        self.messages.append(message)
         self.files.update(files)
         if self.fail_after_write:
             raise runs_store.StoreUnreachable("interrupted")
+
+    def read_file(self, path, deadline=None):
+        self._spend()
+        if not self.reachable:
+            raise runs_store.StoreUnreachable("offline")
+        return self.files.get(path)
 
     def read(self, days, deadline=None):
         wanted = {d.isoformat() for d in days}
         out = []
         for path, text in sorted(self.files.items()):
+            if not path.startswith("runs/"):      # retros/, .github/ ...: not run records
+                continue
             _, y, m, d, _name = path.split("/", 4)
             if f"{y}-{m}-{d}" in wanted:
                 out.append((path, text))
@@ -128,7 +138,7 @@ def store(mem, monkeypatch):
 def stored(s):
     """Records in the store (follow-up lines excluded), oldest first."""
     out = [json.loads(text) for path, text in sorted(s.files.items()) if ".filed." not in path]
-    return sorted(out, key=lambda r: r["ended_at"])
+    return sorted(out, key=lambda r: (r["ended_at"], bool(r.get("resumes"))))   # frozen clock: a resumed run comes after its parent
 
 
 def followups(s):

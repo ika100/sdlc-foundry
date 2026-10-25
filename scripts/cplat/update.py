@@ -232,6 +232,32 @@ def refresh_devbox_lock(repo: Path, changed: list[str]) -> str | None:   # tests
     return None
 
 
+def ensure_playwright(repo: Path, template: str) -> tuple[bool, str | None]:
+    """Spec 091: every web-nextjs repo has the Playwright scaffold, so a project-owned package.json that opted out gets
+    `@playwright/test` and the `e2e` script. Returns (added, next step when the lockfile could not be refreshed)."""
+    path = repo / "package.json"
+    if not path.is_file():
+        return False, None
+    try:
+        pkg = json.loads(path.read_text())
+    except ValueError:
+        return False, None
+    if not isinstance(pkg, dict) or any("@playwright/test" in (pkg.get(k) or {}) for k in ("dependencies", "devDependencies")):
+        return False, None
+    src = PLATFORM_ROOT / "templates" / template / "package.json.jinja"
+    m = re.search(r'"@playwright/test"\s*:\s*"([^"]+)"', src.read_text()) if src.is_file() else None
+    pkg.setdefault("devDependencies", {})["@playwright/test"] = m.group(1) if m else "latest"
+    if isinstance(pkg.get("scripts"), dict):
+        pkg["scripts"].setdefault("e2e", "playwright test")
+    path.write_text(json.dumps(pkg, indent=2) + "\n")
+    step = "refresh the lockfile: devbox run -- pnpm install, then commit pnpm-lock.yaml"
+    try:
+        proc = run(["devbox", "run", "--", "pnpm", "install", "--lockfile-only"], cwd=repo, check=False, timeout=600)
+    except (PlatformError, OSError):
+        return True, step
+    return True, (step if proc.returncode != 0 else None)
+
+
 def merge_devbox_file(repo: Path, before: str | None, baseline: dict | None = None
                       ) -> tuple[list[str], list[tuple[str, str]], str | None, list[str], list[str]]:
     """Merge the project's devbox.json (before the update) into the rendered one. Rewrites only when something is kept or moved.
@@ -454,6 +480,13 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
     base_settings = _load_json(base_root / settingsmerge.REL) if base_root else None
     kept, replaced, devbox_note, moved, dropped_gates = merge_devbox_file(repo, devbox_before, base_devbox)
     settings, settings_note = settingsmerge.merge_settings_file(repo, settings_before, base_settings)
+
+    if req["shape"] == "web-nextjs":
+        added, lock_next = ensure_playwright(repo, req["template"])
+        if added:
+            r.did.append("added @playwright/test to package.json (spec 091: browser smoke tests)")
+        if lock_next:
+            r.next_steps.append(lock_next)
 
     new_keys = sorted(set(re.findall(r"^([a-z_]+):", answers.read_text(), re.M)) - set(re.findall(r"^([a-z_]+):", before, re.M)))
     changed = [ln[3:] for ln in run(["git", "status", "--porcelain"], cwd=repo).stdout.splitlines()]

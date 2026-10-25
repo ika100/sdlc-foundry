@@ -40,7 +40,7 @@ Do not wait for CI on `main`.
 
 **Skip** (resume) when `cplat spec trace <id>` already passes: every criterion has a test.
 
-**tester** agent (`agents.tester`), prompt: "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion with its full text, and the non-goals), `Contract` (the `design.md` contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests against the spec and `design.md`'s contract, confirms they fail because the behaviour is missing, and commits only test files.
+**tester** agent (`agents.tester`), prompt: "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion with its full text, and the non-goals), `Contract` (the `design.md` contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests against the spec and `design.md`'s contract (for a criterion ending in `(smoke)` also its smoke test, using only the base URL, so `cplat spec trace` does not print `smoke: no smoke-tagged test`), confirms they fail because the behaviour is missing, and commits only test files.
 
 Then:
 - `cplat spec trace <id>` must pass; otherwise send the missing ids back to the tester (once).

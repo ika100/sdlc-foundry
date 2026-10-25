@@ -14,8 +14,9 @@
 {%- if needs_database %}
       "db-up":        "docker run --rm --name {{ project_name }}-db -p 5432:5432 -e POSTGRES_USER=app -e POSTGRES_PASSWORD=dev -e POSTGRES_DB={{ project_name | replace('-', '_') }} postgres:17",
 {%- endif %}
-      "test":         "mvn -B verify",
-      "test-fast":    "mvn -B test",
+      "test":         "SMOKE_BASE_URL= mvn -B verify",
+      "test-fast":    "SMOKE_BASE_URL= mvn -B test",
+      "smoke":        "bash scripts/smoke.sh",
       "spec-check":   "bash scripts/spec-check.sh",
       "lint":         "mvn -B spotless:check checkstyle:check",
       "lint-fix":     "mvn -B spotless:apply",

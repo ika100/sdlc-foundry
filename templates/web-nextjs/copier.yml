@@ -1,5 +1,5 @@
 # Copier template: web-nextjs
-# Next.js (App Router only, ADR-004) web frontend: pnpm (ADR-003), Vitest + optional Playwright (ADR-002),
+# Next.js (App Router only, ADR-004) web frontend: pnpm (ADR-003), Vitest + Playwright (ADR-002, ADR-040),
 # pinned Node LTS (ADR-005), canonical devbox recipes, Docker, agentic setup.
 #
 # Usage:
@@ -33,8 +33,6 @@ _skip_if_exists:
 _exclude:
   - "copier.yml"
   - ".git"
-  - "{% if not needs_e2e %}e2e{% endif %}"
-  - "{% if not needs_e2e %}playwright.config.ts{% endif %}"
   - "{% if not needs_observability %}app/api/metrics{% endif %}"
   - "{% if not needs_observability %}tests/metrics.test.ts{% endif %}"
   - "{% if not needs_observability %}instrumentation.ts{% endif %}"
@@ -80,10 +78,11 @@ port:
   help: "HTTP port the app listens on."
   default: 3000
 
+# Kept only so answers files written before spec 091 still apply: the Playwright scaffold is always generated now.
 needs_e2e:
   type: bool
-  help: "Include a Playwright e2e scaffold (e2e/ dir, devbox run e2e)? Vitest is always included."
-  default: false
+  default: true
+  when: false
 
 needs_observability:
   type: bool

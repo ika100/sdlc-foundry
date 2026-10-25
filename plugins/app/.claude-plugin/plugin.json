@@ -1,6 +1,6 @@
 {
   "name": "app",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Spec-driven features across a product's repos (gitops-app): /app:spec writes the product spec, /app:plan assigns its criteria to the component repos (ADR-011/026), /app:build builds ready repos in parallel through their own specs (ADR-023), /app:specs tracks progress.",
   "author": {
     "name": "Eike Hensler",

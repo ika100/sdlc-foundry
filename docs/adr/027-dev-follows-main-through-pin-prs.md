@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-10-09
 **Amends:** [ADR-023](023-parallel-plan-execution.md) (pinning stays human, except for `dev`), [ADR-017](017-gitops-owns-manifests.md)
+**Amended by:** [ADR-041](041-staging-follows-green-dev-smoke.md) (decision 4, for staging)
 
 ## Context
 
@@ -24,7 +25,7 @@
 
    Branch protection (spec 054, required checks, no review) decides the merge. A red CI leaves the PR open and `dev` on the old image.
 3. **New repos:** `/shared:new-service --gitops` turns on `allow_auto_merge` and lets Actions create PRs. A linked service, and `/shared:new-app` for all its components, prints the one manual step: create the token, then `gh secret set GITOPS_TOKEN`. `/shared:update-service` names the same step when the job first arrives.
-4. **Promotion is unchanged:** `staging` and `prod` move only through `/gitops:promote`, one reviewed PR each, never auto-merged.
+4. **Promotion is unchanged:** `staging` and `prod` move only through `/gitops:promote`, one reviewed PR each, never auto-merged. Amended by ADR-041: staging now follows a green dev smoke; prod is unchanged.
 
 ## Consequences
 

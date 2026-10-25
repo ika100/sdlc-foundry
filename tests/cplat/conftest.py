@@ -50,6 +50,14 @@ def no_real_auto_issues(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def no_leaking_alert_settings(monkeypatch):
+    """Spec 092: the shell's alert settings never leak into a test. The seams (`alertissues.tracker`, `alertsources.http_get` /
+    `kubectl`) are replaced by each test that needs them: the tests of the real defaults call them with a stubbed transport."""
+    for name in ("ALERTS_TOKEN", "ALERTS_QUERY_AUTHORIZATION", "ALERTS_PROMETHEUS_URL", "GITHUB_STEP_SUMMARY"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture()
 def clock(monkeypatch):
     """The run-clock fixture of test_runs.py for modules that import `mem` / `store` from there under an alias

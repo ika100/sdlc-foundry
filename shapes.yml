@@ -9,6 +9,7 @@ shapes:
     template: service-python
     deployable: true
     test_globs: ["tests/**/*.py"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    smoke_tag: 'pytest\.mark\.smoke\b'   # regex: a test file naming a (smoke) criterion must match it (spec 091)
     ci_checks: ["quality (ruff + mypy)", "test (pytest + coverage)", "security (pip-audit + detect-secrets + bandit)", "ci-extra"]   # required on main by new-service (spec 054)
     library: false
     detection:
@@ -52,6 +53,8 @@ shapes:
     template: web-nextjs
     deployable: true
     test_globs: ["tests/**/*.ts", "tests/**/*.tsx", "e2e/**/*.ts"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    smoke_tag: '@smoke\b'   # regex: a test file naming a (smoke) criterion must match it (spec 091)
+    smoke_globs: ["e2e/**/*.ts"]   # where trace looks for smoke tests (default: test_globs)
     ci_checks: ["quality (eslint + tsc)", "test (vitest + coverage)", "security (pnpm audit + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
     library: false
     detection:
@@ -95,6 +98,7 @@ shapes:
     template: service-java
     deployable: true
     test_globs: ["src/test/**/*.java"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    smoke_tag: '@Tag\(\s*"smoke"\s*\)'   # regex: a test file naming a (smoke) criterion must match it (spec 091)
     ci_checks: ["quality (spotless + checkstyle + compile)", "test (mvn verify + JaCoCo)", "security (OWASP dependency-check + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
     library: false
     detection:
@@ -123,6 +127,7 @@ shapes:
     template: service-go
     deployable: true
     test_globs: ["**/*_test.go"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    smoke_tag: 'func\s+TestSmoke\w*\s*\('   # regex: a test file naming a (smoke) criterion must match it (spec 091)
     ci_checks: ["quality (golangci-lint + go build)", "test (go test -race -cover)", "security (govulncheck + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
     library: false
     detection:

@@ -14,8 +14,9 @@
   "shell": {
     "init_hook": ["uv sync --all-extras 2>/dev/null || true"],
     "scripts": {
-      "test":           "uv run pytest tests/ --cov={{ module_name }} --cov-report=term-missing",
-      "test-fast":      "uv run pytest tests/ -q --tb=line",
+      "test":           "SMOKE_BASE_URL= uv run python -m pytest tests/ -p scripts.smoke_pytest --cov={{ module_name }} --cov-report=term-missing",
+      "test-fast":      "SMOKE_BASE_URL= uv run python -m pytest tests/ -p scripts.smoke_pytest -q --tb=line",
+      "smoke":          "bash scripts/smoke.sh",
       "spec-check":     "bash scripts/spec-check.sh",
       "lint":           "uv run ruff check . && uv run ruff format --check .",
       "lint-fix":       "uv run ruff check --fix . && uv run ruff format .",

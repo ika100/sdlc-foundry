@@ -60,10 +60,16 @@ render.py only wires it into the environments and pins its image, so pin-dev, /g
 applications/<app>/app.yaml (optional):
   gateway: {name: traefik-gateway, namespace: kube-system}
   hosts: {dev: "{service}.{app}-dev.localhost"}     # per env; no entry = not exposed in that env
+  urls: {dev: "http://{host}:8088"}                 # optional, read by `cplat smoke` (spec 091), not by render: the URL smoke tests use
   secretStore: {name: platform-secrets, kind: ClusterSecretStore}   # where `remote` secrets are read from
   policies: {mode: {dev: Audit, staging: Audit, prod: Enforce}, registries: []}   # Kyverno guard rails per environment (ADR-022)
   addons:                                           # backing services, one per application and environment (ADR-020)
     postgres: {version: 17, instances: {dev: 1, prod: 3}, storage: {dev: 1Gi, prod: 20Gi}}
+    observability:                                  # alert issues (spec 092), read only by the alert poll; validated here
+      alerts: true                                  # false: the poll skips this app
+      rules: [{name: HighErrorRate, query: "<PromQL>", severity: warning, summary: "optional"}]   # critical | warning | info
+      queryURL: https://prom.example.com/api/prom   # optional; querySecret: <name> or <namespace>/<name> (key AUTHORIZATION)
+      alertmanagerURL: https://am.example.com       # optional
 
 Usage:
   render.py            write files
@@ -267,6 +273,49 @@ def per_env(value, env: str, default):
     return value.get(env, default) if isinstance(value, dict) else (default if value is None else value)
 
 
+ALERT_SEVERITIES = ("critical", "warning", "info")
+DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+
+
+def validate_alerts(obs: dict) -> None:
+    """Alert settings under the observability addon (spec 092). Only the poll reads them; the manifests do not change."""
+    if "alerts" in obs and not isinstance(obs["alerts"], bool):
+        raise RenderError("app.yaml: observability.alerts must be true or false")
+    for key in ("queryURL", "alertmanagerURL"):
+        if key in obs and not (isinstance(obs[key], str) and obs[key].startswith(("http://", "https://"))):
+            raise RenderError(f"app.yaml: observability.{key} must be an http(s) URL")
+    if "querySecret" in obs:
+        parts = str(obs["querySecret"]).split("/") if isinstance(obs["querySecret"], str) else []
+        if not 1 <= len(parts) <= 2 or not all(DNS_LABEL.match(p) for p in parts):
+            raise RenderError("app.yaml: observability.querySecret must be <name> or <namespace>/<name>")
+    if "rules" not in obs or obs["rules"] is None:
+        return
+    shape = "app.yaml: observability.rules must be a list of {name, query, severity, summary}"
+    if not isinstance(obs["rules"], list):
+        raise RenderError(shape)
+    seen: set[str] = set()
+    for i, rule in enumerate(obs["rules"]):
+        if not isinstance(rule, dict):
+            raise RenderError(f"app.yaml: observability.rules[{i}] (no name): rules must be a list of {{name, query, severity, summary}}")
+        name = rule.get("name")
+        label = name if isinstance(name, str) and name.strip() else "no name"
+
+        def bad(problem: str) -> RenderError:
+            return RenderError(f"app.yaml: observability.rules[{i}] ({label}): {problem}")
+
+        if label == "no name":
+            raise bad("a rule needs a name")
+        if rule.get("severity") not in ALERT_SEVERITIES:
+            raise bad(f"severity '{rule.get('severity')}' must be one of {', '.join(ALERT_SEVERITIES)}")
+        if name in seen:
+            raise bad(f"the name '{name}' is used twice")
+        seen.add(name)
+        if not isinstance(rule.get("query"), str) or not rule["query"].strip():
+            raise bad("query must be a non-empty string (PromQL)")
+        if "summary" in rule and not isinstance(rule["summary"], str):
+            raise bad("summary must be a string")
+
+
 def validate_addons(services: list[dict], cfg: dict) -> None:
     declared = cfg.get("addons") or {}
     for name in declared:
@@ -297,6 +346,7 @@ def validate_addons(services: list[dict], cfg: dict) -> None:
             raise RenderError("app.yaml: observability.exportTo must be an http(s) OTLP/HTTP endpoint")
         if obs.get("headersSecret") and not obs.get("exportTo"):
             raise RenderError("app.yaml: observability.headersSecret needs exportTo")
+        validate_alerts(obs)
 
 
 def addons_in(services: list[dict], env: str, cfg: dict) -> list[str]:
@@ -326,6 +376,25 @@ def validate_policies(cfg: dict) -> None:
             raise RenderError(f"app.yaml: policies.mode for {env} must be Audit, Enforce or Off, got '{mode}'")
     if not isinstance(conf.get("registries") or [], list):
         raise RenderError("app.yaml: policies.registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
+
+
+def validate_promotion(services: list[dict], cfg: dict) -> None:
+    """`promotion` in app.yaml and on services (spec 093): staging may be auto; prod is never automatic."""
+    for where, conf in [("app.yaml", cfg.get("promotion"))] + [
+            (f"services.yaml ({s.get('name')})", s.get("promotion")) for s in services]:
+        if conf is None:
+            continue
+        if not isinstance(conf, dict):
+            raise RenderError(f"{where}: promotion must be a mapping, e.g. {{staging: auto}}")
+        for k, v in conf.items():
+            if k == "prod":
+                if v != "manual":
+                    raise RenderError(f"{where}: promotion.prod: prod is promoted only by /gitops:promote, never automatically "
+                                      "(spec 093); remove the key or set it to manual")
+            elif k != "staging":
+                raise RenderError(f"{where}: promotion.{k} is not a setting (only staging; dev always follows main)")
+            elif v not in ("auto", "manual"):
+                raise RenderError(f"{where}: promotion.staging must be auto or manual, got '{v}'")
 
 
 def allowed_registries(services: list[dict], cfg: dict, conf: dict) -> list[str]:
@@ -593,6 +662,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
     cfg = (yaml.safe_load(cfg_file.read_text()) or {}) if cfg_file.is_file() else {}
     validate_addons(services, cfg)
     validate_policies(cfg)
+    validate_promotion(services, cfg)
     org = ans.get("github_org", "ika100")
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
     gitops_repo = f"https://github.com/{org}/{ans.get('project_name', app + '-gitops')}"

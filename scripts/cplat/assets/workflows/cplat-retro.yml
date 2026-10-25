@@ -1,0 +1,36 @@
+name: cplat retro
+on:
+  schedule:
+    - cron: "0 6 * * 1"          # Mondays 06:00 UTC
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: cplat-retro
+  cancel-in-progress: false
+jobs:
+  retro:
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.RETRO_GH_TOKEN }}
+      CPLAT_RUNS_REPO: ${{ github.repository }}
+      CPLAT_FEEDBACK_REPO: __PLATFORM_REPO__
+      RETRO_DIR: ${{ runner.temp }}/retro
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {repository: __PLATFORM_REPO__, ref: main, path: platform, persist-credentials: false}
+      - name: report
+        run: devbox run -c platform -- uv run "$GITHUB_WORKSPACE/platform/scripts/cplat/cplat.py" retro --out "$RETRO_DIR"
+      - name: install Claude Code
+        continue-on-error: true
+        run: command -v claude || curl -fsSL https://claude.ai/install.sh | bash
+      - name: proposals
+        continue-on-error: true
+        env:
+          GH_TOKEN: ""
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: PATH="$HOME/.local/bin:$PATH" devbox run -c platform -- uv run "$GITHUB_WORKSPACE/platform/scripts/cplat/cplat.py" retro propose --dir "$RETRO_DIR"
+      - name: post
+        run: devbox run -c platform -- uv run "$GITHUB_WORKSPACE/platform/scripts/cplat/cplat.py" retro post --dir "$RETRO_DIR"

@@ -4,7 +4,8 @@
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat ship start <spec> [--no-merge]   begin or resume; prints the state and the next step
+  cplat ship start <spec> [--no-merge] [--product DIR]   begin or resume; prints the state and the next step
+                                         (--product: /app:ship only, links the run to a product ship, spec 097)
   cplat ship status [--json]             the state of the current run
   cplat ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
   cplat ship pr --title T --body-file F  run `devbox run ci`, push the feature branch and open (or reuse) its PR
@@ -34,7 +35,9 @@ import autoissue
 import core
 import feedback
 import runs
+import smoke
 import spec as specmod
+import staging_deploy
 from core import PlatformError, run
 
 PHASES = ["plan", "build", "pr", "land", "deploy", "done"]
@@ -102,7 +105,7 @@ def _ensure_run(repo: Path, st: dict) -> str | None:
     if rid and (st.get("recorded") or runs.active(rid) is not None):
         return rid
     st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st.get("spec"), run_id=rid,
-                              started_at=_utc_iso(st.get("started")))
+                              started_at=_utc_iso(st.get("started")), parent=(st.get("product") or {}).get("run_id"))
     return st["run_id"]
 
 
@@ -157,6 +160,13 @@ def describe(st: dict) -> str:
     for k in ("branch", "pr", "merge_sha", "deployed"):
         if st.get(k):
             lines.append(f"  {k}: {st[k]}")
+    if (st.get("smoke") or {}).get("row"):
+        lines.append(f"  smoke: {st['smoke']['row']}")
+    if (st.get("staging") or {}).get("row"):
+        row = f"  staging: {st['staging']['row']}"
+        if (st["staging"].get("smoke") or {}).get("row"):
+            row += f"; smoke {st['staging']['smoke']['row']}"
+        lines.append(row)
     if st.get("fix_rounds"):
         lines.append(f"  CI fix rounds: {st['fix_rounds']}")
     lines.append(f"next: {next_step(st)}")
@@ -165,7 +175,17 @@ def describe(st: dict) -> str:
 
 # ---------------- start / phase / escalate / finish ----------------
 
-def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
+def product_link(product: Path) -> dict:
+    """Spec 097: the product run a repo ship belongs to (parent record, default kube context, gitops merge slot)."""
+    import appship_state
+    pst = appship_state.load_state(product)
+    if not pst:
+        raise PlatformError(f"no product ship run in {product}", hint="start it in the gitops-app repo: /app:ship <spec>")
+    return {"dir": str(product), "run_id": pst.get("run_id"), "context": pst.get("context")}
+
+
+def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: Path | None = None) -> dict:
+    link = product_link(product) if product else None
     sp = specmod.find(repo, ref)
     st = load_state(repo)
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated"):
@@ -180,8 +200,11 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
     if st and st["spec"] == sp.id:
         if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
             old = st.get("run_id")
-            st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st["spec"], resumes=old)
+            st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st["spec"], resumes=old,
+                                      parent=link["run_id"] if link else None)
             st["recorded"] = False
+        if link:
+            st["product"] = link
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
         st.pop("cause", None)
         st["blocks"] = 0
@@ -204,6 +227,8 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False) -> dict:
         runs.finish(st.get("run_id"), "abandoned")   # take-over: only after every check that can still refuse
     st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "blocks": 0, "fix_rounds": 0,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "recorded": False}
+    if link:
+        st["product"] = link
     save_state(repo, st)
     runs.link_parent(st.get("run_id"))
     return st
@@ -687,8 +712,19 @@ def merge_gitops(repo: Path, st: dict, order: str, timeout: float, interval: flo
             status, cs, failed = wait_checks(CheckWatch(repo, pr, queue_timeout, st.get("run_id")), timeout, interval)
             if status == "red":
                 return False, lines + [f"gitops task {t['id']} ({order}) is red; nothing more was merged"] + red(repo, pr, cs, failed)
-            res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"], cwd=repo, check=False)
-            if res.returncode != 0:
+            if st.get("product"):            # spec 097: one merge at a time, in the product plan's order
+                import appship_merge
+                gitops_dir, me = Path(st["product"]["dir"]), service_name(repo)
+                try:
+                    with appship_merge.slot(gitops_dir, me, appship_merge.plan_index(gitops_dir, me), timeout, interval):
+                        appship_merge.merge(gitops_dir, pr, me, cwd=repo)
+                except appship_merge.Conflict as e:
+                    escalate(repo, str(e), "decision")
+                    return False, lines + [str(e)]
+                res = None
+            else:
+                res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"], cwd=repo, check=False)
+            if res is not None and res.returncode != 0:
                 detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
                 raise PlatformError(f"merging gitops PR {pr} failed: {detail[0]}", hint="escalate: a conflict is a human decision")
         info["merged"] = True
@@ -710,21 +746,99 @@ def service_name(repo: Path) -> str:
     return m.group(1) if m else repo.name
 
 
+def _smoke_spec(repo: Path, st: dict) -> specmod.Spec | None:
+    try:
+        return specmod.find(repo, st["spec"])
+    except PlatformError:
+        return None
+
+
+def _smoke_state(repo: Path, st: dict, result: smoke.SmokeResult, row: str, filed: dict | None) -> None:
+    """The run record's `smoke` section and the state's summary. Never raises (a recording never changes the deploy)."""
+    try:
+        st["smoke"] = {"outcome": result.outcome, "row": row, "url": result.base_url, "reason": result.reason,
+                       "signature": autoissue.signature("smoke", service_slug(repo), "dev", "\n".join(sorted(result.failing)))}
+        runs.set_section(_ensure_run(repo, st), "smoke", {**result.section(filed), "image": st.get("deployed"),
+                                                           "at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[str], apps: list[str] | None = None,
+                  svc: str | None = None, context: str | None = None, interval: float = 20) -> tuple[bool, list[str]]:
+    """Record the smoke result, then end the deploy: after green or not run staging is promoted when the gitops-app asks for it
+    (spec 093) and the run is done; escalated (cause code) when red."""
+    lines = [*lines, *result.lines()]
+    if result.outcome == "not-run" or result.ok:
+        _smoke_state(repo, st, result, result.row(), None)
+        lines.append(f"Smoke (dev): {result.row()}")
+        ok, more = staging_deploy.promote(repo, st, apps or [], svc or service_name(repo), result, context, interval)
+        lines += more
+        return _done(repo, st, lines) if ok else (False, lines)
+    sp = _smoke_spec(repo, st)
+    sid = sp.id if sp else st["spec"]
+    out = smoke.file_issue(result, service_slug=service_slug(repo), spec_id=sid, image=st.get("deployed"),
+                           run_id=st.get("run_id"), shape=core.read_stamp(repo).get("shape", "none"))
+    lines += out.lines
+    if out.url:
+        issue = out.url
+    else:
+        m = re.search(r"not filed: ([^;]*)", " ".join(out.lines))
+        issue = f"not filed: {m.group(1).strip()}" if m else None
+    filed = {"signature": out.signature, "url": out.url, "result": out.result}
+    row = result.row(issue)
+    _smoke_state(repo, st, result, row, filed)
+    save_state(repo, st)
+    reason = f"smoke red in dev: {len(result.failing)} failing ({sid})"
+    skipped = staging_deploy.skip(repo, st, "dev smoke red", [])
+    save_state(repo, st)
+    escalate(repo, reason, "code", report=lines)
+    lines.append(f"ship {st['spec']}: escalated ({reason}); dev keeps running {st.get('deployed')}. "
+                 f"Resume with /svc:ship {st['spec']}")
+    lines += skipped
+    lines.append(f"Smoke (dev): {row}")
+    return False, lines
+
+
+def _smoke_not_run(repo: Path, st: dict, reason: str, lines: list[str], apps: list[str] | None = None, svc: str | None = None,
+                   context: str | None = None, interval: float = 20) -> tuple[bool, list[str]]:
+    sp = _smoke_spec(repo, st)
+    return _smoke_finish(repo, st, smoke.not_run("dev", reason, sp.smoke_acs() if sp else []), lines, apps, svc, context, interval)
+
+
+def _smoke_step(repo: Path, st: dict, apps: list[str], svc: str, lines: list[str], base_url: str | None,
+                context: str | None = None, interval: float = 20) -> tuple[bool, list[str]]:
+    url, why = (base_url, None) if base_url else smoke.dev_url(repo, apps, svc)
+    if not url:
+        return _smoke_not_run(repo, st, why or "no dev URL", lines, apps, svc, context, interval)
+    result = smoke.run_smoke(repo, url, spec=_smoke_spec(repo, st), probe=smoke.liveness_probe(repo))
+    return _smoke_finish(repo, st, result, lines, apps, svc, context, interval)
+
+
 def deploy(repo: Path, timeout: float, interval: float, context: str | None,
-           queue_timeout: float = QUEUE_TIMEOUT) -> tuple[bool, list[str]]:
+           queue_timeout: float = QUEUE_TIMEOUT, base_url: str | None = None) -> tuple[bool, list[str]]:
     """Wait for each gitops-app's pin PR for the merge commit (spec 062) to merge, watching the service's main CI and
     the pin-dev run so a red or missing one fails at once (spec 077); then for Argo to run that build; then merge the
     after-release gitops PRs and wait for every app they name (spec 076)."""
     import shapecmd
     st = require_state(repo)
+    context = context or (st.get("product") or {}).get("context")
     if st["phase"] == "done":
         return True, ["already done"]
     if not shapecmd.route(repo)["deployable"]:
-        return _done(repo, st, ["not deployable (library): nothing to deploy"])
+        return _smoke_not_run(repo, st, "not deployable (library)", ["not deployable (library): nothing to deploy"])
     apps = gitops_apps(repo)
     if not apps:
-        return _done(repo, st, ["no .platform-app.yml: this repo is not linked to a gitops-app, so dev is not pinned "
-                                "automatically; compose it with /gitops:compose and link it (spec 062)"])
+        return _smoke_not_run(repo, st, "the repo is not linked to a gitops-app",
+                              ["no .platform-app.yml: this repo is not linked to a gitops-app, so dev is not pinned "
+                               "automatically; compose it with /gitops:compose and link it (spec 062)"])
+    if st.get("deployed") and (st.get("smoke") or {}).get("outcome") in {"red", "timed-out"}:
+        return _smoke_step(repo, st, apps, service_name(repo), ["resuming: smoke only, against what dev runs now"], base_url,
+                           context, interval)
+    stg = st.get("staging") or {}
+    if st.get("deployed") and (stg.get("state") == "pin-failed" or (stg.get("smoke") or {}).get("outcome") in {"red", "timed-out"}):
+        ok, more = staging_deploy.resume(repo, st, apps, service_name(repo), context, interval)
+        return _done(repo, st, more) if ok else (False, more)
     sha = st.get("merge_sha") or ""
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise PlatformError("the run has no merge commit", hint="land the PR first: cplat ship land")
@@ -788,7 +902,11 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     elif not context:
         lines.append("Argo health not checked (pass --context <kube-context>)")
     st["deployed"] = f"sha-{sha}"
-    return _done(repo, st, lines)
+    save_state(repo, st)
+    if not context:
+        return _smoke_not_run(repo, st, "no kube context, so Argo health was not checked (pass --context <kube-context>)", lines,
+                              apps, svc, context, interval)
+    return _smoke_step(repo, st, apps, svc, lines, base_url, context, interval)
 
 
 def service_slug(repo: Path) -> str:
@@ -999,6 +1117,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("spec")
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
+    p.add_argument("--product", default=None, help="the gitops-app clone of the product ship this run belongs to (/app:ship only, spec 097)")
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("phase")
@@ -1022,6 +1141,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--interval", type=float, default=20)
     p.add_argument("--queue-timeout", type=float, default=QUEUE_TIMEOUT)
     p.add_argument("--context", help="kube context: also wait for Argo CD to report <service>-dev Synced/Healthy")
+    p.add_argument("--base-url", default=None, help="run the smoke tests against this URL instead of the gitops-app's dev URL")
     p = sub.add_parser("escalate")
     p.add_argument("reason", nargs="+")
     p.add_argument("--cause", default=None, help=f"who must act: {_ALLOWED} (run record; `platform` is filed as an issue, spec 088)")
@@ -1045,7 +1165,8 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        print(describe(start(repo, ns.spec, not ns.no_merge, ns.take_over)))
+        print(describe(start(repo, ns.spec, not ns.no_merge, ns.take_over,
+                              Path(ns.product).resolve() if ns.product else None)))
         return 0
     if ns.cmd == "status":
         st = require_state(repo)
@@ -1071,7 +1192,7 @@ def main(argv: list[str]) -> int:
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "deploy":
-        ok, lines = deploy(repo, ns.timeout, ns.interval, ns.context, ns.queue_timeout)
+        ok, lines = deploy(repo, ns.timeout, ns.interval, ns.context, ns.queue_timeout, ns.base_url)
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "escalate":

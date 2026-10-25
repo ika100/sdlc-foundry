@@ -12,7 +12,8 @@ unattended: /svc:ship <NNN>
               pr       cplat ship pr: pushes feature/<spec>, opens the PR
               land     cplat ship land: waits for every check; red → logs → coder → push (≤ 3 rounds); green → squash merge
               deploy   cplat ship deploy: the service's CI publishes sha-<40>, pin-dev merges the pin PR after CI, Argo syncs
-you:        check dev  →  /gitops:promote <svc> dev staging   (reviewed PR, as before)
+              staging  a green dev smoke dispatches pin-staging (self-merging PR), Argo syncs, staging smoke (spec 093)
+you:        check staging  →  /gitops:promote <svc> staging prod   (evidence summary, reviewed PR)
 ```
 
 The run stops on its own only when it is done or escalated. While it is unfinished, the shared plugin's Stop hook refuses to let the session end (spec 066). It escalates (`cplat ship escalate '<reason>'`) when a rule needs you: a merge conflict after its re-plan (a task is re-planned once, a build at most 3 times), a changed acceptance test, a security finding with no fix released, or a bump that breaks a gate, a decision the spec does not answer, red CI after three fix rounds, a closed pin PR. `/svc:ship <NNN>` resumes where it stopped. `cplat ship status` shows the phase at any time.
@@ -95,6 +96,17 @@ A build record also says how each agent did (spec 089), per agent, shape and mod
 - **Releases:** `--by-version` splits every row by platform version, versions side by side, so you can compare before and after a release.
 - **Incomplete:** a recording call that failed or was malformed never stops the build; it marks the run `incomplete` (counted in the row) and the report still shows what was recorded.
 
+### Weekly retro
+
+Every Monday the platform looks back at the last complete week and proposes what to build next (spec 090, [ADR-039](adr/039-weekly-retro-evidence-checked-proposals.md)).
+
+- **Three steps, one directory:** `cplat retro --out DIR` builds the report (`report.json`, `report.md`, `prompt.md`), `cplat retro propose --dir DIR` lets headless Claude write `proposals.json`, `cplat retro post --dir DIR` checks and posts. A failed proposal step still posts the report with `Proposals: not generated (<reason>)`.
+- **The report** covers ISO week Monday to Sunday UTC, every figure next to the week before: runs per kind and outcome, phase durations, CI rounds and reruns, escalations by cause with the top reasons, reruns by check, platform issues counted again in the week, and the per-agent metrics of spec 089.
+- **Proposals are checked:** each cites evidence refs of the report with their exact values. A proposal without a matching ref, with a bad format, or over the limit (5 specs, 3 prompt changes) is refused and counted. A finding an open spec or issue already covers is shown as `amends spec NNN` or `see #N`.
+- **Public and private:** the issue `Weekly retro <week>` in `ika100/sdlc-foundry` has counts and placeholders only. A leak check stops the post if a repo, spec or store name remains. The full report goes to `retros/<week>.md` and `.json` in the run store. An earlier week's open retro issue is commented on and closed.
+- **Setup:** `cplat runs init <owner/name>` adds `.github/workflows/cplat-retro.yml` to the store (it needs `gh auth refresh -h github.com -s workflow` once). Give the store repo a self-hosted runner (variable `CI_RUNNER`) and the secrets `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`) and `RETRO_GH_TOKEN` (fine-grained: Issues read/write on the platform repo, Contents read/write on the store). `cplat doctor` warns about what is missing.
+- **By hand:** `cplat retro` prints the report and writes nothing; `cplat retro --week 2026-W42` picks another complete week.
+
 ## Auto-filed platform issues
 
 When a run stops because the platform itself misbehaves, the failure is filed as an issue in `ika100/sdlc-foundry` (spec 088, [ADR-033](adr/033-auto-filed-issues-with-signatures.md)).
@@ -105,6 +117,19 @@ When a run stops because the platform itself misbehaves, the failure is filed as
 - **Cap:** at most 10 new issues per 24 h per machine. +1 comments are not capped.
 - **Offline:** if filing fails (`gh` missing or not logged in, no network) or the cap is reached, the escalation still completes with the same exit status, prints `not filed: <reason>`, and the filing is retried at the next `cplat runs flush`.
 - **Off switch:** `CPLAT_AUTO_ISSUES=off` sends nothing and prints the draft instead. `CPLAT_FEEDBACK_REPO=<owner/name>` files in another repo. Run `cplat triage setup-labels` once so the `auto-filed` label exists.
+
+## Smoke in dev
+
+After dev is healthy, `cplat ship deploy` checks the spec in dev (spec 091, [ADR-040](adr/040-smoke-tests-against-a-deployed-environment.md)).
+
+- **The marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL. The tester writes a smoke-tagged test for it (`cplat spec trace` reports `smoke: no smoke-tagged test` until there is one).
+- **The recipe:** every deployable template has `devbox run smoke`. It runs only the smoke-tagged tests against `SMOKE_BASE_URL` (exit 2 without it) and prints `PASS|FAIL|SKIP  <path>::<name>` lines, then `smoke: <p> passed, <f> failed, <s> skipped` (or `0 smoke tests`). Web repos use standard Playwright tests in `e2e/` tagged `@smoke`.
+- **Retry and limit:** a red run is repeated once after 30 s; a pass on retry is reported as `passed on retry`. A run is killed after 600 s and counts as red.
+- **Red:** deploy escalates with cause `code` (`smoke red in dev: <n> failing (<spec>)`), prints the failing tests and the last 60 output lines (secrets redacted), and files one `smoke-failure` issue in the service repo (one issue per failing set, a repeat adds a +1 comment). Dev is not rolled back. `/svc:ship <spec>` resumes with smoke only.
+- **Not run:** no `--context`, a service not exposed in dev, an unreachable URL, a repo without the recipe or without a gitops-app link. Deploy finishes `done`, never reports "passed", and lists the unchecked `(smoke)` criteria.
+- **The record:** the run record has a `smoke` section (outcome, counts, duration, retry, per-criterion result, failing tests, filed issue).
+- **By hand:** `cplat smoke run [--env dev] [--base-url URL] [--spec SPEC] [--json]` in a service repo (exit 0 passed, 1 red, 3 not run); it files no issue.
+- **The dev URL** comes from the linked gitops-app: the service must have `expose:` and a `hosts.dev` template in `app.yaml`. An optional `urls.dev` in `app.yaml` overrides it (`{host}` is the host from `hosts`). For `*.localhost` hosts the port is `LOCAL_HTTP_PORT`, default 8088.
 
 ## Safety on the free plan
 

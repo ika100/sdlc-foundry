@@ -5,6 +5,12 @@
 # hosts:   hostname template per environment for services with `expose:`. No entry = not exposed in that environment.
 #          Placeholders: {service} (expose.host or the service name), {app}, {env}.
 #          *.localhost resolves to 127.0.0.1 in browsers and curl without any DNS or /etc/hosts setup.
+# urls:    optional (spec 091): the URL `cplat smoke` and `cplat ship deploy` use to reach a service per environment, when it is not
+#          the one derived from `hosts` (for example a local cluster on another port). {host} is the host `hosts` gives the service;
+#          {service}, {app} and {env} work too. `render.py` ignores this key. No entry = https://<host>, or http://<host>:8088 for
+#          *.localhost (set LOCAL_HTTP_PORT if `cluster-up` printed another port).
+# urls:
+#   dev: "http://{host}:8088"
 # secretStore: the (Cluster)SecretStore that `remote` secrets in services.yaml are read from (External Secrets Operator, ADR-018).
 #          `cluster-up` creates `platform-secrets` (reads Secrets from the secrets-store namespace). Real clusters: point this
 #          at your Vault / AWS / GCP store. `generate` secrets need no store: ESO generates random values in the cluster.
@@ -30,6 +36,27 @@ secretStore:
 # addons:
 #   postgres: {version: 17, instances: {dev: 1, prod: 3}, storage: {dev: 1Gi, prod: 20Gi}}
 #   observability: {ui: lgtm}
+# Alert issues (spec 092): every 15 minutes `alerts.yml` turns firing alerts into issues in the service's `repo` (or this repo).
+#          Built in: ServiceDown, a service with no up series for 5 minutes. Add your own PromQL rules; `alerts: false` switches the poll off.
+#          queryURL / alertmanagerURL / querySecret (Secret key AUTHORIZATION, `name` or `namespace/name`) point at a Prometheus or
+#          Alertmanager other than the local lgtm stack. Rules on OTLP-pushed metrics need the environment from `target_info`.
+# addons:
+#   observability:
+#     ui: lgtm
+#     alerts: true
+#     rules:
+#       - name: HighErrorRate
+#         query: 'sum by (job, instance) (rate(http_server_requests_seconds_count{status=~"5.."}[5m])) > 1'
+#         severity: warning        # critical | warning | info
+#         summary: More than one 5xx per second
+#     queryURL: https://prom.example.com/api/prom
+#     querySecret: obs-query
+#     alertmanagerURL: https://am.example.com
+# promotion: (spec 093) `staging: auto` = a green dev smoke in `cplat ship` promotes staging through the self-merging
+#          `pin-staging.yml` PR; `staging: manual` = only `/gitops:promote`; unset = manual. A service entry in services.yaml
+#          may override it. Prod is always manual (`/gitops:promote <svc> staging prod`); `promotion.prod` is rejected unless `manual`.
+promotion:
+  staging: auto
 gateway:
   name: traefik-gateway
   namespace: kube-system

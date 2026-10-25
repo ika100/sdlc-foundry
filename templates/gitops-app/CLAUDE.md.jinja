@@ -43,11 +43,20 @@ Argo must be able to read this repo. Then, once per cluster, a human runs `KUBE_
 
 A gitops PR opened by `/svc:ship` carries one body line `Service-ref: <owner>/<repo>@<branch>`: the service repo and its ship branch. On pull requests CI then reads that branch's CRDs (`crds/` and untemplated CRDs in `templates/` of the service's chart) through the GitHub API and validates every Component under `applications/` against them, instead of the public CRD catalog. Without a marker nothing changes. A malformed or duplicate marker, a repo that is not in `services.yaml`, a missing secret or an unreadable repo fails the check; a branch that is gone falls back to the service's default branch. Edit the PR body to correct the marker; the check runs again. The secret `SERVICE_REPOS_READ_TOKEN` (fine-grained token, Contents: read on every service repo) is only used by the `service CRDs` CI step; `cplat doctor` warns when it is missing: `gh secret set SERVICE_REPOS_READ_TOKEN -R <this repo>`.
 
+## Alert issues (spec 092)
+
+`.github/workflows/alerts.yml` polls every 15 minutes and files an issue for each firing alert (`auto-filed`, `alert`, `env:<env>`, `triage`). It runs only on the self-hosted runner (the `CI_RUNNER` variable) and is skipped, with a note in the run name, when that variable is empty. It never runs on a GitHub-hosted runner, because the cluster's query API is not reachable from there. Try it without changing anything: `gh workflow run alerts.yml -f dry_run=true`.
+
+- **Rules** go under the `observability` addon in `applications/<app>/app.yaml` (`rules: [{name, query, severity, summary}]`, severity `critical`, `warning` or `info`; `devbox run quality` validates them). The built-in `ServiceDown` rule covers every service. `alerts: false` switches the poll off for the application. `queryURL`, `querySecret` and `alertmanagerURL` point at another Prometheus or Alertmanager.
+- **Where issues land:** in the service's `repo` from `services.yaml`, else in this repo. Filing in the service repos needs the secret `ALERTS_TOKEN` (fine-grained, Issues: read and write on every service repo): `gh secret set ALERTS_TOKEN -R <this repo>`; `cplat doctor` warns when it is missing.
+- **Settings:** the secret `ALERTS_QUERY_AUTHORIZATION` (sent as the `Authorization` header to the query API) and the variable `ALERTS_PROMETHEUS_URL` (default: the in-cluster lgtm Prometheus).
+- Every alert issue goes through `/shared:triage` like any other auto-filed issue. Run `/shared:update-service` to get the workflow in an existing repo.
+
 ## Pin policy
 
 - `dev`: follows `main`. Each merge to a service's main opens a `pin/dev-<service>-<sha7>` PR here (`.github/workflows/pin-dev.yml`, ADR-027) that runs CI on the pin branch and merges itself only when it passed (no branch protection needed, ADR-028); a red CI leaves it open with a comment and dev on the old image. Until a service's first pin its dev overlay uses the `latest` tag. Pin by hand: `devbox run pin -- dev <service> sha-<7>`.
-- `staging`: image tag `sha-<40>` (full commit sha, ADR-030) of a main build, set by `/gitops:promote`.
-- `prod`: release image tag `X.Y.Z` (the git tag `vX.Y.Z` without the `v`), set by `/gitops:promote`.
+- `staging`: image tag `sha-<40>` (full commit sha, ADR-030) of a main build, set by `/gitops:promote`, and after a green dev smoke by the self-merging `pin-staging.yml` PR (spec 093, ADR-041) when `promotion.staging` is `auto` in `app.yaml`. Switch it off with `promotion: {staging: manual}` in `app.yaml` or on a service in `services.yaml`.
+- `prod`: release image tag `X.Y.Z` (the git tag `vX.Y.Z` without the `v`), set by `/gitops:promote` only, never automatically (the command shows an evidence summary first).
 
 ## Commands (devbox)
 

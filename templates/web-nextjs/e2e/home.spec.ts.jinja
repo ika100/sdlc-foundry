@@ -1,0 +1,28 @@
+import { expect, test } from "@playwright/test";
+
+test("home page renders with its landmarks", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: "{{ project_name }}" })).toBeVisible();
+  await expect(page.getByRole("banner")).toBeVisible();
+  await expect(page.getByRole("main")).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toBeVisible();
+});
+
+test("the health endpoint is linked and answers", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Check health" })).toHaveAttribute("href", "/api/health");
+  expect((await request.get("/api/health")).ok()).toBeTruthy();
+});
+
+test("unknown routes show the friendly 404", async ({ page }) => {
+  const response = await page.goto("/does-not-exist");
+  expect(response?.status()).toBe(404);
+  await expect(page.getByRole("heading", { level: 1, name: "This page could not be found" })).toBeVisible();
+});
+
+test("the layout works on a phone without horizontal scrolling", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 700 });
+  await page.goto("/");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
