@@ -341,7 +341,8 @@ def main(argv: list[str]) -> int:
                 passes.append({**_pass_summary(label, rid, started, runs._iso(runs.utcnow()), new), "outcome": outcome})
                 if outcome != "done":
                     break
-            compare = {"passes": passes, "required_missing": _required_missing(passes[0])}
+            compare = {"passes": passes, "required_missing": _required_missing(passes[0]),
+                       "recorded": bool(passes[0]["checks"])}
     finally:
         runs.phase(rid, "benchmark:reset")
         try:
@@ -371,6 +372,9 @@ def main(argv: list[str]) -> int:
         for p in compare["passes"]:
             print(f"  validation {p['pass']}: {p['outcome']}, duration {p['duration_s']}s, {p['tokens']} tokens, est. USD {p['cost_usd']}; "
                   + (", ".join(f"{c['name']} {c['decision']} ({c['rule']})" for c in p["checks"]) or "no validation section"))
+        if not compare["recorded"]:
+            print("  validation: no validation recorded in the change-aware pass")
+            return 1
         if compare["required_missing"]:
             print("  validation: required check(s) did not run in the change-aware pass: " + ", ".join(compare["required_missing"]))
             return 1

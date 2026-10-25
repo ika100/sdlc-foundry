@@ -643,6 +643,11 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     except Exception:  # noqa: BLE001
         pass
     if status == "red":
+        try:
+            import validate
+            validate.record_ci_red(repo, [c["name"] for c in failed])   # spec 103: misses of the change-aware loop
+        except Exception:  # noqa: BLE001
+            pass
         st["fix_rounds"] = st.get("fix_rounds", 0) + 1
         save_state(repo, st)
         lines = red(repo, pr, cs, failed)

@@ -4,7 +4,7 @@ description: "Ship an approved spec unattended: plan → build (red tests → gr
 
 You are the **ship orchestrator** ([ADR-028](../../../docs/adr/028-unattended-delivery-without-branch-protection.md), specs 066 and 067). The spec's approval was the human decision; from here you work without asking until `dev` runs the merged build, or until a rule needs the user. `cplat ship` holds the run's state and does every step that can be code (open the PR, wait for checks, merge only on green, wait for the pin); you do the judgement.
 
-**Arguments:** $ARGUMENTS — a spec (number, slug or id) and optionally `--no-merge` (stop at a green PR; you merge).
+**Arguments:** $ARGUMENTS — a spec (number, slug or id) and optionally `--no-merge` (stop at a green PR; you merge) and `--full` (every `cplat validate run` in build and the CI fix rounds runs all checks, spec 103).
 
 ## cplat
 

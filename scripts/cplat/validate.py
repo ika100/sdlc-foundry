@@ -38,6 +38,8 @@ from core import PlatformError
 ORDER = ("lint", "typecheck", "test", "acceptance", "security", "image", "ci-extra")
 RISKS = ("low", "medium", "high")
 TAIL = 40
+FINAL_TIMEOUT = 600   # seconds per check rerun after a red final gate
+CI_JOBS = {"quality": ("lint", "typecheck"), "test": ("test", "acceptance"), "security": ("security",), "ci-extra": ("ci-extra",)}
 CONFIG_FILES = ("pyproject.toml", "uv.lock", "package.json", "pnpm-lock.yaml", "package-lock.json", "pom.xml", "go.mod",
                 "go.sum", "devbox.json", "devbox.lock", ".platform-settings.yml")
 MANDATORY = {   # category -> globs (spec 103 rule 2); shapes.yml adds per-shape categories
@@ -48,7 +50,7 @@ MANDATORY = {   # category -> globs (spec 103 rule 2); shapes.yml adds per-shape
                  "**/package-lock.json", "**/go.sum"],
     "ci-workflow": [".github/workflows/**"],
     "secrets": [".secrets.baseline.json", "**/auth*", "**/security*", "**/*secret*"],
-    "spec": ["docs/specs/*/spec.md"],   # the criteria; plan.md is mapping data, other spec files fall to `no rule`
+    "spec": ["docs/specs/**"],   # existing files only (see mandatory_categories)
 }
 TEST_NAME = re.compile(r"(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]*\.(test|spec)\.[jt]sx?|[^/]*Test\.java)$")
 
@@ -118,7 +120,9 @@ def shape_entry(root: Path) -> dict:
 
 
 def is_doc(path: str) -> bool:
-    return path.endswith(".md") or path == "LICENSE" or (path.startswith("docs/") and not path.startswith("docs/specs/"))
+    if path.startswith("docs/specs/"):
+        return False   # a spec file is mandatory category `spec`, never plain documentation
+    return path.endswith(".md") or path == "LICENSE" or path.startswith("docs/")
 
 
 def _read_text(root: Path, rel: str) -> str:
@@ -186,6 +190,8 @@ def mandatory_categories(root: Path, files: list[str], shape: dict) -> dict[str,
     hit: dict[str, list[str]] = {}
     for f in files:
         for cat, globs in cats.items():
+            if cat == "spec" and not (root / f).exists():
+                continue   # a deleted spec file has nothing left to validate; it falls to `no rule` (not documentation)
             if matches(f, globs):
                 hit.setdefault(cat, []).append(f)
         if (TEST_NAME.search(f) or matches(f, specmod.test_globs(shape.get("id")))) and specmod.AC_ANY.search(_read_text(root, f)):
@@ -337,11 +343,21 @@ def command(entry: dict) -> list[str]:
     return ["devbox", "run", entry["script"], *(["--", *entry["targets"]] if entry["targets"] is not None else [])]
 
 
-def inputs_hash(root: Path, entry: dict, files: list[str], tracked: list[str], digests: Digests) -> str:
-    """sha256 over the command, the files the check reads and the configuration / tool versions."""
+def anchors(root: Path, base: str) -> tuple[str, str]:
+    """(merge base with `base`, HEAD): part of every reuse hash, so a pass from before a rebase, a merge or another worktree is not reused."""
+    def sha(*args: str) -> str:
+        code, text = _git(root, *args)
+        return text.strip() if code == 0 else "unknown"
+    return sha("merge-base", base, "HEAD"), sha("rev-parse", "HEAD")
+
+
+def inputs_hash(root: Path, entry: dict, files: list[str], tracked: list[str], digests: Digests,
+                anchor: tuple[str, str] = ("", "")) -> str:
+    """sha256 over the command, the files the check reads, the merge base (and HEAD for a whole-suite check) and the configuration / tool versions."""
     read = set(tracked) if entry["targets"] is None else {*entry["targets"], *files}
     read |= {f for f in CONFIG_FILES if (root / f).is_file()}
-    body = {"check": entry["name"], "command": command(entry), "files": {f: digests.of(f) for f in sorted(read)}}
+    body = {"check": entry["name"], "command": command(entry), "files": {f: digests.of(f) for f in sorted(read)},
+            "merge_base": anchor[0], "head": anchor[1] if entry["targets"] is None else ""}
     return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
 
 
@@ -371,8 +387,9 @@ def plan(root: Path, base: str, *, full: bool = False, risk: str | None = None) 
     risk_section = apply_risk(entries, risk)
     tracked = all_files(root)
     digests = Digests(root)
+    anchor = anchors(root, base)
     for e in entries:
-        e["inputs"] = inputs_hash(root, e, files or [], tracked, digests)
+        e["inputs"] = inputs_hash(root, e, files or [], tracked, digests, anchor)
         ev = read_evidence(root, e["name"])
         if e["decision"] == "run" and ev and ev.get("result") == "passed" and ev.get("inputs") == e["inputs"]:
             e["decision"], e["from_run"] = "reused", ev.get("run_id")
@@ -388,7 +405,10 @@ def public(p: dict) -> dict:
 # ---------------- run and record ----------------
 
 def counts(checks: list[dict]) -> dict:
-    return {d: sum(1 for c in checks if c["decision"] == d) for d in ("run", "reused", "skipped")}
+    out = {d: sum(1 for c in checks if c["decision"] == d) for d in ("run", "reused", "skipped")}
+    if any(c["decision"] == "not started" for c in checks):
+        out["not started"] = sum(1 for c in checks if c["decision"] == "not started")
+    return out
 
 
 def record_section(root: Path, p: dict) -> None:
@@ -442,8 +462,12 @@ def execute(root: Path, p: dict) -> int:
             print(f"FAILED (exit {rc}): {label} (log: {log})")
             print("\n".join(lines[-TAIL:]))
             code = 1
+            for later in p["checks"][p["checks"].index(e) + 1:]:   # never started: not a `run`
+                if later["decision"] == "run":
+                    later["decision"], later["reason"] = "not started", f"an earlier check ({n}) was red"
             break
     record_section(root, p)
+    print("checks: " + ", ".join(f"{d} {k}" for d, k in counts(p["checks"]).items()))
     return code
 
 
@@ -475,8 +499,27 @@ def record_final_gate(root: Path) -> None:
         for c in v.get("checks") or []:
             if c.get("decision") in ("skipped", "reused") and c.get("name") in scripts:
                 entry = _entry(scripts[c["name"]], "run", "final", "final gate")
-                rc = subprocess.run(command(entry), cwd=root, capture_output=True).returncode
+                try:
+                    rc = subprocess.run(command(entry), cwd=root, capture_output=True, timeout=FINAL_TIMEOUT).returncode
+                except subprocess.TimeoutExpired:   # not a miss: nobody knows whether it is red
+                    runs.mutate(rid, lambda rec, n=c["name"]: [x.__setitem__("final", "timed out")
+                                                               for x in rec["validation"]["checks"] if x.get("name") == n])
+                    continue
                 record_final(rid, c["name"], "passed" if rc == 0 else "failed")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def record_ci_red(repo: Path, failed: list[str]) -> None:
+    """Red checks of a PR's CI (job names): each one that maps to a plan check the loop skipped or reused is a miss.
+    Names map by the shape's `ci_checks`; an unmapped name records nothing. Never raises."""
+    try:
+        rid = runs.current(repo)
+        ci_checks = shape_entry(repo).get("ci_checks") or []
+        for name in failed:
+            job = next((j for j in ci_checks if name == j or name.endswith(f"/ {j}")), None)
+            for check in CI_JOBS.get(job.split(" (")[0], ()) if job else ():
+                record_final(rid, check, "failed")
     except Exception:  # noqa: BLE001
         pass
 
