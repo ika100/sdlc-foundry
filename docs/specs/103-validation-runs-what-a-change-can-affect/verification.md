@@ -1,9 +1,9 @@
-# Verification — 103 Validation runs what a change can affect (cycle 2)
+# Verification — 103 Validation runs what a change can affect (cycle 3)
 
-**Result:** fail
-**Commit:** 0fe67dd · **Base:** 6471a0a (merge base with origin/main) · **Trace:** 11/11 criteria named by tests (`tests/cplat/test_validate.py`, `tests/cplat/test_validate_review.py`)
+**Result:** pass
+**Commit:** a36c97c · **Base:** 6471a0a (merge base with origin/main) · **Trace:** 11/11 criteria named by tests (`tests/cplat/test_validate.py`, `tests/cplat/test_validate_review.py`)
 
-Cycle 2 checks the fixes in 0fe67dd. Cycle 1 (05d7b2c) found AC-103.3, .6, .7, .9 and .10 partial. Of these, AC-103.10 is still partial, in one sentence of build.md.
+Cycle 3. Cycle 1 (05d7b2c) found AC-103.3, .6, .7, .9 and .10 partial. 0fe67dd fixed all but AC-103.10, and a36c97c fixed AC-103.10.
 
 | Criterion | Verdict | Tests | Implementation | Notes |
 |---|---|---|---|---|
@@ -16,7 +16,7 @@ Cycle 2 checks the fixes in 0fe67dd. Cycle 1 (05d7b2c) found AC-103.3, .6, .7, .
 | AC-103.7 | met | `test_validate.py::test_the_run_record_holds_a_validation_section_without_logs`, `::test_runs_report_shows_counts_per_rule`, `test_validate_review.py::test_run_prints_counts_and_records_checks_after_a_red_one_as_not_started`, `::test_green_run_prints_counts` | `validate.py:407-411` (counts plus `not started`), `:414-422` (section, no logs), `:464-468`, `:470` (the counts line in the output); `scripts/cplat/runs_report.py:150-165`, `:194-198` | Fixed. The report counts only `run`, `reused` and `skipped` per rule (`runs_report.py:164`), so `not started` checks do not appear there. That is acceptable, because they never ran |
 | AC-103.8 | met | `test_validate.py::test_the_loop_never_runs_the_whole_ci_script`, `::test_ship_run_ci_runs_the_full_ci_whatever_the_loop_skipped` | `plugins/svc/commands/build.md:103`, `:109` (the final gate is still `cplat quiet ci`); `scripts/cplat/ship.py:333` (the whole `devbox run ci`), called at `:358` before every push; no workflow file changed | Reused evidence never stands in for the final gate, which always runs whole. Pre-existing, not changed here: in build, Phase 3 step 3 (tester) and the Phase 4 fix rounds (`build.md:123`, `cplat quiet test-fast`) can change HEAD after the final gate. Ship's `run_ci` re-runs the full set before the push |
 | AC-103.9 | met | `test_validate.py::test_full_flag_runs_every_check_and_says_why`, `::test_the_repo_can_opt_out_in_its_settings`, `::test_selective_is_the_default_and_the_env_switch_forces_full`, `test_validate_review.py::test_build_and_ship_pass_full_and_record_final_results` | `validate.py:162-184`, `:256-258`; `plugins/svc/commands/build.md:7`, `plugins/svc/commands/ship.md:7` | Fixed: `/svc:build` and `/svc:ship` take `--full` and pass it to every `cplat validate run`. The reason names the flag or the setting |
-| AC-103.10 | partial | `test_validate.py::test_a_skipped_check_failing_in_the_final_gate_counts_a_miss_for_its_rule`, `::test_a_reused_check_failing_in_the_final_gate_counts_a_miss`, `::test_a_passing_or_a_run_check_is_no_miss`, `test_validate_review.py::test_build_and_ship_pass_full_and_record_final_results`, `::test_ship_land_records_a_red_ci_check_as_a_miss_when_the_loop_skipped_it`, `::test_final_gate_rerun_that_times_out_is_noted_and_no_miss` | `validate.py:474-488` (`record_final`), `:491-510` (reruns with a 600 s timeout; `timed out` counts no miss), `:513-524` (`record_ci_red`: PR job names mapped through `ci_checks`); `ship.py:335-339` (`run_ci`), `:600-605` (`land`); `build.md:109` | Ship is fixed in code for both the final gate and the PR's CI. **Still open in build:** the `cplat validate final --check <name> failed` instruction is only in the fix-round sentence (`build.md:109`, "run `cplat quiet ci` again …, and record each failed check"). The first final gate, Phase 3 step 1 (`build.md:103`), comes right after Phase 2's loop plan (`build.md:80`). When it is red, step 2 (`build.md:104`) records nothing, so this most common miss case of a build is lost. Fix: put the instruction in step 2 ("Red → first `cplat validate final --check <name> failed` for each red check, then …"). The prompt test (`test_validate_review.py:77`) only checks that the text appears somewhere |
+| AC-103.10 | met | `test_validate.py::test_a_skipped_check_failing_in_the_final_gate_counts_a_miss_for_its_rule`, `::test_a_reused_check_failing_in_the_final_gate_counts_a_miss`, `::test_a_passing_or_a_run_check_is_no_miss`, `test_validate_review.py::test_build_and_ship_pass_full_and_record_final_results` (asserts the instruction is in the step 2 line), `::test_ship_land_records_a_red_ci_check_as_a_miss_when_the_loop_skipped_it`, `::test_final_gate_rerun_that_times_out_is_noted_and_no_miss` | `validate.py:474-488` (`record_final`), `:491-510` (reruns with a 600 s timeout; `timed out` counts no miss), `:513-524` (`record_ci_red`: PR job names mapped through `ci_checks`); `ship.py:335-339` (`run_ci`), `:600-605` (`land`); `build.md:104` (step 2 of Phase 3: on any red final gate, every failed check is recorded first with `cplat validate final --check <name> failed`), `build.md:109` (the fix rounds do the same) | Fixed in a36c97c: a red first final gate after Phase 2's loop plan now records its misses. A check that ran in the loop records no miss (`::test_a_passing_or_a_run_check_is_no_miss`). In build, the coordinator names the failed checks from the `cplat quiet ci` output; ship maps them in code |
 | AC-103.11 | met | `test_validate.py::test_compare_validation_runs_twice_reports_both_and_records_them`, `::test_compare_validation_fails_when_a_required_check_did_not_run`, `test_validate_review.py::test_compare_validation_with_no_recorded_checks_fails` | `scripts/cplat/runs_bench.py:202-247`, `:316-345`, `:361-363`, `:371-381` | Both runs are reported and recorded, with no savings target. Fixed: a change-aware pass with no recorded validation exits 1 (`no validation recorded`, `:375-377`). The coverage check compares decisions with the rules that made them, so it cannot catch a rule that is too loose |
 
 ## Non-goals
@@ -29,7 +29,7 @@ No dependency graph, no remote or shared evidence (the folder is the local git c
   - `tests/cplat/test_validate.py` and `tests/cplat/test_validate_review.py`
   - `docs/adr/044-…`
   - `spec.md`: the non-goal link went from #143 to #139, with no changelog line; the criteria hash is unchanged
-  - `scripts/cplat/ship.py` `land` (0fe67dd)
+  - `scripts/cplat/ship.py` `land` (0fe67dd); build.md in a36c97c is t4's file
 
   All are acceptable.
 - Files listed in a task but not changed: `scripts/cplat/runs.py` (t3) and `scripts/cplat/runs_usage_report.py` (t5). Acceptable. All tasks are `done`.
@@ -44,7 +44,4 @@ No dependency graph, no remote or shared evidence (the folder is the local git c
 
 ## Contract
 
-The code matches `design.md` for the CLI, the `shapes.yml` and `.platform-settings.yml` keys, the plan JSON, and rules 1 to 5. It also adds the decision `not started`, which appears in the run record only, after a red check. That addition is acceptable. Two differences remain:
-
-- Build calls `cplat validate final` only in the fix-round sentence, not after the first red final gate (AC-103.10).
-- Checks the planner does not know are left out of the plan instead of being listed as `run`. This is acceptable, because no `/svc` workflow runs in gitops-app repos.
+The code matches `design.md` for the CLI, the `shapes.yml` and `.platform-settings.yml` keys, the plan JSON, and rules 1 to 5. It also adds the decision `not started`, which appears in the run record only, after a red check. That addition is acceptable. One difference remains: checks the planner does not know are left out of the plan instead of being listed as `run`. This is acceptable, because no `/svc` workflow runs in gitops-app repos.
