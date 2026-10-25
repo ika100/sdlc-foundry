@@ -203,8 +203,8 @@ jobs:
           uv run ruff format --check .
           uv run mypy src
           if [ "${{ matrix.template }}" = "service-python" ]; then
-            SMOKE_BASE_URL= uv run python -m pytest tests/ -p scripts.smoke_pytest -q -rs | tee /tmp/pytest.out
-            grep -q "SMOKE_BASE_URL not set" /tmp/pytest.out   # spec 091: the example smoke test is skipped here
+            SMOKE_BASE_URL='' uv run python -m pytest tests/ -p scripts.smoke_pytest -q -rs | tee /tmp/pytest.out
+            grep -q "SMOKE_BASE_URL is not set" /tmp/pytest.out   # spec 091: the example smoke test is skipped here
           else
             uv run pytest -q
           fi
