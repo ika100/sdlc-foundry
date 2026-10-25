@@ -1,7 +1,7 @@
 ---
 spec_id: 100-leaner-runs-cheaper-coordinator-fewer
 title: 'Leaner runs: cheaper coordinator, fewer turns, smaller context'
-status: draft
+status: approved
 priority: P1
 tracks: [139]
 ---
@@ -81,3 +81,4 @@ Baselines (platform 4.5.0, installed svc 3.4.0, sample `ika100/todo-api`, prices
 
 - 2026-10-25 created
 - 2026-10-25 amended: open questions answered and folded into AC-100.3, AC-100.4, AC-100.5, AC-100.13
+- 2026-10-25 approved
