@@ -17,6 +17,11 @@ Prices of 2026-10-25 (estimates; output tokens as reported, so output cost is a 
 | 2 | quick-task v2 | `20261025T153130Z-674b051e` | done | PR (closed by reset) | n/a (quick-task: quality + tests ran) | — | 7 | 251,537 | $0.08 | sonnet | worktree @2b660e1 |  |
 | 2 | build v4 | `20261025T153255Z-44f7c252` | done | PR (closed by reset) | acc passed, sec passed | pass | 56 | 1,698,198 | $1.00 | sonnet | worktree @2b660e1 |  |
 | 2 | build v4 | `20261025T154213Z-71619373` | done | PR (closed by reset) | acc passed, sec passed | pass | 81 | 2,575,727 | $1.32 | sonnet | worktree @2b660e1 |  |
+| 3 | quick-task v2 @ef04f90 | `20261025T160351Z-67d8fd20` | done | PR (closed by reset) | n/a (quick-task: quality + tests ran) | — | 7 | 246,675 | $0.13 | sonnet | worktree @dcf7612 |  |
+| 3 | build v4 @ef04f90 | `20261025T160526Z-4c318bb8` | done | PR (closed by reset) | acc passed, sec passed | pass | 56 | 1,769,214 | $1.04 | sonnet | worktree @dcf7612 |  |
+| 3 | build v4 @ef04f90 | `20261025T161313Z-84282c71` | failed | — | acc not run, sec not run | not reached | 27 | 841,667 | $0.59 | sonnet | worktree @dcf7612 | failed: `git commit -am` not allowlisted (fixed: templates allow `git commit *`, #173, todo-api#22) |
+| 3 | build v4 @1e004f2 | `20261025T162946Z-6ac9e1cf` | done | PR (closed by reset) | acc passed, sec passed | pass | 65 | 2,181,191 | $1.14 | sonnet | worktree @1c19108 | sample @1e004f2 (git commit * allowed) |
+| 3 | build v4 @1e004f2 | `20261025T163707Z-e6e75020` | done | PR (closed by reset) | acc passed, sec passed | pass | 68 | 2,163,118 | $1.17 | sonnet | worktree @1c19108 | sample @1e004f2 |
 
 ## Step 1 — coordinator on Sonnet: accepted
 
@@ -29,3 +34,9 @@ Prices of 2026-10-25 (estimates; output tokens as reported, so output cost is a 
 - **quick-task:** $0.16 → **$0.08** (7 calls, done, PR).
 - **build v4:** median $1.22 → **$1.16** ($1.00, $1.32; both done with a PR, both gates passed). Within the noise of two runs, no regression.
 - Fixes found by b2: the PR body is written to `.pr-body.md` (Claude Code refuses edits under `.git/`), and `--plugins` benchmarks point `CPLAT_PLATFORM` at the checkout so its `cplat` runs (2b660e1). Two build runs failed on the account's session limit (not counted).
+
+## Step 3 — compact briefs and quiet output: accepted, no measurable saving
+
+- **quick-task:** $0.13 (one run; step 2 had $0.08, step 1 $0.16 — single quick-task runs vary by about ±$0.05).
+- **build v4:** $1.04 (sample @ef04f90), $1.14 and $1.17 (sample @1e004f2): median **$1.14** vs $1.16 in step 2, all done with a PR and both gates passed. Flat, not a regression (the rule needs both workflows to cost more).
+- The benchmark spec is tiny, so agents read little either way; the briefs target larger specs (the 085–098 round read spec.md 220 times).
