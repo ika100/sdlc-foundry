@@ -39,7 +39,7 @@ tasks:
     covers: [AC-101.4, AC-101.6]
     parallel_safe: false
     depends_on: [t3, t4]
-    done: false
+    done: true
 ---
 
 # Plan — 101 Run usage is exported live to OpenTelemetry

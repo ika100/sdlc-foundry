@@ -37,6 +37,7 @@ Other commands that have no slash command of their own:
 | `cplat quiet <script>` | Run a devbox script: one line when green, the tail and the log path when red (spec 100). |
 | `cplat headless "<prompt>" [--model M]` | Fresh `claude -p` sessions until a ship run is done; the coordinator runs on Sonnet unless `--model` or `coordinator_model` says otherwise ([ADR-036](../../docs/adr/036-coordinator-model-default-and-settings.md)). |
 | `cplat budget show\|gate\|attempt\|stage\|resume` | The run tree's budget (minutes, invocations, reruns, cost), no-progress stops and verified stages for resume (spec 102, [guide](../../docs/unattended-delivery.md#budgets-and-repeated-failures)). |
+| `CPLAT_OTLP_ENDPOINT` / `telemetry:` setting | Live OpenTelemetry export of headless and benchmark sessions (local endpoints only unless `allow_remote`), and a comparison note in the run record (spec 101, [guide](../../docs/unattended-delivery.md#live-usage-in-grafana-optional)). |
 | `cplat smoke run` | Run the repo's smoke tests against an environment (`SMOKE_BASE_URL`, spec 091). |
 | `cplat alerts poll` | Evaluate the alert sources and turn firing alerts into deduplicated issues (spec 092). |
 | `cplat retro [--week W] [--json] [--out DIR]` | The weekly report from the run store; by hand it prints and writes nothing. `cplat runs init` installs the Monday workflow that posts it with spec proposals (spec 090). |

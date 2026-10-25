@@ -186,6 +186,16 @@ Inside a build or ship, fix rounds run only what the change can affect (spec 103
 
 The final gate is never selective: before a PR is marked ready or landed, `devbox run ci` runs in full, and the PR's CI is unchanged. A check that the loop skipped or reused and the final gate then finds red is counted as a `miss` for its rule; `cplat runs report` shows the counts and misses per rule. The same holds for the red checks of the PR's CI (`cplat ship land` records them). `--full` (also as an argument of `/svc:build` and `/svc:ship`), `validation: full` in `.platform-settings.yml` or `CPLAT_VALIDATION=full` turn selection off. Every spec file under `docs/specs/` counts as a spec change, never as documentation; checks that never started because an earlier one was red are reported as `not started`. Java, Go and gitops-app repos have no test selector yet and always run everything.
 
+## Live usage in Grafana (optional)
+
+`cplat headless` and `cplat runs benchmark` can turn on Claude Code's own OpenTelemetry export for the sessions they start (spec 101), so tokens and estimated cost show up live, per run, model and day. The run store stays the system of record: phases, roles and the figures in `cplat runs report` always come from the transcripts.
+
+- **Explicit endpoint:** `export CPLAT_OTLP_ENDPOINT=http://localhost:4318`, or `telemetry: {endpoint: …}` in `.platform-settings.yml` or `~/.config/sdlc-foundry/settings.yml`. It must be local (`localhost`, `127.x`, `::1`, `*.localhost`, a cluster `*.svc` name). A remote backend needs `telemetry: {allow_remote: true}` (or `CPLAT_OTLP_ALLOW_REMOTE=1`); without it the endpoint is refused with one line.
+- **The observability addon:** when the product's gitops-app has `observability: {ui: lgtm}` and a kube context is set (`telemetry: {context: k3d-<app>-local}` or `CPLAT_KUBE_CONTEXT`), cplat port-forwards to the local Grafana stack for the session. The context is never guessed. Grafana gets a **Claude Code usage** dashboard: tokens and cost per run, per model, per day, and the coordinator's share.
+- Nothing configured means telemetry stays off, with no output and no delay. An unreachable backend shows one warning and never changes the run's result.
+- cplat forces every content switch off (`OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_TOOL_DETAILS`, `OTEL_LOG_TOOL_CONTENT`, `OTEL_LOG_ASSISTANT_RESPONSES`, `OTEL_LOG_RAW_API_BODIES`), even if your shell sets them. Only counts, model, cost and the attributes `cplat.run_id`, `cplat.kind`, `cplat.repo` and `cplat.platform_version` leave the machine.
+- After a run with telemetry, the record gets `usage.otel`: the OTel totals queried by run id and their difference from the transcript totals per token type. Use it to check the transcript counting.
+
 ## Watching runs live (optional)
 
 To see running sessions, their status and a way to step in while a run works, you can use [dot-agent-deck](agent-deck.md) next to the platform. It is optional and only shows activity: outcomes, costs and gates still come from the run store, CI and the ship gates.
