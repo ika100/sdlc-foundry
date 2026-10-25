@@ -22,6 +22,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py status [--context KUBE_CONTEXT]   one table: pins per env, service CI, Argo sync/health
   cplat.py spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
   cplat.py ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /svc:ship: spec → merged PR → dev (ADR-028)
+  cplat.py app-ship start|status|phase|publish|next|repo|entry|complete|escalate|finish|gate ...   /app:ship: a product spec → every repo → dev (spec 097)
   cplat.py smoke run [--env dev] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment (spec 091)
   cplat.py pr wait <number|url> [-R owner/repo] [--merge]   wait for a PR's CI, heal stuck or transient runs, merge on green (spec 079)
   cplat.py headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume (spec 070)
@@ -58,6 +59,7 @@ COMMANDS = {
     "triage": "triage",
     "spec": "spec",
     "ship": "ship",
+    "app-ship": "appship",
     "smoke": "smoke",
     "pr": "pr",
     "headless": "headless",

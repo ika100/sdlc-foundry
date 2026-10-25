@@ -80,7 +80,7 @@ PLUGIN = ROOT / "plugins" / "svc"
 def test_the_old_commands_are_gone_and_nothing_points_to_them():
     """svc 3.0 (ADR-026) replaced plan-feature and build-feature; no command, agent, template or script may still name them."""
     assert not (PLUGIN / "commands" / "build-feature.md").exists() and not (PLUGIN / "commands" / "plan-feature.md").exists()
-    assert sorted(p.stem for p in (ROOT / "plugins" / "app" / "commands").glob("*.md")) == ["build", "plan", "spec", "specs"]
+    assert sorted(p.stem for p in (ROOT / "plugins" / "app" / "commands").glob("*.md")) == ["build", "plan", "ship", "spec", "specs"]
     stale = [str(p.relative_to(ROOT)) for d in ("plugins", "templates", "scripts") for p in (ROOT / d).rglob("*")
              if p.is_file() and p.suffix in {".md", ".jinja", ".py", ".json"} and "__pycache__" not in p.parts
              and re.search(r"/svc:(plan-feature|build-feature)|/app:(build-feature|run-plan|plans)\b", p.read_text(errors="ignore"))]
