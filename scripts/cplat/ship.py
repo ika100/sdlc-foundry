@@ -408,6 +408,43 @@ class CheckWatch:
         self.queued_since: dict[tuple[str, str], float] = {}
         self.stale_seen: dict[tuple[str, str], int] = {}
         self.healed: dict[tuple[str, str], tuple[str, float]] = {}   # run → (stale | queued, when)
+        self.head: str | None = None                                  # the PR head commit being watched
+        self.run_sha: dict[str, str | None] = {}                      # run id → the commit it ran on
+
+    def head_sha(self) -> str | None:
+        out = gh(["pr", "view", self.pr, "--json", "headRefOid"], cwd=self.repo, check=False)
+        try:
+            return json.loads(out or "{}").get("headRefOid") or None
+        except (ValueError, AttributeError):
+            return None
+
+    def _sha_of(self, c: dict) -> str | None:
+        r = run_of(c)
+        if not r:
+            return None
+        if r[1] not in self.run_sha:
+            out = gh(["run", "view", r[1], "-R", r[0], "--json", "headSha"], cwd=self.repo, check=False)
+            try:
+                self.run_sha[r[1]] = json.loads(out or "{}").get("headSha") or None
+            except (ValueError, AttributeError):
+                self.run_sha[r[1]] = None
+        return self.run_sha[r[1]]
+
+    def _current(self) -> list[dict]:
+        """Only the checks of the PR's current head commit; a new head starts the watch over (a fresh push
+        must not be judged by the previous commit's checks)."""
+        head = self.head_sha()
+        if head and self.head and head != self.head:
+            self.reported.clear()
+            self.queued_since.clear()
+            self.stale_seen.clear()
+            self.healed.clear()
+        if head:
+            self.head = head
+        cs = checks(self.repo, self.pr)
+        if not head:
+            return cs
+        return [c for c in cs if self._sha_of(c) in (None, head)]
 
     def _own_cancel(self, c: dict) -> bool:
         """A check of a run this watch just reran (stuck queue cancelled, or a transient failure) is not red yet."""
@@ -437,7 +474,7 @@ class CheckWatch:
 
     def poll(self) -> tuple[str, list[dict], list[dict]]:
         """("pending" | "green" | "red", checks, failed checks)."""
-        cs = checks(self.repo, self.pr)
+        cs = self._current()
         own = [c for c in cs if self._own_cancel(c)]
         for c in cs:
             b = c.get("bucket", "")
