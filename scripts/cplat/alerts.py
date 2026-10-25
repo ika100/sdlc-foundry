@@ -1,4 +1,4 @@
-"""`cplat alerts poll`: firing alerts become issues (spec 092, ADR 036). Run every 15 minutes by the gitops-app's alerts workflow.
+"""`cplat alerts poll`: firing alerts become issues (spec 092, ADR 038). Run every 15 minutes by the gitops-app's alerts workflow.
 
 For each `applications/<app>`: read the alert sources (`alertsources`), reconcile them with the issues on GitHub
 (`alertissues`), count consecutive failures of the poll itself in a state file, and report. The poll never raises out of
