@@ -39,7 +39,7 @@ tasks:
   covers: [AC-090.12, AC-090.14]
   parallel_safe: true
   depends_on: [t1]
-  done: false
+  done: true
 - id: t6
   title: Doctor checks the retro schedule and shares the store hint
   files: [scripts/cplat/doctor.py]
