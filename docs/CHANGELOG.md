@@ -6,6 +6,21 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [4.6.0] — 2026-10-25
+
+**Runs cost a third less, ship checks the spec in dev and promotes to staging, and a whole product ships across its repos.**
+- **Leaner runs (100):** headless coordinators run on Sonnet (`--model`, `coordinator_model`), `cplat pr open` commits, pushes and opens the PR in one step, agents start from a compact brief, `cplat quiet` keeps green output short. Measured: quick-task $0.48 → $0.15, build $1.94 → $1.26 (estimates at list prices).
+- **Dev and staging (091, 093):** `cplat ship` runs the spec's smoke tests against dev and, with `promotion: {staging: auto}`, promotes a green build to staging and smoke-tests it there; prod stays manual with an evidence summary.
+- **Whole products (097):** `/app:ship` ships one product spec across its repos in dependency order.
+- **Feedback loops (090, 092):** a weekly retro turns the run store into spec proposals; firing alerts become deduplicated issues.
+- **Fixes:** headless sessions can edit files and commit in any flag order; update-service refreshes devbox.lock and keeps a repo's secrets baseline; `cplat pr wait` judges only the PR's current head; the benchmark checks folder trust and its result.
+
+**Action for existing repos:**
+1. Run `/plugin marketplace update` (svc 3.5.0, shared 0.15.0, app 1.1.0, gitops 1.5.0, svc-go/svc-java/web 0.3.0).
+2. Run `/shared:update-service` in every repo (or `cplat fleet update`), gitops-apps first. It brings the dev smoke recipes, `pin-staging.yml` and the wider `git commit *` allowlist.
+3. Optional: add `promotion: {staging: auto}` to a gitops-app's `app.yaml` for automatic staging; set `coordinator_model` if a workflow should keep Opus.
+4. Run store: `export CPLAT_RUNS_REPO=<owner/name>` (a **private** repo, `cplat runs init`); the weekly retro there needs `CLAUDE_CODE_OAUTH_TOKEN`, `RETRO_GH_TOKEN` and a self-hosted runner.
+
 - **Feat (100): leaner runs — cheaper coordinator, fewer turns, smaller context.** [ADR-036](adr/036-coordinator-model-default-and-settings.md), [ADR-037](adr/037-cplat-bundles-honour-the-allowlist.md)
   - **Behaviour change:** headless sessions start the coordinator on **Sonnet** (`cplat headless --model sonnet|opus|haiku`; `coordinator_model` in `.platform-settings.yml` or `~/.config/sdlc-foundry/settings.yml`, also per workflow). Architect, reviewer and product-manager keep their own model.
   - `cplat pr open` commits (`-s`), pushes and opens the PR in one step (idempotent; ends at a ready PR when `gh pr create` is not allowed). quick-task, fix-bug and build use it; PR bodies go to `.pr-body.md` (cplat moves them out of the work tree; Claude Code refuses edits under `.git/`).
