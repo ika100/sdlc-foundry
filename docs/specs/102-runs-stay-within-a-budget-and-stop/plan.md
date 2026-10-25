@@ -55,7 +55,7 @@ tasks:
     covers: [AC-102.1, AC-102.7]
     parallel_safe: false
     depends_on: [t6]
-    done: false
+    done: true
 ---
 
 # Plan — 102 Runs stay within a budget and stop repeating failures

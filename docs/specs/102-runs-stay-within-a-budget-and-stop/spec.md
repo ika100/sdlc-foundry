@@ -47,6 +47,8 @@ No-progress. Two failures are equivalent when they come from the same stage or c
 - A budget service, queue, database or new agent.
 - Weakening or skipping tests, security gates or required approvals to save budget or to break a loop.
 - Estimating cost in USD for a model without a price (cost stays `unknown`).
+- A benchmark that proves a bounded worst case (time and calls) for a failing run (#144's last criterion); a follow-up spec can add it on top of `cplat runs benchmark`.
+- Limits per stage (#144's optional per-stage limits); this spec has run-tree limits only, a follow-up spec can add stage limits to the same ledger.
 - Replacing the existing 3-fix-round escalation of `cplat ship` or the two-idle-session stop of `cplat headless` (spec 080); they stay as additional stops.
 
 ## Open questions

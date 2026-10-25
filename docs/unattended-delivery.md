@@ -146,6 +146,23 @@ After dev is healthy, `cplat ship deploy` checks the spec in dev (spec 091, [ADR
 - **By hand:** `cplat smoke run [--env dev] [--base-url URL] [--spec SPEC] [--json]` in a service repo (exit 0 passed, 1 red, 3 not run); it files no issue.
 - **The dev URL** comes from the linked gitops-app: the service must have `expose:` and a `hosts.dev` template in `app.yaml`. An optional `urls.dev` in `app.yaml` overrides it (`{host}` is the host from `hosts`). For `*.localhost` hosts the port is `LOCAL_HTTP_PORT`, default 8088.
 
+## Budgets and repeated failures
+
+Every unattended run tree shares one budget (spec 102, [ADR-043](adr/043-one-budget-per-run-tree.md)): wall-clock minutes, agent invocations (sessions and subagents), CI reruns and estimated cost. The outermost run owns it (`cplat headless`, `/app:ship`, or a ship or build started by hand); every ship, build and CI wait below it counts against the same budget.
+
+| Limit | Per ship | Counted by |
+|---|---|---|
+| `minutes` | 180 | wall clock from the root's start, carried across resumes |
+| `invocations` | 60 | each headless session, and each subagent (the shared plugin's `PreToolUse` hook runs `cplat budget gate --invocation`) |
+| `reruns` | 6 | each CI rerun of `cplat ship land` and `cplat pr wait` |
+| `cost` | $15 | estimated from the local transcripts (spec 099); `unknown` when a price is missing, then only the other three apply |
+
+A root that covers several ships multiplies the defaults: `cplat headless "/svc:ship 102 103"` gets twice the limits, a product ship one set per repo in its plan. Change a limit with `--budget minutes=240` (repeatable, `off` turns one off) on `cplat headless`, `cplat ship start`, `cplat app-ship start` or `cplat runs begin`, or set `budget:` in `.platform-settings.yml` or `~/.config/sdlc-foundry/settings.yml`. `cplat budget show` prints the limits and what is used.
+
+Limits are checked at safe points (before a session, a subagent or a CI rerun, at the end of a phase, before a product ship starts a repo). A run that hits one starts nothing new, escalates with cause `decision` and reason `budget exhausted: <limit>`, and stays resumable: run it again with a higher limit, and the usage continues from where it stopped. Running work is never killed, and no gate is skipped or counted as passed (`not run`).
+
+A stage that fails three times in a row with the same error (timestamps, paths, ids and line numbers removed) and no fewer failing checks stops with `no progress: <stage>`. Every escalation leaves a recovery snapshot in `<git dir>/cplat-recovery.json` (stage, a redacted excerpt, changed files, criteria, earlier attempts; never uploaded), and `cplat budget resume` shows which stages are still verified for the current HEAD, so a resumed run starts at the failing one.
+
 ## Watching runs live (optional)
 
 To see running sessions, their status and a way to step in while a run works, you can use [dot-agent-deck](agent-deck.md) next to the platform. It is optional and only shows activity: outcomes, costs and gates still come from the run store, CI and the ship gates.

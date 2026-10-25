@@ -36,6 +36,7 @@ Other commands that have no slash command of their own:
 | `cplat pr wait <pr> [-R owner/repo] [--merge]` | Wait for the PR's current head: report each check, stop at the first red one, rerun stuck or transient runs once, squash-merge on green with `--merge` (spec 079). |
 | `cplat quiet <script>` | Run a devbox script: one line when green, the tail and the log path when red (spec 100). |
 | `cplat headless "<prompt>" [--model M]` | Fresh `claude -p` sessions until a ship run is done; the coordinator runs on Sonnet unless `--model` or `coordinator_model` says otherwise ([ADR-036](../../docs/adr/036-coordinator-model-default-and-settings.md)). |
+| `cplat budget show\|gate\|attempt\|stage\|resume` | The run tree's budget (minutes, invocations, reruns, cost), no-progress stops and verified stages for resume (spec 102, [guide](../../docs/unattended-delivery.md#budgets-and-repeated-failures)). |
 | `cplat smoke run` | Run the repo's smoke tests against an environment (`SMOKE_BASE_URL`, spec 091). |
 | `cplat alerts poll` | Evaluate the alert sources and turn firing alerts into deduplicated issues (spec 092). |
 | `cplat retro [--week W] [--json] [--out DIR]` | The weekly report from the run store; by hand it prints and writes nothing. `cplat runs init` installs the Monday workflow that posts it with spec proposals (spec 090). |
@@ -45,6 +46,7 @@ Other commands that have no slash command of their own:
 ## Hooks
 
 - `SessionStart`: checks devbox and runs `devbox install` when the repo has a `devbox.json`.
+- `PreToolUse` (`Task|Agent`): inside a recorded run, `cplat budget gate --invocation` counts the subagent and refuses it when the run's budget is used up (spec 102). Outside a run it exits in shell.
 - `Stop`: while a `/svc:ship` run is unfinished (`<git dir>/cplat-ship.json`), `cplat ship gate` blocks the stop with the next step and what is still red; it allows it when the run is done, escalated or blocked 8 times. Without a run it exits in shell (spec 066).
 
 ## Pre-approved operations (settings.json)
