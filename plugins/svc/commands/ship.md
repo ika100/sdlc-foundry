@@ -57,7 +57,7 @@ Then `cplat ship phase pr`.
 
 ## Phase `deploy`
 
-`cplat ship deploy` (add `--context <kube-context>` when the user named one or `kubectl config current-context` works and points at the product's cluster) waits until the gitops-app merged the pin PR for the merge commit (ADR-027) and, with a context, Argo CD runs that build: `<service>-dev` counts only once `status.summary.images` shows the merged build's tag, never on the old image (spec 077). A red service CI on main, a failed pin-dev run, or no pin-dev run 5 min after main's CI passed (no `GITOPS_TOKEN`) fails it at once; a stuck pin-dev run is rerun once. Then it merges the `after-release` gitops PRs in plan order and, with a context, waits for Synced/Healthy of `<service>-dev` and every app the gitops tasks name (`apps:`), once they reached the merged gitops commit; a SyncError or Degraded app is an error. A repo without a gitops-app link finishes here with a note. A closed pin PR, a red pin CI or an unhealthy app → escalate with the hint. Its last lines list the plan's `human_steps` as a checklist: copy them into the final report.
+`cplat ship deploy` (add `--context <kube-context>` when the user named one or `kubectl config current-context` works and points at the product's cluster) waits until the gitops-app merged the pin PR for the merge commit (ADR-027) and, with a context, Argo CD runs that build: `<service>-dev` counts only once `status.summary.images` shows the merged build's tag, never on the old image (spec 077). A red service CI on main, a failed pin-dev run, or no pin-dev run 5 min after main's CI passed (no `GITOPS_TOKEN`) fails it at once; a stuck pin-dev run is rerun once. Then it merges the `after-release` gitops PRs in plan order and, with a context, waits for Synced/Healthy of `<service>-dev` and every app the gitops tasks name (`apps:`), once they reached the merged gitops commit; a SyncError or Degraded app is an error. Then it runs `devbox run smoke` against the dev URL the gitops-app publishes (spec 091; pass `--base-url <url>` only when the user named one), one retry after 30 s, 600 s at most: it checks every `(smoke)` criterion of the spec. Red or timed-out smoke makes deploy itself escalate with cause `code` (`smoke red in dev: <n> failing (<spec>)`) and file the `smoke-failure` issue in the service repo: report its lines and stop; never call `cplat ship escalate` for it, and dev is not rolled back. Resuming (`/svc:ship <spec>`) reruns smoke only. Smoke that could not run (no `--context`, not exposed in dev, URL unreachable, no recipe) is "not run": deploy finishes `done` and the criteria stay unchecked. A repo without a gitops-app link finishes here with a note. A closed pin PR, a red pin CI or an unhealthy app → escalate with the hint. Its last lines list the plan's `human_steps` as a checklist: copy them into the final report.
 
 ## Finish
 
@@ -74,10 +74,14 @@ The run record (spec 087) is written when the run reaches `done` or escalates; a
 | Build | <m>/<m> criteria met (verification.md) |
 | PR | <url> — merged after <k> CI round(s) |
 | dev | <service>:sha-<40> (pin PR <url>) · Argo <state> | not linked |
+| Smoke (dev) | <the `Smoke (dev):` value from deploy: `<p>/<total> passed`, `passed on retry` or `not run: <reason>`> |
 
 Dependency patches: the bumps of `cplat deps report` (package, from → to, CVE), a major bump marked "major bump"; leave out when none.
 
-Next: check the feature in dev; promote with /gitops:promote <service> dev staging in the gitops-app repo.
+Unchecked (smoke) criteria: <ids>   (only when smoke did not run; "none" otherwise)
+
+Next: promote with /gitops:promote <service> dev staging in the gitops-app repo.     (smoke passed)
+Next: check the unchecked criteria in dev by hand; then promote with /gitops:promote <service> dev staging.     (smoke did not run)
 ```
 
 ## Escalate

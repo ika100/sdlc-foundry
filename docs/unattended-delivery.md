@@ -104,6 +104,19 @@ When a run stops because the platform itself misbehaves, the failure is filed as
 - **Offline:** if filing fails (`gh` missing or not logged in, no network) or the cap is reached, the escalation still completes with the same exit status, prints `not filed: <reason>`, and the filing is retried at the next `cplat runs flush`.
 - **Off switch:** `CPLAT_AUTO_ISSUES=off` sends nothing and prints the draft instead. `CPLAT_FEEDBACK_REPO=<owner/name>` files in another repo. Run `cplat triage setup-labels` once so the `auto-filed` label exists.
 
+## Smoke in dev
+
+After dev is healthy, `cplat ship deploy` checks the spec in dev (spec 091, [ADR-036](adr/036-smoke-tests-against-a-deployed-environment.md)).
+
+- **The marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL. The tester writes a smoke-tagged test for it (`cplat spec trace` reports `smoke: no smoke-tagged test` until there is one).
+- **The recipe:** every deployable template has `devbox run smoke`. It runs only the smoke-tagged tests against `SMOKE_BASE_URL` (exit 2 without it) and prints `PASS|FAIL|SKIP  <path>::<name>` lines, then `smoke: <p> passed, <f> failed, <s> skipped` (or `0 smoke tests`). Web repos use standard Playwright tests in `e2e/` tagged `@smoke`.
+- **Retry and limit:** a red run is repeated once after 30 s; a pass on retry is reported as `passed on retry`. A run is killed after 600 s and counts as red.
+- **Red:** deploy escalates with cause `code` (`smoke red in dev: <n> failing (<spec>)`), prints the failing tests and the last 60 output lines (secrets redacted), and files one `smoke-failure` issue in the service repo (one issue per failing set, a repeat adds a +1 comment). Dev is not rolled back. `/svc:ship <spec>` resumes with smoke only.
+- **Not run:** no `--context`, a service not exposed in dev, an unreachable URL, a repo without the recipe or without a gitops-app link. Deploy finishes `done`, never reports "passed", and lists the unchecked `(smoke)` criteria.
+- **The record:** the run record has a `smoke` section (outcome, counts, duration, retry, per-criterion result, failing tests, filed issue).
+- **By hand:** `cplat smoke run [--env dev] [--base-url URL] [--spec SPEC] [--json]` in a service repo (exit 0 passed, 1 red, 3 not run); it files no issue.
+- **The dev URL** comes from the linked gitops-app: the service must have `expose:` and a `hosts.dev` template in `app.yaml`. An optional `urls.dev` in `app.yaml` overrides it (`{host}` is the host from `hosts`). For `*.localhost` hosts the port is `LOCAL_HTTP_PORT`, default 8088.
+
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`, spec 068) are the review. Use `/svc:ship <NNN> --no-merge` to read the PR yourself first.

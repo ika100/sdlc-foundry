@@ -5,6 +5,12 @@
 # hosts:   hostname template per environment for services with `expose:`. No entry = not exposed in that environment.
 #          Placeholders: {service} (expose.host or the service name), {app}, {env}.
 #          *.localhost resolves to 127.0.0.1 in browsers and curl without any DNS or /etc/hosts setup.
+# urls:    optional (spec 091): the URL `cplat smoke` and `cplat ship deploy` use to reach a service per environment, when it is not
+#          the one derived from `hosts` (for example a local cluster on another port). {host} is the host `hosts` gives the service;
+#          {service}, {app} and {env} work too. `render.py` ignores this key. No entry = https://<host>, or http://<host>:8088 for
+#          *.localhost (set LOCAL_HTTP_PORT if `cluster-up` printed another port).
+# urls:
+#   dev: "http://{host}:8088"
 # secretStore: the (Cluster)SecretStore that `remote` secrets in services.yaml are read from (External Secrets Operator, ADR-018).
 #          `cluster-up` creates `platform-secrets` (reads Secrets from the secrets-store namespace). Real clusters: point this
 #          at your Vault / AWS / GCP store. `generate` secrets need no store: ESO generates random values in the cluster.

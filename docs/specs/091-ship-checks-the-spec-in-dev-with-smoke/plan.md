@@ -74,6 +74,7 @@ tasks:
   covers: [AC-091.1, AC-091.5]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t10
   title: ship command, docs and the gitops-app urls key
   files: [plugins/svc/commands/ship.md, docs/CHANGELOG.md, docs/unattended-delivery.md, 'templates/gitops-app/applications/{{

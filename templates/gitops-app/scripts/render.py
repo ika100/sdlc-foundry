@@ -60,6 +60,7 @@ render.py only wires it into the environments and pins its image, so pin-dev, /g
 applications/<app>/app.yaml (optional):
   gateway: {name: traefik-gateway, namespace: kube-system}
   hosts: {dev: "{service}.{app}-dev.localhost"}     # per env; no entry = not exposed in that env
+  urls: {dev: "http://{host}:8088"}                 # optional, read by `cplat smoke` (spec 091), not by render: the URL smoke tests use
   secretStore: {name: platform-secrets, kind: ClusterSecretStore}   # where `remote` secrets are read from
   policies: {mode: {dev: Audit, staging: Audit, prod: Enforce}, registries: []}   # Kyverno guard rails per environment (ADR-022)
   addons:                                           # backing services, one per application and environment (ADR-020)
