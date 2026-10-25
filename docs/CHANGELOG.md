@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (095): a good dependency bump is not reverted for an unrelated red check.** When the bump clears every dependency finding but the security gate stays red for another reason (bandit, secrets), `cplat deps patch` keeps the bump, prints it and exits 4 so the coder takes over, instead of reverting and blaming it. Unrated fixable findings were already bumped (severity does not select, AC-095.12).
 - **Fix (088): redaction edge cases.** A run of 40+ repeated characters is only kept as padding when it is not glued to other word characters (`ghp_AAAA...` is redacted again), and a private name is replaced as a whole word (`todo` no longer matches inside `todo-api` or `mytodo`). The gh error mapping now has a test.
 - **Fix (087): `cplat runs report` has an upper bound.** Records ended after the window's `until` (future-dated) no longer count.
 - **Fix: skeleton updates keep the repo's secrets baseline.** `.secrets.baseline.json` records a repo's own false positives; `/shared:update-service` replaced it with the template's, so the secrets scan failed again after every update. It is now repo-owned (`_skip_if_exists`) and only added when a repo has none.

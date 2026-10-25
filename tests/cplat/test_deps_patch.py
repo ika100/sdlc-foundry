@@ -39,6 +39,7 @@ class World:
         self.report_override = None
         self.findings_rc = 0
         self.bumped = False
+        self.other_red = False     # the security gate is red for a non-dependency reason (bandit, secrets)
         self.calls = []
         repo.mkdir(parents=True)
         git(repo, "init", "-q", "-b", "main")
@@ -106,6 +107,8 @@ class World:
             return cp(0)
         if name == "security":
             bad = self.vulnerable()
+            if self.other_red and not bad:
+                return cp(1, "bandit: 1 issue found", "")
             return cp(1, SECURITY_LOG.format(n=len(bad)), "") if bad else cp(0, "No known vulnerabilities found")
         if name == self.fail_gate and self.bumped:
             if name == "test":
@@ -549,3 +552,12 @@ def test_a_red_pr_check_counts_in_the_existing_fix_round_limit():  # AC-095.15
     import ship
     src = (Path(ship.__file__)).read_text()
     assert 'st["fix_rounds"] = st.get("fix_rounds", 0) + 1' in src
+
+
+def test_a_good_bump_is_kept_when_only_a_non_dependency_check_stays_red(make, capsys):  # AC-095.12
+    w = one_advisory(make())
+    w.other_red = True
+    pre = w.head()
+    rc, out = w.patch(capsys)
+    assert rc == 4 and "PATCHED: urllib3 1.26.5 -> 1.26.18" in out and "NOT A DEPENDENCY FINDING" in out
+    assert w.lock["urllib3"] == "1.26.18" and w.head() != pre and "reverted" not in out
