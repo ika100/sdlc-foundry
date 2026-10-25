@@ -49,12 +49,16 @@ def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, que
         return True, [f"{url} is already merged"]
     if view.get("state") == "CLOSED":
         raise PlatformError(f"{url} was closed without merging")
-    status, cs, failed = ship.wait_checks(ship.CheckWatch(repo, url, queue_timeout, run_id), timeout, interval)
+    watch = ship.CheckWatch(repo, url, queue_timeout, run_id)
+    while True:
+        status, cs, failed = ship.wait_checks(watch, timeout, interval)
+        if status == "red" or not merge or not watch.head or watch.head_sha() in (None, watch.head):
+            break   # a push during the last poll means the green belongs to an old head: wait again
     if status == "red":
         return False, ship.red(repo, url, cs, failed)
     lines = [f"GREEN: all {len(cs)} check(s) passed on {url}"]
     if merge:
-        res = run(["gh", "pr", "merge", url, "--squash", "--delete-branch"], cwd=repo, check=False)
+        res = run(["gh", "pr", "merge", url, "--squash", "--delete-branch"] + (["--match-head-commit", watch.head] if watch.head else []), cwd=repo, check=False)
         if res.returncode != 0:
             detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
             raise PlatformError(f"merging {url} failed: {detail[0]}", hint="a conflict with main is a human decision")

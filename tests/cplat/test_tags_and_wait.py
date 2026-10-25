@@ -69,6 +69,8 @@ class Gh(FakeGh):
         super().__init__()
         self.logs: dict[str, list[str]] = {}
         self.state = "OPEN"
+        self.heads: list[str] = []            # successive headRefOid answers
+        self.run_heads: dict[str, str] = {}   # run id -> commit it ran on
 
     def __call__(self, args, *, cwd, check=True):
         if args[:2] == ["pr", "view"] and "state,url" in args:
@@ -81,6 +83,11 @@ class Gh(FakeGh):
         if args[:2] == ["run", "rerun"]:
             self.calls.append(args)
             return ""
+        if args[:2] == ["pr", "view"] and "headRefOid" in args:
+            seq = self.heads
+            return json.dumps({"headRefOid": seq.pop(0) if len(seq) > 1 else seq[0]}) if seq else "{}"
+        if args[:2] == ["run", "view"] and "headSha" in args:
+            return json.dumps({"headSha": self.run_heads[args[2]]}) if args[2] in self.run_heads else "{}"
         return super().__call__(args, cwd=cwd, check=check)
 
 
@@ -159,3 +166,43 @@ def test_cplat_knows_pr_wait():
     """AC-079.1: the command is registered."""
     import cplat
     assert cplat.COMMANDS["pr"] == "pr" and "pr wait" in cplat.__doc__
+
+
+def _run_check(name, bucket, run):
+    return {**check(name, bucket), "link": f"https://github.com/acme/shop-api/actions/runs/{run}/job/{name}"}
+
+
+PR = "https://github.com/acme/other/pull/5"
+
+
+def test_old_head_red_while_new_head_is_pending_is_not_red(fake, tmp_path):
+    """AC-079.1: right after a push the previous commit's red check is ignored; the new head's green ends GREEN."""
+    fake.heads, fake.run_heads = ["new"], {"41": "old", "42": "new"}
+    fake.checks = [[_run_check("test", "fail", 41), _run_check("test", "pending", 42)],
+                   [_run_check("test", "fail", 41), _run_check("test", "pass", 42)]]
+    ok, lines = prmod.wait(tmp_path, PR, False, 600, 10, 300)
+    assert ok and lines[0].startswith("GREEN: all 1 check(s)")
+
+
+def test_a_new_head_without_checks_yet_is_pending_not_no_checks(fake, tmp_path):
+    """AC-079.1: only the old head's checks exist → keep waiting (no 'no checks' error, no stale verdict)."""
+    fake.heads, fake.run_heads = ["new"], {"41": "old", "42": "new"}
+    fake.checks = [[_run_check("test", "fail", 41)]] * 3 + [[_run_check("test", "fail", 41), _run_check("test", "pass", 42)]]
+    ok, lines = prmod.wait(tmp_path, PR, False, 600, 10, 300)
+    assert ok and lines[0].startswith("GREEN")
+
+
+def test_a_head_change_mid_wait_restarts_for_the_newest_head(fake, tmp_path):
+    """AC-079.1: a push while waiting → the result is the newest head's, not the first head's red."""
+    fake.heads, fake.run_heads = ["a", "a", "b"], {"41": "a", "42": "b"}
+    fake.checks = [[_run_check("test", "pending", 41)], [_run_check("test", "pending", 42)], [_run_check("test", "pass", 42)]]
+    ok, lines = prmod.wait(tmp_path, PR, False, 600, 10, 300)
+    assert ok and lines[0].startswith("GREEN")
+
+
+def test_merge_never_acts_on_the_old_heads_green(fake, tmp_path):
+    """AC-079.1: the old head is green, the new head red → no merge."""
+    fake.heads, fake.run_heads = ["new"], {"41": "old", "42": "new"}
+    fake.checks = [[_run_check("test", "pass", 41)], [_run_check("test", "pass", 41), _run_check("test", "fail", 42)]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert not ok and fake.merges == [] and lines[0].startswith("RED")

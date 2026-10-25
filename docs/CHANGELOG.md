@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (079): `cplat pr wait` judges only the PR's current head commit.** Right after a push it reported the previous commit's red (or green with `--merge`); checks of other commits are ignored, a new head restarts the wait, and `--merge` pins `--match-head-commit`.
 - **Feat (097): `/app:ship` ships a whole product across repos.** [ADR-042](adr/042-product-ship-coordinates-repo-ships.md)
   - `cplat app-ship` (state in the gitops-app's git dir, never committed) coordinates one `cplat ship` per component repo: the spec/plan PR is merged on green first, repos run in plan order (at most `--max`, default 3) once their dependencies passed their gate (exposed service: Synced/Healthy and passing smoke; internal service: Synced/Healthy; library: merged PR), and the gitops-app's PRs merge one at a time through a merge slot. `cplat ship start --product DIR` links a repo ship to the product run. A repo that escalates stops its dependents only. One `product-ship` run record is written at the run end.
   - New command `/app:ship <spec> [--max N] [--context C]`; a second Stop hook entry keeps the session going until the run is done or escalated. `/app:build` is unchanged. It refuses without a kube context for the product's cluster.
