@@ -1,7 +1,7 @@
 ---
 spec_id: 091-ship-checks-the-spec-in-dev-with-smoke
 title: Ship checks the spec in dev with smoke tests
-status: building
+status: done
 priority: P0
 ---
 
@@ -94,3 +94,4 @@ As a spec author, I want to mark which criteria are smoke-checkable, so that the
 - 2026-10-23 amended with the user's answers: AC-091.10 and AC-091.13 withdrawn, replaced by AC-091.14 (spec 088's issue convention) and AC-091.15 (spec 087's `smoke` record section; not-run never counts as passed); AC-091.16 added (web smoke always in the browser runner, scaffold standard); AC-091.6 clarified to run every smoke test of the repo
 - 2026-10-23 approved
 - 2026-10-24 building
+- 2026-10-25 done
