@@ -9,56 +9,56 @@ tasks:
   covers: [AC-092.9, AC-092.13, AC-092.20, AC-092.22]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t2
   title: render.py validates alert rules and alert settings in app.yaml
   files: [templates/gitops-app/scripts/render.py, "templates/gitops-app/applications/{{ app_name }}/app.yaml.jinja"]
   covers: [AC-092.4, AC-092.6]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t3
   title: alertsources (config, skip reasons, rules + ServiceDown, Prometheus and Alertmanager, label mapping)
   files: [scripts/cplat/alertsources.py]
   covers: [AC-092.2, AC-092.4, AC-092.5, AC-092.8, AC-092.16, AC-092.19, AC-092.20, AC-092.23, AC-092.24]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t4
   title: gitops-app alert workflow, alert-poll.sh, devbox recipe, lgtm Prometheus port
   files: [templates/gitops-app/.github/workflows/alerts.yml, templates/gitops-app/scripts/alert-poll.sh, templates/gitops-app/devbox.json, templates/gitops-app/scripts/local-cluster.sh, templates/gitops-app/.gitignore]
   covers: [AC-092.1, AC-092.3, AC-092.17, AC-092.18, AC-092.19]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t5
   title: doctor warns when ALERTS_TOKEN is missing
   files: [scripts/cplat/doctor.py]
   covers: [AC-092.25]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t6
   title: docs for alert issues (gitops-app CLAUDE.md and README, self-hosted runners, CHANGELOG)
   files: [templates/gitops-app/CLAUDE.md.jinja, templates/gitops-app/README.md.jinja, docs/self-hosted-runners.md, docs/CHANGELOG.md]
   covers: [AC-092.1, AC-092.3, AC-092.25]
   parallel_safe: true
   depends_on: []
-  done: false
+  done: true
 - id: t7
   title: alertissues lifecycle (title/body/comments, routing, dedupe, fired again, reopen, cap, resolve/close, dry run)
   files: [scripts/cplat/alertissues.py, tests/cplat/conftest.py]
   covers: [AC-092.8, AC-092.9, AC-092.10, AC-092.11, AC-092.13, AC-092.15, AC-092.16, AC-092.18, AC-092.20, AC-092.21, AC-092.22, AC-092.23, AC-092.24]
   parallel_safe: true
   depends_on: [t1, t3]
-  done: false
+  done: true
 - id: t8
   title: cplat alerts poll (per-app loop, poll-failure state, failing-poll issue, summary, exit code)
   files: [scripts/cplat/alerts.py, scripts/cplat/cplat.py]
   covers: [AC-092.2, AC-092.9, AC-092.16, AC-092.17, AC-092.18, AC-092.19]
   parallel_safe: true
   depends_on: [t3, t7]
-  done: false
+  done: true
 human_steps:
 - "Per gitops-app repo: create a fine-grained token with Issues: read and write on every service repo in services.yaml and run `gh secret set ALERTS_TOKEN -R <owner>/<gitops-repo>` (cplat doctor warns until then)"
 - "With `exportTo` + `querySecret`: grant the self-hosted runner's ServiceAccount `get` on that one Secret (a Role with resourceNames), or set the repo secret ALERTS_QUERY_AUTHORIZATION instead"
