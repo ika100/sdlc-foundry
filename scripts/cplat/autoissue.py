@@ -216,6 +216,7 @@ class Issue:
     created_at: str
     closed_at: str | None
     body: str
+    title: str = ""
 
 
 @dataclass
@@ -296,7 +297,8 @@ def _items(text: str) -> list[dict]:
 def _to_issue(item: dict) -> Issue:
     return Issue(number=int(item["number"]), url=str(item.get("html_url") or item.get("url") or ""), state=str(item.get("state", "open")),
                  labels=[str(lb.get("name")) if isinstance(lb, dict) else str(lb) for lb in item.get("labels") or []],
-                 created_at=str(item.get("created_at") or ""), closed_at=item.get("closed_at"), body=str(item.get("body") or ""))
+                 created_at=str(item.get("created_at") or ""), closed_at=item.get("closed_at"), body=str(item.get("body") or ""),
+                 title=str(item.get("title") or ""))
 
 
 def _has_signature(body: str, sig: str) -> bool:
