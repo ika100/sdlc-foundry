@@ -49,8 +49,10 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 
 Agents and slash commands come from the [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry) marketplace. The plugins are enabled in `.claude/settings.json`:
 
-- `svc@sdlc-foundry` — multi-agent pipeline (product-manager, architect, coder, tester, migrations, observability, release, deployment)
-- `shared@sdlc-foundry` — quality, security, and the `/shared:new-service` bootstrap command
+- `svc@sdlc-foundry` — pipeline agents (product-manager, architect, coder, tester, migrations, observability, release, deployment)
+- `component@sdlc-foundry` — the commands: `/component:spec`, `plan`, `build`, `ship`, `fix`, `check`, `release`
+- `instance@sdlc-foundry`, `api@sdlc-foundry`, `issue@sdlc-foundry`, `platform@sdlc-foundry` — `/instance:promote`, `/api:list`, `/issue:report`, `/platform:update`
+- `shared@sdlc-foundry` — quality and security agents, the `cplat` launcher
 
 Read the platform's `docs/AGENTS.md` for the full orchestration model.
 
@@ -58,19 +60,18 @@ Read the platform's `docs/AGENTS.md` for the full orchestration model.
 
 | Task | Command |
 |---|---|
-| Write a feature spec (first step) | `/svc:spec <description>` |
-| Plan the approved spec | `/svc:plan <NNN>` |
-| Build it: tests first, verified | `/svc:build <NNN>` |
-| All of it unattended: build, PR, merge on green CI, dev | `/svc:ship <NNN>` (headless: `cplat headless "/svc:ship <NNN>"`) |
-| Where specs stand | `/svc:specs` |
-| Small change | `/svc:quick-task <description>` |
-| Fix a bug | `/svc:fix-bug <description or error>` |
-| Read-only quality + security audit | `/shared:check-quality` |
-| Release | `/svc:release` |
+| Write a feature spec (first step) | `/component:spec <description>` |
+| Plan the approved spec | `/component:plan <NNN>` |
+| Build it: tests first, verified | `/component:build <NNN>` |
+| All of it unattended: build, PR, merge on green CI, dev | `/component:ship <NNN>` (headless: `cplat headless "/component:ship <NNN>"`) |
+| Where specs stand | `/component:spec --all` |
+| Small change | `/component:fix <description>` |
+| Read-only quality + security audit | `/component:check` |
+| Release | `/component:release` |
 
 ### Spec first
 
-A feature starts with a spec, not code ([ADR-026](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/026-feature-specs.md)): `/svc:spec <description>` writes `docs/specs/<NNN>-<slug>/spec.md` with acceptance criteria `AC-<NNN>.<n>` and asks you its open questions; approve it (`/svc:spec approve <NNN>`), plan it (`/svc:plan <NNN>`), then build it (`/svc:build <NNN>`): acceptance tests are written from the criteria first and fail, the code makes them pass, a reviewer checks the result against the spec, and the PR lists every criterion. Tests that name a criterion are the spec in code: never weaken them; change the spec instead (`/svc:spec --amend <NNN> <change>`). `/svc:specs` shows where each spec stands; `devbox run spec-check` validates every spec and traces built ones to their tests (also the warn-only `specs` CI workflow). Small changes (`/svc:quick-task`) and bug fixes (`/svc:fix-bug`) need no spec, but stop when they would change a criterion.
+A feature starts with a spec, not code ([ADR-026](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/026-feature-specs.md)): `/component:spec <description>` writes `docs/specs/<NNN>-<slug>/spec.md` with acceptance criteria `AC-<NNN>.<n>` and asks you its open questions; approve it (`/component:spec approve <NNN>`), plan it (`/component:plan <NNN>`), then build it (`/component:build <NNN>`): acceptance tests are written from the criteria first and fail, the code makes them pass, a reviewer checks the result against the spec, and the PR lists every criterion. Tests that name a criterion are the spec in code: never weaken them; change the spec instead (`/component:spec --amend <NNN> <change>`). `/component:spec --all` shows where each spec stands; `devbox run spec-check` validates every spec and traces built ones to their tests (also the warn-only `specs` CI workflow). Small changes and bug fixes (`/component:fix`) need no spec, but stop when they would change a criterion.
 
 ## Feature Branch Workflow
 
@@ -82,7 +83,7 @@ PR title format: `<type>(<optional-scope>): <description ≤72 chars>`. Valid ty
 
 ## Where your additions go
 
-Updates (`/shared:update-service`) overwrite the skeleton files below. Put your own work next to them, where an update keeps it:
+Updates (`/platform:update`) overwrite the skeleton files below. Put your own work next to them, where an update keeps it:
 
 | Updates overwrite | Your additions go in |
 |---|---|
@@ -90,7 +91,7 @@ Updates (`/shared:update-service`) overwrite the skeleton files below. Put your 
 | `.github/workflows/ci.yml` | a workflow file of your own in `.github/workflows/` |
 | `.claude/settings.json` | your own permission entries (allow, ask, deny) in it; they are kept |
 | `CLAUDE.md` | `.claude/project-notes.md` |
-| other skeleton files (Dockerfile, lint config ...) | nowhere: propose the change to the platform (`/shared:report-issue`) |
+| other skeleton files (Dockerfile, lint config ...) | nowhere: propose the change to the platform (`/issue:report`) |
 
 ## Conventions
 
@@ -114,7 +115,7 @@ Registry: `{{ docker_registry }}/{{ project_name }}`. Authentication via `GITHUB
 
 ## Deployment
 
-This repo ships **only a container image**. Kubernetes manifests, environment wiring (e.g. `API_URL`), replicas, resources and exposure belong to the product's `gitops-app` repo (platform ADR-017): register the service with `/gitops:compose add {{ project_name }}` (needs the GitHub topic `deployable-service`, set by `/shared:new-service`), then `/gitops:promote {{ project_name }} <from> <to>`. Change how the service runs by editing its entry in that repo's `services.yaml`; change the port, probe paths or user in the Dockerfile/app and update the entry to match.
+This repo ships **only a container image**. Kubernetes manifests, environment wiring (e.g. `API_URL`), replicas, resources and exposure belong to the system's `gitops-app` repo (platform ADR-017): register the component with `/component:add {{ project_name }}` in the system's repo (needs the GitHub topic `deployable-service`, set by `/component:new`), then `/instance:promote {{ project_name }} --to <env>`. Change how the service runs by editing its entry under `components:` in that repo's `system.yaml`; change the port, probe paths or user in the Dockerfile/app and update the entry to match.
 
 ## Project notes
 

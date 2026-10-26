@@ -28,6 +28,6 @@ See `CLAUDE.md` for the full agent workflow and `devbox.json` for the canonical 
 
 | Target | Command |
 |---|---|
-| Staging / prod | Open a PR in the platform gitops repo or `/gitops:promote {{ project_name }} <from> <to>` |
+| Staging / prod | Open a PR in the platform gitops repo or `/instance:promote {{ project_name }} --to <env>` |
 
 Image: `{{ docker_registry }}/{{ project_name }}` — built and tagged automatically by CI.
