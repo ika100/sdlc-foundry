@@ -27,6 +27,7 @@ def render(m: model.Model) -> str:
 
     envs = [f"  {e.name}  host {_d(e.host)}  url-template {_d(e.url_template)}  policy {e.policy}  "
             f"promote {'follows main' if e.promotion == 'main' else e.promotion}  observability {_observability(e.observability)}"
+            f"{'  operators owner' if e.operators == 'owner' else ''}"
             for e in m.environments]
     comps = []
     for c in m.components:
@@ -40,10 +41,12 @@ def render(m: model.Model) -> str:
     res: list[str] = []
     for r in m.resources:
         used = ",".join(c.name for c in m.components if r.name in c.uses) or "-"
-        res.append(f"  {r.name}  type {r.type}  used by {used}")
+        res.append(f"  {r.name}  type {r.type}  external {str(r.external).lower()}  used by {used}")
         for ri in m.resource_instances_of(r.name):
             sizing = "".join(f"  {k} {v}" for k, v in ri.sizing.items())
-            res.append(f"    {ri.environment}{sizing}  argo {ri.argo_application}  secret {_d(ri.secret)}")
+            store = f"  store {ri.store_key}" if ri.external else ""
+            res.append(f"    {ri.environment}  type {ri.type}  external {str(ri.external).lower()}{sizing}  "
+                       f"argo {_d(ri.argo_application)}  secret {_d(ri.secret)}{store}")
     apis = [f"  {a.name}  type {a.type}  provider {_d(a.provider)}  consumers {','.join(a.consumers) or '-'}" for a in m.apis]
     return "\n\n".join([f"System: {m.system}\nOwner: {_d(m.owner)}",
                         section("Environments (promotion order):", envs), section("Components:", comps),

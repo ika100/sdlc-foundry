@@ -101,7 +101,7 @@ def collect(repo: Path, app: str | None, context: str | None) -> tuple[str, list
         by_env = {ri.environment: ri for ri in m.resource_instances_of(r.name)}
         if by_env:
             resources.append({"resource": r.name, "cells": {
-                env: ({"argo": argo.get(by_env[env].argo_application, miss)} if env in by_env else None) for env in envs}})
+                env: ({"argo": "external" if by_env[env].external else argo.get(by_env[env].argo_application, miss)} if env in by_env else None) for env in envs}})
     obs = {e.name: e.observability.argo_application for e in m.environments if e.observability and m.instances_in(e.name)}
     if obs:
         resources.append({"resource": "observability", "cells": {
