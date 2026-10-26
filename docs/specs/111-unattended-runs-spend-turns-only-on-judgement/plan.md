@@ -11,21 +11,21 @@ tasks:
     covers: [AC-111.4, AC-111.5, AC-111.6]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: cplat quick-task inline-check and the inline path in quick-task.md
     files: [scripts/cplat/quicktask.py, scripts/cplat/cplat.py, plugins/svc/commands/quick-task.md]
     covers: [AC-111.7, AC-111.8, AC-111.9]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: t3
     title: cplat ship continue (land then deploy, exit 0/1/2) and ship.md uses it
     files: [scripts/cplat/ship.py, plugins/svc/commands/ship.md, plugins/svc/references/ship-land-red.md]
     covers: [AC-111.1, AC-111.2, AC-111.3]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: b1
     title: Benchmarks per part against the 4.7.0 baseline; keep or revert; benchmarks.md, BASELINES.md, CHANGELOG
     files: [docs/specs/111-unattended-runs-spend-turns-only-on-judgement/benchmarks.md, docs/BASELINES.md, docs/CHANGELOG.md]
