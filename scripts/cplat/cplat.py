@@ -2,41 +2,43 @@
 # /// script
 # dependencies = ["pyyaml", "ruamel.yaml"]
 # ///
-"""cplat — deterministic implementation of the sdlc-foundry commands.
+"""cplat — deterministic implementation of the sdlc-foundry commands, grouped by noun (5.0).
 
 The slash commands (plugins/*/commands/*.md) are thin: they run this script with --dry-run, show the plan to the user,
 and run it for real. Everything that can be code is code (and has tests in tests/cplat).
 
-  cplat.py new-service <name> <description…> [--web|--gitops|--library|--type SHAPE] [--app ORG/REPO] [--dry-run]
-  cplat.py new-app <app.yml> [--resume] [--no-github] [--dry-run]   create a gitops-app repo + all component repos, one compose PR
-  cplat.py update-service [--data KEY=VALUE] [--dry-run]
-  cplat.py doctor [--json]
-  cplat.py shape [--repo DIR]          shape + agent routing for the /svc:* orchestrators
-  cplat.py shape check                 the platform's shape contract (run in the platform repo)
-  cplat.py compose add|remove <service…> [--expose] [--env K=V] [--from-k8s] [--pr]   (run inside a gitops-app repo)
-  cplat.py promote <service…|--all> <from> <to> [--version V] [--sha S] [--pr]
-  cplat.py addon add|remove|list [postgres]   backing services of the application (app.yaml)
-  cplat.py secret set|list ...         remote secrets of the local cluster (values never go to git)
-  cplat.py feedback --title T [--what …] [--details-file F] [--submit]   draft (and file) a platform issue, secrets removed
-  cplat.py triage list|show|setup-labels|apply ...   issue intake for /shared:triage (labels and comments only after you confirm; never closes)
-  cplat.py status [--context KUBE_CONTEXT]   one table: pins per env, service CI, Argo sync/health
-  cplat.py model show [--json] [--app APP] [--repo-dir DIR]   the declared domain model of a gitops-app (spec 113, ADR-053)
-  cplat.py spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
-  cplat.py ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /svc:ship: spec → merged PR → dev (ADR-028)
-  cplat.py pr wait|open …   wait <number|url> [-R owner/repo] [--merge]: CI watch (spec 079); open --title T: commit -s, push, PR in one step (spec 100)
-  cplat.py quiet <devbox-script>   run it with output in a log: one line on success, the tail and log path on failure (spec 100)
-  cplat.py validate plan|run|final [--base REF] [--full] [--risk low|medium|high]   change-aware validation of the inner loop (spec 103)
-  cplat.py app-ship start|status|phase|publish|next|repo|entry|complete|escalate|finish|gate ...   /app:ship: a product spec → every repo → dev (spec 097)
-  cplat.py smoke run [--env dev] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment (spec 091)
-  cplat.py headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume (spec 070)
-  cplat.py build schedule|merge|state|replan-commit|replan-abort|resolved ...   /svc:build Phase 2: schedule, merge, re-plan on conflict (spec 094)
-  cplat.py runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost (specs 087, 089, 099)
-  cplat.py retro [--week W] [--json] [--out DIR] | propose --dir DIR | post [--dir DIR]   weekly platform retro (spec 090)
-  cplat.py deps findings|patch|report ...   patch fixable dependency findings of a red security gate (spec 095, ADR-034)
-  cplat.py alerts poll [--dry-run] [--app APP]   firing alerts become issues (spec 092; run by the gitops-app's alerts workflow)
-  cplat.py fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release (spec 096)
-  cplat.py budget show|gate|attempt|stage|resume ...   one budget per run tree, no-progress stops, verified stages for resume (spec 102)
-  cplat.py adopt --type SHAPE [--data KEY=VALUE]   bring an existing repo onto the platform template (spec 071)
+  cplat system new <manifest.yml> [--resume] [--no-github] [--dry-run]   create a gitops-app repo + all component repos, one component PR
+  cplat system status [--context KUBE_CONTEXT] [--json]   one table: components by environment, CI, Argo sync/health
+  cplat system ship start|status|phase|publish|next|repo|entry|complete|escalate|finish|gate ...   /system:ship: a product spec → every repo → dev
+  cplat component new <name> <description…> [--type service|website|library] [--lang python|java|go|typescript] [--system OWNER/REPO] [--dry-run]
+  cplat component add|set|remove <component…> [--type T] [--lang L] [--expose] [--env K=V] [--instance ENV --replicas N] [--from-k8s] [--pr]
+  cplat component ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
+  cplat component build schedule|merge|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
+  cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
+  cplat resource add|remove postgres [--version N]   the system's database resource (system.yaml)
+  cplat instance promote <component…|--all> --to <env> [--version V] [--sha S] [--pr]
+  cplat instance secret set <component>/<env> <secret> <KEY> | list [--env dev]   remote secrets of the local cluster (values never go to git)
+  cplat instance verify [ENV] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment
+  cplat issue triage list|show|setup-labels|apply ...   issue intake (labels and comments only after you confirm; never closes)
+  cplat platform doctor [--json]
+  cplat platform update [--migrate] [--data KEY=VALUE] [--dry-run]
+  cplat platform fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release
+  cplat platform runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost
+  cplat platform retro [--week W] [--json] [--out DIR] | propose --dir DIR | post [--dir DIR]   weekly platform retro
+
+Plumbing keeps its name:
+  cplat shape [--repo DIR]             shape + agent routing for the orchestrators; `shape check` is the platform's shape contract
+  cplat feedback --title T [--what …] [--details-file F] [--submit]   draft (and file) a platform issue, secrets removed
+  cplat model show [--json] [--app APP] [--repo-dir DIR]   the declared domain model of a gitops-app
+  cplat spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
+  cplat pr wait|open …   wait <number|url> [-R owner/repo] [--merge]: CI watch; open --title T: commit -s, push, PR in one step
+  cplat quiet <devbox-script>   run it with output in a log: one line on success, the tail and log path on failure
+  cplat validate plan|run|final [--base REF] [--full] [--risk low|medium|high]   change-aware validation of the inner loop
+  cplat headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume
+  cplat deps findings|patch|report ...   patch fixable dependency findings of a red security gate
+  cplat alerts poll [--dry-run] [--app APP]   firing alerts become issues
+  cplat budget show|gate|attempt|stage|resume ...   one budget per run tree, no-progress stops, verified stages for resume
+  cplat adopt --type SHAPE [--data KEY=VALUE]   bring an existing repo onto the platform template
 """
 from __future__ import annotations
 
@@ -48,40 +50,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import core  # noqa: E402
 
-COMMANDS = {
-    "new-service": "newsvc",
-    "new-app": "newapp",
-    "update-service": "update",
-    "doctor": "doctor",
-    "shape": "shapecmd",
-    "compose": "compose",
-    "promote": "promote",
-    "status": "status",
-    "model": "modelcmd",
-    "secret": "secret",
-    "addon": "addon",
-    "feedback": "feedback",
-    "triage": "triage",
-    "spec": "spec",
-    "ship": "ship",
-    "app-ship": "appship",
-    "smoke": "smoke",
-    "pr": "pr",
-    "headless": "headless",
-    "adopt": "adopt",
-    "runs": "runs",
-    "deps": "deps",
-    "fleet": "fleet",
-    "retro": "retro",
-    "build": "buildcmd",
-    "quiet": "quiet",
-    "validate": "validate",
-    "alerts": "alerts",
-    "budget": "budget",
+# noun -> verb -> (module, argv prefix put before the remaining args)
+NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
+    "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", [])},
+    "component": {"new": ("newsvc", []), "add": ("compose", ["add"]), "set": ("compose", ["set"]), "remove": ("compose", ["remove"]),
+                  "ship": ("ship", []), "build": ("buildcmd", [])},
+    "api": {"list": ("apilist", [])},
+    "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"])},
+    "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
+    "issue": {"triage": ("triage", [])},
+    "platform": {"doctor": ("doctor", []), "update": ("update", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", [])},
+}
+
+PLUMBING = {
+    "shape": "shapecmd", "feedback": "feedback", "model": "modelcmd", "spec": "spec", "pr": "pr", "quiet": "quiet", "validate": "validate",
+    "headless": "headless", "deps": "deps", "alerts": "alerts", "budget": "budget", "adopt": "adopt",
+}
+
+# 4.x top-level name -> its 5.0 form (exit 2, the module is not imported)
+MOVED = {
+    "new-app": "system new", "status": "system status", "app-ship": "system ship", "new-service": "component new",
+    "compose": "component add|set|remove", "ship": "component ship", "build": "component build", "addon": "resource add|remove",
+    "promote": "instance promote", "secret": "instance secret", "smoke": "instance verify", "triage": "issue triage",
+    "doctor": "platform doctor", "update-service": "platform update", "fleet": "platform fleet", "runs": "platform runs",
+    "retro": "platform retro",
 }
 
 
-_REPORT_HINT = ("  This looks like a platform bug. Run `/shared:report-issue` (or `cplat feedback --title ...`) to file it; "
+_REPORT_HINT = ("  This looks like a platform bug. Run `/issue:report` (or `cplat feedback --title ...`) to file it; "
                 "nothing is sent without your OK.")
 
 
@@ -99,20 +95,48 @@ def _file_crash(argv: list[str], exc: Exception) -> list[str]:
     return [_REPORT_HINT]
 
 
-def main(argv: list[str]) -> int:
-    if not argv or argv[0] in ("-h", "--help") or argv[0] not in COMMANDS:
+def _resolve(argv: list[str]) -> tuple[str, list[str], str] | int:
+    """(module, its argv, label of the command), or the exit code after printing."""
+    name = argv[0] if argv else ""
+    if name in ("-h", "--help"):
         print(__doc__)
-        return 0 if argv and argv[0] in ("-h", "--help") else 2
-    module = __import__(COMMANDS[argv[0]])
+        return 0
+    if name in MOVED:
+        print(f"`cplat {name}` is `cplat {MOVED[name]}` in 5.0", file=sys.stderr)
+        return 2
+    if name in PLUMBING:
+        return PLUMBING[name], argv[1:], name
+    if name in NOUNS:
+        verbs = NOUNS[name]
+        if len(argv) > 1 and argv[1] in ("-h", "--help"):
+            print(__doc__)
+            return 0
+        if len(argv) < 2 or argv[1] not in verbs:
+            print(f"usage: cplat {name} <verb> ...  (verbs: {' '.join(verbs)})", file=sys.stderr)
+            for v in verbs:
+                print(f"  cplat {name} {v}", file=sys.stderr)
+            return 2
+        module, prefix = verbs[argv[1]]
+        return module, [*prefix, *argv[2:]], f"{name} {argv[1]}"
+    print(__doc__)
+    return 2
+
+
+def main(argv: list[str]) -> int:
+    resolved = _resolve(argv)
+    if isinstance(resolved, int):
+        return resolved
+    modname, rest, label = resolved
+    module = __import__(modname)
     try:
-        return module.main(argv[1:])
+        return module.main(rest)
     except core.PlatformError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         if e.hint:
             print(f"  fix: {e.hint}", file=sys.stderr)
         return 1
     except Exception as e:  # noqa: BLE001  (an unexpected crash is a platform defect, not a user error)
-        print(f"ERROR: unexpected failure in `cplat {argv[0]}`: {type(e).__name__}: {e}", file=sys.stderr)
+        print(f"ERROR: unexpected failure in `cplat {label}`: {type(e).__name__}: {e}", file=sys.stderr)
         for line in _file_crash(argv, e):
             print(line, file=sys.stderr)
         if os.environ.get("CPLAT_DEBUG"):
