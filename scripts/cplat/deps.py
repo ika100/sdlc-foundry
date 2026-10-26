@@ -396,7 +396,7 @@ def _cmd_report(ns: argparse.Namespace) -> int:
             raise PlatformError("--update-pr needs --body-file")
         print(section, end="")
         return 0
-    body = Path(ns.body_file)
+    body = core.git_path(repo, ns.body_file)
     body.write_text(_merge(body.read_text() if body.exists() else "", section))
     if ns.update_pr:
         try:

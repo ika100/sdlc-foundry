@@ -169,15 +169,34 @@ class Report:
 PR_BODY = ".pr-body.md"   # where agents write a PR body: Claude Code never lets edits into .git/, even under acceptEdits
 
 
+def _own_git_dir(repo: Path) -> Path | None:
+    """git_dir(), else a plain `.git` directory (a repo git cannot read, e.g. a bare skeleton)."""
+    return git_dir(repo) or (repo / ".git" if (repo / ".git").is_dir() else None)
+
+
+def git_path(repo: Path, given: str | Path) -> Path:
+    """`given` relative to the repo, where a `.git/…` path means this checkout's git dir: in a linked worktree `.git`
+    is a file and the git dir lives elsewhere (#227)."""
+    p = Path(given)
+    if p.is_absolute():
+        return p
+    if p.parts[:1] == (".git",) and (gd := _own_git_dir(repo)) is not None:
+        return gd.joinpath(*p.parts[1:])
+    return repo / p
+
+
 def stage_pr_body(repo: Path, given: str | Path) -> Path:
-    """The PR body the model wrote, moved out of the work tree into .git/PR_BODY.md (so no commit picks it up) and returned.
-    A file already under .git/ is used as it is; `.git/PR_BODY.md` is still found when the default `.pr-body.md` is missing."""
-    path = Path(given) if Path(given).is_absolute() else repo / given
-    git_dir = repo / ".git"
-    staged = git_dir / "PR_BODY.md"
+    """The PR body the model wrote, moved out of the work tree into the git dir's PR_BODY.md (so no commit picks it up)
+    and returned; in a linked worktree that is the worktree's own git dir (#227). A file already in the git dir is used
+    as it is; `.git/PR_BODY.md` is still found when the default `.pr-body.md` is missing."""
+    path = git_path(repo, given)
+    gd = _own_git_dir(repo)
+    if gd is None:
+        return path
+    staged = gd / "PR_BODY.md"
     if not path.is_file() and Path(given).name == PR_BODY and staged.is_file():
         return staged
-    if not path.is_file() or not git_dir.is_dir() or git_dir in path.resolve().parents:
+    if not path.is_file() or gd in path.resolve().parents:
         return path
     staged.write_text(path.read_text())
     path.unlink()
