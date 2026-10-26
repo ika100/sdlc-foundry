@@ -1,7 +1,7 @@
 ---
 spec_id: 111-fast-cplat-test-job-shared-renders-and
 title: 'Fast cplat test job: shared renders and sharding'
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -67,3 +67,4 @@ Local use
 
 - 2026-10-26 created
 - 2026-10-26 amended: folded in the user's answers (4 shards, 120-second median target excluding template pull requests, 50% setup target, shard coverage check in every ci run).
+- 2026-10-26 approved
