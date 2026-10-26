@@ -78,3 +78,33 @@ def no_leaking_telemetry_settings(monkeypatch):
     for name in list(os.environ):
         if name.startswith(("OTEL_", "CPLAT_OTLP_")) or name in ("CPLAT_KUBE_CONTEXT", "CLAUDE_CODE_ENABLE_TELEMETRY"):
             monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(scope="session")
+def shared_renders(tmp_path_factory):
+    """Spec 112: renders shared by the tests of one process; they live in this run's basetemp only."""
+    from shared_render import SharedRenders
+    return SharedRenders(tmp_path_factory.mktemp("shared-renders"))
+
+
+@pytest.fixture()
+def new_service(shared_renders):
+    """Spec 112: `new_service(argv)` is `newsvc.main(argv)` for an argv with `--dir D`, returning `D/<name>` as a private
+    copy of a render made once per process."""
+    import newsvc
+    from shared_render import service_key
+
+    def make(argv: list[str]) -> Path:
+        key, name, rest = service_key(argv)
+        dest_root = Path(argv[argv.index("--dir") + 1])
+
+        def build(workdir: Path) -> Path:
+            code = newsvc.main([*rest, "--dir", str(workdir)])
+            if code:
+                raise RuntimeError(f"newsvc exited with {code}")
+            return workdir / name
+
+        dest_root.mkdir(parents=True, exist_ok=True)
+        return shared_renders.copy(key, build, dest_root / name)
+
+    return make
