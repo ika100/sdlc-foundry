@@ -19,6 +19,91 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 - **Fix: run state is per worktree.** `cplat-ship.json`, the app-ship state, the `cplat runs begin` pointer, the recovery snapshot and pending replans now live in the worktree's own git dir instead of the dir every worktree shares, so one session's ship run no longer blocks another session's Stop hook, and a build in one worktree cannot attach to another's run. A worktree no longer sees another checkout's run; a run started inside a worktree before this fix must be resumed from the main checkout or restarted. The main checkout's `.git` is unchanged. The gitops merge slot and the validation evidence cache stay shared (ADR-051).
 - **Fix (090): a failing retro proposal step shows why.** When `claude` exits non-zero, `cplat retro propose` prints the last 20 lines of its output to the job log. `claude exited with 1` alone could not be diagnosed: the output stayed in `propose.log` on the ephemeral runner. The posted issue keeps the short reason.
 
+## [5.0.0] — 2026-10-26
+
+**BREAKING: the platform speaks the domain model.** [ADR-054](adr/054-five-zero-interface-and-proved-migration.md), [ADR-053](adr/053-domain-model.md), [guide](DOMAIN-MODEL.md), spec 114. A system is one file, `applications/<system>/system.yaml`, that the renderer checks; slash commands and `cplat` subcommands are grouped by noun (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`). Cluster names (namespaces, Argo applications, image names) never change, so a migrated system renders the same manifests.
+
+**Plugins:** new `system`, `component`, `api`, `resource`, `instance`, `issue`, `platform` 1.0.0; svc 4.0.0, shared 1.0.0, app 2.0.0, gitops 2.0.0; web, svc-go, svc-java 0.4.0. `shared` keeps the `cplat` launcher, the hooks and the quality and security agents and no working command; the planner agent moved to `system`; the v1-only gitops deployment agent is gone. The last major of `app` and `gitops` holds only tombstone commands (no agents, no hooks), and `app` and `gitops` leave the marketplace in 6.0.
+
+**Old → new.** Every 4.7 slash command stays as a tombstone: it runs nothing and prints where the command went. A 4.7 `cplat` name prints `` `cplat <old>` is `cplat <new>` in 5.0 `` to stderr and exits 2.
+
+| 4.7 slash command | 5.0 |
+|---|---|
+| `/svc:build` | `/component:build` |
+| `/svc:fix-bug` | `/component:fix` |
+| `/svc:plan` | `/component:plan` |
+| `/svc:quick-task` | `/component:fix` |
+| `/svc:release` | `/component:release` |
+| `/svc:ship` | `/component:ship` |
+| `/svc:spec` | `/component:spec` |
+| `/svc:specs` | `/component:spec` |
+| `/svc:verify` | `/component:verify` |
+| `/app:build` | `/system:ship` |
+| `/app:plan` | `/system:plan` |
+| `/app:ship` | `/system:ship` |
+| `/app:spec` | `/system:spec` |
+| `/app:specs` | `/system:spec` |
+| `/gitops:addon` | `/resource:add` and `/resource:remove`; observability is set under `environments.<env>.observability` in `system.yaml` |
+| `/gitops:compose` | `/component:add` (also `set`, `remove`) |
+| `/gitops:promote` | `/instance:promote` (now `--to <env>`) |
+| `/gitops:secret` | `/instance:secret` (list: `/instance:secret list`) |
+| `/shared:check-quality` | `/component:check` |
+| `/shared:doctor` | `/platform:doctor` |
+| `/shared:fleet` | `/platform:fleet` |
+| `/shared:new-app` | `/system:new` |
+| `/shared:new-service` | `/component:new` |
+| `/shared:report-issue` | `/issue:report` |
+| `/shared:status` | `/system:status` |
+| `/shared:triage` | `/issue:triage` |
+| `/shared:update-service` | `/platform:update` |
+
+| 4.7 cplat subcommand | 5.0 |
+|---|---|
+| `cplat new-app` | `cplat system new` |
+| `cplat status` | `cplat system status` |
+| `cplat app-ship` | `cplat system ship` |
+| `cplat new-service` | `cplat component new` (`--type` and `--lang` replace `--web`, `--library`, `--gitops`, `--app` and shape ids) |
+| `cplat compose` | `cplat component add`, `set`, `remove` |
+| `cplat ship` | `cplat component ship` |
+| `cplat build` | `cplat component build` |
+| `cplat addon` | `cplat resource add`, `remove` |
+| `cplat promote` | `cplat instance promote` (`<component> --to <env>`) |
+| `cplat secret` | `cplat instance secret` |
+| `cplat smoke` | `cplat instance verify` |
+| `cplat triage` | `cplat issue triage` |
+| `cplat doctor` | `cplat platform doctor` |
+| `cplat update-service` | `cplat platform update` |
+| `cplat fleet` | `cplat platform fleet` |
+| `cplat runs` | `cplat platform runs` |
+| `cplat retro` | `cplat platform retro` |
+
+New: `cplat api list`. Unchanged plumbing: `spec`, `pr`, `headless`, `budget`, `quiet`, `validate`, `deps`, `shape`, `feedback`, `adopt`, `alerts`, `model` (`cplat model show --json` carries `schema: 2`).
+
+| 4.x file or key | 5.0 |
+|---|---|
+| `applications/<system>/app.yaml` and `services.yaml` | one `applications/<system>/system.yaml` (comments are not carried over) |
+| directory name | `system` |
+| `gateway`, `secretStore`, `policies.registries` | top-level `gateway`, `secretStore`, `registries` |
+| `hosts.<env>`, `urls.<env>` | `environments.<env>.host`, `.url` (`{service}` is `{component}`, `{app}` is `{system}`) |
+| `policies` absent or `false` | `policy: "off"` on every environment |
+| `policies.mode` | `environments.<env>.policy`, lowercased |
+| `promotion.staging: auto` or `manual` | `environments.staging.promote: after-dev-smoke` or `manual` |
+| `promotion.prod: manual` | dropped (prod is always manual) |
+| `addons.observability` | `environments.<env>.observability` on every environment |
+| `addons.postgres` | `resources.postgres` with `type: database` (per-environment values under `instances.<env>`) |
+| service entry | `components.<name>` |
+| `shape` | `type` and `lang` |
+| `environments` of a service | `instances` keys |
+| per-service `replicas` map and `promotion.staging` | `instances.<env>.replicas` and `instances.<env>.promote` |
+| `cplat promote <from> <to>` | `cplat instance promote … --to <env>` |
+| "addon", "product", "service" in docs and prompts | resource, system, component |
+
+**Migration steps** (a repo that is not migrated keeps working only through the tombstones, which tell you what to run):
+1. Run `/plugin marketplace update`, then enable `system`, `component`, `api`, `resource`, `instance`, `issue` and `platform`; the migration switches the repo's plugin settings for you.
+2. In every repo run `cplat platform update --migrate`, or from one place run `/platform:fleet update` over the whole fleet. In a gitops-app it converts `app.yaml` and `services.yaml` into `system.yaml`, proves that the render is unchanged (or says exactly which key or file differs), and opens a PR; the fleet merges a proved one on green CI and reports the repos that failed.
+3. A repo the converter cannot convert (an unknown key, a per-environment `version` that differs) stops with the key named; fix that key by hand and run it again.
+4. Replace old command names in your own scripts, CI and notes with the table above.
+
 ## [4.7.0] — 2026-10-26
 
 **Runs stay within a budget, fix rounds run only what a change can affect, and prod runs exactly what staging tested.**
