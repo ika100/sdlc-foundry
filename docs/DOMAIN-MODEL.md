@@ -1,8 +1,8 @@
 # Domain model
 
-The nouns the platform is built around: what a product is made of, where it runs, and how it changes. The model takes [Backstage's system model](https://backstage.io/docs/features/software-catalog/system-model) for the first part and adds environments and the delivery process. It is a model only: the platform does not use or need Backstage. Decisions and the migration path are in [ADR-053](adr/053-domain-model.md).
+The nouns the platform is built around: what a system is made of, where it runs, and how it changes. The model takes [Backstage's system model](https://backstage.io/docs/features/software-catalog/system-model) for the first part and adds environments and the delivery process. It is a model only: the platform does not use or need Backstage. Decisions and the migration path are in [ADR-053](adr/053-domain-model.md).
 
-**Status:** this is the target model of sdlc-foundry 5.0. The internal core (spec 113) is in place in 4.x without changing any command or file; `cplat model show` prints a product in these nouns, and its JSON (`schema: 1`) may change in 5.0. The user-facing switch to `system.yaml` and noun-based commands (spec 114) is the 5.0 release. Until then, [The model today](#the-model-today) shows the names you use now, and [Today's features on the model](#todays-features-on-the-model) maps every command onto the nouns.
+**Status:** 5.0 is current. `system.yaml` and the noun-based commands described below are what the platform runs (spec 114, [ADR-054](adr/054-five-zero-interface-and-proved-migration.md)); `cplat model show` prints a system in these nouns (JSON `schema: 2`). A repo from 4.x moves over with `cplat platform update --migrate` ([Migrating from 4.x to 5.0](ADOPTING.md#migrating-from-4x-to-50)). [The model in 4.7](#the-model-in-47) and [4.7 features on the model](#47-features-on-the-model) keep the old names as history.
 
 ## Three questions
 
@@ -28,7 +28,7 @@ A library has no Instances; other Components use it.
 
 ![The todo system: parts on the left, one instance per environment on the right](img/model-example.svg)
 
-Read the left column as "what the product is" and the grid as "where each part runs right now". A row is one part across environments; promoting moves a version one cell to the right. Versions and states in the picture are example values. The platform writes versions when it pins and promotes; health and smoke results are looked up when you ask (`/shared:status`), never stored.
+Read the left column as "what the system is" and the grid as "where each part runs right now". A row is one part across environments; promoting moves a version one cell to the right. Versions and states in the picture are example values. The platform writes versions when it pins and promotes; health and smoke results are looked up when you ask (`/system:status`), never stored.
 
 ## The delivery model
 
@@ -36,7 +36,7 @@ Read the left column as "what the product is" and the grid as "where each part r
 
 The documented SDLC (specs per [ADR-026](adr/026-feature-specs.md), [unattended delivery](unattended-delivery.md), the deploy gate, the feedback loops) attaches to the core model:
 
-- Specs have the model's two levels. A **system spec** (today `/app:spec`) is split by a **Plan** into **component specs** (`/svc:spec --from-plan`), and the plan is where an API contract is set (spec 110).
+- Specs have the model's two levels. A **system spec** (`/system:spec`) is split by a **Plan** into **component specs** (`/component:spec`), and the plan is where an API contract is set (spec 110).
 - A **Criterion** (`AC-<NNN>.<n>`) is traced by a **Test** in the component's repo and judged in the **Verification**. A `(smoke)` criterion is checked on an Instance in an Environment, not in a repo.
 - A **Run** ships a spec: it opens a **Pull request**, CI builds an **Image** (`sha-<40>` and its digest), the image is pinned in dev and promoted as an Instance, and a **Release** tag goes to prod with the digest staging verified.
 - Every feedback loop ends as an **Issue** about a model object: a firing alert or a smoke failure is about an Instance; a platform failure or a retro proposal is about the platform.
@@ -75,15 +75,15 @@ Three placements are decided ([ADR-053](adr/053-domain-model.md)):
 - **Secrets** are declared on the Component (generated or read from the store) and can be overridden per Instance; their values are set per Instance.
 - **Names in the cluster do not change**: the namespace `<system>-<env>`, the Argo application `<component>-<env>`, the database Secret `<system>-postgres-app`. The model maps onto them.
 
-## One file per system (5.0)
+## One file per system
 
-In 5.0, `system.yaml` replaces `app.yaml` and `services.yaml`. Each environment's rules live in one place; versions are not in the file, the platform writes them when it pins and promotes. A sketch, not the final schema (spec 114 fixes it):
+`system.yaml` is the only file you edit by hand in a system's GitOps repo (`applications/<system>/system.yaml`). Each environment's rules live in one place. Versions are never in the file: the platform writes them when it pins and promotes. `render.py` checks the file and refuses unknown keys with a message that names the key.
 
 ```yaml
 system: todo
 owner: team-todo
 
-environments:                  # in promotion order
+environments:                  # exactly dev, staging, prod, in promotion order
   dev:     {host: "{component}.todo-dev.localhost", policy: audit, observability: {ui: lgtm}}
   staging: {promote: after-dev-smoke, policy: audit}
   prod:    {promote: manual, policy: enforce}
@@ -92,15 +92,22 @@ components:
   todo-api:
     type: service
     lang: python
+    repo: team-todo/todo-api
     provides: [todo-api-rest]
     uses: [postgres]
     secrets: [{name: api-keys, remote: {keys: [STRIPE_KEY]}}]
-    instances: {prod: {replicas: 2}}
+    instances:                 # the environments it runs in
+      dev: {}
+      staging: {}
+      prod: {replicas: 2}
   todo-web:
     type: website
     lang: typescript
+    repo: team-todo/todo-web
     consumes: [todo-api-rest]
     expose: true
+    instances: {dev: {}, staging: {}, prod: {}}
+  todo-lib: {type: library, lang: python, repo: team-todo/todo-lib}
 
 apis:
   todo-api-rest: {type: openapi}
@@ -109,24 +116,54 @@ resources:
   postgres:
     type: database
     version: 17
-    instances: {prod: {size: 3, storage: 20Gi}}
+    replicas: 1
+    storage: 1Gi
+    instances: {prod: {replicas: 3, storage: 20Gi}}
 ```
 
-## Commands follow the nouns (5.0)
+### Keys
 
-Every command names the thing it acts on; the same verbs work for a system and for a component.
+| Where | Allowed keys |
+|---|---|
+| top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries` |
+| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability` |
+| service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances` |
+| external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote`) |
+| library component | `type`, `lang`, `repo`, `provides`, `consumes` |
+| `components.<c>.instances.<env>` | `replicas`, `resources`, `env`, `promote`, `secrets` |
+| `apis.<a>` | `type`: `openapi`, `grpc`, `graphql` or `events` |
+| `resources.postgres` | `type`, `version`, `replicas`, `storage`, `resources`, `instances` |
+| `resources.postgres.instances.<env>` | `replicas`, `storage`, `resources` |
+
+Valid `type`/`lang` pairs: `service/python`, `service/java`, `service/go`, `website/typescript`, `library/python`, and `service/unknown` for a migrated component without a known shape.
+
+### Semantics
+
+- A component runs in exactly the environments that are keys of its `instances`; without `instances` it runs in dev only; a library has none. Instance `env` is merged over the component's (the instance wins); `replicas` and `resources` replace; instance `secrets` override the fields of the same-named declared secret in that environment only.
+- `host` placeholders: `{component}`, `{system}`, `{env}`. `url` placeholders: `{host}`, `{component}`, `{system}`, `{env}`; a `url` is read by `instance verify` and ignored by the renderer.
+- `policy` is `audit`, `enforce` or `off` (default `audit` in dev and staging, `enforce` in prod).
+- `observability` on an environment gives that environment the collector and gives every instance there the `OTEL_*` variables.
+- `promote`: `after-dev-smoke` or `manual` on staging (default `manual`), only `manual` on prod, none on dev. An instance value wins over the environment's.
+- `resources.postgres` is the one resource in 5.0. It is rendered in every environment where a running component uses it. Its database instances take `replicas` (default 1), `storage` (default `1Gi`) and `version` (default 17), with per-environment overrides under `instances`.
+- Every name in `uses` is a resource or a library of the system; an API has exactly one provider.
+
+## Commands follow the nouns
+
+Every command names the thing it acts on; the same verbs work for a system and for a component. `/component:fix` is the quick-task pipeline: it ships a small change or a bug fix without a spec. `/component:check` is the read-only quality and security check.
 
 | Noun | Verbs |
 |---|---|
 | `system` | `new` · `status` · `spec` · `plan` · `ship` |
-| `component` | `new` · `add` · `set` · `remove` · `spec` · `plan` · `build` · `verify` · `ship` · `fix` · `release` |
-| `api` | `list` · `check` |
+| `component` | `new` · `add` · `set` · `remove` · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
+| `api` | `list` (`check` comes with spec 110) |
 | `resource` | `add` · `remove` |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |
 | `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` |
 
-## Today's features on the model
+The contract check of an API is not built yet: it comes with spec 110.
+
+## 4.7 features on the model
 
 | Layer | Feature today | Acts on | In 5.0 |
 |---|---|---|---|
@@ -152,16 +189,16 @@ Every command names the thing it acts on; the same verbs work for a system and f
 | | alert poll (spec 092), smoke failures (spec 091) | Instance → Issue | automatic |
 | Platform | `/shared:doctor`, `/shared:update-service`, `/shared:fleet` | your setup, repo skeletons | `platform doctor \| update \| fleet` |
 
-## The model today
+## The model in 4.7
 
 ![The domain model as built in 4.7.0](img/model-today.svg)
 
 As built in 4.7.0, in the platform's own names:
 
-- **Composition is solid.** Product, Service, Shape, Repo, Addon and Secret each have a file, a schema and an identity. The work there is naming, not structure.
-- **Names drift in four places:** product, app and application for one thing; service in `services.yaml` but component in the `/shared:new-app` manifest; addon and backing service; pin and image tag.
-- **Environment is the gap.** It is the axis every delivery command works on (pin, promote, smoke, status, alerts), yet `ENVS = dev, staging, prod` is hard-coded in `render.py` and an environment's settings are spread over `hosts`, `urls`, `policies` and `promotion` in `app.yaml`, per-environment maps in `services.yaml` and the overlay paths. Service × environment and addon × environment have no names.
-- **Three relations are missing:** which services use a library, which services provide or consume an API (only prose in the plan), and who owns what.
+- **Composition was solid.** The 4.7 concepts in the table below each had a file, a schema and an identity. The work was naming, not structure.
+- **Names drifted in four places:** one thing had three names; the services file and the new-system manifest disagreed on service and component; add-ons were also called backing services; pin and image tag.
+- **Environment was the gap.** It is the axis every delivery command works on (pin, promote, smoke, status, alerts), yet the list of environments was hard-coded in `render.py` and an environment's settings were spread over four keys in one file, per-environment maps in another and the overlay paths. Service × environment and database × environment had no names.
+- **Three relations were missing:** which services use a library, which services provide or consume an API (only prose in the plan), and who owns what. 5.0 adds them.
 
 | Concept today | Names in use | Defined in | Model noun |
 |---|---|---|---|
