@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Chore: devbox gates in the platform repo.** `devbox run test-fast`, `test`, `quality`, `ci` and `lint-fix` now exist here, so the `/svc:ship` and `/svc:build` gates and the ship Stop hook find their scripts. No action for existing repos.
+
 - **Feat (113): a domain model core in cplat.** [ADR-053](adr/053-domain-model.md), [guide](DOMAIN-MODEL.md) One module now answers "this component in that environment" for `status`, `promote`, `smoke`, the staging promotion, the alert poll, `secret` and the `/app:ship` gate. New `cplat model show [--json]` prints a product in the model's nouns (cplat only, no slash command). No command, flag, output format or file schema changed, so there is no action for existing repos. The JSON carries `schema: 1` and may change in 5.0.
 
 - **Perf (112): the cplat test job is faster without being weaker.** Tests that only need a rendered repo share one render per process and get private copies (`new_service`, `shared_renders`; ADR-052), and CI runs `tests/cplat` in 4 round-robin shards (`--shard I/N`) with a `cplat shards cover the suite` job that fails when a test runs in no shard or in two; `ci-success` needs it. Measured locally: the full suite went from 149 s to 90 s wall on 12 cores.
