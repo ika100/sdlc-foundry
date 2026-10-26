@@ -47,6 +47,7 @@ tasks:
     covers: [AC-112.1, AC-112.3, AC-112.7, AC-112.9, AC-112.12]
     parallel_safe: false
     depends_on: [t3, t4, t5]
+    done: true
 human_steps:
   - "After the merge, take the next five pull requests that change code but no smoke-tested template, record each ci
     run's wall time (first job started to ci-success completed, command in measurements.md) in

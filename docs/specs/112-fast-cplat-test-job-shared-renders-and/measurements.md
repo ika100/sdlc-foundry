@@ -5,7 +5,7 @@ local runs: `uv run --with pytest --with pytest-xdist --with pyyaml --with ruame
 
 ## AC-112.1 — same test ids
 
-`pytest tests/cplat --collect-only -q`, sorted, before and after: 2470 → 2511 ids. The diff is exactly the 41 new
+`pytest tests/cplat --collect-only -q`, sorted, before and after: 2470 → 2511 ids (before merging `main`; `main` later added its own tests). The diff is exactly the 41 new
 tests of `tests/cplat/test_fast_suite_112.py`; no id was removed or renamed. No test got a skip, xfail or
 deselection (the shard plugin deselects only under `--shard`, and `check-shards.py` proves the union).
 
@@ -32,10 +32,14 @@ subprocesses) and with load from other sessions on the same machine during the a
 
 | Shard | pytest step |
 |---|---|
-| 1/4 | _filled from the PR run_ |
-| 2/4 | |
-| 3/4 | |
-| 4/4 | |
+| 1/4 | 63 s |
+| 2/4 | 46 s |
+| 3/4 | 35 s |
+| 4/4 | 46 s |
+
+PR #215, ci run 40319270163 (GitHub-hosted `ubuntu-latest`): average 47.5 s, slowest/average 1.33 (≤ 1.5), slowest
+63 s (≤ 75 s): met. The longest shard job took 77 s in total, against 217 s for the single job before. The cover job
+printed `OK: 2627 tests ran in exactly one of 4 shards`.
 
 Average, slowest/average (≤ 1.5) and slowest (≤ 75 s) are computed with
 `gh run view <run-id> --json jobs | jq '.jobs[] | select(.name|test("shard")) | {name, steps: [.steps[] | select(.name=="pytest") | ((.completedAt|fromdate)-(.startedAt|fromdate))]}'`.
@@ -54,7 +58,7 @@ Before: 185–246 s on pull requests (the 12 runs before 2026-10-26).
 
 | Pull request | ci run | wall time |
 |---|---|---|
-| this PR (first sample) | _filled from the PR run_ | |
+| this PR (not counted: it changes `ci.yml`, so every template smoke job runs and the java smoke, ~140 s, bounds it) | 40319270163 | — |
 | 1 | | |
 | 2 | | |
 | 3 | | |
