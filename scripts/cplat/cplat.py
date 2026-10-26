@@ -17,6 +17,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat.py promote <service…|--all> <from> <to> [--version V] [--sha S] [--pr]
   cplat.py addon add|remove|list [postgres]   backing services of the application (app.yaml)
   cplat.py secret set|list ...         remote secrets of the local cluster (values never go to git)
+  cplat.py quick-task inline-check [--base REF]   may the coordinator make this small change itself? (exit 0 yes, 1 no)
   cplat.py feedback --title T [--what …] [--details-file F] [--submit]   draft (and file) a platform issue, secrets removed
   cplat.py triage list|show|setup-labels|apply ...   issue intake for /shared:triage (labels and comments only after you confirm; never closes)
   cplat.py status [--context KUBE_CONTEXT]   one table: pins per env, service CI, Argo sync/health
@@ -76,6 +77,7 @@ COMMANDS = {
     "validate": "validate",
     "alerts": "alerts",
     "budget": "budget",
+    "quick-task": "quicktask",
 }
 
 

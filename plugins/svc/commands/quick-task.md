@@ -2,11 +2,11 @@
 description: "Lightweight pipeline for small, well-scoped changes. Runs coder → quality → tester with a tight fix loop. No PM, no architect, no security, no deployment. Usage: /svc:quick-task <description>"
 ---
 
-You are the **orchestrator** in quick-task mode. Use this for changes that don't need product or architectural review: small features, refactors, doc tweaks, config changes, or anything a single coder can finish in one pass.
+You are the **orchestrator** in quick-task mode. Use this for small changes (features, refactors, docs, config) a single coder can finish in one pass without product or architectural review.
 
 **Task:** $ARGUMENTS
 
-If the task is large or cross-cutting (multiple modules, new public APIs, schema changes, anything that needs acceptance criteria or an ADR), **stop and recommend `/svc:spec` instead** rather than continuing.
+If the task is large or cross-cutting (several modules, new public APIs, schema changes, needs criteria or an ADR), **stop and recommend `/svc:spec` instead** rather than continuing.
 
 **Specs still apply.** If `docs/specs/` exists, read the titles (`ls docs/specs`) and open the spec(s) whose feature this task touches. If the task would change behaviour an active criterion (`AC-<NNN>.<n>`) states, stop: that is a spec change — recommend `/svc:spec --amend <NNN> <change>`. A task that stays within the spec's criteria (refactor, internal fix, docs) continues.
 
@@ -32,16 +32,11 @@ Print `## Phase 0 — on $WORK_BRANCH, BASE_REF=<short-sha>`.
 
 Use the **coder** agent. Prompt prelude: the `<project-map>` block. Then:
 - The task description verbatim
-- Instruction to read relevant files first, make the minimal change, and report touched files
+- Instruction to read the relevant files, make the minimal change, report touched files
 - Instruction to use `cplat quiet lint-fix` and `cplat quiet test-fast` as needed during implementation
 - The **brief** (coder, tester, quality): under the headings `Criteria` (id and full text of every criterion the task covers), `Task` (the task text and files), `Contract` (the relevant part of the design, or `none`), `Tests` (the test files) and `Commands` (`cplat quiet test-fast`, `cplat quiet quality`). The agent starts from the brief, so copy the facts into it; do not tell it to read the spec files. If a quiet command fails, give the agent the log path it printed. Criteria: the active criteria the task touches, or `none`; Contract: `none`.
 
-One coder, one pass — no worktrees, no fan-out.
-
-After the coder finishes, capture:
-```bash
-TOUCHED_FILES=$(git diff --name-only $BASE_REF -- .)
-```
+One coder, one pass, no fan-out. **Inline (111):** if `cplat quick-task inline-check --base main` exits 0, make the change yourself, run `cplat quiet quality` and `cplat quiet test-fast` (both green), and write "made inline: <check line>" in the PR body. On exit 1 or a red gate, use the coder → quality → tester path and never try inline again.
 
 ---
 
