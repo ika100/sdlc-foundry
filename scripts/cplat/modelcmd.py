@@ -26,13 +26,15 @@ def render(m: model.Model) -> str:
         return "\n".join([title, *(lines or ["  (none)"])])
 
     envs = [f"  {e.name}  host {_d(e.host)}  url-template {_d(e.url_template)}  policy {e.policy}  "
-            f"promotion {'follows main' if e.promotion == 'main' else e.promotion}  observability {_observability(e.observability)}"
+            f"promote {'follows main' if e.promotion == 'main' else e.promotion}  observability {_observability(e.observability)}"
             for e in m.environments]
     comps = []
     for c in m.components:
         ext = f"  external {c.external.kind}" if c.external else ""
         comps.append(f"  {c.name}  type {c.type}  lang {c.lang}  repo {_d(c.repo)}  image {_d(c.image)}{ext}  "
-                     f"uses {','.join(c.uses) or '-'}  secrets {','.join(s.name for s in c.secrets) or '-'}")
+                     f"uses {','.join(c.uses) or '-'}  secrets {','.join(s.name for s in c.secrets) or '-'}  "
+                     f"provides {','.join(c.provides) or '-'}  consumes {','.join(c.consumes) or '-'}  "
+                     f"libraries {','.join(c.libraries) or '-'}")
     insts = [f"  {i.component}  {i.environment}  {i.tag or 'not pinned'}  replicas {_d(i.replicas)}  namespace {i.namespace}  url {_d(i.url)}"
              for i in m.instances]
     res: list[str] = []
@@ -42,9 +44,10 @@ def render(m: model.Model) -> str:
         for ri in m.resource_instances_of(r.name):
             sizing = "".join(f"  {k} {v}" for k, v in ri.sizing.items())
             res.append(f"    {ri.environment}{sizing}  argo {ri.argo_application}  secret {_d(ri.secret)}")
-    return "\n\n".join([f"System: {m.system}",
+    apis = [f"  {a.name}  type {a.type}  provider {_d(a.provider)}  consumers {','.join(a.consumers) or '-'}" for a in m.apis]
+    return "\n\n".join([f"System: {m.system}\nOwner: {_d(m.owner)}",
                         section("Environments (promotion order):", envs), section("Components:", comps),
-                        section("Instances:", insts), section("Resources:", res)]) + "\n"
+                        section("APIs:", apis), section("Instances:", insts), section("Resources:", res)]) + "\n"
 
 
 def main(argv: list[str]) -> int:

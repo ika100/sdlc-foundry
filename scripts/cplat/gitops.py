@@ -1,4 +1,4 @@
-"""Helpers for commands that edit a gitops-app repo: services.yaml (comment-preserving), render, branch/commit/PR."""
+"""Helpers for commands that edit a gitops-app repo: system.yaml (comment-preserving), render, branch/commit/PR."""
 from __future__ import annotations
 
 import re
@@ -22,9 +22,13 @@ def _yaml() -> YAML:
 
 
 def find_app(repo: Path, app: str | None = None) -> Path:
-    apps = sorted(p.parent for p in (repo / "applications").glob("*/services.yaml"))
+    base = repo / "applications"
+    apps = sorted(p.parent for p in base.glob("*/system.yaml"))
+    old = sorted({p.parent for f in ("app.yaml", "services.yaml") for p in base.glob(f"*/{f}")})
+    if old and (not app or any(o.name == app for o in old) or not apps):
+        raise model.NotMigrated()
     if not apps:
-        raise PlatformError("no applications/*/services.yaml here", hint="run this inside a gitops-app repo (/shared:new-service <name> --gitops)")
+        raise PlatformError("no applications/*/system.yaml here", hint="run this inside a gitops-app repo (/system:new <manifest>)")
     if app:
         match = [a for a in apps if a.name == app]
         if not match:
@@ -43,25 +47,26 @@ def answers(repo: Path) -> dict:
 
 def load(app_dir: Path):
     y = _yaml()
-    data = y.load((app_dir / "services.yaml").read_text())
+    data = y.load((app_dir / "system.yaml").read_text())
     if data is None:
         from ruamel.yaml.comments import CommentedMap
         data = CommentedMap()
     return y, data
 
 
-def services_of(data) -> list:
-    if data.get("services") is None or data["services"] == []:
-        from ruamel.yaml.comments import CommentedSeq
-        data["services"] = CommentedSeq()
-    return data["services"]
+def components_of(data):
+    """The `components` mapping of a loaded system.yaml (created when missing)."""
+    if data.get("components") is None:
+        from ruamel.yaml.comments import CommentedMap
+        data["components"] = CommentedMap()
+    return data["components"]
 
 
 def save(app_dir: Path, y: YAML, data) -> None:
     import io
     buf = io.StringIO()
     y.dump(data, buf)
-    (app_dir / "services.yaml").write_text(buf.getvalue())
+    (app_dir / "system.yaml").write_text(buf.getvalue())
 
 
 def render(repo: Path) -> None:
