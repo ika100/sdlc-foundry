@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 import core
+import escalation_rules
 import feedback
 import runs_report
 import runs_store
@@ -545,8 +546,11 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
             rec["ended_at"] = now
             rec["outcome"] = outcome if outcome in OUTCOMES else "failed"
             if escalation is not None:
-                cause = escalation.get("cause")
-                rec["escalation"] = {"reason": str(escalation.get("reason", "")), "cause": cause if cause in CAUSES else "unknown"}
+                reason = str(escalation.get("reason", ""))
+                res = escalation_rules.resolve(escalation.get("cause"), reason)
+                rec["escalation"] = {"reason": reason, "cause": res.cause, "cause_source": res.source}
+                if res.rule:
+                    rec["escalation"]["rule"] = res.rule
             for k, v in (fields or {}).items():
                 if k not in RESERVED:
                     rec[k] = v

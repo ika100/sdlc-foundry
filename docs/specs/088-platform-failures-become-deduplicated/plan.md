@@ -58,6 +58,7 @@ tasks:
   covers: [AC-088.15, AC-088.16, AC-088.17]
   parallel_safe: true
   depends_on: [t2, t7]
+  done: true
 - id: t9
   title: ship escalate prints the rule; stop gate and headless no progress name environment
   files: [scripts/cplat/ship.py, scripts/cplat/headless.py]
