@@ -11,6 +11,7 @@ tasks:
     covers: [AC-112.2, AC-112.5, AC-112.6, AC-112.8, AC-112.15]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Sharding plugin (--shard I/N, --shard-report, round-robin over sorted ids) and scripts/check-shards.py
     files: [tests/cplat/sharding.py, scripts/check-shards.py, tests/cplat/conftest.py]
