@@ -56,7 +56,7 @@ def test_the_shared_plugin_allows_the_launcher():
 
 def test_the_launcher_tells_doctor_where_the_scripts_came_from(tmp_path):
     env = {k: v for k, v in os.environ.items() if not k.startswith("CPLAT_")} | {"XDG_CACHE_HOME": str(tmp_path / "cache")}
-    out = subprocess.run([str(LAUNCHER), "doctor", "--json"], capture_output=True, text=True, env=env)
+    out = subprocess.run([str(LAUNCHER), "platform", "doctor", "--json"], capture_output=True, text=True, env=env)
     rows = {r["name"]: r for r in __import__("json").loads(out.stdout)}
     assert rows["platform scripts"]["status"] == "ok" and rows["platform scripts"]["detail"].startswith("in-place: ")
 

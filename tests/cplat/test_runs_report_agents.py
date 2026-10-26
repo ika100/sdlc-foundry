@@ -155,7 +155,7 @@ def test_cli_text_prints_the_documented_lines(store, capsys):
     assert "fix rounds 1.50 (lint/type 0.50, test 1.00, ci 0.00, verification 0.00)" in out
     assert "out-of-plan files 0.40" in out and "causes:" in out
     assert out.index("svc:coder") < out.index("svc:architect")
-    assert "Buffered locally, not included: 0 record(s) (cplat runs flush)" in out
+    assert "Buffered locally, not included: 0 record(s) (cplat platform runs flush)" in out
 
 
 def test_the_agent_flags_need_agents():

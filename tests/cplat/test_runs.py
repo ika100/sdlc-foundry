@@ -366,8 +366,8 @@ def test_a_headless_invocation_records_itself_and_the_ship_runs_it_drove(hl_repo
     """AC-087.6: one `headless` record (command, sessions, stop reason, ships); the ship record is marked headless."""
     drop_tracks(hl_repo)
     cp = ROOT / "scripts" / "cplat" / "cplat.py"
-    fake_claude(tmp_path, monkeypatch, f'"{sys.executable}" "{cp}" ship --repo . start 7 >/dev/null && '
-                                       f'"{sys.executable}" "{cp}" ship --repo . phase done >/dev/null')
+    fake_claude(tmp_path, monkeypatch, f'"{sys.executable}" "{cp}" component ship --repo . start 7 >/dev/null && '
+                                       f'"{sys.executable}" "{cp}" component ship --repo . phase done >/dev/null')
     assert headless.main(["/svc:ship 7", "--repo", str(hl_repo)]) == 0
     recs = buffered_lines()
     (h,) = [r for r in recs if r["kind"] == "headless"]
@@ -571,7 +571,7 @@ def test_flush_refuses_a_public_store(store, capsys):
     store.reachable = False
     one_run()
     store.reachable, store.vis = True, "public"
-    assert cplat.main(["runs", "flush"]) == 1
+    assert cplat.main(["platform", "runs", "flush"]) == 1
     err = capsys.readouterr().err
     assert "is public" in err and "visibility private" in err and store.files == {} and runs.buffered_count() == 1
 
@@ -673,24 +673,24 @@ def test_a_public_store_fails_doctor(quiet_doctor, store, tmp_path):
 
 @pytest.mark.parametrize("cmd", ["report", "flush"])
 def test_report_and_flush_without_a_store_name_the_fix(clock, capsys, cmd):
-    """AC-087.15: not configured: non-zero exit, the problem, `cplat runs init <owner/name>` and the setting."""
-    assert cplat.main(["runs", cmd]) == 1
+    """AC-087.15: not configured: non-zero exit, the problem, `cplat platform runs init <owner/name>` and the setting."""
+    assert cplat.main(["platform", "runs", cmd]) == 1
     err = capsys.readouterr().err
-    assert "no run store configured" in err and "CPLAT_RUNS_REPO" in err and "cplat runs init <owner/name>" in err
+    assert "no run store configured" in err and "CPLAT_RUNS_REPO" in err and "cplat platform runs init <owner/name>" in err
 
 
 @pytest.mark.parametrize("cmd", ["report", "flush"])
 def test_report_and_flush_with_an_unreachable_store_name_the_repo(store, capsys, cmd):
     """AC-087.15: unreachable: non-zero exit, the repo that could not be reached and a command to check it."""
     store.reachable = False
-    assert cplat.main(["runs", cmd]) == 1
+    assert cplat.main(["platform", "runs", cmd]) == 1
     err = capsys.readouterr().err
     assert "acme/runs" in err and "unreachable" in err and "gh repo view acme/runs" in err
 
 
 def test_cplat_knows_runs():
     """AC-087.15: the command is registered and documented."""
-    assert cplat.COMMANDS["runs"] == "runs" and "cplat.py runs" in cplat.__doc__
+    assert cplat.NOUNS["platform"]["runs"][0] == "runs" and "cplat platform runs" in cplat.__doc__
 
 
 # ---------------- AC-087.16 escalation ----------------
@@ -796,7 +796,7 @@ def test_init_refuses_a_public_repo(mem, monkeypatch, capsys):
     """AC-087.20: an existing public repo: exit non-zero, nothing changed, 'must be private'."""
     mem.vis = "public"
     monkeypatch.setattr(runs, "open_store", lambda slug: mem)
-    assert cplat.main(["runs", "init", "acme/runs"]) == 1
+    assert cplat.main(["platform", "runs", "init", "acme/runs"]) == 1
     cap = capsys.readouterr()
     assert "must be private" in cap.err and not mem.created and mem.vis == "public" and "export" not in cap.out
 

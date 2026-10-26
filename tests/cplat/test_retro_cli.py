@@ -32,7 +32,7 @@ def world(store, clock, tracker):
 
 
 def cli(*argv):
-    return cplat.main(["retro", *argv])
+    return cplat.main(["platform", "retro", *argv])
 
 
 def spec_p(title="Merges stop failing", **over):
@@ -337,7 +337,7 @@ def test_a_store_that_cannot_be_updated_is_reported_after_the_issue_is_posted(wo
     assert cli("post") == 1
     err = capsys.readouterr().err
     assert f"retro posted as https://github.com/{PLATFORM}/issues/201, but the run store could not be updated" in err
-    assert "fix: cplat retro post --dir" in err or "cplat retro post" in err
+    assert "fix: cplat platform retro post --dir" in err or "cplat platform retro post" in err
 
 
 # ---------------- AC-090.12 propose, and the fallbacks ----------------

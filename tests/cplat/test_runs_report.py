@@ -105,7 +105,7 @@ def test_the_report_counts_locally_buffered_records_but_does_not_include_them(st
     store.reachable = True
     assert report_json(capsys)["buffered"] == 2
     assert runs.main(["report"]) == 0
-    assert "Buffered locally, not included: 2 record(s) (cplat runs flush)" in capsys.readouterr().out
+    assert "Buffered locally, not included: 2 record(s) (cplat platform runs flush)" in capsys.readouterr().out
 
 
 def test_the_text_report_prints_the_documented_lines(filled, capsys):

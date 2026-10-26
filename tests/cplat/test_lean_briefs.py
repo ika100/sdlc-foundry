@@ -23,10 +23,10 @@ def text(path):
 
 
 def cmd(name):
-    return text(PLUGINS / "svc" / "commands" / f"{name}.md")
+    return text(PLUGINS / "component" / "commands" / f"{name}.md")
 
 
-@pytest.mark.parametrize("name", ["build", "quick-task", "fix-bug"])
+@pytest.mark.parametrize("name", ["build", "fix"])
 def test_ac_100_10_commands_use_the_brief_headings(name):
     """AC-100.10: briefs carry Criteria, Task, Contract, Tests and Commands."""
     t = cmd(name)
@@ -68,7 +68,7 @@ def test_ac_100_11_reviewer_still_reads_the_full_spec():
     assert "start from the brief" not in rev.lower()
 
 
-@pytest.mark.parametrize("name", ["build", "quick-task", "fix-bug"])
+@pytest.mark.parametrize("name", ["build", "fix"])
 def test_ac_100_12_commands_use_quiet_gates(name):
     """AC-100.12: test and gate commands in briefs run through `cplat quiet`."""
     t = cmd(name)
@@ -146,5 +146,5 @@ def test_ac_100_12_quiet_refuses_unknown_scripts_and_extra_arguments(repo, capsy
 
 def test_ac_100_12_quiet_is_registered():
     import cplat
-    assert cplat.COMMANDS["quiet"] == "quiet"
-    assert "cplat.py quiet" in cplat.__doc__
+    assert cplat.PLUMBING["quiet"] == "quiet"
+    assert "cplat quiet" in cplat.__doc__

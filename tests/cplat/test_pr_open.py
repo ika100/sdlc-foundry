@@ -181,10 +181,10 @@ def test_never_forces_or_amends(env, capsys):
     assert "--force" not in flat and "-f " not in flat and "--amend" not in flat and "+feature" not in flat
 
 
-@pytest.mark.parametrize("name", ["quick-task", "fix-bug", "build"])
+@pytest.mark.parametrize("name", ["fix", "build"])
 def test_finishing_step_of_the_commands_is_one_cplat_pr_open(name):
     """AC-100.7: the coordinator commands finish with `cplat pr open`, not separate git push / gh pr create."""
-    text = (ROOT / "plugins" / "svc" / "commands" / f"{name}.md").read_text()
+    text = (ROOT / "plugins" / "component" / "commands" / f"{name}.md").read_text()
     assert text.count("cplat pr open") >= 1
     steps = "\n".join(ln for ln in text.splitlines() if "pr: ready" not in ln)  # the spec 051 paragraph names the command
     assert "git push" not in steps and "gh pr create" not in steps

@@ -11,7 +11,7 @@ from test_runs_usage_bench import world  # noqa: F401  (fixture)
 from usage_support import projects  # noqa: F401  (fixture)
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 
-PLUGINS = Path(__file__).resolve().parents[2] / "plugins" / "svc"
+PLUGINS = Path(__file__).resolve().parents[2] / "plugins" / "component"
 
 
 def test_every_file_under_docs_specs_is_mandatory_category_spec(env, capsys):

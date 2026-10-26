@@ -66,6 +66,6 @@ def test_an_unexpected_crash_points_to_the_report_command(monkeypatch, capsys):
     import cplat
     import status
     monkeypatch.setattr(status, "main", lambda argv: (_ for _ in ()).throw(RuntimeError("boom")))
-    assert cplat.main(["status"]) == 70
+    assert cplat.main(["system", "status"]) == 70
     err = capsys.readouterr().err
-    assert "unexpected failure" in err and "/shared:report-issue" in err
+    assert "unexpected failure" in err and "/issue:report" in err

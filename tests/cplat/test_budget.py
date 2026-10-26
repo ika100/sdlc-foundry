@@ -149,9 +149,9 @@ def test_headless_budget_option_applies_after_multiplying(hl_repo, tmp_path, mon
 def test_a_ship_under_headless_uses_the_headless_ledger(hl_repo, tmp_path, monkeypatch):
     """AC-102.2: the ship a headless session starts does not open a ledger; `budget show` names the headless run as root."""
     drop_tracks(hl_repo)
-    fake_claude(tmp_path, monkeypatch, f'"{sys.executable}" "{CPLAT}" ship --repo . start 7 >/dev/null && '
+    fake_claude(tmp_path, monkeypatch, f'"{sys.executable}" "{CPLAT}" component ship --repo . start 7 >/dev/null && '
                                        f'"{sys.executable}" "{CPLAT}" budget show --json > shown.json && '
-                                       f'"{sys.executable}" "{CPLAT}" ship --repo . phase done >/dev/null')
+                                       f'"{sys.executable}" "{CPLAT}" component ship --repo . phase done >/dev/null')
     assert headless.main(["/svc:ship 7", "--repo", str(hl_repo)]) == 0
     (h,) = [r for r in buffered_lines() if r["kind"] == "headless"]
     shown = json.loads((hl_repo / "shown.json").read_text())
@@ -187,7 +187,7 @@ def test_a_product_ship_shares_its_budget_with_the_repo_ships(w, budget, capsys,
     assert data["limits"] == {"minutes": 180 * n, "invocations": 60 * n, "reruns": 6 * n, "cost": 15 * n}
     clone = w.clone("shop-api")
     make(clone, status="approved")
-    assert ship.main(["--repo", str(clone), "start", REPO_SPEC, "--product", str(w.gitops)]) == 0
+    assert ship.main(["--repo", str(clone), "start", REPO_SPEC, "--system-dir", str(w.gitops)]) == 0
     assert len(ledgers()) == 1
     monkeypatch.chdir(clone)
     assert show(budget, capsys)["root"] == st["run_id"]
@@ -271,7 +271,7 @@ def test_the_pre_tool_use_hook_gates_task_and_agent():
 
 def test_cplat_knows_budget():
     """AC-102.3: the command is registered and documented."""
-    assert cplat.COMMANDS["budget"] == "budget" and "cplat.py budget" in cplat.__doc__
+    assert cplat.PLUMBING["budget"] == "budget" and "cplat budget" in cplat.__doc__
 
 
 def test_headless_starts_no_session_after_the_budget_is_used_up(hl_repo, tmp_path, monkeypatch, capsys):

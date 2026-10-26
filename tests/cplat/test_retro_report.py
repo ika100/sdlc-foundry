@@ -51,7 +51,7 @@ def test_a_duplicate_run_id_is_counted_once_and_a_record_without_end_belongs_to_
 def test_cplat_knows_retro():
     """AC-090.1: the command is registered and documented."""
     import cplat
-    assert cplat.COMMANDS["retro"] == "retro" and "cplat.py retro" in cplat.__doc__
+    assert cplat.NOUNS["platform"]["retro"][0] == "retro" and "cplat platform retro" in cplat.__doc__
 
 
 # ---------------- AC-090.2 figures ----------------

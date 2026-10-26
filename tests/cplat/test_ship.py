@@ -233,7 +233,7 @@ def test_an_unfinished_run_blocks_with_the_next_step(repo):
     ship.start(repo, "7", True)
     ship.set_phase(repo, "land")
     ans = ship.gate(repo, {"stop_hook_active": True}, 8, run_tests=False)
-    assert ans["decision"] == "block" and "cplat ship land" in ans["reason"] and "cplat ship escalate" in ans["reason"]
+    assert ans["decision"] == "block" and "cplat component ship land" in ans["reason"] and "cplat component ship escalate" in ans["reason"]
 
 
 def test_the_build_phase_reports_what_is_still_red(repo):
