@@ -1,4 +1,4 @@
-"""`cplat ship deploy` promotes a build to staging after its green dev smoke (spec 093, ADR-041).
+"""`cplat component ship deploy` promotes a build to staging after its green dev smoke (spec 093, ADR-041).
 
 `promote` asks `staging.decide`, dispatches the gitops-app's `pin-staging` workflow, waits for its self-merging PR and for Argo
 CD to run the build (at most `STAGING_WINDOW_S` from the green dev smoke), runs the staging smoke and records the outcome.
@@ -76,7 +76,7 @@ def _escalate(repo: Path, st: dict, reason: str, cause: str, lines: list[str], t
     import ship
     ship.save_state(repo, st)
     ship.escalate(repo, reason, cause, report=lines)
-    lines.append(tail or f"ship {st['spec']}: escalated ({reason}). Resume with /svc:ship {st['spec']}")
+    lines.append(tail or f"ship {st['spec']}: escalated ({reason}). Resume with /component:ship {st['spec']}")
     return False, lines
 
 
@@ -253,7 +253,7 @@ def _smoke(repo: Path, st: dict, name: str, lines: list[str], not_run: str | Non
     lines.append(promo)
     ok, lines = _escalate(repo, st, reason, "code", lines,
                           f"ship {st['spec']}: escalated ({reason}); staging keeps running {tag} (no automatic rollback: revert "
-                          f"{pr} to go back to {previous}). Resume with /svc:ship {st['spec']}")
+                          f"{pr} to go back to {previous}). Resume with /component:ship {st['spec']}")
     lines.append(f"Smoke (staging): {row}")
     return ok, lines
 

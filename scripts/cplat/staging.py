@@ -46,15 +46,6 @@ class Decision:
         return self.action == "promote"
 
 
-def effective(app_cfg: dict, entry: dict) -> bool:
-    """The service's `promotion.staging`, else app.yaml's, else manual. True only for `auto`."""
-    for conf in (entry, app_cfg):
-        p = (conf or {}).get("promotion")
-        if isinstance(p, dict) and p.get("staging") is not None:
-            return p["staging"] == "auto"
-    return False
-
-
 def pr_branch(svc: str, tag: str) -> str:
     return f"pin/staging-{svc}-{tag.removeprefix('sha-')[:7]}"
 
@@ -156,10 +147,10 @@ def decide(repo: Path, st: dict, apps: list[str], svc: str, dev: smoke.SmokeResu
         slug, app_dir, comp, m, me = found
         name = comp.name
         where = {"app": slug, "app_dir": app_dir}
-        if m.staging_promotion(comp) != "auto":
+        if m.staging_promotion(comp) != "after-dev-smoke":
             return skip(f"automatic promotion to staging is off for {name}", **where)
         if (inst := m.instance(name, "staging")) is None:
-            return skip(f"{name} is not in staging yet: the first promotion is manual: /gitops:promote {name} dev staging", **where)
+            return skip(f"{name} is not in staging yet: the first promotion is manual: /instance:promote {name} --to staging", **where)
         previous = inst.tag
         where["previous"] = previous
         build = SHA40.match(tag).group(1) if SHA40.match(tag) else None
@@ -170,7 +161,7 @@ def decide(repo: Path, st: dict, apps: list[str], svc: str, dev: smoke.SmokeResu
             if newer(me, build, have, repo) == "ahead":
                 return skip(f"staging already runs a newer build of {name} ({have[:7]}): nothing pinned", **where)
         if not has_workflow(slug, repo):
-            return skip(f"the gitops-app {app_dir.split('/', 1)[1]} has no pin-staging workflow (update it with /shared:update-service)", **where)
+            return skip(f"the gitops-app {app_dir.split('/', 1)[1]} has no pin-staging workflow (update it with /platform:update)", **where)
         return Decision("promote", None, slug, app_dir, name, tag, previous, True)
     except (PlatformError, OSError, ValueError) as e:
         return skip(f"{svc} is not in the linked gitops-app" if not isinstance(e, ValueError) else f"promote: {e}")
