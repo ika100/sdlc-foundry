@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 
 import core
+import settings
 from core import PLATFORM_ROOT, run
 
 OK, WARN, FAIL = "ok", "warn", "fail"
@@ -131,6 +132,19 @@ def check_repo(repo: Path) -> list[dict]:
     if not (repo / ".git").exists():
         return []
     out = []
+    try:
+        declared = settings.declared_shape(repo)
+    except settings.ShapeDeclarationError as e:
+        return [check(FAIL, "repo shape", str(e), getattr(e, "hint", None))]
+    if declared:
+        out.append(check(OK, "repo shape", declared))
+        try:
+            out.append(check(OK, "repo platform version", f"platform source at v{core.platform_version(repo)}"))
+        except OSError:
+            out.append(check(WARN, "repo platform version", "platform source has no docs/CHANGELOG.md"))
+        out += check_addons(repo)
+        out += check_policies(repo)
+        return out
     det = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False)
     shape = det.stdout.strip()
     out.append(check(OK, "repo shape", shape) if shape else check(WARN, "repo shape", "not a platform repo (no .copier-answers.yml / known markers)"))
