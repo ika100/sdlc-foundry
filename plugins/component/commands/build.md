@@ -10,24 +10,24 @@ Work through the phases in order. After each, print `## Phase N complete — <on
 
 ## cplat
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation. First call, also the shape dispatch:
+`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from ; one call per Bash invocation. First call, also the shape dispatch:
 
 ```bash
 cplat shape
 ```
 
-It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subagent type for every role — spawn each role with exactly that type, e.g. `agents.coder`). `unsupported` → stop and show it. A repo without a shape cannot be built: stop. Roles missing from `agents` (e.g. deployment for a library) are skipped. Print its output verbatim.
+It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subagent type for every role — spawn each role with exactly that type, e.g. `agents.coder`). `unsupported` → stop and show it. A repo without a shape cannot be built: stop. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. Roles missing from `agents` (e.g. deployment for a library) are skipped.
 
 ---
 
 ## Phase 0 — Pre-flight
 
-0. `cplat platform runs begin build --spec <id>` (spec 087). Inside `/component:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat platform runs end --outcome done`. Recording never fails a build (a buffered-record warning is fine).
-   **Agent metrics (spec 089):** after every subagent you spawn, in any phase, run `cplat platform runs agent spawned <role> [--model-id <id>]` (`<role>` is the role name, e.g. `coder`; `--model-id` only when you know the model id). The calls below record what only you can judge. They never fail the build, and a `WARNING: agent metric not recorded` line is not an error.
+0. `cplat platform runs begin build --spec <id>` (spec 087). Inside `/component:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat platform runs end --outcome done`. Recording never fails a build.
+   **Agent metrics (spec 089):** after every subagent you spawn, in any phase, run `cplat platform runs agent spawned <role> [--model-id <id>]` (`<role>` is the role name, e.g. `coder`; `--model-id` only when you know the model id). The calls below record what only you can judge; none fails the build.
 1. `git status --porcelain`. A dirty tree on a spec whose status is not `building` stops the build: commit or stash first (the clean-tree rule). On a `building` spec it is an **interrupted build** (spec 047): read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (stale staged files: `git restore --staged`; WIP commit: `wip(<task-id>): interrupted`).
 2. `cplat spec check <id> --require approved` must pass, and `docs/specs/<spec_id>/plan.md` must exist. Otherwise stop with the fix: `/component:spec approve <NNN>`, `/component:plan <NNN>`, or for `spec_hash` drift `/component:plan <NNN>` again.
 3. Switch to `feature/<spec_id>` (create it from `main` if missing). `$FEATURE_BRANCH` = it.
-4. `BASE_REF=$(git merge-base main HEAD)` — the build's diff baseline, stable across re-runs.
+4. `BASE_REF=$(git merge-base main HEAD)` — the stable diff baseline.
 5. `<project-map>` = `ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`. Prepend it to every subagent prompt.
 6. Status: `approved` → `cplat spec set-status <id> building` and commit `docs(spec): start building <spec_id>`. `building` → this is a resume: print which tasks are already `done` (`cplat spec list --json`).
 

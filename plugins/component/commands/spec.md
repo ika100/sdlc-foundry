@@ -36,7 +36,7 @@ Never edit specs from these modes. To change one, use `/component:spec --amend <
 1. **Mode** from `$ARGUMENTS`: `approve <id>` → section A. `--amend <id> <change>` → section C. `--from-plan <plan> [<repo-id>]` → section D. Otherwise → new spec (section B).
 2. **Route small work away** (new spec only): a typo, rename or one-file tweak, an error message or "X is broken" → recommend `/component:fix`. Stop unless the user insists on a spec.
 3. `git status --porcelain` must be empty; otherwise stop: commit or stash first.
-4. **Shape:** the prefix call above prints the routing JSON. If it reports `unsupported` (a gitops-app repo), stop and point to `/system:spec`. If it fails with "cannot determine the repo's shape", continue without a shape (`--no-shape` on `spec new`): specs work in any repo, only `/component:build` needs a shape.
+4. **Shape:** the prefix call above prints the routing JSON. If it reports `unsupported` (a gitops-app repo), stop and point to `/system:spec`. If it fails with "cannot determine the repo's shape", continue without a shape (`--no-shape` on `spec new`): specs work in any repo, only `/component:build` needs a shape. A repo with a shape (the platform repo included, `shape: platform`) records it: no `--no-shape`. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape.
 5. **Branch:** all steps of one spec happen on `feature/<spec_id>`, so its single PR carries spec, plan, tests, code and verification. Create or switch to it as the sections say. On a branch other than `main` and not `feature/<spec_id>`, ask before switching.
 
 ## A. approve <id>

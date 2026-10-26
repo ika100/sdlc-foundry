@@ -14,7 +14,7 @@ You are the **verification orchestrator** ([ADR-026](../../../docs/adr/026-featu
 cplat shape
 ```
 
-A repo without a shape works too (the reviewer is `svc:reviewer`).
+A repo without a shape works too (the reviewer is `svc:reviewer`). A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape.
 
 ## Steps
 
