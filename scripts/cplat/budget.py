@@ -1,6 +1,6 @@
 """Spec 102 (ADR-043): one budget per run tree, stops at safe points, no-progress stops, a recovery snapshot, verified stages.
 
-Public API for the callers (headless, ship, pr wait, app-ship, runs) and the hook:
+Public API for the callers (headless, ship, pr wait, system ship, runs) and the hook:
 
   parse_options(["minutes=45", "cost=off"]) -> dict         `--budget KEY=VALUE`; PlatformError for a bad key or value
   open_root(run_id, key, ships=, options=, repo=)           open or continue the ledger of a root run (a child opens none)
@@ -112,7 +112,7 @@ def spec_refs(prompt: str) -> list[str]:
 
 
 def ships_in(prompt: str) -> int:
-    """How many ships a headless prompt covers: the spec numbers after the command (`/svc:ship 102 103` -> 2), at least 1."""
+    """How many ships a headless prompt covers: the spec numbers after the command (`/component:ship 102 103` -> 2), at least 1."""
     args = re.sub(r"^\s*/\S+", "", prompt)
     return max(1, sum(1 for t in re.split(r"[\s,]+", args) if re.match(r"\d", t)))
 
@@ -686,7 +686,7 @@ def _gate(repo: Path, invocation: bool) -> int:
     limit = check(rid, "subagent")
     if limit:
         print(f"budget exhausted: {limit}: no subagent is started; finish the step, then stop with "
-              f"`cplat ship escalate 'budget exhausted: {limit}' --cause decision` (raise the limit with --budget {limit}=N "
+              f"`cplat component ship escalate 'budget exhausted: {limit}' --cause decision` (raise the limit with --budget {limit}=N "
               "when the run is started again)", file=sys.stderr)
         return 2
     if invocation:

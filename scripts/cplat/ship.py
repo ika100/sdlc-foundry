@@ -1,23 +1,23 @@
 """`ship`: take an approved spec unattended to a merged PR and a running `dev` (specs 066, 067; ADR-028).
 
-/svc:ship does the judgement (plan, build, fix loops); this module keeps the run's state and does every step that
+/component:ship does the judgement (plan, build, fix loops); this module keeps the run's state and does every step that
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat ship start <spec> [--no-merge] [--product DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
-                                         (--product: /app:ship only, links the run to a product ship, spec 097)
-  cplat ship status [--json]             the state of the current run
-  cplat ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
-  cplat ship pr --title T --body-file F  run `devbox run ci`, push the feature branch and open (or reuse) its PR
-  cplat ship gitops prepare <task>       a checkout of a gitops task's repo on spec/<spec>-<task> (spec 076)
-  cplat ship gitops pr <task> --title T --body-file F   push it and open (or reuse) its draft PR
-  cplat ship land [--timeout S]          wait for the PR's checks (the first red one ends the wait, stuck runs are rerun
+  cplat component ship start <spec> [--no-merge] [--product DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
+                                         (--product: /system:ship only, links the run to a product ship, spec 097)
+  cplat component ship status [--json]             the state of the current run
+  cplat component ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
+  cplat component ship pr --title T --body-file F  run `devbox run ci`, push the feature branch and open (or reuse) its PR
+  cplat component ship gitops prepare <task>       a checkout of a gitops task's repo on spec/<spec>-<task> (spec 076)
+  cplat component ship gitops pr <task> --title T --body-file F   push it and open (or reuse) its draft PR
+  cplat component ship land [--timeout S]          wait for the PR's checks (the first red one ends the wait, stuck runs are rerun
                                          once); all green → merge the before-merge gitops PRs, then the PR
-  cplat ship deploy [--timeout S] [--context C]   wait until dev runs the merged build (pin PR merged, Argo healthy),
+  cplat component ship deploy [--timeout S] [--context C]   wait until dev runs the merged build (pin PR merged, Argo healthy),
                                          then merge the after-release gitops PRs and wait for every app they name
-  cplat ship escalate <reason>           a rule needs the user: stop here, the Stop hook lets the session end
-  cplat ship finish                      end the run (archives the state)
-  cplat ship gate [--max-blocks N]       Stop hook: keep an unfinished run going (reads the hook's JSON on stdin)
+  cplat component ship escalate <reason>           a rule needs the user: stop here, the Stop hook lets the session end
+  cplat component ship finish                      end the run (archives the state)
+  cplat component ship gate [--max-blocks N]       Stop hook: keep an unfinished run going (reads the hook's JSON on stdin)
 
 The state lives in `<git common dir>/cplat-ship.json`: local to the clone, shared by worktrees, never committed.
 """
@@ -37,6 +37,7 @@ import cluster
 import core
 import escalation_rules
 import feedback
+import model
 import runs
 import smoke
 import spec as specmod
@@ -137,7 +138,7 @@ def save_state(repo: Path, state: dict) -> None:
 def require_state(repo: Path) -> dict:
     st = load_state(repo)
     if not st:
-        raise PlatformError("no ship run in this repo", hint="start one with `/svc:ship <spec>` (cplat ship start <spec>)")
+        raise PlatformError("no ship run in this repo", hint="start one with `/component:ship <spec>` (cplat component ship start <spec>)")
     return st
 
 
@@ -145,15 +146,15 @@ def next_step(st: dict) -> str:
     """What the orchestrator does next, in words the Stop hook can hand back to the model."""
     sid, phase = st["spec"], st["phase"]
     return {
-        "plan": f"plan the spec: follow /svc:plan {sid}, then `cplat ship phase build`",
-        "build": f"build it: follow /svc:build {sid} (Phases 0–6) until every acceptance test passes and verification.md says pass, "
-                 "then `cplat ship phase pr`. Gitops tasks (plan tasks with `repo:`): `cplat ship gitops prepare <task>`, "
-                 "change and commit in that checkout, then `cplat ship gitops pr <task> --title <title> --body-file <file>`",
-        "pr": "open the PR: write the body to .pr-body.md, then `cplat ship pr --title <title> --body-file .pr-body.md`",
-        "land": "wait for CI and merge: `cplat ship land`; on red checks fix the failures on the feature branch, push "
-                "(`cplat ship pr ...` again) and land again",
-        "deploy": "wait for dev: `cplat ship deploy`",
-        "done": "nothing: the run is finished (`cplat ship finish`)",
+        "plan": f"plan the spec: follow /component:plan {sid}, then `cplat component ship phase build`",
+        "build": f"build it: follow /component:build {sid} (Phases 0–6) until every acceptance test passes and verification.md says pass, "
+                 "then `cplat component ship phase pr`. Gitops tasks (plan tasks with `repo:`): `cplat component ship gitops prepare <task>`, "
+                 "change and commit in that checkout, then `cplat component ship gitops pr <task> --title <title> --body-file <file>`",
+        "pr": "open the PR: write the body to .pr-body.md, then `cplat component ship pr --title <title> --body-file .pr-body.md`",
+        "land": "wait for CI and merge: `cplat component ship land`; on red checks fix the failures on the feature branch, push "
+                "(`cplat component ship pr ...` again) and land again",
+        "deploy": "wait for dev: `cplat component ship deploy`",
+        "done": "nothing: the run is finished (`cplat component ship finish`)",
     }[phase]
 
 
@@ -182,7 +183,7 @@ def product_link(product: Path) -> dict:
     import appship_state
     pst = appship_state.load_state(product)
     if not pst:
-        raise PlatformError(f"no product ship run in {product}", hint="start it in the gitops-app repo: /app:ship <spec>")
+        raise PlatformError(f"no product ship run in {product}", hint="start it in the gitops-app repo: /system:ship <spec>")
     return {"dir": str(product), "run_id": pst.get("run_id"), "context": pst.get("context")}
 
 
@@ -200,8 +201,8 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated"):
         if not take_over:
             raise PlatformError(f"another ship run is in progress: {st['spec']} (phase {st['phase']})",
-                                hint="finish it, or end it with `cplat ship finish`, or take it over: "
-                                     f"cplat ship start {sp.id} --take-over")
+                                hint="finish it, or end it with `cplat component ship finish`, or take it over: "
+                                     f"cplat component ship start {sp.id} --take-over")
     if sp.meta.get("tracks"):                  # spec 082: refuse an issue another branch is building
         import claim
         for note in claim.claim(repo, sp.meta["tracks"], f"feature/{sp.id}", take_over=take_over, what=f"ship {sp.id}"):
@@ -223,7 +224,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         return st
     if sp.status in {"draft", "superseded"}:
         raise PlatformError(f"{sp.id} is '{sp.status}'; only an approved spec is shipped",
-                            hint=f"answer its questions and approve it: `/svc:spec approve {sp.number}`")
+                            hint=f"answer its questions and approve it: `/component:spec approve {sp.number}`")
     if missing_gitops_token(repo):
         raise PlatformError("this repo is linked to a gitops-app, but the secret GITOPS_TOKEN is not set: dev would never "
                             "be pinned (spec 077)", hint=GITOPS_TOKEN_FIX.format(slug=service_slug(repo)))
@@ -290,7 +291,7 @@ def set_phase(repo: Path, phase: str) -> dict:
     save_state(repo, st)
     if phase != "done" and (limit := budget.check(st.get("run_id"), "phase end")):   # spec 102: a safe point
         reason = budget_stop(repo, st, limit, "phase end")
-        raise PlatformError(reason, hint=f"stop here; resume with /svc:ship {st['spec']}, raising the limit if you want "
+        raise PlatformError(reason, hint=f"stop here; resume with /component:ship {st['spec']}, raising the limit if you want "
                                          f"(--budget {limit}=N)")
     return st
 
@@ -320,7 +321,7 @@ def _file_platform_failure(repo: Path, st: dict, reason: str, command: str | Non
     """File or +1 the failure before save_state ends the run record. Never raises (AC-088.12)."""
     try:
         rid = _ensure_run(repo, st)
-        cmd = command or "/svc:ship"
+        cmd = command or "/component:ship"
         names = autoissue.private_names(runs.repo_slug(repo), st.get("spec"), st.get("branch"))
         draft = autoissue.Draft(
             kind="platform",
@@ -387,7 +388,7 @@ def run_ci(repo: Path) -> None:
             pass
         tail = [ln for ln in (res.stdout + res.stderr).splitlines() if ln.strip()][-40:]
         raise PlatformError("`devbox run ci` is red; nothing was pushed:\n" + "\n".join(tail),
-                            hint="hand the failure to the coder agent, commit the fix, then `cplat ship pr` again")
+                            hint="hand the failure to the coder agent, commit the fix, then `cplat component ship pr` again")
 
 
 def open_pr(repo: Path, title: str, body_file: Path) -> dict:
@@ -397,12 +398,12 @@ def open_pr(repo: Path, title: str, body_file: Path) -> dict:
     if cur != branch:
         raise PlatformError(f"on '{cur}', expected the feature branch '{branch}'", hint=f"git switch {branch}")
     if not body_file.is_file():
-        raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /svc:build Phase 7 template)")
+        raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
     check_title(title)
     missing = [t["id"] for t in gitops_tasks(repo, st) if not st.get("gitops", {}).get(t["id"], {}).get("pr")]
     if missing:
         raise PlatformError(f"gitops task(s) without a PR: {', '.join(missing)}",
-                            hint="cplat ship gitops prepare <task>, change and commit there, then cplat ship gitops pr <task> ...")
+                            hint="cplat component ship gitops prepare <task>, change and commit there, then cplat component ship gitops pr <task> ...")
     run_ci(repo)
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
     existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url"], cwd=repo) or "[]")
@@ -693,12 +694,12 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     st = require_state(repo)
     pr = st.get("pr")
     if not pr:
-        raise PlatformError("the run has no PR yet", hint="cplat ship pr --title <title> --body-file .pr-body.md")
+        raise PlatformError("the run has no PR yet", hint="cplat component ship pr --title <title> --body-file .pr-body.md")
     state = json.loads(gh(["pr", "view", pr, "--json", "state,mergeCommit"], cwd=repo) or "{}")
     if state.get("state") == "MERGED":
         return _merged(repo, st, (state.get("mergeCommit") or {}).get("oid", ""), ["already merged"])
     if state.get("state") == "CLOSED":
-        raise PlatformError(f"{pr} was closed without merging", hint="reopen it, or `cplat ship escalate 'PR closed'`")
+        raise PlatformError(f"{pr} was closed without merging", hint="reopen it, or `cplat component ship escalate 'PR closed'`")
     watch = CheckWatch(repo, pr, queue_timeout, st.get("run_id"))
     status, cs, failed = wait_checks(watch, timeout, interval)
     try:  # agent metrics (spec 089): never changes the result
@@ -727,7 +728,7 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     if not st.get("merge", True):
         st["phase"] = "done"
         save_state(repo, st)
-        return True, lines + ["not merged (--no-merge): merge the PR (and its gitops PRs) yourself, then run `/svc:ship` "
+        return True, lines + ["not merged (--no-merge): merge the PR (and its gitops PRs) yourself, then run `/component:ship` "
                               "again to wait for dev"]
     ok, more = merge_gitops(repo, st, "before-merge", timeout, interval, queue_timeout)
     lines += more
@@ -737,7 +738,7 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     if res.returncode != 0:
         detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
         raise PlatformError(f"merging {pr} failed: {detail[0]}", hint="merge conflicts with main: rebase is a human decision; "
-                                                                       "`cplat ship escalate 'merge failed'`")
+                                                                       "`cplat component ship escalate 'merge failed'`")
     merged = json.loads(gh(["pr", "view", pr, "--json", "mergeCommit"], cwd=repo) or "{}")
     return _merged(repo, st, (merged.get("mergeCommit") or {}).get("oid", ""), lines + [f"merged {pr} (squash)"])
 
@@ -829,7 +830,7 @@ def gitops_pr(repo: Path, task_id: str, title: str, body_file: Path) -> dict:
     info = st.get("gitops", {}).get(task_id)
     d = gitops_checkout(repo, t["repo"])
     if not info or not (d / ".git").exists():
-        raise PlatformError(f"gitops task {task_id} has no checkout", hint=f"cplat ship gitops prepare {task_id}")
+        raise PlatformError(f"gitops task {task_id} has no checkout", hint=f"cplat component ship gitops prepare {task_id}")
     check_title(title)
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist")
@@ -864,7 +865,7 @@ def merge_gitops(repo: Path, st: dict, order: str, timeout: float, interval: flo
         pr = info.get("pr")
         if not pr:
             raise PlatformError(f"gitops task {t['id']} ({order}) has no PR; nothing was merged",
-                                hint=f"cplat ship gitops prepare {t['id']}, commit, cplat ship gitops pr {t['id']} ...")
+                                hint=f"cplat component ship gitops prepare {t['id']}, commit, cplat component ship gitops pr {t['id']} ...")
         if info.get("merged"):
             continue
         view = json.loads(gh(["pr", "view", pr, "--json", "state,isDraft"], cwd=repo) or "{}")
@@ -957,7 +958,7 @@ def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[s
         save_state(repo, st)
         escalate(repo, reason, "environment", report=lines)
         lines.append(f"ship {st['spec']}: escalated ({reason}); dev keeps running {st.get('deployed')}. "
-                     f"Resume with /svc:ship {st['spec']}")
+                     f"Resume with /component:ship {st['spec']}")
         lines += skipped
         lines.append(f"Smoke (dev): {row}")
         return False, lines
@@ -978,7 +979,7 @@ def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[s
     save_state(repo, st)
     escalate(repo, reason, "code", report=lines)
     lines.append(f"ship {st['spec']}: escalated ({reason}); dev keeps running {st.get('deployed')}. "
-                 f"Resume with /svc:ship {st['spec']}")
+                 f"Resume with /component:ship {st['spec']}")
     lines += skipped
     lines.append(f"Smoke (dev): {row}")
     return False, lines
@@ -1016,8 +1017,9 @@ def dev_namespace(repo: Path, apps: list[str], svc: str) -> str:
         me = service_slug(repo)
         for slug in apps:
             for a in smoke._app_dirs(slug, repo) or []:
-                entries = (smoke._read(slug, f"applications/{a}/services.yaml", repo) or {}).get("services") or []
-                if any(isinstance(e, dict) and (e.get("repo") == me or e.get("name") == svc) for e in entries):
+                doc = smoke._read(slug, f"applications/{a}/system.yaml", repo)
+                comps = model.build(doc, a).components if isinstance(doc, dict) else ()
+                if any(c.repo == me or c.name == svc for c in comps):
                     return f"{a}-dev"
     except Exception:  # noqa: BLE001
         pass
@@ -1045,7 +1047,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
     if not apps:
         return _smoke_not_run(repo, st, "the repo is not linked to a gitops-app",
                               ["no .platform-app.yml: this repo is not linked to a gitops-app, so dev is not pinned "
-                               "automatically; compose it with /gitops:compose and link it (spec 062)"])
+                               "automatically; compose it with /component:add and link it (spec 062)"])
     if st.get("deployed") and (st.get("smoke") or {}).get("outcome") in {"red", "timed-out"}:
         return _smoke_step(repo, st, apps, service_name(repo), ["resuming: smoke only, against what dev runs now"], base_url,
                            context, interval)
@@ -1055,7 +1057,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
         return _done(repo, st, more) if ok else (False, more)
     sha = st.get("merge_sha") or ""
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
-        raise PlatformError("the run has no merge commit", hint="land the PR first: cplat ship land")
+        raise PlatformError("the run has no merge commit", hint="land the PR first: cplat component ship land")
     svc, short = service_name(repo), sha[:7]
     branch = f"pin/dev-{svc}-{short}"
     lines: list[str] = []
@@ -1081,7 +1083,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
                 continue
             if pr and pr["state"] == "CLOSED":
                 raise PlatformError(f"{app}: the pin PR {pr['url']} was closed without merging (a newer build superseded it, "
-                                    "or its CI failed)", hint="read the PR's comments; `cplat ship escalate 'pin failed'`")
+                                    "or its CI failed)", hint="read the PR's comments; `cplat component ship escalate 'pin failed'`")
             if app not in watches and (rid := pin_run(repo, app, svc, sha)):
                 watches[app] = RunWatch(repo, app, rid, queue_timeout, st.get("run_id"))
             if app in watches:
@@ -1227,7 +1229,7 @@ def _healthy(context: str, want: dict[str, dict], timeout: float, interval: floa
         health = argo_health(context, app, timeout, interval, **need)
         lines.append(f"Argo CD {app}: {health}")
         if health != "Synced/Healthy":
-            raise PlatformError(f"{app} is {health}", hint=f"/shared:status --context {context} in the gitops-app repo; escalate")
+            raise PlatformError(f"{app} is {health}", hint=f"/system:status --context {context} in the gitops-app repo; escalate")
     return lines
 
 
@@ -1295,7 +1297,7 @@ def gate(repo: Path, hook_input: dict, max_blocks: int, run_tests: bool = True) 
         st["cause"] = "environment"            # AC-088.18
         save_state(repo, st)
         return {"systemMessage": f"ship {st['spec']}: stopped after {max_blocks} blocked stops in phase {st['phase']}; "
-                                 "resume with /svc:ship " + st["spec"]}
+                                 "resume with /component:ship " + st["spec"]}
     st["blocks"] = st.get("blocks", 0) + 1
     save_state(repo, st)
     reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, stop attempt {st['blocks']}/{max_blocks}).",
@@ -1304,7 +1306,7 @@ def gate(repo: Path, hook_input: dict, max_blocks: int, run_tests: bool = True) 
         reason += build_status(repo, st["spec"])
     reason.append("Keep going. Only if a rule needs the user (a merge conflict after its re-plan, a changed acceptance test, a CRITICAL finding, "
                   "a decision the spec does not answer) or the user asked you to stop: run "
-                  "`cplat ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop.")
+                  "`cplat component ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop.")
     return {"decision": "block", "reason": "\n".join(reason)}
 
 
@@ -1331,14 +1333,14 @@ def build_status(repo: Path, spec_id: str) -> list[str]:
 # ---------------- CLI ----------------
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat ship", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="cplat component ship", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("start")
     p.add_argument("spec")
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
-    p.add_argument("--product", default=None, help="the gitops-app clone of the product ship this run belongs to (/app:ship only, spec 097)")
+    p.add_argument("--product", default=None, help="the gitops-app clone of the product ship this run belongs to (/system:ship only, spec 097)")
     p.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
                    help="replace a limit of the run's budget: minutes, invocations, reruns, cost (a number or off; spec 102)")
     p = sub.add_parser("status")
@@ -1368,7 +1370,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("escalate")
     p.add_argument("reason", nargs="+")
     p.add_argument("--cause", default=None, help=f"who must act: {_ALLOWED} (run record; `platform` is filed as an issue, spec 088)")
-    p.add_argument("--command", default=None, help="the failing command (cause platform; default /svc:ship)")
+    p.add_argument("--command", default=None, help="the failing command (cause platform; default /component:ship)")
     p.add_argument("--evidence-file", default=None, help="failing output for the issue (cause platform); - reads stdin")
     sub.add_parser("finish")
     p = sub.add_parser("gate")
@@ -1408,7 +1410,7 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "gitops" and ns.gcmd == "prepare":
         print(f"gitops checkout for {ns.task}: {gitops_prepare(repo, ns.task)}\nchange the task's files there, commit, "
-              f"then `cplat ship gitops pr {ns.task} --title <title> --body-file <file>`")
+              f"then `cplat component ship gitops pr {ns.task} --title <title> --body-file <file>`")
         return 0
     if ns.cmd == "gitops":
         info = gitops_pr(repo, ns.task, ns.title, core.stage_pr_body(repo, ns.body_file))
@@ -1434,7 +1436,7 @@ def main(argv: list[str]) -> int:
         shown = st["escalated"]
         if st.get("cause") == "platform":     # the output goes where the issue goes: no repo, spec, branch or secret
             shown = autoissue.scrub(shown, autoissue.private_names(runs.repo_slug(repo), st.get("spec"), st.get("branch")))
-        print(f"ship {st['spec']}: escalated ({shown}); the session may stop. Resume with /svc:ship {st['spec']}")
+        print(f"ship {st['spec']}: escalated ({shown}); the session may stop. Resume with /component:ship {st['spec']}")
         for line in report:
             print(line)
         return 0

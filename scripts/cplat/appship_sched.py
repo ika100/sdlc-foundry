@@ -1,4 +1,4 @@
-"""`cplat app-ship` scheduling (spec 097): which repos start, gate classes and gate evaluation, repo start/result/escalate."""
+"""`cplat system ship` scheduling (spec 097): which repos start, gate classes and gate evaluation, repo start/result/escalate."""
 from __future__ import annotations
 
 import re
@@ -87,13 +87,14 @@ def gate_class(gitops_dir: Path, repo: dict) -> str:
     run(["git", "fetch", "-q", "origin"], cwd=gitops_dir, check=False)
     tree = run(["git", "ls-tree", "--name-only", "origin/main", "applications/"], cwd=gitops_dir, check=False).stdout.split()
     for app in tree:
-        services = _show(gitops_dir, f"{app}/services.yaml")
-        found = next((e for e in services.get("services") or []
-                      if isinstance(e, dict) and (str(e.get("repo") or "").endswith("/" + repo["id"]) or e.get("name") == repo["id"])), None)
+        system = app.rstrip("/").rsplit("/", 1)[-1]
+        doc = _show(gitops_dir, f"{app}/system.yaml")
+        m = model.build(doc, system)
+        found = next((c for c in m.components
+                      if str(c.repo or "").endswith("/" + repo["id"]) or c.name == repo["id"]), None)
         if found is None:
             continue
-        m = model.build(app.rstrip("/").rsplit("/", 1)[-1], services, _show(gitops_dir, f"{app}/app.yaml"))
-        inst = m.instance(found.get("name"), "dev")
+        inst = m.instance(found.name, "dev")
         return "exposed" if inst is not None and inst.exposed else "internal"
     return "internal"
 
@@ -136,7 +137,7 @@ def start_repo(gitops_dir: Path, repo_id: str) -> Path:
     if limit := budget.check(st.get("run_id"), "repo ship start"):          # spec 102: a safe point
         reason = budget.stop(st.get("run_id"), limit, "repo ship start", st["phase"])
         state.escalate(gitops_dir, reason, "decision")
-        raise PlatformError(reason, hint=f"no repo ship is started; resume with /app:ship {st['spec']} (--budget {limit}=N raises the limit)")
+        raise PlatformError(reason, hint=f"no repo ship is started; resume with /system:ship {st['spec']} (--budget {limit}=N raises the limit)")
     if repo.get("shape") == "gitops-app":
         path = _start_entry(gitops_dir, st["spec"])
     else:
@@ -176,7 +177,7 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
     clone = Path(cur.get("clone") or clone_path(gitops_dir, repo_id))
     sh = ship.load_state(clone) if clone.is_dir() else None
     if not sh:
-        raise PlatformError(f"no ship run in {clone}", hint=f"start it: cplat ship start <spec> --product {gitops_dir}")
+        raise PlatformError(f"no ship run in {clone}", hint=f"start it: cplat component ship start <spec> --product {gitops_dir}")
     slug = state.slug(gitops_dir)
     want = f"{slug}:{st['spec']}"
     parent = specmod.find(clone, sh["spec"]).meta.get("parent")
@@ -192,7 +193,7 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
         outcome = ("escalated", None)
     elif sh["phase"] != "done":
         raise PlatformError(f"ship of {repo_id} is in phase {sh['phase']}; resume it",
-                            hint=f"cplat ship start {sh['spec']} --product {gitops_dir} (in {clone})")
+                            hint=f"cplat component ship start {sh['spec']} --product {gitops_dir} (in {clone})")
     elif gate == "library":
         if not sha:
             outcome = ("escalated", f"the PR of {repo_id} is not merged")

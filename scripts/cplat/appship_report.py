@@ -1,4 +1,4 @@
-"""`cplat app-ship` rendering (spec 097): the repo state table and the final report. Pure functions of the state."""
+"""`cplat system ship` rendering (spec 097): the repo state table and the final report. Pure functions of the state."""
 from __future__ import annotations
 
 PASSED = ("passed", "done-before")
@@ -60,7 +60,7 @@ def final_report(st: dict, title: str, product_steps: list[str] | None = None) -
         out.append(f"| {rid} | {repo.get('spec') or '-'} | {repo.get('pr') or '-'} | {rounds} | {dev} | "
                    f"{repo.get('argo') or '-'} | {_smoke(rid, repo)} |")
         if repo.get("gate") in ("exposed", "internal"):
-            promote.append(f"/gitops:promote {rid} dev staging")
+            promote.append(f"/instance:promote {rid} dev staging")
     steps += [s for s in product_steps or [] if s not in steps]
     if steps:
         out += ["", "Human steps (the run cannot do these):", *(f"- [ ] {s}" for s in steps)]

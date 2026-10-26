@@ -1,4 +1,4 @@
-"""`cplat app-ship` state (spec 097): the product run's state file, start checks, resume, escalate, finish, run record
+"""`cplat system ship` state (spec 097): the product run's state file, start checks, resume, escalate, finish, run record
 and the Stop hook gate. Scheduling is in appship_sched, merging in appship_merge, rendering in appship_report."""
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 
 import budget
+import model
 import runs
 import ship
 import spec as specmod
@@ -101,7 +102,7 @@ def save_state(repo: Path, st: dict) -> None:
 def require_state(repo: Path) -> dict:
     st = load_state(repo)
     if not st:
-        raise PlatformError("no product ship run in this repo", hint="start one with `/app:ship <spec>` (cplat app-ship start <spec>)")
+        raise PlatformError("no product ship run in this repo", hint="start one with `/system:ship <spec>` (cplat system ship start <spec>)")
     return st
 
 
@@ -159,12 +160,12 @@ def refresh_repos(repo: Path, st: dict) -> None:
 
 def services(repo: Path) -> list[str]:
     names: list[str] = []
-    for f in sorted((repo / "applications").glob("*/services.yaml")):
+    for f in sorted((repo / "applications").glob("*/system.yaml")):
         try:
-            data = yaml.safe_load(f.read_text()) or {}
+            doc = yaml.safe_load(f.read_text()) or {}
         except (OSError, yaml.YAMLError):
             continue
-        names += [str(e["name"]) for e in (data.get("services") or []) if isinstance(e, dict) and e.get("name")]
+        names += [c.name for c in model.build(doc, f.parent.name).components]
     return names
 
 
@@ -201,16 +202,16 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
     except PlatformError:
         shape = "unknown"
     if shape != "gitops-app":
-        raise PlatformError(f"this is a {shape} repo: a component spec ships with /svc:ship <spec>", hint=f"/svc:ship {ref}")
+        raise PlatformError(f"this is a {shape} repo: a component spec ships with /component:ship <spec>", hint=f"/component:ship {ref}")
     sp = specmod.find(repo, ref)
     if sp.status not in {"approved", "building"}:
         raise PlatformError(f"{sp.id} is '{sp.status}'; only an approved product spec is shipped",
-                            hint=f"/app:spec approve {sp.number}")
+                            hint=f"/system:spec approve {sp.number}")
     st = load_state(repo)
     ctx = resolve_context(repo, context or (st.get("context") if st and st.get("spec") == sp.id else None))
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated"):
         raise PlatformError(f"another product ship run is in progress: {st['spec']} (phase {st['phase']})",
-                            hint="finish it with `cplat app-ship finish`")
+                            hint="finish it with `cplat system ship finish`")
     origin = slug(repo)
     if st and st["spec"] == sp.id:
         if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
@@ -291,12 +292,12 @@ def finish(repo: Path) -> Path:
 def next_step(st: dict) -> str:
     sid = st["spec"]
     return {
-        "plan": f"plan the product unattended (/app:plan {sid}), then `cplat app-ship phase publish`",
-        "publish": "publish the spec and plan: `cplat app-ship publish`",
-        "repos": "`cplat app-ship next --json`, then start the repos it lists (`cplat app-ship repo start <id>`) "
-                 "and read each result (`cplat app-ship repo result <id>`)",
-        "complete": "`cplat app-ship complete`, print its report, then `cplat app-ship finish`",
-        "done": "nothing: the run is finished (`cplat app-ship finish`)",
+        "plan": f"plan the product unattended (/system:plan {sid}), then `cplat system ship phase publish`",
+        "publish": "publish the spec and plan: `cplat system ship publish`",
+        "repos": "`cplat system ship next --json`, then start the repos it lists (`cplat system ship repo start <id>`) "
+                 "and read each result (`cplat system ship repo result <id>`)",
+        "complete": "`cplat system ship complete`, print its report, then `cplat system ship finish`",
+        "done": "nothing: the run is finished (`cplat system ship finish`)",
     }[st["phase"]]
 
 
@@ -326,7 +327,7 @@ def gate(repo: Path, hook_input: dict, max_blocks: int = DEFAULT_MAX_BLOCKS) -> 
     reason = [f"The product ship of {st['spec']} is not finished (phase {st['phase']}, stop attempt {blocks}/{max_blocks}).",
               f"Next: {next_step(st)}.",
               "Keep going. Only if a rule needs the user (a question of a repo spec, a conflict, a decision the spec does not answer) "
-              "or the user asked you to stop: run `cplat app-ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop."]
+              "or the user asked you to stop: run `cplat system ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop."]
     return {"decision": "block", "reason": "\n".join(reason)}
 
 
