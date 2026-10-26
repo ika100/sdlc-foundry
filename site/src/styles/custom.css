@@ -113,7 +113,8 @@
 }
 
 /* ---------- wide diagrams from docs/img: readable size, scrolled sideways in the content column ---------- */
-.sl-markdown-content p:has(> img[src*='/img/sdlc-map.svg']) {
+.sl-markdown-content p:has(> img[src*='/img/sdlc-map.svg']),
+.sl-markdown-content p:has(> img[src*='/img/model-']) {
   overflow-x: auto;
   border: 1px solid var(--sl-color-hairline);
   border-radius: 0.75rem;
@@ -123,6 +124,13 @@
   display: block;
   max-width: none;
   width: 1240px;
+}
+
+/* the domain model diagrams (docs/DOMAIN-MODEL.md) are drawn 1000 wide with 12px labels: keep them at that size */
+.sl-markdown-content p > img[src*='/img/model-'] {
+  display: block;
+  max-width: none;
+  width: 1000px;
 }
 
 /* the same map on the landing page: the splash column is wider, so it fills it and scrolls only below 1080px */

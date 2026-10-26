@@ -1,6 +1,6 @@
 # How it works
 
-What actually happens when you use the platform — read this when a command surprises you. For the guided tour see [USER-JOURNEY](USER-JOURNEY.md); for decisions see the ADRs.
+What actually happens when you use the platform — read this when a command surprises you. For the guided tour see [USER-JOURNEY](USER-JOURNEY.md); for the nouns (system, component, environment, instance, spec, run) see the [domain model](DOMAIN-MODEL.md); for decisions see the ADRs.
 
 ## The map
 
