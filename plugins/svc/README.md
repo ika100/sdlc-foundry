@@ -32,7 +32,7 @@ Orchestrators (`/svc:*`) and the shape-agnostic product-manager, architect and r
 | `/svc:ship <id> [--no-merge]` | Unattended from an approved spec to `dev`: plan → build → PR (`cplat ship pr`) → merge only after every check passed (`cplat ship land`, CI fix loop) → wait for the pin PR and Argo (`cplat ship deploy`). Resumable; the shared plugin's Stop hook keeps the run going until it is done or escalated ([ADR-028](../../docs/adr/028-unattended-delivery-without-branch-protection.md)); the run is recorded in the run store (spec 087, `cplat runs report`) |
 | `/svc:verify [<id>]` | Trace + reviewer against the spec; writes `verification.md`, changes no code |
 | `/svc:specs [--all\|index\|migrate]` | Spec status with the next command; refresh the backlog table; migrate legacy `STORY-NNN` stories |
-| `/svc:quick-task <desc>` | Lightweight, no spec: coder → quality → tester → PR (stops if the change alters a spec criterion) |
+| `/svc:quick-task <desc>` | Lightweight, no spec: coder → quality → tester → PR; a trivial change (at most 1 source file, 1 test file, 60 lines, nothing in manifests, CI, Docker, settings or specs, checked by `cplat quick-task inline-check`) may be made inline, with quality and tests still run (spec 111) (stops if the change alters a spec criterion) |
 | `/svc:fix-bug <desc>` | Diagnose → fix → regression test → PR |
 | `/svc:release` | Quality gate → test gate → security gate → version bump → tag → close issues |
 

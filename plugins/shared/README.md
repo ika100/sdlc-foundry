@@ -35,9 +35,11 @@ Other commands that have no slash command of their own:
 | `cplat pr open` | Commit (`-s`), push and open the PR in one step; idempotent, the body is read from `.pr-body.md` (spec 100). |
 | `cplat pr wait <pr> [-R owner/repo] [--merge]` | Wait for the PR's current head: report each check, stop at the first red one, rerun stuck or transient runs once, squash-merge on green with `--merge` (spec 079). |
 | `cplat quiet <script>` | Run a devbox script: one line when green, the tail and the log path when red (spec 100). |
-| `cplat headless "<prompt>" [--model M]` | Fresh `claude -p` sessions until a ship run is done; the coordinator runs on Sonnet unless `--model` or `coordinator_model` says otherwise ([ADR-036](../../docs/adr/036-coordinator-model-default-and-settings.md)). |
+| `cplat headless "<prompt>" [--model M]` | Fresh `claude -p` sessions until a ship run is done, with only the repo's MCP servers and no claude.ai connectors (spec 111); the coordinator runs on Sonnet unless `--model` or `coordinator_model` says otherwise ([ADR-036](../../docs/adr/036-coordinator-model-default-and-settings.md)). |
 | `cplat budget show\|gate\|attempt\|stage\|resume` | The run tree's budget (minutes, invocations, reruns, cost), no-progress stops and verified stages for resume (spec 102, [guide](../../docs/unattended-delivery.md#budgets-and-repeated-failures)). |
 | `CPLAT_OTLP_ENDPOINT` / `telemetry:` setting | Live OpenTelemetry export of headless and benchmark sessions (local endpoints only unless `allow_remote`), and a comparison note in the run record (spec 101, [guide](../../docs/unattended-delivery.md#live-usage-in-grafana-optional)). |
+| `cplat quick-task inline-check [--base REF]` | Whether a quick-task change is trivial enough to make inline (spec 111): exit 0 allowed, 1 refused with the rule. |
+| `cplat ship continue` | `land` then `deploy` in one command (spec 111; exit 0 done, 1 red, 2 escalated). `/svc:ship` uses it after `cplat ship pr`; run it in the foreground, since a backgrounded `continue` lets the Stop hook re-invoke a waiting session (see the spec's benchmarks). |
 | `cplat smoke run` | Run the repo's smoke tests against an environment (`SMOKE_BASE_URL`, spec 091). |
 | `cplat alerts poll` | Evaluate the alert sources and turn firing alerts into deduplicated issues (spec 092). |
 | `cplat retro [--week W] [--json] [--out DIR]` | The weekly report from the run store; by hand it prints and writes nothing. `cplat runs init` installs the Monday workflow that posts it with spec proposals (spec 090). |

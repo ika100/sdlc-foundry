@@ -203,6 +203,10 @@ The final gate is never selective: before a PR is marked ready or landed, `devbo
 - cplat forces every content switch off (`OTEL_LOG_USER_PROMPTS`, `OTEL_LOG_TOOL_DETAILS`, `OTEL_LOG_TOOL_CONTENT`, `OTEL_LOG_ASSISTANT_RESPONSES`, `OTEL_LOG_RAW_API_BODIES`), even if your shell sets them. Only metrics are exported (no events, logs or traces): counts, model, cost, the attributes `cplat.run_id`, `cplat.kind`, `cplat.repo` and `cplat.platform_version`, and the attributes Claude Code always attaches without a switch (`user.id`, `user.email`, `organization.id`, `terminal.type`). Every attribute that has a switch (session id, account UUID, version, entrypoint, repository) is turned off, and your own `OTEL_*` variables (endpoints, headers, exporters) do not reach the session. Because the always-attached identity leaves the machine, the endpoint must be local unless `allow_remote` is set.
 - After a run with telemetry, the record gets `usage.otel`: the OTel totals queried by run id and their difference from the transcript totals per token type. Use it to check the transcript counting.
 
+## What an unattended session can reach
+
+Sessions that cplat starts (`cplat headless`, `cplat runs benchmark`, the weekly retro) load only the repo's own MCP servers: `--strict-mcp-config` with the repo's `.mcp.json` (none when there is none), and claude.ai connectors are off (`disableClaudeAiConnectors`). Your personal MCP servers and connectors (mail, calendar, drive, home automation, browser) are never available to a run nobody watches, and the session starts with less context (spec 111). A repo that needs one more server declares it in `.platform-settings.yml`: `headless: {mcp_config: <file>}`. Interactive sessions are unchanged.
+
 ## Watching runs live (optional)
 
 To see running sessions, their status and a way to step in while a run works, you can use [dot-agent-deck](agent-deck.md) next to the platform. It is optional and only shows activity: outcomes, costs and gates still come from the run store, CI and the ship gates.
