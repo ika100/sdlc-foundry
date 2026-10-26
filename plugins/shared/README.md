@@ -48,7 +48,7 @@ Other commands that have no slash command of their own:
 
 - `SessionStart`: checks devbox and runs `devbox install` when the repo has a `devbox.json`.
 - `PreToolUse` (`Task|Agent`): inside a recorded run, `cplat budget gate --invocation` counts the subagent and refuses it when the run's budget is used up (spec 102). Outside a run it exits in shell.
-- `Stop`: while a `/svc:ship` run is unfinished (`<git dir>/cplat-ship.json`), `cplat ship gate` blocks the stop with the next step and what is still red; it allows it when the run is done, escalated or blocked 8 times. Without a run it exits in shell (spec 066).
+- `Stop`: while a `/svc:ship` run is unfinished (`<git dir>/cplat-ship.json`, the worktree's own git dir, so parallel sessions in other worktrees are not blocked: [ADR-051](../../docs/adr/051-run-state-is-per-worktree.md)), `cplat ship gate` blocks the stop with the next step and what is still red; it allows it when the run is done, escalated or blocked 8 times. Without a run it exits in shell (spec 066).
 
 ## Pre-approved operations (settings.json)
 
