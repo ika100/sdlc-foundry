@@ -997,6 +997,32 @@ def secret_manifests(app: str, svc: dict, env: str, cfg: dict) -> dict[str, dict
     return out
 
 
+def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dict[str, dict[str, dict]]:
+    """{component: {file name: ExternalSecret}} for the external resource instances of `env`.
+
+    One ExternalSecret `<system>-<name>-app` per instance, in the overlay of the alphabetically first running component that uses it."""
+    store = cfg.get("secretStore") or DEFAULT_STORE
+    out: dict[str, dict[str, dict]] = {}
+    for name, rc in cfg["resources"].items():
+        conf = rc["envs"][env]
+        if not conf["external"]:
+            continue
+        users = sorted(s["name"] for s in services if env in envs_of(s) and "external" not in s and name in (s.get("uses") or []))
+        if not users:
+            continue
+        secret = f"{app}-{name}-app"
+        doc = {"apiVersion": ESO_API, "kind": "ExternalSecret",
+               "metadata": {"name": secret, "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app,
+                                                       "app.kubernetes.io/managed-by": "gitops-app"}},
+               "spec": {"refreshInterval": conf["refreshInterval"],
+                        "secretStoreRef": {"name": store["name"], "kind": store.get("kind", "ClusterSecretStore")},
+                        "target": {"name": secret, "creationPolicy": "Orphan", "deletionPolicy": "Retain"},
+                        "data": [{"secretKey": k, "remoteRef": {"key": conf["store_key"], "property": k}}
+                                 for k in TYPES[rc["type"]]["keys"]]}}
+        out.setdefault(users[0], {})[f"externalsecret-{secret}.yaml"] = doc
+    return out
+
+
 def database_cluster(app: str, name: str, env: str, conf: dict) -> dict:
     db = app.replace("-", "_")
     return {
@@ -1171,6 +1197,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
     })
 
     for env in ENVS:
+        ext_secrets = external_secrets(app, env, services, cfg)
         for comp in services:
             if env not in envs_of(comp):
                 continue
@@ -1186,6 +1213,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             if route:
                 files["httproute.yaml"] = route
             files.update(secret_manifests(app, s, env, cfg))
+            files.update(ext_secrets.get(s["name"], {}))
             for fname, doc in files.items():
                 out[base / fname] = dump(doc)
             tag = existing_tag(base / "kustomization.yaml") or "latest"
