@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--generate", action="append", default=[], metavar="SECRET=KEY,KEY", help="Secret whose values ESO generates randomly once per environment (single service only)")
     p.add_argument("--secret", action="append", default=[], metavar="SECRET=KEY,KEY", help="Secret read from the secret store (set the values with `cplat secret set`; single service only)")
     p.add_argument("--secret-ref", action="append", default=[], metavar="NAME", help="existing Secret in the namespace to expose as env vars, e.g. the one generated for another service (single service only)")
-    p.add_argument("--uses", action="append", default=[], metavar="ADDON", help="resource the component needs (e.g. postgres → DATABASE_URL); declare it first with `cplat resource add postgres`")
+    p.add_argument("--uses", action="append", default=[], metavar="ADDON", help="resource or library the component needs (a database gives DATABASE_URL and PG*); declare it first with `cplat resource add <name> --type database`")
     p.add_argument("--replicas", type=int)
     p.add_argument("--instance", metavar="ENV", help="with set: change this instance only (with --replicas)")
     p.add_argument("--port", type=int, help="override the port (default: the service's template answer, else the shape default)")
@@ -210,6 +210,7 @@ def main(argv: list[str]) -> int:
                 components[name] = e
             gitops.save(app_dir, y, data)
     elif ns.action == "set":
+        prefix_notes: list[str] = []
         name, _ = resolve_slug(ns.services[0], org)
         if name not in components:
             raise PlatformError(f"{name} is not in system.yaml", hint="current: " + ", ".join(components) if components else "system.yaml has no components")
@@ -230,6 +231,16 @@ def main(argv: list[str]) -> int:
             changes.append(f"replicas {ns.replicas}" + (f" in {ns.instance}" if ns.instance else ""))
         names.append(name)
         r.will_do.append(f"set {name}: " + "; ".join(changes))
+        if ns.uses:
+            declared = data.get("resources") or {}
+            by_type: dict[str, int] = {}
+            for u in dict.fromkeys([*(entry.get("uses") or []), *ns.uses]):
+                t = (declared.get(u) or {}).get("type") if isinstance(declared.get(u), dict) else None
+                if t:
+                    by_type[t] = by_type.get(t, 0) + 1
+            for t, n in by_type.items():
+                if n >= 2:
+                    prefix_notes.append(f"{name} now uses {n} {t} resources: their variables are prefixed (<NAME>_DATABASE_URL, …) and DATABASE_URL, PG* are no longer injected")
         if not ns.dry_run:  # mutate the round-trip entry in place, so comments and order in system.yaml survive
             if ns.env:
                 env = entry.setdefault("env", {})
@@ -277,8 +288,10 @@ def main(argv: list[str]) -> int:
         r.next_steps.append("review and merge the PR; Argo syncs after the merge")
     else:
         r.next_steps.append("review the diff, run `devbox run validate`, then commit (or re-run with --pr)")
+    if ns.action == "set":
+        r.next_steps.extend(prefix_notes)
     if ns.action == "add":
-        r.next_steps.append("adapt the entry if needed (env wiring such as API_URL, replicas, --expose); components start in dev only — `/instance:promote` adds staging/prod; `/resource:add postgres` declares a database")
+        r.next_steps.append("adapt the entry if needed (env wiring such as API_URL, replicas, --expose); components start in dev only — `/instance:promote` adds staging/prod; `/resource:add <name> --type database` declares a database")
     r.undo.append("discard the working-tree changes under applications and bootstrap")
     r.data = {"components": names, "changed": changed}
     r.emit(False, ns.json)
