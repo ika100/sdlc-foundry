@@ -559,12 +559,30 @@ def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: lis
     return spec
 
 
+def _resource_type(app_root: Path, name: str) -> str | None:
+    """The `type` of resource `name` in the system's system.yaml; `postgres` alone is a database (spec 115)."""
+    for f in sorted((app_root / "applications").glob("*/system.yaml")):
+        try:
+            entry = ((yaml.safe_load(f.read_text()) or {}).get("resources") or {}).get(name)
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(entry, dict) and entry.get("type"):
+            return str(entry["type"])
+    return "database" if name == "postgres" else None
+
+
 def resource_env(app_root: Path, addon: str) -> list[str]:
-    """Env variables a resource gives a component that uses it: render.py's ADDONS table (the contract, ADR-020)."""
+    """Env variables a resource gives a component that uses it: the TYPES contract of render.py for the resource's type
+    (spec 115, ADR-057); a 5.0 render.py still holds it in its ADDONS table under the resource's name (ADR-020)."""
+    rtype = _resource_type(app_root, addon)
     for render in (app_root / "scripts" / "render.py", core.PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"):
-        if render.is_file():
-            block = render.read_text().split("ADDONS = {", 1)[-1]
-            m = re.search(rf'^    "{re.escape(addon)}": \{{.*?"env": \{{([^}}]*)\}}', block, re.M | re.S)
+        if not render.is_file():
+            continue
+        text = render.read_text()
+        for table, key in (("TYPES = {", rtype), ("ADDONS = {", addon)):
+            if key is None or table not in text:
+                continue
+            m = re.search(rf'^    "{re.escape(key)}": \{{.*?"env": \{{([^}}]*)\}}', text.split(table, 1)[1], re.M | re.S)
             if m:
                 return re.findall(r'"([A-Z0-9_]+)":', m.group(1))
     return []
