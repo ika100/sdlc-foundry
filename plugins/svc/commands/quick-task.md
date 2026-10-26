@@ -73,7 +73,7 @@ If still failing after 2 cycles, escalate to the user.
 
 ## Phase 3 — Commit and open PR
 
-After the tester passes:
+After the gates pass:
 
 Write the PR body with the Write tool to `.pr-body.md` in the repo root (never into `.git/`: Claude Code refuses edits there; cplat moves the file out of the work tree before it commits) (the lines under "Related issues / stories" stay `{{CLOSES}}`; the command fills them):
 
