@@ -102,6 +102,7 @@ class Environment:
     policy: str = "off"
     promotion: str = "manual"
     observability: Observability | None = None
+    operators: str | None = None  # "owner" or None
 
 
 @dataclass(frozen=True)
@@ -160,6 +161,7 @@ class Api:
 class Resource:
     name: str
     type: str = "unknown"
+    external: bool = False  # the resource-level flag is True
 
 
 @dataclass
@@ -195,9 +197,12 @@ class Instance:
 class ResourceInstance:
     resource: str
     environment: str
-    argo_application: str
+    argo_application: str | None
     secret: str | None = None
     sizing: dict = field(default_factory=dict)
+    type: str = "unknown"
+    external: bool = False
+    store_key: str | None = None
 
 
 @dataclass
@@ -334,7 +339,8 @@ class Model:
             "system": {"name": self.system, "owner": self.owner, "components": [c.name for c in self.components],
                        "resources": [r.name for r in self.resources], "apis": [a.name for a in self.apis]},
             "environments": [{"name": e.name, "host": e.host, "url": e.url_template, "policy": e.policy,
-                              "promotion": e.promotion, "observability": obs(e.observability)} for e in self.environments],
+                              "promotion": e.promotion, "observability": obs(e.observability),
+                              "operators": e.operators} for e in self.environments],
             "components": [{
                 "name": c.name, "type": c.type, "lang": c.lang, "shape": c.shape, "repo": c.repo, "image": c.image,
                 "external": {"kind": c.external.kind, "namespace": c.external.namespace} if c.external else None,
@@ -344,11 +350,12 @@ class Model:
                 "libraries": list(c.libraries),
                 "used_by": [o.name for o in self.components if c.name in o.libraries]} for c in self.components],
             "apis": [{"name": a.name, "type": a.type, "provider": a.provider, "consumers": list(a.consumers)} for a in self.apis],
-            "resources": [{"name": r.name, "type": r.type,
+            "resources": [{"name": r.name, "type": r.type, "external": r.external,
                            "used_by": [c.name for c in self.components if r.name in c.uses]} for r in self.resources],
             "instances": [inst(i) for i in self.instances],
-            "resource_instances": [{"resource": r.resource, "environment": r.environment, "argo_application": r.argo_application,
-                                    "secret": r.secret, "sizing": dict(r.sizing)} for r in self.resource_instances],
+            "resource_instances": [{"resource": r.resource, "environment": r.environment, "type": r.type,
+                                    "external": r.external, "argo_application": r.argo_application, "secret": r.secret,
+                                    "store_key": r.store_key, "sizing": dict(r.sizing)} for r in self.resource_instances],
             "relations": self.relations(),
         }
 
@@ -488,6 +495,10 @@ def _sizing(conf: dict, env: str) -> dict:
     return {"replicas": replicas, "version": conf.get("version", 17), "storage": str(inst.get("storage", conf.get("storage", "1Gi")))}
 
 
+def _store_key(template: str, system: str, env: str, resource: str) -> str:
+    return template.replace("{system}", system).replace("{env}", env).replace("{resource}", resource)
+
+
 # ---------------- build ----------------
 
 def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: list[dict] | None = None) -> Model:
@@ -504,7 +515,7 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
             o = Observability(ob.get("ui"), ob.get("exportTo"), ob.get("alerts"), ob.get("rules"), ob.get("queryURL"),
                               ob.get("alertmanagerURL"), f"addon-observability-{name}", ob.get("headersSecret"), ob.get("querySecret"))
         envs.append(Environment(name, order, _str_or_none(conf.get("host")), _str_or_none(conf.get("url")), _policy(conf, name),
-                                _promotion(conf, name), o))
+                                _promotion(conf, name), o, "owner" if conf.get("operators") == "owner" else None))
     by_env = {e.name: e for e in envs}
 
     res_docs = {str(k): _map(v) for k, v in _map(doc.get("resources")).items()}
@@ -516,7 +527,8 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
         components.append((entry, c))
         warnings += w
 
-    resources = [Resource(k, str(v.get("type") or ("database" if k == "postgres" else "unknown"))) for k, v in res_docs.items()]
+    resources = [Resource(k, str(v.get("type") or ("database" if k == "postgres" else "unknown")), v.get("external") is True)
+                 for k, v in res_docs.items()]
 
     instances = []
     for entry, c in components:
@@ -538,9 +550,13 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
         conf = res_docs.get(r.name, {})
         for env in ENVIRONMENTS:
             if any(r.name in c.uses and env in c.environments for _, c in components):
+                idoc = _map(_map(conf.get("instances")).get(env))
+                ext = idoc["external"] is True if "external" in idoc else r.external
+                path = _map(idoc.get("remote")).get("path") or _map(conf.get("remote")).get("path")
                 ris.append(ResourceInstance(
-                    r.name, env, f"addon-{r.name}-{env}", f"{system}-postgres-app" if r.name == "postgres" else None,
-                    _sizing(conf, env) if r.name == "postgres" else {}))
+                    r.name, env, None if ext else f"addon-{r.name}-{env}", f"{system}-{r.name}-app",
+                    _sizing(conf, env) if r.type == "database" and not ext else {}, r.type, ext,
+                    _store_key(str(path or "{system}-{env}-{resource}"), system, env, r.name) if ext else None))
 
     cs = [c for _, c in components]
     apis = []
