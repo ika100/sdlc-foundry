@@ -1,9 +1,9 @@
 ---
 title: "The problem"
-description: "Why running a product on Kubernetes costs a small team so much glue work, and why AI agents alone make it worse."
+description: "Why running a system on Kubernetes costs a small team so much glue work, and why AI agents alone make it worse."
 ---
 
-<p class="lead">Writing the product is the smaller half of shipping it. The other half is the glue, and the glue is where small teams lose months.</p>
+<p class="lead">Writing the system is the smaller half of shipping it. The other half is the glue, and the glue is where small teams lose months.</p>
 
 ## The glue
 

@@ -1,6 +1,6 @@
 ---
 title: "From a new repo to Kubernetes via GitOps"
-description: "An agentic SDLC platform: Claude Code agents, slash commands and Copier templates that take a product from idea to Kubernetes via GitOps. Secrets, Postgres, OpenTelemetry and Kyverno guard rails are one declaration each."
+description: "An agentic SDLC platform: Claude Code agents, slash commands and Copier templates that take a system from idea to Kubernetes via GitOps. Secrets, Postgres, OpenTelemetry and Kyverno guard rails are one declaration each."
 template: splash
 hero:
   title: From a new repo to Kubernetes, declared once.
@@ -36,11 +36,11 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## From an issue to production
 
-You decide at three points: route an issue, approve its spec, promote to prod. `/svc:ship` runs everything in the green band, and every run, failure and alert comes back as an issue for the next round.
+You decide at three points: route an issue, approve its spec, promote to prod. `/component:ship` runs everything in the green band, and every run, failure and alert comes back as an issue for the next round.
 
 <figure class="map">
   <div class="map-scroll">
-    <img src="/sdlc-foundry/img/sdlc-map.svg" width="1440" height="650" alt="Swimlane map of the delivery flow and its feedback loops: you route an issue and approve the spec; agents write spec, plan, red tests, code and verification; cplat runs the gates, opens the PR, merges on green, runs the smoke tests in dev and promotes to staging; prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts come back as deduplicated issues that you route in triage." />
+    <img src="/sdlc-foundry/img/sdlc-map.svg" width="1440" height="650" alt="Swimlane map of the delivery flow and its feedback loops: you route an issue and approve the spec; agents write spec, plan, red tests, code and verification; the `cplat` CLI runs the gates, opens the PR, merges on green, runs the smoke tests in dev and promotes to staging; prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts come back as deduplicated issues that you route in triage." />
   </div>
   <figcaption>[How it works](/sdlc-foundry/guides/how-it-works/#the-map) explains the map and lists the feedback loops · [open it full size](/sdlc-foundry/img/sdlc-map.svg)</figcaption>
 </figure>
@@ -50,22 +50,28 @@ You decide at three points: route an issue, approve its spec, promote to prod. `
 <div class="split">
 <div>
 
-```yaml title="applications/shop/services.yaml"
-# abbreviated: /gitops:compose fills in port, probes, user and resources from the shape's defaults
-services:
-  - name: shop-api
-    shape: service-java
-    image: ghcr.io/acme/shop-api
+```yaml title="applications/shop/system.yaml"
+# abbreviated: /component:add fills in port, probes, user and resources from the component type's defaults
+system: shop
+owner: team-shop
+components:
+  shop-api:
+    type: service
+    lang: java
+    repo: acme/shop-api
     uses: [postgres]
     secrets:
       - name: shop-api-auth
         generate: [JWT_KEY]
-    environments: [dev, staging]
-  - name: shop-web
-    shape: web-nextjs
-    image: ghcr.io/acme/shop-web
+    instances: {dev: {}, staging: {}}
+  shop-web:
+    type: website
+    lang: typescript
+    repo: acme/shop-web
     env: { API_URL: "http://shop-api" }
-    expose: { host: shop }
+    expose: true
+resources:
+  postgres: {type: database}
 ```
 
 </div>
@@ -82,19 +88,19 @@ From that file the platform renders, per environment: Deployments with numeric n
 
 <CardGrid>
   <Card title="Scaffold any shape" icon="document">
-    `/shared:new-service` creates Python, Java, Go and Next.js services, libraries and the GitOps repo from tested templates, with CI, Dockerfile, devbox recipes and agent instructions. [Shapes](/sdlc-foundry/reference/shapes/)
+    `/component:new` creates Python, Java, Go and Next.js services, libraries and the GitOps repo from tested templates, with CI, Dockerfile, devbox recipes and agent instructions. [Shapes](/sdlc-foundry/reference/shapes/)
   </Card>
   <Card title="Agent pipeline" icon="random">
-    `/svc:spec`, `/svc:plan` and `/svc:build` go from an approved spec to failing acceptance tests, code that passes them, a check against every criterion and a pull request, with the right agents for each shape. [Agents model](/sdlc-foundry/guides/agents/)
+    `/component:spec`, `/component:plan` and `/component:build` go from an approved spec to failing acceptance tests, code that passes them, a check against every criterion and a pull request, with the right agents for each shape. [Agents model](/sdlc-foundry/guides/agents/)
   </Card>
   <Card title="GitOps that is generated" icon="setting">
-    `/gitops:compose` edits one registry; `render.py` writes every manifest. `/gitops:promote` pins verified image tags per environment. [Concepts](/sdlc-foundry/concepts/)
+    `/component:add` edits one `system.yaml`; `render.py` writes every manifest. `/instance:promote` pins verified image tags per environment. [Concepts](/sdlc-foundry/concepts/)
   </Card>
   <Card title="Secrets without git" icon="approve-check">
     External Secrets Operator creates and reads secrets in the cluster; generated passwords never leave it. [Secrets](/sdlc-foundry/concepts/secrets/)
   </Card>
-  <Card title="Addons and observability" icon="seti:db">
-    Postgres via CloudNativePG; OpenTelemetry collector with optional Grafana dev stack. [Addons](/sdlc-foundry/concepts/addons/)
+  <Card title="Resources and observability" icon="seti:db">
+    Postgres via CloudNativePG; OpenTelemetry collector with optional Grafana dev stack. [Resources](/sdlc-foundry/concepts/addons/)
   </Card>
   <Card title="Guard rails" icon="seti:lock">
     Kyverno policies for the platform's own conventions, checked before merge; pinned Actions, scanned images and SBOMs. [Guard rails](/sdlc-foundry/concepts/guard-rails/)
@@ -115,7 +121,7 @@ The numbers come from the platform's own test application and are listed with th
 ## Pick a scenario
 
 <CardGrid>
-  <LinkCard title="Ship a product from zero" description="GitOps repo, services, first environment." href="/sdlc-foundry/scenarios/ship-a-product/" />
+  <LinkCard title="Ship a system from zero" description="GitOps repo, services, first environment." href="/sdlc-foundry/scenarios/ship-a-system/" />
   <LinkCard title="Promote to production safely" description="Verified tags, one pull request per move." href="/sdlc-foundry/scenarios/promote-safely/" />
   <LinkCard title="Add Postgres, secrets, observability" description="Three declarations instead of three projects." href="/sdlc-foundry/scenarios/addons-secrets-observability/" />
   <LinkCard title="Adopt an existing repo" description="Bring what you have onto the platform." href="/sdlc-foundry/scenarios/adopt-existing/" />
