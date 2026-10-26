@@ -137,6 +137,8 @@ def _propose(ns: argparse.Namespace) -> int:
            "--allowedTools", "Read,Write", "--output-format", "text"]
     if ns.model:
         cmd += ["--model", ns.model]
+    import headless   # lazily: retro must start without it
+    cmd += headless.mcp_flags(d)
     env = {k: v for k, v in os.environ.items() if k not in _TOKENS}
     env["CPLAT_HEADLESS"] = "1"
     try:

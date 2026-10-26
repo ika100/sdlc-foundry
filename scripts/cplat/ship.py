@@ -150,9 +150,9 @@ def next_step(st: dict) -> str:
                  "then `cplat ship phase pr`. Gitops tasks (plan tasks with `repo:`): `cplat ship gitops prepare <task>`, "
                  "change and commit in that checkout, then `cplat ship gitops pr <task> --title <title> --body-file <file>`",
         "pr": "open the PR: write the body to .pr-body.md, then `cplat ship pr --title <title> --body-file .pr-body.md`",
-        "land": "wait for CI and merge: `cplat ship land`; on red checks fix the failures on the feature branch, push "
-                "(`cplat ship pr ...` again) and land again",
-        "deploy": "wait for dev: `cplat ship deploy`",
+        "land": "wait for CI and merge: `cplat ship land` (`cplat ship continue` adds the deploy); on red checks fix the failures on the feature branch, push "
+                "(`cplat ship pr ...` again) and `cplat ship continue` again",
+        "deploy": "wait for dev: `cplat ship continue`",
         "done": "nothing: the run is finished (`cplat ship finish`)",
     }[phase]
 

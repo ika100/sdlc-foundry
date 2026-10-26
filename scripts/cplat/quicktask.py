@@ -15,7 +15,8 @@ import validate
 from core import PlatformError
 
 MAX_LINES = 60
-PROTECTED = {"claude": [".claude/**"], "settings": [".platform-settings.yml"]}
+PROTECTED = {"claude": [".claude/**"], "settings": [".platform-settings.yml"],
+             "spec": ["docs/specs/**"]}
 
 
 def _changes(root: Path, base: str) -> dict[str, int]:
@@ -23,7 +24,7 @@ def _changes(root: Path, base: str) -> dict[str, int]:
     code, mb = validate._git(root, "merge-base", base, "HEAD")
     if code != 0 or not mb.strip():
         raise PlatformError(f"cannot compare with '{base}'", hint="pass an existing ref with --base")
-    code, text = validate._git(root, "diff", "--numstat", mb.strip())
+    code, text = validate._git(root, "diff", "--numstat", "--no-renames", mb.strip())
     if code != 0:
         raise PlatformError("git diff failed", hint="run it inside a git repository")
     out: dict[str, int] = {}

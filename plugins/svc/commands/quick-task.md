@@ -2,7 +2,7 @@
 description: "Lightweight pipeline for small, well-scoped changes. Runs coder → quality → tester with a tight fix loop. No PM, no architect, no security, no deployment. Usage: /svc:quick-task <description>"
 ---
 
-You are the **orchestrator** in quick-task mode. Use this for small changes (features, refactors, docs, config) a single coder can finish in one pass without product or architectural review.
+You are the **orchestrator** in quick-task mode. Use this for small changes (features, refactors, docs, config) one coder can finish in one pass.
 
 **Task:** $ARGUMENTS
 
@@ -33,16 +33,21 @@ Print `## Phase 0 — on $WORK_BRANCH, BASE_REF=<short-sha>`.
 Use the **coder** agent. Prompt prelude: the `<project-map>` block. Then:
 - The task description verbatim
 - Instruction to read the relevant files, make the minimal change, report touched files
-- Instruction to use `cplat quiet lint-fix` and `cplat quiet test-fast` as needed during implementation
-- The **brief** (coder, tester, quality): under the headings `Criteria` (id and full text of every criterion the task covers), `Task` (the task text and files), `Contract` (the relevant part of the design, or `none`), `Tests` (the test files) and `Commands` (`cplat quiet test-fast`, `cplat quiet quality`). The agent starts from the brief, so copy the facts into it; do not tell it to read the spec files. If a quiet command fails, give the agent the log path it printed. Criteria: the active criteria the task touches, or `none`; Contract: `none`.
+- Instruction to use `cplat quiet lint-fix` and `cplat quiet test-fast` while implementing
+- The **brief** (coder, tester, quality): under the headings `Criteria` (id and full text of every criterion the task covers), `Task` (the task text and files), `Contract` (the relevant part of the design, or `none`), `Tests` (the test files) and `Commands` (`cplat quiet test-fast`, `cplat quiet quality`). Copy the facts into the brief; do not tell the agent to read the spec files. On a failed quiet command, pass the agent its log path. Criteria: the active criteria the task touches, or `none`; Contract: `none`.
 
-One coder, one pass, no fan-out. **Inline (111):** if `cplat quick-task inline-check --base main` exits 0, make the change yourself, run `cplat quiet quality` and `cplat quiet test-fast` (both green), and write "made inline: <check line>" in the PR body. On exit 1 or a red gate, use the coder → quality → tester path and never try inline again.
+One coder, one pass — no worktrees, no fan-out. **Inline (111):** make the change yourself only if, once made, `cplat quick-task inline-check --base main` exits 0; skip Step 2's agents but run `cplat quiet quality` and `cplat quiet test-fast` yourself (both green) and write "made inline: <check line>" in the PR body. On exit 1 or a red gate, undo it, use the coder → quality → tester path and never try inline again.
+
+After the coder finishes (or the inline change is made), capture:
+```bash
+TOUCHED_FILES=$(git diff --name-only $BASE_REF -- .)
+```
 
 ---
 
 ## Step 2 — Parallel QA fan-out (quality + tester)
 
-Fan out **quality** and **tester** in a single message. Wall-clock is the longer leg, not the sum. Each prompt prelude:
+Fan out **quality** and **tester** in a single message. Each prompt prelude:
 ```
 <project-map>
 $PROJECT_MAP
@@ -54,7 +59,7 @@ $TOUCHED_FILES
 
 Then:
 
-1. **Quality agent** — instruction: "Run `cplat quiet lint-fix` then `cplat quiet quality` (brief headings as above: `Criteria`, `Task`, `Contract`, `Tests`, `Commands`). Report remaining violations."
+1. **Quality agent** — instruction: "Run `cplat quiet lint-fix` then `cplat quiet quality` (brief as above). Report remaining violations."
 2. **Tester agent** — instruction: "Touched files listed above. Run `devbox run test` (or `cplat quiet test-fast` while iterating) and write any missing tests for the changed code paths. Report pass/fail count and coverage."
 
 Reconcile:
@@ -99,7 +104,7 @@ Write the PR body with the Write tool to `.pr-body.md` in the repo root (never i
 Not run by quick-task: `devbox run security` (use `/shared:check-quality` for a full audit before merging risky changes).
 ```
 
-Then make **one** Bash call (it commits everything with `-s`, finds the open issues to close, pushes the branch and opens the PR):
+Then **one** Bash call (commits with `-s`, finds the issues to close, pushes, opens the PR):
 
 ```bash
 cplat pr open --title "<type>(<scope>): <imperative description of the task>" [--issues "#NNN …"]

@@ -84,17 +84,21 @@ def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None, re
         cmd += ["--model", model]
     for d in plugin_dirs or []:
         cmd += ["--plugin-dir", d]
-    cmd += ["--strict-mcp-config"]
+    return cmd + mcp_flags(repo, plugin_dirs)
+
+
+def mcp_flags(repo: Path, plugin_dirs: list[str] | None = None) -> list[str]:
+    """The MCP restriction of every unattended `claude -p` (spec 111): the repo's servers only, connectors off."""
+    flags = ["--strict-mcp-config"]
     mcp = repo / ".mcp.json"
     if mcp.is_file():
-        cmd += ["--mcp-config", str(mcp)]
+        flags += ["--mcp-config", str(mcp)]
     if extra := settings.mcp_config(repo):
-        cmd += ["--mcp-config", str(extra)]
+        flags += ["--mcp-config", str(extra)]
     conf: dict = {"disableClaudeAiConnectors": True}
     if plugin_dirs:   # plugins loaded in place are not under ~/.claude/plugins, so their files need their own Read rule
         conf["permissions"] = {"allow": [f"Read(/{d}/**)" for d in plugin_dirs]}
-    cmd += ["--settings", json.dumps(conf)]
-    return cmd
+    return flags + ["--settings", json.dumps(conf)]
 
 
 def plugin_dirs_of(paths: list[str]) -> list[str]:

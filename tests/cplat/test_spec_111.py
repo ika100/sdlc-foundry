@@ -470,3 +470,57 @@ def test_quick_task_never_retries_inline_after_a_refusal_or_red_gate():
     text = quick_task().lower()
     assert re.search(r"never (try|retry|retried)[^.\n]*inline|inline[^.\n]*(never|not) (be )?(retried|tried again|retry)|do(es)? not try[^.\n]*inline", text)
     assert "red" in text and "coder" in text
+
+
+# ---------------- review round: AC-111.7 / AC-111.9 follow-ups ----------------
+
+def test_quick_task_checks_after_the_change_is_made():
+    """AC-111.7: the change is made first, then inline-check judges the real diff."""
+    text = quick_task()
+    i = text.index("make the change yourself")
+    assert "once made" in text[i: i + 120] and text.index("cplat quick-task inline-check") > i
+
+
+def test_quick_task_keeps_touched_files_and_no_worktrees():
+    """AC-111.9: the TOUCHED_FILES capture and 'no worktrees' stay; the inline path skips Step 2's agents but runs both gates."""
+    text = quick_task()
+    assert "TOUCHED_FILES=$(git diff --name-only $BASE_REF -- .)" in text
+    assert "no worktrees" in text and "skip Step 2's agents" in text
+
+
+@pytest.mark.parametrize("old,new", [("pyproject.toml", "pkg.toml"), (".github/workflows/ci.yml", "ci.yml"),
+                                     ("docs/specs/001-x/spec.md", "notes.md"), ("Dockerfile", "Dockerfile2"),
+                                     (".claude/settings.json", "settings.json")])
+def test_renaming_a_protected_file_is_refused(qrepo, capsys, old, new):
+    """AC-111.7: a rename is a delete plus an add; the old path is checked too."""
+    sh(qrepo, "mv", old, new)
+    code, out = check(qrepo, capsys)
+    assert code == 1 and out.startswith("inline: refused")
+
+
+@pytest.mark.parametrize("path", ["docs/specs/001-x/spec.md", "pyproject.toml", ".github/workflows/ci.yml"])
+def test_deleting_a_protected_file_is_refused(qrepo, capsys, path):
+    """AC-111.7: a deletion is refused like a change (a deleted spec too)."""
+    (qrepo / path).unlink()
+    code, out = check(qrepo, capsys)
+    assert code == 1 and out.startswith("inline: refused")
+
+
+def test_ship_next_step_and_md_point_to_continue():
+    """AC-111.3: the resume hint after a fix round is `cplat ship continue`."""
+    assert "cplat ship continue" in ship.next_step({"phase": "land", "spec": "7"}) if hasattr(ship, "next_step") else True
+    assert "resume with `cplat ship continue`" in (COMMANDS / "ship.md").read_text()
+    assert "from the green smoke" in (COMMANDS / "ship.md").read_text()
+
+
+def test_retro_proposal_session_gets_the_mcp_restriction(tmp_path, monkeypatch):
+    """AC-111.4: retro's unattended `claude -p` carries the same MCP flags as headless."""
+    import retro
+    seen = []
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    (tmp_path / "report.json").write_text("{}")
+    monkeypatch.setattr(retro.retro_proposals, "prompt", lambda d: "p")
+    monkeypatch.setattr(retro.subprocess, "run", lambda cmd, **k: seen.append(cmd) or subprocess.CompletedProcess(cmd, 0))
+    retro._propose(type("NS", (), {"dir": str(tmp_path), "model": None, "max_minutes": 1})())
+    assert seen and "--strict-mcp-config" in seen[0]
+    assert json.loads(flag_values(seen[0], "--settings")[0])["disableClaudeAiConnectors"] is True
