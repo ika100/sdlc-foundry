@@ -29,8 +29,46 @@ STATUSES = {"stable", "planned", "deprecated"}
 PRD = ROOT / "docs" / "requirements" / "platform-vision.md"
 
 
-def load() -> list[dict]:
+DECLARED_IN = ".platform-settings.yml"
+
+
+def load_all() -> list[dict]:
+    """Every registry entry in file order, including declared shapes (ADR-056)."""
     return yaml.safe_load((ROOT / "shapes.yml").read_text())["shapes"]
+
+
+def is_declared(entry: dict) -> bool:
+    return (entry.get("detection") or {}).get("declared") is not None
+
+
+def load() -> list[dict]:
+    """The template shapes: what every creating, adopting and rolling-out caller sees."""
+    return [e for e in load_all() if not is_declared(e)]
+
+
+def get(sid: str) -> dict | None:
+    return next((e for e in load_all() if e.get("id") == sid), None)
+
+
+def declared_ids() -> list[str]:
+    return [e["id"] for e in load_all() if is_declared(e)]
+
+
+def _declared_errors(sid: str, s: dict) -> list[str]:
+    errs: list[str] = []
+    det = s.get("detection") or {}
+    if det.get("declared") != DECLARED_IN:
+        errs.append(f"{sid}: detection.declared must be {DECLARED_IN} (ADR-056)")
+    if "copier_src" in det or "sniff" in det:
+        errs.append(f"{sid}: a declared shape has no copier_src or sniff rule (ADR-056)")
+    if s.get("template") is not None:
+        errs.append(f"{sid}: a declared shape has no template (template: null, ADR-056)")
+    if s.get("deployable") or s.get("library"):
+        errs.append(f"{sid}: a declared shape is neither deployable nor a library (ADR-056)")
+    for k in ("runtime", "smoke_tag", "smoke_globs", "default_stack"):
+        if k in s:
+            errs.append(f"{sid}: a declared shape has no {k} (ADR-056)")
+    return errs
 
 
 def validate(shapes: list[dict]) -> list[str]:
@@ -46,7 +84,12 @@ def validate(shapes: list[dict]) -> list[str]:
         seen.add(sid)
         if s.get("status") not in STATUSES:
             errs.append(f"{sid}: status must be one of {sorted(STATUSES)}")
-        det = s.get("detection", {})
+        if is_declared(s):
+            errs += _declared_errors(sid, s)
+            continue
+        if s.get("template") is None:
+            errs.append(f"{sid}: template missing: only a shape declared in {DECLARED_IN} has none (ADR-056)")
+        det = s.get("detection") or {}
         if det.get("copier_src") != f"templates/{s.get('template')}":
             errs.append(f"{sid}: detection.copier_src must be templates/{s.get('template')}")
         if not det.get("sniff"):
@@ -109,8 +152,12 @@ def _validation_errors(sid: str, s: dict) -> list[str]:
 def check_files(shapes: list[dict]) -> list[str]:
     errs: list[str] = []
     for s in shapes:
-        tdir = ROOT / "templates" / s["template"]
         pdir = ROOT / "plugins" / s["plugin"]
+        if is_declared(s):
+            if s["status"] != "planned" and not pdir.is_dir():
+                errs.append(f"{s['id']}: plugins/{s['plugin']}/ missing (status {s['status']})")
+            continue
+        tdir = ROOT / "templates" / s["template"]
         if s["status"] != "planned":
             if not (tdir / "copier.yml").is_file():
                 errs.append(f"{s['id']}: templates/{s['template']}/copier.yml missing (status {s['status']})")
@@ -173,7 +220,7 @@ def check_contract(shapes: list[dict]) -> list[str]:
     detect = (ROOT / "scripts" / "detect-shape.sh").read_text()
     fixtures = (ROOT / "scripts" / "test-detect-shape.sh").read_text()
     for s in shapes:
-        if s["status"] == "planned":
+        if s["status"] == "planned" or is_declared(s):
             continue
         sid, tdir, pdir = s["id"], ROOT / "templates" / s["template"], ROOT / "plugins" / s["plugin"]
         # 1. template: devbox recipes, CLAUDE.md, plugin enablement
@@ -341,7 +388,7 @@ def prd_rows() -> dict[str, tuple[str, str]]:
 def check_prd(shapes: list[dict]) -> list[str]:
     errs: list[str] = []
     rows = prd_rows()
-    by_id = {s["id"]: s for s in shapes}
+    by_id = {s["id"]: s for s in shapes if not is_declared(s)}
     for sid in sorted(set(rows) | set(by_id)):
         if sid not in rows:
             errs.append(f"{sid}: in shapes.yml but not in PRD §4 table")
@@ -356,9 +403,9 @@ def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__)
         return 2
-    cmd, shapes = argv[0], load()
+    cmd, shapes = argv[0], load_all()
     if cmd == "ids":
-        print("\n".join(s["id"] for s in shapes))
+        print("\n".join(s["id"] for s in load()))
         return 0
     if cmd == "get":
         sid, field = argv[1], argv[2]

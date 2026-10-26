@@ -40,7 +40,7 @@ write('commands.md', 'Slash commands', `All ${count} slash commands of the sdlc-
   `These pages are generated from \`plugins/*/commands/*.md\`, one section per noun of the domain model. Install the plugins with \`/plugin marketplace add ika100/sdlc-foundry\` and \`/plugin install <name>@sdlc-foundry\`.\n${commands}`, 1);
 
 // ---- shapes ----
-const shapes = YAML.parse(read('shapes.yml')).shapes;
+const shapes = YAML.parse(read('shapes.yml')).shapes.filter((s) => !s.detection?.declared);
 const shapeRows = shapes.map((s) => `| \`${s.id}\` | ${s.plugin} | \`templates/${s.template}\` | ${s.deployable ? 'yes' : 'no'} | ${s.default_stack ? mdTableCell(Object.values(s.default_stack).join(' / ')) : ''} | ${s.runtime ? `${s.runtime.port}; \`${s.runtime.probes.readiness}\`; \`${s.runtime.metrics ?? '-'}\`` : '-'} | ${s.status} |`);
 write('shapes.md', 'Shapes', 'The repository shapes the platform can create and operate, generated from shapes.yml.',
   `A **shape** is a kind of repository. It decides which template creates it and which agents work on it. This table is generated from \`shapes.yml\`, the single source of truth.\n\n| Shape | Plugin | Template | Deployable | Default stack | Port; readiness probe; metrics path | Status |\n|---|---|---|---|---|---|---|\n${shapeRows.join('\n')}\n\nTo add a shape, follow [Adding a new shape](/sdlc-foundry/guides/add-a-shape/).\n`, 2);
