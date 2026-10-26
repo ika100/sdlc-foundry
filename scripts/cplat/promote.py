@@ -1,4 +1,4 @@
-"""`promote`: pin services to a newer image in the next environment (dev → staging → prod)."""
+"""`instance promote`: pin components to a newer image in the next environment (dev → staging → prod)."""
 from __future__ import annotations
 
 import argparse
@@ -23,15 +23,16 @@ def gh(args: list[str]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat promote", description=__doc__)
-    p.add_argument("items", nargs="*", help="<service...> <from-env> <to-env>   (or --all <from-env> <to-env>)")
-    p.add_argument("--all", action="store_true", help="every service that is in <from-env>")
+    p = argparse.ArgumentParser(prog="cplat instance promote", description=__doc__)
+    p.add_argument("items", nargs="*", metavar="component", help="the components to promote (or --all)")
+    p.add_argument("--to", help="the environment to promote into (the source is the environment before it)")
+    p.add_argument("--all", action="store_true", help="every component that has an instance in the source environment")
     p.add_argument("--version", help="prod: release to pin (vX.Y.Z); default: newest release tag with a published image")
     p.add_argument("--sha", help="staging: full commit SHA to pin; default: head of the service's main branch")
     p.add_argument("--no-verify", action="store_true", help="do not check that the image tag exists in GHCR")
     p.add_argument("--accept-digest-mismatch", metavar="REASON", default=None,
                    help="prod: promote although the release image is not the one staging tested; REASON is a sentence")
-    p.add_argument("--app")
+    p.add_argument("--system", dest="app", help="the system (applications/<name>) when the repo holds several")
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--pr", action="store_true")
     p.add_argument("--dry-run", action="store_true")
@@ -119,36 +120,38 @@ def _check_digests(svc: dict, staging_tag: str | None, release_tag: str) -> dict
 
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
-    if len(ns.items) < (2 if ns.all else 3):
-        raise PlatformError("usage: promote <service...> <from> <to>   |   promote --all <from> <to>")
-    *names, frm, to = ns.items
+    names = list(ns.items)
+    if not ns.to or (not names and not ns.all):
+        raise PlatformError("promote names its target with --to: cplat instance promote <component...|--all> --to <env>")
+    to = ns.to
+    if to not in model.ENVIRONMENTS:
+        raise PlatformError(f"unknown environment '{to}' (environments: {', '.join(model.ENVIRONMENTS)})")
+    if to == model.ENVIRONMENTS[0]:
+        raise PlatformError(f"{to} is the first environment: nothing is promoted to it (dev follows main)")
+    frm = model.ENVIRONMENTS[model.ENVIRONMENTS.index(to) - 1]
     if ns.all and names:
-        raise PlatformError("--all and explicit services are mutually exclusive")
-    for e in (frm, to):
-        if e not in model.ENVIRONMENTS:
-            raise PlatformError(f"unknown environment '{e}'", hint="dev, staging or prod")
-    if model.ENVIRONMENTS.index(to) <= model.ENVIRONMENTS.index(frm):
-        raise PlatformError(f"cannot promote {frm} → {to}", hint="promotion only moves forward: dev → staging → prod (dev tracks the service's main branch)")
-    if to == "dev":
-        raise PlatformError("dev is not a promotion target")
+        raise PlatformError("--all and explicit components are mutually exclusive")
     if ns.accept_digest_mismatch is not None and not _reason_ok(ns.accept_digest_mismatch):
         raise PlatformError("--accept-digest-mismatch needs a reason of at least one sentence (3 or more words, ending in . ! or ?)",
                             hint='e.g. --accept-digest-mismatch "The release was rebuilt on purpose."')
     if ns.version and len(names) > 1:
-        raise PlatformError("--version applies to a single service")
+        raise PlatformError("--version applies to a single component")
 
     repo = Path(ns.repo_dir).resolve()
     app_dir = gitops.find_app(repo, ns.app)
     if not ns.dry_run:
         gitops.require_clean(repo)
     y, data = gitops.load(app_dir)
-    services = gitops.services_of(data)
-    by_name = {s["name"]: s for s in services}
     m = model.load_dir(app_dir)
+    by_name = {}
+    for c in m.components:
+        if c.type == "library":
+            continue
+        by_name[c.name] = {"name": c.name, "repo": c.repo, "image": c.image}
     if ns.all:
-        names = [s["name"] for s in services if m.instance(s["name"], frm)]
+        names = [c for c in by_name if m.instance(c, frm)]
         if not names:
-            raise PlatformError(f"no service is in {frm}")
+            raise PlatformError(f"no component is in {frm}")
     r = Report(title=f"promote {', '.join(names)}: {frm} → {to} ({app_dir.name})")
     plan: list[tuple[str, str]] = []
     checks: dict[str, dict] = {}
@@ -159,10 +162,11 @@ def main(argv: list[str]) -> int:
     summaries: dict[str, evidence.Evidence] = {}
     for n in names:
         svc = by_name.get(n)
-        if svc is None:
-            raise PlatformError(f"{n} is not in services.yaml", hint="current: " + ", ".join(by_name))
         if m.instance(n, frm) is None:
-            raise PlatformError(f"{n} is not in {frm} yet", hint="promote it through the earlier environment first")
+            runs = ", ".join(i.environment for i in m.instances_of(n)) or "none"
+            if m.component(n) is None:
+                raise PlatformError(f"{n} is not a component of {m.system}", hint="components: " + ", ".join(c.name for c in m.components))
+            raise PlatformError(f"{n} has no instance in {frm} (it runs in: {runs})", hint=f"promote it through {frm} first")
         tag, what = pick_tag(svc, to, ns)
         if not ns.no_verify and to == "staging":
             have = image_tags(svc["image"])
@@ -204,7 +208,7 @@ def main(argv: list[str]) -> int:
         raise PlatformError("\n".join(problems), hint="re-publish the release from the tested image with the release job (it re-tags "
                             "the staging sha-<40> image), or promote the release whose image is the staging one; "
                             "a mismatch alone can be accepted with --accept-digest-mismatch \"<reason>\"")
-    r.will_do.append("add the environment to the service's `environments`, regenerate manifests, pin the tag")
+    r.will_do.append(f"add `instances.{to}` to each component, regenerate manifests, pin the tag")
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch promote/…)")
     if summaries:
@@ -216,12 +220,11 @@ def main(argv: list[str]) -> int:
         return 0
 
     for n, _ in plan:
-        envs = by_name[n].get("environments")
-        if envs is None:
-            by_name[n]["environments"] = ["dev"]
-            envs = by_name[n]["environments"]
-        if to not in envs:
-            envs.append(to)
+        entry = gitops.components_of(data)[n]
+        if entry.get("instances") is None:
+            entry["instances"] = {"dev": {}}
+        if to not in entry["instances"]:
+            entry["instances"][to] = {}
     gitops.save(app_dir, y, data)
     gitops.render(repo)
     for n, tag in plan:  # render created the overlay at `latest`; pin the tag (render preserves it from now on)
