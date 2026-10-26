@@ -414,3 +414,142 @@ must never be written anywhere in the platform repo.
 - **Two `--take-over` meanings**: both need the user's word; ship.md says so.
 - **Pre-087 ship states** have no `run_id`. `_ensure_run` creates one from `started`, so a run in flight at upgrade time
   still gets a record.
+
+## Amendment 2026-10-26 (#207): why a `pr-wait` run ended (AC-087.24 to AC-087.27)
+
+### Decisions
+
+- **The result is a section, not a new outcome.** `outcome` keeps its four values; a `pr-wait` record gets the section
+  `pr_wait`, and only the readers (`cplat runs report`, the weekly retro) turn `failed` + a red result into `red-ci`.
+  The store is never rewritten, so a record from before this amendment simply has no section (`unrecorded`).
+- **Only `cplat pr wait`'s own run gets the section.** When `pr wait` attaches to a ship run (AC-087.5), and in the
+  ship land, gitops and deploy paths, nothing new is recorded: the ship record's `ci_rounds`, `reruns` and
+  `escalation` already say why it stopped (non-goal). `ship.py` changes only so that the two `wait_checks` failures
+  can be told apart by type instead of by message text.
+- **The classification lives where the wait ends, not in the reader.** `pr.py` knows which branch ended the wait; a
+  reader parsing message texts would break on the next wording change.
+- **One classifier for both readers.** `runs_report.count_outcome(record)` decides `red-ci`; the retro imports it
+  (it already imports `runs_report`), so the report and the retro can never disagree.
+
+### Record section `pr_wait` (AC-087.24)
+
+```json
+"pr_wait": {"result": "red", "checks": ["ci / lint", "ci / test"]}
+"pr_wait": {"result": "error", "message": "gh: HTTP 502: Bad Gateway (https://api.github.com/graphql)"}
+```
+
+| Field | Type | Present when |
+|---|---|---|
+| `result` | str | always: `green` \| `merged` \| `red` \| `budget-refused` \| `timeout` \| `no-checks` \| `closed` \| `merge-failed` \| `error` |
+| `checks` | list of str | `red`, `budget-refused` (the failing checks), `timeout` (the checks still pending); sorted, unique |
+| `message` | str | `error` only: the first non-empty line of the error text, cut to 200 characters; `finish` redacts it like every other string (AC-087.10) |
+
+The section is passed as `runs.finish(own, outcome, fields={"pr_wait": section})`; `pr_wait` is not in `RESERVED`, so no
+change to `runs.py` is needed. `outcome` stays as in AC-087.5: `done` for `green` and `merged`, `failed` otherwise.
+
+### Where it is decided — `scripts/cplat/pr.py` and `scripts/cplat/ship.py`
+
+`ship.py` gets two subclasses of `PlatformError`, raised by `wait_checks` with the same message and hint as today (so
+`land`, `merge_gitops`, their tests and every exit code are unchanged):
+
+```python
+class NoChecks(PlatformError): ...                 # "no CI checks were reported on … after …s"
+class ChecksPending(PlatformError):                # "checks on … still pending after …s: <names>"
+    checks: list[str]                              # the pending check names
+```
+
+`pr.py` gets two of its own, raised where it raises today: `Closed(PlatformError)` (the PR was closed without merging)
+and `MergeFailed(PlatformError)` (`gh pr merge` refused). `_wait` returns `(ok, lines, section)`; `wait` passes the
+section to `finish` only for its own run (`own`), never for an attached one.
+
+| Where the wait ends | `result` | `checks` / `message` |
+|---|---|---|
+| PR already `MERGED` when the wait starts | `merged` | |
+| all green, no `--merge` | `green` | |
+| all green, `--merge` succeeded | `merged` | |
+| `status == "red"` and `watch.refused` | `budget-refused` | names of the returned failed checks |
+| `status == "red"` | `red` | names of the failed checks |
+| `ship.ChecksPending` | `timeout` | `e.checks` |
+| `ship.NoChecks` | `no-checks` | |
+| `Closed` | `closed` | |
+| `MergeFailed` | `merge-failed` | |
+| any other exception (`PlatformError` from `gh`, the API, a stale run that stays in progress after its rerun, jobs queued again after a cancel; `FileNotFoundError`; a crash; `KeyboardInterrupt` → message `interrupted`) | `error` | first line of `str(e)`, else the exception's class name |
+
+Every exception is re-raised after `finish`, exactly as today.
+
+### Report — `scripts/cplat/runs_report.py` (AC-087.25, AC-087.26)
+
+```python
+PR_WAIT_RESULTS = ("green", "merged", "red", "budget-refused", "timeout", "no-checks", "closed", "merge-failed", "error")
+RED_RESULTS = ("red", "budget-refused")
+RED_CI = "red-ci"                    # a reader's count, never an outcome in a record
+TOP_RED_CHECKS = 5
+
+def pr_wait_result(record: dict) -> str | None:
+    """None for a record whose kind is not pr-wait; "unrecorded" when it has no `pr_wait` dict; "unknown" when the
+    dict has no string `result`; otherwise the result (an unlisted one is kept under its own name)."""
+def count_outcome(record: dict) -> str:
+    """The outcome a reader counts: RED_CI for kind pr-wait, outcome failed and a result in RED_RESULTS; otherwise
+    _text(record["outcome"])."""
+def aggregate_pr_wait(kept: list[dict]) -> dict: ...   # {"results": {...}, "red_checks": [{"check", "count"}, ...]}
+```
+
+- `runs` (kind → outcome counts) counts `count_outcome(r)` instead of the raw outcome. A `pr-wait` record without the
+  section stays `failed`. Every other kind is unchanged.
+- `pr_wait.results`: every key of `PR_WAIT_RESULTS` plus `unrecorded`, in that order, always present (0 when none),
+  then any other result seen (including `unknown`) under its own name. Only `pr-wait` records in the window count.
+- `pr_wait.red_checks`: over `red` and `budget-refused` results, each check name counted once per record; top 5 by
+  count descending, then name ascending; a non-list `checks` or a non-string name is skipped.
+- `--json`: the key `pr_wait` is always present and comes after `usage` (`validation`, when present, stays last):
+  `window, runs, phases, causes, escalations, reruns, filed, buffered, usage, pr_wait`.
+- Text: two lines right after the "Runs per kind and outcome" block:
+
+  ```
+  pr-wait results: green <n>, merged <n>, red <n>, budget-refused <n>, timeout <n>, no-checks <n>, closed <n>, merge-failed <n>, error <n>, unrecorded <n>
+  Red checks: <check> <n>, …
+  ```
+
+  `pr-wait results: none` when the window has no `pr-wait` record; `Red checks: none` when the list is empty.
+- `runs_usage_report` (the usage view, spec 099) keeps the raw outcome: AC-087.26 is about runs per kind and outcome only.
+
+### Retro — `scripts/cplat/retro_report.py` (AC-087.26, AC-087.27)
+
+- `_outcome(r)` returns `runs_report.count_outcome(r)` when that is `red-ci`, else as today. `_runs` lists the columns
+  `done, escalated, failed, red-ci, abandoned[, unknown]`, with `red-ci` only when a `red-ci` was counted in either week
+  (like `unknown` today), so a retro of weeks without one renders exactly as before.
+- `build` adds the report key `pr_wait`:
+
+  ```json
+  "pr_wait": {
+    "results": {"green": {"current": 3, "previous": 1}, "red": {"current": 5, "previous": 7}, "...": "...",
+                "unrecorded": {"current": 0, "previous": 29}},
+    "red_checks": [{"rank": 1, "check": "ci / test", "count": {"current": 4, "previous": 2},
+                    "run_ids": ["20261020T101500Z-3f9c2a71"]}]
+  }
+  ```
+
+  `results` has the keys of `aggregate_pr_wait` for both weeks (`_fig(cur, prev)`); `red_checks` is the top 5 of the
+  covered week, its `previous` the same check's count in the week before (0 when absent), `run_ids` at most 5, sorted.
+- Evidence refs (spec 090's index, both sides): `pr_wait.<result>` for every result, and `pr_wait.check<rank>`.
+- Rendering: a section `## pr-wait` right after `## CI`:
+
+  ```
+  ## pr-wait
+  results: green 3 (prev 1), merged 10 (prev 8), red 5 (prev 7), …, unrecorded 0 (prev 29)
+  red checks:
+    1. ci / test — 4 (prev 2) (20261020T101500Z-3f9c2a71, …)
+  ```
+
+  The private retro and `render_text` print check names; `render_public` prints `check <rank>` in their place, as
+  `## Reruns` does, so no check name reaches the public issue. `no data for this week` when the week has no runs;
+  `red checks: none` when the list is empty.
+
+### Back-compat
+
+- Records written before this amendment, and `pr-wait` records from older platform versions in other repos, have no
+  `pr_wait`: they count as `unrecorded` and stay `failed` in runs per kind and outcome. Nothing in the store is
+  rewritten (non-goal).
+- No change to the record schema number: `pr_wait` is an additional section, and readers already ignore unknown
+  sections (AC-087.14). An older platform's report reading new records ignores `pr_wait` and shows them as `failed`.
+- `test_json_output_has_stable_keys_and_nothing_else_on_stdout` (tests/cplat/test_runs_report.py) asserts the exact
+  JSON key list; it must gain `pr_wait` after `usage` (AC-087.18 and AC-087.25 together).
