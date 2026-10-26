@@ -256,17 +256,21 @@ def test_compare_validation_applies_the_arm_and_recall_in_both_passes(arms, stor
     assert len([c for c, _ in arms.calls if c[:2] == ["bash", "-c"] and "pytest" in c[-1]]) == 2
 
 
-def test_the_codebase_memory_arm_approves_the_server_and_uses_an_absolute_command():
-    """AC-107.3: the project .mcp.json server is approved in settings, started by absolute path; the note says where it installs."""
+def test_the_codebase_memory_arm_approves_the_server_and_commits_no_local_path():
+    """AC-107.3 / AC-107.9: the server is approved in settings and started via sh -c, so $HOME expands at run time; the
+    committed .mcp.json holds no local path (the sample repo is public); install script and binary are pinned."""
     arm = json.loads((REAL_BENCH / "arms" / "codebase-memory.json").read_text())
     assert "enabledMcpjsonServers" in json.dumps(arm["commands"])
-    assert json.loads(arm["files"][".mcp.json"])["mcpServers"]["codebase-memory-mcp"]["command"].startswith("$HOME/.local/bin/")
+    server = json.loads(arm["files"][".mcp.json"])["mcpServers"]["codebase-memory-mcp"]
+    assert server["command"] == "sh" and "$HOME/.local/bin/codebase-memory-mcp" in " ".join(server["args"])
+    assert str(Path.home()) not in arm["files"][".mcp.json"] and "/Users/" not in arm["files"][".mcp.json"]
+    assert "/v0.12.1/install.sh" in json.dumps(arm["commands"]) and "releases/download/v0.12.1" in json.dumps(arm["commands"])
     assert "~/.local/bin" in arm["note"] and "~/.cache" in arm["note"]
 
 
-def test_stage_arm_resolves_home_in_files(arms, tmp_path):
-    """AC-107.3: $HOME in an arm file is the real home directory at apply time."""
+def test_stage_arm_writes_files_verbatim(arms, tmp_path):
+    """AC-107.9: arm files are written byte for byte; no local path is substituted into what gets pushed."""
     clone = tmp_path / "c"
     clone.mkdir()
     runs_bench.stage_arm({"name": "h", "files": {"m.json": "$HOME/.local/bin/x"}, "commands": []}, clone)
-    assert (clone / "m.json").read_text() == f"{Path.home()}/.local/bin/x"
+    assert (clone / "m.json").read_text() == "$HOME/.local/bin/x"

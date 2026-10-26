@@ -184,7 +184,7 @@ def stage_arm(arm: dict, clone: Path) -> None:
         if clone.resolve() not in target.parents:
             raise RuntimeError(f"arm {arm['name']}: file {rel} is outside the clone")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content.replace("$HOME", str(Path.home())))
+        target.write_text(content)   # verbatim: no local path ever reaches the (public) sample repo
     for cmd in arm.get("commands") or []:
         code, out, err = run(cmd, clone)
         if code != 0:
