@@ -46,7 +46,6 @@ def test_two_databases_add_the_prefixed_variables_step_ac_115_8(repo, capsys):  
     assert f"api now uses 2 database resources: {STEP}" in out
 
 
-@pytest.mark.xfail(strict=True, reason="compose.py emits the dry-run report before prefix_notes are added to next_steps")
 def test_two_databases_step_is_printed_with_dry_run_ac_115_8(repo, capsys):  # AC-115.8
     rc, out, err = run("component", "set", "api", "--uses", "orders-db", "--uses", "users-db", "--dry-run", "--repo-dir", repo, capsys=capsys)
     assert rc == 0, err

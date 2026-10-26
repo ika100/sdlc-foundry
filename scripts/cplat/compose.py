@@ -275,6 +275,8 @@ def main(argv: list[str]) -> int:
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch component/…)")
     if ns.dry_run:
+        if ns.action == "set":
+            r.next_steps.extend(prefix_notes)
         r.emit(True, ns.json)
         return 0
 
