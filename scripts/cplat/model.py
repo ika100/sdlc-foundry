@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -368,7 +368,7 @@ def _component(entry: dict, shapes: list[dict]) -> tuple[Component, list[str]]:
     return Component(
         name=name, repo=_str_or_none(entry.get("repo")), image=_str_or_none(entry.get("image")), shape=_str_or_none(shape),
         type=kind, lang=str(lang), external=_external(entry), expose=expose if expose else None,
-        metrics=_str_or_none(entry.get("metrics")),
+        metrics=_str_or_none(entry.get("metrics") or None),
         uses=tuple(str(u) for u in uses) if isinstance(uses, list) else (),
         environments=envs,
         promotion_staging=_str_or_none(promo.get("staging")) if isinstance(promo, dict) else None,
@@ -427,6 +427,8 @@ def build(system: str, services: dict | list | None, app: dict | None, *, pins: 
         components.append((entry, c))
         warnings += w
     declared = tuple(str(k) for k in addons)
+    names = {k for k in declared if k != "observability"}
+    components = [(e, replace(c, uses=tuple(u for u in c.uses if u in names))) for e, c in components]
     resources = [Resource(k, "database" if k == "postgres" else "unknown") for k in declared if k != "observability"]
 
     staging_default = by_env["staging"].promotion
@@ -496,7 +498,7 @@ def load_dir(app_dir: Path, *, shapes: list[dict] | None = None) -> Model:
             if not f.is_file() and not required:
                 return {}
             doc = yaml.safe_load(f.read_text())
-            if doc is None and not required:
+            if doc is None:
                 return {}
             if not isinstance(doc, dict):
                 raise TypeError("the top level is not a mapping")
