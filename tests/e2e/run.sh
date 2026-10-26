@@ -4,6 +4,8 @@
 #   local registry → start the platform's own local cluster (scripts/local-cluster.sh, WITH_ARGO=0) → apply the manifests
 #   the renderer generated → wait for rollout → probe the services through the Gateway → ship a spec: verify dev, promote
 #   to staging, apply, verify staging, finish the ship run.
+# It also declares a second, external database (ext-db) and proves in the cluster that its ExternalSecret creates no
+# partial Secret while the store entry lacks `password` (AC-115.12), and that the Secret appears once the entry is complete.
 # It exercises: cplat system new, resource add, component ship, instance promote|secret|verify, the templates'
 # Dockerfiles (non-root numeric user, read-only filesystem), render.py on system.yaml, the generated
 # Deployment/Service/HTTPRoute against a real API server, and the Gateway API on k3s' Traefik.
@@ -63,6 +65,24 @@ $cplat system new "$work/system.yml" --no-github --skip-tasks --dir "$work" --or
 step "Declare the Postgres resource in system.yaml (cluster-up then installs the CloudNativePG operator)"
 $cplat resource add postgres --repo-dir "$gitops_repo" >/dev/null
 commit "postgres"
+step "Declare the secret store and an external database ext-db (its store entry is filled in later)"
+(cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" <<'PY'
+import sys
+sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
+import gitops
+from pathlib import Path
+app_dir = gitops.find_app(Path("."))
+y, data = gitops.load(app_dir)
+if not data.get("secretStore"):
+    data["secretStore"] = {"name": "platform-secrets", "kind": "ClusterSecretStore"}   # the local cluster's store
+gitops.save(app_dir, y, data)
+PY
+)
+$cplat resource add ext-db --type database --external --repo-dir "$gitops_repo" >/dev/null
+commit "ext-db"
+# the in-cluster database needs the CloudNativePG operator: render writes it to operators/ (cluster level, once)
+[ -f "$gitops_repo/operators/apps/cloudnative-pg.yaml" ] || fail "render did not write operators/apps/cloudnative-pg.yaml for the in-cluster database"
+[ -f "$gitops_repo/operators/root.yaml" ] || fail "render did not write operators/root.yaml"
 step "Describe the environments in system.yaml: the OpenTelemetry collector and enforced Kyverno guard rails in dev, a staging host"
 (cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" "$port" <<'PY'
 import sys
@@ -84,6 +104,8 @@ PY
 commit "environments"
 
 step "Start the local cluster with a registry (the template's own script, Gateway only)"
+# Without Argo CD (WITH_ARGO=0) the script cannot apply operators/root.yaml (an Argo CD Application); it installs the
+# CloudNativePG chart itself at the version pinned in operators/apps/cloudnative-pg.yaml (WITH_CNPG auto-detects that file).
 (cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
 
 step "Build and push the images"
@@ -206,6 +228,51 @@ step "Kyverno: the platform's own workloads were admitted under Enforce, a viola
 kc get deploy e2e-api e2e-web otel-collector >/dev/null || fail "a platform workload is missing"
 if out=$(kc create deployment violating --image=docker.io/library/nginx:latest 2>&1); then kc delete deployment violating >/dev/null; fail "a violating Deployment was admitted under Enforce"; fi
 case "$out" in *"platform-guardrails"*) echo "ok   denied: $(echo "$out" | tr '\n' ' ' | cut -c1-160)";; *) fail "the denial did not come from the guard rails: $out";; esac
+
+step "External database: a store entry without password creates no Secret and the ExternalSecret reports the key"
+# ext-db is external in every environment; the ExternalSecret <system>-ext-db-app lands in the overlay of the first
+# component that uses it. e2e-web uses it from here on (e2e-api keeps postgres alone, so DATABASE_URL stays as it was).
+(cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" <<'PY'
+import sys
+sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
+import gitops
+from pathlib import Path
+app_dir = gitops.find_app(Path("."))
+y, data = gitops.load(app_dir)
+gitops.components_of(data)["e2e-web"]["uses"] = ["ext-db"]
+gitops.save(app_dir, y, data)
+PY
+uv run scripts/render.py)
+commit "e2e-web uses ext-db"
+ext_es=e2e-ext-db-app
+store_key=e2e-dev-ext-db
+sc() { kubectl --context k3d-$cluster -n secrets-store "$@"; }
+# the store entry holds uri, host, port, dbname and user, but not password
+sc create secret generic $store_key --from-literal=uri=postgres://app@ext.example:5432/app --from-literal=host=ext.example \
+  --from-literal=port=5432 --from-literal=dbname=app --from-literal=user=app >/dev/null
+kubectl --context k3d-$cluster apply -n $ns -k "$work/e2e-gitops/applications/e2e/overlays/dev/e2e-web" >/dev/null
+kc get externalsecret $ext_es >/dev/null || fail "the ExternalSecret $ext_es was not applied with the e2e-web overlay"
+kc annotate externalsecret $ext_es force-sync="$(date +%s)" --overwrite >/dev/null
+es_ready() { kc get externalsecret $ext_es -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null; }
+for _ in $(seq 1 30); do [ "$(es_ready)" = False ] && break; sleep 3; done   # up to 90 s
+[ "$(es_ready)" = False ] || { kc get externalsecret $ext_es -o yaml | tail -25; fail "the ExternalSecret $ext_es is not reported as not ready although password is missing in the store"; }
+es_message=$(kc get externalsecret $ext_es -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}')
+case "$es_message" in *password*) echo "ok   ExternalSecret not ready, status names the key: $(echo "$es_message" | cut -c1-160)";; *) fail "the ExternalSecret status does not name the missing key password: $es_message";; esac
+sleep 5   # give a wrongly created partial Secret time to appear
+if kc get secret $ext_es >/dev/null 2>&1; then fail "the Secret $ext_es exists although the store entry lacks password (no partial Secret allowed)"; fi
+echo "ok   no Secret $ext_es while password is missing"
+
+step "External database: completing the store entry creates the Secret with all keys"
+sc patch secret $store_key --type merge -p '{"stringData":{"password":"ext-secret-pw"}}' >/dev/null
+kc annotate externalsecret $ext_es force-sync="$(date +%s)" --overwrite >/dev/null
+for _ in $(seq 1 40); do [ "$(secret_val $ext_es password)" = ext-secret-pw ] && break; sleep 3; done   # up to 120 s
+[ "$(secret_val $ext_es password)" = ext-secret-pw ] || { kc get externalsecret $ext_es -o yaml | tail -25; fail "the Secret $ext_es did not appear after the store entry was completed"; }
+for k in uri host port dbname user password; do
+  [ -n "$(secret_val $ext_es $k)" ] || fail "the Secret $ext_es lacks the key $k"
+done
+kc rollout status deploy/e2e-web --timeout=240s || {
+  kc describe pod -l app=e2e-web | tail -30; fail "e2e-web did not become ready once the Secret $ext_es existed"; }
+echo "ok   Secret $ext_es has uri, host, port, dbname, user and password; e2e-web runs"
 
 # ---- Ship a spec: dev is verified, the build is promoted to staging, applied and verified, the run ends ----
 sns=e2e-staging
