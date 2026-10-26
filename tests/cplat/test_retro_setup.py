@@ -61,6 +61,14 @@ def test_a_failing_report_fails_the_run_and_skips_the_post_but_a_failing_proposa
     assert len(flagged) == 2
 
 
+def test_the_job_env_uses_only_contexts_github_allows_there():
+    """AC-090.12: `runner` and other step-time contexts in `jobs.<id>.env` make GitHub reject the whole file."""
+    allowed = {"github", "inputs", "matrix", "needs", "secrets", "strategy", "vars"}
+    for value in asset()["jobs"]["retro"].get("env", {}).values():
+        used = set(re.findall(r"\$\{\{\s*([a-z_]+)", str(value)))
+        assert used <= allowed, value
+
+
 def test_only_the_proposal_step_sees_the_claude_credential_and_it_sees_no_github_token():
     """AC-090.12: the credential is a secret of the store repo; the job token is the retro token; the proposal step clears GH_TOKEN (AC-090.9)."""
     job = asset()["jobs"]["retro"]

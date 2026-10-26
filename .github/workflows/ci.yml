@@ -112,7 +112,7 @@ jobs:
           for t in service-python library-python service-java service-go web-nextjs gitops-app; do
             copier copy ./templates/$t /tmp/lint-$t --defaults --trust --skip-tasks --data project_name=lint-test
           done
-          uv tool run --from actionlint-py actionlint .github/workflows/*.yml /tmp/lint-*/.github/workflows/*.yml
+          uv tool run --from actionlint-py actionlint .github/workflows/*.yml scripts/cplat/assets/workflows/*.yml /tmp/lint-*/.github/workflows/*.yml
       - name: generated Kubernetes manifests are valid (labels, kustomize build, kubeconform)
         run: |
           uv tool install copier

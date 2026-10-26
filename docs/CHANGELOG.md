@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (090): the weekly retro workflow is valid.** `cplat-retro.yml` set `RETRO_DIR` from `${{ runner.temp }}` in the job `env:`, where GitHub does not allow the `runner` context, so GitHub rejected the file: the retro never ran and every push of a run record showed a failed run in the store repo. The steps use `$RUNNER_TEMP/retro` now, and CI runs actionlint over `scripts/cplat/assets/workflows/`. Store repos set up before this fix: replace `.github/workflows/cplat-retro.yml` there with the new asset (`cplat runs init` leaves an existing file alone).
+
 - **Fix (067): `cplat ship start` switches to the feature branch itself.** Before the merge it creates `feature/<spec>` from the current HEAD, or switches to the local or remote one, and prints which. A headless coordinator improvised `git checkout -B …`, which the template allowlist rightly refuses because it resets a branch, and a ship benchmark escalated in phase plan. `ship.md` now says never to create, reset or switch branches by hand.
 
 - **Fix (091): `cplat ship deploy` uses the configured kube context.** Headless coordinators rarely pass `--context`, so a ship against a real cluster skipped Argo, smoke and the digest check (found in the ship benchmark on the LAN cluster). Without `--context` or a product link, deploy now takes `CPLAT_KUBE_CONTEXT`, then `kube_context:` in `.platform-settings.yml`, then the user settings file, and prints which one. It never guesses from kubectl.
