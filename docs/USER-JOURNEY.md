@@ -45,6 +45,8 @@ Four ideas carry everything:
 3. **Specs drive the work.** A feature starts as a spec in `docs/specs/` with numbered acceptance criteria you approve; the build writes failing tests from them first, then the code, and verifies every criterion before the pull request. Small changes and bug fixes skip the spec.
 4. **Two update channels.** Agents and commands update with `/plugin marketplace update`; the project skeleton (CI, Dockerfile, devbox, CLAUDE.md) updates with `/shared:update-service`. Your own code is never touched by either.
 
+The nouns behind all of this (system, component, API, resource, environment, instance, spec, run) are in the [domain model](DOMAIN-MODEL.md). It is the model the platform moves to in 5.0; its last section maps today's names onto it.
+
 ---
 
 ## Chapter 0 — One-time setup (10 minutes)

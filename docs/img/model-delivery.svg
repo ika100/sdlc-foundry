@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 550" width="1000" height="550" role="img">
+  <title>Delivery model. An Issue is routed in triage to a Spec of a system or a component. A Spec has Criteria, each traced by a Test in the component&#x27;s repo and judged by the Verification. A system spec is split by a Plan into component specs, and the Plan sets the API contract. A Run ships a Spec: it opens a Pull request, CI builds an Image, which is pinned in dev and promoted as an Instance; a Release tag goes to prod. Runs and Instances send failures, alerts and retro proposals back as Issues.</title>
+  <style>svg{--bg:#ffffff;--surface:#ffffff;--fg:#1d2330;--muted:#5b6475;--line:#d5d9e2;--accent:#3d4fc4;--accent-soft:#eceefc;--ok:#2f7d4f;--warn:#a3580b;--warn-soft:#fbefe1;--sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--fg)}@media (prefers-color-scheme: dark){svg{--bg:#1a1e28;--surface:#1a1e28;--fg:#e4e7ee;--muted:#9aa2b3;--line:#2f3545;--accent:#9aa6ff;--accent-soft:#232945;--ok:#6fcf97;--warn:#e8a85c;--warn-soft:#3a2a17;}}text{font-family:var(--sans)}.bg{fill:var(--bg)}.band { fill: none; stroke: var(--line); stroke-width: 1.4; }.band.acc { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 6 4; }.node.ext { fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }.node.core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; }.node.gate { stroke-width: 3; }.pill { font-size: 13px; fill: currentColor; }.rowname { font-size: 14px; font-weight: 600; fill: currentColor; }.node { fill: var(--surface); stroke: currentColor; stroke-width: 1.4; }.node.env { fill: var(--accent-soft); stroke: var(--accent); }.node.inst { fill: var(--surface); stroke: var(--accent); stroke-width: 1.4; }.node.empty { fill: none; stroke: var(--muted); stroke-dasharray: 5 4; }.chip { fill: var(--surface); stroke: var(--muted); stroke-width: 1; }.edge { fill: none; stroke: currentColor; stroke-width: 1.4; }.edge.acc { stroke: var(--accent); }.edge.m { stroke: var(--muted); stroke-dasharray: 4 4; }.kind { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; fill: var(--muted); }.kind.acc { fill: var(--accent); }.name { font-size: 15px; font-weight: 600; fill: currentColor; }.big { font-size: 18px; font-weight: 600; fill: currentColor; }.sha { font-family: var(--mono); font-size: 14px; font-weight: 500; fill: currentColor; }.src { font-family: var(--mono); font-size: 11px; fill: var(--muted); }.okt { font-family: var(--mono); font-size: 11px; fill: var(--ok); }.lbl { font-size: 12px; fill: currentColor; }.lbl.m { fill: var(--muted); }.lbl.acc { fill: var(--accent); font-weight: 500; }.arrow { fill: currentColor; }.arrow.acc { fill: var(--accent); }.arrow.m { fill: var(--muted); }</style>
+  <rect class="bg" x="0" y="0" width="1000" height="550"/>
+      <defs>
+        <marker id="d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow"/></marker>
+        <marker id="da" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow acc"/></marker>
+        <marker id="dm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow m"/></marker>
+      </defs>
+
+      <text x="30" y="40" class="kind">DELIVERY</text>
+      <text x="840" y="40" class="kind acc">CORE MODEL</text>
+
+      <!-- Row A: intake and spec -->
+      <rect x="30" y="60" width="160" height="64" rx="8" class="node"/>
+      <text x="42" y="82" class="name">Issue</text>
+      <text x="42" y="100" class="src">from you or a loop</text>
+      <text x="42" y="115" class="src">routed in triage</text>
+
+      <rect x="230" y="60" width="160" height="64" rx="8" class="node"/>
+      <text x="242" y="82" class="name">Spec</text>
+      <text x="242" y="100" class="src">draft → approved</text>
+      <text x="242" y="115" class="src">system or component</text>
+
+      <rect x="430" y="60" width="160" height="64" rx="8" class="node"/>
+      <text x="442" y="82" class="name">Criterion</text>
+      <text x="442" y="100" class="src">AC-&lt;NNN&gt;.&lt;n&gt;</text>
+      <text x="442" y="115" class="src">(smoke): checked live</text>
+
+      <rect x="630" y="60" width="160" height="64" rx="8" class="node"/>
+      <text x="642" y="82" class="name">Test</text>
+      <text x="642" y="100" class="src">written red first</text>
+      <text x="642" y="115" class="src">names its criterion</text>
+
+      <line x1="190" y1="92" x2="228" y2="92" class="edge" marker-end="url(#d)"/>
+      <text x="210" y="54" text-anchor="middle" class="lbl">triage</text>
+      <line x1="390" y1="92" x2="428" y2="92" class="edge" marker-end="url(#d)"/>
+      <text x="410" y="54" text-anchor="middle" class="lbl">has</text>
+      <line x1="628" y1="92" x2="592" y2="92" class="edge" marker-end="url(#d)"/>
+      <text x="610" y="54" text-anchor="middle" class="lbl">traces</text>
+
+      <!-- Row B: plan and verification -->
+      <rect x="230" y="190" width="160" height="64" rx="8" class="node"/>
+      <text x="242" y="212" class="name">Plan</text>
+      <text x="242" y="230" class="src">tasks cover criteria</text>
+      <text x="242" y="245" class="src">splits a system spec</text>
+
+      <rect x="430" y="190" width="160" height="64" rx="8" class="node"/>
+      <text x="442" y="212" class="name">Verification</text>
+      <text x="442" y="230" class="src">verdict per criterion</text>
+      <text x="442" y="245" class="src">result: pass</text>
+
+      <line x1="290" y1="124" x2="290" y2="188" class="edge" marker-end="url(#d)"/>
+      <text x="296" y="150" class="lbl">system spec</text>
+      <line x1="370" y1="190" x2="370" y2="126" class="edge" marker-end="url(#d)"/>
+      <text x="376" y="172" class="lbl">component specs</text>
+      <line x1="510" y1="190" x2="510" y2="126" class="edge" marker-end="url(#d)"/>
+      <text x="518" y="160" class="lbl">judges</text>
+
+      <path d="M310,254 V286 H915 V266" class="edge acc" marker-end="url(#da)"/>
+      <text x="620" y="280" text-anchor="middle" class="lbl acc">sets the API contract</text>
+
+      <!-- Row C: run to image -->
+      <rect x="30" y="320" width="160" height="64" rx="8" class="node"/>
+      <text x="42" y="342" class="name">Run</text>
+      <text x="42" y="360" class="src">phases · budget</text>
+      <text x="42" y="375" class="src">escalates to you</text>
+
+      <rect x="230" y="320" width="160" height="64" rx="8" class="node"/>
+      <text x="242" y="342" class="name">Pull request</text>
+      <text x="242" y="360" class="src">feature branch · CI</text>
+      <text x="242" y="375" class="src">merged on green</text>
+
+      <rect x="430" y="320" width="160" height="64" rx="8" class="node"/>
+      <text x="442" y="342" class="name">Image</text>
+      <text x="442" y="360" class="src">sha-&lt;40&gt; · digest</text>
+      <text x="442" y="375" class="src">built by CI</text>
+
+      <line x1="190" y1="352" x2="228" y2="352" class="edge" marker-end="url(#d)"/>
+      <text x="210" y="314" text-anchor="middle" class="lbl">opens</text>
+      <line x1="390" y1="352" x2="428" y2="352" class="edge" marker-end="url(#d)"/>
+      <text x="410" y="314" text-anchor="middle" class="lbl">builds</text>
+      <line x1="170" y1="320" x2="252" y2="126" class="edge" marker-end="url(#d)"/>
+      <text x="182" y="282" text-anchor="end" class="lbl">ships</text>
+      <line x1="80" y1="320" x2="80" y2="126" class="edge m" marker-end="url(#dm)"/>
+      <text x="88" y="222" class="lbl m">platform failure</text>
+      <text x="88" y="238" class="lbl m">retro proposal</text>
+
+      <line x1="590" y1="342" x2="838" y2="342" class="edge acc" marker-end="url(#da)"/>
+      <text x="714" y="334" text-anchor="middle" class="lbl acc">pinned in dev, promoted</text>
+
+      <!-- Row D: release -->
+      <rect x="630" y="430" width="160" height="64" rx="8" class="node"/>
+      <text x="642" y="452" class="name">Release</text>
+      <text x="642" y="470" class="src">tag X.Y.Z</text>
+      <text x="642" y="485" class="src">digest = staging</text>
+      <line x1="560" y1="384" x2="650" y2="428" class="edge" marker-end="url(#d)"/>
+      <text x="596" y="420" text-anchor="end" class="lbl">tagged</text>
+      <line x1="790" y1="446" x2="860" y2="366" class="edge acc" marker-end="url(#da)"/>
+      <text x="812" y="404" text-anchor="end" class="lbl acc">to prod</text>
+
+      <!-- Core column -->
+      <rect x="840" y="60" width="150" height="44" rx="8" class="node core"/>
+      <text x="915" y="80" text-anchor="middle" class="name">System</text>
+      <text x="915" y="96" text-anchor="middle" class="src">system.yaml</text>
+      <rect x="840" y="140" width="150" height="44" rx="8" class="node core"/>
+      <text x="915" y="160" text-anchor="middle" class="name">Component</text>
+      <text x="915" y="176" text-anchor="middle" class="src">repo · type</text>
+      <rect x="840" y="220" width="150" height="44" rx="8" class="node core"/>
+      <text x="915" y="240" text-anchor="middle" class="name">API</text>
+      <text x="915" y="256" text-anchor="middle" class="src">openapi</text>
+      <rect x="840" y="320" width="150" height="44" rx="8" class="node core"/>
+      <text x="915" y="340" text-anchor="middle" class="name">Instance</text>
+      <text x="915" y="356" text-anchor="middle" class="src">component × env</text>
+      <rect x="840" y="420" width="150" height="44" rx="8" class="node core"/>
+      <text x="915" y="440" text-anchor="middle" class="name">Environment</text>
+      <text x="915" y="456" text-anchor="middle" class="src">dev · staging · prod</text>
+
+      <line x1="790" y1="100" x2="838" y2="152" class="edge" marker-end="url(#d)"/>
+      <text x="806" y="140" text-anchor="end" class="lbl">in its repo</text>
+      <line x1="915" y1="364" x2="915" y2="418" class="edge acc" marker-end="url(#da)"/>
+      <text x="925" y="396" class="lbl acc">runs in</text>
+
+      <!-- Feedback -->
+      <path d="M990,342 H997 V532 H12 V92 H28" class="edge m" marker-end="url(#dm)"/>
+      <text x="500" y="526" text-anchor="middle" class="lbl m">firing alert, smoke failure → issue in the component's repo, labelled with the environment</text>
+    </svg>
