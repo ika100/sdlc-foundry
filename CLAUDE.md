@@ -18,7 +18,7 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 | `plugins/<name>/settings.json` | Plugin-scoped permission allowlists. |
 | `shapes.yml` | The shape registry: one entry per template/plugin pair, validated by `scripts/shapes.py check`. |
 | `templates/<shape>/` | Copier templates: `service-python`, `library-python`, `service-java`, `service-go`, `web-nextjs`, `gitops-app`. Only `*.jinja` files are rendered in the newer templates (see each `copier.yml`). |
-| `scripts/cplat/` | The tested CLI behind the commands (`new-service`, `update-service`, `compose`, `promote`, `addon`, `secret`, `doctor`, `status`, `feedback`). |
+| `scripts/cplat/` | The tested CLI behind the commands (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`, `feedback`). |
 | `scripts/*.py`, `scripts/ci-local.sh` | Repository checks: shape registry, pinned Actions, Markdown links, local CI. |
 | `tests/cplat/`, `tests/e2e/` | pytest suite for the CLI and renderer; the full-stack cluster test. |
 | `devbox.json` | Repo-root devbox env + smoke-test scripts (`validate`, `smoke-*`, `ci-local`). |
@@ -31,7 +31,7 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 - **Bump versions in both places.** When a plugin changes, update both `marketplace.json` and `plugins/<name>/.claude-plugin/plugin.json`. Use semver — major bump only for breaking changes consumers must react to (renamed commands, removed agents).
 - **Template Jinja gotcha.** GitHub Actions uses `${{ var }}` syntax, which Copier (Jinja) would otherwise interpret. The escape pattern is `${{ '{{' }} var {{ '}}' }}` — already applied in the existing CI workflows. Don't unescape it.
 - **Don't put project-specific content in plugin agents.** Agents are shared across repos. Anything project-specific belongs in the Copier template (which gets parameterised per-repo) or in the consumer's own `CLAUDE.md`.
-- **Platform changes start with a spec.** Run `/svc:spec <description>` here (no shape needed for spec, plan, verify, specs), write an ADR for decisions that outlive the change, and keep `cplat spec check` green.
+- **Platform changes start with a spec.** Run `/component:spec <description>` here (no shape needed for spec, plan, verify), write an ADR for decisions that outlive the change, and keep `cplat spec check` green.
 - **Wait for CI with `cplat pr wait <pr> [-R owner/repo] [--merge]`** (spec 079), never a hand-written polling loop: it reports each check, stops at the first red one and reruns stuck or transient runs once.
 - **No backwards-compat hacks for old marketplace ref.** When breaking, ship a new major version and document the migration in `docs/CHANGELOG.md`.
 
@@ -39,7 +39,7 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 
 ### Add an agent
 
-1. Decide which plugin (`svc` / `gitops` / `shared`).
+1. Decide which plugin (`component` / `system` / `platform` / `svc` / `shared`; the `app` and `gitops` plugins hold only tombstones).
 2. Write `plugins/<plugin>/agents/<name>.md` with YAML frontmatter (`name`, `description`, `tools`, `model`).
 3. Update the plugin's README.
 4. Bump `plugins/<plugin>/.claude-plugin/plugin.json` version (minor for additions, patch for fixes).
@@ -54,9 +54,9 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 
 1. Edit files under `templates/<template>/`.
 2. Test locally: `copier copy ./templates/service-python /tmp/test --defaults --data project_name=test-svc --data module_name=test_svc`.
-3. Add to `_skip_if_exists` in `copier.yml` if the file should NOT be overwritten by `/shared:update-service` (project-owned files).
+3. Add to `_skip_if_exists` in `copier.yml` if the file should NOT be overwritten by `/platform:update` (project-owned files).
 4. Tag a release in the platform repo.
-5. Downstream repos run `/shared:update-service` to pull the change.
+5. Downstream repos run `/platform:update` to pull the change.
 
 ## Smoke test before pushing
 
@@ -68,7 +68,7 @@ devbox run validate     # jq-checks marketplace.json + every plugin.json + every
 devbox run smoke-service  # copier copy → devbox install → devbox run quality
 devbox run smoke-library  # same, for the library template
 devbox run smoke        # all of the above
-devbox run test-fast    # cplat tests; also `quality` (static checks), `ci` (= ci-local.sh), `lint-fix` (no-op) for /svc:ship and /svc:build
+devbox run test-fast    # cplat tests; also `quality` (static checks), `ci` (= ci-local.sh), `lint-fix` (no-op) for /component:ship and /component:build
 ```
 
 (`devbox` must be available on the host — everything else is provided by `devbox install`. Host install: `curl -fsSL https://get.jetify.com/devbox/install.sh | bash`.)
