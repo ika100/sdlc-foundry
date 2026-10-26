@@ -117,10 +117,9 @@ jobs:
         run: |
           uv tool install copier
           copier copy ./templates/gitops-app /tmp/v2 --defaults --trust --skip-tasks --data project_name=fx-gitops --data app_name=fx
-          cp tests/fixtures/gitops/services.yaml /tmp/v2/applications/fx/services.yaml
-          cp tests/fixtures/gitops/app.yaml /tmp/v2/applications/fx/app.yaml
+          cp tests/fixtures/gitops/system.yaml /tmp/v2/applications/fx/system.yaml
           (cd /tmp/v2 && uv run scripts/render.py)
-          # what `/gitops:promote` does: staging/prod run pinned tags, never :latest (the guard rails below require it)
+          # what `/instance:promote` does: staging/prod run pinned tags, never :latest (the guard rails below require it)
           sed -i 's/newTag: latest/newTag: sha-1234567/' /tmp/v2/applications/fx/overlays/staging/*/kustomization.yaml
           (cd /tmp/v2 && uv run scripts/render.py --check)
           uv run scripts/check-k8s-labels.py /tmp/v2
@@ -290,7 +289,7 @@ jobs:
         run: |
           test -f /tmp/test-gitops/devbox.json
           test -f /tmp/test-gitops/.claude/settings.json
-          test -f /tmp/test-gitops/applications/test/services.yaml
+          test -f /tmp/test-gitops/applications/test/system.yaml
           test -f /tmp/test-gitops/applications/test/applicationset.yaml
           test -d /tmp/test-gitops/applications/test/overlays/dev
           test -d /tmp/test-gitops/applications/test/overlays/staging
@@ -302,8 +301,7 @@ jobs:
         run: |
           cd /tmp/test-gitops
           uv run scripts/render.py --check
-          cp "$GITHUB_WORKSPACE/tests/fixtures/gitops/services.yaml" applications/test/services.yaml
-          cp "$GITHUB_WORKSPACE/tests/fixtures/gitops/app.yaml" applications/test/app.yaml
+          sed 's/^system: fx$/system: test/' "$GITHUB_WORKSPACE/tests/fixtures/gitops/system.yaml" > applications/test/system.yaml
           uv run scripts/render.py
           uv run scripts/render.py --check
           test -f applications/test/overlays/dev/fx-api/deployment.yaml
