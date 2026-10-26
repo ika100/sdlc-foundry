@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix (090): a failing retro proposal step shows why.** When `claude` exits non-zero, `cplat retro propose` prints the last 20 lines of its output to the job log. `claude exited with 1` alone could not be diagnosed: the output stayed in `propose.log` on the ephemeral runner. The posted issue keeps the short reason.
+
 ## [4.7.0] — 2026-10-26
 
 **Runs stay within a budget, fix rounds run only what a change can affect, and prod runs exactly what staging tested.**

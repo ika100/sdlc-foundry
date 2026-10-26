@@ -105,6 +105,16 @@ def _report_mode(ns: argparse.Namespace) -> int:
 
 # ---------------- propose ----------------
 
+def _print_log_tail(log: Path, lines: int = 20) -> None:
+    """The end of claude's output, for the job log only: the posted reason stays short (the platform repo may be public)."""
+    try:
+        tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
+    except OSError:
+        return
+    for line in tail:
+        print(f"  claude: {line}")
+
+
 def _fail(d: Path, reason: str) -> int:
     try:
         (d / "proposals.error").write_text(reason + "\n", encoding="utf-8")
@@ -139,6 +149,7 @@ def _propose(ns: argparse.Namespace) -> int:
     except OSError as e:
         return _fail(d, f"claude could not be started: {e.strerror or e}")
     if p.returncode != 0:
+        _print_log_tail(d / "propose.log")
         return _fail(d, f"claude exited with {p.returncode}")
     if not (d / "proposals.json").is_file():
         return _fail(d, "no proposals.json written")

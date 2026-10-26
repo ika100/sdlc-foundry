@@ -354,6 +354,7 @@ Path(os.environ["FAKE_CLAUDE_LOG"]).write_text(json.dumps({{"argv": sys.argv[1:]
     "env": {{k: os.environ.get(k) for k in ("GH_TOKEN", "GITHUB_TOKEN", "RETRO_GH_TOKEN", "CPLAT_HEADLESS", "CLAUDE_CODE_OAUTH_TOKEN")}}}}))
 mode = os.environ.get("FAKE_CLAUDE_MODE", "ok")
 if mode == "exit3":
+    print("Invalid API key")
     sys.exit(3)
 if mode == "ok":
     Path("proposals.json").write_text(os.environ["FAKE_PROPOSALS"])
@@ -429,6 +430,17 @@ def test_a_failed_proposal_step_still_posts_the_deterministic_report(world, tmp_
     assert cli("post", "--dir", str(d)) == 0
     body = issue_body(world)
     assert f"Proposals: not generated ({reason})" in body and "Weekly retro 2026-W43" in body
+
+
+def test_a_failing_claude_shows_its_output_in_the_job_log_but_not_in_the_posted_reason(world, tmp_path, fake_claude, monkeypatch, capsys):
+    """AC-090.12: `claude exited with N` alone cannot be diagnosed on an ephemeral runner; the issue keeps the short reason."""
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "exit3")
+    d = prepared(world, tmp_path)
+    capsys.readouterr()
+    assert cli("propose", "--dir", str(d)) == 0
+    assert "  claude: Invalid API key" in capsys.readouterr().out
+    assert cli("post", "--dir", str(d)) == 0
+    assert "Invalid API key" not in issue_body(world)
 
 
 def test_an_unreadable_proposals_file_is_not_generated_with_the_reason(world, tmp_path, fake_claude, monkeypatch):
