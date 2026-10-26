@@ -315,9 +315,9 @@ def commit(repo, msg):
 
 
 @pytest.fixture()
-def old_web_repo(tmp_path):
+def old_web_repo(tmp_path, new_service):
     """A web repo made before spec 091 and with `needs_e2e: false`: no Playwright anywhere."""
-    newsvc.main(["old-web", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    new_service(["old-web", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     repo = tmp_path / "old-web"
     shutil.rmtree(repo / "e2e", ignore_errors=True)
     (repo / "playwright.config.ts").unlink(missing_ok=True)

@@ -8,7 +8,6 @@ import subprocess
 
 import pytest
 
-import newsvc
 import update
 
 NAME = "upd-go"
@@ -25,8 +24,8 @@ def commit(repo, msg="own changes"):
     git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", msg)
 
 
-def render(parent):
-    newsvc.main([NAME, "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(parent), "--org", "acme"])
+def render(new_service, parent):
+    new_service([NAME, "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(parent), "--org", "acme"])
     return parent / NAME
 
 
@@ -53,9 +52,9 @@ def edit_devbox(repo, **scripts):
 
 
 @pytest.fixture()
-def pair(tmp_path):
+def pair(tmp_path, new_service):
     """(repo, baseline): both are the current template; the repo carries an old platform stamp."""
-    repo, base = render(tmp_path / "repo"), render(tmp_path / "base")
+    repo, base = render(new_service, tmp_path / "repo"), render(new_service, tmp_path / "base")
     (repo / ".platform-version").write_text("platform: 4.4.0\nshape: service-go\nref: main\n")
     commit(repo, "old stamp")
     return repo, base
@@ -236,8 +235,8 @@ def test_without_a_baseline_every_difference_counts_as_a_loss(pair, monkeypatch,
     assert out["baseline"] is None and [e["file"] for e in lost(out, kind="file")] == [".golangci.yml"]
 
 
-def test_a_noop_update_renders_no_baseline_and_emits_no_lost_list(tmp_path, monkeypatch, capsys):  # AC-086.13
-    repo = render(tmp_path)
+def test_a_noop_update_renders_no_baseline_and_emits_no_lost_list(tmp_path, monkeypatch, capsys, new_service):  # AC-086.13
+    repo = render(new_service, tmp_path)
 
     def boom(*a, **k):
         raise AssertionError("a no-op update must not render a baseline")
