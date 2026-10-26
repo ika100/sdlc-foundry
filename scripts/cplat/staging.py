@@ -14,6 +14,7 @@ from pathlib import Path
 
 import yaml
 
+import model
 import runs
 import smoke
 from core import PlatformError, run
@@ -97,14 +98,6 @@ def _app_dirs(slug: str, repo: Path) -> list[str] | None:
     return [e["name"] for e in data if isinstance(e, dict) and e.get("type") == "dir" and e.get("name")]
 
 
-def staging_tag(slug: str, app_dir: str, svc: str, repo: Path | None = None) -> str | None:
-    doc = _read(slug, f"{app_dir}/overlays/staging/{svc}/kustomization.yaml", repo or Path.cwd())
-    images = (doc or {}).get("images")
-    if isinstance(images, list) and images and isinstance(images[0], dict) and images[0].get("newTag"):
-        return str(images[0]["newTag"])
-    return None
-
-
 def resolve(service_slug: str, tag: str | None, repo: Path | None = None) -> str | None:
     """The commit sha a staging tag names: sha-<40>, sha-<7> and X.Y.Z (through the release tag)."""
     if not tag:
@@ -134,15 +127,14 @@ def has_workflow(slug: str, repo: Path | None = None) -> bool:
 # ---------------- the decision ----------------
 
 def _find(repo: Path, apps: list[str], svc: str):
-    """(slug, app dir, entry, app.yaml) of the first linked gitops-app that lists the service, like `smoke.dev_url`."""
+    """(slug, app dir, component, model, me) of the first linked gitops-app that lists the service, like `smoke.dev_url`."""
     me = smoke._slug(repo)
     for slug in apps:
         for a in _app_dirs(slug, repo) or []:
-            services = _read(slug, f"applications/{a}/services.yaml", repo)
-            entries = [e for e in (services or {}).get("services") or [] if isinstance(e, dict)]
-            entry = next((e for e in entries if e.get("repo") == me), None) or next((e for e in entries if e.get("name") == svc), None)
-            if entry is not None:
-                return slug, f"applications/{a}", entry, _read(slug, f"applications/{a}/app.yaml", repo) or {}, me
+            m = model.load_remote(a, lambda p, slug=slug: _read(slug, p, repo))
+            c = m.find_component(me, svc)
+            if c is not None:
+                return slug, f"applications/{a}", c, m, me
     return None
 
 
@@ -161,14 +153,14 @@ def decide(repo: Path, st: dict, apps: list[str], svc: str, dev: smoke.SmokeResu
         found = _find(repo, apps or [], svc)
         if found is None:
             return skip(f"{svc} is not in the linked gitops-app")
-        slug, app_dir, entry, app_cfg, me = found
-        name = entry.get("name") or svc
+        slug, app_dir, comp, m, me = found
+        name = comp.name
         where = {"app": slug, "app_dir": app_dir}
-        if not effective(app_cfg, entry):
+        if m.staging_promotion(comp) != "auto":
             return skip(f"automatic promotion to staging is off for {name}", **where)
-        if "staging" not in (entry.get("environments") or ["dev"]):
+        if (inst := m.instance(name, "staging")) is None:
             return skip(f"{name} is not in staging yet: the first promotion is manual: /gitops:promote {name} dev staging", **where)
-        previous = staging_tag(slug, app_dir, name, repo)
+        previous = inst.tag
         where["previous"] = previous
         build = SHA40.match(tag).group(1) if SHA40.match(tag) else None
         have = resolve(me, previous, repo)

@@ -28,6 +28,7 @@ import yaml
 import autoissue
 import core
 import feedback
+import model
 import spec as specmod
 from core import PlatformError, run
 
@@ -37,7 +38,7 @@ ENV_ATTEMPTS = 3                    # spec 105: an environment failure is tried 
 GATEWAY = {502, 503, 504}
 RECIPE_FAILED = "(smoke recipe)"
 TIMED_OUT = "(timed out)"
-DEFAULT_LOCAL_PORT = 8088
+DEFAULT_LOCAL_PORT = model.DEFAULT_LOCAL_PORT
 RESULT = re.compile(r"^(PASS|FAIL|SKIP)  (\S.*?)\s*$")
 SUMMARY = re.compile(r"^smoke: (\d+) passed, (\d+) failed, (\d+) skipped\s*$")
 WORDS = {"PASS": "passed", "FAIL": "failed", "SKIP": "skipped"}
@@ -339,28 +340,12 @@ def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> t
             unread.append(slug)
             continue
         for a in dirs:
-            services = _read(slug, f"applications/{a}/services.yaml", repo)
-            entries = [e for e in (services or {}).get("services") or [] if isinstance(e, dict)]
-            entry = next((e for e in entries if e.get("repo") == me), None) or next((e for e in entries if e.get("name") == service), None)
-            if entry is None:
+            m = model.load_remote(a, lambda p, slug=slug: _read(slug, p, repo))
+            c = m.find_component(me, service)
+            if c is None:
                 continue
-            hidden = f"{service} has no {env} URL (not exposed in {env})"
-            expose = entry.get("expose")
-            if not expose or env not in (entry.get("environments") or ["dev"]):
-                return None, hidden
-            app = _read(slug, f"applications/{a}/app.yaml", repo) or {}
-            template = (app.get("hosts") or {}).get(env)
-            if not template:
-                return None, hidden
-            name = entry.get("name") or service
-            host = str(template).format(service=(expose.get("host") if isinstance(expose, dict) else None) or name, app=a, env=env)
-            urls = app.get("urls") or {}
-            if urls.get(env):
-                return str(urls[env]).format(host=host, service=name, app=a, env=env), None
-            if host.endswith(".localhost"):
-                port = os.environ.get("LOCAL_HTTP_PORT", "")
-                return f"http://{host}:{port if port.isdigit() else DEFAULT_LOCAL_PORT}", None
-            return f"https://{host}", None
+            url, why = m.url(c.name, env) if m.instance(c.name, env) else (None, f"not exposed in {env}")
+            return (url, None) if url else (None, f"{service} has no {env} URL ({why})")
     if unread and len(unread) == len(apps):
         return None, f"{service} has no {env} URL (could not read the gitops-app {', '.join(unread)})"
     return None, f"{service} has no {env} URL (not in the linked gitops-app)"

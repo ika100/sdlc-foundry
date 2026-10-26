@@ -124,7 +124,7 @@ def promote(repo: Path, st: dict, apps: list[str], svc: str, dev: smoke.SmokeRes
         return True, skip(repo, st, "the dev smoke recorded no image digest", [])
     try:
         found = staging._find(repo, apps, svc)
-        current = registry.digest(registry.image_name(found[2] if found else None, ship.service_slug(repo)), tag)
+        current = registry.digest(registry.image_name({"image": found[2].image} if found else None, ship.service_slug(repo)), tag)
     except PlatformError as e:
         return True, skip(repo, st, f"digest of {tag} not verified: {e}", [])
     if current != dev.digest:
