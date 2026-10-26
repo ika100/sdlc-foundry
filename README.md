@@ -114,7 +114,7 @@ See `docs/ADOPTING.md` for the full migration guide.
 | `/system:spec <desc>` · `/system:plan <id>` | system | System spec, then every criterion assigned to a repo with the contract (topo-sorted, validated) |
 | `/system:ship <id>` · `/system:status` | system | Ship ready repos in parallel, each through its own spec slice, ending at PRs and a running dev · one table: image pins per environment, component CI, Argo sync/health, resources |
 | `/api:list` | api | The APIs the system declares, with provider and consumers |
-| `/resource:add\|remove postgres` | resource | The system's database (CloudNativePG); observability is set per environment in `system.yaml` |
+| `/resource:add\|remove <name>` | resource | A named, typed resource of the system (a database on CloudNativePG, or an external one); observability is set per environment in `system.yaml` |
 | `/instance:promote <component...\|--all> --to <env> [--version]` | instance | Pin component versions in an environment, open one PR |
 | `/instance:secret set\|list …` | instance | Values of store-backed secrets in the local cluster (generated secrets need nothing) |
 | `/instance:verify [<env>]` | instance | Smoke tests against a deployed instance |

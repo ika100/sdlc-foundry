@@ -56,7 +56,7 @@ Thick borders are where you decide: approving a spec, an escalation, promoting t
 | System | A product: everything below, delivered together | todo | product, app, gitops-app repo |
 | Component | Something you build, in its own repo: a service, a website or a library | todo-api | service, shape |
 | API | What a component offers others, and who uses it | todo-api REST | plan `## Contract` (prose) |
-| Resource | Something you use but don't build; the platform runs it | postgres | addon |
+| Resource | Something you use but don't build; named and typed, run by the platform or external | users-db (database) | addon |
 | Owner | Who is responsible for the system and its parts | team-todo | not modelled |
 | Environment | A stage the system passes through, with its own rules for getting in | staging | env key in several files |
 | Instance | One component running in one environment, at one version | todo-api in staging | pin, overlay, Argo app |
@@ -73,7 +73,7 @@ Three placements are decided ([ADR-053](adr/053-domain-model.md)):
 
 - **Observability** (the OpenTelemetry collector, alert rules, the UI) is a property of an Environment, not a Resource: every component in the environment gets it.
 - **Secrets** are declared on the Component (generated or read from the store) and can be overridden per Instance; their values are set per Instance.
-- **Names in the cluster do not change**: the namespace `<system>-<env>`, the Argo application `<component>-<env>`, the database Secret `<system>-postgres-app`. The model maps onto them.
+- **Names in the cluster do not change**: the namespace `<system>-<env>`, the Argo application `<component>-<env>`, every resource's Secret `<system>-<name>-app` (so `<system>-postgres-app` for a resource called `postgres`). The model maps onto them.
 
 ## One file per system
 
@@ -119,6 +119,10 @@ resources:
     replicas: 1
     storage: 1Gi
     instances: {prod: {replicas: 3, storage: 20Gi}}
+  users-db:
+    type: database
+    external: true            # the database lives outside the cluster
+    remote: {path: "{system}-{env}-{resource}"}
 ```
 
 ### Keys
@@ -126,14 +130,15 @@ resources:
 | Where | Allowed keys |
 |---|---|
 | top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries` |
-| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability` |
+| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators` |
 | service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances` |
 | external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote`) |
 | library component | `type`, `lang`, `repo`, `provides`, `consumes` |
 | `components.<c>.instances.<env>` | `replicas`, `resources`, `env`, `promote`, `secrets` |
 | `apis.<a>` | `type`: `openapi`, `grpc`, `graphql` or `events` |
-| `resources.postgres` | `type`, `version`, `replicas`, `storage`, `resources`, `instances` |
-| `resources.postgres.instances.<env>` | `replicas`, `storage`, `resources` |
+| `resources.<name>` | `type`, `external`, `remote`, `version`, `replicas`, `storage`, `resources`, `instances` |
+| `resources.<name>.remote` | `path`, `refreshInterval` |
+| `resources.<name>.instances.<env>` | `external`, `remote`, `replicas`, `storage`, `resources` |
 
 Valid `type`/`lang` pairs: `service/python`, `service/java`, `service/go`, `website/typescript`, `library/python`, and `service/unknown` for a migrated component without a known shape.
 
@@ -144,7 +149,10 @@ Valid `type`/`lang` pairs: `service/python`, `service/java`, `service/go`, `webs
 - `policy` is `audit`, `enforce` or `off` (default `audit` in dev and staging, `enforce` in prod).
 - `observability` on an environment gives that environment the collector and gives every instance there the `OTEL_*` variables.
 - `promote`: `after-dev-smoke` or `manual` on staging (default `manual`), only `manual` on prod, none on dev. An instance value wins over the environment's.
-- `resources.postgres` is the one resource in 5.0. It is rendered in every environment where a running component uses it. Its database instances take `replicas` (default 1), `storage` (default `1Gi`) and `version` (default 17), with per-environment overrides under `instances`.
+- `resources.<name>` declares any number of named, typed resources. `type` is required (the name `postgres` alone defaults to `database`). The types are `database` (rendered today), and `bucket`, `cache` and `broker`, which are reserved: spec 116, spec 118 and spec 119 deliver them. A resource is rendered in every environment where a running component uses it. Database instances take `replicas` (default 1), `storage` (default `1Gi`) and `version` (default 17; the supported majors are 15, 16, 17 and 18), with per-environment overrides under `instances.<env>`. The Argo application is `addon-<name>-<env>` and the Secret is `<system>-<name>-app`.
+- `external: true` means the resource lives outside the cluster. The platform renders no database, only an External Secrets `ExternalSecret` that fills `<system>-<name>-app` from the secret store, so components see the same contract. `remote` (`path`, `refreshInterval`) says where in the store; the default path is `{system}-{env}-{resource}`, and `remote` needs `external: true`. `instances.<env>` may override `external` and `remote`, for example an in-cluster database in dev and an external one in prod.
+- Prefix rule: a component that uses exactly one resource of a type gets the bare variables (`DATABASE_URL`, `PGHOST`, ...). With two or more resources of that type, every variable is prefixed with the upper-cased resource name, `-` becoming `_`: `uses: [orders-db, users-db]` yields `ORDERS_DB_DATABASE_URL`, `USERS_DB_PGHOST` and so on, and no bare `DATABASE_URL`. The variables are the same in every environment, in-cluster or external.
+- `operators: owner` on an environment (the only value) says the cluster owner installs the operators there. Otherwise the platform installs them from the repo's `operators/` folder (`operators/root.yaml`, applied once per cluster with `devbox run bootstrap`; `cluster-up` does it locally).
 - Every name in `uses` is a resource or a library of the system; an API has exactly one provider.
 
 ## Commands follow the nouns

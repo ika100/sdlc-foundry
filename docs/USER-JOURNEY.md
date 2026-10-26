@@ -222,11 +222,11 @@ Everything here is a declaration in the GitOps repo; `render.py` turns it into m
 |---|---|---|
 | A random credential the system owns | `/component:add taskboard-api --generate taskboard-api-auth=JWT_KEY` | An `ExternalSecret`: External Secrets Operator creates the value in the cluster, once per environment. Nothing in git |
 | A credential someone else issues | `/component:add taskboard-api --secret taskboard-api-stripe=STRIPE_KEY`, then `/instance:secret set taskboard-api taskboard-api-stripe STRIPE_KEY` | The value is read from your secret store (locally the `secrets-store` namespace) |
-| A Postgres database | `/resource:add postgres`, then `uses: [postgres]` on the component (`/component:set <component> --uses postgres`) | A CloudNativePG cluster per environment; `DATABASE_URL` and `PG*` reach the component |
+| A database | `/resource:add <name>` (a named resource of `type: database`, `--external` for one outside the cluster), then `uses: [<name>]` on the component (`/component:set <component> --uses <name>`) | A CloudNativePG cluster per environment, or an ExternalSecret for an external one; `DATABASE_URL` and `PG*` reach the component (prefixed with the resource name when it uses two databases) |
 | Traces and metrics | set `observability: {ui: lgtm}` on an environment in `system.yaml` | An OpenTelemetry collector in that environment, `OTEL_*` in every component, a local Grafana at `http://grafana.localhost:8088 (or the port cluster-up prints)` |
 | Policy | set `policy: audit` or `policy: enforce` on an environment in `system.yaml` | Kyverno policies for that environment (audit reports, enforce blocks) and an offline check in `devbox run validate` |
 
-`devbox run cluster-up` installs whichever operators these declarations need on your local cluster; on a real cluster they must be installed by its owner. Limits: the Postgres resource has no backups or pooling, observability ships no alert rules. Concept pages on the documentation site: [resources](https://ika100.github.io/sdlc-foundry/concepts/addons/), [secrets](https://ika100.github.io/sdlc-foundry/concepts/secrets/), [guard rails](https://ika100.github.io/sdlc-foundry/concepts/guard-rails/).
+`devbox run cluster-up` applies `operators/root.yaml`, so the platform installs the operators these declarations need; on a real cluster apply it once with `devbox run bootstrap`, or set `operators: owner` on an environment whose cluster owner installs them. Limits: the database resource has no backups or pooling, observability ships no alert rules. Concept pages on the documentation site: [resources](https://ika100.github.io/sdlc-foundry/concepts/addons/), [secrets](https://ika100.github.io/sdlc-foundry/concepts/secrets/), [guard rails](https://ika100.github.io/sdlc-foundry/concepts/guard-rails/).
 
 ---
 
@@ -267,7 +267,7 @@ Everything here is a declaration in the GitOps repo; `render.py` turns it into m
 - Cross-repo work is specified and planned in one place and built per repo: `/system:plan` produces a validated plan; `/component:spec --from-plan` (by you, or by `/system:ship`) turns each repo's part into its own spec, and nothing merges without you.
 - The cluster itself, ArgoCD installation and its repo/registry credentials are outside the platform; the only manual cluster step is `devbox run bootstrap` once (Chapter 1).
 - Skeleton updates overwrite customised skeleton files by design; the review branch is where you keep or restore your changes.
-- Operators (External Secrets, CloudNativePG, Kyverno) are installed by `cluster-up` on the local cluster only; real clusters need them installed by their owner. The Postgres resource has no backups, point-in-time recovery or pooling.
+- Operators (External Secrets, CloudNativePG, Kyverno) are installed by the platform from the `operators/` folder of the gitops repo, unless the environment says `operators: owner`. The database resource has no backups, point-in-time recovery or pooling.
 
 ## Where to read more
 
