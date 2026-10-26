@@ -18,6 +18,7 @@ tasks:
     covers: [AC-112.10, AC-112.11, AC-112.15]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: Gitops fixtures from the cache (gitops_repo, the composed todo-api repo of alerts_render and staging_093_setting)
     files: [tests/cplat/test_gitops.py, tests/cplat/test_alerts_render.py, tests/cplat/test_staging_093_setting.py]
