@@ -391,7 +391,7 @@ def test_find_hands_staging_deploy_the_component_ac_113_11(shop_repo, monkeypatc
     found = staging._find(shop_repo, [GITOPS], "shop-api")
     assert found[0] == GITOPS and found[1] == "applications/shop" and found[4] == "acme/shop-api"
     assert (found[2].name, found[2].image) == ("shop-api", "ghcr.io/acme/shop-api")
-    assert staging._find(shop_repo, [GITOPS], "nobody") is None
+    assert staging._find(shop_repo, [GITOPS], "nobody")[2].name == "shop-api"  # the repo match wins, as before (093)
 
 
 # ======================================================================================
