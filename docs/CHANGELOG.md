@@ -6,19 +6,17 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
-**The platform repo declares its own shape.** [ADR-056](adr/056-the-platform-repo-declares-its-shape.md), spec 123. This repo declares `shape: platform` in `.platform-settings.yml`, so `/component:spec`, `plan`, `build`, `verify` and `ship` work here. `/component:release` and `cplat platform update` refuse (the platform is released through its own procedure and is not updated from a template), and `cplat doctor` reports the platform source version. A `shape:` key anywhere else is an error.
-
-**Fix:** a bare `off` in `budget:` (`.platform-settings.yml` or the user settings file) is read as off; YAML parsed it as `false`, which was refused.
-
-**Plugins:** component 1.1.0.
-
-**Action for existing repos:** none.
-
 ## [5.0.0] — 2026-10-26
 
 **BREAKING: the platform speaks the domain model.** [ADR-054](adr/054-five-zero-interface-and-proved-migration.md), [ADR-053](adr/053-domain-model.md), [guide](DOMAIN-MODEL.md), spec 114. A system is one file, `applications/<system>/system.yaml`, that the renderer checks; slash commands and `cplat` subcommands are grouped by noun (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`). Cluster names (namespaces, Argo applications, image names) never change, so a migrated system renders the same manifests.
 
-**Plugins:** new `system`, `component`, `api`, `resource`, `instance`, `issue`, `platform` 1.0.0; svc 4.0.0, shared 1.0.0, app 2.0.0, gitops 2.0.0; web, svc-go, svc-java 0.4.0. `shared` keeps the `cplat` launcher, the hooks and the quality and security agents and no working command; the planner agent moved to `system`; the v1-only gitops deployment agent is gone. The last major of `app` and `gitops` holds only tombstone commands (no agents, no hooks), and `app` and `gitops` leave the marketplace in 6.0.
+**Plugins:** new `system`, `api`, `resource`, `instance`, `issue`, `platform` 1.0.0 and `component` 1.1.0; svc 4.0.0, shared 1.0.0, app 2.0.0, gitops 2.0.0; web, svc-go, svc-java 0.4.0. `shared` keeps the `cplat` launcher, the hooks and the quality and security agents and no working command; the planner agent moved to `system`; the v1-only gitops deployment agent is gone. The last major of `app` and `gitops` holds only tombstone commands (no agents, no hooks), and `app` and `gitops` leave the marketplace in 6.0.
+
+**The platform repo declares its own shape.** [ADR-056](adr/056-the-platform-repo-declares-its-shape.md), spec 123. This repo declares `shape: platform` in `.platform-settings.yml`, so `/component:spec`, `plan`, `build`, `verify` and `ship` work here like in a component repo (svc agents, not deployable: ship ends at merge). `/component:release` and `cplat platform update` refuse in it (the platform is released through CONTRIBUTING.md, Releases), `cplat platform doctor` reports the platform source version, and the fleet skips it. Only `platform` can be declared; a `shape:` key in the personal settings file, a component shape or a declaration next to a template `.copier-answers.yml` is an error.
+
+**Fixes:**
+- A bare `off` in `budget:` (`.platform-settings.yml` or the user settings file) is read as off; YAML parsed it as `false`, which was refused.
+- `cplat pr open` and `cplat component ship pr` in a git worktree no longer commit the PR body: it moves into the worktree's own git dir, and a `.git/…` `--body-file` resolves there (#227).
 
 **Old → new.** Every 4.7 slash command stays as a tombstone: it runs nothing and prints where the command went. A 4.7 `cplat` name prints `` `cplat <old>` is `cplat <new>` in 5.0 `` to stderr and exits 2.
 
