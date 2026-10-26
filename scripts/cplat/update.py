@@ -587,6 +587,13 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
                     continue   # the repo never touched it: a template change
             except (OSError, UnicodeDecodeError):
                 pass
+        if _CLUSTER_FILE.match(path):   # generated output: only the pinned database image moved (AC-115.6, AC-115.17)
+            was = run(["git", "show", f"HEAD:{path}"], cwd=repo, check=False)
+            try:
+                if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}):
+                    continue
+            except OSError:
+                pass
         lost.append({"kind": "file", "file": path, "entry": None, "was": None, "where": _where_file(path)})
     return lost
 
