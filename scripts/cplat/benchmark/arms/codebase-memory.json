@@ -6,7 +6,7 @@
     "quick-task"
   ],
   "files": {
-    ".mcp.json": "{\n  \"mcpServers\": {\n    \"codebase-memory-mcp\": {\n      \"command\": \"codebase-memory-mcp\",\n      \"args\": []\n    }\n  }\n}\n"
+    ".mcp.json": "{\n  \"mcpServers\": {\n    \"codebase-memory-mcp\": {\n      \"command\": \"$HOME/.local/bin/codebase-memory-mcp\",\n      \"args\": []\n    }\n  }\n}\n"
   },
   "commands": [
     [
@@ -17,8 +17,8 @@
     [
       "bash",
       "-c",
-      "jq '.permissions.allow += [\"mcp__codebase-memory-mcp\"]' .claude/settings.json > .claude/settings.json.new && mv .claude/settings.json.new .claude/settings.json"
+      "jq '.permissions.allow += [\"mcp__codebase-memory-mcp\"] | .enabledMcpjsonServers = [\"codebase-memory-mcp\"]' .claude/settings.json > .claude/settings.json.new && mv .claude/settings.json.new .claude/settings.json"
     ]
   ],
-  "note": "installs non-interactively with the upstream install.sh (--skip-config: binary only, MCP entry from .mcp.json); MIT, native binary, no API key"
+  "note": "installs non-interactively with the upstream install.sh (--skip-config: binary only, MCP entry from .mcp.json); MIT, native binary, no API key; the binary installs to ~/.local/bin and the indexes are cached in ~/.cache/codebase-memory-mcp; the project server is approved with enabledMcpjsonServers"
 }

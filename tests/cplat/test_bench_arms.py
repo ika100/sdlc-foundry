@@ -210,3 +210,63 @@ def test_the_change_aware_test_arms_run_on_build():
     """AC-107.1: testmon and pytest-impact are measured on the build workflow (design)."""
     for name in ("testmon", "pytest-impact"):
         assert "build" in json.loads((REAL_BENCH / "arms" / f"{name}.json").read_text())["workflows"]
+
+
+# ---------------- review fixes (verification.md of 0a75294) ----------------
+
+def _non_force_pushes(calls):
+    return [c for c, _ in calls if "push" in c and "--force" not in c]
+
+
+def test_a_refused_plugins_value_leaves_no_arm_on_main(arms, store, monkeypatch, tmp_path):
+    """AC-107.9: the arm is pushed only after every refusal point (here --plugins), so a refusal leaves main untouched."""
+    def trust(clone):
+        (clone / ".claude").mkdir(parents=True, exist_ok=True)
+        (clone / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {"svc@x": True}}))
+        return True
+    monkeypatch.setattr(runs_bench, "trusted", trust)
+    with pytest.raises(PlatformError, match="svc"):
+        runs.main(["benchmark", "quick-task", "--arm", "probe", "--plugins", str(tmp_path / "no-plugins")])
+    assert _non_force_pushes(arms.calls) == [] and arms.headless_calls == []
+
+
+def test_an_arm_build_pushes_only_the_arm_and_keeps_the_spec_commit_local(arms, store):
+    """AC-107.2: the spec commit comes after the arm is pushed, like a baseline PR it is in the session's clone but not on main."""
+    assert tasks()["workflows"]["build"].get("spec_file")
+    assert runs.main(["benchmark", "build", "--arm", "probe"]) == 0
+    pre = [c for c, _ in before_session(arms)]
+    arm_commit = max(i for i, c in enumerate(pre) if "commit" in c and "bench: arm probe" in c)
+    push = max(i for i, c in enumerate(pre) if "push" in c and "--force" not in c)
+    spec_commit = max(i for i, c in enumerate(pre) if "commit" in c and any(a.startswith("docs(spec):") for a in c))
+    assert arm_commit < push < spec_commit
+
+
+@pytest.mark.parametrize("name", ["testmon", "pytest-impact", "semgrep", "trivy"])
+def test_the_devbox_arms_keep_the_pinned_test_fast_flags(name):
+    """AC-107.2: only what the tool needs changes in the sample's devbox.json."""
+    scripts = json.loads(json.loads((REAL_BENCH / "arms" / f"{name}.json").read_text())["files"]["devbox.json"])["shell"]["scripts"]
+    assert "-q --tb=line" in scripts["test-fast"] and "--tb=short" not in scripts["test-fast"]
+
+
+def test_compare_validation_applies_the_arm_and_recall_in_both_passes(arms, store):
+    """AC-107.2: pass 2 runs with the same arm and the same --recall as pass 1."""
+    runs.main(["benchmark", "build", "--arm", "probe", "--recall", "--compare-validation"])
+    assert len([c for c, _ in arms.calls if "commit" in c and "bench: arm probe" in c]) == 2
+    assert len(_non_force_pushes(arms.calls)) == 2
+    assert len([c for c, _ in arms.calls if "pytest" in " ".join(c)]) == 2
+
+
+def test_the_codebase_memory_arm_approves_the_server_and_uses_an_absolute_command():
+    """AC-107.3: the project .mcp.json server is approved in settings, started by absolute path; the note says where it installs."""
+    arm = json.loads((REAL_BENCH / "arms" / "codebase-memory.json").read_text())
+    assert "enabledMcpjsonServers" in json.dumps(arm["commands"])
+    assert json.loads(arm["files"][".mcp.json"])["mcpServers"]["codebase-memory-mcp"]["command"].startswith("$HOME/.local/bin/")
+    assert "~/.local/bin" in arm["note"] and "~/.cache" in arm["note"]
+
+
+def test_stage_arm_resolves_home_in_files(arms, tmp_path):
+    """AC-107.3: $HOME in an arm file is the real home directory at apply time."""
+    clone = tmp_path / "c"
+    clone.mkdir()
+    runs_bench.stage_arm({"name": "h", "files": {"m.json": "$HOME/.local/bin/x"}, "commands": []}, clone)
+    assert (clone / "m.json").read_text() == f"{Path.home()}/.local/bin/x"

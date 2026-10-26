@@ -134,7 +134,7 @@ def reset_sample(repo: str, rev: str, clone: Path, keep: dict | None = None) -> 
         raise RuntimeError(f"main of {repo} is not at {rev[:7]} after the reset")
 
 
-def _prepare(url: str, rev: str, task: dict, clone: Path) -> None:
+def _prepare(url: str, rev: str, task: dict, clone: Path, spec: bool = True) -> None:
     """Clone once, then reuse the folder (its trust stays): back to `rev` with no local branches and no untracked files."""
     clone.parent.mkdir(parents=True, exist_ok=True)
     if not (clone / ".git").exists():
@@ -146,6 +146,12 @@ def _prepare(url: str, rev: str, task: dict, clone: Path) -> None:
         if branch != "main":
             _ok(["git", "branch", "-D", branch], clone)
     _ok(["git", "clean", "-ffdx", "-e", ".devbox", "-e", ".venv"], clone)
+    if spec:
+        commit_spec(task, clone)
+
+
+def commit_spec(task: dict, clone: Path) -> None:
+    """The workflow's spec as a local commit (build, ship). With an arm it comes after the arm's commit, which alone goes to main."""
     if task.get("spec_file"):
         target = clone / "docs" / "specs" / task["spec_id"] / "spec.md"
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -170,21 +176,25 @@ def load_arm(name: str, workflow: str) -> dict:
     return arm
 
 
-def apply_arm(arm: dict, url: str, clone: Path) -> None:
-    """Write the arm's files, run its commands in the clone, commit `bench: arm <name>` and push it (not forced) to main.
-    The reset after the run puts main back. Raises RuntimeError naming the failing command."""
+def stage_arm(arm: dict, clone: Path) -> None:
+    """Write the arm's files, run its commands in the clone and commit `bench: arm <name>` locally (nothing leaves the machine).
+    Raises RuntimeError naming the failing command."""
     for rel, content in (arm.get("files") or {}).items():
         target = (clone / rel).resolve()
         if clone.resolve() not in target.parents:
             raise RuntimeError(f"arm {arm['name']}: file {rel} is outside the clone")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+        target.write_text(content.replace("$HOME", str(Path.home())))
     for cmd in arm.get("commands") or []:
         code, out, err = run(cmd, clone)
         if code != 0:
             raise RuntimeError(f"arm {arm['name']}: `{' '.join(str(c) for c in cmd[:4])}` failed: {_why(out, err)}")
     _ok(["git", "add", "-A"], clone)
     _ok(["git", *GIT_IDENTITY, "commit", "--allow-empty", "-m", f"bench: arm {arm['name']}"], clone)
+
+
+def push_arm(url: str, clone: Path) -> None:
+    """Push the arm commit (not forced) to main. The reset after the run puts main back."""
     _ok(["git", "push", url, "HEAD:refs/heads/main"], clone)
 
 
@@ -334,15 +344,15 @@ def main(argv: list[str]) -> int:
                             hint=f"cplat runs benchmark {ns.workflow} --reset-first")
     clone = runs.state_dir() / "benchmark" / ns.workflow
     try:
-        _prepare(url, rev, task, clone)
+        _prepare(url, rev, task, clone, spec=arm is None)
+        if arm:
+            stage_arm(arm, clone)
         if not trusted(clone):
             raise PlatformError(f"the benchmark folder {clone} is not trusted in Claude Code, so its permission rules would be ignored",
                                 hint=f"cd {clone} && claude   (accept the trust dialog, then /exit), and run the benchmark again")
         if main_now != rev:
             reset_sample(repo, rev, clone)
         keep = snapshot(repo, clone)
-        if arm:
-            apply_arm(arm, url, clone)
     except RuntimeError as e:
         raise PlatformError(f"sample repo {repo} could not be prepared: {e}") from None
 
@@ -356,6 +366,13 @@ def main(argv: list[str]) -> int:
     outcome, reset, note, check = "failed", "not run", None, None
     usage, compare = None, None
     try:
+        if arm:   # after every refusal above, so the reset below always removes it; then the spec commit on top of it
+            try:
+                push_arm(url, clone)
+                commit_spec(task, clone)
+            except RuntimeError as e:
+                raise PlatformError(f"arm {ns.arm} could not be applied to {repo}: {e}") from None
+
         def one_pass(suffix: str = "") -> tuple[str, str | None]:
             out, why = "failed", None
             for name, prompt in steps(task):   # e.g. build: plan, then build; each its own phase, a failed step stops the run
@@ -365,19 +382,25 @@ def main(argv: list[str]) -> int:
                 if out != "done":
                     return out, f"step {name} did not finish"
             missing = result(ns.workflow, repo, keep)
-            return ("failed", missing) if missing else (out, why)
+            if missing:
+                return "failed", missing
+            if ns.recall and out == "done":   # spec 107: the full suite after the session, in every pass
+                why = recall_check(clone)
+                out = "failed" if why else out
+            return out, why
 
         if not ns.compare_validation:
             outcome, check = one_pass()
-            if ns.recall and outcome == "done" and not check:
-                check = recall_check(clone)
-                outcome = "failed" if check else outcome
         else:
             passes, seen = [], set(_children(rid))
             for label, mode in (("selective", None), ("full", "full")):
                 if label == "full":   # the sample repo back to the pinned state for the second pass
                     reset_sample(repo, rev, clone, keep)
-                    _prepare(url, rev, task, clone)
+                    _prepare(url, rev, task, clone, spec=arm is None)
+                    if arm:   # the second pass runs with the same arm
+                        stage_arm(arm, clone)
+                        push_arm(url, clone)
+                        commit_spec(task, clone)
                 saved = os.environ.get("CPLAT_VALIDATION")
                 if mode:
                     os.environ["CPLAT_VALIDATION"] = mode
