@@ -285,6 +285,18 @@ RENDER_SUBJECT = {
     "test_newsvc.py": None,
     "test_java_database.py": None,
 }
+# render-subject tests that stay in a migrated file (AC-112.4); their bodies are left out of the AC-112.7 check
+FRESH_WEB = "def test_a_fresh_web_repo_has_the_playwright_scaffold_by_default_ac_091_16"
+KEPT_RENDERS = {"test_smoke_091_templates.py": [FRESH_WEB]}
+
+
+def top_level_def(text, head):
+    """The source of the top-level def starting with `head`, up to the next top-level statement."""
+    start = text.index(head)
+    nxt = re.search(r"\n(?=\S)", text[start + len(head):])
+    return text[start: start + len(head) + nxt.start() if nxt else len(text)]
+
+
 MIGRATED = ["test_gitops.py", "fleet_world.py", "test_update_lost.py", "test_update_doctor.py", "test_rename_migration.py",
             "test_smoke_091_templates.py", "test_generated_repos.py", "test_alerts_render.py", "test_staging_093_setting.py"]
 
@@ -304,9 +316,7 @@ def test_render_subject_tests_still_render_from_the_template_ac_112_4():  # AC-1
 
 def test_the_render_tests_of_the_smoke_091_file_keep_newsvc_main_ac_112_4():  # AC-112.4
     text = (TESTS / "test_smoke_091_templates.py").read_text()
-    start = text.index("def test_a_fresh_web_repo_has_the_playwright_scaffold_by_default_ac_091_16")
-    nxt = text.find("\ndef test_", start + 10)
-    body = text[start: nxt if nxt != -1 else len(text)]
+    body = top_level_def(text, FRESH_WEB)
     assert "newsvc.main" in body and "new_service" not in body
 
 
@@ -314,6 +324,8 @@ def test_tests_that_only_need_a_rendered_repo_get_a_shared_copy_ac_112_7():  # A
     for name in MIGRATED:
         text = (TESTS / name).read_text()
         assert "new_service" in text or "shared_renders" in text, f"{name} does not use the shared renders"
+        for head in KEPT_RENDERS.get(name, []):
+            text = text.replace(top_level_def(text, head), "")
         assert "newsvc.main" not in text, f"{name} still renders per test"
 
 
