@@ -33,6 +33,7 @@ tasks:
     covers: [AC-112.1, AC-112.2, AC-112.4, AC-112.7, AC-112.8]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: CI runs 4 shards and checks their coverage; ci-success needs the check; docs, changelog, ADR index
     files: [.github/workflows/ci.yml, CONTRIBUTING.md, docs/CHANGELOG.md, docs/adr/README.md]
