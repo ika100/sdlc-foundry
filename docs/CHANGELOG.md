@@ -6,6 +6,9 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**Fixes:**
+- `cplat platform doctor` in the platform repo reports `gate recipes` and `gate CI jobs` as not applicable instead of warning and suggesting `/platform:update`, which refuses there (#231, AC-123.24).
+
 ## [5.0.0] — 2026-10-26
 
 **BREAKING: the platform speaks the domain model.** [ADR-054](adr/054-five-zero-interface-and-proved-migration.md), [ADR-053](adr/053-domain-model.md), [guide](DOMAIN-MODEL.md), spec 114. A system is one file, `applications/<system>/system.yaml`, that the renderer checks; slash commands and `cplat` subcommands are grouped by noun (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`). Cluster names (namespaces, Argo applications, image names) never change, so a migrated system renders the same manifests.

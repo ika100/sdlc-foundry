@@ -114,8 +114,8 @@ def test_adopt_reports_missing_ci_gates(tmp_path):
     assert (r / ".github" / "workflows" / "ci.yml").read_text() == ci
 
 
-def test_platform_repo_skips_the_template_gate_checks(tmp_path):
-    """#231: a repo with `shape: platform` has no template; recipes and CI jobs are ok, not applicable, no /platform:update."""
+def test_ac_123_24_platform_repo_skips_the_template_gate_checks(tmp_path):
+    """AC-123.24 (#231): a repo with `shape: platform` has no template; recipes and CI jobs are ok, not applicable, no /platform:update."""
     r = make_repo(tmp_path, filters=STANDARD, ci_recipe=None, workflow_runs=["quality"])
     scripts = json.loads((r / "devbox.json").read_text())
     del scripts["shell"]["scripts"]["secrets-baseline"]
