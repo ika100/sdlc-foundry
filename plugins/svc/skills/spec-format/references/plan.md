@@ -29,11 +29,11 @@ tasks:
     covers: [AC-007.1, AC-007.3]
     parallel_safe: false
     depends_on: [t1, t2]
-  - id: g1                         # a gitops task (spec 076): it changes the product's gitops-app repo
+  - id: g1                         # a gitops task (spec 076): it changes the system's gitops-app repo
     title: Wire ALERT_WEBHOOK_URL into the shop-api entry
     repo: acme/shop-gitops         # listed in the service's .platform-app.yml
     order: before-merge            # before-merge: lands before the service PR | after-release: after dev runs it
-    files: [applications/shop/services.yaml]
+    files: [applications/shop/system.yaml]
     apps: [shop-api-dev]           # Argo CD apps the change touches; the deploy waits for each to be Synced/Healthy
     covers: [AC-007.2]
     parallel_safe: true
@@ -68,11 +68,11 @@ The orchestrator adds `done: true` to each task as it merges; never write `done`
 - **`parallel_safe`**: `true` only when the task's files do not overlap any other parallel task at the same dependency level and the change is local. Cross-cutting refactors and renames are `false`. `cplat spec check` rejects two parallel-safe tasks of one level that share a file.
 - **`depends_on`**: only real dependencies (t2 imports what t1 creates). Cosmetic ordering serializes work that could run in parallel.
 - **Granularity**: a task a coder finishes in one focused pass; more than ~10 implementation bullets means split it.
-- **Gitops tasks** (`repo:`): every change the spec needs in the product's gitops-app repo (services.yaml values,
+- **Gitops tasks** (`repo:`): every change the spec needs in the system's gitops-app repo (system.yaml values,
   Components, ExternalSecrets, removing what the release no longer uses) is a task here, not a note in design.md.
   `order: before-merge` for what the new code needs to start (new env, secrets, CRD fields it reads);
-  `order: after-release` for clean-ups once dev runs it. `files` are paths in that repo. `/svc:ship` opens each as a
-  draft PR during the build and merges them in that order; `/svc:build` alone lists them in its report.
+  `order: after-release` for clean-ups once dev runs it. `files` are paths in that repo. `/component:ship` opens each as a
+  draft PR during the build and merges them in that order; `/component:build` alone lists them in its report.
 - **Expand/contract**: removing or renaming CRD fields, namespaces or config keys takes two releases. This plan adds
   the new shape and keeps accepting the old one (expand); a later spec removes the old one (contract) after every
   gitops repo moved. Never remove in the same release that adds.

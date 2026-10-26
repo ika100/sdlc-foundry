@@ -143,4 +143,4 @@ The orchestrator will merge the PR and create the git tag automatically.
 - Determine version bump from commit messages only — do not guess or ask interactively.
 - If conventional commit prefixes are absent, default to a **patch** bump and note the assumption.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.

@@ -43,4 +43,4 @@ Your job is **verify and extend**, not generate from scratch.
 - Read env vars; never hardcode endpoints, ports, or thresholds.
 - For any new dependency, add it under `[project.dependencies]` or `[project.optional-dependencies].dev` and note in your output that `devbox run -- uv sync` is needed.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.

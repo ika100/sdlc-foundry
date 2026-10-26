@@ -67,4 +67,4 @@ When the orchestrator tells you the task id (e.g. `t1`), include it in the body 
 
 You do not run the test suite for verification — hand off to the tester agent. `test-fast` is only for tight inner-loop sanity checks while implementing.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.

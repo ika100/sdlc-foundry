@@ -42,4 +42,4 @@ When you commit your own work (orchestrators in worktree-isolation mode require 
 
 You do not run the full test suite for verification — hand off to the tester agent. `test-fast` is only for inner-loop sanity checks.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.

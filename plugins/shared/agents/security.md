@@ -62,7 +62,7 @@ For a one-shot run of audit + secrets-scan + bandit, use:
 devbox run security
 ```
 
-This is the recipe `/shared:check-quality` and `/svc:build` use — prefer it when running all checks together.
+This is the recipe `/component:check` and `/component:build` use — prefer it when running all checks together.
 
 ### 5. Document findings
 
@@ -101,7 +101,7 @@ Print a one-line verdict:
 ## Rules
 
 - **Always go through devbox.** Tooling versions and flags must come from `devbox.json`.
-- **Dependency findings with a fix.** In `/svc:build` and `/svc:ship` the run patches them itself (`cplat deps patch`, ADR-034); this agent never bumps. In `/svc:release` and `/shared:check-quality` a red security gate still blocks, and the agent only reports.
+- **Dependency findings with a fix.** In `/component:build` and `/component:ship` the run patches them itself (`cplat deps patch`, ADR-034); this agent never bumps. In `/component:release` and `/component:check` a red security gate still blocks, and the agent only reports.
 - **CRITICAL findings with no fix released** block release — report them to the orchestrator for escalation.
 - **HIGH findings** are documented but do not block the build pipeline.
 - **Do not** modify application code, dependencies, or Dockerfile.
@@ -112,4 +112,4 @@ Print a one-line verdict:
 
 Other shapes use their own audit tools (`pnpm audit`, OWASP Dependency-Check, `govulncheck`) behind the same `devbox run security` / `devbox run audit` recipes, plus detect-secrets and trivy. Run the recipes, report with the same table layout (substitute the tool name for "pip-audit"), and never install or invoke the language tools directly. For `gitops-app` repos, run `devbox run security` (secret scan + manifest policy checks) — there is no image to scan.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
