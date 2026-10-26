@@ -65,6 +65,7 @@ tasks:
   covers: [AC-088.15, AC-088.17, AC-088.18]
   parallel_safe: true
   depends_on: [t4, t8]
+  done: true
 - id: t10
   title: runs report counts effective causes and shows unclassified escalations
   files: [scripts/cplat/runs_report.py]

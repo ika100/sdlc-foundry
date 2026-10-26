@@ -35,6 +35,7 @@ import autoissue
 import budget
 import cluster
 import core
+import escalation_rules
 import feedback
 import runs
 import smoke
@@ -339,6 +340,10 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
     cause, message = _coerce_cause(cause)
     if message:
         report.append(message)
+    if cause == "unknown":                     # AC-088.15: a missing or unknown cause is classified by the reason
+        classified = escalation_rules.message(escalation_rules.resolve(None, reason))
+        if classified:
+            report.append(classified)
     st["escalated"] = reason
     st["cause"] = cause
     if cause == "platform":
@@ -1260,6 +1265,7 @@ def gate(repo: Path, hook_input: dict, max_blocks: int, run_tests: bool = True) 
         return None
     if st.get("blocks", 0) >= max_blocks:
         st["escalated"] = f"gave up after {max_blocks} attempts to stop in phase {st['phase']}"
+        st["cause"] = "environment"            # AC-088.18
         save_state(repo, st)
         return {"systemMessage": f"ship {st['spec']}: stopped after {max_blocks} blocked stops in phase {st['phase']}; "
                                  "resume with /svc:ship " + st["spec"]}
