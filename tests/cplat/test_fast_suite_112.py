@@ -394,7 +394,7 @@ def test_a_failing_test_fails_its_shard_and_is_named_but_not_the_others_ac_112_1
 def test_shard_option_validation_ac_112_15(tmp_path):  # AC-112.15
     project = make_project(tmp_path, files=1, per_file=2)
     for bad in ("0/4", "5/4", "a/b", "2", "1/0", "-1/4"):
-        r = run_pytest(project, "-q", "--shard", bad)
+        r = run_pytest(project, "-q", f"--shard={bad}")  # `=`: argparse before 3.14 reads a bare "-1/4" as an option
         assert r.returncode == 4, (bad, r.stdout, r.stderr)
         assert f"--shard must be I/N with 1 <= I <= N, got {bad}" in r.stdout + r.stderr
     r = run_pytest(project, "-q", "--shard-report", str(project / "r.json"))
