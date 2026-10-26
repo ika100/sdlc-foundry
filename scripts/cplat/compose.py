@@ -1,4 +1,4 @@
-"""`compose`: add/remove services in a gitops-app repo (services.yaml → generated manifests)."""
+"""`component add|set|remove`: edit the components of a gitops-app repo's system.yaml and render the manifests."""
 from __future__ import annotations
 
 import argparse
@@ -10,6 +10,7 @@ import yaml
 
 import core
 import gitops
+import model
 from core import PlatformError, Report, run
 
 
@@ -19,21 +20,23 @@ def gh(args: list[str]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat compose", description=__doc__)
-    p.add_argument("action", choices=["add", "set", "remove"], help="set: change env, exposure, addon use or replicas of a composed service")
-    p.add_argument("services", nargs="+", help="service repo names (org/name, or just name = <github_org>/name)")
-    p.add_argument("--app", help="application name when the repo has several")
+    p = argparse.ArgumentParser(prog="cplat component", description=__doc__)
+    p.add_argument("action", choices=["add", "set", "remove"], help="set: change env, exposure, resource use or replicas of a component")
+    p.add_argument("services", nargs="+", metavar="component", help="component repo names (org/name, or just name = <github_org>/name)")
+    p.add_argument("--system", help="system name when the repo has several")
     p.add_argument("--repo-dir", default=".", help="the gitops-app repo (default: current directory)")
     p.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="env var for the service (single service only)")
     p.add_argument("--expose", nargs="?", const=True, default=None, metavar="HOST", help="publish through the Gateway (optional host label)")
     p.add_argument("--generate", action="append", default=[], metavar="SECRET=KEY,KEY", help="Secret whose values ESO generates randomly once per environment (single service only)")
     p.add_argument("--secret", action="append", default=[], metavar="SECRET=KEY,KEY", help="Secret read from the secret store (set the values with `cplat secret set`; single service only)")
     p.add_argument("--secret-ref", action="append", default=[], metavar="NAME", help="existing Secret in the namespace to expose as env vars, e.g. the one generated for another service (single service only)")
-    p.add_argument("--uses", action="append", default=[], metavar="ADDON", help="addon the service needs (e.g. postgres → DATABASE_URL); declare it first with `cplat addon add`")
+    p.add_argument("--uses", action="append", default=[], metavar="ADDON", help="resource the component needs (e.g. postgres → DATABASE_URL); declare it first with `cplat resource add postgres`")
     p.add_argument("--replicas", type=int)
+    p.add_argument("--instance", metavar="ENV", help="with set: change this instance only (with --replicas)")
     p.add_argument("--port", type=int, help="override the port (default: the service's template answer, else the shape default)")
     p.add_argument("--from-k8s", action="store_true", help="seed port/probes/env/replicas/resources from the service's existing k8s/base/deployment.yaml (v1 → v2 migration)")
-    p.add_argument("--shape", help="shape of the service when it has no .copier-answers.yml")
+    p.add_argument("--type", help="component type when its repo has no .copier-answers.yml (service, website, library)")
+    p.add_argument("--lang", help="component language when its repo has no .copier-answers.yml")
     p.add_argument("--pr", action="store_true", help="create branch, commit, push and open a pull request")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
@@ -48,18 +51,21 @@ def repo_file(slug: str, path: str) -> str | None:
     return base64.b64decode(raw).decode() if raw.strip() else None
 
 
-def shape_of(answers_text: str | None, explicit: str | None) -> str:
+def shape_of(answers_text: str | None, type_: str | None, lang: str | None) -> str:
     entries = core.registry.load()
-    if explicit:
-        if explicit not in {e["id"] for e in entries}:
-            raise PlatformError(f"unknown shape '{explicit}'")
-        return explicit
+    if type_ or lang:
+        if not (type_ and lang):
+            raise PlatformError("--type and --lang go together", hint="e.g. --type service --lang python")
+        sid = model.shape_for(type_, lang, entries)
+        if sid is None:
+            raise PlatformError(f"no component of type {type_} and lang {lang}", hint="available: " + ", ".join(f"{t}/{l}" for t, l in model.TYPE_LANGS if model.shape_for(t, l, entries)))
+        return sid
     if answers_text:
         src = (yaml.safe_load(answers_text) or {}).get("_src_path", "")
         for e in entries:
             if src.rstrip("/").endswith("templates/" + e["template"]):
                 return e["id"]
-    raise PlatformError("cannot tell the service's shape", hint="the service repo needs a .copier-answers.yml from the platform template, or pass --shape <shape>")
+    raise PlatformError("cannot tell the service's shape", hint="the component repo needs a .copier-answers.yml from the platform template, or pass --type <type> --lang <lang>")
 
 
 def seed_from_k8s(slug: str) -> dict:
@@ -102,8 +108,9 @@ def parse_secret_args(items: list[str]) -> list[tuple[str, list[str]]]:
 
 def build_entry(name: str, slug: str, shape_entry: dict, port: int | None, registry_ns: str, ns: argparse.Namespace, seed: dict) -> dict:
     rt = shape_entry["runtime"]
+    ctype, clang = model.type_lang(shape_entry["id"])
     entry = {
-        "name": name, "repo": slug, "shape": shape_entry["id"], "image": f"{registry_ns}/{name}",
+        "type": ctype, "lang": clang, "repo": slug, "image": f"{registry_ns}/{name}",
         "port": ns.port or seed.get("port") or port or rt["port"],
         "probes": seed.get("probes") or dict(rt["probes"]),
         "user": rt["user"],
@@ -111,10 +118,11 @@ def build_entry(name: str, slug: str, shape_entry: dict, port: int | None, regis
         "volumes": dict(rt.get("volumes") or {}),
         "env": {**(rt.get("env") or {}), **(seed.get("env") or {})},
         "secretRefs": [],
-        "replicas": ns.replicas or seed.get("replicas") or 1,
         "resources": seed.get("resources") or rt["resources"],
-        "environments": ["dev"],
+        "instances": {"dev": {}},
     }
+    if ns.replicas or seed.get("replicas"):
+        entry["replicas"] = ns.replicas or seed["replicas"]
     for kv in ns.env:
         k, _, v = kv.partition("=")
         if not k or not _:
@@ -155,63 +163,59 @@ def check_remote(slug: str) -> str | None:
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
     repo = Path(ns.repo_dir).resolve()
-    app_dir = gitops.find_app(repo, ns.app)
+    app_dir = gitops.find_app(repo, ns.system)
     ans = gitops.answers(repo)
     org = ans.get("github_org", "ika100")
     registry_ns = ans.get("docker_registry", f"ghcr.io/{org}")
     if ns.action == "set" and len(ns.services) != 1:
-        raise PlatformError("compose set changes exactly one service", hint="run it once per service")
+        raise PlatformError("component set changes exactly one component", hint="run it once per component")
     if ns.action == "set" and not (ns.env or ns.expose or ns.uses or ns.replicas):
-        raise PlatformError("nothing to change", hint="pass --env KEY=VALUE, --expose [HOST], --uses ADDON or --replicas N")
+        raise PlatformError("nothing to change", hint="pass --env KEY=VALUE, --expose [HOST], --uses RESOURCE or --replicas N")
+    if ns.instance and ns.action != "set":
+        raise PlatformError("--instance applies to component set only")
+    if ns.instance and (ns.env or ns.expose or ns.uses or not ns.replicas):
+        raise PlatformError("--instance changes replicas only", hint="component set <name> --instance ENV --replicas N")
     if (ns.env or ns.generate or ns.secret or ns.uses or ns.secret_ref) and len(ns.services) != 1:
-        raise PlatformError("--env, --generate, --secret, --secret-ref and --uses apply to exactly one service")
+        raise PlatformError("--env, --generate, --secret, --secret-ref and --uses apply to exactly one component")
     if not ns.dry_run:
         gitops.require_clean(repo)
     shapes = {e["id"]: e for e in core.registry.load()}
 
     y, data = gitops.load(app_dir)
-    services = gitops.services_of(data)
-    existing = {s["name"]: s for s in services}
-    # a half-migrated services.yaml cannot be rendered: refuse before touching anything, and say how to finish in one go
-    v1_left = [n for n, e in existing.items() if "port" not in e and "probes" not in e and resolve_slug(n, org)[0] not in [resolve_slug(x, org)[0] for x in ns.services]]
-    if v1_left and ns.action == "add":
-        raise PlatformError(f"other services still use the v1 format: {', '.join(v1_left)}",
-                            hint=f"migrate them together in one command: compose add {' '.join(list(ns.services) + v1_left)} --from-k8s")
-    r = Report(title=f"compose {ns.action}: {', '.join(ns.services)} ({app_dir.name})")
+    components = gitops.components_of(data)
+    r = Report(title=f"component {ns.action}: {', '.join(ns.services)} ({app_dir.name})")
     names: list[str] = []
-    replaced: list[str] = []
 
     if ns.action == "add":
         new = []
         for arg in ns.services:
             name, slug = resolve_slug(arg, org)
-            old = existing.get(name)
-            v1 = old is not None and "port" not in old and "probes" not in old     # platform-v1 entry (remote base, `path:`)
-            if old is not None and not v1:
-                raise PlatformError(f"{name} is already in services.yaml", hint="edit its entry by hand, or remove it first")
+            old = components.get(name)
+            half = old is not None and "port" not in old and "probes" not in old     # a half-written entry: complete it in place
+            if old is not None and not half:
+                raise PlatformError(f"{name} is already in system.yaml", hint="edit its entry by hand, or remove it first")
             answers_text = check_remote(slug)
-            shape = shape_of(answers_text, ns.shape)
+            shape = shape_of(answers_text, ns.type, ns.lang)
             port = (yaml.safe_load(answers_text) or {}).get("port") if answers_text else None
             seed = seed_from_k8s(slug) if ns.from_k8s else {}
             entry = build_entry(name, slug, shapes[shape], port, registry_ns, ns, seed)
-            if v1:  # migrate in place: keep the environments that already run (their overlays exist) and, via render, their image pins
-                entry["environments"] = [e for e in gitops.ENVS if (app_dir / "overlays" / e / name).is_dir()] or ["dev"]
-                replaced.append(name)
-            new.append(entry)
+            if half:  # keep the environments that already run (their overlays and image pins) as instance keys
+                keys = list((old.get("instances") or {}).keys()) or [e for e in gitops.ENVS if (app_dir / "overlays" / e / name).is_dir()] or ["dev"]
+                entry["instances"] = {k: {} for k in keys}
+            new.append((name, entry))
             names.append(name)
-            r.will_do.append(("migrate v1 entry of " if v1 else "add ") + f"{name} ({shape}): port {entry['port']}, image {entry['image']}, environments {entry['environments']}" + (", exposed" if "expose" in entry else "")
-                             + (" — existing image pins are kept" if v1 else ""))
+            r.will_do.append(("complete " if half else "add ") + f"{name} ({entry['type']}/{entry['lang']}): port {entry['port']}, image {entry['image']}, instances {list(entry['instances'])}" + (", exposed" if "expose" in entry else ""))
         if not ns.dry_run:
-            for e in new:
-                if e["name"] in replaced:
-                    del services[[x["name"] for x in services].index(e["name"])]
-                services.append(e)
+            for name, e in new:
+                components[name] = e
             gitops.save(app_dir, y, data)
     elif ns.action == "set":
         name, _ = resolve_slug(ns.services[0], org)
-        if name not in existing:
-            raise PlatformError(f"{name} is not in services.yaml", hint="current: " + ", ".join(existing) if existing else "services.yaml is empty")
-        entry = existing[name]
+        if name not in components:
+            raise PlatformError(f"{name} is not in system.yaml", hint="current: " + ", ".join(components) if components else "system.yaml has no components")
+        entry = components[name]
+        if ns.instance and ns.instance not in (entry.get("instances") or {}):
+            raise PlatformError(f"{name} has no instance in {ns.instance}", hint="instances: " + ", ".join(entry.get("instances") or {}))
         changes = []
         for kv in ns.env:
             k, sep, v = kv.partition("=")
@@ -223,10 +227,10 @@ def main(argv: list[str]) -> int:
         if ns.uses:
             changes.append("uses " + ", ".join(ns.uses))
         if ns.replicas:
-            changes.append(f"replicas {ns.replicas}")
+            changes.append(f"replicas {ns.replicas}" + (f" in {ns.instance}" if ns.instance else ""))
         names.append(name)
         r.will_do.append(f"set {name}: " + "; ".join(changes))
-        if not ns.dry_run:  # mutate the round-trip entry in place, so comments and order in services.yaml survive
+        if not ns.dry_run:  # mutate the round-trip entry in place, so comments and order in system.yaml survive
             if ns.env:
                 env = entry.setdefault("env", {})
                 for kv in ns.env:
@@ -236,41 +240,46 @@ def main(argv: list[str]) -> int:
                 entry["expose"] = {"host": name if ns.expose is True else ns.expose}
             if ns.uses:
                 entry["uses"] = list(dict.fromkeys([*(entry.get("uses") or []), *ns.uses]))
-            if ns.replicas:
+            if ns.replicas and ns.instance:
+                inst = entry["instances"]
+                if inst[ns.instance] is None:
+                    inst[ns.instance] = {}
+                inst[ns.instance]["replicas"] = ns.replicas
+            elif ns.replicas:
                 entry["replicas"] = ns.replicas
             gitops.save(app_dir, y, data)
     else:
         for arg in ns.services:
             name, _ = resolve_slug(arg, org)
-            if name not in existing:
-                raise PlatformError(f"{name} is not in services.yaml", hint="current: " + ", ".join(existing) if existing else "services.yaml is empty")
+            if name not in components:
+                raise PlatformError(f"{name} is not in system.yaml", hint="current: " + ", ".join(components) if components else "system.yaml has no components")
             names.append(name)
             r.will_do.append(f"remove {name}; Argo prunes its Applications and workloads after the PR merges (prune is on)")
         if not ns.dry_run:
             for name in names:
-                del services[[s["name"] for s in services].index(name)]
+                del components[name]
             gitops.save(app_dir, y, data)
 
     r.will_do.append("regenerate ApplicationSets and manifests (render.py)")
     if ns.pr:
-        r.will_do.append("[outward] open a pull request (branch compose/…)")
+        r.will_do.append("[outward] open a pull request (branch component/…)")
     if ns.dry_run:
         r.emit(True, ns.json)
         return 0
 
     gitops.render(repo)
     changed = gitops.rendered_changes(repo)
-    r.did.append(f"updated services.yaml and regenerated {len(changed)} file(s)")
+    r.did.append(f"updated system.yaml and regenerated {len(changed)} file(s)")
     if ns.pr:
-        title = f"feat(compose): {ns.action} {' '.join(names)}"
-        url = gitops.open_pr(repo, f"compose/{ns.action}-{gitops.slug('-'.join(names))}", title, f"`/gitops:compose {ns.action} {' '.join(names)}`. Generated files regenerated by `devbox run render`.")
+        title = f"feat(component): {ns.action} {' '.join(names)}"
+        url = gitops.open_pr(repo, f"component/{ns.action}-{gitops.slug('-'.join(names))}", title, f"`/component:{ns.action} {' '.join(names)}`. Generated files regenerated by `devbox run render`.")
         r.did.append(f"opened {url}")
         r.next_steps.append("review and merge the PR; Argo syncs after the merge")
     else:
-        r.next_steps.append("review `git diff`, run `devbox run validate`, then commit (or re-run with --pr)")
+        r.next_steps.append("review the diff, run `devbox run validate`, then commit (or re-run with --pr)")
     if ns.action == "add":
-        r.next_steps.append("adapt the entry if needed (env wiring such as API_URL, replicas, --expose); services start in dev only — `/gitops:promote` adds staging/prod")
-    r.undo.append("git checkout -- . && git clean -fd applications bootstrap")
-    r.data = {"services": names, "changed": changed}
+        r.next_steps.append("adapt the entry if needed (env wiring such as API_URL, replicas, --expose); components start in dev only — `/instance:promote` adds staging/prod; `/resource:add postgres` declares a database")
+    r.undo.append("discard the working-tree changes under applications and bootstrap")
+    r.data = {"components": names, "changed": changed}
     r.emit(False, ns.json)
     return 0
