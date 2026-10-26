@@ -1,7 +1,7 @@
 ---
 spec_id: 088-platform-failures-become-deduplicated
 title: Platform failures become deduplicated issues
-status: building
+status: done
 priority: P1
 tracks: [207]
 ---
@@ -93,3 +93,4 @@ As the platform maintainer reading the weekly retro, I want escalations whose ca
 - 2026-10-26 amended: open questions answered with the suggested answers (cause mapping of AC-088.16, `environment` for the stop gate and no progress, older records classified when read, at most 20 reasons listed)
 - 2026-10-26 approved
 - 2026-10-26 building
+- 2026-10-26 done

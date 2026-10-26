@@ -99,7 +99,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [082-sessions-do-not-collide](specs/082-sessions-do-not-collide/spec.md) — Sessions do not collide: claimed issues and specs required | P1 | done | 2 | #121, #122 |
 | [085-a-broken-spec-names-itself-and-stops](specs/085-a-broken-spec-names-itself-and-stops/spec.md) — A broken spec names itself and stops nothing else | P1 | done | 12 | #129 |
 | [086-repo-gates-survive-skeleton-updates](specs/086-repo-gates-survive-skeleton-updates/spec.md) — Repo gates survive skeleton updates | P1 | done | 16 | #132 |
-| [088-platform-failures-become-deduplicated](specs/088-platform-failures-become-deduplicated/spec.md) — Platform failures become deduplicated issues | P1 | done | 14 |  |
+| [088-platform-failures-become-deduplicated](specs/088-platform-failures-become-deduplicated/spec.md) — Platform failures become deduplicated issues | P1 | done | 21 | #207 |
 | [089-agent-quality-is-measured-per-agent-and](specs/089-agent-quality-is-measured-per-agent-and/spec.md) — Agent quality is measured per agent and shape | P1 | done | 14 |  |
 | [090-a-weekly-retro-proposes-the-next-specs](specs/090-a-weekly-retro-proposes-the-next-specs/spec.md) — A weekly retro proposes the next specs | P1 | done | 14 |  |
 | [092-firing-alerts-become-issues-in-the](specs/092-firing-alerts-become-issues-in-the/spec.md) — Firing alerts become issues in the owning repo | P1 | done | 22 |  |
