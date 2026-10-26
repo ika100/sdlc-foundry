@@ -1,7 +1,7 @@
 ---
 spec_id: 087-every-run-is-recorded-in-a-private-run
 title: Every run is recorded in a private run store
-status: building
+status: done
 priority: P0
 tracks: [207]
 ---
@@ -138,3 +138,4 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 - 2026-10-26 amended: open questions answered with the suggested answers (a red `pr-wait` keeps `outcome` `failed`, `red-ci` only in the readers; top 5 red checks, `check <n>` in public); AC-087.26 clarified
 - 2026-10-26 approved
 - 2026-10-26 building
+- 2026-10-26 done
