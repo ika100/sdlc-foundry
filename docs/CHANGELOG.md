@@ -6,6 +6,16 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**Resources are named, typed and may be external.** [ADR-057](adr/057-named-typed-resources-with-fixed-contracts.md), [ADR-058](adr/058-pinned-versions-and-platform-installed-operators.md), spec 115. Not breaking: a 5.0 `system.yaml` renders as before. A system declares any number of resources under `resources.<name>` with a `type` (`database` is built; `bucket`, `cache` and `broker` are reserved for specs 116, 118 and 119). A database can be `external` (optionally with `remote.path` and a per-environment `instances.<env>.external`): the platform renders an ExternalSecret from the secret store and no cluster. A component that uses two or more resources of one type gets prefixed variables (`ORDERS_DB_DATABASE_URL`). `cplat model show` lists type and `external`; `cplat platform doctor` compares the installed operator.
+
+**Pinned database image, supported majors 15–18.** The database image is pinned exactly per major. The one narrowing against 5.0: another `version` (for example 14) now fails the render and names the supported majors 15, 16, 17 and 18.
+
+**Operators live under `operators/`.** The platform installs CloudNativePG through `operators/` instead of leaving it to the cluster. `environments.<env>.operators: owner` leaves the operator to the cluster owner.
+
+**Plugins:** `resource` 1.1.0 (`/resource:add <name> --type database [--version N] [--external [--path P]]`, `/resource:remove <name>`).
+
+**Action.** One human step per existing cluster: `kubectl apply -f operators/root.yaml` (or `KUBE_CONTEXT=<ctx> devbox run bootstrap`; local clusters get it from `devbox run cluster-up`). A cluster that already runs a hand-installed CloudNativePG: set `environments.<env>.operators: owner` before anyone applies it. Existing repos: run `/platform:update`; databases on a major other than 15–18 must move to a supported one before the render passes.
+
 ## [5.0.0] — 2026-10-26
 
 **BREAKING: the platform speaks the domain model.** [ADR-054](adr/054-five-zero-interface-and-proved-migration.md), [ADR-053](adr/053-domain-model.md), [guide](DOMAIN-MODEL.md), spec 114. A system is one file, `applications/<system>/system.yaml`, that the renderer checks; slash commands and `cplat` subcommands are grouped by noun (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`). Cluster names (namespaces, Argo applications, image names) never change, so a migrated system renders the same manifests.
