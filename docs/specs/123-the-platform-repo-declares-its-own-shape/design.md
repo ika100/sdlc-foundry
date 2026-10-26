@@ -43,7 +43,7 @@ Appended after `service-go`:
     detection:
       declared: .platform-settings.yml   # only `shape: platform` in the committed settings file; never sniffed
     status: stable
-    adr: [55]
+    adr: [56]
 ```
 
 It has no `test_globs`, `smoke_tag`, `smoke_globs`, `ci_checks`, `validation`, `default_stack` or `runtime`. Leaving out `default_stack` means `model._pair` never makes a type/lang pair from it. Leaving out `validation` and `test_globs` means `cplat validate` and `cplat spec trace` behave exactly as they do in a repo without a shape.
