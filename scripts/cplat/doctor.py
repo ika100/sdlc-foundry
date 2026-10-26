@@ -138,9 +138,9 @@ def check_repo(repo: Path) -> list[dict]:
     if shape:
         cur = core.platform_version()
         if not stamp:
-            out.append(check(WARN, "repo platform version", "no .platform-version stamp", "/shared:update-service"))
+            out.append(check(WARN, "repo platform version", "no .platform-version stamp", "/platform:update"))
         elif core.vtuple(stamp.get("platform", "0.0.0")) < core.vtuple(cur):
-            out.append(check(WARN, "repo platform version", f"{stamp['platform']} (platform is {cur})", "/shared:update-service"))
+            out.append(check(WARN, "repo platform version", f"{stamp['platform']} (platform is {cur})", "/platform:update"))
         else:
             out.append(check(OK, "repo platform version", stamp.get("platform", "?")))
     out += check_addons(repo)
@@ -148,20 +148,50 @@ def check_repo(repo: Path) -> list[dict]:
     return out
 
 
+def check_migration(repo: Path) -> list[dict]:
+    """AC-114.39: the 4.x plugins or files are still in place; the fix is the migration."""
+    fix = "cplat platform update --migrate"
+    out = []
+    old: list[str] = []
+    for f in (repo / ".claude" / "settings.json", Path.home() / ".claude" / "settings.json"):
+        try:
+            enabled = (json.loads(f.read_text()) or {}).get("enabledPlugins") or {}
+        except (OSError, ValueError, AttributeError):
+            continue
+        old += [k for k in ("app@sdlc-foundry", "gitops@sdlc-foundry") if enabled.get(k) is True and k not in old]
+    if old:
+        out.append(check(WARN, "plugins (4.x)", f"{', '.join(old)} enabled: these plugins hold only tombstones in 5.0", fix))
+    files = sorted(str(p.relative_to(repo)) for n in ("app.yaml", "services.yaml") for p in (repo / "applications").glob(f"*/{n}"))
+    if files:
+        out.append(check(WARN, "system.yaml", f"4.x files still in place: {', '.join(files)}", fix))
+    return out
+
+
+def _models(repo: Path) -> list:
+    """The model of every system in the repo; an unmigrated or unreadable one is skipped (check_migration warns)."""
+    import model
+    out = []
+    for f in sorted((repo / "applications").glob("*/system.yaml")):
+        try:
+            out.append(model.load_dir(f.parent))
+        except model.ModelError:
+            continue
+    return out
+
+
 def check_addons(repo: Path) -> list[dict]:
-    """A gitops-app repo that declares addons needs their cluster-side parts in the cluster the user is pointed at."""
-    import yaml
-    declared: dict = {}
-    for f in (repo / "applications").glob("*/app.yaml"):
-        declared.update((yaml.safe_load(f.read_text()) or {}).get("addons") or {})
-    if not declared or not shutil.which("kubectl"):
+    """A gitops-app repo that declares postgres or the lgtm dev stack needs their cluster-side parts in the cluster the user is pointed at."""
+    models = _models(repo)
+    postgres = any(r.type == "postgres" for m in models for r in m.resources)
+    lgtm = any(e.observability is not None and e.observability.ui == "lgtm" for m in models for e in m.environments)
+    if not (postgres or lgtm) or not shutil.which("kubectl"):
         return []
     out = []
-    if "postgres" in declared:
+    if postgres:
         have = run(["kubectl", "get", "crd", "clusters.postgresql.cnpg.io"], check=False).returncode == 0
         out.append(check(OK, "addon postgres", "CloudNativePG operator is installed in the current kube context") if have else
                    check(WARN, "addon postgres", "CloudNativePG operator not found in the current kube context", "local: devbox run cluster-up; real clusters: install the cloudnative-pg chart"))
-    if (declared.get("observability") or {}).get("ui") == "lgtm":
+    if lgtm:
         have = run(["kubectl", "-n", "observability", "get", "deploy", "lgtm"], check=False).returncode == 0
         out.append(check(OK, "addon observability", "the Grafana dev stack (lgtm) is installed") if have else
                    check(WARN, "addon observability", "`ui: lgtm` is declared but the dev stack is missing in the current kube context", "local: devbox run cluster-up"))
@@ -169,14 +199,12 @@ def check_addons(repo: Path) -> list[dict]:
 
 
 def check_policies(repo: Path) -> list[dict]:
-    """`policies:` in app.yaml needs Kyverno (and its CEL policy CRDs) in the cluster the user is pointed at."""
-    import yaml
-    if not shutil.which("kubectl") or not any((yaml.safe_load(f.read_text()) or {}).get("policies") is not None and (yaml.safe_load(f.read_text()) or {}).get("policies") is not False
-                                                for f in (repo / "applications").glob("*/app.yaml")):
+    """An environment policy other than `off` needs Kyverno (and its CEL policy CRDs) in the cluster the user is pointed at."""
+    if not shutil.which("kubectl") or not any(e.policy != "off" for m in _models(repo) for e in m.environments):
         return []
     have = run(["kubectl", "get", "crd", "namespacedvalidatingpolicies.policies.kyverno.io"], check=False).returncode == 0
     return [check(OK, "policies", "Kyverno is installed in the current kube context")] if have else \
-        [check(WARN, "policies", "app.yaml declares `policies:` but Kyverno (1.17+) is missing in the current kube context", "local: devbox run cluster-up; real clusters: install the kyverno chart")]
+        [check(WARN, "policies", "system.yaml sets an environment `policy` but Kyverno (1.17+) is missing in the current kube context", "local: devbox run cluster-up; real clusters: install the kyverno chart")]
 
 
 def check_gitops_token(repo: Path) -> list[dict]:
@@ -190,7 +218,7 @@ def check_gitops_token(repo: Path) -> list[dict]:
     return [check(OK, "secret GITOPS_TOKEN", "set (or not readable with this token)")]
 
 
-SERVICE_REPOS_TOKEN_FIX = ("create a fine-grained token with Contents: read on every service repo in services.yaml, then: "
+SERVICE_REPOS_TOKEN_FIX = ("create a fine-grained token with Contents: read on every component repo in system.yaml, then: "
                            "gh secret set SERVICE_REPOS_READ_TOKEN -R {slug}")
 
 
@@ -209,42 +237,24 @@ def check_service_repos_token(repo: Path) -> list[dict]:
     if names is None:
         return [check(WARN, name, "could not be read with this gh login", fix)]
     if "SERVICE_REPOS_READ_TOKEN" not in names:
-        return [check(WARN, name, "not set: gitops PRs with a Service-ref marker (opened by /svc:ship) fail their CRD check", fix)]
+        return [check(WARN, name, "not set: gitops PRs with a Service-ref marker (opened by /component:ship) fail their CRD check", fix)]
     return [check(OK, name, "set: gitops CI can read the service repos named by Service-ref markers")]
 
 
-ALERTS_TOKEN_FIX = ("create a fine-grained token with Issues: read and write on every service repo in services.yaml, then: "
+ALERTS_TOKEN_FIX = ("create a fine-grained token with Issues: read and write on every component repo in system.yaml, then: "
                     "gh secret set ALERTS_TOKEN -R {slug}")
 
 
 def check_alerts_token(repo: Path) -> list[dict]:
     """Spec 092: the alert poll files issues in the service repos with ALERTS_TOKEN; without it they land in the gitops repo."""
-    import yaml
-
     import ship
     name = "secret ALERTS_TOKEN"
     shape = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False).stdout.strip()
     if shape != "gitops-app":
         return []
-
-    def load(path: Path) -> dict:
-        try:
-            data = yaml.safe_load(path.read_text())
-        except (OSError, yaml.YAMLError):
-            return {}
-        return data if isinstance(data, dict) else {}
-
-    polled = has_repo = False
-    for app in sorted((repo / "applications").glob("*/app.yaml")):
-        obs = (load(app).get("addons") or {})
-        if not isinstance(obs, dict) or "observability" not in obs:
-            continue
-        conf = obs["observability"] if isinstance(obs["observability"], dict) else {}
-        if conf.get("alerts") is False:
-            continue
-        polled = True
-        services = load(app.parent / "services.yaml").get("services") or []
-        has_repo = has_repo or any(isinstance(s, dict) and s.get("repo") for s in services)
+    models = _models(repo)
+    polled = any(e.observability is not None and e.observability.alerts is not False for m in models for e in m.environments)
+    has_repo = any(c.repo for m in models for c in m.components)
     if not (polled and has_repo):
         return []
     try:
@@ -316,13 +326,13 @@ def check_retro_schedule() -> list[dict]:
 
 def run_checks(repo: Path) -> list[dict]:
     import gates
-    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_repo(repo),
+    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_migration(repo), *check_repo(repo),
             *gates.check_gates(repo), *check_gitops_token(repo),
             *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule()]
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat doctor", description=__doc__)
+    ap = argparse.ArgumentParser(prog="cplat platform doctor", description=__doc__)
     ap.add_argument("--repo", default=".")
     ap.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv)
