@@ -89,6 +89,7 @@ def test_the_reset_also_runs_when_a_session_with_an_arm_fails(arms, store, monke
 def test_the_record_names_the_arm_and_a_run_without_arm_is_baseline(arms, store):
     """AC-107.10: benchmark.arm is the arm's name, `baseline` without --arm."""
     assert runs.main(["benchmark", "quick-task", "--arm", "probe"]) == 0
+    arms.delivered_pr = None   # setup: the reset closed the first run's PR, so the second run must open its own (AC-099 result check)
     assert runs.main(["benchmark", "quick-task"]) == 0
     assert sorted(r["benchmark"]["arm"] for r in benchmark_records(store)) == ["baseline", "probe"]
     assert not any("bench: arm" in " ".join(c) for c, _ in arms.calls[arms.at_session["calls"]:] if "commit" in c)
