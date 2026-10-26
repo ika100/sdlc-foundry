@@ -140,18 +140,26 @@ TYPES = {
 }
 API_TYPES = ["openapi", "grpc", "graphql", "events"]
 POLICY_VALUES = {"audit": "Audit", "enforce": "Enforce", "off": "Off"}     # system.yaml policy -> the 4.x mode
-# Resource contract (ADR-020): what a component gets when it `uses` a resource. Components never see the implementation.
+# Pinned versions (ADR-058). Changing a pin follows spec 121. A database image is `ghcr.io/cloudnative-pg/postgresql:<major>.<minor>`
+# (optionally with an `@sha256:` digest); the operator row is the CloudNativePG chart and the operator version it installs.
+POSTGRES_IMAGES = {
+    15: "ghcr.io/cloudnative-pg/postgresql:15.19",
+    16: "ghcr.io/cloudnative-pg/postgresql:16.15",
+    17: "ghcr.io/cloudnative-pg/postgresql:17.11",
+    18: "ghcr.io/cloudnative-pg/postgresql:18.6",
+}
+OPERATORS = {
+    "cloudnative-pg": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "cloudnative-pg", "chart_version": "0.29.1",
+                       "operator_version": "1.30.1", "namespace": "cnpg-system", "release": "cnpg", "crd": "clusters.postgresql.cnpg.io"},
+}
+DB_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
+# Resource contract (ADR-020, ADR-057): what a component gets when it `uses` a resource is in TYPES. Components never see the implementation.
 ADDONS = {
-    "postgres": {
-        "secret": "{app}-postgres-app",    # connection Secret written by the operator (CloudNativePG)
-        "env": {"DATABASE_URL": "uri", "PGHOST": "host", "PGPORT": "port", "PGDATABASE": "dbname", "PGUSER": "user", "PGPASSWORD": "password"},  # pragma: allowlist secret
-        "defaults": {"version": 17, "instances": 1, "storage": "1Gi"},
-    },
     # OpenTelemetry base (ADR-021): applies to every component of an environment that has `observability`. A collector per environment
     # receives OTLP and scrapes the components' Prometheus endpoints; a UI/backend is optional (`ui: lgtm`, or `exportTo`).
     "observability": {
         "scope": "all",
-        "prune": True,                      # configuration only: removing it removes the collector (postgres keeps its data)
+        "prune": True,                      # configuration only: removing it removes the collector (a database keeps its data)
         "image": "otel/opentelemetry-collector-contrib:0.162.0",
         "defaults": {"ui": "none"},
     },
@@ -673,6 +681,19 @@ def check_resource_clashes(system: str, resources: dict, comps_doc: dict, comps:
                 fail(f"components.{c['name']}: secret '{sec['name']}' is the connection Secret of resources.{connection[sec['name']]}; rename it")
 
 
+def variable_names(uses: list[str], resources: dict) -> list[tuple[str, list[str]]]:
+    """(resource, variable names) per used resource in `uses` order: the bare names when the component uses one resource of that type,
+    otherwise `<NAME>_<VAR>` (AC-115.8)."""
+    used = [u for u in uses if u in resources]
+    out = []
+    for u in used:
+        typ = resources[u]["type"]
+        many = sum(1 for x in used if resources[x]["type"] == typ) > 1
+        prefix = u.upper().replace("-", "_") + "_" if many else ""
+        out.append((u, [prefix + v for v in TYPES[typ]["env"]]))
+    return out
+
+
 def validate_uses(comps: list[dict], resources: dict) -> None:
     libs = [c["name"] for c in comps if c["type"] == "library"]
     for s in comps:
@@ -683,8 +704,9 @@ def validate_uses(comps: list[dict], resources: dict) -> None:
         for u in s.get("uses") or []:
             if u not in resources:
                 continue
+            names = dict(variable_names(s.get("uses") or [], resources))[u]
             for env, eff in (s.get("_eff") or {}).items():
-                clash = [k for k in TYPES[resources[u]["type"]]["env"] if k in (eff.get("env") or {})]
+                clash = [k for k in names if k in (eff.get("env") or {})]
                 if clash:
                     fail(f"components.{s['name']}: env {', '.join(clash)} is provided by the '{u}' resource; remove it from `env`")
 
@@ -692,7 +714,7 @@ def validate_uses(comps: list[dict], resources: dict) -> None:
 def load_system(app_dir: Path) -> dict:
     """Parse and validate applications/<system>/system.yaml; returns the normalized system:
     `services` (components in the 4.x service shape, libraries left out), `cfg` (gateway, secretStore, hosts, policy and observability per
-    environment, postgres per environment, registries), `libraries`, `system` and `owner`."""
+    environment, resources per environment, registries), `libraries`, `system` and `owner`."""
     try:
         return _load_system(app_dir)
     except RenderError as e:
@@ -725,15 +747,12 @@ def _load_system(app_dir: Path) -> dict:
     resources = validate_resources(doc)
     check_resource_clashes(d, resources, comps_doc, comps)
     validate_uses(comps, resources)
-    pg = resources.get("postgres")      # until the per-database rendering, the renderer reads the one 5.0 database (the settings it renders)
-    postgres = {e: {"version": c["version"] or 17, "instances": c["replicas"] or 1, "storage": c["storage"] or "1Gi", "resources": c["resources"]}
-                for e, c in pg["envs"].items()} if pg else {}
     registries = doc.get("registries") or []
     if not isinstance(registries, list):
         fail("registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
     services = [{**c, "uses": [u for u in c.get("uses") or [] if u in resources]} for c in comps if c["type"] != "library"]
     cfg = {"gateway": doc.get("gateway"), "secretStore": doc.get("secretStore"), "hosts": hosts, "registries": [str(r) for r in registries],
-           "policy": env_conf["policy"], "observability": env_conf["observability"], "postgres": postgres}
+           "policy": env_conf["policy"], "observability": env_conf["observability"], "resources": resources}
     return {"system": d, "owner": doc["owner"], "services": services, "libraries": [c["name"] for c in comps if c["type"] == "library"], "cfg": cfg}
 
 
@@ -793,10 +812,17 @@ def per_env(value, env: str, default):
 
 
 def addons_in(services: list[dict], env: str, cfg: dict) -> list[str]:
-    names = {a for s in services if env in envs_of(s) for a in s.get("uses") or []}
+    names = {a for s in services if env in envs_of(s) for a in s.get("uses") or [] if not cfg["resources"][a]["envs"][env]["external"]}
     if env in cfg["observability"] and any(env in envs_of(s) for s in services):
         names.add("observability")
     return sorted(names)
+
+
+def resource_instances(system: dict) -> list[tuple[str, str, str, bool]]:
+    """(name, env, type, external) for each used resource instance, in resource order then ENVS order."""
+    services, resources = system["services"], system["cfg"]["resources"]
+    return [(r, e, rc["type"], rc["envs"][e]["external"]) for r, rc in resources.items() for e in ENVS
+            if any(e in envs_of(s) and r in (s.get("uses") or []) for s in services)]
 
 
 def allowed_registries(services: list[dict], cfg: dict, env: str) -> list[str]:
@@ -865,12 +891,12 @@ def replicas_for(svc: dict, env: str) -> int:
     return int(svc.get("replicas", 1))
 
 
-def addon_env(app: str, svc: dict) -> list[dict]:
-    """Connection settings of the resources a component uses, read from the operator's Secret (never copied into git)."""
+def addon_env(app: str, svc: dict, resources: dict) -> list[dict]:
+    """Connection settings of the resources a component uses, read from the resource's Secret `<system>-<name>-app` (never copied into git)."""
     out = []
-    for a in svc.get("uses") or []:
-        secret = ADDONS[a]["secret"].format(app=app)
-        out += [{"name": var, "valueFrom": {"secretKeyRef": {"name": secret, "key": key}}} for var, key in ADDONS[a]["env"].items()]
+    for u, names in variable_names(svc.get("uses") or [], resources):
+        env = TYPES[resources[u]["type"]]["env"]
+        out += [{"name": name, "valueFrom": {"secretKeyRef": {"name": f"{app}-{u}-app", "key": key}}} for name, key in zip(names, env.values())]
     return out
 
 
@@ -881,7 +907,7 @@ def obs_env(app: str, svc: dict, env: str) -> dict[str, str]:
             "OTEL_SDK_DISABLED": "false"}
 
 
-def deployment(app: str, svc: dict, env: str, obs: bool = False) -> dict:
+def deployment(app: str, svc: dict, env: str, obs: bool = False, resources: dict | None = None) -> dict:
     labels = labels_for(app, svc)
     selector = {"app": svc["name"]}
     env_vars = {"PORT": str(svc["port"]), **(obs_env(app, svc, env) if obs else {}), **{k: str(v) for k, v in (svc.get("env") or {}).items()}}
@@ -889,7 +915,7 @@ def deployment(app: str, svc: dict, env: str, obs: bool = False) -> dict:
         "name": "app",
         "image": svc["image"],
         "ports": [{"name": "http", "containerPort": int(svc["port"])}],
-        "env": [{"name": k, "value": v} for k, v in sorted(env_vars.items())] + addon_env(app, svc),
+        "env": [{"name": k, "value": v} for k, v in sorted(env_vars.items())] + addon_env(app, svc, resources or {}),
     }
     secret_names = [*(svc.get("secretRefs") or []), *[x["name"] for x in svc.get("secrets") or []]]
     if secret_names:
@@ -971,19 +997,18 @@ def secret_manifests(app: str, svc: dict, env: str, cfg: dict) -> dict[str, dict
     return out
 
 
-def postgres_cluster(app: str, env: str, conf: dict) -> dict:
-    d = ADDONS["postgres"]["defaults"]
+def database_cluster(app: str, name: str, env: str, conf: dict) -> dict:
     db = app.replace("-", "_")
     return {
         "apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster",
-        "metadata": {"name": f"{app}-postgres", "labels": {"app.kubernetes.io/name": "postgres", "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}},
+        "metadata": {"name": f"{app}-{name}", "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}},
         "spec": {
-            "instances": int(per_env(conf.get("instances"), env, d["instances"])),
-            "imageName": f"ghcr.io/cloudnative-pg/postgresql:{per_env(conf.get('version'), env, d['version'])}",
-            "storage": {"size": str(per_env(conf.get("storage"), env, d["storage"]))},
+            "instances": conf["replicas"],
+            "imageName": POSTGRES_IMAGES[conf["version"]],
+            "storage": {"size": conf["storage"]},
             "enableSuperuserAccess": False,
             "bootstrap": {"initdb": {"database": db, "owner": db}},
-            "resources": conf.get("resources") or {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}},
+            "resources": conf["resources"] or DB_DEFAULT_RESOURCES,
         },
     }
 
@@ -1051,7 +1076,8 @@ def observability_files(app: str, env: str, conf: dict, services: list[dict]) ->
 def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict]) -> dict[str, dict | str]:
     if name == "observability":
         return observability_files(app, env, cfg["observability"][env], services)
-    files = {"cluster.yaml": postgres_cluster(app, env, cfg["postgres"][env])}   # one resource today; dispatch on `name` when more exist
+    res = cfg["resources"][name]
+    files = {"cluster.yaml": database_cluster(app, name, env, res["envs"][env])}   # the only type built so far; dispatch on res["type"] when more exist
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["cluster.yaml"]}
     return files
 
@@ -1087,9 +1113,9 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
         names = addons_in(services, env, cfg)
         if not names:
             continue
-        # one ApplicationSet per prune policy: stateful resources (postgres) are never pruned, config-only ones are
+        # one ApplicationSet per prune policy: stateful resources (databases) are never pruned, config-only ones are
         for prune, suffix in ((False, "addons"), (True, "addons-config")):
-            group = [n for n in names if bool(ADDONS[n].get("prune", False)) is prune]
+            group = [n for n in names if (n == "observability") is prune]
             if not group:
                 continue
             docs.append({
@@ -1155,7 +1181,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                 for fname, doc in external_files(app, s, env, tag, server).items():
                     out[base / fname] = dump(doc)
                 continue
-            files = {"deployment.yaml": deployment(app, s, env, env in cfg["observability"]), "service.yaml": service(app, s)}
+            files = {"deployment.yaml": deployment(app, s, env, env in cfg["observability"], cfg["resources"]), "service.yaml": service(app, s)}
             route = httproute(app, s, env, cfg)
             if route:
                 files["httproute.yaml"] = route
