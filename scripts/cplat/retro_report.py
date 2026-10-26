@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime
 import re
 import statistics
+from collections import Counter
 
 import autoissue
 import runs_report
@@ -78,6 +79,8 @@ def _shape_of(r: dict) -> str:
 
 
 def _outcome(r: dict) -> str:
+    if runs_report.count_outcome(r) == runs_report.RED_CI:
+        return runs_report.RED_CI
     o = r.get("outcome")
     return o if o in OUTCOMES else UNKNOWN
 
@@ -131,7 +134,8 @@ def _runs(cur: list[dict], prev: list[dict]) -> dict:
             c = counts.setdefault(_text(r.get("kind")), {})
             c.setdefault(_outcome(r), [0, 0])[i] += 1
     seen_unknown = any(UNKNOWN in c for c in counts.values())
-    names = OUTCOMES + ((UNKNOWN,) if seen_unknown else ())
+    seen_red = any(runs_report.RED_CI in c for c in counts.values())
+    names = OUTCOMES[:3] + ((runs_report.RED_CI,) if seen_red else ()) + OUTCOMES[3:] + ((UNKNOWN,) if seen_unknown else ())
     return {k: {o: _fig(*counts[k].get(o, [0, 0])) for o in names} for k in sorted(counts)}
 
 
@@ -171,6 +175,27 @@ def _ci(cur: list[dict], prev: list[dict]) -> dict:
     rc, rp, kc, kp = rounds(cur), rounds(prev), reruns(cur), reruns(prev)
     return {"rounds": _fig(rc, rp), "reruns": _fig(kc, kp),
             "rounds_per_run": _fig(per(rc, cur), per(rp, prev)), "reruns_per_run": _fig(per(kc, cur), per(kp, prev))}
+
+
+def _pr_wait(cur: list[dict], prev: list[dict]) -> dict:
+    c, p = runs_report.aggregate_pr_wait(cur), runs_report.aggregate_pr_wait(prev)
+    names = list(c["results"]) + [k for k in p["results"] if k not in c["results"]]
+    results = {k: _fig(c["results"].get(k, 0), p["results"].get(k, 0)) for k in names}
+
+    def counts(g):
+        n: Counter = Counter()
+        ids: dict[str, set] = {}
+        for r in g:
+            for name in runs_report.red_check_names(r):
+                n[name] += 1
+                ids.setdefault(name, set()).add(str(r.get("run_id")))
+        return n, ids
+    cn, ids = counts(cur)
+    pn, _ = counts(prev)
+    ranked = sorted(cn, key=lambda k: (-cn[k], k))[:runs_report.TOP_RED_CHECKS]
+    red = [{"rank": i, "check": k, "count": _fig(cn[k], pn.get(k, 0)), "run_ids": sorted(ids[k])[:MAX_RUN_IDS]}
+           for i, k in enumerate(ranked, 1)]
+    return {"results": results, "red_checks": red}
 
 
 def _escalations(cur: list[dict], prev: list[dict]) -> dict:
@@ -321,6 +346,10 @@ def _index(rep: dict, side: str = "current") -> dict:
             put(f"phases.{names[name]}.{k}", st[k][side])
     for k, f in rep["ci"].items():
         put(f"ci.{k}", f[side])
+    for k, f in rep["pr_wait"]["results"].items():
+        put(f"pr_wait.{k}", f[side])
+    for c in rep["pr_wait"]["red_checks"]:
+        put(f"pr_wait.check{c['rank']}", c["count"][side])
     for cause, e in rep["escalations"].items():
         put(f"escalations.{cause}", e["count"][side])
         if side == "current":
@@ -368,7 +397,7 @@ def build(records: list[dict], *, auto_issues: list[dict], open_issues: list[dic
         "records": {"current": len(cur), "previous": len(prev), "malformed": malformed},
         "repos": {"by_shape": by_shape, "list": repo_list, "specs": specs_seen},
         "runs": _runs(cur, prev), "phases": _phases(cur, prev), "ci": _ci(cur, prev),
-        "escalations": _escalations(cur, prev), "reruns": _rerun_view(cur, prev),
+        "pr_wait": _pr_wait(cur, prev), "escalations": _escalations(cur, prev), "reruns": _rerun_view(cur, prev),
         "issues": issues, "agents": agents, "no_data": no_data,
         "context": {"specs": specs, "open_issues": open_issues},
     }
@@ -484,6 +513,16 @@ def _render(report: dict, proposals_md: str | None, public: bool) -> str:
         ci = r["ci"]
         out.append(f"CI rounds per run {_cell(ci['rounds_per_run'], _a)} · reruns per run {_cell(ci['reruns_per_run'], _a)} · "
                    f"rounds {_cell(ci['rounds'])} · reruns {_cell(ci['reruns'])}")
+
+    out.append("## pr-wait")
+    if "runs" in nd:
+        out.append(none)
+    else:
+        out.append("results: " + ", ".join(f"{k} {_cell(f)}" for k, f in r["pr_wait"]["results"].items()))
+        out.append("red checks:" + ("" if r["pr_wait"]["red_checks"] else " none"))
+        for x in r["pr_wait"]["red_checks"]:
+            label = f"check {x['rank']}" if public else x["check"]
+            out.append(f"  {x['rank']}. {label} — {_cell(x['count'])} ({', '.join(x['run_ids'])})")
 
     out.append("## Escalations")
     if "runs" in nd:

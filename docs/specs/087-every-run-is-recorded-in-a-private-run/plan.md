@@ -72,6 +72,7 @@ tasks:
   covers: [AC-087.26, AC-087.27]
   parallel_safe: true
   depends_on: [t9]
+  done: true
 - id: t11
   title: Docs for pr-wait results
   files: [docs/CHANGELOG.md, docs/unattended-delivery.md]
