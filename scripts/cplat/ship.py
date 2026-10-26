@@ -612,6 +612,18 @@ def cancel_and_rerun(repo: Path, slug: str, rid: str, wait: float = 120) -> None
     gh(["run", "rerun", rid, "-R", slug], cwd=repo, check=False)
 
 
+class NoChecks(PlatformError):
+    """No check was reported within the grace period (spec 087: told apart by type, not by message)."""
+
+
+class ChecksPending(PlatformError):
+    """The timeout ran out with checks still pending; `checks` holds their names."""
+
+    def __init__(self, message: str, hint: str | None = None, checks: list[str] | None = None) -> None:
+        super().__init__(message, hint=hint)
+        self.checks = checks or []
+
+
 def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str, list[dict], list[dict]]:
     """Poll until every check concluded or one is red. A PR without any check is never green."""
     begin = now()
@@ -622,13 +634,13 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
             return status, cs, failed
         waited = now() - begin
         if not cs and waited > NO_CHECKS_GRACE:
-            raise PlatformError(f"no CI checks were reported on {watch.pr} after {NO_CHECKS_GRACE}s",
-                                hint="is CI set up for pull requests, and is a runner online (vars.CI_RUNNER)? "
-                                     "Merging without any check is never done automatically")
+            raise NoChecks(f"no CI checks were reported on {watch.pr} after {NO_CHECKS_GRACE}s",
+                           hint="is CI set up for pull requests, and is a runner online (vars.CI_RUNNER)? "
+                                "Merging without any check is never done automatically")
         if waited > timeout:
-            names = ", ".join(c["name"] for c in cs if c.get("bucket") == "pending")
-            raise PlatformError(f"checks on {watch.pr} still pending after {int(timeout)}s: {names}",
-                                hint="run the command again later; a runner may be busy or offline")
+            pending = [c["name"] for c in cs if c.get("bucket") == "pending"]
+            raise ChecksPending(f"checks on {watch.pr} still pending after {int(timeout)}s: {', '.join(pending)}",
+                                hint="run the command again later; a runner may be busy or offline", checks=pending)
         sleep(interval)
 
 

@@ -58,6 +58,7 @@ tasks:
   covers: [AC-087.24]
   parallel_safe: true
   depends_on: [t4]
+  done: true
 - id: t9
   title: Report counts pr-wait results, top red checks and red-ci
   files: [scripts/cplat/runs_report.py]
