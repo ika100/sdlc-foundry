@@ -12,6 +12,7 @@ tasks:
     covers: [AC-113.1, AC-113.2, AC-113.3, AC-113.4, AC-113.5, AC-113.6, AC-113.7, AC-113.8, AC-113.9, AC-113.10, AC-113.15]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cplat model show [--json] [--app] [--repo-dir] and its help line
     files: [scripts/cplat/modelcmd.py, scripts/cplat/cplat.py]
