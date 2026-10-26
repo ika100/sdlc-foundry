@@ -1,7 +1,7 @@
 ---
 spec_id: 087-every-run-is-recorded-in-a-private-run
 title: Every run is recorded in a private run store
-status: draft
+status: approved
 priority: P0
 tracks: [207]
 ---
@@ -98,7 +98,7 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 
   The `outcome` stays as in AC-087.5: `done` for `green` and `merged`, `failed` for every other result.
 - **AC-087.25** Given `pr-wait` records in the report window, when `cplat runs report` runs, then it shows `pr-wait results:` with the count per result of AC-087.24, records without a `pr_wait` section counted as `unrecorded`, and `Red checks:` with the 5 check names most often failing in `red` and `budget-refused` results and their counts; `--json` adds the key `pr_wait` with `results` (result to count) and `red_checks` (a list of `{check, count}`).
-- **AC-087.26** Given a `pr-wait` record with result `red` or `budget-refused`, when `cplat runs report` or the weekly retro (spec 090) counts runs per kind and outcome, then it is counted under `red-ci` instead of `failed`, so the `failed` count of `pr-wait` holds only timeouts, missing checks, closed PRs, refused merges, errors and records without a `pr_wait` section; the record in the store keeps `outcome` `failed`.
+- **AC-087.26** Given a `pr-wait` record with result `red` or `budget-refused`, when `cplat runs report` or the weekly retro (spec 090) counts runs per kind and outcome, then it is counted under `red-ci` instead of `failed`, so the `failed` count of `pr-wait` holds only timeouts, missing checks, closed PRs, refused merges, errors and records without a `pr_wait` section; the record in the store keeps `outcome` `failed` and its `pr_wait.result`, and `red-ci` is a reader's count only, never an `outcome` value in a record.
 - **AC-087.27** Given a weekly retro (spec 090), when it is written, then it shows the `pr-wait` results of AC-087.25 for the covered week and the week before, and the top 5 red checks; the private retro names the checks and the public issue shows them as `check <n>`, as it does for reruns.
 
 ## Non-goals
@@ -123,8 +123,8 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 - ~~Confirm: the report defaults to the last 30 days and the top 10 escalation reasons.~~ Answered: yes; see AC-087.17.
 - ~~Confirm: a public store repo is a doctor `fail`.~~ Answered: yes; see AC-087.9 and AC-087.11.
 - ~~Confirm: an escalated run ends its record, and a resumed ship is a new run linked through `resumes`.~~ Answered: yes; see AC-087.16.
-- Should a red `pr-wait` keep `outcome` `failed` in the record, with the report counting it as `red-ci`, or should the record itself get a new outcome? (suggested: keep `failed` in the record and split only in the readers, so the record contract and older records stay as they are; affects AC-087.24 and AC-087.26)
-- Confirm: the report and the retro show the top 5 red check names. (suggested: yes; affects AC-087.25 and AC-087.27)
+- ~~Should a red `pr-wait` keep `outcome` `failed` in the record, or get a new outcome?~~ Answered: it keeps `failed` with `pr_wait.result` `red`; only the report and the retro count it as `red-ci`, and no outcome value is added, see AC-087.24 and AC-087.26.
+- ~~Confirm: the report and the retro show the top 5 red check names.~~ Answered: yes, shown as `check <n>` in the public issue, see AC-087.25 and AC-087.27.
 
 ## Changelog
 
@@ -135,3 +135,5 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 - 2026-10-24 done
 - 2026-10-26 amended from the weekly retro 2026-W43 (#207): a `pr-wait` record carries a `pr_wait` section with the result and check names (AC-087.24), and the report and the retro count `pr-wait` results, the top red checks and red CI as `red-ci` instead of `failed` (AC-087.25 to AC-087.27); per-phase time budgets and git pre-approval stay out
 - 2026-10-26 draft
+- 2026-10-26 amended: open questions answered with the suggested answers (a red `pr-wait` keeps `outcome` `failed`, `red-ci` only in the readers; top 5 red checks, `check <n>` in public); AC-087.26 clarified
+- 2026-10-26 approved
