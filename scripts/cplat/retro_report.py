@@ -346,9 +346,10 @@ def _index(rep: dict, side: str = "current") -> dict:
             put(f"phases.{names[name]}.{k}", st[k][side])
     for k, f in rep["ci"].items():
         put(f"ci.{k}", f[side])
-    for k, f in rep["pr_wait"]["results"].items():
+    pw = rep.get("pr_wait") or {"results": {}, "red_checks": []}   # a report.json from before AC-087.27
+    for k, f in pw["results"].items():
         put(f"pr_wait.{k}", f[side])
-    for c in rep["pr_wait"]["red_checks"]:
+    for c in pw["red_checks"]:
         put(f"pr_wait.check{c['rank']}", c["count"][side])
     for cause, e in rep["escalations"].items():
         put(f"escalations.{cause}", e["count"][side])
@@ -515,12 +516,13 @@ def _render(report: dict, proposals_md: str | None, public: bool) -> str:
                    f"rounds {_cell(ci['rounds'])} · reruns {_cell(ci['reruns'])}")
 
     out.append("## pr-wait")
-    if "runs" in nd:
+    pw = r.get("pr_wait")   # absent in a report.json from before AC-087.27
+    if "runs" in nd or not pw:
         out.append(none)
     else:
-        out.append("results: " + ", ".join(f"{k} {_cell(f)}" for k, f in r["pr_wait"]["results"].items()))
-        out.append("red checks:" + ("" if r["pr_wait"]["red_checks"] else " none"))
-        for x in r["pr_wait"]["red_checks"]:
+        out.append("results: " + ", ".join(f"{k} {_cell(f)}" for k, f in pw["results"].items()))
+        out.append("red checks:" + ("" if pw["red_checks"] else " none"))
+        for x in pw["red_checks"]:
             label = f"check {x['rank']}" if public else x["check"]
             out.append(f"  {x['rank']}. {label} — {_cell(x['count'])} ({', '.join(x['run_ids'])})")
 
