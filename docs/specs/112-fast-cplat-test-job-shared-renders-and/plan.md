@@ -40,6 +40,7 @@ tasks:
     covers: [AC-112.10, AC-112.12, AC-112.13, AC-112.14]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: m1
     title: Measure and record (ids before/after, reverse and per-file runs, setup total, shard times, ci wall time)
     files: [docs/specs/112-fast-cplat-test-job-shared-renders-and/measurements.md]
