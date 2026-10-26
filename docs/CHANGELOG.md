@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Feat (087, #207): the run records say why a `pr wait` ended.** [guide](unattended-delivery.md#run-records) A `pr-wait` record has a `pr_wait` section: the result (`green`, `merged`, `red`, `budget-refused`, `timeout`, `no-checks`, `closed`, `merge-failed`, `error`) and the failing or pending check names. `cplat runs report` and the weekly retro show `pr-wait results:` and the top 5 red checks, and count red CI as `red-ci` instead of `failed` (the record keeps `outcome: failed`). The public retro issue shows checks as `check <n>`. Older records count as `unrecorded`.
 - **Fix (090): a failing retro proposal step shows why.** When `claude` exits non-zero, `cplat retro propose` prints the last 20 lines of its output to the job log. `claude exited with 1` alone could not be diagnosed: the output stayed in `propose.log` on the ephemeral runner. The posted issue keeps the short reason.
 
 ## [4.7.0] — 2026-10-26

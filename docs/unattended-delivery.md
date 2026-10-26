@@ -88,6 +88,7 @@ Every run is recorded as one JSON record in a private GitHub repo (spec 087, [AD
 - **A record holds** kind, repo, spec, phases with durations, CI rounds, reruns, the escalation reason and cause, and the outcome. **It never holds** secrets (redacted), file contents or logs.
 - **Offline:** without a store, or when it is unreachable, records wait in a local buffer (1000) and one warning line says so. The run itself is never affected. `cplat runs flush` writes the buffer; `cplat doctor` shows what is waiting.
 - **Read it:** `cplat runs report [--json] [--since DAYS]`.
+- **Why a `pr wait` ended:** its own record carries `pr_wait.result` (`green`, `merged`, `red`, `budget-refused`, `timeout`, `no-checks`, `closed`, `merge-failed` or `error`) with the failing or pending check names. The report and the weekly retro show the count per result and the 5 checks that fail most, and count a red result as `red-ci` instead of `failed`: red CI means the gate worked, not that the wait broke. Records from before this have no result and count as `unrecorded`.
 
 ### Token usage and cost
 
