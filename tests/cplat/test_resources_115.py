@@ -499,7 +499,7 @@ def test_check_mode_covers_the_operators_and_stale_ones_go_ac_115_18(tmp_path): 
     assert check().returncode == 1
     subprocess.run([sys.executable, "scripts/render.py"], cwd=tmp_path, check=True, capture_output=True)
     assert check().returncode == 0
-    (tmp_path / "applications" / "shop" / "system.yaml").write_text(yaml.safe_dump(system(None)))
+    (tmp_path / "applications" / "shop" / "system.yaml").write_text(yaml.safe_dump(system(None), sort_keys=False))
     subprocess.run([sys.executable, "scripts/render.py"], cwd=tmp_path, check=True, capture_output=True)
     assert not (tmp_path / "operators").exists(), "operators/ is removed when no environment needs an operator"
 

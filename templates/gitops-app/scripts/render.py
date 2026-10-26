@@ -752,7 +752,8 @@ def _load_system(app_dir: Path) -> dict:
         fail("registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
     services = [{**c, "uses": [u for u in c.get("uses") or [] if u in resources]} for c in comps if c["type"] != "library"]
     cfg = {"gateway": doc.get("gateway"), "secretStore": doc.get("secretStore"), "hosts": hosts, "registries": [str(r) for r in registries],
-           "policy": env_conf["policy"], "observability": env_conf["observability"], "resources": resources}
+           "policy": env_conf["policy"], "observability": env_conf["observability"], "operators": env_conf["operators"],
+           "resources": resources}
     return {"system": d, "owner": doc["owner"], "services": services, "libraries": [c["name"] for c in comps if c["type"] == "library"], "cfg": cfg}
 
 
@@ -1224,6 +1225,40 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
     return out
 
 
+def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
+    """operators/ (AC-115.18): cluster-level, outside every system's tree; only when an in-cluster database runs in an environment
+    whose operators are not owned by the cluster's owner."""
+    needed = False
+    for app_dir in apps:
+        system = load_system(app_dir)
+        owned = system["cfg"]["operators"]
+        needed = needed or any(not ext and typ == "database" and env not in owned for _, env, typ, ext in resource_instances(system))
+    if not needed:
+        return {}
+    server = ans.get("cluster_server", "https://kubernetes.default.svc")
+    org = ans.get("github_org", "ika100")
+    repo = f"https://github.com/{org}/{ans.get('project_name', apps[0].name + '-gitops')}"
+    op = OPERATORS["cloudnative-pg"]
+    base = ROOT / "operators"
+    return {
+        base / "root.yaml": dump({
+            "apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "metadata": {"name": "platform-operators", "namespace": "argocd"},
+            "spec": {"project": "default", "source": {"repoURL": repo, "targetRevision": "main", "path": "operators/apps"},
+                     "destination": {"server": server, "namespace": "argocd"},
+                     "syncPolicy": {"automated": {"prune": True, "selfHeal": True}}}}),
+        base / "apps" / "cloudnative-pg.yaml": dump({
+            "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+            "metadata": {"name": "operator-cloudnative-pg", "namespace": "argocd",
+                         "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+            "spec": {"project": "default",
+                     "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"],
+                                "helm": {"releaseName": op["release"]}},
+                     "destination": {"server": server, "namespace": op["namespace"]},
+                     "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
+                                    "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}}),
+    }
+
+
 def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
     """Overlay component dirs for components/envs no longer declared, and generated files no longer produced."""
     stale: list[Path] = []
@@ -1279,6 +1314,7 @@ def main() -> int:
     drift: list[str] = []
     try:
         plans = [(app_dir, render_app(app_dir, ans)) for app_dir in apps]     # every system is validated before anything is written
+        operators = operator_files(apps, ans)
     except RenderError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -1293,6 +1329,22 @@ def main() -> int:
             drift.append(f"{st.relative_to(ROOT)} (stale)")
             if not check:
                 shutil.rmtree(st) if st.is_dir() else st.unlink()
+    for path, content in operators.items():
+        if not path.is_file() or path.read_text() != content:
+            drift.append(str(path.relative_to(ROOT)))
+            if not check:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+    op_dir = ROOT / "operators"
+    if op_dir.is_dir():
+        for f in sorted(p for p in op_dir.rglob("*") if p.is_file() and p not in operators):
+            drift.append(f"{f.relative_to(ROOT)} (stale)")
+            if not check:
+                f.unlink()
+        if not check:
+            for d in sorted((p for p in op_dir.rglob("*") if p.is_dir()), reverse=True) + [op_dir]:
+                if not any(d.iterdir()):
+                    d.rmdir()
     if check and drift:
         print("ERROR: rendered files are out of date — run `devbox run render`:", file=sys.stderr)
         for d in drift:
