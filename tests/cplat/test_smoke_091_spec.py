@@ -186,5 +186,5 @@ def test_spec_format_testing_reference_states_the_data_rule_ac_091_5():  # AC-09
 
 
 def test_build_command_hands_smoke_criteria_to_the_tester_ac_091_5():  # AC-091.5
-    text = (ROOT / "plugins/svc/commands/build.md").read_text()
+    text = (ROOT / "plugins/component/commands/build.md").read_text()
     assert "(smoke)" in text

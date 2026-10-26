@@ -110,8 +110,8 @@ def hook_commands():
         for entry in HOOKS["hooks"][group]:
             for h in entry["hooks"]:
                 c = h["command"]
-                for key in ("budget gate", "ship gate", "app-ship gate"):
-                    if key in c and not (key == "ship gate" and "app-ship gate" in c):
+                for key in ("budget gate", "component ship gate", "system ship gate"):
+                    if key in c:
                         found[key] = c
     return found
 
@@ -119,14 +119,14 @@ def hook_commands():
 def test_hooks_use_git_dir():
     """spec 066: the Stop, app-ship Stop and budget hooks look at --git-dir, not the common dir."""
     cmds = hook_commands()
-    assert set(cmds) == {"budget gate", "ship gate", "app-ship gate"}
+    assert set(cmds) == {"budget gate", "component ship gate", "system ship gate"}
     for c in cmds.values():
         assert "rev-parse --git-dir" in c
         assert "--git-common-dir" not in c
 
 
-@pytest.mark.parametrize("key,state", [("budget gate", "cplat-ship.json"), ("ship gate", "cplat-ship.json"),
-                                       ("app-ship gate", "cplat-app-ship.json")])
+@pytest.mark.parametrize("key,state", [("budget gate", "cplat-ship.json"), ("component ship gate", "cplat-ship.json"),
+                                       ("system ship gate", "cplat-app-ship.json")])
 def test_hook_exit_behaviour(trio, tmp_path, key, state):
     """spec 066: no state in this worktree -> exit 0 without calling cplat; own state -> cplat is called."""
     main, a, b = trio

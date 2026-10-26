@@ -27,7 +27,7 @@ def started(repo):
 # ---------------- AC-088.1 platform escalation files ----------------
 
 def test_a_platform_escalation_files_one_issue_and_prints_its_url(repo, tr, capsys):
-    """AC-088.1: exactly one new issue; the output has `<url> new` and no /shared:report-issue offer."""
+    """AC-088.1: exactly one new issue; the output has `<url> new` and no /issue:report offer."""
     started(repo)
     assert escalate(repo, "copier render fails on the Dockerfile", "--cause", "platform") == 0
     out = capsys.readouterr().out
@@ -35,7 +35,7 @@ def test_a_platform_escalation_files_one_issue_and_prints_its_url(repo, tr, caps
     ((_, target, title, body, labels),) = tr.created()
     assert target == PLATFORM_REPO and title == "[auto] copier render fails on the Dockerfile" and "auto-filed" in labels
     assert f"issue: https://github.com/{PLATFORM_REPO}/issues/1 new" in out.splitlines()
-    assert "/shared:report-issue" not in out and "escalated (copier render fails on the Dockerfile)" in out
+    assert "/issue:report" not in out and "escalated (copier render fails on the Dockerfile)" in out
     assert len(SIG_LINE.findall(body)) == 1
 
 
@@ -71,7 +71,7 @@ def test_the_escalate_options_carry_command_and_evidence(repo, tr, tmp_path):
     assert "- command: `devbox run ci`" in body and "FAIL TestPriceAlert" in body and "- phase: `plan`" in body or "- phase:" in body
     started(repo)
     escalate(repo, "gate fails differently", "--cause", "platform", "--evidence-file", str(tmp_path / "missing.txt"))
-    assert "(none)" in tr.created()[1][3] and "- command: `/svc:ship`" in tr.created()[1][3]
+    assert "(none)" in tr.created()[1][3] and "- command: `/component:ship`" in tr.created()[1][3]
 
 
 def test_stdin_is_read_for_evidence_dash(repo, tr, monkeypatch):
@@ -204,12 +204,12 @@ def test_the_pending_escalation_filing_is_flushed_later(repo, tr, store, ai):
 
 
 def test_off_prints_the_draft_and_the_hint_for_an_escalation(repo, tr, store, capsys, monkeypatch):
-    """AC-088.13: CPLAT_AUTO_ISSUES=off: nothing sent; the draft and the /shared:report-issue hint are printed."""
+    """AC-088.13: CPLAT_AUTO_ISSUES=off: nothing sent; the draft and the /issue:report hint are printed."""
     monkeypatch.setenv("CPLAT_AUTO_ISSUES", "off")
     started(repo)
     assert escalate(repo, "copier render fails", "--cause", "platform") == 0
     out = capsys.readouterr().out
-    assert tr.calls == [] and "Draft issue for" in out and "[auto] copier render fails" in out and "/shared:report-issue" in out
+    assert tr.calls == [] and "Draft issue for" in out and "[auto] copier render fails" in out and "/issue:report" in out
     assert stored(store)[0]["filed"] == []
 
 
@@ -248,14 +248,14 @@ def test_a_crash_inside_a_recorded_run_is_filed_at_once(repo, tr, store, monkeyp
     started(repo)
     monkeypatch.chdir(repo)
     crash_in(monkeypatch)
-    assert cplat.main(["status"]) == 70
+    assert cplat.main(["system", "status"]) == 70
     err = capsys.readouterr().err
     assert "unexpected failure" in err and f"issue: https://github.com/{PLATFORM_REPO}/issues/1 new" in err.splitlines()
-    assert "/shared:report-issue" not in err
+    assert "/issue:report" not in err
     ((_, target, title, body, labels),) = tr.created()
-    assert target == PLATFORM_REPO and title.startswith("[auto] cplat status crashed: RuntimeError: kaboom") and "bug" in labels
+    assert target == PLATFORM_REPO and title.startswith("[auto] cplat system status crashed: RuntimeError: kaboom") and "bug" in labels
     assert "RuntimeError" in body and "Traceback" in body and "kaboom" in body
-    assert "- command: `cplat status`" in body and len(SIG_LINE.findall(body)) == 1
+    assert "- command: `cplat system status`" in body and len(SIG_LINE.findall(body)) == 1
     rid = runs.current(repo)
     assert rid and rid in body
     runs.finish(rid, "abandoned")
@@ -271,8 +271,8 @@ def test_the_crash_evidence_is_the_last_20_trace_lines(ai, tmp_path):
     try:
         deep(40)
     except ValueError as e:
-        d = ai.crash_draft(["ship", "land"], e, "r-1", tmp_path)
-    assert d.reason == "cplat ship land crashed: ValueError: deep " + "y" * 50
+        d = ai.crash_draft(["component", "ship", "land"], e, "r-1", tmp_path)
+    assert d.reason == "cplat component ship land crashed: ValueError: deep " + "y" * 50
     lines = d.evidence.splitlines()
     assert 1 <= len(lines) <= 20 and "ValueError" in d.evidence and d.kind == "platform" and d.run_id == "r-1"
 
@@ -282,20 +282,20 @@ def test_the_same_crash_again_is_a_plus_one(repo, tr, monkeypatch, capsys):
     started(repo)
     monkeypatch.chdir(repo)
     crash_in(monkeypatch, boom("ship.py", "land", RuntimeError("one 1")))
-    cplat.main(["status"])
+    cplat.main(["system", "status"])
     crash_in(monkeypatch, boom("ship.py", "land", RuntimeError("two 22")))
-    cplat.main(["status"])
+    cplat.main(["system", "status"])
     assert len(tr.created()) == 1 and len(tr.commented()) == 1
     assert capsys.readouterr().err.count(" +1") == 1
 
 
 def test_a_crash_outside_a_recorded_run_files_nothing_and_keeps_the_hint(tmp_path, tr, monkeypatch, capsys):
-    """AC-088.4: a manual command in a plain directory prints the /shared:report-issue hint as today."""
+    """AC-088.4: a manual command in a plain directory prints the /issue:report hint as today."""
     monkeypatch.chdir(tmp_path)
     crash_in(monkeypatch)
-    assert cplat.main(["status"]) == 70
+    assert cplat.main(["system", "status"]) == 70
     err = capsys.readouterr().err
-    assert tr.calls == [] and "unexpected failure" in err and "/shared:report-issue" in err and "issue:" not in err
+    assert tr.calls == [] and "unexpected failure" in err and "/issue:report" in err and "issue: https" not in err
 
 
 def test_a_crash_in_a_repo_without_an_active_run_files_nothing(repo, tr, monkeypatch, capsys):
@@ -304,8 +304,8 @@ def test_a_crash_in_a_repo_without_an_active_run_files_nothing(repo, tr, monkeyp
     escalate(repo, "stopped", "--cause", "code")
     monkeypatch.chdir(repo)
     crash_in(monkeypatch)
-    assert cplat.main(["status"]) == 70
-    assert tr.calls == [] and "/shared:report-issue" in capsys.readouterr().err
+    assert cplat.main(["system", "status"]) == 70
+    assert tr.calls == [] and "/issue:report" in capsys.readouterr().err
 
 
 def test_an_error_with_a_hint_is_not_a_crash(repo, tr, monkeypatch, capsys):
@@ -314,7 +314,7 @@ def test_an_error_with_a_hint_is_not_a_crash(repo, tr, monkeypatch, capsys):
     started(repo)
     monkeypatch.chdir(repo)
     monkeypatch.setattr(status, "main", lambda argv: (_ for _ in ()).throw(core.PlatformError("nope", hint="do this")))
-    assert cplat.main(["status"]) == 1
+    assert cplat.main(["system", "status"]) == 1
     assert tr.calls == [] and "fix: do this" in capsys.readouterr().err
 
 
@@ -324,8 +324,8 @@ def test_a_failing_crash_hook_falls_back_to_the_hint(repo, tr, ai, monkeypatch, 
     monkeypatch.chdir(repo)
     crash_in(monkeypatch)
     monkeypatch.setattr(ai, "file_crash", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("hook broke")))
-    assert cplat.main(["status"]) == 70
-    assert "/shared:report-issue" in capsys.readouterr().err
+    assert cplat.main(["system", "status"]) == 70
+    assert "/issue:report" in capsys.readouterr().err
 
 
 def test_a_crash_with_filing_off_prints_the_draft_and_the_hint(repo, tr, monkeypatch, capsys):
@@ -334,9 +334,9 @@ def test_a_crash_with_filing_off_prints_the_draft_and_the_hint(repo, tr, monkeyp
     started(repo)
     monkeypatch.chdir(repo)
     crash_in(monkeypatch)
-    assert cplat.main(["status"]) == 70
+    assert cplat.main(["system", "status"]) == 70
     err = capsys.readouterr().err
-    assert tr.calls == [] and "/shared:report-issue" in err and "Draft issue for" in err
+    assert tr.calls == [] and "/issue:report" in err and "Draft issue for" in err
 
 
 def test_debug_reraises_after_the_filing(repo, tr, monkeypatch):
@@ -346,7 +346,7 @@ def test_debug_reraises_after_the_filing(repo, tr, monkeypatch):
     monkeypatch.setenv("CPLAT_DEBUG", "1")
     crash_in(monkeypatch)
     with pytest.raises(RuntimeError):
-        cplat.main(["status"])
+        cplat.main(["system", "status"])
     assert len(tr.created()) == 1
 
 

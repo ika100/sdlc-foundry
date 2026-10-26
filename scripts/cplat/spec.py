@@ -551,8 +551,8 @@ def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: lis
     return spec
 
 
-def addon_env(app_root: Path, addon: str) -> list[str]:
-    """Env variables an addon gives a service that uses it: render.py's ADDONS table (the contract, ADR-020)."""
+def resource_env(app_root: Path, addon: str) -> list[str]:
+    """Env variables a resource gives a component that uses it: render.py's ADDONS table (the contract, ADR-020)."""
     for render in (app_root / "scripts" / "render.py", core.PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"):
         if render.is_file():
             block = render.read_text().split("ADDONS = {", 1)[-1]
@@ -562,8 +562,11 @@ def addon_env(app_root: Path, addon: str) -> list[str]:
     return []
 
 
-def provided_by_product(app_root: Path, repos: list[dict], repo_id: str) -> list[str]:
-    """Spec 052: what the plan's gitops entry wires for this repo (env, addons with their env, exposure)."""
+def provided_by_system(app_root: Path, repos: list[dict], repo_id: str) -> list[str]:
+    """Spec 052: what the plan's gitops entry wires for this repo (env, resources with their env, exposure).
+
+    An operation names its component with `component:` (5.0) or `service:` (plans written before), as plan.py accepts.
+    """
     lines = []
     for entry in repos:
         if entry.get("shape") != "gitops-app":
@@ -571,10 +574,11 @@ def provided_by_product(app_root: Path, repos: list[dict], repo_id: str) -> list
         for op in entry.get("gitops") or []:
             if not isinstance(op, dict):
                 continue
-            if op.get("uses") and op.get("service") == repo_id:
-                names = addon_env(app_root, op["uses"])
-                lines.append(f"- addon `{op['uses']}`" + (f": env {', '.join(f'`{n}`' for n in names)}" if names else ""))
-            elif isinstance(op.get("env"), dict) and op.get("service") == repo_id:
+            target = op.get("component") or op.get("service")
+            if op.get("uses") and target == repo_id:
+                names = resource_env(app_root, op["uses"])
+                lines.append(f"- resource `{op['uses']}`" + (f": env {', '.join(f'`{n}`' for n in names)}" if names else ""))
+            elif isinstance(op.get("env"), dict) and target == repo_id:
                 lines += [f"- env `{k}={v}`" for k, v in op["env"].items()]
             elif op.get("expose") == repo_id:
                 lines.append(f"- exposed through the Gateway at host `{op.get('host') or repo_id}`")
@@ -614,7 +618,7 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
     contract = contract or sections(body).get("contract", "").strip()
     if contract:
         parts.append("### Contract\n\n" + contract)
-    provided = provided_by_product(app_root, meta.get("repos") or [], repo_id)
+    provided = provided_by_system(app_root, meta.get("repos") or [], repo_id)
     if provided:
         parts.append("### Provided by the system\n\nThe gitops part of this plan wires these for this repo; rely on them, "
                      "do not ask for them again:\n\n" + "\n".join(provided))

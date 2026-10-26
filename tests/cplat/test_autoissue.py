@@ -204,15 +204,15 @@ def boom(frame_file, func, exc):
 
 def test_a_crash_signature_is_command_exception_type_and_innermost_platform_frame(ai, tmp_path):
     """AC-088.5: another message, line or argument value keeps the signature; another type, frame or command changes it."""
-    d1 = ai.crash_draft(["ship", "land", "--repo", "/x/a"], boom("ship.py", "land", ValueError("one 12")), "r1", tmp_path)
-    d2 = ai.crash_draft(["ship", "land", "--repo", "/y/b"], boom("ship.py", "land", ValueError("two 99")), "r2", tmp_path)
+    d1 = ai.crash_draft(["component", "ship", "land", "--repo", "/x/a"], boom("ship.py", "land", ValueError("one 12")), "r1", tmp_path)
+    d2 = ai.crash_draft(["component", "ship", "land", "--repo", "/y/b"], boom("ship.py", "land", ValueError("two 99")), "r2", tmp_path)
     assert d1.signature == d2.signature and SIG_LINE.fullmatch("Signature: " + d1.signature)
-    assert d1.signature == ai.raw_signature("platform", "cplat ship land", "ValueError", "ship.py:land")
+    assert d1.signature == ai.raw_signature("platform", "cplat component ship land", "ValueError", "ship.py:land")
     others = [
-        ai.crash_draft(["ship", "land"], boom("ship.py", "land", KeyError("one")), "r", tmp_path),
-        ai.crash_draft(["ship", "land"], boom("ship.py", "open_pr", ValueError("one")), "r", tmp_path),
-        ai.crash_draft(["ship", "land"], boom("pr.py", "land", ValueError("one")), "r", tmp_path),
-        ai.crash_draft(["ship", "pr"], boom("ship.py", "land", ValueError("one")), "r", tmp_path),
+        ai.crash_draft(["component", "ship", "land"], boom("ship.py", "land", KeyError("one")), "r", tmp_path),
+        ai.crash_draft(["component", "ship", "land"], boom("ship.py", "open_pr", ValueError("one")), "r", tmp_path),
+        ai.crash_draft(["component", "ship", "land"], boom("pr.py", "land", ValueError("one")), "r", tmp_path),
+        ai.crash_draft(["component", "ship", "pr"], boom("ship.py", "land", ValueError("one")), "r", tmp_path),
     ]
     assert len({d1.signature, *(o.signature for o in others)}) == 5
 
@@ -220,9 +220,9 @@ def test_a_crash_signature_is_command_exception_type_and_innermost_platform_fram
 def test_a_crash_command_names_the_group_subcommand_but_not_option_values(ai, tmp_path):
     """AC-088.5: `cplat <argv[0]>`, plus the first later word of a subcommand group that is not an option's value."""
     e = boom("ship.py", "land", ValueError("x"))
-    assert ai.crash_draft(["ship", "--repo", "land", "escalate", "why"], e, "r", tmp_path).command == "cplat ship escalate"
-    assert ai.crash_draft(["status"], e, "r", tmp_path).command == "cplat status"
-    assert ai.crash_draft(["status", "extra"], e, "r", tmp_path).command == "cplat status"
+    assert ai.crash_draft(["component", "ship", "--repo", "land", "escalate", "why"], e, "r", tmp_path).command == "cplat component ship escalate"
+    assert ai.crash_draft(["system", "status"], e, "r", tmp_path).command == "cplat system status"
+    assert ai.crash_draft(["system", "status", "extra"], e, "r", tmp_path).command == "cplat system status"
 
 
 def test_a_crash_without_a_platform_frame_is_outside(ai, tmp_path):
@@ -477,7 +477,7 @@ def test_the_run_store_is_a_private_name_when_configured(ai, monkeypatch):
 
 
 def test_scrub_removes_secrets_mail_and_home_paths(ai):
-    """AC-088.9: the redaction of /shared:report-issue applies."""
+    """AC-088.9: the redaction of /issue:report applies."""
     out = ai.scrub(f"{TOKEN} password=hunter2hunter2 mail me@example.com in /Users/eike/dev/x and /home/anna/y")
     for leak in (TOKEN, "hunter2", "me@example.com", "/Users/eike", "/home/anna"):
         assert leak not in out
@@ -616,14 +616,14 @@ def test_a_draft_survives_the_json_payload_round_trip(ai):
 
 @pytest.mark.parametrize("value", ["off", "OFF", "0", "false", "No"])
 def test_auto_issues_off_sends_nothing_and_prints_the_draft(ai, tr, monkeypatch, value):
-    """AC-088.13: the draft and the /shared:report-issue hint; no tracker call; nothing recorded."""
+    """AC-088.13: the draft and the /issue:report hint; no tracker call; nothing recorded."""
     monkeypatch.setenv("CPLAT_AUTO_ISSUES", value)
     assert ai.enabled() is False
     out = ai.file(mkdraft(ai), record=False)
     assert out.result == "off" and tr.calls == [] and out.url is None
     text = "\n".join(out.lines)
     assert f"Draft issue for {PLATFORM_REPO}" in text and "[auto] merge conflict" in text and "triage" in text and "Signature: platform:" in text
-    assert "/shared:report-issue" in text
+    assert "/issue:report" in text
 
 
 def test_auto_issues_are_on_unless_switched_off(ai, monkeypatch):

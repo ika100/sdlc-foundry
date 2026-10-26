@@ -16,16 +16,15 @@ Work through the phases in order. After each, print `## Phase N complete — <on
 cplat shape
 ```
 
-It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subagent type for every role — spawn each role with exactly that type, e.g. `agents.coder`). `unsupported` → stop and show it. A repo without a shape cannot be built (no coder to route to): stop. Roles missing from `agents` (e.g. deployment for a library) are skipped. Print its output verbatim.
+It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subagent type for every role — spawn each role with exactly that type, e.g. `agents.coder`). `unsupported` → stop and show it. A repo without a shape cannot be built: stop. Roles missing from `agents` (e.g. deployment for a library) are skipped. Print its output verbatim.
 
 ---
 
 ## Phase 0 — Pre-flight
 
-0. `cplat platform runs begin build --spec <id>` (spec 087). Inside `/component:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat platform runs end --outcome done`. Recording never fails a build: a warning line about a buffered record is not an error.
+0. `cplat platform runs begin build --spec <id>` (spec 087). Inside `/component:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat platform runs end --outcome done`. Recording never fails a build (a buffered-record warning is fine).
    **Agent metrics (spec 089):** after every subagent you spawn, in any phase, run `cplat platform runs agent spawned <role> [--model-id <id>]` (`<role>` is the role name, e.g. `coder`; `--model-id` only when you know the model id). The calls below record what only you can judge. They never fail the build, and a `WARNING: agent metric not recorded` line is not an error.
-1. `git status --porcelain`. A dirty tree on a spec whose status is not `building` stops the build: commit or stash first (the clean-tree rule). On a `building` spec it is an **interrupted build** (spec 047):
-   - Dirty tree on a `building` spec (an interrupted build, spec 047) → read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (stale staged files: `git restore --staged`; the WIP commit is `wip(<task-id>): interrupted`).
+1. `git status --porcelain`. A dirty tree on a spec whose status is not `building` stops the build: commit or stash first (the clean-tree rule). On a `building` spec it is an **interrupted build** (spec 047): read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (stale staged files: `git restore --staged`; WIP commit: `wip(<task-id>): interrupted`).
 2. `cplat spec check <id> --require approved` must pass, and `docs/specs/<spec_id>/plan.md` must exist. Otherwise stop with the fix: `/component:spec approve <NNN>`, `/component:plan <NNN>`, or for `spec_hash` drift `/component:plan <NNN>` again.
 3. Switch to `feature/<spec_id>` (create it from `main` if missing). `$FEATURE_BRANCH` = it.
 4. `BASE_REF=$(git merge-base main HEAD)` — the build's diff baseline, stable across re-runs.
@@ -38,7 +37,7 @@ Do not wait for CI on `main`.
 
 `cplat platform runs phase build:tests`
 
-**Skip** (resume) when `cplat spec trace <id>` already passes: every criterion has a test.
+**Skip** (resume) when `cplat spec trace <id>` already passes.
 
 **tester** agent (`agents.tester`), prompt: "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion with its full text, and the non-goals), `Contract` (the `design.md` contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests against the spec and `design.md`'s contract (for a criterion ending in `(smoke)` also its smoke test, using only the base URL, so `cplat spec trace` does not print `smoke: no smoke-tagged test`), confirms they fail because the behaviour is missing, and commits only test files.
 
@@ -76,7 +75,7 @@ Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and
 
 **Parallel batch (≥ 2 tasks):** one coder per task **in a single message**, each with `isolation: "worktree"`. Collect `(branch, worktree_path)` from those that changed something. Then for each, in order:
 1. `cplat component build merge <id> <task> <branch> [--helper <path>]...` (one `--helper` for each new test helper the coder reported). It merges with `--no-ff`, records `merged` (spec 089) and, on a conflict, does what `cplat platform runs agent conflict <task>` and `git merge --abort` would (it aborts the merge first, then records the conflict) and sets the task aside. Exit 0 → continue with step 2. Exit 3 → the task is set aside: leave its worktree and branch in place and continue with the next branch of the batch. Exit 4 → `cplat platform runs end --outcome escalated --reason '<the ESCALATE line>'` and stop. Never resolve a conflict yourself.
-2. `cplat quiet lint-fix`, stage; then `cplat spec test-diff $RED --task <task>`: acceptance tests may only have changed in formatting. Exit 1 means a test was weakened or changed: stop and show the user the file and the reason (spec 048); never decide yourself that it is a false alarm — since spec 063 it only looks at test files, so a failure is real. Then `cplat quiet quality` — failures go back to that task's coder (lint/type fixes only; record each hand-back with `cplat platform runs agent fix-round lint/type --task <task>`).
+2. `cplat quiet lint-fix`, stage; then `cplat spec test-diff $RED --task <task>`: acceptance tests may only have changed in formatting. Exit 1 means a test was weakened or changed: stop and show the user the file and the reason (spec 048); never decide yourself that it is a false alarm (spec 063: it only looks at test files). Then `cplat quiet quality` — failures go back to that task's coder (lint/type fixes only; record each hand-back with `cplat platform runs agent fix-round lint/type --task <task>`).
 3. `cplat validate run` (only the checks this change can affect) — integration failures go back to the coder with the output (`cplat platform runs agent fix-round test --task <task>`).
 4. `git worktree remove <path>`; `git branch -d <branch>`. A set-aside branch is removed by `cplat component build resolved`, not here.
 
@@ -86,7 +85,7 @@ After each task is merged and green: `cplat spec task-done <id> <task-id>`, then
 
 ### 2.4a Re-plan after a conflict
 
-`cplat component build merge` exit 3 (a task set aside) or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references/build-replan.md` and follow it (`cplat component build replan-commit`, errors to the architect once, a BLOCKER → `cplat component build replan-abort`): re-plan **without asking the user**, in an attended build as well as an unattended one.
+`cplat component build merge` exit 3 (a task set aside) or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references/build-replan.md` and follow it (`cplat component build replan-commit`, errors to the architect once, a BLOCKER → `cplat component build replan-abort`): re-plan **without asking the user**, attended or not.
 
 ### 2.5 All green
 
@@ -141,7 +140,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 
 `cplat platform runs phase build:pr`
 
-1. Write the PR body with the Write tool to `.pr-body.md` in the repo root (never into `.git/`: Claude Code refuses edits there; cplat moves the file out of the work tree before it commits) (`{{CLOSES}}` stands where the issue lines go; the command fills them from the spec's `tracks:` and the branch's commits):
+1. Write the PR body with the Write tool to `.pr-body.md` in the repo root (never into `.git/`; `{{CLOSES}}` stands where the issue lines go; the command fills them from the spec's `tracks:` and the branch's commits):
 
    ```markdown
    ## Summary
@@ -183,7 +182,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
    cplat pr open --spec <spec_id> --title "feat(<scope>): <spec title, ≤72 chars>"
    ```
 
-   Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report which part failed and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
+   Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report the failed part and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
 
    **`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and cplat has moved the body to `.git/PR_BODY.md`. End the report with that exact command as its last line.
 
@@ -207,14 +206,14 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 <gitops change needed (system.yaml / /instance:promote after release), HIGH findings, sequential fallback, `/component:spec migrate` hint>
 ```
 
-The bracketed part of the Implementation row is added, attended builds too, only when `cplat component build state <id>` shows a re-plan count of 1 or more: one `<task>: <files>` entry per re-planned task.
+Add the bracketed part of the Implementation row only when `cplat component build state <id>` shows a re-plan count of 1 or more: one `<task>: <files>` entry per re-planned task.
 
 ## Rules
 
 - **Every stop and the end are recorded** with `cplat platform runs end` (Phase 0), so no run goes missing.
 - **Only approved specs are built**, and only as planned. A decision the spec does not answer stops the build: `/component:spec --amend`, then `/component:plan` again.
 - **Acceptance tests are fixed** once Phase 1 committed them. If one is wrong, stop and take it to the user; a changed test is a changed spec.
-- **Push only in Phase 7**; `cplat pr open` pushes the feature branch and opens the PR (or ends at a ready PR), so a headless build needs no further prompt.
+- **Push only in Phase 7**; `cplat pr open` pushes the feature branch and opens the PR (or ends at a ready PR).
 - **A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** `cplat component build merge` aborts the merge and sets the task aside; the architect amends only the plan and the task runs again on top of the merged work, without asking. Never edit conflicting hunks.
 - **Every shell command goes through `devbox run <script>`** (see `CLAUDE.md`), except git, gh and `cplat`.
 - **No `--no-verify`, no `--no-gpg-sign`.**
