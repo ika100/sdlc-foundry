@@ -127,10 +127,11 @@ def _git(*args: str) -> str | None:
 
 
 def test_no_existing_test_file_is_changed_ac_113_12():  # AC-113.12
-    base = next((b for b in (_git("merge-base", "HEAD", ref) for ref in ("origin/main", "main")) if b and b.strip()), None)
-    if base is None:
-        pytest.skip("no main branch to compare with")
-    diff = _git("diff", "--name-status", base.strip(), "--", "tests/")
+    # spec 113's own commits only: its parent (after the 112 test changes) and its merge commit (later PRs may change tests)
+    first, last = "8e8ea82", "d6bd290"
+    if any(_git("cat-file", "-e", f"{c}^{{commit}}") is None for c in (first, last)):
+        pytest.skip(f"commits {first}/{last} are not in this clone (shallow checkout)")
+    diff = _git("diff", "--name-status", first, last, "--", "tests/")
     assert diff is not None
     changed = [ln for ln in diff.splitlines() if ln and ln[0] in "MDR"]
     assert changed == [], "existing test files must not change in this spec:\n" + "\n".join(changed)
