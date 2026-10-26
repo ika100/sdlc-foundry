@@ -1,7 +1,7 @@
 ---
 spec_id: 114-the-platform-speaks-the-domain-model-5-0
 title: The platform speaks the domain model (5.0)
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -9,7 +9,7 @@ priority: P1
 
 ## Problem
 
-ADR-053 settles one vocabulary for the platform (System, Component, API, Resource, Owner, Environment, Instance, Resource instance, Issue, Spec, Plan, Run, Release), but users still work with the old names. One product is spread over `app.yaml` and `services.yaml`, and an environment's rules sit in four keys plus per-environment maps. The commands are grouped by plugin history (`/svc:`, `/app:`, `/gitops:`, `/shared:`) instead of by what they act on, so `new-service --gitops` creates a product and `promote x dev staging` repeats what the environment order already says. Spec 113 gives `cplat` an internal model without changing anything users see. This spec is the 5.0 release that switches the interface: one `system.yaml` per system, commands grouped by noun, a migration that converts existing repos exactly, and docs and agents that use the same words. It depends on spec 113 being done.
+ADR-053 settles one vocabulary for the platform (System, Component, API, Resource, Owner, Environment, Instance, Resource instance, Issue, Spec, Plan, Run, Release), but users still work with the old names. One product is spread over `app.yaml` and `services.yaml`, and an environment's rules sit in four keys plus per-environment maps. The commands are grouped by plugin history (`/svc:`, `/app:`, `/gitops:`, `/shared:`) instead of by what they act on, so `new-service --gitops` creates a product and `promote x dev staging` repeats what the environment order already says. Spec 113 gives `cplat` an internal model without changing anything users see. This spec is the 5.0 release that switches the interface: one `system.yaml` per system, commands grouped by noun, a migration that converts existing repos exactly, and docs and agents that use the same words. It builds on the model core of spec 113 (done): the 5.0 readers load `system.yaml` into that model.
 
 ## Stories
 
@@ -33,7 +33,7 @@ ADR-053 settles one vocabulary for the platform (System, Component, API, Resourc
 - **AC-114.8** Given `promote` on an environment, when it is rendered, then `staging` accepts `after-dev-smoke` (the 4.x `promotion.staging: auto` behaviour of spec 093) or `manual` (default), `prod` accepts only `manual`, and `dev` accepts no `promote`; any other value fails, and for prod the message says prod is always promoted by hand.
 - **AC-114.9** Given an environment with `observability` (keys and checks of 4.x: `ui`, `exportTo`, `headersSecret`, `alerts`, `rules`, `queryURL`, `querySecret`, `alertmanagerURL`), when it is rendered, then that environment gets the OpenTelemetry collector and every instance there gets the `OTEL_*` variables as in 4.x; an environment without `observability` gets neither.
 - **AC-114.10** Given environments with `observability`, when the alert poll (spec 092) runs, then it checks every environment whose `observability.alerts` is not `false`, with that environment's rules and query endpoints, and files issues as in 4.x.
-- **AC-114.11** Given a component, when it is rendered, then `type` and `lang` are required and must be one of `service`/`python`, `service`/`java`, `service`/`go`, `website`/`nextjs` or `library`/`python`; another pair fails listing the valid pairs, and a `shape` key fails with a message saying it is replaced by `type` and `lang`.
+- ~~**AC-114.11**~~ withdrawn 2026-10-26: spec 113 fixed the web `lang` as `typescript` (AC-113.2) and keeps unknown shapes as `service`/`unknown`; replaced by AC-114.58.
 - **AC-114.12** Given a service or website component, when it is rendered, then it accepts the 4.x service keys `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas` (one number), `resources`, `expose` and `external` (spec 069) with their 4.x meaning, plus `provides`, `consumes`, `uses` and `instances`; a per-environment map under `replicas` or a key `environments` or `promotion` fails naming `instances` as the place for it.
 - **AC-114.13** Given a component's `instances:`, when it is rendered, then the component runs in exactly the environments that are keys of `instances` (no `instances` = dev only); a key that is not an environment fails; each instance may override `replicas`, `resources`, `env` (merged over the component's `env`, the instance wins), `promote` and `secrets`, and any other key fails listing these.
 - **AC-114.14** Given a component of type `library`, when it is rendered, then it produces no manifests; a library with `instances`, `image`, `port` or `expose` fails with "a library has no instances".
@@ -46,11 +46,15 @@ ADR-053 settles one vocabulary for the platform (System, Component, API, Resourc
 - **AC-114.21** Given the same system rendered by 4.x and by 5.0, when the cluster objects are compared, then namespaces (`<system>-<env>`), Argo applications (`<component>-<env>`, `addon-<addon>-<env>`), the Secret `<system>-postgres-app` and the label `app.kubernetes.io/part-of` carry the same names and values.
 - **AC-114.22** Given an application directory that contains `app.yaml` or `services.yaml` (with or without `system.yaml`), when the render runs, then it writes nothing and fails with "not migrated to 5.0: run `cplat platform update --migrate`".
 - **AC-114.23** Given a migrated repo, when any platform command that read `app.yaml` or `services.yaml` in 4.x runs (system status, instance promote, instance secret, instance verify, the ship deploy step, the staging promotion, the alert poll, component add/set/remove, resource add/remove), then it reads `system.yaml`; in an unmigrated repo it exits 1 with the same message as AC-114.22.
+- **AC-114.57** Given a `system.yaml` without `owner`, or with an `owner` that is not a non-empty string, when it is rendered, then the render fails naming `owner` as required.
+- **AC-114.58** Given a component, when it is rendered, then `type` and `lang` are required and the pair must be `service`/`python`, `service`/`java`, `service`/`go`, `website`/`typescript` or `library`/`python` (the languages of the shape registry, as in AC-113.2), or `service`/`unknown` for a component whose 4.x entry had no shape or an unknown one; another pair fails listing the valid pairs, a `shape` key fails with a message saying it is replaced by `type` and `lang`, and `/component:new` and `/system:new` do not accept `unknown`.
+- **AC-114.69** Given a migrated repo, when the model of spec 113 is loaded, then it is loaded from `system.yaml`: `cplat model show --json` shows the same system, environments with their rules, components, instances (`tag`, `replicas`, `namespace`, `argo_application`, `url`, `promoted_from`, `secrets`) and resource instances that 4.7 showed for the old files of the same repo, plus `owner`, `apis` with each component's `provides` and `consumes`, library components with the components that use them, and per-instance secret overrides, with `schema` 2. Every command of AC-114.23 takes its component-in-environment answers from this model as in AC-113.11 and AC-113.18, and the check of AC-113.13 still holds.
+- **AC-114.70** Given the same `system.yaml`, when a test compares the renderer with the model of spec 113, then the environments and their order, which component has an instance in which environment, the namespaces, the Argo application names and the resource instances agree; the test fails naming the first difference (as AC-113.1 does for the environment list).
 
 ### Commands grouped by noun
 
-- **AC-114.24** Given the 5.0 marketplace, when its plugins' commands are listed, then exactly these slash commands exist besides the ones of AC-114.27: `/system:new|status|spec|plan|ship`, `/component:new|add|set|remove|spec|plan|build|verify|ship|fix|release`, `/api:list|check`, `/resource:add|remove`, `/instance:promote|secret|verify`, `/issue:triage|report`, `/platform:doctor|update|fleet|runs|retro`; the agent plugins `svc`, `svc-java`, `svc-go` and `web` keep their agents and skills and carry no working commands.
-- **AC-114.25** Given `cplat`, when it is run with a noun and a verb, then `system new|status|ship`, `component new|add|set|remove|ship|build`, `resource add|remove`, `instance promote|secret|verify`, `issue triage`, `platform doctor|update|fleet|runs|retro` do what `new-app`, `status`, `app-ship`, `new-service`, `compose`, `ship`, `build`, `addon`, `promote`, `secret`, `smoke run`, `triage`, `doctor`, `update-service`, `fleet`, `runs` and `retro` did in 4.7, and `api list|check` exist; the plumbing commands `spec`, `pr`, `headless`, `budget`, `quiet`, `validate`, `deps`, `shape`, `feedback`, `adopt` and `alerts` keep their names.
+- ~~**AC-114.24**~~ withdrawn 2026-10-26: the command set changed (`/component:check` added, `/api:check` not in 5.0); replaced by AC-114.59.
+- ~~**AC-114.25**~~ withdrawn 2026-10-26: no `cplat api check` in 5.0 and `model` kept as a name; replaced by AC-114.60.
 - **AC-114.26** Given a 4.x `cplat` subcommand that 5.0 regrouped (for example `cplat promote`), when it is run, then it exits 2 without doing anything and prints one line naming the new form (for example "`cplat promote` is `cplat instance promote` in 5.0").
 - **AC-114.27** Given a 5.0 install, when a user runs any of the 27 slash commands of 4.7 (for example `/svc:ship`, `/gitops:promote`, `/shared:new-service`), then it runs no script, agent or file change and answers with one line naming the new command; in an unmigrated repo the line adds "run `cplat platform update --migrate` first". No old name runs the new behaviour (no aliases).
 - **AC-114.28** Given `/instance:promote <component...|--all> --to <env> [--version vX.Y.Z]`, when it runs, then the source is the environment before `<env>` in `environments:`, `<env>` is added to each component's `instances` and pinned to the source instance's image (prod: the release with the digest staging verified, spec 106), all in one PR as 4.x promote did.
@@ -62,9 +66,16 @@ ADR-053 settles one vocabulary for the platform (System, Component, API, Resourc
 - **AC-114.34** Given `/system:new <manifest>` with `system`, `owner`, optional `org` and `visibility`, and `components` each with `name`, `description`, `type`, `lang` and optional `data`, when it runs, then it creates the gitops-app repo with a `system.yaml` and every component repo as 4.x new-app did; a component with `shape` fails naming `type` and `lang`.
 - **AC-114.35** Given `/component:add|set|remove` in a gitops-app repo, when they run, then they edit `components:` of `system.yaml` and render in one PR as 4.x compose did (including `--from-k8s`), and `/component:set <name> --instance <env> --replicas <n>` writes `instances.<env>.replicas`.
 - **AC-114.36** Given `/resource:add postgres [--version N]` and `/resource:remove postgres`, when they run, then they edit `resources:` and render as 4.x `addon add|remove postgres` did; `/resource:add observability` changes nothing and fails saying observability is set per environment under `environments.<env>.observability`.
-- **AC-114.37** Given `/api:list` in a gitops-app repo, when it runs, then it prints each API with its type, its provider and its consumers from `system.yaml`; given `/api:check`, then it runs the contract check of spec 110 for the current repo and exits non-zero on a violation.
+- ~~**AC-114.37**~~ withdrawn 2026-10-26: `/api:check` comes later with spec 110; replaced by AC-114.61.
 - **AC-114.38** Given a run started with `/component:ship` or `/system:ship`, when the Stop hook keeps it going or stops it, then every message it prints names `/component:ship` or `/system:ship`, never a 4.x command.
 - **AC-114.39** Given `/platform:doctor`, when the `app` or `gitops` plugin is still enabled, or the current gitops-app repo still has `app.yaml` or `services.yaml`, then it warns with the fix (`cplat platform update --migrate`).
+- **AC-114.59** Given the 5.0 marketplace, when its plugins' commands are listed, then exactly these working slash commands exist: `/system:new|status|spec|plan|ship`, `/component:new|add|set|remove|spec|plan|build|verify|check|ship|fix|release`, `/api:list`, `/resource:add|remove`, `/instance:promote|secret|verify`, `/issue:triage|report`, `/platform:doctor|update|fleet|runs|retro`; there is no `/api:check`, and every other command file is a tombstone of AC-114.27. The agent plugins `svc`, `svc-java`, `svc-go` and `web` keep their agents and skills.
+- **AC-114.60** Given `cplat`, when it is run with a noun and a verb, then `system new|status|ship`, `component new|add|set|remove|ship|build`, `resource add|remove`, `instance promote|secret|verify`, `issue triage` and `platform doctor|update|fleet|runs|retro` do what `new-app`, `status`, `app-ship`, `new-service`, `compose`, `ship`, `build`, `addon`, `promote`, `secret`, `smoke run`, `triage`, `doctor`, `update-service`, `fleet`, `runs` and `retro` did in 4.7, and `api list` exists; the plumbing commands `spec`, `pr`, `headless`, `budget`, `quiet`, `validate`, `deps`, `shape`, `feedback`, `adopt`, `alerts` and `model` keep their names.
+- **AC-114.61** Given `/api:list` in a gitops-app repo, when it runs, then it prints each API with its type, its provider and its consumers from `system.yaml` and exits 0; with no `apis:` it prints "no APIs declared" and exits 0.
+- **AC-114.62** Given `/component:fix <description>` in a component repo, when it runs, then it runs the 4.7 quick-task pipeline (coder → quality → tester with its fix loop) for a small change and for a bug alike, and stops when the change would contradict a criterion as quick-task did; no separate fix-bug pipeline exists.
+- **AC-114.63** Given `/component:check` in any repo, when it runs, then it runs the read-only quality and security audit of 4.7 `/shared:check-quality` for the repo's shape and changes no file.
+- **AC-114.64** Given `/component:spec` without arguments (or with `--all`, `index`, `migrate`), when it runs, then it does what `/svc:specs` did; given `/system:spec` without arguments (or with `--all`, `show <id>`, `done <id> <repo>`, `abandon <id>`), then it does what `/app:specs` did; with a description, `--amend <id> <change>`, `approve <id>` or (component only) `--from-plan`, both write specs as `/svc:spec` and `/app:spec` did.
+- **AC-114.65** Given a 4.7 command that 5.0 drops or merges, when it is run, then its tombstone names: `/system:ship` for `/app:build`, `/component:fix` for `/svc:quick-task` and `/svc:fix-bug`, `/component:spec` for `/svc:specs`, `/system:spec` for `/app:specs`, `/component:check` for `/shared:check-quality`, `resources:` in `system.yaml` for `/gitops:addon list`, `/instance:secret list` for `/gitops:secret list`, and `environments.<env>.observability` for `/gitops:addon add observability`.
 
 ### Migration
 
@@ -78,6 +89,8 @@ ADR-053 settles one vocabulary for the platform (System, Component, API, Resourc
 - **AC-114.47** Given a v1 repo that still has `k8s/`, when `--migrate` runs, then the 4.x v1→v2 step (removing `k8s/`) still happens as part of the same migration.
 - **AC-114.48** Given comments in `app.yaml` or `services.yaml`, when the migration runs, then `system.yaml` starts with a generated header pointing to the schema docs, the old comments are not carried over, and the report says so.
 - **AC-114.49** Given `/platform:fleet update` with the 5.0 release, when it runs, then every gitops-app and component repo gets one migration PR made by `platform update --migrate` on a fresh clone, and a repo whose migration fails as in AC-114.42 is reported failed with that reason and gets no PR.
+- **AC-114.67** Given the migration of a gitops-app repo, when it writes `system.yaml`, then `owner` is the GitHub organization recorded for the repo, a service with shape `service-python`, `service-java` or `service-go` becomes `type: service` with that language, `web-nextjs` becomes `website`/`typescript`, a service with no or an unknown shape becomes `service`/`unknown`, and `gateway`, `secretStore` and `policies.registries` become the top-level `gateway`, `secretStore` and `registries`, one per system, with their 4.x values.
+- **AC-114.68** Given a 5.0 migration PR from `/platform:fleet update`, when its CI is green, then the fleet squash-merges it by itself, although it is a major version, when the migration proved the byte-identical render of AC-114.40 (gitops-app repos) and overwrote nothing the repo added (every repo); otherwise the PR stays open with the label `platform-update: needs review` and a comment naming the reason.
 
 ### Release, docs and agents
 
@@ -88,6 +101,8 @@ ADR-053 settles one vocabulary for the platform (System, Component, API, Resourc
 - **AC-114.54** Given `docs/DOMAIN-MODEL.md`, when 5.0 is released, then its status says 5.0 is current, the `system.yaml` sketch is replaced by the final schema of this spec with a full example, and `docs/ADOPTING.md` has a "Migrating from 4.x to 5.0" section.
 - **AC-114.55** Given the shape registry check, when it runs, then every template's `CLAUDE.md` names `/component:spec` (gitops-app: `/system:spec`) as the spec-first rule instead of `/svc:spec` or `/app:spec`.
 - **AC-114.56** Given the end-to-end cluster test, when it runs, then it creates a system with `/system:new`'s script, ships a spec, promotes with `instance promote --to staging` and verifies with `instance verify`, using only 5.0 command names and a `system.yaml`.
+- **AC-114.66** Given the 5.0 plugins, when their contents are listed, then `shared` holds the `cplat` launcher, the hooks and the quality and security agents and no working command; the planner agent is in `system` (and no longer in `app`); the v1-only gitops deployment agent no longer exists; the last major of `app` and `gitops` holds only tombstone commands (no agents, no hooks); and the 5.0 CHANGELOG says `app` and `gitops` leave the marketplace in 6.0.
+- **AC-114.71** Given `docs/DOMAIN-MODEL.md` after 5.0 is built, when it is read, then its `system.yaml` example uses the keys of each component's `instances:` as the environments it runs in (a component running in dev, staging and prod lists all three), `replicas` for the database, `lang: typescript` for the website and a required `owner`, and its command tables list `/api:list` but no `/api:check` in 5.0 (marked as coming with spec 110), `/component:check`, and `/component:fix` as the quick-task pipeline. The guide is changed when this spec is built, not before.
 
 ## Non-goals
 
@@ -100,26 +115,32 @@ ADR-053 settles one vocabulary for the platform (System, Component, API, Resourc
 - Versions or pins in `system.yaml`; observed state (running image, health, smoke result) written to git.
 - A Backstage catalog or portal; generating Backstage entities from `system.yaml`.
 - Rewriting history: specs, ADRs, run records and earlier CHANGELOG sections keep the old terms.
+- `/api:check` and a `cplat api check`: the contract check comes later with spec 110; 5.0 has `apis:`, `provides`/`consumes` and `/api:list` only.
+- A separate fix-bug pipeline; a command that lists resources (the former `addon list`).
+- Per-environment `gateway`, `secretStore` or `registries`.
+- Splitting this spec: all of it ships as one 5.0 release.
 
 ## Open questions
 
-- Split this spec in two? (suggested: yes, both in 5.0 and shipped together: 114 keeps `system.yaml`, render, the cplat readers and the file migration, AC-114.1–23 and 40–49 except 45; a new spec takes the noun commands, plugins, enabledPlugins switch, docs and site, AC-114.24–39, 45 and 50–56; affects all criteria)
-- Which environments does a component run in? (suggested: the keys of its `instances:`, no `instances` = dev only, and `instance promote` adds the key, as in AC-114.13; alternative: a separate `environments: [dev, staging]` list next to `instances`; note the DOMAIN-MODEL sketch's `instances: {prod: {replicas: 2}}` would then mean "prod only"; affects AC-114.12, 13, 28, 41)
-- Where do `gateway`, `secretStore` and the extra image `registries` live? (suggested: top-level, one for the whole system as in 4.x; per-environment overrides later; affects AC-114.2, 41)
-- Is `owner` required, and what does the migration write? (suggested: required; the migration writes the repo's GitHub org; affects AC-114.2, 34, 41, new criterion)
-- What happens to the 4.x commands that have no noun in the request: `/app:build`, `/svc:specs`, `/app:specs`, `/shared:check-quality`, `/gitops:addon list` and `/gitops:secret list`? (suggested: `/app:build` dropped in favour of `/system:ship`; spec lists become `/system:spec` and `/component:spec` without arguments; `/shared:check-quality` becomes `/component:check`; `addon list` dropped (`system.yaml` and `/system:status` show resources); `secret list` stays as `/instance:secret list`; affects AC-114.24, 30, 51)
-- `/component:fix` replaces both `/svc:quick-task` and `/svc:fix-bug`: which pipeline does it run? (suggested: the quick-task pipeline, coder → quality → tester with its fix loop, for bugs too; the separate fix-bug pipeline is removed; affects AC-114.24, 51)
-- Where do the agents and tools of the plugins that lose their commands go? (suggested: `shared` stays as packaging for `cplat`, the hooks and the quality and security agents; the planner agent moves from `app` to `system`; the v1-only gitops deployment agent is deleted; `app` and `gitops` ship a last major that holds only the tombstone commands of AC-114.27 and are removed from the marketplace in 6.0; affects AC-114.24, 27, 39, 50)
-- Confirm: an old slash command answers with a one-line tombstone naming the new command and does nothing else; this is not an alias, because it never runs the new behaviour. (affects AC-114.27)
-- Confirm the `cplat` grouping and the plumbing commands that keep their names: `spec`, `pr`, `headless`, `budget`, `quiet`, `validate`, `deps`, `shape`, `feedback`, `adopt`, `alerts`. (suggested: yes; `adopt` could become `component adopt` and `alerts` `instance alerts` later; affects AC-114.25, 26)
-- Does `/platform:fleet update` merge a migration PR by itself? (suggested: yes, on green CI when the migration proved the byte-identical render and nothing the repo added was overwritten, although it is a major version; otherwise it stays open with `platform-update: needs review`; today's rule leaves every major-version PR open; affects AC-114.49, new criterion)
-- Confirm: the database resource's replica count is `replicas` (not `size` as in the DOMAIN-MODEL sketch, not `instances` as in 4.x addons), so it matches components. (affects AC-114.19, 41)
-- Confirm: API `type` is one of `openapi`, `grpc`, `graphql`, `events`. (affects AC-114.16)
-- Confirm: an unmigrated repo cannot be updated to 5.0 without `--migrate`, and `--migrate` keeps the 4.x v1→v2 step. (affects AC-114.44, 47)
-- Confirm: comments in `app.yaml` and `services.yaml` are not carried over. (affects AC-114.48)
-- Confirm: `/component:new` without `--type`/`--lang` creates `service`/`python`, as 4.x `new-service` does today. (affects AC-114.33)
-- `/api:check` needs spec 110's contract check: ship 5.0 only after 110, or ship `/api:check` later? (suggested: 5.0 waits for 110; affects AC-114.37)
+- ~~Split this spec in two?~~ Answered: no, all criteria stay in spec 114. See Non-goals.
+- ~~Which environments does a component run in?~~ Answered: the keys of its `instances:`, none = dev only, `instance promote` adds the key. See AC-114.13, AC-114.28 and AC-114.71.
+- ~~Where do `gateway`, `secretStore` and `registries` live?~~ Answered: top level, one per system, as in 4.x. See AC-114.2 and AC-114.67.
+- ~~Is `owner` required, and what does the migration write?~~ Answered: required; the migration writes the repo's GitHub organization. See AC-114.57 and AC-114.67.
+- ~~What happens to `/app:build`, `/svc:specs`, `/app:specs`, `/shared:check-quality`, `/gitops:addon list`, `/gitops:secret list`?~~ Answered: as suggested. See AC-114.59, AC-114.63, AC-114.64, AC-114.65 and AC-114.30.
+- ~~Which pipeline does `/component:fix` run?~~ Answered: the quick-task pipeline, for bugs too; fix-bug is removed. See AC-114.62.
+- ~~Where do the agents and tools of plugins that lose their commands go?~~ Answered: as suggested. See AC-114.66.
+- ~~Confirm: old slash commands answer with a one-line tombstone.~~ Answered: yes. See AC-114.27 and AC-114.65.
+- ~~Confirm the `cplat` grouping and the plumbing names.~~ Answered: yes. See AC-114.60 and AC-114.26.
+- ~~Does `/platform:fleet update` merge a migration PR by itself?~~ Answered: yes, on green CI with the proved byte-identical render and nothing overwritten; else it stays open for review. See AC-114.68.
+- ~~Confirm: the database replica count is `replicas`.~~ Answered: yes. See AC-114.19.
+- ~~Confirm: API `type` is one of openapi, grpc, graphql, events.~~ Answered: yes. See AC-114.16.
+- ~~Confirm: no 5.0 update without `--migrate`; `--migrate` keeps the v1→v2 step.~~ Answered: yes. See AC-114.44 and AC-114.47.
+- ~~Confirm: comments are not carried over.~~ Answered: yes. See AC-114.48.
+- ~~Confirm: `/component:new` defaults to `service`/`python`.~~ Answered: yes. See AC-114.33.
+- ~~`/api:check` needs spec 110: wait or ship later?~~ Answered: 5.0 ships without `/api:check`; it comes later with spec 110. See AC-114.61 and Non-goals.
 
 ## Changelog
 
 - 2026-10-26 created
+- 2026-10-26 open questions answered
+- 2026-10-26 approved
