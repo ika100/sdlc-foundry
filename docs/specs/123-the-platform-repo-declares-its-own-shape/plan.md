@@ -1,6 +1,6 @@
 ---
 spec_id: 123-the-platform-repo-declares-its-own-shape
-spec_hash: 251f90338851
+spec_hash: ebc824c726de
 summary: "The platform repo declares `shape: platform` in its committed .platform-settings.yml; a template-less, declared-only registry entry hidden from every create/adopt/update/fleet path; cplat shape routes it to svc/shared agents without a release role; spec check keeps old shape-less specs unchanged; ship deploys nothing; update refuses, doctor reports the source version; the component commands stop on a bad declaration and release refuses"
 tasks:
   - id: t1
@@ -86,6 +86,13 @@ tasks:
     covers: [AC-123.14, AC-123.23]
     parallel_safe: true
     depends_on: [t1]
+    done: true
+  - id: t13
+    title: Doctor reports the template gate checks as not applicable in the platform repo (#231)
+    files: [scripts/cplat/gates.py, tests/cplat/test_gates.py]
+    covers: [AC-123.24]
+    parallel_safe: true
+    depends_on: []
     done: true
 ---
 

@@ -52,6 +52,7 @@ As a component repo owner, I want nothing to change in my repo, so that the new 
 - **AC-123.21** Given a platform ship run whose PR was merged, when `cplat component ship deploy` runs, then the run reaches `done` at once with the line `not deployable (platform): nothing to deploy`, without waiting for a pin PR, Argo CD, smoke tests or staging, and without running `devbox run smoke` (which in this repo smoke-tests the templates).
 - **AC-123.22** Given a platform ship run that reached `done`, when the final report is printed, then the dev, promotion and smoke rows read `not deployable`, no `/instance:promote` next step is printed, and the run record names the shape `platform`.
 - **AC-123.23** Given the platform repo with `shape: platform`, when `/component:release` runs, then it refuses before changing anything, saying that the platform is released through its own procedure (version bumps in the marketplace catalog and the plugin manifests, a release PR and a tag), and naming where that procedure is described.
+- **AC-123.24** Given the platform repo with `shape: platform`, when `cplat platform doctor` runs in it, then it reports `gate recipes` and `gate CI jobs` as OK with "not applicable: the platform repo has no template (ADR-056)" and no fix, and never suggests `/platform:update` or copying a template job; every other gate check runs as in any repo, and a repo without the declaration gets both checks as before (#231).
 
 ## Non-goals
 
@@ -76,6 +77,11 @@ As a component repo owner, I want nothing to change in my repo, so that the new 
 
 - 2026-10-26 created
 - 2026-10-26 amended: the user's answers folded in: no release role and AC-123.23 (`/component:release` refuses), doctor wording in AC-123.13, AC-104.4 named in AC-123.16; all open questions answered
+- 2026-10-26 approved
+- 2026-10-26 building
+- 2026-10-26 done
+- 2026-10-26 draft: amendment: doctor gate checks for shape: platform (#231)
+- 2026-10-26 amended: AC-123.24, the doctor's template gate checks do not apply to the platform repo (#231)
 - 2026-10-26 approved
 - 2026-10-26 building
 - 2026-10-26 done

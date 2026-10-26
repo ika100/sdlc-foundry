@@ -1,7 +1,7 @@
 # Verification — 123 The platform repo declares its own shape
 
 **Result:** pass
-**Commit:** 08d0a89 · **Base:** 7de9f05 (origin/main) · **Trace:** 23/23 criteria named by tests
+**Commit:** 08d0a89 · **Base:** 7de9f05 (origin/main) · **Trace:** 24/24 criteria named by tests
 
 Tests: `tests/cplat` 3352 passed, 7 skipped (Kyverno CLI not installed); `bash scripts/ci-local.sh` green; site `npm test` and build green.
 All test ids below are in `tests/cplat/test_platform_shape_123.py` (abbreviated `T::`).
@@ -31,6 +31,7 @@ All test ids below are in `tests/cplat/test_platform_shape_123.py` (abbreviated 
 | AC-123.21 | met | `T::test_ac_123_21_deploy_is_done_at_once_for_the_platform`, `T::test_ac_123_21_deploy_never_runs_devbox_smoke_even_with_a_context` | `scripts/cplat/ship.py:1052-1057` | Phase `done`, no `gh` call after land, no `run` call at all (no kubectl, no `devbox run smoke`), even with `--context`. |
 | AC-123.22 | met | `T::test_ac_123_22_the_finished_run_reports_not_deployable_and_names_the_shape`, `T::test_ac_123_22_ship_md_prints_not_deployable_rows_and_no_promote_step` | `scripts/cplat/ship.py:1054-1057`, `:196-198` (`_record_shape`), `:257`; `plugins/component/commands/ship.md:63` | Run record has `shape: platform`, outcome `done`; no `/instance:promote` line. See deviation 3. |
 | AC-123.23 | met | `T::test_ac_123_23_release_refuses_without_a_release_role`, `T::test_ac_123_23_contributing_says_where_the_procedure_is` | `plugins/component/commands/release.md:13-19`, `scripts/cplat/shapecmd.py:45`, `CONTRIBUTING.md:94` | The refusal is keyed on the missing `release` role, as designed. |
+| AC-123.24 | met | `tests/cplat/test_gates.py::test_ac_123_24_platform_repo_skips_the_template_gate_checks` | `scripts/cplat/gates.py:85` (`_is_platform_repo`, via `settings.declared_shape`), `:118-119` | Added with #231 (amendment): without the declaration both checks still warn; with `shape: platform` both are OK, "not applicable", no fix. `cplat platform doctor` on the real platform repo shows both as not applicable; `devbox run test` 3355 passed. |
 
 ## Non-goals
 
