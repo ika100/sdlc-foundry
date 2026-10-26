@@ -258,8 +258,15 @@ kc annotate externalsecret $ext_es force-sync="$(date +%s)" --overwrite >/dev/nu
 es_ready() { kc get externalsecret $ext_es -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null; }
 for _ in $(seq 1 30); do [ "$(es_ready)" = False ] && break; sleep 3; done   # up to 90 s
 [ "$(es_ready)" = False ] || { kc get externalsecret $ext_es -o yaml | tail -25; fail "the ExternalSecret $ext_es is not reported as not ready although password is missing in the store"; }
+# External Secrets Operator keeps the Ready message generic ("could not get secret data from provider") and reports the
+# provider's error, which names the missing property, as an event of the ExternalSecret (what `kubectl describe` shows)
 es_message=$(kc get externalsecret $ext_es -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}')
-case "$es_message" in *password*) echo "ok   ExternalSecret not ready, status names the key: $(echo "$es_message" | cut -c1-160)";; *) fail "the ExternalSecret status does not name the missing key password: $es_message";; esac
+es_events() { kc get events --field-selector "involvedObject.kind=ExternalSecret,involvedObject.name=$ext_es" -o jsonpath='{range .items[*]}{.message}{"\n"}{end}' 2>/dev/null; }
+for _ in $(seq 1 20); do case "$es_message $(es_events)" in *password*) break;; esac; sleep 3; done   # up to 60 s
+case "$es_message $(es_events)" in
+  *password*) echo "ok   ExternalSecret not ready, its status names the key: $(es_events | grep -m1 password | cut -c1-160)";;
+  *) kc describe externalsecret $ext_es | tail -20; fail "the ExternalSecret status does not name the missing key password (ready: $es_message)";;
+esac
 sleep 5   # give a wrongly created partial Secret time to appear
 if kc get secret $ext_es >/dev/null 2>&1; then fail "the Secret $ext_es exists although the store entry lacks password (no partial Secret allowed)"; fi
 echo "ok   no Secret $ext_es while password is missing"
