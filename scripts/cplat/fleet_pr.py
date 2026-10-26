@@ -238,7 +238,7 @@ def update(ctx: Ctx, old: str | None, target: str, ref: str | None) -> Result:  
 
 
 def _run_update(ctx: Ctx, ref: str | None, old: str | None = None, target: str | None = None) -> core.Report:
-    migrate = old is not None and target is not None and _major(old) < 5 <= _major(target)
+    migrate = target is not None and (old is None or _major(old) < 5) and _major(target) >= 5   # an unreadable stamp counts as below 5
     req = upd.resolve(["--repo", str(ctx.clone)] + (["--ref", ref] if ref else []) + (["--migrate"] if migrate else []))
     try:
         return upd.execute(req)

@@ -1,5 +1,5 @@
 """Spec 095: the deps-findings / deps-bump recipes of every template, the shape contract that requires them, and the prose of
-/svc:build, /svc:ship and the security agent that calls `cplat deps`."""
+/component:build, /component:ship and the security agent that calls `cplat deps`."""
 import json
 import os
 import re
@@ -291,53 +291,53 @@ def section(text, heading):
 
 
 def test_build_calls_cplat_deps_patch_on_a_red_security_gate_and_acts_on_its_exit_code():  # AC-095.12
-    text = plugin("svc/commands/build.md")
+    text = plugin("component/commands/build.md")
     assert "cplat deps patch" in text
     near = text[text.index("cplat deps patch"):][:1500]
-    assert "ESCALATE" in near and "--cause" in near and "cplat ship escalate" in near and "cplat runs end --outcome escalated" in near
+    assert "ESCALATE" in near and "--cause" in near and "cplat component ship escalate" in near and "cplat platform runs end --outcome escalated" in near
     assert "a CRITICAL finding stops the build" not in text
 
 
 def test_build_never_hands_a_red_gate_after_a_bump_to_a_coder_and_keeps_acceptance_tests_fixed():  # AC-095.6
-    text = plugin("svc/commands/build.md")
+    text = plugin("component/commands/build.md")
     near = text[text.index("cplat deps patch"):][:2000].lower()
     assert "coder" in near and "never" in near and "acceptance test" in near
 
 
 def test_build_puts_the_patch_table_in_the_pr_body_and_the_final_report():  # AC-095.4 AC-095.17
-    text = plugin("svc/commands/build.md")
+    text = plugin("component/commands/build.md")
     assert "cplat deps report" in text
     assert "Dependency patches" in text and "(no CRITICAL findings)" not in text
 
 
 def test_ship_build_phase_escalates_only_on_what_cplat_deps_patch_cannot_fix():  # AC-095.13
-    text = plugin("svc/commands/ship.md")
+    text = plugin("component/commands/ship.md")
     assert "a CRITICAL security finding" not in text
     assert "a security finding `cplat deps patch` cannot fix" in text
 
 
 def test_ship_pr_phase_adds_the_patch_section_to_the_body():  # AC-095.4
-    text = plugin("svc/commands/ship.md")
+    text = plugin("component/commands/ship.md")
     assert "cplat deps report --body-file .git/PR_BODY.md" in section(text, "## Phase `pr`")
 
 
 def test_ship_land_patches_a_red_security_check_and_counts_it_as_a_fix_round():  # AC-095.15
-    land = section(plugin("svc/commands/ship.md"), "## Phase `land`")
+    land = section(plugin("component/commands/ship.md"), "## Phase `land`")
     assert "cplat deps patch" in land
     assert "cplat deps report --body-file .git/PR_BODY.md --update-pr" in land
-    assert "cplat ship escalate" in land and "--cause" in land
+    assert "cplat component ship escalate" in land and "--cause" in land
     assert "security check" in land and "fix_rounds" in land
 
 
 def test_ship_finish_lists_the_bumps_and_marks_major_bumps():  # AC-095.17
-    text = plugin("svc/commands/ship.md")
+    text = plugin("component/commands/ship.md")
     assert "major bump" in text and "cplat deps report" in text.split("Finish", 1)[-1]
 
 
 def test_security_agent_never_bumps_and_leaves_patching_to_the_run():  # AC-095.12
     text = plugin("shared/agents/security.md")
     assert "cplat deps patch" in text and "never bumps" in text
-    assert "/svc:release" in text and "/shared:check-quality" in text
+    assert "/component:release" in text and "/component:check" in text
     assert "**CRITICAL findings block release** — escalate to user immediately." not in text
 
 

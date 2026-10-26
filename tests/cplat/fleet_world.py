@@ -31,7 +31,7 @@ def seed(tmp_path_factory, new_service):
     """(repo, baseline): two copies of the shared render of the current service-go template."""
     base = tmp_path_factory.mktemp("fleet-seed")
     for n in ("repo", "base"):
-        new_service(["seed", "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(base / n), "--org", "acme"])
+        new_service(["seed", "desc", "--type", "service", "--lang", "go", "--no-github", "--skip-tasks", "--dir", str(base / n), "--org", "acme"])
     return base / "repo" / "seed", base / "base" / "seed"
 
 

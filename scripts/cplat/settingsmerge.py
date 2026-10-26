@@ -13,6 +13,7 @@ from pathlib import Path
 LISTS = ("allow", "ask", "deny")
 REL = ".claude/settings.json"
 DROPPED_PLUGINS = ("app@sdlc-foundry", "gitops@sdlc-foundry")   # the 4.x plugins 5.0 replaced by the noun plugins
+LEGACY_SUFFIX = "@ika100-claude"   # every plugin of the marketplace before the v3.0.0 rename (doctor.LEGACY_MARKETPLACE)
 
 
 def _json(v) -> str:
@@ -65,14 +66,14 @@ def merge_settings(project: dict, template: dict, baseline: dict | None) -> tupl
 
 
 def _merge_plugins(project: dict, template: dict, merged: dict) -> dict:
-    """enabledPlugins = the template's map + the repo's own entries - the dropped 4.x plugins; -> {added, removed}."""
+    """enabledPlugins = the template's map + the repo's own entries - the dropped 4.x and old-marketplace plugins; -> {added, removed}."""
     mine = project.get("enabledPlugins") if isinstance(project.get("enabledPlugins"), dict) else {}
     theirs = template.get("enabledPlugins") if isinstance(template.get("enabledPlugins"), dict) else {}
     if not theirs and not mine:
         return {"added": [], "removed": []}
     result = dict(theirs)
     for name, value in mine.items():
-        if name not in result and name not in DROPPED_PLUGINS:
+        if name not in result and name not in DROPPED_PLUGINS and not name.endswith(LEGACY_SUFFIX):
             result[name] = value
     merged["enabledPlugins"] = result
     return {"added": sorted(set(result) - set(mine)), "removed": sorted(set(mine) - set(result))}

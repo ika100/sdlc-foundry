@@ -25,7 +25,7 @@ def commit(repo, msg="own changes"):
 
 
 def render(new_service, parent):
-    new_service([NAME, "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(parent), "--org", "acme"])
+    new_service([NAME, "desc", "--type", "service", "--lang", "go", "--no-github", "--skip-tasks", "--dir", str(parent), "--org", "acme"])
     return parent / NAME
 
 
@@ -64,7 +64,7 @@ def go(repo, monkeypatch, capsys, baseline, *extra):
     """Run the update with `baseline` as the render of the previous version (None: it cannot be rendered); returns its --json."""
     monkeypatch.setattr(update, "render_baseline", lambda *a, **k: baseline)
     capsys.readouterr()
-    assert update.main(["--repo", str(repo), "--skip-tasks", "--json", *extra]) == 0
+    assert update.main(["--repo", str(repo), "--skip-tasks", "--json", "--migrate", *extra]) == 0
     return json.loads(capsys.readouterr().out)
 
 

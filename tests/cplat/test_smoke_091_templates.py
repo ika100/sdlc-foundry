@@ -293,7 +293,7 @@ def test_web_smoke_runs_in_the_browser_runner_ac_091_16():  # AC-091.16
 
 
 def test_a_fresh_web_repo_has_the_playwright_scaffold_by_default_ac_091_16(tmp_path):  # AC-091.16
-    newsvc.main(["fresh-web", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    newsvc.main(["fresh-web", "desc", "--type", "website", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     repo = tmp_path / "fresh-web"
     assert (repo / "playwright.config.ts").is_file() and (repo / "e2e" / "smoke.spec.ts").is_file() and (repo / "e2e" / "home.spec.ts").is_file()
     pkg = json.loads((repo / "package.json").read_text())
@@ -317,7 +317,7 @@ def commit(repo, msg):
 @pytest.fixture()
 def old_web_repo(tmp_path, new_service):
     """A web repo made before spec 091 and with `needs_e2e: false`: no Playwright anywhere."""
-    new_service(["old-web", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    new_service(["old-web", "desc", "--type", "website", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     repo = tmp_path / "old-web"
     shutil.rmtree(repo / "e2e", ignore_errors=True)
     (repo / "playwright.config.ts").unlink(missing_ok=True)

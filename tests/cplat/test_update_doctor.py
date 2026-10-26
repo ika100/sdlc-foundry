@@ -15,7 +15,7 @@ def git(repo, *a):
 
 @pytest.fixture()
 def repo(tmp_path, new_service):
-    new_service(["upd-go", "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    new_service(["upd-go", "desc", "--type", "service", "--lang", "go", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     return tmp_path / "upd-go"
 
 
@@ -24,7 +24,7 @@ def test_update_restores_skeleton_keeps_project_files(repo):
     (repo / "internal/server/server.go").write_text("// mine\n")      # project-owned → must survive
     (repo / ".platform-version").write_text("platform: 1.0.0\nshape: service-go\nref: main\n")
     git(repo, "add", "-A"); git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "tweak")
-    assert update.main(["--repo", str(repo), "--skip-tasks"]) == 0
+    assert update.main(["--repo", str(repo), "--skip-tasks", "--migrate"]) == 0
     assert "tweak" not in (repo / ".golangci.yml").read_text()
     assert (repo / "internal/server/server.go").read_text() == "// mine\n"
     assert git(repo, "branch", "--show-current").startswith("chore/platform-update-")
@@ -101,7 +101,7 @@ def test_shape_routing(repo, tmp_path, new_service):
     r = shapecmd.route(repo)
     assert r["shape"] == "service-go" and r["agents"]["coder"] == "svc-go:coder" and r["agents"]["architect"] == "svc:architect"
     assert r["agents"]["reviewer"] == "svc:reviewer"
-    new_service(["g-app", "d", "--gitops", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    new_service(["g-app", "d", "--shape", "gitops-app", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     g = shapecmd.route(tmp_path / "g-app")
     assert g["shape"] == "gitops-app" and "deployment" not in g["agents"] and "unsupported" in g
 
@@ -116,6 +116,7 @@ def test_python_service_routes_to_svc_with_migrations(tmp_path, new_service):
 def test_migrate_removes_k8s_dir_and_stamp_is_current(repo):
     (repo / "k8s" / "base").mkdir(parents=True)
     (repo / "k8s" / "base" / "deployment.yaml").write_text("kind: Deployment\n")
+    (repo / ".platform-version").write_text("platform: 4.4.0\nshape: service-go\nref: main\n")   # a 4.x repo: the migration runs
     git(repo, "add", "-A"); git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "v1 k8s")
     update.main(["--repo", str(repo), "--skip-tasks", "--migrate"])
     assert not (repo / "k8s").exists()
@@ -128,7 +129,9 @@ def test_without_migrate_k8s_dir_is_left_alone(repo):
     git(repo, "add", "-A"); git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "k8s")
     (repo / ".platform-version").write_text("platform: 1.0.0\nshape: service-go\nref: main\n")
     git(repo, "add", "-A"); git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "old stamp")
-    update.main(["--repo", str(repo), "--skip-tasks"])
+    with pytest.raises(core.PlatformError) as e:   # 5.0: a 4.x repo is not updated without --migrate
+        update.main(["--repo", str(repo), "--skip-tasks"])
+    assert "--migrate" in e.value.hint
     assert (repo / "k8s" / "x.yaml").exists()
 
 
@@ -160,7 +163,7 @@ def test_doctor_reports_legacy_and_current_installs_together(monkeypatch):
 
 def test_update_does_not_add_starter_files_to_project_owned_paths(tmp_path, new_service):
     """An existing web app has its own UI and tests: an update must not re-create (or newly add) template starter files in app/ or tests/."""
-    new_service(["own-ui", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    new_service(["own-ui", "desc", "--type", "website", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     repo = tmp_path / "own-ui"
     import shutil
     starter = ["app/globals.css", "app/not-found.tsx", "app/error.tsx", "app/icon.svg", "app/_components/site-header.tsx", "tests/layout.test.tsx"]
@@ -190,7 +193,7 @@ def test_project_owned_patterns_come_from_the_templates_own_list():
 def test_update_keeps_the_web_apps_own_dependencies(tmp_path, new_service):
     """package.json holds the project's dependencies (and Dependabot's bumps): like pom.xml, go.mod and pyproject.toml it is project-owned."""
     import json
-    new_service(["own-deps", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    new_service(["own-deps", "desc", "--type", "website", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     repo = tmp_path / "own-deps"
     pkg = json.loads((repo / "package.json").read_text())
     pkg["dependencies"]["zod"] = "^3.23.0"                  # a dependency the project added
@@ -219,7 +222,7 @@ def test_update_keeps_the_readme_and_says_so(repo, capsys):
     (repo / "README.md").write_text("# upd-go\n\nOur API docs.\n")
     (repo / ".platform-version").write_text("platform: 0.0.1\nshape: service-go\nref: main\n")   # unknown old ref
     _commit(repo, "own readme")
-    assert update.main(["--repo", str(repo), "--skip-tasks"]) == 0
+    assert update.main(["--repo", str(repo), "--skip-tasks", "--migrate"]) == 0
     out = capsys.readouterr().out
     assert (repo / "README.md").read_text() == "# upd-go\n\nOur API docs.\n"
     assert "README.md kept" in out and "templates/service-go/README.md.jinja" in out
@@ -244,7 +247,7 @@ def test_update_keeps_project_recipes_and_packages(repo, capsys):
     d.setdefault("env", {})["MY_FLAG"] = "1"
     _write_devbox(repo, d)
     _commit(repo, "own recipes")
-    assert update.main(["--repo", str(repo), "--skip-tasks"]) == 0
+    assert update.main(["--repo", str(repo), "--skip-tasks", "--migrate"]) == 0
     after, out = _devbox(repo), capsys.readouterr().out
     assert after["shell"]["scripts"]["bundle-check"] == "pnpm build && node scripts/bundle-check.mjs"
     assert "k6@latest" in after["packages"] or after["packages"].get("k6") == "latest"
@@ -259,7 +262,7 @@ def test_update_takes_the_templates_recipe_and_shows_the_old_line(repo, capsys):
     d["shell"]["scripts"]["test"] = "go test ./... -count=1 -v"
     _write_devbox(repo, d)
     _commit(repo, "tweak test")
-    assert update.main(["--repo", str(repo), "--skip-tasks"]) == 0
+    assert update.main(["--repo", str(repo), "--skip-tasks", "--migrate"]) == 0
     out = capsys.readouterr().out
     assert _devbox(repo)["shell"]["scripts"]["test"] == template_test
     assert "replaced in devbox.json" in out and "go test ./... -count=1 -v" in out
@@ -289,7 +292,7 @@ def test_kept_recipes_do_not_reformat_the_templates_devbox_json(repo):
     d["shell"]["scripts"]["bundle-check"] = "make bundle"
     _write_devbox(repo, d)
     _commit(repo, "own recipe")
-    assert update.main(["--repo", str(repo), "--skip-tasks"]) == 0
+    assert update.main(["--repo", str(repo), "--skip-tasks", "--migrate"]) == 0
     after = (repo / "devbox.json").read_text()
     assert json.loads(after)["shell"]["scripts"]["bundle-check"] == "make bundle"
     first = next(ln for ln in rendered.splitlines() if '"test":' in ln)
@@ -298,14 +301,14 @@ def test_kept_recipes_do_not_reformat_the_templates_devbox_json(repo):
 
 def test_update_that_brings_pin_dev_names_the_token_step(tmp_path, capsys, new_service):
     """AC-062.4: an existing linked service gets the job and the one manual step."""
-    new_service(["pin-upd", "d", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme",
-                 "--app", "acme/shop"])
+    new_service(["pin-upd", "d", "--type", "service", "--lang", "go", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme",
+                 "--system", "acme/shop"])
     repo = tmp_path / "pin-upd"
     ci = repo / ".github" / "workflows" / "ci.yml"
     ci.write_text(ci.read_text().split("\n  pin-dev:\n", 1)[0] + "\n")    # as before spec 062
     _commit(repo, "old ci")
     capsys.readouterr()
-    assert update.main(["--repo", str(repo), "--skip-tasks"]) == 0
+    assert update.main(["--repo", str(repo), "--skip-tasks", "--migrate"]) == 0
     out = capsys.readouterr().out
     assert "pin-dev:" in ci.read_text() and "gh secret set GITOPS_TOKEN -R" in out and "acme/shop" in out
 
@@ -322,4 +325,4 @@ def test_update_runs_in_a_git_worktree(tmp_path):
     wt = tmp_path / "wt"
     subprocess.run(["git", "worktree", "add", "-q", "-b", "chore/x", str(wt)], cwd=main_repo, check=True)
     assert (wt / ".git").is_file()
-    assert update.resolve(["--repo", str(wt), "--dry-run"])["shape"] == "service-go"
+    assert update.resolve(["--repo", str(wt), "--dry-run", "--migrate"])["shape"] == "service-go"
