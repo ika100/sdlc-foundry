@@ -36,7 +36,7 @@ Use the **coder** agent. Prompt prelude: the `<project-map>` block. Then:
 - Instruction to use `cplat quiet lint-fix` and `cplat quiet test-fast` while implementing
 - The **brief** (coder, tester, quality): under the headings `Criteria` (id and full text of every criterion the task covers), `Task` (the task text and files), `Contract` (the relevant part of the design, or `none`), `Tests` (the test files) and `Commands` (`cplat quiet test-fast`, `cplat quiet quality`). Copy the facts into the brief; do not tell the agent to read the spec files. On a failed quiet command, pass the agent its log path. Criteria: the active criteria the task touches, or `none`; Contract: `none`.
 
-One coder, one pass — no worktrees, no fan-out. **Inline (111):** make the change yourself only if, once made, `cplat quick-task inline-check --base main` exits 0; skip Step 2's agents but run `cplat quiet quality` and `cplat quiet test-fast` yourself (both green) and write "made inline: <check line>" in the PR body. On exit 1 or a red gate, undo it, use the coder → quality → tester path and never try inline again.
+One coder, one pass — no worktrees, no fan-out. **Inline (111):** make the change yourself only if, once made, `cplat quick-task inline-check --base main` exits 0; skip Step 2's agents but run `cplat quiet quality` and `cplat quiet test-fast` yourself (both green) and write "made inline: <check line>" in the PR body; leave its coverage box unticked. On exit 1 or a red gate, undo it, use the coder → quality → tester path and never try inline again.
 
 After the coder finishes (or the inline change is made), capture:
 ```bash
