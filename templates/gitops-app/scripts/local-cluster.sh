@@ -27,8 +27,10 @@
 #   WITH_LGTM            1 = install the dev Grafana stack, 0 = never; default: only if system.yaml says `ui: lgtm`
 #   KYVERNO_VERSION      Kyverno chart version (default 3.9.1)
 #   WITH_KYVERNO         1 = install Kyverno, 0 = never; default: only if an environment's policy in system.yaml is not off
-#   CNPG_VERSION         CloudNativePG operator chart version (default 0.29.1)
-#   WITH_CNPG            1 = install CloudNativePG, 0 = never; default: only if system.yaml declares `resources.postgres`
+#   CNPG_VERSION         CloudNativePG operator chart version (default: the targetRevision of operators/apps/cloudnative-pg.yaml, else 0.29.1)
+#   WITH_CNPG            1 = CloudNativePG, 0 = never; default: 1 exactly when operators/apps/cloudnative-pg.yaml exists.
+#                        With Argo CD the operator comes from operators/root.yaml (applied before bootstrap/); only with
+#                        WITH_ARGO=0 does this script install it through a k3s HelmChart.
 #   REGISTRY_PORT        also create a local image registry reachable as localhost:<port> from the host and as
 #                        k3d-<cluster>-registry:<port> from the cluster
 # Re-running `up` is safe; it re-applies credentials and the root Application.
@@ -50,7 +52,13 @@ with_argo="${WITH_ARGO:-1}"
 registry_port="${REGISTRY_PORT:-}"
 eso_version="${ESO_VERSION:-2.12.0}"
 with_eso="${WITH_ESO:-1}"
-cnpg_version="${CNPG_VERSION:-0.29.1}"
+cnpg_file=operators/apps/cloudnative-pg.yaml
+cnpg_default=0.29.1
+if [ -f "$cnpg_file" ]; then
+  cnpg_default=$(sed -n 's/^[[:space:]]*targetRevision:[[:space:]]*["'"'"']\{0,1\}\([^"'"'"'[:space:]]*\).*/\1/p' "$cnpg_file" | head -1)
+  cnpg_default="${cnpg_default:-0.29.1}"
+fi
+cnpg_version="${CNPG_VERSION:-$cnpg_default}"
 with_cnpg="${WITH_CNPG:-auto}"
 kyverno_version="${KYVERNO_VERSION:-3.9.1}"
 with_kyverno="${WITH_KYVERNO:-auto}"
@@ -69,7 +77,7 @@ if [ "$with_lgtm" = auto ]; then
   if grep -qE '^[^#]*ui:[[:space:]]*lgtm' applications/*/system.yaml 2>/dev/null; then with_lgtm=1; else with_lgtm=0; fi
 fi
 if [ "$with_cnpg" = auto ]; then
-  if awk '/^resources:/ {r = 1; next} /^[^ #]/ {r = 0} r && /^  postgres:/ {f = 1} END {exit !f}' applications/*/system.yaml 2>/dev/null; then with_cnpg=1; else with_cnpg=0; fi
+  if [ -f "$cnpg_file" ]; then with_cnpg=1; else with_cnpg=0; fi
 fi
 registry="${name}-registry"
 org=$(sed -n 's/^github_org:[[:space:]]*//p' .copier-answers.yml | head -1)
@@ -242,7 +250,9 @@ YAML
       done
     fi
 
-    if [ "$with_cnpg" = 1 ]; then
+    if [ "$with_cnpg" = 1 ] && [ "$with_argo" = 1 ]; then
+      : # Argo CD installs the operator from operators/root.yaml (applied below, before bootstrap/)
+    elif [ "$with_cnpg" = 1 ]; then
       echo "Installing the CloudNativePG operator ($cnpg_version)"
       k apply -f - >/dev/null <<YAML
 apiVersion: helm.cattle.io/v1
@@ -360,6 +370,17 @@ YAML
     if [ -n "$urls" ]; then urls="${urls}"$'\n'; fi   # command substitution strips the trailing newline
 
     if [ "$with_argo" = 1 ]; then
+      if [ "$with_cnpg" = 1 ] && [ -f operators/root.yaml ]; then
+        if k -n kube-system get helmchart cnpg >/dev/null 2>&1; then
+          echo "CloudNativePG was installed by an older cluster-up (HelmChart kube-system/cnpg); keeping it. Recreate the cluster to let Argo CD manage it"
+        else
+          echo "Applying the operators (operators/root.yaml)"
+          k apply -n argocd -f operators/root.yaml
+          for _ in $(seq 1 200); do k get crd clusters.postgresql.cnpg.io >/dev/null 2>&1 && break; sleep 3; done
+          for _ in $(seq 1 100); do k -n cnpg-system get deploy/cnpg-cloudnative-pg >/dev/null 2>&1 && break; sleep 3; done
+          k -n cnpg-system rollout status deploy/cnpg-cloudnative-pg --timeout=300s >/dev/null
+        fi
+      fi
       echo "Applying the root Application"
       k apply -n argocd -f bootstrap/
       cat <<MSG

@@ -15,6 +15,7 @@ applications/{{ app_name }}/
 ├── system.yaml                   the only hand-edited file: owner, environments, components, APIs, resources (reference: docs/DOMAIN-MODEL.md)
 ├── applicationset.yaml           GENERATED — one ApplicationSet per env
 └── overlays/<env>/<component>/     GENERATED — deployment.yaml, service.yaml, [httproute.yaml], kustomization.yaml (image pin)
+operators/                    GENERATED, cluster-level (root.yaml + apps/<operator>.yaml; only when a system needs an operator), applied once per cluster by a human
 bootstrap/{{ app_name }}-root.yaml        GENERATED — root Argo Application (app-of-apps), applied once by a human
 docs/specs/                       system specs (docs/specs/<NNN>-<slug>/spec.md)
 docs/plan/                        multi-repo plans written by /system:plan (one per system spec)
@@ -34,7 +35,7 @@ Everything marked GENERATED is derived from `system.yaml` by `devbox run render`
 
 ## One-time cluster bootstrap (human only)
 
-Argo must be able to read this repo. Then, once per cluster, a human runs `KUBE_CONTEXT=<context> devbox run bootstrap` (`kubectl apply -n argocd -f bootstrap/`; the context must be named explicitly so it never hits whatever cluster happens to be current). That creates the root Application `{{ app_name }}-root`, which watches `applications/{{ app_name }}/applicationset.yaml` in git; from then on every change reaches the cluster through merged PRs. Agents never run `bootstrap` or any `kubectl apply`.
+Argo must be able to read this repo. Then, once per cluster, a human runs `KUBE_CONTEXT=<context> devbox run bootstrap` (`scripts/bootstrap.sh`: first `operators/root.yaml` when it exists, waiting for the operator's CRD, then `kubectl apply -n argocd -f bootstrap/`; the context must be named explicitly so it never hits whatever cluster happens to be current). That creates the root Application `{{ app_name }}-root`, which watches `applications/{{ app_name }}/applicationset.yaml` in git; from then on every change reaches the cluster through merged PRs. Agents never run `bootstrap` or any `kubectl apply`.
 
 **To try the system on your machine:** `devbox run cluster-up` creates a k3d cluster `{{ app_name }}-local` (port 8088 → the Gateway), installs ArgoCD and External Secrets Operator and enables the Gateway API, gives Argo your `gh` token for this private repo, pre-creates `{{ app_name }}-{dev,staging,prod}` with a GHCR pull secret, applies the root Application and prints the URLs of exposed components. `devbox run cluster-down` removes it. Needs Docker running; the `gh` token needs `repo` and `read:packages`.
 
@@ -67,7 +68,7 @@ A gitops PR opened by `/component:ship` carries one body line `Service-ref: <own
 | `validate` | render-check + plan-check + label check + `kustomize build` every overlay + `kubeconform` (Argo/Gateway CRD schemas) — fully offline |
 | `lint` / `quality` / `test` / `deploy-check` | aliases of `validate` |
 | `lint-fix` | alias of `render` |
-| `bootstrap` | **human, once per cluster**: `KUBE_CONTEXT=<ctx> devbox run bootstrap` applies the root Application |
+| `bootstrap` | **human, once per cluster**: `KUBE_CONTEXT=<ctx> devbox run bootstrap` applies `operators/root.yaml` first, then the root Application |
 | `cluster-up` / `cluster-down` | local k3d cluster with ArgoCD, Gateway API and credentials |
 | `security` | detect-secrets |
 | `secrets-baseline` | refresh `.secrets.baseline.json` with fixed flags (never run `detect-secrets scan` by hand) |
