@@ -1,5 +1,5 @@
 # Copier template: gitops-app
-# A product-scoped GitOps repo: one SaaS application = a set of services + their per-environment pins
+# A product-scoped GitOps repo: one system = a set of components + their per-environment pins
 # (Kustomize + ArgoCD ApplicationSet, env-only overlays dev/staging/prod — ADR-006, ADR-014).
 #
 # Usage:
@@ -13,16 +13,15 @@ _templates_suffix: .jinja
 
 _answers_file: .copier-answers.yml
 
-# Project-owned once generated: /shared:update-service must not overwrite these.
+# Project-owned once generated: /platform:update must not overwrite these.
 _skip_if_exists:
   - .secrets.baseline.json    # repo-owned once created: it records the repo's own false positives (seeded when missing)
   - .claude/project-notes.md   # repo-owned notes, loaded by CLAUDE.md (spec 086)
   - README.md                # project-owned after creation (spec 060)
   - .github/ISSUE_TEMPLATE/**
-  - applications/**/services.yaml
+  - applications/**/system.yaml
   - applications/**/overlays/**
   - applications/**/applicationset.yaml
-  - applications/**/app.yaml
   - bootstrap/**
   - docs/plan/**
   - docs/specs/**
@@ -61,8 +60,13 @@ description:
 
 github_org:
   type: str
-  help: "GitHub organization or user that owns the repo and the service repos."
+  help: "GitHub organization or user that owns the repo and the component repos."
   default: "ika100"
+
+owner:
+  type: str
+  help: "Who owns the system (a team or person; written to system.yaml)."
+  default: "{{ github_org }}"
 
 cluster_server:
   type: str
