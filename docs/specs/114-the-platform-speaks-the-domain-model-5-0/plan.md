@@ -12,228 +12,266 @@ tasks:
     covers: [AC-114.1, AC-114.2, AC-114.3, AC-114.4, AC-114.5, AC-114.7, AC-114.8, AC-114.9, AC-114.12, AC-114.13, AC-114.14, AC-114.15, AC-114.16, AC-114.17, AC-114.18, AC-114.19, AC-114.20, AC-114.21, AC-114.22, AC-114.57, AC-114.58, AC-114.70]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: gitops-app template around render.py — system.yaml starter, owner answer, pin/plan/CRD scripts, cluster and policy scripts
     files: ["templates/gitops-app/applications/{{ app_name }}/system.yaml.jinja", "templates/gitops-app/applications/{{ app_name }}/app.yaml.jinja", "templates/gitops-app/applications/{{ app_name }}/services.yaml.jinja", templates/gitops-app/copier.yml, templates/gitops-app/scripts/pin.py, templates/gitops-app/scripts/plan.py, templates/gitops-app/scripts/check-service-crds.py, templates/gitops-app/scripts/local-cluster.sh, templates/gitops-app/scripts/check-policies.sh, templates/gitops-app/scripts/alert-poll.sh, templates/gitops-app/.github/workflows/pin-staging.yml, templates/gitops-app/.github/workflows/pin-dev.yml]
     covers: [AC-114.1, AC-114.20]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: model.py loads system.yaml (schema 2, owner, APIs, libraries, instance overrides, NotMigrated, type/lang helpers); model show; gitops helpers
     files: [scripts/cplat/model.py, scripts/cplat/modelcmd.py, scripts/cplat/gitops.py]
     covers: [AC-114.6, AC-114.23, AC-114.58, AC-114.69, AC-114.70]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: migrate5.py — pure conversion of app.yaml + services.yaml into system.yaml, problems list, header dump
     files: [scripts/cplat/migrate5.py]
     covers: [AC-114.41, AC-114.42, AC-114.48, AC-114.67]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t5
     title: platform update --migrate — refusal, already migrated, dry-run, byte-identical proof against render_v4, rollback, report
     files: [scripts/cplat/update.py]
     covers: [AC-114.40, AC-114.42, AC-114.43, AC-114.44, AC-114.45, AC-114.46, AC-114.47, AC-114.48]
     parallel_safe: true
     depends_on: [t1, t4, t6]
+    done: true
   - id: t6
     title: enabledPlugins merge with plugin report; the templates enable the 5.0 noun plugins
     files: [scripts/cplat/settingsmerge.py, templates/gitops-app/.claude/settings.json.jinja, templates/service-python/.claude/settings.json, templates/library-python/.claude/settings.json, templates/service-java/.claude/settings.json.jinja, templates/service-go/.claude/settings.json.jinja, templates/web-nextjs/.claude/settings.json.jinja]
     covers: [AC-114.45]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: fleet update runs the migration and merges a proved one on green CI
     files: [scripts/cplat/fleet.py, scripts/cplat/fleet_pr.py]
     covers: [AC-114.49, AC-114.68]
     parallel_safe: true
     depends_on: [t5]
+    done: true
   - id: t8
     title: cplat noun dispatcher, moved-name errors (exit 2) and the 5.0 help
     files: [scripts/cplat/cplat.py]
     covers: [AC-114.26, AC-114.60]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: cplat api list
     files: [scripts/cplat/apilist.py]
     covers: [AC-114.60, AC-114.61]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t10
     title: component add|set|remove edit components in system.yaml (type/lang, instances, --instance ENV --replicas)
     files: [scripts/cplat/compose.py]
     covers: [AC-114.23, AC-114.35]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t11
     title: resource add|remove postgres in system.yaml; observability refused; no list
     files: [scripts/cplat/addon.py]
     covers: [AC-114.23, AC-114.36]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t12
     title: instance promote <component...|--all> --to <env> (source from the order, instances key, pins, digest check)
     files: [scripts/cplat/promote.py]
     covers: [AC-114.23, AC-114.28, AC-114.29]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t13
     title: instance secret set <component>/<env> and list, with per-instance overrides
     files: [scripts/cplat/secret.py]
     covers: [AC-114.18, AC-114.23, AC-114.30]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t14
     title: system status — one row per component, one column per environment, resource section
     files: [scripts/cplat/status.py]
     covers: [AC-114.23, AC-114.32]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t15
     title: instance verify [ENV], env URLs from system.yaml, staging promotion after-dev-smoke
     files: [scripts/cplat/smoke.py, scripts/cplat/staging.py, scripts/cplat/staging_deploy.py]
     covers: [AC-114.6, AC-114.8, AC-114.23, AC-114.31, AC-114.38]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t16
     title: ship and system ship in 5.0 names (gates, hints, budget gate, Stop hooks); model reads in appship
     files: [scripts/cplat/ship.py, scripts/cplat/appship.py, scripts/cplat/appship_state.py, scripts/cplat/appship_sched.py, scripts/cplat/appship_report.py, scripts/cplat/appship_merge.py, scripts/cplat/budget.py, plugins/shared/hooks/hooks.json]
     covers: [AC-114.23, AC-114.38]
     parallel_safe: true
     depends_on: [t3, t8]
+    done: true
   - id: t17
     title: alert poll per environment (rules and endpoints of each environment's observability); telemetry lgtm detection
     files: [scripts/cplat/alertsources.py, scripts/cplat/alerts.py, scripts/cplat/telemetry.py]
     covers: [AC-114.9, AC-114.10, AC-114.23]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t18
     title: component new --type/--lang/--system and system new (system, owner, components with type/lang)
     files: [scripts/cplat/newsvc.py, scripts/cplat/newapp.py]
     covers: [AC-114.33, AC-114.34, AC-114.58]
     parallel_safe: true
     depends_on: [t2, t3]
+    done: true
   - id: t19
     title: platform doctor warns about the 4.x plugins and files; its checks read the model
     files: [scripts/cplat/doctor.py]
     covers: [AC-114.39]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t20
     title: 5.0 names in the hints of spec, build, adopt, shape and helper modules
     files: [scripts/cplat/spec.py, scripts/cplat/buildcmd.py, scripts/cplat/replan.py, scripts/cplat/adopt.py, scripts/cplat/shapecmd.py, scripts/cplat/core.py, scripts/cplat/gates.py, scripts/cplat/headless.py, scripts/check-spec-required.py, scripts/test-detect-shape.sh]
     covers: [AC-114.60]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t21
     title: 5.0 names in the runs, retro, triage, feedback, deps and issue modules and their assets
     files: [scripts/cplat/runs.py, scripts/cplat/runs_report.py, scripts/cplat/runs_agents.py, scripts/cplat/runs_bench.py, scripts/cplat/runs_usage_cli.py, scripts/cplat/runs_usage_report.py, scripts/cplat/retro.py, scripts/cplat/retro_setup.py, scripts/cplat/retro_report.py, scripts/cplat/retro_proposals.py, scripts/cplat/triage.py, scripts/cplat/feedback.py, scripts/cplat/deps.py, scripts/cplat/autoissue.py, scripts/cplat/alertissues.py, scripts/cplat/evidence.py, scripts/cplat/claim.py, scripts/cplat/assets/workflows/cplat-retro.yml, scripts/cplat/assets/retro-prompt.md, scripts/cplat/benchmark/tasks.json]
     covers: [AC-114.60]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t22
     title: plugin system — new, status, spec, plan, ship; planner agent moved from app
     files: [plugins/system/.claude-plugin/plugin.json, plugins/system/README.md, plugins/system/commands/new.md, plugins/system/commands/status.md, plugins/system/commands/spec.md, plugins/system/commands/plan.md, plugins/system/commands/ship.md, plugins/system/agents/planner.md, plugins/app/agents/planner.md]
     covers: [AC-114.32, AC-114.34, AC-114.59, AC-114.64, AC-114.66]
     parallel_safe: true
     depends_on: [t14, t16, t18]
+    done: true
   - id: t23
     title: plugin component — new, add, set, remove, spec, plan, build, verify, check, ship, fix, release; references moved from svc
     files: [plugins/component/.claude-plugin/plugin.json, plugins/component/README.md, plugins/component/commands/new.md, plugins/component/commands/add.md, plugins/component/commands/set.md, plugins/component/commands/remove.md, plugins/component/commands/spec.md, plugins/component/commands/plan.md, plugins/component/commands/build.md, plugins/component/commands/verify.md, plugins/component/commands/check.md, plugins/component/commands/ship.md, plugins/component/commands/fix.md, plugins/component/commands/release.md, plugins/component/references/build-red-rounds.md, plugins/component/references/build-replan.md, plugins/component/references/build-resume.md, plugins/component/references/build-security-red.md, plugins/component/references/build-worktree-fallback.md, plugins/component/references/fix-on-main.md, plugins/component/references/ship-gitops.md, plugins/component/references/ship-land-red.md, plugins/svc/references/build-red-rounds.md, plugins/svc/references/build-replan.md, plugins/svc/references/build-resume.md, plugins/svc/references/build-security-red.md, plugins/svc/references/build-worktree-fallback.md, plugins/svc/references/quick-task-on-main.md, plugins/svc/references/ship-gitops.md, plugins/svc/references/ship-land-red.md]
     covers: [AC-114.33, AC-114.35, AC-114.59, AC-114.62, AC-114.63, AC-114.64]
     parallel_safe: true
     depends_on: [t10, t16, t18]
+    done: true
   - id: t24
     title: plugins api, resource, instance, issue, platform
     files: [plugins/api/.claude-plugin/plugin.json, plugins/api/README.md, plugins/api/commands/list.md, plugins/resource/.claude-plugin/plugin.json, plugins/resource/README.md, plugins/resource/commands/add.md, plugins/resource/commands/remove.md, plugins/instance/.claude-plugin/plugin.json, plugins/instance/README.md, plugins/instance/commands/promote.md, plugins/instance/commands/secret.md, plugins/instance/commands/verify.md, plugins/issue/.claude-plugin/plugin.json, plugins/issue/README.md, plugins/issue/commands/triage.md, plugins/issue/commands/report.md, plugins/platform/.claude-plugin/plugin.json, plugins/platform/README.md, plugins/platform/commands/doctor.md, plugins/platform/commands/update.md, plugins/platform/commands/fleet.md, plugins/platform/commands/runs.md, plugins/platform/commands/retro.md]
     covers: [AC-114.28, AC-114.30, AC-114.31, AC-114.36, AC-114.59, AC-114.61]
     parallel_safe: true
     depends_on: [t9, t11, t12, t13, t15, t19]
+    done: true
   - id: t25
     title: tombstones — scripts/tombstones.py, the 27 old command files, app/gitops emptied of agents and hooks
     files: [scripts/tombstones.py, scripts/ci-local.sh, plugins/svc/commands/build.md, plugins/svc/commands/fix-bug.md, plugins/svc/commands/plan.md, plugins/svc/commands/quick-task.md, plugins/svc/commands/release.md, plugins/svc/commands/ship.md, plugins/svc/commands/spec.md, plugins/svc/commands/specs.md, plugins/svc/commands/verify.md, plugins/app/commands/build.md, plugins/app/commands/plan.md, plugins/app/commands/ship.md, plugins/app/commands/spec.md, plugins/app/commands/specs.md, plugins/gitops/commands/addon.md, plugins/gitops/commands/compose.md, plugins/gitops/commands/promote.md, plugins/gitops/commands/secret.md, plugins/shared/commands/check-quality.md, plugins/shared/commands/doctor.md, plugins/shared/commands/fleet.md, plugins/shared/commands/new-app.md, plugins/shared/commands/new-service.md, plugins/shared/commands/report-issue.md, plugins/shared/commands/status.md, plugins/shared/commands/triage.md, plugins/shared/commands/update-service.md, plugins/gitops/agents/deployment.md, plugins/gitops/hooks/hooks.json]
     covers: [AC-114.27, AC-114.59, AC-114.65, AC-114.66]
     parallel_safe: true
     depends_on: [t22, t23, t24]
+    done: true
   - id: t26
     title: versions — marketplace, plugin manifests, plugin READMEs of svc/shared/app/gitops; shapes.yml and the shape check
     files: [.claude-plugin/marketplace.json, plugins/svc/.claude-plugin/plugin.json, plugins/shared/.claude-plugin/plugin.json, plugins/app/.claude-plugin/plugin.json, plugins/gitops/.claude-plugin/plugin.json, plugins/web/.claude-plugin/plugin.json, plugins/svc-go/.claude-plugin/plugin.json, plugins/svc-java/.claude-plugin/plugin.json, plugins/svc/README.md, plugins/shared/README.md, plugins/app/README.md, plugins/gitops/README.md, shapes.yml, scripts/shapes.py]
     covers: [AC-114.50, AC-114.55, AC-114.66]
     parallel_safe: true
     depends_on: [t25]
+    done: true
   - id: t27
     title: agent prompts and skills in the 5.0 words (svc, shared, web, svc-go, svc-java)
     files: [plugins/svc/agents/architect.md, plugins/svc/agents/coder.md, plugins/svc/agents/deployment.md, plugins/svc/agents/migrations.md, plugins/svc/agents/observability.md, plugins/svc/agents/product-manager.md, plugins/svc/agents/release.md, plugins/svc/agents/reviewer.md, plugins/svc/agents/tester.md, plugins/svc/skills/spec-format/SKILL.md, plugins/svc/skills/spec-format/references/spec.md, plugins/svc/skills/spec-format/references/design.md, plugins/svc/skills/spec-format/references/plan.md, plugins/svc/skills/spec-format/references/testing.md, plugins/svc/skills/spec-format/references/verification.md, plugins/shared/agents/quality.md, plugins/shared/agents/security.md, plugins/web/agents/coder.md, plugins/web/agents/deployment.md, plugins/web/agents/observability.md, plugins/web/agents/release.md, plugins/web/agents/tester.md, plugins/svc-go/agents/coder.md, plugins/svc-go/agents/deployment.md, plugins/svc-go/agents/observability.md, plugins/svc-go/agents/release.md, plugins/svc-go/agents/tester.md, plugins/svc-java/agents/coder.md, plugins/svc-java/agents/deployment.md, plugins/svc-java/agents/observability.md, plugins/svc-java/agents/release.md, plugins/svc-java/agents/tester.md, plugins/web/README.md, plugins/svc-go/README.md, plugins/svc-java/README.md]
     covers: [AC-114.52]
     parallel_safe: true
     depends_on: [t8]
+    done: true
   - id: t28
     title: templates' CLAUDE.md, README and spec docs in the 5.0 words; spec-first names /component:spec and /system:spec
     files: [templates/gitops-app/CLAUDE.md.jinja, templates/gitops-app/README.md.jinja, templates/gitops-app/docs/specs/README.md, templates/service-python/CLAUDE.md, templates/service-python/README.md, templates/service-python/docs/specs/README.md, templates/service-python/docs/backlog.md, templates/library-python/CLAUDE.md, templates/library-python/README.md, templates/library-python/docs/specs/README.md, templates/library-python/docs/backlog.md, templates/service-java/CLAUDE.md.jinja, templates/service-java/README.md.jinja, templates/service-java/docs/specs/README.md, templates/service-java/docs/backlog.md, templates/service-go/CLAUDE.md.jinja, templates/service-go/README.md.jinja, templates/service-go/docs/specs/README.md, templates/service-go/docs/backlog.md, templates/web-nextjs/CLAUDE.md.jinja, templates/web-nextjs/README.md.jinja, templates/web-nextjs/docs/specs/README.md, templates/web-nextjs/docs/backlog.md]
     covers: [AC-114.52, AC-114.55]
     parallel_safe: true
     depends_on: [t2, t22, t23, t24]
+    done: true
   - id: t29
     title: DOMAIN-MODEL guide on 5.0 (final schema, full example, command tables) and "Migrating from 4.x to 5.0" in ADOPTING
     files: [docs/DOMAIN-MODEL.md, docs/ADOPTING.md]
     covers: [AC-114.52, AC-114.54, AC-114.71]
     parallel_safe: true
     depends_on: [t1, t5]
+    done: true
   - id: t30
     title: guides in the 5.0 words — user journey, how it works, agents, architecture
     files: [docs/USER-JOURNEY.md, docs/HOW-IT-WORKS.md, docs/AGENTS.md, docs/ARCHITECTURE.md]
     covers: [AC-114.52]
     parallel_safe: true
     depends_on: [t25]
+    done: true
   - id: t31
     title: remaining docs in the 5.0 words — unattended delivery, agent deck, baselines, templates guide, runners, README, CONTRIBUTING, CLAUDE.md
     files: [docs/unattended-delivery.md, docs/agent-deck.md, docs/BASELINES.md, docs/templates.md, docs/self-hosted-runners.md, README.md, CONTRIBUTING.md, CLAUDE.md]
     covers: [AC-114.52]
     parallel_safe: true
     depends_on: [t25]
+    done: true
   - id: t32
     title: plans, requirements, spikes and diagrams in the 5.0 words (PRD shape table matches shapes.yml)
     files: [docs/plan/issue-triage.md, docs/plan/new-app.md, docs/plan/spec-driven-bootstrap.md, docs/requirements/platform-vision.md, docs/requirements/end-to-end-scenario.md, docs/spikes/kro.md, docs/img/sdlc-map.svg, docs/img/model-lifecycles.svg]
     covers: [AC-114.52]
     parallel_safe: true
     depends_on: [t25, t26]
+    done: true
   - id: t33
     title: site command reference grouped by noun; configuration and cplat reference; concepts and get-started pages
     files: [site/scripts/generate-reference.mjs, site/src/content/docs/concepts/addons.md, site/src/content/docs/concepts/agents.md, site/src/content/docs/concepts/environments.md, site/src/content/docs/concepts/gitops-model.md, site/src/content/docs/concepts/guard-rails.md, site/src/content/docs/concepts/index.md, site/src/content/docs/concepts/secrets.md, site/src/content/docs/concepts/shapes.md, site/src/content/docs/get-started/index.md, site/src/content/docs/get-started/local-cluster.md]
     covers: [AC-114.52, AC-114.53]
     parallel_safe: true
     depends_on: [t25, t26]
+    done: true
   - id: t34
     title: site scenarios and landing pages in the 5.0 words
     files: [site/src/content/docs/index.mdx, site/src/content/docs/problem.md, site/src/content/docs/value.md, site/src/content/docs/vision/index.md, site/src/content/docs/scenarios/index.md, site/src/content/docs/scenarios/addons-secrets-observability.md, site/src/content/docs/scenarios/adopt-existing.md, site/src/content/docs/scenarios/build-a-feature.md, site/src/content/docs/scenarios/extend-the-platform.md, site/src/content/docs/scenarios/harden-for-audit.md, site/src/content/docs/scenarios/project-management-app.md, site/src/content/docs/scenarios/promote-safely.md, site/src/content/docs/scenarios/ship-a-product.md]
     covers: [AC-114.52]
     parallel_safe: true
     depends_on: [t25]
+    done: true
   - id: t35
     title: CHANGELOG 5.0.0 (BREAKING, old → new table, migration steps, app/gitops leave in 6.0) and the ADR index
     files: [docs/CHANGELOG.md, docs/adr/README.md]
     covers: [AC-114.50, AC-114.51, AC-114.66]
     parallel_safe: true
     depends_on: [t25, t26]
+    done: true
   - id: t36
     title: e2e cluster test on 5.0 names — system new, a shipped spec, instance promote --to staging, instance verify
     files: [tests/e2e/run.sh]
     covers: [AC-114.56]
     parallel_safe: true
     depends_on: [t1, t10, t11, t12, t15, t18]
+    done: true
   - id: t37
     title: port the existing cplat tests that build 4.x gitops-app files to system.yaml
     files: [tests/cplat/model_fixtures.py, tests/cplat/test_model.py, tests/cplat/test_model_show.py, tests/cplat/test_model_callers.py, tests/cplat/test_model_release.py, tests/cplat/test_gitops.py, tests/cplat/test_addons.py, tests/cplat/test_policies.py, tests/cplat/test_alerts_render.py, tests/cplat/test_alertsources.py, tests/cplat/test_alertissues.py, tests/cplat/test_alerts_poll.py, tests/cplat/test_alerts_doctor.py, tests/cplat/alerts_fakes.py, tests/cplat/test_staging_093_setting.py, tests/cplat/test_staging_093_ship.py, tests/cplat/test_smoke_091_run.py, tests/cplat/test_ship_checks.py, tests/cplat/test_telemetry.py, tests/cplat/test_telemetry_more.py, tests/cplat/test_service_crds.py, tests/cplat/test_appship_097.py, tests/cplat/fixtures/plans/001-todo-list.md]
     covers: [AC-114.69]
     parallel_safe: false
     depends_on: [t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21]
+    done: true
   - id: t38
     title: port the existing tests that use 4.x names and plugin paths; the whole suite and ci-local green
     files: [tests/cplat/conftest.py, tests/cplat/fleet_world.py, tests/cplat/test_newsvc.py, tests/cplat/test_newapp.py, tests/cplat/test_fast_suite_112.py, tests/cplat/test_smoke_091_templates.py, tests/cplat/test_java_database.py, tests/cplat/test_spec_driven.py, tests/cplat/test_ci_extra.py, tests/cplat/test_gates.py, tests/cplat/test_update_doctor.py, tests/cplat/test_update_lost.py, tests/cplat/test_adopt.py, tests/cplat/test_rename_migration.py, tests/cplat/test_autoissue_ship.py, tests/cplat/test_feedback.py, tests/cplat/test_runs.py, tests/cplat/test_retro_setup.py, tests/cplat/test_retro_cli.py, tests/cplat/test_replan.py, tests/cplat/test_fleet.py, tests/cplat/test_fleet_pr.py, tests/cplat/test_smoke_091_ship.py, tests/cplat/test_smoke_091_spec.py, tests/cplat/test_promote_digest.py, tests/cplat/test_spec_agents.py, tests/cplat/test_build_replan_docs.py, tests/cplat/test_lean_prompts.py, tests/cplat/test_lean_briefs.py, tests/cplat/test_launcher.py, tests/cplat/test_ship.py, tests/cplat/test_budget.py, tests/cplat/test_runs_agents.py, tests/cplat/test_runs_bench_plugins.py, tests/cplat/test_headless_model.py, tests/cplat/test_validate_review.py, tests/cplat/test_state_per_worktree.py, tests/cplat/test_pr_body_staging.py, tests/cplat/test_issue_forms.py, tests/cplat/test_deps_templates.py, tests/cplat/test_tags_and_wait.py, tests/cplat/test_pr_open.py, tests/cplat/test_ci_gates.py]
     covers: [AC-114.50, AC-114.52]
     parallel_safe: false
     depends_on: [t22, t23, t24, t25, t26, t27, t28, t29, t30, t31, t32, t33, t34, t35, t36, t37]
+    done: true
 human_steps:
   - After the 5.0 PR merges, tag and publish the release v5.0.0 (AC-114.50).
   - Then run `/platform:fleet update` once with v5.0.0 and fix by hand the repos it reports failed (unconvertible keys or a render difference).
