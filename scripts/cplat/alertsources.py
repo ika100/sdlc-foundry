@@ -22,9 +22,10 @@ from pathlib import Path
 
 import autoissue
 import feedback
+import model
+from model import Model
 
 SEVERITIES = ("critical", "warning", "info")
-ENVS = ("dev", "staging", "prod")
 SERVICE_DOWN = "ServiceDown"
 LGTM_QUERY_URL = "http://lgtm.observability.svc:9090"
 TIMEOUT_S = 10.0
@@ -76,6 +77,7 @@ class AppConfig:
     query_secret: str | None
     skip: str | None
     notes: list[str] = field(default_factory=list)
+    model: Model | None = None
 
 
 class SourceError(Exception):
@@ -144,10 +146,6 @@ def _rule_problem(rules: object) -> str | None:
     return None
 
 
-def _envs_of(svc: dict) -> list[str]:
-    return svc.get("environments") or ["dev"]
-
-
 def _read_yaml(path: Path) -> dict:
     import yaml
     try:
@@ -170,11 +168,12 @@ def load_app(app_dir: Path) -> AppConfig:
     cfg = _read_yaml(app_dir / "app.yaml")
     raw_services = _read_yaml(app_dir / "services.yaml").get("services") or []
     services = [s for s in raw_services if isinstance(s, dict) and s.get("name")]
-    envs = [e for e in ENVS if any(e in _envs_of(s) for s in services)]
+    m = model.build(app, {"services": raw_services}, cfg)
+    envs = [e.name for e in m.environments if m.instances_in(e.name)]
     addons = cfg.get("addons") if isinstance(cfg.get("addons"), dict) else {}
     obs = addons.get("observability") if "observability" in addons else None
     out = AppConfig(app=app, app_dir=app_dir, services=services, envs=envs, rules=[], prometheus_url=None, alertmanager_url=None,
-                    query_secret=None, skip=None)
+                    query_secret=None, skip=None, model=m)
     if "observability" not in addons:
         out.skip = "app.yaml declares no observability addon"
         return out
@@ -211,9 +210,8 @@ def load_app(app_dir: Path) -> AppConfig:
     declared = [Rule(r["name"], r["query"], r["severity"], r.get("summary") or "") for r in obs.get("rules") or []]
     out.rules = list(declared)
     if not any(r.name == SERVICE_DOWN for r in declared):
-        for s in services:
-            if s.get("metrics"):
-                out.rules += [_service_down(app, s["name"], e) for e in ENVS if e in _envs_of(s)]
+        with_metrics = {c.name for c in m.components if c.metrics}
+        out.rules += [_service_down(app, i.component, i.environment) for i in m.instances if i.component in with_metrics]
     return out
 
 
@@ -269,12 +267,13 @@ def _service_of(cfg: AppConfig, labels: dict[str, str]) -> tuple[str, str | None
 
 def _env_of(cfg: AppConfig, labels: dict[str, str]) -> tuple[str, list[str]]:
     for key in _ENV_LABELS:
-        if labels.get(key) in ENVS:
+        if labels.get(key) in model.ENVIRONMENTS:
             return labels[key], []
-    m = re.fullmatch(rf"{re.escape(cfg.app)}-({'|'.join(ENVS)})", labels.get("namespace", ""))
+    envs = "|".join(model.ENVIRONMENTS)
+    m = re.fullmatch(rf"{re.escape(cfg.app)}-({envs})", labels.get("namespace", ""))
     if m:
         return m.group(1), []
-    m = re.search(rf"\.{re.escape(cfg.app)}-({'|'.join(ENVS)})\.svc", labels.get("instance", ""))
+    m = re.search(rf"\.{re.escape(cfg.app)}-({envs})\.svc", labels.get("instance", ""))
     if m:
         return m.group(1), []
     return "unknown", [NO_ENV_NOTE]
