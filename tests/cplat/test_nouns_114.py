@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import types
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -388,7 +389,7 @@ def test_collect_queries_each_source_with_its_own_rules_only_ac_114_10(tmp_path,
     got = {(a.name, a.environment) for a in alerts}
     assert got == {("RDEV", "dev"), ("RSTG", "staging")}
     q = net.queries()
-    assert any(u.startswith("http://q.example.com") and "rstg" in u for u in q) and not any(u.startswith("http://q.example.com") and "rdev" in u for u in q)
+    assert any(urlsplit(u).hostname == "q.example.com" and "rstg" in u for u in q) and not any(urlsplit(u).hostname == "q.example.com" and "rdev" in u for u in q)
     assert any("lgtm" in u and "rdev" in u for u in q) and not any("lgtm" in u and "rstg" in u for u in q)
 
 

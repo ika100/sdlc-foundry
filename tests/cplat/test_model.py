@@ -9,6 +9,7 @@ import socket
 import subprocess
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -466,7 +467,8 @@ def test_load_remote_reads_the_file_once_and_pins_lazily_ac_113_10(tmp_path):  #
     log = []
     r = model().load_remote("shop", reader(tmp_path, log))
     assert log == ["applications/shop/system.yaml"]                 # 5.0: one file
-    assert r.url("shop-api", "dev")[0].startswith("http://api.shop-dev.localhost")
+    u = urlsplit(r.url("shop-api", "dev")[0])
+    assert (u.scheme, u.hostname) == ("http", "api.shop-dev.localhost")
     assert len(log) == 1                                            # a URL needs no pin
     assert r.instance("shop-api", "dev").tag == "sha-" + SHA
     assert log[1:] == ["applications/shop/overlays/dev/shop-api/kustomization.yaml"]
