@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Perf (112): the cplat test job is faster without being weaker.** Tests that only need a rendered repo share one render per process and get private copies (`new_service`, `shared_renders`; ADR-052), and CI runs `tests/cplat` in 4 round-robin shards (`--shard I/N`) with a `cplat shards cover the suite` job that fails when a test runs in no shard or in two; `ci-success` needs it. Measured locally: the full suite went from 149 s to 90 s wall on 12 cores.
 - **Fix (090): a failing retro proposal step shows why.** When `claude` exits non-zero, `cplat retro propose` prints the last 20 lines of its output to the job log. `claude exited with 1` alone could not be diagnosed: the output stayed in `propose.log` on the ephemeral runner. The posted issue keeps the short reason.
 
 ## [4.7.0] — 2026-10-26
