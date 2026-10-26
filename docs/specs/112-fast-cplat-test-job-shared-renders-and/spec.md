@@ -1,7 +1,7 @@
 ---
 spec_id: 112-fast-cplat-test-job-shared-renders-and
 title: 'Fast cplat test job: shared renders and sharding'
-status: approved
+status: building
 priority: P1
 ---
 
@@ -70,3 +70,4 @@ Local use
 - 2026-10-26 approved
 - 2026-10-26 draft: renumbered from 111 (number clash with 111-unattended-runs-spend-turns-only-on-judgement)
 - 2026-10-26 approved
+- 2026-10-26 building
