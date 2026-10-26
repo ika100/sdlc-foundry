@@ -14,7 +14,7 @@ Accepted on bootstrap.
 - Vitest + Testing Library with an 80% coverage gate; Playwright e2e and smoke tests (platform ADR-002, ADR-040)
 - eslint + `tsc --noEmit` as the quality gate
 - Multi-stage, non-root Docker build (standalone output) → `{{ docker_registry }}/{{ project_name }}`
-- No Kubernetes manifests here: the product's gitops-app repo owns them (platform ADR-017); this repo ships a container image
+- No Kubernetes manifests here: the system's gitops-app repo owns them (platform ADR-017); this repo ships a container image
 - GitHub topic `deployable-service` for ArgoCD discovery
 - Claude Code agents from the `sdlc-foundry` marketplace (`web` + `svc` + `shared`)
 
