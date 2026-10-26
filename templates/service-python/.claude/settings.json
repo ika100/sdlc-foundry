@@ -11,6 +11,11 @@
     }
   },
   "enabledPlugins": {
+    "component@sdlc-foundry": true,
+    "api@sdlc-foundry": true,
+    "instance@sdlc-foundry": true,
+    "issue@sdlc-foundry": true,
+    "platform@sdlc-foundry": true,
     "svc@sdlc-foundry": true,
     "shared@sdlc-foundry": true
   },

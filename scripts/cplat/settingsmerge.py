@@ -12,6 +12,7 @@ from pathlib import Path
 
 LISTS = ("allow", "ask", "deny")
 REL = ".claude/settings.json"
+DROPPED_PLUGINS = ("app@sdlc-foundry", "gitops@sdlc-foundry")   # the 4.x plugins 5.0 replaced by the noun plugins
 
 
 def _json(v) -> str:
@@ -54,12 +55,40 @@ def merge_settings(project: dict, template: dict, baseline: dict | None) -> tupl
                 merged.setdefault("permissions", {}).setdefault(name, []).append(entry)
 
     for key, value in project.items():
-        if key != "permissions" and value != template.get(key) and not _same_as_baseline(value, baseline, key, None):
+        if key not in ("permissions", "enabledPlugins") and value != template.get(key) and not _same_as_baseline(value, baseline, key, None):
             replaced.append({"key": key, "was": _json(value)})
     for key, value in pperm.items():
         if key not in LISTS and value != tperm.get(key) and not _same_as_baseline(value, baseline, key, "permissions"):
             replaced.append({"key": f"permissions.{key}", "was": _json(value)})
-    return merged, {"kept": kept, "removed_by_platform": removed, "replaced": replaced}
+    plugins = _merge_plugins(project, template, merged)
+    return merged, {"kept": kept, "removed_by_platform": removed, "replaced": replaced, "plugins": plugins}
+
+
+def _merge_plugins(project: dict, template: dict, merged: dict) -> dict:
+    """enabledPlugins = the template's map + the repo's own entries - the dropped 4.x plugins; -> {added, removed}."""
+    mine = project.get("enabledPlugins") if isinstance(project.get("enabledPlugins"), dict) else {}
+    theirs = template.get("enabledPlugins") if isinstance(template.get("enabledPlugins"), dict) else {}
+    if not theirs and not mine:
+        return {"added": [], "removed": []}
+    result = dict(theirs)
+    for name, value in mine.items():
+        if name not in result and name not in DROPPED_PLUGINS:
+            result[name] = value
+    merged["enabledPlugins"] = result
+    return {"added": sorted(set(result) - set(mine)), "removed": sorted(set(mine) - set(result))}
+
+
+def _write_plugins(text: str, plugins: dict) -> str:
+    """Replace the enabledPlugins block of `text`, keeping the rest of the file as it is."""
+    m = re.search(r'"enabledPlugins"\s*:\s*\{', text)
+    if not m:
+        raise ValueError("enabledPlugins")
+    open_at = m.end() - 1
+    end = _close(text, open_at)
+    line_start = text.rfind("\n", 0, m.start()) + 1
+    key_indent = re.match(r"[ \t]*", text[line_start:]).group(0)  # type: ignore[union-attr]
+    inner = ",\n".join(f"{key_indent}  {json.dumps(k)}: {json.dumps(v)}" for k, v in plugins.items())
+    return text[:open_at] + "{\n" + inner + f"\n{key_indent}" + text[end:]
 
 
 def _close(text: str, start: int) -> int:
@@ -124,7 +153,7 @@ def _insert(text: str, merged: dict) -> str:
 
 def merge_settings_file(repo: Path, before: str | None, baseline: dict | None) -> tuple[dict, str | None]:
     """Reads the rendered file, writes the merge (only when something is kept), returns (report, note)."""
-    empty: dict = {"kept": [], "removed_by_platform": [], "replaced": []}
+    empty: dict = {"kept": [], "removed_by_platform": [], "replaced": [], "plugins": {"added": [], "removed": []}}
     path = repo / REL
     if before is None or not path.is_file():
         return empty, None
@@ -137,6 +166,12 @@ def merge_settings_file(repo: Path, before: str | None, baseline: dict | None) -
                        f"re-add your permission entries from git show HEAD~1:{REL}")
     text = path.read_text()
     merged, report = merge_settings(project, json.loads(text), baseline)
-    if report["kept"]:
-        path.write_text(_insert(text, merged))
+    out = _insert(text, merged) if report["kept"] else text
+    if merged.get("enabledPlugins") != json.loads(text).get("enabledPlugins"):
+        try:
+            out = _write_plugins(out, merged["enabledPlugins"])
+        except ValueError:
+            out = json.dumps({**json.loads(out), "enabledPlugins": merged["enabledPlugins"]}, indent=2) + "\n"
+    if out != text:
+        path.write_text(out)
     return report, None
