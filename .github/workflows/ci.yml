@@ -129,17 +129,21 @@ jobs:
         run: |
           curl -fsSL -o /tmp/kyverno-cli.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
           echo "b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae  /tmp/kyverno-cli.tgz" | sha256sum -c -
-          mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
+          mkdir -p "$HOME/.local/bin" && tar xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: rendered manifests satisfy the Kyverno guard rails (offline)
         run: bash /tmp/v2/scripts/check-policies.sh
 
 
   platform-tests:
-    name: cplat unit + integration tests
+    name: cplat unit + integration tests (shard ${{ matrix.shard }}/4)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false   # spec 112: a failing shard must not cancel the others; each log names its failing tests
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -149,10 +153,33 @@ jobs:
         run: |
           curl -fsSL -o /tmp/kyverno-cli.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
           echo "b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae  /tmp/kyverno-cli.tgz" | sha256sum -c -
-          mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
+          mkdir -p "$HOME/.local/bin" && tar xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: pytest
-        run: uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto
+        run: uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto --shard ${{ matrix.shard }}/4 --shard-report shard-${{ matrix.shard }}.json
+      - name: Upload the shard report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cplat-shard-${{ matrix.shard }}
+          path: shard-${{ matrix.shard }}.json
+          retention-days: 1
+          if-no-files-found: ignore
+
+  platform-tests-cover:
+    name: cplat shards cover the suite
+    needs: [changes, platform-tests]
+    if: always() && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: cplat-shard-*
+          merge-multiple: true
+          path: shards
+      - name: every collected test ran in exactly one shard
+        run: python3 scripts/check-shards.py shards/*.json
 
   smoke-test-templates:
     name: smoke-test Copier templates
@@ -568,7 +595,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [changes, validate-manifests, validate-shapes, platform-tests, smoke-test-templates, smoke-test-gitops-app, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
+    needs: [changes, validate-manifests, validate-shapes, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: every needed job passed or was skipped

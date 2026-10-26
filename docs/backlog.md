@@ -111,6 +111,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [098-gitops-ci-checks-components-against-the](specs/098-gitops-ci-checks-components-against-the/spec.md) — Gitops CI checks Components against the service branch CRDs | P1 | done | 17 | #110 |
 | [099-token-usage-and-cost-are-measured-per](specs/099-token-usage-and-cost-are-measured-per/spec.md) — Token usage and cost are measured per run | P1 | done | 14 | #140 |
 | [100-leaner-runs-cheaper-coordinator-fewer](specs/100-leaner-runs-cheaper-coordinator-fewer/spec.md) — Leaner runs: cheaper coordinator, fewer turns, smaller context | P1 | done | 17 | #139 |
+| [112-fast-cplat-test-job-shared-renders-and](specs/112-fast-cplat-test-job-shared-renders-and/spec.md) — Fast cplat test job: shared renders and sharding | P1 | done | 15 |  |
 | [113-a-domain-model-core-in-cplat](specs/113-a-domain-model-core-in-cplat/spec.md) — A domain model core in cplat | P1 | done | 18 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |

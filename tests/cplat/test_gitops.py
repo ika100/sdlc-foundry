@@ -8,7 +8,6 @@ import yaml
 
 import compose
 import core
-import newsvc
 import promote
 
 JAVA_ANSWERS = "_src_path: gh:ika100/sdlc-foundry/templates/service-java\nport: 8080\n"
@@ -32,9 +31,23 @@ SHA = "a" * 40
 
 
 @pytest.fixture()
-def gitops_repo(tmp_path):
-    newsvc.main(["todo-gitops", "d", "--gitops", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
-    return tmp_path / "todo-gitops"
+def gitops_repo(tmp_path, new_service):
+    return new_service(["todo-gitops", "d", "--gitops", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+
+
+def composed_todo_api(tmp_path, new_service, shared_renders):
+    """Spec 112: a gitops repo with `compose add todo-api` committed, rendered once per process and copied per test."""
+    def build(workdir):
+        repo = new_service(["todo-gitops", "d", "--gitops", "--no-github", "--skip-tasks", "--dir", str(workdir), "--org", "acme"])
+        with pytest.MonkeyPatch.context() as mp:
+            fake = FakeGh()
+            mp.setattr(compose, "gh", fake)
+            mp.setattr(promote, "gh", fake)
+            run_compose(repo, "add", "todo-api")
+        commit(repo, "service")
+        return repo
+
+    return shared_renders.copy("gitops todo-gitops + compose add todo-api", build, tmp_path / "todo-gitops")
 
 
 class FakeGh:

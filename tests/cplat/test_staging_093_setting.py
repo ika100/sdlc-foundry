@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 import core
-from test_gitops import gh, gitops_repo, run_compose, commit  # noqa: F401  (fixtures)
+from test_gitops import composed_todo_api, gh, gitops_repo, run_compose, commit  # noqa: F401  (fixtures)
 
 ROOT = core.PLATFORM_ROOT
 APP = "applications/todo"
@@ -40,10 +40,8 @@ def set_service(repo, **extra):
 
 
 @pytest.fixture()
-def app(gitops_repo, gh):
-    run_compose(gitops_repo, "add", "todo-api")
-    commit(gitops_repo, "compose")
-    return gitops_repo
+def app(tmp_path, new_service, shared_renders, gh):
+    return composed_todo_api(tmp_path, new_service, shared_renders)
 
 
 # ---------------- AC-093.15: where the setting lives and what it defaults to ----------------

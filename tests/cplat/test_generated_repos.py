@@ -21,19 +21,25 @@ def _render(template: str, dest: Path, name: str, **data: str) -> Path:
     return dest
 
 
-@pytest.fixture(scope="module")
-def py_on(tmp_path_factory):
-    return _render("service-python", tmp_path_factory.mktemp("on") / "svc-on", "svc-on", needs_observability="true")
+def _copy(shared_renders, tmp_path: Path, template: str, name: str, **data: str) -> Path:
+    """A private copy of the render of `template` with `data` (rendered once per process)."""
+    key = f"{template} {name} {sorted(data.items())}"
+    return shared_renders.copy(key, lambda workdir: _render(template, workdir / name, name, **data), tmp_path / name)
 
 
-@pytest.fixture(scope="module")
-def py_off(tmp_path_factory):
-    return _render("service-python", tmp_path_factory.mktemp("off") / "svc-off", "svc-off", needs_observability="false")
+@pytest.fixture()
+def py_on(shared_renders, tmp_path):
+    return _copy(shared_renders, tmp_path, "service-python", "svc-on", needs_observability="true")
 
 
-@pytest.fixture(scope="module")
-def web(tmp_path_factory):
-    return _render("web-nextjs", tmp_path_factory.mktemp("web") / "web-app", "web-app")
+@pytest.fixture()
+def py_off(shared_renders, tmp_path):
+    return _copy(shared_renders, tmp_path, "service-python", "svc-off", needs_observability="false")
+
+
+@pytest.fixture()
+def web(shared_renders, tmp_path):
+    return _copy(shared_renders, tmp_path, "web-nextjs", "web-app")
 
 
 def _lines(path: Path) -> list[str]:

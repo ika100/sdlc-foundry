@@ -2,7 +2,6 @@
 import json
 import subprocess
 
-import newsvc
 import update
 
 
@@ -10,8 +9,8 @@ def git(repo, *args):
     return subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=True).stdout.strip()
 
 
-def test_update_service_moves_a_legacy_repo_to_the_new_marketplace(tmp_path):
-    newsvc.main(["legacy-go", "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+def test_update_service_moves_a_legacy_repo_to_the_new_marketplace(tmp_path, new_service):
+    new_service(["legacy-go", "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     repo = tmp_path / "legacy-go"
     # make it look like a v2.x repository
     settings = repo / ".claude" / "settings.json"

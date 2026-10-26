@@ -5,7 +5,7 @@ import subprocess
 import pytest
 import yaml
 
-from test_gitops import commit, gh, gitops_repo, render_check, run_compose  # noqa: F401  (fixtures)
+from test_gitops import commit, composed_todo_api, gh, render_check  # noqa: F401  (fixtures)
 
 APP = "applications/todo"
 GOOD = {"name": "HighErrorRate", "query": "up == 0", "severity": "warning", "summary": "down"}
@@ -23,10 +23,8 @@ def render(repo):
 
 
 @pytest.fixture()
-def repo(gitops_repo, gh):  # noqa: F811
-    run_compose(gitops_repo, "add", "todo-api")
-    commit(gitops_repo, "service")
-    return gitops_repo
+def repo(tmp_path, new_service, shared_renders, gh):  # noqa: F811
+    return composed_todo_api(tmp_path, new_service, shared_renders)
 
 
 @pytest.mark.parametrize("rules, message", [
