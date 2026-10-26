@@ -8,6 +8,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **The platform repo declares its own shape.** [ADR-056](adr/056-the-platform-repo-declares-its-shape.md), spec 123. This repo declares `shape: platform` in `.platform-settings.yml`, so `/component:spec`, `plan`, `build`, `verify` and `ship` work here. `/component:release` and `cplat platform update` refuse (the platform is released through its own procedure and is not updated from a template), and `cplat doctor` reports the platform source version. A `shape:` key anywhere else is an error.
 
+**Fix:** a bare `off` in `budget:` (`.platform-settings.yml` or the user settings file) is read as off; YAML parsed it as `false`, which was refused.
+
 **Plugins:** component 1.1.0.
 
 **Action for existing repos:** none.

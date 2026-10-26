@@ -10,7 +10,7 @@ Work through the phases in order. After each, print `## Phase N complete — <on
 
 ## cplat
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from ; one call per Bash invocation. First call, also the shape dispatch:
+`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from; one call per Bash invocation. First call, also the shape dispatch:
 
 ```bash
 cplat shape
@@ -22,7 +22,7 @@ It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subage
 
 ## Phase 0 — Pre-flight
 
-0. `cplat platform runs begin build --spec <id>` (spec 087). Inside `/component:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat platform runs end --outcome done`. Recording never fails a build.
+0. `cplat platform runs begin build --spec <id>` (spec 087). Inside `/component:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat platform runs end --outcome done`. Recording never fails a build; a warning is not an error.
    **Agent metrics (spec 089):** after every subagent you spawn, in any phase, run `cplat platform runs agent spawned <role> [--model-id <id>]` (`<role>` is the role name, e.g. `coder`; `--model-id` only when you know the model id). The calls below record what only you can judge; none fails the build.
 1. `git status --porcelain`. A dirty tree on a spec whose status is not `building` stops the build: commit or stash first (the clean-tree rule). On a `building` spec it is an **interrupted build** (spec 047): read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (stale staged files: `git restore --staged`; WIP commit: `wip(<task-id>): interrupted`).
 2. `cplat spec check <id> --require approved` must pass, and `docs/specs/<spec_id>/plan.md` must exist. Otherwise stop with the fix: `/component:spec approve <NNN>`, `/component:plan <NNN>`, or for `spec_hash` drift `/component:plan <NNN>` again.

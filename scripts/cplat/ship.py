@@ -341,7 +341,7 @@ def _file_platform_failure(repo: Path, st: dict, reason: str, command: str | Non
             kind="platform",
             signature=autoissue.signature("platform", cmd, st.get("phase") or "none", reason, names=names),
             reason=reason, command=cmd, phase=st.get("phase") or "none", evidence=feedback.tail(evidence),
-            run_id=rid, shape=core.read_stamp(repo).get("shape", "none"), names=names,
+            run_id=rid, shape=st.get("shape") or core.read_stamp(repo).get("shape", "none"), names=names,
             environment=feedback.diagnostics(repo))
         report.extend(autoissue.file(draft, run_id=rid).lines)
     except Exception as e:  # noqa: BLE001  (an escalation always completes)
@@ -977,7 +977,7 @@ def _smoke_finish(repo: Path, st: dict, result: smoke.SmokeResult, lines: list[s
         lines.append(f"Smoke (dev): {row}")
         return False, lines
     out = smoke.file_issue(result, service_slug=service_slug(repo), spec_id=sid, image=st.get("deployed"),
-                           run_id=st.get("run_id"), shape=core.read_stamp(repo).get("shape", "none"))
+                           run_id=st.get("run_id"), shape=st.get("shape") or core.read_stamp(repo).get("shape", "none"))
     lines += out.lines
     if out.url:
         issue = out.url

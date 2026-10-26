@@ -18,6 +18,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import yaml
+
 import core
 import fleet_pr
 import runs
@@ -141,7 +143,11 @@ def process(slug: str, entry: dict | None, only: bool, target: str, ref: str | N
             settings = _read(slug, ".platform-settings.yml")
         except PlatformError as e:
             return _row(slug, None, None, "failed", str(e))
-        if settings is not None and re.search(r"^shape:\s*platform\s*$", settings, re.M):
+        try:
+            declared = yaml.safe_load(settings) if settings is not None else None
+        except yaml.YAMLError:
+            declared = None
+        if isinstance(declared, dict) and declared.get("shape") == "platform":
             return _row(slug, None, None, "skipped", "the platform repo is not updated from a template")
     if stamp is None or answers is None or not is_platform(answers, templates):
         return _row(slug, None, None, "skipped", "not a platform repo") if only else None

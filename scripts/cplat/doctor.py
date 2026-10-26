@@ -9,6 +9,7 @@ from pathlib import Path
 
 import core
 import settings
+import shapecmd
 from core import PLATFORM_ROOT, run
 
 OK, WARN, FAIL = "ok", "warn", "fail"
@@ -133,7 +134,7 @@ def check_repo(repo: Path) -> list[dict]:
         return []
     out = []
     try:
-        declared = settings.declared_shape(repo)
+        declared = settings.declared_shape(repo) and shapecmd.resolve(repo)   # resolve also refuses a conflicting .copier-answers.yml
     except settings.ShapeDeclarationError as e:
         return [check(FAIL, "repo shape", str(e), getattr(e, "hint", None))]
     if declared:
