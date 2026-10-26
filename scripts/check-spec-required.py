@@ -26,7 +26,7 @@ def verdict(body: str, labels: list[str], files: list[str]) -> str | None:
     if not code or any(f.startswith("docs/specs/") for f in files):
         return None
     return (f"this PR closes an issue and changes {len(code)} platform file(s) ({', '.join(code[:3])}{' …' if len(code) > 3 else ''}) "
-            "but no spec under docs/specs/. Write one with /svc:spec (CLAUDE.md: platform changes start with a spec), "
+            "but no spec under docs/specs/. Write one with /component:spec (CLAUDE.md: platform changes start with a spec), "
             "or add the label `no-spec` for a one-line fix or docs.")
 
 

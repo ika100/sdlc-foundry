@@ -1,4 +1,4 @@
-"""Gates that can fail (spec 081): static checks that a repo's CI gates are real, used by `cplat doctor` and `cplat adopt`.
+"""Gates that can fail (spec 081): static checks that a repo's CI gates are real, used by `cplat platform doctor` and `cplat adopt`.
 
 A gate can pass while checking nothing: a secrets baseline without its filters, a scanner that changes with every
 machine, a `ci` recipe that skips a job, or a CI workflow that never runs a gate. Each check here is a file read, so it
@@ -104,9 +104,9 @@ def check_gates(repo: Path) -> list[dict]:
             v = pkgs[tool]
             out.append(_check(OK, f"gate {tool} pinned", v) if v != "latest" else
                        _check(FAIL, f"gate {tool} pinned", "@latest: local and CI can disagree",
-                              f"pin it in devbox.json (the template's version: /shared:update-service)"))
+                              f"pin it in devbox.json (the template's version: /platform:update)"))
     missing = [r for r in ("ci", "secrets-baseline") if r not in scripts]
-    out.append(_check(WARN, "gate recipes", "missing: " + ", ".join(missing), "/shared:update-service adds them") if missing else
+    out.append(_check(WARN, "gate recipes", "missing: " + ", ".join(missing), "/platform:update adds them") if missing else
                _check(OK, "gate recipes", "ci, secrets-baseline"))
     wf = workflow_gates(repo)
     if "ci" in scripts and wf:
@@ -116,7 +116,7 @@ def check_gates(repo: Path) -> list[dict]:
         name = "gate ci = CI workflow"
         if CI_EXTRA in scripts and CI_EXTRA not in want:
             out.append(_check(WARN, name, "CI does not run ci-extra: no job of .github/workflows/ci.yml runs devbox run ci-extra",
-                              "/shared:update-service"))
+                              "/platform:update"))
         elif real == want:
             if CI_EXTRA in scripts:
                 inner = " → ".join(chain(scripts[CI_EXTRA])) or scripts[CI_EXTRA]

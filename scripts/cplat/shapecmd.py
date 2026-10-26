@@ -1,4 +1,4 @@
-"""`shape`: detect the repo's shape and print the agent routing the /svc:* orchestrators use (agent routing)."""
+"""`shape`: detect the repo's shape and print the agent routing the /component:* orchestrators use (agent routing)."""
 from __future__ import annotations
 
 import argparse
@@ -28,7 +28,7 @@ def route(repo: Path) -> dict:
         agents["migrations"] = "svc:migrations"
     out = {"shape": shape, "plugin": plugin, "deployable": entry["deployable"], "library": entry["library"], "agents": agents}
     if shape == "gitops-app":
-        out["unsupported"] = "/svc:* commands do not apply to a gitops-app repo; use /gitops:compose, /gitops:promote or /app:spec"
+        out["unsupported"] = "/component:* commands do not apply to a gitops-app repo; use /system:spec, /component:add or /instance:promote"
     return out
 
 

@@ -1,4 +1,4 @@
-"""cplat build — /svc:build Phase 2: the schedule, the conflict-safe merge and the re-plan after a conflict (spec 094).
+"""cplat component build — /component:build Phase 2: the schedule, the conflict-safe merge and the re-plan after a conflict (spec 094).
 
   cplat.py build schedule <spec> [--json]
   cplat.py build merge <spec> <task> <branch> [--helper PATH]...     exit 0 merged, 3 set aside, 4 escalate
@@ -34,7 +34,7 @@ def _out(repo: Path, *args: str) -> str:
 def _load(repo: Path, ref: str) -> tuple[specmod.Spec, list[dict]]:
     sp = specmod.find(repo, ref)
     if not sp.plan:
-        raise PlatformError(f"{sp.id} has no plan.md", hint=f"run `/svc:plan {sp.number}`")
+        raise PlatformError(f"{sp.id} has no plan.md", hint=f"run `/component:plan {sp.number}`")
     return sp, [t for t in (sp.plan[0].get("tasks") or []) if isinstance(t, dict)]
 
 
@@ -196,7 +196,7 @@ def main(argv: list[str]) -> int:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--repo", default=".")
     common.add_argument("spec")
-    ap = argparse.ArgumentParser(prog="cplat build", description=__doc__)
+    ap = argparse.ArgumentParser(prog="cplat component build", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("schedule", "state"):
         sub.add_parser(name, parents=[common]).add_argument("--json", action="store_true")

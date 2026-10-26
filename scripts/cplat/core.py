@@ -128,7 +128,7 @@ def read_stamp(repo: Path) -> dict[str, str]:
 
 def write_stamp(repo: Path, shape: str, ref: str) -> None:
     (repo / ".platform-version").write_text(
-        "# Written by /shared:new-service and /shared:update-service; read by /shared:doctor.\n"
+        "# Written by /component:new and /platform:update; read by /platform:doctor.\n"
         f"platform: {platform_version()}\nshape: {shape}\nref: {ref}\n"
     )
 

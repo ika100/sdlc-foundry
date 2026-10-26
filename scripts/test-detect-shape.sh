@@ -17,7 +17,7 @@ expect() { # name expected dir
 
 mk() { local d="$tmp/$1"; mkdir -p "$d"; echo "$d"; }
 
-# (a) copier answers — local path form (what /shared:new-service produces) and gh: form
+# (a) copier answers — local path form (what /component:new produces) and gh: form
 shapes=$(uv run "$here/shapes.py" ids 2>/dev/null || python3 - <<'PY'
 print("service-python library-python web-nextjs gitops-app service-java service-go")
 PY

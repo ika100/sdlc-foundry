@@ -269,7 +269,7 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
     rank = RANK.get(spec.status, -1)  # superseded has no rank: it never satisfies --require
     if require and rank < RANK[require]:
         errs.append(f"status is '{spec.status}', needs '{require}' or later"
-                    + (f" — approve it with `/svc:spec approve {spec.number}`" if require == "approved" else ""))
+                    + (f" — approve it with `/component:spec approve {spec.number}`" if require == "approved" else ""))
     if spec.status == "superseded":
         return errs
     if rank >= RANK["approved"]:
@@ -294,7 +294,7 @@ def check_plan(spec: Spec, meta: dict, _body: str) -> list[str]:
     if spec.meta.get("shape") and meta.get("shape") != spec.meta["shape"]:
         errs.append(f"shape '{meta.get('shape')}' must equal the spec's shape '{spec.meta['shape']}'")
     if meta["spec_hash"] != spec.ac_hash():
-        errs.append("the acceptance criteria changed after this plan was written; re-plan with `/svc:plan "
+        errs.append("the acceptance criteria changed after this plan was written; re-plan with `/component:plan "
                     f"{spec.number}` (or set spec_hash: {spec.ac_hash()} if the change does not affect the tasks)")
     tasks = meta["tasks"]
     if not isinstance(tasks, list) or not tasks:
@@ -642,7 +642,7 @@ def approve(spec: Spec, shape: str | None) -> None:
     errs = check(trial, shape=shape)
     if errs:
         raise PlatformError(f"{spec.id} cannot be approved: " + "; ".join(errs),
-                            hint=f"fix the spec (`/svc:spec --amend {spec.number}`), then approve again")
+                            hint=f"fix the spec (`/component:spec --amend {spec.number}`), then approve again")
     spec.meta["status"] = "approved"
     save(spec.dir / "spec.md", spec.meta, add_changelog(spec.body, "approved"))
 
@@ -669,7 +669,7 @@ def set_status(spec: Spec, status: str, reason: str | None, *, unverified: bool 
         if result != "pass" and not unverified:
             why = "has no verification.md" if result is None else "verification.md does not say **Result:** pass"
             raise PlatformError(f"{spec.id} {why}; done means a reviewer checked every criterion",
-                                hint=f"run `/svc:verify {spec.number}` (or `--unverified --reason <why>` to record an exception)")
+                                hint=f"run `/component:verify {spec.number}` (or `--unverified --reason <why>` to record an exception)")
         if result != "pass":
             if not reason:
                 raise PlatformError("--unverified needs --reason: the exception is recorded in the spec's changelog")
@@ -734,19 +734,19 @@ def _set_done_in_text(text: str, task_id: str) -> str | None:
 # ---------------- list / index ----------------
 
 def next_step(spec: Spec) -> str:
-    """The command that moves this spec on. Product specs (gitops-app) use /app:*, with the plan in docs/plan/<id>.md."""
+    """The command that moves this spec on. Product specs (gitops-app) use /system:*, with the plan in docs/plan/<id>.md."""
     n = spec.number
     product = spec.meta.get("shape") == "gitops-app"
-    prefix = "/app" if product else "/svc"
+    prefix = "/system" if product else "/component"
     planned = (spec.dir.parents[2] / "docs" / "plan" / f"{spec.id}.md").is_file() if product else bool(spec.plan)
     if spec.status == "draft":
         return f"{prefix}:spec --amend {n}" if spec.open_questions() or not spec.active_acs() else f"{prefix}:spec approve {n}"
     if spec.status == "approved" and not planned:
         return f"{prefix}:plan {n}"
     if spec.status in {"approved", "building"}:
-        return f"{prefix}:build {n}"
+        return f"/system:ship {n}" if product else f"/component:build {n}"
     if spec.status == "done" and not product and verification_result(spec) != "pass":
-        return f"/svc:verify {n}"   # spec 068: done without evidence
+        return f"/component:verify {n}"   # spec 068: done without evidence
     return "—"
 
 
@@ -775,7 +775,7 @@ def index_table(root: Path) -> str:
         lines.append(f"| [{r['id']}]({Path('specs') / r['id'] / 'spec.md'}) — {r['title']} | {r['priority']} | "
                      f"{r['status']} | {r['acs']} | {tracks} |")
     if not rows:
-        lines.append("| (no specs yet: `/svc:spec <description>`) | | | | |")
+        lines.append("| (no specs yet: `/component:spec <description>`) | | | | |")
     return "\n".join(lines)
 
 
@@ -1085,7 +1085,7 @@ def main(argv: list[str]) -> int:
         if ns.json:
             print(json.dumps(rows, indent=2))
         elif not rows:
-            print("(no open specs — start one with `/svc:spec <description>`)")
+            print("(no open specs — start one with `/component:spec <description>`)")
         else:
             for r in rows:
                 tasks = f"{r['tasks_done']}/{r['tasks']} tasks" if r["tasks"] else "no plan"

@@ -1,9 +1,9 @@
 """`headless`: run a slash command unattended with `claude -p`, and start it again until its ship run is finished (spec 070).
 
-  cplat headless "/svc:ship 012"                         run in the current repo until done, escalated or out of runs
-  cplat headless "/svc:ship 012" --quiet 23:30-07:00     never start a run inside that window (e.g. nightly jobs on the
+  cplat headless "/component:ship 012"                         run in the current repo until done, escalated or out of runs
+  cplat headless "/component:ship 012" --quiet 23:30-07:00     never start a run inside that window (e.g. nightly jobs on the
                                                          same subscription); wait for it to end, or --no-wait to exit
-  cplat headless --dry-run "/svc:fix-bug ..."            print the claude command
+  cplat headless --dry-run "/component:fix ..."            print the claude command
 
 Each run is a fresh `claude -p` session with `--permission-mode acceptEdits` and the repo's committed permission allowlist:
 file edits inside the repo are accepted, any other tool not allowlisted is refused instead of prompting, so nobody has to watch. A run ends when Claude stops, the
@@ -155,7 +155,7 @@ def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str 
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat headless", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("prompt", nargs="+", help="the prompt, usually a slash command such as /svc:ship 012")
+    ap.add_argument("prompt", nargs="+", help="the prompt, usually a slash command such as /component:ship 012")
     ap.add_argument("--repo", default=".")
     ap.add_argument("--max-runs", type=int, default=6, help="sessions in total (each resumes the last)")
     ap.add_argument("--max-minutes", type=float, default=240, help="wall-clock budget for all sessions together (from the first start)")
@@ -172,7 +172,7 @@ def main(argv: list[str]) -> int:
         raise PlatformError(f"{repo} is not a git repository")
     if not (repo / ".claude" / "settings.json").is_file():
         raise PlatformError("no .claude/settings.json: an unattended run needs the repo's committed permission allowlist",
-                            hint="/shared:update-service (or cplat adopt) brings it")
+                            hint="/platform:update (or cplat adopt) brings it")
     telemetry.reset()
     prompt = " ".join(ns.prompt)
     window = parse_window(ns.quiet)
