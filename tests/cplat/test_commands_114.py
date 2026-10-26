@@ -171,7 +171,8 @@ def test_resource_add_observability_changes_nothing_and_points_to_the_environmen
 
 def test_resource_add_another_name_is_refused_ac_114_36(gitops5, capsys):  # AC-114.36
     rc, _, err = run("resource", "add", "redis", "--repo-dir", gitops5, capsys=capsys)
-    assert rc == 1 and "5.0 supports one database resource named postgres" in err
+    # spec 115 (AC-115.1): the type is no longer implied for other names
+    assert rc == 1 and "--type is required for redis (database, bucket, cache or broker)" in err
 
 
 def test_resource_remove_refuses_while_used_then_removes_ac_114_36(gitops5, capsys):  # AC-114.36

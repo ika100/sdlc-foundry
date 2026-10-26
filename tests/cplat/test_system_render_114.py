@@ -5,6 +5,7 @@ hand-built checkout (system_fixtures.render5), exactly like `devbox run render`.
 renderer (scripts/cplat/assets/render_v4.py, plan t1) on the same system written as app.yaml + services.yaml."""
 import copy
 import importlib.util
+import re
 import subprocess
 import sys
 
@@ -37,6 +38,9 @@ def overlay(g, env, comp, fname):
     return yaml.safe_load(g[f"{APP}/overlays/{env}/{comp}/{fname}"])
 
 
+PINNED_IMAGE = re.compile(r"(imageName: ghcr\.io/cloudnative-pg/postgresql:)(\d+)\S*")  # spec 115: the design's normalisation regex
+
+
 def same_as_4x(tmp_path, doc5, app4=None, services4=None, pins=None):
     """Render the 5.0 document and the 4.7 files of the same system: the generated trees must be equal."""
     r4, r5 = tmp_path / "v4", tmp_path / "v5"
@@ -47,6 +51,8 @@ def same_as_4x(tmp_path, doc5, app4=None, services4=None, pins=None):
     p5 = render5(r5, doc5, pins=pins)
     assert p5.returncode == 0, p5.stdout + p5.stderr
     a, b = generated(r4), generated(r5)
+    # spec 115 (AC-115.6): the database image is pinned to a patch release; only imageName is normalised, to its major version
+    a, b = ({k: PINNED_IMAGE.sub(r"\1\2", v) for k, v in t.items()} for t in (a, b))
     assert sorted(a) == sorted(b), f"files differ: only 4.7 {sorted(set(a) - set(b))}, only 5.0 {sorted(set(b) - set(a))}"
     first = next((k for k in sorted(a) if a[k] != b[k]), None)
     assert first is None, f"{first} differs between the 4.7 and the 5.0 render"
@@ -128,7 +134,7 @@ def test_a_missing_environments_key_fails_ac_114_3(tmp_path):  # AC-114.3
 def test_an_unknown_environment_key_fails_naming_environment_key_and_allowed_ac_114_4(tmp_path):  # AC-114.4
     doc = full5()
     doc["environments"]["staging"]["replicas"] = 2
-    fails(tmp_path, doc, "environments.staging: unknown key 'replicas'", "(allowed: host, url, policy, promote, observability)")
+    fails(tmp_path, doc, "environments.staging: unknown key 'replicas'", "(allowed: host, url, policy, promote, observability, operators)")  # spec 115: operators (AC-115.18)
 
 
 @pytest.mark.parametrize("key", ["hosts", "urls", "mode", "addons"])
@@ -503,11 +509,21 @@ def test_the_resource_is_rendered_only_where_a_running_component_uses_it_ac_114_
     assert not [k for k in g if "/postgres/" in k]
 
 
-@pytest.mark.parametrize("resource", [{"redis": {"type": "database"}}, {"postgres": {"type": "queue"}}, {"postgres": {}}])
-def test_another_resource_name_or_type_fails_ac_114_19(tmp_path, resource):  # AC-114.19
+# spec 115 (AC-115.1): any name may carry a database; the type is required and must be one of the four
+def test_another_resource_name_renders_when_the_type_is_a_database_ac_114_19(tmp_path):  # AC-114.19
+    doc = copy.deepcopy(FULL5)
+    doc["resources"] = {"redis": {"type": "database"}}
+    component(doc)["uses"] = ["redis"]
+    ok(tmp_path, doc)
+
+
+@pytest.mark.parametrize("resource,msg", [
+    ({"postgres": {"type": "queue"}}, "resources.postgres: type 'queue' is not a resource type (database, bucket, cache or broker)"),
+    ({"postgres": {}}, "resources.postgres: type is required (database, bucket, cache or broker)")])
+def test_another_resource_name_or_type_fails_ac_114_19(tmp_path, resource, msg):  # AC-114.19
     doc = copy.deepcopy(FULL5)
     doc["resources"] = resource
-    fails(tmp_path, doc, "5.0 supports one database resource named postgres (type: database)")
+    fails(tmp_path, doc, msg)
 
 
 def test_a_resource_named_observability_points_to_the_environment_ac_114_19(tmp_path):  # AC-114.19
@@ -520,7 +536,7 @@ def test_an_unknown_resource_key_fails_ac_114_19(tmp_path):  # AC-114.19
     doc = copy.deepcopy(FULL5)
     doc["resources"]["postgres"]["instances"] = 3
     doc["resources"]["postgres"]["size"] = "big"
-    fails(tmp_path, doc, "resources.postgres: unknown key 'size' (allowed: type, version, replicas, storage, resources, instances)")
+    fails(tmp_path, doc, "resources.postgres: unknown key 'size' (allowed: type, external, remote, version, replicas, storage, resources, instances)")
 
 
 # ---------------- AC-114.20: versions live in the overlays ----------------

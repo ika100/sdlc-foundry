@@ -143,9 +143,10 @@ def test_components_resources_and_resource_instances_ac_113_15(doc):  # AC-113.1
     assert api["external"] is None and api["metrics"] == "/metrics" and api["expose"] is True and api["promotion"] == {"staging": "manual"}
     stock = next(c for c in doc["components"] if c["name"] == "stock")
     assert stock["external"] == {"kind": "kustomize", "namespace": "stock"}
-    assert doc["resources"] == [{"name": "postgres", "type": "database", "used_by": ["shop-api"]}]
+    assert doc["resources"] == [{"name": "postgres", "type": "database", "external": False, "used_by": ["shop-api"]}]  # spec 115: external (AC-115.15)
     assert [(r["resource"], r["environment"], r["argo_application"], r["secret"]) for r in doc["resource_instances"]] == [
         ("postgres", "dev", "addon-postgres-dev", "shop-postgres-app"), ("postgres", "staging", "addon-postgres-staging", "shop-postgres-app")]
+    assert [(r["type"], r["external"], r["store_key"]) for r in doc["resource_instances"]] == [("database", False, None)] * 2  # spec 115 (AC-115.15)
     assert doc["resource_instances"][0]["sizing"] == {"replicas": 1, "version": 17, "storage": "1Gi"}
 
 

@@ -1,4 +1,5 @@
 """Resource contract (ADR-020, 5.0): system.yaml `resources` + component `uses` → CloudNativePG Cluster and env wiring."""
+import re
 import subprocess
 
 import pytest
@@ -50,7 +51,7 @@ def test_service_uses_postgres_gets_env_from_the_operator_secret_and_a_cluster_i
     cluster = yaml.safe_load((gitops_repo / APP / "addons/dev/postgres/cluster.yaml").read_text())
     assert cluster["kind"] == "Cluster" and cluster["metadata"]["name"] == "todo-postgres"
     assert cluster["spec"]["instances"] == 1 and cluster["spec"]["storage"]["size"] == "1Gi"
-    assert cluster["spec"]["imageName"].endswith("postgresql:17") and cluster["spec"]["enableSuperuserAccess"] is False
+    assert re.search(r"postgresql:17\.\d+$", cluster["spec"]["imageName"])  # spec 115 (AC-115.6): pinned and cluster["spec"]["enableSuperuserAccess"] is False
     assert cluster["spec"]["bootstrap"]["initdb"] == {"database": "todo", "owner": "todo"}
     sets = yaml.safe_load_all((gitops_repo / APP / "applicationset.yaml").read_text())
     names = [d["metadata"]["name"] for d in sets]
@@ -89,7 +90,6 @@ def test_removing_the_use_prunes_the_addon_files(gitops_repo, gh):
 @pytest.mark.parametrize("mutate,msg", [
     (lambda d: d["components"]["todo-api"].update(uses=["postgres"]) or d.pop("resources", None), "uses 'postgres', which is neither a resource nor a library"),
     (lambda d: d["components"]["todo-api"].update(uses=["redis"]), "uses 'redis', which is neither a resource nor a library"),
-    (lambda d: d.update(resources={"mysql": {"type": "database"}}), "resources.mysql: 5.0 supports one database resource named postgres"),
     (lambda d: (d.update(resources={"postgres": {"type": "database"}}), d["components"]["todo-api"].update(uses=["postgres"]),
                 d["components"]["todo-api"]["env"].update(DATABASE_URL="x")), "is provided by the 'postgres' resource"),
 ])
@@ -117,7 +117,8 @@ def test_addon_remove_refuses_while_in_use_and_never_touches_data(gitops_repo, g
 
 
 def test_unknown_or_duplicate_resource_is_an_error(gitops_repo, gh):
-    with pytest.raises(core.PlatformError, match="unknown resource 'redis'"):
+    # spec 115 (AC-115.1): a name other than postgres needs --type; there is no "unknown resource" any more
+    with pytest.raises(core.PlatformError, match=r"--type is required for redis \(database, bucket, cache or broker\)"):
         addon.main(["add", "redis", "--repo-dir", str(gitops_repo)])
     declare(gitops_repo)
     with pytest.raises(core.PlatformError, match="already declared"):

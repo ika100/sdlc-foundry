@@ -175,9 +175,9 @@ Instances:
   stock  dev  sha-abc1234  replicas -  namespace stock  url -
 
 Resources:
-  postgres  type database  used by shop-api
-    dev  replicas 1  version 17  storage 1Gi  argo addon-postgres-dev  secret shop-postgres-app
-    staging  replicas 1  version 17  storage 1Gi  argo addon-postgres-staging  secret shop-postgres-app
+  postgres  type database  external false  used by shop-api
+    dev  type database  external false  replicas 1  version 17  storage 1Gi  argo addon-postgres-dev  secret shop-postgres-app
+    staging  type database  external false  replicas 1  version 17  storage 1Gi  argo addon-postgres-staging  secret shop-postgres-app
 """
 
 # ---------------- a rich app: every rule of the model once ----------------
