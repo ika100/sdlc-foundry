@@ -322,7 +322,7 @@ def test_ac_123_11_platform_update_refuses_the_platform_repo(tmp_path, capsys, e
     assert rc == 1
     assert "the platform repo is not updated from a template" in err
     assert files(r) == before and git(r, "status", "--porcelain") == ""
-    assert git(r, "branch", "--show-current") == "main"
+    assert git(r, "branch", "--show-current").strip() == "main"
 
 
 class FakeFleetGh:
