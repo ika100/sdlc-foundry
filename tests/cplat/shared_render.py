@@ -5,12 +5,31 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import shlex
 import shutil
 from pathlib import Path
 from typing import Callable
 
 TAIL_LINES = 20
+
+
+@contextlib.contextmanager
+def _git_quiet():
+    """Build with git auto-maintenance off: a detached `git maintenance` would keep changing the source's .git after the build."""
+    saved = {k: v for k, v in os.environ.items() if k.startswith("GIT_CONFIG_")}
+    count = int(os.environ.get("GIT_CONFIG_COUNT") or 0)
+    extra = [("maintenance.auto", "false"), ("gc.auto", "0")]
+    for i, (k, v) in enumerate(extra, start=count):
+        os.environ[f"GIT_CONFIG_KEY_{i}"] = k
+        os.environ[f"GIT_CONFIG_VALUE_{i}"] = v
+    os.environ["GIT_CONFIG_COUNT"] = str(count + len(extra))
+    try:
+        yield
+    finally:
+        for k in [k for k in os.environ if k.startswith("GIT_CONFIG_")]:
+            del os.environ[k]
+        os.environ.update(saved)
 
 
 class RenderFailed(Exception):
@@ -30,7 +49,7 @@ class SharedRenders:
         self.builds[key] = 1
         out = io.StringIO()
         try:
-            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out), _git_quiet():
                 source = Path(build(workdir))
             if not source.is_dir():
                 raise NotADirectoryError(f"build returned {str(source)!r}, which is not a directory")
