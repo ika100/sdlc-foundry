@@ -33,17 +33,26 @@ Almost every web product needs a fast key-value store for sessions, rate limits,
 
 ### The connection contract
 
-- **AC-118.9** Given a component whose `uses` lists a cache resource `<name>`, when it is rendered in an environment, then the component gets `REDIS_URL` (`redis://:<password>@<host>:6379/0`), `REDIS_HOST`, `REDIS_PORT` and `REDIS_PASSWORD`, each read with `secretKeyRef` from the keys `url`, `host`, `port` and `password` of the Secret `<system>-<name>-auth` in that environment's namespace; for a second resource of the same type the variable names follow the rule of spec 115.
-- **AC-118.10** Given a cache instance, when the Secret `<system>-<name>-auth` is created, then its password is generated (32 characters) and never appears in git, and later renders, syncs and restarts of the cache keep the same Secret name, keys and password.
+- ~~**AC-118.9**~~ withdrawn 2026-10-26: the resource Secret is named `<system>-<name>-app` and the prefix rule of spec 115 is settled; replaced by AC-118.18.
+- ~~**AC-118.10**~~ withdrawn 2026-10-26: Secret renamed to `<system>-<name>-app`; replaced by AC-118.19.
 - **AC-118.11** Given a running cache instance, when a client connects without a password or with a wrong one, then every command except `AUTH` and `HELLO` is refused (`NOAUTH` or `WRONGPASS`); with the password from the Secret, `PING` answers `PONG`.
-- **AC-118.12** Given a cache resource marked external in an environment with the mechanism of spec 115, when it is rendered, then no Valkey runs in that environment, the Secret `<system>-<name>-auth` is filled from the secret store keys `url`, `host`, `port` and `password` of that resource, and the component gets the same four variables as in AC-118.9; a `url` starting with `rediss://` (TLS, as ElastiCache, Memorystore and Upstash use) is passed unchanged.
+- ~~**AC-118.12**~~ withdrawn 2026-10-26: Secret renamed to `<system>-<name>-app`; replaced by AC-118.20.
+- **AC-118.18** Given a component whose `uses` lists one cache resource `<name>`, when it is rendered in an environment, then the component gets `REDIS_URL` (`redis://:<password>@<host>:6379/0`), `REDIS_HOST`, `REDIS_PORT` and `REDIS_PASSWORD`, each read with `secretKeyRef` from the keys `url`, `host`, `port` and `password` of the Secret `<system>-<name>-app` in that environment's namespace; given a component that uses two or more cache resources, then every one of them gets the four variables prefixed with `<NAME>_` by the rule of spec 115 (for a resource `sessions`: `SESSIONS_REDIS_URL`, `SESSIONS_REDIS_HOST`, `SESSIONS_REDIS_PORT`, `SESSIONS_REDIS_PASSWORD`), and all components that use one cache share database `0` and one password.
+- **AC-118.19** Given a cache instance, when the Secret `<system>-<name>-app` is created, then its password is generated (32 characters) and never appears in git, and later renders, syncs, restarts and upgrades of the cache keep the same Secret name, keys and password.
+- **AC-118.20** Given a cache resource marked external in an environment with the mechanism of spec 115, when it is rendered, then no Valkey runs in that environment, the Secret `<system>-<name>-app` is filled from the secret store keys `url`, `host`, `port` and `password` of that resource (the same keys as the in-cluster Secret), and the component gets the same variables as in AC-118.18; a `url` starting with `rediss://` (TLS, as ElastiCache, Memorystore and Upstash use) is passed unchanged.
 - **AC-118.13** Given `/resource:remove <name>` for a cache resource that a component still uses, when it runs, then it changes nothing and fails naming the components that use it.
 
 ### Backups, docs and the local cluster
 
 - **AC-118.14** Given a system with a cache resource and the backups of spec 117, when the backup schedules are rendered, then no cache instance (with or without `persistence`) is part of any backup, and the resource docs say that cache data is not backed up.
 - **AC-118.15** Given the local cluster from `cluster-up` with nothing installed beyond the platform's prerequisites, when the end-to-end test deploys a system with a cache resource and a component that uses it to dev, then the component SETs a key and GETs the same value back through `REDIS_URL`, and `/platform:doctor` reports no missing prerequisite for the cache.
-- **AC-118.16** Given `docs/DOMAIN-MODEL.md` and the resource docs after this spec is built, when they are read, then they list `cache` as a resource type that speaks the Redis protocol and runs Valkey (with the licence reason), its keys and defaults, the four variables, the Secret `<system>-<name>-auth` and its keys as the contract other specs (such as 120) may rely on, and that the type is not called `redis`.
+- ~~**AC-118.16**~~ withdrawn 2026-10-26: Secret renamed to `<system>-<name>-app`; replaced by AC-118.21.
+- **AC-118.21** Given `docs/DOMAIN-MODEL.md` and the resource docs after this spec is built, when they are read, then they list `cache` as a resource type that speaks the Redis protocol and runs Valkey (with the licence reason), its keys and defaults, the four variables and their `<NAME>_` prefix rule, the Secret `<system>-<name>-app` and its keys as the contract other specs (such as 120) may rely on, and that the type is not called `redis`.
+
+### Place in 5.x
+
+- **AC-118.22** Given spec 114 as approved, when this spec is built, then it is an additive 5.x extension of the closed list of resource types in AC-114.19 (as opened by spec 115) and of the `/resource:add` types of AC-114.36: `cache` is accepted there, every other type and message of those criteria is unchanged, and no criterion of spec 114 is amended.
+- **AC-118.23** Given a cache instance in any environment, when it runs, then it is one Valkey StatefulSet rendered by the platform from the official Valkey image whose exact release is listed in the versions table of spec 121, with no operator, CRD or Helm chart; `environments.<env>.operators: owner` changes nothing for a cache, and `/platform:doctor` reports no prerequisite for it on any cluster.
 
 ### Upgrades
 
@@ -64,15 +73,16 @@ Almost every web product needs a fast key-value store for sessions, rate limits,
 
 ## Open questions
 
-- How does a cache instance run? (suggested: a single-node Valkey StatefulSet rendered by the platform from the official Valkey image, no operator and no chart, so the local cluster needs no new prerequisite; alternatives: a Valkey operator as a cluster prerequisite, which brings HA later but adds a CRD; or a Helm chart, where the Bitnami catalog moved its free images to a legacy repository in 2025 and the official Valkey chart is young; affects AC-118.3, AC-118.7, AC-118.15)
-- Which variables does a using component get? (suggested: `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT` and `REDIS_PASSWORD`; alternatives: only `REDIS_URL`; or the four plus `VALKEY_URL`; affects AC-118.9, AC-118.12)
-- Confirm: the Secret is named `<system>-<name>-auth` with keys `url`, `host`, `port`, `password`, unless spec 115 fixes a common naming rule for resource Secrets. (suggested: yes, and align with 115 if it names one; affects AC-118.9, AC-118.10, AC-118.12, AC-118.16)
-- Confirm the defaults: one node, memory `256Mi`, `allkeys-lru`, persistence off, `storage` `1Gi` when on, `maxmemory` at 80 % of the memory limit. (suggested: yes; affects AC-118.3, AC-118.6, AC-118.7)
-- Which Valkey versions are supported and which is the default? (suggested: majors `8` and `9`, default `9`; alternatives: only `9`; or default `8` for the longer track record; affects AC-118.3, AC-118.4)
-- How does `persistence: true` persist? (suggested: append-only file synced every second, so at most one second of writes is lost; alternatives: periodic snapshots only, losing up to minutes; or both; affects AC-118.7)
-- Should `type: redis` be an alias for `cache` instead of an error? (suggested: no, an error naming `cache`, so there is one word for the type; alternative: accept `redis` silently; affects AC-118.5)
-- Confirm: all components that use one cache share it (database `0`, one password). (suggested: yes; affects AC-118.9 and the Non-goals)
+- ~~How does a cache instance run?~~ Answered: a single-node Valkey StatefulSet rendered by the platform from the official image, no operator or chart. See AC-118.3 and AC-118.23.
+- ~~Which variables does a using component get?~~ Answered: `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, prefixed `<NAME>_` by spec 115's rule when a component uses two or more caches. See AC-118.18.
+- ~~Confirm the Secret name.~~ Answered: one rule for every resource type, `<system>-<name>-app`, keys `url`, `host`, `port`, `password`. See AC-118.18, AC-118.19, AC-118.20 and AC-118.21.
+- ~~Confirm the defaults.~~ Answered: yes (one node, `256Mi`, `allkeys-lru`, persistence off, `1Gi` when on, `maxmemory` 80 %). See AC-118.3, AC-118.6 and AC-118.7.
+- ~~Which Valkey versions are supported?~~ Answered: majors `8` and `9`, default `9`. See AC-118.4 and AC-118.17.
+- ~~How does `persistence: true` persist?~~ Answered: append-only file synced every second. See AC-118.7.
+- ~~Should `type: redis` be an alias?~~ Answered: no, an error naming `cache`. See AC-118.5.
+- ~~Confirm: components share one cache.~~ Answered: yes, database `0` and one password. See AC-118.18 and Non-goals.
 
 ## Changelog
 
 - 2026-10-26 created
+- 2026-10-26 open questions answered: Secret `<system>-<name>-app` (AC-118.9, .10, .12, .16 withdrawn, replaced by AC-118.18 to .21), `<NAME>_` prefix rule of spec 115, extension of AC-114.19 and AC-114.36 (AC-118.22), no operator and image pinned in spec 121's table (AC-118.23)

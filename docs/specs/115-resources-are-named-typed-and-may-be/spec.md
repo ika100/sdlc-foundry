@@ -9,7 +9,9 @@ priority: P1
 
 ## Problem
 
-In 5.0 (spec 114) a system can have exactly one resource, a database named `postgres`. A system whose components each own their data (orders, users) has to share that one database, and a team that runs its production database outside the cluster (a managed database service) cannot say so: the platform always runs the database itself, in every environment. The resources the series brings next (object storage, cache, message broker in specs 116, 118 and 119) cannot be declared at all. This spec is the foundation for them: a resource gets a name of its own and a type, each type gives the components that use it a fixed set of environment variables, and any resource instance may be external, so the platform runs nothing and the components read the same variables from the secret store. It ships as a 5.x minor release; every 5.0 `system.yaml` keeps rendering exactly as before.
+In 5.0 (spec 114) a system can have exactly one resource, a database named `postgres`. A system whose components each own their data (orders, users) has to share that one database, and a team that runs its production database outside the cluster (a managed database service) cannot say so: the platform always runs the database itself, in every environment. The resources the series brings next (object storage, cache, message broker in specs 116, 118 and 119) cannot be declared at all. This spec is the foundation for them: a resource gets a name of its own and a type, each type gives the components that use it a fixed set of environment variables, and any resource instance may be external, so the platform runs nothing and the components read the same variables from the secret store. It ships as a 5.x minor release; every 5.0 `system.yaml` keeps rendering as before (only the database image becomes exactly pinned).
+
+Spec 114 stays as approved. This spec adds to the closed lists of 114 without amending it: the resource names and types of AC-114.19 (one `postgres` database becomes any number of named, typed resources), the variables `uses` injects in AC-114.15, the environment keys of AC-114.4 (adds `operators`), the arguments of `/resource:add|remove` in AC-114.36, and the resource fields of `cplat model show` in AC-114.69. The top-level keys of AC-114.2 do not change.
 
 ## Stories
 
@@ -27,7 +29,7 @@ In 5.0 (spec 114) a system can have exactly one resource, a database named `post
 - **AC-115.2** Given a resource of type `bucket`, `cache` or `broker` in a release that does not yet run that type, when it is rendered or added with `/resource:add`, then it writes nothing and fails with one line naming the type and the spec that brings it (`bucket`: spec 116, `cache`: spec 118, `broker`: spec 119).
 - **AC-115.3** Given a resource name, when it is rendered, then it must start with a lowercase letter, contain only lowercase letters, digits and hyphens, and be at most 30 characters long; a resource with the same name as a component fails naming both, and a resource named `observability` still fails pointing to `environments.<env>.observability` (AC-114.19).
 - **AC-115.4** Given two or more resources of type `database` (for example `orders-db` and `users-db`), each with `version`, `replicas`, `storage`, `resources` and `instances.<env>` overrides, when they are rendered, then every environment where a running component uses a database gets one CloudNativePG cluster per used database, with that database's own values; changing one database's values changes no manifest of another.
-- **AC-115.5** Given the database resource named `postgres`, when it is rendered, then its Secret is `<system>-postgres-app` and its Argo application `addon-postgres-<env>` as in 5.0; given a database with another name `<name>`, then its Secret is `<system>-<name>-app` and its Argo application `addon-<name>-<env>`, and no two resources of a system share a cluster object name.
+- **AC-115.5** Given a resource `<name>` of any type, in-cluster or external, when it is rendered, then its connection Secret is `<system>-<name>-app` (so `postgres` keeps `<system>-postgres-app`) and an in-cluster resource instance's Argo application is `addon-<name>-<env>` (so `postgres` keeps `addon-postgres-<env>`); these names never change while the resource keeps its name, and no two resources of a system share a cluster object name.
 - **AC-115.6** Given any `system.yaml` that 5.0 accepts (including `resources.postgres` of `type: database`), when this release renders it, then the rendered tree is byte-identical to the 5.0 render except the database image reference, which AC-115.17 pins; and `cplat platform update --migrate` on a 4.7 repo writes the same `system.yaml` and the same rendered tree as 5.0 did.
 
 ### What a using component gets
@@ -44,7 +46,8 @@ In 5.0 (spec 114) a system can have exactly one resource, a database named `post
 
 ### Versions
 
-- **AC-115.17** Given a database resource with `version: N`, when it is rendered, then the CloudNativePG cluster runs an image the platform pins to an exact version (a full patch version or a digest, never a major-only or floating tag such as `postgresql:17`), and the operator and chart versions it relies on are pinned exactly per platform release; changing `version` or any of these pins follows the upgrade rules of spec 121.
+- **AC-115.17** Given a database resource with `version: N`, when it is rendered, then the CloudNativePG cluster runs an image the platform pins to an exact version (a full patch version or a digest, never a major-only or floating tag such as `postgresql:17`), and the operator and chart versions it relies on are pinned exactly per platform release; changing `version` or any of these pins follows the upgrade rules of spec 121, and an existing 5.0 cluster moves from its major-only tag to the pinned image under those same rules.
+- **AC-115.18** Given a system with at least one in-cluster database resource instance, when it is rendered for a cluster, then that cluster gets the CloudNativePG operator as an Argo CD application pinned to the version of spec 121's versions table, once per cluster; a cluster on which no environment of the system has an in-cluster database gets no operator application. Given `environments.<env>.operators: owner`, then the platform installs and upgrades no operator for that environment, and `/platform:doctor` lists, per operator the environment needs, the installed and the expected version and warns when one is missing or differs; any value of `operators` other than `owner` fails naming the environment and `owner`.
 
 ### Commands and the model
 
@@ -64,20 +67,24 @@ In 5.0 (spec 114) a system can have exactly one resource, a database named `post
 - Renaming the cluster objects of the resource `postgres` (Secret, Argo application, CloudNativePG cluster).
 - Off-the-shelf components (Node-RED and similar), for this whole series.
 - Any change to the 4.x → 5.0 migration.
+- Amending spec 114: this spec only adds to its closed lists.
+- Setting an external resource's store values through `/instance:secret set`; they are set in the store directly.
 
 ## Open questions
 
-- How do the variables of a component that uses two resources of the same type get distinct names? (suggested: an automatic prefix `<NAME>_` for every resource of that type once there are two or more, as in AC-115.8; note that adding a second database to a component then renames its existing `DATABASE_URL`; alternatives: keep the unprefixed names for one resource marked `primary: true` and prefix the others; or an explicit prefix per use, `uses: [{resource: users-db, prefix: USERS}]`; affects AC-115.8)
-- Which cluster names do databases other than `postgres` get? (suggested: Secret `<system>-<name>-app` and Argo application `addon-<name>-<env>`, the 5.0 pattern; alternative: Argo application `resource-<name>-<env>` to use the new noun, at the price of two patterns in the cluster; affects AC-115.5, AC-115.9)
-- Confirm: resource names are lowercase DNS-style, at most 30 characters, and may not equal a component name. (suggested: yes; affects AC-115.3)
-- Which key names must the store entry of an external database hold? (suggested: the keys of the in-cluster Secret, `uri`, `host`, `port`, `dbname`, `user`, `password`, so both Secrets look the same; alternative: the variable names `DATABASE_URL`, `PGHOST` etc.; affects AC-115.9, AC-115.12)
-- Confirm: the default store path of an external resource is `{system}-{env}-{resource}`, following the default of component secrets. (suggested: yes; affects AC-115.9)
-- Should `/instance:secret set` set the store values of an external resource? (suggested: not in this spec, the values are set in the store directly; alternative: yes, as `/instance:secret set <resource>/<env> <KEY>`; affects a new criterion)
-- Confirm: no `/resource:set`; the per-instance `external` override is edited in `system.yaml` by hand. (suggested: yes; alternative: `/resource:set <name> --instance <env> --external`; affects Non-goals or a new criterion)
-- Confirm: `cplat model show --json` stays at `schema` 2 and only adds fields. (suggested: yes, the change is additive; alternative: bump to 3; affects AC-115.15)
-- 5.0 renders the database image with a major-only tag (`postgresql:<version>`); pinning it exactly (AC-115.17) changes that one line for every existing system, so the 5.0 render is not byte-identical there. Accept this one difference? (suggested: yes, the pin is the only allowed difference, and switching an existing cluster to the pinned image rolls out through the environments under spec 121; alternatives: keep the 5.0 tag for existing systems and pin only new databases; or defer all pinning to spec 121; affects AC-115.6, AC-115.17)
-- Confirm: the message for a type not built yet names the spec, not a release version, because the version is not known yet. (suggested: yes; affects AC-115.2)
+- ~~How do the variables of a component that uses two resources of the same type get distinct names?~~ Answered: an automatic `<NAME>_` prefix for every resource of that type once there are two or more. See AC-115.8.
+- ~~Which cluster names do databases other than `postgres` get?~~ Answered: Secret `<system>-<name>-app` for every resource type, Argo application `addon-<name>-<env>`; never changes. See AC-115.5.
+- ~~Confirm: resource names are lowercase DNS-style, at most 30 characters, and may not equal a component name.~~ Answered: yes. See AC-115.3.
+- ~~Which key names must the store entry of an external database hold?~~ Answered: the keys of the in-cluster Secret (`uri`, `host`, `port`, `dbname`, `user`, `password`). See AC-115.9 and AC-115.12.
+- ~~Confirm: the default store path of an external resource is `{system}-{env}-{resource}`.~~ Answered: yes. See AC-115.9.
+- ~~Should `/instance:secret set` set the store values of an external resource?~~ Answered: not in this spec. See Non-goals.
+- ~~Confirm: no `/resource:set`.~~ Answered: yes, the override is edited in `system.yaml`. See Non-goals.
+- ~~Confirm: `cplat model show --json` stays at `schema` 2 and only adds fields.~~ Answered: yes. See AC-115.15.
+- ~~Accept the exact database image pin as the one difference from the 5.0 render?~~ Answered: yes; existing clusters move to the pinned image under spec 121. See AC-115.6 and AC-115.17.
+- ~~Confirm: the message for a type not built yet names the spec, not a release version.~~ Answered: yes. See AC-115.2.
+- ~~Who installs and upgrades the operators a resource needs?~~ Answered (series decision): the platform, as pinned Argo CD applications per cluster, only when needed; `environments.<env>.operators: owner` opts out and `/platform:doctor` compares versions. See AC-115.18.
 
 ## Changelog
 
 - 2026-10-26 created
+- 2026-10-26 amended: open questions answered as suggested; added exact version pins (AC-115.17) and operator installation with the `operators: owner` opt-out (AC-115.18); one Secret rule for all types (AC-115.5); named the AC-114 lists this spec extends
