@@ -19,6 +19,20 @@ cluster=e2e-local
 registry="k3d-${cluster}-registry"
 cplat="uv run $root/scripts/cplat/cplat.py"
 export PATH="$PATH:$HOME/.local/bin"
+if ! command -v devbox >/dev/null; then
+  # CI has no devbox: `devbox run <script>` runs the repo's devbox.json script with the runner's own tools
+  # (the smoke recipes `instance verify` calls need only uv, or java and mvn)
+  mkdir -p "$work/bin"
+  cat > "$work/bin/devbox" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}" = run ] && [ -n "${2:-}" ] || { echo "e2e devbox shim: only 'devbox run <script>'" >&2; exit 2; }
+cmd=$(python3 -c 'import json, sys; s = json.load(open("devbox.json"))["shell"]["scripts"][sys.argv[1]]; print(s if isinstance(s, str) else "\n".join(s))' "$2") || exit 2
+shift 2
+exec bash -c "$cmd" e2e-devbox "$@"
+SH
+  chmod +x "$work/bin/devbox"
+  export PATH="$work/bin:$PATH"
+fi
 fail() { echo "E2E FAIL: $*" >&2; exit 1; }
 step() { echo; echo "==> $*"; }
 
