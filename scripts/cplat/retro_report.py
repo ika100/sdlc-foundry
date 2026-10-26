@@ -7,6 +7,7 @@ placeholders, never a repo, spec or store name).
 from __future__ import annotations
 
 import datetime
+import math
 import re
 import statistics
 from collections import Counter
@@ -86,8 +87,7 @@ def _outcome(r: dict) -> str:
 
 
 def _cause(esc: dict) -> str:
-    c = esc.get("cause")
-    return c if c in CAUSES else UNKNOWN
+    return runs_report.escalation_rules.effective(esc).cause
 
 
 def _escalation(r: dict) -> dict | None:
@@ -213,6 +213,11 @@ def _escalations(cur: list[dict], prev: list[dict]) -> dict:
                    for i, (reason, rs) in enumerate(ranked, 1)]
         out[cause] = {"count": _fig(len(c), len(p)), "reasons": reasons}
     return out
+
+
+def _unclassified(cur: list[dict], prev: list[dict]) -> dict:
+    c, p = runs_report.aggregate_unclassified(cur), runs_report.aggregate_unclassified(prev)
+    return {k: _fig(c[k], p[k]) for k in ("count", "escalations", "share", "by_rule")}
 
 
 def _rerun_view(cur: list[dict], prev: list[dict]) -> dict:
@@ -356,6 +361,9 @@ def _index(rep: dict, side: str = "current") -> dict:
         if side == "current":
             for r in e["reasons"]:
                 put(f"escalations.{cause}.reason{r['rank']}", r["runs"])
+    for k, f in (rep.get("unclassified") or {}).items():   # a report.json from before spec 088 (#207)
+        if k in ("count", "share", "by_rule"):
+            put(f"unclassified.{k}", f[side])
     for k, f in rep["reruns"]["by_reason"].items():
         put(f"reruns.{k}", f[side])
     for c in rep["reruns"]["by_check"]:
@@ -398,7 +406,8 @@ def build(records: list[dict], *, auto_issues: list[dict], open_issues: list[dic
         "records": {"current": len(cur), "previous": len(prev), "malformed": malformed},
         "repos": {"by_shape": by_shape, "list": repo_list, "specs": specs_seen},
         "runs": _runs(cur, prev), "phases": _phases(cur, prev), "ci": _ci(cur, prev),
-        "pr_wait": _pr_wait(cur, prev), "escalations": _escalations(cur, prev), "reruns": _rerun_view(cur, prev),
+        "pr_wait": _pr_wait(cur, prev), "escalations": _escalations(cur, prev),
+        "unclassified": _unclassified(cur, prev), "reruns": _rerun_view(cur, prev),
         "issues": issues, "agents": agents, "no_data": no_data,
         "context": {"specs": specs, "open_issues": open_issues},
     }
@@ -467,6 +476,14 @@ def _agent_cell(row: dict, path: str) -> str:
     return f"{_a(cur)} (prev {_a(prev)}, {'n/a' if diff is None else f'{diff:+.2f}'})"
 
 
+def _unknown_share(u: dict) -> str:
+    def pct(x):
+        return "n/a" if x is None else f"{math.floor(100 * x + 0.5)}%"
+    s, n, m, b = u["share"], u["count"], u["escalations"], u["by_rule"]
+    return (f"unknown share: {pct(s['current'])} (prev {pct(s['previous'])}) · unknown {n['current']} of {m['current']} "
+            f"(prev {n['previous']} of {m['previous']}) · classified by rule {b['current']} (prev {b['previous']})")
+
+
 def _render(report: dict, proposals_md: str | None, public: bool) -> str:
     r = report
     kinds = _alias(list(r["runs"]), "kind") if public else {k: k for k in r["runs"]}
@@ -530,6 +547,8 @@ def _render(report: dict, proposals_md: str | None, public: bool) -> str:
     if "runs" in nd:
         out.append(none)
     else:
+        if r.get("unclassified"):
+            out.append(_unknown_share(r["unclassified"]))
         for cause, e in r["escalations"].items():
             out.append(f"{cause}: {_cell(e['count'])}")
             for x in e["reasons"]:

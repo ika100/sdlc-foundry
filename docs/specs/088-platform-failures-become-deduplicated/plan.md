@@ -79,6 +79,7 @@ tasks:
   covers: [AC-088.20, AC-088.21]
   parallel_safe: true
   depends_on: [t10]
+  done: true
 - id: t12
   title: docs for classified escalations
   files: [docs/CHANGELOG.md, docs/unattended-delivery.md]
