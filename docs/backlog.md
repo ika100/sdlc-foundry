@@ -21,7 +21,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [105-a-deploy-counts-only-after-its-checks](specs/105-a-deploy-counts-only-after-its-checks/spec.md) — A deploy counts only after its checks pass | P1 | approved | 8 | #155 |
 | [106-prod-runs-the-exact-image-staging-tested](specs/106-prod-runs-the-exact-image-staging-tested/spec.md) — Prod runs the exact image staging tested | P1 | approved | 12 | #157 |
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [114-the-platform-speaks-the-domain-model-5-0](specs/114-the-platform-speaks-the-domain-model-5-0/spec.md) — The platform speaks the domain model (5.0) | P1 | approved | 67 |  |
 | [115-resources-are-named-typed-and-may-be](specs/115-resources-are-named-typed-and-may-be/spec.md) — Resources are named, typed and may be external | P1 | approved | 18 |  |
 | [116-an-object-storage-resource-for-files-and](specs/116-an-object-storage-resource-for-files-and/spec.md) — An object storage resource for files and backups | P1 | approved | 16 |  |
 | [117-databases-and-environments-are-backed-up](specs/117-databases-and-environments-are-backed-up/spec.md) — Databases and environments are backed up and restorable | P1 | approved | 32 |  |
@@ -120,6 +119,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [100-leaner-runs-cheaper-coordinator-fewer](specs/100-leaner-runs-cheaper-coordinator-fewer/spec.md) — Leaner runs: cheaper coordinator, fewer turns, smaller context | P1 | done | 17 | #139 |
 | [112-fast-cplat-test-job-shared-renders-and](specs/112-fast-cplat-test-job-shared-renders-and/spec.md) — Fast cplat test job: shared renders and sharding | P1 | done | 15 |  |
 | [113-a-domain-model-core-in-cplat](specs/113-a-domain-model-core-in-cplat/spec.md) — A domain model core in cplat | P1 | done | 18 |  |
+| [114-the-platform-speaks-the-domain-model-5-0](specs/114-the-platform-speaks-the-domain-model-5-0/spec.md) — The platform speaks the domain model (5.0) | P1 | done | 67 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
