@@ -15,16 +15,18 @@ import yaml
 
 import core
 import gates
+import gitops
+import migrate5
 import settingsmerge
 from core import PLATFORM_ROOT, PlatformError, Report, run
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat update-service", description=__doc__)
+    p = argparse.ArgumentParser(prog="cplat platform update", description=__doc__)
     p.add_argument("--ref", default=None, help="platform ref being applied (informational; the running checkout is the source)")
     p.add_argument("--data", action="append", default=[], metavar="KEY=VALUE", help="change a template answer (repeatable)")
     p.add_argument("--repo", default=".", help="repo to update (default: current directory)")
-    p.add_argument("--migrate", action="store_true", help="v1 → v2: also delete the service's k8s/ directory (the gitops-app repo owns manifests now; import them first with `compose add <service> --from-k8s`)")
+    p.add_argument("--migrate", action="store_true", help="4.x → 5.0 (system.yaml, plugins; v1 `k8s/` removal included)")
     p.add_argument("--skip-tasks", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
@@ -53,9 +55,26 @@ def resolve(argv: list[str]) -> dict:
     shape = detect_shape(repo)
     entry = next(s for s in core.registry.load() if s["id"] == shape)
     stamp = core.read_stamp(repo)
-    return {"repo": repo, "shape": shape, "template": entry["template"], "data": ns.data, "old": stamp.get("platform"),
+    unmigrated = _major(stamp.get("platform")) < 5 or (shape == "gitops-app" and bool(_old_files(repo)))
+    if unmigrated and not ns.migrate:
+        raise PlatformError(f"this repo is on platform {stamp.get('platform') or 'none'}: 5.0 changes its files and plugins",
+                            hint="run cplat platform update --migrate (or /platform:update --migrate)")
+    return {"unmigrated": unmigrated,"repo": repo, "shape": shape, "template": entry["template"], "data": ns.data, "old": stamp.get("platform"),
             "new": core.platform_version(), "ref": ns.ref or stamp.get("ref") or "main", "skip_tasks": ns.skip_tasks, "migrate": ns.migrate,
             "dry_run": ns.dry_run, "json": ns.json}
+
+
+def _major(version: str | None) -> int:
+    try:
+        return int(str(version).split(".")[0])
+    except ValueError:
+        return -1
+
+
+def _old_files(repo: Path) -> list[str]:
+    """The 4.x inputs (applications/*/app.yaml, services.yaml) a gitops-app repo still has, as repo-relative paths."""
+    base = repo / "applications"
+    return sorted(p.relative_to(repo).as_posix() for f in ("app.yaml", "services.yaml") for p in base.glob(f"*/{f}"))
 
 
 def branch_name(repo: Path | None = None) -> str:
@@ -368,6 +387,121 @@ def pin_dev_steps(repo: Path, shape: str) -> list[str]:
     return []
 
 
+RENDER_V4 = PLATFORM_ROOT / "scripts" / "cplat" / "assets" / "render_v4.py"   # the frozen 4.7 renderer (spec 114)
+OLD_NAMES = ("app.yaml", "services.yaml")
+NOT_RENDERED = (*OLD_NAMES, "system.yaml")
+
+
+def _owner(repo: Path) -> str | None:
+    org = gitops.answers(repo).get("github_org")
+    if org:
+        return str(org)
+    url = run(["git", "remote", "get-url", "origin"], cwd=repo, check=False).stdout.strip()
+    m = re.search(r"github\.com[:/]([^/]+)/", url)
+    return m.group(1) if m else None
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    """Every generated file under applications/ and bootstrap/ (path -> bytes); the system's inputs are not generated."""
+    out: dict[str, bytes] = {}
+    for base in ("applications", "bootstrap"):
+        for p in sorted((root / base).rglob("*")) if (root / base).is_dir() else []:
+            if p.is_file() and p.name not in NOT_RENDERED:
+                out[p.relative_to(root).as_posix()] = p.read_bytes()
+    return out
+
+
+def convert_systems(repo: Path) -> list[dict]:
+    """Convert every 4.x application directory; any problem stops the migration before anything changes."""
+    owner = _owner(repo)
+    found: list[dict] = []
+    problems: list[str] = []
+    for rel in _old_files(repo):
+        d = Path(rel).parent
+        if any(f["dir"] == d for f in found):
+            continue
+        texts = {n: (repo / d / n).read_text() if (repo / d / n).is_file() else "" for n in OLD_NAMES}
+        try:
+            docs = {n: yaml.safe_load(t) or {} for n, t in texts.items()}
+        except yaml.YAMLError as e:
+            raise PlatformError(f"cannot migrate {d} to 5.0: {str(e).splitlines()[0]}", hint="nothing was changed; fix the YAML and run again") from e
+        conv = migrate5.convert(d.name, docs["app.yaml"], docs["services.yaml"], owner)
+        problems += [f"{d}/{p}" if p.startswith(OLD_NAMES) else p for p in conv.problems]
+        found.append({"dir": d, "text": migrate5.dump(conv.doc), "comments": any(migrate5.has_comments(t) for t in texts.values()),
+                      "deleted": [f"{d.as_posix()}/{n}" for n in OLD_NAMES if (repo / d / n).is_file()]})
+    if problems:
+        names = ", ".join(f["dir"].as_posix() for f in found)
+        raise PlatformError(f"cannot migrate {names} to 5.0: these values have no place in system.yaml:\n  " + "\n  ".join(problems),
+                            hint="nothing was changed; remove or move them, commit, and run again")
+    return found
+
+
+def reference_render(repo: Path, tmp: Path) -> dict[str, bytes]:
+    """What the frozen 4.7 renderer makes of HEAD (in a temporary copy)."""
+    root = tmp / "v4"
+    root.mkdir()
+    archive = subprocess.run(["git", "archive", "HEAD"], cwd=repo, capture_output=True, check=True).stdout
+    subprocess.run(["tar", "-x", "-C", str(root)], input=archive, capture_output=True, check=True)
+    (root / "scripts").mkdir(exist_ok=True)
+    shutil.copyfile(RENDER_V4, root / "scripts" / "render.py")
+    run(["uv", "run", "scripts/render.py"], cwd=root)
+    return _tree(root)
+
+
+def apply_systems(repo: Path, systems: list[dict], reference: dict[str, bytes]) -> None:
+    """Write system.yaml, delete the old inputs, render with the repo's 5.0 renderer and compare with the 4.7 render."""
+    for s in systems:
+        (repo / s["dir"] / "system.yaml").write_text(s["text"])
+        for rel in s["deleted"]:
+            (repo / rel).unlink()
+    gitops.render(repo)
+    after = _tree(repo)
+    diff = [f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
+    diff += [f"{p} (missing)" for p in sorted(reference) if p not in after]
+    diff += [f"{p} (extra)" for p in sorted(after) if p not in reference]
+    if diff:
+        names = ", ".join(s["dir"].as_posix() for s in systems)
+        raise PlatformError(f"cannot migrate {names} to 5.0: the 5.0 render differs from 4.7:\n  " + "\n  ".join(diff),
+                            hint="nothing was changed; report it with /issue:report")
+
+
+def _ignored(repo: Path) -> set[str]:
+    return set(run(["git", "ls-files", "--others", "--ignored", "--exclude-standard"], cwd=repo, check=False).stdout.splitlines())
+
+
+def rollback(repo: Path, cur: str, branch: str, created: bool, ignored: set[str]) -> None:
+    """Back to the state before the migration: tracked files, untracked files and the ignored files the migration made."""
+    run(["git", "reset", "--hard", "-q"], cwd=repo, check=False)
+    run(["git", "clean", "-fdq"], cwd=repo, check=False)
+    for rel in _ignored(repo) - ignored:
+        (repo / rel).unlink(missing_ok=True)
+    if created:
+        run(["git", "checkout", "-q", cur], cwd=repo, check=False)
+        run(["git", "branch", "-D", branch], cwd=repo, check=False)
+
+
+def _list(names: list[str]) -> str:
+    return ", ".join(names) or "none"
+
+
+def plan_migration(req: dict, r: Report) -> None:
+    """--dry-run --migrate: the converted system.yaml, the files to delete and the plugin switch; nothing is written."""
+    for s in convert_systems(req["repo"]) if req["shape"] == "gitops-app" else []:
+        r.will_do.append(f"would write {s['dir'].as_posix()}/system.yaml:\n" + "\n".join("    " + ln if ln else ln for ln in s["text"].splitlines()))
+        r.will_do.append("would delete " + ", ".join(s["deleted"]))
+    mine = _load_json(req["repo"] / settingsmerge.REL) or {}
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td) / "out"
+        cmd = [*core.find_copier(), "copy", str(PLATFORM_ROOT / "templates" / req["template"]), str(out), "--data-file",
+               str(req["repo"] / ".copier-answers.yml"), "--overwrite", "--defaults", "--trust", "--skip-tasks"]
+        for kv in req["data"]:
+            cmd += ["--data", kv]
+        run(cmd, cwd=Path(td))
+        _, report = settingsmerge.merge_settings(mine, _load_json(out / settingsmerge.REL) or {}, None)
+    p = report["plugins"]
+    r.will_do.append(f"plugins: would add {_list(p['added'])}; would remove {_list(p['removed'])}")
+
+
 def plan(req: dict) -> Report:
     was = req["old"] or "none — this repo has no .platform-version stamp yet"
     r = Report(title=f"Update {req['repo'].name} ({req['shape']}) from platform {was} → {req['new']}")
@@ -377,7 +511,7 @@ def plan(req: dict) -> Report:
     r.will_do.append(f"re-apply templates/{req['template']} with the repo's recorded answers" + (f" plus {', '.join(req['data'])}" if req["data"] else ""))
     r.will_do.append("OVERWRITE skeleton files (CI, Dockerfile, CLAUDE.md, …); project-owned files (README, app code, tests, ADRs) are never touched, and new starter files in those paths are not added")
     r.will_do.append("MERGE devbox.json: the template's recipes and packages, plus the ones only this repo has")
-    if req["migrate"]:
+    if req["migrate"] and req["unmigrated"]:
         r.will_do.append("DELETE k8s/ (v1 → v2 migration: manifests are generated in the product's gitops-app repo; recoverable from git history)")
     r.will_do.append("restore the stable template source in .copier-answers.yml and stamp .platform-version")
     r.will_do.append("commit once (nothing is pushed)")
@@ -446,9 +580,19 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
 def execute(req: dict) -> Report:
     repo: Path = req["repo"]
     r = plan(req)
+    migrating = req["migrate"] and req["unmigrated"]
+    systems: list[dict] = []
+    reference: dict[str, bytes] = {}
+    tmp = tempfile.TemporaryDirectory()
+    if migrating and req["shape"] == "gitops-app":   # before anything changes: problems stop here, the 4.7 render is the reference
+        systems = convert_systems(repo)
+        if systems:
+            reference = reference_render(repo, Path(tmp.name))
     cur = run(["git", "symbolic-ref", "--short", "HEAD"], cwd=repo).stdout.strip()
     branch = branch_name(repo)
-    if cur in ("main", "master"):
+    created = cur in ("main", "master")
+    ignored = _ignored(repo) if migrating else set()
+    if created:
         run(["git", "checkout", "-q", "-b", branch], cwd=repo)
         r.did.append(f"created branch {branch}")
     before = (repo / ".copier-answers.yml").read_text()
@@ -462,19 +606,38 @@ def execute(req: dict) -> Report:
            "--overwrite", "--defaults", "--trust", "--skip-tasks"]
     for kv in req["data"]:
         cmd += ["--data", kv]
-    run(cmd, cwd=repo)
-    dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
-    if dropped:
-        r.did.append(f"left out {len(dropped)} new starter file(s) in project-owned paths (app code, tests, docs): {', '.join(dropped[:4])}{' ...' if len(dropped) > 4 else ''}")
-    answers = repo / ".copier-answers.yml"
-    answers.write_text(re.sub(r"^_src_path:.*$", f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}", answers.read_text(), flags=re.M))
-    core.write_stamp(repo, req["shape"], req["ref"])
-    if req["migrate"] and (repo / "k8s").is_dir():
-        import shutil
-        shutil.rmtree(repo / "k8s")
-        r.did.append("removed k8s/ (v1 manifests; import them with `compose add <service> --from-k8s` if you have not yet)")
-
-    tmp = tempfile.TemporaryDirectory()
+    mig: dict = {"ran": False, "already_migrated": True}
+    try:
+        run(cmd, cwd=repo)
+        dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
+        if dropped:
+            r.did.append(f"left out {len(dropped)} new starter file(s) in project-owned paths (app code, tests, docs): {', '.join(dropped[:4])}{' ...' if len(dropped) > 4 else ''}")
+        answers = repo / ".copier-answers.yml"
+        answers.write_text(re.sub(r"^_src_path:.*$", f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}", answers.read_text(), flags=re.M))
+        core.write_stamp(repo, req["shape"], req["ref"])
+        if migrating and (repo / "k8s").is_dir():
+            shutil.rmtree(repo / "k8s")
+            r.did.append("removed k8s/ (v1 manifests; import them with `compose add <service> --from-k8s` if you have not yet)")
+        if migrating:
+            mig = {"ran": True, "kind": "system" if req["shape"] == "gitops-app" else "component", "byte_identical": None, "compared": 0,
+                   "system_yaml": None, "deleted": [], "plugins": {"added": [], "removed": []}, "comments_dropped": False}
+            if systems:
+                apply_systems(repo, systems, reference)
+                mig.update(byte_identical=True, compared=len(reference), system_yaml=f"{systems[0]['dir'].as_posix()}/system.yaml",
+                           deleted=sorted(p for s in systems for p in s["deleted"]), comments_dropped=any(s["comments"] for s in systems))
+                for s in systems:
+                    r.did.append(f"wrote {s['dir'].as_posix()}/system.yaml" + (" (the comments of app.yaml and services.yaml were not carried over)" if s["comments"] else ""))
+                r.did.append("deleted " + ", ".join(mig["deleted"]))
+                r.did.append(f"the 5.0 render is byte-identical to 4.7 ({mig['compared']} files compared)")
+        elif req["migrate"]:
+            r.did.append("already migrated to 5.0: nothing of the migration ran")
+    except BaseException:
+        if migrating:
+            rollback(repo, cur, branch, created, ignored)
+        tmp.cleanup()
+        raise
+    if req["migrate"]:
+        r.data["migration"] = mig
     try:
         return _finish(req, r, before, devbox_before, settings_before, had_pin_dev, cur, branch, Path(tmp.name))
     finally:
@@ -504,6 +667,9 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
     changed = [ln[3:] for ln in run(["git", "status", "--porcelain"], cwd=repo).stdout.splitlines()]
     modified = [ln[3:] for ln in run(["git", "status", "--porcelain"], cwd=repo).stdout.splitlines() if ln[:2].strip() == "M"
                 and not (ln[3:] == "devbox.json" and not replaced and not devbox_note)]   # merged, nothing lost (spec 060)
+    if r.data.get("migration", {}).get("ran"):
+        r.data["migration"]["plugins"] = settings["plugins"]
+        r.did.append(f"plugins added: {_list(settings['plugins']['added'])}; removed: {_list(settings['plugins']['removed'])}")
     if kept:
         r.did.append("kept in devbox.json: " + "; ".join(kept))
     if moved:
@@ -529,7 +695,7 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
     run(["git", *core.git_identity(repo), "commit", "-q", "-m", f"chore: update skeleton from platform {req['new']}"], cwd=repo)
     r.did.append(f"re-applied the template; {len(changed)} file(s) changed, committed on {branch if cur in ('main','master') else cur}")
     notes = core.changelog_between(req["old"], req["new"])
-    r.data = {"changed": changed, "modified": modified, "new_answers": new_keys, "changelog": notes,
+    r.data |= {"changed": changed, "modified": modified, "new_answers": new_keys, "changelog": notes,
               "baseline": req["old"] if base_root else None,
               "devbox": {"kept": kept, "replaced": [{"entry": k, "was": v} for k, v in replaced],
                          "moved_to_ci_extra": moved, "dropped_gates": dropped_gates},
@@ -563,7 +729,10 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
 def main(argv: list[str]) -> int:
     req = resolve(argv)
     if req["dry_run"]:
-        plan(req).emit(True, req["json"])
+        r = plan(req)
+        if req["migrate"] and req["unmigrated"]:
+            plan_migration(req, r)
+        r.emit(True, req["json"])
         return 0
     execute(req).emit(False, req["json"])
     return 0
