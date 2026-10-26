@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Platform end-to-end test (no GitHub, no GHCR, no ArgoCD):
-#   render a gitops-app + a Java service + a web app with the real templates → build the images → push to a local
-#   registry → start the platform's own local cluster (scripts/local-cluster.sh, WITH_ARGO=0) → apply the manifests the
-#   renderer generated → wait for rollout → probe the services through the Gateway.
-# It exercises: cplat new-service, the templates' Dockerfiles (non-root numeric user, read-only filesystem), render.py,
-# the generated Deployment/Service/HTTPRoute against a real API server, and the Gateway API on k3s' Traefik.
+#   create a system (system.yaml + a Java service + a website) with `cplat system new` → build the images → push to a
+#   local registry → start the platform's own local cluster (scripts/local-cluster.sh, WITH_ARGO=0) → apply the manifests
+#   the renderer generated → wait for rollout → probe the services through the Gateway → ship a spec: verify dev, promote
+#   to staging, apply, verify staging, finish the ship run.
+# It exercises: cplat system new, resource add, component ship, instance promote|secret|verify, the templates'
+# Dockerfiles (non-root numeric user, read-only filesystem), render.py on system.yaml, the generated
+# Deployment/Service/HTTPRoute against a real API server, and the Gateway API on k3s' Traefik.
 #
 # Needs: docker (running), k3d, kubectl, uv, curl, copier (or uv). Env: E2E_KEEP=1 keeps the cluster, E2E_PORT, E2E_WORK.
 set -euo pipefail
@@ -33,19 +35,39 @@ trap cleanup EXIT
 for t in docker k3d kubectl uv curl; do command -v $t >/dev/null || fail "$t is required"; done
 docker info >/dev/null 2>&1 || fail "docker is not running"
 
-step "Render the three repos with the real templates (no GitHub)"
-$cplat new-service e2e-gitops "e2e gitops repo" --gitops --no-github --skip-tasks --dir "$work" --org e2e >/dev/null
-$cplat new-service e2e-api "e2e api" --type service-java --no-github --skip-tasks --dir "$work" --org e2e >/dev/null
-$cplat new-service e2e-web "e2e web" --web --no-github --skip-tasks --dir "$work" --org e2e >/dev/null
+gitops_repo="$work/e2e-gitops"
+api_repo="$work/e2e-api"
+commit() { (cd "$gitops_repo" && git add -A && git -c user.name=e2e -c user.email=e2e@example.com commit -qm "$1"); }
 
-step "Declare the Postgres addon (cluster-up then installs the CloudNativePG operator)"
-$cplat addon add postgres --repo-dir "$work/e2e-gitops" >/dev/null
-(cd "$work/e2e-gitops" && git add -A && git -c user.name=e2e -c user.email=e2e@example.com commit -qm "postgres")
-step "Declare the OpenTelemetry base (collector only, no UI stack)"
-$cplat addon add observability --repo-dir "$work/e2e-gitops" >/dev/null
-step "Turn on the Kyverno guard rails, enforced in dev (cluster-up installs Kyverno)"
-printf 'policies:\n  mode: {dev: Enforce}\n' >> "$work/e2e-gitops/applications/e2e/app.yaml"
-(cd "$work/e2e-gitops" && git add -A && git -c user.name=e2e -c user.email=e2e@example.com commit -qm "observability")
+step "Create the system with the real templates (no GitHub): system.yaml, a Java service, a website"
+printf '%s\n' 'system: e2e' 'owner: e2e' 'components:' \
+  '  - {name: e2e-api, description: "e2e api", type: service, lang: java}' \
+  '  - {name: e2e-web, description: "e2e web", type: website, lang: typescript}' > "$work/system.yml"
+$cplat system new "$work/system.yml" --no-github --skip-tasks --dir "$work" --org e2e >/dev/null
+[ -f "$gitops_repo/applications/e2e/system.yaml" ] || fail "system new did not write applications/e2e/system.yaml"
+
+step "Declare the Postgres resource in system.yaml (cluster-up then installs the CloudNativePG operator)"
+$cplat resource add postgres --repo-dir "$gitops_repo" >/dev/null
+commit "postgres"
+step "Describe the environments in system.yaml: the OpenTelemetry collector and enforced Kyverno guard rails in dev, a staging host"
+(cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" "$port" <<'PY'
+import sys
+root, port = sys.argv[1], sys.argv[2]
+sys.path.insert(0, f"{root}/scripts/cplat")
+import gitops
+from pathlib import Path
+app_dir = gitops.find_app(Path("."))
+y, data = gitops.load(app_dir)
+envs = data["environments"]
+envs["dev"]["policy"] = "enforce"          # cluster-up installs Kyverno
+envs["dev"]["observability"] = {}          # the collector only, no UI stack
+envs["dev"]["url"] = "http://{host}:" + port
+envs["staging"]["host"] = "{component}.{system}-staging.localhost"
+envs["staging"]["url"] = "http://{host}:" + port
+gitops.save(app_dir, y, data)
+PY
+)
+commit "environments"
 
 step "Start the local cluster with a registry (the template's own script, Gateway only)"
 (cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
@@ -60,7 +82,7 @@ for svc in e2e-api e2e-web; do
   docker push -q "localhost:$regport/$svc:latest" >/dev/null
 done
 
-step "Describe the services like /gitops:compose does and render the manifests"
+step "Describe the components like /component:add does (into components: of system.yaml) and render the manifests"
 (cd "$work/e2e-gitops" && uv run --with pyyaml --with ruamel.yaml python - "$root" "$registry:$regport" <<'PY'
 import sys
 root, registry = sys.argv[1], sys.argv[2]
@@ -70,7 +92,7 @@ from pathlib import Path
 repo = Path(".")
 app_dir = gitops.find_app(repo)
 y, data = gitops.load(app_dir)
-services = gitops.services_of(data)
+components = gitops.components_of(data)
 shapes = {s["id"]: s for s in core.registry.load()}
 ns = compose.build_parser().parse_args(["add", "e2e-api", "--expose"])   # real parser defaults: new compose flags cannot break this harness
 for name, shape in (("e2e-api", "service-java"), ("e2e-web", "web-nextjs")):
@@ -79,13 +101,14 @@ for name, shape in (("e2e-api", "service-java"), ("e2e-web", "web-nextjs")):
     ns.secret = ["e2e-api-stripe=STRIPE_KEY"] if name == "e2e-api" else []            # read from the secret store
     ns.uses = ["postgres"] if name == "e2e-api" else []                               # DATABASE_URL from the addon
     ns.secret_ref = ["e2e-api-auth"] if name == "e2e-web" else []                     # the web app reads the secret generated for the API
-    services.append(compose.build_entry(name, f"e2e/{name}", shapes[shape], None, registry, ns, {}))
+    components[name] = compose.build_entry(name, f"e2e/{name}", shapes[shape], None, registry, ns, {})
 gitops.save(app_dir, y, data)
 PY
 uv run scripts/render.py)
+commit "components"
 
-step "Set the remote secret in the local store (what a developer does with /gitops:secret)"
-printf 'sk_test_e2e' | $cplat secret set e2e-api e2e-api-stripe STRIPE_KEY --value-stdin --repo-dir "$work/e2e-gitops" >/dev/null
+step "Set the remote secret in the local store (what a developer does with /instance:secret)"
+printf 'sk_test_e2e' | $cplat instance secret set e2e-api/dev e2e-api-stripe STRIPE_KEY --value-stdin --repo-dir "$gitops_repo" --context k3d-$cluster >/dev/null
 
 step "Apply the guard rails (Enforce) before anything else, so every platform workload is admitted under them"
 ns=e2e-dev
@@ -169,3 +192,45 @@ step "Kyverno: the platform's own workloads were admitted under Enforce, a viola
 kc get deploy e2e-api e2e-web otel-collector >/dev/null || fail "a platform workload is missing"
 if out=$(kc create deployment violating --image=docker.io/library/nginx:latest 2>&1); then kc delete deployment violating >/dev/null; fail "a violating Deployment was admitted under Enforce"; fi
 case "$out" in *"platform-guardrails"*) echo "ok   denied: $(echo "$out" | tr '\n' ' ' | cut -c1-160)";; *) fail "the denial did not come from the guard rails: $out";; esac
+
+# ---- Ship a spec: dev is verified, the build is promoted to staging, applied and verified, the run ends ----
+sns=e2e-staging
+dev_url="http://e2e-api.e2e-dev.localhost:$port"
+staging_url="http://e2e-api.e2e-staging.localhost:$port"
+
+step "Write and approve a spec in the service repo, start its ship run"
+$cplat spec --repo "$api_repo" new "probe the e2e api" >/dev/null
+uv run python - "$api_repo" <<'PY'
+import re, sys
+from pathlib import Path
+spec = next(Path(sys.argv[1], "docs", "specs").glob("001-*/spec.md"))
+text = spec.read_text()
+ac = "## Acceptance criteria\n\n- **AC-001.1** Given the deployed service, when /api/info is requested, then it names the service e2e-api.\n"
+spec.write_text(re.sub(r"## Acceptance criteria\n\n<!--.*?-->\n", lambda _: ac, text, count=1, flags=re.S))
+PY
+$cplat spec --repo "$api_repo" approve 001 >/dev/null
+(cd "$api_repo" && $cplat component ship start 001 --no-merge)
+
+step "Verify dev with the service's smoke tests"
+(cd "$api_repo" && $cplat instance verify dev --base-url "$dev_url" --no-retry)
+
+step "Promote the built commit to staging: tag the image like CI does, pin it, render, apply, verify"
+sha=$(git -C "$api_repo" rev-parse HEAD)
+docker tag "localhost:$regport/e2e-api:latest" "localhost:$regport/e2e-api:sha-$sha"
+docker push -q "localhost:$regport/e2e-api:sha-$sha" >/dev/null
+$cplat instance promote e2e-api --to staging --sha "$sha" --no-verify --repo-dir "$gitops_repo" >/dev/null
+printf 'sk_test_e2e' | $cplat instance secret set e2e-api/staging e2e-api-stripe STRIPE_KEY --value-stdin --repo-dir "$gitops_repo" --context k3d-$cluster >/dev/null
+grep -q "sha-$sha" "$work/e2e-gitops/applications/e2e/overlays/staging/e2e-api/kustomization.yaml" || fail "the staging overlay is not pinned to sha-$sha"
+kubectl --context k3d-$cluster apply -n $sns -k "$work/e2e-gitops/applications/e2e/addons/staging/postgres"
+for _ in $(seq 1 80); do
+  [ "$(kubectl --context k3d-$cluster -n $sns get cluster e2e-postgres -o jsonpath='{.status.phase}' 2>/dev/null)" = "Cluster in healthy state" ] && break; sleep 5
+done
+[ "$(kubectl --context k3d-$cluster -n $sns get cluster e2e-postgres -o jsonpath='{.status.phase}')" = "Cluster in healthy state" ] || fail "the staging Postgres cluster did not become healthy"
+kubectl --context k3d-$cluster apply -n $sns -k "$work/e2e-gitops/applications/e2e/overlays/staging/e2e-api"
+kubectl --context k3d-$cluster -n $sns rollout status deploy/e2e-api --timeout=240s || fail "e2e-api did not become ready in staging"
+kubectl --context k3d-$cluster -n $sns get deploy e2e-api -o jsonpath='{.spec.template.spec.containers[0].image}' | grep -q "sha-$sha" || fail "staging runs another image than the pinned one"
+(cd "$api_repo" && $cplat instance verify staging --base-url "$staging_url" --no-retry)
+probe "$staging_url/api/info" '"service":"e2e-api"'
+
+step "End the ship run"
+(cd "$api_repo" && $cplat component ship finish)
