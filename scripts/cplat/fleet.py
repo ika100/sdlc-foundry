@@ -61,7 +61,7 @@ def _first(text: str) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="cplat fleet", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="cplat platform fleet", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("update", help="bring every platform repo to the installed release")
     p.add_argument("--owner", action="append", default=[], help="repo owner (repeatable; default: the gh login)")

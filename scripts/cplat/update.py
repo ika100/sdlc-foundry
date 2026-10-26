@@ -512,7 +512,7 @@ def plan(req: dict) -> Report:
     r.will_do.append("OVERWRITE skeleton files (CI, Dockerfile, CLAUDE.md, …); project-owned files (README, app code, tests, ADRs) are never touched, and new starter files in those paths are not added")
     r.will_do.append("MERGE devbox.json: the template's recipes and packages, plus the ones only this repo has")
     if req["migrate"] and req["unmigrated"]:
-        r.will_do.append("DELETE k8s/ (v1 → v2 migration: manifests are generated in the product's gitops-app repo; recoverable from git history)")
+        r.will_do.append("DELETE k8s/ (v1 → v2 migration: manifests are generated in the system's gitops-app repo; recoverable from git history)")
     r.will_do.append("restore the stable template source in .copier-answers.yml and stamp .platform-version")
     r.will_do.append("commit once (nothing is pushed)")
     return r
@@ -547,7 +547,7 @@ NOT_CUSTOMISATION = ("devbox.json", settingsmerge.REL, ".copier-answers.yml", ".
 
 
 def _where_file(path: str) -> str:
-    return WHERE_FILES.get(path) or f"it has no repo-owned companion: keep yours with git checkout HEAD~1 -- {path} and propose the change with /shared:report-issue"
+    return WHERE_FILES.get(path) or f"it has no repo-owned companion: keep yours with git checkout HEAD~1 -- {path} and propose the change with /issue:report"
 
 
 def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], dropped_gates: list[str], settings: dict,
@@ -617,7 +617,7 @@ def execute(req: dict) -> Report:
         core.write_stamp(repo, req["shape"], req["ref"])
         if migrating and (repo / "k8s").is_dir():
             shutil.rmtree(repo / "k8s")
-            r.did.append("removed k8s/ (v1 manifests; import them with `compose add <service> --from-k8s` if you have not yet)")
+            r.did.append("removed k8s/ (v1 manifests; import them with `cplat component add <component> --from-k8s` if you have not yet)")
         if migrating:
             mig = {"ran": True, "kind": "system" if req["shape"] == "gitops-app" else "component", "byte_identical": None, "compared": 0,
                    "system_yaml": None, "deleted": [], "plugins": {"added": [], "removed": []}, "comments_dropped": False}

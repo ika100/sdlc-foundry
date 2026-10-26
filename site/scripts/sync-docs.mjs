@@ -11,7 +11,7 @@ const BASE = '/sdlc-foundry';
 
 /** repo file -> site page. `slug` is relative to the docs collection. */
 const PAGES = [
-  { src: 'docs/USER-JOURNEY.md', slug: 'guides/user-journey', title: 'User journey: from empty folder to a running product', order: 1 },
+  { src: 'docs/USER-JOURNEY.md', slug: 'guides/user-journey', title: 'User journey: from empty folder to a running system', order: 1 },
   { src: 'docs/HOW-IT-WORKS.md', slug: 'guides/how-it-works', title: 'How it works', order: 2 },
   { src: 'docs/DOMAIN-MODEL.md', slug: 'guides/domain-model', title: 'Domain model', order: 3 },
   { src: 'docs/ADOPTING.md', slug: 'guides/adopting', title: 'Adopting the platform and troubleshooting', order: 3 },

@@ -153,7 +153,7 @@ def check_remote(slug: str) -> str | None:
     try:
         info = yaml.safe_load(gh(["repo", "view", slug, "--json", "repositoryTopics"]) or "{}")  # JSON is valid YAML
     except PlatformError:
-        raise PlatformError(f"repository {slug} not found or not readable", hint=f"check the name; create it with /shared:new-service {slug.split('/')[1]} …") from None
+        raise PlatformError(f"repository {slug} not found or not readable", hint=f"check the name; create it with /component:new {slug.split('/')[1]} …") from None
     topics = [t["name"] for t in (info.get("repositoryTopics") or [])]
     if "deployable-service" not in topics:
         raise PlatformError(f"{slug} does not have the topic deployable-service", hint=f"gh repo edit {slug} --add-topic deployable-service")

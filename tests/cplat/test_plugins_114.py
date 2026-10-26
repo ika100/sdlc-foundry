@@ -290,7 +290,7 @@ def test_the_changelog_has_the_old_to_new_table_and_the_migration_steps_ac_114_5
 
 HISTORY_SECTIONS = {"docs/ADOPTING.md": ("Migrating from 4.x to 5.0",)}
 OLD_COMMAND = re.compile(r"/(svc|app|gitops|shared):[a-z]|\bcplat (" + "|".join(n.split()[1] for n in CPLAT_MOVED) + r")\b|\bapp\.yaml\b|\bservices\.yaml\b")
-OLD_NOUN = re.compile(r"(?<![\w/-])addons?(?![\w/-])|(?<![\w/-])product\b(?![ -](manager|owner|requirement|management))", re.I)
+OLD_NOUN = re.compile(r"(?<![\w/-])addons?(?![\w/-])|(?<![\w/-])product\b(?![ -](manager|owner|requirement|management|names))", re.I)
 
 
 def in_scope() -> list[Path]:
@@ -314,8 +314,13 @@ def in_scope() -> list[Path]:
     return sorted({p for p in out if p.is_file()})
 
 
+SYNCED = {f"site/src/content/docs/{slug}.md": src for src, slug in
+          re.findall(r"src: '([^']+)', slug: '([^']+)'", (ROOT / "site" / "scripts" / "sync-docs.mjs").read_text())}
+
+
 def hits(path: Path) -> list[str]:
-    rel = path.relative_to(ROOT).as_posix()
+    shown = path.relative_to(ROOT).as_posix()
+    rel = SYNCED.get(shown, shown)   # a page the site build copied from the repo is judged as its source
     skip = False
     out = []
     for i, line in enumerate(path.read_text().splitlines(), 1):
@@ -326,7 +331,7 @@ def hits(path: Path) -> list[str]:
         for rx in (OLD_COMMAND, OLD_NOUN):
             m = rx.search(line)
             if m:
-                out.append(f"{rel}:{i}: {m.group(0)!r}")
+                out.append(f"{shown}:{i}: {m.group(0)!r}")
     return out
 
 

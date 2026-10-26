@@ -51,7 +51,7 @@ def shape_of_pair(type_: str | None, lang: str | None) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat new-service", description=__doc__)
+    p = argparse.ArgumentParser(prog="cplat component new", description=__doc__)
     p.add_argument("words", nargs="*", help="<name> [description words...]")
     p.add_argument("--type", dest="type_", help="service, website or library (default service)")
     p.add_argument("--lang", help="python, java, go or typescript (default python)")

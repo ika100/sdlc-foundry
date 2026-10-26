@@ -84,7 +84,7 @@ def pick_tag(svc: dict, to_env: str, ns: argparse.Namespace) -> tuple[str, str]:
         plain = SEMVER.match(v).group(1)
         if ns.no_verify or plain in tags:
             return plain, f"release v{plain}"
-    raise PlatformError(f"no release of {slug} has a published image", hint=f"cut one with /svc:release in {slug} (CI publishes X.Y.Z images on v*.*.* tags)")
+    raise PlatformError(f"no release of {slug} has a published image", hint=f"cut one with /component:release in {slug} (CI publishes X.Y.Z images on v*.*.* tags)")
 
 
 SHA_TAG = re.compile(r"^sha-[0-9a-f]{40}$")
