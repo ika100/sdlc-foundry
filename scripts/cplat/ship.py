@@ -4,8 +4,8 @@
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat component ship start <spec> [--no-merge] [--product DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
-                                         (--product: /system:ship only, links the run to a product ship, spec 097)
+  cplat component ship start <spec> [--no-merge] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
+                                         (--system-dir: /system:ship only, links the run to a system ship, spec 097)
   cplat component ship status [--json]             the state of the current run
   cplat component ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
   cplat component ship pr --title T --body-file F  run `devbox run ci`, push the feature branch and open (or reuse) its PR
@@ -1340,7 +1340,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("spec")
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
-    p.add_argument("--product", default=None, help="the gitops-app clone of the product ship this run belongs to (/system:ship only, spec 097)")
+    p.add_argument("--system-dir", default=None, help="the gitops-app clone of the system ship this run belongs to (/system:ship only, spec 097)")
     p.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
                    help="replace a limit of the run's budget: minutes, invocations, reruns, cost (a number or off; spec 102)")
     p = sub.add_parser("status")
@@ -1390,7 +1390,7 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.product).resolve() if ns.product else None, ns.budget)
+        st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
         if st["phase"] in ("plan", "build", "pr"):
             say(on_branch(repo, st["branch"]))
         print(describe(st))

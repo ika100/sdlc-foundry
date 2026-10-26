@@ -582,7 +582,7 @@ def provided_by_product(app_root: Path, repos: list[dict], repo_id: str) -> list
 
 
 def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
-    """This repo's part of a product plan (ADR-026): title, priority, parent and the Product context section.
+    """This repo's part of a system plan (ADR-026): title, priority, parent and the System context section.
 
     The plan lives in the gitops-app repo (docs/plan/<spec_id>.md); its spec next to it in docs/specs/<spec_id>/.
     Plans written before ADR-026 have no `spec:`; their `arguments` prompt is then the whole context.
@@ -595,9 +595,9 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
         ids = ", ".join(str(r.get("id")) for r in meta.get("repos") or [])
         raise PlatformError(f"plan {plan_path.name} has no repo '{repo_id}' (repos: {ids})")
     app_root = plan_path.resolve().parents[2]
-    parts = [f"Slice of the product plan `{meta.get('plan_id')}` in `{meta.get('gitops_app')}` for `{repo_id}` "
-             f"({repo.get('shape')}). The product criteria and the contract below are binding: every criterion of this "
-             "spec implements one of them and names it: `(product AC-<NNN>.<n>)`."]
+    parts = [f"Slice of the system plan `{meta.get('plan_id')}` in `{meta.get('gitops_app')}` for `{repo_id}` "
+             f"({repo.get('shape')}). The system criteria and the contract below are binding: every criterion of this "
+             "spec implements one of them and names it: `(system AC-<NNN>.<n>)`."]
     priority, problem = "P1", ""
     if meta.get("spec"):
         product = read(app_root / SPECS_DIR / str(meta["spec"]))
@@ -606,7 +606,7 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
         wanted = set(repo.get("acs") or [])
         lines = [ln for ln in sections(product.body).get("acceptance criteria", "").splitlines()
                  if (m := AC_LINE.match(ln)) and m.group(2) in wanted and not m.group(1)]
-        parts.append("### Product criteria\n\n" + ("\n".join(lines) or "(none assigned)"))
+        parts.append("### System criteria\n\n" + ("\n".join(lines) or "(none assigned)"))
         design = product.dir / "design.md"
         contract = sections(design.read_text()).get("contract", "").strip() if design.is_file() else ""
     else:
@@ -616,7 +616,7 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
         parts.append("### Contract\n\n" + contract)
     provided = provided_by_product(app_root, meta.get("repos") or [], repo_id)
     if provided:
-        parts.append("### Provided by the product\n\nThe gitops part of this plan wires these for this repo; rely on them, "
+        parts.append("### Provided by the system\n\nThe gitops part of this plan wires these for this repo; rely on them, "
                      "do not ask for them again:\n\n" + "\n".join(provided))
     if repo.get("arguments"):
         parts.append("### Notes for this repo\n\n" + str(repo["arguments"]).strip())
@@ -628,7 +628,7 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
 def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | None) -> Spec:
     sl = slice_from_plan(plan_path, repo_id)
     spec = new(root, sl["title"], shape=shape, priority=sl["priority"], tracks=[], parent=sl["parent"])
-    body = spec.body.replace("## Stories", f"## Product context\n\n{sl['context']}\n\n## Stories", 1)
+    body = spec.body.replace("## Stories", f"## System context\n\n{sl['context']}\n\n## Stories", 1)
     if sl["problem"]:
         body = re.sub(r"(## Problem\n\n)<!--.*?-->", lambda m: m.group(1) + sl["problem"], body, count=1, flags=re.S)
     save(spec.dir / "spec.md", spec.meta, body)

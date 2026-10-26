@@ -177,7 +177,7 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
     clone = Path(cur.get("clone") or clone_path(gitops_dir, repo_id))
     sh = ship.load_state(clone) if clone.is_dir() else None
     if not sh:
-        raise PlatformError(f"no ship run in {clone}", hint=f"start it: cplat component ship start <spec> --product {gitops_dir}")
+        raise PlatformError(f"no ship run in {clone}", hint=f"start it: cplat component ship start <spec> --system-dir {gitops_dir}")
     slug = state.slug(gitops_dir)
     want = f"{slug}:{st['spec']}"
     parent = specmod.find(clone, sh["spec"]).meta.get("parent")
@@ -193,7 +193,7 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
         outcome = ("escalated", None)
     elif sh["phase"] != "done":
         raise PlatformError(f"ship of {repo_id} is in phase {sh['phase']}; resume it",
-                            hint=f"cplat component ship start {sh['spec']} --product {gitops_dir} (in {clone})")
+                            hint=f"cplat component ship start {sh['spec']} --system-dir {gitops_dir} (in {clone})")
     elif gate == "library":
         if not sha:
             outcome = ("escalated", f"the PR of {repo_id} is not merged")

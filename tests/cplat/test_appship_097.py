@@ -619,7 +619,7 @@ def test_ship_start_with_product_links_the_repo_run_to_the_product_run(w):  # AC
     st = w.started()
     clone = w.clone("shop-api")
     make(clone, status="approved")
-    assert ship.main(["--repo", str(clone), "start", REPO_SPEC, "--product", str(w.gitops)]) == 0
+    assert ship.main(["--repo", str(clone), "start", REPO_SPEC, "--system-dir", str(w.gitops)]) == 0
     linked = ship.load_state(clone)
     assert linked["product"] == {"dir": str(w.gitops), "run_id": st["run_id"], "context": "kind-shop"}
     assert runs._read_active(linked["run_id"])["parent"] == st["run_id"]

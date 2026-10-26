@@ -5,7 +5,7 @@
 """Validate and manage multi-repo plans in docs/plan/ (ADR-011, amended by ADR-026).
 
 A plan is a Markdown file: a YAML front-matter block followed by a prose body. A plan made from a product spec
-names it (`spec: <spec_id>`, the file is docs/specs/<spec_id>/spec.md) and lists per repo the product criteria
+names it (`spec: <spec_id>`, the file is docs/specs/<spec_id>/spec.md) and lists per repo the system criteria
 (`acs: [AC-<NNN>.<n>]`) that repo implements; every active criterion of the spec must be assigned to a repo.
 Plans without `spec:` (written before ADR-026) stay valid and carry a free-text `arguments` prompt per repo.
 
