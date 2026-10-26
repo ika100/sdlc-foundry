@@ -27,7 +27,7 @@
 
       <!-- Run -->
       <text x="24" y="180" class="rowname">Run</text>
-      <text x="24" y="196" class="src">/svc:ship</text>
+      <text x="24" y="196" class="src">/component:ship</text>
       <rect x="180" y="160" width="96" height="40" rx="20" class="node"/><text x="228" y="185" text-anchor="middle" class="pill">plan</text>
       <rect x="290" y="160" width="96" height="40" rx="20" class="node"/><text x="338" y="185" text-anchor="middle" class="pill">build</text>
       <rect x="400" y="160" width="96" height="40" rx="20" class="node"/><text x="448" y="185" text-anchor="middle" class="pill">pr</text>

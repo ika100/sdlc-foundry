@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 650" role="img" aria-labelledby="title desc">
   <title id="title">SDLC Foundry map (4.6.0): delivery flow and feedback loops</title>
-  <desc id="desc">Swimlanes for you, agents, cplat, GitHub with gitops and Argo, and the feedback loops. You route an issue and approve the spec. Agents write the spec, plan, red tests, code and verification; cplat runs the gates, opens the PR, merges on green, waits for dev, runs the smoke tests and promotes to staging on green. Red CI goes back to the coder, a merge conflict goes back to the architect. Prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts all come back as deduplicated GitHub issues that you route in triage.</desc>
+  <desc id="desc">Swimlanes for you, agents, cplat, GitHub with gitops and Argo, and the feedback loops. You route an issue and approve the spec. Agents write the spec, plan, red tests, code and verification; the platform script runs the gates, opens the PR, merges on green, waits for dev, runs the smoke tests and promotes to staging on green. Red CI goes back to the coder, a merge conflict goes back to the architect. Prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts all come back as deduplicated GitHub issues that you route in triage.</desc>
   <style>
     svg { --bg: #FFFFFF; --ink: #17201D; --muted: #5A6561; --rule: #D6DBD5; --human: #A95A07; --human-tint: #FBEBD6;
       --agent: #5847C2; --code: #0E6E66; --ext: #6A717B; --band: #E3EFEC; --hot: #C2352B; --loop: #8A4FB8; --loop-tint: #F3EAFA; }
@@ -46,20 +46,20 @@
 
   <rect class="bg" width="1440" height="650" rx="10"/>
 
-  <!-- unattended band: /svc:ship now runs through dev smoke and staging -->
+  <!-- unattended band: /component:ship now runs through dev smoke and staging -->
   <rect class="band" x="318" y="58" width="1008" height="404" rx="8"/>
-  <text class="band-l" x="332" y="80">/svc:ship runs this band without asking you</text>
-  <text class="band-s" x="332" y="96">through dev smoke and, with promotion: {staging: auto}, staging · /app:ship does it per repo in plan order</text>
+  <text class="band-l" x="332" y="80">/component:ship runs this band without asking you</text>
+  <text class="band-s" x="332" y="96">through dev smoke and, with promotion: {staging: auto}, staging · /system:ship does it per repo in plan order</text>
 
   <!-- stage headers -->
-  <text class="stage" x="150" y="22">Intake</text><text class="cmd" x="150" y="38">/shared:triage</text>
-  <text class="stage" x="262" y="22">Spec</text><text class="cmd" x="262" y="38">/svc:spec</text>
-  <text class="stage" x="374" y="22">Plan</text><text class="cmd" x="374" y="38">/svc:plan</text>
-  <text class="stage" x="654" y="22">Build</text><text class="cmd" x="654" y="38">/svc:build</text>
-  <text class="stage" x="990" y="22">PR &amp; land</text><text class="cmd" x="990" y="38">cplat ship pr · land</text>
+  <text class="stage" x="150" y="22">Intake</text><text class="cmd" x="150" y="38">/issue:triage</text>
+  <text class="stage" x="262" y="22">Spec</text><text class="cmd" x="262" y="38">/component:spec</text>
+  <text class="stage" x="374" y="22">Plan</text><text class="cmd" x="374" y="38">/component:plan</text>
+  <text class="stage" x="654" y="22">Build</text><text class="cmd" x="654" y="38">/component:build</text>
+  <text class="stage" x="990" y="22">PR &amp; land</text><text class="cmd" x="990" y="38">cplat component ship pr · land</text>
   <text class="stage" x="1158" y="22">Dev</text><text class="cmd" x="1158" y="38">ship deploy</text>
   <text class="stage" x="1270" y="22">Staging</text><text class="cmd" x="1270" y="38">auto on green</text>
-  <text class="stage" x="1382" y="22">Prod</text><text class="cmd" x="1382" y="38">/gitops:promote</text>
+  <text class="stage" x="1382" y="22">Prod</text><text class="cmd" x="1382" y="38">/instance:promote</text>
 
   <!-- lanes -->
   <line class="rule" x1="0" y1="152" x2="1440" y2="152"/>
@@ -134,7 +134,7 @@
   <g class="n c"><rect x="1002" y="286" width="88" height="48" rx="6"/><text class="t" x="1046" y="306">ship land</text><text class="s" x="1046" y="321">merge on green</text></g>
   <g class="n c"><rect x="1114" y="286" width="88" height="48" rx="6"/><text class="t" x="1158" y="306">ship deploy</text><text class="s" x="1158" y="321">dev + smoke</text></g>
   <g class="n c"><rect x="1226" y="286" width="88" height="48" rx="6"/><text class="t" x="1270" y="306">staging</text><text class="s" x="1270" y="321">pin + smoke</text></g>
-  <g class="n c"><rect x="1338" y="286" width="88" height="48" rx="6"/><text class="t" x="1382" y="306">cplat promote</text><text class="s" x="1382" y="321">pin tag PR</text></g>
+  <g class="n c"><rect x="1338" y="286" width="88" height="48" rx="6"/><text class="t" x="1382" y="306">cplat instance promote</text><text class="s" x="1382" y="321">pin tag PR</text></g>
   <!-- GitHub, gitops, Argo -->
   <g class="n e"><rect x="106" y="391" width="88" height="48" rx="6"/><text class="t" x="150" y="411">GitHub issue</text><text class="s" x="150" y="426">any repo</text></g>
   <g class="n e"><rect x="890" y="391" width="88" height="48" rx="6"/><text class="t" x="934" y="411">Pull request</text><text class="s" x="934" y="426">feature branch</text></g>
@@ -156,7 +156,7 @@
   <line class="edge fb" x1="642" y1="524" x2="774" y2="524" marker-end="url(#arf)"/>
   <text class="elab fb" x="708" y="516" text-anchor="middle">weekly</text>
   <path class="edge fb" d="M374,550 V574 M822,550 V574 M1046,550 V574 M1158,550 V574 M1270,550 V574 H150 V443" marker-end="url(#arf)"/>
-  <text class="elab fb" x="710" y="592" text-anchor="middle">every loop ends as one deduplicated issue, routed by you in /shared:triage</text>
+  <text class="elab fb" x="710" y="592" text-anchor="middle">every loop ends as one deduplicated issue, routed by you in /issue:triage</text>
 
   <g class="n l"><rect x="330" y="500" width="88" height="48" rx="6"/><text class="t" x="374" y="520">report-issue</text><text class="s" x="374" y="535">after your OK</text></g>
   <g class="n l"><rect x="554" y="500" width="88" height="48" rx="6"/><text class="t" x="598" y="520">Run store</text><text class="s" x="598" y="535">runs·cost·agents</text></g>
