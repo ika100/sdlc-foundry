@@ -780,7 +780,7 @@ def test_no_record_at_start_and_one_escalated_record_with_the_repos_cause(w, sto
     assert w.app("escalate", "shop-api: smoke not run", "--cause", "code").rc == 0
     [rec] = stored(store)
     assert rec["kind"] == "product-ship" and rec["repo"] == SLUG and rec["spec"] == SPEC and rec["outcome"] == "escalated"
-    assert rec["escalation"] == {"reason": "shop-api: smoke not run", "cause": "environment"}
+    assert rec["escalation"] == {"reason": "shop-api: smoke not run", "cause": "environment", "cause_source": "given"}
     assert rec["ships"] == ["20261025T080000Z-aaaa", "20261025T081000Z-bbbb"]
     assert rec["repos"]["shop-api"] == "escalated" and rec["resumes"] is None
 

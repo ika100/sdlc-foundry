@@ -179,7 +179,7 @@ def test_red_smoke_escalates_as_code_and_rolls_nothing_back_ac_091_9(world, caps
     assert st["escalated"] == REASON and st["cause"] == "code" and st["phase"] == "deploy"
     assert st["deployed"] == f"sha-{SHA}" and world.gh.merges == []
     r = world.record()
-    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": REASON, "cause": "code"}
+    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": REASON, "cause": "code", "cause_source": "given"}
     assert len(stored(world.store)) == 1                                     # escalated once, not twice
 
 
