@@ -7,27 +7,27 @@ import core
 import secret
 import status
 from alerts_fakes import make_app
-from model_fixtures import git_repo, model, write_app
+from model_fixtures import git_repo, model, system_doc, write_app
 
 
 @pytest.mark.parametrize("text", ["", "# only a comment\n", "null\n"])
-def test_status_with_an_empty_services_file_has_no_rows_ac_113_11(tmp_path, monkeypatch, capsys, text):  # AC-113.11
+def test_status_with_an_empty_system_file_has_no_rows_ac_113_11(tmp_path, monkeypatch, capsys, text):  # AC-113.11
     write_app(tmp_path, text, {})
     git_repo(tmp_path)
     monkeypatch.setattr(status, "sh", lambda cmd: None)
     monkeypatch.setattr(core, "platform_version", lambda: "4.8.0")
     assert status.main(["--repo-dir", str(tmp_path), "--context", "k3d-x", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"app": "shop", "rows": []}
+    assert json.loads(capsys.readouterr().out) == {"system": "shop", "environments": ["dev", "staging", "prod"], "rows": [], "resources": []}
 
 
 @pytest.mark.parametrize("text", ["", "# only a comment\n"])
-def test_secret_list_with_an_empty_services_file_says_so_ac_113_18(tmp_path, capsys, text):  # AC-113.18
+def test_secret_list_with_an_empty_system_file_says_so_ac_113_18(tmp_path, capsys, text):  # AC-113.18
     write_app(tmp_path, text, {})
     assert secret.main(["list", "--repo-dir", str(tmp_path)]) == 0
     assert "no `secrets:` declared" in capsys.readouterr().out
 
 
-def test_load_dir_accepts_an_empty_services_file_but_not_a_list_ac_113_16(tmp_path):  # AC-113.16
+def test_load_dir_accepts_an_empty_system_file_but_not_a_list_ac_113_16(tmp_path):  # AC-113.16
     assert list(model().load_dir(write_app(tmp_path, "", {})).components) == []
     with pytest.raises(model().ModelError):
         model().load_dir(write_app(tmp_path / "b", "- a\n- b\n", {}))
@@ -44,6 +44,6 @@ def test_metrics_false_adds_no_service_down_rule_ac_113_11(tmp_path):  # AC-113.
 
 def test_uses_keeps_only_declared_resources_ac_113_3():  # AC-113.3
     svc = [{"name": "api", "repo": "acme/api", "image": "i", "uses": ["postgres", "redis"], "environments": ["dev"]}]
-    m = model().build("shop", svc, {"addons": {"postgres": {}, "observability": {}}})
+    m = model().build(system_doc(svc, {"addons": {"postgres": {}, "observability": {}}}), "shop")
     assert tuple(m.component("api").uses) == ("postgres",)
     assert not [r for r in m.relations() if r["type"] == "uses" and r["to"] == "resource:redis"]

@@ -295,21 +295,21 @@ def at_staging(gitops_repo, gh, ev, capsys, monkeypatch):
     matching_registry(monkeypatch, gh)      # spec 106: prod needs a full-sha staging build whose digest matches the release
     gh.image_tags["todo-api"].add("sha-" + SHA)
     composed(gitops_repo, "todo-api")
-    promote.main(["todo-api", "dev", "staging", "--repo-dir", str(gitops_repo)])
+    promote.main(["todo-api", "--to", "staging", "--repo-dir", str(gitops_repo)])
     commit(gitops_repo, "promote")
     capsys.readouterr()
     return gitops_repo
 
 
 def test_a_dry_run_to_prod_shows_the_summary_before_the_report_ac_093_11(at_staging, capsys):  # AC-093.11
-    assert promote.main(["todo-api", "staging", "prod", "--dry-run", "--repo-dir", str(at_staging)]) == 0
+    assert promote.main(["todo-api", "--to", "prod", "--dry-run", "--repo-dir", str(at_staging)]) == 0
     out = capsys.readouterr().out
     assert "evidence for todo-api" in out
     assert out.index("evidence for todo-api") < out.index("promote todo-api: staging")
 
 
 def test_without_green_evidence_the_dry_run_starts_with_a_warning_ac_093_12(at_staging, capsys):  # AC-093.12
-    promote.main(["todo-api", "staging", "prod", "--dry-run", "--repo-dir", str(at_staging)])
+    promote.main(["todo-api", "--to", "prod", "--dry-run", "--repo-dir", str(at_staging)])
     out = capsys.readouterr().out.splitlines()
     first = next(ln for ln in out if ln.strip())
     assert first.startswith("WARNING: ") and "has no green staging smoke" in first
@@ -318,19 +318,19 @@ def test_without_green_evidence_the_dry_run_starts_with_a_warning_ac_093_12(at_s
 def test_the_pr_body_carries_the_summary_and_the_pr_is_still_opened_ac_093_12(at_staging, monkeypatch, capsys):  # AC-093.12
     opened = []
     monkeypatch.setattr(gitops, "open_pr", lambda repo, branch, title, body: opened.append((branch, title, body)) or "https://github.com/acme/g/pull/5")
-    assert promote.main(["todo-api", "staging", "prod", "--pr", "--repo-dir", str(at_staging)]) == 0
+    assert promote.main(["todo-api", "--to", "prod", "--pr", "--repo-dir", str(at_staging)]) == 0
     ((branch, title, body),) = opened
     assert "\n\n## Evidence\n\n" in body and "evidence for todo-api" in body and "WARNING: " in body
     assert "Production promotion" in body
 
 
 def test_json_output_has_the_evidence_per_service_ac_093_11(at_staging, capsys):  # AC-093.11
-    promote.main(["todo-api", "staging", "prod", "--dry-run", "--json", "--repo-dir", str(at_staging)])
+    promote.main(["todo-api", "--to", "prod", "--dry-run", "--json", "--repo-dir", str(at_staging)])
     data = json.loads(capsys.readouterr().out)
     assert data["evidence"]["todo-api"]["service"] == "todo-api" and data["evidence"]["todo-api"]["warning"]
 
 
 def test_promoting_to_staging_shows_no_evidence_ac_093_11(gitops_repo, gh, ev, capsys):  # AC-093.11
     composed(gitops_repo, "todo-api")
-    promote.main(["todo-api", "dev", "staging", "--dry-run", "--repo-dir", str(gitops_repo)])
+    promote.main(["todo-api", "--to", "staging", "--dry-run", "--repo-dir", str(gitops_repo)])
     assert "evidence for" not in capsys.readouterr().out

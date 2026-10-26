@@ -1,4 +1,4 @@
-"""Spec 083: /shared:status shows each service repo's platform version and whether it is behind."""
+"""Spec 083: /system:status shows each service repo's platform version and whether it is behind."""
 import core
 import status
 from test_gitops import composed, gh, gitops_repo  # noqa: F401  (fixtures)
@@ -15,15 +15,15 @@ def test_status_shows_the_platform_version_of_each_service(gitops_repo, gh, monk
             return stamps.get(cmd[2][len("repos/"):-len("/contents/.platform-version")])
         return None
     monkeypatch.setattr(status, "sh", sh)
-    _, rows = status.collect(gitops_repo, None, None)
-    row = next(r for r in rows if r["service"] == "todo-api")
+    _, envs, rows, resources = status.collect(gitops_repo, None, None)
+    row = next(r for r in rows if r["component"] == "todo-api")
     assert row["platform"] == "0.0.1 (behind)"
     stamps["acme/todo-api"] = f"platform: {latest}\n"
-    assert next(r for r in status.collect(gitops_repo, None, None)[1] if r["service"] == "todo-api")["platform"] == latest
+    assert next(r for r in status.collect(gitops_repo, None, None)[2] if r["component"] == "todo-api")["platform"] == latest
     stamps.clear()
-    _, rows = status.collect(gitops_repo, None, None)
-    assert next(r for r in rows if r["service"] == "todo-api")["platform"] == "none"
-    assert "platform" in status.render_table("todo", rows, {}, None).splitlines()[2]
+    _, envs, rows, resources = status.collect(gitops_repo, None, None)
+    assert next(r for r in rows if r["component"] == "todo-api")["platform"] == "none"
+    assert "platform" in status.render_table("todo", envs, rows, resources, {}, None).splitlines()[2]
 
 
 # ---------------- spec 084 (kept here: both are about the platform's own repo) ----------------
