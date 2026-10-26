@@ -10,7 +10,15 @@ You are the **release orchestrator**. Drive a release through quality gating, te
 
 ## Phase 0 — Shape dispatch
 
-Resolve the shape: run `cplat shape`. It prints JSON: `shape`, `plugin`, `deployable`, `library` and `agents` (the subagent type for every role — spawn each role with exactly that type, e.g. `agents.coder`). If `unsupported` is present, stop and show it. Roles missing from `agents` (e.g. deployment for a library) are skipped. The tester is `agents.tester`, the release agent in Phase 4 is `agents.release` ([ADR-012](../../../docs/adr/012-per-plugin-release-agent.md)). The gates below call only shape-neutral `devbox run` recipes; skip the image scan in Phase 3 when `deployable` is false.
+Resolve the shape: run `cplat shape`. It prints JSON: `shape`, `plugin`, `deployable`, `library` and `agents` (the subagent type for every role — spawn each role with exactly that type, e.g. `agents.coder`). If `unsupported` is present, stop and show it. If `agents` has no `release` role (shape `platform`), stop before anything changes and print:
+
+```
+## Release refused: the platform is not released with /component:release
+
+The platform is released through its own procedure: version bumps in .claude-plugin/marketplace.json and each changed plugin's .claude-plugin/plugin.json, the CHANGELOG section, a release PR and a tag. It is described in CONTRIBUTING.md, section Releases.
+```
+
+Roles missing from `agents` (e.g. deployment for a library) are skipped. The tester is `agents.tester`, the release agent in Phase 4 is `agents.release` ([ADR-012](../../../docs/adr/012-per-plugin-release-agent.md)). The gates below call only shape-neutral `devbox run` recipes; skip the image scan in Phase 3 when `deployable` is false.
 
 ---
 
