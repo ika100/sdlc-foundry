@@ -1,6 +1,6 @@
 # Claude Code Multi-Agent Setup
 
-This document describes the orchestration model used by the `svc`, `web`, `svc-java`, `svc-go`, `gitops`, `app` and `shared` plugins. Read this first when adding or modifying agents.
+This document describes the orchestration model used by the `svc`, `web`, `svc-java`, `svc-go`, `shared` and `system` plugins, and by the noun plugins `component`, `api`, `resource`, `instance`, `issue` and `platform`, whose commands carry no agents. Read this first when adding or modifying agents.
 
 ---
 
@@ -12,7 +12,7 @@ If a recipe is missing, **add it to `devbox.json` and commit** — never run an 
 
 ### SessionStart hooks
 
-The `svc`, `web`, `svc-java`, `svc-go`, `gitops` and `shared` plugins ship a `hooks/hooks.json` with a `SessionStart` hook that:
+The `svc`, `web`, `svc-java`, `svc-go` and `shared` plugins ship a `hooks/hooks.json` with a `SessionStart` hook that:
 
 - **Warns if `devbox` is missing from `PATH`** and prints the install command: `curl -fsSL https://get.jetify.com/devbox/install.sh | bash`. The hook exits 0 — it never blocks the session.
 - **Runs `devbox install` (idempotent)** if a `devbox.json` is present in the working directory, so the dev environment is ready before any agent touches it. The `svc` hook additionally runs `uv sync --all-extras` for Python repos (when `pyproject.toml` exists); `web` runs `devbox run install` when `node_modules/` is missing.
@@ -21,13 +21,13 @@ A consumer repo that installs any of these plugins is therefore devbox-aware out
 
 ### Stop hook (shared plugin)
 
-While a `/svc:ship` run is unfinished, the shared plugin's `Stop` hook keeps the session going (spec 066, [ADR-028](adr/028-unattended-delivery-without-branch-protection.md)). It looks for `<git dir>/cplat-ship.json` in shell first (the worktree's own git dir, so one worktree's run never blocks a session in another, [ADR-051](adr/051-run-state-is-per-worktree.md)), so sessions without a run never start Python. With a run it calls `cplat ship gate`, which blocks the stop with the next step, and in the build phase the untraced criteria and the red `devbox run test-fast` output. It lets the session stop when the run is done, when the orchestrator escalated (`cplat ship escalate '<reason>'`: a merge conflict after its re-plan (or the 4th re-plan of a build), a changed acceptance test, a security finding with no fix released or a bump that breaks a gate, a decision the spec does not answer, the user asked to stop), or after 8 blocked stops in a row (recorded as the escalation).
+While a `/component:ship` run is unfinished, the shared plugin's `Stop` hook keeps the session going (spec 066, [ADR-028](adr/028-unattended-delivery-without-branch-protection.md)). It looks for `<git dir>/cplat-ship.json` in shell first (the worktree's own git dir, so one worktree's run never blocks a session in another, [ADR-051](adr/051-run-state-is-per-worktree.md)), so sessions without a run never start Python. With a run it calls `cplat component ship gate`, which blocks the stop with the next step, and in the build phase the untraced criteria and the red `devbox run test-fast` output. It lets the session stop when the run is done, when the orchestrator escalated (`cplat component ship escalate '<reason>'`: a merge conflict after its re-plan (or the 4th re-plan of a build), a changed acceptance test, a security finding with no fix released or a bump that breaks a gate, a decision the spec does not answer, the user asked to stop), or after 8 blocked stops in a row (recorded as the escalation).
 
 ---
 
 ## Permissions allowlist
 
-Each consumer repo ships a `.claude/settings.json` (templated by Copier) with a committed allowlist that pre-approves the safe, frequent operations the pipeline needs — so `/svc:build` and `/svc:quick-task` don't pause for permission prompts mid-flight.
+Each consumer repo ships a `.claude/settings.json` (templated by Copier) with a committed allowlist that pre-approves the safe, frequent operations the pipeline needs — so `/component:build` and `/component:fix` don't pause for permission prompts mid-flight.
 
 **Auto-allowed (in every template; the Python-only `uv`/`python` entries exist only in the Python templates, `pnpm add`/`pnpm remove` prompt in the web template):**
 - Every `devbox run <recipe>` (the canonical entry point)
@@ -44,25 +44,25 @@ Each consumer repo ships a `.claude/settings.json` (templated by Copier) with a 
 - Out-of-band installs: `pip install`, `uv add`, `uv remove` (Python) / `pnpm add`, `pnpm remove` (web)
 
 **Pre-approved by the `shared` plugin specifically:**
-- `gh repo create * --private *`, `gh repo edit * --add-topic *`, `git clone --depth 1 *`, `uv run * shapes.py *` and `copier copy *` so `/shared:new-service` and `/shared:update-service` can run without mid-flight prompts.
+- `gh repo create * --private *`, `gh repo edit * --add-topic *`, `git clone --depth 1 *`, `uv run * shapes.py *` and `copier copy *` so `/component:new` and `/platform:update` can run without mid-flight prompts.
 
 ---
 
 ## How commands run the platform script
 
-Commands never contain logic that can be code: they call `cplat <command>` and relay its output. `cplat` is the shared plugin's `bin/cplat` launcher, on the Bash PATH while the plugin is enabled. It runs `scripts/cplat` from the installed marketplace checkout, so commands use the platform version the plugins were installed from, offline; `$CPLAT_PLATFORM` (a local checkout) and `$CPLAT_REF` (a tag) override it, and only a missing checkout makes it fetch `main`. `/shared:doctor` reports the source.
+Commands never contain logic that can be code: they call `cplat <noun> <verb>` and relay its output. `cplat` is the shared plugin's `bin/cplat` launcher, on the Bash PATH while the plugin is enabled. It runs `scripts/cplat` from the installed marketplace checkout, so commands use the platform version the plugins were installed from, offline; `$CPLAT_PLATFORM` (a local checkout) and `$CPLAT_REF` (a tag) override it, and only a missing checkout makes it fetch `main`. `/platform:doctor` reports the source.
 
 ---
 
 ## Shapes and agent dispatch
 
-Every `/svc:*` command starts by detecting the repo's **shape** (`.copier-answers.yml`, falling back to file sniffing) and looks it up in `shapes.yml`. Coder, tester, deployment, observability and release agents are then spawned from the plugin that owns the shape (`web:coder`, `svc-java:tester`, `svc-go:release`, …; `svc:*` for Python); product-manager and architect (`svc`) and quality and security (`shared`) are shared by all shapes. `gitops-app` repos do not use `/svc:spec`, `/svc:plan` or `/svc:build`; they use `/gitops:compose`, `/gitops:promote` and `/app:spec|plan|build|specs` (`cplat shape` prints the routing). The multi-repo flow: `/app:spec` (product spec, approved) → `/app:plan` (criteria per repo, contract) → `/app:build` runs `/svc:spec --from-plan <plan> <repo-id>`, `/svc:plan`, `/svc:build` in each ready repo in parallel → you merge → `/gitops:promote`.
+Every `/component:*` command starts by detecting the repo's **shape** (`.copier-answers.yml`, falling back to file sniffing) and looks it up in `shapes.yml`. Coder, tester, deployment, observability and release agents are then spawned from the plugin that owns the shape (`web:coder`, `svc-java:tester`, `svc-go:release`, …; `svc:*` for Python); product-manager and architect (`svc`) and quality and security (`shared`) are shared by all shapes. `gitops-app` repos do not use `/component:spec`, `/component:plan` or `/component:build`; they use `/component:add|set|remove`, `/resource:add`, `/instance:promote` and `/system:spec|plan|ship` (`cplat shape` prints the routing). The multi-repo flow: `/system:spec` (system spec, approved) → `/system:plan` (criteria per repo, contract) → `/system:ship` runs `/component:spec --from-plan <plan> <repo-id>`, `/component:plan`, `/component:build` in each ready repo in parallel → you merge → `/instance:promote`.
 
 ---
 
 ## Parallel implementation via git worktrees
 
-`/svc:build` Phase 2 fans coder agents out in parallel using the Agent tool's `isolation: "worktree"` mode. Each parallel coder works in its own git worktree on its own branch; the orchestrator merges branches back onto the base branch sequentially with a quality gate between each merge.
+`/component:build` Phase 2 fans coder agents out in parallel using the Agent tool's `isolation: "worktree"` mode. Each parallel coder works in its own git worktree on its own branch; the orchestrator merges branches back onto the base branch sequentially with a quality gate between each merge.
 
 Worktrees must start at the **feature branch**, where the spec, the plan and the red acceptance tests are: every template sets `worktree.baseRef: "head"` in `.claude/settings.json` (Claude Code's default branches from `main`), and the probe before the first batch checks the worktree's HEAD; on a mismatch the build runs sequentially and says why.
 
@@ -89,23 +89,23 @@ The orchestrator:
 1. **Topologically sorts** tasks by `depends_on`.
 2. At each dependency level, **greedily groups `parallel_safe: true` tasks into batches** whose `files` sets are disjoint.
 3. For each batch ≥ 2: spawns one coder per task **in one assistant turn** (multiple Agent tool calls in parallel), each in its own worktree. Each coder commits inside its worktree before returning.
-4. **Merges sequentially** back onto the base branch with `cplat build merge` (`git merge --no-ff`). After each merge: `devbox run lint-fix`, then `cplat spec test-diff <red commit>` (acceptance tests may only be reformatted), `devbox run quality` and `devbox run test-fast`. On failure, hand back to that task's coder for lint/type fixes only. Each merged task is marked `done` in the plan and committed on its own (one commit per task), so the next merge starts from a clean tree.
+4. **Merges sequentially** back onto the base branch with `cplat component build merge` (`git merge --no-ff`). After each merge: `devbox run lint-fix`, then `cplat spec test-diff <red commit>` (acceptance tests may only be reformatted), `devbox run quality` and `devbox run test-fast`. On failure, hand back to that task's coder for lint/type fixes only. Each merged task is marked `done` in the plan and committed on its own (one commit per task), so the next merge starts from a clean tree.
 5. Cleans up worktrees and branches as it merges.
 
-**A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** A conflict means the architect's `files` declarations were inaccurate, so the fix is to update the plan. `cplat build merge` aborts the merge and sets the task aside; the architect amends only `files` / `depends_on` / `parallel_safe` of tasks that are not done; the task runs again on top of the merged work. This happens without asking, attended or not.
+**A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** A conflict means the architect's `files` declarations were inaccurate, so the fix is to update the plan. `cplat component build merge` aborts the merge and sets the task aside; the architect amends only `files` / `depends_on` / `parallel_safe` of tasks that are not done; the task runs again on top of the merged work. This happens without asking, attended or not.
 
-Merge conflicts, files outside the plan and hand-backs are recorded per agent, shape and model (spec 089); `cplat runs report --agents` shows which agent causes rework and whether a release changed it (`--by-version`).
+Merge conflicts, files outside the plan and hand-backs are recorded per agent, shape and model (spec 089); `cplat platform runs report --agents` shows which agent causes rework and whether a release changed it (`--by-version`).
 
 ---
 
 ## Feature branch and PR lifecycle
 
-Both `/svc:quick-task` and `/svc:build` include:
+Both `/component:fix` and `/component:build` include:
 
 - **Phase 0** (pre-flight): if on `main`, create `feature/<slug>` branch before any work starts.
 - **Final PR phase**: after all quality/test/security gates pass, push the branch and open a PR. Both push and PR creation are in the `ask` permission list — user must confirm.
 
-`/svc:ship` goes further without asking (spec 067): `cplat ship pr` pushes only the spec's feature branch and opens the PR, `cplat ship land` merges it after every reported check passed (never with a pending, failed or missing check), and `cplat ship deploy` waits for the gitops-app's pin PR. None of it needs branch protection or auto-merge, which private repos on GitHub Free lack ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md)); the gitops-app's `pin-dev` workflow merges pin PRs the same way (spec 065).
+`/component:ship` goes further without asking (spec 067): `cplat component ship pr` pushes only the spec's feature branch and opens the PR, `cplat component ship land` merges it after every reported check passed (never with a pending, failed or missing check), and `cplat component ship deploy` waits for the gitops-app's pin PR. None of it needs branch protection or auto-merge, which private repos on GitHub Free lack ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md)); the gitops-app's `pin-dev` workflow merges pin PRs the same way (spec 065).
 
 ### Automatic issue linking and closing
 
@@ -116,47 +116,47 @@ The PR phase explicitly scans for GitHub issue references — `#NNN` patterns �
 
 Each candidate issue is verified via `gh issue view` to confirm it is `OPEN`. Live `Closes #NNN` lines (not HTML comments) are injected into the PR body. When the PR merges into `main`, GitHub automatically closes each linked issue.
 
-The `/svc:release` pipeline adds a second safety net: **Phase 7** scans all commits included in the release (since the previous tag) for `#NNN` references and calls `gh issue close` on any that are still open, with a comment linking to the release version.
+The `/component:release` pipeline adds a second safety net: **Phase 7** scans all commits included in the release (since the previous tag) for `#NNN` references and calls `gh issue close` on any that are still open, with a comment linking to the release version.
 
 ---
 
 ## Overview
 
 ```
-/svc:spec   ──►  product-manager  ──►  your answers to its open questions  ──►  your approval
+/component:spec   ──►  product-manager  ──►  your answers to its open questions  ──►  your approval
                     │
                     ▼
                docs/specs/<NNN>-<slug>/spec.md   (criteria AC-<NNN>.<n>, non-goals)
 
-/svc:plan   ──►  architect  ──►  design.md (contract) + plan.md (tasks covering every criterion; cplat spec check)
+/component:plan   ──►  architect  ──►  design.md (contract) + plan.md (tasks covering every criterion; cplat spec check)
 
-/svc:build  ──►  tester (acceptance mode) ──► coders ║parallel║ ──► merge+quality ──► quality ‖ tester ‖ security ──► reviewer ──► deployment ──► PR
+/component:build  ──►  tester (acceptance mode) ──► coders ║parallel║ ──► merge+quality ──► quality ‖ tester ‖ security ──► reviewer ──► deployment ──► PR
                        │                         │ (1 worktree per task)                │                              │              │
                        ▼                         ▼                                      ▼                              ▼              ▼
                 failing tests per AC     code until they pass                 lint, coverage, CVEs            verification.md   Dockerfile image
 
-/svc:verify ──►  cplat spec trace + reviewer (no code changes)
+/component:verify ──►  cplat spec trace + reviewer (no code changes)
 
-/svc:ship   ──►  [plan] ──► [build Phases 0–6] ──► cplat ship pr ──► cplat ship land ──► cplat ship deploy
+/component:ship   ──►  [plan] ──► [build Phases 0–6] ──► cplat component ship pr ──► cplat component ship land ──► cplat component ship deploy
                                                                          │  red: logs → coder → push │  pin PR merged,
                                                                          │  (max 3 rounds)           │  Argo healthy
                                                                          └── merge only when every check passed (no branch protection needed)
-                 Stop hook: no stop until done or `cplat ship escalate`; `cplat headless` resumes it in fresh sessions
+                 Stop hook: no stop until done or `cplat component ship escalate`; `cplat headless` resumes it in fresh sessions
 
-/svc:fix-bug       ──►  coder (diagnose) ──►  coder (fix) ──►  tester (verify)
+/component:fix       ──►  coder (diagnose) ──►  coder (fix) ──►  tester (verify)
                                   └──────────── loop (max 3) ──────────────┘
 
-/shared:check-quality ──►  quality + security (parallel, read-only)
+/component:check ──►  quality + security (parallel, read-only)
 
-/svc:release       ──►  quality gate ──►  tester gate ──►  security gate ──►  release agent
+/component:release       ──►  quality gate ──►  tester gate ──►  security gate ──►  release agent
                                                                                   │
                                                                                   ▼
                                                                           changelog + tag + PR
 
-/gitops:promote <svc...> <from> <to>   ──►  cplat promote  ──►  PR (Argo reconciles on merge)
-/gitops:compose add|remove <svc...>    ──►  cplat compose  ──►  PR (services.yaml + generated ApplicationSets)
-/app:spec <desc> → /app:plan <id>      ──►  product-manager ──► planner ──►  docs/specs/<id>/ + docs/plan/<id>.md
-/app:build <id>                        ──►  one agent per ready repo: /svc:spec --from-plan → /svc:plan → /svc:build  ──►  PRs
+/instance:promote <component...> --to <env>   ──►  cplat instance promote  ──►  PR (Argo reconciles on merge)
+/component:add|set|remove <component...>    ──►  cplat component add|set|remove  ──►  PR (system.yaml + generated ApplicationSets)
+/system:spec <desc> → /system:plan <id>      ──►  product-manager ──► system:planner ──►  docs/specs/<id>/ + docs/plan/<id>.md
+/system:ship <id>                        ──►  one agent per ready repo: /component:spec --from-plan → /component:plan → /component:build  ──►  PRs
 ```
 
 ---
@@ -211,19 +211,15 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `observability` | sonnet | slog + Prometheus client_golang |
 | `release` | sonnet | CHANGELOG + PR; version is the git tag |
 
-### `gitops` plugin
+### Noun plugins (`component`, `api`, `resource`, `instance`, `issue`, `platform`)
+
+They have no agent. `/instance:promote`, `/component:add|set|remove`, `/resource:add|remove`, `/instance:secret`, `/instance:verify`, `/api:list` and `/platform:update` run `cplat instance promote|secret|verify`, `cplat component add|set|remove`, `cplat resource add|remove`, `cplat api list` and `cplat platform update` and relay its output; `/component:spec|plan|build|ship|verify|fix|release` dispatch the `svc` agents above.
+
+### `system` plugin
 
 | Agent | Model | Job |
 |---|---|---|
-| `deployment` | sonnet | ArgoCD ApplicationSet, cluster add-ons, overrides (platform GitOps repo) |
-
-`/gitops:promote`, `/gitops:compose`, `/gitops:addon` and `/gitops:secret` have no agent: they run `cplat promote|compose|addon|secret` and relay its output.
-
-### `app` plugin
-
-| Agent | Model | Job |
-|---|---|---|
-| `planner` | opus | Multi-repo plan (`docs/plan/<slug>.md`, ADR-011): which repos change, in what order, with paste-ready prompts. opus because decomposition across repos is the hard judgement call |
+| `system:planner` | opus | Multi-repo plan (`docs/plan/<slug>.md`, ADR-011): which repos change, in what order, with paste-ready prompts. opus because decomposition across repos is the hard judgement call |
 
 ### `shared` plugin
 
@@ -245,7 +241,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `docs/env-vars.md` | Required environment variables |
 | `docs/security/scan-<date>.md` | Security scan reports |
 | `docs/migrations/runbook.md` | Migration runbook |
-| `applications/<app>/services.yaml` (gitops-app repo) | How each service runs; the manifests under `overlays/` are generated from it |
+| `applications/<system>/system.yaml` (gitops-app repo) | The whole system: environments, components, APIs and resources;  the manifests under `overlays/` are generated from it |
 | `migrations/` | Alembic migration scripts |
 | `tests/` | pytest test suite |
 | `.github/workflows/` | CI/CD pipelines |
@@ -257,7 +253,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 
 ## Model selection convention
 
-- `model: opus` — agents whose primary output is *decisions* downstream agents consume (`product-manager`, `architect`, `app:planner`) or that judge the result (`reviewer`). One bad plan poisons the whole run, so the reasoning headroom pays for itself.
+- `model: opus` — agents whose primary output is *decisions* downstream agents consume (`product-manager`, `architect`, `system:planner`) or that judge the result (`reviewer`). One bad plan poisons the whole run, so the reasoning headroom pays for itself.
 - `model: sonnet` — execution agents (everything else).
 
 When adding a new agent that needs to run shell commands, copy the **devbox rule** from `coder.md` or `quality.md` into the system prompt so the new agent inherits the same convention: shell only via `devbox run <script>`, recipes pinned in `devbox.json`.
