@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.0.1] — 2026-10-26
+
 **Fixes:**
 - `cplat platform doctor` in the platform repo reports `gate recipes` and `gate CI jobs` as not applicable instead of warning and suggesting `/platform:update`, which refuses there (#231, AC-123.24).
 
