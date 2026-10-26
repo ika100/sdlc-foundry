@@ -92,6 +92,15 @@ def unchanged(repo):
     return subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True).stdout.strip() == ""
 
 
+def prod_untouched(repo):
+    """The prod overlay holds only the template's empty .gitkeep and no commit after the template touched it (nothing promoted)."""
+    prod_dir = repo / "applications/todo/overlays/prod"
+    files = sorted(str(f.relative_to(prod_dir)) for f in prod_dir.rglob("*") if f.is_file()) if prod_dir.exists() else []
+    touched = subprocess.run(["git", "log", "--format=%H", "--", "applications/todo/overlays/prod"], cwd=repo,
+                             capture_output=True, text=True).stdout.split()
+    return files in ([], [".gitkeep"]) and all((prod_dir / f).read_bytes() == b"" for f in files) and len(touched) <= 1
+
+
 # ---------------- registry.digests ----------------
 
 def test_digests_maps_every_tag_and_none_for_a_missing_one(reg):
@@ -144,7 +153,7 @@ def test_a_digest_mismatch_refuses_and_changes_nothing(at_staging, reg, capsys):
     assert rc != 0 and unchanged(at_staging)
     for needle in ("todo-api", STAGING, RELEASE, D1, D2, "prod would not run what staging tested", "re-publish"):
         assert needle in out, needle
-    assert not (at_staging / "applications/todo/overlays/prod").exists()
+    assert prod_untouched(at_staging)   # the template ships overlays/prod/.gitkeep, so check its content, not its existence
 
 
 def test_a_mismatch_opens_no_pr(at_staging, reg, monkeypatch, capsys):
@@ -218,7 +227,7 @@ def test_a_failed_lookup_refuses_and_names_the_fix(at_staging, reg, capsys):
     reg.fail = True
     rc, out = attempt(prod(at_staging), capsys)
     assert rc != 0 and unchanged(at_staging) and "read:packages" in out and "gh api" in out
-    assert not (at_staging / "applications/todo/overlays/prod").exists()
+    assert prod_untouched(at_staging)   # the template ships overlays/prod/.gitkeep, so check its content, not its existence
 
 
 def test_a_failed_lookup_in_dry_run_is_not_a_match(at_staging, reg, capsys):
@@ -396,7 +405,7 @@ def test_one_failing_service_promotes_none_and_is_named(two_at_staging, reg, cap
     # one package serves every image in the fake: todo-api matches (D1/D1); todo-web resolves in the same fake, so make it differ
     reg.tags["2.0.0"] = D2
     rc, out = attempt(_both(two_at_staging), capsys)
-    assert rc != 0 and unchanged(two_at_staging) and not (two_at_staging / "applications/todo/overlays/prod").exists()
+    assert rc != 0 and unchanged(two_at_staging) and prod_untouched(two_at_staging)
     assert "todo-web" in out and "2.0.0" in out
 
 
@@ -418,3 +427,4 @@ def test_the_docs_state_the_digest_rule_the_dry_run_and_the_override(doc):
     assert "--accept-digest-mismatch" in text
     assert "digest" in text and "mismatch" in text and "--dry-run" in text
     assert "staging tested" in text
+
