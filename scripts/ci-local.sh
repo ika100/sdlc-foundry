@@ -22,6 +22,9 @@ echo "OK: plugin manifests match the marketplace"
 step "shape registry, templates, plugins, descriptions"
 uv run scripts/shapes.py check
 
+step "4.x slash-command tombstones"
+python3 scripts/tombstones.py check
+
 step "GitHub Actions pinned by SHA, workflows have permissions"
 python3 scripts/pin-actions.py --check
 

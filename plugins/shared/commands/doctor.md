@@ -1,13 +1,12 @@
 ---
-description: "Preflight check of the platform setup (tools, gh scopes, Docker, kube context, plugin versions, this repo's platform version) with a concrete fix per problem. Usage: /shared:doctor"
+description: "Moved in 5.0: /shared:doctor is /platform:doctor. Runs nothing."
+moved-to: "/platform:doctor"
+allowed-tools: Read, Glob
 ---
 
-Run the platform doctor. One Bash call:
+`/shared:doctor` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.
 
-```bash
-cplat doctor
-```
-
-Show the output verbatim. If it reports outdated plugins, say plainly that **Claude Code must be restarted** to load updated plugin prompts (a running session keeps the old ones). Offer to run the `fix:` commands that are safe (`gh auth refresh -s …`, `claude plugin update …`, `open -a Docker`); never run anything that touches a non-local kube context.
-
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+1. With Read and Glob only, check whether this repo is migrated: it is not when `.platform-version` is missing or its `platform:` is below 5.0.0, or when `applications/*/app.yaml` or `applications/*/services.yaml` exists.
+2. Answer with exactly one line and nothing else:
+   - migrated: `/shared:doctor` is `/platform:doctor` in 5.0.
+   - not migrated: `/shared:doctor` is `/platform:doctor` in 5.0; run `cplat platform update --migrate` first.

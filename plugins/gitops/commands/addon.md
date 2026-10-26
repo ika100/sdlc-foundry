@@ -1,17 +1,12 @@
 ---
-description: "Declare addons for the application (postgres, observability). Usage: /gitops:addon add|remove|list <postgres|observability> [--version N] [--ui lgtm] [--export-to URL]"
+description: "Moved in 5.0: /gitops:addon is /resource:add|remove (addon list: resources: in system.yaml; addon add observability: environments.<env>.observability in system.yaml). Runs nothing."
+moved-to: "/resource:add|remove (addon list: resources: in system.yaml; addon add observability: environments.<env>.observability in system.yaml)"
+allowed-tools: Read, Glob
 ---
 
-Run the platform script inside the gitops-app repo. **Request:** $ARGUMENTS
+`/gitops:addon` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.
 
-```bash
-cplat addon <ARGS>
-```
-
-1. **Preview** with `--dry-run` and show it verbatim; errors carry a `fix:` line.
-2. **Run** with `--pr` (one PR; the user asked for it, do not ask again).
-3. **Next**: services opt in with `/gitops:compose add <service> --uses postgres` (or `uses: [postgres]`), which injects `DATABASE_URL` and `PG*`. The operator (CloudNativePG) must exist in the cluster; `devbox run cluster-up` installs it locally.
-
-`observability` needs no `uses:`: every service gets `OTEL_*` variables and a collector per environment (`--ui lgtm` = local Grafana dev stack, `--export-to` = your OTLP/HTTP backend). Removing an addon never deletes the database; say so. No backups/PITR/pooling are provided (ADR-020).
-
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+1. With Read and Glob only, check whether this repo is migrated: it is not when `.platform-version` is missing or its `platform:` is below 5.0.0, or when `applications/*/app.yaml` or `applications/*/services.yaml` exists.
+2. Answer with exactly one line and nothing else:
+   - migrated: `/gitops:addon` is `/resource:add|remove (addon list: resources: in system.yaml; addon add observability: environments.<env>.observability in system.yaml)` in 5.0.
+   - not migrated: `/gitops:addon` is `/resource:add|remove (addon list: resources: in system.yaml; addon add observability: environments.<env>.observability in system.yaml)` in 5.0; run `cplat platform update --migrate` first.

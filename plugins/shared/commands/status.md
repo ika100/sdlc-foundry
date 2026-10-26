@@ -1,13 +1,12 @@
 ---
-description: "One-table overview of a product (run in its gitops-app repo) — which image each environment pins, whether each service's CI on main is green, and ArgoCD sync/health. Usage: /shared:status [--context <kube-context>]"
+description: "Moved in 5.0: /shared:status is /system:status. Runs nothing."
+moved-to: "/system:status"
+allowed-tools: Read, Glob
 ---
 
-Show the product status. One Bash call from the gitops-app repo root:
+`/shared:status` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.
 
-```bash
-cplat status <ARGS>
-```
-
-Pass `--context k3d-<app>-local` (or the user's cluster context) when they want the Argo column. Show the table verbatim, then add at most three lines: anything not `ok`/`Synced/Healthy`, whether staging/prod lag behind dev, and the one command that would fix the most obvious problem. Read-only: never change anything.
-
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+1. With Read and Glob only, check whether this repo is migrated: it is not when `.platform-version` is missing or its `platform:` is below 5.0.0, or when `applications/*/app.yaml` or `applications/*/services.yaml` exists.
+2. Answer with exactly one line and nothing else:
+   - migrated: `/shared:status` is `/system:status` in 5.0.
+   - not migrated: `/shared:status` is `/system:status` in 5.0; run `cplat platform update --migrate` first.
