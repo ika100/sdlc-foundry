@@ -144,16 +144,18 @@ def kube_context(repo: Path) -> str | None:
     return os.environ.get("CPLAT_KUBE_CONTEXT") or _settings_value(repo, "context") or None
 
 
-def _has_lgtm(app: dict | None) -> bool:
-    obs = (app or {}).get("observability")
-    return isinstance(obs, dict) and obs.get("ui") == "lgtm"
+def _has_lgtm(doc: dict | None) -> bool:
+    """Any environment of the system.yaml has `observability: {ui: lgtm}`."""
+    envs = (doc or {}).get("environments")
+    return isinstance(envs, dict) and any(isinstance(e, dict) and isinstance(e.get("observability"), dict)
+                                          and e["observability"].get("ui") == "lgtm" for e in envs.values())
 
 
 def has_addon(repo: Path) -> bool:
-    """The repo is a gitops-app with `observability: {ui: lgtm}`, or `.platform-app.yml` names one that has (read through gh)."""
+    """The repo is a gitops-app with an environment whose `observability.ui` is lgtm, or `.platform-app.yml` names one that has (read through gh)."""
     apps = repo / "applications"
     if apps.is_dir():
-        for f in sorted(apps.glob("*/app.yaml")):
+        for f in sorted(apps.glob("*/system.yaml")):
             try:
                 if _has_lgtm(yaml.safe_load(f.read_text())):
                     return True
@@ -164,7 +166,7 @@ def has_addon(repo: Path) -> bool:
     import smoke
     for slug in ship.gitops_apps(repo):
         for name in smoke._app_dirs(slug, repo) or []:
-            if _has_lgtm(smoke._read(slug, f"applications/{name}/app.yaml", repo)):
+            if _has_lgtm(smoke._read(slug, f"applications/{name}/system.yaml", repo)):
                 return True
     return False
 

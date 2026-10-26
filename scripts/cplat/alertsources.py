@@ -1,6 +1,6 @@
 """`alertsources`: where firing alerts come from (spec 092, ADR 038).
 
-Reads `applications/<app>/{app.yaml,services.yaml}`, evaluates the declared rules and the built-in `ServiceDown` against a
+Reads `applications/<app>/system.yaml` (each environment's `observability` is one source), evaluates the declared rules and the built-in `ServiceDown` against a
 Prometheus query API, reads an optional Alertmanager, and maps every series to a service, its repo and an environment.
 The output is `Alert`s and `SourceError`s. Nothing here touches GitHub. The seams `http_get` and `kubectl` never raise;
 tests replace them.
@@ -66,18 +66,31 @@ class Alert:
 
 
 @dataclass
+class EnvSource:
+    """One environment's observability: its rules and its endpoints (AC-114.10)."""
+    env: str
+    rules: list[Rule] = field(default_factory=list)
+    prometheus_url: str | None = None
+    alertmanager_url: str | None = None
+    query_secret: str | None = None
+    notes: list[str] = field(default_factory=list)
+    skip: str | None = None
+
+
+@dataclass
 class AppConfig:
     app: str
     app_dir: Path
     services: list[dict]
     envs: list[str]
-    rules: list[Rule]
-    prometheus_url: str | None
-    alertmanager_url: str | None
-    query_secret: str | None
-    skip: str | None
+    sources: list[EnvSource] = field(default_factory=list)
+    skip: str | None = None
     notes: list[str] = field(default_factory=list)
     model: Model | None = None
+
+    @property
+    def rules(self) -> list[Rule]:
+        return [r for s in self.sources for r in s.rules]
 
 
 class SourceError(Exception):
@@ -93,7 +106,7 @@ def http_get(url: str, *, headers: dict[str, str], timeout: float = TIMEOUT_S) -
     """(status, body); (0, reason) when the endpoint cannot be reached. Never raises. Tests replace this."""
     try:
         req = urllib.request.Request(url, headers=dict(headers or {}))
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310  (http(s) URLs from app.yaml)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310  (http(s) URLs from system.yaml)
             return int(resp.status), resp.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         try:
@@ -162,62 +175,76 @@ def _service_down(app: str, svc: str, env: str) -> Rule:
                 f"No metrics target of {svc} in {env} has been up for 5 minutes", service=svc, environment=env)
 
 
+def _source(m: Model, app: str, env: str, obs: model.Observability) -> EnvSource:
+    src = EnvSource(env=env)
+    if obs.alerts is False:
+        src.skip = f"{env}: alerts: false in observability"
+        return src
+    query_url = obs.query_url if isinstance(obs.query_url, str) else None
+    am_url = obs.alertmanager_url if isinstance(obs.alertmanager_url, str) else None
+    export_to = obs.export_to
+    lgtm = obs.ui == "lgtm"
+    if export_to and not query_url and not am_url:
+        src.skip = f"{env}: exportTo is set but queryURL is missing"
+        return src
+    if not lgtm and not export_to and not am_url:
+        src.skip = f"{env}: no metrics backend: set ui: lgtm, or exportTo with queryURL"
+        return src
+    if obs.rules is not None:
+        problem = _rule_problem(obs.rules)
+        if problem:
+            raise SourceError(f"applications/{app}/system.yaml",
+                              problem.replace("observability.", f"environments.{env}.observability.", 1))
+    src.alertmanager_url = am_url.rstrip("/") if am_url else None
+    if query_url:
+        src.prometheus_url = query_url.rstrip("/")
+    elif lgtm:
+        src.prometheus_url = (os.environ.get("ALERTS_PROMETHEUS_URL", "").strip() or LGTM_QUERY_URL).rstrip("/")
+    else:
+        src.notes.append(f"{env}: rules not evaluated: queryURL is missing")
+    secret = obs.query_secret
+    if isinstance(secret, str) and secret:
+        first = next((i.namespace for i in m.instances), f"{app}-{env}")
+        src.query_secret = secret if "/" in secret else f"{first}/{secret}"
+    declared = [Rule(r["name"], r["query"], r["severity"], r.get("summary") or "") for r in obs.rules or []]
+    src.rules = list(declared)
+    if not any(r.name == SERVICE_DOWN for r in declared):
+        with_metrics = {c.name for c in m.components if c.metrics}
+        src.rules += [_service_down(app, i.component, i.environment) for i in m.instances
+                      if i.environment == env and i.component in with_metrics]
+    return src
+
+
 def load_app(app_dir: Path) -> AppConfig:
     app_dir = Path(app_dir)
     app = app_dir.name
-    cfg = _read_yaml(app_dir / "app.yaml")
-    raw_services = _read_yaml(app_dir / "services.yaml").get("services") or []
-    services = [s for s in raw_services if isinstance(s, dict) and s.get("name")]
-    m = model.build(app, {"services": raw_services}, cfg)
+    if not (app_dir / "system.yaml").exists() and ((app_dir / "app.yaml").exists() or (app_dir / "services.yaml").exists()):
+        raise SourceError(f"applications/{app}", model.NOT_MIGRATED)
+    doc = _read_yaml(app_dir / "system.yaml")
+    comps = doc.get("components") if isinstance(doc.get("components"), dict) else {}
+    services = [{"name": n, "repo": c.get("repo")} for n, c in comps.items() if isinstance(c, dict) and c.get("type") != "library"]
+    m = model.build(doc, app)
     envs = [e.name for e in m.environments if m.instances_in(e.name)]
-    addons = cfg.get("addons") if isinstance(cfg.get("addons"), dict) else {}
-    obs = addons.get("observability") if "observability" in addons else None
-    out = AppConfig(app=app, app_dir=app_dir, services=services, envs=envs, rules=[], prometheus_url=None, alertmanager_url=None,
-                    query_secret=None, skip=None, model=m)
-    if "observability" not in addons:
-        out.skip = "app.yaml declares no observability addon"
-        return out
-    obs = obs if isinstance(obs, dict) else {}
-    if obs.get("alerts") is False:
-        out.skip = "alerts: false in the observability addon"
-        return out
-    if not envs:
-        out.skip = "no service runs in any environment"
-        return out
-    query_url = obs.get("queryURL") if isinstance(obs.get("queryURL"), str) else None
-    am_url = obs.get("alertmanagerURL") if isinstance(obs.get("alertmanagerURL"), str) else None
-    export_to = obs.get("exportTo")
-    lgtm = obs.get("ui") == "lgtm"
-    if export_to and not query_url and not am_url:
-        out.skip = "exportTo is set but queryURL is missing"
-        return out
-    if not lgtm and not export_to and not am_url:
-        out.skip = "no metrics backend: set ui: lgtm, or exportTo with queryURL"
-        return out
-    problem = _rule_problem(obs["rules"]) if "rules" in obs else None
-    if problem:
-        raise SourceError(f"applications/{app}/app.yaml", problem)
-    out.alertmanager_url = am_url.rstrip("/") if am_url else None
-    if query_url:
-        out.prometheus_url = query_url.rstrip("/")
-    elif lgtm:
-        out.prometheus_url = (os.environ.get("ALERTS_PROMETHEUS_URL", "").strip() or LGTM_QUERY_URL).rstrip("/")
+    out = AppConfig(app=app, app_dir=app_dir, services=services, envs=envs, model=m)
+    skipped: list[str] = []
+    for e in m.environments:
+        if e.name not in envs or e.observability is None:
+            continue
+        src = _source(m, app, e.name, e.observability)
+        if src.skip:
+            skipped.append(src.skip)
+        else:
+            out.sources.append(src)
+    if not out.sources:
+        out.skip = "; ".join(skipped) if skipped else "no environment declares observability"
     else:
-        out.notes.append("rules not evaluated: queryURL is missing")
-    secret = obs.get("querySecret")
-    if isinstance(secret, str) and secret:
-        out.query_secret = secret if "/" in secret else f"{app}-{envs[0]}/{secret}"
-    declared = [Rule(r["name"], r["query"], r["severity"], r.get("summary") or "") for r in obs.get("rules") or []]
-    out.rules = list(declared)
-    if not any(r.name == SERVICE_DOWN for r in declared):
-        with_metrics = {c.name for c in m.components if c.metrics}
-        out.rules += [_service_down(app, i.component, i.environment) for i in m.instances if i.component in with_metrics]
+        out.notes += [f"skipped {s}" for s in skipped] + [n for src in out.sources for n in src.notes]
     return out
 
 
 # ---------------- reading ----------------
 
-def authorization(cfg: AppConfig) -> str | None:
+def authorization(cfg: EnvSource) -> str | None:
     env = os.environ.get("ALERTS_QUERY_AUTHORIZATION", "").strip()
     if env:
         return env
@@ -261,8 +288,8 @@ def _service_of(cfg: AppConfig, labels: dict[str, str]) -> tuple[str, str | None
     for cand in (raw, raw.rsplit("/", 1)[-1]):
         if cand in names:
             repo = names[cand].get("repo") or None
-            return cand, repo, ([] if repo else [f"service {cand} has no repo in services.yaml"])
-    return raw, None, [f'service label "{raw}" (or job "{raw}") is not a service in services.yaml']
+            return cand, repo, ([] if repo else [f"service {cand} has no repo in system.yaml"])
+    return raw, None, [f'service label "{raw}" (or job "{raw}") is not a service in system.yaml']
 
 
 def _env_of(cfg: AppConfig, labels: dict[str, str]) -> tuple[str, list[str]]:
@@ -311,20 +338,33 @@ def _parse_time(text: object, default: datetime.datetime) -> datetime.datetime:
         return default
 
 
+def _mine(src: EnvSource, first: bool, env: str) -> bool:
+    """A series belongs to the source of its environment; one that maps to no environment is kept once, by the first source."""
+    return env == src.env or (first and env not in model.ENVIRONMENTS)
+
+
 def collect(cfg: AppConfig, *, now: datetime.datetime) -> tuple[list[Alert], list[SourceError]]:
     errors: list[SourceError] = []
     found: dict[str, Alert] = {}
-    use_prom = bool(cfg.prometheus_url and cfg.rules)
-    if not use_prom and not cfg.alertmanager_url:
-        return [], errors
+    for n, src in enumerate(cfg.sources):
+        _collect_source(cfg, src, n == 0, now, found, errors)
+    return _finish(found), errors
+
+
+def _collect_source(cfg: AppConfig, src: EnvSource, first: bool, now: datetime.datetime, found: dict[str, Alert],
+                    errors: list[SourceError]) -> None:
+    use_prom = bool(src.prometheus_url and src.rules)
+    if not use_prom and not src.alertmanager_url:
+        return
     try:
-        auth = authorization(cfg)
+        auth = authorization(src)
     except SourceError as e:
-        return [], [e]
+        errors.append(e)
+        return
     headers = {"Authorization": auth} if auth else {}
     if use_prom:
-        base = cfg.prometheus_url or ""
-        for rule in cfg.rules:
+        base = src.prometheus_url or ""
+        for rule in src.rules:
             data, err = _fetch(base, f"{base}/api/v1/query?" + urllib.parse.urlencode({"query": rule.query}), headers)
             if err is None and not (isinstance(data, dict) and data.get("status") == "success"):
                 err = SourceError(feedback.redact(base), f"error: {data.get('error') or 'unreadable answer'}"
@@ -336,36 +376,39 @@ def collect(cfg: AppConfig, *, now: datetime.datetime) -> tuple[list[Alert], lis
             for item in result:
                 labels = {str(k): str(v) for k, v in ((item or {}).get("metric") or {}).items()}
                 if rule.service is not None:
-                    service, env, repo, notes = rule.service, rule.environment or "unknown", None, []
+                    service, env, notes = rule.service, rule.environment or "unknown", []
                     repo = next((s.get("repo") or None for s in cfg.services if s["name"] == service), None)
                 else:
                     service, repo, notes = _service_of(cfg, labels)
                     env, env_notes = _env_of(cfg, labels)
                     notes = notes + env_notes
+                if not _mine(src, first, env):
+                    continue
                 _merge(found, Alert(app=cfg.app, name=rule.name, severity=rule.severity, environment=env, service=service, repo=repo,
                                     started_at=now, summary=rule.summary, source="rule", query=rule.query, series=[labels],
                                     unmapped=list(notes)))
-    if cfg.alertmanager_url:
-        base = cfg.alertmanager_url
+    if src.alertmanager_url:
+        base = src.alertmanager_url
         data, err = _fetch(base, f"{base}/api/v2/alerts?active=true&silenced=false&inhibited=false", headers)
         if err is None and not isinstance(data, list):
             err = SourceError(feedback.redact(base), "unreadable answer")
         if err is not None:
             errors.append(err)
-        else:
-            for entry in data:  # type: ignore[union-attr]
-                if not isinstance(entry, dict):
-                    continue
-                state = (entry.get("status") or {}).get("state", "active")
-                if state != "active":
-                    continue
-                labels = {str(k): str(v) for k, v in (entry.get("labels") or {}).items()}
-                ann = {str(k): str(v) for k, v in (entry.get("annotations") or {}).items()}
-                sev = labels.get("severity")
-                service, repo, notes = _service_of(cfg, labels)
-                env, env_notes = _env_of(cfg, labels)
-                _merge(found, Alert(app=cfg.app, name=labels.get("alertname", "unnamed"), severity=sev if sev in SEVERITIES else "warning",
-                                    environment=env, service=service, repo=repo, started_at=_parse_time(entry.get("startsAt"), now),
-                                    summary=ann.get("summary", ""), source="alertmanager", query=f"Alertmanager {feedback.redact(base)}",
-                                    series=[labels], annotations=ann, unmapped=notes + env_notes))
-    return _finish(found), errors
+            return
+        for entry in data:  # type: ignore[union-attr]
+            if not isinstance(entry, dict):
+                continue
+            state = (entry.get("status") or {}).get("state", "active")
+            if state != "active":
+                continue
+            labels = {str(k): str(v) for k, v in (entry.get("labels") or {}).items()}
+            ann = {str(k): str(v) for k, v in (entry.get("annotations") or {}).items()}
+            sev = labels.get("severity")
+            service, repo, notes = _service_of(cfg, labels)
+            env, env_notes = _env_of(cfg, labels)
+            if not _mine(src, first, env):
+                continue
+            _merge(found, Alert(app=cfg.app, name=labels.get("alertname", "unnamed"), severity=sev if sev in SEVERITIES else "warning",
+                                environment=env, service=service, repo=repo, started_at=_parse_time(entry.get("startsAt"), now),
+                                summary=ann.get("summary", ""), source="alertmanager", query=f"Alertmanager {feedback.redact(base)}",
+                                series=[labels], annotations=ann, unmapped=notes + env_notes))
