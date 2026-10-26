@@ -21,7 +21,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [105-a-deploy-counts-only-after-its-checks](specs/105-a-deploy-counts-only-after-its-checks/spec.md) — A deploy counts only after its checks pass | P1 | approved | 8 | #155 |
 | [106-prod-runs-the-exact-image-staging-tested](specs/106-prod-runs-the-exact-image-staging-tested/spec.md) — Prod runs the exact image staging tested | P1 | approved | 12 | #157 |
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [113-a-domain-model-core-in-cplat](specs/113-a-domain-model-core-in-cplat/spec.md) — A domain model core in cplat | P1 | approved | 18 |  |
 | [114-the-platform-speaks-the-domain-model-5-0](specs/114-the-platform-speaks-the-domain-model-5-0/spec.md) — The platform speaks the domain model (5.0) | P1 | draft | 56 |  |
 | [108-agents-get-a-compact-failure-summary-not](specs/108-agents-get-a-compact-failure-summary-not/spec.md) — Agents get a compact failure summary, not the full log | P2 | draft | 11 | #139 |
 | [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | draft | 12 | #164 |
@@ -112,6 +111,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [098-gitops-ci-checks-components-against-the](specs/098-gitops-ci-checks-components-against-the/spec.md) — Gitops CI checks Components against the service branch CRDs | P1 | done | 17 | #110 |
 | [099-token-usage-and-cost-are-measured-per](specs/099-token-usage-and-cost-are-measured-per/spec.md) — Token usage and cost are measured per run | P1 | done | 14 | #140 |
 | [100-leaner-runs-cheaper-coordinator-fewer](specs/100-leaner-runs-cheaper-coordinator-fewer/spec.md) — Leaner runs: cheaper coordinator, fewer turns, smaller context | P1 | done | 17 | #139 |
+| [113-a-domain-model-core-in-cplat](specs/113-a-domain-model-core-in-cplat/spec.md) — A domain model core in cplat | P1 | done | 18 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
