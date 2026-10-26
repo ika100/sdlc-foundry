@@ -18,7 +18,7 @@ PASSED = state.PASSED
 
 
 def entry_path(gitops_dir: Path, spec_id: str) -> Path:
-    return state.common_dir(gitops_dir) / "cplat-app-ship" / f"{spec_id}-entry"
+    return state.git_dir(gitops_dir) / "cplat-app-ship" / f"{spec_id}-entry"
 
 
 def clone_path(gitops_dir: Path, repo_id: str) -> Path:

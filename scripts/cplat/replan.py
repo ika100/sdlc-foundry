@@ -103,7 +103,7 @@ def last_entry(hist: list[dict], task: str) -> tuple[dict, dict] | None:
 # ---------------- pending conflicts ----------------
 
 def _pending_path(repo: Path) -> Path:
-    common = runs._git_common_dir(repo)
+    common = core.git_dir(repo)
     if common is None:
         raise PlatformError(f"{repo} is not a git repository")
     return common / PENDING_FILE

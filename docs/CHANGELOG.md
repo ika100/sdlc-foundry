@@ -6,6 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+- **Fix: run state is per worktree.** `cplat-ship.json`, the app-ship state, the `cplat runs begin` pointer, the recovery snapshot and pending replans now live in the worktree's own git dir instead of the dir every worktree shares, so one session's ship run no longer blocks another session's Stop hook, and a build in one worktree cannot attach to another's run. A worktree no longer sees another checkout's run; a run started inside a worktree before this fix must be resumed from the main checkout or restarted. The main checkout's `.git` is unchanged. The gitops merge slot and the validation evidence cache stay shared (ADR-051).
 - **Fix (090): a failing retro proposal step shows why.** When `claude` exits non-zero, `cplat retro propose` prints the last 20 lines of its output to the job log. `claude exited with 1` alone could not be diagnosed: the output stayed in `propose.log` on the ephemeral runner. The posted issue keeps the short reason.
 
 ## [4.7.0] — 2026-10-26

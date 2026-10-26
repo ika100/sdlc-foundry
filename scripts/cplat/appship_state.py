@@ -37,11 +37,19 @@ def slug(repo: Path) -> str | None:
 # ---------------- state file ----------------
 
 def common_dir(repo: Path) -> Path:
+    """The repo's shared git dir: only for what must span every checkout (the gitops merge slot)."""
+    out = run(["git", "rev-parse", "--git-common-dir"], cwd=repo, check=False).stdout.strip()
+    if not out:
+        raise PlatformError(f"{repo} is not a git repository")
+    return (Path(out) if Path(out).is_absolute() else Path(repo) / out).resolve()
+
+
+def git_dir(repo: Path) -> Path:
     return ship.state_path(repo).parent
 
 
 def state_path(repo: Path) -> Path:
-    return common_dir(repo) / STATE_FILE
+    return git_dir(repo) / STATE_FILE
 
 
 def load_state(repo: Path) -> dict | None:
@@ -99,7 +107,7 @@ def require_state(repo: Path) -> dict:
 
 @contextlib.contextmanager
 def _locked(repo: Path) -> Iterator[None]:
-    with open(common_dir(repo) / STATE_LOCK, "a") as f:
+    with open(git_dir(repo) / STATE_LOCK, "a") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
             yield

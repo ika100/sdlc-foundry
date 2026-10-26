@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "d=\"$(git rev-parse --git-common-dir 2>/dev/null)\"; [ -n \"$CPLAT_RUN_PARENT\" ] || [ -f \"$d/cplat-ship.json\" ] || [ -f \"$d/cplat-app-ship.json\" ] || [ -f \"$d/cplat-run.json\" ] || exit 0; out=$(\"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" budget gate --invocation 2>&1); rc=$?; if [ $rc -eq 2 ] && printf %s \"$out\" | grep -q 'budget exhausted'; then printf '%s\\n' \"$out\" >&2; exit 2; fi; exit 0",
+            "command": "d=\"$(git rev-parse --git-dir 2>/dev/null)\"; [ -n \"$CPLAT_RUN_PARENT\" ] || [ -f \"$d/cplat-ship.json\" ] || [ -f \"$d/cplat-app-ship.json\" ] || [ -f \"$d/cplat-run.json\" ] || exit 0; out=$(\"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" budget gate --invocation 2>&1); rc=$?; if [ $rc -eq 2 ] && printf %s \"$out\" | grep -q 'budget exhausted'; then printf '%s\\n' \"$out\" >&2; exit 2; fi; exit 0",
             "timeout": 30,
             "statusMessage": "Checking the run's budget (spec 102)"
           }
@@ -31,13 +31,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=\"$(git rev-parse --git-common-dir 2>/dev/null)/cplat-ship.json\"; [ -f \"$f\" ] || exit 0; exec \"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" ship gate",
+            "command": "f=\"$(git rev-parse --git-dir 2>/dev/null)/cplat-ship.json\"; [ -f \"$f\" ] || exit 0; exec \"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" ship gate",
             "timeout": 960,
             "statusMessage": "Checking the ship run (spec 066)"
           },
           {
             "type": "command",
-            "command": "f=\"$(git rev-parse --git-common-dir 2>/dev/null)/cplat-app-ship.json\"; [ -f \"$f\" ] || exit 0; exec \"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" app-ship gate",
+            "command": "f=\"$(git rev-parse --git-dir 2>/dev/null)/cplat-app-ship.json\"; [ -f \"$f\" ] || exit 0; exec \"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" app-ship gate",
             "timeout": 120,
             "statusMessage": "Checking the product ship run (spec 097)"
           }

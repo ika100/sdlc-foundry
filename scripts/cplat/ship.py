@@ -77,10 +77,9 @@ def say(line: str) -> None:           # progress while waiting (tests replace th
 # ---------------- state ----------------
 
 def state_path(repo: Path) -> Path:
-    common = run(["git", "rev-parse", "--git-common-dir"], cwd=repo, check=False).stdout.strip()
-    if not common:
+    base = core.git_dir(repo)
+    if base is None:
         raise PlatformError(f"{repo} is not a git repository")
-    base = Path(common) if Path(common).is_absolute() else repo / common
     return base / STATE_FILE
 
 
