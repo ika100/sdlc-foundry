@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**The platform repo declares its own shape.** [ADR-056](adr/056-the-platform-repo-declares-its-shape.md), spec 123. This repo declares `shape: platform` in `.platform-settings.yml`, so `/component:spec`, `plan`, `build`, `verify` and `ship` work here. `/component:release` and `cplat platform update` refuse (the platform is released through its own procedure and is not updated from a template), and `cplat doctor` reports the platform source version. A `shape:` key anywhere else is an error.
+
+**Plugins:** component 1.1.0.
+
+**Action for existing repos:** none.
+
 ## [5.0.0] — 2026-10-26
 
 **BREAKING: the platform speaks the domain model.** [ADR-054](adr/054-five-zero-interface-and-proved-migration.md), [ADR-053](adr/053-domain-model.md), [guide](DOMAIN-MODEL.md), spec 114. A system is one file, `applications/<system>/system.yaml`, that the renderer checks; slash commands and `cplat` subcommands are grouped by noun (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`). Cluster names (namespaces, Argo applications, image names) never change, so a migrated system renders the same manifests.
