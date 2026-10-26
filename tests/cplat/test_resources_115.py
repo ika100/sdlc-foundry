@@ -5,6 +5,7 @@ Contract: design.md "Contract: system.yaml additions", its render-error tables a
 script in a hand-built checkout (resources_fixtures); nothing touches the network or a cluster. The commands, the model, doctor, the
 migration and the docs are in test_resources_115_cmds.py."""
 import copy
+import re
 
 import pytest
 import yaml
@@ -509,7 +510,7 @@ def test_the_template_applies_the_operators_before_the_systems_ac_115_18():  # A
     boot = t / "scripts" / "bootstrap.sh"
     assert boot.is_file(), "scripts/bootstrap.sh is new"
     text = boot.read_text()
-    assert "operators/root.yaml" in text and "clusters.postgresql.cnpg.io" in text and "KUBE_CONTEXT" in text
+    assert "operators/root.yaml" in text and re.search(r"\bclusters\.postgresql\.cnpg\.io\b", text) and "KUBE_CONTEXT" in text
     assert text.index("operators/root.yaml") < text.index("bootstrap/")
     assert "bash scripts/bootstrap.sh" in (t / "devbox.json").read_text()
     local = (t / "scripts" / "local-cluster.sh").read_text()
