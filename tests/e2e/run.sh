@@ -261,6 +261,14 @@ case "$es_message" in *password*) echo "ok   ExternalSecret not ready, status na
 sleep 5   # give a wrongly created partial Secret time to appear
 if kc get secret $ext_es >/dev/null 2>&1; then fail "the Secret $ext_es exists although the store entry lacks password (no partial Secret allowed)"; fi
 echo "ok   no Secret $ext_es while password is missing"
+# the instance that uses it stays unhealthy: the new e2e-web pod cannot start without the Secret (the old ReplicaSet
+# keeps the Deployment available, so the new pod's state is checked directly)
+web_waiting() { kc get pods -l app=e2e-web -o jsonpath='{.items[*].status.containerStatuses[*].state.waiting.reason}' 2>/dev/null; }
+for _ in $(seq 1 20); do case "$(web_waiting)" in *CreateContainerConfigError*) break;; esac; sleep 3; done   # up to 60 s
+case "$(web_waiting)" in
+  *CreateContainerConfigError*) echo "ok   e2e-web's new pod is not ready while $ext_es is missing (CreateContainerConfigError)";;
+  *) kc get pods -l app=e2e-web -o wide; fail "e2e-web's new pod is not held back by the missing Secret $ext_es (waiting: '$(web_waiting)')";;
+esac
 
 step "External database: completing the store entry creates the Secret with all keys"
 sc patch secret $store_key --type merge -p '{"stringData":{"password":"ext-secret-pw"}}' >/dev/null
