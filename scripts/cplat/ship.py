@@ -463,6 +463,7 @@ class CheckWatch:
         self.healed: dict[tuple[str, str], tuple[str, float]] = {}   # run → (stale | queued, when)
         self.head: str | None = None                                  # the PR head commit being watched
         self.run_sha: dict[str, str | None] = {}                      # run id → the commit it ran on
+        self.run_workflow: dict[str, str | None] = {}                 # run id → its workflow (database id)
         self.refused: str | None = None                               # spec 102: the budget refused a rerun
         self.refused_checks: list[dict] = []
 
@@ -479,11 +480,36 @@ class CheckWatch:
             return None
         if r[1] not in self.run_sha:
             out = gh(["run", "view", r[1], "-R", r[0], "--json", "headSha"], cwd=self.repo, check=False)
+            wf = gh(["run", "view", r[1], "-R", r[0], "--json", "workflowDatabaseId"], cwd=self.repo, check=False)
             try:
                 self.run_sha[r[1]] = json.loads(out or "{}").get("headSha") or None
             except (ValueError, AttributeError):
                 self.run_sha[r[1]] = None
+            try:
+                w = json.loads(wf or "{}").get("workflowDatabaseId")
+                self.run_workflow[r[1]] = str(w) if w else None
+            except (ValueError, AttributeError):
+                self.run_workflow[r[1]] = None
         return self.run_sha[r[1]]
+
+    def _newest_runs(self, cs: list[dict]) -> list[dict]:
+        """Of several runs of one workflow on the same commit only the newest counts: an older one was superseded
+        (concurrency cancel-in-progress), and its cancelled or failed checks say nothing about the PR."""
+        newest: dict[tuple[str, str], int] = {}
+        for c in cs:
+            r = run_of(c)
+            wf = self.run_workflow.get(r[1]) if r else None
+            if r and wf:
+                key = (r[0], wf)
+                newest[key] = max(newest.get(key, 0), int(r[1]))
+        out = []
+        for c in cs:
+            r = run_of(c)
+            wf = self.run_workflow.get(r[1]) if r else None
+            if r and wf and int(r[1]) < newest[(r[0], wf)]:
+                continue
+            out.append(c)
+        return out
 
     def _current(self) -> list[dict]:
         """Only the checks of the PR's current head commit; a new head starts the watch over (a fresh push
@@ -497,9 +523,10 @@ class CheckWatch:
         if head:
             self.head = head
         cs = checks(self.repo, self.pr)
-        if not head:
-            return cs
-        return [c for c in cs if self._sha_of(c) in (None, head)]
+        shas = [self._sha_of(c) for c in cs]
+        if head:
+            cs = [c for c, sha in zip(cs, shas) if sha in (None, head)]
+        return self._newest_runs(cs)
 
     def _own_cancel(self, c: dict) -> bool:
         """A check of a run this watch just reran (stuck queue cancelled, or a transient failure) is not red yet."""

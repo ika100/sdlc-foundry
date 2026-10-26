@@ -45,7 +45,7 @@ copier copy ./templates/web-nextjs /tmp/try --defaults --trust --skip-tasks --da
 bash tests/e2e/run.sh                                                       # whole stack on a local k3d cluster (Docker, k3d, kubectl)
 ```
 
-`bash scripts/ci-local.sh` (or `devbox run ci-local`; add `--render` to render every template) runs the first five in one go.
+`bash scripts/ci-local.sh` (or `devbox run ci-local`; add `--render` to render every template) runs the first five in one go. The same checks are devbox scripts for the `/svc:*` gates: `devbox run test-fast` (cplat tests), `quality` (static checks, no tests), `ci` (= `ci-local.sh`), `lint-fix` (no-op, no formatter here).
 
 CI runs the same checks plus a smoke test per template (generated repos must pass their own `quality` and `test` recipes). Pull requests that only touch documentation run a reduced set of jobs.
 
