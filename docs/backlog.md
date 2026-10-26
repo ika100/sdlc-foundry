@@ -22,6 +22,13 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [106-prod-runs-the-exact-image-staging-tested](specs/106-prod-runs-the-exact-image-staging-tested/spec.md) — Prod runs the exact image staging tested | P1 | approved | 12 | #157 |
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
 | [114-the-platform-speaks-the-domain-model-5-0](specs/114-the-platform-speaks-the-domain-model-5-0/spec.md) — The platform speaks the domain model (5.0) | P1 | approved | 67 |  |
+| [115-resources-are-named-typed-and-may-be](specs/115-resources-are-named-typed-and-may-be/spec.md) — Resources are named, typed and may be external | P1 | approved | 18 |  |
+| [116-an-object-storage-resource-for-files-and](specs/116-an-object-storage-resource-for-files-and/spec.md) — An object storage resource for files and backups | P1 | approved | 16 |  |
+| [117-databases-and-environments-are-backed-up](specs/117-databases-and-environments-are-backed-up/spec.md) — Databases and environments are backed up and restorable | P1 | approved | 32 |  |
+| [118-a-cache-resource-compatible-with-redis](specs/118-a-cache-resource-compatible-with-redis/spec.md) — A cache resource compatible with Redis | P1 | approved | 19 |  |
+| [119-a-message-broker-resource-behind-events](specs/119-a-message-broker-resource-behind-events/spec.md) — A message broker resource behind events APIs | P1 | approved | 24 |  |
+| [120-instances-scale-on-load-and-queue-depth](specs/120-instances-scale-on-load-and-queue-depth/spec.md) — Instances scale on load and queue depth | P1 | approved | 28 |  |
+| [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | approved | 27 |  |
 | [108-agents-get-a-compact-failure-summary-not](specs/108-agents-get-a-compact-failure-summary-not/spec.md) — Agents get a compact failure summary, not the full log | P2 | draft | 11 | #139 |
 | [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | draft | 12 | #164 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |

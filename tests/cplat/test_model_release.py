@@ -34,8 +34,10 @@ def test_model_is_registered_and_nothing_else_changed_ac_113_17():  # AC-113.17
 def unreleased() -> str:
     text = CHANGELOG.read_text()
     start = text.index("## [Unreleased]")
-    nxt = re.search(r"^## \[", text[start + 1:], re.M)
-    return text[start: start + 1 + nxt.start()] if nxt else text[start:]
+    # [Unreleased] plus the newest released section: the release moves the entry there
+    heads = [m.start() for m in re.finditer(r"^## \[", text[start + 1:], re.M)]
+    end = start + 1 + heads[1] if len(heads) > 1 else len(text)
+    return text[start:end]
 
 
 def test_the_changelog_announces_the_model_and_that_nothing_else_changed_ac_113_17():  # AC-113.17
