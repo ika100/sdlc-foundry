@@ -25,6 +25,7 @@ tasks:
     covers: [AC-112.1, AC-112.2, AC-112.4, AC-112.7, AC-112.8]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: Service fixtures from the cache (fleet seed, update pair, update/doctor repos, rename, old web repo, generated repos)
     files: [tests/cplat/fleet_world.py, tests/cplat/test_update_lost.py, tests/cplat/test_update_doctor.py,
