@@ -2,7 +2,7 @@
 
 The nouns the platform is built around: what a product is made of, where it runs, and how it changes. The model takes [Backstage's system model](https://backstage.io/docs/features/software-catalog/system-model) for the first part and adds environments and the delivery process. It is a model only: the platform does not use or need Backstage. Decisions and the migration path are in [ADR-053](adr/053-domain-model.md).
 
-**Status:** this is the target model of sdlc-foundry 5.0. The internal core (spec 113) lands in 4.x without changing any command or file; the user-facing switch to `system.yaml` and noun-based commands (spec 114) is the 5.0 release. Until then, [The model today](#the-model-today) shows the names you use now, and [Today's features on the model](#todays-features-on-the-model) maps every command onto the nouns.
+**Status:** this is the target model of sdlc-foundry 5.0. The internal core (spec 113) is in place in 4.x without changing any command or file; `cplat model show` prints a product in these nouns, and its JSON (`schema: 1`) may change in 5.0. The user-facing switch to `system.yaml` and noun-based commands (spec 114) is the 5.0 release. Until then, [The model today](#the-model-today) shows the names you use now, and [Today's features on the model](#todays-features-on-the-model) maps every command onto the nouns.
 
 ## Three questions
 
