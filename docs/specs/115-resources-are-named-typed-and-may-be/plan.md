@@ -9,90 +9,105 @@ tasks:
     covers: [AC-115.1, AC-115.2, AC-115.3, AC-115.5, AC-115.11, AC-115.17, AC-115.18]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: render.py — one CloudNativePG cluster per used database, the TYPES contract with the prefix rule, the versions table and the pinned image
     files: [templates/gitops-app/scripts/render.py]
     covers: [AC-115.4, AC-115.5, AC-115.6, AC-115.7, AC-115.8, AC-115.17]
     parallel_safe: false
     depends_on: [t1]
+    done: true
   - id: t3
     title: render.py — external resource instances (ExternalSecret in the first using overlay, per-environment override, no cluster, no Argo app)
     files: [templates/gitops-app/scripts/render.py]
     covers: [AC-115.9, AC-115.10, AC-115.12]
     parallel_safe: false
     depends_on: [t2]
+    done: true
   - id: t4
     title: render.py — operators/ once per cluster (root and pinned CloudNativePG application), operators owner opt-out, check and stale handling
     files: [templates/gitops-app/scripts/render.py]
     covers: [AC-115.18]
     parallel_safe: false
     depends_on: [t3]
+    done: true
   - id: t5
     title: model.py — typed, external resource instances with Secret, Argo app and store key; Resource.external; Environment.operators
     files: [scripts/cplat/model.py]
     covers: [AC-115.5, AC-115.15]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: model show text and system status cells for typed and external resource instances
     files: [scripts/cplat/modelcmd.py, scripts/cplat/status.py]
     covers: [AC-115.15]
     parallel_safe: true
     depends_on: [t5]
+    done: true
   - id: t7
     title: cplat resource add <name> --type … [--external [--path]] and remove <name> for any resource
     files: [scripts/cplat/addon.py]
     covers: [AC-115.2, AC-115.13, AC-115.14]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: Migration proof normalises the database image only
     files: [scripts/cplat/update.py]
     covers: [AC-115.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: platform doctor — operator cloudnative-pg row (owner-managed vs platform-managed, installed vs expected)
     files: [scripts/cplat/doctor.py]
     covers: [AC-115.18]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: t10
     title: gitops-app template — bootstrap.sh and cluster-up apply operators/root.yaml first; no k3s CloudNativePG under Argo CD
     files: [templates/gitops-app/scripts/local-cluster.sh, templates/gitops-app/scripts/bootstrap.sh, templates/gitops-app/devbox.json, templates/gitops-app/CLAUDE.md.jinja]
     covers: [AC-115.18]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t11
     title: e2e — a second, external database with a missing store key, then complete; the operator comes from operators/
     files: [tests/e2e/run.sh]
     covers: [AC-115.9, AC-115.12, AC-115.18]
     parallel_safe: false
     depends_on: [t4, t10]
+    done: true
   - id: t12
     title: resource plugin 1.1.0 (commands, README, manifest, catalog) and the CHANGELOG [Unreleased] entry
     files: [plugins/resource/commands/add.md, plugins/resource/commands/remove.md, plugins/resource/README.md, plugins/resource/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/CHANGELOG.md]
     covers: [AC-115.13, AC-115.14, AC-115.16]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t13
     title: Docs — DOMAIN-MODEL.md, USER-JOURNEY.md, README and the site's resources page
     files: [docs/DOMAIN-MODEL.md, docs/USER-JOURNEY.md, README.md, site/src/content/docs/concepts/addons.md]
     covers: [AC-115.16]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t14
     title: Amend the spec 113/114 assertions that spec 115 supersedes (pinned image, new keys and messages, added model fields)
     files: [tests/cplat/test_system_render_114.py, tests/cplat/test_commands_114.py, tests/cplat/test_migrate_114.py, tests/cplat/test_system_model_114.py, tests/cplat/test_addons.py, tests/cplat/test_model_show.py, tests/cplat/model_fixtures.py]
     covers: [AC-115.1, AC-115.6, AC-115.13, AC-115.15]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t15
     title: component set --uses — help text and the next step when the prefix rule starts to apply
     files: [scripts/cplat/compose.py]
     covers: [AC-115.8]
     parallel_safe: true
     depends_on: []
+    done: true
 human_steps:
   - "Consumer note for the release: a gitops repo whose real cluster already runs a hand-installed CloudNativePG sets environments.<env>.operators: owner before anyone applies operators/root.yaml; everyone else applies it once per cluster with KUBE_CONTEXT=<ctx> devbox run bootstrap (local clusters: devbox run cluster-up applies it)"
 ---
