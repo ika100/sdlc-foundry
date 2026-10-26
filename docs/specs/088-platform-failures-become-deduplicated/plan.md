@@ -81,6 +81,7 @@ tasks:
   covers: []
   parallel_safe: true
   depends_on: [t6]
+  done: true
 ---
 
 The contract for every task is [design.md](design.md). ADR: [033](../../adr/033-auto-filed-issues-with-signatures.md).
