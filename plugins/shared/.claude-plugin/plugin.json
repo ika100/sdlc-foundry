@@ -1,6 +1,6 @@
 {
   "name": "shared",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Shared quality and security agents used by both svc and gitops plugins, plus the /new-service bootstrap command that scaffolds new repos from Copier templates.",
   "author": {
     "name": "Eike Hensler",
