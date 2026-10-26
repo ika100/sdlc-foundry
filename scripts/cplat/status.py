@@ -1,4 +1,4 @@
-"""`status`: one table for a product — what each environment pins, how the service's CI is doing, and Argo's view."""
+"""`system status`: one table for a system — per component and environment what is pinned, how CI is doing, and Argo's view."""
 from __future__ import annotations
 
 import argparse
@@ -9,7 +9,7 @@ from pathlib import Path
 import core
 import gitops
 import model
-from core import PlatformError, Report, run
+from core import PlatformError, run
 
 
 def sh(cmd: list[str]) -> str | None:
@@ -73,60 +73,86 @@ def pin_prs(repo: Path) -> dict[str, str]:
     return found
 
 
-def collect(repo: Path, app: str | None, context: str | None) -> tuple[str, list[dict]]:
+def collect(repo: Path, app: str | None, context: str | None) -> tuple[str, list[str], list[dict], list[dict]]:
+    """(system, environment names, component rows, resource rows); cells are None where there is no instance."""
     app_dir = gitops.find_app(repo, app)
     m = model.load_dir(app_dir)
     argo = argo_state(context)
     pins = pin_prs(repo)
     latest = core.platform_version()
     miss = "-" if not context else "missing"
+    envs = [e.name for e in m.environments]
     rows = []
     for c in m.components:
         ci = ci_state(c.repo) if c.repo else "?"
         plat = platform_of(c.repo, latest) if c.repo else "-"
-        for inst in m.instances_of(c.name):
+        cells: dict[str, dict | None] = {}
+        for env in envs:
+            inst = m.instance(c.name, env)
+            if inst is None:
+                cells[env] = None
+                continue
             inst.observed.update(argo=argo.get(inst.argo_application, miss), ci=ci)
-            rows.append({"service": c.name, "env": inst.environment, "tag": inst.tag or "?",
-                         "ci": ci, "argo": inst.observed["argo"],
-                         "exposed": bool(c.expose), "pin_pr": pins.get(c.name, "-") if inst.environment == "dev" else "-",
-                         "platform": plat})
-    for name in m.declared_addons:   # an addon runs in every environment where a service uses it
-        if name == "observability":
-            apps = [(e.name, e.observability.argo_application) for e in m.environments if e.observability and m.instances_in(e.name)]
-        else:
-            apps = [(ri.environment, ri.argo_application) for ri in m.resource_instances_of(name)]
-        for env, app_name in apps:
-            rows.append({"service": f"{name} (addon)", "env": env, "tag": "-", "ci": "-",
-                         "argo": argo.get(app_name, miss), "exposed": False, "pin_pr": "-", "platform": "-"})
-    return app_dir.name, rows
+            cells[env] = {"tag": _short(inst.tag), "ci": ci, "argo": inst.observed["argo"],
+                          "pin_pr": pins.get(c.name) if env == "dev" else None}
+        rows.append({"component": c.name, "platform": plat, "cells": cells})
+    resources = []
+    for r in m.resources:
+        by_env = {ri.environment: ri for ri in m.resource_instances_of(r.name)}
+        if by_env:
+            resources.append({"resource": r.name, "cells": {
+                env: ({"argo": argo.get(by_env[env].argo_application, miss)} if env in by_env else None) for env in envs}})
+    obs = {e.name: e.observability.argo_application for e in m.environments if e.observability and m.instances_in(e.name)}
+    if obs:
+        resources.append({"resource": "observability", "cells": {
+            env: ({"argo": argo.get(obs[env], miss)} if env in obs else None) for env in envs}})
+    return app_dir.name, envs, rows, resources
 
 
-def render_table(app: str, rows: list[dict], stamp: dict, context: str | None) -> str:
-    head = f"## {app} (gitops-app) — platform {core.platform_version()} available, repo stamped {stamp.get('platform', 'none')}"
-    cols = ["service", "env", "tag", "ci", "argo", "pin_pr", "platform"]
-    title = {"pin_pr": "pin PR"}
-    widths = {c: max(len(title.get(c, c)), *(len(str(r.get(c, "-"))) for r in rows)) if rows else len(title.get(c, c)) for c in cols}
-    lines = [head, ""] + ["  " + "  ".join(title.get(c, c).ljust(widths[c]) for c in cols), "  " + "  ".join("-" * widths[c] for c in cols)]
-    for r in rows:
-        lines.append("  " + "  ".join(str(r.get(c, "-")).ljust(widths[c]) for c in cols))
-    if not rows:
-        lines.append("  (no services yet — /gitops:compose add <service>)")
+def _short(tag: str | None) -> str:
+    m = re.fullmatch(r"sha-([0-9a-f]{40})", tag or "")
+    return f"sha-{m.group(1)[:7]}" if m else (tag or "?")
+
+
+def _cell(c: dict | None) -> str:
+    if c is None:
+        return "-"
+    if "tag" not in c:
+        return f"argo {c['argo']}"
+    out = f"{c['tag']} ci {c['ci']} argo {c['argo']}"
+    return out + (f"  pin PR {c['pin_pr']}" if c.get("pin_pr") else "")
+
+
+def _grid(header: list[str], body: list[list[str]]) -> list[str]:
+    w = [max(len(h), *(len(r[i]) for r in body)) if body else len(h) for i, h in enumerate(header)]
+    fmt = lambda r: "  " + "  ".join(v.ljust(w[i]) for i, v in enumerate(r)).rstrip()  # noqa: E731
+    return [fmt(header), fmt(["-" * x for x in w]), *map(fmt, body)]
+
+
+def render_table(app: str, envs: list[str], rows: list[dict], resources: list[dict], stamp: dict, context: str | None) -> str:
+    lines = [f"## {app} (system) — platform {core.platform_version()} available, repo stamped {stamp.get('platform', 'none')}", ""]
+    if rows:
+        lines += _grid(["component", *envs, "platform"], [[r["component"], *(_cell(r["cells"].get(e)) for e in envs), r["platform"]] for r in rows])
+    else:
+        lines.append("  (no components yet — /component:add <component>)")
+    if resources:
+        lines += [""] + _grid(["resource", *envs], [[r["resource"], *(_cell(r["cells"].get(e)) for e in envs)] for r in resources])
     if not context:
         lines += ["", "Argo column empty? pass --context <kube-context> (e.g. k3d-" + app + "-local)."]
     return "\n".join(lines)
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat status", description=__doc__)
+    ap = argparse.ArgumentParser(prog="cplat system status", description=__doc__)
     ap.add_argument("--repo-dir", default=".")
-    ap.add_argument("--app")
+    ap.add_argument("--system")
     ap.add_argument("--context", help="kube context to read ArgoCD applications from")
     ap.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv)
     repo = Path(ns.repo_dir).resolve()
-    app, rows = collect(repo, ns.app, ns.context)
+    system, envs, rows, resources = collect(repo, ns.system, ns.context)
     if ns.json:
-        print(json.dumps({"app": app, "rows": rows}, indent=2))
+        print(json.dumps({"system": system, "environments": envs, "rows": rows, "resources": resources}, indent=2))
     else:
-        print(render_table(app, rows, core.read_stamp(repo), ns.context))
+        print(render_table(system, envs, rows, resources, core.read_stamp(repo), ns.context))
     return 0
