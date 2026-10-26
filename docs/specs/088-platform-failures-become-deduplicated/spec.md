@@ -1,7 +1,7 @@
 ---
 spec_id: 088-platform-failures-become-deduplicated
 title: Platform failures become deduplicated issues
-status: draft
+status: approved
 priority: P1
 tracks: [207]
 ---
@@ -76,10 +76,10 @@ As the platform maintainer reading the weekly retro, I want escalations whose ca
 - ~~File crashes outside a recorded run automatically?~~ Answered: no, see AC-088.4.
 - ~~Confirm: label name `auto-filed`.~~ Answered: yes (the retro, spec 090, finds these issues by it), see AC-088.10.
 - ~~Confirm: the shape is not part of the signature.~~ Answered: yes, see AC-088.5.
-- Confirm: approval waits for git actions and a dirty working tree are `environment`, a spec/test conflict and a build left open for review are `decision`. (suggested: yes; affects AC-088.16)
-- Confirm: the stop gate giving up and headless `no progress` are recorded as `environment`. (suggested: yes, as the product ship's stop gate already does; affects AC-088.18)
-- Confirm: the report and the retro apply the current rules to older `unknown` records when they read them. (suggested: yes, so the 2026-11-02 retro can compare with W43; affects AC-088.21)
-- Confirm: the report lists at most 20 unclassified reasons. (suggested: yes; affects AC-088.19)
+- ~~Confirm: approval waits for git actions and a dirty working tree are `environment`, a spec/test conflict and a build left open for review are `decision`.~~ Answered: yes, see AC-088.16.
+- ~~Confirm: the stop gate giving up and headless `no progress` are recorded as `environment`.~~ Answered: yes, see AC-088.18.
+- ~~Confirm: the report and the retro apply the current rules to older `unknown` records when they read them.~~ Answered: yes, without rewriting the store, see AC-088.21.
+- ~~Confirm: the report lists at most 20 unclassified reasons.~~ Answered: yes, see AC-088.19.
 
 ## Changelog
 
@@ -90,3 +90,5 @@ As the platform maintainer reading the weekly retro, I want escalations whose ca
 - 2026-10-24 done
 - 2026-10-26 amended from the weekly retro 2026-W43 (#207): escalations without a cause are classified by reason rules (`cause_source`, AC-088.15 to AC-088.17), the platform's own stop-gate and no-progress escalations name `environment` (AC-088.18), and the report and the retro show the share of `unknown` and the reasons still unclassified (AC-088.19 to AC-088.21); per-phase time budgets and git pre-approval stay out
 - 2026-10-26 draft
+- 2026-10-26 amended: open questions answered with the suggested answers (cause mapping of AC-088.16, `environment` for the stop gate and no progress, older records classified when read, at most 20 reasons listed)
+- 2026-10-26 approved
