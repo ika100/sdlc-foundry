@@ -13,7 +13,7 @@ description: "Move a verified image through dev, staging and production with one
 | `staging` | `sha-<40>` of the commit | a green dev smoke in `/svc:ship` (self-merging `pin-staging` PR, spec 093), or `/gitops:promote` |
 | `prod` | `X.Y.Z` from the service's `vX.Y.Z` release tag | `/gitops:promote` after `/svc:release` |
 
-Automatic staging promotion is on in new gitops-apps. Switch it off with `promotion: {staging: manual}` in `app.yaml`, or per service in `services.yaml`. Production is never automatic: `/gitops:promote shop-api staging prod` first prints an evidence summary (smoke in dev and staging, open issues).
+Automatic staging promotion is on in new gitops-apps. Switch it off with `promotion: {staging: manual}` in `app.yaml`, or per service in `services.yaml`. Production is never automatic and runs the image staging tested: `/gitops:promote shop-api staging prod` refuses if the release tag's digest differs from the staging build (`--accept-digest-mismatch "<reason>"` overrides, and the reason is recorded). It first prints an evidence summary (smoke in dev and staging, open issues).
 
 If the staging smoke is red, the platform files a `smoke-failure` issue and leaves staging as it is; it does not roll back.
 

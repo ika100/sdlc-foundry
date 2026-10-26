@@ -10,6 +10,7 @@ Measured with `cplat runs benchmark` (spec 099) on `ika100/todo-api`, Claude Cod
 |---|---|---|---|
 | quick-task (one small change) | $0.48, 22 calls | **$0.15**, 8 calls | −69% |
 | build (plan + build of a two-criterion spec, median of two runs) | $1.94 | **$1.26** | −35% |
+| ship (spec to deployed dev, LAN cluster, first measured) | — | **$1.20 to $1.60** per run | |
 | A 10-spec delivery round before measuring (085–098, one session) | about $105, 2,287 calls, 42% of it coordination | — | |
 
 Re-measure with `cplat runs benchmark quick-task|build` after changes to the commands, agents or `cplat`; `cplat runs report --benchmarks` shows the median per workflow and platform version.
