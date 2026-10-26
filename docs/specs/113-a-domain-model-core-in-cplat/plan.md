@@ -19,42 +19,49 @@ tasks:
     covers: [AC-113.14, AC-113.15, AC-113.16, AC-113.17]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: status on the model (Instances, Resource instances, observed state per run); gitops.ENVS becomes an alias
     files: [scripts/cplat/status.py, scripts/cplat/gitops.py]
     covers: [AC-113.9, AC-113.11, AC-113.12, AC-113.13]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: promote on the model (environment order, Instances, staging pin for the digest check, pin write)
     files: [scripts/cplat/promote.py]
     covers: [AC-113.9, AC-113.11, AC-113.12, AC-113.13]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: smoke dev URL and the staging promotion decision through model.load_remote
     files: [scripts/cplat/smoke.py, scripts/cplat/staging.py, scripts/cplat/staging_deploy.py]
     covers: [AC-113.10, AC-113.11, AC-113.12, AC-113.13]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t6
     title: alert poll sources on the model (polled environments, ServiceDown per Instance, label to environment)
     files: [scripts/cplat/alertsources.py]
     covers: [AC-113.11, AC-113.12, AC-113.13]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t7
     title: secret store keys and the app-ship "exposed in dev" gate class from the model
     files: [scripts/cplat/secret.py, scripts/cplat/appship_sched.py]
     covers: [AC-113.12, AC-113.13, AC-113.18]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t8
     title: Docs — CHANGELOG (4.x minor, nothing changed for users) and the domain model guide's Status
     files: [docs/CHANGELOG.md, docs/DOMAIN-MODEL.md]
     covers: [AC-113.17]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 113 A domain model core in cplat
