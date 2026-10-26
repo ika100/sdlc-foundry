@@ -274,9 +274,10 @@ def build_old_gitops(root: Path, comments: bool = True) -> Path:
 
 
 def build_old_component(root: Path, template: str = "service-go", name: str = "svc") -> Path:
-    """A 4.x component repo: the template as rendered now (4.x), stamped 4.7.0, with both old plugins enabled."""
+    """A 4.x component repo: the pre-5.0 template (V4_REF) rendered with copier, stamped 4.7.0, with both old plugins enabled."""
     import json
-    repo = copier_render(ROOT / "templates" / template, root / name, project_name=name, github_org="acme")
+    src = archive_4x([f"templates/{template}"], root / f"tpl-{name}")
+    repo = copier_render(src / "templates" / template, root / name, project_name=name, github_org="acme")
     stamp(repo, "4.7.0", template)
     settings = repo / ".claude" / "settings.json"
     d = json.loads(settings.read_text())
