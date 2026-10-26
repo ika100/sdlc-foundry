@@ -13,6 +13,7 @@ It needs no branch protection or auto-merge, so it works for private repos on Gi
   cplat ship gitops pr <task> --title T --body-file F   push it and open (or reuse) its draft PR
   cplat ship land [--timeout S]          wait for the PR's checks (the first red one ends the wait, stuck runs are rerun
                                          once); all green → merge the before-merge gitops PRs, then the PR
+  cplat ship continue [--timeout S] ...  land, then deploy in one command: exit 0 done, 1 red, 2 escalated (spec 111)
   cplat ship deploy [--timeout S] [--context C]   wait until dev runs the merged build (pin PR merged, Argo healthy),
                                          then merge the after-release gitops PRs and wait for every app they name
   cplat ship escalate <reason>           a rule needs the user: stop here, the Stop hook lets the session end
@@ -1297,6 +1298,23 @@ def build_status(repo: Path, spec_id: str) -> list[str]:
 
 # ---------------- CLI ----------------
 
+def continue_run(repo: Path, ns: argparse.Namespace) -> int:
+    """Spec 111: `land` then `deploy` in one command, every rule staying in those two. 0 done, 1 red, 2 escalated."""
+    phase = require_state(repo)["phase"]
+    steps = ["deploy"] if phase in ("deploy", "done") else ["land", "deploy"]
+    for step in steps:
+        if step == "land":
+            ok, lines = land(repo, ns.timeout, ns.interval, ns.queue_timeout)
+        else:
+            ok, lines = deploy(repo, ns.timeout, ns.interval, ns.context, ns.queue_timeout, ns.base_url)
+        print("\n".join(lines))
+        if (load_state(repo) or {}).get("escalated"):
+            return 2
+        if not ok:
+            return 1
+    return 0
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat ship", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".")
@@ -1328,6 +1346,12 @@ def main(argv: list[str]) -> int:
     p.add_argument("--queue-timeout", type=float, default=QUEUE_TIMEOUT, help="cancel and rerun a run whose jobs stay queued this long")
     p = sub.add_parser("deploy")
     p.add_argument("--timeout", type=float, default=1800)
+    p.add_argument("--interval", type=float, default=20)
+    p.add_argument("--queue-timeout", type=float, default=QUEUE_TIMEOUT)
+    p.add_argument("--context", help="kube context: also wait for Argo CD to report <service>-dev Synced/Healthy")
+    p.add_argument("--base-url", default=None, help="run the smoke tests against this URL instead of the gitops-app's dev URL")
+    p = sub.add_parser("continue", help="land, then deploy: exit 0 done, 1 red, 2 escalated (spec 111)")
+    p.add_argument("--timeout", type=float, default=3600)
     p.add_argument("--interval", type=float, default=20)
     p.add_argument("--queue-timeout", type=float, default=QUEUE_TIMEOUT)
     p.add_argument("--context", help="kube context: also wait for Argo CD to report <service>-dev Synced/Healthy")
@@ -1389,6 +1413,8 @@ def main(argv: list[str]) -> int:
         ok, lines = deploy(repo, ns.timeout, ns.interval, ns.context, ns.queue_timeout, ns.base_url)
         print("\n".join(lines))
         return 0 if ok else 1
+    if ns.cmd == "continue":
+        return continue_run(repo, ns)
     if ns.cmd == "escalate":
         evidence = ""
         if ns.evidence_file:
