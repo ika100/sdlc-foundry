@@ -12,6 +12,7 @@ import statistics
 from collections import Counter
 
 import core
+import escalation_rules
 import feedback
 import runs_usage_report
 
@@ -22,6 +23,7 @@ PR_WAIT_RESULTS = ("green", "merged", "red", "budget-refused", "timeout", "no-ch
 RED_RESULTS = ("red", "budget-refused")
 RED_CI = "red-ci"    # a reader's count, never an outcome in a record
 TOP_RED_CHECKS = 5
+MAX_UNCLASSIFIED = 20
 
 
 def parse(texts: list[str]) -> tuple[list[dict], list[dict], int]:
@@ -109,6 +111,36 @@ def aggregate_pr_wait(kept: list[dict]) -> dict:
     return {"results": ordered, "red_checks": [{"check": c, "count": n} for c, n in top]}
 
 
+class Unclassified(dict):
+    """The `unclassified` figures; `more` (reasons beyond the cap) is for the text only and not a JSON key."""
+    more = 0
+
+
+def effective_escalation(record: dict) -> escalation_rules.Resolved | None:
+    """None without an escalation dict; otherwise the cause as the current rules read it (spec 088, AC-088.21)."""
+    esc = record.get("escalation")
+    return escalation_rules.effective(esc) if isinstance(esc, dict) else None
+
+
+def aggregate_unclassified(kept: list[dict]) -> dict:
+    unknown: Counter = Counter()
+    total = by_rule = 0
+    for r in kept:
+        res = effective_escalation(r)
+        if res is None:
+            continue
+        total += 1
+        by_rule += res.source == "rule"
+        if res.cause == UNKNOWN:
+            unknown[_text(r["escalation"].get("reason"))] += 1
+    count = sum(unknown.values())
+    out = Unclassified(
+        count=count, escalations=total, share=round(count / total, 3) if total else None, by_rule=by_rule,
+        reasons=[{"reason": t, "count": n} for t, n in sorted(unknown.items(), key=lambda kv: (-kv[1], kv[0]))[:MAX_UNCLASSIFIED]])
+    out.more = max(0, len(unknown) - MAX_UNCLASSIFIED)
+    return out
+
+
 def select(records: list[dict], *, since_days: int, repo: str | None, now: datetime.datetime) -> list[dict]:
     """Window, repo filter and run_id dedupe, shared by both reports."""
     cutoff = now - datetime.timedelta(days=since_days)
@@ -153,7 +185,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
                 durations.setdefault(_text(p.get("name")), []).append((b - a).total_seconds())
         esc = r.get("escalation")
         if isinstance(esc, dict):
-            causes[_text(esc.get("cause"))] += 1
+            causes[effective_escalation(r).cause] += 1
             reasons[_text(esc.get("reason"))] += 1
         for rr in _list(r.get("reruns")):
             rr = rr if isinstance(rr, dict) else {}
@@ -189,6 +221,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         "buffered": buffered,
         "usage": runs_usage_report.aggregate_usage(kept),
         "pr_wait": aggregate_pr_wait(kept),
+        "unclassified": aggregate_unclassified(kept),
     }
     validation = aggregate_validation(kept)
     if validation["rules"]:   # spec 103: only when a run recorded a validation section
@@ -225,6 +258,18 @@ def _pairs(counts: dict) -> str:
     return ", ".join(f"{k} {n}" for k, n in counts.items()) or "none"
 
 
+def _unclassified_lines(u: dict) -> list[str]:
+    if not u["escalations"]:
+        return ["Unclassified escalations: none"]
+    pct = (200 * u["count"] + u["escalations"]) // (2 * u["escalations"])   # floor(100 * n / m + 0.5)
+    lines = [f"Unclassified escalations: {u['count']} of {u['escalations']} ({pct}%)", f"  classified by rule: {u['by_rule']}"]
+    lines += [f"  {x['count']}  {x['reason']}" for x in u["reasons"]]
+    more = getattr(u, "more", 0)
+    if more:
+        lines.append(f"  … and {more} more")
+    return lines
+
+
 def render_text(agg: dict) -> str:
     w = agg["window"]
     lines = [f"Runs {w['since']} to {w['until']} ({w['days']} days) in {w['store']}" + (f", repo {w['repo']}" if w["repo"] else "")
@@ -239,6 +284,7 @@ def render_text(agg: dict) -> str:
     lines.append(f"Escalations per cause: {_pairs(agg['causes'])}")
     lines.append("Top escalation reasons:")
     lines += [f"  {e['count']}  {e['reason']}" for e in agg["escalations"]] or ["  none"]
+    lines += _unclassified_lines(agg["unclassified"])
     lines.append(f"Reruns by reason: {_pairs(agg['reruns']['by_reason'])}")
     lines.append(f"Reruns by check: {_pairs(agg['reruns']['by_check'])}")
     lines.append("Filed issues: " + ", ".join(f"{k} {n}" for k, n in agg["filed"].items()))

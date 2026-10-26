@@ -52,7 +52,8 @@ def test_ac_087_25_red_checks_count_red_and_budget_refused_only(filled, capsys):
 
 def test_ac_087_25_json_key_comes_after_usage_and_is_always_there(store, capsys):  # AC-087.25
     data = report_json(capsys)
-    assert list(data)[-2:] == ["usage", "pr_wait"]
+    keys = list(data)
+    assert keys[keys.index("usage") + 1] == "pr_wait"   # later keys (spec 088's `unclassified`) may follow
     assert list(data["pr_wait"]["results"]) == RESULTS and set(data["pr_wait"]["results"].values()) == {0}
     assert data["pr_wait"]["red_checks"] == []
 

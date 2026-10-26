@@ -72,6 +72,7 @@ tasks:
   covers: [AC-088.19, AC-088.21]
   parallel_safe: true
   depends_on: [t7]
+  done: true
 - id: t11
   title: weekly retro shows the unknown share week over week
   files: [scripts/cplat/retro_report.py]
