@@ -87,13 +87,20 @@ def _major(v: str) -> int:
     return core.vtuple(v)[0]
 
 
+def _proved_migration(old: str, target: str, data: dict) -> bool:
+    """AC-114.68: a 4 → 5 migration that proved its render and overwrote nothing merges although it is a major version."""
+    mig = data.get("migration") or {}
+    return bool(mig.get("ran") and _major(old) == 4 and _major(target) == 5 and not data.get("lost")
+                and (mig.get("kind") == "component" or mig.get("byte_identical") is True))
+
+
 def pre_wait_reasons(old: str | None, target: str, data: dict) -> list[str]:
     reasons = []
     if data.get("lost"):
         reasons.append("local customisation")
     if old is None:
         reasons.append(f"major version unknown → {_major(target)}")
-    elif _major(old) < _major(target):
+    elif _major(old) < _major(target) and not _proved_migration(old, target, data):
         reasons.append(f"major version {_major(old)} → {_major(target)}")
     return reasons
 
@@ -111,7 +118,7 @@ def pr_body(old: str | None, target: str, data: dict, next_steps: list[str]) -> 
     replaced = "; ".join(f"`{r['entry']}` (was `{r['was']}`)" for r in dev.get("replaced") or []) or "none"
     lines = [MARKER,
              f"Platform update **{was} → {target}** by `cplat fleet update` (spec 096); the same commit "
-             "`/shared:update-service` makes.", "",
+             "`/platform:update` makes.", "",
              f"### Changed files ({len(changed)})", *[f"- `{p}`" for p in changed],
              "### devbox.json", f"- kept: {kept}", f"- replaced by the template: {replaced}"]
     if dev.get("moved_to_ci_extra"):
@@ -204,7 +211,7 @@ def update(ctx: Ctx, old: str | None, target: str, ref: str | None) -> Result:  
         return _manual(ctx, existing, head, old, target)
     branch = head or new_branch(ctx)
     _git(ctx, "checkout", "-q", "-b", branch)
-    report = _run_update(ctx, ref)
+    report = _run_update(ctx, ref, old, target)
     if not report.data:
         return Result("up to date", None, existing["url"] if existing else None, [])
     nxt = follow_ups(report)
@@ -230,9 +237,16 @@ def update(ctx: Ctx, old: str | None, target: str, ref: str | None) -> Result:  
         return Result("failed", _first(str(e)) or type(e).__name__, url, nxt)
 
 
-def _run_update(ctx: Ctx, ref: str | None) -> core.Report:
-    req = upd.resolve(["--repo", str(ctx.clone)] + (["--ref", ref] if ref else []))
-    return upd.execute(req)
+def _run_update(ctx: Ctx, ref: str | None, old: str | None = None, target: str | None = None) -> core.Report:
+    migrate = old is not None and target is not None and _major(old) < 5 <= _major(target)
+    req = upd.resolve(["--repo", str(ctx.clone)] + (["--ref", ref] if ref else []) + (["--migrate"] if migrate else []))
+    try:
+        return upd.execute(req)
+    except Exception as e:  # noqa: BLE001
+        lines = [ln.strip() for ln in str(e).strip().splitlines() if ln.strip()]
+        if migrate and lines and lines[0].startswith("cannot migrate"):   # the bad keys are on the lines after the first
+            raise RuntimeError(" ".join(lines)) from e
+        raise
 
 
 def _decide(ctx: Ctx, url: str, labelled: bool, old: str | None, target: str, data: dict, nxt: list[str]) -> Result:

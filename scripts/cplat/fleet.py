@@ -168,7 +168,9 @@ def _dry(slug: str, default: str, frm: str, old: str | None, target: str) -> dic
         prs = [p for p in json.loads(out or "[]") if str(p.get("headRefName", "")).startswith(fleet_pr.BRANCH_PREFIX)]
         if prs:
             nxt.append("would update open PR " + max(prs, key=lambda p: p["number"])["url"])
-    if old is None or core.vtuple(old)[0] < core.vtuple(target)[0]:
+    if old is not None and core.vtuple(old)[0] == 4 and core.vtuple(target)[0] >= 5:
+        nxt.append("5.0 migration: merges on green CI when proved")
+    elif old is None or core.vtuple(old)[0] < core.vtuple(target)[0]:
         nxt.append("major version: the PR will stay open")
     return _row(slug, frm, target, "would update", nxt=nxt)
 
