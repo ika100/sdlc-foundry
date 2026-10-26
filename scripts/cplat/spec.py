@@ -211,9 +211,12 @@ def slugify(text: str) -> str:
 
 
 def repo_shape(root: Path) -> str | None:
+    import settings
     import shapecmd
     try:
         return shapecmd.route(root)["shape"]
+    except settings.ShapeDeclarationError:
+        raise
     except PlatformError:
         return None  # shape-less repo (the platform itself): specs work, shape matching is skipped
 
@@ -237,6 +240,11 @@ def smoke_globs(shape: str | None) -> list[str]:
 
 # ---------------- check ----------------
 
+def spec_shape(spec: Spec, repo_shape: str | None) -> str | None:
+    """A spec's own shape, else the repo's unless that is a declared shape (specs written before it stay shape-less)."""
+    return spec.meta.get("shape") or (None if repo_shape in core.registry.declared_ids() else repo_shape)
+
+
 def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -> list[str]:
     errs: list[str] = []
     meta = spec.meta
@@ -251,7 +259,7 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
         errs.append(f"spec.md: status must be one of {STATUSES}")
     if meta.get("priority") not in PRIORITIES:
         errs.append(f"spec.md: priority must be one of {sorted(PRIORITIES)}")
-    known = {s["id"] for s in core.registry.load()}
+    known = {s["id"] for s in core.registry.load_all()}
     if meta.get("shape") and meta["shape"] not in known:
         errs.append(f"spec.md: unknown shape '{meta['shape']}' (valid: {', '.join(sorted(known))})")
     if shape and meta.get("shape") and meta["shape"] != shape:
@@ -263,7 +271,7 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
     for a in acs:
         if a.spec_no != spec.number:
             errs.append(f"{a.id} belongs to spec {a.spec_no}, not {spec.number} (ids are AC-{spec.number}.<n>)")
-    eff_shape = meta.get("shape") or shape
+    eff_shape = spec_shape(spec, shape)
     if eff_shape in known and smoke_tag(eff_shape) is None:
         errs += [f"{ac}: (smoke) needs a deployable shape ({eff_shape} has no smoke tests)" for ac in spec.smoke_acs()]
     rank = RANK.get(spec.status, -1)  # superseded has no rank: it never satisfies --require
@@ -935,7 +943,7 @@ def ci_problems(root: Path) -> list[tuple[Spec, str]]:
     out: list[tuple[Spec, str]] = []
     for s in all_specs(root):
         out += [(s, e) for e in check(s, shape=shape)]
-        own_shape = s.meta.get("shape") or shape
+        own_shape = spec_shape(s, shape)
         if s.status in {"building", "done"} and own_shape != "gitops-app":
             out += [(s, f"{ac} is not named by any test") for ac, files in trace(root, s, test_globs(own_shape)).items() if not files]
             out += [(s, f"{ac} smoke: no smoke-tagged test") for ac, files in _smoke_traced(root, s, own_shape).items() if not files]
@@ -1062,7 +1070,7 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "trace":
         spec = find(root, ns.id)
-        own_shape = spec.meta.get("shape") or repo_shape(root)
+        own_shape = spec_shape(spec, repo_shape(root))
         result = trace(root, spec, test_globs(own_shape))
         smoke = _smoke_traced(root, spec, own_shape)
         missing = [a for a, f in result.items() if not f or (a in smoke and not smoke[a])]
