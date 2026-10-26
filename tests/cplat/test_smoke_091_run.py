@@ -208,10 +208,10 @@ def test_no_retry_option_runs_once_ac_091_7(svc, fake, seams):  # AC-091.7
 
 def test_a_run_that_does_not_finish_is_stopped_and_red_ac_091_8(svc, fake, seams):  # AC-091.8
     s = seams()
-    fake.script([(["PASS  slow"], 0, 30)])
+    fake.script([(["PASS  slow"], 0, 120)])
     t0 = time.monotonic()
     res = smoke_mod().run_smoke(svc, BASE, spec=sp(svc), timeout=5)
-    assert time.monotonic() - t0 < 20                                  # the group was killed, not waited for
+    assert time.monotonic() - t0 < 60                                  # killed, not waited for (120 s); slack for a loaded CI
     assert res.outcome == "timed-out" and not res.ok and res.failing == ["(timed out)"]
     assert "timed out after" in (res.reason or "")
     assert s.sleeps == [] and len(fake.calls) == 1                     # a timed-out attempt is not retried

@@ -13,6 +13,8 @@ Measured with `cplat runs benchmark` (spec 099) on `ika100/todo-api`, Claude Cod
 | ship (spec to deployed dev, LAN cluster, first measured) | — | **$1.20 to $1.60** per run | |
 | A 10-spec delivery round before measuring (085–098, one session) | about $105, 2,287 calls, 42% of it coordination | — | |
 
+**4.7.0 baseline (2026-10-26, sample `ika100/todo-api@9cba320`, plugins at the tag):** quick-task **$0.30** (18 calls: coordinator plus coder, quality and tester, as `/svc:quick-task` prescribes; the $0.15 runs above had the coordinator make the change itself), build **$1.36 and $1.25** (median $1.31, within the ±$0.10 spread of 4.6.0), ship **$1.20 to $1.60** (two runs, 4.6.0 plus the deploy fixes). Run ids are in the run store (`cplat runs report --benchmarks`).
+
 Re-measure with `cplat runs benchmark quick-task|build` after changes to the commands, agents or `cplat`; `cplat runs report --benchmarks` shows the median per workflow and platform version.
 
 ## Prompt/token footprint (static)
