@@ -303,17 +303,10 @@ def active(run_id: str | None) -> dict | None:
         return None
 
 
-def _git_common_dir(repo_dir: Path) -> Path | None:
-    out = core.run(["git", "rev-parse", "--git-common-dir"], cwd=repo_dir, check=False).stdout.strip()
-    if not out:
-        return None
-    return Path(out) if Path(out).is_absolute() else Path(repo_dir) / out
-
-
 def attach_point(repo_dir: Path) -> str | None:
     """run_id of the repo's ship run when it is unfinished (phase != done, not escalated) and has a run_id."""
     try:
-        common = _git_common_dir(Path(repo_dir))
+        common = core.git_dir(Path(repo_dir))
         if common is None:
             return None
         st = json.loads((common / "cplat-ship.json").read_text())
@@ -372,7 +365,7 @@ def _mutate(run_id: str | None, change: Callable[[dict], None]) -> None:
 
 
 def current_run(repo_dir: Path) -> str | None:
-    """run_id of the pointer `<git common dir>/cplat-run.json` when that run is still active, else attach_point."""
+    """run_id of the pointer `<git dir>/cplat-run.json` when that run is still active, else attach_point."""
     try:
         rid = (_read_pointer(_pointer(Path(repo_dir))) or {}).get("run_id")
         if rid and _read_active(rid) is not None:
@@ -795,7 +788,7 @@ def init(slug: str) -> list[str]:
 # ---------------- CLI ----------------
 
 def _pointer(repo_dir: Path) -> Path | None:
-    common = _git_common_dir(repo_dir)
+    common = core.git_dir(repo_dir)
     return common / "cplat-run.json" if common else None
 
 

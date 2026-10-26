@@ -41,6 +41,15 @@ def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, ca
     return proc
 
 
+def git_dir(repo: Path | str) -> Path | None:
+    """The absolute git dir of this checkout (`git rev-parse --git-dir`): per-run state lives here, so a linked
+    worktree never sees state another checkout wrote (ADR-051). For the main checkout it is the `.git` directory."""
+    out = run(["git", "rev-parse", "--git-dir"], cwd=repo, check=False).stdout.strip()
+    if not out:
+        return None
+    return (Path(out) if Path(out).is_absolute() else Path(repo) / out).resolve()
+
+
 def install_hint(tool: str) -> str | None:
     return {
         "gh": "brew install gh && gh auth login",

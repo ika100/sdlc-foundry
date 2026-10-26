@@ -400,7 +400,7 @@ def _cmd_report(ns: argparse.Namespace) -> int:
     body.write_text(_merge(body.read_text() if body.exists() else "", section))
     if ns.update_pr:
         try:
-            pr = json.loads((_path(repo, "--git-common-dir") / "cplat-ship.json").read_text()).get("pr")
+            pr = json.loads((_path(repo, "--git-dir") / "cplat-ship.json").read_text()).get("pr")
         except (OSError, ValueError):
             pr = None
         if pr:
