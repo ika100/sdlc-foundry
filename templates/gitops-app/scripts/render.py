@@ -33,6 +33,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
         rules: [{name: HighErrorRate, query: "<PromQL>", severity: warning, summary: "optional"}]   # critical | warning | info
         queryURL: https://prom.example.com/api/prom # optional; querySecret: <name> or <namespace>/<name> (key AUTHORIZATION)
         alertmanagerURL: https://am.example.com     # optional
+      operators: owner                              # optional, the only value: the platform installs no operator here (spec 115)
     staging:
       promote: after-dev-smoke       # after-dev-smoke | manual (default); dev takes none; prod is always promoted by hand
     prod: {}
@@ -66,14 +67,18 @@ system.yaml (every value explicit and reviewable; the model is described in docs
     todo-lib: {type: library, lang: python, repo: org/todo-lib}    # a library has no instances and renders nothing
   apis:
     todo-api-rest: {type: openapi}   # openapi | grpc | graphql | events; changes no manifest
-  resources:
-    postgres:                        # the only resource in 5.0
-      type: database
-      version: 17
+  resources:                         # any number, each named, typed (database; bucket, cache, broker come with specs 116-119)
+    orders-db:                       # name: lowercase letters, digits, hyphens; at most 30 characters; not a component name
+      type: database                 # required
+      version: 17                    # 15 | 16 | 17 | 18 (default 17)
       replicas: 1
       storage: 1Gi
       resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 512Mi}}
-      instances: {prod: {replicas: 3, storage: 20Gi}}   # per-environment overrides: replicas, storage, resources
+      instances: {prod: {replicas: 3, storage: 20Gi}}   # per-environment overrides: external, remote, replicas, storage, resources
+    billing-db:                      # external: runs nothing, its connection Secret is synced from the secretStore
+      type: database
+      external: true                 # true | false (default false); per environment under instances.<env>.external
+      remote: {path: "{system}-{env}-{resource}", refreshInterval: 1h}    # both optional; placeholders {system}, {env}, {resource}
 
 External component (spec 069, ADR-029): a component whose manifests this generator cannot express (CronJobs, volumes,
 a login proxy, a Helm chart with CRDs). The package is owned by this repo or pinned to the component repo's chart;
@@ -106,7 +111,7 @@ NOT_MIGRATED = "not migrated to 5.0: run `cplat platform update --migrate`"
 MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml", "application.yaml"}
 MANAGED_PREFIXES = ("externalsecret-",)
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries"]
-ENV_KEYS = ["host", "url", "policy", "promote", "observability"]
+ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
 VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"), ("library", "python"),
                ("service", "unknown")]
@@ -118,8 +123,21 @@ SERVICE_KEYS = [*COMMON_KEYS, "image", "port", "probes", "user", "volumes", "env
 EXTERNAL_KEYS = [*COMMON_KEYS, "image", "external", "provides", "consumes", "instances"]
 LIBRARY_KEYS = [*COMMON_KEYS, "provides", "consumes"]
 INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets"]
-RESOURCE_KEYS = ["type", "version", "replicas", "storage", "resources", "instances"]
-RESOURCE_INSTANCE_KEYS = ["replicas", "storage", "resources"]
+RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
+PLANNED_TYPES = {"bucket": 116, "cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
+RESOURCE_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
+RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources"]
+SIZING_KEYS = ["version", "replicas", "storage", "resources"]      # an external resource runs nothing: none of these
+REMOTE_KEYS = ["path", "refreshInterval"]
+RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
+SUPPORTED_VERSIONS = (15, 16, 17, 18)
+CNPG_SUFFIXES = ("-app", "-ca", "-replication", "-server", "-superuser", "-rw", "-ro", "-r", "-primary")
+# Contract per resource type (ADR-057): the keys of the connection Secret `<system>-<name>-app` and the variables a using component gets.
+TYPES = {
+    "database": {"keys": ["uri", "host", "port", "dbname", "user", "password"],  # pragma: allowlist secret
+                 "env": {"DATABASE_URL": "uri", "PGHOST": "host", "PGPORT": "port", "PGDATABASE": "dbname", "PGUSER": "user",
+                         "PGPASSWORD": "password"}},  # pragma: allowlist secret
+}
 API_TYPES = ["openapi", "grpc", "graphql", "events"]
 POLICY_VALUES = {"audit": "Audit", "enforce": "Enforce", "off": "Off"}     # system.yaml policy -> the 4.x mode
 # Resource contract (ADR-020): what a component gets when it `uses` a resource. Components never see the implementation.
@@ -268,7 +286,7 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
     if names != ENVS:
         fail(f"environments must be dev, staging, prod in this order (the promotion order), got {', '.join(map(str, names)) or 'none'}")
     hosts: dict[str, str] = {}
-    conf: dict = {"policy": {}, "observability": {}}
+    conf: dict = {"policy": {}, "observability": {}, "operators": {}}
     for e in ENVS:
         c = envs[e] if envs[e] is not None else {}
         if not isinstance(c, dict):
@@ -292,6 +310,10 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
             check_promote(f"environments.{e}.promote", e, c["promote"])
         if "observability" in c:
             conf["observability"][e] = validate_observability(e, c["observability"])
+        if "operators" in c:
+            if c["operators"] != "owner":
+                fail(f"environments.{e}.operators must be owner, got '{c['operators']}'")
+            conf["operators"][e] = "owner"
     return hosts, conf
 
 
@@ -508,40 +530,147 @@ def validate_apis(doc: dict, comps: list[dict]) -> None:
             fail(f"apis.{a}: provided by {len(providers)} components ({names_list(providers)}); an API has exactly one provider")
 
 
+def check_remote(where: str, remote) -> dict:
+    """`remote` of a resource or of one of its instances: {path, refreshInterval}, both optional."""
+    if remote is None:
+        return {}
+    if not isinstance(remote, dict):
+        fail(f"{where} must be a mapping, e.g. {{path: prod/{{resource}}}}")
+    for k in remote:
+        if k not in REMOTE_KEYS:
+            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(REMOTE_KEYS)})")
+    if remote.get("path") is not None:
+        check_placeholders(f"{where}.path", remote["path"], ["system", "env", "resource"])
+    if remote.get("refreshInterval") is not None and not isinstance(remote["refreshInterval"], str):
+        fail(f"{where}.refreshInterval must be a string, e.g. 1h")
+    return remote
+
+
+def check_replicas(where: str, replicas) -> None:
+    if isinstance(replicas, bool) or not isinstance(replicas, int) or replicas < 1:
+        fail(f"{where}: replicas must be a number of at least 1")
+
+
+def database_version(r: str, value) -> int:
+    if isinstance(value, str) and value.isdigit():
+        value = int(value)
+    if isinstance(value, bool) or value not in SUPPORTED_VERSIONS:
+        fail(f"resources.{r}: version '{value}' is not a supported database version ({', '.join(map(str, SUPPORTED_VERSIONS))})")
+    return value
+
+
+def validate_resource(doc: dict, r: str, rc) -> dict:
+    """One resource, in the check order of design.md; returns {type, external, envs: {env: effective values}}."""
+    types = f"({', '.join(RESOURCE_TYPES[:-1])} or {RESOURCE_TYPES[-1]})"
+    if r == "observability":
+        fail("resources.observability: observability is set per environment under environments.<env>.observability")
+    if not isinstance(r, str) or not RESOURCE_NAME.match(r) or len(r) > 30:
+        fail(f"resources.{r}: the name must start with a lowercase letter and contain only lowercase letters, digits and hyphens "
+             "(at most 30 characters)")
+    if not isinstance(rc, dict) or rc.get("type") is None:
+        fail(f"resources.{r}: type is required {types}")
+    typ = rc["type"]
+    if typ not in RESOURCE_TYPES:
+        fail(f"resources.{r}: type '{typ}' is not a resource type {types}")
+    if typ in PLANNED_TYPES:
+        fail(f"resources.{r}: type {typ} is not available yet: spec {PLANNED_TYPES[typ]} brings it")
+    for k in rc:
+        if k not in RESOURCE_KEYS:
+            fail(f"resources.{r}: unknown key '{k}' (allowed: {', '.join(RESOURCE_KEYS)})")
+    if "external" in rc and not isinstance(rc["external"], bool):
+        fail(f"resources.{r}: external must be true or false")
+    inst = rc.get("instances")
+    inst = {} if inst is None else inst
+    if not isinstance(inst, dict):
+        fail(f"resources.{r}.instances must be a mapping of environments to {{external, remote, replicas, storage, resources}}")
+    base_external = rc.get("external", False)
+    external: dict[str, bool] = {}
+    for e, i in inst.items():
+        if e not in ENVS:
+            fail(f"resources.{r}.instances: '{e}' is not an environment (environments: {', '.join(ENVS)})")
+        where = f"resources.{r}.instances.{e}"
+        if i is not None and not isinstance(i, dict):
+            fail(f"{where} must be a mapping")
+        i = i or {}
+        if "external" in i and not isinstance(i["external"], bool):
+            fail(f"{where}: external must be true or false")
+        if i.get("external", base_external):
+            for k in SIZING_KEYS:
+                if k in i:
+                    fail(f"{where}: an external resource runs nothing (remove {k})")
+        for k in i:
+            if k not in RESOURCE_INSTANCE_KEYS:
+                fail(f"{where}: unknown key '{k}' (allowed: {', '.join(RESOURCE_INSTANCE_KEYS)})")
+    inst = {e: i or {} for e, i in inst.items()}
+    for e in ENVS:
+        external[e] = inst.get(e, {}).get("external", base_external)
+    if all(external.values()):
+        for k in SIZING_KEYS:
+            if k in rc:
+                fail(f"resources.{r}: external in every environment: an external resource runs nothing (remove {k})")
+    if "remote" in rc and not any(external.values()):
+        fail(f"resources.{r}: remote needs external: true")
+    for e, i in inst.items():
+        if "remote" in i and not external[e]:
+            fail(f"resources.{r}.instances.{e}: remote needs external: true in {e}")
+    check_remote(f"resources.{r}.remote", rc.get("remote"))
+    for e, i in inst.items():
+        check_remote(f"resources.{r}.instances.{e}.remote", i.get("remote"))
+    first = next((e for e in ENVS if external[e]), None)
+    if first and not doc.get("secretStore"):
+        fail(f"resources.{r}: external in {first} needs the system's secretStore (declare secretStore: {{name, kind}})")
+    version = None
+    if not all(external.values()):
+        version = database_version(r, rc.get("version", 17))
+    for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
+        if "replicas" in conf:
+            check_replicas(f"resources.{r}", conf["replicas"])
+    envs: dict[str, dict] = {}
+    for e in ENVS:
+        i = inst.get(e, {})
+        if external[e]:
+            remote = {**(check_remote("", rc.get("remote"))), **check_remote("", i.get("remote"))}
+            key = str(remote.get("path") or "{system}-{env}-{resource}").format(system=str(doc.get("system")), env=e, resource=r)
+            envs[e] = {"external": True, "version": None, "replicas": None, "storage": None, "resources": None,
+                       "store_key": key, "refreshInterval": str(remote.get("refreshInterval") or "1h")}
+            continue
+        storage = i.get("storage", rc.get("storage"))
+        envs[e] = {"external": False, "version": version, "replicas": int(i.get("replicas", rc.get("replicas", 1))),
+                   "storage": "1Gi" if storage is None else str(storage), "resources": i.get("resources", rc.get("resources")),
+                   "store_key": None, "refreshInterval": None}
+    return {"type": typ, "external": bool(base_external), "envs": envs}
+
+
 def validate_resources(doc: dict) -> dict:
-    """Returns {env: conf} of the postgres resource in the shape postgres_cluster reads, or {} without the resource."""
+    """The normalised resources: {name: {type, external, envs: {env: {external, version, replicas, storage, resources, store_key,
+    refreshInterval}}}}, with the effective values of all three environments (design.md, Renderer API)."""
     res = doc.get("resources") or {}
     if not isinstance(res, dict):
         fail("resources must be a mapping of names to resources")
-    for r, rc in res.items():
-        if r == "observability":
-            fail("resources.observability: observability is set per environment under environments.<env>.observability")
-        if r != "postgres" or not isinstance(rc, dict) or rc.get("type") != "database":
-            fail(f"resources.{r}: 5.0 supports one database resource named postgres (type: database)")
-        for k in rc:
-            if k not in RESOURCE_KEYS:
-                fail(f"resources.postgres: unknown key '{k}' (allowed: {', '.join(RESOURCE_KEYS)})")
-        inst = rc.get("instances") or {}
-        if not isinstance(inst, dict):
-            fail("resources.postgres.instances must be a mapping of environments to {replicas, storage, resources}")
-        for e, i in inst.items():
-            if e not in ENVS:
-                fail(f"resources.postgres.instances: '{e}' is not an environment (environments: {', '.join(ENVS)})")
-            for k in i or {}:
-                if k not in RESOURCE_INSTANCE_KEYS:
-                    fail(f"resources.postgres.instances.{e}: unknown key '{k}' (allowed: {', '.join(RESOURCE_INSTANCE_KEYS)})")
-        for where in [rc, *[i or {} for i in inst.values()]]:
-            if "replicas" in where and (isinstance(where["replicas"], bool) or not isinstance(where["replicas"], int) or where["replicas"] < 1):
-                fail("resources.postgres: replicas must be a number of at least 1")
-    pg = res.get("postgres")
-    if not pg:
-        return {}
-    out = {}
-    for e in ENVS:
-        i = (pg.get("instances") or {}).get(e) or {}
-        out[e] = {"version": pg.get("version"), "instances": i.get("replicas", pg.get("replicas")),
-                  "storage": i.get("storage", pg.get("storage")), "resources": i.get("resources", pg.get("resources"))}
-    return out
+    return {r: validate_resource(doc, r, rc) for r, rc in res.items()}
+
+
+def object_names(system: str, r: str, typ: str) -> list[str]:
+    """The cluster objects a resource creates (design.md): a database the CloudNativePG family, any other type the object and its Secret."""
+    base = f"{system}-{r}"
+    return [base, *(base + s for s in (CNPG_SUFFIXES if typ == "database" else ("-app",)))]
+
+
+def check_resource_clashes(system: str, resources: dict, comps_doc: dict, comps: list[dict]) -> None:
+    for r in resources:
+        if r in comps_doc:
+            fail(f"resources.{r}: components.{r} has the same name; a resource and a component need different names")
+    names = list(resources)
+    for n, a in enumerate(names):
+        for b in names[n + 1:]:
+            both = [o for o in object_names(system, a, resources[a]["type"]) if o in object_names(system, b, resources[b]["type"])]
+            if both:
+                fail(f"resources.{a} and resources.{b} would both create the object {both[0]}; rename one")
+    connection = {f"{system}-{r}-app": r for r in resources}
+    for c in comps:
+        for sec in (comps_doc.get(c["name"]) or {}).get("secrets") or []:
+            if isinstance(sec, dict) and sec.get("name") in connection:
+                fail(f"components.{c['name']}: secret '{sec['name']}' is the connection Secret of resources.{connection[sec['name']]}; rename it")
 
 
 def validate_uses(comps: list[dict], resources: dict) -> None:
@@ -555,7 +684,7 @@ def validate_uses(comps: list[dict], resources: dict) -> None:
             if u not in resources:
                 continue
             for env, eff in (s.get("_eff") or {}).items():
-                clash = [k for k in ADDONS[u]["env"] if k in (eff.get("env") or {})]
+                clash = [k for k in TYPES[resources[u]["type"]]["env"] if k in (eff.get("env") or {})]
                 if clash:
                     fail(f"components.{s['name']}: env {', '.join(clash)} is provided by the '{u}' resource; remove it from `env`")
 
@@ -593,9 +722,12 @@ def _load_system(app_dir: Path) -> dict:
         fail("components must be a mapping of names to components")
     comps = [validate_component(app_dir, str(c), spec) for c, spec in comps_doc.items()]
     validate_apis(doc, comps)
-    postgres = validate_resources(doc)
-    resources = {"postgres": postgres} if postgres else {}
+    resources = validate_resources(doc)
+    check_resource_clashes(d, resources, comps_doc, comps)
     validate_uses(comps, resources)
+    pg = resources.get("postgres")      # until the per-database rendering, the renderer reads the one 5.0 database (the settings it renders)
+    postgres = {e: {"version": c["version"] or 17, "instances": c["replicas"] or 1, "storage": c["storage"] or "1Gi", "resources": c["resources"]}
+                for e, c in pg["envs"].items()} if pg else {}
     registries = doc.get("registries") or []
     if not isinstance(registries, list):
         fail("registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
