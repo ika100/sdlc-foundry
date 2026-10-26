@@ -9,6 +9,7 @@ import yaml
 import appship_state as state
 import budget
 import core
+import model
 import runs
 import ship
 import spec as specmod
@@ -76,7 +77,7 @@ def _show(gitops_dir: Path, path: str) -> dict:
 
 
 def gate_class(gitops_dir: Path, repo: dict) -> str:
-    """entry | library | exposed | internal. Exposed is smoke.dev_url's rule: `expose`, `dev` in environments, `hosts.dev`."""
+    """entry | library | exposed | internal. Exposed means the model has a dev Instance that is exposed."""
     shape = repo.get("shape")
     if shape == "gitops-app":
         return "entry"
@@ -91,10 +92,9 @@ def gate_class(gitops_dir: Path, repo: dict) -> str:
                       if isinstance(e, dict) and (str(e.get("repo") or "").endswith("/" + repo["id"]) or e.get("name") == repo["id"])), None)
         if found is None:
             continue
-        hosts = (_show(gitops_dir, f"{app}/app.yaml").get("hosts") or {})
-        if found.get("expose") and "dev" in (found.get("environments") or ["dev"]) and hosts.get("dev"):
-            return "exposed"
-        return "internal"
+        m = model.build(app.rstrip("/").rsplit("/", 1)[-1], services, _show(gitops_dir, f"{app}/app.yaml"))
+        inst = m.instance(found.get("name"), "dev")
+        return "exposed" if inst is not None and inst.exposed else "internal"
     return "internal"
 
 
