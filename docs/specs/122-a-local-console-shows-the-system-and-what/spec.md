@@ -17,7 +17,7 @@ Starting work has the same gap. A user with an idea has to choose between `/syst
 
 A UI mockup was discussed on 2026-10-26 (six screens: Home, Approve, Spec, New, Specs board, Notifications), then revised after a developer-experience review into three places: Inbox, Board and System. This spec turns its decisions into criteria. The console is a view on top of the existing commands: it adds no second source of truth, and every change still goes through a slash command and a pull request.
 
-This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat needs` and `cplat runs --json` to the CLI, and `ui` to the `platform` verbs of AC-114.59.
+This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat needs` and `cplat runs --json` to the CLI, `ui` to the `platform` verbs and `set` to the `system` verbs of AC-114.59, and `--provides`/`--consumes` to `/component:add|set`.
 
 ## Stories
 
@@ -89,6 +89,8 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - **AC-122.18** Given any action in the console that changes something (approve, ship, promote, add, set, remove, answer), when the user starts it, then the console shows the exact command and, where `system.yaml` changes, the diff before it runs. On confirm it runs the command through Claude Code (`claude -p`) in the repo and shows a link to the run and the resulting pull request. The console never writes files in a repo or calls `kubectl` itself.
 - **AC-122.19** Given "Describe a change", when the user enters a sentence and confirms, then the console runs `/system:spec` or `/component:spec` with it (the user's choice, or the product manager agent's when the user chooses "Let Claude decide"). The new draft appears on the Board in the Spec column and in the Inbox. Open issues whose title matches the sentence are shown before confirming, so the user can link one.
 - **AC-122.20** Given the forms for a component, an API, a resource, environment rules or a new system, when a field changes, then the diff and the checks are recomputed with the same rules `render.py` applies. An invalid value names the key and the rule, and the confirm button stays disabled.
+- **AC-122.50** Given `/component:add <component>` or `/component:set <component>` with `--provides NAME[:TYPE]` or `--consumes NAME` (repeatable), when it runs, then it opens one pull request that adds the API to `apis:` with its type (`openapi` when none is given) if it is new, and adds the name to the component's `provides` or `consumes`; a second provider for an API, an unknown type, or consuming an API nobody provides fails naming the API and the rule, and changes nothing. The console's API form runs this command.
+- **AC-122.51** Given `/system:set --env <env>` with any of `--promote <rule>`, `--policy <policy>` and `--host <host>`, when it runs, then it opens one pull request that changes only that environment's keys in `system.yaml`, with the values allowed by spec 114 (`promote` on prod only `manual`, none on dev); an invalid value fails naming the key and the allowed values, and changes nothing. The console's environment-rules form runs this command. This adds the verb `set` to the `system` noun of AC-114.59.
 
 ### Ask bar
 
@@ -161,4 +163,7 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - 2026-10-26 approved
 - 2026-10-26 draft: amendment: v1 gaps (first run and degraded states, action feedback, releases, history)
 - 2026-10-26 amended: v1 gaps added: first run, missing prerequisites and unreachable sources (AC-122.40 to AC-122.43); feedback on actions the user started (AC-122.44 to AC-122.46); cutting a release and the Done view with search (AC-122.47 to AC-122.49)
+- 2026-10-26 approved
+- 2026-10-26 draft: amendment: commands behind the API and environment-rules forms (planning blocker)
+- 2026-10-26 amended (planning blocker): the API form runs `/component:add|set --provides|--consumes` (AC-122.50), the environment-rules form runs the new `/system:set --env` (AC-122.51)
 - 2026-10-26 approved
