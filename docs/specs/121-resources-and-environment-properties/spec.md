@@ -1,7 +1,7 @@
 ---
 spec_id: 121-resources-and-environment-properties
 title: Resources and environment properties upgrade safely
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -120,3 +120,4 @@ This spec is an additive 5.x extension of spec 114, which stays as approved. It 
 - 2026-10-26 created
 - 2026-10-26 amended: answers folded in (operators per need with opt-out, `instances.<env>.version`, `/resource:upgrade`, 60-minute backup from `backup.last_success`, sibling names from specs 115–120); stated as an additive 5.x extension of spec 114
 - 2026-10-26 amended: AC-121.12 names `/resource:backup` (spec 117); added AC-121.27 (no backup check for bucket, cache and broker majors)
+- 2026-10-26 approved

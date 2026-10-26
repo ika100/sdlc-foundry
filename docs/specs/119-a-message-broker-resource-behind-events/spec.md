@@ -1,7 +1,7 @@
 ---
 spec_id: 119-a-message-broker-resource-behind-events
 title: A message broker resource behind events APIs
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -94,3 +94,4 @@ This is an additive 5.x extension of spec 114, which stays as approved and is no
 
 - 2026-10-26 created
 - 2026-10-26 open questions answered: per-component Secret named `<system>-<name>-<component>-app` (AC-119.11 clarified); AC-119.18 withdrawn for the platform-installed controller and the `operators: owner` opt-out (AC-119.22, AC-119.23); added AC-119.21 (chart and declared streams), AC-119.24 (additive to 5.0), AC-119.25 (docs example); AC-119.20 to AC-119.25 under "Running the broker, upgrades and docs" so ids read in order; backups by spec 117 noted.
+- 2026-10-26 approved

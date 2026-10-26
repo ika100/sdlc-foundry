@@ -1,7 +1,7 @@
 ---
 spec_id: 120-instances-scale-on-load-and-queue-depth
 title: Instances scale on load and queue depth
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -101,3 +101,4 @@ In 5.0 (spec 114) an Instance runs a fixed number of replicas: `components.<c>.r
 
 - 2026-10-26 created
 - 2026-10-26 open questions answered: KEDA installed per cluster as a pinned Argo CD application with `operators: owner` opt-out (AC-120.27, AC-120.18 reworded), Secret names in AC-120.13, scale to zero refused for request-serving components (AC-120.28), additive extension of spec 114's key lists (AC-120.26), pinned versions per spec 121 (AC-120.25)
+- 2026-10-26 approved

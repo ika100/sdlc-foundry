@@ -1,7 +1,7 @@
 ---
 spec_id: 115-resources-are-named-typed-and-may-be
 title: Resources are named, typed and may be external
-status: draft
+status: approved
 priority: P1
 ---
 
@@ -88,3 +88,4 @@ Spec 114 stays as approved. This spec adds to the closed lists of 114 without am
 
 - 2026-10-26 created
 - 2026-10-26 amended: open questions answered as suggested; added exact version pins (AC-115.17) and operator installation with the `operators: owner` opt-out (AC-115.18); one Secret rule for all types (AC-115.5); named the AC-114 lists this spec extends
+- 2026-10-26 approved
