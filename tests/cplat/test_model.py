@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 import core
-from model_fixtures import RICH_APP, RICH_SERVICES, SHA, model, reader, rich, small, write_app
+from model_fixtures import RICH_APP, RICH_SERVICES, SHA, model, reader, rich, small, system_doc, write_app
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -29,7 +29,7 @@ def names(items):
 
 
 def build(services, app=None, *, system="shop", pins=None):
-    return model().build(system, copy.deepcopy(services), copy.deepcopy(app), pins=pins)
+    return model().build(system_doc(services, app, system), system, pins=pins)
 
 
 def entry(**kw):
@@ -78,7 +78,7 @@ def test_an_app_without_addons_or_services_is_an_empty_system_ac_113_1(tmp_path)
     ("shop-web", "website", "typescript", "web-nextjs"),
     ("ledger", "service", "java", "service-java"),
     ("batch", "service", "go", "service-go"),
-    ("mystery", "service", "unknown", "service-cobol"),      # a shape the registry does not know
+    ("mystery", "service", "unknown", None),                 # 5.0: a shape the registry does not know is service/unknown
     ("plain", "service", "unknown", None),                   # no shape at all
 ])
 def test_component_type_and_lang_come_from_the_shape_registry_ac_113_2(m, name, kind, lang, shape):  # AC-113.2
@@ -122,7 +122,7 @@ def test_no_environments_key_or_an_empty_list_means_dev_ac_113_3(m):  # AC-113.3
 def test_an_unknown_environment_creates_no_instance_but_a_warning_ac_113_3(m):  # AC-113.3
     assert [i.environment for i in m.instances_of("batch")] == ["dev"]
     assert m.component("batch").environments == ("dev",)
-    assert list(m.warnings) == ["batch lists unknown environment 'qa': no Instance"]
+    assert list(m.warnings) == ["batch has instances in unknown environment 'qa': no Instance"]
 
 
 @pytest.mark.parametrize("component, env, tag", [
@@ -158,20 +158,20 @@ def test_a_per_environment_replica_map_defaults_missing_environments_to_one_ac_1
 
 def test_hosts_urls_policy_and_promotion_per_environment_ac_113_4(m):  # AC-113.4
     dev, staging, prod = (m.environment(n) for n in ("dev", "staging", "prod"))
-    assert (dev.host, staging.host, prod.host) == ("{service}.{app}-dev.localhost", "{service}.staging.example.com", None)
-    assert (dev.url_template, staging.url_template, prod.url_template) == (None, "https://{host}/{service}", None)
-    assert (dev.policy, staging.policy, prod.policy) == ("Audit", "Off", "Enforce")      # prod defaults to Enforce
-    assert (dev.promotion, staging.promotion, prod.promotion) == ("main", "auto", "manual")
+    assert (dev.host, staging.host, prod.host) == ("{component}.{system}-dev.localhost", "{component}.staging.example.com", None)
+    assert (dev.url_template, staging.url_template, prod.url_template) == (None, "https://{host}/{component}", None)
+    assert (dev.policy, staging.policy, prod.policy) == ("audit", "off", "enforce")      # prod defaults to enforce
+    assert (dev.promotion, staging.promotion, prod.promotion) == ("main", "after-dev-smoke", "manual")
 
 
 def test_policies_absent_or_false_are_off_and_defaults_apply_when_on_ac_113_4():  # AC-113.4
     for app in (None, {}, {"policies": False}):
         assert [e.policy for e in build([entry()], app).environments] == ["off", "off", "off"]
-    assert [e.policy for e in build([entry()], {"policies": {}}).environments] == ["Audit", "Audit", "Enforce"]
+    assert [e.policy for e in build([entry()], {"policies": {}}).environments] == ["audit", "audit", "enforce"]
 
 
 def test_staging_promotion_defaults_to_manual_and_prod_is_always_manual_ac_113_4():  # AC-113.4
-    for app, staging in ((None, "manual"), ({"promotion": {"staging": "auto"}}, "auto"), ({"promotion": {"staging": "manual"}}, "manual")):
+    for app, staging in ((None, "manual"), ({"promotion": {"staging": "auto"}}, "after-dev-smoke"), ({"promotion": {"staging": "manual"}}, "manual")):
         m = build([entry()], app)
         assert [e.promotion for e in m.environments] == ["main", staging, "manual"]
 
@@ -197,14 +197,14 @@ def test_observability_is_absent_when_not_declared_and_a_null_value_counts_as_de
 
 def test_the_staging_promotion_of_an_instance_prefers_the_components_ac_113_5(m):  # AC-113.5
     assert m.instance("shop-api", "staging").staging_promotion == "manual"      # the entry's promotion.staging
-    assert m.instance("shop-web", "staging").staging_promotion == "auto"        # the environment's
+    assert m.instance("shop-web", "staging").staging_promotion == "after-dev-smoke"        # the environment's
     assert m.staging_promotion(m.component("shop-api")) == "manual"
-    assert m.staging_promotion(m.component("shop-web")) == "auto"
+    assert m.staging_promotion(m.component("shop-web")) == "after-dev-smoke"
 
 
 @pytest.mark.parametrize("component, env, url", [
     ("shop-api", "dev", "http://api.shop-dev.localhost:8088"),                  # expose.host, local fallback
-    ("shop-api", "staging", "https://api.staging.example.com/shop-api"),        # urls.staging with {host} and {service}
+    ("shop-api", "staging", "https://api.staging.example.com/shop-api"),        # url of staging with {host} and {component}
     ("shop-web", "dev", "http://shop-web.shop-dev.localhost:8088"),             # expose: true, the component name
     ("shop-web", "staging", "https://shop-web.staging.example.com/shop-web"),
 ])
@@ -255,7 +255,7 @@ def test_a_component_declares_its_secrets_and_references_ac_113_6(m):  # AC-113.
     c = m.component("shop-api")
     assert [(s.name, s.kind, tuple(s.keys), s.path) for s in c.secrets] == [
         ("api-keys", "remote", ("STRIPE_KEY", "STRIPE_HOOK"), None),
-        ("api-pay", "remote", ("PAY_KEY",), "{service}/{env}/{secret}"),
+        ("api-pay", "remote", ("PAY_KEY",), "{component}/{env}/{secret}"),
         ("api-auth", "generate", ("DB_PASSWORD", "JWT_KEY"), None)]
     assert tuple(c.secret_refs) == ("shared-config",)
     assert m.component("stock").secrets == ()
@@ -296,20 +296,20 @@ def test_resource_instances_exist_where_a_using_component_has_an_instance_ac_113
 
 def test_postgres_sizing_is_per_environment_with_defaults_ac_113_7(m):  # AC-113.7
     dev, staging = m.resource_instances_of("postgres")
-    assert (dev.sizing["instances"], str(dev.sizing["version"]), dev.sizing["storage"]) == (1, "17", "1Gi")
-    assert (staging.sizing["instances"], str(staging.sizing["version"]), staging.sizing["storage"]) == (1, "17", "1Gi")   # map without staging
+    assert (dev.sizing["replicas"], str(dev.sizing["version"]), dev.sizing["storage"]) == (1, "17", "1Gi")
+    assert (staging.sizing["replicas"], str(staging.sizing["version"]), staging.sizing["storage"]) == (1, "17", "1Gi")   # map without staging
 
 
 def test_prod_sizing_comes_from_the_declared_maps_ac_113_7():  # AC-113.7
     m = build([entry(uses=["postgres"], environments=["dev", "prod"])], RICH_APP)
     prod = next(r for r in m.resource_instances_of("postgres") if r.environment == "prod")
-    assert (prod.sizing["instances"], prod.sizing["storage"]) == (3, "20Gi")
+    assert (prod.sizing["replicas"], prod.sizing["storage"]) == (3, "20Gi")
 
 
 def test_a_single_value_sizing_applies_everywhere_ac_113_7():  # AC-113.7
     m = build([entry(uses=["postgres"], environments=["dev", "staging"])], {"addons": {"postgres": {"version": 16, "instances": 2, "storage": "5Gi"}}})
     for r in m.resource_instances_of("postgres"):
-        assert (r.sizing["instances"], str(r.sizing["version"]), r.sizing["storage"]) == (2, "16", "5Gi")
+        assert (r.sizing["replicas"], str(r.sizing["version"]), r.sizing["storage"]) == (2, "16", "5Gi")
 
 
 def test_a_declared_postgres_nobody_uses_has_no_resource_instance_ac_113_7():  # AC-113.7
@@ -461,15 +461,15 @@ def test_the_model_read_through_github_equals_the_one_from_a_checkout_ac_113_10(
     assert model().load_remote("shop", reader(tmp_path)).to_dict() == model().load_dir(d).to_dict()
 
 
-def test_load_remote_reads_the_two_files_once_and_pins_lazily_ac_113_10(tmp_path):  # AC-113.10
+def test_load_remote_reads_the_file_once_and_pins_lazily_ac_113_10(tmp_path):  # AC-113.10
     rich(tmp_path)
     log = []
     r = model().load_remote("shop", reader(tmp_path, log))
-    assert sorted(log) == ["applications/shop/app.yaml", "applications/shop/services.yaml"]
+    assert log == ["applications/shop/system.yaml"]                 # 5.0: one file
     assert r.url("shop-api", "dev")[0].startswith("http://api.shop-dev.localhost")
-    assert len(log) == 2                                            # a URL needs no pin
+    assert len(log) == 1                                            # a URL needs no pin
     assert r.instance("shop-api", "dev").tag == "sha-" + SHA
-    assert log[2:] == ["applications/shop/overlays/dev/shop-api/kustomization.yaml"]
+    assert log[1:] == ["applications/shop/overlays/dev/shop-api/kustomization.yaml"]
 
 
 def test_a_gitops_app_that_cannot_be_read_is_an_empty_model_ac_113_10():  # AC-113.10
@@ -489,8 +489,8 @@ def test_the_component_is_found_by_repo_first_and_by_name_second_ac_113_10(tmp_p
 
 # ---------------- loading: strict from a checkout, entries that are not mappings ----------------
 
-@pytest.mark.parametrize("fname", ["services.yaml", "app.yaml"])
-@pytest.mark.parametrize("text", ["services: [unclosed\n", "- just\n- a list\n"])
+@pytest.mark.parametrize("fname", ["system.yaml"])         # 5.0: the one file (services.yaml and app.yaml are the 4.x pair)
+@pytest.mark.parametrize("text", ["components: [unclosed\n", "- just\n- a list\n"])
 def test_load_dir_names_an_unparseable_file_ac_113_16(tmp_path, fname, text):  # AC-113.16
     d = small(tmp_path)
     (d / fname).write_text(text)
@@ -501,16 +501,18 @@ def test_load_dir_names_an_unparseable_file_ac_113_16(tmp_path, fname, text):  #
 
 
 def test_entries_that_are_not_mappings_or_have_no_name_are_skipped_ac_113_2():  # AC-113.2
-    m = build(["junk", {"repo": "acme/none"}, entry()])
+    api = system_doc([entry()])["components"]["api"]
+    m = model().build({"components": {"junk": "x", "empty": None, "list": [], "api": api}}, "shop")
     assert names(m.components) == ["api"]
 
 
-def test_a_missing_app_yaml_is_an_empty_one_ac_113_4(tmp_path):  # AC-113.4
+def test_a_system_without_environment_settings_has_bare_environments_ac_113_4(tmp_path):  # AC-113.4
     m = model().load_dir(write_app(tmp_path, [entry()], None))
     assert all(e.host is None and e.observability is None for e in m.environments)
 
 
 def test_the_model_does_not_mutate_what_it_is_given_ac_113_9():  # AC-113.9
-    services, app = copy.deepcopy([RICH_SERVICES, RICH_APP])
-    model().build("shop", services, app).to_dict()
-    assert (services, app) == (RICH_SERVICES, RICH_APP)
+    doc = system_doc(RICH_SERVICES, RICH_APP)
+    before = copy.deepcopy(doc)
+    model().build(doc, "shop").to_dict()
+    assert doc == before

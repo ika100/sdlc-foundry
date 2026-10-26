@@ -25,9 +25,10 @@ def net(monkeypatch):
     return fake
 
 
-def load(tmp_path, addon, services=None):
+def load(tmp_path, addon, services=None, envs=None):
+    """The AppConfig of a system whose environments `envs` (default: all) carry the observability `addon`."""
     import alertsources
-    return alertsources.load_app(make_app(tmp_path, addon=addon, services=services))
+    return alertsources.load_app(make_app(tmp_path, addon=addon, services=services, envs=envs))
 
 
 def collect(cfg):
@@ -41,12 +42,17 @@ def by_env(alerts):
 
 # ---------------- AC-092.2 / AC-092.19 skip reasons ----------------
 
+def both(reason):
+    """5.0: every environment that has an instance gives its own reason, prefixed with the environment."""
+    return f"dev: {reason}; prod: {reason}"
+
+
 @pytest.mark.parametrize("addon, services, reason", [
-    (None, None, "app.yaml declares no observability addon"),
-    ({"ui": "lgtm", "alerts": False}, None, "alerts: false in the observability addon"),
-    ({"ui": "lgtm"}, [], "no service runs in any environment"),
-    ({"exportTo": "https://otlp.example.com"}, None, "exportTo is set but queryURL is missing"),
-    ({}, None, "no metrics backend: set ui: lgtm, or exportTo with queryURL"),
+    (None, None, "no environment declares observability"),
+    ({"ui": "lgtm", "alerts": False}, None, both("alerts: false in observability")),
+    ({"ui": "lgtm"}, [], "no environment declares observability"),                 # no instance, so no environment is polled
+    ({"exportTo": "https://otlp.example.com"}, None, both("exportTo is set but queryURL is missing")),
+    ({}, None, both("no metrics backend: set ui: lgtm, or exportTo with queryURL")),
 ])
 def test_an_app_that_cannot_be_polled_says_why_it_is_skipped(net, tmp_path, addon, services, reason):
     """AC-092.2 AC-092.19: no addon, `alerts: false`, no running service, or no query source: skipped with the reason."""
@@ -65,19 +71,19 @@ def test_an_app_with_a_query_source_is_not_skipped(net, tmp_path):
 def test_lgtm_queries_the_shared_stack_and_the_url_can_be_overridden(net, monkeypatch, tmp_path):
     """AC-092.19: `ui: lgtm` queries the shared stack's Prometheus API; $ALERTS_PROMETHEUS_URL moves it for runners outside the cluster."""
     cfg = load(tmp_path, {"ui": "lgtm", "rules": [RULE]})
-    assert cfg.prometheus_url == LGTM == "http://lgtm.observability.svc:9090"
+    assert cfg.sources[0].prometheus_url == LGTM == "http://lgtm.observability.svc:9090"
     collect(cfg)
     assert net.queries() and all(u.startswith(f"{LGTM}/api/v1/query?") for u in net.queries())
     assert Q in [urllib.parse.parse_qs(urllib.parse.urlparse(u).query)["query"][0] for u in net.queries()]
     monkeypatch.setenv("ALERTS_PROMETHEUS_URL", "http://localhost:9999")
-    assert load(tmp_path / "b", {"ui": "lgtm"}).prometheus_url == "http://localhost:9999"
+    assert load(tmp_path / "b", {"ui": "lgtm"}).sources[0].prometheus_url == "http://localhost:9999"
 
 
 def test_export_to_queries_the_addons_query_url_with_the_credential_from_the_env(net, monkeypatch, tmp_path):
     """AC-092.19: with exportTo the rules go to queryURL; $ALERTS_QUERY_AUTHORIZATION is sent as the Authorization header."""
     monkeypatch.setenv("ALERTS_QUERY_AUTHORIZATION", "Bearer from-env")
     cfg = load(tmp_path, {"exportTo": "https://otlp.example.com", "queryURL": "https://prom.example.com/api/prom", "rules": [RULE]})
-    assert cfg.prometheus_url == "https://prom.example.com/api/prom"
+    assert cfg.sources[0].prometheus_url == "https://prom.example.com/api/prom"
     collect(cfg)
     assert net.calls and all(u.startswith("https://prom.example.com/api/prom/api/v1/query?") for u, _ in net.calls)
     assert all(h.get("Authorization") == "Bearer from-env" for _, h in net.calls)
@@ -95,7 +101,7 @@ def test_the_credential_can_come_from_the_query_secret(net, monkeypatch, tmp_pat
     monkeypatch.setattr(alertsources, "kubectl", kubectl)
     cfg = load(tmp_path, {"exportTo": "https://otlp.example.com", "queryURL": "https://prom.example.com", "querySecret": "obs-query",
                           "rules": [RULE]})
-    assert cfg.query_secret == "shop-dev/obs-query"          # <app>-<first environment the addon runs in>
+    assert cfg.sources[0].query_secret == "shop-dev/obs-query"          # <app>-<first environment the addon runs in>
     collect(cfg)
     assert seen and {"get", "secret", "obs-query"} <= set(seen[0]) and "shop-dev" in seen[0]
     assert all(h.get("Authorization") == "Bearer from-secret" for _, h in net.calls)
@@ -107,8 +113,8 @@ def test_a_namespaced_query_secret_is_kept_and_the_env_credential_wins(net, monk
     monkeypatch.setattr(alertsources, "kubectl", lambda *a, **k: pytest.fail("the env credential must win"))
     monkeypatch.setenv("ALERTS_QUERY_AUTHORIZATION", "Bearer env")
     cfg = load(tmp_path, {"exportTo": "https://o.example.com", "queryURL": "https://prom.example.com", "querySecret": "obs/query"})
-    assert cfg.query_secret == "obs/query"
-    assert alertsources.authorization(cfg) == "Bearer env"
+    assert cfg.sources[0].query_secret == "obs/query"
+    assert alertsources.authorization(cfg.sources[0]) == "Bearer env"
 
 
 def test_an_unreadable_query_secret_is_a_source_error(net, tmp_path):
@@ -117,7 +123,7 @@ def test_an_unreadable_query_secret_is_a_source_error(net, tmp_path):
     cfg = load(tmp_path, {"exportTo": "https://o.example.com", "queryURL": "https://prom.example.com", "querySecret": "obs-query",
                           "rules": [RULE]})
     with pytest.raises(alertsources.SourceError) as e:
-        alertsources.authorization(cfg)
+        alertsources.authorization(cfg.sources[0])
     assert str(e.value).startswith("querySecret shop-dev/obs-query: ") and "tests never call kubectl" in str(e.value)
 
 
@@ -130,8 +136,8 @@ def test_no_credential_means_no_authorization_header(net, tmp_path):
 def test_export_to_with_only_alertmanager_reads_only_alertmanager(net, tmp_path):
     """AC-092.19 AC-092.23: exportTo without queryURL but with alertmanagerURL is not skipped; rules are not evaluated, and a note says so."""
     cfg = load(tmp_path, {"exportTo": "https://o.example.com", "alertmanagerURL": "https://am.example.com", "rules": [RULE]})
-    assert cfg.skip is None and cfg.alertmanager_url == "https://am.example.com"
-    assert "rules not evaluated: queryURL is missing" in cfg.notes
+    assert cfg.skip is None and cfg.sources[0].alertmanager_url == "https://am.example.com"
+    assert "dev: rules not evaluated: queryURL is missing" in cfg.notes
     collect(cfg)
     assert net.queries() == [] and net.am_calls()
 
@@ -149,7 +155,8 @@ def test_invalid_rules_are_a_source_error_naming_the_rule_and_the_problem(net, t
     import alertsources
     with pytest.raises(alertsources.SourceError) as e:
         load(tmp_path, {"ui": "lgtm", "rules": rules})
-    assert str(e.value).startswith(f"applications/{APP}/app.yaml: ") and fragment in str(e.value)
+    assert str(e.value).startswith(f"applications/{APP}/system.yaml: ") and fragment in str(e.value)
+    assert "environments.dev.observability.rules[" in str(e.value)
 
 
 # ---------------- AC-092.4 rules fire per environment and service ----------------
@@ -207,7 +214,8 @@ def test_every_environment_where_the_addon_runs_is_evaluated(net, tmp_path):
 def test_the_environment_comes_from_the_series_labels(net, tmp_path, labels, env):
     """AC-092.24: deployment_environment_name/deployment_environment/environment/env, else namespace <app>-<env>, else the instance host."""
     net.on(Q, [labels])
-    (a,) = collect(load(tmp_path, {"ui": "lgtm", "rules": [RULE]}))[0]
+    everywhere = [{"name": "shop-api", "repo": "acme/shop-api", "environments": ["dev", "staging", "prod"]}]     # 5.0: a source per running environment
+    (a,) = collect(load(tmp_path, {"ui": "lgtm", "rules": [RULE]}, everywhere))[0]
     assert a.environment == env
 
 
@@ -251,7 +259,7 @@ def test_service_down_fires_for_the_service_and_environment_whatever_the_series_
 def test_a_declared_service_down_rule_replaces_the_built_in(net, tmp_path):
     """AC-092.5: when a rule of that name is declared the built-in one is not added."""
     own = {"name": "ServiceDown", "query": "up == 0", "severity": "warning"}
-    cfg = load(tmp_path, {"ui": "lgtm", "rules": [own]})
+    cfg = load(tmp_path, {"ui": "lgtm", "rules": [own]}, envs=("dev",))
     assert [(r.query, r.service) for r in service_down(cfg)] == [("up == 0", None)]
 
 
@@ -280,7 +288,7 @@ def test_a_series_that_matches_no_service_keeps_its_label_and_has_no_repo(net, t
     net.on(Q, [{"service": "billing", "deployment_environment_name": "dev"}])
     (a,) = collect(load(tmp_path, {"ui": "lgtm", "rules": [RULE]}))[0]
     assert a.service == "billing" and a.repo is None
-    assert any('"billing"' in n and "not a service in services.yaml" in n for n in a.unmapped)
+    assert any('"billing"' in n and "not a service in system.yaml" in n for n in a.unmapped)
 
 
 def test_a_series_without_service_or_job_has_an_empty_service_and_a_note(net, tmp_path):
@@ -294,7 +302,7 @@ def test_a_service_without_a_repo_maps_to_the_gitops_repo_with_a_note(net, tmp_p
     """AC-092.8: a services.yaml entry without `repo`: no repo, and the note says the service has none."""
     net.on(Q, [{"job": "shop-batch", "deployment_environment_name": "dev"}])
     (a,) = collect(load(tmp_path, {"ui": "lgtm", "rules": [RULE]}))[0]
-    assert a.service == "shop-batch" and a.repo is None and any("shop-batch has no repo in services.yaml" in n for n in a.unmapped)
+    assert a.service == "shop-batch" and a.repo is None and any("shop-batch has no repo in system.yaml" in n for n in a.unmapped)
 
 
 # ---------------- AC-092.23 Alertmanager ----------------
@@ -307,7 +315,7 @@ def am_entry(name, **labels):
 def test_active_alertmanager_alerts_are_read_and_mapped(net, tmp_path):
     """AC-092.23: every active alert is mapped like a rule alert; severity is the label, name the alertname, start the startsAt."""
     net.am = [am_entry("DiskFull", severity="critical", service="shop-api", deployment_environment_name="prod")]
-    cfg = load(tmp_path, {"ui": "lgtm", "alertmanagerURL": "https://am.example.com"})
+    cfg = load(tmp_path, {"ui": "lgtm", "alertmanagerURL": "https://am.example.com"}, envs=("prod",))
     alerts, errors = collect(cfg)
     assert errors == []
     (a,) = alerts
@@ -359,7 +367,7 @@ def test_an_unreachable_or_refusing_prometheus_is_one_source_error(net, tmp_path
     """AC-092.16: the endpoint and the reason are reported as one SourceError; no alert comes out of a failed read."""
     import alertsources
     net.prom_error = answer
-    alerts, errors = collect(load(tmp_path, {"ui": "lgtm", "rules": [RULE]}))
+    alerts, errors = collect(load(tmp_path, {"ui": "lgtm", "rules": [RULE]}, envs=("dev",)))
     assert alerts == [] and len(errors) == 1 and isinstance(errors[0], alertsources.SourceError)
     assert errors[0].endpoint == LGTM and reason in errors[0].reason
     assert str(errors[0]) == f"{LGTM}: {errors[0].reason}"
@@ -369,7 +377,7 @@ def test_an_unreachable_alertmanager_is_a_source_error_and_rules_still_run(net, 
     """AC-092.16 AC-092.23: a failing Alertmanager does not hide what Prometheus reports, and is reported."""
     net.am_error = (503, "down")
     net.on(Q, [{"job": "shop-api", "deployment_environment_name": "dev"}])
-    alerts, errors = collect(load(tmp_path, {"ui": "lgtm", "rules": [RULE], "alertmanagerURL": "https://am.example.com"}))
+    alerts, errors = collect(load(tmp_path, {"ui": "lgtm", "rules": [RULE], "alertmanagerURL": "https://am.example.com"}, envs=("dev",)))
     assert [a.name for a in alerts] == ["HighErrorRate"]
     assert len(errors) == 1 and errors[0].endpoint == "https://am.example.com" and "HTTP 503" in errors[0].reason
 

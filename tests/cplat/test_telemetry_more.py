@@ -13,13 +13,17 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
 
 
+LGTM = "system: shop\nowner: acme\nenvironments:\n  dev:\n    observability: {ui: lgtm}\n  staging: {}\n  prod: {}\n"
+COLLECTOR = "system: shop\nowner: acme\nenvironments:\n  dev:\n    observability: {collector: true}\n  staging: {}\n  prod: {}\n"
+
+
 def service_repo(repo, slugs="  - acme/shop-gitops\n"):
     (repo / ".platform-app.yml").write_text("gitops_apps:\n" + slugs)
     return repo
 
 
 def fake_gh(monkeypatch, apps):
-    """`gh api` answers for the gitops-app repo: applications/ listing and each app.yaml."""
+    """`gh api` answers for the gitops-app repo: applications/ listing and each system.yaml."""
     import json
     calls = []
 
@@ -29,7 +33,7 @@ def fake_gh(monkeypatch, apps):
         if path.endswith("/applications"):
             return json.dumps([{"name": a, "type": "dir"} for a in apps])
         for a, text in apps.items():
-            if path.endswith(f"/applications/{a}/app.yaml"):
+            if path.endswith(f"/applications/{a}/system.yaml"):
                 return text
         return ""
     monkeypatch.setattr(smoke, "gh", gh)
@@ -37,10 +41,10 @@ def fake_gh(monkeypatch, apps):
 
 
 def test_the_addon_is_found_from_a_service_repo(repo, monkeypatch):
-    """AC-101.2: `.platform-app.yml` names the gitops-app; its app.yaml (read as the platform reads it) has `ui: lgtm`."""
+    """AC-101.2: `.platform-app.yml` names the gitops-app; its system.yaml (read as the platform reads it) has `ui: lgtm`."""
     import telemetry
     service_repo(repo)
-    fake_gh(monkeypatch, {"shop": "observability:\n  ui: lgtm\n"})
+    fake_gh(monkeypatch, {"shop": LGTM})
     monkeypatch.setenv("CPLAT_KUBE_CONTEXT", "kind-dev")
     env, _, forward = telemetry.session_env(repo, "run-1", "ship")
     assert forward is not None and "kind-dev" in repr(vars(forward)) and env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
@@ -50,7 +54,7 @@ def test_a_linked_gitops_app_without_the_addon_stays_off(repo, monkeypatch):
     """AC-101.2: the linked gitops-app has no lgtm UI: nothing starts."""
     import telemetry
     service_repo(repo)
-    fake_gh(monkeypatch, {"shop": "observability:\n  collector: true\n"})
+    fake_gh(monkeypatch, {"shop": COLLECTOR})
     monkeypatch.setenv("CPLAT_KUBE_CONTEXT", "kind-dev")
     assert telemetry.session_env(repo, "run-1", "ship") == ({}, None, None)
 
@@ -59,7 +63,7 @@ def test_gitops_is_not_asked_without_a_context(repo, monkeypatch):
     """AC-101.4: no configured context: the linked repo is not even read (no gh call, no delay)."""
     import telemetry
     service_repo(repo)
-    calls = fake_gh(monkeypatch, {"shop": "observability:\n  ui: lgtm\n"})
+    calls = fake_gh(monkeypatch, {"shop": LGTM})
     assert telemetry.session_env(repo, "run-1", "ship") == ({}, None, None) and calls == []
 
 

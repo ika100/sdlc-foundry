@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CHANGELOG = (ROOT / "docs" / "CHANGELOG.md")
 GUIDE = (ROOT / "docs" / "DOMAIN-MODEL.md")
 
-# the commands of 4.7.0 (cplat.COMMANDS before this spec): none of them may disappear or be renamed
+# the commands of 4.7.0 (cplat.COMMANDS before this spec): in 5.0 each is plumbing that kept its name or a moved name that answers with its new form
 EXISTING = ["new-service", "new-app", "update-service", "doctor", "shape", "compose", "promote", "status", "secret", "addon", "feedback",
             "triage", "spec", "ship", "pr", "quiet", "validate", "app-ship", "smoke", "headless", "build", "runs", "retro", "deps", "alerts",
             "fleet", "budget", "adopt"]
@@ -26,8 +26,8 @@ def test_help_lists_model_show_ac_113_17(capsys):  # AC-113.17
 
 
 def test_model_is_registered_and_nothing_else_changed_ac_113_17():  # AC-113.17
-    assert cplat.COMMANDS["model"] == "modelcmd"
-    missing = [c for c in EXISTING if c not in cplat.COMMANDS]
+    assert cplat.PLUMBING["model"] == "modelcmd"
+    missing = [c for c in EXISTING if c not in cplat.PLUMBING and c not in cplat.MOVED]
     assert missing == [], f"commands that disappeared: {missing}"
 
 
@@ -49,9 +49,9 @@ def test_the_changelog_announces_the_model_and_that_nothing_else_changed_ac_113_
 
 def test_the_guides_status_names_the_core_the_command_and_the_json_ac_113_17():  # AC-113.17
     status = next(ln for ln in GUIDE.read_text().splitlines() if ln.startswith("**Status:**"))
-    assert re.search(r"(?i)internal core[^.]*\bis in place\b|\bis in place\b[^.]*internal core", status), status
+    assert "5.0 is current" in status, status                     # 4.x: "the internal core is in place"; 5.0: the model is what runs
     assert "cplat model show" in status
-    assert "schema: 1" in status and "5.0" in status and re.search(r"(?i)may change", status)
+    assert "schema: 2" in status and "system.yaml" in status
     assert "lands in 4.x" not in status
 
 

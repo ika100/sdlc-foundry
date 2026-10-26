@@ -10,7 +10,8 @@ import pytest
 import yaml
 
 import core
-from test_gitops import composed_todo_api, gh, gitops_repo, run_compose, commit  # noqa: F401  (fixtures)
+from model_fixtures import model
+from test_gitops import commit, composed_todo_api, gh, gitops_repo, run_compose, system_file  # noqa: F401  (fixtures)
 
 ROOT = core.PLATFORM_ROOT
 APP = "applications/todo"
@@ -25,18 +26,20 @@ def render(repo):
     return subprocess.run(["uv", "run", "scripts/render.py"], cwd=repo, capture_output=True, text=True)
 
 
-def set_app(repo, **extra):
-    f = repo / APP / "app.yaml"
-    cfg = yaml.safe_load(f.read_text()) or {}
-    cfg.update(extra)
-    f.write_text(yaml.safe_dump(cfg))
+def set_env(repo, env, **extra):
+    """Set keys of `environments.<env>` in system.yaml."""
+    f = system_file(repo)
+    cfg = yaml.safe_load(f.read_text())
+    cfg["environments"][env].update(extra)
+    f.write_text(yaml.safe_dump(cfg, sort_keys=False))
 
 
-def set_service(repo, **extra):
-    f = repo / APP / "services.yaml"
+def set_instance(repo, env, **extra):
+    """Set keys of `components.todo-api.instances.<env>` (the instance is created when missing)."""
+    f = system_file(repo)
     d = yaml.safe_load(f.read_text())
-    d["services"][0].update(extra)
-    f.write_text(yaml.safe_dump(d))
+    d["components"]["todo-api"]["instances"].setdefault(env, {}).update(extra)
+    f.write_text(yaml.safe_dump(d, sort_keys=False))
 
 
 @pytest.fixture()
@@ -47,37 +50,41 @@ def app(tmp_path, new_service, shared_renders, gh):
 # ---------------- AC-093.15: where the setting lives and what it defaults to ----------------
 
 def test_a_generated_gitops_app_has_staging_promotion_on_app_wide_ac_093_15(gitops_repo):  # AC-093.15
-    cfg = yaml.safe_load((gitops_repo / APP / "app.yaml").read_text())
-    assert cfg["promotion"] == {"staging": "auto"}
+    cfg = yaml.safe_load(system_file(gitops_repo).read_text())
+    assert cfg["environments"]["staging"]["promote"] == "after-dev-smoke"
 
 
-def test_app_yaml_is_project_owned_so_an_update_never_switches_it_on_ac_093_15():  # AC-093.15
+def test_system_yaml_is_project_owned_so_an_update_never_switches_it_on_ac_093_15():  # AC-093.15
     skip = yaml.safe_load((TPL / "copier.yml").read_text())["_skip_if_exists"]
-    assert "applications/**/app.yaml" in skip and "applications/**/services.yaml" in skip
+    assert "applications/**/system.yaml" in skip
+    assert "applications/**/app.yaml" not in skip and "applications/**/services.yaml" not in skip      # 4.x files
 
 
-@pytest.mark.parametrize("app_cfg, entry, want", [
-    ({}, {}, False),                                                             # nothing set: off
-    ({"promotion": {"staging": "auto"}}, {}, True),                              # app-wide on
-    ({"promotion": {"staging": "manual"}}, {}, False),
-    ({"promotion": {"staging": "auto"}}, {"promotion": {"staging": "manual"}}, False),   # the service wins
-    ({"promotion": {"staging": "manual"}}, {"promotion": {"staging": "auto"}}, True),
-    ({}, {"promotion": {"staging": "auto"}}, True),
-    ({"promotion": {}}, {"promotion": {}}, False),
+@pytest.mark.parametrize("env_promote, instance_promote, want", [
+    (None, None, False),                                  # nothing set: off
+    ("after-dev-smoke", None, True),                      # app-wide (the staging environment) on
+    ("manual", None, False),
+    ("after-dev-smoke", "manual", False),                 # the component's instance wins
+    ("manual", "after-dev-smoke", True),
+    (None, "after-dev-smoke", True),
 ])
-def test_effective_setting_is_the_entry_then_the_app_then_off_ac_093_15(app_cfg, entry, want):  # AC-093.15
-    assert staging_mod().effective(app_cfg, entry) is want
+def test_effective_setting_is_the_instance_then_the_environment_then_off_ac_093_15(env_promote, instance_promote, want):  # AC-093.15
+    doc = {"system": "todo", "owner": "acme",
+           "environments": {"dev": {}, "staging": {"promote": env_promote} if env_promote else {}, "prod": {}},
+           "components": {"api": {"type": "service", "lang": "python", "repo": "acme/api",
+                                  "instances": {"dev": {}, "staging": {"promote": instance_promote} if instance_promote else {}}}}}
+    m = model().build(doc, "todo")
+    assert (m.staging_promotion(m.component("api")) == "after-dev-smoke") is want
 
 
 def test_the_templates_document_the_key_ac_093_15():  # AC-093.15
-    services = (TPL / "applications" / "{{ app_name }}" / "services.yaml.jinja").read_text()
-    appy = (TPL / "applications" / "{{ app_name }}" / "app.yaml.jinja").read_text()
-    assert "promotion" in services and "promotion" in appy
+    text = (TPL / "applications" / "{{ app_name }}" / "system.yaml.jinja").read_text()
+    assert "promote" in text and "after-dev-smoke" in text
 
 
 def test_a_valid_setting_renders_at_both_levels_ac_093_15(app):  # AC-093.15
-    set_app(app, promotion={"staging": "auto"})
-    set_service(app, promotion={"staging": "manual"})
+    set_env(app, "staging", promote="after-dev-smoke")
+    set_instance(app, "staging", promote="manual")
     p = render(app)
     assert p.returncode == 0, p.stderr
 
@@ -85,33 +92,38 @@ def test_a_valid_setting_renders_at_both_levels_ac_093_15(app):  # AC-093.15
 # ---------------- AC-093.13: prod is never automatic ----------------
 
 @pytest.mark.parametrize("value", ["auto", True, "yes", {"auto": True}])
-def test_an_automatic_prod_in_app_yaml_is_rejected_ac_093_13(app, value):  # AC-093.13
-    set_app(app, promotion={"staging": "auto", "prod": value})
+def test_an_automatic_prod_on_the_environment_is_rejected_ac_093_13(app, value):  # AC-093.13
+    set_env(app, "prod", promote=value)
     p = render(app)
     assert p.returncode == 1
-    assert "app.yaml: promotion.prod: prod is promoted only by /gitops:promote" in p.stderr
+    assert "environments.prod.promote: prod is always promoted by hand (manual)" in p.stderr
 
 
-def test_an_automatic_prod_on_a_service_is_rejected_and_names_it_ac_093_13(app):  # AC-093.13
-    set_service(app, promotion={"prod": "auto"})
+def test_an_automatic_prod_on_a_component_is_rejected_and_names_it_ac_093_13(app):  # AC-093.13
+    set_instance(app, "prod", promote="auto")
     p = render(app)
     assert p.returncode == 1
-    assert "services.yaml (todo-api): promotion.prod: prod is promoted only by /gitops:promote" in p.stderr
-    assert "never automatically (spec 093)" in p.stderr
+    assert "components.todo-api.instances.prod.promote: prod is always promoted by hand (manual), got 'auto'" in p.stderr
 
 
 def test_prod_manual_is_accepted_ac_093_13(app):  # AC-093.13
-    set_app(app, promotion={"staging": "auto", "prod": "manual"})
+    set_env(app, "staging", promote="after-dev-smoke")
+    set_env(app, "prod", promote="manual")
     assert render(app).returncode == 0
 
 
 def test_other_invalid_values_are_rejected_with_their_own_messages_ac_093_13(app):  # AC-093.13
-    set_app(app, promotion="auto")
-    assert "app.yaml: promotion must be a mapping, e.g. {staging: auto}" in render(app).stderr
-    set_app(app, promotion={"staging": "always"})
-    assert "app.yaml: promotion.staging must be auto or manual, got 'always'" in render(app).stderr
-    set_app(app, promotion={"dev": "auto"})
-    assert "app.yaml: promotion.dev is not a setting (only staging; dev always follows main)" in render(app).stderr
+    set_env(app, "staging", promote="always")
+    assert "environments.staging.promote must be after-dev-smoke or manual, got 'always'" in render(app).stderr
+    set_env(app, "staging", promote="manual")
+    set_env(app, "dev", promote="after-dev-smoke")
+    assert "environments.dev.promote: dev follows main and takes no promote" in render(app).stderr
+    f = system_file(app)
+    doc = yaml.safe_load(f.read_text())
+    del doc["environments"]["dev"]["promote"]
+    doc["components"]["todo-api"]["promotion"] = {"staging": "auto"}          # the 4.x per-service key
+    f.write_text(yaml.safe_dump(doc, sort_keys=False))
+    assert "components.todo-api: promotion is replaced by instances.<env>.promote in 5.0" in render(app).stderr
 
 
 def test_no_platform_workflow_pins_prod_ac_093_13():  # AC-093.13
@@ -172,9 +184,9 @@ def test_a_red_ci_leaves_the_pr_open_with_a_comment_ac_093_6():  # AC-093.6
 
 # ---------------- AC-093.14: the docs describe the mechanism ----------------
 
-DOC_FILES = [
+DOC_FILES = [      # 5.0: /gitops:promote is /instance:promote; the gitops deployment agent is gone
     "docs/USER-JOURNEY.md", "docs/HOW-IT-WORKS.md", "templates/gitops-app/CLAUDE.md.jinja",
-    "plugins/gitops/commands/promote.md", "plugins/gitops/agents/deployment.md",
+    "plugins/instance/commands/promote.md",
 ]
 
 
@@ -185,15 +197,15 @@ def test_no_document_says_staging_is_never_auto_merged_ac_093_14(rel):  # AC-093
 
 
 @pytest.mark.parametrize("rel", ["docs/USER-JOURNEY.md", "docs/HOW-IT-WORKS.md", "templates/gitops-app/CLAUDE.md.jinja",
-                                 "plugins/gitops/commands/promote.md"])
+                                 "plugins/instance/commands/promote.md"])
 def test_the_documents_describe_automatic_staging_and_how_to_switch_it_off_ac_093_14(rel):  # AC-093.14
     text = (ROOT / rel).read_text()
     assert "pin-staging" in text or "spec 093" in text or "ADR-041" in text, rel
-    assert re.search(r"promotion:\s*\{\s*staging:\s*manual\s*\}", text) or "staging: manual" in text, rel
+    assert "promote: manual" in text, rel
 
 
 def test_the_promote_command_describes_the_prod_evidence_summary_ac_093_14():  # AC-093.14
-    text = (ROOT / "plugins/gitops/commands/promote.md").read_text()
+    text = (ROOT / "plugins/instance/commands/promote.md").read_text()
     assert "evidence" in text.lower() and "smoke" in text.lower()
 
 

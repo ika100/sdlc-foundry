@@ -1,6 +1,6 @@
 """Shared helpers of the spec 113 acceptance tests (not a test module, never collected).
 
-Builds a gitops-app checkout by hand (no copier, no render): `applications/<app>/{services.yaml,app.yaml}` and the image pins in
+Builds a gitops-app checkout by hand (no copier, no render): `applications/<app>/system.yaml` (5.0) and the image pins in
 `overlays/<env>/<service>/kustomization.yaml`. `model` / `modelcmd` do not exist before the feature, so they are imported inside
 the tests (through `model()`), never at module level: a missing module fails the test, it does not break collection."""
 import copy
@@ -18,13 +18,100 @@ def model():
     return importlib.import_module("model")
 
 
+SHAPE_PAIRS = {"service-python": ("service", "python"), "service-java": ("service", "java"), "service-go": ("service", "go"),
+               "web-nextjs": ("website", "typescript")}
+ENVS = ("dev", "staging", "prod")
+
+
+def _ph(v):
+    return v.replace("{service}", "{component}").replace("{app}", "{system}") if isinstance(v, str) else v
+
+
+def system_doc(services, app=None, name: str = "shop") -> dict:
+    """The 5.0 `system.yaml` document of a system written in the 4.x vocabulary (services list + app dict) of the spec 113 fixtures:
+    the same facts, in the 5.0 shape. Lenient on purpose (unknown environments, unknown shapes) like the model."""
+    app = copy.deepcopy(app or {})
+    envs = {e: {} for e in ENVS}
+    for e, v in (app.get("hosts") or {}).items():
+        envs.setdefault(e, {})["host"] = _ph(v)
+    for e, v in (app.get("urls") or {}).items():
+        envs.setdefault(e, {})["url"] = _ph(v)
+    pol = app.get("policies")
+    modes = (pol or {}).get("mode") if isinstance(pol, dict) else None
+    for e in envs:       # 4.x: no `policies` (or false) = off; `policies:` on = audit, audit, enforce unless a mode is given
+        on = "Enforce" if e == "prod" else "Audit"
+        envs[e]["policy"] = str((modes or {}).get(e, on)).lower() if isinstance(pol, dict) else "off"
+    for e, v in (app.get("promotion") or {}).items():
+        envs.setdefault(e, {})["promote"] = {"auto": "after-dev-smoke"}.get(v, v)
+    addons = app.get("addons") or {}
+    if "observability" in addons:
+        for e in envs:
+            envs[e]["observability"] = copy.deepcopy(addons["observability"] or {})
+    comps = {}
+    for s in copy.deepcopy(services):
+        s = dict(s)
+        n = s.pop("name")
+        c = {}
+        if "shape" in s:
+            c["type"], c["lang"] = SHAPE_PAIRS.get(s.pop("shape"), ("service", "unknown"))
+        else:
+            c["type"], c["lang"] = "service", "unknown"
+        repl = s.pop("replicas", None)
+        promo = s.pop("promotion", None) or {}
+        run = s.pop("environments", None)
+        inst = None if run is None else {e: {} for e in run}
+        if isinstance(repl, dict):
+            for e, r in repl.items():
+                if inst is not None and e in inst:
+                    inst[e]["replicas"] = r
+        elif repl is not None:
+            c["replicas"] = repl
+        for e, v in promo.items():
+            if inst is not None and e in inst:
+                inst[e]["promote"] = v
+        for k, v in s.items():
+            c[k] = _ph(v) if isinstance(v, str) else v
+        for sec in c.get("secrets") or []:
+            if isinstance(sec.get("remote"), dict) and "path" in sec["remote"]:
+                sec["remote"]["path"] = _ph(sec["remote"]["path"])
+        if inst is not None:
+            c["instances"] = inst
+        comps[n] = c
+    doc = {"system": name, "owner": "acme"}
+    for k in ("gateway", "secretStore"):
+        if k in app:
+            doc[k] = app[k]
+    if isinstance(pol, dict) and pol.get("registries"):
+        doc["registries"] = pol["registries"]
+    doc["environments"] = envs
+    doc["components"] = comps
+    pg = addons.get("postgres")
+    if pg is not None:
+        r = {"type": "database"}
+        for k in ("version", "resources"):
+            if k in pg:
+                r[k] = pg[k]
+        inst: dict = {}
+        for key, dest in (("instances", "replicas"), ("storage", "storage")):
+            v = pg.get(key)
+            if isinstance(v, dict):
+                for e, x in v.items():
+                    inst.setdefault(e, {})[dest] = x
+            elif v is not None:
+                r["replicas" if dest == "replicas" else "storage"] = v
+        if inst:
+            r["instances"] = inst
+        doc["resources"] = {"postgres": r}
+    return doc
+
+
 def write_app(root: Path, services, app=None, pins=None, name: str = "shop") -> Path:
-    """Write the declared files; `pins` maps (env, service) to a tag (None: an overlay without a tag). Returns the app dir."""
+    """Write `applications/<name>/system.yaml` from the 4.x-vocabulary facts (see `system_doc`) and the image pins; `services` may
+    also be the text of a file. `pins` maps (env, component) to a tag (None: an overlay without a tag). Returns the app dir."""
     d = Path(root) / "applications" / name
     d.mkdir(parents=True, exist_ok=True)
-    (d / "services.yaml").write_text(services if isinstance(services, str) else yaml.safe_dump({"services": copy.deepcopy(services)}, sort_keys=False))
-    if app is not None:
-        (d / "app.yaml").write_text(app if isinstance(app, str) else yaml.safe_dump(copy.deepcopy(app), sort_keys=False))
+    text = services if isinstance(services, str) else yaml.safe_dump(system_doc(services, app, name), sort_keys=False)
+    (d / "system.yaml").write_text(text)
     for (env, svc), tag in (pins or {}).items():
         k = d / "overlays" / env / svc
         k.mkdir(parents=True, exist_ok=True)
@@ -68,15 +155,19 @@ SMALL_SERVICES = [
 SMALL_PINS = {("dev", "shop-api"): "sha-" + SHA, ("dev", "stock"): "sha-abc1234"}
 
 SMALL_TEXT = f"""System: shop
+Owner: acme
 
 Environments (promotion order):
-  dev  host {{service}}.{{app}}-dev.localhost  url-template -  policy off  promotion follows main  observability ui=lgtm export=- alerts=on rules=0
-  staging  host -  url-template -  policy off  promotion manual  observability ui=lgtm export=- alerts=on rules=0
-  prod  host -  url-template -  policy off  promotion manual  observability ui=lgtm export=- alerts=on rules=0
+  dev  host {{component}}.{{system}}-dev.localhost  url-template -  policy off  promote follows main  observability ui=lgtm export=- alerts=on rules=0
+  staging  host -  url-template -  policy off  promote manual  observability ui=lgtm export=- alerts=on rules=0
+  prod  host -  url-template -  policy off  promote manual  observability ui=lgtm export=- alerts=on rules=0
 
 Components:
-  shop-api  type service  lang python  repo acme/shop-api  image ghcr.io/acme/shop-api  uses postgres  secrets api-keys
-  stock  type service  lang unknown  repo acme/stock  image ghcr.io/acme/stock  external kustomize  uses -  secrets -
+  shop-api  type service  lang python  repo acme/shop-api  image ghcr.io/acme/shop-api  uses postgres  secrets api-keys  provides -  consumes -  libraries -
+  stock  type service  lang unknown  repo acme/stock  image ghcr.io/acme/stock  external kustomize  uses -  secrets -  provides -  consumes -  libraries -
+
+APIs:
+  (none)
 
 Instances:
   shop-api  dev  sha-{SHA}  replicas 1  namespace shop-dev  url http://shop-api.shop-dev.localhost:8088
@@ -85,8 +176,8 @@ Instances:
 
 Resources:
   postgres  type database  used by shop-api
-    dev  instances 1  version 17  storage 1Gi  argo addon-postgres-dev  secret shop-postgres-app
-    staging  instances 1  version 17  storage 1Gi  argo addon-postgres-staging  secret shop-postgres-app
+    dev  replicas 1  version 17  storage 1Gi  argo addon-postgres-dev  secret shop-postgres-app
+    staging  replicas 1  version 17  storage 1Gi  argo addon-postgres-staging  secret shop-postgres-app
 """
 
 # ---------------- a rich app: every rule of the model once ----------------

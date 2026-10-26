@@ -7,6 +7,7 @@ Seams: `staging.gh` (gitops-app files, compare, commits, the dispatch), `ship.gh
 the autoissue fake tracker, as in test_smoke_091_ship. `staging` and `staging_deploy` are imported inside the tests: they do not
 exist yet. Contract: design.md "Decision", "Dispatch and the workflow", "Ship deploy", "State and resume", "Run record"."""
 import base64
+import copy
 import importlib
 import json
 import re
@@ -15,6 +16,7 @@ import subprocess
 from datetime import datetime, timezone
 
 import pytest
+import yaml
 
 import core
 import ship
@@ -33,17 +35,29 @@ RUN_URL = f"https://github.com/{GITOPS}/actions/runs/88"
 STAGING_URL = "http://shop-api.shop-staging.localhost:8088"
 WORKFLOW = ".github/workflows/pin-staging.yml"
 KUSTOMIZATION = "applications/shop/overlays/staging/shop-api/kustomization.yaml"
-APP_HOSTS = ('gateway: {name: traefik-gateway, namespace: kube-system}\nhosts:\n  dev: "{service}.{app}-dev.localhost"\n'
-             '  staging: "{service}.{app}-staging.localhost"\n')
+
+def system_top(env_promote=None, staging_host=True) -> dict:
+    """The system.yaml parts besides the components (5.0): the gateway, the dev and staging hosts, `promote` on the staging environment."""
+    staging = {}
+    if staging_host:
+        staging["host"] = "{component}.{system}-staging.localhost"
+    if env_promote:
+        staging["promote"] = env_promote
+    return {"gateway": {"name": "traefik-gateway", "namespace": "kube-system"},
+            "environments": {"dev": {"host": "{component}.{system}-dev.localhost"}, "staging": staging}}
 
 
 def staging_mod():
     return importlib.import_module("staging")
 
 
-def services_text(envs="[dev, staging]", promotion="", expose=True):
-    return ("services:\n  - name: shop-api\n    repo: acme/shop-api\n    shape: service-python\n    port: 8080\n"
-            + ("    expose: {host: shop-api}\n" if expose else "") + f"    environments: {envs}\n" + promotion)
+def shop_api(envs=("dev", "staging"), staging_promote=None, expose=True) -> dict:
+    """The components of the system: shop-api running in `envs`, with `promote` on its staging instance when given."""
+    instances = {e: {} for e in envs}
+    if staging_promote and "staging" in instances:
+        instances["staging"]["promote"] = staging_promote
+    return {"shop-api": {"type": "service", "lang": "python", "repo": "acme/shop-api", "port": 8080,
+                         **({"expose": {"host": "shop-api"}} if expose else {}), "instances": instances}}
 
 
 def kustomization(tag):
@@ -61,8 +75,9 @@ class Api:
     """`gh` for the gitops-app repo and the service repo: file contents, directory listing, compare, commits, the dispatch, the pin
     PR of the dispatched build and its run. One instance answers `smoke.gh`, `staging.gh` and the pin-staging parts of `ship.gh`."""
 
-    def __init__(self, services: str, app: str):
-        self.files = {"applications/shop/services.yaml": services, "applications/shop/app.yaml": app,
+    def __init__(self, components: dict, top: dict):
+        system = {"system": "shop", "owner": "acme", **copy.deepcopy(top), "components": copy.deepcopy(components)}
+        self.files = {"applications/shop/system.yaml": yaml.safe_dump(system, sort_keys=False),
                       KUSTOMIZATION: kustomization(OLD), WORKFLOW: "name: pin-staging\n"}
         self.compare_status = "behind"          # compare/<build>...<staging commit>: the build is ahead of staging
         self.commits: dict[str, str] = {}       # ref -> full sha (tags)
@@ -114,7 +129,7 @@ class Api:
             ref = path.split("/commits/")[1]
             return self._out({"sha": self.commits.get(ref, ref)}, args)
         rel = path.split("/contents/")[1] if "/contents/" in path else None
-        if rel == "applications" or (rel is None and "services.yaml" not in joined and "app.yaml" not in joined):
+        if rel == "applications" or (rel is None and "system.yaml" not in joined):
             return "shop\n" if "--jq" in args or "-q" in args else json.dumps([{"name": "shop", "type": "dir"}])
         for p, text in self.files.items():
             if rel == p or (rel is None and p in joined):
@@ -134,11 +149,11 @@ class Api:
 
 
 class SWorld(World):
-    def stage(self, *, services=None, app=None, api=None, context="lan", tweak=None):
-        services = services if services is not None else services_text(promotion="    promotion: {staging: auto}\n")
-        app = app if app is not None else APP_HOSTS
-        self.install(services=services)
-        self.api = api or Api(services, app)
+    def stage(self, *, components=None, top=None, api=None, context="lan", tweak=None):
+        components = components if components is not None else shop_api(staging_promote="after-dev-smoke")
+        top = top if top is not None else system_top()
+        self.install(services=components)
+        self.api = api or Api(components, top)
         if tweak:
             tweak(self.api)
         staging, staging_deploy = staging_mod(), importlib.import_module("staging_deploy")
@@ -315,11 +330,11 @@ def test_the_record_says_skipped_with_the_reason_ac_093_3(sw, capsys):  # AC-093
 # ---------------- AC-093.4: the first entry into staging stays manual ----------------
 
 def test_a_service_not_yet_in_staging_is_not_promoted_and_the_first_step_is_named_ac_093_4(sw, capsys):  # AC-093.4
-    sw.stage(services=services_text(envs="[dev]", promotion="    promotion: {staging: auto}\n"))
+    sw.stage(components=shop_api(envs=("dev",)), top=system_top("after-dev-smoke"))
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     assert ("Promotion (staging): not promoted: shop-api is not in staging yet: the first promotion is manual: "
-            "/gitops:promote shop-api dev staging") in lines_of(capsys)
+            "/instance:promote shop-api --to staging") in lines_of(capsys)
     assert sw.dispatches() == [] and len(sw.fake.calls) == 1
 
 
@@ -347,7 +362,7 @@ def test_a_staging_that_runs_a_later_commit_is_left_alone_ac_093_5(sw, capsys): 
 # ---------------- AC-093.15: the off switch, at both levels ----------------
 
 def test_nothing_set_means_off_and_the_report_says_so_ac_093_15(sw, capsys):  # AC-093.15
-    sw.stage(services=services_text())
+    sw.stage(components=shop_api())
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     assert "Promotion (staging): not promoted: automatic promotion to staging is off for shop-api" in lines_of(capsys)
@@ -355,21 +370,21 @@ def test_nothing_set_means_off_and_the_report_says_so_ac_093_15(sw, capsys):  # 
 
 
 def test_a_service_can_switch_it_off_under_an_app_that_has_it_on_ac_093_15(sw, capsys):  # AC-093.15
-    sw.stage(services=services_text(promotion="    promotion: {staging: manual}\n"), app=APP_HOSTS + "promotion: {staging: auto}\n")
+    sw.stage(components=shop_api(staging_promote="manual"), top=system_top("after-dev-smoke"))
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     assert "automatic promotion to staging is off for shop-api" in "\n".join(lines_of(capsys)) and sw.dispatches() == []
 
 
 def test_the_app_setting_alone_switches_it_on_ac_093_15(sw, capsys):  # AC-093.15
-    sw.stage(services=services_text(), app=APP_HOSTS + "promotion: {staging: auto}\n")
+    sw.stage(components=shop_api(), top=system_top("after-dev-smoke"))
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     assert len(sw.dispatches()) == 1
 
 
 def test_a_service_can_switch_it_on_under_an_app_that_has_it_off_ac_093_15(sw, capsys):  # AC-093.15
-    sw.stage(services=services_text(promotion="    promotion: {staging: auto}\n"), app=APP_HOSTS + "promotion: {staging: manual}\n")
+    sw.stage(components=shop_api(staging_promote="after-dev-smoke"), top=system_top("manual"))
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     assert len(sw.dispatches()) == 1
@@ -380,7 +395,7 @@ def test_an_app_without_the_workflow_is_not_promoted_and_told_to_update_ac_093_1
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     assert (f"Promotion (staging): not promoted: the gitops-app shop has no pin-staging workflow "
-            "(update it with /shared:update-service)") in lines_of(capsys)
+            "(update it with /platform:update)") in lines_of(capsys)
     assert sw.dispatches() == []
 
 
@@ -454,7 +469,7 @@ def test_a_red_staging_smoke_escalates_as_code_and_keeps_the_build_ac_093_9(sw, 
     st = sw.state()
     assert st["escalated"] == reason and st["cause"] == "code" and st["phase"] != "done"
     line = next(ln for ln in out if ln.startswith(f"ship {SPEC_ID}: escalated ({reason}); staging keeps running {TAG} "))
-    assert f"(no automatic rollback: revert {PR_URL} to go back to {OLD}" in line and line.endswith(f"Resume with /svc:ship {SPEC_ID}")
+    assert f"(no automatic rollback: revert {PR_URL} to go back to {OLD}" in line and line.endswith(f"Resume with /component:ship {SPEC_ID}")
     assert len(sw.dispatches()) == 1 and SECRET not in "\n".join(out)           # nothing was pinned back
     assert any(ln.startswith("Smoke (staging): red (1 failing") for ln in out)
     assert sw.record()["smoke"]["staging"]["outcome"] == "red"
@@ -494,7 +509,7 @@ def test_resuming_after_a_red_staging_smoke_runs_the_staging_smoke_only_ac_093_9
 # ---------------- AC-093.10: no staging URL ----------------
 
 def test_a_service_without_a_staging_url_is_not_run_not_passed_and_not_escalated_ac_093_10(sw, capsys):  # AC-093.10
-    sw.stage(services=services_text(promotion="    promotion: {staging: auto}\n", expose=False))
+    sw.stage(components=shop_api(staging_promote="after-dev-smoke", expose=False))
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     out = lines_of(capsys)
@@ -507,8 +522,7 @@ def test_a_service_without_a_staging_url_is_not_run_not_passed_and_not_escalated
 
 
 def test_an_app_without_a_staging_host_is_also_not_run_ac_093_10(sw, capsys):  # AC-093.10
-    only_dev = 'gateway: {name: traefik-gateway, namespace: kube-system}\nhosts:\n  dev: "{service}.{app}-dev.localhost"\n'
-    sw.stage(app=only_dev)
+    sw.stage(top=system_top(staging_host=False))
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
     assert "Smoke (staging): not run: no staging URL for shop-api" in lines_of(capsys)
@@ -525,8 +539,8 @@ class Dev:
         return smoke.SmokeResult(env="dev", outcome=outcome, base_url=None, reason=reason, passed=2 if outcome.startswith("passed") else 0)
 
 
-def decide(sw, dev, services=None, tweak=None, st=None):
-    sw.stage(services=services, tweak=tweak)
+def decide(sw, dev, components=None, tweak=None, st=None):
+    sw.stage(components=components, tweak=tweak)
     return staging_mod().decide(sw.repo, st or {"deployed": TAG}, [GITOPS], "shop-api", dev)
 
 
@@ -553,8 +567,8 @@ def test_not_run_dev_skips_with_its_reason_ac_093_3(sw):  # AC-093.3
 
 
 def test_a_service_that_is_not_in_the_gitops_app_skips_ac_093_3(sw):  # AC-093.3
-    other = "services:\n  - name: other\n    repo: acme/other\n    shape: service-python\n    port: 8080\n"
-    d = decide(sw, Dev.of("passed"), services=other)
+    other = {"other": {"type": "service", "lang": "python", "repo": "acme/other", "port": 8080}}
+    d = decide(sw, Dev.of("passed"), components=other)
     assert (d.action, d.reason) == ("skip", "shop-api is not in the linked gitops-app")
 
 

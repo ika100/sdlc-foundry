@@ -82,12 +82,17 @@ DEFAULT_REPOS = [
     ("shop-web", "web-nextjs", ["shop-api"], ["AC-012.2"], False),
 ]
 
-SERVICES = """services:
-  - {name: shop-api, repo: acme/shop-api, expose: {port: 8080}}
-  - {name: shop-web, repo: acme/shop-web, expose: {port: 3000}}
-  - {name: shop-worker, repo: acme/shop-worker}
+SYSTEM_YAML = """system: shop
+owner: acme
+environments:
+  dev: {host: '{component}.dev.example.test'}
+  staging: {}
+  prod: {}
+components:
+  shop-api: {type: service, lang: python, repo: acme/shop-api, expose: true}
+  shop-web: {type: website, lang: typescript, repo: acme/shop-web, expose: true}
+  shop-worker: {type: service, lang: python, repo: acme/shop-worker}
 """
-APP_YAML = "name: shop\nhosts:\n  dev: '{service}.dev.example.test'\n"
 
 FAKE_GH = '''#!%(py)s
 import json, os, subprocess, sys
@@ -270,8 +275,7 @@ class World:
         (g / "docs" / "plan").mkdir(parents=True)
         (g / "docs" / "plan" / f"{SPEC}.md").write_text(plan_text())
         (g / "applications" / "shop").mkdir(parents=True)
-        (g / "applications" / "shop" / "services.yaml").write_text(SERVICES)
-        (g / "applications" / "shop" / "app.yaml").write_text(APP_YAML)
+        (g / "applications" / "shop" / "system.yaml").write_text(SYSTEM_YAML)
         (g / "scripts").mkdir()
         shutil.copy(core.PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "plan.py", g / "scripts" / "plan.py")
         git(g, "add", "-A")
@@ -381,7 +385,7 @@ def table_of(out):
 def test_refuses_a_component_repo_with_a_hint_and_changes_nothing(w):  # AC-097.1
     r = w.app("start", REPO_SPEC, "--context", "kind-shop", repo=w.clone("shop-api"))
     assert r.rc == 1
-    assert "this is a service-python repo: a component spec ships with /svc:ship" in r.out
+    assert "this is a service-python repo: a component spec ships with /component:ship" in r.out
     assert not (w.clone("shop-api") / ".git" / "cplat-app-ship.json").exists()
     assert not w.state_file.exists()
 
@@ -392,7 +396,7 @@ def test_refuses_a_product_spec_that_is_not_approved(w):  # AC-097.1
     r = w.app("start", SPEC, "--context", "kind-shop")
     assert r.rc == 1
     assert f"{SPEC} is 'draft'; only an approved product spec is shipped" in r.out
-    assert "/app:spec approve" in r.out
+    assert "/system:spec approve" in r.out
     assert not w.state_file.exists()
 
 
@@ -410,7 +414,7 @@ def test_refuses_a_second_unfinished_run_for_another_spec(w):  # AC-097.1
     other.mkdir()
     (other / "spec.md").write_text(PRODUCT_SPEC.format(status="approved").replace("012-shop", "013-other").replace("AC-012", "AC-013"))
     r = w.app("start", "013-other", "--context", "kind-shop")
-    assert r.rc == 1 and "cplat app-ship finish" in r.out
+    assert r.rc == 1 and "cplat system ship finish" in r.out
     assert w.state()["spec"] == SPEC
 
 
@@ -559,7 +563,7 @@ def test_the_stop_hook_gives_up_after_max_blocks(w):  # AC-097.4
 def test_the_stop_hook_is_registered_for_the_product_state_file(w):  # AC-097.4
     hooks = json.loads((core.PLATFORM_ROOT / "plugins" / "shared" / "hooks" / "hooks.json").read_text())
     cmds = [h["command"] for e in hooks["hooks"]["Stop"] for h in e["hooks"]]
-    assert any("cplat-app-ship.json" in c and "app-ship gate" in c and "|| exit 0" in c for c in cmds)
+    assert any("cplat-app-ship.json" in c and "system ship gate" in c and "|| exit 0" in c for c in cmds)
 
 
 # ---------------- AC-097.6: questions escalate verbatim ----------------
@@ -956,8 +960,8 @@ def test_complete_report_has_a_row_per_repo_the_checklist_and_promote_commands(w
     assert "(entry)" in out
     for step in ("Create the payment provider account", "Publish the lib to the registry", "Set the queue URL"):
         assert f"- [ ] {step}" in out
-    assert "/gitops:promote shop-api dev staging" in out and "/gitops:promote shop-web dev staging" in out
-    assert "/gitops:promote shop-lib" not in out
+    assert "/instance:promote shop-api --to staging" in out and "/instance:promote shop-web --to staging" in out
+    assert "/instance:promote shop-lib" not in out
 
 
 def test_complete_with_a_red_pr_escalates_and_merges_nothing(w):  # AC-097.20

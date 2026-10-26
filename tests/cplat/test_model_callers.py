@@ -25,8 +25,8 @@ import smoke
 import staging
 import status
 from alerts_fakes import APP as ALERT_APP, make_app
-from model_fixtures import SHA, SMALL_APP, SMALL_PINS, SMALL_SERVICES, clean, git, git_repo, model, snapshot, write_app
-from test_smoke_091_run import APP as SMOKE_APP, EXPOSED, GITOPS, GitopsApi, HIDDEN, make_service
+from model_fixtures import SHA, SMALL_APP, SMALL_PINS, SMALL_SERVICES, clean, git, git_repo, model, snapshot, system_doc, write_app
+from test_smoke_091_run import APP as SMOKE_APP, EXPOSED, GITOPS, HIDDEN, GitopsApi, env_conf, make_service, runs_in
 
 D1, D2 = "sha256:" + "1" * 64, "sha256:" + "2" * 64
 
@@ -52,8 +52,8 @@ def alt_model(monkeypatch, name, services, app, pins=None):
 
     def replaced(*args, **kwargs):
         calls.append((args, kwargs))
-        system = args[0].name if isinstance(args[0], Path) else args[0]
-        return build(system, copy.deepcopy(services), copy.deepcopy(app), pins=pins)
+        system = args[1] if name == "build" else args[0].name if isinstance(args[0], Path) else args[0]
+        return build(system_doc(services, app, system), system, pins=pins)
     monkeypatch.setattr(mod, name, replaced)
     return calls
 
@@ -74,18 +74,19 @@ STATUS_ANSWERS = {
 STAGING_PIN = "sha-" + "b" * 40
 
 
-def row(service, env, tag, argo, *, ci="ok", exposed=False, pin_pr="-", platform="4.0.0 (behind)"):
-    return {"service": service, "env": env, "tag": tag, "ci": ci, "argo": argo, "exposed": exposed, "pin_pr": pin_pr, "platform": platform}
+def cell(tag, argo, *, ci="ok", pin_pr=None):
+    return {"tag": tag, "ci": ci, "argo": argo, "pin_pr": pin_pr}
 
 
-STATUS_ROWS = [
-    row("shop-api", "dev", "sha-" + SHA, "Synced/Healthy", exposed=True, pin_pr="#12 sha-def5678"),
-    row("shop-api", "staging", STAGING_PIN, "missing", exposed=True),
-    row("stock", "dev", "sha-abc1234", "missing"),
-    row("postgres (addon)", "dev", "-", "Synced/Progressing", ci="-", platform="-"),
-    row("postgres (addon)", "staging", "-", "missing", ci="-", platform="-"),
-    row("observability (addon)", "dev", "-", "missing", ci="-", platform="-"),
-    row("observability (addon)", "staging", "-", "missing", ci="-", platform="-"),
+STATUS_ENVS = ["dev", "staging", "prod"]
+STATUS_ROWS = [      # 5.0: one row per component with one cell per environment (None: no instance there)
+    {"component": "shop-api", "platform": "4.0.0 (behind)", "cells": {
+        "dev": cell("sha-" + SHA[:7], "Synced/Healthy", pin_pr="#12 sha-def5678"), "staging": cell(STAGING_PIN[:11], "missing"), "prod": None}},
+    {"component": "stock", "platform": "4.0.0 (behind)", "cells": {"dev": cell("sha-abc1234", "missing"), "staging": None, "prod": None}},
+]
+STATUS_RESOURCES = [
+    {"resource": "postgres", "cells": {"dev": {"argo": "Synced/Progressing"}, "staging": {"argo": "missing"}, "prod": None}},
+    {"resource": "observability", "cells": {"dev": {"argo": "missing"}, "staging": {"argo": "missing"}, "prod": None}},
 ]
 
 
@@ -100,16 +101,16 @@ def status_repo(tmp_path, monkeypatch):
 
 def test_status_rows_come_from_the_models_instances_ac_113_11(status_repo, monkeypatch):  # AC-113.11
     calls = spy(monkeypatch, "load_dir")
-    app, rows = status.collect(status_repo, None, "k3d-x")
-    assert app == "shop" and rows == STATUS_ROWS
+    app, envs, rows, resources = status.collect(status_repo, None, "k3d-x")
+    assert app == "shop" and envs == STATUS_ENVS and rows == STATUS_ROWS and resources == STATUS_RESOURCES
     assert [c[0][0].name for c in calls] == ["shop"]
 
 
 def test_status_follows_the_model_not_the_files_ac_113_11(status_repo, monkeypatch):  # AC-113.11
     other = [{"name": "ledger", "repo": "acme/ledger", "image": "ghcr.io/acme/ledger", "shape": "service-java", "environments": ["dev"]}]
     alt_model(monkeypatch, "load_dir", other, {})
-    _, rows = status.collect(status_repo, None, "k3d-x")
-    assert [(r["service"], r["env"]) for r in rows] == [("ledger", "dev")]
+    _, _, rows, resources = status.collect(status_repo, None, "k3d-x")
+    assert [(r["component"], [e for e, c in r["cells"].items() if c]) for r in rows] == [("ledger", ["dev"])] and resources == []
 
 
 def test_status_pinned_tag_stays_and_reads_the_overlay_ac_113_11(status_repo):  # AC-113.11
@@ -122,12 +123,12 @@ def test_status_pinned_tag_stays_and_reads_the_overlay_ac_113_11(status_repo):  
 def test_status_table_and_json_are_unchanged_ac_113_11(status_repo, monkeypatch, capsys):  # AC-113.11
     calls = spy(monkeypatch, "load_dir")
     assert status.main(["--repo-dir", str(status_repo), "--context", "k3d-x", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"app": "shop", "rows": STATUS_ROWS}
+    assert json.loads(capsys.readouterr().out) == {"system": "shop", "environments": STATUS_ENVS, "rows": STATUS_ROWS, "resources": STATUS_RESOURCES}
     assert status.main(["--repo-dir", str(status_repo), "--context", "k3d-x"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("## shop (gitops-app) — platform 4.8.0 available, repo stamped none")
-    assert "  shop-api               dev      sha-" + SHA + "  ok  Synced/Healthy      #12 sha-def5678  4.0.0 (behind)" in out
-    assert "  observability (addon)  staging  -" in out and len(calls) == 2
+    assert out.startswith("## shop (system) — platform 4.8.0 available, repo stamped none")
+    assert "sha-0123456 ci ok argo Synced/Healthy  pin PR #12 sha-def5678" in out and "4.0.0 (behind)" in out
+    assert "observability  argo missing" in out and "argo missing  -" in out and len(calls) == 2
 
 
 def test_status_with_a_context_leaves_the_working_tree_unchanged_ac_113_9(status_repo, capsys):  # AC-113.9
@@ -168,18 +169,18 @@ def promote_repo(tmp_path, monkeypatch):
 
     def render(repo):
         d = Path(repo) / "applications/shop"
-        for s in yaml.safe_load((d / "services.yaml").read_text())["services"]:
-            for env in s.get("environments") or ["dev"]:
-                k = d / "overlays" / env / s["name"] / "kustomization.yaml"
+        for name, c in yaml.safe_load((d / "system.yaml").read_text())["components"].items():
+            for env in c.get("instances") or ["dev"]:
+                k = d / "overlays" / env / name / "kustomization.yaml"
                 if not k.exists():
                     k.parent.mkdir(parents=True, exist_ok=True)
-                    k.write_text(yaml.safe_dump({"images": [{"name": s["image"], "newTag": "latest"}]}))
+                    k.write_text(yaml.safe_dump({"images": [{"name": c["image"], "newTag": "latest"}]}))
     monkeypatch.setattr(gitops, "render", render)
     return SimpleNamespace(root=tmp_path, digests=seen)
 
 
 def prod_argv(repo, *extra):
-    return ["api", "staging", "prod", "--version", "v1.3.0", "--repo-dir", str(repo.root), *extra]
+    return ["api", "--to", "prod", "--version", "v1.3.0", "--repo-dir", str(repo.root), *extra]
 
 
 def test_the_digest_check_uses_the_staging_instances_pin_ac_113_11(promote_repo, monkeypatch, capsys):  # AC-113.11
@@ -193,8 +194,7 @@ def test_the_digest_check_uses_the_staging_instances_pin_ac_113_11(promote_repo,
 
 def test_the_staging_tag_is_the_models_not_the_files_ac_113_11(promote_repo, monkeypatch, capsys):  # AC-113.11
     other = "sha-" + "e" * 40
-    services = yaml.safe_load((promote_repo.root / "applications/shop/services.yaml").read_text())["services"]
-    alt_model(monkeypatch, "load_dir", services, {}, pins=lambda env, c: other if env == "staging" else None)
+    alt_model(monkeypatch, "load_dir", [{"name": "api", "repo": "acme/api", "image": "ghcr.io/acme/api", "shape": "service-python", "environments": ["dev", "staging"]}], {}, pins=lambda env, c: other if env == "staging" else None)
     assert promote.main(prod_argv(promote_repo, "--dry-run", "--json")) == 0
     assert promote_repo.digests == [("ghcr.io/acme/api", [other, "1.3.0"])]
     assert json.loads(capsys.readouterr().out)["digests"]["api"]["staging_tag"] == other
@@ -211,19 +211,19 @@ def test_promote_dev_to_staging_pins_through_the_model_ac_113_11(promote_repo, m
     sha = "d" * 40
     writes = spy(monkeypatch, "write_pin")
     calls = spy(monkeypatch, "load_dir")
-    assert promote.main(["web", "dev", "staging", "--sha", sha, "--no-verify", "--repo-dir", str(promote_repo.root)]) == 0
+    assert promote.main(["web", "--to", "staging", "--sha", sha, "--no-verify", "--repo-dir", str(promote_repo.root)]) == 0
     d = promote_repo.root / "applications/shop"
     assert [w[0][1:] for w in writes] == [("staging", "web", "sha-" + sha)] and writes[0][0][0] == d
     k = d / "overlays/staging/web/kustomization.yaml"
     assert k.read_text() == yaml.safe_dump({"images": [{"name": "ghcr.io/acme/web", "newTag": "sha-" + sha}]}, sort_keys=False, default_flow_style=False)
-    assert yaml.safe_load((d / "services.yaml").read_text())["services"][1]["environments"] == ["dev", "staging"]
+    assert list(yaml.safe_load((d / "system.yaml").read_text())["components"]["web"]["instances"]) == ["dev", "staging"]
     out = capsys.readouterr().out
     assert f"pinned web=sha-{sha}" in out and len(calls) >= 1
 
 
 def test_promote_all_takes_the_services_that_are_in_the_source_environment_ac_113_11(promote_repo, monkeypatch, capsys):  # AC-113.11
     calls = spy(monkeypatch, "load_dir")
-    assert promote.main(["--all", "dev", "staging", "--sha", "a" * 40, "--no-verify", "--dry-run", "--repo-dir", str(promote_repo.root)]) == 0
+    assert promote.main(["--all", "--to", "staging", "--sha", "a" * 40, "--no-verify", "--dry-run", "--repo-dir", str(promote_repo.root)]) == 0
     out = capsys.readouterr().out
     assert f"api: staging → ghcr.io/acme/api:sha-{'a' * 40}" in out and f"web: staging → ghcr.io/acme/web:sha-{'a' * 40}" in out
     assert len(calls) == 1
@@ -231,14 +231,14 @@ def test_promote_all_takes_the_services_that_are_in_the_source_environment_ac_11
 
 def test_a_service_that_is_not_in_the_source_environment_is_refused_ac_113_11(promote_repo, monkeypatch):  # AC-113.11
     spy(monkeypatch, "load_dir")
-    with pytest.raises(core.PlatformError, match="web is not in staging yet") as e:
-        promote.main(["web", "staging", "prod", "--version", "v1.3.0", "--no-verify", "--repo-dir", str(promote_repo.root)])
-    assert e.value.hint == "promote it through the earlier environment first"
+    with pytest.raises(core.PlatformError, match=r"web has no instance in staging \(it runs in: dev\)") as e:
+        promote.main(["web", "--to", "prod", "--version", "v1.3.0", "--no-verify", "--repo-dir", str(promote_repo.root)])
+    assert e.value.hint == "promote it through staging first"
 
 
 @pytest.mark.parametrize("argv, message", [
-    (["api", "dev", "qa"], "unknown environment 'qa'"),
-    (["api", "prod", "staging"], "cannot promote prod → staging"),
+    (["api", "--to", "qa"], "unknown environment 'qa'"),
+    (["api", "--to", "dev"], "dev is the first environment: nothing is promoted to it"),      # 5.0: the source is implied, a backwards move cannot be named
 ])
 def test_the_environment_checks_keep_their_messages_ac_113_11(promote_repo, argv, message):  # AC-113.11
     assert not hasattr(promote, "ORDER")
@@ -266,13 +266,13 @@ def test_dev_url_is_read_through_the_model_ac_113_11(svc, monkeypatch):  # AC-11
 def test_dev_url_follows_the_model_ac_113_11(svc, monkeypatch):  # AC-113.11
     monkeypatch.setattr(smoke, "gh", GitopsApi(HIDDEN, SMOKE_APP))          # the files expose nothing
     exposed = [{"name": "shop-api", "repo": "acme/shop-api", "expose": True, "environments": ["dev"]}]
-    alt_model(monkeypatch, "load_remote", exposed, {"hosts": {"dev": "{service}.alt.example.com"}})
+    alt_model(monkeypatch, "load_remote", exposed, {"hosts": {"dev": "{service}.alt.example.com"}})     # 4.x words, built as system.yaml
     assert smoke.dev_url(svc, [GITOPS], "shop-api") == ("https://shop-api.alt.example.com", None)
 
 
 def test_the_staging_url_and_its_reasons_ac_113_11(svc, monkeypatch):  # AC-113.11
-    both = EXPOSED.replace("[dev]", "[dev, staging]")
-    app = SMOKE_APP + '  staging: "{service}.staging.example.com"\nurls:\n  staging: "https://{host}/x"\n'
+    both = runs_in(EXPOSED, "dev", "staging")
+    app = {**SMOKE_APP, "environments": {**SMOKE_APP["environments"], "staging": {"host": "{component}.staging.example.com", "url": "https://{host}/x"}}}
     monkeypatch.setattr(smoke, "gh", GitopsApi(both, app))
     calls = spy(monkeypatch, "load_remote")
     assert smoke.dev_url(svc, [GITOPS], "shop-api", env="staging") == ("https://shop-api.staging.example.com/x", None)
@@ -290,14 +290,14 @@ def test_a_gitops_app_that_cannot_be_read_gives_the_same_reasons_ac_113_10(svc, 
         raise core.PlatformError("gh: HTTP 404")
     monkeypatch.setattr(smoke, "gh", broken)
     assert smoke.dev_url(svc, [GITOPS], "shop-api") == (None, f"shop-api has no dev URL (could not read the gitops-app {GITOPS})")
-    other = "services:\n  - name: other\n    repo: acme/other\n    shape: service-python\n    port: 8080\n"
+    other = {"other": {"type": "service", "lang": "python", "repo": "acme/other", "port": 8080}}
     monkeypatch.setattr(smoke, "gh", GitopsApi(other, SMOKE_APP))
     assert smoke.dev_url(svc, [GITOPS], "shop-api") == (None, "shop-api has no dev URL (not in the linked gitops-app)")
 
 
 def test_the_service_is_found_by_its_repo_first_ac_113_10(svc, monkeypatch):  # AC-113.10
-    two = ("services:\n  - name: shop-api\n    repo: acme/else\n    shape: service-python\n    port: 8080\n"
-           "  - name: renamed\n    repo: acme/shop-api\n    shape: service-python\n    port: 8080\n    expose: true\n    environments: [dev]\n")
+    two = {"shop-api": {"type": "service", "lang": "python", "repo": "acme/else", "port": 8080},
+           "renamed": {"type": "service", "lang": "python", "repo": "acme/shop-api", "port": 8080, "expose": True, "instances": {"dev": {}}}}
     monkeypatch.setattr(smoke, "gh", GitopsApi(two, SMOKE_APP))
     spy(monkeypatch, "load_remote")
     monkeypatch.delenv("LOCAL_HTTP_PORT", raising=False)
@@ -310,15 +310,22 @@ def test_the_service_is_found_by_its_repo_first_ac_113_10(svc, monkeypatch):  # 
 
 TAG = "sha-" + SHA
 OLD = "sha-" + "d" * 40
-STAGING_APP = 'hosts:\n  dev: "{service}.{app}-dev.localhost"\n'
-STAGING_SERVICES = ("services:\n  - name: shop-api\n    repo: acme/shop-api\n    image: ghcr.io/acme/shop-api\n    shape: service-python\n"
-                    "    port: 8080\n    expose: true\n    environments: [dev, staging]\n{promotion}")
+def staging_system(*, staging_promote=None, env_promote=None, envs=("dev", "staging")) -> str:
+    """The system.yaml of the staging decision tests: shop-api exposed in dev, running in `envs`; `promote` on its staging instance
+    and/or on the staging environment (5.0 words: after-dev-smoke | manual)."""
+    instances = {e: {} for e in envs}
+    if staging_promote and "staging" in instances:
+        instances["staging"]["promote"] = staging_promote
+    doc = {"system": "shop", "owner": "acme",
+           "environments": {"dev": {"host": "{component}.{system}-dev.localhost"}, "staging": {"promote": env_promote} if env_promote else {}, "prod": {}},
+           "components": {"shop-api": {"type": "service", "lang": "python", "repo": "acme/shop-api", "image": "ghcr.io/acme/shop-api",
+                                       "port": 8080, "expose": True, "instances": instances}}}
+    return yaml.safe_dump(doc, sort_keys=False)
 
 
 class StagingGh:
-    def __init__(self, services, app=STAGING_APP, old=OLD):
-        self.files = {"applications/shop/services.yaml": services, "applications/shop/app.yaml": app,
-                      ".github/workflows/pin-staging.yml": "name: pin-staging\n"}
+    def __init__(self, system_text, old=OLD):
+        self.files = {"applications/shop/system.yaml": system_text, ".github/workflows/pin-staging.yml": "name: pin-staging\n"}
         if old:
             self.files["applications/shop/overlays/staging/shop-api/kustomization.yaml"] = yaml.safe_dump({"images": [{"name": "i", "newTag": old}]})
         self.calls = []
@@ -345,15 +352,15 @@ def shop_repo(tmp_path):
     return r
 
 
-def decide(shop_repo, monkeypatch, services, app=STAGING_APP, old=OLD):
-    monkeypatch.setattr(staging, "gh", StagingGh(services, app, old))
+def decide(shop_repo, monkeypatch, system_text, old=OLD):
+    monkeypatch.setattr(staging, "gh", StagingGh(system_text, old))
     dev = smoke.SmokeResult(env="dev", outcome="passed", base_url=None, reason=None, passed=2)
     return staging.decide(shop_repo, {"deployed": TAG}, [GITOPS], "shop-api", dev)
 
 
 def test_auto_promotion_reads_its_answers_from_the_model_ac_113_11(shop_repo, monkeypatch):  # AC-113.11
     calls = spy(monkeypatch, "load_remote")
-    d = decide(shop_repo, monkeypatch, STAGING_SERVICES.format(promotion="    promotion: {staging: auto}\n"))
+    d = decide(shop_repo, monkeypatch, staging_system(staging_promote="after-dev-smoke"))
     assert (d.action, d.reason, d.service, d.tag, d.previous, d.app, d.app_dir, d.workflow) == (
         "promote", None, "shop-api", TAG, OLD, GITOPS, "applications/shop", True)
     assert [c[0][0] for c in calls] == ["shop"]
@@ -361,24 +368,24 @@ def test_auto_promotion_reads_its_answers_from_the_model_ac_113_11(shop_repo, mo
 
 def test_the_components_promotion_beats_the_apps_ac_113_11(shop_repo, monkeypatch):  # AC-113.11
     spy(monkeypatch, "load_remote")
-    manual = decide(shop_repo, monkeypatch, STAGING_SERVICES.format(promotion="    promotion: {staging: manual}\n"), STAGING_APP + "promotion: {staging: auto}\n")
+    manual = decide(shop_repo, monkeypatch, staging_system(staging_promote="manual", env_promote="after-dev-smoke"))
     assert (manual.action, manual.reason) == ("skip", "automatic promotion to staging is off for shop-api")
-    auto = decide(shop_repo, monkeypatch, STAGING_SERVICES.format(promotion="    promotion: {staging: auto}\n"))
+    auto = decide(shop_repo, monkeypatch, staging_system(staging_promote="after-dev-smoke"))
     assert auto.action == "promote"
-    app_auto = decide(shop_repo, monkeypatch, STAGING_SERVICES.format(promotion=""), STAGING_APP + "promotion: {staging: auto}\n")
+    app_auto = decide(shop_repo, monkeypatch, staging_system(env_promote="after-dev-smoke"))
     assert app_auto.action == "promote"
-    default = decide(shop_repo, monkeypatch, STAGING_SERVICES.format(promotion=""))
+    default = decide(shop_repo, monkeypatch, staging_system())
     assert default.reason == "automatic promotion to staging is off for shop-api"
 
 
 def test_a_component_that_is_not_in_staging_yet_skips_ac_113_11(shop_repo, monkeypatch):  # AC-113.11
     spy(monkeypatch, "load_remote")
-    d = decide(shop_repo, monkeypatch, STAGING_SERVICES.format(promotion="    promotion: {staging: auto}\n").replace("[dev, staging]", "[dev]"))
-    assert d.reason == "shop-api is not in staging yet: the first promotion is manual: /gitops:promote shop-api dev staging"
+    d = decide(shop_repo, monkeypatch, staging_system(env_promote="after-dev-smoke", envs=("dev",)))
+    assert d.reason == "shop-api is not in staging yet: the first promotion is manual: /instance:promote shop-api --to staging"
 
 
 def test_the_decision_follows_the_model_for_the_rule_and_the_staging_pin_ac_113_11(shop_repo, monkeypatch):  # AC-113.11
-    files_say_manual = STAGING_SERVICES.format(promotion="")
+    files_say_manual = staging_system()
     auto = [{"name": "shop-api", "repo": "acme/shop-api", "image": "ghcr.io/acme/shop-api", "environments": ["dev", "staging"]}]
     other = "sha-" + "f" * 40
     alt_model(monkeypatch, "load_remote", auto, {"promotion": {"staging": "auto"}}, pins=lambda env, c: other if env == "staging" else None)
@@ -387,7 +394,7 @@ def test_the_decision_follows_the_model_for_the_rule_and_the_staging_pin_ac_113_
 
 
 def test_find_hands_staging_deploy_the_component_ac_113_11(shop_repo, monkeypatch):  # AC-113.11
-    monkeypatch.setattr(staging, "gh", StagingGh(STAGING_SERVICES.format(promotion="")))
+    monkeypatch.setattr(staging, "gh", StagingGh(staging_system()))
     found = staging._find(shop_repo, [GITOPS], "shop-api")
     assert found[0] == GITOPS and found[1] == "applications/shop" and found[4] == "acme/shop-api"
     assert (found[2].name, found[2].image) == ("shop-api", "ghcr.io/acme/shop-api")
@@ -405,7 +412,7 @@ def test_the_polled_environments_and_service_down_come_from_the_model_ac_113_11(
     assert cfg.envs == ["dev", "prod"] and cfg.skip is None
     down = [(r.service, r.environment) for r in cfg.rules if r.name == "ServiceDown"]
     assert down == [("shop-api", "dev"), ("shop-api", "prod")]
-    assert len(calls) == 1 and calls[0][0][0] == ALERT_APP
+    assert len(calls) == 1 and calls[0][0][1] == ALERT_APP          # build(doc, system)
     assert cfg.model is not None and cfg.model.system == ALERT_APP
     assert {(i.component, i.environment) for i in cfg.model.instances} == {
         ("shop-api", "dev"), ("shop-api", "prod"), ("shop-web", "dev"), ("shop-batch", "dev")}
@@ -424,11 +431,10 @@ def test_an_unreadable_file_still_skips_instead_of_failing_ac_113_11(tmp_path, m
     import alertsources
     calls = spy(monkeypatch, "build")
     d = make_app(tmp_path, addon={"ui": "lgtm"})
-    (d / "services.yaml").write_text("services: [unclosed\n")
+    (d / "system.yaml").write_text("components: [unclosed\n")
     cfg = alertsources.load_app(d)
-    assert cfg.skip == "no service runs in any environment" and cfg.envs == [] and len(calls) == 1
-    assert alertsources.AppConfig(app="x", app_dir=d, services=[], envs=[], rules=[], prometheus_url=None, alertmanager_url=None,
-                                  query_secret=None, skip=None).model is None
+    assert cfg.skip == "no environment declares observability" and cfg.envs == [] and len(calls) == 1
+    assert alertsources.AppConfig(app="x", app_dir=d, services=[], envs=[]).model is None
 
 
 @pytest.mark.parametrize("labels, env", [
@@ -450,6 +456,7 @@ def test_a_series_maps_to_its_environment_ac_113_11(tmp_path, monkeypatch, label
 
 SECRET_SERVICES = [
     {"name": "shop-api", "repo": "acme/shop-api", "image": "ghcr.io/acme/shop-api", "shape": "service-python",
+     "environments": ["dev", "staging"],
      "secrets": [{"name": "api-keys", "remote": {"keys": ["STRIPE_KEY", "HOOK_KEY"]}},
                  {"name": "api-pay", "remote": {"keys": ["PAY_KEY"], "path": "pay-{env}-{app}-{secret}"}},
                  {"name": "api-auth", "generate": ["DB_PASSWORD", "JWT_KEY"]}]},
@@ -491,8 +498,8 @@ def test_secret_list_resolves_store_keys_through_the_model_ac_113_18(secret_repo
     assert secret.main(["list", "--env", "staging", "--repo-dir", str(secret_repo)]) == 0
     out = capsys.readouterr().out
     assert "shop-api/api-keys.STRIPE_KEY: set" in out
-    assert "shop-api/api-keys.HOOK_KEY: MISSING → cplat secret set shop-api api-keys HOOK_KEY --env staging" in out
-    assert "shop-api/api-pay.PAY_KEY: MISSING → cplat secret set shop-api api-pay PAY_KEY --env staging" in out
+    assert "shop-api/api-keys.HOOK_KEY: MISSING → cplat instance secret set shop-api/staging api-keys HOOK_KEY" in out
+    assert "shop-api/api-pay.PAY_KEY: MISSING → cplat instance secret set shop-api/staging api-pay PAY_KEY" in out
     assert "shop-api/api-auth: generated by External Secrets Operator (DB_PASSWORD, JWT_KEY)" in out
     assert out.index("api-keys.STRIPE_KEY") < out.index("api-pay.PAY_KEY") < out.index("api-auth")
     got = [a[a.index("secret") + 1] for a in k.calls]
@@ -505,25 +512,24 @@ def test_secret_set_writes_to_the_resolved_store_key_ac_113_18(secret_repo, monk
     k = Kubectl()
     monkeypatch.setattr(secret, "kubectl", k)
     monkeypatch.setattr("sys.stdin", __import__("io").StringIO("sk_test_1\n"))
-    argv = ["--repo-dir", str(secret_repo), "--env", "staging"]
-    assert secret.main(["set", "shop-api", "api-pay", "PAY_KEY", "--value-stdin", *argv]) == 0
+    argv = ["--repo-dir", str(secret_repo)]
+    assert secret.main(["set", "shop-api/staging", "api-pay", "PAY_KEY", "--value-stdin", *argv]) == 0
     assert k.secrets == {"pay-staging-shop-api-pay": {"PAY_KEY": "sk_test_1"}}
     out = capsys.readouterr().out
     assert "stored in secrets-store/pay-staging-shop-api-pay" in out and "sk_test_1" not in out
 
 
 @pytest.mark.parametrize("argv, message", [
-    (["set", "shop-api", "nope", "K", "--value-stdin"], "shop-api has no secret 'nope'"),
-    (["set", "shop-api", "api-auth", "DB_PASSWORD", "--value-stdin"], "'api-auth' is generated by External Secrets Operator; there is nothing to set"),
-    (["set", "shop-api", "api-keys", "NOPE", "--value-stdin"], "'NOPE' is not a key of 'api-keys'"),
+    (["set", "shop-api/dev", "nope", "K", "--value-stdin"], r"shop-api has no remote secret 'nope' \(remote secrets: api-keys, api-pay\)"),
+    # 5.0: a generated secret has nothing to set, said as "no remote secret"
+    (["set", "shop-api/dev", "api-auth", "DB_PASSWORD", "--value-stdin"], r"shop-api has no remote secret 'api-auth' \(remote secrets: api-keys, api-pay\)"),
+    (["set", "shop-api/dev", "api-keys", "NOPE", "--value-stdin"], "'NOPE' is not a key of 'api-keys'"),
 ])
 def test_secret_errors_keep_their_messages_ac_113_18(secret_repo, monkeypatch, argv, message):  # AC-113.18
     spy(monkeypatch, "load_dir")
     monkeypatch.setattr(secret, "kubectl", Kubectl())
-    with pytest.raises(core.PlatformError, match=message) as e:
+    with pytest.raises(core.PlatformError, match=message):
         secret.main([*argv, "--repo-dir", str(secret_repo)])
-    if "has no secret" in message:
-        assert e.value.hint == "declared: shop-api/api-keys, shop-api/api-pay, shop-api/api-auth"
 
 
 def test_secret_list_without_secrets_says_so_ac_113_18(tmp_path, monkeypatch, capsys):  # AC-113.18
@@ -549,7 +555,7 @@ def test_secret_follows_the_model_ac_113_18(secret_repo, monkeypatch, capsys):  
 
 def gate(monkeypatch, services, app, repo=None):
     import appship_sched
-    docs = {"applications/shop/services.yaml": {"services": services}, "applications/shop/app.yaml": app}
+    docs = {"applications/shop/system.yaml": system_doc(services, app, "shop")}
     monkeypatch.setattr(appship_sched, "run", lambda cmd, **k: SimpleNamespace(stdout="applications/shop\n" if cmd[:2] == ["git", "ls-tree"] else "", returncode=0))
     monkeypatch.setattr(appship_sched, "_show", lambda gitops_dir, path: copy.deepcopy(docs.get(path, {})))
     return appship_sched.gate_class(Path("/gitops"), repo or {"id": "shop-api", "shape": "service-python"})
@@ -570,8 +576,7 @@ ENTRY = {"name": "shop-api", "repo": "acme/shop-api"}
 def test_exposed_in_dev_comes_from_the_dev_instance_ac_113_18(monkeypatch, entry, app, expected):  # AC-113.18
     calls = spy(monkeypatch, "build")
     assert gate(monkeypatch, [entry], app) == expected
-    assert len(calls) == (0 if entry["name"] == "other" else 1)
-    assert not calls or calls[0][0][0] == "shop"
+    assert len(calls) == 1 and calls[0][0][1] == "shop"      # 5.0: the system is built once, whether or not the repo is in it
 
 
 def test_the_gate_class_follows_the_model_ac_113_18(monkeypatch):  # AC-113.18

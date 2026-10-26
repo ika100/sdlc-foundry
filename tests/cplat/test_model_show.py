@@ -50,8 +50,8 @@ def test_environment_rules_are_printed_ac_113_14(tmp_path, capsys):  # AC-113.14
     rich(tmp_path)
     _, out, _ = show(tmp_path, capsys=capsys)
     lines = {ln.split("  ")[1]: ln for ln in out.splitlines() if ln.startswith(("  dev  host", "  staging  host", "  prod  host"))}
-    assert "host {service}.staging.example.com  url-template https://{host}/{service}  policy Off  promotion auto" in lines["staging"]
-    assert "policy Enforce  promotion manual" in lines["prod"] and "host -  url-template -" in lines["prod"]
+    assert "host {component}.staging.example.com  url-template https://{host}/{component}  policy off  promote after-dev-smoke" in lines["staging"]
+    assert "policy enforce  promote manual" in lines["prod"] and "host -  url-template -" in lines["prod"]
     assert "observability ui=lgtm export=https://otlp.example.com alerts=off rules=1" in lines["dev"]
 
 
@@ -59,7 +59,7 @@ def test_an_empty_section_prints_none_ac_113_14(tmp_path, capsys):  # AC-113.14
     write_app(tmp_path, [], None)
     rc, out, _ = show(tmp_path, capsys=capsys)
     assert rc == 0
-    assert "Components:\n  (none)\n\nInstances:\n  (none)\n\nResources:\n  (none)" in out
+    assert "Components:\n  (none)\n\nAPIs:\n  (none)\n\nInstances:\n  (none)\n\nResources:\n  (none)" in out
     assert "observability -" in out
 
 
@@ -81,7 +81,7 @@ def test_no_observed_state_and_no_file_change_ac_113_14(tmp_path, capsys, monkey
     rc, out, _ = show(tmp_path, capsys=capsys)
     assert rc == 0 and snapshot(tmp_path) == before
     for word in ("Synced", "Healthy", "Degraded", "digest", "sha256", "smoke", "firing"):
-        assert word not in out
+        assert word not in out.replace("after-dev-smoke", "")      # 5.0 spells the staging promotion rule after-dev-smoke
 
 
 # ---------------- AC-113.15: the JSON ----------------
@@ -99,16 +99,16 @@ def test_the_json_is_one_object_with_the_documented_keys_ac_113_15(tmp_path, cap
     rc, out, err = show(tmp_path, "--json", capsys=capsys)
     assert rc == 0 and err == ""
     d = json.loads(out)                                             # the whole stdout is one JSON object
-    assert set(d) == {"schema", "system", "environments", "components", "resources", "instances", "resource_instances", "relations"}
-    assert d["schema"] == 1
-    assert d["system"] == {"name": "shop", "components": ["shop-api", "stock"], "resources": ["postgres"]}
+    assert set(d) == {"schema", "system", "environments", "components", "apis", "resources", "instances", "resource_instances", "relations"}
+    assert d["schema"] == 2
+    assert d["system"] == {"name": "shop", "owner": "acme", "components": ["shop-api", "stock"], "resources": ["postgres"], "apis": []}
 
 
 def test_environments_are_a_list_in_promotion_order_ac_113_15(doc):  # AC-113.15
     assert [e["name"] for e in doc["environments"]] == ["dev", "staging", "prod"]
     dev, staging, prod = doc["environments"]
-    assert (dev["host"], dev["url"], dev["policy"], dev["promotion"]) == ("{service}.{app}-dev.localhost", None, "Audit", "main")
-    assert (staging["url"], staging["promotion"], prod["promotion"], prod["host"]) == ("https://{host}/{service}", "auto", "manual", None)
+    assert (dev["host"], dev["url"], dev["policy"], dev["promotion"]) == ("{component}.{system}-dev.localhost", None, "audit", "main")
+    assert (staging["url"], staging["promotion"], prod["promotion"], prod["host"]) == ("https://{host}/{component}", "after-dev-smoke", "manual", None)
     assert set(dev["observability"]) >= {"ui", "exportTo", "alerts", "rules", "queryURL", "alertmanagerURL"}
     assert dev["observability"]["ui"] == "lgtm" and dev["observability"]["queryURL"] == "http://q.example.com"
 
@@ -128,12 +128,12 @@ def test_every_instance_has_the_documented_fields_ac_113_15(doc):  # AC-113.15
 def test_secrets_list_names_and_keys_never_values_ac_113_15(doc):  # AC-113.15
     by = {(i["component"], i["environment"]): i for i in doc["instances"]}
     assert by[("shop-api", "staging")]["secrets"] == [
-        {"name": "api-keys", "kind": "remote", "keys": ["STRIPE_KEY", "STRIPE_HOOK"], "store_key": "shop-staging-api-keys"},
-        {"name": "api-pay", "kind": "remote", "keys": ["PAY_KEY"], "store_key": "shop-api/staging/api-pay"},
-        {"name": "api-auth", "kind": "generate", "keys": ["DB_PASSWORD", "JWT_KEY"], "store_key": None}]
+        {"name": "api-keys", "kind": "remote", "keys": ["STRIPE_KEY", "STRIPE_HOOK"], "store_key": "shop-staging-api-keys", "overridden": False},
+        {"name": "api-pay", "kind": "remote", "keys": ["PAY_KEY"], "store_key": "shop-api/staging/api-pay", "overridden": False},
+        {"name": "api-auth", "kind": "generate", "keys": ["DB_PASSWORD", "JWT_KEY"], "store_key": None, "overridden": False}]
     comp = next(c for c in doc["components"] if c["name"] == "shop-api")
     assert [s["name"] for s in comp["secrets"]] == ["api-keys", "api-pay", "api-auth"] and comp["secret_refs"] == ["shared-config"]
-    assert all(set(s) <= {"name", "kind", "keys", "store_key", "path"} for i in doc["instances"] for s in i["secrets"])
+    assert all(set(s) <= {"name", "kind", "keys", "store_key", "path", "overridden"} for i in doc["instances"] for s in i["secrets"])
 
 
 def test_components_resources_and_resource_instances_ac_113_15(doc):  # AC-113.15
@@ -146,7 +146,7 @@ def test_components_resources_and_resource_instances_ac_113_15(doc):  # AC-113.1
     assert doc["resources"] == [{"name": "postgres", "type": "database", "used_by": ["shop-api"]}]
     assert [(r["resource"], r["environment"], r["argo_application"], r["secret"]) for r in doc["resource_instances"]] == [
         ("postgres", "dev", "addon-postgres-dev", "shop-postgres-app"), ("postgres", "staging", "addon-postgres-staging", "shop-postgres-app")]
-    assert doc["resource_instances"][0]["sizing"] == {"instances": 1, "version": 17, "storage": "1Gi"}
+    assert doc["resource_instances"][0]["sizing"] == {"replicas": 1, "version": 17, "storage": "1Gi"}
 
 
 def test_relations_have_type_from_and_to_ac_113_15(doc):  # AC-113.15
@@ -170,7 +170,7 @@ def test_the_json_has_no_observed_state_anywhere_ac_113_15(doc):  # AC-113.15
 # ---------------- AC-113.16: errors, options ----------------
 
 def test_outside_a_gitops_app_it_fails_like_status_ac_113_16(tmp_path, capsys):  # AC-113.16
-    rc = cplat.main(["status", "--repo-dir", str(tmp_path)])
+    rc = cplat.main(["system", "status", "--repo-dir", str(tmp_path)])
     want = capsys.readouterr()
     assert rc == 1 and "fix:" in want.err
     rc, out, err = show(tmp_path, capsys=capsys)
@@ -190,7 +190,7 @@ def test_several_applications_need_app_and_app_picks_one_ac_113_16(tmp_path, cap
 
 def test_an_unknown_app_fails_like_status_ac_113_16(tmp_path, capsys):  # AC-113.16
     small(tmp_path)
-    cplat.main(["status", "--repo-dir", str(tmp_path), "--app", "nope"])
+    cplat.main(["system", "status", "--repo-dir", str(tmp_path), "--system", "nope"])
     want = capsys.readouterr()
     assert show(tmp_path, "--app", "nope", capsys=capsys) == (1, "", want.err)
 
@@ -203,10 +203,10 @@ def test_repo_dir_is_resolved_like_status_ac_113_16(tmp_path, capsys, monkeypatc
     assert cplat.main(["model", "show", "--repo-dir", "."]) == 0
 
 
-@pytest.mark.parametrize("fname", ["services.yaml", "app.yaml"])
+@pytest.mark.parametrize("fname", ["system.yaml"])             # 5.0: the one file
 def test_an_unparseable_file_exits_1_naming_it_ac_113_16(tmp_path, capsys, fname):  # AC-113.16
     d = small(tmp_path)
-    (d / fname).write_text("services: [unclosed\n")
+    (d / fname).write_text("components: [unclosed\n")
     before = snapshot(tmp_path)
     rc, out, err = show(tmp_path, capsys=capsys)
     assert rc == 1 and out == "" and f"ERROR: cannot parse applications/shop/{fname}" in err
@@ -217,13 +217,13 @@ def test_an_unknown_environment_is_a_warning_not_an_error_ac_113_16(tmp_path, ca
     rich(tmp_path)
     rc, out, err = show(tmp_path, capsys=capsys)
     assert rc == 0
-    assert err.strip().splitlines() == ["warning: batch lists unknown environment 'qa': no Instance"]
+    assert err.strip().splitlines() == ["warning: batch has instances in unknown environment 'qa': no Instance"]
     assert "  batch  dev" in out and "batch  qa" not in out
 
 
 def test_the_warning_does_not_break_the_json_on_stdout_ac_113_16(tmp_path, capsys):  # AC-113.16
     rich(tmp_path)
     rc, out, err = show(tmp_path, "--json", capsys=capsys)
-    assert rc == 0 and json.loads(out)["schema"] == 1
-    assert "warning: batch lists unknown environment 'qa'" in err
+    assert rc == 0 and json.loads(out)["schema"] == 2
+    assert "warning: batch has instances in unknown environment 'qa'" in err
     assert not any(i["environment"] == "qa" for i in json.loads(out)["instances"])

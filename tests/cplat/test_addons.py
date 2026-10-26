@@ -1,4 +1,4 @@
-"""Addon contract (ADR-020): app.yaml `addons` + service `uses` → CloudNativePG Cluster and env wiring."""
+"""Resource contract (ADR-020, 5.0): system.yaml `resources` + component `uses` → CloudNativePG Cluster and env wiring."""
 import subprocess
 
 import pytest
@@ -7,13 +7,17 @@ import yaml
 import addon
 import compose
 import core
-from test_gitops import gh, gitops_repo, run_compose, render_check, services, commit  # noqa: F401  (fixtures)
+from test_gitops import commit, components, gh, gitops_repo, render_check, run_compose, system_file  # noqa: F401  (fixtures)
 
 APP = "applications/todo"
 
 
-def app_yaml(repo):
-    return yaml.safe_load((repo / APP / "app.yaml").read_text())
+def system_doc(repo):
+    return yaml.safe_load(system_file(repo).read_text())
+
+
+def write_system(repo, doc):
+    system_file(repo).write_text(yaml.safe_dump(doc, sort_keys=False))
 
 
 def render(repo):
@@ -31,9 +35,10 @@ def dev_deploy(repo, svc="todo-api"):
 
 def test_addon_add_declares_it_and_keeps_comments(gitops_repo, gh):
     declare(gitops_repo, extra=["--version", "16"])
-    cfg = app_yaml(gitops_repo)
-    assert cfg["addons"]["postgres"]["version"] == 16 and cfg["addons"]["postgres"]["instances"] == {"dev": 1, "prod": 3}
-    assert "Per-application settings" in (gitops_repo / APP / "app.yaml").read_text()
+    pg = system_doc(gitops_repo)["resources"]["postgres"]
+    assert pg["type"] == "database" and pg["version"] == 16 and pg["instances"] == {"prod": {"replicas": 3, "storage": "20Gi"}}
+    assert pg["replicas"] == 1 and pg["storage"] == "1Gi"
+    assert "# components: add with `/component:new`" in system_file(gitops_repo).read_text()
 
 
 def test_service_uses_postgres_gets_env_from_the_operator_secret_and_a_cluster_is_rendered(gitops_repo, gh):
@@ -56,10 +61,9 @@ def test_service_uses_postgres_gets_env_from_the_operator_secret_and_a_cluster_i
 def test_values_can_differ_per_environment(gitops_repo, gh):
     declare(gitops_repo)
     run_compose(gitops_repo, "add", "todo-api", "--uses", "postgres")
-    f = gitops_repo / APP / "services.yaml"
-    d = yaml.safe_load(f.read_text())
-    d["services"][0]["environments"] = ["dev", "prod"]
-    f.write_text(yaml.safe_dump(d))
+    d = system_doc(gitops_repo)
+    d["components"]["todo-api"]["instances"] = {"dev": {}, "prod": {}}
+    write_system(gitops_repo, d)
     assert render(gitops_repo).returncode == 0
     prod = yaml.safe_load((gitops_repo / APP / "addons/prod/postgres/cluster.yaml").read_text())
     assert prod["spec"]["instances"] == 3 and prod["spec"]["storage"]["size"] == "20Gi"
@@ -75,27 +79,25 @@ def test_removing_the_use_prunes_the_addon_files(gitops_repo, gh):
     declare(gitops_repo)
     run_compose(gitops_repo, "add", "todo-api", "--uses", "postgres")
     commit(gitops_repo)
-    f = gitops_repo / APP / "services.yaml"
-    d = yaml.safe_load(f.read_text())
-    del d["services"][0]["uses"]
-    f.write_text(yaml.safe_dump(d))
+    d = system_doc(gitops_repo)
+    del d["components"]["todo-api"]["uses"]
+    write_system(gitops_repo, d)
     assert render(gitops_repo).returncode == 0
     assert not (gitops_repo / APP / "addons/dev/postgres").exists()
 
 
 @pytest.mark.parametrize("mutate,msg", [
-    (lambda d, c: d["services"][0].update(uses=["postgres"]) or c.pop("addons", None), "does not declare"),
-    (lambda d, c: d["services"][0].update(uses=["redis"]), "unknown addon 'redis'"),
-    (lambda d, c: c.update(addons={"mysql": {}}), "unknown addon 'mysql'"),
-    (lambda d, c: (c.update(addons={"postgres": {}}), d["services"][0].update(uses=["postgres"]), d["services"][0]["env"].update(DATABASE_URL="x")), "provided by the 'postgres' addon"),
+    (lambda d: d["components"]["todo-api"].update(uses=["postgres"]) or d.pop("resources", None), "uses 'postgres', which is neither a resource nor a library"),
+    (lambda d: d["components"]["todo-api"].update(uses=["redis"]), "uses 'redis', which is neither a resource nor a library"),
+    (lambda d: d.update(resources={"mysql": {"type": "database"}}), "resources.mysql: 5.0 supports one database resource named postgres"),
+    (lambda d: (d.update(resources={"postgres": {"type": "database"}}), d["components"]["todo-api"].update(uses=["postgres"]),
+                d["components"]["todo-api"]["env"].update(DATABASE_URL="x")), "is provided by the 'postgres' resource"),
 ])
-def test_invalid_addon_wiring_is_rejected(gitops_repo, gh, mutate, msg):
+def test_invalid_resource_wiring_is_rejected(gitops_repo, gh, mutate, msg):
     run_compose(gitops_repo, "add", "todo-api")
-    sf, cf = gitops_repo / APP / "services.yaml", gitops_repo / APP / "app.yaml"
-    d, c = yaml.safe_load(sf.read_text()), yaml.safe_load(cf.read_text()) or {}
-    mutate(d, c)
-    sf.write_text(yaml.safe_dump(d))
-    cf.write_text(yaml.safe_dump(c))
+    d = system_doc(gitops_repo)
+    mutate(d)
+    write_system(gitops_repo, d)
     p = render(gitops_repo)
     assert p.returncode == 1 and msg in p.stderr
 
@@ -106,17 +108,16 @@ def test_addon_remove_refuses_while_in_use_and_never_touches_data(gitops_repo, g
     commit(gitops_repo)
     with pytest.raises(core.PlatformError, match="still used by todo-api"):
         addon.main(["remove", "postgres", "--repo-dir", str(gitops_repo)])
-    f = gitops_repo / APP / "services.yaml"
-    d = yaml.safe_load(f.read_text())
-    del d["services"][0]["uses"]
-    f.write_text(yaml.safe_dump(d))
+    d = system_doc(gitops_repo)
+    del d["components"]["todo-api"]["uses"]
+    write_system(gitops_repo, d)
     commit(gitops_repo, "no use")
     assert addon.main(["remove", "postgres", "--repo-dir", str(gitops_repo)]) == 0
-    assert "addons" not in app_yaml(gitops_repo)
+    assert "postgres" not in (system_doc(gitops_repo).get("resources") or {})
 
 
-def test_unknown_or_duplicate_addon_is_an_error(gitops_repo, gh):
-    with pytest.raises(core.PlatformError, match="unknown addon"):
+def test_unknown_or_duplicate_resource_is_an_error(gitops_repo, gh):
+    with pytest.raises(core.PlatformError, match="unknown resource 'redis'"):
         addon.main(["add", "redis", "--repo-dir", str(gitops_repo)])
     declare(gitops_repo)
     with pytest.raises(core.PlatformError, match="already declared"):
@@ -124,17 +125,18 @@ def test_unknown_or_duplicate_addon_is_an_error(gitops_repo, gh):
 
 
 def test_uses_flag_needs_a_single_service(gitops_repo, gh):
-    with pytest.raises(core.PlatformError, match="exactly one service"):
+    with pytest.raises(core.PlatformError, match="exactly one component"):
         run_compose(gitops_repo, "add", "todo-api", "todo-web", "--uses", "postgres")
 
 
 # ---------------- observability: OpenTelemetry base (ADR-021) ----------------
 
 def obs(repo, **conf):
-    f = repo / APP / "app.yaml"
-    cfg = yaml.safe_load(f.read_text()) or {}
-    cfg.setdefault("addons", {})["observability"] = conf
-    f.write_text(yaml.safe_dump(cfg))
+    """5.0: observability is set per environment; the 4.x addon applied to all of them."""
+    cfg = system_doc(repo)
+    for env in cfg["environments"].values():
+        env["observability"] = dict(conf)
+    write_system(repo, cfg)
     commit(repo, "obs")
 
 
@@ -213,12 +215,11 @@ def test_invalid_observability_config_is_rejected(gitops_repo, gh, conf, msg):
 def test_uses_observability_is_an_error(gitops_repo, gh):
     obs(gitops_repo)
     run_compose(gitops_repo, "add", "todo-api")
-    f = gitops_repo / APP / "services.yaml"
-    d = yaml.safe_load(f.read_text())
-    d["services"][0]["uses"] = ["observability"]
-    f.write_text(yaml.safe_dump(d))
+    d = system_doc(gitops_repo)
+    d["components"]["todo-api"]["uses"] = ["observability"]
+    write_system(gitops_repo, d)
     p = render(gitops_repo)
-    assert p.returncode == 1 and "applies to every service automatically" in p.stderr
+    assert p.returncode == 1 and "uses 'observability', which is neither a resource nor a library" in p.stderr
 
 
 def test_config_addons_are_pruned_but_databases_are_not(gitops_repo, gh):
@@ -232,17 +233,17 @@ def test_config_addons_are_pruned_but_databases_are_not(gitops_repo, gh):
     assert [e["name"] for e in sets["todo-addons-config-dev"]["spec"]["generators"][0]["list"]["elements"]] == ["observability"]
 
 
-def test_addon_add_observability_with_options(gitops_repo, gh):
-    assert addon.main(["add", "observability", "--ui", "lgtm", "--repo-dir", str(gitops_repo)]) == 0
-    assert app_yaml(gitops_repo)["addons"]["observability"] == {"ui": "lgtm"}
-    commit(gitops_repo, "x")
-    with pytest.raises(core.PlatformError, match="apply to the observability"):
-        addon.main(["add", "postgres", "--ui", "lgtm", "--repo-dir", str(gitops_repo)])
+def test_resource_add_observability_points_to_the_environment_setting(gitops_repo, gh):
+    """5.0: observability is no resource (the 4.x `addon add observability --ui lgtm` is `environments.<env>.observability`)."""
+    before = system_file(gitops_repo).read_text()
+    with pytest.raises(core.PlatformError, match=r"observability is set per environment under environments\.<env>\.observability in system\.yaml"):
+        addon.main(["add", "observability", "--repo-dir", str(gitops_repo)])
+    assert system_file(gitops_repo).read_text() == before
 
 
 def test_compose_seeds_the_metrics_path_per_shape(gitops_repo, gh):
     run_compose(gitops_repo, "add", "todo-api", "todo-web")
-    assert {s["name"]: s["metrics"] for s in services(gitops_repo)} == {"todo-api": "/actuator/prometheus", "todo-web": "/api/metrics"}
+    assert {n: c["metrics"] for n, c in components(gitops_repo).items()} == {"todo-api": "/actuator/prometheus", "todo-web": "/api/metrics"}
 
 
 def test_collector_config_has_no_yaml_anchors(gitops_repo, gh):

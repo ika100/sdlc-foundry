@@ -71,8 +71,8 @@ def w(tmp_path, monkeypatch, capsys):
 # ---------------- AC-092.2 skipped apps ----------------
 
 @pytest.mark.parametrize("addon, reason", [
-    ("none", "app.yaml declares no observability addon"),
-    ({"ui": "lgtm", "alerts": False, "rules": [RULE]}, "alerts: false in the observability addon"),
+    ("none", "no environment declares observability"),
+    ({"ui": "lgtm", "alerts": False, "rules": [RULE]}, "dev: alerts: false in observability; prod: alerts: false in observability"),
 ])
 def test_a_skipped_app_makes_no_call_and_the_summary_says_why(w, addon, reason):
     """AC-092.2: no addon or `alerts: false`: nothing is filed, commented on or closed, no network or GitHub call, and the run summary says why."""
@@ -277,7 +277,7 @@ def test_a_dry_run_prints_what_it_would_do_and_changes_nothing(w):
 def test_the_command_is_routed_by_the_cplat_launcher():
     """AC-092.18 AC-092.1: `cplat alerts poll` is a known command (the workflow runs it)."""
     import cplat
-    assert cplat.COMMANDS.get("alerts") == "alerts"
+    assert cplat.PLUMBING.get("alerts") == "alerts"
     assert "alerts poll" in cplat.__doc__
 
 
@@ -303,7 +303,7 @@ def test_each_app_is_polled_on_its_own_and_app_selects_one(w):
     make_app(w.tmp, addon=None, app="other")
     w.net.on(Q, FIRING)
     code, out = w.poll()
-    assert code == 0 and "alert poll other: skipped: app.yaml declares no observability addon" in out
+    assert code == 0 and "alert poll other: skipped: no environment declares observability" in out
     assert f"alert poll {APP}: 1 firing in prod" in out
     code, out = w.poll("--app", "other")
     assert f"alert poll {APP}:" not in out and "alert poll other: skipped" in out

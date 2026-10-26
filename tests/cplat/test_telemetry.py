@@ -10,7 +10,7 @@ Seams faked here (the coder must provide them under these names in `scripts/cpla
   telemetry.http_get(url, ...) -> str        the PromQL HTTP query; returns the Prometheus JSON body, raises on any error
 Assumptions: conftest.py does not clear CPLAT_OTLP_* / CPLAT_KUBE_CONTEXT / OTEL_* / CLAUDE_CODE_ENABLE_TELEMETRY, so the autouse
 fixture below does; a `Forward` value exposes its kubectl arguments in `vars(forward)`; the addon is found from
-`applications/<app>/app.yaml` of a gitops-app repo.
+`applications/<app>/system.yaml` of a gitops-app repo (5.0: `observability` is set per environment).
 """
 import json
 import os
@@ -67,7 +67,7 @@ def project_settings(repo, **telemetry_keys):
 def addon_repo(repo):
     app = repo / "applications" / "shop"
     app.mkdir(parents=True)
-    (app / "app.yaml").write_text("observability:\n  ui: lgtm\n")
+    (app / "system.yaml").write_text("system: shop\nowner: acme\nenvironments:\n  dev:\n    observability: {ui: lgtm}\n  staging: {}\n  prod: {}\n")
     return repo
 
 
@@ -172,7 +172,7 @@ def test_a_benchmark_session_gets_the_telemetry_environment(hl_repo, tmp_path, m
 # ---------------- AC-101.2 ----------------
 
 def test_the_addon_with_a_context_exports_through_a_port_forward(repo, monkeypatch):  # AC-101.2
-    """AC-101.2: gitops-app with `observability: {ui: lgtm}` plus a configured context: a kubectl port-forward to svc/lgtm
+    """AC-101.2: gitops-app with `environments.dev.observability: {ui: lgtm}` plus a configured context: a kubectl port-forward to svc/lgtm
     in namespace observability, exporting to 127.0.0.1:<port>."""
     addon_repo(repo)
     monkeypatch.setenv("CPLAT_KUBE_CONTEXT", "kind-dev")
@@ -220,7 +220,7 @@ def test_an_app_without_the_lgtm_ui_is_not_the_addon(repo, monkeypatch):  # AC-1
     """AC-101.2: `observability` without `ui: lgtm` is not the addon."""
     app = repo / "applications" / "shop"
     app.mkdir(parents=True)
-    (app / "app.yaml").write_text("observability:\n  collector: true\n")
+    (app / "system.yaml").write_text("system: shop\nowner: acme\nenvironments:\n  dev:\n    observability: {collector: true}\n  staging: {}\n  prod: {}\n")
     monkeypatch.setenv("CPLAT_KUBE_CONTEXT", "kind-dev")
     env, _, forward = session(repo)
     assert env == {} and forward is None
