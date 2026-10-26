@@ -144,6 +144,7 @@ def check_repo(repo: Path) -> list[dict]:
         except OSError:
             out.append(check(WARN, "repo platform version", "platform source has no docs/CHANGELOG.md"))
         out += check_addons(repo)
+        out += check_operators(repo)
         out += check_policies(repo)
         return out
     det = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False)
@@ -159,6 +160,7 @@ def check_repo(repo: Path) -> list[dict]:
         else:
             out.append(check(OK, "repo platform version", stamp.get("platform", "?")))
     out += check_addons(repo)
+    out += check_operators(repo)
     out += check_policies(repo)
     return out
 
@@ -195,22 +197,59 @@ def _models(repo: Path) -> list:
 
 
 def check_addons(repo: Path) -> list[dict]:
-    """A gitops-app repo that declares postgres or the lgtm dev stack needs their cluster-side parts in the cluster the user is pointed at."""
+    """A gitops-app repo that declares the lgtm dev stack needs its cluster-side parts in the cluster the user is pointed at.
+
+    The database operator is `check_operators`' row.
+    """
     models = _models(repo)
-    postgres = any(r.type == "postgres" for m in models for r in m.resources)
     lgtm = any(e.observability is not None and e.observability.ui == "lgtm" for m in models for e in m.environments)
-    if not (postgres or lgtm) or not shutil.which("kubectl"):
+    if not lgtm or not shutil.which("kubectl"):
         return []
     out = []
-    if postgres:
-        have = run(["kubectl", "get", "crd", "clusters.postgresql.cnpg.io"], check=False).returncode == 0
-        out.append(check(OK, "addon postgres", "CloudNativePG operator is installed in the current kube context") if have else
-                   check(WARN, "addon postgres", "CloudNativePG operator not found in the current kube context", "local: devbox run cluster-up; real clusters: install the cloudnative-pg chart"))
     if lgtm:
         have = run(["kubectl", "-n", "observability", "get", "deploy", "lgtm"], check=False).returncode == 0
         out.append(check(OK, "addon observability", "the Grafana dev stack (lgtm) is installed") if have else
                    check(WARN, "addon observability", "`ui: lgtm` is declared but the dev stack is missing in the current kube context", "local: devbox run cluster-up"))
     return out
+
+
+def _operators() -> dict:
+    """OPERATORS of the platform's render.py (the expected operator versions)."""
+    import importlib.util
+    path = PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"
+    spec = importlib.util.spec_from_file_location("cplat_doctor_render", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.OPERATORS
+
+
+def check_operators(repo: Path) -> list[dict]:
+    """AC-115.18: the CloudNativePG operator an in-cluster database needs: installed vs expected version."""
+    if not shutil.which("kubectl"):
+        return []
+    needs = sorted({ri.environment for m in _models(repo) for ri in m.resource_instances if ri.type == "database" and not ri.external})
+    if not needs:
+        return []
+    owner_envs = sorted({e.name for m in _models(repo) for e in m.environments if e.name in needs and e.operators == "owner"})
+    op = _operators()["cloudnative-pg"]
+    want, chart = op["operator_version"], op["chart_version"]
+    name = "operator cloudnative-pg"
+    p = run(["kubectl", "get", "deploy", "-A", "-l", "app.kubernetes.io/name=cloudnative-pg", "-o",
+             "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
+    images = (p.stdout or "").split()
+    have = images[0].split("@")[0].rsplit(":", 1)[-1] if images and ":" in images[0].split("@")[0].rsplit("/", 1)[-1] else None
+    owner = owner_envs == needs
+    where = f"operators: owner in {', '.join(owner_envs)}" if owner else "Argo CD application operator-cloudnative-pg"
+    if have == want:
+        return [check(OK, name, f"installed {have}, expected {want} ({where})")]
+    if have is None:
+        detail = f"not installed in the current kube context, expected {want} ({where})"
+        if owner:
+            return [check(WARN, name, detail, f"install the cloudnative-pg chart {chart} (operator {want})")]
+        ctx = (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
+        return [check(WARN, name, detail, f"apply operators/root.yaml once: KUBE_CONTEXT={ctx} devbox run bootstrap (local: devbox run cluster-up)")]
+    detail = f"installed {have}, expected {want} ({where})"
+    return [check(WARN, name, detail, f"move the cloudnative-pg chart to {chart} (operator {want})" if owner else "sync operator-cloudnative-pg in Argo CD")]
 
 
 def check_policies(repo: Path) -> list[dict]:
