@@ -1,0 +1,13 @@
+{
+  "name": "system",
+  "version": "5.0.0",
+  "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
+  "author": {
+    "name": "Eike Hensler",
+    "email": "eike.hensler@gmail.com"
+  },
+  "homepage": "https://github.com/ika100/sdlc-foundry",
+  "repository": "https://github.com/ika100/sdlc-foundry",
+  "license": "Apache-2.0",
+  "keywords": ["planning", "multi-repo", "gitops", "agents", "system"]
+}
