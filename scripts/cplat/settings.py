@@ -7,6 +7,9 @@
 
 `coordinator_model` is a model name (every workflow) or a map `{default: ..., <workflow>: ...}`. Precedence: the
 `--model` flag, project (workflow, then general), user (workflow, then general), then `sonnet`.
+
+`shape` (spec 123, ADR-056) is read by `declared_shape` only: the platform repo declares `shape: platform` in the committed
+project file; the personal file may not have the key.
 """
 from __future__ import annotations
 
@@ -16,11 +19,16 @@ from pathlib import Path
 
 import yaml
 
+import core
 from core import PlatformError
 
 MODELS = ("sonnet", "opus", "haiku")
 DEFAULT_MODEL = "sonnet"
 PROJECT_FILE = ".platform-settings.yml"
+
+
+class ShapeDeclarationError(PlatformError):
+    """An invalid `shape:` declaration (spec 123); callers that tolerate "no shape" must let it through."""
 
 
 def user_file() -> Path:
@@ -116,10 +124,44 @@ def budget_defaults(repo: Path) -> dict:
         for key, value in block.items():
             if key not in BUDGET_KEYS:
                 raise PlatformError(f"{path}: unknown budget limit '{key}'", hint="use " + ", ".join(BUDGET_KEYS))
-            if value in ("off", None):
+            if value in ("off", None) or value is False:  # YAML 1.1 reads a bare `off` as False
                 out[key] = None
             elif isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
                 out[key] = value
             else:
                 raise PlatformError(f"{path}: budget.{key} must be a number or off, got '{value}'")
     return out
+
+
+def _yaml(path: Path) -> object:
+    try:
+        return yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError) as e:
+        raise PlatformError(f"{path} cannot be read: {e}") from None
+
+
+def declared_shape(repo: Path) -> str | None:
+    """The shape a repo declares in its committed project file (spec 123), or None; raises ShapeDeclarationError."""
+    user = user_file()
+    if user.is_file():
+        data = _yaml(user)
+        if isinstance(data, dict) and "shape" in data:
+            raise ShapeDeclarationError(
+                f"{user}: `shape` belongs in the repo's committed .platform-settings.yml, not in the personal settings file",
+                hint="move or remove the `shape:` line; only the platform repo declares a shape")
+    path = repo / PROJECT_FILE
+    if not path.is_file():
+        return None
+    data = _yaml(path)
+    if not isinstance(data, dict) or "shape" not in data:
+        return None
+    value = data["shape"]
+    if isinstance(value, str) and value in [s["id"] for s in core.registry.load()]:
+        raise ShapeDeclarationError(
+            f"{path}: shape '{value}' cannot be declared: only 'platform' can be declared; a component repo's shape comes from "
+            f"its .copier-answers.yml (for an existing repo: cplat adopt --type {value})")
+    if not isinstance(value, str) or value not in core.registry.declared_ids():
+        raise ShapeDeclarationError(
+            f"{path}: unknown shape '{value}'; the shapes that can be declared are: {', '.join(core.registry.declared_ids())}",
+            hint="fix or remove the `shape:` line in .platform-settings.yml")
+    return value

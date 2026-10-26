@@ -3,23 +3,46 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 import core
+import settings
 from core import PLATFORM_ROOT, PlatformError, run
 
 ROLES_BY_SHAPE_PLUGIN = ("coder", "tester", "deployment", "observability", "release")
 
 
-def route(repo: Path) -> dict:
+def resolve(repo: Path) -> str | None:
+    """The repo's shape: a committed declaration (spec 123), else detect-shape.sh; None when neither resolves."""
+    declared = settings.declared_shape(repo)
+    if declared:
+        answers = repo / ".copier-answers.yml"
+        if answers.is_file():
+            m = re.search(r"^_src_path:[ \t]*(.*)$", answers.read_text(), re.M)
+            src = re.sub(r"/*$", "", m.group(1).replace('"', "").replace("'", "")) if m else ""
+            for t in core.registry.load():
+                if src == f"templates/{t['id']}" or src.endswith(f"/templates/{t['id']}"):
+                    raise settings.ShapeDeclarationError(
+                        f"conflicting shape sources: .platform-settings.yml declares '{declared}' and .copier-answers.yml "
+                        f"names templates/{t['id']}; remove one of them",
+                        hint="a component repo keeps .copier-answers.yml and drops `shape:`; the platform repo has no .copier-answers.yml")
+        return declared
     det = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False)
-    shape = det.stdout.strip()
+    return det.stdout.strip() or None
+
+
+def route(repo: Path) -> dict:
+    shape = resolve(repo)
     if not shape:
         raise PlatformError("cannot determine the repo's shape", hint="ask the user which shape this is, or add a .copier-answers.yml (docs/ADOPTING.md)")
-    entry = next(s for s in core.registry.load() if s["id"] == shape)
+    entry = core.registry.get(shape)
     plugin = entry["plugin"]
+    declared = core.registry.is_declared(entry)
     agents = {role: f"{plugin}:{role}" for role in ROLES_BY_SHAPE_PLUGIN}
+    if declared:
+        agents.pop("release")  # released through its own procedure (ADR-056)
     if not entry["deployable"]:
         agents.pop("deployment"), agents.pop("observability")  # nothing to deploy
     agents.update({"product-manager": "svc:product-manager", "architect": "svc:architect", "reviewer": "svc:reviewer",
