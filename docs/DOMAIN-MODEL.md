@@ -98,7 +98,7 @@ components:
     instances: {prod: {replicas: 2}}
   todo-web:
     type: website
-    lang: nextjs
+    lang: typescript
     consumes: [todo-api-rest]
     expose: true
 
