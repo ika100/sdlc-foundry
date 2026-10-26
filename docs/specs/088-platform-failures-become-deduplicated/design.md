@@ -388,3 +388,227 @@ it. `list` already shows any open issue with `triage` and no decision label (AC-
 - **A label removed in triage:** an open issue without `auto-filed` is still found through search, but with index delay.
 - **Escalation time:** filing has 20 s, then `runs.finish` has its own 20 s. A down network costs at most 40 s on an
   escalation that stops the session anyway.
+
+## Amendment 2026-10-26 (#207): escalations classified by reason rules (AC-088.15 to AC-088.21)
+
+### Decisions
+
+- **One pure module holds the rules: `scripts/cplat/escalation_rules.py`.** It has the rule table, `classify`,
+  `resolve` (writer) and `effective` (reader), and imports only `re` and `dataclasses`. The writer (`runs.finish`), the
+  output line (`ship escalate`) and both readers (`runs_report`, `retro_report`) call the same functions, so the record,
+  the escalation output, the report and the retro can never disagree. Extending the rules is a change to this one
+  table.
+- **The record is classified in `runs.finish`.** Every escalation reaches the store through it: ship, app-ship,
+  headless, `cplat runs end --outcome escalated` (the `/svc:build` path) and fleet. Callers keep passing
+  `{"reason", "cause"}`; `finish` turns that into `cause`, `cause_source` and, for a rule match, `rule`. The ship and
+  app-ship states keep the cause as stated (coerced, `unknown` when not stated), so `ship._record`,
+  `appship_state._record` and the app-ship's "cause of the escalated repo" logic are unchanged.
+- **A stated allowed cause always wins** (AC-088.17): `resolve` only consults the rules when the cause is not one of
+  `platform`, `code`, `decision`, `environment`. `unknown` passed explicitly counts as not stated.
+- **No rule yields `platform`** (AC-088.17). The module asserts it at import (`assert all(r.cause != "platform" ...)`),
+  and the filing decision in `ship.escalate` keeps reading the *stated* cause, so a classified escalation is never
+  filed (AC-088.2).
+- **Readers re-apply the current rules on read** (AC-088.21) to every escalation whose stored cause is not one of the
+  four allowed causes: older records without `cause_source`, records with `cause_source: none` written under an older
+  table, and malformed causes. A stored allowed cause is taken as it is. The store is never rewritten.
+- **The platform's own escalations state their cause** (AC-088.18): the ship stop gate giving up passes `environment`;
+  headless "no progress" calls `ship.escalate(repo, result, "environment")`, and the headless record's own escalation
+  section gets `environment` too (as it already gets `decision` for a budget stop). Both are `cause_source: given`.
+- **No ADR.** This extends ADR-033's "the cause is the orchestrator's word" with a fixed-text fallback that the spec's
+  non-goals already bound (no model, never `platform`); the rule table itself is expected to grow from the report's
+  unclassified list.
+
+### Where causes are set and read
+
+| Place | Today | After this amendment |
+|---|---|---|
+| `ship.escalate` (`scripts/cplat/ship.py`) | `_coerce_cause` → `st["cause"]`, the AC-088.3 message | unchanged, plus: when the coerced cause is `unknown` and a rule matches, the line `classified as <cause> by rule <name>` is appended to `report` right after the message |
+| `ship.gate` (stop hook, `ship.py`) | gives up: sets `st["escalated"]`, no cause → `unknown` | also sets `st["cause"] = "environment"` before `save_state` |
+| `ship._record` | `escalation={"reason", "cause"}` | unchanged |
+| `headless._drive` ("no progress") | `ship.escalate(repo, result)` → `unknown` | `ship.escalate(repo, result, "environment")` |
+| `headless.main` (`finally`) | escalation section only for a budget stop (`decision`) | also for stop reason `escalated` with a result starting `no progress`: `{"reason": result, "cause": "environment"}` |
+| `appship_state._record`, `appship.py`, `staging_deploy.py`, `deps.py`, `fleet.py`, `budget.py` | pass a cause or `unknown` | unchanged; `runs.finish` classifies |
+| `runs.finish` (`scripts/cplat/runs.py`) | `cause if cause in CAUSES else "unknown"` | `escalation_rules.resolve(cause, reason)` → `cause`, `cause_source`, `rule` |
+| `cplat runs end --outcome escalated` (`runs.py`) | `ns.cause or "unknown"` | unchanged; `finish` classifies |
+| `runs_report.aggregate` | `causes` counts the stored cause | counts `effective(esc).cause`; new key `unclassified` |
+| `retro_report._cause` / `_escalations` | stored cause | `effective(esc).cause`; new key `unclassified` |
+
+### Python API — `scripts/cplat/escalation_rules.py`
+
+```python
+ALLOWED = ("platform", "code", "decision", "environment")
+SOURCES = ("given", "rule", "none")
+
+@dataclass(frozen=True)
+class Rule:
+    name: str                       # kebab-case, printed in "classified as <cause> by rule <name>"
+    cause: str                      # environment | decision, never platform
+    patterns: tuple[re.Pattern, ...]   # compiled with re.IGNORECASE; the rule matches when every pattern .search()es
+    def matches(self, reason: str) -> bool: ...
+
+RULES: tuple[Rule, ...]             # the table below, in this order
+
+@dataclass(frozen=True)
+class Resolved:
+    cause: str                      # one of ALLOWED, or "unknown"
+    source: str                     # one of SOURCES
+    rule: str | None                # the rule name when source == "rule"
+
+def classify(reason) -> Rule | None:
+    """The first rule in RULES that matches; None for no match or a non-string reason."""
+def resolve(cause, reason) -> Resolved:
+    """Writer side. cause in ALLOWED → Resolved(cause, "given", None); else classify(reason) →
+    Resolved(rule.cause, "rule", rule.name) or Resolved("unknown", "none", None)."""
+def effective(escalation: dict) -> Resolved:
+    """Reader side (AC-088.21). Stored cause in ALLOWED → that cause, the stored cause_source when it is "given" or
+    "rule" (else "given"), and the stored rule when the source is "rule". Otherwise resolve(None, reason)."""
+def message(resolved: Resolved) -> str | None:
+    """"classified as <cause> by rule <rule>" when source == "rule", else None."""
+```
+
+### Rule table (AC-088.16, AC-088.17)
+
+A rule matches when **all** of its patterns are found (`re.search`, `re.IGNORECASE`). The first matching rule in
+table order wins; the two `decision` rules come first, because a build handed to the user for review or a spec/test
+conflict can mention a git action too.
+
+| # | Name | Cause | Patterns (all must match) |
+|---|---|---|---|
+| 1 | `spec-test-conflict` | `decision` | `\bspec\s*/\s*tests?\s+conflicts?\b` **or** `\btests?\b.*\b(contradicts?\|contradicting\|contradiction with\|conflicts? with)\b.*\b(spec\|ac-\d{3}\.\d+\|criteri(on\|a)\|rule)\b` **or** `\b(spec\|ac-\d{3}\.\d+\|criteri(on\|a)\|rule)\b.*\b(contradicts?\|contradicting\|conflicts? with)\b.*\btests?\b` (one pattern, the three alternatives joined by `\|`) |
+| 2 | `left-for-review` | `decision` | `\bleft\b[^.;]{0,30}\b(for\|to)\b[^.;]{0,30}\breview\b` |
+| 3 | `git-action-awaits-approval` | `environment` | (a) `\b(wait\|waits\|waiting\|needs?\|requires?\|requiring\|asks?\|asking\|pending\|blocked on)\b`, (b) `\b(approval\|approve\|permissions?\|confirmation\|confirm)\b`, (c) `\b(git\|branch(es)?\|commit(s\|ting\|ted)?\|push(es\|ing\|ed)?\|merg(e\|es\|ing\|ed)\|rebas(e\|es\|ing\|ed)\|checkout\|tag(s\|ging)?)\b` |
+| 4 | `dirty-working-tree` | `environment` | `\b(dirty\|unclean\|not clean)\b.*\b(working[ -]?tree\|worktree\|checkout)\b` **or** `\b(working[ -]?tree\|worktree\|checkout)\b.*\b(dirty\|unclean\|not clean)\b` **or** `\b(uncommitted\|unstaged) (changes\|files)\b` (one pattern) |
+
+(`\|` in the table is a regex `|`.) Examples the acceptance tests use:
+
+| Reason | Result |
+|---|---|
+| `waiting for approval to create the branch` | `environment`, `git-action-awaits-approval` |
+| `commit needs permission` | `environment`, `git-action-awaits-approval` |
+| `needs user confirmation to push` | `environment`, `git-action-awaits-approval` |
+| `stopped: working tree is dirty` | `environment`, `dirty-working-tree` |
+| `uncommitted changes in the working tree` | `environment`, `dirty-working-tree` |
+| `acceptance test contradicts AC-012.3` | `decision`, `spec-test-conflict` |
+| `spec/test conflict` | `decision`, `spec-test-conflict` |
+| `build left open for review` | `decision`, `left-for-review` |
+| `left for the user to review` | `decision`, `left-for-review` |
+| `WAITING FOR APPROVAL TO CREATE THE BRANCH` | `environment` (case-insensitive) |
+| `tests fail after commit 1a2b3c` | `unknown`, `cause_source: none` (a git word only: no wait, no approval) |
+| `git push failed` | `unknown` (no wait, no approval) |
+| `working tree is dirty` with `--cause code` | `code`, `cause_source: given` (a stated cause wins) |
+
+### Record field (AC-088.15, AC-088.18)
+
+```json
+"escalation": {"reason": "waiting for approval to create the branch", "cause": "environment", "cause_source": "rule", "rule": "git-action-awaits-approval"}
+"escalation": {"reason": "needs a decision on rate limits", "cause": "unknown", "cause_source": "none"}
+"escalation": {"reason": "gave up after 3 attempts to stop in phase build", "cause": "environment", "cause_source": "given"}
+```
+
+| Field | Type | Present |
+|---|---|---|
+| `reason` | str | always (as today) |
+| `cause` | str | always: `platform` \| `code` \| `decision` \| `environment` \| `unknown` |
+| `cause_source` | str | always on records written from now on: `given` \| `rule` \| `none` |
+| `rule` | str | only when `cause_source` is `rule` |
+
+`runs.finish` computes `resolve(escalation.get("cause"), str(escalation.get("reason", "")))` on the reason as passed
+(before `_scrub`) and writes the fields in the order above. Nothing else in the record changes.
+
+### `cplat ship escalate` output (AC-088.15)
+
+```
+ship 012-x: escalated (waiting for approval to create the branch); the session may stop. Resume with /svc:ship 012-x
+cause missing: recorded as unknown; allowed causes: platform, code, decision, environment
+classified as environment by rule git-action-awaits-approval
+```
+
+The AC-088.3 message text is unchanged. Without a match only the message is printed. With a stated allowed cause
+neither line is printed. Exit code 0 as before. `st["cause"]` stays the coerced stated cause (`unknown`); the record
+carries the classified cause.
+
+### Report — `cplat runs report` (AC-088.19, AC-088.21)
+
+`runs_report.py` gains:
+
+```python
+MAX_UNCLASSIFIED = 20
+
+def effective_escalation(record: dict) -> escalation_rules.Resolved | None:
+    """None when the record has no escalation dict; otherwise escalation_rules.effective(...)."""
+def aggregate_unclassified(kept: list[dict]) -> dict:
+    """{"count": n, "escalations": m, "share": round(n / m, 3) or None when m == 0, "by_rule": k,
+        "reasons": [{"reason": _text(reason), "count": c}, ...]}  # every still-unknown reason, by count desc, then reason"""
+```
+
+- `m` = records in the window with an escalation dict; `n` = those whose effective cause is `unknown`; `k` = those
+  whose effective source is `rule` (stored or derived on read).
+- `causes` (`Escalations per cause`) counts the effective cause, so an older `unknown` that a rule now matches is
+  counted under the rule's cause (AC-088.21).
+- JSON: the key `unclassified` comes after `pr_wait` and before the conditional `validation`; key order inside is
+  `count`, `escalations`, `share`, `by_rule`, `reasons`. `reasons` holds at most 20 entries, the same ones the text
+  shows (the user confirmed "at most 20" for the report as a whole); `count` still counts every unknown escalation.
+
+```json
+"unclassified": {"count": 2, "escalations": 6, "share": 0.333, "by_rule": 3,
+                 "reasons": [{"reason": "needs a decision on rate limits", "count": 2}]}
+"unclassified": {"count": 0, "escalations": 0, "share": null, "by_rule": 0, "reasons": []}
+```
+
+- Text: right after the `Top escalation reasons:` block, before `Reruns by reason:`:
+
+```
+Unclassified escalations: 2 of 6 (33%)
+  classified by rule: 3
+  2  needs a decision on rate limits
+  … and 1 more
+```
+
+  `<p>` is `floor(100 * n / m + 0.5)` without decimals. Reasons as `  <count>  <reason>`, at most 20, then
+  `  … and <k> more` where `<k>` is the number of further distinct reasons (no line when none are left). With
+  `m == 0` there is one line only: `Unclassified escalations: none`. With `n == 0` and `m > 0`:
+  `Unclassified escalations: 0 of 6 (0%)` and the `classified by rule` line.
+
+### Retro (AC-088.20, AC-088.21)
+
+- `retro_report._cause(esc)` returns `escalation_rules.effective(esc).cause` (the `CAUSES` blocks of `## Escalations`
+  are therefore by effective cause; the `unknown` block lists only reasons still unknown).
+- `build` adds `"unclassified"` right after `"escalations"`:
+
+```json
+"unclassified": {"count": {"current": 1, "previous": 5}, "escalations": {"current": 4, "previous": 6},
+                 "share": {"current": 0.25, "previous": 0.833}, "by_rule": {"current": 3, "previous": 0}}
+```
+
+  computed with `runs_report.aggregate_unclassified` on each week (`share` null for a week without escalations).
+- `_index` adds the evidence refs `unclassified.count`, `unclassified.share` and `unclassified.by_rule` for both
+  sides (a `None` share is skipped, as `put` already does); a `report.json` without the key (written before this
+  amendment) yields none of them.
+- `_render`, `## Escalations`, first line (before the cause blocks), in the private and the public rendering alike:
+
+```
+unknown share: 25% (prev 83%) · unknown 1 of 4 (prev 5 of 6) · classified by rule 3 (prev 0)
+```
+
+  A week without escalations shows `n/a` for its share. A report without the key prints no such line.
+- Reasons: the private retro keeps listing every reason of the `unknown` block with its run count (today's rendering,
+  now only the still-unknown ones); the public issue keeps `reason <n>` and the counts. No new text reaches the public
+  issue besides the share line, which holds numbers only.
+
+### Back-compat and test changes
+
+- Old records (no `cause_source`) are read as described; nothing in the store is rewritten (AC-088.21). The JSON report
+  only gains a key; `report.json` keeps `schema: 1` and only gains a key.
+- Existing tests that compare a whole `escalation` dict gain `cause_source` (tester changes; coders do not edit them):
+  `tests/cplat/test_autoissue_ship.py` (lines 91, 114, 126), `tests/cplat/test_smoke_091_ship.py` (182),
+  `tests/cplat/test_budget.py` (320, 641), `tests/cplat/test_runs.py` (341, 703),
+  `tests/cplat/test_appship_097.py` (783). `tests/cplat/test_runs_report.py::test_json_output_has_stable_keys_and_nothing_else_on_stdout`
+  gains `unclassified` after `pr_wait`.
+
+### Risks
+
+- **A rule can misclassify** a reason that happens to contain its words. The damage is bounded: it is never
+  `platform`, so nothing is filed; a stated cause always wins; the record names the rule, so a wrong rule is visible in
+  the report and fixable in one table.
+- **Headless "no progress" counts twice** (the ship record and the headless record both carry the escalation), as a
+  budget stop already does today. Both are `given`, so the unknown share is not distorted.
