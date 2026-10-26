@@ -253,7 +253,7 @@ def test_compare_validation_applies_the_arm_and_recall_in_both_passes(arms, stor
     runs.main(["benchmark", "build", "--arm", "probe", "--recall", "--compare-validation"])
     assert len([c for c, _ in arms.calls if "commit" in c and "bench: arm probe" in c]) == 2
     assert len(_non_force_pushes(arms.calls)) == 2
-    assert len([c for c, _ in arms.calls if "pytest" in " ".join(c)]) == 2
+    assert len([c for c, _ in arms.calls if c[:2] == ["bash", "-c"] and "pytest" in c[-1]]) == 2
 
 
 def test_the_codebase_memory_arm_approves_the_server_and_uses_an_absolute_command():
