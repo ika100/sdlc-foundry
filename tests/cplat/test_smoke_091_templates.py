@@ -292,17 +292,6 @@ def test_web_smoke_runs_in_the_browser_runner_ac_091_16():  # AC-091.16
     assert "playwright install" not in (recipe("web-nextjs", "ci") or "") + (recipe("web-nextjs", "test") or "")
 
 
-def test_a_fresh_web_repo_has_the_playwright_scaffold_by_default_ac_091_16(tmp_path):  # AC-091.16
-    newsvc.main(["fresh-web", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
-    repo = tmp_path / "fresh-web"
-    assert (repo / "playwright.config.ts").is_file() and (repo / "e2e" / "smoke.spec.ts").is_file() and (repo / "e2e" / "home.spec.ts").is_file()
-    pkg = json.loads((repo / "package.json").read_text())
-    assert "@playwright/test" in pkg["devDependencies"] and "e2e" in pkg["scripts"]
-    devbox = json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]
-    assert devbox["smoke"] == "bash scripts/smoke.sh" and "e2e" in devbox
-    assert (repo / "scripts" / "smoke.sh").is_file()
-
-
 # ---------------- AC-091.2 / AC-091.16: updated repos ----------------
 
 def git(repo, *a):
@@ -315,9 +304,9 @@ def commit(repo, msg):
 
 
 @pytest.fixture()
-def old_web_repo(tmp_path):
+def old_web_repo(tmp_path, new_service):
     """A web repo made before spec 091 and with `needs_e2e: false`: no Playwright anywhere."""
-    newsvc.main(["old-web", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    new_service(["old-web", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     repo = tmp_path / "old-web"
     shutil.rmtree(repo / "e2e", ignore_errors=True)
     (repo / "playwright.config.ts").unlink(missing_ok=True)
@@ -347,6 +336,17 @@ def fake_devbox(monkeypatch, rc=0):
         return real(cmd, **kw)
     monkeypatch.setattr(update, "run", run)
     return calls
+
+
+def test_a_fresh_web_repo_has_the_playwright_scaffold_by_default_ac_091_16(tmp_path):  # AC-091.16
+    newsvc.main(["fresh-web", "desc", "--web", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    repo = tmp_path / "fresh-web"
+    assert (repo / "playwright.config.ts").is_file() and (repo / "e2e" / "smoke.spec.ts").is_file() and (repo / "e2e" / "home.spec.ts").is_file()
+    pkg = json.loads((repo / "package.json").read_text())
+    assert "@playwright/test" in pkg["devDependencies"] and "e2e" in pkg["scripts"]
+    devbox = json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]
+    assert devbox["smoke"] == "bash scripts/smoke.sh" and "e2e" in devbox
+    assert (repo / "scripts" / "smoke.sh").is_file()
 
 
 def test_update_brings_the_scaffold_to_a_web_repo_that_opted_out_ac_091_16(old_web_repo, monkeypatch, capsys):  # AC-091.16

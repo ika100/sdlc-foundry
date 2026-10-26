@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 import core
-import newsvc
 import pr as prmod
 import update
 
@@ -27,12 +26,12 @@ def git(cwd, *a, check=True):
                           check=check).stdout.strip()
 
 
-@pytest.fixture(scope="module")
-def seed(tmp_path_factory):
-    """(repo, baseline): two renders of the current service-go template."""
+@pytest.fixture()
+def seed(tmp_path_factory, new_service):
+    """(repo, baseline): two copies of the shared render of the current service-go template."""
     base = tmp_path_factory.mktemp("fleet-seed")
     for n in ("repo", "base"):
-        newsvc.main(["seed", "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(base / n), "--org", "acme"])
+        new_service(["seed", "desc", "--type", "service-go", "--no-github", "--skip-tasks", "--dir", str(base / n), "--org", "acme"])
     return base / "repo" / "seed", base / "base" / "seed"
 
 
