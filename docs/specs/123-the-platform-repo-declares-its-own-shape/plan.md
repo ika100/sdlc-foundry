@@ -9,72 +9,84 @@ tasks:
     covers: []
     parallel_safe: false
     depends_on: []
+    done: true
   - id: t2
     title: Registry — platform entry, load()/load_all()/get()/declared_ids(), declared-entry validation; site table hides it
     files: [shapes.yml, scripts/shapes.py, site/scripts/generate-reference.mjs]
     covers: [AC-123.9, AC-123.10, AC-123.1]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: settings.declared_shape + ShapeDeclarationError; shapecmd.resolve and the platform routing
     files: [scripts/cplat/settings.py, scripts/cplat/shapecmd.py]
     covers: [AC-123.1, AC-123.2, AC-123.3, AC-123.4, AC-123.5, AC-123.6, AC-123.7, AC-123.8]
     parallel_safe: false
     depends_on: [t2]
+    done: true
   - id: t4
     title: cplat spec — declaration errors pass repo_shape, platform is a known shape, spec_shape keeps old specs shape-less
     files: [scripts/cplat/spec.py]
     covers: [AC-123.3, AC-123.15, AC-123.16, AC-123.17]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t5
     title: component ship — start resolves and records the shape, deploy ends at once for platform
     files: [scripts/cplat/ship.py]
     covers: [AC-123.3, AC-123.19, AC-123.20, AC-123.21, AC-123.22]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t6
     title: platform update refuses the platform repo
     files: [scripts/cplat/update.py]
     covers: [AC-123.11]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t7
     title: platform doctor — repo shape platform, platform source at v<version>, FAIL row for a bad declaration
     files: [scripts/cplat/doctor.py]
     covers: [AC-123.13]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t8
     title: platform fleet — explicit skip reason for the platform repo under --only
     files: [scripts/cplat/fleet.py]
     covers: [AC-123.12]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t9
     title: spec, plan, verify, build commands stop on a declaration error and never ask for the shape
     files: [plugins/component/commands/spec.md, plugins/component/commands/plan.md, plugins/component/commands/verify.md, plugins/component/commands/build.md]
     covers: [AC-123.14, AC-123.18]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t10
     title: ship final report for a non-deployable run; release refuses without a release role
     files: [plugins/component/commands/ship.md, plugins/component/commands/release.md]
     covers: [AC-123.19, AC-123.22, AC-123.23]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t11
     title: The repo commits shape platform; CLAUDE.md, specs README and CONTRIBUTING say so
     files: [.platform-settings.yml, CLAUDE.md, docs/specs/README.md, CONTRIBUTING.md]
     covers: [AC-123.8]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t12
     title: component plugin 1.1.0 (catalog + manifest) and the CHANGELOG [Unreleased] entry
     files: [.claude-plugin/marketplace.json, plugins/component/.claude-plugin/plugin.json, docs/CHANGELOG.md]
     covers: [AC-123.14, AC-123.23]
     parallel_safe: true
     depends_on: [t1]
+    done: true
 ---
 
 # Plan — 123 The platform repo declares its own shape
