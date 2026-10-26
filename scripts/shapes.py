@@ -202,8 +202,8 @@ def check_contract(shapes: list[dict]) -> list[str]:
             errs.append(f"{sid}: template has no CLAUDE.md")
         elif "### Spec first" not in claude.read_text():
             errs.append(f"{sid}: CLAUDE.md has no '### Spec first' section (ADR-024)")
-        elif ("/app:spec" if sid == "gitops-app" else "/svc:spec") not in claude.read_text():
-            errs.append(f"{sid}: CLAUDE.md 'Spec first' does not name {'/app:spec' if sid == 'gitops-app' else '/svc:spec'} (ADR-026)")
+        elif ("/system:spec" if sid == "gitops-app" else "/component:spec") not in claude.read_text():
+            errs.append(f"{sid}: CLAUDE.md 'Spec first' does not name {'/system:spec' if sid == 'gitops-app' else '/component:spec'} (ADR-026)")
         if not (tdir / "docs" / "plan").is_dir():
             errs.append(f"{sid}: template has no docs/plan/ (ADR-024)")
         # ADR-026: specs live in docs/specs/ (project-owned) and are checked by the warn-only `specs` workflow
@@ -239,7 +239,7 @@ def check_contract(shapes: list[dict]) -> list[str]:
                 if f'"{plugin}@sdlc-foundry": true' not in st:
                     errs.append(f"{sid}: .claude/settings.json does not enable '{plugin}'")
         # 2. plugin: agents
-        if s["plugin"] != "gitops":
+        if s["plugin"] != "system":
             agents = CONTRACT_AGENTS + (DEPLOY_AGENTS if s["deployable"] else [])
             for a in agents:
                 if s["plugin"] == "svc":

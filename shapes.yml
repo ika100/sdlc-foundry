@@ -89,7 +89,7 @@ shapes:
     adr: [2, 3, 4, 5]
 
   - id: gitops-app
-    plugin: gitops
+    plugin: system
     template: gitops-app
     deployable: false
     test_globs: ["tests/**/*"]   # where `cplat spec trace` looks for AC ids (ADR-026)
