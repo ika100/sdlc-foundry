@@ -108,6 +108,25 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - **AC-122.29** Given the console, when the system switcher is opened, then it lists the repos of the `gh` account and its organisations that carry the `gitops-app` topic. Choosing one opens its console from a local clone under the configured workspace directory, or offers to clone it there first.
 - **AC-122.30** Given `/system:spec` or `/component:spec` creating a draft, when the draft is written, then it is pushed on its own branch with a draft pull request that holds `spec.md`, and the system owner is requested as reviewer. Approving the spec (in the console or by command) approves that review and merges the spec; "Request changes" leaves a review comment that the amend reads. This extends spec 114's spec commands additively.
 
+### When things are not normal
+
+- **AC-122.40** Given a system with no specs, runs or open issues, when the Inbox, the Board or System is shown, then none of them is an empty table: the Inbox lists the next steps to a first change (what already runs, "Describe your first change" opening "New or ask", choosing notifications), the Board shows its columns with one line each on what happens there, and System shows the parts and instances that exist.
+- **AC-122.41** Given `claude` not on the PATH, `gh` not logged in, or no kube context for an environment, when the console starts, then it starts anyway and shows a banner that names each missing piece with the fix `/platform:doctor` gives for it. Every action that needs the missing piece is disabled and says which piece it needs, its command can still be copied, and everything that does not need it works.
+- **AC-122.42** Given a source the console reads (a cluster, GitHub, or a `cplat` call) that fails or cannot be reached, when a page shows data from it, then the affected part says since when it is unavailable, offers the error and "Retry now", and retries every 30 seconds. Its last data is marked stale; health it cannot read is shown as `unknown`, never as the last known value; and an action that depends on that health (such as "Promote") is disabled until it is known again. The other parts of the page stay live.
+- **AC-122.43** Given any page, when it is shown, then it shows the time its data was read, and data older than 2 minutes is marked stale.
+
+### Actions you started
+
+- **AC-122.44** Given an action the user confirmed (AC-122.18), when it runs, then an activity indicator on every page shows how many actions run and how many failed. Its panel lists each action with its command, the time it has run, the current step from its output, and its result: on success the links to the run and the pull request; on failure the reason, the last lines of output, "Retry" and "Open in Claude Code".
+- **AC-122.45** Given an action running on an object (a spec, run, issue, instance or release), when the same object is shown, then other actions on it are disabled until the first one ends, and say so.
+- **AC-122.46** Given actions still running, when `cplat ui` is asked to stop, then it lists them and asks for confirmation before it stops; a confirmed stop ends them, and the next start shows them as stopped.
+
+### Releases and history
+
+- **AC-122.47** Given a component whose version is verified in Staging and newer than its last release, when its Board card or its System cell is shown, then it offers "Cut release". Before confirming, it shows the version derived from the commits, the specs and fixes the changelog will list, and that a release pull request is opened and the tag is set on the digest Staging verified after it merges; its way back is closing the release pull request. Confirming runs `/component:release` in the component's repo, and the release then appears in the Prod column as waiting for promotion.
+- **AC-122.48** Given the Board, when "Done" is chosen, then it lists the specs, fix runs, issues and releases closed in the chosen period (30 days by default; 90 days or all), newest first, each with the date, the stage it reached, its release and links to its evidence.
+- **AC-122.49** Given the Board's search, when the user types an id, a title word, a component name or an issue number, then open and done items that match are shown, with their stage or the stage they reached.
+
 ### Usable by everyone
 
 - **AC-122.28** Given any page, when it is used with the keyboard only, then every action is reachable and operable, text meets WCAG 2.2 AA contrast, and the layout works at 390 px width without horizontal page scroll (wide tables scroll inside their box).
@@ -119,6 +138,7 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - Replacing GitHub for code review, or Argo CD and Grafana for cluster and telemetry detail. The console links to them.
 - Showing more than one system at once. The system switcher (AC-122.29) opens another system's console.
 - A Slack app that updates or withdraws messages, or acts from buttons in Slack. 5.x uses webhooks; an app is a later spec.
+- Cutting releases automatically once Staging verified a version. 5.x offers "Cut release" (AC-122.47).
 - A cost page per week, spec or agent. 5.x shows the budget on each run; "Runs & cost" links to `/platform:runs`.
 - A Backstage plugin or any dependency on Backstage (the domain model takes its shape only).
 - Running actions without Claude Code installed: without `claude` on the PATH the console is read-only and says so.
@@ -138,4 +158,7 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - 2026-10-26 approved
 - 2026-10-26 draft: amendment: developer UX review (three places, one vocabulary, failures, consequences, hand-off)
 - 2026-10-26 amended after a developer-experience review: three places (Inbox, Board, System) with side panels and a `⌘K` palette; one stage vocabulary; failures explained with ways forward; consequence and way back for every decision; hand-off to Claude Code, keyboard and deep links. AC-122.6 to AC-122.15 reworded for the three places, AC-122.11's "Needs me" filter replaced by the Inbox; added AC-122.31 to AC-122.39
+- 2026-10-26 approved
+- 2026-10-26 draft: amendment: v1 gaps (first run and degraded states, action feedback, releases, history)
+- 2026-10-26 amended: v1 gaps added: first run, missing prerequisites and unreachable sources (AC-122.40 to AC-122.43); feedback on actions the user started (AC-122.44 to AC-122.46); cutting a release and the Done view with search (AC-122.47 to AC-122.49)
 - 2026-10-26 approved
