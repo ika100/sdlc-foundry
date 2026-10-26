@@ -22,7 +22,7 @@ import gitops
 import update
 from fleet_world import World, row
 from system_fixtures import (FULL4_APP, FULL4_SERVICES, FULL5, NOT_MIGRATED, OTHER_PLUGIN, RENDER4, ROOT, V4_REF, archive_4x, build_old_component,
-                             build_old_gitops, files, generated, git, load, mod, stamp)
+                             build_old_gitops, copier_render, files, generated, git, load, mod, stamp)
 
 NOUNS_SYSTEM = ["system", "component", "api", "resource", "instance", "issue", "platform"]
 NOUNS_COMPONENT = ["component", "api", "instance", "issue", "platform"]
@@ -480,12 +480,19 @@ def branch_file(world, slug, path):
     return p.stdout if p.returncode == 0 else None
 
 
-def fleet_of(tmp_path, base, monkeypatch, capsys):
-    return World(tmp_path, (base, None), monkeypatch, capsys)
+def v4_baseline(root, template, **data):
+    """The pre-5.0 template rendered with the repo's answers: what the fleet's update compares against (spec 086)."""
+    src = archive_4x([f"templates/{template}"], root / "tpl")
+    return copier_render(src / "templates" / template, root / "baseline", **data)
+
+
+def fleet_of(tmp_path, base, monkeypatch, capsys, baseline=None):
+    return World(tmp_path, (base, baseline), monkeypatch, capsys)
 
 
 def test_the_fleet_migrates_a_gitops_app_and_merges_the_proved_pr_ac_114_68(old_base, tmp_path, monkeypatch, capsys, v5):  # AC-114.68
-    w = fleet_of(tmp_path, old_base, monkeypatch, capsys)
+    base = v4_baseline(tmp_path / "bl", "gitops-app", project_name="shop-gitops", app_name="shop", github_org="acme")
+    w = fleet_of(tmp_path, old_base, monkeypatch, capsys, baseline=base)
     w.add("acme/shop-gitops", "4.7.0", mutate=lambda d: stamp(d, "4.7.0", "gitops-app"))
     rc, doc, err = w.json()
     r = row(doc, "acme/shop-gitops")
@@ -498,7 +505,8 @@ def test_the_fleet_migrates_a_gitops_app_and_merges_the_proved_pr_ac_114_68(old_
 
 
 def test_the_fleet_migrates_a_component_repo_and_merges_it_ac_114_49(old_component, tmp_path, monkeypatch, capsys, v5):  # AC-114.49
-    w = fleet_of(tmp_path, old_component, monkeypatch, capsys)
+    base = v4_baseline(tmp_path / "bl", "service-go", project_name="svc", github_org="acme")
+    w = fleet_of(tmp_path, old_component, monkeypatch, capsys, baseline=base)
     w.add("acme/svc", "4.7.0", mutate=lambda d: stamp(d, "4.7.0", "service-go"))
     rc, doc, err = w.json()
     r = row(doc, "acme/svc")
