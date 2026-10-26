@@ -65,6 +65,7 @@ tasks:
   covers: [AC-087.25, AC-087.26]
   parallel_safe: true
   depends_on: [t3]
+  done: true
 - id: t10
   title: Weekly retro shows pr-wait results and red checks week over week
   files: [scripts/cplat/retro_report.py]

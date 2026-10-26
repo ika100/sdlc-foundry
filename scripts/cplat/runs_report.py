@@ -18,6 +18,10 @@ import runs_usage_report
 UNKNOWN = "unknown"
 FILED_RESULTS = ("new", "+1", "suppressed", "pending")
 TOP_REASONS = 10
+PR_WAIT_RESULTS = ("green", "merged", "red", "budget-refused", "timeout", "no-checks", "closed", "merge-failed", "error")
+RED_RESULTS = ("red", "budget-refused")
+RED_CI = "red-ci"    # a reader's count, never an outcome in a record
+TOP_RED_CHECKS = 5
 
 
 def parse(texts: list[str]) -> tuple[list[dict], list[dict], int]:
@@ -61,6 +65,50 @@ def _count_sorted(counter: Counter) -> dict:
     return dict(sorted(counter.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
+def pr_wait_result(record: dict) -> str | None:
+    """None for a record whose kind is not pr-wait; "unrecorded" when it has no `pr_wait` dict; "unknown" when the
+    dict has no string `result`; otherwise the result (an unlisted one is kept under its own name)."""
+    if record.get("kind") != "pr-wait":
+        return None
+    section = record.get("pr_wait")
+    if not isinstance(section, dict):
+        return "unrecorded"
+    result = section.get("result")
+    return result.strip() if isinstance(result, str) and result.strip() else UNKNOWN
+
+
+def count_outcome(record: dict) -> str:
+    """The outcome a reader counts: RED_CI for kind pr-wait, outcome failed and a result in RED_RESULTS; otherwise
+    _text(record["outcome"])."""
+    outcome = _text(record.get("outcome"))
+    if outcome == "failed" and pr_wait_result(record) in RED_RESULTS:
+        return RED_CI
+    return outcome
+
+
+def red_check_names(record: dict) -> set[str]:
+    """The distinct check names of a red or budget-refused pr-wait record (non-list and non-string entries skipped)."""
+    if pr_wait_result(record) not in RED_RESULTS:
+        return set()
+    names = record["pr_wait"].get("checks")
+    return {c for c in (names if isinstance(names, list) else []) if isinstance(c, str)}
+
+
+def aggregate_pr_wait(kept: list[dict]) -> dict:
+    results: Counter = Counter()
+    checks: Counter = Counter()
+    for r in kept:
+        result = pr_wait_result(r)
+        if result is None:
+            continue
+        results[result] += 1
+        checks.update(red_check_names(r))
+    ordered = {k: results.get(k, 0) for k in (*PR_WAIT_RESULTS, "unrecorded")}
+    ordered.update({k: results[k] for k in sorted(results) if k not in ordered})
+    top = sorted(checks.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_RED_CHECKS]
+    return {"results": ordered, "red_checks": [{"check": c, "count": n} for c, n in top]}
+
+
 def select(records: list[dict], *, since_days: int, repo: str | None, now: datetime.datetime) -> list[dict]:
     """Window, repo filter and run_id dedupe, shared by both reports."""
     cutoff = now - datetime.timedelta(days=since_days)
@@ -96,7 +144,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
     by_check: Counter = Counter()
     filed: Counter = Counter({k: 0 for k in FILED_RESULTS})
     for r in kept:
-        kinds.setdefault(_text(r.get("kind")), Counter())[_text(r.get("outcome"))] += 1
+        kinds.setdefault(_text(r.get("kind")), Counter())[count_outcome(r)] += 1
         for p in _list(r.get("phases")):
             if not isinstance(p, dict):
                 continue
@@ -140,6 +188,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         "filed": dict(filed),
         "buffered": buffered,
         "usage": runs_usage_report.aggregate_usage(kept),
+        "pr_wait": aggregate_pr_wait(kept),
     }
     validation = aggregate_validation(kept)
     if validation["rules"]:   # spec 103: only when a run recorded a validation section
@@ -182,6 +231,9 @@ def render_text(agg: dict) -> str:
              + f": {w['records']} record(s); {w['malformed']} malformed line(s) skipped",
              "Runs per kind and outcome:"]
     lines += [f"  {kind}: {_pairs(outcomes)}" for kind, outcomes in agg["runs"].items()] or ["  none"]
+    pw = agg["pr_wait"]
+    lines.append("pr-wait results: " + (", ".join(f"{k} {n}" for k, n in pw["results"].items()) if any(pw["results"].values()) else "none"))
+    lines.append("Red checks: " + (", ".join(f"{c['check']} {c['count']}" for c in pw["red_checks"]) or "none"))
     lines.append("Phases (median / p90):")
     lines += [f"  {n}: {_dur(p['median_s'])} / {_dur(p['p90_s'])} (n={p['count']})" for n, p in agg["phases"].items()] or ["  none"]
     lines.append(f"Escalations per cause: {_pairs(agg['causes'])}")
