@@ -120,6 +120,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [112-fast-cplat-test-job-shared-renders-and](specs/112-fast-cplat-test-job-shared-renders-and/spec.md) — Fast cplat test job: shared renders and sharding | P1 | done | 15 |  |
 | [113-a-domain-model-core-in-cplat](specs/113-a-domain-model-core-in-cplat/spec.md) — A domain model core in cplat | P1 | done | 18 |  |
 | [114-the-platform-speaks-the-domain-model-5-0](specs/114-the-platform-speaks-the-domain-model-5-0/spec.md) — The platform speaks the domain model (5.0) | P1 | done | 67 |  |
+| [123-the-platform-repo-declares-its-own-shape](specs/123-the-platform-repo-declares-its-own-shape/spec.md) — The platform repo declares its own shape | P1 | done | 23 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

@@ -1,7 +1,7 @@
 ---
 spec_id: 123-the-platform-repo-declares-its-own-shape
 title: The platform repo declares its own shape
-status: approved
+status: done
 priority: P1
 ---
 
@@ -77,3 +77,5 @@ As a component repo owner, I want nothing to change in my repo, so that the new 
 - 2026-10-26 created
 - 2026-10-26 amended: the user's answers folded in: no release role and AC-123.23 (`/component:release` refuses), doctor wording in AC-123.13, AC-104.4 named in AC-123.16; all open questions answered
 - 2026-10-26 approved
+- 2026-10-26 building
+- 2026-10-26 done
