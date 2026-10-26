@@ -1,7 +1,7 @@
 ---
 spec_id: 113-a-domain-model-core-in-cplat
 title: A domain model core in cplat
-status: approved
+status: building
 priority: P1
 ---
 
@@ -68,3 +68,4 @@ The model is loaded from a gitops-app's declared files: `applications/<app>/app.
 - 2026-10-26 created
 - 2026-10-26 open questions answered
 - 2026-10-26 approved
+- 2026-10-26 building
