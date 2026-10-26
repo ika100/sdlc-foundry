@@ -123,3 +123,26 @@ def budget_defaults(repo: Path) -> dict:
             else:
                 raise PlatformError(f"{path}: budget.{key} must be a number or off, got '{value}'")
     return out
+
+
+def mcp_config(repo: Path) -> Path | None:
+    """`headless: {mcp_config: <file>}` of the project file (spec 111): an extra MCP config for unattended sessions,
+    relative to the repo; it must exist."""
+    path = repo / PROJECT_FILE
+    if not path.is_file():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError) as e:
+        raise PlatformError(f"{path} cannot be read: {e}") from None
+    block = data.get("headless") if isinstance(data, dict) else None
+    if block is None or (isinstance(block, dict) and block.get("mcp_config") is None):
+        return None
+    value = block.get("mcp_config") if isinstance(block, dict) else None
+    if not isinstance(value, str) or not value.strip():
+        raise PlatformError(f"{path}: headless.mcp_config must be a path to an MCP config file")
+    target = repo / value.strip()
+    if not target.is_file():
+        raise PlatformError(f"headless.mcp_config in {path} names {value}, which does not exist",
+                            hint="create the file or remove headless.mcp_config")
+    return target

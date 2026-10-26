@@ -76,16 +76,24 @@ def seconds_left_in_window(window: tuple[dt.time, dt.time] | None, at: dt.dateti
     return (end_at - at).total_seconds()
 
 
-def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None = None) -> list[str]:
+def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None, repo: Path) -> list[str]:
+    """The `claude -p` command. Spec 111: only the repo's MCP servers load (strict config), the claude.ai connectors are off."""
     exe = os.environ.get("CPLAT_CLAUDE") or "claude"
     cmd = [exe, "-p", prompt, "--permission-mode", "acceptEdits", "--output-format", "text"]
     if model:
         cmd += ["--model", model]
     for d in plugin_dirs or []:
         cmd += ["--plugin-dir", d]
+    cmd += ["--strict-mcp-config"]
+    mcp = repo / ".mcp.json"
+    if mcp.is_file():
+        cmd += ["--mcp-config", str(mcp)]
+    if extra := settings.mcp_config(repo):
+        cmd += ["--mcp-config", str(extra)]
+    conf: dict = {"disableClaudeAiConnectors": True}
     if plugin_dirs:   # plugins loaded in place are not under ~/.claude/plugins, so their files need their own Read rule
-        rules = [f"Read(/{d}/**)" for d in plugin_dirs]
-        cmd += ["--settings", json.dumps({"permissions": {"allow": rules}})]
+        conf["permissions"] = {"allow": [f"Read(/{d}/**)" for d in plugin_dirs]}
+    cmd += ["--settings", json.dumps(conf)]
     return cmd
 
 
@@ -177,7 +185,7 @@ def main(argv: list[str]) -> int:
     prompt = " ".join(ns.prompt)
     window = parse_window(ns.quiet)
     model, source = settings.coordinator_model(repo, prompt, ns.model)
-    cmd = claude_cmd(prompt, model, plugin_dirs_of(ns.plugin_dir))
+    cmd = claude_cmd(prompt, model, plugin_dirs_of(ns.plugin_dir), repo)
     if ns.dry_run:
         print(shlex.join(cmd))
         print(f"coordinator: {model} ({source})")
