@@ -24,6 +24,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [108-agents-get-a-compact-failure-summary-not](specs/108-agents-get-a-compact-failure-summary-not/spec.md) — Agents get a compact failure summary, not the full log | P2 | draft | 11 | #139 |
 | [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | draft | 12 | #164 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
+| [111-unattended-runs-spend-turns-only-on-judgement](specs/111-unattended-runs-spend-turns-only-on-judgement/spec.md) — Unattended runs spend turns only on judgement | P2 | approved | 10 | #139 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
