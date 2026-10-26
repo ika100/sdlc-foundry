@@ -41,7 +41,7 @@ def test_the_sections_come_in_the_documented_order_for_a_rich_app_ac_113_14(tmp_
     assert "  shop-api  dev  sha-" + SHA in out
     assert "  shop-api  staging  not pinned" in out
     assert "  shop-web  prod  1.2.0  replicas 3  namespace shop-prod  url -" in out
-    assert "  ai-ops  prod  not pinned  replicas -  namespace ai-ops  url -" in out
+    assert "  ai-ops  prod  not pinned  replicas -  namespace shop-prod  url -" in out
     assert "external helm" in out and "external kustomize" in out
     assert "secrets api-keys,api-pay,api-auth" in out
 

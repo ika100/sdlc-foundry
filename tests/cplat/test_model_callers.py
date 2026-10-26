@@ -48,11 +48,12 @@ def alt_model(monkeypatch, name, services, app, pins=None):
     """model.<name> answers with a model built from `services` / `app` whatever the files say; returns the calls."""
     mod = model()
     calls = []
+    build = mod.build  # the original, before `name` (possibly "build" itself) is replaced
 
     def replaced(*args, **kwargs):
         calls.append((args, kwargs))
         system = args[0].name if isinstance(args[0], Path) else args[0]
-        return mod.build(system, copy.deepcopy(services), copy.deepcopy(app), pins=pins)
+        return build(system, copy.deepcopy(services), copy.deepcopy(app), pins=pins)
     monkeypatch.setattr(mod, name, replaced)
     return calls
 
