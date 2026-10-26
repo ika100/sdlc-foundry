@@ -102,7 +102,8 @@ def test_headless_adds_plugin_dir_and_a_read_rule_per_path(repo, tmp_path, capsy
     cmd = shlex.split([ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("claude ")][0])
     assert [cmd[i + 1] for i, c in enumerate(cmd) if c == "--plugin-dir"] == [str(a), str(b)]
     settings = json.loads(cmd[cmd.index("--settings") + 1])
-    assert settings["permissions"] == {"allow": [f"Read(/{a}/**)", f"Read(/{b}/**)"]}   # spec 111 adds disableClaudeAiConnectors
+    assert settings == {"permissions": {"allow": [f"Read(/{a}/**)", f"Read(/{b}/**)"]},
+                        "disableClaudeAiConnectors": True}   # spec 111 (AC-111.4) adds the connector switch to the one --settings JSON
 
 
 def test_headless_refuses_a_plugin_dir_without_manifest(repo, tmp_path, monkeypatch):
