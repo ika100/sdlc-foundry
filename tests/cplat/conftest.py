@@ -4,7 +4,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "cplat"))
 
-import pytest  # noqa: E402
+import pytest
+from sharding import (  # noqa: F401  (spec 112: --shard / --shard-report)
+    pytest_addoption,
+    pytest_collection_modifyitems,
+    pytest_configure,
+    pytest_report_collectionfinish,
+    pytest_runtest_logreport,
+    pytest_sessionfinish,
+    pytest_sessionstart,
+    pytest_testnodedown,
+)
 
 
 @pytest.fixture(autouse=True)
