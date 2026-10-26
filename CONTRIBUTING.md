@@ -91,7 +91,7 @@ The sign-off e-mail must be the commit's author or committer e-mail (use your Gi
 
 ## Releases
 
-Maintainers release: move `[Unreleased]` under a new `## [x.y.z] - date` heading in `docs/CHANGELOG.md` (the platform version is read from the first such heading), make sure plugin and marketplace versions match, merge, tag `vX.Y.Z` and publish a GitHub release with the changelog section as notes.
+Maintainers release: move `[Unreleased]` under a new `## [x.y.z] - date` heading in `docs/CHANGELOG.md` (the platform version is read from the first such heading), make sure plugin and marketplace versions match, merge, tag `vX.Y.Z` and publish a GitHub release with the changelog section as notes. `/component:release` refuses in this repo (it has no release role); this section is the procedure.
 
 ## CI cost
 

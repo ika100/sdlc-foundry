@@ -16,7 +16,7 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 | `plugins/<name>/commands/*.md` | Slash commands (description frontmatter + body using `$ARGUMENTS`). Commands stay thin: they run `cplat <command>` (the launcher in `plugins/shared/bin/`, which runs `scripts/cplat`) and relay its output. |
 | `plugins/<name>/hooks/hooks.json` | Plugin-scoped hooks (e.g. the SessionStart hook that checks devbox and runs `devbox install`). |
 | `plugins/<name>/settings.json` | Plugin-scoped permission allowlists. |
-| `shapes.yml` | The shape registry: one entry per template/plugin pair, validated by `scripts/shapes.py check`. |
+| `shapes.yml` | The shape registry: one entry per template/plugin pair, validated by `scripts/shapes.py check`. The `platform` entry has no template: this repo declares `shape: platform` in the committed `.platform-settings.yml` (ADR-056). |
 | `templates/<shape>/` | Copier templates: `service-python`, `library-python`, `service-java`, `service-go`, `web-nextjs`, `gitops-app`. Only `*.jinja` files are rendered in the newer templates (see each `copier.yml`). |
 | `scripts/cplat/` | The tested CLI behind the commands (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`, `feedback`). |
 | `scripts/*.py`, `scripts/ci-local.sh` | Repository checks: shape registry, pinned Actions, Markdown links, local CI. |
@@ -31,7 +31,7 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 - **Bump versions in both places.** When a plugin changes, update both `marketplace.json` and `plugins/<name>/.claude-plugin/plugin.json`. Use semver — major bump only for breaking changes consumers must react to (renamed commands, removed agents).
 - **Template Jinja gotcha.** GitHub Actions uses `${{ var }}` syntax, which Copier (Jinja) would otherwise interpret. The escape pattern is `${{ '{{' }} var {{ '}}' }}` — already applied in the existing CI workflows. Don't unescape it.
 - **Don't put project-specific content in plugin agents.** Agents are shared across repos. Anything project-specific belongs in the Copier template (which gets parameterised per-repo) or in the consumer's own `CLAUDE.md`.
-- **Platform changes start with a spec.** Run `/component:spec <description>` here (no shape needed for spec, plan, verify), write an ADR for decisions that outlive the change, and keep `cplat spec check` green.
+- **Platform changes start with a spec.** Run `/component:spec <description>` here (the repo declares `shape: platform`, so spec, plan, build, verify and ship work as in a component repo; releases follow CONTRIBUTING.md, Releases), write an ADR for decisions that outlive the change, and keep `cplat spec check` green.
 - **Wait for CI with `cplat pr wait <pr> [-R owner/repo] [--merge]`** (spec 079), never a hand-written polling loop: it reports each check, stops at the first red one and reruns stuck or transient runs once.
 - **No backwards-compat hacks for old marketplace ref.** When breaking, ship a new major version and document the migration in `docs/CHANGELOG.md`.
 
