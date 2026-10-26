@@ -1,6 +1,6 @@
 ---
-title: "Your first product"
-description: "Install the plugins, check your setup and create a first product in about fifteen minutes."
+title: "Your first system"
+description: "Install the plugins, check your setup and create a first system in about fifteen minutes."
 ---
 
 <p class="lead">You need Claude Code, a GitHub account and a few tools. Everything else is created for you.</p>
@@ -23,39 +23,40 @@ In Claude Code:
 
 ```text
 /plugin marketplace add ika100/sdlc-foundry
-/plugin install shared@sdlc-foundry
-/plugin install svc@sdlc-foundry
-/plugin install gitops@sdlc-foundry
+/plugin install system@sdlc-foundry
+/plugin install component@sdlc-foundry
+/plugin install instance@sdlc-foundry
+/plugin install platform@sdlc-foundry
 ```
 
-Add `web`, `svc-java`, `svc-go` and `app` for the shapes you use. After installing or updating plugins, **restart Claude Code**: a running session keeps the old prompts.
+Add `resource`, `api`, `issue`, `web`, `svc-java` and `svc-go` for the shapes you use. After installing or updating plugins, **restart Claude Code**: a running session keeps the old prompts.
 
 ## 3. Check your setup
 
 ```text
-/shared:doctor
+/platform:doctor
 ```
 
 It checks the tools above, `gh` scopes, Docker, your kube context (and warns when it is not local), plugin versions and the platform version of the current repository, and prints a concrete fix for every problem.
 
-## 4. Create the product
+## 4. Create the system
 
 ```text
-/shared:new-service shop Product GitOps repo --gitops
-/shared:new-service shop-api Catalog and orders API --type service-java
-/shared:new-service shop-web Storefront --web
+/system:new shop.yml
+/component:new shop-api Catalog and orders API --lang java --system you/shop
+/component:new shop-web Storefront --type website --system you/shop
 ```
 
-Each command shows what it will do and asks before anything outward-facing (creating the GitHub repository, pushing). The default shape is `service-python`; `--type` picks any registered [shape](/sdlc-foundry/reference/shapes/).
+Each command shows what it will do and asks before anything outward-facing (creating the GitHub repository, pushing). `/system:new` reads a manifest and creates the GitOps repository with its `system.yaml` plus a repository per component. The default is a Python service; `--type` and `--lang` pick the kind and language of a component; the registered [shapes](/sdlc-foundry/reference/shapes/) decide the template.
 
-## 5. Build, compose, run
+## 5. Build, add, run
 
-1. In a service repository: `/svc:spec <what you want>`, then `/svc:plan <NNN>` and `/svc:build <NNN>` (or `/svc:quick-task` for a small change). See [Build a feature](/sdlc-foundry/scenarios/build-a-feature/).
-2. When CI has published the first image: `/gitops:compose add shop-api` in the GitOps repository, then merge the pull request.
+1. In a component repository: `/component:spec <what you want>`, then `/component:plan <NNN>` and `/component:build <NNN>` (or `/component:fix` for a bug). See [Build a feature](/sdlc-foundry/scenarios/build-a-feature/).
+2. When CI has published the first image: `/component:add shop-api` in the GitOps repository, then merge the pull request.
 3. [Run it on your laptop](/sdlc-foundry/get-started/local-cluster/).
 
 ## Where to go next
 
 - The whole story with every command: [User journey](/sdlc-foundry/guides/user-journey/).
 - Concepts in five minutes: [Concepts](/sdlc-foundry/concepts/).
-- Something broke: [Troubleshooting](/sdlc-foundry/guides/adopting/#troubleshooting) or `/shared:report-issue`.
+- Something broke: [Troubleshooting](/sdlc-foundry/guides/adopting/#troubleshooting) or `/issue:report`.

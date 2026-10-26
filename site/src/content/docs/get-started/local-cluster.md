@@ -16,8 +16,8 @@ devbox run cluster-down    # removes the cluster and its registry
 1. Creates (or reuses) a k3d cluster named `<app>-local` on a pinned k3s image, mapping port `8088` to the Gateway, or the next free port when 8088 is taken (it says which; `LOCAL_HTTP_PORT=<port>` forces one).
 2. Enables the Gateway API on k3s' built-in Traefik, so `HTTPRoute`s work and `*.localhost` host names resolve without any DNS setup.
 3. Installs ArgoCD, hands it read access to your private GitOps repository, pre-creates the `<app>-dev`, `-staging` and `-prod` namespaces with an image pull secret for GHCR, and applies the root Application.
-4. Installs only what your declarations need: External Secrets Operator, CloudNativePG (if `addons.postgres`), Kyverno (if `policies:`), a Grafana dev stack (if `observability: {ui: lgtm}`).
-5. Prints the URLs of exposed services and of Grafana.
+4. Installs only what your declarations need: External Secrets Operator, CloudNativePG (if the system declares the postgres resource), Kyverno (if an environment has a `policy`), a Grafana dev stack (if an environment sets `observability: {ui: lgtm}`).
+5. Prints the URLs of exposed components and of Grafana.
 
 Then watch it converge:
 
@@ -26,7 +26,7 @@ kubectl --context k3d-<app>-local -n argocd get applications
 kubectl --context k3d-<app>-local -n <app>-dev get pods
 ```
 
-or use `/shared:status` for one table.
+or use `/system:status` for one table.
 
 ## Credentials
 
