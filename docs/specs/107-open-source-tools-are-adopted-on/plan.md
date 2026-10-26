@@ -13,14 +13,14 @@ tasks:
     covers: [AC-107.2, AC-107.9, AC-107.10]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: --recall — full suite after the session, a deselected failing test fails the arm's record
     files: [scripts/cplat/runs_bench.py]
     covers: [AC-107.3]
     parallel_safe: false
     depends_on: [t1]
-    done: false
+    done: true
   - id: t3
     title: Evaluation index and ADR record format (docs/evaluations.md, ADR index rows)
     files: [docs/evaluations.md, docs/adr/README.md]
