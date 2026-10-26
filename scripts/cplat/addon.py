@@ -1,30 +1,25 @@
-"""`addon`: declare backing services (addons) of a gitops-app application in app.yaml (ADR-020).
+"""`resource add|remove`: declare the system's database resource (postgres) in system.yaml (ADR-020, ADR-054).
 
-`addon add postgres` writes the entry; services then opt in with `compose add --uses postgres` (or `uses: [postgres]`).
-The addon's implementation (CloudNativePG today) is not visible to services.
+`resource add postgres` writes `resources.postgres`; components then opt in with `component set --uses postgres`
+(or `uses: [postgres]`). The implementation (CloudNativePG today) is not visible to components.
+Observability is not a resource in 5.0: it is set per environment under `environments.<env>.observability`.
 """
 from __future__ import annotations
 
 import argparse
-import io
 from pathlib import Path
 
 import gitops
 from core import PlatformError, Report
 
-KNOWN = {
-    "postgres": {"version": 17, "instances": {"dev": 1, "prod": 3}, "storage": {"dev": "1Gi", "prod": "20Gi"}},
-    "observability": {"ui": "none"},   # OpenTelemetry collector per environment; `ui: lgtm` adds a local Grafana stack
-}
+DEFAULT = {"type": "database", "version": 17, "replicas": 1, "storage": "1Gi", "instances": {"prod": {"replicas": 3, "storage": "20Gi"}}}
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat addon", description=__doc__)
-    p.add_argument("action", choices=["add", "remove", "list"])
-    p.add_argument("name", nargs="?", help="addon name: " + ", ".join(KNOWN))
-    p.add_argument("--version", help="addon version (postgres: major version)")
-    p.add_argument("--ui", choices=["none", "lgtm"], help="observability: optional UI stack (lgtm = Grafana, Tempo, Loki, Prometheus in one dev pod)")
-    p.add_argument("--export-to", metavar="URL", help="observability: OTLP/HTTP endpoint of your own backend")
+    p = argparse.ArgumentParser(prog="cplat resource", description=__doc__)
+    p.add_argument("action", choices=["add", "remove"])
+    p.add_argument("name", help="resource name: postgres")
+    p.add_argument("--version", help="postgres major version")
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--pr", action="store_true")
@@ -33,56 +28,37 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def load_cfg(app_dir: Path):
-    y = gitops._yaml()
-    f = app_dir / "app.yaml"
-    data = y.load(f.read_text()) if f.is_file() else None
-    if data is None:
-        from ruamel.yaml.comments import CommentedMap
-        data = CommentedMap()
-    return y, data, f
-
-
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
     repo = Path(ns.repo_dir).resolve()
     app_dir = gitops.find_app(repo, ns.app)
-    y, data, f = load_cfg(app_dir)
-    declared = data.get("addons") or {}
-    r = Report(title=f"addon {ns.action} {ns.name or ''} ({app_dir.name})".replace("  ", " "))
+    if ns.name == "observability":
+        raise PlatformError("observability is set per environment under environments.<env>.observability in system.yaml",
+                            hint="nothing was changed; edit system.yaml and run `devbox run render`")
+    if ns.name != "postgres":
+        raise PlatformError(f"unknown resource '{ns.name}': 5.0 supports one database resource named postgres")
+    y, data = gitops.load(app_dir)
+    declared = data.get("resources") or {}
+    r = Report(title=f"resource {ns.action} {ns.name} ({app_dir.name})")
 
-    if ns.action == "list":
-        r.did += [f"{n}: {dict(v) if v else {}}" for n, v in declared.items()] or ["no addons declared (available: " + ", ".join(KNOWN) + ")"]
-        r.emit(False, ns.json)
-        return 0
-    if ns.name not in KNOWN:
-        raise PlatformError(f"unknown addon '{ns.name}'", hint="available: " + ", ".join(KNOWN))
     if ns.action == "add":
         if ns.name in declared:
-            raise PlatformError(f"{ns.name} is already declared", hint="edit its settings in app.yaml")
-        entry = dict(KNOWN[ns.name])
+            raise PlatformError(f"{ns.name} is already declared", hint="edit its settings in system.yaml")
+        entry = {k: v for k, v in DEFAULT.items()}
+        entry["instances"] = {e: dict(v) for e, v in DEFAULT["instances"].items()}
         if ns.version:
             entry["version"] = int(ns.version) if ns.version.isdigit() else ns.version
-        if ns.name == "observability":
-            if ns.ui and ns.export_to:
-                raise PlatformError("choose either --ui or --export-to")
-            if ns.ui:
-                entry["ui"] = ns.ui
-            if ns.export_to:
-                entry["exportTo"] = ns.export_to
-        elif ns.ui or ns.export_to:
-            raise PlatformError("--ui and --export-to apply to the observability addon")
-        r.will_do.append(f"declare {ns.name} {entry} in app.yaml")
+        r.will_do.append(f"declare {ns.name} {entry} in system.yaml")
     else:
         if ns.name not in declared:
             raise PlatformError(f"{ns.name} is not declared")
-        using = [s["name"] for s in gitops.services_of(gitops.load(app_dir)[1]) if ns.name in (s.get("uses") or [])]
+        using = [n for n, c in gitops.components_of(data).items() if ns.name in ((c or {}).get("uses") or [])]
         if using:
             raise PlatformError(f"still used by {', '.join(using)}", hint="remove it from their `uses:` first")
-        r.will_do.append(f"remove {ns.name} from app.yaml; the Argo Application disappears but the database and its data stay in the cluster (delete them by hand when you are sure)")
+        r.will_do.append(f"remove {ns.name} from system.yaml; the Argo Application disappears but the database and its data stay in the cluster (delete them by hand when you are sure)")
     r.will_do.append("regenerate manifests (render.py)")
     if ns.pr:
-        r.will_do.append("[outward] open a pull request (branch addon/…)")
+        r.will_do.append("[outward] open a pull request (branch resource/…)")
     if ns.dry_run:
         r.emit(True, ns.json)
         return 0
@@ -90,25 +66,21 @@ def main(argv: list[str]) -> int:
     gitops.require_clean(repo)
     from ruamel.yaml.comments import CommentedMap
     if ns.action == "add":
-        if data.get("addons") is None:
-            data["addons"] = CommentedMap()
-        data["addons"][ns.name] = entry
+        if data.get("resources") is None:
+            data["resources"] = CommentedMap()
+        data["resources"][ns.name] = entry
     else:
-        del data["addons"][ns.name]
-        if not data["addons"]:
-            del data["addons"]
-    buf = io.StringIO()
-    y.dump(data, buf)
-    f.write_text(buf.getvalue())
+        del data["resources"][ns.name]
+        if not data["resources"]:
+            del data["resources"]
+    gitops.save(app_dir, y, data)
     gitops.render(repo)
-    r.did.append(f"updated app.yaml and regenerated {len(gitops.rendered_changes(repo))} file(s)")
+    r.did.append(f"updated system.yaml and regenerated {len(gitops.rendered_changes(repo))} file(s)")
     if ns.pr:
-        r.did.append("opened " + gitops.open_pr(repo, f"addon/{ns.action}-{ns.name}", f"feat(addon): {ns.action} {ns.name}", f"`/gitops:addon {ns.action} {ns.name}`. Generated files regenerated by `devbox run render`."))
-    if ns.action == "add" and ns.name == "observability":
-        r.next_steps.append("every service now gets OTEL_* variables pointing at the environment's otel-collector; add services with `/gitops:compose add` so they declare their `metrics:` path")
-        r.next_steps.append("`ui: lgtm` (local Grafana at http://grafana.localhost:8088 after `devbox run cluster-up`) or `exportTo: <your OTLP/HTTP backend>` decides where telemetry goes; without either the collector only logs it")
-    elif ns.action == "add":
-        r.next_steps.append(f"let services use it: `/gitops:compose add <service> --uses {ns.name}` (or `uses: [{ns.name}]` in services.yaml)")
+        r.did.append("opened " + gitops.open_pr(repo, f"resource/{ns.action}-{ns.name}", f"feat(resource): {ns.action} {ns.name}",
+                                                f"`/resource:{ns.action} {ns.name}`. Generated files regenerated by `devbox run render`."))
+    if ns.action == "add":
+        r.next_steps.append(f"let components use it: `/component:set <component> --uses {ns.name}` (or `uses: [{ns.name}]` in system.yaml)")
         r.next_steps.append("the operator must exist in the cluster: `devbox run cluster-up` installs it locally; real clusters need CloudNativePG installed by the cluster owner")
     r.undo.append("git checkout -- . && git clean -fd applications")
     r.emit(False, ns.json)
