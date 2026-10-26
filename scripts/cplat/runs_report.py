@@ -294,7 +294,7 @@ def render_text(agg: dict) -> str:
         lines.append("Validation checks per rule: " + "; ".join(
             f"{rule} " + ", ".join(f"{d} {n}" for d, n in counts.items()) for rule, counts in validation["rules"].items()))
         lines.append(f"Validation misses per rule: {_pairs(validation['misses'])}")
-    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
+    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat platform runs flush)")
     return "\n".join(lines)
 
 
@@ -508,5 +508,5 @@ def render_agents_text(agg: dict) -> str:
         lines.append(f"  causes: {causes}")
     if not agg["rows"]:
         lines.append("  none")
-    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
+    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat platform runs flush)")
     return "\n".join(lines)

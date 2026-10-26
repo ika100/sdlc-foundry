@@ -7,7 +7,7 @@
   "workflows": {
     "quick-task": {
       "task_version": 3,
-      "prompt": "/svc:quick-task Make GET /todos answer with the response header `Cache-Control: no-store`. Change only src/todo_api/todos/router.py (add the header to the JSONResponse of list_todos) and add one test for it in tests/test_todos_api.py. No new dependency.",
+      "prompt": "/component:fix Make GET /todos answer with the response header `Cache-Control: no-store`. Change only src/todo_api/todos/router.py (add the header to the JSONResponse of list_todos) and add one test for it in tests/test_todos_api.py. No new dependency.",
       "max_runs": 1,
       "max_minutes": 30
     },
@@ -20,11 +20,11 @@
       "steps": [
         {
           "name": "plan",
-          "prompt": "/svc:plan 900"
+          "prompt": "/component:plan 900"
         },
         {
           "name": "build",
-          "prompt": "/svc:build 900"
+          "prompt": "/component:build 900"
         }
       ]
     },
@@ -32,7 +32,7 @@
       "task_version": 4,
       "spec_file": "spec-900.md",
       "spec_id": "900-count-todos-with-get-todos-count",
-      "prompt": "/svc:ship 900",
+      "prompt": "/component:ship 900",
       "max_runs": 4,
       "max_minutes": 240
     }

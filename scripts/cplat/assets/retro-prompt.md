@@ -14,7 +14,7 @@ Read both. Then write exactly one file, `proposals.json`, in this directory. For
     {"title": "One line, at most 100 characters",
      "problem": "At most five sentences.",
      "priority": "P0, P1 or P2",
-     "spec_line": "One line, at most 200 characters: what to pass to /svc:spec",
+     "spec_line": "One line, at most 200 characters: what to pass to /component:spec",
      "evidence": [{"ref": "escalations.platform.reason1", "value": 3}],
      "covers": null}
   ],

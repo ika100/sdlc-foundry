@@ -1,4 +1,4 @@
-"""`cplat runs usage <run_id> | --session <id> [--json]` (spec 099, ADR-035): tokens and estimated cost of one run or session."""
+"""`cplat platform runs usage <run_id> | --session <id> [--json]` (spec 099, ADR-035): tokens and estimated cost of one run or session."""
 from __future__ import annotations
 
 import argparse
@@ -36,7 +36,7 @@ def _find(run_id: str) -> dict | None:
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat runs usage", description="Tokens and estimated cost of one run or session.")
+    ap = argparse.ArgumentParser(prog="cplat platform runs usage", description="Tokens and estimated cost of one run or session.")
     ap.add_argument("run_id", nargs="?")
     ap.add_argument("--session", metavar="ID")
     ap.add_argument("--json", action="store_true")

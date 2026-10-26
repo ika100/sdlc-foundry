@@ -151,8 +151,8 @@ def render_body(alert: Alert, *, gitops_repo: str, closed: Issue | None = None, 
         repo, reason = intended
         parts += ["## Intended repo",
                   f"This alert belongs to {_line(repo)}, but the poll's credential cannot write issues there: {_line(reason)}.",
-                  "Set the ALERTS_TOKEN secret (`cplat doctor` shows how).", ""]
-    parts += ["_Filed automatically by the alert poll (spec 092). Secrets were removed. Route it with /shared:triage._", "",
+                  "Set the ALERTS_TOKEN secret (`cplat platform doctor` shows how).", ""]
+    parts += ["_Filed automatically by the alert poll (spec 092). Secrets were removed. Route it with /issue:triage._", "",
               f"Signature: {alert.signature}"]
     return "\n".join(parts)
 

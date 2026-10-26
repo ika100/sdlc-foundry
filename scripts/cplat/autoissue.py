@@ -522,7 +522,7 @@ def _off_lines(draft: Draft, repo: str) -> list[str]:
     title, body = render(draft)
     lines = [f"## Draft issue for {repo}", "", f"**{title}**   (labels: {', '.join(draft.label_list())})", ""]
     lines += body.splitlines()
-    lines += ["", "Automatic filing is off (CPLAT_AUTO_ISSUES=off); nothing was sent. Run /shared:report-issue to file it; nothing is sent without your OK."]
+    lines += ["", "Automatic filing is off (CPLAT_AUTO_ISSUES=off); nothing was sent. Run /issue:report to file it; nothing is sent without your OK."]
     return lines
 
 

@@ -6,7 +6,7 @@ Public API for the callers (ship, pr wait, headless, doctor) and for later specs
   phase / ci_round / rerun / event / set_section / add_to / filed    change it in place (never raise, print nothing)
   finish(run_id, outcome, escalation=, fields=)                      redact, buffer, flush; at most one stderr line
   flush(budget=, strict=) -> FlushResult                             buffer (and pending filings) -> store
-  store_status() / buffered_count() / pending_count()                for `cplat doctor`
+  store_status() / buffered_count() / pending_count()                for `cplat platform doctor`
   attach_point(repo) / link_parent(run_id)                           nested runs and headless parents
   current(repo_dir) -> run_id | None                                 the recorded run a command in repo_dir runs inside
   init(slug)                                                         create the private store repo
@@ -18,12 +18,12 @@ A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (o
   mutate(run_id, change) -> "ok"|"none"|"error" / current_run(repo) / mark_incomplete(run_id, section, problem)
                                                                      hooks for agent metrics (spec 089, runs_agents)
 
-  cplat runs init <owner/name> | flush | report [--json] [--since DAYS] [--repo R]
+  cplat platform runs init <owner/name> | flush | report [--json] [--since DAYS] [--repo R]
               [--agents [--by-version] [--agent NAME] [--shape SHAPE] | --benchmarks]
-  cplat runs begin <kind> [--spec S] [--budget KEY=VALUE] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
-  cplat runs agent <event> ...                                       agent metrics of the current run (spec 089)
-  cplat runs usage <run_id> | --session <id> [--json]                tokens and estimated cost per run (spec 099)
-  cplat runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR] fixed task on the sample repo (spec 099)
+  cplat platform runs begin <kind> [--spec S] [--budget KEY=VALUE] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
+  cplat platform runs agent <event> ...                                       agent metrics of the current run (spec 089)
+  cplat platform runs usage <run_id> | --session <id> [--json]                tokens and estimated cost per run (spec 099)
+  cplat platform runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR] fixed task on the sample repo (spec 099)
 
 Usage (spec 099, ADR-035): `start` registers the Claude Code session as a claim, `finish` adds the `usage` section
 from the local transcripts (runs_usage) and fills missing `gates` of ship / build runs with "not run".
@@ -321,7 +321,7 @@ def attach_point(repo_dir: Path) -> str | None:
 def current(repo_dir: Path) -> str | None:
     """The recorded run a command in repo_dir runs inside (spec 088), or None.
 
-    Candidates in order: the repo's ship run, the `cplat runs begin` pointer, $CPLAT_RUN_PARENT. The first one with an
+    Candidates in order: the repo's ship run, the `cplat platform runs begin` pointer, $CPLAT_RUN_PARENT. The first one with an
     active record wins. Never raises."""
     try:
         candidates: list[str | None] = [attach_point(repo_dir)]
@@ -694,10 +694,10 @@ def flush(*, budget: float = BUDGET_SECONDS, strict: bool = False) -> FlushResul
     deadline = monotonic() + budget
     slug = configured_repo()
     if slug is None:
-        res = _result(None, "unset", "no run store: set CPLAT_RUNS_REPO=<owner/name>, see cplat runs init")
+        res = _result(None, "unset", "no run store: set CPLAT_RUNS_REPO=<owner/name>, see cplat platform runs init")
         if strict:
             raise PlatformError("no run store configured (CPLAT_RUNS_REPO is not set)",
-                                hint="cplat runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
+                                hint="cplat platform runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
         return res
     store = open_store(slug)
 
@@ -768,7 +768,7 @@ def store_status(timeout: float = 10.0) -> StoreStatus:
 def init(slug: str) -> list[str]:
     """Create the private store repo if it is missing; raises PlatformError for a public repo or a gh failure."""
     if not _SLUG_RE.match(slug or ""):
-        raise PlatformError(f"`{slug}` is not owner/name", hint="cplat runs init <owner/name>")
+        raise PlatformError(f"`{slug}` is not owner/name", hint="cplat platform runs init <owner/name>")
     store = open_store(slug)
     lines = []
     try:
@@ -807,11 +807,11 @@ def _report(ns: argparse.Namespace) -> int:
     if ns.benchmarks and ns.agents:
         raise PlatformError("--benchmarks and --agents cannot be combined", hint="run them as two reports")
     if not ns.agents and (ns.by_version or ns.agent or ns.shape):
-        raise PlatformError("--by-version, --agent and --shape need --agents", hint="cplat runs report --agents ...")
+        raise PlatformError("--by-version, --agent and --shape need --agents", hint="cplat platform runs report --agents ...")
     slug = configured_repo()
     if slug is None:
         raise PlatformError("no run store configured (CPLAT_RUNS_REPO is not set)",
-                            hint="cplat runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
+                            hint="cplat platform runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
     store = open_store(slug)
     now = utcnow()
     days = [now.date() - datetime.timedelta(days=n) for n in range(ns.since, -1, -1)]
@@ -847,7 +847,7 @@ def _positive(text: str) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat runs", description="Private run records (spec 087, ADR-032).")
+    p = argparse.ArgumentParser(prog="cplat platform runs", description="Private run records (spec 087, ADR-032).")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init", help="create the private run store repo").add_argument("slug", help="owner/name")
     sub.add_parser("flush", help="write the local buffer to the store")

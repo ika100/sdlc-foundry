@@ -211,7 +211,7 @@ def render_public_section(checked: Checked) -> str:
         cov = p.get("covers")
         tail = f" — amends spec {cov['spec']}" if cov and "spec" in cov else f" — see #{cov['issue']}" if cov else ""
         lines += [f"{p['rank']}. **{p['title']}** ({p['priority']}){tail}", f"   {p['problem']}",
-                  f"   Evidence: {_evidence_text(p)}", f"   `/svc:spec {p['spec_line']}`"]
+                  f"   Evidence: {_evidence_text(p)}", f"   `/component:spec {p['spec_line']}`"]
     if not checked.specs:
         lines.append("none")
     lines.append("## Agent prompt proposals")

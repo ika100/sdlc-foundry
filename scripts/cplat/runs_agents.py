@@ -7,7 +7,7 @@ Contract: docs/specs/089-agent-quality-is-measured-per-agent-and/design.md.
 Every public function takes `run_id` first (None, unknown or finished: no-op), never raises and prints nothing.
 A malformed argument marks the run's agent metrics incomplete (runs.mark_incomplete) and records nothing else.
 
-  cplat runs agent spawned|merged|conflict|conflict-outcome|replan|fix-round|findings|tester ...   (always exit 0)
+  cplat platform runs agent spawned|merged|conflict|conflict-outcome|replan|fix-round|findings|tester ...   (always exit 0)
 """
 from __future__ import annotations
 
@@ -541,7 +541,7 @@ class _Parser(argparse.ArgumentParser):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = _Parser(prog="cplat runs agent", description="Record an agent signal in the current run (spec 089).")
+    p = _Parser(prog="cplat platform runs agent", description="Record an agent signal in the current run (spec 089).")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def add(name: str) -> argparse.ArgumentParser:
