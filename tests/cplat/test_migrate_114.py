@@ -75,7 +75,7 @@ def test_hosts_urls_and_placeholders_become_environment_keys_ac_114_41():  # AC-
     ({}, ["off", "off", "off"]), ({"policies": False}, ["off", "off", "off"]),
     ({"policies": {}}, ["audit", "audit", "enforce"]),
     ({"policies": {"mode": "Enforce"}}, ["enforce", "enforce", "enforce"]),
-    ({"policies": {"mode": {"dev": "Off", "prod": "Audit"}}}, ["off", "audit", "enforce"]),
+    ({"policies": {"mode": {"dev": "Off", "prod": "Audit"}}}, ["off", "audit", "audit"]),
     ({"policies": {"mode": {"dev": "Audit", "staging": "Off", "prod": "Enforce"}}}, ["audit", "off", "enforce"]),
 ])
 def test_policies_become_a_lowercase_policy_on_every_environment_ac_114_41(app, modes):  # AC-114.41

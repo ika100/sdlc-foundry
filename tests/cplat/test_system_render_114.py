@@ -486,6 +486,8 @@ def test_the_postgres_resource_renders_the_4x_cluster_ac_114_19(tmp_path):  # AC
 def test_the_resource_defaults_are_the_4x_defaults_ac_114_19(tmp_path):  # AC-114.19
     doc = tiny(uses=["postgres"])
     doc["resources"] = {"postgres": {"type": "database"}}
+    for e in doc["environments"].values():   # 4.x without `policies:` renders no policy; absent policy is audit in 5.0 (AC-114.7)
+        e["policy"] = "off"
     app4 = {"hosts": {"dev": "{service}.{app}-dev.localhost"}, "addons": {"postgres": {}}}
     svc4 = {"services": [{"name": "api", "repo": "acme/api", "shape": "service-python", "image": "ghcr.io/acme/api", "port": 8080,
                           "probes": dict(PROBES), "uses": ["postgres"], "environments": ["dev"]}]}
@@ -561,7 +563,7 @@ def test_a_dev_pin_changes_only_the_overlay_never_system_yaml_ac_114_20(tmp_path
 def test_cluster_names_and_labels_are_the_4x_ones_ac_114_21(tmp_path):  # AC-114.21
     g = same_as_4x(tmp_path, FULL5, FULL4_APP, FULL4_SERVICES)
     sets = {d["metadata"]["name"]: d for d in docs(tmp_path / "v5" / f"{APP}/applicationset.yaml")}
-    assert sorted(sets) == ["shop-dev", "shop-prod", "shop-staging"]
+    assert {"shop-dev", "shop-prod", "shop-staging"} <= set(sets)   # the addon/policy sets are checked by same_as_4x
     assert sets["shop-staging"]["spec"]["template"]["metadata"]["name"] == "{{name}}-staging"
     assert sets["shop-staging"]["spec"]["template"]["spec"]["destination"]["namespace"] == "shop-staging"
     assert "shop-postgres-app" in g[f"{APP}/overlays/dev/shop-api/deployment.yaml"]

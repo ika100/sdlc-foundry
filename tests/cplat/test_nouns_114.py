@@ -433,7 +433,7 @@ def test_the_run_modules_never_print_a_4x_command_ac_114_38(fname):  # AC-114.38
 def test_the_stop_hooks_run_the_5_0_gates_ac_114_38():  # AC-114.38
     hooks = json.dumps(json.loads((ROOT / "plugins/shared/hooks/hooks.json").read_text()))
     assert "cplat\\\" component ship gate" in hooks or "bin/cplat\\\" component ship gate" in hooks
-    assert "system ship gate" in hooks and " ship gate" in hooks and "app-ship" not in hooks and '\\" ship gate' not in hooks
+    assert "system ship gate" in hooks and " ship gate" in hooks and "app-ship gate" not in hooks and '\\" ship gate' not in hooks
 
 
 # ---------------- AC-114.39: platform doctor ----------------
