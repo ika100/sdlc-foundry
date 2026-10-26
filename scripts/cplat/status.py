@@ -6,13 +6,10 @@ import json
 import re
 from pathlib import Path
 
-import yaml
-
 import core
 import gitops
+import model
 from core import PlatformError, Report, run
-
-ENVS = gitops.ENVS
 
 
 def sh(cmd: list[str]) -> str | None:
@@ -25,13 +22,7 @@ def sh(cmd: list[str]) -> str | None:
 
 
 def pinned_tag(app_dir: Path, env: str, name: str) -> str | None:
-    f = app_dir / "overlays" / env / name / "kustomization.yaml"
-    if not f.is_file():
-        return None
-    for img in (yaml.safe_load(f.read_text()) or {}).get("images", []):
-        if img.get("newTag"):
-            return img["newTag"]
-    return None
+    return model.read_pin(app_dir, env, name)
 
 
 def ci_state(slug: str) -> str:
@@ -84,30 +75,29 @@ def pin_prs(repo: Path) -> dict[str, str]:
 
 def collect(repo: Path, app: str | None, context: str | None) -> tuple[str, list[dict]]:
     app_dir = gitops.find_app(repo, app)
-    data = yaml.safe_load((app_dir / "services.yaml").read_text()) or {}
+    m = model.load_dir(app_dir)
     argo = argo_state(context)
     pins = pin_prs(repo)
     latest = core.platform_version()
+    miss = "-" if not context else "missing"
     rows = []
-    for s in data.get("services") or []:
-        envs = s.get("environments") or ["dev"]
-        ci = ci_state(s["repo"]) if s.get("repo") else "?"
-        plat = platform_of(s["repo"], latest) if s.get("repo") else "-"
-        for env in ENVS:
-            if env not in envs:
-                continue
-            rows.append({"service": s["name"], "env": env, "tag": pinned_tag(app_dir, env, s["name"]) or "?",
-                         "ci": ci, "argo": argo.get(f"{s['name']}-{env}", "-" if not context else "missing"),
-                         "exposed": bool(s.get("expose")), "pin_pr": pins.get(s["name"], "-") if env == "dev" else "-",
+    for c in m.components:
+        ci = ci_state(c.repo) if c.repo else "?"
+        plat = platform_of(c.repo, latest) if c.repo else "-"
+        for inst in m.instances_of(c.name):
+            inst.observed.update(argo=argo.get(inst.argo_application, miss), ci=ci)
+            rows.append({"service": c.name, "env": inst.environment, "tag": inst.tag or "?",
+                         "ci": ci, "argo": inst.observed["argo"],
+                         "exposed": bool(c.expose), "pin_pr": pins.get(c.name, "-") if inst.environment == "dev" else "-",
                          "platform": plat})
-    cfg_file = app_dir / "app.yaml"
-    declared = list(((yaml.safe_load(cfg_file.read_text()) or {}).get("addons") or {})) if cfg_file.is_file() else []
-    for name in declared:   # an addon runs in every environment where a service uses it
-        for env in ENVS:
-            if any((name == "observability" or name in (s.get("uses") or [])) and env in (s.get("environments") or ["dev"]) for s in data.get("services") or []):
-                rows.append({"service": f"{name} (addon)", "env": env, "tag": "-", "ci": "-",
-                             "argo": argo.get(f"addon-{name}-{env}", "-" if not context else "missing"), "exposed": False, "pin_pr": "-",
-                             "platform": "-"})
+    for name in m.declared_addons:   # an addon runs in every environment where a service uses it
+        if name == "observability":
+            apps = [(e.name, e.observability.argo_application) for e in m.environments if e.observability and m.instances_in(e.name)]
+        else:
+            apps = [(ri.environment, ri.argo_application) for ri in m.resource_instances_of(name)]
+        for env, app_name in apps:
+            rows.append({"service": f"{name} (addon)", "env": env, "tag": "-", "ci": "-",
+                         "argo": argo.get(app_name, miss), "exposed": False, "pin_pr": "-", "platform": "-"})
     return app_dir.name, rows
 
 

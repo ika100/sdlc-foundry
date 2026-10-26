@@ -7,9 +7,10 @@ from pathlib import Path
 from ruamel.yaml import YAML
 
 import core
+import model
 from core import PlatformError, run
 
-ENVS = ["dev", "staging", "prod"]
+ENVS = list(model.ENVIRONMENTS)
 
 
 def _yaml() -> YAML:
