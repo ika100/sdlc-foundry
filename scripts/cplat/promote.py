@@ -7,15 +7,13 @@ import re
 import sys
 from pathlib import Path
 
-import yaml
-
 import core
 import evidence
 import gitops
+import model
 import registry
 from core import PlatformError, Report, run
 
-ORDER = ["dev", "staging", "prod"]
 SEMVER = re.compile(r"^v?(\d+\.\d+\.\d+)$")
 
 
@@ -88,15 +86,6 @@ def pick_tag(svc: dict, to_env: str, ns: argparse.Namespace) -> tuple[str, str]:
     raise PlatformError(f"no release of {slug} has a published image", hint=f"cut one with /svc:release in {slug} (CI publishes X.Y.Z images on v*.*.* tags)")
 
 
-def _staging_tag(app_dir: Path, name: str) -> str | None:
-    """The newTag staging runs now (the local overlay), or None when the service is not pinned there."""
-    try:
-        doc = yaml.safe_load((app_dir / "overlays" / "staging" / name / "kustomization.yaml").read_text())
-        return str(doc["images"][0]["newTag"])
-    except (OSError, yaml.YAMLError, KeyError, IndexError, TypeError):
-        return None
-
-
 SHA_TAG = re.compile(r"^sha-[0-9a-f]{40}$")
 
 
@@ -136,9 +125,9 @@ def main(argv: list[str]) -> int:
     if ns.all and names:
         raise PlatformError("--all and explicit services are mutually exclusive")
     for e in (frm, to):
-        if e not in ORDER:
+        if e not in model.ENVIRONMENTS:
             raise PlatformError(f"unknown environment '{e}'", hint="dev, staging or prod")
-    if ORDER.index(to) <= ORDER.index(frm):
+    if model.ENVIRONMENTS.index(to) <= model.ENVIRONMENTS.index(frm):
         raise PlatformError(f"cannot promote {frm} → {to}", hint="promotion only moves forward: dev → staging → prod (dev tracks the service's main branch)")
     if to == "dev":
         raise PlatformError("dev is not a promotion target")
@@ -155,8 +144,9 @@ def main(argv: list[str]) -> int:
     y, data = gitops.load(app_dir)
     services = gitops.services_of(data)
     by_name = {s["name"]: s for s in services}
+    m = model.load_dir(app_dir)
     if ns.all:
-        names = [s["name"] for s in services if frm in (s.get("environments") or ["dev"])]
+        names = [s["name"] for s in services if m.instance(s["name"], frm)]
         if not names:
             raise PlatformError(f"no service is in {frm}")
     r = Report(title=f"promote {', '.join(names)}: {frm} → {to} ({app_dir.name})")
@@ -171,8 +161,8 @@ def main(argv: list[str]) -> int:
         svc = by_name.get(n)
         if svc is None:
             raise PlatformError(f"{n} is not in services.yaml", hint="current: " + ", ".join(by_name))
-        if frm not in (svc.get("environments") or ["dev"]):
-            raise PlatformError(f"{n} is not in {frm} yet", hint=f"promote it through the earlier environment first")
+        if m.instance(n, frm) is None:
+            raise PlatformError(f"{n} is not in {frm} yet", hint="promote it through the earlier environment first")
         tag, what = pick_tag(svc, to, ns)
         if not ns.no_verify and to == "staging":
             have = image_tags(svc["image"])
@@ -182,7 +172,7 @@ def main(argv: list[str]) -> int:
                 raise PlatformError(f"image {svc['image']}:{tag} does not exist yet", hint=f"wait for CI on {svc['repo']}'s main to finish (it publishes sha-<40> tags), or pass --sha of a built commit")
         elif not ns.no_verify and to == "prod" and tag not in image_tags(svc["image"]):
             raise PlatformError(f"image {svc['image']}:{tag} does not exist", hint=f"the release v{tag} must have been built by CI in {svc['repo']}")
-        staging_tag = _staging_tag(app_dir, n) if to == "prod" else None
+        staging_tag = (inst.tag if (inst := m.instance(n, "staging")) else None) if to == "prod" else None
         rec = None
         if to == "prod" and not ns.no_verify:
             rec = checks[n] = _check_digests(svc, staging_tag, tag)
@@ -235,10 +225,7 @@ def main(argv: list[str]) -> int:
     gitops.save(app_dir, y, data)
     gitops.render(repo)
     for n, tag in plan:  # render created the overlay at `latest`; pin the tag (render preserves it from now on)
-        k = app_dir / "overlays" / to / n / "kustomization.yaml"
-        doc = yaml.safe_load(k.read_text())
-        doc["images"][0]["newTag"] = tag
-        k.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False))
+        model.write_pin(app_dir, to, n, tag)
     gitops.render(repo)  # idempotent: proves the pin survives a re-render
     if accepted:
         r.did.append(accepted)
