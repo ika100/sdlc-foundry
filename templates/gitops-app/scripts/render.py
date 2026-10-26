@@ -108,9 +108,9 @@ MANAGED_PREFIXES = ("externalsecret-",)
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries"]
 ENV_KEYS = ["host", "url", "policy", "promote", "observability"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
-VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"), ("library", "python")]
-UNKNOWN_PAIR = ("service", "unknown")
-PAIR_TEXT = ", ".join(f"{t}/{lang}" for t, lang in VALID_PAIRS)
+VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"), ("library", "python"),
+               ("service", "unknown")]
+PAIR_TEXT = ", ".join(f"{t}/{lang}" for t, lang in VALID_PAIRS if lang != "unknown")
 COMMON_KEYS = ["type", "lang", "repo"]
 SERVICE_KEYS = [*COMMON_KEYS, "image", "port", "probes", "user", "volumes", "env", "secretRefs", "secrets", "replicas", "resources",
                 "expose", "metrics", "provides", "consumes", "uses", "instances"]
@@ -444,7 +444,7 @@ def validate_component(app_dir: Path, c: str, spec) -> dict:
     t, lang = spec.get("type"), spec.get("lang")
     if t is None or lang is None:
         fail(f"components.{c}: type and lang are required (valid: {PAIR_TEXT})")
-    if (t, lang) not in [*VALID_PAIRS, UNKNOWN_PAIR]:
+    if (t, lang) not in VALID_PAIRS:
         fail(f"components.{c}: {t}/{lang} is not a valid type/lang pair (valid: {PAIR_TEXT})")
     provides, consumes = str_list(f"components.{c}", "provides", spec.get("provides")), str_list(f"components.{c}", "consumes", spec.get("consumes"))
     base = {"name": c, "type": t, "lang": lang, "repo": spec.get("repo"), "provides": provides, "consumes": consumes}

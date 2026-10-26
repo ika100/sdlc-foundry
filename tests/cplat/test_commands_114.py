@@ -175,9 +175,11 @@ def test_resource_add_another_name_is_refused_ac_114_36(gitops5, capsys):  # AC-
 
 
 def test_resource_remove_refuses_while_used_then_removes_ac_114_36(gitops5, capsys):  # AC-114.36
-    run("component", "add", "todo-api", "--repo-dir", gitops5)
-    run("resource", "add", "postgres", "--repo-dir", gitops5)
-    run("component", "set", "todo-api", "--uses", "postgres", "--repo-dir", gitops5)
+    assert run("component", "add", "todo-api", "--repo-dir", gitops5) == 0
+    commit(gitops5)
+    assert run("resource", "add", "postgres", "--repo-dir", gitops5) == 0
+    commit(gitops5)
+    assert run("component", "set", "todo-api", "--uses", "postgres", "--repo-dir", gitops5) == 0
     commit(gitops5)
     rc, _, err = run("resource", "remove", "postgres", "--repo-dir", gitops5, capsys=capsys)
     assert rc == 1 and "todo-api" in err
