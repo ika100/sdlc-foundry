@@ -3,6 +3,7 @@ spec_id: 087-every-run-is-recorded-in-a-private-run
 title: Every run is recorded in a private run store
 status: done
 priority: P0
+tracks: [207]
 ---
 
 # 087 — Every run is recorded in a private run store
@@ -11,12 +12,15 @@ priority: P0
 
 Ship, build, headless and PR-wait runs leave no history. When a run ends, the only traces are a ship state that the next run overwrites, local headless logs and the PR. Of the last 23 specs (062–084), 18 hardened the PR→dev stretch, and each one started from a failure someone happened to notice by hand (#102–#132). Nobody can say which phase takes longest, which escalation reasons keep coming back or which CI checks keep needing reruns. Specs 088–097 (platform-failure issues, agent quality, weekly retro, smoke results, auto-promotion, fleet updates) all need a durable, comparable record of every run. That record must never land in the public platform repo and must never make a run fail.
 
+Amended 2026-10-26 (#207): the weekly retro 2026-W43 counted 29 `pr-wait` runs `failed` against 60 `done` and could not say why. Most are likely `cplat pr wait` correctly reporting a red check (spec 079), which is the CI's verdict, not a failure of the platform. A `pr-wait` record now says why it ended, and the report counts red CI apart from timeouts and tool errors.
+
 ## Stories
 
 - As the platform owner, I want every unattended or interactive run to leave one structured record in a private store, so that I can judge the platform from evidence instead of from the failures I happened to see.
 - As the platform owner, I want `cplat runs report` to show time per phase, the top escalation reasons and causes, and the rerun causes across all my repos, so that I can choose the next spec from data.
 - As a developer running `/svc:ship` offline or without the store set up, I want my run to behave exactly as before, so that recording never costs me a run.
 - As the author of a later spec (088–097), I want a stable record format with a version and room for extra sections, so that I can extend the record without breaking older records or the report.
+- As the platform owner, I want each `pr-wait` run to say whether it ended on a red check, a timeout or a tool error, so that red CI in my repos is not read as a platform failure and I see which checks go red most.
 
 ## Acceptance criteria
 
@@ -81,6 +85,21 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 - **AC-087.21** Given a run in progress, when a step records or changes an event (for example a merge-conflict event whose outcome moves from `re-planned` to `resolved`, spec 089), then nothing about the run is in the store yet. The record written at run end holds each event once, in its last state.
 - **AC-087.22** Given a run that filed an issue or added a +1 comment (spec 088), when its record is written, then `filed` holds the signature, the issue URL and the result. When the filing could not be done, the entry's result is `pending`, and the filing is kept locally with its `run_id`. Each later `cplat runs flush` or record write retries it once. When it succeeds, one follow-up line naming the `run_id`, the signature, the URL and the result is appended, and the report counts that run's filing with its final result. A retried filing is filed or +1'd at most once per run and signature.
 - **AC-087.23** Given `cplat fleet update` (spec 096), `cplat retro` (spec 090) or a product ship (spec 097), when it ends, then one record with `kind` `fleet`, `retro` or `product-ship` is appended, with the common fields above and the sections those specs define. For `product-ship`, `spec` is the product spec id and the record lists the `run_id` of each repo ship it drove.
+- **AC-087.24** Given `cplat pr wait` writes its own `pr-wait` record (AC-087.5), when the wait ends, then the record has a `pr_wait` section with a `result` and, where stated, the check names:
+  - `green`: every check passed, without `--merge`;
+  - `merged`: every check passed and the PR was merged, or it was already merged when the wait started;
+  - `red`: a check concluded red; `checks` lists the failing check names;
+  - `budget-refused`: a check went red and its rerun was refused by the run's budget (spec 102); `checks` lists the failing check names;
+  - `timeout`: checks were still pending when the timeout ran out; `checks` lists the pending check names;
+  - `no-checks`: no check was reported on the PR within the grace period;
+  - `closed`: the PR was closed without merging;
+  - `merge-failed`: every check passed but the merge was refused (for example a conflict with the base branch);
+  - `error`: the wait could not be done (`gh` missing or not logged in, the GitHub API refused or was unreachable, or an internal crash); `message` holds the redacted one-line error (AC-087.10).
+
+  The `outcome` stays as in AC-087.5: `done` for `green` and `merged`, `failed` for every other result.
+- **AC-087.25** Given `pr-wait` records in the report window, when `cplat runs report` runs, then it shows `pr-wait results:` with the count per result of AC-087.24, records without a `pr_wait` section counted as `unrecorded`, and `Red checks:` with the 5 check names most often failing in `red` and `budget-refused` results and their counts; `--json` adds the key `pr_wait` with `results` (result to count) and `red_checks` (a list of `{check, count}`).
+- **AC-087.26** Given a `pr-wait` record with result `red` or `budget-refused`, when `cplat runs report` or the weekly retro (spec 090) counts runs per kind and outcome, then it is counted under `red-ci` instead of `failed`, so the `failed` count of `pr-wait` holds only timeouts, missing checks, closed PRs, refused merges, errors and records without a `pr_wait` section; the record in the store keeps `outcome` `failed` and its `pr_wait.result`, and `red-ci` is a reader's count only, never an `outcome` value in a record.
+- **AC-087.27** Given a weekly retro (spec 090), when it is written, then it shows the `pr-wait` results of AC-087.25 for the covered week and the week before, and the top 5 red checks; the private retro names the checks and the public issue shows them as `check <n>`, as it does for reruns.
 
 ## Non-goals
 
@@ -91,6 +110,10 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 - Writing a run's record before the run ends (no start or heartbeat records).
 - Dashboards, a web UI, retention or deletion policies for the store.
 - A default store repo. Each owner configures their own (`ika100/sdlc-runs` is only an example).
+- A `pr_wait` section for waits inside a ship run: those count toward the ship record (AC-087.5), whose CI rounds and escalation already say why it stopped.
+- Rewriting older `pr-wait` records with a result.
+- Per-phase time budgets: deferred as a follow-up of spec 102.
+- Changing which git actions are pre-approved for unattended sessions: likely fixed by #198 and #199, and re-checked in the 2026-11-02 retro.
 
 ## Open questions
 
@@ -100,6 +123,8 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 - ~~Confirm: the report defaults to the last 30 days and the top 10 escalation reasons.~~ Answered: yes; see AC-087.17.
 - ~~Confirm: a public store repo is a doctor `fail`.~~ Answered: yes; see AC-087.9 and AC-087.11.
 - ~~Confirm: an escalated run ends its record, and a resumed ship is a new run linked through `resumes`.~~ Answered: yes; see AC-087.16.
+- ~~Should a red `pr-wait` keep `outcome` `failed` in the record, or get a new outcome?~~ Answered: it keeps `failed` with `pr_wait.result` `red`; only the report and the retro count it as `red-ci`, and no outcome value is added, see AC-087.24 and AC-087.26.
+- ~~Confirm: the report and the retro show the top 5 red check names.~~ Answered: yes, shown as `check <n>` in the public issue, see AC-087.25 and AC-087.27.
 
 ## Changelog
 
@@ -108,3 +133,9 @@ Later specs add their own sections (`agents` from 089, `smoke` from 091, `patche
 - 2026-10-23 approved
 - 2026-10-24 building
 - 2026-10-24 done
+- 2026-10-26 amended from the weekly retro 2026-W43 (#207): a `pr-wait` record carries a `pr_wait` section with the result and check names (AC-087.24), and the report and the retro count `pr-wait` results, the top red checks and red CI as `red-ci` instead of `failed` (AC-087.25 to AC-087.27); per-phase time budgets and git pre-approval stay out
+- 2026-10-26 draft
+- 2026-10-26 amended: open questions answered with the suggested answers (a red `pr-wait` keeps `outcome` `failed`, `red-ci` only in the readers; top 5 red checks, `check <n>` in public); AC-087.26 clarified
+- 2026-10-26 approved
+- 2026-10-26 building
+- 2026-10-26 done

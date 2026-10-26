@@ -319,6 +319,7 @@ def apply_risk(entries: list[dict], risk: str | None) -> dict:
 # ---------------- evidence and reuse ----------------
 
 def evidence_dir(root: Path) -> Path:
+    # common dir ON PURPOSE (spec 103): the cache is keyed by content and merge base, so every worktree may share it
     code, text = _git(root, "rev-parse", "--git-common-dir")
     common = Path(text.strip()) if code == 0 and text.strip() else Path(".git")
     return (common if common.is_absolute() else root / common) / "cplat-evidence"

@@ -22,6 +22,11 @@ def sleep(seconds: float) -> None:   # tests replace this
     time.sleep(seconds)
 
 
+def lock_path(gitops_dir: Path) -> Path:
+    # common dir ON PURPOSE (ADR-051): the merge slot must serialise merges across every checkout of a gitops-app
+    return state.common_dir(gitops_dir) / LOCK_FILE
+
+
 class Conflict(PlatformError):
     """The PR no longer merges cleanly; `after` is the last PR this product run merged."""
 
@@ -64,7 +69,7 @@ def slot(gitops_dir: Path, repo_id: str, plan_index: int, timeout: float, interv
     _register(gitops_dir, repo_id, plan_index)
     try:
         begin = time.monotonic()
-        with open(state.common_dir(gitops_dir) / LOCK_FILE, "a") as lock:
+        with open(lock_path(gitops_dir), "a") as lock:
             while True:
                 who = "another merge holds the slot"
                 try:
