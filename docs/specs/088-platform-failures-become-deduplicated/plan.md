@@ -51,6 +51,7 @@ tasks:
   covers: [AC-088.15, AC-088.16, AC-088.17, AC-088.21]
   parallel_safe: true
   depends_on: []
+  done: true
 - id: t8
   title: runs.finish records cause_source and the matching rule
   files: [scripts/cplat/runs.py]
