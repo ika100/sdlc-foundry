@@ -50,7 +50,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [065-merges-wait-for-green-ci-without-branch](specs/065-merges-wait-for-green-ci-without-branch/spec.md) — Merges wait for green CI without branch protection | P0 | done | 5 |  |
 | [067-ship-an-approved-spec-to-dev](specs/067-ship-an-approved-spec-to-dev/spec.md) — Ship an approved spec to dev unattended | P0 | done | 5 |  |
 | [077-ship-deploy-reports-what-really-runs](specs/077-ship-deploy-reports-what-really-runs/spec.md) — Ship deploy reports what really runs | P0 | done | 4 | #113, #114, #115 |
-| [087-every-run-is-recorded-in-a-private-run](specs/087-every-run-is-recorded-in-a-private-run/spec.md) — Every run is recorded in a private run store | P0 | done | 20 |  |
+| [087-every-run-is-recorded-in-a-private-run](specs/087-every-run-is-recorded-in-a-private-run/spec.md) — Every run is recorded in a private run store | P0 | done | 24 | #207 |
 | [091-ship-checks-the-spec-in-dev-with-smoke](specs/091-ship-checks-the-spec-in-dev-with-smoke/spec.md) — Ship checks the spec in dev with smoke tests | P0 | done | 14 |  |
 | [004-preflight-check-of-the-setup](specs/004-preflight-check-of-the-setup/spec.md) — Preflight check of the setup | P1 | done | 2 |  |
 | [007-a-shape-is-added-by-following-a](specs/007-a-shape-is-added-by-following-a/spec.md) — A shape is added by following a documented contract | P1 | done | 3 |  |
@@ -99,7 +99,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [082-sessions-do-not-collide](specs/082-sessions-do-not-collide/spec.md) — Sessions do not collide: claimed issues and specs required | P1 | done | 2 | #121, #122 |
 | [085-a-broken-spec-names-itself-and-stops](specs/085-a-broken-spec-names-itself-and-stops/spec.md) — A broken spec names itself and stops nothing else | P1 | done | 12 | #129 |
 | [086-repo-gates-survive-skeleton-updates](specs/086-repo-gates-survive-skeleton-updates/spec.md) — Repo gates survive skeleton updates | P1 | done | 16 | #132 |
-| [088-platform-failures-become-deduplicated](specs/088-platform-failures-become-deduplicated/spec.md) — Platform failures become deduplicated issues | P1 | done | 14 |  |
+| [088-platform-failures-become-deduplicated](specs/088-platform-failures-become-deduplicated/spec.md) — Platform failures become deduplicated issues | P1 | done | 21 | #207 |
 | [089-agent-quality-is-measured-per-agent-and](specs/089-agent-quality-is-measured-per-agent-and/spec.md) — Agent quality is measured per agent and shape | P1 | done | 14 |  |
 | [090-a-weekly-retro-proposes-the-next-specs](specs/090-a-weekly-retro-proposes-the-next-specs/spec.md) — A weekly retro proposes the next specs | P1 | done | 14 |  |
 | [092-firing-alerts-become-issues-in-the](specs/092-firing-alerts-become-issues-in-the/spec.md) — Firing alerts become issues in the owning repo | P1 | done | 22 |  |

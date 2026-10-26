@@ -10,7 +10,7 @@ Public API for the callers (headless, ship, pr wait, app-ship, runs) and the hoo
   count_invocation(run_id) / stop(run_id, limit, point)     one more session / write the `budget` section of a stop
   limits_line(run_id) -> str | None                         the start output ("budget: minutes 180, ...")
   attempt(repo, stage, error, failing, names=) -> reason | None   third equivalent failure without progress stops
-  snapshot(repo, stage, excerpt, criteria)                  <git common dir>/cplat-recovery.json (local only)
+  snapshot(repo, stage, excerpt, criteria)                  <git dir>/cplat-recovery.json (local only)
   record_stage(repo, name, result)                          verified stage result for HEAD + inputs
   on_finish(run_id, usage)                                  called by runs.finish: the record's section, the ledger carry
 
@@ -34,6 +34,7 @@ from pathlib import Path
 import feedback
 import runs
 import settings
+import core
 from core import PlatformError, run
 
 LIMITS = ("minutes", "invocations", "reruns", "cost")
@@ -571,11 +572,11 @@ def changed_files(repo: Path) -> list[str]:
 
 
 def snapshot(repo: Path, stage: str, excerpt: str, criteria: list[str] | tuple = ()) -> Path | None:
-    """`<git common dir>/cplat-recovery.json`: stage, redacted last 40 lines, changed files, criteria ids, the stage's attempts.
+    """`<git dir>/cplat-recovery.json`: stage, redacted last 40 lines, changed files, criteria ids, the stage's attempts.
     Local only; no prompts and no full logs. Never raises."""
     try:
         repo = Path(repo)
-        common = runs._git_common_dir(repo)
+        common = core.git_dir(repo)
         if common is None:
             return None
         text = feedback.redact("\n".join(str(excerpt).strip().splitlines()[-EXCERPT_LINES:]))
@@ -600,7 +601,7 @@ def snapshot(repo: Path, stage: str, excerpt: str, criteria: list[str] | tuple =
 
 def read_snapshot(repo: Path) -> dict | None:
     try:
-        common = runs._git_common_dir(Path(repo))
+        common = core.git_dir(Path(repo))
         data = json.loads((common / RECOVERY_FILE).read_text()) if common else None
     except (OSError, ValueError):
         return None

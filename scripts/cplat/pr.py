@@ -29,51 +29,80 @@ def url_of(pr: str, slug: str | None) -> str:
     return pr.lstrip("#")
 
 
+class Closed(PlatformError):
+    """The PR was closed without merging."""
+
+
+class MergeFailed(PlatformError):
+    """Every check passed but `gh pr merge` refused."""
+
+
+def _error_message(e: BaseException) -> str:
+    """The first non-empty line of the error text (cut to 200), else the class name; `interrupted` for Ctrl-C."""
+    if isinstance(e, KeyboardInterrupt):
+        return "interrupted"
+    line = next((ln.strip() for ln in str(e).splitlines() if ln.strip()), "")
+    return line[:200] or type(e).__name__
+
+
+def _failure_section(e: BaseException) -> dict:
+    """Spec 087 (AC-087.24): why the wait ended with an exception."""
+    if isinstance(e, ship.ChecksPending):
+        return {"result": "timeout", "checks": sorted(set(e.checks))}
+    for cls, result in ((ship.NoChecks, "no-checks"), (Closed, "closed"), (MergeFailed, "merge-failed")):
+        if isinstance(e, cls):
+            return {"result": result}
+    return {"result": "error", "message": _error_message(e)}
+
+
 def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float,
          slug: str | None = None) -> tuple[bool, list[str]]:
-    """Spec 087: counts toward the repo's unfinished ship run, else records its own `pr-wait` run."""
+    """Spec 087: counts toward the repo's unfinished ship run, else records its own `pr-wait` run with a `pr_wait`
+    section saying why the wait ended."""
     rid = runs.attach_point(repo)
     own = None if rid else runs.start("pr-wait", repo=slug or runs.repo_slug(repo))
     try:
-        ok, lines = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own)
-    except BaseException:
+        ok, lines, section = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own)
+    except BaseException as e:
         if own:
-            runs.finish(own, "failed")
+            runs.finish(own, "failed", fields={"pr_wait": _failure_section(e)})
         raise
     if own:
-        runs.finish(own, "done" if ok else "failed")
+        runs.finish(own, "done" if ok else "failed", fields={"pr_wait": section})
     return ok, lines
 
 
 def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float,
-          run_id: str | None) -> tuple[bool, list[str]]:
+          run_id: str | None) -> tuple[bool, list[str], dict]:
     view = json.loads(ship.gh(["pr", "view", pr, "--json", "state,url"], cwd=repo) or "{}")
     url = view.get("url") or pr
     if view.get("state") == "MERGED":
-        return True, [f"{url} is already merged"]
+        return True, [f"{url} is already merged"], {"result": "merged"}
     if view.get("state") == "CLOSED":
-        raise PlatformError(f"{url} was closed without merging")
+        raise Closed(f"{url} was closed without merging")
     watch = ship.CheckWatch(repo, url, queue_timeout, run_id)
     while True:
         status, cs, failed = ship.wait_checks(watch, timeout, interval)
         if status == "red" or not merge or not watch.head or watch.head_sha() in (None, watch.head):
             break   # a push during the last poll means the green belongs to an old head: wait again
+    names = sorted({c["name"] for c in failed})
     if status == "red" and watch.refused:      # spec 102: the budget refused a rerun; a ship run is escalated
         lines = ship.red(repo, url, cs, failed)
+        section = {"result": "budget-refused", "checks": names}
         st = ship.load_state(repo) if run_id and runs.attach_point(repo) == run_id else None
         if st:
-            return False, ship.refused(repo, st, watch.refused, lines)
-        return False, [watch.refused, *lines]
+            return False, ship.refused(repo, st, watch.refused, lines), section
+        return False, [watch.refused, *lines], section
     if status == "red":
-        return False, ship.red(repo, url, cs, failed)
+        return False, ship.red(repo, url, cs, failed), {"result": "red", "checks": names}
     lines = [f"GREEN: all {len(cs)} check(s) passed on {url}"]
     if merge:
         res = run(["gh", "pr", "merge", url, "--squash", "--delete-branch"] + (["--match-head-commit", watch.head] if watch.head else []), cwd=repo, check=False)
         if res.returncode != 0:
             detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
-            raise PlatformError(f"merging {url} failed: {detail[0]}", hint="a conflict with main is a human decision")
+            raise MergeFailed(f"merging {url} failed: {detail[0]}", hint="a conflict with main is a human decision")
         lines.append(f"merged {url} (squash)")
-    return True, lines
+    return True, lines, {"result": "merged" if merge else "green"}
 
 
 def main(argv: list[str]) -> int:

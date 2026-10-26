@@ -317,7 +317,7 @@ def test_a_ship_stopped_by_the_budget_is_escalated_with_the_decision_cause(here,
     st = ship.load_state(here)
     assert st["escalated"] == "budget exhausted: minutes" and st["cause"] == "decision"
     (r,) = stored(store)
-    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "budget exhausted: minutes", "cause": "decision"}
+    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "budget exhausted: minutes", "cause": "decision", "cause_source": "given"}
 
 
 def test_the_record_holds_the_budget_section(here, gh, budget, clock, usage, store):
@@ -638,7 +638,7 @@ def test_a_headless_budget_stop_is_an_escalation_with_the_decision_cause(hl_repo
     fake_claude(tmp_path, monkeypatch, "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m step")
     assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--max-runs", "5", "--budget", "invocations=1"]) == 1
     (h,) = [r for r in buffered_lines() if r["kind"] == "headless"]
-    assert h["escalation"] == {"reason": "budget exhausted: invocations", "cause": "decision"}
+    assert h["escalation"] == {"reason": "budget exhausted: invocations", "cause": "decision", "cause_source": "given"}
 
 
 def test_unreadable_usage_is_an_unknown_cost_never_zero(here, gh, budget, monkeypatch, capsys):

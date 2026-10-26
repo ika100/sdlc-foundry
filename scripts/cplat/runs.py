@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 import core
+import escalation_rules
 import feedback
 import runs_report
 import runs_store
@@ -303,17 +304,10 @@ def active(run_id: str | None) -> dict | None:
         return None
 
 
-def _git_common_dir(repo_dir: Path) -> Path | None:
-    out = core.run(["git", "rev-parse", "--git-common-dir"], cwd=repo_dir, check=False).stdout.strip()
-    if not out:
-        return None
-    return Path(out) if Path(out).is_absolute() else Path(repo_dir) / out
-
-
 def attach_point(repo_dir: Path) -> str | None:
     """run_id of the repo's ship run when it is unfinished (phase != done, not escalated) and has a run_id."""
     try:
-        common = _git_common_dir(Path(repo_dir))
+        common = core.git_dir(Path(repo_dir))
         if common is None:
             return None
         st = json.loads((common / "cplat-ship.json").read_text())
@@ -372,7 +366,7 @@ def _mutate(run_id: str | None, change: Callable[[dict], None]) -> None:
 
 
 def current_run(repo_dir: Path) -> str | None:
-    """run_id of the pointer `<git common dir>/cplat-run.json` when that run is still active, else attach_point."""
+    """run_id of the pointer `<git dir>/cplat-run.json` when that run is still active, else attach_point."""
     try:
         rid = (_read_pointer(_pointer(Path(repo_dir))) or {}).get("run_id")
         if rid and _read_active(rid) is not None:
@@ -552,8 +546,11 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
             rec["ended_at"] = now
             rec["outcome"] = outcome if outcome in OUTCOMES else "failed"
             if escalation is not None:
-                cause = escalation.get("cause")
-                rec["escalation"] = {"reason": str(escalation.get("reason", "")), "cause": cause if cause in CAUSES else "unknown"}
+                reason = str(escalation.get("reason", ""))
+                res = escalation_rules.resolve(escalation.get("cause"), reason)
+                rec["escalation"] = {"reason": reason, "cause": res.cause, "cause_source": res.source}
+                if res.rule:
+                    rec["escalation"]["rule"] = res.rule
             for k, v in (fields or {}).items():
                 if k not in RESERVED:
                     rec[k] = v
@@ -795,7 +792,7 @@ def init(slug: str) -> list[str]:
 # ---------------- CLI ----------------
 
 def _pointer(repo_dir: Path) -> Path | None:
-    common = _git_common_dir(repo_dir)
+    common = core.git_dir(repo_dir)
     return common / "cplat-run.json" if common else None
 
 

@@ -338,7 +338,7 @@ def test_a_build_that_needs_the_user_is_recorded_escalated(repo, store):
     runs.main(["begin", "build", "--spec", "007-price-alerts", *d])
     runs.main(["end", "--outcome", "escalated", "--reason", "needs a decision on rate limits", *d])
     (r,) = stored(store)
-    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "needs a decision on rate limits", "cause": "unknown"}
+    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "needs a decision on rate limits", "cause": "unknown", "cause_source": "none"}
 
 
 def test_build_inside_a_ship_run_attaches_to_it(repo, gh, store, capsys):
@@ -700,7 +700,7 @@ def test_an_escalation_is_recorded_with_its_cause(repo, store):
     ship.start(repo, "7", True)
     assert ship.main(["--repo", str(repo), "escalate", "merge conflict in alerts.go", "--cause", "platform"]) == 0
     (r,) = stored(store)
-    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "merge conflict in alerts.go", "cause": "platform"}
+    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "merge conflict in alerts.go", "cause": "platform", "cause_source": "given"}
 
 
 def test_a_missing_or_unknown_cause_is_stored_as_unknown(repo, store):
@@ -726,13 +726,13 @@ def test_the_cause_must_be_one_of_the_known_ones(repo, store, capsys):
 
 
 def test_the_gate_giving_up_records_an_escalation(repo, store):
-    """AC-087.16: the stop gate giving up ends the run as escalated with cause unknown."""
+    """AC-087.16 AC-088.18: the stop gate giving up ends the run as escalated with cause environment (given)."""
     ship.start(repo, "7", True)
     for _ in range(3):
         ship.gate(repo, {}, 3, run_tests=False)
     ship.gate(repo, {}, 3, run_tests=False)
     (r,) = stored(store)
-    assert r["outcome"] == "escalated" and r["escalation"]["cause"] == "unknown" and "gave up" in r["escalation"]["reason"]
+    assert r["outcome"] == "escalated" and (r["escalation"]["cause"], r["escalation"]["cause_source"]) == ("environment", "given") and "gave up" in r["escalation"]["reason"]
 
 
 def test_a_resumed_ship_is_a_new_run_linked_to_the_escalated_one(repo, store, clock):

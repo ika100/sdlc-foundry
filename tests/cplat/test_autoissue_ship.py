@@ -88,7 +88,7 @@ def test_the_filing_is_part_of_the_escalated_record(repo, tr, store):
     started(repo)
     escalate(repo, "copier render fails", "--cause", "platform")
     (r,) = stored(store)
-    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "copier render fails", "cause": "platform"}
+    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "copier render fails", "cause": "platform", "cause_source": "given"}
     (f,) = r["filed"]
     assert f["result"] == "new" and f["url"] == f"https://github.com/{PLATFORM_REPO}/issues/1" and f["signature"].startswith("platform:")
     assert r["run_id"] in tr.created()[0][3]
@@ -111,7 +111,7 @@ def test_other_causes_are_only_recorded(repo, tr, store, capsys, cause):
     out = capsys.readouterr().out
     assert tr.calls == [] and "issue:" not in out and "report-issue" not in out
     (r,) = stored(store)
-    assert r["escalation"] == {"reason": "needs the user", "cause": cause} and r["filed"] == []
+    assert r["escalation"] == {"reason": "needs the user", "cause": cause, "cause_source": "given"} and r["filed"] == []
 
 
 # ---------------- AC-088.3 missing or unknown cause ----------------
@@ -123,7 +123,7 @@ def test_a_missing_cause_is_unknown_and_the_output_lists_the_allowed_ones(repo, 
     out = capsys.readouterr().out
     assert tr.calls == [] and "missing" in out and all(c in out for c in ALLOWED)
     (r,) = stored(store)
-    assert r["escalation"] == {"reason": "why", "cause": "unknown"} and r["filed"] == []
+    assert r["escalation"] == {"reason": "why", "cause": "unknown", "cause_source": "none"} and r["filed"] == []
 
 
 @pytest.mark.parametrize("value", ["bogus", "unknown", "Platform "])

@@ -201,6 +201,8 @@ def main(argv: list[str]) -> int:
         if rid:
             reason, outcome = stop_of(state["result"], state["code"])
             esc = {"reason": state["result"], "cause": "decision"} if reason == "budget" else None
+            if reason == "escalated" and state["result"].startswith("no progress"):   # AC-088.18
+                esc = {"reason": state["result"], "cause": "environment"}
             runlog.finish(rid, outcome, escalation=esc, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason, **state_fields})
 
 
@@ -265,7 +267,7 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         key = progress_key(repo, st)
         if key == last:
             result = f"no progress: two runs in a row ended in phase {st['phase']} with nothing changed"
-            ship.escalate(repo, result)
+            ship.escalate(repo, result, "environment")
             snapped = True
             break
         last = key
