@@ -415,6 +415,15 @@ def _tree(root: Path) -> dict[str, bytes]:
     return out
 
 
+_CLUSTER_FILE = re.compile(r"^applications/[^/]+/addons/[^/]+/[^/]+/cluster\.yaml$")
+_DB_IMAGE = re.compile(rb"(imageName: ghcr\.io/cloudnative-pg/postgresql:)(\d+)\S*")
+
+
+def _normalised(tree: dict[str, bytes]) -> dict[str, bytes]:
+    """The migration proof ignores the database image beyond its major (AC-115.6, AC-115.17)."""
+    return {p: _DB_IMAGE.sub(rb"\1\2", b) if _CLUSTER_FILE.match(p) else b for p, b in tree.items()}
+
+
 def convert_systems(repo: Path) -> list[dict]:
     """Convert every 4.x application directory; any problem stops the migration before anything changes."""
     owner = _owner(repo)
@@ -459,8 +468,9 @@ def apply_systems(repo: Path, systems: list[dict], reference: dict[str, bytes]) 
         for rel in s["deleted"]:
             (repo / rel).unlink()
     gitops.render(repo)
-    after = _tree(repo)
-    diff = [f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
+    reference = _normalised(reference)
+    after = _normalised(_tree(repo))
+    diff =[f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
     diff += [f"{p} (missing)" for p in sorted(reference) if p not in after]
     diff += [f"{p} (extra)" for p in sorted(after) if p not in reference]
     if diff:
