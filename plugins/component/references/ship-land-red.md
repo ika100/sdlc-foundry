@@ -1,0 +1,7 @@
+# Ship: a red or failed `cplat component ship land`
+
+Read from `/component:ship` Phase `land` when `cplat component ship land` exits non-zero.
+
+- **RED** (exit 1) → `cplat component ship land` records the round against the coder itself (spec 089), so there is no `cplat platform runs agent` call here. It prints the failed checks and their log tails. Hand them to the coder agent (`agents.coder`) of the task whose files are involved, with `<project-map>`: "fix these CI failures; never edit, skip or weaken an acceptance test". Run `cplat validate run` (the checks the fix can affect; the whole `devbox run ci` runs in `cplat component ship pr` before every push), commit `fix(ci): <what>`, then `cplat component ship pr --title <same title> --body-file .pr-body.md` (pushes) and `cplat component ship land` again. After **3** red rounds (`fix_rounds` in `cplat component ship status`), escalate with the last failure.
+- **RED, the security check** (spec 095) → other red checks go to the coder first. Then `cplat deps patch`: exit 0 → `cplat deps report --body-file .git/PR_BODY.md --update-pr`, then `cplat component ship pr --title <same title> --body-file .pr-body.md` and `cplat component ship land`; exit 3 → `cplat component ship escalate '<reason>' --cause <CAUSE>` with the `ESCALATE` and `CAUSE` lines it printed; exit 4 → the coder as above. The round counts toward the 3 (`fix_rounds`).
+- An error (no checks reported, timeout, merge refused) → read its hint; a transient one (runner busy) → `cplat component ship land` once more; otherwise escalate.
