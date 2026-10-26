@@ -80,9 +80,7 @@ PY
 )
 $cplat resource add ext-db --type database --external --repo-dir "$gitops_repo" >/dev/null
 commit "ext-db"
-# the in-cluster database needs the CloudNativePG operator: render writes it to operators/ (cluster level, once)
-[ -f "$gitops_repo/operators/apps/cloudnative-pg.yaml" ] || fail "render did not write operators/apps/cloudnative-pg.yaml for the in-cluster database"
-[ -f "$gitops_repo/operators/root.yaml" ] || fail "render did not write operators/root.yaml"
+[ ! -e "$gitops_repo/operators" ] || fail "render wrote operators/ although no component uses an in-cluster database yet"
 step "Describe the environments in system.yaml: the OpenTelemetry collector and enforced Kyverno guard rails in dev, a staging host"
 (cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" "$port" <<'PY'
 import sys
@@ -105,8 +103,9 @@ commit "environments"
 
 step "Start the local cluster with a registry (the template's own script, Gateway only)"
 # Without Argo CD (WITH_ARGO=0) the script cannot apply operators/root.yaml (an Argo CD Application); it installs the
-# CloudNativePG chart itself at the version pinned in operators/apps/cloudnative-pg.yaml (WITH_CNPG auto-detects that file).
-(cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
+# CloudNativePG chart itself. WITH_CNPG=1: e2e-api uses postgres from the components step on, after the cluster is up, so
+# operators/ (which WITH_CNPG would auto-detect) does not exist yet; the components step checks it and its pinned version.
+(cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 WITH_CNPG=1 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
 
 step "Build and push the images"
 # Rendered with --skip-tasks, so the web repo has no pnpm-lock.yaml yet; the template's bootstrap would run
@@ -142,6 +141,9 @@ gitops.save(app_dir, y, data)
 PY
 uv run scripts/render.py)
 commit "components"
+# e2e-api now uses the in-cluster database: render writes the CloudNativePG operator to operators/ (cluster level, once)
+[ -f "$gitops_repo/operators/apps/cloudnative-pg.yaml" ] || fail "render did not write operators/apps/cloudnative-pg.yaml for the in-cluster database"
+[ -f "$gitops_repo/operators/root.yaml" ] || fail "render did not write operators/root.yaml"
 
 step "Set the remote secret in the local store (what a developer does with /instance:secret)"
 printf 'sk_test_e2e' | $cplat instance secret set e2e-api/dev e2e-api-stripe STRIPE_KEY --value-stdin --repo-dir "$gitops_repo" --context k3d-$cluster >/dev/null
