@@ -25,6 +25,11 @@
       "test-plan":     "bash scripts/test-plan.sh",
       "smoke-go":      "rm -rf /tmp/test-go && uv tool run --from copier copier copy ./templates/service-go /tmp/test-go --defaults --trust --skip-tasks --data project_name=test-go && cd /private/tmp/test-go && git init -q && devbox run quality && devbox run test",
       "smoke-java":    "rm -rf /tmp/test-java && uv tool run --from copier copier copy ./templates/service-java /tmp/test-java --defaults --trust --skip-tasks --data project_name=test-java && cd /private/tmp/test-java && git init -q && devbox run quality && devbox run test",
+      "test-fast":     "uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto",
+      "test":          "devbox run test-fast",
+      "quality":       "devbox run validate && for p in plugins/*/; do n=$(basename \"$p\"); [ \"$(jq -r .version \"${p}.claude-plugin/plugin.json\")\" = \"$(jq -r \".plugins[] | select(.name == \\\"$n\\\") | .version\" .claude-plugin/marketplace.json)\" ] || { echo \"version mismatch for $n\" >&2; exit 1; }; done && uv run scripts/shapes.py check && python3 scripts/pin-actions.py --check && python3 scripts/check-links.py && uvx --quiet --from 'reuse[charset-normalizer]' reuse lint | tail -3",
+      "lint-fix":      "echo 'lint-fix: no formatter is configured in the platform repo (nothing to do)'",
+      "ci":            "bash scripts/ci-local.sh",
       "smoke":         "devbox run validate && devbox run shapes-check && devbox run test-detect && devbox run test-plan && devbox run smoke-service && devbox run smoke-library && devbox run smoke-gitops && devbox run smoke-web && devbox run smoke-go && devbox run smoke-java"
     }
   }
