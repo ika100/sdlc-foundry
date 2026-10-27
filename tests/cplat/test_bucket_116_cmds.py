@@ -158,7 +158,7 @@ def test_add_a_bucket_is_no_longer_refused_as_not_available_ac_116_20(repo, caps
     assert rc == 0 and "not available yet" not in err
 
 
-@pytest.mark.parametrize("typ, spec", [("cache", 118), ("broker", 119)])
+@pytest.mark.parametrize("typ, spec", [("broker", 119)])  # spec 118: cache is built
 def test_add_of_the_other_planned_types_keeps_its_refusal_ac_116_20(repo, capsys, typ, spec):  # AC-116.20
     before = files(repo)
     rc, _, err = run("resource", "add", "store", "--type", typ, "--repo-dir", repo, capsys=capsys)
@@ -417,8 +417,8 @@ def test_a_bucket_and_a_database_add_no_prefixed_variables_step_ac_116_4(tmp_pat
 
 def test_the_uses_help_names_the_bucket_variables_ac_116_4():  # AC-116.4
     text = (ROOT / "scripts" / "cplat" / "compose.py").read_text()
-    assert ("resource or library the component needs (a database gives DATABASE_URL and PG*, a bucket S3_* and AWS_*); "
-            "declare it first with `cplat resource add <name> --type database|bucket`") in text
+    assert ("resource or library the component needs (a database gives DATABASE_URL and PG*, a bucket S3_* and AWS_*, a cache REDIS_URL and REDIS_*); "  # spec 118: caches named
+            "declare it first with `cplat resource add <name> --type database|bucket|cache`") in text  # spec 118: cache type
 
 
 # ---------------- AC-116.19: the template's cluster scripts ----------------
