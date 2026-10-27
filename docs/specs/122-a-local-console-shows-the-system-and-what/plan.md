@@ -20,6 +20,7 @@ tasks:
     covers: [AC-122.34, AC-122.35, AC-122.47]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: runlist.py and the dispatcher — `cplat runs [--json]`, `cplat needs`, `cplat ui`, `cplat platform ui`, `cplat system set`
     files: [scripts/cplat/runlist.py, scripts/cplat/cplat.py]
