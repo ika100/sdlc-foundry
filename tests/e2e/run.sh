@@ -737,7 +737,8 @@ timeout 180 $cplat platform doctor --repo "$gitops_repo" --json > "$doc_json" 2>
 python3 - "$doc_json" <<'PY' || { tail -5 "$work/doctor.err" || true; cfail "doctor output unreadable, or a row mentions a cache (see above)"; }
 import json, re, sys
 rows = json.load(open(sys.argv[1]))
-bad = [r for r in rows if re.search(r"cache|valkey|sessions|ratelimit", f"{r.get('name', '')} {r.get('detail', '')}", re.I)]
+# whole words only: tool paths such as /opt/hostedtoolcache/... are not cache rows
+bad = [r for r in rows if re.search(r"\b(cache|valkey|sessions|ratelimit)\b", f"{r.get('name', '')} {r.get('detail', '')}", re.I)]
 for r in bad:
     print("doctor row names a cache:", r, file=sys.stderr)
 sys.exit(1 if bad else 0)
