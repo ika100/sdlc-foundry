@@ -83,3 +83,4 @@ In prod, `--switch` and `--discard` first print what they would do and change no
 
 - `/system:status` shows, from the cluster, the last backup, whether WAL archiving works, the restore window (earliest and latest point in time) and any restored or previous instance, per database and per environment.
 - When a backup or WAL archiving has failed for more than an hour, the alert poll opens one issue, `[auto] [alert] backup failing: <db or environment>/<env>`, for environments with `observability` alerts on.
+- Right after you turn on `backup` for a database that already runs, the database restarts once to load the backup plugin, so the very first scheduled backup cannot run. Status then says `last base backup never (first backup pending)`, not "failing". cplat takes the first base backup by itself as soon as the plugin is loaded: at the end of `/resource:restore --switch`, or in the next alert poll. `/resource:backup` always works too.

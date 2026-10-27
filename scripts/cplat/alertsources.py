@@ -371,6 +371,10 @@ def _collect_backups(cfg: AppConfig, now: datetime.datetime, found: dict[str, Al
                         state = backupstate.restore_state(cfg.app_dir, env, subject)
                     except backupstate.StateError:
                         state = None
+                    try:
+                        backupstate.take_first_backup(cfg.app, subject, env, None, now, state)
+                    except backupstate.ReadError as e:
+                        errors.append(SourceError(endpoint, feedback.redact(f"first base backup of {subject}: {e}")))
                     fails = [(f["since"], f["error"]) for f in
                              backupstate.database_failing_since(cfg.app, subject, env, None, now, state=state)]
                 else:

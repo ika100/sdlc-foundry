@@ -293,6 +293,9 @@ def backup_lines(b: dict) -> list[str]:
             rows.append((label, "external (backed up by its provider)"))
         elif st == "unknown":
             rows.append((label, f"unknown ({x['error']})"))
+        elif st == "pending":
+            rows.append((label, f"last base backup never (first backup pending)  archiving ok  restore points "
+                                f"{x['earliest'] + ' … ' + (x['latest'] or x['earliest']) if x['earliest'] else 'none'}"))
         else:
             arch = {"ok": "archiving ok", "failing": f"archiving failing ({x['error']})" if x["error"] else "archiving failing"}.get(
                 x["archiving"] or "", "archiving unknown")

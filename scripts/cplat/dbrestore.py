@@ -25,6 +25,8 @@ POLL_S = 10.0
 TIMEOUT_S = 30 * 60.0
 ARGO_TIMEOUT_S = 10 * 60.0
 PR_TIMEOUT_S = 30 * 60.0
+PLUGIN_TIMEOUT_S = 10 * 60.0
+FIRST_SETTLE_S = 60.0
 CLUSTER_KIND = "clusters.postgresql.cnpg.io"
 SECRET_KEYS = ("host", "uri", "jdbc-uri", "pgpass", "fqdn-uri", "fqdn-jdbc-uri")
 OFFSET_TIME = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|z|[+-]\d\d:\d\d)$")
@@ -174,6 +176,42 @@ def _wait_ready(name: str, kns: str, ctx: str | None, db: str, env: str) -> None
     raise PlatformError(f"restore failed: {db}/{env}: {reason}", hint="the restored instance stays for inspection until --discard")
 
 
+def _wait_archiving(name: str, kns: str, ctx: str | None) -> bool:
+    """Wait until the cluster has loaded the backup plugin (ContinuousArchiving True); False after PLUGIN_TIMEOUT_S."""
+    deadline = time.monotonic() + PLUGIN_TIMEOUT_S
+    while True:
+        try:
+            arch = backupstate._cond(backupstate.get_json([CLUSTER_KIND, name, "-n", kns], ctx), "ContinuousArchiving")
+            if arch and arch.get("status") == "True":
+                return True
+        except backupstate.ReadError:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(POLL_S)
+
+
+def _first_backup_lines(system: str, db: str, env: str, name: str, kns: str, ctx: str | None, state: dict) -> list[str]:
+    """After a switch: wait for the plugin on the new active cluster, then take its first base backup (CloudNativePG never retries
+    the immediate Backup that failed because the plugin was not loaded yet)."""
+    if not _wait_archiving(name, kns, ctx):
+        return [f"the plugin is not loaded on {name} yet; the alert poll takes the first base backup when it is"]
+    # The immediate Backup may be recorded as failed a moment after archiving starts: look again for FIRST_SETTLE_S, and stop as soon
+    # as the cluster has a Backup that did not fail (running or completed).
+    deadline = time.monotonic() + FIRST_SETTLE_S
+    while True:
+        try:
+            backup = backupstate.take_first_backup(system, db, env, ctx, datetime.datetime.fromtimestamp(time.time(), datetime.UTC), state)
+            if backup:
+                return [f"first base backup of {name} started (Backup {backup})"]
+            fine = [b for b in backupstate.database_backups(system, db, kns, [name], ctx) if (b.get("status") or {}).get("phase") != "failed"]
+        except backupstate.ReadError as e:
+            return [f"could not take the first base backup of {name}: {e}; the alert poll takes it when it can"]
+        if fine or time.monotonic() >= deadline:
+            return []
+        time.sleep(POLL_S)
+
+
 def _wait_volumes_gone(name: str, kns: str, ctx: str | None) -> None:
     deadline = time.monotonic() + TIMEOUT_S
     while True:
@@ -193,7 +231,7 @@ def main(argv: list[str]) -> int:
     repo = Path(ns.repo_dir).resolve()
     app_dir = gitops.find_app(repo, ns.app)
     m = model.load_dir(app_dir)
-    check(ns, m)
+    ri = check(ns, m)
     system, db, env, ctx = app_dir.name, ns.name, ns.env, ns.context
     kns = f"{system}-{env}"
     try:
@@ -303,6 +341,8 @@ def main(argv: list[str]) -> int:
             _write(["rollout", "status", f"deployment/{c}", "-n", kns, "--timeout=300s"], ctx, f"{c} did not roll out again", timeout=360)
         r.did.append(f"restarted {', '.join(users) or 'no component'}")
         lines = [f"switched {db}/{env} to {name}; {old} is previous (no connections); discard it with /resource:restore {db} --env {env} --discard"]
+        if ri.backup:
+            lines += _first_backup_lines(system, db, env, name, kns, ctx, new)
         r.data = {"result": "switched", "cluster": name, "previous": old}
     else:
         _write(["delete", CLUSTER_KIND, name, "-n", kns, "--ignore-not-found"], ctx, f"cannot delete the cluster {name}")

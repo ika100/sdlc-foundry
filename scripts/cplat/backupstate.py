@@ -5,7 +5,7 @@ Every kubectl call of the backup commands, the status table and the alert poll g
 except `write_restore_state`. Values read from the cluster are never stored.
 
 Readers: `database_state`, `environment_state`, `velero_backups`, `pod_volume_backups`, `existing_volumes`, `workload_root`,
-`database_failing_since`, `environment_failing_since`. State file: `restore_state`, `write_restore_state`.
+`database_failing_since`, `environment_failing_since`, `first_backup_pending`, `take_first_backup`, `create_backup`. State file: `restore_state`, `write_restore_state`.
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ import yaml
 
 TIMEOUT_S = 60.0
 PLUGIN = "barman-cloud.cloudnative-pg.io"
+PLUGIN_UNAVAILABLE = "requested plugin is not available"
 VELERO_NS = "velero"
 HEADER = "# Written by `cplat resource restore` (spec 117). render.py reads it; do not edit it by hand.\n"
 GEN = re.compile(r"-g([0-9]+)$")
@@ -240,6 +241,51 @@ def _stopped(b: dict) -> datetime.datetime | None:
     return _when(b, ("status", "stoppedAt"), ("metadata", "creationTimestamp"))
 
 
+def _phase(b: dict) -> str:
+    return (b.get("status") or {}).get("phase") or ""
+
+
+def _of(b: dict, cluster: str) -> bool:
+    return ((b.get("spec") or {}).get("cluster") or {}).get("name") == cluster
+
+
+def _plugin_failure(b: dict) -> bool:
+    return PLUGIN_UNAVAILABLE in str((b.get("status") or {}).get("error") or "")
+
+
+def create_backup(ns: str, cluster: str, name: str, context: str | None) -> None:
+    """Create the plugin Backup `name` of `cluster` in namespace `ns`. ReadError (with kubectl's reason) when kubectl fails."""
+    obj = {"apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup", "metadata": {"name": name, "namespace": ns},
+           "spec": {"cluster": {"name": cluster}, "method": "plugin", "pluginConfiguration": {"name": PLUGIN}}}
+    rc, out, err = _k(["create", "-n", ns, "-f", "-"], context, input=json.dumps(obj))
+    if rc != 0:
+        raise ReadError(_why(rc, err, out))
+
+
+def first_backup_pending(system: str, db: str, env: str, context: str | None, state: dict | None = None) -> bool:
+    """True when the active cluster has loaded the plugin (ContinuousArchiving True), has no completed and no running Backup, and
+    at least one failed Backup says the plugin was not available then. ReadError on kubectl failure."""
+    ns, active = f"{system}-{env}", cluster_roles(system, db, state)["active"]
+    arch = _cond(get_json(["clusters.postgresql.cnpg.io", active, "-n", ns], context), "ContinuousArchiving")
+    if not arch or arch.get("status") != "True":
+        return False
+    mine = [b for b in get_items(["backups.postgresql.cnpg.io", "-n", ns], context) if _of(b, active)]
+    if any(_phase(b) != "failed" for b in mine):  # completed or still running
+        return False
+    return any(_plugin_failure(b) for b in mine)
+
+
+def take_first_backup(system: str, db: str, env: str, context: str | None, now: datetime.datetime,
+                      state: dict | None = None) -> str | None:
+    """Create Backup `<active>-first-<YYYYMMDDHHMMSS>` when the first base backup is pending; its name, else None."""
+    if not first_backup_pending(system, db, env, context, state):
+        return None
+    active = cluster_roles(system, db, state)["active"]
+    name = f"{active}-first-{now.astimezone(datetime.UTC).strftime('%Y%m%d%H%M%S')}"
+    create_backup(f"{system}-{env}", active, name, context)
+    return name
+
+
 def database_backups(system: str, db: str, ns: str, names: list[str], context: str | None) -> list[dict]:
     """Every CloudNativePG Backup of any cluster of this database (a name in `names`)."""
     keep = set(names)
@@ -279,7 +325,13 @@ def database_state(system: str, db: str, env: str, context: str | None, *, backu
         if completed:
             b["last_success"] = norm_time((completed[0].get("status") or {}).get("stoppedAt")) or norm_time(
                 completed[0]["metadata"].get("creationTimestamp"))
-        if done and (done[0].get("status") or {}).get("phase") == "failed":
+        mine = [x for x in done if _of(x, roles["active"])]
+        failed_mine = [x for x in mine if _phase(x) == "failed"]
+        only_plugin = bool(failed_mine) and len(failed_mine) == len(mine) and all(_plugin_failure(x) for x in failed_mine)
+        pending = only_plugin and b["archiving"] != "failing" and not completed
+        if pending:
+            failing_backup = False
+        elif done and (done[0].get("status") or {}).get("phase") == "failed":
             b["error"] = b["error"] or (done[0].get("status") or {}).get("error") or "the last base backup failed"
             failing_backup = True
         else:
@@ -289,7 +341,7 @@ def database_state(system: str, db: str, env: str, context: str | None, *, backu
         if firsts:
             b["earliest"] = fmt_time(min(firsts))
             b["latest"] = _latest(active, ns, context)
-        b["state"] = "failing" if b["archiving"] == "failing" or failing_backup else "ok"
+        b["state"] = "failing" if b["archiving"] == "failing" or failing_backup else "pending" if pending else "ok"
         if roles["restored"]:
             r = get_json(["clusters.postgresql.cnpg.io", roles["restored"], "-n", ns], context)
             row["restored"] = {"name": roles["restored"], "ready": cluster_ready(r)}
@@ -478,6 +530,8 @@ def database_failing_since(system: str, db: str, env: str, context: str | None, 
         if since and now - since > min_age:
             out.append({"rule": "archiving", "since": fmt_time(since), "error": arch.get("message") or "continuous archiving is failing"})
     sched = get_items(["backups.postgresql.cnpg.io", "-n", ns, "-l", f"cnpg.io/scheduled-backup={system}-{db}"], context)
+    if not any(_phase(b) == "completed" and _of(b, roles["active"]) for b in get_items(["backups.postgresql.cnpg.io", "-n", ns], context)):
+        sched = [b for b in sched if not (_phase(b) == "failed" and _plugin_failure(b))]  # the first backup is pending, not failing
     done = _finished(sched)
     run = []
     for b in done:

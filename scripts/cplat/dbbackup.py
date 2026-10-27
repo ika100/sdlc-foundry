@@ -67,11 +67,10 @@ def main(argv: list[str]) -> int:
 
     stamp = datetime.datetime.fromtimestamp(time.time(), datetime.UTC).strftime("%Y%m%d%H%M%S")
     name = f"{active}-manual-{stamp}"
-    obj = {"apiVersion": "postgresql.cnpg.io/v1", "kind": "Backup", "metadata": {"name": name, "namespace": kns},
-           "spec": {"cluster": {"name": active}, "method": "plugin", "pluginConfiguration": {"name": backupstate.PLUGIN}}}
-    rc, out, err = backupstate.kubectl(["create", "-n", kns, "-f", "-"], ns.context, input=json.dumps(obj))
-    if rc != 0:
-        raise PlatformError(f"cannot read the cluster: {backupstate._why(rc, err, out)}")
+    try:
+        backupstate.create_backup(kns, active, name, ns.context)
+    except backupstate.ReadError as e:
+        raise PlatformError(f"cannot read the cluster: {e}") from e
 
     deadline = time.monotonic() + TIMEOUT_S
     phase, status = "", {}

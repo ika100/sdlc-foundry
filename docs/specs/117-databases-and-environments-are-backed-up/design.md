@@ -345,7 +345,8 @@ Backup state is read with `kubectl --context <--context or the current context>`
 
 - `resource_instances`: every database resource instance. `state`: `off` (no `backup`), `external`, `ok`, `failing` (archiving
   failing, or the newest base backup failed after the last completed one), `unknown` (the cluster could not be read; `error` says
-  why). `archiving` `ok` | `failing` | `null`. `last_success` = `.status.stoppedAt` of the newest completed `Backup` of any cluster of
+  why), `pending` (the plugin was not loaded when the first scheduled base backup ran and no backup has completed yet; archiving not
+  failing; `error` is `null`). `archiving` `ok` | `failing` | `null`. `last_success` = `.status.stoppedAt` of the newest completed `Backup` of any cluster of
   this database, in RFC 3339 UTC (`Z`), else `null`. `earliest` = the smallest `firstRecoverabilityPoint` of the database's server
   names in the `ObjectStore`'s `status.serverRecoveryWindow`; `latest` = `last_archived_time` of `pg_stat_archiver` on the active
   primary; both `null` without a restore point. Archiving error = the message of the active cluster's `ContinuousArchiving`
@@ -366,6 +367,7 @@ Backups (read from the cluster k3d-shop-local now):
   environment prod   off
 ```
 
+  A `pending` row reads `  <db>/<env>  last base backup never (first backup pending)  archiving ok  restore points <p>`.
   A `previous` generation is its own line `  <db>/<env>      previous <cluster>` (AC-117.9). `unknown` lines read
   `  <db>/<env>  unknown (<reason>)`.
 
@@ -421,6 +423,11 @@ switch to it: /resource:restore <db> --env <env> --switch
 
 Failure (recovery Job failed or not ready after 30 minutes): `restore failed: <db>/<env>: <reason>`, exit 1; the restored instance
 stays in git and the cluster for inspection until `--discard` (AC-117.12).
+
+**`--switch`**, after the Secret is repointed and the pods restarted: when the database has `backup`, wait (up to 10 minutes) until the
+new active cluster's `ContinuousArchiving` is True, then take the first base backup if it is pending and print
+`first base backup of <cluster> started (Backup <name>)`. On timeout print `the plugin is not loaded on <cluster> yet; the alert poll
+takes the first base backup when it is`; the switch still exits 0.
 
 **`--switch`**: state `restored` → `active`, old `active` → `previous` (`until` = now). Commit
 `chore(restore): switch <db>/<env> to <name>`; Argo or apply path; delete `ScheduledBackup <system>-<db>` so it is recreated for the
@@ -557,7 +564,12 @@ untouched (same UID).
    pods, not `rollout restart`, so Argo CD sees no drift).
 6. **A restored instance archives nothing until switched; the previous keeps archiving until discarded.**
 7. **`ScheduledBackup` uses `immediate: true`**, so a restore point exists right after `backup` is set. Alternative: wait for the
-   first schedule (up to 24 h without restore point).
+   first schedule (up to 24 h without restore point). Race: when `backup` is added to an existing cluster, CloudNativePG restarts the
+   instance to load the Barman Cloud plugin; the immediate `Backup` is created before that and fails with `requested plugin is not
+   available`, and CloudNativePG never retries it. So cplat takes the first base backup itself once the cluster has loaded the plugin
+   (`ContinuousArchiving` True, no completed or running `Backup`, at least one failed with that error): `--switch` waits for it and
+   creates `Backup <active>-first-<YYYYMMDDHHMMSS>`, the alert poll does the same for any database in that state, and
+   `/resource:backup` works as before. Until then status shows `pending`, and `pending` never raises "backup failing".
 8. **Environment backups cover persistent volumes only (`emptyDir` skipped)**, via Velero file-system backup. Alternative: back up
    emptyDirs too; their restore is bound to a pod that controllers replace, so it cannot be relied on. The e2e "component volume" is
    the PVC of an external component.

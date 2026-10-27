@@ -711,10 +711,25 @@ for _ in $(seq 1 60); do [ "$(vn get backupstoragelocation e2e-dev -o jsonpath='
   vn get backupstoragelocation e2e-dev -o yaml | tail -25; bfail "the BackupStorageLocation e2e-dev is not Available"; }
 kc rollout status statefulset/e2e-files --timeout=240s || { kc describe pod -l app=e2e-files | tail -30; bfail "e2e-files did not become ready"; }
 kc rollout status deploy/e2e-web --timeout=240s || { kc describe pod -l app=e2e-web | tail -30; bfail "e2e-web did not become ready with the bucket backups"; }
-# the scheduled backup is immediate: wait for the first base backup of the database
+status_state() { # backup.state of the postgres/dev row of `system status --json`
+  $cplat system status --json "${rargs[@]}" 2>/dev/null | python3 -c '
+import json, sys
+print(next(r for r in json.load(sys.stdin)["backups"]["resource_instances"] if r["resource"] == "postgres" and r["environment"] == "dev")["backup"]["state"])' 2>/dev/null
+}
+# Adding backup restarts the instance to load the plugin, so the immediate Backup can fail ("requested plugin is not available") and
+# CloudNativePG never retries it: wait until the plugin is loaded, then accept a completed Backup or the status state pending.
+archiving_on() { [ "$(kc get cluster "$1" -o jsonpath='{.status.conditions[?(@.type=="ContinuousArchiving")].status}' 2>/dev/null)" = True ]; }
 backups_done() { kc get backups.postgresql.cnpg.io -o jsonpath='{range .items[*]}{.status.phase}{"\n"}{end}' 2>/dev/null | grep -qx completed; }
-for _ in $(seq 1 100); do backups_done && break; sleep 5; done   # up to 500 s
-backups_done || { kc get backups.postgresql.cnpg.io; kc describe cluster e2e-postgres | tail -30; bfail "the immediate base backup of postgres did not complete"; }
+for _ in $(seq 1 100); do archiving_on e2e-postgres && break; sleep 5; done   # up to 500 s
+archiving_on e2e-postgres || { kc get backups.postgresql.cnpg.io; kc describe cluster e2e-postgres | tail -30; bfail "the plugin was not loaded on e2e-postgres (ContinuousArchiving is not True)"; }
+if backups_done; then echo "ok   the immediate base backup of postgres completed"
+elif [ "$(status_state)" = pending ]; then echo "ok   postgres/dev status is pending (first backup pending; the on-demand backup follows)"
+else
+  for _ in $(seq 1 24); do backups_done && break; [ "$(status_state)" = pending ] && break; sleep 5; done
+  if backups_done; then echo "ok   the immediate base backup of postgres completed"
+  elif [ "$(status_state)" = pending ]; then echo "ok   postgres/dev status is pending (first backup pending; the on-demand backup follows)"
+  else kc get backups.postgresql.cnpg.io; bfail "postgres has neither a completed base backup nor the state pending"; fi
+fi
 for _ in $(seq 1 60); do [ "$(kc get cluster e2e-postgres -o jsonpath='{.status.phase}' 2>/dev/null)" = "Cluster in healthy state" ] && break; sleep 5; done
 [ "$(kc get cluster e2e-postgres -o jsonpath='{.status.phase}')" = "Cluster in healthy state" ] || bfail "the Postgres cluster is not healthy with the plugin"
 
@@ -801,6 +816,10 @@ if ! out=$($cplat resource restore postgres --env dev --switch "${rargs[@]}" 2>&
 case "$out" in *"switched postgres/dev to e2e-postgres-g1"*) ;; *) bfail "switch did not report e2e-postgres-g1: $out";; esac
 sb_cluster=$(kc get scheduledbackup.postgresql.cnpg.io e2e-postgres -o jsonpath='{.spec.cluster.name}' 2>&1) || bfail "after the switch the ScheduledBackup e2e-postgres is missing (AC-117.13): $sb_cluster"
 [ "$sb_cluster" = e2e-postgres-g1 ] || bfail "after the switch the ScheduledBackup e2e-postgres targets '$sb_cluster', not e2e-postgres-g1 (AC-117.13)"
+g1_backup() { kc get backups.postgresql.cnpg.io -o jsonpath='{range .items[*]}{.spec.cluster.name}{" "}{.status.phase}{"\n"}{end}' 2>/dev/null | grep -qx 'e2e-postgres-g1 completed'; }
+for _ in $(seq 1 120); do g1_backup && break; sleep 5; done   # up to 600 s
+g1_backup || { kc get backups.postgresql.cnpg.io; bfail "no completed base backup of e2e-postgres-g1 after the switch (the first backup must not be lost to the plugin race)"; }
+echo "ok   e2e-postgres-g1 has a completed base backup after the switch"
 kc rollout status deploy/e2e-api --timeout=240s || { kc describe pod -l app=e2e-api | tail -30; bfail "e2e-api did not become ready on the restored database"; }
 rows_ok=""
 for _ in $(seq 1 10); do db_rows && rows_ok=1 && break; sleep 5; done
