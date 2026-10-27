@@ -38,6 +38,7 @@ tasks:
     covers: [AC-124.7, AC-124.9, AC-124.13, AC-124.21]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: instance promote --to dev --version <previous dev pin> (the rollback and its undo)
     files: [scripts/cplat/promote.py]
