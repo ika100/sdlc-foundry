@@ -40,6 +40,7 @@ STEPS = {
         "A cell shows the running version and its state (pinned, healthy, verified, NOT VERIFIED, alert or unknown).",
         "Promote and Cut release open the decision with its consequence first; the promotion itself is a pull request.",
         "Add to the model: each form previews the exact command, the system.yaml diff and the renderer's checks before anything runs.",
+        "Autonomy tab: the level per environment, its guardrails, the engine state, Pause all, and what was done on its own with Undo.",
     ],
 }
 
