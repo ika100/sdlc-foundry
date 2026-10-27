@@ -7,13 +7,20 @@ An opened system runs its own console: `cplat ui --repo-dir <clone>` starts a ne
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import subprocess
+import sys
+import threading
+from pathlib import Path
 
 from console import actions, layout
 from console.html import command_block, esc, freshness
 
 TOPIC = "gitops-app"
+CPLAT = Path(__file__).resolve().parents[1] / "cplat.py"
+START_TIMEOUT = 20.0
+_URL = re.compile(r"console:\s*(http://\S+)")
 
 
 def gh(args: list[str]) -> str:
@@ -44,6 +51,36 @@ def list_systems() -> list[dict]:
     return out
 
 
+def open_system(repo: str) -> dict:
+    """Start the console of the local clone of `repo` (detached, free port) and return `{"url", "command"}` (AC-122.29).
+
+    Raises ValueError without a clone and RuntimeError when no address is printed in time."""
+    clone = actions.clone_of(repo)
+    if not clone.is_dir():
+        raise ValueError(f"no local clone of {repo}: clone it first")
+    argv = [sys.executable, str(CPLAT), "ui", "--repo-dir", str(clone), "--no-open", "--port", "0"]
+    command = "cplat ui --repo-dir " + shlex.quote(str(clone))
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,  # noqa: S603
+                            text=True, start_new_session=True)
+    found: list[str] = []
+
+    def read() -> None:
+        for line in proc.stdout or []:
+            hit = _URL.search(line)
+            if hit:
+                found.append(hit.group(1))
+                return
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    reader.join(START_TIMEOUT)
+    if not found:
+        if proc.poll() is None:
+            proc.terminate()
+        raise RuntimeError(f"its console printed no address; run {command} in a terminal")
+    return {"url": found[0], "command": command}
+
+
 def _row(entry: dict) -> str:
     repo = entry["repo"]
     if entry["action"] == "open":
@@ -72,6 +109,6 @@ def page(ctx, query: dict[str, str]) -> str:
     else:
         body = f'<ul class="list" data-systems>{"".join(_row(e) for e in entries)}</ul>'
     stamp = freshness(ctx.state().get("read_at"))
-    html = (f'<h1>Switch system</h1><p>Opening a system starts its own console on a new port; its address is shown here.</p>'
+    html = (f'<h1>Switch system</h1><p>Opening a system starts its own console on a new port; its address is shown next to it.</p>'
             f'{body}<p>{stamp}</p>')
     return layout.page("Switch system", "system", html, state=ctx.state())

@@ -10,6 +10,7 @@ import contextlib
 import difflib
 import io
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -247,13 +248,62 @@ def way_back_of(form: str, fields: dict, words: list[str], snapshot: Path) -> li
 
 # ---------------- entry point ----------------
 
-def _system_manifest(fields: dict) -> list[str]:
-    """`/system:new` takes a manifest: write the form to the cache and name the file."""
-    manifest = {k: v for k, v in fields.items() if v not in (None, "", [])}
-    path = actions.state_dir() / "manifests" / f"{_need(fields, 'name')}.yaml"
+def _manifest_of(fields: dict) -> dict:
+    """The `/system:new` manifest of the form: `system`, `owner` and one first component."""
+    name = _text(fields, "name") or _text(fields, "system")
+    comp = {"name": _text(fields, "component"), "description": _text(fields, "description"),
+            "type": _text(fields, "type"), "lang": _text(fields, "lang")}
+    manifest: dict = {"system": name, "owner": _text(fields, "owner")}
+    for key in ("org", "visibility"):
+        if _text(fields, key):
+            manifest[key] = _text(fields, key)
+    manifest["components"] = [{k: v for k, v in comp.items() if v}] if any(comp.values()) else []
+    return manifest
+
+
+def _system_manifest(fields: dict) -> tuple[list[str], str, list[dict]]:
+    """`/system:new` takes a manifest: write the form to the cache, check it with the validator `cplat system new` uses
+    (`newapp.load_manifest`, no rules of our own) and return `(words, manifest text, checks)`."""
+    import newapp
+    from core import PlatformError
+
+    manifest = _manifest_of(fields)
+    text = yaml.safe_dump(manifest, sort_keys=False)
+    path = actions.state_dir() / "manifests" / f"{re.sub(r'[^a-z0-9-]', '-', str(manifest['system'] or 'new'))}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(manifest, sort_keys=False))
-    return ["/system:new", str(path)]
+    path.write_text(text)
+    try:
+        newapp.load_manifest(path)
+        checks = [{"key": "manifest", "rule": "the manifest passes the checks of `cplat system new`", "ok": True}]
+    except PlatformError as e:
+        rule = str(e) + (f" ({e.hint})" if e.hint else "")
+        key = next((k for k in ("system", "owner", "components", "visibility", "org") if f"`{k}`" in rule or f"'{k}'" in rule), "")
+        key = key or ("system" if "system name" in rule else "manifest")
+        checks = [{"key": key, "rule": rule, "ok": False}]
+    return ["/system:new", str(path)], text, checks
+
+
+MODEL_COMMAND = re.compile(r"^/(component|resource|system|api):(add|set|remove)$")
+
+
+def diff_of_command(snapshot_dir: Path, command: str) -> str:
+    """The `system.yaml` diff of a slash command that changes the model (run on a scratch copy), else "" (AC-122.21)."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return ""
+    if not words or not MODEL_COMMAND.match(words[0]):
+        return ""
+    with tempfile.TemporaryDirectory(prefix="console-preview-") as tmp:
+        scratch = Path(tmp)
+        make_scratch(Path(snapshot_dir), scratch)
+        target = system_yaml(scratch)
+        before = _read(target)
+        rc, _ = run_command(cplat_argv(words), scratch)
+        after = _read(system_yaml(scratch))
+    if rc != 0:
+        return ""
+    return "".join(difflib.unified_diff(before.splitlines(True), after.splitlines(True), "a/system.yaml", "b/system.yaml"))
 
 
 def preview(snapshot_dir: Path, form: str, fields: dict) -> dict:
@@ -261,8 +311,9 @@ def preview(snapshot_dir: Path, form: str, fields: dict) -> dict:
     snapshot = Path(snapshot_dir)
     fields = fields or {}
     if form == "system":
-        words = _system_manifest(fields)
-        return {"command": shown(words), "diff": "", "checks": [], "valid": True,
+        words, text, checks = _system_manifest(fields)
+        diff = "".join(difflib.unified_diff([], text.splitlines(True), "/dev/null", "b/manifest.yaml"))
+        return {"command": shown(words), "diff": diff, "checks": checks, "valid": all(c["ok"] for c in checks),
                 "consequence": consequence_of(form, fields, snapshot, []),
                 "way_back": ["Close its pull request and delete the new repo."]}
     words = command_of(form, fields)

@@ -19,12 +19,13 @@ import re
 import shlex
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import yaml
 
 import stages
 from console import actions, handoff
-from console.html import action_button, command_block, esc, freshness, stage_badge
+from console.html import action_button, command_block, esc, freshness, short_version, stage_badge
 
 _SPLIT = re.compile(r"[:@/]")
 _BUDGET_LIMITS = ("minutes", "invocations", "reruns", "cost")
@@ -98,7 +99,9 @@ def _budget_line(run: dict | None) -> str:
     used, limit = budget.get("used") or {}, budget.get("limit") or {}
     if not used or not limit:
         return "no budget recorded"
-    return f"${used.get('cost')} of ${limit.get('cost')}, {used.get('minutes')} of {limit.get('minutes')} min"
+    cost = "cost unknown" if used.get("cost") is None else f"${used['cost']}"
+    minutes = "minutes unknown" if used.get("minutes") is None else f"{used['minutes']} min"
+    return f"{cost} of ${limit.get('cost')}, {minutes} of {limit.get('minutes')} min"
 
 
 def _run_for(runs: list[dict], spec: str, repo: str | None = None) -> dict | None:
@@ -168,11 +171,17 @@ def _criterion(c: dict, run: dict | None) -> str:
             f'Tests: {tests_html}. Verdict: {esc(c.get("verdict") or "not judged")}{smoke}</li>')
 
 
+def _stage_or_done(stage: str | None) -> str:
+    """A stage badge, or "Done" outside the stage vocabulary for a finished item (no `data-stage`, AC-122.32)."""
+    return stage_badge(stage) if stage else '<span class="muted">Done</span>'
+
+
 def _slice_line(repo: str, spec_id: str, status: str, run: dict | None) -> str:
     stage = stages.stage_of_spec(status, run) if status else None
-    badge = stage_badge(stage) if stage else esc(status or "done")
     stop = " stopped" if run and run.get("stopped") else ""
-    return (f'<li data-slice="{esc(repo)}">{esc(repo)} {badge}{esc(stop)} {esc(_budget_line(run))}</li>')
+    ident = f"/panel/slice/{quote(f'{repo}:{spec_id}', safe='')}"
+    return (f'<li data-slice="{esc(repo)}" data-open="{ident}"><a href="{ident}">{esc(repo)}</a> {_stage_or_done(stage)}{esc(stop)} '
+            f'{esc(_budget_line(run))}</li>')
 
 
 def _evidence(repo: str, spec: dict, run: dict | None) -> str:
@@ -215,7 +224,8 @@ def panel_spec(ctx: Any, ident: str) -> str:
     current = stages.stage_of_spec(str(spec.get("status")), run)
     slices = spec.get("slices") or []
     if slices:
-        lines = "".join(_slice_line(str(s.get("repo")), ident, str(s.get("status") or ""), _run_for(runs, ident, s.get("repo")))
+        lines = "".join(_slice_line(str(s.get("repo")), str(s.get("spec") or ident), str(s.get("status") or ""),
+                                    _run_for(runs, str(s.get("spec") or ident), s.get("repo")))
                         for s in slices if isinstance(s, dict))
     else:
         lines = _slice_line(repo, ident, str(spec.get("status")), run)
@@ -224,10 +234,29 @@ def panel_spec(ctx: Any, ident: str) -> str:
     contract_html = _section("Contract change", f"<p>{esc(contract)}</p>") if contract else ""
     activity = "".join(f"<li>{esc(a.get('at'))} {esc(a.get('agent'))}: {esc(a.get('text'))}</li>" for a in (run or {}).get("activity") or [])
     activity_html = _section("Activity", f"<ul>{activity}</ul>") if activity else ""
-    body = (_strip(current, bool(run and run.get("stopped"))) + f"<p>{esc(spec.get('title'))}, {esc(spec.get('status'))}</p>"
+    body = (_strip(current, bool(run and run.get("stopped"))) + f"<p>{esc(spec.get('title'))}{'' if current else ' - Done'}</p>"
             + _section("Slices", f'<ul class="slices">{lines}</ul>') + _section("Criteria", f"<ul>{criteria}</ul>")
             + _section("Evidence", _evidence(repo, spec, run)) + contract_html + activity_html)
     return _aside(f"Spec {ident}", body, ctx, _read_at(ctx, f"specs:{repo}"))
+
+
+def panel_slice(ctx: Any, ident: str) -> str:
+    """One slice of a system spec: its repo's stage, budget and the activity of that repo's run of the spec (AC-122.13)."""
+    repo, _, spec_id = ident.rpartition(":")
+    if not repo or not spec_id:
+        raise LookupError(f"unknown slice {ident!r}")
+    sl = next((x for _, rows in _spec_sources(ctx) for s in rows for x in s.get("slices") or []
+               if isinstance(x, dict) and x.get("repo") == repo and str(x.get("spec") or s.get("id")) == spec_id), None)
+    run = _run_for(_runs(ctx), spec_id, repo)
+    if sl is None and run is None:
+        raise LookupError(f"unknown slice {ident!r}")
+    stage = stages.stage_of_spec(str((sl or {}).get("status") or "approved"), run) if sl else None
+    activity = "".join(f"<li>{esc(a.get('at'))} {esc(a.get('agent'))}: {esc(a.get('text'))}</li>" for a in (run or {}).get("activity") or [])
+    run_link = f'<p><a href="/panel/run/{quote(str(run["run_id"]), safe="")}">Run {esc(run["run_id"])}</a></p>' if run else ""
+    body = (_kv([("Repo", esc(repo)), ("Spec", esc(spec_id)), ("Stage", _stage_or_done(stage) + (" stopped" if run and run.get("stopped") else "")),
+                 ("Budget", esc(_budget_line(run)))])
+            + _section("Activity", f"<ul>{activity}</ul>" if activity else "<p>No activity recorded for this slice yet.</p>") + run_link)
+    return _aside(f"Slice {repo} {spec_id}", body, ctx, _read_at(ctx, "runs"))
 
 
 # ---------------- failures and run ----------------
@@ -278,21 +307,38 @@ def _ways_forward(run: dict) -> str:
             + f"<p>{esc(stays)}</p>")
 
 
+def _record_url(run: dict) -> str | None:
+    """The run record in the run store (the repo of `CPLAT_RUNS_REPO`), when known."""
+    if run.get("record_url") or run.get("store_url"):
+        return str(run.get("record_url") or run.get("store_url"))
+    slug = os.environ.get("CPLAT_RUNS_REPO", "").strip()
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", slug) or not run.get("ended_at"):
+        return None
+    try:
+        import runs_store   # noqa: PLC0415 - the layout of the record in the store belongs to the store
+        return f"https://github.com/{slug}/blob/main/{runs_store.record_path(run)}"
+    except (ImportError, KeyError, ValueError):
+        return None
+
+
 def panel_run(ctx: Any, ident: str) -> str:
     """One run: stage, budget, why it stopped, ways forward and the links to its evidence."""
     run = next((r for r in _runs(ctx) if r.get("run_id") == ident), None)
     if run is None:
         raise LookupError(f"unknown run {ident!r}")
     phase, stopped_in = run.get("phase"), run.get("stopped_in")
-    stage = stages.stage_of_run(str(phase), stopped_in)[0] if phase and phase != "done" else None
+    stage = run.get("stage") if run.get("stage") in stages.STAGES else None
+    if stage is None and phase and phase != "done":
+        stage = stages.stage_of_run(str(phase), stopped_in)[0]
     failure = _failure_html(run)
     troubled = bool(run.get("stopped") or run.get("failure") or run.get("escalation")
                     or any(isinstance(v, dict) and v.get("result") == "failed" for v in (run.get("smoke") or {}).values()))
     links = handoff.links_for_work(run)
-    links.append({"label": "Run record", "url": f"/panel/run/{ident}"})
+    if not any(x["label"] == "Run record" for x in links):
+        links.append({"label": "Run record", "url": _record_url(run) or f"/panel/run/{ident}"})
     link_html = "<ul>" + "".join(f"<li>{_link(x['label'], x['url'])}</li>" for x in links) + "</ul>"
     head = _kv([("Spec", esc(run.get("spec"))), ("Repo", esc(run.get("repo"))),
-                ("Stage", (stage_badge(stage) if stage else "done") + (" stopped" if run.get("stopped") else "")),
+                ("Stage", _stage_or_done(stage) + (" stopped" if run.get("stopped") else "")),
                 ("Budget", esc(_budget_line(run))), ("Smoke", esc(_smoke_text(run)))])
     body = (head + (_section("Why it stopped", failure or "<p>The run stopped without a recorded failure.</p>") if troubled else "")
             + (_ways_forward(run) if troubled else "") + _section("Where the evidence lives", link_html))
@@ -302,21 +348,28 @@ def panel_run(ctx: Any, ident: str) -> str:
 # ---------------- issue ----------------
 
 def panel_issue(ctx: Any, ident: str) -> str:
-    """A triage issue: fix it, make a spec of it, or dismiss it with a reason."""
-    needs = (ctx.data("needs") or {}).get("items") if isinstance(ctx.data("needs"), dict) else None
+    """An open issue: fix it, make a spec of it, or dismiss it with a reason (a triage item, or an untracked issue of `needs.issues`)."""
+    needs = ctx.data("needs") if isinstance(ctx.data("needs"), dict) else {}
     number = str(ident).rsplit("#", 1)[-1]             # `<n>`, `#<n>` or `<repo>#<n>`
-    item = next((i for i in needs or [] if str((i.get("object") or {}).get("issue")) == number), None)
-    if item is None:
-        raise LookupError(f"unknown issue {ident!r}")
-    obj = dict(item["object"])
-    obj.setdefault("repo", item.get("cwd_repo"))
-    n = obj["issue"]
-    repo = obj.get("repo")
+    item = next((i for i in needs.get("items") or [] if str((i.get("object") or {}).get("issue")) == number), None)
+    if item is not None:
+        obj = dict(item["object"])
+        obj.setdefault("repo", item.get("cwd_repo"))
+        stage, why, title = item.get("stage") or "Issue", item.get("reason"), ""
+    else:
+        found = next((i for i in needs.get("issues") or [] if isinstance(i, dict) and str(i.get("number")) == number), None)
+        if found is None:
+            raise LookupError(f"unknown issue {ident!r}")
+        obj = {"type": "issue", "repo": found.get("repo"), "issue": found["number"], "spec": None}
+        stage, why, title = "Issue", "Open and not tracked by a spec.", found.get("title") or ""
+    n, repo = obj["issue"], obj.get("repo")
     dismiss = (f'<form><textarea name="reason" aria-label="Reason" placeholder="Why is this not worth fixing?" required></textarea>'
                + _action("dismiss", "Dismiss", "d", obj, f"/issue:triage {n} dismiss as wontfix: <reason>",
                          confirm="Dismiss this issue as wontfix?") + "</form>")
-    body = (_kv([("Issue", _link(f"#{n}", f"https://github.com/{repo}/issues/{n}") if repo else esc(f"#{n}")),
-                 ("Stage", stage_badge(item.get("stage") or "Issue")), ("Why it is here", esc(item.get("reason")))])
+    facts = [("Issue", _link(f"#{n}", f"https://github.com/{repo}/issues/{n}") if repo else esc(f"#{n}"))]
+    facts += [("Title", esc(title))] if title else []
+    facts += [("Stage", stage_badge(stage)), ("Why it is here", esc(why))]
+    body = (_kv(facts)
             + _section("What do you want to do", _action("fix", "Fix it", None, obj, f"/component:fix #{n}", primary=True)
                        + _action("make-spec", "Make a spec", None, obj, f"/component:spec #{n}") + dismiss))
     return _aside(f"Issue #{n}", body, ctx, _read_at(ctx, "needs"))
@@ -339,7 +392,7 @@ def panel_instance(ctx: Any, ident: str) -> str:
     if row is None or env not in (row.get("cells") or {}):
         raise LookupError(f"unknown instance {ident!r}")
     system = str(doc.get("system") or "")
-    facts = [("Version", esc((cell or {}).get("version") or "not deployed")), ("State", esc((cell or {}).get("state") or "unknown"))]
+    facts = [("Version", esc(short_version((cell or {}).get("version")) or "not deployed")), ("State", esc((cell or {}).get("state") or "unknown"))]
     for label, key in (("Digest", "digest"), ("Argo CD", "argo"), ("CI", "ci")):
         if cell and cell.get(key):
             facts.append((label, esc(cell[key])))

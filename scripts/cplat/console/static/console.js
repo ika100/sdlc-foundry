@@ -333,17 +333,25 @@
     out.insertAdjacentElement("afterend", list);
   }
 
-  /* Opening another system starts its own console: show the command to run. */
+  /* Opening another system starts its own console (POST /api/open-system) and shows the address it printed. */
   function openSystem(button) {
     var row = button.closest("[data-system]") || button.parentNode;
     var note = $("[data-open-note]", row);
     if (!note) {
-      note = el("p", { "data-open-note": "", "class": "muted" },
-        "Run the command below in a terminal. It starts that system's console on its own port and prints the address.");
+      note = el("p", { "data-open-note": "", "class": "muted" }, "");
       row.appendChild(note);
     }
-    var code = $("[data-command]", row);
-    toast(code ? "Run in a terminal: " + code.textContent : "Run the command shown");
+    var object = parseValue(button.getAttribute("data-object")) || {};
+    note.textContent = "Starting its console ...";
+    api("POST", "/api/open-system", { repo: object.repo }).then(function (r) {
+      var d = r.data || {};
+      if (r.status === 200 && d.url) {
+        note.textContent = "Its console runs at ";
+        note.appendChild(el("a", { href: d.url, target: "_blank", rel: "noopener noreferrer", "data-open-url": "" }, d.url));
+      } else {
+        note.textContent = (d.error || "Could not start its console") + (d.detail ? ": " + d.detail : "") + ". Run the command shown.";
+      }
+    });
   }
 
   /* "edit rules" in an environment column: open the form and preselect that environment. */
@@ -401,7 +409,8 @@
     if (button) {
       if (button.disabled) { return; }
       var kind = button.getAttribute("data-action");
-      if (kind === "palette") { openPalette(); }
+      if (button.hasAttribute("data-open")) { openPanel(button.getAttribute("data-open"), button); }
+      else if (kind === "palette") { openPalette(); }
       else if (kind === "close-palette") { closePalette(); }
       else if (kind === "close-panel") { closePanel(); }
       else if (kind === "retry-source") { retrySource(button); }

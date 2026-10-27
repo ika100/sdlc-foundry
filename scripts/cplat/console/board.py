@@ -16,7 +16,7 @@ from urllib.parse import quote, urlencode
 
 import stages
 from console import actions, handoff, layout, sources as sources_mod
-from console.html import action_button, esc, freshness, stage_badge, table, unavailable
+from console.html import action_button, esc, freshness, short_version, stage_badge, table, unavailable
 
 PERIODS = {"30": 30, "90": 90, "all": None}
 DEFAULT_PERIOD = "30"
@@ -27,6 +27,13 @@ VIEWS = (("board", "Columns"), ("list", "List"), ("done", "Done"))
 
 def _num(value: Any) -> str:
     return f"{value:g}" if isinstance(value, (int, float)) else str(value)
+
+
+def one_line(text: Any, limit: int = 110) -> str:
+    """The first line of `text`, cut with an ellipsis; the full text lives in the panel."""
+    lines = str(text or "").strip().splitlines()
+    line = lines[0].strip() if lines else ""
+    return line if len(line) <= limit and len(lines) <= 1 else line[: limit - 1].rstrip() + "\u2026"
 
 
 def _panel(kind: str, ident: str) -> str:
@@ -57,10 +64,13 @@ def _run_info(run: dict | None) -> dict:
     used, limit = budget.get("used") or {}, budget.get("limit") or {}
     parts = []
     if limit.get("cost") is not None:
-        parts.append(f"Cost {_num(used.get('cost', 0))} of {_num(limit['cost'])} USD")
+        spent = "cost unknown" if used.get("cost") is None else f"cost {_num(used['cost'])}"
+        parts.append(f"{spent} of {_num(limit['cost'])} USD")
     if limit.get("minutes") is not None:
-        parts.append(f"{_num(used.get('minutes', 0))} of {_num(limit['minutes'])} min")
-    return {"budget": ", ".join(parts), "why": ((run.get("escalation") or {}).get("summary") or "") if run.get("stopped") else ""}
+        parts.append(("minutes unknown" if used.get("minutes") is None else f"{_num(used['minutes'])} min") + f" of {_num(limit['minutes'])} min")
+    escalation = run.get("escalation") or {}
+    why = (escalation.get("summary") or escalation.get("reason") or "") if run.get("stopped") else ""
+    return {"budget": ", ".join(parts).capitalize(), "why": one_line(why)}
 
 
 def _spec_stage(row: dict, runs: list[dict]) -> tuple[str | None, bool, dict | None]:
@@ -101,13 +111,43 @@ def _components(ctx: Any) -> dict[str, str]:
     return {c.get("name"): c.get("repo") for c in model.get("components") or [] if c.get("name")}
 
 
+def system_repos(ctx: Any) -> set[str] | None:
+    """The repos of this system: the gitops repo and the component repos of the model; None while the model is unknown."""
+    model = ctx.data("model")
+    if not isinstance(model, dict):
+        return None
+    repos = {str(c["repo"]) for c in model.get("components") or [] if isinstance(c, dict) and c.get("repo")}
+    system = model.get("system")
+    if isinstance(system, dict) and system.get("owner") and system.get("name"):
+        repos.add(f"{system['owner']}/{system['name']}-gitops")
+    return repos or None
+
+
+def _mine(repos: set[str] | None, repo: Any) -> bool:
+    return repos is None or not repo or str(repo) in repos
+
+
+def _runs_of_system(ctx: Any) -> list[dict]:
+    repos = system_repos(ctx)
+    return [r for r in (ctx.data("runs") or {}).get("runs") or [] if _mine(repos, r.get("repo"))]
+
+
+def _issues(ctx: Any) -> list[dict]:
+    """The issues of `cplat needs` (open untracked ones and recently closed), of this system's repos."""
+    repos = system_repos(ctx)
+    return [i for i in (ctx.data("needs") or {}).get("issues") or [] if isinstance(i, dict) and i.get("number") is not None
+            and _mine(repos, i.get("repo"))]
+
+
 def open_items(ctx: Any) -> list[dict]:
     """Every open item once: specs, runs without a spec row, untracked issues and releases waiting for prod."""
-    runs = (ctx.data("runs") or {}).get("runs") or []
+    runs = _runs_of_system(ctx)
     items: list[dict] = []
     seen_runs: set[str] = set()
     for name in sorted(ctx.sources):
         if not name.startswith("specs:"):
+            continue
+        if not _mine(system_repos(ctx), name[len("specs:"):]):
             continue
         for row in ctx.data(name) or []:
             row = {"repo": name[len("specs:"):], **row}
@@ -131,13 +171,30 @@ def open_items(ctx: Any) -> list[dict]:
                       "component": str(run.get("repo") or "").split("/")[-1],
                       "state": "Stopped" if stopped else "Running", "open": _panel("run", run.get("run_id")), **_run_info(run)})
     items += _need_items(ctx)
+    return items + _issue_items(ctx, items)
+
+
+def _issue_items(ctx: Any, have: list[dict]) -> list[dict]:
+    """Open issues no spec tracks (`needs.issues`) in the Issue column, unless a triage item already shows them."""
+    shown = {i["id"] for i in have if i["kind"] == "issue"}
+    items = []
+    for issue in _issues(ctx):
+        ident = f"#{issue['number']}"
+        if ident in shown or "triage" in (issue.get("labels") or []) or stages.stage_of_issue({"state": issue.get("state") or "OPEN", "labels": issue.get("labels") or []}) != "Issue":
+            continue
+        items.append({"kind": "issue", "stage": "Issue", "stopped": False, "id": ident, "title": issue.get("title") or "",
+                      "repo": issue.get("repo") or "", "component": "", "state": "Open, not triaged",
+                      "open": _panel("issue", issue["number"])})
     return items
 
 
 def _need_items(ctx: Any) -> list[dict]:
     repos = _components(ctx)
     items = []
+    system = system_repos(ctx)
     for need in (ctx.data("needs") or {}).get("items") or []:
+        if not _mine(system, (need.get("object") or {}).get("repo") or need.get("cwd_repo")):
+            continue
         obj = need.get("object") or {}
         if need.get("kind") == "triage" and obj.get("issue") is not None:
             if stages.stage_of_issue({"state": "OPEN", "labels": []}) != "Issue":
@@ -149,22 +206,31 @@ def _need_items(ctx: Any) -> list[dict]:
             if stages.stage_of_release({"verified": True, "running_in_prod": False}) != "Prod":
                 continue
             repo = obj.get("repo") or repos.get(obj["component"]) or ""
-            items.append({"kind": "release", "stage": "Prod", "stopped": False, "id": f"{obj['component']} {obj.get('version')}",
+            items.append({"kind": "release", "stage": "Prod", "stopped": False, "id": f"{obj['component']} {short_version(obj.get('version'))}",
                           "title": "", "repo": repo, "component": obj["component"], "state": "Verified in staging, waits to be promoted",
                           "open": _panel("release", f"{obj['component']}:{obj.get('version')}")})
     for row in (ctx.data("status") or {}).get("rows") or []:
         cand = row.get("release_candidate")
         if cand and cand.get("version"):
-            items.append({"kind": "candidate", "stage": "Prod", "stopped": False, "id": f"{row['component']} {cand['version']}",
+            items.append({"kind": "candidate", "stage": "Prod", "stopped": False, "id": f"{row['component']} {short_version(cand['version'])}",
                           "title": "", "repo": repos.get(row["component"]) or "", "component": row["component"],
                           "state": "New version ready to release", "version": cand["version"],
                           "open": _panel("release", f"{row['component']}:{cand['version']}")})
     return items
 
 
+def _release_of(run: dict) -> str:
+    release = run.get("release") or run.get("version")
+    if isinstance(release, dict):
+        release = release.get("version") or release.get("tag")
+    return short_version(release) if release else ""
+
+
 def done_items(ctx: Any) -> list[dict]:
-    """Finished runs, newest first, each with the stage it reached and its links."""
-    runs = (ctx.data("runs") or {}).get("runs") or []
+    """What was finished, newest first: finished runs, issues closed (`needs.issues`) and releases running in prod.
+
+    Each has the stage it reached, its date, its release (or none) and its evidence links."""
+    runs = _runs_of_system(ctx)
     titles = {(n[len("specs:"):], r.get("id")): r.get("title") for n in ctx.sources if n.startswith("specs:")
               for r in ctx.data(n) or []}
     out = []
@@ -175,7 +241,23 @@ def done_items(ctx: Any) -> list[dict]:
         spec = str(run.get("spec") or run.get("run_id"))
         out.append({"kind": "run", "stage": stage, "id": spec, "title": titles.get((run.get("repo"), run.get("spec"))) or "",
                     "repo": run.get("repo") or "", "component": str(run.get("repo") or "").split("/")[-1],
-                    "ended": run.get("ended_at") or "", "links": handoff.links_for_work(run), "open": _panel("run", run.get("run_id"))})
+                    "ended": run.get("ended_at") or "", "release": _release_of(run), "links": handoff.links_for_work(run),
+                    "open": _panel("run", run.get("run_id"))})
+    for issue in _issues(ctx):
+        if str(issue.get("state") or "").upper() != "CLOSED" or not issue.get("closed_at"):
+            continue
+        links = [{"label": f"Issue #{issue['number']}", "url": issue["url"]}] if issue.get("url") else []
+        out.append({"kind": "issue", "stage": "Issue", "id": f"#{issue['number']}", "title": issue.get("title") or "",
+                    "repo": issue.get("repo") or "", "component": "", "ended": issue["closed_at"], "release": "", "links": links,
+                    "open": _panel("issue", issue["number"])})
+    repos = _components(ctx)
+    for row in (ctx.data("status") or {}).get("rows") or []:
+        prod = (row.get("cells") or {}).get("prod") or {}
+        release = prod.get("release")
+        if release:
+            out.append({"kind": "release", "stage": "Prod", "id": f"{row['component']} {short_version(release)}", "title": "",
+                        "repo": repos.get(row["component"]) or "", "component": row["component"], "ended": "",
+                        "release": short_version(release), "links": [], "open": _panel("instance", f"{row['component']}:prod")})
     return sorted(out, key=lambda i: i["ended"], reverse=True)
 
 
@@ -201,7 +283,8 @@ def _cut_release(item: dict) -> str:
     reason = f"Needs {', '.join(reasons)}" if reasons else None
     if reason is None and actions.active_for(obj):
         reason = "Another action is running on this release"
-    return action_button("cut-release", "Cut release", None, reason, attrs={"data_object": json.dumps(obj)})
+    # The release panel shows version, changes, pull request, tag and the way back; its button confirms (AC-122.47).
+    return action_button("cut-release", "Cut release", None, reason, attrs={"data_object": json.dumps(obj), "data_open": item["open"]})
 
 
 def _card(item: dict) -> str:
@@ -254,14 +337,15 @@ def _done(items: list[dict], empty: str) -> str:
         links = " ".join(f'<a href="{esc(link["url"])}">{esc(link["label"])}</a>' for link in i["links"])
         label = f"{i['id']} {i['title']}".strip()
         rows.append([f'<a href="{esc(i["open"])}">{esc(label)}</a>', esc(i["repo"]),
-                     stage_badge(i["stage"]) if i["stage"] else "", _date(i["ended"]), links])
-    return table(rows, ["Item", "Repo", "Stage reached", "Finished", "Links"])
+                     stage_badge(i["stage"]) if i["stage"] else "\u2013", _date(i["ended"]) or "\u2013",
+                     esc(i.get("release") or "\u2013"), links or "\u2013"])
+    return table(rows, ["Item", "Repo", "Stage reached", "Finished", "Release", "Links"])
 
 
 def _within(item: dict, period: str, now: Any) -> bool:
     days = PERIODS[period]
     ended = sources_mod.parse_iso(item["ended"])
-    return days is None or (ended is not None and now - ended <= timedelta(days=days))
+    return days is None or not item["ended"] or (ended is not None and now - ended <= timedelta(days=days))
 
 
 def _nav(view: str, period: str, needle: str) -> str:
