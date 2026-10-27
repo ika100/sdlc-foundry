@@ -146,6 +146,7 @@ tasks:
     covers: [AC-122.2, AC-122.23, AC-122.24, AC-122.25, AC-122.26]
     parallel_safe: true
     depends_on: [t3, t6, t19]
+    done: true
   - id: t21
     title: /platform:ui, docs, CHANGELOG and plugin versions
     files: [plugins/platform/commands/ui.md, plugins/platform/README.md, plugins/system/README.md, plugins/component/README.md, plugins/platform/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, plugins/component/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/console.md, docs/DOMAIN-MODEL.md, README.md, docs/CHANGELOG.md]
