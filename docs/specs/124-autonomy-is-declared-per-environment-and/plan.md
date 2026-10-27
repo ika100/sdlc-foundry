@@ -26,6 +26,7 @@ tasks:
     covers: [AC-124.10, AC-124.18]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: run store — audit/ prefix, record_audit with buffer and flush, kind fix
     files: [scripts/cplat/runs_store.py, scripts/cplat/runs.py]
