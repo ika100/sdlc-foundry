@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -52,10 +53,32 @@ def _derive(rec: dict) -> tuple[str, str | None]:
         return "escalated", where if where in stages._PHASE_STAGE else "build"
     if rec.get("outcome") == "done" or last == "done":
         return "done", None
-    staging = rec.get("staging")
-    if last == "deploy" and isinstance(staging, dict) and staging.get("state") == "pending":
+    if last == "deploy" and _staging_pending(rec):
         return "staging", None
     return last, None
+
+
+def _outcome(section) -> str | None:
+    return section.get("outcome") if isinstance(section, dict) else None
+
+
+def _staging_pending(rec: dict) -> bool:
+    """Deployed and smoked in dev, the staging promotion not skipped or failed, and no staging smoke recorded yet."""
+    smoke = rec.get("smoke") if isinstance(rec.get("smoke"), dict) else {}
+    promo = (rec.get("promotion") or {}).get("staging") if isinstance(rec.get("promotion"), dict) else None
+    if smoke.get("staging") or (isinstance(promo, dict) and promo.get("result") in ("skipped", "failed")):
+        return False
+    return isinstance(promo, dict) and promo.get("result") == "promoted"
+
+
+def _reached(rec: dict) -> str:
+    """The phase a finished run got to last (never `done`): the last opened phase, `staging` when staging was smoked."""
+    if isinstance(rec.get("smoke"), dict) and rec["smoke"].get("staging"):
+        return "staging"
+    opened = [n for n in _phase_names(rec) if n != "done"]
+    if opened:
+        return opened[-1]
+    return "plan" if rec.get("kind") in ("ship", "product-ship") else "build"
 
 
 def _one_line(text) -> str:
@@ -80,6 +103,20 @@ def _snapshot(repo_dir: str | None) -> dict:
     return {}
 
 
+def _snapshot_refs(snap: dict, repo_dir: str | None) -> tuple[str | None, str | None]:
+    """(first changed test file, path of the recovery snapshot) of a stopped run's clone; None for what is not there."""
+    if not snap:
+        return None, None
+    try:
+        import budget
+        import core
+        test = next((f for f in snap.get("changed_files") or [] if isinstance(f, str) and budget._TESTFILE.search(f)), None)
+        common = core.git_dir(Path(repo_dir)) if repo_dir else None
+        return test, str(common / budget.RECOVERY_FILE) if common else None
+    except Exception:  # noqa: BLE001
+        return None, None
+
+
 def _failure(rec: dict, esc: dict | None, repo_dir: str | None) -> dict | None:
     if esc is None and rec.get("outcome") != "failed":
         return None
@@ -91,8 +128,9 @@ def _failure(rec: dict, esc: dict | None, repo_dir: str | None) -> dict | None:
         import escalation_rules
         diagnosis = escalation_rules.message(runs_report.effective_escalation(rec)) or ""
     diagnosis = diagnosis or (esc or {}).get("reason") or str(rec.get("outcome") or "failed")
-    return {"check": snap.get("stage"), "test": None, "criterion": criteria[0] if criteria else None,
-            "error": excerpt[-1] if excerpt else None, "excerpt": excerpt[-10:], "log": None, "diagnosis": diagnosis}
+    test, log = _snapshot_refs(snap, repo_dir)
+    return {"check": snap.get("stage"), "test": test, "criterion": criteria[0] if criteria else None,
+            "error": excerpt[-1] if excerpt else None, "excerpt": excerpt[-10:], "log": log, "diagnosis": diagnosis}
 
 
 def _ledger(rec: dict):
@@ -159,14 +197,78 @@ def _children(rec: dict) -> list[str]:
     return [c for c in rec.get("ships") or [] if isinstance(c, str)]
 
 
+def lookup_pr(repo: str, branch: str) -> dict | None:
+    """The open or merged PR of a branch through `gh` (tests replace this); None when `gh` cannot say."""
+    import json as _json
+    from core import run
+    try:
+        out = run(["gh", "pr", "list", "-R", repo, "--head", branch, "--state", "all", "--json", "number,url", "--limit", "1"],
+                  check=False, timeout=10).stdout
+        found = _json.loads(out or "[]")
+    except Exception:  # noqa: BLE001
+        return None
+    return found[0] if found and isinstance(found[0], dict) and found[0].get("url") else None
+
+
+def _as_pr(value) -> dict | None:
+    """`{number, url}` from a PR url, a number-and-url dict or None."""
+    url = value.get("url") if isinstance(value, dict) else value if isinstance(value, str) else None
+    if not url:
+        return None
+    number = value.get("number") if isinstance(value, dict) else None
+    if number is None and (m := re.search(r"/pull/(\d+)", url)):
+        number = int(m.group(1))
+    return {"number": number, "url": url}
+
+
+def _state_pr(rec: dict, repo_dir: str | None) -> dict | None:
+    """The PR the unfinished ship state of the run's clone names (`st["pr"]` is a url)."""
+    try:
+        import ship
+        st = ship.load_state(Path(repo_dir)) if repo_dir and Path(repo_dir).is_dir() else None
+    except Exception:  # noqa: BLE001
+        return None
+    return _as_pr(st.get("pr")) if st and st.get("run_id") == rec.get("run_id") else None
+
+
+def _pr(rec: dict, repo_dir: str | None, phase: str) -> dict | None:
+    """The run's PR: a recorded one, else the ship state's, else (running or stopped runs) the `feature/<spec>` branch's."""
+    found = _as_pr(rec.get("pr")) or _state_pr(rec, repo_dir)
+    if found or phase == "done" or not rec.get("repo") or not rec.get("spec"):
+        return found
+    return _as_pr(lookup_pr(rec["repo"], f"feature/{rec['spec']}"))
+
+
+def _image(rec: dict) -> str | None:
+    smoke = rec.get("smoke") if isinstance(rec.get("smoke"), dict) else {}
+    staging = smoke.get("staging") if isinstance(smoke.get("staging"), dict) else {}
+    return rec.get("image") or smoke.get("image") or staging.get("image") or None
+
+
+_GREEN = ("passed", "passed-on-retry")
+
+
+def _smoke_cell(section, repo: str | None, env: str) -> dict | None:
+    outcome = _outcome(section)
+    if not outcome:
+        return None
+    result = "passed" if outcome in _GREEN else "not-run" if outcome == "not-run" else "failed"
+    return {"result": result, "instance": f"{(repo or '').rsplit('/', 1)[-1]}/{env}"}
+
+
+def _smoke(rec: dict) -> dict:
+    """`{dev, staging}` as `{result: passed|failed|not-run, instance: <component>/<env>}` from the record's smoke sections."""
+    smoke = rec.get("smoke") if isinstance(rec.get("smoke"), dict) else {}
+    return {"dev": _smoke_cell(smoke, rec.get("repo"), "dev"), "staging": _smoke_cell(smoke.get("staging"), rec.get("repo"), "staging")}
+
+
 def row(rec: dict, active: bool) -> dict:
     """One row of the run list from a run record (active, buffered or stored)."""
     phase, stopped_in = _derive(rec)
-    stage, stopped = (None, False) if phase == "done" else stages.stage_of_run(phase, stopped_in)
+    stage, stopped = stages.stage_of_run(_reached(rec) if phase == "done" else phase, stopped_in)
     esc = _escalation(rec)
     session, repo_dir = _session(rec["run_id"])
-    pr = rec.get("pr") if isinstance(rec.get("pr"), dict) else None
-    smoke = rec.get("smoke") if isinstance(rec.get("smoke"), dict) else {}
+    pr = _pr(rec, repo_dir, phase)
     return {
         "run_id": rec["run_id"], "kind": rec.get("kind"), "level": "system" if rec.get("kind") == "product-ship" else "component",
         "spec": rec.get("spec"), "repo": rec.get("repo"), "parent": rec.get("parent"), "children": _children(rec),
@@ -174,8 +276,8 @@ def row(rec: dict, active: bool) -> dict:
         "started_at": rec.get("started_at"), "ended_at": rec.get("ended_at"), "outcome": rec.get("outcome"),
         "escalation": esc, "failure": _failure(rec, esc, repo_dir), "budget": _budget(rec, active),
         "activity": _activity(rec, esc), "session_id": session, "repo_dir": repo_dir,
-        "pr": pr, "ci_url": rec.get("ci_url"), "image": rec.get("image"),
-        "smoke": {"dev": smoke.get("dev") or (smoke if smoke.get("result") else None), "staging": smoke.get("staging")},
+        "pr": pr, "ci_url": rec.get("ci_url") or (f"{pr['url']}/checks" if pr and pr.get("url") else None),
+        "image": _image(rec), "smoke": _smoke(rec),
     }
 
 
