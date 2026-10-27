@@ -209,7 +209,7 @@ def test_the_unknown_key_texts_name_backup_ac_117_2(tmp_path):  # AC-117.2
           P + "resources.orders-db.instances.dev: unknown key 'bogus' (allowed: external, remote, replicas, storage, resources, backup)")
     doc = bdoc()
     doc["environments"]["dev"]["bogus"] = 1
-    fails(tmp_path / "e", doc, P + "environments.dev: unknown key 'bogus' (allowed: host, url, policy, promote, observability, operators, backup)")
+    fails(tmp_path / "e", doc, P + "environments.dev: unknown key 'bogus' (allowed: host, url, policy, promote, observability, operators, backup, autonomy)")  # spec 124: autonomy
 
 
 # ---------------- remote.s3 of a bucket ----------------
