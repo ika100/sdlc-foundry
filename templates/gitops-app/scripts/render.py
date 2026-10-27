@@ -1162,6 +1162,15 @@ def secret_manifests(app: str, svc: dict, env: str, cfg: dict) -> dict[str, dict
     return out
 
 
+def is_backup_target(cfg: dict, env: str, name: str) -> bool:
+    """True when bucket `name` is the backup target of `env`."""
+    return (cfg.get("backup") or {}).get(env, {}).get("to") == name
+
+
+def backup_target_labels(app: str, name: str) -> dict:
+    return {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
+
+
 def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dict[str, dict[str, dict]]:
     """{component: {file name: ExternalSecret}} for the external resource instances of `env`.
 
@@ -1184,11 +1193,16 @@ def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dic
                         "target": {"name": secret, "creationPolicy": "Orphan", "deletionPolicy": "Retain"},
                         "data": [{"secretKey": k, "remoteRef": {"key": conf["store_key"], "property": k}}
                                  for k in TYPES[rc["type"]]["keys"]]}}
+        if is_backup_target(cfg, env, name):       # Velero's store reads the Secret by these labels (AC-117.17)
+            doc["spec"]["target"]["template"] = {"engineVersion": "v2", "mergePolicy": "Merge",
+                                                 "metadata": {"labels": backup_target_labels(app, name)}}
         out.setdefault(users[0], {})[f"externalsecret-{secret}.yaml"] = doc
     return out
 
 
 BARMAN_PLUGIN = "barman-cloud.cloudnative-pg.io"
+VELERO_EXCLUDED = ["clusters.postgresql.cnpg.io", "backups.postgresql.cnpg.io", "scheduledbackups.postgresql.cnpg.io", "objectstores.barmancloud.cnpg.io"]
+PRESERVED_FIELDS = {"annotations": ["argocd.argoproj.io/skip-reconcile"]}
 SERVER_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
 
@@ -1286,7 +1300,7 @@ def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | N
     }
 
 
-def bucket_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | str]:
+def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False) -> dict[str, dict | str]:
     """The in-cluster bucket instance (ADR-059): its own SeaweedFS, a Bucket, an identity limited to it and generated keys.
 
     Argo CD never deletes any of it (`Delete=false`, `reclaimPolicy: Retain`). No credential value is rendered: the keys come from
@@ -1342,9 +1356,72 @@ def bucket_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | 
                                     "secretAccessKey": "{{ .secretAccessKey }}"}}},  # pragma: allowlist secret
                      "dataFrom": [source("access-key", "accessKeyId"), source("secret-key", "secretAccessKey")]}},  # pragma: allowlist secret
     }
+    if target:       # the environment's backup target: Velero's store finds the Secret by its labels (AC-117.17)
+        files["externalsecret.yaml"]["spec"]["target"]["template"]["metadata"] = {"labels": dict(labels)}
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
                                    "resources": ["access-key-generator.yaml", "bucket.yaml", "credentials.yaml", "externalsecret.yaml",
                                                  "identity.yaml", "seaweed.yaml", "secret-key-generator.yaml"]}
+    return files
+
+
+def backup_files(app: str, env: str, cfg: dict) -> dict[str, dict]:
+    """backup/<env>/ (AC-117.15, AC-117.17): Velero's storage location, credentials from the target bucket's Secret, and the Schedule."""
+    backup = cfg["backup"][env]
+    to = backup["to"]
+    bucket, endpoint, secret = backup_target(app, env, cfg, to)
+    target = cfg["resources"][to]["envs"][env]
+    n, ns = f"{app}-{env}", f"{app}-{env}"
+    labels = {"app.kubernetes.io/name": "backup", "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
+
+    def meta(name: str, namespace: str) -> dict:
+        return {"name": name, "namespace": namespace, "labels": dict(labels)}
+
+    if target["external"]:
+        region, path_style = target["s3"]["region"], str(bool(target["s3"]["forcePathStyle"])).lower()
+    else:
+        region, path_style = "us-east-1", "true"
+    number, unit = int(backup["retention"][:-1]), backup["retention"][-1]
+    hours = number * (24 if unit == "d" else 168)
+    caches = sorted(r for r, rc in cfg["resources"].items() if rc["type"] == "cache")
+    policy = "version: v1\nvolumePolicies:\n- conditions:\n    volumeTypes:\n    - emptyDir\n  action:\n    type: skip\n"
+    cloud = "[default]\naws_access_key_id={{ .accessKeyId }}\naws_secret_access_key={{ .secretAccessKey }}\n"
+    files: dict[str, dict] = {
+        "serviceaccount.yaml": {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": meta(f"{n}-backup", "velero")},
+        "role.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role", "metadata": meta(f"{app}-backup-credentials", ns),
+                      "rules": [{"apiGroups": [""], "resources": ["secrets"], "resourceNames": [secret], "verbs": ["get"]},
+                                {"apiGroups": ["authorization.k8s.io"], "resources": ["selfsubjectrulesreviews"], "verbs": ["create"]}]},
+        "rolebinding.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "RoleBinding", "metadata": meta(f"{app}-backup-credentials", ns),
+                             "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": f"{app}-backup-credentials"},
+                             "subjects": [{"kind": "ServiceAccount", "name": f"{n}-backup", "namespace": "velero"}]},
+        "secretstore.yaml": {"apiVersion": ESO_API, "kind": "SecretStore", "metadata": meta(f"{n}-backup", "velero"),
+                             "spec": {"provider": {"kubernetes": {
+                                 "remoteNamespace": ns,
+                                 "server": {"caProvider": {"type": "ConfigMap", "name": "kube-root-ca.crt", "key": "ca.crt"}},
+                                 "auth": {"serviceAccount": {"name": f"{n}-backup"}}}}}},
+        "externalsecret.yaml": {"apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": meta(f"{n}-backup", "velero"),
+                                "spec": {"refreshInterval": "1h", "secretStoreRef": {"name": f"{n}-backup", "kind": "SecretStore"},
+                                         "target": {"name": f"{n}-backup", "creationPolicy": "Owner",
+                                                    "template": {"engineVersion": "v2", "data": {"cloud": cloud}}},
+                                         "data": [{"secretKey": k, "remoteRef": {"key": secret, "property": k}}
+                                                  for k in ("accessKeyId", "secretAccessKey")]}},  # pragma: allowlist secret
+        "storage-location.yaml": {"apiVersion": "velero.io/v1", "kind": "BackupStorageLocation", "metadata": meta(n, "velero"),
+                                  "spec": {"provider": "aws", "objectStorage": {"bucket": bucket, "prefix": f"environments/{n}"},
+                                           "credential": {"name": f"{n}-backup", "key": "cloud"},
+                                           "config": {"region": region, "s3ForcePathStyle": path_style, "s3Url": endpoint},
+                                           "accessMode": "ReadWrite"}},
+        "resource-policy.yaml": {"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta(f"{n}-backup-policy", "velero"),
+                                 "data": {"policy.yaml": policy}},
+        "schedule.yaml": {"apiVersion": "velero.io/v1", "kind": "Schedule", "metadata": meta(n, "velero"),
+                          "spec": {"schedule": backup["schedule"], "useOwnerReferencesInBackup": False,
+                                   "template": {"includedNamespaces": [ns], "excludedResources": list(VELERO_EXCLUDED),
+                                                "labelSelector": {"matchExpressions": [
+                                                    {"key": "cnpg.io/cluster", "operator": "DoesNotExist"},
+                                                    {"key": "app.kubernetes.io/name", "operator": "NotIn", "values": [to, *caches]},
+                                                    {"key": "app.kubernetes.io/instance", "operator": "NotIn", "values": [f"{app}-{to}"]}]},
+                                                "storageLocation": n, "ttl": f"{hours}h0m0s", "defaultVolumesToFsBackup": True,
+                                                "snapshotVolumes": False, "resourcePolicy": {"kind": "configmap", "name": f"{n}-backup-policy"}}}},
+    }
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
     return files
 
 
@@ -1413,7 +1490,7 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], 
         return observability_files(app, env, cfg["observability"][env], services)
     res = cfg["resources"][name]
     if res["type"] == "bucket":
-        return bucket_files(app, name, env, res["envs"][env])
+        return bucket_files(app, name, env, res["envs"][env], is_backup_target(cfg, env, name))
     conf = res["envs"][env]            # database; cache and broker are not built yet
     backup = conf.get("backup")
     base = f"{app}-{name}"
@@ -1465,6 +1542,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                         "syncPolicy": {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]},
                     },
                 },
+                **({"preservedFields": PRESERVED_FIELDS} if env in cfg["backup"] else {}),
             },
         })
     for env in ENVS:
@@ -1493,6 +1571,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                             "syncPolicy": sync,
                         },
                     },
+                    **({"preservedFields": PRESERVED_FIELDS} if env in cfg["backup"] else {}),
                 },
             })
         for n in names:
@@ -1518,6 +1597,27 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
         base = app_dir / "policies" / env
         out[base / "policy.yaml"] = dump(guardrail_policy(app, env, cfg["policy"][env], allowed_registries(services, cfg, env)))
         out[base / "kustomization.yaml"] = dump({"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["policy.yaml"]})
+    for env in ENVS:
+        if env not in cfg["backup"]:
+            continue
+        docs.append({
+            "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",
+            "metadata": {"name": f"{app}-backup-{env}", "namespace": "argocd"},
+            "spec": {
+                "generators": [{"list": {"elements": [{"name": "environment"}]}}],
+                "template": {
+                    "metadata": {"name": f"{app}-backup-{env}"},
+                    "spec": {
+                        "project": "default",
+                        "source": {"repoURL": gitops_repo, "targetRevision": "main", "path": f"applications/{app}/backup/{env}"},
+                        "destination": {"server": server, "namespace": "velero"},
+                        "syncPolicy": {"automated": {"prune": True, "selfHeal": True}, "retry": RETRY},
+                    },
+                },
+            },
+        })
+        for fname, doc in backup_files(app, env, cfg).items():
+            out[app_dir / "backup" / env / fname] = dump(doc)
     out[app_dir / "applicationset.yaml"] = "---\n".join(dump(d) for d in docs)
 
     out[ROOT / "bootstrap" / f"{app}-root.yaml"] = dump({
@@ -1613,7 +1713,7 @@ def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
                 stale.append(d)
                 continue
             stale += [f for f in d.iterdir() if (f.name in MANAGED_FILES or f.name.startswith(MANAGED_PREFIXES)) and f not in wanted]
-    for kind in ("addons", "policies"):
+    for kind in ("addons", "policies", "backup"):
         top = app_dir / kind
         if top.is_dir() and not any(top in p.parents for p in wanted):
             stale.append(top)          # nothing of this kind is wanted any more: remove the whole directory
@@ -1622,7 +1722,7 @@ def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
             base = app_dir / kind / env
             if not base.is_dir():
                 continue
-            if kind == "policies":
+            if kind in ("policies", "backup"):
                 if not any(p.parent == base for p in wanted):
                     stale.append(base)
                 continue
