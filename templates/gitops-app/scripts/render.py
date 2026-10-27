@@ -180,6 +180,7 @@ POSTGRES_IMAGES = {
     17: "ghcr.io/cloudnative-pg/postgresql:17.11",
     18: "ghcr.io/cloudnative-pg/postgresql:18.6",
 }
+VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4"     # matches the Velero chart's appVersion line (1.14 <-> 1.18)
 SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51"     # every in-cluster bucket runs its own SeaweedFS of this image
 OPERATORS = {
     "cloudnative-pg": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "cloudnative-pg", "chart_version": "0.29.1",
@@ -187,7 +188,21 @@ OPERATORS = {
     "seaweedfs": {"repo_url": "https://seaweedfs.github.io/seaweedfs-operator", "chart": "seaweedfs-operator", "chart_version": "0.1.45",
                   "operator_version": "1.0.42", "namespace": "seaweedfs-operator", "release": "seaweedfs-operator",
                   "crd": "buckets.seaweed.seaweedfs.com"},
+    # Spec 117: the Barman Cloud plugin (and its hard requirement cert-manager) for database backups, Velero for environment backups.
+    "plugin-barman-cloud": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "plugin-barman-cloud", "chart_version": "0.8.1",
+                            "operator_version": "0.15.1", "namespace": "cnpg-system", "release": "barman-cloud",
+                            "crd": "objectstores.barmancloud.cnpg.io", "retry": True},
+    "cert-manager": {"repo_url": "https://charts.jetstack.io", "chart": "cert-manager", "chart_version": "v1.21.3",
+                     "operator_version": "1.21.3", "namespace": "cert-manager", "release": "cert-manager",
+                     "crd": "certificates.cert-manager.io", "values": {"crds": {"enabled": True}}},
+    "velero": {"repo_url": "https://vmware-tanzu.github.io/helm-charts", "chart": "velero", "chart_version": "12.2.1",
+               "operator_version": "1.18.2", "namespace": "velero", "release": "velero", "crd": "schedules.velero.io", "finalizer": True,
+               "values": {"initContainers": [{"name": "velero-plugin-for-aws", "image": VELERO_AWS_PLUGIN_IMAGE,
+                                              "volumeMounts": [{"mountPath": "/target", "name": "plugins"}]}],
+                          "deployNodeAgent": True, "snapshotsEnabled": False, "credentials": {"useSecret": False},
+                          "configuration": {"backupStorageLocation": [], "volumeSnapshotLocation": [], "uploaderType": "kopia"}}},
 }
+OPERATOR_RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
 OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs"}
 DB_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
 # Resource contract (ADR-020, ADR-057): what a component gets when it `uses` a resource is in TYPES. Components never see the implementation.
@@ -1669,6 +1684,12 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
         for _, env, typ, ext in resource_instances(system):
             if not ext and env not in owned and typ in OPERATOR_OF_TYPE:
                 needed.add(OPERATOR_OF_TYPE[typ])
+        for r, rc in system["cfg"]["resources"].items():
+            for env, inst in rc["envs"].items():
+                if rc["type"] == "database" and not inst["external"] and env not in owned and inst.get("backup"):
+                    needed |= {"plugin-barman-cloud", "cert-manager"}
+        if any(env not in owned for env in system["cfg"]["backup"]):
+            needed.add("velero")
     if not needed:
         return {}
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
@@ -1686,16 +1707,18 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
         if name not in needed:
             continue
         op = OPERATORS[name]
+        meta = {"name": f"operator-{name}", "namespace": "argocd",
+                "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}}
+        if op.get("finalizer"):
+            meta["finalizers"] = ["resources-finalizer.argocd.argoproj.io"]
+        helm = {"releaseName": op["release"], **({"valuesObject": op["values"]} if "values" in op else {})}
+        sync = {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"],
+                **({"retry": OPERATOR_RETRY} if op.get("retry") else {})}
         files[base / "apps" / f"{name}.yaml"] = dump({
-            "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
-            "metadata": {"name": f"operator-{name}", "namespace": "argocd",
-                         "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+            "apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "metadata": meta,
             "spec": {"project": "default",
-                     "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"],
-                                "helm": {"releaseName": op["release"]}},
-                     "destination": {"server": server, "namespace": op["namespace"]},
-                     "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
-                                    "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}})
+                     "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"], "helm": helm},
+                     "destination": {"server": server, "namespace": op["namespace"]}, "syncPolicy": sync}})
     return files
 
 
