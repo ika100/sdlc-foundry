@@ -170,7 +170,11 @@ SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51"     # every in-cluster bucket runs 
 OPERATORS = {
     "cloudnative-pg": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "cloudnative-pg", "chart_version": "0.29.1",
                        "operator_version": "1.30.1", "namespace": "cnpg-system", "release": "cnpg", "crd": "clusters.postgresql.cnpg.io"},
+    "seaweedfs": {"repo_url": "https://seaweedfs.github.io/seaweedfs-operator", "chart": "seaweedfs-operator", "chart_version": "0.1.45",
+                  "operator_version": "1.0.42", "namespace": "seaweedfs-operator", "release": "seaweedfs-operator",
+                  "crd": "buckets.seaweed.seaweedfs.com"},
 }
+OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs"}
 DB_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
 # Resource contract (ADR-020, ADR-057): what a component gets when it `uses` a resource is in TYPES. Components never see the implementation.
 ADDONS = {
@@ -1343,35 +1347,41 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
 def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
     """operators/ (AC-115.18): cluster-level, outside every system's tree; only when an in-cluster database runs in an environment
     whose operators are not owned by the cluster's owner."""
-    needed = False
+    needed: set[str] = set()
     for app_dir in apps:
         system = load_system(app_dir)
         owned = system["cfg"]["operators"]
-        needed = needed or any(not ext and typ == "database" and env not in owned for _, env, typ, ext in resource_instances(system))
+        for _, env, typ, ext in resource_instances(system):
+            if not ext and env not in owned and typ in OPERATOR_OF_TYPE:
+                needed.add(OPERATOR_OF_TYPE[typ])
     if not needed:
         return {}
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
     org = ans.get("github_org", "ika100")
     repo = f"https://github.com/{org}/{ans.get('project_name', apps[0].name + '-gitops')}"
-    op = OPERATORS["cloudnative-pg"]
     base = ROOT / "operators"
-    return {
+    files = {
         base / "root.yaml": dump({
             "apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "metadata": {"name": "platform-operators", "namespace": "argocd"},
             "spec": {"project": "default", "source": {"repoURL": repo, "targetRevision": "main", "path": "operators/apps"},
                      "destination": {"server": server, "namespace": "argocd"},
                      "syncPolicy": {"automated": {"prune": True, "selfHeal": True}}}}),
-        base / "apps" / "cloudnative-pg.yaml": dump({
+    }
+    for name in OPERATORS:
+        if name not in needed:
+            continue
+        op = OPERATORS[name]
+        files[base / "apps" / f"{name}.yaml"] = dump({
             "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
-            "metadata": {"name": "operator-cloudnative-pg", "namespace": "argocd",
+            "metadata": {"name": f"operator-{name}", "namespace": "argocd",
                          "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
             "spec": {"project": "default",
                      "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"],
                                 "helm": {"releaseName": op["release"]}},
                      "destination": {"server": server, "namespace": op["namespace"]},
                      "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
-                                    "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}}),
-    }
+                                    "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}})
+    return files
 
 
 def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
