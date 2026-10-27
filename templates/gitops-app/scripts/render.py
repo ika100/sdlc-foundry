@@ -203,6 +203,10 @@ POSTGRES_IMAGES = {
     17: "ghcr.io/cloudnative-pg/postgresql:17.11",
     18: "ghcr.io/cloudnative-pg/postgresql:18.6",
 }
+VALKEY_IMAGES = {         # matches ^valkey/valkey:\d+\.\d+\.\d+(@sha256:[0-9a-f]{64})?$; no bare major, no latest
+    8: "valkey/valkey:8.1.11",
+    9: "valkey/valkey:9.1.3",
+}
 VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4"     # matches the Velero chart's appVersion line (1.14 <-> 1.18)
 SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51"     # every in-cluster bucket runs its own SeaweedFS of this image
 OPERATORS = {
@@ -1464,6 +1468,73 @@ def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False
     return files
 
 
+def cache_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | str]:
+    """The in-cluster cache instance (ADR-063): one Valkey StatefulSet, a ClusterIP Service and a password generated once.
+
+    Every object carries `app.kubernetes.io/name: <name>`, so spec 117's Velero Schedule leaves all of it out. No secret value is
+    rendered: the password comes from an External Secrets `Password` generator and is written once to `<system>-<name>-app`."""
+    n, ns = f"{app}-{name}", f"{app}-{env}"
+    gen_api = "generators.external-secrets.io/v1alpha1"
+    labels = lambda: {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}  # noqa: E731
+    selector = lambda: {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app}  # noqa: E731
+    wave = lambda: {"argocd.argoproj.io/sync-wave": "-1"}  # noqa: E731
+    persistent = conf["persistence"]
+    args = ["--port", "6379", "--requirepass", "$(VALKEY_PASSWORD)", "--maxmemory", str(conf["maxmemory"]),
+            "--maxmemory-policy", conf["maxmemoryPolicy"], "--save", "", "--dir", "/data",
+            "--appendonly", "yes" if persistent else "no"]
+    if persistent:
+        args += ["--appendfsync", "everysec"]
+    memory = str(conf["memory"])
+    container: dict = {
+        "name": "valkey", "image": VALKEY_IMAGES[conf["version"]], "command": ["valkey-server"], "args": args,
+        "env": [{"name": "VALKEY_PASSWORD", "valueFrom": {"secretKeyRef": {"name": f"{n}-app", "key": "password"}}}],  # pragma: allowlist secret
+        "ports": [{"name": "redis", "containerPort": 6379}],
+        "resources": {"requests": {"cpu": "50m", "memory": memory}, "limits": {"memory": memory}},
+        "readinessProbe": {"exec": {"command": ["sh", "-c", 'valkey-cli --no-auth-warning -a "$VALKEY_PASSWORD" ping | grep -q PONG']},
+                           "periodSeconds": 5},
+        "livenessProbe": {"tcpSocket": {"port": "redis"}, "initialDelaySeconds": 10, "periodSeconds": 10},
+        "securityContext": {"runAsNonRoot": True, "runAsUser": 999, "allowPrivilegeEscalation": False,
+                            "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}},
+    }
+    spec: dict = {
+        "replicas": 1, "serviceName": n, "selector": {"matchLabels": selector()},
+        "template": {"metadata": {"labels": labels()},
+                     "spec": {"automountServiceAccountToken": False,
+                              "securityContext": {"runAsNonRoot": True, "runAsUser": 999, "runAsGroup": 999, "fsGroup": 999,
+                                                  "seccompProfile": {"type": "RuntimeDefault"}},
+                              "containers": [container]}},
+    }
+    if persistent:
+        container["volumeMounts"] = [{"name": "data", "mountPath": "/data"}]
+        spec["volumeClaimTemplates"] = [{"metadata": {"name": "data", "labels": labels()},
+                                         "spec": {"accessModes": ["ReadWriteOnce"],
+                                                  "resources": {"requests": {"storage": conf["storage"]}}}}]
+    files: dict[str, dict | str] = {
+        "password-generator.yaml": {
+            "apiVersion": gen_api, "kind": "Password", "metadata": {"name": f"{n}-password", "labels": labels(), "annotations": wave()},
+            "spec": {"length": 32, "digits": 5, "symbols": 0, "noUpper": False, "allowRepeat": True}},
+        "externalsecret.yaml": {
+            "apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": {"name": f"{n}-app", "labels": labels(), "annotations": wave()},
+            "spec": {"refreshPolicy": "CreatedOnce",
+                     "target": {"name": f"{n}-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
+                                "template": {"engineVersion": "v2", "metadata": {"labels": labels()}, "data": {
+                                    "url": f"redis://:{{{{ .password }}}}@{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc",
+                                    "port": "6379", "password": "{{ .password }}"}}},  # pragma: allowlist secret
+                     "dataFrom": [{"sourceRef": {"generatorRef": {"apiVersion": gen_api, "kind": "Password", "name": f"{n}-password"}}}]}},
+        "service.yaml": {
+            "apiVersion": "v1", "kind": "Service", "metadata": {"name": n, "labels": labels()},
+            "spec": {"type": "ClusterIP", "selector": selector(),
+                     "ports": [{"name": "redis", "port": 6379, "targetPort": "redis"}]}},
+        "statefulset.yaml": {
+            "apiVersion": "apps/v1", "kind": "StatefulSet",
+            "metadata": {"name": n, "labels": labels(), "annotations": {"argocd.argoproj.io/sync-options": "Force=true,Replace=true"}},
+            "spec": spec},
+    }
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
+                                   "resources": ["externalsecret.yaml", "password-generator.yaml", "service.yaml", "statefulset.yaml"]}
+    return files
+
+
 def backup_files(app: str, env: str, cfg: dict) -> dict[str, dict]:
     """backup/<env>/ (AC-117.15, AC-117.17): Velero's storage location, credentials from the target bucket's Secret, and the Schedule."""
     backup = cfg["backup"][env]
@@ -1591,7 +1662,9 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], 
     res = cfg["resources"][name]
     if res["type"] == "bucket":
         return bucket_files(app, name, env, res["envs"][env], is_backup_target(cfg, env, name))
-    conf = res["envs"][env]            # database; cache and broker are not built yet
+    if res["type"] == "cache":
+        return cache_files(app, name, env, res["envs"][env])
+    conf = res["envs"][env]            # database; broker is not built yet
     backup = conf.get("backup")
     base = f"{app}-{name}"
     clusters = read_restore_state(app_dir, env, name) if app_dir is not None else [{"name": base, "role": "active"}]
