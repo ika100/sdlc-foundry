@@ -617,6 +617,8 @@ rargs=(--repo-dir "$gitops_repo" --context "k3d-$cluster")
 vn() { kubectl --context k3d-$cluster -n velero "$@"; }
 
 bstep "Backups: declare the bucket backups, instances.dev.backup on postgres, environments.dev.backup and the external component e2e-files"
+# The staging promote above pins and renders without a commit; cplat writes need a clean tree.
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] || commit "promote e2e-api to staging"
 $cplat resource add backups --type bucket --repo-dir "$gitops_repo" >/dev/null
 commit "backups"   # each cplat write starts from a clean tree
 # e2e-files: an external component (a kustomize package in the gitops repo): a StatefulSet with a 1Gi volume `data`, busybox, non-root
