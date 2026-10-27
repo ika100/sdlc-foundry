@@ -120,6 +120,8 @@ def default_sources(repo_dir: Path, snapshot: Callable[[str | None], Path]) -> d
     return {
         "model": Source("model", lambda: cplat_argv("model", "show", "--json", "--repo-dir", str(snapshot(None)))),
         "status": Source("status", lambda: cplat_argv("system", "status", "--json", "--repo-dir", str(snapshot(None)))),
+        "autonomy": Source("autonomy", lambda: cplat_argv("system", "autonomy", "show", "--json", "--repo-dir", str(snapshot(None))),
+                           timeout=60),
         "needs": Source("needs", lambda: cplat_argv("needs", "--json", "--repo-dir", str(repo_dir))),
         "runs": Source("runs", lambda: cplat_argv("runs", "--json", "--since", "90")),
         "doctor": Source("doctor", lambda: cplat_argv("platform", "doctor", "--json", "--repo", str(repo_dir))),
