@@ -224,32 +224,39 @@ def _operators() -> dict:
 
 
 def check_operators(repo: Path) -> list[dict]:
-    """AC-115.18: the CloudNativePG operator an in-cluster database needs: installed vs expected version."""
+    """AC-115.18, AC-116.19: the operators in-cluster resources need (cloudnative-pg, seaweedfs): installed vs expected version."""
     if not shutil.which("kubectl"):
         return []
-    needs = sorted({ri.environment for m in _models(repo) for ri in m.resource_instances if ri.type == "database" and not ri.external})
-    if not needs:
-        return []
-    owner_envs = sorted({e.name for m in _models(repo) for e in m.environments if e.name in needs and e.operators == "owner"})
-    op = _operators()["cloudnative-pg"]
+    models = _models(repo)
+    out = []
+    for op_name, rtype, chart_name in (("cloudnative-pg", "database", "cloudnative-pg"), ("seaweedfs", "bucket", "seaweedfs-operator")):
+        needs = sorted({ri.environment for m in models for ri in m.resource_instances if ri.type == rtype and not ri.external})
+        if needs:
+            out += _operator_row(models, needs, op_name, chart_name)
+    return out
+
+
+def _operator_row(models: list, needs: list[str], op_name: str, chart_name: str) -> list[dict]:
+    owner_envs = sorted({e.name for m in models for e in m.environments if e.name in needs and e.operators == "owner"})
+    op = _operators()[op_name]
     want, chart = op["operator_version"], op["chart_version"]
-    name = "operator cloudnative-pg"
-    p = run(["kubectl", "get", "deploy", "-A", "-l", "app.kubernetes.io/name=cloudnative-pg", "-o",
+    name = f"operator {op_name}"
+    p = run(["kubectl", "get", "deploy", "-A", "-l", f"app.kubernetes.io/name={chart_name}", "-o",
              "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
     images = (p.stdout or "").split()
     have = images[0].split("@")[0].rsplit(":", 1)[-1] if images and ":" in images[0].split("@")[0].rsplit("/", 1)[-1] else None
     owner = owner_envs == needs
-    where = f"operators: owner in {', '.join(owner_envs)}" if owner else "Argo CD application operator-cloudnative-pg"
+    where = f"operators: owner in {', '.join(owner_envs)}" if owner else f"Argo CD application operator-{op_name}"
     if have == want:
         return [check(OK, name, f"installed {have}, expected {want} ({where})")]
     if have is None:
         detail = f"not installed in the current kube context, expected {want} ({where})"
         if owner:
-            return [check(WARN, name, detail, f"install the cloudnative-pg chart {chart} (operator {want})")]
+            return [check(WARN, name, detail, f"install the {chart_name} chart {chart} (operator {want})")]
         ctx = (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
         return [check(WARN, name, detail, f"apply operators/root.yaml once: KUBE_CONTEXT={ctx} devbox run bootstrap (local: devbox run cluster-up)")]
     detail = f"installed {have}, expected {want} ({where})"
-    return [check(WARN, name, detail, f"move the cloudnative-pg chart to {chart} (operator {want})" if owner else "sync operator-cloudnative-pg in Argo CD")]
+    return [check(WARN, name, detail, f"move the {chart_name} chart to {chart} (operator {want})" if owner else f"sync operator-{op_name} in Argo CD")]
 
 
 def check_policies(repo: Path) -> list[dict]:
