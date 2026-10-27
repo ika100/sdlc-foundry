@@ -1,5 +1,5 @@
 ---
-description: "Change a component of the system in a gitops-app repo (system.yaml, rendered manifests, one PR). Usage: /component:set <component> [--env K=V] [--expose [HOST]] [--uses postgres] [--replicas N] [--instance <env> --replicas N]"
+description: "Change a component of the system in a gitops-app repo (one PR). Usage: /component:set <component> [--env K=V] [--expose [HOST]] [--uses postgres] [--replicas N] [--provides NAME[:TYPE]] [--consumes NAME] [--instance <env> --replicas N]"
 ---
 
 Run the platform script inside the gitops-app repo. **Request:** $ARGUMENTS
