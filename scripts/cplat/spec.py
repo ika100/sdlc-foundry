@@ -1116,6 +1116,17 @@ def main(argv: list[str]) -> int:
     p.add_argument("--all", action="store_true", help="include done and superseded")
     p.add_argument("--json", action="store_true")
     p.add_argument("--detail", action="store_true", help="with --json: criteria, questions, check, slices (spec 122)")
+    p = sub.add_parser("publish", help="push the spec's branch and open or update its draft PR; ask the owner to review (spec 122)")
+    p.add_argument("id")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("land", help="approved spec: approve the review, mark the draft PR ready and merge it (spec 122)")
+    p.add_argument("id")
+    p = sub.add_parser("review", help="post a changes-requested review, or list the PR's review comments (spec 122)")
+    p.add_argument("id")
+    p.add_argument("--request-changes", action="store_true")
+    p.add_argument("--body-file")
+    p.add_argument("--comments", action="store_true")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("test-diff", help="acceptance tests changed only in formatting since BASE? (exit 1 otherwise)")
     p.add_argument("base", help="the commit with the red acceptance tests (Phase 1)")
     p.add_argument("files", nargs="*")
@@ -1208,6 +1219,9 @@ def main(argv: list[str]) -> int:
                 oq = f", {r['open_questions']} open q" if r["open_questions"] else ""
                 print(f"{r['id']:40} {r['priority']:3} {r['status']:10} {r['acs']:>2} AC{oq:12} {tasks:12} next: {r['next']}")
         return 0
+    if ns.cmd in ("publish", "land", "review"):
+        import spec_pr
+        return spec_pr.main(ns, root, find(root, ns.id))
     if ns.cmd == "test-diff":
         result = test_diff(root, ns.base, ns.files)
         for f, (ok, why) in result.items():
