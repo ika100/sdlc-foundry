@@ -33,6 +33,7 @@ tasks:
     covers: [AC-124.11, AC-124.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: engine.py — signal and status client, token lookup, 60 s confirmation, heartbeat cache
     files: [scripts/cplat/engine.py]
