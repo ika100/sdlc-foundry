@@ -1,6 +1,6 @@
 # The local console
 
-The console is a page in your browser that answers three questions about a system: **what needs my decision**, **where is every change in the process**, and **what is the system made of and where does it run**. It runs on your machine, reads the same data as `cplat … --json`, and stores nothing of its own. Every change it makes is a slash command run by Claude Code in your local clone and ends in a pull request, so budgets, run records and resumes work as in the terminal. Design: [ADR-055](adr/055-local-console-over-cplat-json.md).
+The console is a page in your browser that answers three questions about a system: **what needs my decision**, **where is every change in the process**, and **what is the system made of and where does it run**. It is optional: everything it does is a slash command you can also run in Claude Code. It runs on your machine, reads the same data as `cplat … --json`, and stores nothing of its own. Every change it makes is a slash command run by Claude Code in your local clone and ends in a pull request, so budgets, run records and resumes work as in the terminal. Design: [ADR-055](adr/055-local-console-over-cplat-json.md).
 
 ![The Inbox with a promotion selected: what it changes, the command, and the way back](img/console/inbox.jpg)
 

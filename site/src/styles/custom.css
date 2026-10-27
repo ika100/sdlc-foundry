@@ -147,63 +147,6 @@
   }
 }
 
-/* ---------- the console on the get-started page ---------- */
-.console-intro {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-  margin-block: 1.5rem 2rem;
-  padding: 1.25rem 1.5rem;
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 0.9rem;
-  background:
-    radial-gradient(30rem 14rem at 100% 0%, color-mix(in srgb, var(--brand-2) 14%, transparent), transparent 70%),
-    var(--sl-color-bg-nav);
-}
-
-.console-intro > div > :first-child {
-  margin-top: 0;
-}
-
-.console-intro .console-shot img {
-  margin: 0;
-}
-
-/* side by side only where the text column stays readable */
-@media (min-width: 110rem) {
-  .console-intro {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-    gap: 1.5rem;
-    align-items: center;
-  }
-}
-
-/* the same map on the landing page: the splash column is wider, so it fills it and scrolls only below 1080px */
-.map {
-  margin-block: 1.5rem;
-}
-
-.map-scroll {
-  overflow-x: auto;
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 0.75rem;
-}
-
-.map-scroll img {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  cursor: zoom-in;
-}
-
-.map figcaption {
-  margin-top: 0.6rem;
-  color: var(--sl-color-gray-2);
-  font-size: var(--sl-text-sm);
-}
-
-
-
 /* a screenshot in a landing-page figure: framed like the docs pictures */
 .map > img {
   display: block;
