@@ -78,7 +78,7 @@ def test_the_model_text_ends_a_line_with_the_backup_only_when_set_ac_117_7(tmp_p
     assert cplat.main(["model", "show", "--repo-dir", str(repo)]) == 0
     lines = capsys.readouterr().out.splitlines()
     with_backup = [ln for ln in lines if "backup to" in ln]
-    assert len(with_backup) == 3 + 1, with_backup
+    assert len(with_backup) == 3, with_backup   # orders-db dev and prod, the staging environment
     assert any(ln.startswith("    dev  type database") and ln.endswith('  backup to backups schedule "0 3 * * *" retention 30d') for ln in with_backup)
     assert any(ln.startswith("    prod  type database") and ln.endswith('  backup to backups schedule "30 2 * * *" retention 8w') for ln in with_backup)
     assert any(ln.startswith("  staging  host") and ln.endswith('  backup to backups schedule "0 3 * * *" retention 2w') for ln in with_backup)
