@@ -79,7 +79,8 @@ system.yaml (every value explicit and reviewable; the model is described in docs
     todo-lib: {type: library, lang: python, repo: org/todo-lib}    # a library has no instances and renders nothing
   apis:
     todo-api-rest: {type: openapi}   # openapi | grpc | graphql | events; changes no manifest
-  resources:                         # any number, each named, typed (database, bucket, cache; broker comes with spec 119)
+    orders: {type: events, broker: bus}   # spec 119: an events API is carried by a broker (optional key while there is one)
+  resources:                         # any number, each named, typed (database, bucket, cache, broker)
     orders-db:                       # name: lowercase letters, digits, hyphens; at most 30 characters; not a component name
       type: database                 # required
       version: 17                    # 15 | 16 | 17 | 18 (default 17)
@@ -97,6 +98,12 @@ system.yaml (every value explicit and reviewable; the model is described in docs
       persistence: false             # true = append-only file on a volume (default false)
       storage: 1Gi                   # only with persistence: true
       instances: {prod: {memory: 1Gi, persistence: true, storage: 5Gi}}   # per environment: external, remote, memory, maxmemoryPolicy, persistence, storage
+    bus:                             # a broker (spec 119): NATS with JetStream; providers and consumers of its events APIs use it
+      type: broker                   # without listing it in `uses`; each gets NATS_* from <system>-bus-<component>-app
+      version: "2.15"                # "2.14" | "2.15" (default "2.15")
+      replicas: 1                    # 1 | 3 (default 1)
+      storage: 1Gi                   # JetStream volume per replica (default 1Gi)
+      instances: {prod: {replicas: 3, storage: 10Gi}}   # per environment: external, remote, replicas, storage, resources
     billing-db:                      # external: runs nothing, its connection Secret is synced from the secretStore
       type: database
       external: true                 # true | false (default false); per environment under instances.<env>.external
