@@ -77,6 +77,7 @@ tasks:
     covers: [AC-122.28, AC-122.31, AC-122.37, AC-122.38, AC-122.41, AC-122.43, AC-122.44]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t12
     title: cplat ui and the server — system.yaml lookup, 127.0.0.1, routes, sources cache, mirror of main, stop
     files: [scripts/cplat/ui.py, scripts/cplat/console/server.py, scripts/cplat/console/sources.py, scripts/cplat/console/mirror.py]
