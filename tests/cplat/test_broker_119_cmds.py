@@ -801,7 +801,8 @@ def domain_model() -> str:
 
 def design_example() -> str:
     text = (ROOT / "docs" / "specs" / "119-a-message-broker-resource-behind-events" / "design.md").read_text()
-    return re.search(r"```python\n(.*?)```", text, re.S).group(1)
+    # spec 119 slip: design.md has three python blocks; the documented example is the one that connects
+    return next(b for b in re.findall(r"```python\n(.*?)```", text, re.S) if "nats.connect" in b)
 
 
 def test_the_domain_model_documents_the_broker_and_its_environment_contract_ac_119_25():  # AC-119.25
