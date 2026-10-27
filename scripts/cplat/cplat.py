@@ -14,6 +14,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat component add|set|remove <component…> [--type T] [--lang L] [--expose] [--env K=V] [--instance ENV --replicas N] [--from-k8s] [--pr]
   cplat component ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
   cplat component build schedule|merge|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
+  cplat cluster new <name> [--org O] [--public] | add <owner>/<repo> [--name S] | remove <system>   the cluster repo and the systems it installs
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
   cplat resource add|remove postgres [--version N]   the system's database resource (system.yaml)
   cplat instance promote <component…|--all> --to <env> [--version V] [--sha S] [--pr]
@@ -55,6 +56,7 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", [])},
     "component": {"new": ("newsvc", []), "add": ("compose", ["add"]), "set": ("compose", ["set"]), "remove": ("compose", ["remove"]),
                   "ship": ("ship", []), "build": ("buildcmd", [])},
+    "cluster": {"new": ("clusterrepo", ["new"]), "add": ("clusterrepo", ["add"]), "remove": ("clusterrepo", ["remove"])},
     "api": {"list": ("apilist", [])},
     "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"])},
     "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
