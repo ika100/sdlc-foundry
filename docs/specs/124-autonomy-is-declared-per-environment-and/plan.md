@@ -96,6 +96,7 @@ tasks:
     covers: [AC-124.5, AC-124.7, AC-124.14, AC-124.17, AC-124.18]
     parallel_safe: true
     depends_on: [t2, t3, t8, t10]
+    done: true
   - id: t14
     title: notifications — review, signal and done-on-its-own events
     files: [scripts/cplat/notify_config.py, scripts/cplat/notify.py]
