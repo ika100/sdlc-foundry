@@ -204,7 +204,9 @@ ADDONS = {
 POLICY_API = "policies.kyverno.io/v1"
 POLICY_MODES = {"Audit": "Audit", "Enforce": "Deny"}     # mode -> Kyverno validationActions
 LGTM_ENDPOINT = "http://lgtm.observability.svc:4318"    # the shared all-in-one UI stack `cluster-up` installs for `ui: lgtm`
-ADDON_FILES = {"cluster.yaml", "kustomization.yaml"}
+ADDON_FILES = {"cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"}
+DATABASE_FILES = {"cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"}
+DATABASE_GENERATION = re.compile(r"^cluster-g[1-9][0-9]*\.yaml$")
 ESO_API = "external-secrets.io/v1"
 GEN_API = "generators.external-secrets.io/v1alpha1"
 DEFAULT_STORE = {"name": "platform-secrets", "kind": "ClusterSecretStore"}
@@ -1186,19 +1188,101 @@ def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dic
     return out
 
 
-def database_cluster(app: str, name: str, env: str, conf: dict) -> dict:
+BARMAN_PLUGIN = "barman-cloud.cloudnative-pg.io"
+SERVER_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
+
+
+def utc_time(value) -> bool:
+    import datetime
+    if not isinstance(value, str) or not SERVER_TIME.match(value):
+        return False
+    try:
+        datetime.datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        return False
+    return True
+
+
+def read_restore_state(app_dir: Path, env: str, db: str) -> list[dict]:
+    """The clusters of addons/<env>/<db>/restore-state.yaml (spec 117, written by `cplat resource restore`): a list of
+    {name, role, from?, until?}. Absent file = one active cluster `<system>-<db>`."""
+    app = app_dir.name
+    base = f"{app}-{db}"
+    path = app_dir / "addons" / env / db / "restore-state.yaml"
+    if not path.is_file():
+        return [{"name": base, "role": "active"}]
+
+    def bad(reason: str):
+        raise RenderError(f"applications/{app}/addons/{env}/{db}/restore-state.yaml is not valid ({reason}); take it from git history")
+
+    try:
+        doc = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as e:
+        bad(f"does not parse: {str(e).splitlines()[0] if str(e) else e}")
+    if not isinstance(doc, dict) or not isinstance(doc.get("clusters"), list) or not doc["clusters"]:
+        bad("must be a mapping with next and clusters")
+    clusters = doc["clusters"]
+    numbers = []
+    for c in clusters:
+        if not isinstance(c, dict) or not isinstance(c.get("name"), str) or c.get("role") not in ("active", "restored", "previous"):
+            bad("every cluster needs a name and a role of active, restored or previous")
+        m = re.fullmatch(re.escape(base) + r"(-g([1-9][0-9]*))?", c["name"])
+        if not m:
+            bad(f"cluster '{c['name']}' is not {base} or {base}-g<n>")
+        if m.group(2):
+            numbers.append(int(m.group(2)))
+            frm = c.get("from")
+            if not isinstance(frm, dict) or not isinstance(frm.get("server"), str) or not frm["server"]:
+                bad(f"cluster '{c['name']}' needs from.server")
+            if frm.get("to") != "latest" and not utc_time(frm.get("to")):
+                bad(f"cluster '{c['name']}': from.to must be an RFC 3339 UTC time ending in Z, or latest")
+        if c["role"] == "previous" and not utc_time(c.get("until")):
+            bad(f"cluster '{c['name']}' is previous and needs until, an RFC 3339 UTC time ending in Z")
+    if sum(c["role"] == "active" for c in clusters) != 1:
+        bad("exactly one cluster must be active")
+    if sum(c["role"] != "active" for c in clusters) > 1:
+        bad("at most one cluster may be restored or previous, not both")
+    nxt = doc.get("next")
+    if isinstance(nxt, bool) or not isinstance(nxt, int) or any(nxt <= n for n in numbers):
+        bad("next must be an integer greater than every generation number")
+    return clusters
+
+
+def backup_target(app: str, env: str, cfg: dict, to: str) -> tuple[str, str, str]:
+    """(bucket, endpoint, secret) of the backup target bucket `to` in `env`."""
+    target = cfg["resources"][to]["envs"][env]
+    secret = f"{app}-{to}-app"
+    if target["external"]:
+        return target["s3"]["bucket"], target["s3"]["endpoint"], secret
+    return f"{app}-{to}", f"http://{app}-{to}-filer.{app}-{env}.svc:8333", secret
+
+
+def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | None = None, role: str = "active",
+                     frm: dict | None = None, backup: bool = False) -> dict:
     db = app.replace("-", "_")
+    base = f"{app}-{name}"
+    spec: dict = {
+        "instances": conf["replicas"],
+        "imageName": POSTGRES_IMAGES[conf["version"]],
+        "storage": {"size": conf["storage"]},
+        "enableSuperuserAccess": False,
+    }
+    if frm is None:
+        spec["bootstrap"] = {"initdb": {"database": db, "owner": db}}
+    else:
+        recovery: dict = {"source": "origin", "database": db, "owner": db, "secret": {"name": f"{base}-app"}}
+        if frm["to"] != "latest":
+            recovery["recoveryTarget"] = {"targetTime": frm["to"]}
+        spec["bootstrap"] = {"recovery": recovery}
+        spec["externalClusters"] = [{"name": "origin", "plugin": {"name": BARMAN_PLUGIN, "parameters": {"barmanObjectName": base, "serverName": frm["server"]}}}]
+    spec["resources"] = conf["resources"] or DB_DEFAULT_RESOURCES
+    if backup and role in ("active", "previous"):
+        spec["plugins"] = [{"name": BARMAN_PLUGIN, "isWALArchiver": True, "parameters": {"barmanObjectName": base}}]
     return {
         "apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster",
-        "metadata": {"name": f"{app}-{name}", "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}},
-        "spec": {
-            "instances": conf["replicas"],
-            "imageName": POSTGRES_IMAGES[conf["version"]],
-            "storage": {"size": conf["storage"]},
-            "enableSuperuserAccess": False,
-            "bootstrap": {"initdb": {"database": db, "owner": db}},
-            "resources": conf["resources"] or DB_DEFAULT_RESOURCES,
-        },
+        "metadata": {"name": cluster or base, "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}},
+        "spec": spec,
     }
 
 
@@ -1324,14 +1408,35 @@ def observability_files(app: str, env: str, conf: dict, services: list[dict]) ->
     }
 
 
-def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict]) -> dict[str, dict | str]:
+def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], app_dir: Path | None = None) -> dict[str, dict | str]:
     if name == "observability":
         return observability_files(app, env, cfg["observability"][env], services)
     res = cfg["resources"][name]
     if res["type"] == "bucket":
         return bucket_files(app, name, env, res["envs"][env])
-    files = {"cluster.yaml": database_cluster(app, name, env, res["envs"][env])}   # database; cache and broker are not built yet
-    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["cluster.yaml"]}
+    conf = res["envs"][env]            # database; cache and broker are not built yet
+    backup = conf.get("backup")
+    base = f"{app}-{name}"
+    clusters = read_restore_state(app_dir, env, name) if app_dir is not None else [{"name": base, "role": "active"}]
+    files: dict[str, dict | str] = {}
+    for c in clusters:
+        fname = "cluster.yaml" if c["name"] == base else f"cluster-g{c['name'][len(base) + 2:]}.yaml"
+        files[fname] = database_cluster(app, name, env, conf, c["name"], c["role"], c.get("from"), bool(backup))
+    if backup:
+        labels = {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
+        bucket, endpoint, secret = backup_target(app, env, cfg, backup["to"])
+        active = next(c["name"] for c in clusters if c["role"] == "active")
+        files["objectstore.yaml"] = {
+            "apiVersion": "barmancloud.cnpg.io/v1", "kind": "ObjectStore", "metadata": {"name": base, "labels": dict(labels)},
+            "spec": {"retentionPolicy": backup["retention"],
+                     "configuration": {"destinationPath": f"s3://{bucket}/databases", "endpointURL": endpoint,
+                                       "s3Credentials": {k: {"name": secret, "key": k} for k in ("accessKeyId", "secretAccessKey", "region")},  # pragma: allowlist secret
+                                       "wal": {"compression": "gzip"}, "data": {"compression": "gzip"}}}}
+        files["scheduledbackup.yaml"] = {
+            "apiVersion": "postgresql.cnpg.io/v1", "kind": "ScheduledBackup", "metadata": {"name": base, "labels": dict(labels)},
+            "spec": {"schedule": f"0 {backup['schedule']}", "immediate": True, "backupOwnerReference": "none", "cluster": {"name": active},
+                     "method": "plugin", "pluginConfiguration": {"name": BARMAN_PLUGIN}}}
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
     return files
 
 
@@ -1371,6 +1476,9 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             group = [n for n in names if (n == "observability") is prune]
             if not group:
                 continue
+            sync = {"automated": {"prune": prune, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]}
+            if any(cfg["resources"].get(n, {}).get("envs", {}).get(env, {}).get("backup") for n in group):
+                sync["retry"] = RETRY       # an ObjectStore may sync before its CRD exists
             docs.append({
                 "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",
                 "metadata": {"name": f"{app}-{suffix}-{env}", "namespace": "argocd"},
@@ -1382,13 +1490,13 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                             "project": "default",
                             "source": {"repoURL": gitops_repo, "targetRevision": "main", "path": f"applications/{app}/addons/{env}/" + "{{name}}"},
                             "destination": {"server": server, "namespace": f"{app}-{env}"},
-                            "syncPolicy": {"automated": {"prune": prune, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]},
+                            "syncPolicy": sync,
                         },
                     },
                 },
             })
         for n in names:
-            for fname, doc in addon_files(app, n, env, cfg, services).items():
+            for fname, doc in addon_files(app, n, env, cfg, services, app_dir).items():
                 out[app_dir / "addons" / env / n / fname] = dump(doc) if not isinstance(doc, str) else doc
     for env in policy_envs(services, cfg):
         docs.append({
@@ -1519,8 +1627,13 @@ def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
                     stale.append(base)
                 continue
             for d in base.iterdir():
-                if d.is_dir() and not any(p.parent == d for p in wanted):
+                if not d.is_dir():
+                    continue
+                if not any(p.parent == d for p in wanted):
                     stale.append(d)
+                    continue
+                # database files that are no longer rendered; restore-state.yaml is input and never touched
+                stale += [f for f in d.iterdir() if f not in wanted and (f.name in DATABASE_FILES or DATABASE_GENERATION.match(f.name))]
     return stale
 
 
