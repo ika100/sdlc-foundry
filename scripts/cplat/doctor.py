@@ -23,9 +23,11 @@ def check(status: str, name: str, detail: str, fix: str | None = None) -> dict:
 
 def check_tools() -> list[dict]:
     out = []
-    for tool, required in (("git", True), ("uv", True), ("gh", True), ("devbox", False), ("docker", False)):
+    for tool, required in (("git", True), ("uv", True), ("gh", True), ("devbox", False), ("docker", False), ("claude", False)):
         if shutil.which(tool):
             out.append(check(OK, tool, shutil.which(tool)))
+        elif tool == "claude":
+            out.append(check(WARN, tool, "not found", "install Claude Code: https://docs.anthropic.com/claude-code"))
         else:
             out.append(check(FAIL if required else WARN, tool, "not found", core.install_hint(tool)))
     copier = shutil.which("copier") or (str(Path.home() / ".local/bin/copier") if (Path.home() / ".local/bin/copier").is_file() else None)
@@ -380,9 +382,10 @@ def check_retro_schedule() -> list[dict]:
 
 def run_checks(repo: Path) -> list[dict]:
     import gates
+    import notify_config
     return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_migration(repo), *check_repo(repo),
             *gates.check_gates(repo), *check_gitops_token(repo),
-            *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule()]
+            *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule(), *notify_config.doctor_checks()]
 
 
 def main(argv: list[str]) -> int:
