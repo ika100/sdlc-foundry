@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from console import actions, handoff, layout, preview, sources as sources_mod
+from console import actions, handoff, layout, preview, sources as sources_mod, switcher
 from console.html import esc
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -44,6 +44,7 @@ PANELS = {
     "need": "console.inbox:panel_need",
     "spec": "console.panels:panel_spec", "run": "console.panels:panel_run", "issue": "console.panels:panel_issue",
     "instance": "console.panels:panel_instance", "release": "console.panels:panel_release", "stage": "console.panels:panel_stage",
+    "slice": "console.panels:panel_slice",
 }
 PALETTE = "console.palette:fragment"
 ASK = "console.palette:ask"
@@ -266,6 +267,13 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(202, {"id": self.retry(unquote(retry_action.group(1)))})
         elif path == "/api/open-in-claude":
             self.reply_json(200, self.open_in_claude(body))
+        elif path == "/api/open-system":
+            try:
+                self.reply_json(200, switcher.open_system(str(body.get("repo") or "")))
+            except ValueError as e:
+                raise HttpError(412, "no local clone", str(e)) from e
+            except RuntimeError as e:
+                raise HttpError(500, "its console did not start", str(e)) from e
         elif path == "/api/ask":
             question = str(body.get("question") or "").strip()
             if not question:
@@ -319,9 +327,22 @@ class Handler(BaseHTTPRequestHandler):
         if run is None:
             raise HttpError(404, "no such run", run_id)
         argv = handoff.claude_command(run, f"docs/specs/{run.get('spec')}/spec.md", run.get("failure"))
-        cwd = run.get("repo_dir")
-        started = handoff.open_terminal(argv, cwd if cwd and Path(cwd).is_dir() else str(self.ctx.repo_dir))
-        return {"command": shlex.join(argv), "started": bool(started)}
+        cwd, note = self.claude_cwd(run)
+        started = handoff.open_terminal(argv, cwd)
+        return {"command": shlex.join(argv), "started": bool(started), "cwd": cwd, **({"note": note} if note else {})}
+
+    def claude_cwd(self, run: dict) -> tuple[str, str]:
+        """Where Claude starts: the run's recorded directory, else the clone of the run's repo (AC-122.36), else this console's clone."""
+        recorded = run.get("repo_dir")
+        if recorded and Path(recorded).is_dir():
+            return str(recorded), ""
+        repo = str(run.get("repo") or "")
+        if "/" in repo:
+            clone = actions.clone_of(repo)
+            if clone.is_dir():
+                return str(clone), ""
+            return str(self.ctx.repo_dir), f"No local clone of {repo} at {clone}; started in this system's clone instead."
+        return str(self.ctx.repo_dir), "The run names no repository; started in this system's clone."
 
     def shutdown(self, body: dict) -> None:
         running = actions.running()

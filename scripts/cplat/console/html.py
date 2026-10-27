@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from html import escape
+import re
 
 STALE_AFTER_SECONDS = 120
 
@@ -24,6 +25,13 @@ STALE_AFTER_SECONDS = 120
 def esc(text: object) -> str:
     """Escape `text` for element content and for double-quoted attribute values."""
     return escape("" if text is None else str(text), quote=True)
+
+
+def short_version(version: object) -> str:
+    """A version for display: `sha-<40 hex>` pins become `sha-<7>`, a release version stays as it is."""
+    text = "" if version is None else str(version)
+    found = re.fullmatch(r"(?:sha-)?([0-9a-f]{40})", text)
+    return f"sha-{found.group(1)[:7]}" if found else text
 
 
 def _attrs(attrs: Mapping[str, object] | None) -> str:

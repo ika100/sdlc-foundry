@@ -11,12 +11,13 @@ and are lists, never empty tables (AC-122.40). The forms post to `/api/preview`;
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
 
 from console import actions
-from console.html import action_button, command_block, esc, freshness, unavailable
+from console.html import _parse, action_button, command_block, esc, freshness, short_version, unavailable
 
 UNKNOWN = "unknown"
 GOOD = ("healthy", "verified")
@@ -34,7 +35,16 @@ def _part(ctx: Any, name: str, body: str) -> str:
         note = unavailable(name, src.unavailable_since, src.error)
         stale = f'<p class="stale">Last data: {freshness(src.read_at, stale=True)}</p>' if src.data else ""
         return note[: -len("</section>")] + stale + "</section>" + body
-    return f'<p class="stamp">{freshness(src.read_at)}</p>{body}'
+    return f'{_stamp(ctx, src)}{body}'
+
+
+def _stamp(ctx: Any, src: Any) -> str:
+    """The read time of a part; omitted while it equals the one in the page title, so it is not repeated (AC-122.3)."""
+    page_read = _parse(ctx.state().get("read_at"))
+    read = _parse(src.read_at)
+    if read is not None and page_read is not None and read.replace(microsecond=0) == page_read.replace(microsecond=0):
+        return ""
+    return f'<p class="stamp">{freshness(src.read_at)}</p>'
 
 
 def _down(ctx: Any, name: str) -> bool:
@@ -67,7 +77,7 @@ def _rules(status: Mapping, model: Mapping) -> list[dict]:
 def _head(rule: Mapping) -> str:
     return (f'<th scope="col" data-env="{esc(rule.get("name"))}"><strong>{esc(rule.get("name"))}</strong> '
             f'<span class="muted">promote {esc(rule.get("promote") or "none")} policy {esc(rule.get("policy") or "none")}</span> '
-            '<a href="#form-environment" data-edit-env="{esc(rule.get("name"))}">edit rules</a></th>')
+            f'<a href="#form-environment" data-edit-env="{esc(rule.get("name"))}">edit rules</a></th>')
 
 
 # ---------------- cells ----------------
@@ -81,6 +91,15 @@ def _obj(repo: str, component: str, version: str) -> str:
     return json.dumps({"type": "release", "repo": repo, "component": component, "version": version})
 
 
+def _need_panel(ctx: Any, comp: str, version: str) -> str | None:
+    """The Inbox panel of the promote need of this release, which shows the consequence and the way back first."""
+    for item in (ctx.data("needs") or {}).get("items") or []:
+        obj = item.get("object") or {}
+        if item.get("kind") == "promote" and obj.get("component") == comp and str(obj.get("version")) == version:
+            return f"/panel/need/{quote(str(item.get('id')), safe='')}"
+    return None
+
+
 def _promote(ctx: Any, comp: str, repo: str, version: str, target: str, unknown: bool, pieces: dict[str, str]) -> str:
     obj = {"type": "release", "repo": repo, "component": comp, "version": version}
     reason = None
@@ -90,9 +109,11 @@ def _promote(ctx: Any, comp: str, repo: str, version: str, target: str, unknown:
         reason = _missing(pieces, "claude", "gh", f"kube:{target}")
     if not reason and actions.active_for(obj):
         reason = "Another action runs on this release."
-    button = action_button("promote", f"Promote to {target}", None, reason,
-                           attrs={"data_object": json.dumps(obj), "data_args": json.dumps({"to": target}),
-                                  "data_confirm": f"Promote {comp} {version} to {target}?"}, primary=True)
+    panel = _need_panel(ctx, comp, version)
+    attrs = {"data_object": json.dumps(obj), "data_args": json.dumps({"to": target})}
+    # The panel shows what lies between the versions and the way back; the confirm is there (AC-122.34, AC-122.35).
+    attrs.update({"data_open": panel} if panel else {"data_confirm": f"Promote {comp} {version} to {target}?"})
+    button = action_button("promote", f"Promote to {target}", None, reason, attrs=attrs, primary=True)
     return f'<div class="offer">{button}{command_block(f"/instance:promote {comp} --to {target} --version {version}")}</div>'
 
 
@@ -104,7 +125,7 @@ def _cut(ctx: Any, comp: str, repo: str, cand: Mapping, unknown: bool, pieces: d
         reason = "Another action runs on this release."
     panel = f"/panel/release/{quote(f'{comp}:{version}', safe='')}"
     button = action_button("cut-release", f"Cut release {version}", None, reason,
-                           attrs={"data_object": json.dumps(obj), "data_args": "{}"})
+                           attrs={"data_object": json.dumps(obj), "data_args": "{}", "data_open": panel})
     return (f'<div class="offer"><a href="{panel}" data-open="{panel}">{esc(version)} is ready</a> {button}'
             f'{command_block("/component:release")}</div>')
 
@@ -119,6 +140,9 @@ def _cell(ctx: Any, row: Mapping, env: str, index: int, rules: list[dict], down:
     raw = str(cell.get("state") or UNKNOWN)
     shown = UNKNOWN if down else raw
     version = str(cell.get("version") or "")
+    if not re.fullmatch(r"\S{3,}", version) and cell.get("tag"):   # a stray one-character version: show the pin instead
+        version = str(cell["tag"])
+    raw_version, version = version, short_version(version)
     panel = f"/panel/instance/{quote(f'{comp}:{env}', safe='')}"
     link = f'<a href="{panel}" data-open="{panel}">{esc(version)}</a>' if version else ""
     out = [f'<div>{link} {_state_html(shown)}</div>']
@@ -127,7 +151,7 @@ def _cell(ctx: Any, row: Mapping, env: str, index: int, rules: list[dict], down:
         target = str(nxt["name"])
         nxt_cell = cells.get(target) or {}
         unknown = down or raw == UNKNOWN or str(nxt_cell.get("state") or "") == UNKNOWN
-        out.append(_promote(ctx, comp, repo, version, target, unknown, pieces))
+        out.append(_promote(ctx, comp, repo, raw_version, target, unknown, pieces))
     cand = row.get("release_candidate")
     if isinstance(cand, Mapping) and env == cut_env:
         out.append(_cut(ctx, comp, repo, cand, down, pieces))
@@ -142,10 +166,22 @@ def _cut_env(row: Mapping, envs: list[str]) -> str | None:
     return next((e for e in envs if cells.get(e)), None)
 
 
+def _resource_state(cell: Mapping) -> str:
+    """The shown state of a resource cell: `state` when status gives it, else derived from the Argo CD state (AC-122.7)."""
+    if cell.get("state"):
+        return str(cell["state"])
+    argo = str(cell.get("argo") or "")
+    if argo == "Synced/Healthy":
+        return "healthy"
+    if argo == "missing":
+        return "not deployed"
+    return "external" if argo == "external" else UNKNOWN
+
+
 def _resource_cell(env: str, cell: Mapping | None, down: bool) -> str:
     if not cell:
         return f'<td data-env="{esc(env)}"><span class="muted">not deployed</span></td>'
-    state = UNKNOWN if down else str(cell.get("state") or UNKNOWN)
+    state = UNKNOWN if down else _resource_state(cell)
     return f'<td data-env="{esc(env)}" data-state="{esc(state)}">{_state_html(state)}</td>'
 
 
@@ -286,7 +322,10 @@ def model_forms(ctx: Any) -> str:
               + _field("Promote", "promote", options=["", "after-dev-smoke", "manual"])
               + _field("Policy", "policy", options=["", "audit", "enforce", "off"])
               + _field("Host", "host", hint="with {component}, {system} and {env}"), repo),
-        _form("system", "New system", _field("Name", "name", required=True), repo),
+        _form("system", "New system", _field("Name", "name", required=True, hint="kebab-case, 2-40 characters, starts with a letter")
+              + _field("Owner", "owner", required=True) + _field("First component", "component", required=True)
+              + _field("Type", "type", hint="service, website or library") + _field("Language", "lang", hint="python, java, go or typescript")
+              + _field("Description", "description"), repo),
     ]
     return ('<section id="add-to-the-model"><h2>Add to the model</h2>'
             '<p class="muted">Each change shows its command, diff and checks before anything runs.</p>' + "".join(forms) + "</section>")

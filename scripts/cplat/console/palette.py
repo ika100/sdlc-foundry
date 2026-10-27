@@ -70,14 +70,20 @@ def _runs(ctx: Any) -> list[dict]:
 
 
 def _issues(ctx: Any) -> list[dict]:
-    """Open issues the needs list knows about: `{"number", "title", "repo"}`."""
+    """Issues the needs list knows about (triage items and `issues`): `{"number", "title", "repo", "state"}`."""
     data = ctx.data("needs")
     items = data.get("items") if isinstance(data, dict) else None
     found: dict[Any, dict] = {}
     for it in items if isinstance(items, list) else []:
         obj = it.get("object") if isinstance(it, dict) else None
         if isinstance(obj, dict) and obj.get("issue"):
-            found.setdefault(obj["issue"], {"number": obj["issue"], "title": it.get("reason") or "", "repo": obj.get("repo") or ""})
+            found.setdefault(obj["issue"], {"number": obj["issue"], "title": it.get("reason") or "", "repo": obj.get("repo") or "",
+                                            "state": "OPEN"})
+    listed = data.get("issues") if isinstance(data, dict) else None     # open untracked issues and recently closed ones
+    for issue in listed if isinstance(listed, list) else []:
+        if isinstance(issue, dict) and issue.get("number") is not None:
+            found[issue["number"]] = {"number": issue["number"], "title": issue.get("title") or "", "repo": issue.get("repo") or "",
+                                      "state": str(issue.get("state") or "OPEN").upper()}
     return list(found.values())
 
 
@@ -123,7 +129,7 @@ def _matching_issues(ctx: Any, sentence: str) -> str:
     words = _words(sentence)
     if not words:
         return ""
-    rows = [i for i in _issues(ctx) if words & _words(i["title"])]
+    rows = [i for i in _issues(ctx) if i["state"] == "OPEN" and words & _words(i["title"])]
     if not rows:
         return ""
     items = "".join(f'<li data-issue="{esc(i["number"])}"><a href="/panel/issue/{esc(i["number"])}" data-open="/panel/issue/{esc(i["number"])}">'
@@ -196,13 +202,22 @@ def _target_repo(ctx: Any, command: str) -> str:
     return _gitops_repo(ctx)
 
 
+def _diff(ctx: Any, command: str) -> str:
+    """The `system.yaml` diff of a suggestion that changes the model (through the preview); "" for any other command."""
+    from console import preview
+    try:
+        return preview.diff_of_command(ctx.snapshot(), command)
+    except Exception:  # noqa: BLE001 - a suggestion without a diff is still useful; the preview must never break the answer
+        return ""
+
+
 def suggestions_of(ctx: Any, answer: str) -> list[dict]:
     """One suggestion per fenced `command` block; the diff is filled when the preview shows one."""
     out = []
     for block in _BLOCK.findall(answer):
         command = block.strip()
         if command:
-            out.append({"command": command, "repo": _target_repo(ctx, command), "diff": ""})
+            out.append({"command": command, "repo": _target_repo(ctx, command), "diff": _diff(ctx, command)})
     return out
 
 
