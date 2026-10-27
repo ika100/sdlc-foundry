@@ -97,3 +97,44 @@ def test_a_mergeable_pr_with_green_checks_is_still_green(conflict, tmp_path):   
     conflict.checks = [[_run_check("ci-success", "pass", 41)]]
     ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
     assert ok and conflict.merges == [PR]
+
+
+class QueuedGh(Gh):
+    """Gh whose head commit has workflow runs: `runs` answers `gh run list --commit` poll by poll (#269)."""
+
+    runs: list[list[dict]] = []
+
+    def __call__(self, args, *, cwd, check=True):
+        if args[:2] == ["run", "list"] and "--commit" in args:
+            self.calls.append(args)
+            seq = self.runs
+            return json.dumps(seq.pop(0) if len(seq) > 1 else seq[0]) if seq else "[]"
+        return super().__call__(args, cwd=cwd, check=check)
+
+
+@pytest.fixture()
+def queued(fake, monkeypatch):  # noqa: F811
+    g = QueuedGh()
+    g.said, g.merges = fake.said, fake.merges
+    g.heads = ["abc123"]
+    monkeypatch.setattr(ship, "gh", g)
+    return g
+
+
+def test_a_queued_workflow_run_without_checks_is_not_green(queued, tmp_path):   # #269
+    """Only CodeQL reported while the CI run is still queued: the wait goes on and merges only once that run is done."""
+    codeql = [_run_check("CodeQL", "pass", 41)]
+    queued.checks = [codeql, codeql, [*codeql, _run_check("ci-success", "pass", 42)]]
+    queued.runs = [[{"status": "completed"}, {"status": "queued"}], [{"status": "completed"}, {"status": "queued"}],
+                   [{"status": "completed"}, {"status": "completed"}]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert ok and queued.merges == [PR] and lines[0].startswith("GREEN: all 2 check(s)")
+    assert any("abc123" in c and "acme/other" in c for c in queued.calls if c[:2] == ["run", "list"])
+
+
+def test_a_queued_run_that_never_starts_times_out_unmerged(queued, tmp_path):   # #269
+    queued.checks = [[_run_check("CodeQL", "pass", 41)]]
+    queued.runs = [[{"status": "queued"}]]
+    with pytest.raises(ship.ChecksPending, match="queued"):
+        prmod.wait(tmp_path, PR, True, 120, 10, 300)
+    assert queued.merges == []

@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**`cplat pr wait` and `ship land` wait for a queued workflow run.** GitHub reports no checks for a run that is still queued, so a PR whose CI waited for a runner showed only CodeQL, and the wait called it green and tried to merge (the merge was refused). The wait now also asks for the head commit's workflow runs and stays pending while one has not completed; a run that never starts ends in the usual timeout, unmerged.
+
 **Fixes to the platform's own checks.** Release and docs-only PRs now run the cplat tests too: the tests read the changelog, specs and guides, and release 5.2.0 left `main` red because they were skipped. `uv run scripts/pin-actions.py`, which the pin check names as the fix, now moves the templates' pins to the platform's own: Dependabot reads only `/.github/workflows`, so its Actions PRs bump the platform's pins alone. `cplat spec test-diff` no longer reports a test file that a building spec's plan task creates after the red commit. The platform repo sets `worktree.baseRef: "head"`, so its build tasks can run in parallel worktrees.
 
 ## [5.2.0] — 2026-10-27

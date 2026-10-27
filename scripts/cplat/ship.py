@@ -551,6 +551,19 @@ class CheckWatch:
             cs = [c for c, sha in zip(cs, shas) if sha in (None, head)]
         return self._newest_runs(cs)
 
+    def _runs_pending(self) -> bool:
+        """A workflow run of the head commit that has not completed: a queued run reports no checks at all, so the
+        checks of the other workflows (CodeQL) alone would look green (#269)."""
+        if not self.head:
+            return False
+        m = re.match(r"https://github\.com/([^/]+/[^/]+)/pull/", self.pr)
+        out = gh(["run", "list", "--commit", self.head, "--json", "status", "-L", "50"] + (["-R", m.group(1)] if m else []),
+                 cwd=self.repo, check=False)
+        try:
+            return any(r.get("status") != "completed" for r in json.loads(out or "[]"))
+        except (ValueError, AttributeError):
+            return False
+
     def _own_cancel(self, c: dict) -> bool:
         """A check of a run this watch just reran (stuck queue cancelled, or a transient failure) is not red yet."""
         h = self.healed.get(run_of(c) or ("", ""))
@@ -596,6 +609,8 @@ class CheckWatch:
         own = [c for c in cs if self._own_cancel(c)]
         pending = [c for c in cs if c.get("bucket") == "pending" or c in own]
         if cs and not pending:
+            if self._runs_pending():
+                return "pending", cs, []
             return "green", cs, []
         self._heal(pending)
         if self.refused:
@@ -701,7 +716,7 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
                            hint="is CI set up for pull requests, and is a runner online (vars.CI_RUNNER)? "
                                 "Merging without any check is never done automatically")
         if waited > timeout:
-            pending = [c["name"] for c in cs if c.get("bucket") == "pending"]
+            pending = [c["name"] for c in cs if c.get("bucket") == "pending"] or ["a workflow run that reports no checks yet (queued)"]
             raise ChecksPending(f"checks on {watch.pr} still pending after {int(timeout)}s: {', '.join(pending)}",
                                 hint="run the command again later; a runner may be busy or offline", checks=pending)
         sleep(interval)
