@@ -495,6 +495,12 @@ def _sizing(conf: dict, env: str) -> dict:
     return {"replicas": replicas, "version": conf.get("version", 17), "storage": str(inst.get("storage", conf.get("storage", "1Gi")))}
 
 
+def _bucket_sizing(conf: dict, env: str) -> dict:
+    inst = _map(_map(conf.get("instances")).get(env))
+    return {"storage": str(inst.get("storage", conf.get("storage", "10Gi"))),
+            "versioning": inst.get("versioning", conf.get("versioning")) is True}
+
+
 def _store_key(template: str, system: str, env: str, resource: str) -> str:
     return template.replace("{system}", system).replace("{env}", env).replace("{resource}", resource)
 
@@ -555,7 +561,8 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
                 path = _map(idoc.get("remote")).get("path") or _map(conf.get("remote")).get("path")
                 ris.append(ResourceInstance(
                     r.name, env, None if ext else f"addon-{r.name}-{env}", f"{system}-{r.name}-app",
-                    _sizing(conf, env) if r.type == "database" and not ext else {}, r.type, ext,
+                    {} if ext else _sizing(conf, env) if r.type == "database" else _bucket_sizing(conf, env) if r.type == "bucket" else {},
+                    r.type, ext,
                     _store_key(str(path or "{system}-{env}-{resource}"), system, env, r.name) if ext else None))
 
     cs = [c for _, c in components]
