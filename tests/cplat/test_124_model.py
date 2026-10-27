@@ -87,7 +87,7 @@ def test_the_promotion_rule_is_reported_and_autonomy_does_not_change_it_ac_124_5
     d = doc(tmp_path, capsys)
     assert env_of(d, "dev")["autonomy"]["promotion"] == "main"
     assert env_of(d, "prod")["autonomy"]["promotion"] == "manual"
-    assert env_of(d, "prod")["promote"] == "manual", "the existing key keeps its meaning"
+    assert env_of(d, "prod")["promotion"] == "manual", "the existing key keeps its meaning"
 
 
 def test_each_instance_reports_its_cap_and_effective_level_ac_124_22(tmp_path, capsys):  # AC-124.22
