@@ -179,6 +179,7 @@ def check_repo(repo: Path) -> list[dict]:
             out.append(check(WARN, "repo platform version", "platform source has no docs/CHANGELOG.md"))
         out += check_addons(repo)
         out += check_operators(repo)
+        out += check_brokers(repo)
         out += check_backups(repo)
         out += check_policies(repo)
         if declared == "cluster-gitops":
@@ -198,6 +199,7 @@ def check_repo(repo: Path) -> list[dict]:
             out.append(check(OK, "repo platform version", stamp.get("platform", "?")))
     out += check_addons(repo)
     out += check_operators(repo)
+    out += check_brokers(repo)
     out += check_backups(repo)
     out += check_policies(repo)
     if shape == "cluster-gitops":
@@ -319,10 +321,55 @@ def check_operators(repo: Path) -> list[dict]:
     models = _models(repo)
     out = []
     for op_name, chart_name in (("cloudnative-pg", "cloudnative-pg"), ("seaweedfs", "seaweedfs-operator"),
-                                ("plugin-barman-cloud", "plugin-barman-cloud"), ("cert-manager", "cert-manager"), ("velero", "velero")):
+                                ("plugin-barman-cloud", "plugin-barman-cloud"), ("cert-manager", "cert-manager"), ("velero", "velero"),
+                                ("nack", "nack")):
         needs = _operator_needs(models, op_name)
         if needs:
             out += _operator_row(models, needs, op_name, chart_name)
+    return out
+
+
+def _nats_expected() -> tuple[str, dict]:
+    """NATS_CHART's chart version and NATS_IMAGES of the platform's render.py."""
+    import importlib.util
+    path = PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"
+    spec = importlib.util.spec_from_file_location("cplat_doctor_render", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.NATS_CHART["chart_version"], mod.NATS_IMAGES
+
+
+def check_brokers(repo: Path) -> list[dict]:
+    """AC-119.22: one row per in-cluster broker instance: the running NATS chart and server image vs render.py's pins."""
+    if not shutil.which("kubectl"):
+        return []
+    models = _models(repo)
+    chart_want, images = _nats_expected()
+    out = []
+    for m in models:
+        pre = f"{m.system}/" if len(models) > 1 else ""
+        for ri in m.resource_instances:
+            if ri.type != "broker" or ri.external:
+                continue
+            n = f"{m.system}-{ri.resource}"
+            image_want = images[ri.sizing.get("version", "2.15")]
+            expected = f"nats chart {chart_want}, server {image_want}"
+            name = f"broker {pre}{ri.resource} ({ri.environment})"
+            app = f"{n}-{ri.environment}-nats"
+            p = run(["kubectl", "-n", f"{m.system}-{ri.environment}", "get", "statefulsets.apps", n, "-o",
+                     'jsonpath={.metadata.labels.helm\\.sh/chart} {.spec.template.spec.containers[?(@.name=="nats")].image}'], check=False)
+            parts = (p.stdout or "").split() if p.returncode == 0 else []
+            if not parts:
+                out.append(check(WARN, name, f"not running in the current kube context; expected {expected}",
+                                 f"sync the Argo CD application {app} (local: devbox run cluster-up)"))
+                continue
+            chart_have = parts[0].removeprefix("nats-").removeprefix("v")
+            image_have = parts[1] if len(parts) > 1 else "-"
+            if chart_have == chart_want.removeprefix("v") and image_have == image_want:
+                out.append(check(OK, name, f"{expected} (expected)"))
+            else:
+                out.append(check(WARN, name, f"nats chart {chart_have}, server {image_have}; expected {expected}",
+                                 f"sync the Argo CD application {app}"))
     return out
 
 
@@ -335,7 +382,7 @@ def _operator_needs(models: list, op_name: str) -> list[str]:
         elif op_name in ("plugin-barman-cloud", "cert-manager"):
             envs |= {ri.environment for ri in m.resource_instances if ri.type == "database" and not ri.external and ri.backup}
         else:
-            rtype = "database" if op_name == "cloudnative-pg" else "bucket"
+            rtype = {"cloudnative-pg": "database", "nack": "broker"}.get(op_name, "bucket")
             envs |= {ri.environment for ri in m.resource_instances if ri.type == rtype and not ri.external}
     return sorted(envs)
 
