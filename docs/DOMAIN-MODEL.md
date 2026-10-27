@@ -130,15 +130,16 @@ resources:
 | Where | Allowed keys |
 |---|---|
 | top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries` |
-| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators` |
+| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `backup` |
 | service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances` |
 | external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote`) |
 | library component | `type`, `lang`, `repo`, `provides`, `consumes` |
 | `components.<c>.instances.<env>` | `replicas`, `resources`, `env`, `promote`, `secrets` |
 | `apis.<a>` | `type`: `openapi`, `grpc`, `graphql` or `events` |
 | `resources.<name>` | `type`, `external`, `remote`, `version`, `replicas`, `storage`, `resources`, `instances` |
-| `resources.<name>.remote` | `path`, `refreshInterval` |
-| `resources.<name>.instances.<env>` | `external`, `remote`, `replicas`, `storage`, `resources` |
+| `resources.<name>.remote` | `path`, `refreshInterval`; on a bucket also `s3` (`endpoint`, `bucket`, `region`, `forcePathStyle`) |
+| database `resources.<name>.instances.<env>` | `external`, `remote`, `replicas`, `storage`, `resources`, `backup` |
+| `backup` (environment or database instance) | `to`, `schedule`, `retention` |
 | bucket `resources.<name>` (`type: bucket`) | `type`, `external`, `remote`, `storage`, `versioning`, `instances` |
 | bucket `resources.<name>.instances.<env>` | `external`, `remote`, `storage`, `versioning` |
 
@@ -150,6 +151,7 @@ Valid `type`/`lang` pairs: `service/python`, `service/java`, `service/go`, `webs
 - `host` placeholders: `{component}`, `{system}`, `{env}`. `url` placeholders: `{host}`, `{component}`, `{system}`, `{env}`; a `url` is read by `instance verify` and ignored by the renderer.
 - `policy` is `audit`, `enforce` or `off` (default `audit` in dev and staging, `enforce` in prod).
 - `observability` on an environment gives that environment the collector and gives every instance there the `OTEL_*` variables.
+- `backup` on an environment backs up its persistent volumes and objects (Velero); on a database instance it backs up that database with continuous archiving and point-in-time restore. `to` is a bucket resource with an instance in that environment, `schedule` a five-field UTC cron (default `0 3 * * *`), `retention` `<n>d` or `<n>w` (default `30d`); an external bucket as target declares `remote.s3`. Databases are restored only with `/resource:restore`. See [BACKUP-AND-RESTORE.md](BACKUP-AND-RESTORE.md) (spec 117).
 - `promote`: `after-dev-smoke` or `manual` on staging (default `manual`), only `manual` on prod, none on dev. An instance value wins over the environment's.
 - `resources.<name>` declares any number of named, typed resources. `type` is required in `system.yaml`, `postgres` included (`/resource:add postgres` fills in `type: database` when `--type` is left out). The types are `database` and `bucket` (both rendered; the bucket is spec 116), and `cache` and `broker`, which are reserved: spec 118 and spec 119 deliver them. A resource is rendered in every environment where a running component uses it. Database instances take `replicas` (default 1), `storage` (default `1Gi`) and `version` (default 17; the supported majors are 15, 16, 17 and 18), with per-environment overrides under `instances.<env>`. The Argo application is `addon-<name>-<env>` and the Secret is `<system>-<name>-app`.
 - `type: bucket` is an S3-compatible object store for files and backups (spec 116). It takes `storage` (default `10Gi`) and `versioning` (default `false`; `true` keeps earlier versions of an overwritten object, `false` renders the S3 state `Suspended`), at the resource level or per instance under `instances.<env>`. For an in-cluster bucket the name `<system>-<name>` is the bucket name and may be at most 45 characters. Each bucket instance runs its own SeaweedFS, managed by the SeaweedFS operator that the platform installs from `operators/`. The component gets eight variables from the Secret `<system>-<name>-app` (keys `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId`, `secretAccessKey`): `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_FORCE_PATH_STYLE` (`true` in-cluster), `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` and `AWS_ENDPOINT_URL_S3`. With two or more buckets the prefix rule applies, for example `UPLOADS_S3_BUCKET`, and no bare `S3_*` or `AWS_*` variable is set. An `external: true` bucket renders no store; its secret store entry (default path `{system}-{env}-{resource}`) carries the same keys as the Secret: `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId` and `secretAccessKey`; `storage` and `versioning` are refused there, since an external bucket is sized and configured at its provider. Removing a bucket resource keeps the in-cluster bucket and its data until a human deletes them.
