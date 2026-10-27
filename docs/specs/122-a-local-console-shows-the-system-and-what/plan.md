@@ -58,6 +58,7 @@ tasks:
     covers: [AC-122.18, AC-122.41, AC-122.44, AC-122.45, AC-122.46]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: console/preview.py — forms to commands, the command on a scratch copy checked by render.py, system.yaml diff, consequence
     files: [scripts/cplat/console/preview.py]
