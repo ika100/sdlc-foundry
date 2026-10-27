@@ -153,6 +153,7 @@ tasks:
     covers: [AC-122.1, AC-122.30, AC-122.50, AC-122.51]
     parallel_safe: false
     depends_on: [t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t22, t23]
+    done: true
   - id: t22
     title: component add|set --provides NAME[:TYPE] and --consumes NAME
     files: [scripts/cplat/compose.py, plugins/component/commands/add.md, plugins/component/commands/set.md]
