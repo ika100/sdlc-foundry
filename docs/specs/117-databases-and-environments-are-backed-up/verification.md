@@ -1,9 +1,10 @@
 # Verification — 117 Databases and environments are backed up and restorable
 
 **Result:** pass, on condition that the PR's CI e2e job is green before merge. Every active criterion is `met`; the in-cluster parts are pending that job. The first review (at 4494883) returned `fail`: AC-117.13 was `partial` on the apply path. c6ca3dc fixes it, and da7c6a3 fixes the `/system:restore` risk raised alongside it (see the AC-117.13, AC-117.20 and AC-117.21 rows, and "Fixes after the first review").
-**Commit:** da7c6a3 · **Base:** 8f82d7b (merge base with `origin/main`, merged in bbcd99e) · **Trace:** 32/32 active criteria named by tests (every id from AC-117.1 to AC-117.32 appears in `tests/cplat/test_backup_117*.py`, and AC-117.24 also in `tests/e2e/run.sh`)
+**Commit:** da7c6a3, then the merge 7443744 · **Base:** d610dfe (`origin/main`, merged in bbcd99e and 7443744) · **Trace:** 32/32 active criteria named by tests (every id from AC-117.1 to AC-117.32 appears in `tests/cplat/test_backup_117*.py`, and AC-117.24 also in `tests/e2e/run.sh`)
 
 **Test run.** These figures come from the orchestrator; I did not rerun them, because this review is read-only and runs no tests:
+- After the merge of d610dfe (7443744): the same command gives 4432 passed, 7 skipped (spec 122's tests included), and `devbox run validate` is OK.
 - After the fixes: `uv run -q --with pyyaml --with ruamel.yaml --with pytest --with pytest-xdist python -m pytest -q -n auto tests/cplat` gives 3972 passed, 7 skipped. The first run, at 4494883, gave 3957 passed, 7 skipped.
 - `scripts/ci-local.sh --render --site` passed at 4494883.
 - The orchestrator confirmed that the new AC-117.13 test fails on the old `dbrestore.py` and passes on the new one.
@@ -114,7 +115,10 @@ These tests only add assertions. `git diff 4494883 HEAD -- tests/cplat/test_back
 2. **Task status.** The plan's front matter has no `done` flags. Every task t1–t17 has its own commit (f924ae0, 59b2831, 9d448be, 345fb09, 5f0cac0, f277850, 406de56, b4da983, 75c3122, d599103, 6a8b9d4, 260b316, e5ce1f7, 4494883, 469db3c, 423cdea, cf23333). There are fixes on top: f00bbbb, 5f1ccf3, and the review fixes c6ca3dc and da7c6a3.
 3. **t4: "run `helm template` of each chart".** Not done (no helm on the machine). The chart archives were read instead, and the result is recorded in design.md ("Re-verified at build", f6bdec4). The SeaweedFS `app.kubernetes.io/instance` label (needed for the AC-117.17 exclusion of the target store) is set by the operator, not the chart, so it is left to the e2e. Acceptable, provided the CI e2e is green.
 4. **t14 "done when: passes on a local machine".** Replaced by the CI e2e job, as for 115 and 116. Acceptable only once that job is green.
-5. **Base.** `origin/main` 8f82d7b is merged (bbcd99e). Since then `origin/main` has moved on by one commit, to d610dfe (spec 122, #246). Merge it again if the PR shows conflicts.
+5. **Base.** `origin/main` 8f82d7b is merged (bbcd99e), then d610dfe (spec 122, #246) in 7443744 (by the orchestrator, after this review). That merge:
+   - `status.py`: 122 moved `--json` into `collect_all`; 117's `backups` is added on top, the model is still loaded once, and the backup reads now use each environment's own context (122's `--context ENV=CTX`).
+   - The `system` plugin goes to **1.2.0**, not the plan's 1.1.0, because 122 released 1.1.0 with `/system:set`. Manifest, catalog and the CHANGELOG entry say 1.2.0; the AC-114.59-style assertion in `test_backup_117_cmds.py` changes from 1.1.0 to 1.2.0 (merge-caused, commented `# spec 117`).
+   - `test_plugins_114.py`: the command lists of both specs, count 35 (32 + 3). `test_model_callers.py` and `test_model_regressions.py`: 122's subset assertion plus an assertion of 117's `backups`.
 
 ## Choices the coders made where design.md is silent
 

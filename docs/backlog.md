@@ -21,7 +21,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [105-a-deploy-counts-only-after-its-checks](specs/105-a-deploy-counts-only-after-its-checks/spec.md) — A deploy counts only after its checks pass | P1 | approved | 8 | #155 |
 | [106-prod-runs-the-exact-image-staging-tested](specs/106-prod-runs-the-exact-image-staging-tested/spec.md) — Prod runs the exact image staging tested | P1 | approved | 12 | #157 |
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [117-databases-and-environments-are-backed-up](specs/117-databases-and-environments-are-backed-up/spec.md) — Databases and environments are backed up and restorable | P1 | approved | 32 |  |
 | [118-a-cache-resource-compatible-with-redis](specs/118-a-cache-resource-compatible-with-redis/spec.md) — A cache resource compatible with Redis | P1 | approved | 19 |  |
 | [119-a-message-broker-resource-behind-events](specs/119-a-message-broker-resource-behind-events/spec.md) — A message broker resource behind events APIs | P1 | approved | 24 |  |
 | [120-instances-scale-on-load-and-queue-depth](specs/120-instances-scale-on-load-and-queue-depth/spec.md) — Instances scale on load and queue depth | P1 | approved | 28 |  |
@@ -120,6 +119,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [114-the-platform-speaks-the-domain-model-5-0](specs/114-the-platform-speaks-the-domain-model-5-0/spec.md) — The platform speaks the domain model (5.0) | P1 | done | 67 |  |
 | [115-resources-are-named-typed-and-may-be](specs/115-resources-are-named-typed-and-may-be/spec.md) — Resources are named, typed and may be external | P1 | done | 18 |  |
 | [116-an-object-storage-resource-for-files-and](specs/116-an-object-storage-resource-for-files-and/spec.md) — An object storage resource for files and backups | P1 | done | 16 |  |
+| [117-databases-and-environments-are-backed-up](specs/117-databases-and-environments-are-backed-up/spec.md) — Databases and environments are backed up and restorable | P1 | done | 32 |  |
 | [123-the-platform-repo-declares-its-own-shape](specs/123-the-platform-repo-declares-its-own-shape/spec.md) — The platform repo declares its own shape | P1 | done | 24 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |

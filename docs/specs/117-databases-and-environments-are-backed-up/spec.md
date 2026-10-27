@@ -1,7 +1,7 @@
 ---
 spec_id: 117-databases-and-environments-are-backed-up
 title: Databases and environments are backed up and restorable
-status: building
+status: done
 priority: P1
 ---
 
@@ -104,3 +104,4 @@ This spec is an additive 5.x extension of lists that spec 114 closes. It adds th
 - 2026-10-26 amended: on-demand database backup `/resource:backup <db> --env <env>` (AC-117.31, AC-117.32), used by spec 121 before a major upgrade
 - 2026-10-26 approved
 - 2026-10-27 building
+- 2026-10-27 done
