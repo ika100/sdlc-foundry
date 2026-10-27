@@ -103,6 +103,7 @@ tasks:
     covers: [AC-124.20]
     parallel_safe: true
     depends_on: [t3, t9, t13]
+    done: true
   - id: t15
     title: console plumbing — autonomy source, pause/resume/undo/review-approve actions, autonomy preview form
     files: [scripts/cplat/console/sources.py, scripts/cplat/console/actions.py, scripts/cplat/console/preview.py]
