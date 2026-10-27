@@ -53,6 +53,7 @@ tasks:
     covers: [AC-122.30, AC-122.23, AC-122.16, AC-122.17]
     parallel_safe: true
     depends_on: [t4]
+    done: true
   - id: t8
     title: console/actions.py — run, track, lock, stop and persist actions through cplat headless; prerequisites
     files: [scripts/cplat/console/__init__.py, scripts/cplat/console/actions.py]
