@@ -1137,7 +1137,7 @@ def bucket_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | 
         "credentials.yaml": {
             "apiVersion": seaweed_api, "kind": "S3Credentials", "metadata": meta(n, "1"),
             "spec": {"seaweedRef": {"name": n}, "identityRef": {"name": n},
-                     "secretRef": {"name": f"{n}-app", "accessKeyField": "accessKeyId", "secretKeyField": "secretAccessKey"},
+                     "secretRef": {"name": f"{n}-app", "accessKeyField": "accessKeyId", "secretKeyField": "secretAccessKey"},  # pragma: allowlist secret
                      "reclaimPolicy": "Retain"}},
         "access-key-generator.yaml": generator("access-key", 20, 5),
         "secret-key-generator.yaml": generator("secret-key", 40, 10),
