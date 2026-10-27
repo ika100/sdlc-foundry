@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "cplat"))
 
 import pytest
+from console_support import console  # noqa: F401  (spec 122: the running-console fixture)
 from sharding import (  # noqa: F401  (spec 112: --shard / --shard-report)
     pytest_addoption,
     pytest_collection_modifyitems,

@@ -31,6 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--secret", action="append", default=[], metavar="SECRET=KEY,KEY", help="Secret read from the secret store (set the values with `cplat secret set`; single service only)")
     p.add_argument("--secret-ref", action="append", default=[], metavar="NAME", help="existing Secret in the namespace to expose as env vars, e.g. the one generated for another service (single service only)")
     p.add_argument("--uses", action="append", default=[], metavar="ADDON", help="resource or library the component needs (a database gives DATABASE_URL and PG*, a bucket S3_* and AWS_*); declare it first with `cplat resource add <name> --type database|bucket`")
+    p.add_argument("--provides", action="append", default=[], metavar="NAME[:TYPE]", help="API the component provides (TYPE: openapi, grpc, graphql, events; default openapi; single component only)")
+    p.add_argument("--consumes", action="append", default=[], metavar="NAME", help="API the component consumes; somebody must provide it (single component only)")
     p.add_argument("--replicas", type=int)
     p.add_argument("--instance", metavar="ENV", help="with set: change this instance only (with --replicas)")
     p.add_argument("--port", type=int, help="override the port (default: the service's template answer, else the shape default)")
@@ -143,6 +145,43 @@ def build_entry(name: str, slug: str, shape_entry: dict, port: int | None, regis
     return entry
 
 
+API_TYPES = ("openapi", "grpc", "graphql", "events")
+
+
+def parse_provides(items: list[str]) -> list[tuple[str, str]]:
+    """`NAME[:TYPE]` items to (name, type); a type outside API_TYPES is refused before any edit."""
+    out = []
+    for item in items:
+        name, _, kind = item.partition(":")
+        kind = kind or "openapi"
+        if not name or kind not in API_TYPES:
+            raise PlatformError(f"--provides {name or item}:{kind}: type must be one of {', '.join(API_TYPES)}")
+        out.append((name, kind))
+    return out
+
+
+def apply_apis(data, entry, provides: list[tuple[str, str]], consumes: list[str]) -> None:
+    """Add the APIs to `apis:` and the names to the component's provides/consumes (no duplicates). Round-trip safe."""
+    if provides and data.get("apis") is None:
+        data["apis"] = {}
+    for name, kind in provides:
+        apis = data["apis"]
+        have = apis.get(name)
+        if have is None:
+            apis[name] = {"type": kind}
+        elif (have.get("type") or "openapi") != kind:
+            raise PlatformError(f"apis.{name} is already of type {have.get('type') or 'openapi'}, not {kind}", hint="an API keeps its type; edit system.yaml by hand to change it")
+    for key, names in (("provides", [n for n, _ in provides]), ("consumes", consumes)):
+        if names:
+            entry[key] = list(dict.fromkeys([*(entry.get(key) or []), *names]))
+
+
+def restore_tree(repo: Path) -> None:
+    """Undo an edit plus a failed render (the tree was clean when the command started)."""
+    run(["git", "checkout", "-q", "--", "."], cwd=repo, check=False)
+    run(["git", "clean", "-fdq", "--", "applications", "bootstrap"], cwd=repo, check=False)
+
+
 def resolve_slug(arg: str, org: str) -> tuple[str, str]:
     slug = arg if "/" in arg else f"{org}/{arg}"
     return slug.split("/", 1)[1], slug
@@ -169,8 +208,11 @@ def main(argv: list[str]) -> int:
     registry_ns = ans.get("docker_registry", f"ghcr.io/{org}")
     if ns.action == "set" and len(ns.services) != 1:
         raise PlatformError("component set changes exactly one component", hint="run it once per component")
-    if ns.action == "set" and not (ns.env or ns.expose or ns.uses or ns.replicas):
-        raise PlatformError("nothing to change", hint="pass --env KEY=VALUE, --expose [HOST], --uses RESOURCE or --replicas N")
+    if ns.action == "set" and not (ns.env or ns.expose or ns.uses or ns.replicas or ns.provides or ns.consumes):
+        raise PlatformError("nothing to change", hint="pass --env KEY=VALUE, --expose [HOST], --uses RESOURCE, --replicas N, --provides NAME[:TYPE] or --consumes NAME")
+    if (ns.provides or ns.consumes) and (len(ns.services) != 1 or ns.instance):
+        raise PlatformError("--provides and --consumes apply to exactly one component and not to an --instance", hint="run it once per component")
+    provides = parse_provides(ns.provides)
     if ns.instance and ns.action != "set":
         raise PlatformError("--instance applies to component set only")
     if ns.instance and (ns.env or ns.expose or ns.uses or not ns.replicas):
@@ -183,6 +225,10 @@ def main(argv: list[str]) -> int:
 
     y, data = gitops.load(app_dir)
     components = gitops.components_of(data)
+    declared_apis = set(data.get("apis") or {}) | {n for n, _ in provides}
+    for cname in ns.consumes:
+        if cname not in declared_apis:
+            raise PlatformError(f"--consumes {cname}: no component is the provider of this API", hint=f"declare it first with --provides {cname}[:TYPE] on the component that serves it")
     r = Report(title=f"component {ns.action}: {', '.join(ns.services)} ({app_dir.name})")
     names: list[str] = []
 
@@ -204,10 +250,11 @@ def main(argv: list[str]) -> int:
                 entry["instances"] = {k: {} for k in keys}
             new.append((name, entry))
             names.append(name)
-            r.will_do.append(("complete " if half else "add ") + f"{name} ({entry['type']}/{entry['lang']}): port {entry['port']}, image {entry['image']}, instances {list(entry['instances'])}" + (", exposed" if "expose" in entry else ""))
+            r.will_do.append(("complete " if half else "add ") + f"{name} ({entry['type']}/{entry['lang']}): port {entry['port']}, image {entry['image']}, instances {list(entry['instances'])}" + (", exposed" if "expose" in entry else "") + "".join(f", provides {pn} ({pk})" for pn, pk in provides) + "".join(f", consumes {cn}" for cn in ns.consumes))
         if not ns.dry_run:
             for name, e in new:
                 components[name] = e
+                apply_apis(data, components[name], provides, ns.consumes)
             gitops.save(app_dir, y, data)
     elif ns.action == "set":
         prefix_notes: list[str] = []
@@ -229,6 +276,7 @@ def main(argv: list[str]) -> int:
             changes.append("uses " + ", ".join(ns.uses))
         if ns.replicas:
             changes.append(f"replicas {ns.replicas}" + (f" in {ns.instance}" if ns.instance else ""))
+        changes += [f"provides {pn} (api {pk})" for pn, pk in provides] + [f"consumes {cn}" for cn in ns.consumes]
         names.append(name)
         r.will_do.append(f"set {name}: " + "; ".join(changes))
         if ns.uses:
@@ -252,6 +300,7 @@ def main(argv: list[str]) -> int:
                 entry["expose"] = {"host": name if ns.expose is True else ns.expose}
             if ns.uses:
                 entry["uses"] = list(dict.fromkeys([*(entry.get("uses") or []), *ns.uses]))
+            apply_apis(data, entry, provides, ns.consumes)
             if ns.replicas and ns.instance:
                 inst = entry["instances"]
                 if inst[ns.instance] is None:
@@ -281,7 +330,12 @@ def main(argv: list[str]) -> int:
         r.emit(True, ns.json)
         return 0
 
-    gitops.render(repo)
+    try:
+        gitops.render(repo)
+    except PlatformError:
+        if provides or ns.consumes:
+            restore_tree(repo)
+        raise
     changed = gitops.rendered_changes(repo)
     r.did.append(f"updated system.yaml and regenerated {len(changed)} file(s)")
     if ns.pr:

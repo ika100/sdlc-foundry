@@ -23,9 +23,13 @@ def check(status: str, name: str, detail: str, fix: str | None = None) -> dict:
 
 def check_tools() -> list[dict]:
     out = []
-    for tool, required in (("git", True), ("uv", True), ("gh", True), ("devbox", False), ("docker", False)):
+    for tool, required in (("git", True), ("uv", True), ("gh", True), ("devbox", False), ("docker", False), ("claude", False)):
+        if tool == "gh" and shutil.which(tool):
+            continue   # `check_gh` reports the one `gh` row (installed and logged in)
         if shutil.which(tool):
             out.append(check(OK, tool, shutil.which(tool)))
+        elif tool == "claude":
+            out.append(check(WARN, tool, "not found", "install Claude Code: https://docs.anthropic.com/claude-code"))
         else:
             out.append(check(FAIL if required else WARN, tool, "not found", core.install_hint(tool)))
     copier = shutil.which("copier") or (str(Path.home() / ".local/bin/copier") if (Path.home() / ".local/bin/copier").is_file() else None)
@@ -39,8 +43,8 @@ def check_gh() -> list[dict]:
     p = run(["gh", "auth", "status"], check=False)
     text = (p.stdout or "") + (p.stderr or "")
     if p.returncode != 0:
-        return [check(FAIL, "gh login", "not logged in", "gh auth login")]
-    out = [check(OK, "gh login", "logged in")]
+        return [check(FAIL, "gh", "installed, not logged in", "gh auth login")]
+    out = [check(OK, "gh", "logged in")]
     scopes = text.split("Token scopes:")[-1].splitlines()[0] if "Token scopes:" in text else ""
     for needed, why in (("repo", "create repos / PRs"), ("workflow", "push CI workflows")):
         out.append(check(OK if needed in scopes else FAIL, f"gh scope {needed}", why, None if needed in scopes else f"gh auth refresh -s {needed}"))
@@ -67,6 +71,36 @@ def check_kube() -> list[dict]:
     if cur.startswith(LOCAL_CONTEXT_PREFIXES):
         return [check(OK, "kube context", f"{cur} (local)")]
     return [check(WARN, "kube context", f"{cur} looks like a NON-local cluster", "scripts always pass an explicit --context; never run kubectl apply by hand here")]
+
+
+def _contexts() -> set[str]:
+    return set(run(["kubectl", "config", "get-contexts", "-o", "name"], check=False).stdout.split())
+
+
+def check_kube_envs(repo: Path) -> list[dict]:
+    """One `kube:<env>` row per environment of the system in `repo`: the context `status` would use (spec 122, AC-122.41).
+
+    That is CPLAT_KUBE_CONTEXT or `kube_context:` of the settings files, else the current context; ok when kubectl knows it."""
+    if not shutil.which("kubectl"):
+        return []
+    try:
+        import gitops
+        import model
+        envs = [e.name for e in model.load_dir(gitops.find_app(repo, None)).environments]
+        ctx = settings.kube_context(repo)[0] or run(["kubectl", "config", "current-context"], check=False).stdout.strip()
+        known = _contexts() if ctx else set()
+    except Exception:  # noqa: BLE001  (not a gitops-app repo, or an unreadable settings file: nothing to report)
+        return []
+    out = []
+    for env in envs:
+        if ctx and ctx in known:
+            out.append(check(OK, f"kube:{env}", f"{ctx}"))
+        elif ctx:
+            out.append(check(WARN, f"kube:{env}", f"context {ctx} is not in the kubeconfig", f"kubectl config use-context <the {env} context>"))
+        else:
+            out.append(check(WARN, f"kube:{env}", "no kube context set",
+                             f"kubectl config use-context <the {env} context>, or set kube_context in .platform-settings.yml"))
+    return out
 
 
 MARKETPLACE = "sdlc-foundry"
@@ -387,9 +421,10 @@ def check_retro_schedule() -> list[dict]:
 
 def run_checks(repo: Path) -> list[dict]:
     import gates
-    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_migration(repo), *check_repo(repo),
+    import notify_config
+    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_kube_envs(repo), *check_plugins(), *check_platform_source(), *check_migration(repo), *check_repo(repo),
             *gates.check_gates(repo), *check_gitops_token(repo),
-            *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule()]
+            *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule(), *notify_config.doctor_checks()]
 
 
 def main(argv: list[str]) -> int:

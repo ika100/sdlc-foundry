@@ -1,5 +1,5 @@
 ---
-description: "Add components to the system.yaml of a gitops-app repo, rendered into manifests in one PR. Usage: /component:add <component...> [--type T --lang L] [--env K=V] [--expose [HOST]] [--uses postgres] [--replicas N] [--generate|--secret NAME=KEY,KEY] [--from-k8s]"
+description: "Add components to the system.yaml of a gitops-app. Usage: /component:add <component...> [--env K=V] [--expose [HOST]] [--uses postgres] [--replicas N] [--generate|--secret NAME=KEY,KEY] [--provides NAME[:TYPE]] [--consumes NAME] [--from-k8s]"
 ---
 
 Run the platform script inside the gitops-app repo. **Request:** $ARGUMENTS

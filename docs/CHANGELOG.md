@@ -6,6 +6,22 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**A local console shows the system, its process and what needs you.** Spec 122, [ADR-055](adr/055-local-console-over-cplat-json.md), [guide](console.md). `/platform:ui` (`cplat ui`) serves a browser console on `127.0.0.1` with three places: Inbox (decisions waiting for you), Board (every item by stage) and System (components by environment). Actions run as `cplat headless` in the local clone; the console never writes to git, GitHub or the cluster itself.
+
+**`cplat needs` and the run list.** `cplat needs --json` lists what waits for a human (approvals, answers, escalations, promotions). The run list (`cplat runs --json`) gives every run a phase and a stage.
+
+**Status and spec additions.** `cplat system status --json` and `cplat spec list --all --detail --json` carry more keys for the console. Deliberate test change: the AC-113.11 status tests now compare the 5.0 keys, because spec 122 adds keys.
+
+**Draft spec PRs.** `/component:spec` and `/system:spec` publish a spec as a draft pull request (`cplat spec publish`) and ask the owner to review; approving lands it (`cplat spec land`).
+
+**Notifications.** `~/.config/sdlc-foundry/notify.yaml` chooses per event whether GitHub, desktop, Slack or email is told, instantly or in a digest, with quiet hours. Secrets come from the environment or the OS keychain, never the file. `cplat ui notify --once` runs from cron or launchd.
+
+**`--provides` and `--consumes`.** `/component:add` and `/component:set` declare the APIs of one component; a new API goes into `apis:` in the same PR.
+
+**`/system:set`.** Changes system-wide settings such as `--env` (`cplat system set`).
+
+**Plugins:** `platform` 1.1.0 (`/platform:ui`), `system` 1.1.0 (`/system:set`), `component` 1.2.0 (`--provides`, `--consumes`, draft spec PRs).
+
 **`cplat pr wait` and `ship land` never call a conflicting PR green.** GitHub starts no `pull_request` workflow while a PR conflicts with its base, so only CodeQL reported and the wait said GREEN. The watch now asks whether the PR is mergeable and ends with "conflicts with its base branch" and how to fix it (#221).
 **Fixes to `platform update --migrate`.** A repo without `.claude/project-notes.md` now gets the file, created empty, because the new `CLAUDE.md` imports it; an existing notes file is still never changed (#239). The "left out N new starter file(s)" line no longer lists the `system.yaml` the migration writes on the next line (#238).
 
