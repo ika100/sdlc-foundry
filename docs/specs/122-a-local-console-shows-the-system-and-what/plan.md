@@ -125,6 +125,7 @@ tasks:
     covers: [AC-122.22, AC-122.27, AC-122.41]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t20
     title: notify.py — `cplat ui notify` with events, channels, quiet hours, digest and resolution
     files: [scripts/cplat/notify.py]
