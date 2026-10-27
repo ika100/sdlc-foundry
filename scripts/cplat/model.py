@@ -506,6 +506,22 @@ def _bucket_sizing(conf: dict, env: str) -> dict:
             "versioning": inst.get("versioning", conf.get("versioning")) is True}
 
 
+def _cache_sizing(conf: dict, env: str) -> dict:
+    inst = _map(_map(conf.get("instances")).get(env))
+    version = conf.get("version", 9)
+    if isinstance(version, str) and version.strip().isdigit():
+        version = int(version)
+    elif isinstance(version, bool) or not isinstance(version, int):
+        version = 9
+    persistence = inst.get("persistence", conf.get("persistence")) is True
+    out = {"version": version, "memory": str(inst.get("memory", conf.get("memory", "256Mi"))),
+           "maxmemoryPolicy": str(inst.get("maxmemoryPolicy", conf.get("maxmemoryPolicy", "allkeys-lru"))),
+           "persistence": persistence}
+    if persistence:
+        out["storage"] = str(inst.get("storage", conf.get("storage", "1Gi")))
+    return out
+
+
 def _backup(value: object) -> dict | None:
     """`{"to", "schedule", "retention"}` with defaults for a mapping with a string `to`; anything else is None (spec 117)."""
     if not isinstance(value, dict) or not isinstance(value.get("to"), str) or not value["to"]:
@@ -574,7 +590,8 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
                 path = _map(idoc.get("remote")).get("path") or _map(conf.get("remote")).get("path")
                 ris.append(ResourceInstance(
                     r.name, env, None if ext else f"addon-{r.name}-{env}", f"{system}-{r.name}-app",
-                    {} if ext else _sizing(conf, env) if r.type == "database" else _bucket_sizing(conf, env) if r.type == "bucket" else {},
+                    {} if ext else _sizing(conf, env) if r.type == "database" else _bucket_sizing(conf, env) if r.type == "bucket"
+                    else _cache_sizing(conf, env) if r.type == "cache" else {},
                     r.type, ext,
                     _store_key(str(path or "{system}-{env}-{resource}"), system, env, r.name) if ext else None,
                     None if ext or r.type != "database" else _backup(idoc.get("backup"))))
