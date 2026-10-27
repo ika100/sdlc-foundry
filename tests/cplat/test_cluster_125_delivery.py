@@ -243,7 +243,11 @@ def test_ac_125_18_adr_060_records_the_decision_and_amends_adr_058():  # AC-125.
 
 def test_ac_125_18_the_changelog_announces_a_non_breaking_minor():  # AC-125.18
     t = read(DOCS / "CHANGELOG.md")
-    section = t.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    # the first section that lists spec 125: [Unreleased] until a release moves it under 5.x.0
+    hits = [s for s in re.split(r"\n(?=## \[)", t) if s.startswith("## [") and "spec 125" in s]
+    assert hits, "the change is listed"
+    section = hits[0]
+    assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", section.splitlines()[0])
     assert "cluster" in section.lower() and "`cluster` 1.0.0" in section and "ADR-060" in section and "spec 125" in section
     block = section[section.lower().index("a cluster repo hosts several systems"):]
     assert "BREAKING" not in block.split("\n**Resources are named", 1)[0]
