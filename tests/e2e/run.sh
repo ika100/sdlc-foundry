@@ -19,6 +19,14 @@
 # NOAUTH/WRONGPASS/PONG, maxmemory and eviction, SET and GET through SESSIONS_REDIS_URL from a probe pod, persistence across a pod
 # delete, a password that survives restart and force-sync, only ClusterIP, no operator (operators/ unchanged), doctor without a cache row,
 # and, in the backup steps, that neither the Schedule nor the Backup nor the restore knows a cache (AC-118.6 to .8, .11, .14, .15, .19, .23).
+# A message broker (spec 119) follows the caches, before the ship steps: NACK is installed by cluster-up (WITH_NACK=1), a probe image
+# e2e-natsprobe:1 (nats-py) is built with the service images, and the broker `bus` carries the events APIs orders (e2e-api provides, e2e-web
+# consumes) and audit (e2e-web provides). The steps prove operators/apps/nack.yaml and its pins, the server, Secrets, streams and the
+# consumer, the Secret contract and /jsz, one message delivered within 30 seconds, a message published while no consumer runs, no
+# redelivery of an acknowledged message, pending counts, Permissions Violation refusals, doctor's nack and broker rows, the refused
+# removal while the APIs are bound and the retired names (AC-119.4, .9 to .14, .16, .19 to .22). The broker is then unbound and deleted by
+# hand, so the ship and backup steps run as before. Time budget: the broker steps take at most 5 minutes in the log, NACK at cluster-up and
+# the probe build at most 1.5 minutes more (the e2e job has 75 minutes).
 # It exercises: cplat system new, resource add, component ship, instance promote|secret|verify, the templates'
 # Dockerfiles (non-root numeric user, read-only filesystem), render.py on system.yaml, the generated
 # Deployment/Service/HTTPRoute against a real API server, and the Gateway API on k3s' Traefik.
@@ -129,7 +137,8 @@ step "Start the local cluster with a registry (the template's own script, Gatewa
 # The same holds for the SeaweedFS operator (WITH_SEAWEEDFS=1): e2e-api and e2e-web use the bucket files from the components step on.
 # And for the backup operators (WITH_BARMAN_CLOUD=1, with cert-manager, and WITH_VELERO=1): the database and the environment get
 # `backup` only in the last steps, so operators/apps/ does not name them yet.
-(cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 WITH_CNPG=1 WITH_SEAWEEDFS=1 WITH_BARMAN_CLOUD=1 WITH_VELERO=1 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
+# And for NACK (WITH_NACK=1): the broker is declared only after the caches, so operators/apps/nack.yaml does not exist yet either.
+(cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 WITH_CNPG=1 WITH_SEAWEEDFS=1 WITH_BARMAN_CLOUD=1 WITH_VELERO=1 WITH_NACK=1 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
 
 step "Build and push the images"
 # Rendered with --skip-tasks, so the web repo has no pnpm-lock.yaml yet; the template's bootstrap would run
@@ -140,6 +149,9 @@ for svc in e2e-api e2e-web; do
   docker build -q -t "localhost:$regport/$svc:latest" "$work/$svc" >/dev/null
   docker push -q "localhost:$regport/$svc:latest" >/dev/null
 done
+# the broker steps probe with what a component uses (nats-py, spec 119): python:3.13-slim + nats-py, built from a Dockerfile on stdin
+printf 'FROM python:3.13-slim\nRUN pip install --no-cache-dir nats-py==2.16.0\n' | docker build -q -t "localhost:$regport/e2e-natsprobe:1" - >/dev/null
+docker push -q "localhost:$regport/e2e-natsprobe:1" >/dev/null
 
 step "Describe the components like /component:add does (into components: of system.yaml) and render the manifests"
 (cd "$work/e2e-gitops" && uv run --with pyyaml --with ruamel.yaml python - "$root" "$registry:$regport" <<'PY'
@@ -744,6 +756,444 @@ for r in bad:
 sys.exit(1 if bad else 0)
 PY
 echo "ok   platform doctor lists no row for a cache"
+
+# ---- A message broker (spec 119): NATS JetStream in dev, two events APIs, probes with the components' own variables ----
+# The component overlays are not applied: the probe pods take their variables from the rendered Deployments (kubectl kustomize), so no live
+# workload depends on the broker. At the end the e2e unbinds and deletes the broker by hand, so the ship and backup steps run as before.
+nstep_name=""
+nstep() { nstep_name="$*"; step "$*"; }
+nfail() { fail "[$nstep_name] $*"; }
+broker_t0=$SECONDS
+
+nstep "Broker: declare bus and the events APIs apis.orders (e2e-api provides, e2e-web consumes) and apis.audit (e2e-web provides) (AC-119.19, AC-119.20, AC-119.11)"
+# cplat refuses a dirty tree: commit first if there is anything
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] || commit "before the broker"
+[ ! -e "$gitops_repo/operators/apps/nack.yaml" ] || nfail "operators/apps/nack.yaml exists before any events API is bound to a broker"
+$cplat resource add bus --type broker --repo-dir "$gitops_repo" >/dev/null || nfail "resource add bus --type broker failed"
+commit "bus"
+(cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" <<'PY'
+import sys
+sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
+import gitops
+from pathlib import Path
+app_dir = gitops.find_app(Path("."))
+y, data = gitops.load(app_dir)
+data["apis"] = {"orders": {"type": "events"}, "audit": {"type": "events"}}   # bound to bus: the system's only broker
+comps = gitops.components_of(data)
+comps["e2e-api"]["provides"] = [*(comps["e2e-api"].get("provides") or []), "orders"]
+comps["e2e-web"]["consumes"] = [*(comps["e2e-web"].get("consumes") or []), "orders"]
+comps["e2e-web"]["provides"] = [*(comps["e2e-web"].get("provides") or []), "audit"]
+gitops.save(app_dir, y, data)
+PY
+uv run scripts/render.py) || nfail "render.py failed with the broker and its events APIs"
+commit "broker: bus with the events APIs orders and audit"
+bus_dir="$gitops_repo/applications/e2e/addons/dev/bus"
+# the operator file exists now; the HelmChart that cluster-up installed (WITH_NACK=1) is its pin (AC-119.20)
+[ -f "$gitops_repo/operators/apps/nack.yaml" ] || nfail "render did not write operators/apps/nack.yaml for the in-cluster broker"
+nack_pin=$(sed -n 's/^[[:space:]]*targetRevision:[[:space:]]*["'"'"']\{0,1\}\([^"'"'"'[:space:]]*\).*/\1/p' "$gitops_repo/operators/apps/nack.yaml" | head -1)
+nack_have=$(kubectl --context k3d-$cluster -n kube-system get helmcharts.helm.cattle.io nack -o jsonpath='{.spec.version}' 2>/dev/null || true)
+[ "$nack_pin" = 0.35.0 ] || nfail "operators/apps/nack.yaml pins '$nack_pin', expected the NACK chart 0.35.0"
+[ "$nack_have" = "$nack_pin" ] || nfail "the installed NACK chart is '$nack_have', operators/apps/nack.yaml pins '$nack_pin'"
+nack_image=$(kubectl --context k3d-$cluster -n nack get deploy -l app.kubernetes.io/name=nack -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null || true)
+[ "${nack_image##*:}" = 0.24.0 ] || nfail "the NACK Deployment runs '$nack_image', expected the tag 0.24.0"
+kubectl --context k3d-$cluster get crd streams.jetstream.nats.io consumers.jetstream.nats.io accounts.jetstream.nats.io >/dev/null || nfail "the NACK CRDs are not installed"
+for f in password-generator.yaml nack-secret.yaml externalsecret-e2e-api.yaml externalsecret-e2e-web.yaml server.yaml account.yaml \
+         stream-orders.yaml stream-audit.yaml consumer-orders.e2e-web.yaml kustomization.yaml; do
+  [ -f "$bus_dir/$f" ] || nfail "render did not write addons/dev/bus/$f"
+done
+[ -z "$(ls "$bus_dir" | grep -E '^consumer-audit' || true)" ] || nfail "render wrote a consumer for audit, which nobody consumes"
+# the server pin (chart and image), and the variables of both components in the rendered overlays (kubectl kustomize overlays/dev/<component>)
+read -r -d '' decl_py <<'PY' || true
+import json, subprocess, sys
+from pathlib import Path
+import yaml
+app, work = Path(sys.argv[1]), Path(sys.argv[2])
+bad = []
+src = yaml.safe_load((app / "addons/dev/bus/server.yaml").read_text())["spec"]["source"]
+image = src["helm"]["valuesObject"]["container"]["image"]
+if src["chart"] != "nats" or src["targetRevision"] != "2.15.1":
+    bad.append(f"server.yaml pins chart {src['chart']} {src['targetRevision']}, expected nats 2.15.1")
+if f"{image['repository']}:{image['tag']}" != "nats:2.15.2-alpine":
+    bad.append(f"server.yaml pins the image {image['repository']}:{image['tag']}, expected nats:2.15.2-alpine")
+
+def env_of(c):
+    out = subprocess.run(["kubectl", "kustomize", str(app / "overlays/dev" / c)], capture_output=True, text=True)
+    if out.returncode:
+        bad.append(f"kubectl kustomize overlays/dev/{c} failed: {out.stderr[-300:]}")
+        return []
+    for d in yaml.safe_load_all(out.stdout):
+        if d and d.get("kind") == "Deployment":
+            env = [e for e in d["spec"]["template"]["spec"]["containers"][0].get("env", []) if e["name"].startswith(("NATS_", "EVENTS_"))]
+            (work / f"natsenv-{c}.json").write_text(json.dumps(env))
+            return env
+    bad.append(f"overlays/dev/{c} has no Deployment")
+    return []
+
+def check(c, literals, absent):
+    env = {e["name"]: e for e in env_of(c)}
+    for k, v in literals.items():
+        if env.get(k, {}).get("value") != v:
+            bad.append(f"{c}: {k} is {env.get(k, {}).get('value')!r}, expected {v!r}")
+    for k, key in (("NATS_URL", "url"), ("NATS_USER", "user"), ("NATS_PASSWORD", "password")):
+        ref = env.get(k, {}).get("valueFrom", {}).get("secretKeyRef", {})
+        if ref != {"name": f"e2e-bus-{c}-app", "key": key}:
+            bad.append(f"{c}: {k} reads {ref}, expected the key {key} of e2e-bus-{c}-app")
+    for k in absent:
+        if k in env:
+            bad.append(f"{c}: has {k}, which it must not have")
+
+check("e2e-web", {"EVENTS_ORDERS_STREAM": "e2e-orders", "EVENTS_ORDERS_SUBJECT_PREFIX": "e2e.orders", "EVENTS_ORDERS_CONSUMER": "e2e-web",
+                  "EVENTS_AUDIT_STREAM": "e2e-audit", "EVENTS_AUDIT_SUBJECT_PREFIX": "e2e.audit", "NATS_INBOX_PREFIX": "_INBOX.e2e-web"},
+      ["EVENTS_AUDIT_CONSUMER"])
+check("e2e-api", {"EVENTS_ORDERS_STREAM": "e2e-orders", "EVENTS_ORDERS_SUBJECT_PREFIX": "e2e.orders", "NATS_INBOX_PREFIX": "_INBOX.e2e-api"},
+      ["EVENTS_ORDERS_CONSUMER", "EVENTS_AUDIT_STREAM", "EVENTS_AUDIT_SUBJECT_PREFIX", "EVENTS_AUDIT_CONSUMER"])
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+(cd "$gitops_repo" && uv run -q --with pyyaml python -c "$decl_py" "$gitops_repo/applications/e2e" "$work") || nfail "the rendered broker files or component variables are not as designed (see above)"
+echo "ok   operators/apps/nack.yaml pins nack $nack_pin (installed), the NACK Deployment runs 0.24.0; server.yaml pins nats chart 2.15.1 and nats:2.15.2-alpine; e2e-web and e2e-api get NATS_* from e2e-bus-<component>-app, EVENTS_ORDERS_*/EVENTS_AUDIT_* and NATS_INBOX_PREFIX"
+
+nstep "Broker: apply the addon without Argo CD (Secrets first, then the NATS server as a k3s HelmChart, then Account, streams and consumer) and wait for them (AC-119.21)"
+# what Argo CD would do: the Application becomes a helmcharts.helm.cattle.io (same repo, chart, version, values); the rest is applied as rendered
+read -r -d '' apply_py <<'PY' || true
+import sys
+import yaml
+docs = [d for d in yaml.safe_load_all(sys.stdin) if d]
+first, second, chart = [], [], None
+for d in docs:
+    if d["kind"] == "Application":
+        s = d["spec"]["source"]
+        chart = {"apiVersion": "helm.cattle.io/v1", "kind": "HelmChart", "metadata": {"name": s["helm"]["releaseName"], "namespace": "kube-system"},
+                 "spec": {"repo": s["repoURL"], "chart": s["chart"], "version": s["targetRevision"],
+                          "targetNamespace": d["spec"]["destination"]["namespace"], "valuesContent": yaml.safe_dump(s["helm"]["valuesObject"])}}
+    elif d["kind"] in ("Password", "ExternalSecret"):
+        first.append(d)
+    elif d["kind"] in ("Account", "Stream", "Consumer"):
+        second.append(d)
+    else:
+        sys.exit(f"unexpected kind {d['kind']} in addons/dev/bus")
+if chart is None:
+    sys.exit("addons/dev/bus has no Application")
+for path, items in zip(sys.argv[1:4], ([*first], [chart], [*second])):
+    open(path, "w").write(yaml.safe_dump_all(items))
+PY
+kubectl kustomize "$bus_dir" | (cd "$gitops_repo" && uv run -q --with pyyaml python -c "$apply_py" "$work/bus-1.yaml" "$work/bus-chart.yaml" "$work/bus-2.yaml") || nfail "could not turn the rendered addon into objects to apply"
+kc apply -f "$work/bus-1.yaml" >/dev/null || nfail "applying the generator and the ExternalSecrets failed"
+bus_secrets="e2e-bus-nack e2e-bus-e2e-api-app e2e-bus-e2e-web-app"
+for _ in $(seq 1 40); do   # up to 120 s
+  all=1; for s in $bus_secrets; do [ -n "$(secret_val $s password)" ] || all=0; done; [ $all = 1 ] && break; sleep 3
+done
+for s in $bus_secrets; do
+  [ -n "$(secret_val $s password)" ] || {
+    kc get externalsecrets.external-secrets.io $s -o yaml | tail -25
+    kc get events --field-selector involvedObject.kind=ExternalSecret,involvedObject.name=$s | tail -10   # ESO names a problem only here
+    nfail "the Secret $s has no password after 120 s"; }
+done
+kubectl --context k3d-$cluster apply -f "$work/bus-chart.yaml" >/dev/null || nfail "applying the HelmChart e2e-bus failed"
+for _ in $(seq 1 40); do kc get statefulsets.apps e2e-bus >/dev/null 2>&1 && break; sleep 3; done   # up to 120 s
+if ! kc get statefulsets.apps e2e-bus >/dev/null 2>&1; then
+  kubectl --context k3d-$cluster -n kube-system get pods | grep -E 'helm-install-e2e-bus' || true
+  kubectl --context k3d-$cluster -n kube-system logs job/helm-install-e2e-bus --tail=30 || true
+  nfail "the StatefulSet e2e-bus did not appear within 120 s"
+fi
+if ! kc rollout status statefulsets.apps/e2e-bus --timeout=180s 2>&1 | tee /dev/stderr; then
+  kc get pods; kc describe pod e2e-bus-0 | tail -30; kc logs e2e-bus-0 -c nats --tail=20 || true
+  nfail "the StatefulSet e2e-bus did not become ready"
+fi
+kc apply -f "$work/bus-2.yaml" >/dev/null || nfail "applying the Account, the streams and the consumer failed"
+bus_ready() { # kind name: the NACK object reports Ready
+  [ "$(kc get "$1" "$2" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = True ]
+}
+for o in streams.jetstream.nats.io/e2e-orders streams.jetstream.nats.io/e2e-audit consumers.jetstream.nats.io/e2e-orders.e2e-web; do
+  for _ in $(seq 1 40); do bus_ready "${o%%/*}" "${o#*/}" && break; sleep 3; done   # up to 120 s
+  bus_ready "${o%%/*}" "${o#*/}" || {
+    kc describe "${o%%/*}" "${o#*/}" | tail -25; kc get accounts.jetstream.nats.io e2e-bus -o yaml | tail -20
+    kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=30 || true
+    nfail "$o is not Ready after 120 s"; }
+done
+echo "ok   the Secrets, the server (e2e-bus-0), the streams e2e-orders and e2e-audit and the consumer e2e-orders.e2e-web are ready"
+
+nstep "Broker: the Secrets hold url, user and a 32-character password; the Service is ClusterIP on 4222 and 8222; /jsz shows the streams and the consumer (AC-119.9, AC-119.10, AC-119.11, AC-119.21)"
+for c in e2e-api e2e-web; do
+  [ "$(secret_val e2e-bus-$c-app url)" = nats://e2e-bus.e2e-dev.svc:4222 ] || nfail "the url of e2e-bus-$c-app is not nats://e2e-bus.e2e-dev.svc:4222"
+  [ "$(secret_val e2e-bus-$c-app user)" = "$c" ] || nfail "the user of e2e-bus-$c-app is not $c"
+  [ "$(secret_val e2e-bus-$c-app password | wc -c | tr -d ' ')" = 32 ] || nfail "the password of e2e-bus-$c-app is not 32 characters"
+done
+[ "$(secret_val e2e-bus-nack user)" = _nack ] && [ "$(secret_val e2e-bus-nack password | wc -c | tr -d ' ')" = 32 ] || nfail "e2e-bus-nack does not hold the user _nack and a 32-character password"
+[ "$(secret_val e2e-bus-e2e-api-app password)" != "$(secret_val e2e-bus-e2e-web-app password)" ] || nfail "both components got the same password"
+[ "$(kc get services e2e-bus -o jsonpath='{.spec.type}')" = ClusterIP ] || nfail "the Service e2e-bus is not of type ClusterIP"
+svc_ports=" $(kc get services e2e-bus -o jsonpath='{.spec.ports[*].port}') "
+case "$svc_ports" in *" 4222 "*) ;; *) nfail "the Service e2e-bus lacks the port 4222 (ports:$svc_ports)";; esac
+case "$svc_ports" in *" 8222 "*) ;; *) nfail "the Service e2e-bus lacks the monitoring port 8222 (ports:$svc_ports)";; esac
+# /jsz is read inside the server pod (the monitoring port 8222, unauthenticated); the streams, their limits and the consumer
+read -r -d '' jsz_py <<'PY' || true
+import json, sys
+d = json.load(sys.stdin)
+for a in d.get("account_details") or []:
+    for s in a.get("stream_detail") or []:
+        n, c = s["name"], s.get("config") or {}
+        print(f"S.{n}.subjects={','.join(c.get('subjects') or [])}")
+        print(f"S.{n}.max_age={c.get('max_age')}")
+        print(f"S.{n}.storage={c.get('storage')}")
+        print(f"S.{n}.messages={(s.get('state') or {}).get('messages')}")
+        for k in s.get("consumer_detail") or []:
+            p, cc = f"C.{n}.{k['name']}", k.get("config") or {}
+            print(f"{p}.ack_policy={cc.get('ack_policy')}")
+            print(f"{p}.ack_wait={cc.get('ack_wait')}")
+            print(f"{p}.num_pending={k.get('num_pending')}")
+            print(f"{p}.num_ack_pending={k.get('num_ack_pending')}")
+PY
+jsz() { kc exec e2e-bus-0 -c nats -- wget -qO- "http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true" | python3 -c "$jsz_py"; }
+jf() { sed -n "s/^$1=//p" <<< "$J" | head -1; }
+jsz_wait() { # seconds key=value...: reads /jsz until every pair holds (J keeps the last reading)
+  local t=$1 i kv ok; shift
+  for i in $(seq 1 "$t"); do
+    J=$(jsz 2>/dev/null) || J=""
+    ok=1; for kv in "$@"; do [ "$(jf "${kv%%=*}")" = "${kv#*=}" ] || ok=0; done
+    [ $ok = 1 ] && return 0; sleep 1
+  done
+  return 1
+}
+week_ns=604800000000000   # 7 days
+jsz_wait 20 S.e2e-orders.subjects='e2e.orders.>' S.e2e-audit.subjects='e2e.audit.>' S.e2e-orders.max_age=$week_ns S.e2e-audit.max_age=$week_ns \
+  S.e2e-orders.storage=file S.e2e-audit.storage=file C.e2e-orders.e2e-web.ack_policy=explicit C.e2e-orders.e2e-web.ack_wait=30000000000 \
+  || { echo "$J"; nfail "/jsz does not show the streams (e2e.orders.> and e2e.audit.>, max_age 7 days, file storage) and the consumer e2e-web (explicit, ack wait 30 s)"; }
+[ -z "$(grep -E '^C\.e2e-audit\.' <<< "$J")" ] || nfail "the stream e2e-audit has a consumer, although nobody consumes audit"
+[ "$(kc get consumers.jetstream.nats.io e2e-orders.e2e-web -o jsonpath='{.spec.durableName} {.spec.ackPolicy} {.spec.ackWait}')" = "e2e-web explicit 30s" ] || nfail "the Consumer object e2e-orders.e2e-web is not durable e2e-web, explicit, 30s"
+echo "ok   Secrets with url nats://e2e-bus.e2e-dev.svc:4222, user and a 32-character password; Service ClusterIP on 4222 and 8222; streams e2e.orders.> and e2e.audit.> (7 days, file) and the consumer e2e-web (explicit, ack wait 30 s)"
+
+# probe pods (plain Pods, not Deployments: the guard rails do not cover them) with the rendered variables of a component, in the nats-py image
+nats_image="$registry:$regport/e2e-natsprobe:1"
+read -r -d '' nats_pod_py <<'PY' || true
+import json, sys
+name, image, script, envfile = sys.argv[1:5]
+env = json.load(open(envfile)) + [{"name": k, "value": v} for k, v in (("PYTHONDONTWRITEBYTECODE", "1"), ("PYTHONUNBUFFERED", "1"), ("HOME", "/tmp"))]
+ctx = {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
+print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "natsprobe"}},
+                  "spec": {"restartPolicy": "Never",
+                           "securityContext": {"runAsNonRoot": True, "runAsUser": 1000, "runAsGroup": 1000, "seccompProfile": {"type": "RuntimeDefault"}},
+                           "containers": [{"name": "probe", "image": image, "command": ["python", "-c", script], "env": env, "securityContext": ctx}]}}))
+PY
+nn=0
+nrun() { # component script: runs it in a pod that carries the component's NATS_* and EVENTS_* variables; output in N_OUT
+  local name phase=""
+  nn=$((nn + 1)); name="natsprobe-$nn"
+  python3 -c "$nats_pod_py" "$name" "$nats_image" "$2" "$work/natsenv-$1.json" | kc apply -f - >/dev/null || nfail "could not start the probe pod $name"
+  for _ in $(seq 1 90); do   # up to 180 s
+    phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+    case "$phase" in Succeeded|Failed) break;; esac; sleep 2
+  done
+  N_OUT=$(kc logs "$name" 2>&1 || true)
+  [ "$phase" = Succeeded ] || { N_OUT="$N_OUT (pod phase: ${phase:-unknown}; $(kc get pod "$name" -o jsonpath='{.status.containerStatuses[*].state.waiting.reason}' 2>/dev/null))"; kc describe pod "$name" | tail -15; }
+  kc delete pod "$name" --wait=false >/dev/null 2>&1 || true
+  [ "$phase" = Succeeded ]
+}
+n_field() { sed -n "s/^$1=//p" <<< "$N_OUT" | head -1; }
+n_must() { nrun "$1" "$2" || nfail "the probe of $1 failed: $(echo "$N_OUT" | tail -8 | tr '\n' ' ' | cut -c1-600)"; }
+# what every probe does first: connect the way the docs example does (NATS_URL, NATS_USER, NATS_PASSWORD, NATS_INBOX_PREFIX)
+read -r -d '' natspre <<'PY' || true
+import asyncio, os, time
+import nats
+from nats.errors import TimeoutError as NatsTimeout
+
+ERRS = []
+
+async def on_error(e):
+    ERRS.append(str(e))
+    print("ERR=" + str(e).replace("\n", " "), flush=True)
+
+async def connect():
+    return await nats.connect(os.environ["NATS_URL"], user=os.environ["NATS_USER"], password=os.environ["NATS_PASSWORD"],
+                              inbox_prefix=os.environ["NATS_INBOX_PREFIX"], error_cb=on_error, connect_timeout=5)
+
+def violations(subject=None):
+    return len([e for e in ERRS if "Permissions Violation" in e and (subject is None or subject in e)])
+
+async def settle(nc):
+    await nc.flush()
+    await asyncio.sleep(1)   # the server answers a refusal asynchronously
+PY
+
+nstep "Broker: e2e-api publishes m1 and e2e-web fetches it within 30 seconds of the publish, through the docs example's calls (AC-119.13)"
+n_must e2e-api "$natspre"'
+async def main():
+    nc = await connect()
+    js = nc.jetstream()
+    ack = await js.publish(os.environ["EVENTS_ORDERS_SUBJECT_PREFIX"] + ".created", b"m1")   # e2e.orders.created
+    print("PUBLISHED=%s" % ack.stream)
+    print("T=%d" % int(time.time()))
+    await nc.close()
+asyncio.run(main())'
+[ "$(n_field PUBLISHED)" = e2e-orders ] || nfail "e2e-api published m1 but the stream is '$(n_field PUBLISHED)', not e2e-orders: $N_OUT"
+t_pub=$(n_field T)
+n_must e2e-web "$natspre"'
+async def main():
+    nc = await connect()
+    js = nc.jetstream()
+    sub = await js.pull_subscribe_bind(durable=os.environ["EVENTS_ORDERS_CONSUMER"], stream=os.environ["EVENTS_ORDERS_STREAM"])
+    msgs = await sub.fetch(1, timeout=30)
+    print("RECEIVED=" + ",".join(m.data.decode() for m in msgs))
+    print("T=%d" % int(time.time()))
+    for m in msgs:
+        await m.ack()
+    await settle(nc)
+    print("VIOLATIONS_BEFORE_REFUSALS=%d" % violations())
+    # e2e-web consumes orders: it may not publish on e2e.orders.created, nor subscribe to e2e.orders.>; it provides audit: e2e.audit.done is allowed
+    await nc.publish("e2e.orders.created", b"forbidden")
+    await settle(nc)
+    print("REFUSED_PUBLISH_ORDERS=%d" % violations("e2e.orders.created"))
+    await nc.subscribe("e2e.orders.>")
+    await settle(nc)
+    print("REFUSED_SUBSCRIBE_ORDERS=%d" % violations("e2e.orders.>"))
+    ack = await js.publish("e2e.audit.done", b"a1")
+    print("AUDIT_PUBLISHED=%s" % ack.stream)
+    await nc.close()
+asyncio.run(main())'
+[ "$(n_field RECEIVED)" = m1 ] || nfail "e2e-web fetched '$(n_field RECEIVED)', not m1: $N_OUT"
+t_got=$(n_field T)
+[ -n "$t_pub" ] && [ -n "$t_got" ] && [ $((t_got - t_pub)) -le 30 ] || nfail "m1 was fetched $((t_got - t_pub)) s after it was published (more than 30 s)"
+[ "$(n_field VIOLATIONS_BEFORE_REFUSALS)" = 0 ] || nfail "a fetch or an acknowledgement of e2e-web was refused: $N_OUT"
+echo "ok   e2e-web fetched m1 $((t_got - t_pub)) s after e2e-api published it, and acknowledged it"
+
+nstep "Broker: refusals of e2e-web (AC-119.12): no publish on e2e.orders.created, no subscribe to e2e.orders.>, publish on e2e.audit.done allowed"
+grep -q 'Permissions Violation.*e2e.orders.created' <<< "$N_OUT" || nfail "publishing on e2e.orders.created was not refused with a Permissions Violation: $N_OUT"
+grep -q 'Permissions Violation.*e2e.orders.>' <<< "$N_OUT" || nfail "subscribing to e2e.orders.> was not refused with a Permissions Violation: $N_OUT"
+[ "$(n_field REFUSED_PUBLISH_ORDERS)" = 1 ] && [ "$(n_field REFUSED_SUBSCRIBE_ORDERS)" = 1 ] || nfail "expected one refusal for each of the two actions: $N_OUT"
+[ "$(n_field AUDIT_PUBLISHED)" = e2e-audit ] || nfail "e2e-web could not publish on e2e.audit.done (stream '$(n_field AUDIT_PUBLISHED)'): $N_OUT"
+jsz_wait 15 S.e2e-orders.messages=1 S.e2e-audit.messages=1 C.e2e-orders.e2e-web.num_pending=0 C.e2e-orders.e2e-web.num_ack_pending=0 \
+  || { echo "$J"; nfail "after m1 the stream e2e-orders should hold 1 message (the refused publish stores none), e2e-audit 1, and the consumer 0 pending, 0 ack-pending"; }
+echo "ok   e2e-web's publish on e2e.orders.created and subscribe to e2e.orders.> got a Permissions Violation and stored nothing; e2e.audit.done went through"
+
+nstep "Broker: e2e-api publishes m2 and m3 while no consumer runs; /jsz shows 2 pending and 0 ack-pending (AC-119.13, AC-119.16, AC-119.12)"
+n_must e2e-api "$natspre"'
+async def main():
+    nc = await connect()
+    js = nc.jetstream()
+    for body in (b"m2", b"m3"):
+        await js.publish(os.environ["EVENTS_ORDERS_SUBJECT_PREFIX"] + ".created", body)
+    print("PUBLISHED=m2,m3")
+    print("VIOLATIONS_BEFORE_REFUSALS=%d" % violations())
+    # e2e-api does not belong to audit: no subscribe to e2e.audit.>, no publish on e2e.audit.x
+    await nc.subscribe("e2e.audit.>")
+    await settle(nc)
+    print("REFUSED_SUBSCRIBE_AUDIT=%d" % violations("e2e.audit.>"))
+    await nc.publish("e2e.audit.x", b"forbidden")
+    await settle(nc)
+    print("REFUSED_PUBLISH_AUDIT=%d" % violations("e2e.audit.x"))
+    await nc.close()
+asyncio.run(main())'
+[ "$(n_field PUBLISHED)" = m2,m3 ] && [ "$(n_field VIOLATIONS_BEFORE_REFUSALS)" = 0 ] || nfail "e2e-api could not publish m2 and m3: $N_OUT"
+grep -q 'Permissions Violation.*e2e.audit.>' <<< "$N_OUT" || nfail "e2e-api subscribing to e2e.audit.> was not refused with a Permissions Violation: $N_OUT"
+grep -q 'Permissions Violation.*e2e.audit.x' <<< "$N_OUT" || nfail "e2e-api publishing on e2e.audit.x was not refused with a Permissions Violation: $N_OUT"
+# the consumer e2e-web reads /jsz while no consumer process runs: m2 and m3 wait on the server (m1 is acknowledged)
+jsz_wait 15 S.e2e-orders.messages=3 S.e2e-audit.messages=1 C.e2e-orders.e2e-web.num_pending=2 C.e2e-orders.e2e-web.num_ack_pending=0 \
+  || { echo "$J"; nfail "/jsz should show 3 messages in e2e-orders (1 in e2e-audit: the refused e2e.audit.x stored nothing), num_pending 2 and num_ack_pending 0"; }
+echo "ok   e2e-api's subscribe to e2e.audit.> and publish on e2e.audit.x got a Permissions Violation; num_pending 2, num_ack_pending 0 for the consumer e2e-web"
+
+nstep "Broker: e2e-web fetches m2 and m3 (published while no consumer ran, not m1), acknowledges; an acknowledged message is not delivered again (AC-119.13, AC-119.16)"
+n_must e2e-web "$natspre"'
+async def main():
+    nc = await connect()
+    js = nc.jetstream()
+    sub = await js.pull_subscribe_bind(durable=os.environ["EVENTS_ORDERS_CONSUMER"], stream=os.environ["EVENTS_ORDERS_STREAM"])
+    msgs = await sub.fetch(2, timeout=30)
+    print("RECEIVED=" + ",".join(sorted(m.data.decode() for m in msgs)))
+    for m in msgs:
+        await m.ack()
+    await settle(nc)
+    try:
+        more = await sub.fetch(1, timeout=3)
+        print("AGAIN=" + ",".join(m.data.decode() for m in more))
+    except (asyncio.TimeoutError, NatsTimeout):
+        print("AGAIN=none")
+    print("VIOLATIONS=%d" % violations())
+    await nc.close()
+asyncio.run(main())'
+[ "$(n_field RECEIVED)" = m2,m3 ] || nfail "e2e-web fetched '$(n_field RECEIVED)', exactly m2 and m3 were expected (not m1): $N_OUT"
+[ "$(n_field AGAIN)" = none ] || nfail "a further fetch delivered '$(n_field AGAIN)': an acknowledged message must not be delivered again"
+[ "$(n_field VIOLATIONS)" = 0 ] || nfail "an acknowledgement of e2e-web was refused: $N_OUT"
+jsz_wait 15 S.e2e-orders.messages=3 C.e2e-orders.e2e-web.num_pending=0 C.e2e-orders.e2e-web.num_ack_pending=0 \
+  || { echo "$J"; nfail "after the acknowledgements /jsz should show 0 pending, 0 ack-pending and 3 messages in e2e-orders"; }
+echo "ok   e2e-web fetched m2 and m3 only, acknowledged them, and a further fetch timed out; num_pending 0, num_ack_pending 0, e2e-orders keeps 3 messages"
+
+nstep "Broker: platform doctor shows the operator nack and broker bus (dev) rows as ok (AC-119.22)"
+kubectl config use-context k3d-$cluster >/dev/null || nfail "could not select the kube context k3d-$cluster"
+timeout 180 $cplat platform doctor --repo "$gitops_repo" --json > "$work/doctor-broker.json" 2> "$work/doctor-broker.err" || true   # any exit code: only its rows matter
+python3 - "$work/doctor-broker.json" <<'PY' || { tail -5 "$work/doctor-broker.err" || true; nfail "doctor output unreadable, or the nack or broker row is not as expected (see above)"; }
+import json, sys
+rows = {r["name"]: r for r in json.load(open(sys.argv[1]))}
+bad = []
+for name, needles in (("operator nack", ["0.24.0"]), ("broker bus (dev)", ["nats chart 2.15.1", "nats:2.15.2-alpine"])):
+    r = rows.get(name)
+    if r is None:
+        bad.append(f"no row '{name}'")
+    elif r["status"] != "ok" or not all(n in r["detail"] for n in needles):
+        bad.append(f"row '{name}' is {r['status']}: {r['detail']}")
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+echo "ok   platform doctor: operator nack (0.24.0) and broker bus (dev) (nats chart 2.15.1, nats:2.15.2-alpine) are ok"
+
+nstep "Broker: resource remove bus is refused while the events APIs orders and audit are bound (AC-119.4)"
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] || nfail "the tree is dirty before the removal"
+if out=$($cplat resource remove bus --repo-dir "$gitops_repo" 2>&1); then nfail "resource remove bus succeeded although two events APIs are bound to it"; fi
+case "$out" in *"orders, audit"*) ;; *) nfail "the refusal does not name the APIs 'orders, audit': $out";; esac
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] || nfail "the refused removal changed the tree"
+echo "ok   refused: $(echo "$out" | tr '\n' ' ' | cut -c1-200)"
+
+nstep "Broker: remove both events APIs; the render names the retired stream e2e-orders, e2e-audit and the durable consumer e2e-web, and the stream stays with its messages (AC-119.14)"
+(cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" <<'PY'
+import sys
+sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
+import gitops
+from pathlib import Path
+app_dir = gitops.find_app(Path("."))
+y, data = gitops.load(app_dir)
+del data["apis"]
+for name, comp in gitops.components_of(data).items():
+    for key in ("provides", "consumes"):
+        left = [a for a in comp.get(key) or [] if a not in ("orders", "audit")]
+        if left:
+            comp[key] = left
+        elif key in comp:
+            del comp[key]
+gitops.save(app_dir, y, data)
+PY
+) || nfail "could not remove the events APIs from system.yaml"
+render_out=$(cd "$gitops_repo" && uv run scripts/render.py 2>&1 | tee /dev/stderr) || nfail "render.py failed after the events APIs were removed"
+commit "broker: remove the events APIs orders and audit"
+for needle in "stream e2e-orders is no longer declared" "stream e2e-audit is no longer declared" "durable consumer e2e-web of stream e2e-orders is no longer declared"; do
+  case "$render_out" in *"$needle"*) ;; *) nfail "the render did not print a note with '$needle'";; esac
+done
+# no longer declared, but still there: the stream, its messages and its consumer stay on the server
+jsz_wait 15 S.e2e-orders.messages=3 C.e2e-orders.e2e-web.ack_policy=explicit \
+  || { echo "$J"; nfail "after the events APIs were removed /jsz should still show e2e-orders with 3 messages and its consumer e2e-web"; }
+echo "ok   the render named the retired streams e2e-orders and e2e-audit and the consumer e2e-web; /jsz still shows e2e-orders with 3 messages and its consumer"
+
+nstep "Broker: resource remove bus succeeds once nothing is bound; operators/apps/nack.yaml goes; then the broker is deleted by hand, as a person would (AC-119.4)"
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] || nfail "the tree is dirty before the removal"
+$cplat resource remove bus --repo-dir "$gitops_repo" 2>&1 | tee /dev/stderr >/dev/null || nfail "resource remove bus failed although no events API is bound to it"
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] || commit "remove bus"
+[ ! -e "$gitops_repo/operators/apps/nack.yaml" ] || nfail "operators/apps/nack.yaml still exists although no broker is declared"
+[ ! -e "$bus_dir" ] || nfail "addons/dev/bus still exists although the broker is removed"
+# the Application disappears but the cluster objects stay (that is what the removal says): delete them by hand so that the staging and the
+# backup steps see the cluster they had before. Consumers, streams, the account by full kind name; NACK keeps the data (preventDelete).
+for o in consumers.jetstream.nats.io/e2e-orders.e2e-web streams.jetstream.nats.io/e2e-orders streams.jetstream.nats.io/e2e-audit accounts.jetstream.nats.io/e2e-bus; do
+  kc delete "$o" --timeout=60s || { kc get "$o" -o yaml | tail -20; kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=20 || true; nfail "could not delete $o"; }
+done
+kubectl --context k3d-$cluster -n kube-system delete helmcharts.helm.cattle.io e2e-bus --timeout=120s || nfail "could not delete the HelmChart e2e-bus"
+for _ in $(seq 1 30); do kc get statefulsets.apps e2e-bus >/dev/null 2>&1 || break; sleep 3; done   # up to 90 s
+if kc get statefulsets.apps e2e-bus >/dev/null 2>&1; then
+  kc get pods; kubectl --context k3d-$cluster -n kube-system get pods | grep -E 'helm-delete-e2e-bus|helm-install-e2e-bus' || true
+  nfail "the StatefulSet e2e-bus is still there 90 s after the HelmChart was deleted"
+fi
+kc delete persistentvolumeclaims e2e-bus-js-e2e-bus-0 --timeout=60s || nfail "could not delete the PVC e2e-bus-js-e2e-bus-0"
+for s in $bus_secrets; do kc delete externalsecrets.external-secrets.io $s --timeout=60s || nfail "could not delete the ExternalSecret $s"; done
+kc delete secrets $bus_secrets --ignore-not-found --timeout=60s >/dev/null || nfail "could not delete the Secrets of the broker"
+kc delete passwords.generators.external-secrets.io e2e-bus-password --timeout=60s || nfail "could not delete the generator e2e-bus-password"
+left=$(kc get statefulsets.apps,persistentvolumeclaims,secrets,externalsecrets.external-secrets.io,streams.jetstream.nats.io,consumers.jetstream.nats.io,accounts.jetstream.nats.io -o name 2>/dev/null | grep -E 'e2e-bus|e2e-orders|e2e-audit' || true)
+[ -z "$left" ] || nfail "objects of the broker are still in e2e-dev: $left"
+echo "ok   bus is removed from system.yaml (nack.yaml and addons/dev/bus are gone) and deleted from the cluster; the broker steps took $((SECONDS - broker_t0)) s (budget 300 s)"
 
 # ---- Ship a spec: dev is verified, the build is promoted to staging, applied and verified, the run ends ----
 sns=e2e-staging
