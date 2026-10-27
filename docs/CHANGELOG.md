@@ -12,6 +12,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **Action** for shared clusters, once per cluster: create the cluster repo and move the cluster to it as described in [CLUSTERS.md](CLUSTERS.md). Nothing is reinstalled. Clusters with one system need nothing.
 
+## [5.1.0] — 2026-10-27
+
 **A local console shows the system, its process and what needs you.** Spec 122, [ADR-055](adr/055-local-console-over-cplat-json.md), [guide](console.md). `/platform:ui` (`cplat ui`) serves a browser console on `127.0.0.1` with three places: Inbox (decisions waiting for you), Board (every item by stage) and System (components by environment). Actions run as `cplat headless` in the local clone; the console never writes to git, GitHub or the cluster itself.
 
 **The documentation is in the console.** **Menu → Guide** (or `g`) shows the console guide with its screenshots, the process with every stage, and a reference of every 5.x slash command with its usage and a copy button, read from the platform checkout the console runs from; each page's help links to its section (AC-122.52).
