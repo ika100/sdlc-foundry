@@ -16,7 +16,7 @@ from urllib.parse import quote, urlencode
 
 import stages
 from console import actions, handoff, layout, sources as sources_mod
-from console.html import action_button, esc, freshness, short_version, stage_badge, table, unavailable
+from console.html import action_button, engine_badge, esc, freshness, short_version, stage_badge, table, unavailable
 
 PERIODS = {"30": 30, "90": 90, "all": None}
 DEFAULT_PERIOD = "30"
@@ -169,7 +169,8 @@ def open_items(ctx: Any) -> list[dict]:
         spec = str(run.get("spec") or run.get("run_id"))
         items.append({"kind": "run", "stage": stage, "stopped": stopped, "id": spec, "title": "", "repo": run.get("repo") or "",
                       "component": str(run.get("repo") or "").split("/")[-1],
-                      "state": "Stopped" if stopped else "Running", "open": _panel("run", run.get("run_id")), **_run_info(run)})
+                      "state": "Stopped" if stopped else "Running", "open": _panel("run", run.get("run_id")),
+                      "engine": run.get("engine") or "", **_run_info(run)})
     items += _need_items(ctx)
     return items + _issue_items(ctx, items)
 
@@ -180,11 +181,11 @@ def _issue_items(ctx: Any, have: list[dict]) -> list[dict]:
     items = []
     for issue in _issues(ctx):
         ident = f"#{issue['number']}"
-        if ident in shown or "triage" in (issue.get("labels") or []) or stages.stage_of_issue({"state": issue.get("state") or "OPEN", "labels": issue.get("labels") or []}) != "Issue":
+        if ident in shown or ("triage" in (issue.get("labels") or []) and not issue.get("engine")) or stages.stage_of_issue({"state": issue.get("state") or "OPEN", "labels": issue.get("labels") or []}) != "Issue":
             continue
         items.append({"kind": "issue", "stage": "Issue", "stopped": False, "id": ident, "title": issue.get("title") or "",
                       "repo": issue.get("repo") or "", "component": "", "state": "Open, not triaged",
-                      "open": _panel("issue", issue["number"])})
+                      "open": _panel("issue", issue["number"]), "engine": issue.get("engine") or ""})
     return items
 
 
@@ -201,7 +202,8 @@ def _need_items(ctx: Any) -> list[dict]:
                 continue
             items.append({"kind": "issue", "stage": "Issue", "stopped": False, "id": f"#{obj['issue']}",
                           "title": need.get("reason") or "", "repo": obj.get("repo") or need.get("cwd_repo") or "",
-                          "component": "", "state": "Open, not triaged", "open": _panel("issue", obj["issue"])})
+                          "component": "", "state": "Open, not triaged", "open": _panel("issue", obj["issue"]),
+                          "engine": obj.get("engine") or ""})
         elif need.get("kind") == "promote" and obj.get("component"):
             if stages.stage_of_release({"verified": True, "running_in_prod": False}) != "Prod":
                 continue
@@ -275,7 +277,7 @@ def matches(item: dict, needle: str) -> bool:
 # ---------------- markup ----------------
 
 def _link(item: dict) -> str:
-    return f'<a href="{esc(item["open"])}">{esc(item["id"])}</a>'
+    return f'<a href="{esc(item["open"])}">{esc(item["id"])}</a>{engine_badge(item.get("engine"))}'
 
 
 def _cut_release(item: dict) -> str:
@@ -321,7 +323,7 @@ def _columns(items: list[dict]) -> str:
 def _list(items: list[dict]) -> str:
     if not items:
         return "<p>Nothing is open.</p>"
-    rows = [[_link(i), esc(i["repo"]), stage_badge(i["stage"]), esc(i["state"] + (f". {i['why']}" if i.get("why") else ""))]
+    rows = [[_link(i) + (f" {esc(i['title'])}" if i.get("title") else ""), esc(i["repo"]), stage_badge(i["stage"]), esc(i["state"] + (f". {i['why']}" if i.get("why") else ""))]
             for i in sorted(items, key=lambda i: (stages.STAGES.index(i["stage"]), i["id"]))]
     return table(rows, ["Item", "Repo", "Stage", "State"])
 

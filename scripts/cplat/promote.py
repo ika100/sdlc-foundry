@@ -7,6 +7,8 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 import core
 import evidence
 import gitops
@@ -118,6 +120,53 @@ def _check_digests(svc: dict, staging_tag: str | None, release_tag: str) -> dict
     return rec
 
 
+def _dev_pins_before(repo: Path, app_dir: Path, component: str) -> set[str]:
+    """Every tag the dev overlay of `component` pinned, according to the git history of its kustomization.yaml."""
+    rel = (app_dir / model.pin_path("dev", component)).relative_to(repo)
+    revisions = run(["git", "log", "--format=%H", "--", str(rel)], cwd=repo).stdout.split()
+    tags: set[str] = set()
+    for rev in revisions:
+        shown = run(["git", "show", f"{rev}:{rel}"], cwd=repo, check=False)
+        if shown.returncode == 0 and (tag := model.pin_of(yaml.safe_load(shown.stdout))):
+            tags.add(tag)
+    return tags
+
+
+def _rollback_dev(ns: argparse.Namespace, repo: Path, app_dir: Path, names: list[str]) -> int:
+    """Spec 124 (AC-124.15): the one promotion into dev, a pin back to a tag dev ran before (git history decides)."""
+    if ns.all or len(names) != 1:
+        raise PlatformError("a dev rollback is for one component: cplat instance promote <component> --to dev --version <tag>")
+    n, tag = names[0], ns.version
+    m = model.load_dir(app_dir)
+    if m.component(n) is None:
+        raise PlatformError(f"{n} is not a component of {m.system}", hint="components: " + ", ".join(c.name for c in m.components))
+    if m.instance(n, "dev") is None:
+        raise PlatformError(f"{n} has no instance in dev")
+    if tag not in _dev_pins_before(repo, app_dir, n):
+        raise PlatformError(f"{tag} is not a version dev ran before; dev follows main (a rollback pins only a previous dev version)")
+    previous = model.read_pin(app_dir, "dev", n)
+    r = Report(title=f"rollback {n}: dev → {tag} ({app_dir.name})")
+    r.will_do.append(f"{n}: dev {previous} → {tag} (rollback)")
+    r.data.update({"previous": previous, "version": tag, "pins": {n: tag}})
+    if ns.pr:
+        r.will_do.append("[outward] open a pull request (branch promote/…)")
+    if ns.dry_run:
+        r.emit(True, ns.json)
+        return 0
+    model.write_pin(app_dir, "dev", n, tag)
+    r.did.append(f"pinned {n}={tag}")
+    if ns.pr:
+        title = f"chore(promote): rollback {n} dev to {tag}"
+        body = f"- {n}: `{tag}` (rollback, was `{previous}`)"
+        r.did.append("opened " + gitops.open_pr(repo, f"promote/{gitops.slug(n)}-dev-rollback", title, body))
+        r.next_steps.append("review and merge; Argo rolls dev after the merge")
+    else:
+        r.next_steps.append("review `git diff`, then commit (or re-run with --pr)")
+    r.undo.append(f"promote {n} --to dev --version {previous} (the tag dev ran before)")
+    r.emit(False, ns.json)
+    return 0
+
+
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
     names = list(ns.items)
@@ -126,7 +175,7 @@ def main(argv: list[str]) -> int:
     to = ns.to
     if to not in model.ENVIRONMENTS:
         raise PlatformError(f"unknown environment '{to}' (environments: {', '.join(model.ENVIRONMENTS)})")
-    if to == model.ENVIRONMENTS[0]:
+    if to == model.ENVIRONMENTS[0] and not ns.version:
         raise PlatformError(f"{to} is the first environment: nothing is promoted to it (dev follows main)")
     frm = model.ENVIRONMENTS[model.ENVIRONMENTS.index(to) - 1]
     if ns.all and names:
@@ -141,6 +190,8 @@ def main(argv: list[str]) -> int:
     app_dir = gitops.find_app(repo, ns.app)
     if not ns.dry_run:
         gitops.require_clean(repo)
+    if to == model.ENVIRONMENTS[0]:
+        return _rollback_dev(ns, repo, app_dir, names)
     y, data = gitops.load(app_dir)
     m = model.load_dir(app_dir)
     by_name = {}

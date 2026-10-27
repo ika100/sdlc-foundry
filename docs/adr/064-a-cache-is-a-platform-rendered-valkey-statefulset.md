@@ -1,4 +1,4 @@
-# ADR-063: A cache is a platform-rendered single-node Valkey StatefulSet, without an operator; its password is generated once in the cluster
+# ADR-064: A cache is a platform-rendered single-node Valkey StatefulSet, without an operator; its password is generated once in the cluster
 
 **Status:** Accepted (2026-10-27)
 **Builds on:** [ADR-018](018-secrets-with-external-secrets-operator.md) (secrets from External Secrets Operator), [ADR-022](022-kyverno-policies.md) (guard rails), [ADR-057](057-named-typed-resources-with-fixed-contracts.md) (named, typed resources, the `cache` contract slot), [ADR-058](058-pinned-versions-and-platform-installed-operators.md) (pinned versions, operators under `operators/`), [ADR-062](062-environment-backups-with-velero.md) (caches left out of environment backups), spec 118; used by spec 120 (scaling on a list length) and spec 121 (upgrades)

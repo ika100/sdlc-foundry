@@ -11,6 +11,9 @@ and the acceptance tests rely on:
   freshness(read_at, now)                         <time data-read-at>, marked stale after 2 minutes
   unavailable(source, since, error)               a part whose source cannot be read, with "Retry now"
   table(rows, cols)                               a table inside <div class="scroll-x">
+  engine_badge(name)                              <span class="badge" data-engine> for an item of an engine, "" for none (spec 124)
+  guardrails(policy)                              <dl data-guardrails> with a <dd data-key="group.field"> per effective guardrail
+  level_name(level), level_sentence(level)        the autonomy level as shown, and what the engine may do at it
 """
 from __future__ import annotations
 
@@ -119,3 +122,99 @@ def table(rows: Sequence[Sequence[object]], cols: Sequence[str], *, caption: str
                    for i, row in enumerate(rows))
     cap = f"<caption>{esc(caption)}</caption>" if caption else ""
     return f'<div class="scroll-x"><table>{cap}<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+
+
+_LEVEL_MAY = {
+    "observe": "record issues from signals",
+    "advise": "also triage them and notify",
+    "propose": "also open fix pull requests that a person merges",
+    "act": "also merge fixes within the guardrails, roll back after a failed smoke, and let a person undo",
+    "improve": "act as `act` until a later spec defines it",
+}
+
+
+def level_name(level: str) -> str:
+    """An autonomy level as shown to a person."""
+    return str(level)
+
+
+def level_sentence(level: str) -> str:
+    """What the engine may do at `level`; the text of `autonomy.allows`, which a test keeps in sync (html.py does not import it)."""
+    return f"The engine may {_LEVEL_MAY.get(level, 'do nothing')}."
+
+
+def engine_badge(name: str | None) -> str:
+    """The badge of an item that an engine handled (AC-124.18); nothing for a person's item."""
+    if not name:
+        return ""
+    return f'<span class="badge" data-engine="{esc(name)}">{esc(name)}</span>'
+
+
+_GUARDRAIL_ORDER = (
+    ("autoMerge", ("routes", "maxCriticality")),
+    ("riskGate", ("maxFiles", "maxLines", "regressionTest", "secondReview")),
+    ("budget", ("runsPerDay", "mergesPerDay")),
+    ("window", ("days", "from", "to", "timezone")),
+)
+_PER_RUN = ("minutes", "invocations", "reruns", "cost")
+
+
+def _guardrail_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(v) for v in value)
+    return "" if value is None else str(value)
+
+
+def guardrails(policy: Mapping[str, object]) -> str:
+    """The effective guardrails of an environment as a `<dl data-guardrails>` (AC-124.19), one entry per field."""
+    rails = policy.get("guardrails")
+    rails = rails if isinstance(rails, Mapping) else {}
+    entries: list[tuple[str, object]] = []
+    for group, fields in _GUARDRAIL_ORDER:
+        values = rails.get(group)
+        values = values if isinstance(values, Mapping) else {}
+        for field in fields:
+            if field in values:
+                entries.append((f"{group}.{field}", values[field]))
+        if group == "budget":
+            per_run = values.get("perRun")
+            if isinstance(per_run, Mapping):
+                entries.extend((f"budget.perRun.{k}", per_run[k]) for k in _PER_RUN if k in per_run)
+    if "undoWindow" in policy:
+        entries.append(("undoWindow", policy["undoWindow"]))
+    body = "".join(f'<dt>{esc(key)}</dt><dd data-key="{esc(key)}">{esc(_guardrail_value(value))}</dd>' for key, value in entries)
+    return f"<dl data-guardrails>{body}</dl>"
+
+
+def definition_list(attr: str, pairs: Sequence[tuple[str, object]]) -> str:
+    """`<dl attr>` of (term, already escaped HTML) pairs."""
+    rows = "".join(f"<dt>{esc(k)}</dt><dd>{v}</dd>" for k, v in pairs)
+    return f"<dl {attr}>{rows}</dl>"
+
+
+def signal_facts(sig: Any) -> str:
+    """The facts of an engine signal, its triage and the policy decision; `(none)` before triage (AC-124.18)."""
+    if not isinstance(sig, dict):
+        return ""
+    evidence = "".join(
+        f'<a href="{esc(e.get("url"))}">{esc(e.get("text") or e.get("url"))}</a> ' if e.get("url") else f"{esc(e.get('text'))} "
+        for e in sig.get("evidence") or [] if isinstance(e, dict))
+    facts = definition_list("data-signal", [
+        ("Component", esc(sig.get("component"))), ("Environment", esc(sig.get("environment"))),
+        ("Category", esc(sig.get("category"))), ("Criticality", esc(sig.get("criticality"))),
+        ("Seen", esc(sig.get("seen"))), ("First seen", esc(sig.get("first_seen"))), ("Last seen", esc(sig.get("last_seen"))),
+        ("Evidence", evidence or "(none)")])
+    tri = sig.get("triage")
+    if isinstance(tri, dict):
+        files = ", ".join(esc(f) for f in tri.get("suspected_files") or []) or "(none)"
+        triage = definition_list("data-triage", [("Route", esc(tri.get("route"))), ("Confidence", esc(tri.get("confidence"))),
+                                     ("Suspected files", files)])
+    else:
+        triage = definition_list("data-triage", [("Triage", "(none)")])
+    pol = sig.get("policy")
+    decision = esc(pol.get("decision")) if isinstance(pol, dict) and pol.get("decision") else "(none)"
+    level = f" (level {esc(pol.get('level'))})" if isinstance(pol, dict) and pol.get("level") else ""
+    return (f"<h3>The signal</h3>{facts}<h3>Triage</h3>{triage}"
+            f"<h3>Policy decision</h3><p data-policy-decision>{decision}{level}</p>")

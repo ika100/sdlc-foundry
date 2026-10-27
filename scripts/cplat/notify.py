@@ -28,8 +28,8 @@ from core import PlatformError, run
 INTERVAL = 60
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 REVIEW_REQUEST = ("approve", "answer")           # GitHub already asks for a review
-ASSIGN = ("alert", "smoke", "retro")             # GitHub: assign the user to the existing issue
-ISSUE_LABELS = {"alert": "alert", "smoke-failure": "smoke"}
+ASSIGN = ("alert", "smoke", "retro", "signal")           # GitHub: assign the user to the existing issue
+ISSUE_LABELS = {"alert": "alert", "smoke-failure": "smoke", "signal": "signal"}
 HELD = "held"
 
 
@@ -94,6 +94,33 @@ def _label_names(issue: dict) -> set[str]:
     return {(x.get("name") if isinstance(x, dict) else x) for x in issue.get("labels") or []}
 
 
+def _done_on_its_own(windows: dict[str, str] | None = None) -> list[dict]:
+    """Engine audit events nobody undid yet and still inside their environment's `undoWindow` (default 24 h).
+
+    `windows` maps an environment to its effective `undoWindow`; empty when the store cannot be read.
+    """
+    import audit
+    import autonomy
+    import runs
+    try:
+        spans = {env: autonomy.parse_duration(w) for env, w in (windows or {}).items()}
+        default = autonomy.parse_duration(autonomy.DEFAULTS["undoWindow"])
+        widest = max([default, *spans.values()])
+        hours = max(24, -(-int(widest.total_seconds()) // 3600))
+        events = audit.read(-(-hours // 24))
+        undone = {e.get("undoes") for e in events if e.get("undoes")}
+        now_ = runs.utcnow()
+        out = []
+        for e in audit.done_on_its_own(events, now_, hours):
+            at = audit._ts(e.get("at"))
+            span = spans.get(e.get("environment"), default)
+            if e.get("event_id") not in undone and at is not None and now_ - at <= span:
+                out.append(e)
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def collect(repo_dir: Path) -> dict:
     """{"needs", "runs", "issues", "shipped", "issues_failed"} read from the system's sources (tests replace this)."""
     import model
@@ -119,28 +146,42 @@ def collect(repo_dir: Path) -> dict:
                 failed = True
                 continue
             issues += [{**i, "repo": slug} for i in found]
+    windows = {e.name: str((e.autonomy or {}).get("undoWindow")) for e in m.environments if (e.autonomy or {}).get("undoWindow")}
+    return_audit = _done_on_its_own(windows)
     shipped = [{"what": f"{r.get('spec') or r['run_id']} shipped", "at": r.get("ended_at")} for r in rows if r.get("phase") == "done"]
-    return {"needs": needs_doc, "runs": runs_doc, "issues": issues, "shipped": shipped, "issues_failed": failed}
+    return {"needs": needs_doc, "runs": runs_doc, "issues": issues, "shipped": shipped, "audit": return_audit,
+            "issues_failed": failed}
 
 
 def events_of(doc: dict) -> dict[str, dict]:
     """key -> event: `event`, `title`, `text`, `repo`, `number`, `prod`, `spec`."""
     out: dict[str, dict] = {}
     for it in (doc.get("needs") or {}).get("items") or []:
-        if it.get("kind") not in ("approve", "answer", "escalation", "promote"):
+        if it.get("kind") not in ("approve", "answer", "escalation", "promote", "review"):
             continue
         obj = it.get("object") or {}
+        if it["kind"] == "review":
+            out[it["id"]] = {"event": "review", "title": f"review: {obj.get('repo')}#{obj.get('pr')}", "text": it.get("reason") or "",
+                             "repo": obj.get("repo"), "number": obj.get("pr"), "prod": False, "spec": ""}
+            continue
         what = obj.get("spec") or obj.get("version") or obj.get("run_id") or ""
         out[it["id"]] = {"event": it["kind"], "title": f"{it['kind']}: {what}", "text": it.get("reason") or "",
                          "repo": obj.get("repo") or it.get("cwd_repo"), "number": None, "prod": False, "spec": what}
     for i in doc.get("issues") or []:
         names = _label_names(i)
         event = next((ev for label, ev in {**ISSUE_LABELS, "retro": "retro"}.items() if label in names), None)
-        if event is None:
+        if event is None or (event == "signal" and "triage" not in names):      # a routed signal issue leaves the event
             continue
         key = f"{event}:{i['repo']}#{i['number']}"
         out[key] = {"event": event, "title": f"{event}: {i.get('title') or ''}".strip(), "text": f"{i['repo']}#{i['number']}",
                     "repo": i["repo"], "number": i["number"], "prod": "env:prod" in names, "spec": i.get("title") or ""}
+    for e in doc.get("audit") or []:
+        obj = e.get("object") or {}
+        what = f"{e.get('kind')} by {(e.get('actor') or {}).get('name') or 'engine'} in {e.get('environment')}"
+        ref = f"{obj.get('repo')}#{obj.get('number')}" if obj.get("repo") and obj.get("number") else ""
+        out[f"done-on-its-own:{e['event_id']}"] = {"event": "done-on-its-own", "title": f"done on its own: {what}",
+                                                    "text": f"{what} {ref} at {e.get('at')}".strip(), "repo": obj.get("repo"),
+                                                    "number": None, "prod": False, "spec": what}
     for r in (doc.get("runs") or {}).get("runs") or []:
         if r.get("phase") == "done":
             what = r.get("spec") or r["run_id"]
@@ -212,6 +253,11 @@ def _send_github(key: str, ev: dict) -> str | None:
     """Returns the reference to resolve later, or None when there is nothing to send."""
     if ev["event"] in REVIEW_REQUEST:
         return "review-request"
+    if ev["event"] == "review":
+        if ev["number"] is None or not ev["repo"]:
+            return None
+        gh(["pr", "edit", str(ev["number"]), "-R", ev["repo"], "--add-reviewer", "@me"])
+        return f"review:{ev['repo']}#{ev['number']}"
     if ev["event"] in ASSIGN:
         if ev["number"] is None:
             return None
@@ -350,7 +396,7 @@ def run_once(repo_dir: Path) -> None:
         for channel, value in cfg.events[ev["event"]].items():
             if value != "instant" or channel in rec["sent"]:
                 continue
-            if quiet and not (ev["event"] == "alert" and ev["prod"]):
+            if quiet and not (ev["event"] in ("alert", "signal") and ev["prod"]):
                 rec["sent"][channel] = {"at": _iso(when), "ref": HELD}
                 continue
             try:
@@ -363,7 +409,7 @@ def run_once(repo_dir: Path) -> None:
     for key, rec in state["events"].items():
         if key in current or rec.get("resolved_at") or rec.get("event") in hidden:
             continue
-        if rec.get("event") in ("alert", "smoke", "retro") and doc.get("issues_failed"):
+        if rec.get("event") in ("alert", "smoke", "retro", "signal") and doc.get("issues_failed"):
             continue
         _resolve(rec, when)
     if not quiet and digest_due(cfg, state, when):

@@ -63,7 +63,7 @@ tasks:
 
 The contract (schema, error texts, rendered documents with key order, Secret, variables, pins, CLI texts, model, status, doctor) is
 in [design.md](design.md). The decision that outlives this spec is
-[ADR-063](../../adr/063-a-cache-is-a-platform-rendered-valkey-statefulset.md). It builds on spec 115 (ADR-057/058), spec 116
+[ADR-064](../../adr/064-a-cache-is-a-platform-rendered-valkey-statefulset.md). It builds on spec 115 (ADR-057/058), spec 116
 (ADR-059) and spec 117 (ADR-062: the Velero Schedule already leaves out every cache by name). Levels: t1, t3, t4, t5, t6, t7, t9 →
 t2 → t8.
 
@@ -194,7 +194,7 @@ tests stay green after t9.
 - README: the types line names `cache`; manifest description `(databases, buckets, caches)`.
 - `resource` 1.3.0 → 1.4.0 in both manifests and the catalog. No other plugin changes.
 - CHANGELOG `## [Unreleased]`: a new 118 entry **above** the existing entries there, which stay untouched: the cache resource (spec
-  118, ADR-063), the pins (`valkey/valkey:8.1.11`, `valkey/valkey:9.1.3`), "no operator is installed", resource 1.4.0. Not BREAKING.
+  118, ADR-064), the pins (`valkey/valkey:8.1.11`, `valkey/valkey:9.1.3`), "no operator is installed", resource 1.4.0. Not BREAKING.
 
 **Done when:** `devbox run validate` and the version-match loop of `devbox run quality` are green, and the amended AC-117.31 version
 assertion (t9) passes.

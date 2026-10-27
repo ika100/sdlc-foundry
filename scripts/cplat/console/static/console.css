@@ -233,3 +233,9 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .guide-body figure img { aspect-ratio: 1439 / 840; object-fit: contain; width: 100%; }
 .guide-stages .guide-stage { padding: var(--s2) 0; border-bottom: 1px solid var(--border); }
 .guide-stages .guide-stage p { margin-bottom: var(--s1); }
+
+/* System tabs and the Autonomy tab (spec 124) */
+nav.tabs { display: flex; gap: var(--s3); margin-bottom: var(--s3); border-bottom: 1px solid var(--line); }
+nav.tabs a { padding: var(--s1) var(--s2); text-decoration: none; color: var(--text); }
+nav.tabs a[aria-current="page"] { font-weight: 600; border-bottom: 2px solid var(--accent); }
+.levels { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; }

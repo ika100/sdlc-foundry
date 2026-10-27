@@ -12,7 +12,7 @@ Schedule already leaves out every `cache` resource by its `app.kubernetes.io/nam
 - **A cache instance is one Valkey StatefulSet that the renderer writes itself: no operator, no CRD, no Helm chart** (AC-118.23).
   `operators/` never gets an entry for a cache, `operators: owner` changes nothing for it, and `/platform:doctor` has no row for it.
   The image is the official `valkey/valkey` image, pinned exactly per major in the versions table (`VALKEY_IMAGES`, AC-118.17).
-  ADR: [063](../../adr/063-a-cache-is-a-platform-rendered-valkey-statefulset.md).
+  ADR: [064](../../adr/064-a-cache-is-a-platform-rendered-valkey-statefulset.md).
 - **The password is generated in the cluster by External Secrets Operator, once** (AC-118.19). A `Password` generator (32 letters
   and digits, no symbols, so it is safe inside a URL) feeds an `ExternalSecret` with `refreshPolicy: CreatedOnce` that writes all four
   contract keys of `<system>-<name>-app` through a template. Later renders, syncs, restarts and image upgrades never touch the Secret;

@@ -14,12 +14,14 @@ Public API:
 """
 from __future__ import annotations
 
+import copy
 import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+import autonomy as _autonomy
 from core import PlatformError
 from core import registry as _registry
 
@@ -106,6 +108,7 @@ class Environment:
     observability: Observability | None = None
     operators: str | None = None  # "owner" or None
     backup: dict | None = None  # {"to", "schedule", "retention"} (spec 117)
+    autonomy: dict = field(default_factory=dict, compare=False)  # spec 124: declared and effective policy
 
 
 @dataclass(frozen=True)
@@ -178,6 +181,7 @@ class Instance:
     exposed: bool
     staging_promotion: str
     secrets: tuple[InstanceSecret, ...] = ()
+    autonomy: dict = field(default_factory=dict, compare=False)  # spec 124: {"max", "effective"}
     observed: dict = field(default_factory=dict, compare=False, repr=False)
     _pins: Pins | None = field(default=None, compare=False, repr=False)
     _tag: object = field(default=_UNSET, compare=False, repr=False)
@@ -220,6 +224,7 @@ class Model:
     resource_instances: Sequence[ResourceInstance] = ()
     apis: Sequence[Api] = ()
     warnings: Sequence[str] = ()
+    paused: bool = False
 
     # ---- lookups ----
 
@@ -336,15 +341,16 @@ class Model:
                     "replicas": i.replicas, "namespace": i.namespace, "argo_application": i.argo_application,
                     "url": i.url, "exposed": i.exposed,
                     "promoted_from": f"{prev.component}/{prev.environment}" if prev else None,
-                    "secrets": [sec(s) for s in i.secrets]}
+                    "secrets": [sec(s) for s in i.secrets], "autonomy": dict(i.autonomy)}
 
         return {
             "schema": SCHEMA,
+            "autonomy": {"paused": self.paused, "levels": list(_autonomy.LEVELS)},
             "system": {"name": self.system, "owner": self.owner, "components": [c.name for c in self.components],
                        "resources": [r.name for r in self.resources], "apis": [a.name for a in self.apis]},
             "environments": [{"name": e.name, "host": e.host, "url": e.url_template, "policy": e.policy,
                               "promotion": e.promotion, "observability": obs(e.observability),
-                              "operators": e.operators, "backup": e.backup} for e in self.environments],
+                              "operators": e.operators, "backup": e.backup, "autonomy": copy.deepcopy(e.autonomy)} for e in self.environments],
             "components": [{
                 "name": c.name, "type": c.type, "lang": c.lang, "shape": c.shape, "repo": c.repo, "image": c.image,
                 "external": {"kind": c.external.kind, "namespace": c.external.namespace} if c.external else None,
@@ -534,6 +540,23 @@ def _store_key(template: str, system: str, env: str, resource: str) -> str:
     return template.replace("{system}", system).replace("{env}", env).replace("{resource}", resource)
 
 
+def _env_autonomy(env: str, conf: dict, paused: bool, promotion: str) -> dict:
+    """The environment's autonomy object; a malformed block falls back to the defaults (the renderer validates)."""
+    block = conf.get("autonomy")
+    try:
+        if isinstance(block, dict) and block.get("level", "observe") in _autonomy.LEVELS:
+            return _autonomy.effective(env, block, paused=paused, promotion=promotion)
+    except (TypeError, AttributeError, ValueError, KeyError):
+        pass
+    return _autonomy.effective(env, None, paused=paused, promotion=promotion)
+
+
+def _instance_autonomy(env_obj: dict, idoc: dict) -> dict:
+    block = _map(idoc.get("autonomy"))
+    mx = block.get("max")
+    return _autonomy.instance(env_obj, mx if mx in _autonomy.LEVELS else None)
+
+
 # ---------------- build ----------------
 
 def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: list[dict] | None = None) -> Model:
@@ -541,6 +564,7 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
     doc = doc if isinstance(doc, dict) else {}
     shapes = _registry.load() if shapes is None else shapes
     env_docs = _map(doc.get("environments"))
+    paused = _map(doc.get("autonomy")).get("paused") is True
     envs = []
     for order, name in enumerate(ENVIRONMENTS):
         conf = _map(env_docs.get(name))
@@ -550,7 +574,8 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
             o = Observability(ob.get("ui"), ob.get("exportTo"), ob.get("alerts"), ob.get("rules"), ob.get("queryURL"),
                               ob.get("alertmanagerURL"), f"addon-observability-{name}", ob.get("headersSecret"), ob.get("querySecret"))
         envs.append(Environment(name, order, _str_or_none(conf.get("host")), _str_or_none(conf.get("url")), _policy(conf, name),
-                                _promotion(conf, name), o, "owner" if conf.get("operators") == "owner" else None, _backup(conf.get("backup"))))
+                                _promotion(conf, name), o, "owner" if conf.get("operators") == "owner" else None, _backup(conf.get("backup")),
+                                _env_autonomy(name, conf, paused, _promotion(conf, name))))
     by_env = {e.name: e for e in envs}
 
     res_docs = {str(k): _map(v) for k, v in _map(doc.get("resources")).items()}
@@ -578,7 +603,8 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
                 namespace=(ext.namespace if ext and ext.namespace else None) or f"{system}-{env}",
                 argo_application=f"{c.name}-{env}", exposed=bool(c.expose and e.host), _rule=(system, c, e),
                 staging_promotion=c.promotion_staging or by_env["staging"].promotion,
-                secrets=_instance_secrets(system, c, env, overrides), _pins=pins))
+                secrets=_instance_secrets(system, c, env, overrides), _pins=pins,
+                autonomy=_instance_autonomy(e.autonomy, idoc)))
 
     ris = []
     for r in resources:
@@ -605,7 +631,7 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
 
     return Model(system=system, owner=str(doc.get("owner") or ""), environments=tuple(envs), components=tuple(cs),
                  resources=tuple(resources), instances=tuple(instances), resource_instances=tuple(ris), apis=tuple(apis),
-                 warnings=tuple(warnings))
+                 warnings=tuple(warnings), paused=paused)
 
 
 # ---------------- pins ----------------

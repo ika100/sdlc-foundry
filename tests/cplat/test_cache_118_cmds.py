@@ -360,7 +360,7 @@ def test_cluster_up_and_bootstrap_have_no_cache_step_ac_118_23():  # AC-118.23
 
 
 def test_the_adr_for_the_statefulset_decision_exists_ac_118_23():  # AC-118.23
-    adr = ROOT / "docs" / "adr" / "063-a-cache-is-a-platform-rendered-valkey-statefulset.md"
+    adr = ROOT / "docs" / "adr" / "064-a-cache-is-a-platform-rendered-valkey-statefulset.md"  # spec 118: ADR-063 went to spec 124 first
     assert adr.is_file() and "StatefulSet" in adr.read_text()
     assert "063" in (ROOT / "docs" / "adr" / "README.md").read_text()
 
@@ -502,10 +502,10 @@ def test_the_resource_docs_say_cache_data_is_not_backed_up_ac_118_14():  # AC-11
 def test_the_changelog_lists_the_cache_in_a_minor_section_that_is_not_breaking_ac_118_22():  # AC-118.22
     text = (ROOT / "docs" / "CHANGELOG.md").read_text()
     sections = re.split(r"(?m)^(?=## \[)", text)
-    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 118|ADR-063", s)]
+    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 118|ADR-064", s)]  # spec 118: ADR-063 went to spec 124 first
     assert hits, "the change is listed"
     assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", hits[0].splitlines()[0])
-    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"spec 118|ADR-063", e))
+    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"spec 118|ADR-064", e))
     assert "BREAKING" not in entry
     assert "valkey/valkey:8.1.11" in hits[0] and "valkey/valkey:9.1.3" in hits[0] and "resource" in entry and "1.4.0" in hits[0]
     assert "no operator" in hits[0].lower()

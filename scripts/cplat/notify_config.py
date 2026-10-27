@@ -17,7 +17,7 @@ import yaml
 
 from core import PlatformError
 
-EVENTS = ("approve", "answer", "escalation", "promote", "alert", "smoke", "run-done", "retro")
+EVENTS = ("approve", "answer", "escalation", "promote", "alert", "smoke", "run-done", "retro", "review", "signal", "done-on-its-own")
 CHANNELS = ("github", "slack", "email", "desktop")
 VALUES = ("off", "instant", "digest")
 DIGEST_CHANNELS = ("slack", "email")
@@ -26,8 +26,8 @@ TOP_KEYS = ("preset", "events", "slack", "email", "digest", "quiet_hours")
 EMAIL_KEYS = ("to", "from", "host", "port", "user", "starttls")
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 KEYCHAIN_SERVICE = "sdlc-foundry"
-GITHUB_INSTANT = ("approve", "answer", "escalation", "alert", "smoke")
-DESKTOP_INSTANT = ("approve", "answer", "escalation", "promote", "alert", "smoke")
+GITHUB_INSTANT = ("approve", "answer", "escalation", "alert", "smoke", "review", "signal")
+DESKTOP_INSTANT = ("approve", "answer", "escalation", "promote", "alert", "smoke", "review", "signal", "done-on-its-own")
 HINT = "see docs/console.md (notifications)"
 
 

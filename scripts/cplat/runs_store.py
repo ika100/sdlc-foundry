@@ -51,7 +51,7 @@ class Store(Protocol):
     def visibility(self, deadline: float | None = None) -> str: ...
     def create_private(self) -> None: ...
     def put(self, files: dict[str, str], message: str, deadline: float | None = None) -> None: ...
-    def read(self, days: list[datetime.date], deadline: float | None = None) -> list[tuple[str, str]]: ...
+    def read(self, days: list[datetime.date], deadline: float | None = None, prefix: str = "runs") -> list[tuple[str, str]]: ...
     def read_file(self, path: str, deadline: float | None = None) -> str | None: ...
 
 
@@ -70,6 +70,12 @@ def record_path(record: dict) -> str:
         name = f"{record['run_id']}.json"
     y, m, d = day.split("-")
     return f"runs/{y}/{m}/{d}/{name}"
+
+
+def audit_path(event: dict) -> str:
+    """audit/YYYY/MM/DD/<event_id>.json (day = at)."""
+    y, m, d = str(event.get("at", ""))[:10].split("-")
+    return f"audit/{y}/{m}/{d}/{event['event_id']}.json"
 
 
 class GitHubStore:
@@ -169,12 +175,12 @@ class GitHubStore:
             return None
         raise StoreUnreachable(_last_line(err or out))
 
-    def read(self, days: list[datetime.date], deadline: float | None = None) -> list[tuple[str, str]]:
+    def read(self, days: list[datetime.date], deadline: float | None = None, prefix: str = "runs") -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
         owner, _, name = self.slug.partition("/")
         for i in range(0, len(days), DAYS_PER_QUERY):
             chunk = days[i:i + DAYS_PER_QUERY]
-            dirs = {f"d{n}": f"runs/{d:%Y/%m/%d}" for n, d in enumerate(chunk)}
+            dirs = {f"d{n}": f"{prefix}/{d:%Y/%m/%d}" for n, d in enumerate(chunk)}
             fields = " ".join(
                 f'{alias}: object(expression: "HEAD:{path}") {{ ... on Tree {{ entries {{ name object {{ ... on Blob {{ text }} }} }} }} }}'
                 for alias, path in dirs.items())

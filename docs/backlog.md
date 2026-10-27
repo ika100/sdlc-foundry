@@ -137,6 +137,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [084-platform-ci-in-minutes](specs/084-platform-ci-in-minutes/spec.md) — Platform CI in minutes | P2 | done | 2 | #124, #127 |
 | [094-a-merge-conflict-re-plans-instead-of](specs/094-a-merge-conflict-re-plans-instead-of/spec.md) — A merge conflict re-plans instead of escalating | P2 | done | 15 |  |
 | [122-a-local-console-shows-the-system-and-what](specs/122-a-local-console-shows-the-system-and-what/spec.md) — A local console shows the system, its process and what needs you | P2 | done | 52 |  |
+| [124-autonomy-is-declared-per-environment-and](specs/124-autonomy-is-declared-per-environment-and/spec.md) — Autonomy is declared per environment and supervised in the console | P2 | done | 22 |  |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)

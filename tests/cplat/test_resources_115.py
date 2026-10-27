@@ -486,7 +486,7 @@ def test_any_operators_value_but_owner_fails_naming_environment_and_owner_ac_115
 def test_operators_is_an_allowed_environment_key_ac_115_18(tmp_path):  # AC-115.18 (adds to AC-114.4)
     doc = op_doc()
     doc["environments"]["staging"]["replicas"] = 2
-    fails(tmp_path, doc, "environments.staging: unknown key 'replicas' (allowed: host, url, policy, promote, observability, operators, backup)")  # spec 117: backup
+    fails(tmp_path, doc, "environments.staging: unknown key 'replicas' (allowed: host, url, policy, promote, observability, operators, backup, autonomy)")  # spec 117: backup; spec 124: autonomy
 
 
 def test_check_mode_covers_the_operators_and_stale_ones_go_ac_115_18(tmp_path):  # AC-115.18

@@ -134,7 +134,7 @@ def test_a_missing_environments_key_fails_ac_114_3(tmp_path):  # AC-114.3
 def test_an_unknown_environment_key_fails_naming_environment_key_and_allowed_ac_114_4(tmp_path):  # AC-114.4
     doc = full5()
     doc["environments"]["staging"]["replicas"] = 2
-    fails(tmp_path, doc, "environments.staging: unknown key 'replicas'", "(allowed: host, url, policy, promote, observability, operators, backup)")  # spec 115: operators (AC-115.18); spec 117: backup
+    fails(tmp_path, doc, "environments.staging: unknown key 'replicas'", "(allowed: host, url, policy, promote, observability, operators, backup, autonomy)")  # spec 115: operators (AC-115.18); spec 117: backup; spec 124: autonomy
 
 
 @pytest.mark.parametrize("key", ["hosts", "urls", "mode", "addons"])
@@ -350,7 +350,7 @@ def test_instances_override_replicas_resources_and_merge_env_ac_114_13(tmp_path)
 
 def test_an_unknown_instance_key_fails_listing_the_allowed_ones_ac_114_13(tmp_path):  # AC-114.13
     fails(tmp_path, tiny(instances={"dev": {"port": 9}}),
-          "components.api.instances.dev: unknown key 'port' (allowed: replicas, resources, env, promote, secrets)")
+          "components.api.instances.dev: unknown key 'port' (allowed: replicas, resources, env, promote, secrets, autonomy)")  # spec 124: autonomy
 
 
 # ---------------- AC-114.14: libraries ----------------
