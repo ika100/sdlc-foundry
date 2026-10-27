@@ -7,6 +7,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 ## [Unreleased]
 
 **`cplat pr wait` and `ship land` never call a conflicting PR green.** GitHub starts no `pull_request` workflow while a PR conflicts with its base, so only CodeQL reported and the wait said GREEN. The watch now asks whether the PR is mergeable and ends with "conflicts with its base branch" and how to fix it (#221).
+**Fixes to `platform update --migrate`.** A repo without `.claude/project-notes.md` now gets the file, created empty, because the new `CLAUDE.md` imports it; an existing notes file is still never changed (#239). The "left out N new starter file(s)" line no longer lists the `system.yaml` the migration writes on the next line (#238).
 
 **An object storage resource: `type: bucket`.** [ADR-059](adr/059-in-cluster-buckets-on-seaweedfs-per-instance.md), spec 116. Not breaking: a 5.0 or 115 `system.yaml` renders as before. A system declares buckets under `resources.<name>` with `type: bucket` (`storage`, default `10Gi`, and `versioning`, default off, per resource or instance). An in-cluster bucket is its own SeaweedFS per instance; `external` buckets read `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId` and `secretAccessKey` from the secret store. A component that uses a bucket gets `S3_*` and `AWS_*` (prefixed with two or more buckets). Pins: SeaweedFS image `chrislusf/seaweedfs:4.51` and operator chart `seaweedfs-operator` 0.1.45. `cplat platform doctor` compares the installed SeaweedFS operator.
 
