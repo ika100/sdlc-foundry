@@ -136,6 +136,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [083-platform-drift-in-status](specs/083-platform-drift-in-status/spec.md) — Platform drift in /shared:status | P2 | done | 1 | #125 |
 | [084-platform-ci-in-minutes](specs/084-platform-ci-in-minutes/spec.md) — Platform CI in minutes | P2 | done | 2 | #124, #127 |
 | [094-a-merge-conflict-re-plans-instead-of](specs/094-a-merge-conflict-re-plans-instead-of/spec.md) — A merge conflict re-plans instead of escalating | P2 | done | 15 |  |
+| [122-a-local-console-shows-the-system-and-what](specs/122-a-local-console-shows-the-system-and-what/spec.md) — A local console shows the system, its process and what needs you | P2 | done | 52 |  |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)

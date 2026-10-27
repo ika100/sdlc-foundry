@@ -2,7 +2,7 @@
 title: "Guard rails"
 description: "The platform's own conventions as Kyverno policy, checked before merge and enforced in the cluster."
 sidebar:
-  order: 6
+  order: 7
 ---
 
 Each environment has a `policy` in `system.yaml`: `audit`, `enforce` or `off`. Unless it is `off`, the platform renders a namespaced Kyverno policy per environment that encodes its conventions for every Deployment:

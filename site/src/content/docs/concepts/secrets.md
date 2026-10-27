@@ -2,7 +2,7 @@
 title: "Secrets"
 description: "Secrets are created or read in the cluster by External Secrets Operator; values never enter git."
 sidebar:
-  order: 5
+  order: 6
 ---
 
 Git holds **references**, never values. A component declares `secrets:` in `system.yaml`; `render.py` emits an `ExternalSecret` for each and exposes the resulting Secret to the pod through `envFrom`.

@@ -25,6 +25,10 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat platform update [--migrate] [--data KEY=VALUE] [--dry-run]
   cplat platform fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release
   cplat platform runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost
+  cplat system set --env ENV [--promote RULE] [--policy POLICY] [--host HOST]   one environment's promote rule, policy or host
+  cplat runs [--json] [--since DAYS] [--repo OWNER/NAME] [--spec ID]   the run list (active and recent runs)
+  cplat needs [--json] [--repo-dir DIR] [--system NAME]   what waits for your decision
+  cplat ui | cplat platform ui   the local console
   cplat platform retro [--week W] [--json] [--out DIR] | propose --dir DIR | post [--dir DIR]   weekly platform retro
 
 Plumbing keeps its name:
@@ -53,7 +57,8 @@ import core  # noqa: E402
 
 # noun -> verb -> (module, argv prefix put before the remaining args)
 NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
-    "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", [])},
+    "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", []),
+               "set": ("systemset", [])},
     "component": {"new": ("newsvc", []), "add": ("compose", ["add"]), "set": ("compose", ["set"]), "remove": ("compose", ["remove"]),
                   "ship": ("ship", []), "build": ("buildcmd", [])},
     "cluster": {"new": ("clusterrepo", ["new"]), "add": ("clusterrepo", ["add"]), "remove": ("clusterrepo", ["remove"])},
@@ -61,12 +66,14 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"])},
     "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
     "issue": {"triage": ("triage", [])},
-    "platform": {"doctor": ("doctor", []), "update": ("update", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", [])},
+    "platform": {"doctor": ("doctor", []), "update": ("update", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", []),
+                 "ui": ("ui", [])},
 }
 
 PLUMBING = {
     "shape": "shapecmd", "feedback": "feedback", "model": "modelcmd", "spec": "spec", "pr": "pr", "quiet": "quiet", "validate": "validate",
     "headless": "headless", "deps": "deps", "alerts": "alerts", "budget": "budget", "adopt": "adopt",
+    "needs": "needs", "ui": "ui",
 }
 
 # 4.x top-level name -> its 5.0 form (exit 2, the module is not imported)
@@ -78,6 +85,8 @@ MOVED = {
     "retro": "platform retro",
 }
 
+
+RUNLIST_VALUED = ("--since", "--repo", "--spec")
 
 _REPORT_HINT = ("  This looks like a platform bug. Run `/issue:report` (or `cplat feedback --title ...`) to file it; "
                 "nothing is sent without your OK.")
@@ -103,6 +112,9 @@ def _resolve(argv: list[str]) -> tuple[str, list[str], str] | int:
     if name in ("-h", "--help"):
         print(__doc__)
         return 0
+    if name == "runs" and all(a.startswith("-") or (i and argv[i].lstrip("-").isdigit()) or (i and argv[i - 1] in RUNLIST_VALUED)
+                              for i, a in enumerate(argv[1:], 1)):
+        return "runlist", argv[1:], name   # spec 122: the verb-less form lists runs; `runs <verb>` stays moved
     if name in MOVED:
         print(f"`cplat {name}` is `cplat {MOVED[name]}` in 5.0", file=sys.stderr)
         return 2

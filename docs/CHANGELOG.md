@@ -12,6 +12,27 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **Action** for shared clusters, once per cluster: create the cluster repo and move the cluster to it as described in [CLUSTERS.md](CLUSTERS.md). Nothing is reinstalled. Clusters with one system need nothing.
 
+**A local console shows the system, its process and what needs you.** Spec 122, [ADR-055](adr/055-local-console-over-cplat-json.md), [guide](console.md). `/platform:ui` (`cplat ui`) serves a browser console on `127.0.0.1` with three places: Inbox (decisions waiting for you), Board (every item by stage) and System (components by environment). Actions run as `cplat headless` in the local clone; the console never writes to git, GitHub or the cluster itself.
+
+**The documentation is in the console.** **Menu → Guide** (or `g`) shows the console guide with its screenshots, the process with every stage, and a reference of every 5.x slash command with its usage and a copy button, read from the platform checkout the console runs from; each page's help links to its section (AC-122.52).
+
+**`cplat needs` and the run list.** `cplat needs --json` lists what waits for a human (approvals, answers, escalations, promotions). The run list (`cplat runs --json`) gives every run a phase and a stage.
+
+**Status and spec additions.** `cplat system status --json` and `cplat spec list --all --detail --json` carry more keys for the console. Deliberate test change: the AC-113.11 status tests now compare the 5.0 keys, because spec 122 adds keys.
+
+**Draft spec PRs.** `/component:spec` and `/system:spec` publish a spec as a draft pull request (`cplat spec publish`) and ask the owner to review; approving lands it (`cplat spec land`).
+
+**Notifications.** `~/.config/sdlc-foundry/notify.yaml` chooses per event whether GitHub, desktop, Slack or email is told, instantly or in a digest, with quiet hours. Secrets come from the environment or the OS keychain, never the file. `cplat ui notify --once` runs from cron or launchd.
+
+**`--provides` and `--consumes`.** `/component:add` and `/component:set` declare the APIs of one component; a new API goes into `apis:` in the same PR.
+
+**`/system:set`.** Changes system-wide settings such as `--env` (`cplat system set`).
+
+**Plugins:** `platform` 1.1.0 (`/platform:ui`), `system` 1.1.0 (`/system:set`), `component` 1.2.0 (`--provides`, `--consumes`, draft spec PRs).
+
+**`cplat pr wait` and `ship land` never call a conflicting PR green.** GitHub starts no `pull_request` workflow while a PR conflicts with its base, so only CodeQL reported and the wait said GREEN. The watch now asks whether the PR is mergeable and ends with "conflicts with its base branch" and how to fix it (#221).
+**Fixes to `platform update --migrate`.** A repo without `.claude/project-notes.md` now gets the file, created empty, because the new `CLAUDE.md` imports it; an existing notes file is still never changed (#239). The "left out N new starter file(s)" line no longer lists the `system.yaml` the migration writes on the next line (#238).
+
 **An object storage resource: `type: bucket`.** [ADR-059](adr/059-in-cluster-buckets-on-seaweedfs-per-instance.md), spec 116. Not breaking: a 5.0 or 115 `system.yaml` renders as before. A system declares buckets under `resources.<name>` with `type: bucket` (`storage`, default `10Gi`, and `versioning`, default off, per resource or instance). An in-cluster bucket is its own SeaweedFS per instance; `external` buckets read `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId` and `secretAccessKey` from the secret store. A component that uses a bucket gets `S3_*` and `AWS_*` (prefixed with two or more buckets). Pins: SeaweedFS image `chrislusf/seaweedfs:4.51` and operator chart `seaweedfs-operator` 0.1.45. `cplat platform doctor` compares the installed SeaweedFS operator.
 
 **Plugins:** `resource` 1.2.0 (`/resource:add <name> --type database|bucket [--storage S] [--versioning]`).

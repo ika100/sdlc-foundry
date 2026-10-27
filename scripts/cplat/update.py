@@ -102,7 +102,8 @@ def project_owned_patterns(template: str) -> list[str]:
         return []
 
 
-SEEDS = {".secrets.baseline.json"}   # repo-owned once they exist, but the skeleton needs them: added when missing, never replaced
+# repo-owned once they exist, but the skeleton needs them: added when missing, never replaced (CLAUDE.md imports the notes, #239)
+SEEDS = {".secrets.baseline.json", ".claude/project-notes.md"}
 
 
 def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
@@ -631,6 +632,8 @@ def execute(req: dict) -> Report:
     try:
         run(cmd, cwd=repo)
         dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
+        written = {f"{s['dir'].as_posix()}/system.yaml" for s in systems}   # the migration writes these next, not left out (#238)
+        dropped = [d for d in dropped if d not in written]
         if dropped:
             r.did.append(f"left out {len(dropped)} new starter file(s) in project-owned paths (app code, tests, docs): {', '.join(dropped[:4])}{' ...' if len(dropped) > 4 else ''}")
         answers = repo / ".copier-answers.yml"
