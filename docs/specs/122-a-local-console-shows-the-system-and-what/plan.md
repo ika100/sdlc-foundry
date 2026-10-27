@@ -104,6 +104,7 @@ tasks:
     covers: [AC-122.9, AC-122.10, AC-122.11, AC-122.12, AC-122.40, AC-122.48, AC-122.49]
     parallel_safe: true
     depends_on: [t1, t11, t12]
+    done: true
   - id: t15
     title: side panels — spec, run, issue, instance, release; failures, evidence chain, criteria, links, Cut release
     files: [scripts/cplat/console/panels.py]
