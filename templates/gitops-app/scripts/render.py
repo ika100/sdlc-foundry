@@ -34,6 +34,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
         queryURL: https://prom.example.com/api/prom # optional; querySecret: <name> or <namespace>/<name> (key AUTHORIZATION)
         alertmanagerURL: https://am.example.com     # optional
       operators: owner                              # optional, the only value: the platform installs no operator here (spec 115)
+      backup: {to: backups, schedule: "0 3 * * *", retention: 30d}   # optional (spec 117): back the environment up to a bucket resource
     staging:
       promote: after-dev-smoke       # after-dev-smoke | manual (default); dev takes none; prod is always promoted by hand
     prod: {}
@@ -74,7 +75,9 @@ system.yaml (every value explicit and reviewable; the model is described in docs
       replicas: 1
       storage: 1Gi
       resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 512Mi}}
-      instances: {prod: {replicas: 3, storage: 20Gi}}   # per-environment overrides: external, remote, replicas, storage, resources
+      instances: {prod: {replicas: 3, storage: 20Gi,    # per-environment overrides: external, remote, replicas, storage, resources, backup
+                         backup: {to: backups, schedule: "30 2 * * *", retention: 8w}}}   # spec 117: to = a bucket resource; schedule is
+                                     # a five-field cron in UTC (default "0 3 * * *"), retention <n>d or <n>w (default 30d)
     billing-db:                      # external: runs nothing, its connection Secret is synced from the secretStore
       type: database
       external: true                 # true | false (default false); per environment under instances.<env>.external
@@ -84,6 +87,10 @@ system.yaml (every value explicit and reviewable; the model is described in docs
       storage: 10Gi                  # default 10Gi
       versioning: false              # true | false (default false)
       instances: {dev: {versioning: true}, prod: {external: true}}   # per environment: external, remote, storage, versioning
+    backups:                         # an external bucket that backups write to needs the S3 coordinates in git (spec 117)
+      type: bucket
+      external: true
+      remote: {s3: {endpoint: "https://s3.eu-central-1.amazonaws.com", bucket: acme-backups, region: eu-central-1, forcePathStyle: false}}
 
 External component (spec 069, ADR-029): a component whose manifests this generator cannot express (CronJobs, volumes,
 a login proxy, a Helm chart with CRDs). The package is owned by this repo or pinned to the component repo's chart;
@@ -116,7 +123,7 @@ NOT_MIGRATED = "not migrated to 5.0: run `cplat platform update --migrate`"
 MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml", "application.yaml"}
 MANAGED_PREFIXES = ("externalsecret-",)
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries"]
-ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators"]
+ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
 VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"), ("library", "python"),
                ("service", "unknown")]
@@ -131,7 +138,7 @@ INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets"]
 RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
 PLANNED_TYPES = {"cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
 RESOURCE_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
-RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources"]
+RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources", "backup"]
 SIZING_KEYS = ["version", "replicas", "storage", "resources"]      # an external resource runs nothing: none of these
 BUCKET_KEYS = ["type", "external", "remote", "storage", "versioning", "instances"]
 BUCKET_INSTANCE_KEYS = ["external", "remote", "storage", "versioning"]
@@ -143,6 +150,13 @@ STORAGE_SIZE = re.compile(r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei)?$")    # a Kub
 S3_BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 BUCKET_NAME_MAX = 45     # the StatefulSet `<name>-volume` plus a pod revision hash must fit a 63-character label
 REMOTE_KEYS = ["path", "refreshInterval"]
+BUCKET_REMOTE_KEYS = [*REMOTE_KEYS, "s3"]
+S3_KEYS = ["endpoint", "bucket", "region", "forcePathStyle"]
+BACKUP_KEYS = ["to", "schedule", "retention"]                     # spec 117: environments.<env>.backup and database instances' backup
+BACKUP_DEFAULTS = {"schedule": "0 3 * * *", "retention": "30d"}
+RETENTION = re.compile(r"^[1-9][0-9]*[dw]$")
+CRON_RANGES = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)]        # minute, hour, day of month, month, day of week
+CRON_ITEM = re.compile(r"^(\*|[0-9]+|[0-9]+-[0-9]+)(/[0-9]+)?$")
 RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 SUPPORTED_VERSIONS = (15, 16, 17, 18)
 CNPG_SUFFIXES = ("-app", "-ca", "-replication", "-server", "-superuser", "-rw", "-ro", "-r", "-primary")
@@ -317,7 +331,7 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
     if names != ENVS:
         fail(f"environments must be dev, staging, prod in this order (the promotion order), got {', '.join(map(str, names)) or 'none'}")
     hosts: dict[str, str] = {}
-    conf: dict = {"policy": {}, "observability": {}, "operators": {}}
+    conf: dict = {"policy": {}, "observability": {}, "operators": {}, "backup": {}}
     for e in ENVS:
         c = envs[e] if envs[e] is not None else {}
         if not isinstance(c, dict):
@@ -345,6 +359,8 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
             if c["operators"] != "owner":
                 fail(f"environments.{e}.operators must be owner, got '{c['operators']}'")
             conf["operators"][e] = "owner"
+        if "backup" in c:
+            conf["backup"][e] = c["backup"]       # checked by validate_backups, once the resources are known
     return hosts, conf
 
 
@@ -561,19 +577,40 @@ def validate_apis(doc: dict, comps: list[dict]) -> None:
             fail(f"apis.{a}: provided by {len(providers)} components ({names_list(providers)}); an API has exactly one provider")
 
 
-def check_remote(where: str, remote) -> dict:
-    """`remote` of a resource or of one of its instances: {path, refreshInterval}, both optional."""
+def check_s3(where: str, s3) -> None:
+    """`remote.s3` of a bucket: the coordinates of an external store that backups read from git (spec 117)."""
+    if not isinstance(s3, dict):
+        fail(f"{where} must be a mapping with endpoint, bucket, region and forcePathStyle")
+    for k in s3:
+        if k not in S3_KEYS:
+            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(S3_KEYS)})")
+    if any(k not in s3 for k in S3_KEYS):
+        fail(f"{where} needs endpoint, bucket, region and forcePathStyle")
+    if not (isinstance(s3["endpoint"], str) and re.match(r"^https?://[^\s/]+", s3["endpoint"])):
+        fail(f"{where}.endpoint must be an http(s) URL")
+    if not (isinstance(s3["bucket"], str) and S3_BUCKET_NAME.match(s3["bucket"])):
+        fail(f"{where}.bucket must be a valid S3 bucket name")
+    if not (isinstance(s3["region"], str) and s3["region"].strip()):
+        fail(f"{where}.region must be a non-empty string")
+    if not isinstance(s3["forcePathStyle"], bool):
+        fail(f"{where}.forcePathStyle must be true or false")
+
+
+def check_remote(where: str, remote, keys: list[str] = REMOTE_KEYS) -> dict:
+    """`remote` of a resource or of one of its instances: {path, refreshInterval}, both optional (a bucket also takes s3)."""
     if remote is None:
         return {}
     if not isinstance(remote, dict):
         fail(f"{where} must be a mapping, e.g. {{path: prod/{{resource}}}}")
     for k in remote:
-        if k not in REMOTE_KEYS:
-            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(REMOTE_KEYS)})")
+        if k not in keys:
+            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(keys)})")
     if remote.get("path") is not None:
         check_placeholders(f"{where}.path", remote["path"], ["system", "env", "resource"])
     if remote.get("refreshInterval") is not None and not isinstance(remote["refreshInterval"], str):
         fail(f"{where}.refreshInterval must be a string, e.g. 1h")
+    if "s3" in remote:
+        check_s3(f"{where}.s3", remote["s3"])
     return remote
 
 
@@ -645,6 +682,8 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         i = i or {}
         if "external" in i and not isinstance(i["external"], bool):
             fail(f"{where}: external must be true or false")
+        if not bucket and "backup" in i and i.get("external", base_external) is True:
+            fail(f"{where}: an external database is backed up by its provider (remove backup)")
         if i.get("external", base_external):
             for k in sizing_keys:
                 if k in i:
@@ -667,9 +706,10 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
     for e, i in inst.items():
         if "remote" in i and not external[e]:
             fail(f"resources.{r}.instances.{e}: remote needs external: true in {e}")
-    check_remote(f"resources.{r}.remote", rc.get("remote"))
+    remote_keys = BUCKET_REMOTE_KEYS if bucket else REMOTE_KEYS
+    check_remote(f"resources.{r}.remote", rc.get("remote"), remote_keys)
     for e, i in inst.items():
-        check_remote(f"resources.{r}.instances.{e}.remote", i.get("remote"))
+        check_remote(f"resources.{r}.instances.{e}.remote", i.get("remote"), remote_keys)
     first = next((e for e in ENVS if external[e]), None)
     if first and not doc.get("secretStore"):
         fail(f"resources.{r}: external in {first} needs the system's secretStore (declare secretStore: {{name, kind}})")
@@ -685,22 +725,26 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
     for e in ENVS:
         i = inst.get(e, {})
         if external[e]:
-            remote = {**(check_remote("", rc.get("remote"))), **check_remote("", i.get("remote"))}
+            remote = {**(check_remote("", rc.get("remote"), remote_keys)), **check_remote("", i.get("remote"), remote_keys)}
             key = str(remote.get("path") or "{system}-{env}-{resource}").format(system=str(doc.get("system")), env=e, resource=r)
             envs[e] = {"external": True, "version": None, "replicas": None, "storage": None, "resources": None,
                        "store_key": key, "refreshInterval": str(remote.get("refreshInterval") or "1h")}
             if bucket:
+                s3 = (i.get("remote") or {}).get("s3") or (rc.get("remote") or {}).get("s3")
                 envs[e]["versioning"] = None
+                envs[e]["s3"] = dict(s3) if s3 else None
+            else:
+                envs[e]["backup"] = None
             continue
         if bucket:
             envs[e] = {"external": False, "version": None, "replicas": None, "storage": str(i.get("storage", rc.get("storage", "10Gi"))),
                        "resources": None, "versioning": i.get("versioning", rc.get("versioning", False)),
-                       "store_key": None, "refreshInterval": None}
+                       "store_key": None, "refreshInterval": None, "s3": None}
             continue
         storage = i.get("storage", rc.get("storage"))
         envs[e] = {"external": False, "version": version, "replicas": int(i.get("replicas", rc.get("replicas", 1))),
                    "storage": "1Gi" if storage is None else str(storage), "resources": i.get("resources", rc.get("resources")),
-                   "store_key": None, "refreshInterval": None}
+                   "store_key": None, "refreshInterval": None, "backup": None}
     return {"type": typ, "external": bool(base_external), "envs": envs}
 
 
@@ -766,6 +810,68 @@ def validate_uses(comps: list[dict], resources: dict) -> None:
                     fail(f"components.{s['name']}: env {', '.join(clash)} is provided by the '{u}' resource; remove it from `env`")
 
 
+def check_cron(where: str, value) -> None:
+    fields = value.split() if isinstance(value, str) else []
+    ok = len(fields) == 5
+    for field, (lo, hi) in zip(fields, CRON_RANGES):
+        for item in field.split(","):
+            m = CRON_ITEM.match(item)
+            if not m:
+                ok = False
+                continue
+            if m.group(2) is not None and int(m.group(2)[1:]) < 1:
+                ok = False
+            nums = [int(x) for x in m.group(1).split("-")] if m.group(1) != "*" else []
+            if any(not lo <= x <= hi for x in nums) or (len(nums) == 2 and nums[0] > nums[1]):
+                ok = False
+    if not ok:
+        fail(f"{where}.schedule '{value}' is not a five-field cron expression (minute hour day-of-month month day-of-week, in UTC)")
+
+
+def check_backup(where: str, env: str, backup, resources: dict, comps: list[dict]) -> dict:
+    """One `backup` (design.md, Render errors): returns {to, schedule, retention} with the defaults filled."""
+    if not isinstance(backup, dict):
+        fail(f"{where} must be a mapping with to, schedule and retention")
+    for k in backup:
+        if k not in BACKUP_KEYS:
+            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(BACKUP_KEYS)})")
+    if backup.get("to") is None:
+        fail(f"{where}.to is required: the name of a bucket resource of the system")
+    to = backup["to"]
+    buckets = [n for n, rc in resources.items() if rc["type"] == "bucket"]
+    if not isinstance(to, str) or to not in buckets:
+        fail(f"{where}.to: '{to}' is not a bucket resource of the system (buckets: {names_list(buckets)})")
+    if not any(env in s.get("environments", []) and to in (s.get("uses") or []) for s in comps):
+        fail(f"{where}.to: the bucket {to} has no resource instance in {env} (a component that runs in {env} must use it)")
+    target = resources[to]["envs"][env]
+    if target["external"] and not target.get("s3"):
+        fail(f"{where}.to: the external bucket {to} needs remote.s3 (endpoint, bucket, region, forcePathStyle) in {env}: "
+             "backups cannot read them from the secret store")
+    schedule = backup.get("schedule", BACKUP_DEFAULTS["schedule"])
+    check_cron(where, schedule)
+    retention = backup.get("retention", BACKUP_DEFAULTS["retention"])
+    if not (isinstance(retention, str) and RETENTION.match(retention) and not retention.endswith("\n")):
+        fail(f"{where}.retention '{retention}' must be <n>d or <n>w with n of at least 1")
+    return {"to": to, "schedule": schedule, "retention": retention}
+
+
+def validate_backups(doc: dict, env_conf: dict, resources: dict, comps: list[dict]) -> dict:
+    """Checks every backup, environments first, then each database with its instances in ENVS order; returns {env: backup} of the
+    environments and sets `backup` in the database instances' effective values."""
+    out = {}
+    for e in ENVS:
+        if e in env_conf["backup"]:
+            out[e] = check_backup(f"environments.{e}.backup", e, env_conf["backup"][e], resources, comps)
+    for r, rc in resources.items():
+        if rc["type"] != "database":
+            continue
+        inst = ((doc.get("resources") or {}).get(r) or {}).get("instances") or {}
+        for e in ENVS:
+            if "backup" in (inst.get(e) or {}):
+                rc["envs"][e]["backup"] = check_backup(f"resources.{r}.instances.{e}.backup", e, inst[e]["backup"], resources, comps)
+    return out
+
+
 def load_system(app_dir: Path) -> dict:
     """Parse and validate applications/<system>/system.yaml; returns the normalized system:
     `services` (components in the 4.x service shape, libraries left out), `cfg` (gateway, secretStore, hosts, policy and observability per
@@ -802,13 +908,14 @@ def _load_system(app_dir: Path) -> dict:
     resources = validate_resources(doc)
     check_resource_clashes(d, resources, comps_doc, comps)
     validate_uses(comps, resources)
+    backups = validate_backups(doc, env_conf, resources, comps)
     registries = doc.get("registries") or []
     if not isinstance(registries, list):
         fail("registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
     services = [{**c, "uses": [u for u in c.get("uses") or [] if u in resources]} for c in comps if c["type"] != "library"]
     cfg = {"gateway": doc.get("gateway"), "secretStore": doc.get("secretStore"), "hosts": hosts, "registries": [str(r) for r in registries],
            "policy": env_conf["policy"], "observability": env_conf["observability"], "operators": env_conf["operators"],
-           "resources": resources}
+           "backup": backups, "resources": resources}
     return {"system": d, "owner": doc["owner"], "services": services, "libraries": [c["name"] for c in comps if c["type"] == "library"], "cfg": cfg}
 
 
