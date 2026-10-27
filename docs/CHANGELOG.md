@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**A cluster repo hosts several systems.** [ADR-060](adr/060-a-cluster-repo-owns-shared-services.md), spec 125. Not breaking: a system repo renders as before. The new shape `cluster-gitops` is a repo for one cluster: `cluster.yaml` lists the shared operators, the secret store and the systems (`cluster/systems/<system>.yaml`, one Argo CD application each). A system with `operators: owner` in every environment leaves its operators to the cluster, and a CI check names any operator or release a system still needs. The versions table pins `external-secrets` 2.12.0 and `kyverno` 3.9.1.
+
+**Plugins:** new `cluster` 1.0.0 (`/cluster:new <name>`, `/cluster:add <owner>/<repo>`, `/cluster:remove <system>`).
+
+**Action** for shared clusters, once per cluster: create the cluster repo and move the cluster to it as described in [CLUSTERS.md](CLUSTERS.md). Nothing is reinstalled. Clusters with one system need nothing.
+
 **An object storage resource: `type: bucket`.** [ADR-059](adr/059-in-cluster-buckets-on-seaweedfs-per-instance.md), spec 116. Not breaking: a 5.0 or 115 `system.yaml` renders as before. A system declares buckets under `resources.<name>` with `type: bucket` (`storage`, default `10Gi`, and `versioning`, default off, per resource or instance). An in-cluster bucket is its own SeaweedFS per instance; `external` buckets read `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId` and `secretAccessKey` from the secret store. A component that uses a bucket gets `S3_*` and `AWS_*` (prefixed with two or more buckets). Pins: SeaweedFS image `chrislusf/seaweedfs:4.51` and operator chart `seaweedfs-operator` 0.1.45. `cplat platform doctor` compares the installed SeaweedFS operator.
 
 **Plugins:** `resource` 1.2.0 (`/resource:add <name> --type database|bucket [--storage S] [--versioning]`).

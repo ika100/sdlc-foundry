@@ -29,6 +29,13 @@ Required files [checked unless noted]:
 
 **Always re-templated vs project-owned.** Skeleton files (CI, devbox, Dockerfile, CLAUDE.md, lint config) are overwritten by `/platform:update`. Application files (`src/`, `app/`, `cmd/`, `internal/`, `tests/`, language manifests such as `go.mod`/`pom.xml`/`package.json` once created, `docs/adr/**`) go in `_skip_if_exists`.
 
+### Repos that are not a component
+
+| Shape | Template | Plugin | What the repo holds |
+|---|---|---|---|
+| `gitops-app` | `templates/gitops-app` | `gitops` | One system: `system.yaml`, rendered manifests, the system's own operators when it owns them |
+| `cluster-gitops` | `templates/cluster-gitops` | `cluster` | One cluster: `cluster.yaml`, the shared operators and secret store, and the list of systems that run there ([ADR-060](adr/060-a-cluster-repo-owns-shared-services.md), [guide](CLUSTERS.md)). Not deployable, no library |
+
 ### Pitfalls found while building the Go, Java and web shapes
 
 - **Use `_templates_suffix: .jinja`** for non-Python shapes. Without it every file is rendered and anything with `{{ }}` (GitHub Actions `${{ }}`, Argo `{{name}}`, JSX, Go templates) needs escaping. With it, only `*.jinja` files render; filenames and directory names always render (so `src/main/java/{{ package_path }}/` works).
