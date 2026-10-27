@@ -48,6 +48,7 @@ tasks:
     covers: [AC-122.4, AC-122.6, AC-122.34, AC-122.35]
     parallel_safe: true
     depends_on: [t1, t2, t3, t4, t5]
+    done: true
   - id: t7
     title: draft spec pull requests — spec publish|land|review and the two spec commands
     files: [scripts/cplat/spec_pr.py, scripts/cplat/spec.py, plugins/component/commands/spec.md, plugins/system/commands/spec.md]
