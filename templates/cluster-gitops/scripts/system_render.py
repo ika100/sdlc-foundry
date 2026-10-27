@@ -228,6 +228,11 @@ VALKEY_IMAGES = {         # matches ^valkey/valkey:\d+\.\d+\.\d+(@sha256:[0-9a-f
     8: "valkey/valkey:8.1.11",
     9: "valkey/valkey:9.1.3",
 }
+NATS_CHART = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nats", "chart_version": "2.15.1"}   # per broker instance, not an operator
+NATS_IMAGES = {           # matches ^nats:\d+\.\d+\.\d+-alpine(@sha256:[0-9a-f]{64})?$; no bare minor, no latest
+    "2.14": "nats:2.14.9-alpine",
+    "2.15": "nats:2.15.2-alpine",
+}
 VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4"     # matches the Velero chart's appVersion line (1.14 <-> 1.18)
 SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51"     # every in-cluster bucket runs its own SeaweedFS of this image
 OPERATORS = {
@@ -257,9 +262,12 @@ OPERATORS = {
                                               "volumeMounts": [{"mountPath": "/target", "name": "plugins"}]}],
                           "deployNodeAgent": True, "snapshotsEnabled": False, "credentials": {"useSecret": False},
                           "configuration": {"backupStorageLocation": [], "volumeSnapshotLocation": [], "uploaderType": "kopia"}}},
+    # Spec 119: the NATS JetStream controller (NACK) reconciles the Account, Stream and Consumer objects of in-cluster brokers.
+    "nack": {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nack", "chart_version": "0.35.0",
+             "operator_version": "0.24.0", "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io"},
 }
 OPERATOR_RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
-OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs"}
+OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}
 DB_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
 # Resource contract (ADR-020, ADR-057): what a component gets when it `uses` a resource is in TYPES. Components never see the implementation.
 ADDONS = {
@@ -1561,7 +1569,7 @@ def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dic
     out: dict[str, dict[str, dict]] = {}
     for name, rc in cfg["resources"].items():
         conf = rc["envs"][env]
-        if not conf["external"]:
+        if not conf["external"] or rc["type"] == "broker":      # a broker's ExternalSecrets are per component (spec 119)
             continue
         users = sorted(s["name"] for s in services if env in envs_of(s) and "external" not in s and name in (s.get("uses") or []))
         if not users:
@@ -1934,7 +1942,101 @@ def observability_files(app: str, env: str, conf: dict, services: list[dict]) ->
     }
 
 
-def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], app_dir: Path | None = None) -> dict[str, dict | str]:
+def broker_files(app: str, name: str, env: str, cfg: dict, services: list[dict], server: str) -> dict[str, dict | str]:
+    """The in-cluster broker instance (ADR-065): the NATS server as a nested Argo CD Application of the official chart, generated
+    passwords, and the NACK Account, Streams and Consumers. Nothing secret is rendered; streams and consumers are never deleted by a sync."""
+    conf = cfg["resources"][name]["envs"][env]
+    n, ns = f"{app}-{name}", f"{app}-{env}"
+    url = f"nats://{n}.{ns}.svc:4222"
+    gen_api = "generators.external-secrets.io/v1alpha1"
+    labels = lambda: {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}  # noqa: E731
+    wave = lambda w: {"argocd.argoproj.io/sync-wave": w}  # noqa: E731
+    events = {a: e for a, e in cfg["events"].items() if e["broker"] == name}
+    users = [s for s in services if env in envs_of(s) and any(a in events for a in [*s["provides"], *s["consumes"]])]
+    secret_env = lambda c: c.upper().replace("-", "_")  # noqa: E731
+
+    def user_secret(secret: str, data: dict) -> dict:
+        return {"apiVersion": ESO_API, "kind": "ExternalSecret",
+                "metadata": {"name": secret, "labels": labels(), "annotations": wave("-1")},
+                "spec": {"refreshPolicy": "CreatedOnce",
+                         "target": {"name": secret, "creationPolicy": "Owner", "deletionPolicy": "Retain",
+                                    "template": {"engineVersion": "v2", "metadata": {"labels": labels()}, "data": data}},
+                         "dataFrom": [{"sourceRef": {"generatorRef": {"apiVersion": gen_api, "kind": "Password", "name": f"{n}-password"}}}]}}
+
+    files: dict[str, dict | str] = {
+        "password-generator.yaml": {"apiVersion": gen_api, "kind": "Password",
+                                    "metadata": {"name": f"{n}-password", "labels": labels(), "annotations": wave("-1")},
+                                    "spec": {"length": 32, "digits": 5, "symbols": 0, "noUpper": False, "allowRepeat": True}},
+        "nack-secret.yaml": user_secret(f"{n}-nack", {"user": "_nack", "password": "{{ .password }}"}),  # pragma: allowlist secret
+    }
+    auth = [{"user": "_nack", "password": "<< $ADMIN_PASSWORD >>"}]  # pragma: allowlist secret
+    cenv: dict = {"ADMIN_PASSWORD": {"valueFrom": {"secretKeyRef": {"name": f"{n}-nack", "key": "password"}}}}  # pragma: allowlist secret
+    for s in users:
+        c = s["name"]
+        files[f"externalsecret-{c}.yaml"] = user_secret(f"{n}-{c}-app", {"url": url, "user": c, "password": "{{ .password }}"})  # pragma: allowlist secret
+        publish = [f"{app}.{a}.>" for a in events if a in s["provides"]]
+        for a in events:
+            if a in s["consumes"]:
+                st = f"{app}-{a}"
+                publish += [f"$JS.API.CONSUMER.INFO.{st}.{c}", f"$JS.API.CONSUMER.MSG.NEXT.{st}.{c}", f"$JS.ACK.{st}.{c}.>", f"$JS.ACK.*.*.{st}.{c}.>"]
+        auth.append({"user": c, "password": f"<< $USER_{secret_env(c)}_PASSWORD >>",  # pragma: allowlist secret
+                     "permissions": {"publish": {"allow": publish}, "subscribe": {"allow": [f"_INBOX.{c}.>"]}}})
+        cenv[f"USER_{secret_env(c)}_PASSWORD"] = {"valueFrom": {"secretKeyRef": {"name": f"{n}-{c}-app", "key": "password"}}}  # pragma: allowlist secret
+    sec = lambda: {"runAsNonRoot": True, "runAsUser": 1000, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,  # noqa: E731
+                   "capabilities": {"drop": ["ALL"]}}
+    repository, tag = NATS_IMAGES[conf["version"]].rsplit(":", 1)
+    replicas = conf["replicas"]
+    files["server.yaml"] = {
+        "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+        "metadata": {"name": f"{app}-{name}-{env}-nats", "namespace": "argocd", "labels": labels()},
+        "spec": {"project": "default",
+                 "source": {"repoURL": NATS_CHART["repo_url"], "chart": NATS_CHART["chart"], "targetRevision": NATS_CHART["chart_version"],
+                            "helm": {"releaseName": n, "valuesObject": {
+                                "nameOverride": name, "fullnameOverride": n,
+                                "global": {"labels": {"app.kubernetes.io/part-of": app}},
+                                "config": {"cluster": {"enabled": True, "replicas": 3} if replicas == 3 else {"enabled": False},
+                                           "jetstream": {"enabled": True, "fileStore": {"enabled": True, "pvc": {"enabled": True, "size": conf["storage"]}},
+                                                         "memoryStore": {"enabled": False}},
+                                           "monitor": {"enabled": True, "port": 8222},
+                                           "merge": {"authorization": {"users": auth}}},
+                                "container": {"image": {"repository": repository, "tag": tag}, "env": cenv,
+                                              "merge": {"resources": conf["resources"] or BROKER_DEFAULT_RESOURCES, "securityContext": sec()}},
+                                "reloader": {"enabled": True, "merge": {"securityContext": sec()}},
+                                "podTemplate": {"merge": {"spec": {"automountServiceAccountToken": False,
+                                                                   "securityContext": {"runAsNonRoot": True, "runAsUser": 1000, "runAsGroup": 1000,
+                                                                                       "fsGroup": 1000, "seccompProfile": {"type": "RuntimeDefault"}}}}},
+                                "service": {"ports": {"monitor": {"enabled": True}}},
+                                "natsBox": {"enabled": False}}}},
+                 "destination": {"server": server, "namespace": ns},
+                 "syncPolicy": {"automated": {"prune": True, "selfHeal": True}}}}
+    files["account.yaml"] = {
+        "apiVersion": "jetstream.nats.io/v1beta2", "kind": "Account",
+        "metadata": {"name": n, "labels": labels(),
+                     "annotations": {**wave("1"), "argocd.argoproj.io/sync-options": "SkipDryRunOnMissingResource=true"}},
+        "spec": {"name": n, "servers": [url], "user": {"secret": {"name": f"{n}-nack"}, "user": "user", "password": "password"}}}  # pragma: allowlist secret
+    keep = {"argocd.argoproj.io/sync-options": "Delete=false,SkipDryRunOnMissingResource=true",
+            "argocd.argoproj.io/compare-options": "IgnoreExtraneous"}
+    for a, e in events.items():
+        st = f"{app}-{a}"
+        files[f"stream-{a}.yaml"] = {
+            "apiVersion": "jetstream.nats.io/v1beta2", "kind": "Stream",
+            "metadata": {"name": st, "labels": labels(), "annotations": {**wave("2"), **keep}},
+            "spec": {"name": st, "subjects": [f"{app}.{a}.>"], "storage": "file", "replicas": replicas, "retention": "limits",
+                     "discard": "old", "maxAge": "168h", "account": n, "preventDelete": True}}
+        for s in users:
+            if a in s["consumes"]:
+                c = s["name"]
+                files[f"consumer-{a}.{c}.yaml"] = {
+                    "apiVersion": "jetstream.nats.io/v1beta2", "kind": "Consumer",
+                    "metadata": {"name": f"{st}.{c}", "labels": labels(), "annotations": {**wave("3"), **keep}},
+                    "spec": {"streamName": st, "durableName": c, "deliverPolicy": "all", "ackPolicy": "explicit", "ackWait": "30s",
+                             "maxDeliver": -1, "account": n, "preventDelete": True}}
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
+    return files
+
+
+def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], app_dir: Path | None = None,
+                server: str = "https://kubernetes.default.svc") -> dict[str, dict | str]:
     if name == "observability":
         return observability_files(app, env, cfg["observability"][env], services)
     res = cfg["resources"][name]
@@ -1942,7 +2044,9 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], 
         return bucket_files(app, name, env, res["envs"][env], is_backup_target(cfg, env, name))
     if res["type"] == "cache":
         return cache_files(app, name, env, res["envs"][env])
-    conf = res["envs"][env]            # database; broker is not built yet
+    if res["type"] == "broker":
+        return broker_files(app, name, env, cfg, services, server)
+    conf = res["envs"][env]            # database
     backup = conf.get("backup")
     base = f"{app}-{name}"
     clusters = read_restore_state(app_dir, env, name) if app_dir is not None else [{"name": base, "role": "active"}]
@@ -2008,6 +2112,8 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             sync = {"automated": {"prune": prune, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]}
             if any(cfg["resources"].get(n, {}).get("envs", {}).get(env, {}).get("backup") for n in group):
                 sync["retry"] = RETRY       # an ObjectStore may sync before its CRD exists
+            elif any(cfg["resources"].get(n, {}).get("type") == "broker" for n in group):
+                sync["retry"] = RETRY       # the Account, streams and consumers wait for NACK and the server
             docs.append({
                 "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",
                 "metadata": {"name": f"{app}-{suffix}-{env}", "namespace": "argocd"},
@@ -2026,7 +2132,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                 },
             })
         for n in names:
-            for fname, doc in addon_files(app, n, env, cfg, services, app_dir).items():
+            for fname, doc in addon_files(app, n, env, cfg, services, app_dir, server).items():
                 out[app_dir / "addons" / env / n / fname] = dump(doc) if not isinstance(doc, str) else doc
     for env in policy_envs(services, cfg):
         docs.append({
