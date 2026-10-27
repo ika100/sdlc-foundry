@@ -1,7 +1,7 @@
 ---
 spec_id: 124-autonomy-is-declared-per-environment-and
 title: Autonomy is declared per environment and supervised in the console
-status: approved
+status: building
 priority: P2
 ---
 
@@ -89,3 +89,4 @@ This spec adds autonomy to the model: a level per environment with guardrails in
 - 2026-10-26 amended: answers folded in (pause and lowering as a signal recorded by a pull request, engine address per environment, engine writes runs and audit into the run records, `undoWindow`, `improve` deferred, per-component cap); added AC-124.21 and AC-124.22
 - 2026-10-26 approved
 - 2026-10-26 renumbered from 123 (the number was taken by spec 123, the platform repo declares its own shape); criteria AC-123.n are now AC-124.n, otherwise unchanged
+- 2026-10-27 building
