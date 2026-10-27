@@ -8,7 +8,7 @@ Two kinds of backup exist, and they cover different data (spec 117, [ADR-061](ad
 | Persistent volumes of the environment's namespace (for example the store of an in-cluster bucket) | An environment backup (Velero, file-system backup of volumes) | `emptyDir` volumes: they hold scratch data and are skipped |
 | Kubernetes objects of the namespace (the system's workloads, Services, ConfigMaps) | An environment backup | Anything git already declares is recreated by Argo CD; the backup is for the state around it |
 | An external database | Its provider | The platform renders no backup for it; an external database is backed up by its provider |
-| Cache data | Nothing | Cache data is not backed up: a cache is rebuilt from its source |
+| Cache data | Nothing | Cache data is not backed up: a cache is rebuilt from its source. Caches are left out by name, so this holds with `persistence: true` too (the volume keeps the data across a restart, not across a restore) |
 | An external bucket (the data in it) | Its provider | Only the use of a bucket as a backup *target* is supported |
 
 An environment backup is not a consistent database backup: it copies files of a running database. Databases are restored only with `/resource:restore`; `/system:restore` never restores one and says so.
