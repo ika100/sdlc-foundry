@@ -90,6 +90,7 @@ tasks:
     covers: [AC-124.5, AC-124.6, AC-124.7, AC-124.8, AC-124.13, AC-124.21]
     parallel_safe: true
     depends_on: [t2, t5, t8, t9, t10, t11]
+    done: true
   - id: t13
     title: needs.py — review decisions, signal issues in triage, issue signal facts, engine escalations
     files: [scripts/cplat/needs.py]
