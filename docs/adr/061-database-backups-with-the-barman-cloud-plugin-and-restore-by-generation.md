@@ -1,4 +1,4 @@
-# ADR-060: Databases are backed up by the CloudNativePG Barman Cloud plugin to a bucket resource; a point-in-time restore is a new generation next to the running one
+# ADR-061: Databases are backed up by the CloudNativePG Barman Cloud plugin to a bucket resource; a point-in-time restore is a new generation next to the running one
 
 **Status:** Accepted (2026-10-27)
 **Builds on:** [ADR-057](057-named-typed-resources-with-fixed-contracts.md) (named, typed resources; the Secret `<system>-<name>-app`), [ADR-058](058-pinned-versions-and-platform-installed-operators.md) (pinned versions, operators under `operators/`), [ADR-059](059-in-cluster-buckets-on-seaweedfs-per-instance.md) (the bucket resource), spec 117; used by spec 121 (a fresh backup before a major upgrade)

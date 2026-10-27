@@ -1,11 +1,11 @@
-# ADR-061: An environment is backed up by Velero, installed once per cluster; persistent volumes by file-system backup; databases, caches and the target bucket are left out
+# ADR-062: An environment is backed up by Velero, installed once per cluster; persistent volumes by file-system backup; databases, caches and the target bucket are left out
 
 **Status:** Accepted (2026-10-27)
-**Builds on:** [ADR-053](053-domain-model.md) (the Environment and its properties), [ADR-058](058-pinned-versions-and-platform-installed-operators.md) (operators under `operators/`), [ADR-059](059-in-cluster-buckets-on-seaweedfs-per-instance.md), [ADR-060](060-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md), spec 117
+**Builds on:** [ADR-053](053-domain-model.md) (the Environment and its properties), [ADR-058](058-pinned-versions-and-platform-installed-operators.md) (operators under `operators/`), [ADR-059](059-in-cluster-buckets-on-seaweedfs-per-instance.md), [ADR-061](061-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md), spec 117
 
 ## Context
 
-Spec 117 makes `backup` an Environment property, like observability: the namespace `<system>-<env>` and the contents of its volumes are backed up on a schedule to a bucket resource and kept for a retention window. Velero is the chosen tool. Databases have their own consistent backup (ADR-060) and must not be part of it, nor caches (spec 118) nor the bucket that holds the backups. Local clusters (k3d, local-path volumes) have no volume snapshots, and component volumes in `system.yaml` are `emptyDir` scratch space.
+Spec 117 makes `backup` an Environment property, like observability: the namespace `<system>-<env>` and the contents of its volumes are backed up on a schedule to a bucket resource and kept for a retention window. Velero is the chosen tool. Databases have their own consistent backup (ADR-061) and must not be part of it, nor caches (spec 118) nor the bucket that holds the backups. Local clusters (k3d, local-path volumes) have no volume snapshots, and component volumes in `system.yaml` are `emptyDir` scratch space.
 
 ## Decision
 

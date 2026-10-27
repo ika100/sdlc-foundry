@@ -57,6 +57,7 @@ Thick borders are where you decide: approving a spec, an escalation, promoting t
 | Component | Something you build, in its own repo: a service, a website or a library | todo-api | service, shape |
 | API | What a component offers others, and who uses it | todo-api REST | plan `## Contract` (prose) |
 | Resource | Something you use but don't build; named and typed, run by the platform or external | users-db (database) | addon |
+| Cluster | The place systems run, with its shared operators, External Secrets with the secret store, the Kyverno engine and the list of its systems | home | cluster repo, `operators/` |
 | Owner | Who is responsible for the system and its parts | team-todo | not modelled |
 | Environment | A stage the system passes through, with its own rules for getting in | staging | env key in several files |
 | Instance | One component running in one environment, at one version | todo-api in staging | pin, overlay, Argo app |
@@ -74,6 +75,10 @@ Three placements are decided ([ADR-053](adr/053-domain-model.md)):
 - **Observability** (the OpenTelemetry collector, alert rules, the UI) is a property of an Environment, not a Resource: every component in the environment gets it.
 - **Secrets** are declared on the Component (generated or read from the store) and can be overridden per Instance; their values are set per Instance.
 - **Names in the cluster do not change**: the namespace `<system>-<env>`, the Argo application `<component>-<env>`, every resource's Secret `<system>-<name>-app` (so `<system>-postgres-app` for a resource called `postgres`). The model maps onto them.
+
+### Cluster
+
+A Cluster is the place systems run. Its own repo (`cluster.yaml`, shape `cluster-gitops`) owns what several systems share: the operators (for example CloudNativePG), External Secrets with the secret store, and the Kyverno engine. It also lists its systems by their gitops repo. One system runs all its environments on its cluster; a system that sets `operators: owner` in every environment leaves its operators to the cluster. The decision is [ADR-060](adr/060-a-cluster-repo-owns-shared-services.md); the steps are in [CLUSTERS.md](CLUSTERS.md).
 
 ## One file per system
 
@@ -170,6 +175,7 @@ Every command names the thing it acts on; the same verbs work for a system and f
 | `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
 | `api` | `list` (`check` comes with spec 110) |
 | `resource` | `add` · `remove` |
+| `cluster` | `new` · `add` · `remove` (`/cluster:new`, `/cluster:add`, `/cluster:remove`) |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |
 | `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` · `ui` |

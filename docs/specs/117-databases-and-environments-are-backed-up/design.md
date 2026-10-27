@@ -10,18 +10,18 @@ byte-identically, and no command output changes for it, except the listed key te
 
 - **Database backups use the CloudNativePG Barman Cloud plugin** (`ObjectStore`, plugin WAL archiver, `ScheduledBackup` with
   `immediate: true`, method `plugin`); the plugin chart and cert-manager (the plugin's hard requirement) are platform operators
-  under `operators/`. ADR: [060](../../adr/060-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md).
+  under `operators/`. ADR: [061](../../adr/061-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md).
 - **A restore is a new generation** `<system>-<db>-g<n>` next to the active cluster, recorded in git in
   `addons/<env>/<db>/restore-state.yaml` (written only by `cplat resource restore`, read by `render.py`, like overlay pins).
   `--switch` makes it active in git, detaches the connection Secret `<system>-<db>-app` from CloudNativePG and repoints its host
-  keys, then restarts the users' pods. ADR-060.
+  keys, then restarts the users' pods. ADR-061.
 - **Restore commands change git and the cluster in one step.** When the Argo CD application `addon-<db>-<env>` exists, the command
   opens a PR, waits for CI, merges it (spec 079's `pr.wait(merge=True)`) and waits until Argo CD synced the merge commit. Otherwise
   (no Argo CD, as in the e2e test and `WITH_ARGO=0` clusters) it commits on the current branch and runs `kubectl apply -k` on the
   addon directory. The tree must be clean before (as every `cplat` write).
 - **Environment backups use Velero** installed once per cluster, with per `(system, env)` objects in `velero` rendered under
   `applications/<system>/backup/<env>/`; file-system backup (kopia) of persistent volumes, `emptyDir` skipped. ADR:
-  [061](../../adr/061-environment-backups-with-velero.md).
+  [062](../../adr/062-environment-backups-with-velero.md).
 - **An external bucket as backup target needs `remote.s3`** (`endpoint`, `bucket`, `region`, `forcePathStyle`) in git, because
   `ObjectStore` and `BackupStorageLocation` take these as literal values; the keys stay in the secret store. (Decision taken by
   default, see the last section.)
@@ -540,7 +540,7 @@ untouched (same UID).
   StatefulSets, the build changes the stop step (e2e proves it).
 - **CloudNativePG internals.** The switch relies on CloudNativePG not touching a Secret it no longer owns, and on a generation with
   `recovery.secret` not writing the Secret. The e2e switch is the proof; the build follows observed behaviour and updates this
-  design and ADR-060.
+  design and ADR-061.
 - **cert-manager in clusters that already run one**: those set `operators: owner` (CHANGELOG action).
 - **A discarded previous generation's backups are never pruned** (nothing runs its retention any more).
 - **Only `operators/apps/velero.yaml` left** — when it is the last operator and is removed, `operators/` disappears and 115's

@@ -181,6 +181,8 @@ def check_repo(repo: Path) -> list[dict]:
         out += check_operators(repo)
         out += check_backups(repo)
         out += check_policies(repo)
+        if declared == "cluster-gitops":
+            out += check_cluster(repo)
         return out
     det = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False)
     shape = det.stdout.strip()
@@ -198,6 +200,57 @@ def check_repo(repo: Path) -> list[dict]:
     out += check_operators(repo)
     out += check_backups(repo)
     out += check_policies(repo)
+    if shape == "cluster-gitops":
+        out += check_cluster(repo)
+    return out
+
+
+def check_cluster(repo: Path) -> list[dict]:
+    """AC-125.13: per listed operator installed vs expected version, per registered system its application's sync and health."""
+    if not shutil.which("kubectl"):
+        return []
+    import yaml
+    try:
+        data = yaml.safe_load((repo / "cluster.yaml").read_text()) or {}
+        operators = [str(o) for o in (data.get("operators") or [])]
+        systems = [str(s) for s in (data.get("systems") or {})]
+        table = _operators()
+        for o in operators:
+            table[o]
+    except (OSError, ValueError, AttributeError, KeyError, TypeError, yaml.YAMLError):
+        return [check(WARN, "cluster.yaml", "unreadable or not valid", "devbox run render")]
+    ctx = (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
+    bootstrap = f"KUBE_CONTEXT={ctx} devbox run bootstrap"
+    out = []
+    for op_name in operators:
+        op = table[op_name]
+        want = op["operator_version"]
+        selector = op.get("selector") or f"app.kubernetes.io/name={op['chart']}"
+        p = run(["kubectl", "get", "deploy", "-A", "-l", selector, "-o",
+                 "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
+        images = (p.stdout or "").split()
+        ref = images[0].split("@")[0] if images else ""
+        have = ref.rsplit(":", 1)[-1].removeprefix("v") if ":" in ref.rsplit("/", 1)[-1] else None
+        name = f"operator {op_name}"
+        if have == want:
+            out.append(check(OK, name, f"installed {have}, expected {want} (cluster.yaml)"))
+        elif have is None:
+            out.append(check(WARN, name, f"not installed in the current kube context, expected {want} (cluster.yaml)",
+                             f"{bootstrap} (local: devbox run cluster-up)"))
+        else:
+            out.append(check(WARN, name, f"installed {have}, expected {want} (cluster.yaml)", f"sync operator-{op_name} in Argo CD"))
+    for s in systems:
+        p = run(["kubectl", "-n", "argocd", "get", "application", f"system-{s}", "-o",
+                 "jsonpath={.status.sync.status} {.status.health.status}"], check=False)
+        name = f"system {s}"
+        if p.returncode != 0:
+            out.append(check(WARN, name, f"system-{s}: no such application in the current kube context", bootstrap))
+            continue
+        sync, _, health = (p.stdout or "").strip().partition(" ")
+        if (sync, health) == ("Synced", "Healthy"):
+            out.append(check(OK, name, f"system-{s}: Synced, Healthy"))
+        else:
+            out.append(check(WARN, name, f"system-{s}: {sync or '?'}, {health or '?'}", f"kubectl -n argocd get application system-{s} -o yaml"))
     return out
 
 

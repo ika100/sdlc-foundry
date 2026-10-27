@@ -114,8 +114,8 @@ human_steps:
 
 The contract (schema, error texts, rendered objects, pins, CLI flags and outputs, status, doctor, alerts) is in
 [design.md](design.md). The lasting decisions are
-[ADR-060](../../adr/060-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md) (database backups and restore by
-generation) and [ADR-061](../../adr/061-environment-backups-with-velero.md) (environment backups with Velero). It builds on spec 115
+[ADR-061](../../adr/061-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md) (database backups and restore by
+generation) and [ADR-062](../../adr/062-environment-backups-with-velero.md) (environment backups with Velero). It builds on spec 115
 (ADR-057/058) and spec 116 (ADR-059). Levels: t1, t5, t6, t13, t15, t16, t17 → t2, t7, t8, t12 → t3, t9, t10 → t4 → t11, t14.
 
 `render.py` changes in four sequential tasks (t1 → t2 → t3 → t4). Every other task owns its files. Never edit
@@ -388,7 +388,7 @@ needs them syncs.
   `--dry-run` where it exists, run, say what stays). `status.md` mentions the Backups section.
 - `resource` 1.2.0 → 1.3.0, `system` 1.0.0 → 1.1.0 in both manifests and the catalog.
 - CHANGELOG `## [Unreleased]`: a new 117 entry **above** the existing 116 and 115 entries, which stay untouched: what is backed up,
-  ADR-060/061, the pins (plugin-barman-cloud 0.8.1, cert-manager v1.21.3, velero 12.2.1, velero-plugin-for-aws v1.14.4), the
+  ADR-061/061, the pins (plugin-barman-cloud 0.8.1, cert-manager v1.21.3, velero 12.2.1, velero-plugin-for-aws v1.14.4), the
   plugins line, and the Action of `human_steps`. Not BREAKING.
 
 **Done when:** `devbox run validate` and the version-match loop of `devbox run quality` are green, and the amended AC-114.59 test

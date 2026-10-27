@@ -151,3 +151,17 @@ Matches `design.md`, including its updated `--switch` paragraph (the apply path 
 One addition goes beyond the design's table of `system restore` refusals: the text `backup <name> is <state>: only a completed or partially failed backup can be restored (available: …)`. It adds a refusal and changes no designed text.
 
 RESULT: pass, on condition that the PR's CI e2e job, which runs `tests/e2e/run.sh` for AC-117.24, the cluster halves of AC-117.8, .9, .13, .20 and .31, and the installed-pin check of AC-117.26, is green before merge. AC-117.13 was `partial` in the first review (fail → fixed in c6ca3dc).
+
+## After review: merges with spec 125 and release 5.1.0, and the first-backup fix
+
+- **CI e2e, round 1** found the e2e left the staging promote uncommitted (28ce36c). **Round 2** found that on an existing cluster the
+  immediate Backup fails while CloudNativePG restarts the instance to load the plugin, and is never retried. The user chose that
+  cplat takes the first base backup once the plugin is loaded: status `pending`, the alert poll and `--switch` take it; render
+  unchanged (design decision 7 kept). New tests in `test_backup_117_fixes.py`; the e2e requires a completed backup of the switched
+  cluster.
+- **Spec 125 merged** (f23abc3): 125 took ADR-060, so 117's ADRs are **ADR-061** (database backups) and **ADR-062** (environment
+  backups). The operators table holds 125's `external-secrets` and `kyverno` before 117's three; `operator_application` (shared by
+  system and cluster repos) carries 117's values, finalizer and retry; the cluster-gitops copies are synced. Merge-caused test
+  changes, each commented `# spec 117`: the operator order list, the CHANGELOG regex (ADR-061/062), the command count 38.
+- Full suite after the merge: 4617 passed, 8 skipped.
+

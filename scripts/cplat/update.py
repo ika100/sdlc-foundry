@@ -199,7 +199,7 @@ def render_baseline(template: str, old: str | None, answers: str, dest: Path, ro
     try:
         src = dest / "src"
         src.mkdir(parents=True, exist_ok=True)
-        archive = _archive(f"v{old}", f"templates/{template}", root)
+        archive = _archive(f"v{old}", "templates", root)
         subprocess.run(["tar", "-x", "-C", str(src)], input=archive, capture_output=True, check=True)
         data = dest / "answers.yml"
         data.write_text(answers)

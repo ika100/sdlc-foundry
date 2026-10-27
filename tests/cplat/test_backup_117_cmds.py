@@ -830,7 +830,7 @@ def test_the_plugin_readmes_list_the_new_commands_ac_117_31():  # AC-117.31
 def test_the_changelog_announces_spec_117_as_a_minor_change_with_the_pins_ac_117_26():  # AC-117.26
     text = (ROOT / "docs" / "CHANGELOG.md").read_text()
     sections = re.split(r"(?m)^(?=## \[)", text)
-    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 117|ADR-060|ADR-061", s)]
+    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 117|ADR-061|ADR-062", s)]  # spec 117: ADR-060 went to spec 125 first
     assert hits, "the change is listed"
     first = hits[0]
     assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", first.splitlines()[0]) and "BREAKING" not in first

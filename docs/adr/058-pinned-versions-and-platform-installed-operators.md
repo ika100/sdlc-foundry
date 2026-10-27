@@ -1,6 +1,6 @@
 # ADR-058: Images and operators are pinned exactly per release; the platform installs the operators a cluster needs as Argo CD applications
 
-**Status:** Accepted (2026-10-26)
+**Status:** Accepted (2026-10-26); the consequence for shared clusters is amended by [ADR-060](060-a-cluster-repo-owns-shared-services.md)
 **Builds on:** [ADR-017](017-gitops-owns-manifests.md) (the gitops repo owns every manifest), [ADR-020](020-addons-contract.md) (operators were cluster prerequisites), [ADR-054](054-five-zero-interface-and-proved-migration.md), spec 115; extended by spec 121
 
 ## Context
@@ -18,6 +18,6 @@
 ## Consequences
 
 - Each system's tree (`applications/<system>/`, `bootstrap/<system>-root.yaml`) stays byte-identical for a 5.0 `system.yaml`, except the pinned database image. The operator files are cluster-level.
-- A cluster shared by several gitops repos must let one of them install the operators. The others set `operators: owner` in every environment.
+- A cluster shared by several gitops repos gets a cluster repo (ADR-060), which installs the operators for all of them; every registered system sets `operators: owner` in every environment. Before ADR-060 one of the gitops repos had to install the operators and the others set `operators: owner`; such a cluster moves to a cluster repo without reinstalling anything (the application names stay `platform-operators` and `operator-<name>`).
 - An existing 5.0 cluster whose owner installed CloudNativePG by hand must set `operators: owner` before applying `operators/root.yaml`, or skip that file.
 - The local cluster with Argo CD no longer installs CloudNativePG through k3s. Argo CD installs it from `operators/`. Without Argo CD (the platform's end-to-end test), `cluster-up` installs the chart version that `operators/apps/cloudnative-pg.yaml` pins.

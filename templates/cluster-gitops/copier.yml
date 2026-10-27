@@ -1,0 +1,61 @@
+# Copier template: cluster-gitops
+# A cluster repo: one repo per cluster. `cluster.yaml` registers the systems that run there and names the cluster-level
+# operators; `devbox run render` writes the Argo CD applications under cluster/ (spec 125, ADR-060).
+#
+# Usage:
+#   copier copy <platform-checkout>/templates/cluster-gitops ./<project> --data project_name=<name>
+
+_min_copier_version: "9.0.0"
+
+# Only *.jinja files are rendered. Argo CD ({{name}}) and GitHub Actions (${{ }}) use the same
+# delimiters as Jinja, so everything else is copied verbatim.
+_templates_suffix: .jinja
+
+_answers_file: .copier-answers.yml
+
+# Project-owned once generated: /platform:update must not overwrite these.
+_skip_if_exists:
+  - .secrets.baseline.json    # repo-owned once created: it records the repo's own false positives (seeded when missing)
+  - .claude/project-notes.md   # repo-owned notes, loaded by CLAUDE.md (spec 086)
+  - README.md                # project-owned after creation (spec 060)
+  - .github/ISSUE_TEMPLATE/**
+  - cluster.yaml             # the only hand-edited file
+  - cluster/**               # owned by scripts/render.py
+
+_exclude:
+  - "copier.yml"
+  - ".git"
+
+_tasks:
+  - "git init -q -b main"
+  - "devbox install"
+  - "git add -A && git -c user.email=bootstrap@ika100 -c user.name=bootstrap commit -q -m 'chore: bootstrap from cluster-gitops template'"
+  - "echo 'Bootstrap complete. Run: cd {{ project_name }} && devbox run quality'"
+
+project_name:
+  type: str
+  help: "Cluster repo name (lowercase DNS style, at most 40 characters, e.g. 'home'). It is also the cluster's name."
+  validator: >-
+    {%- if not (project_name | regex_search('^[a-z]([a-z0-9-]{0,38}[a-z0-9])?$')) -%}
+    project_name must match ^[a-z]([a-z0-9-]{0,38}[a-z0-9])?$
+    {%- endif -%}
+
+description:
+  type: str
+  help: "One-line description of the cluster."
+  default: "Cluster repo of the {{ project_name }} cluster"
+
+github_org:
+  type: str
+  help: "GitHub organization or user that owns this repo and the system repos Argo CD reads."
+  default: "ika100"
+
+owner:
+  type: str
+  help: "Who owns the cluster (a team or person; written to cluster.yaml)."
+  default: "{{ github_org }}"
+
+platform_marketplace_ref:
+  type: str
+  help: "Git ref of ika100/sdlc-foundry to pin the plugin marketplace to."
+  default: "main"

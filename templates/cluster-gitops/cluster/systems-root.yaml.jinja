@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-systems
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/{{ github_org }}/{{ project_name }}
+    targetRevision: main
+    path: cluster/systems
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

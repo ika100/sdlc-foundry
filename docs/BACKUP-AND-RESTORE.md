@@ -1,6 +1,6 @@
 # Backup and restore
 
-Two kinds of backup exist, and they cover different data (spec 117, [ADR-060](adr/060-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md), [ADR-061](adr/061-environment-backups-with-velero.md)). Both write to a **bucket resource** of the system, and both are declared in `system.yaml`.
+Two kinds of backup exist, and they cover different data (spec 117, [ADR-061](adr/061-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md), [ADR-062](adr/062-environment-backups-with-velero.md)). Both write to a **bucket resource** of the system, and both are declared in `system.yaml`.
 
 | Data | Covered by | Not covered |
 |---|---|---|
