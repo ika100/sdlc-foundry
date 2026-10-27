@@ -25,7 +25,7 @@ import yaml
 
 import stages
 from console import actions, handoff
-from console.html import action_button, command_block, engine_badge, esc, freshness, short_version, stage_badge
+from console.html import action_button, command_block, engine_badge, esc, freshness, short_version, signal_facts, stage_badge
 
 _SPLIT = re.compile(r"[:@/]")
 _BUDGET_LIMITS = ("minutes", "invocations", "reruns", "cost")
@@ -399,16 +399,6 @@ def panel_run(ctx: Any, ident: str) -> str:
 
 # ---------------- issue ----------------
 
-def _signal_html(sig: Any) -> str:
-    """The facts of an engine signal as a `dl[data-signal]` (AC-124.18); nothing when the issue has none."""
-    if not isinstance(sig, dict) or not sig:
-        return ""
-    rows = [(label, esc(sig[key])) for label, key in (("Component", "component"), ("Environment", "environment"), ("Category", "category"),
-                                                      ("Criticality", "criticality"), ("Seen", "seen"), ("First seen", "first_seen"),
-                                                      ("Last seen", "last_seen"), ("Key", "dedupe_key")) if sig.get(key) is not None]
-    return _section("Signal", _kv(rows).replace("<dl>", "<dl data-signal>", 1))
-
-
 def panel_issue(ctx: Any, ident: str) -> str:
     """An open issue: fix it, make a spec of it, or dismiss it with a reason (a triage item, or an untracked issue of `needs.issues`)."""
     needs = ctx.data("needs") if isinstance(ctx.data("needs"), dict) else {}
@@ -437,7 +427,7 @@ def panel_issue(ctx: Any, ident: str) -> str:
     detail = obj.get("detail") if isinstance(obj.get("detail"), dict) else {}
     facts += [(label, esc(detail[key])) for label, key in (("Failing check", "check"), ("Failing test", "test"), ("Criterion", "criterion"),
                                                            ("Last error", "error"), ("Diagnosis", "diagnosis")) if detail.get(key)]
-    body = (_kv(facts) + _signal_html(signal)
+    body = (_kv(facts) + signal_facts(signal)
             + _section("What do you want to do", _action("fix", "Fix it", None, obj, f"/component:fix #{n}", primary=True)
                        + _action("make-spec", "Make a spec", None, obj, f"/component:spec #{n}") + dismiss))
     return _aside(f"Issue #{n}", body, ctx, _read_at(ctx, "needs"))

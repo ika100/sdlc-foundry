@@ -94,14 +94,29 @@ def _label_names(issue: dict) -> set[str]:
     return {(x.get("name") if isinstance(x, dict) else x) for x in issue.get("labels") or []}
 
 
-def _done_on_its_own() -> list[dict]:
-    """Engine audit events of the last 24 hours that nobody undid yet (empty when the store cannot be read)."""
+def _done_on_its_own(windows: dict[str, str] | None = None) -> list[dict]:
+    """Engine audit events nobody undid yet and still inside their environment's `undoWindow` (default 24 h).
+
+    `windows` maps an environment to its effective `undoWindow`; empty when the store cannot be read.
+    """
     import audit
+    import autonomy
     import runs
     try:
-        events = audit.read(1)
+        spans = {env: autonomy.parse_duration(w) for env, w in (windows or {}).items()}
+        default = autonomy.parse_duration(autonomy.DEFAULTS["undoWindow"])
+        widest = max([default, *spans.values()])
+        hours = max(24, -(-int(widest.total_seconds()) // 3600))
+        events = audit.read(-(-hours // 24))
         undone = {e.get("undoes") for e in events if e.get("undoes")}
-        return [e for e in audit.done_on_its_own(events, runs.utcnow()) if e.get("event_id") not in undone]
+        now_ = runs.utcnow()
+        out = []
+        for e in audit.done_on_its_own(events, now_, hours):
+            at = audit._ts(e.get("at"))
+            span = spans.get(e.get("environment"), default)
+            if e.get("event_id") not in undone and at is not None and now_ - at <= span:
+                out.append(e)
+        return out
     except Exception:  # noqa: BLE001
         return []
 
@@ -131,7 +146,8 @@ def collect(repo_dir: Path) -> dict:
                 failed = True
                 continue
             issues += [{**i, "repo": slug} for i in found]
-    return_audit = _done_on_its_own()
+    windows = {e.name: str((e.autonomy or {}).get("undoWindow")) for e in m.environments if (e.autonomy or {}).get("undoWindow")}
+    return_audit = _done_on_its_own(windows)
     shipped = [{"what": f"{r.get('spec') or r['run_id']} shipped", "at": r.get("ended_at")} for r in rows if r.get("phase") == "done"]
     return {"needs": needs_doc, "runs": runs_doc, "issues": issues, "shipped": shipped, "audit": return_audit,
             "issues_failed": failed}
@@ -154,7 +170,7 @@ def events_of(doc: dict) -> dict[str, dict]:
     for i in doc.get("issues") or []:
         names = _label_names(i)
         event = next((ev for label, ev in {**ISSUE_LABELS, "retro": "retro"}.items() if label in names), None)
-        if event is None:
+        if event is None or (event == "signal" and "triage" not in names):      # a routed signal issue leaves the event
             continue
         key = f"{event}:{i['repo']}#{i['number']}"
         out[key] = {"event": event, "title": f"{event}: {i.get('title') or ''}".strip(), "text": f"{i['repo']}#{i['number']}",

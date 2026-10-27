@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -90,32 +91,34 @@ def send(targets: dict[str, str], kind: str, *, system: str, actor: str, policy_
         body = {"id": sid, "kind": kind, "system": system, "environment": env, "at": _now(), "actor": actor,
                 "policy": (policy_of or {}).get(env), "pr": pr}
         waiting[env] = {"url": url.rstrip("/") + "/v1/signals", "token": tok, "body": body}
+    with ThreadPoolExecutor(max_workers=max(1, len(waiting))) as pool:
+        for env, outcome in zip(waiting, pool.map(lambda e: _deliver(waiting[e], deadline), list(waiting)), strict=True):
+            result[env].update(outcome)
+    return result
+
+
+def _deliver(item: dict, deadline: float) -> dict:
+    """POST one signal to one engine, retrying until `deadline`; returns the fields of its result."""
+    reason: str | None = None
     delay = 1.0
-    while waiting:
-        for env in list(waiting):
-            item = waiting[env]
-            try:
-                code, doc = _http("POST", item["url"], item["body"], item["token"], POST_TIMEOUT)
-            except OSError as e:
-                result[env]["reason"] = f"engine not reachable: {e}"
-                continue
+    while True:
+        try:
+            code, doc = _http("POST", item["url"], item["body"], item["token"], POST_TIMEOUT)
+        except OSError as e:
+            code, doc, reason = 0, {}, f"engine not reachable: {e}"
+        else:
             if code >= 500:
-                result[env]["reason"] = _reason(code, doc)
-                continue
-            del waiting[env]
-            if code == 200 and doc.get("confirmed") is True:
-                result[env].update(confirmed=True, effective=doc.get("effective"), reason=None)
+                reason = _reason(code, doc)
+            elif code == 200 and doc.get("confirmed") is True:
+                return {"confirmed": True, "effective": doc.get("effective"), "reason": None}
             else:
-                result[env]["effective"] = doc.get("effective")
-                result[env]["reason"] = _reason(code, doc) if code != 200 else "the engine did not confirm"
+                return {"effective": doc.get("effective"),
+                        "reason": _reason(code, doc) if code != 200 else "the engine did not confirm"}
         left = deadline - monotonic()
-        if not waiting or left <= 0:
-            break
+        if left <= 0:
+            return {"reason": f"no confirmation within {CONFIRM_SECONDS} s: {reason}"}
         sleep(min(delay, left))
         delay = min(delay * 2, 10.0)
-    for env in waiting:
-        result[env]["reason"] = f"no confirmation within {CONFIRM_SECONDS} s: {result[env]['reason']}"
-    return result
 
 
 def _parse(stamp: object) -> dt.datetime | None:

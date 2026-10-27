@@ -186,3 +186,35 @@ def guardrails(policy: Mapping[str, object]) -> str:
         entries.append(("undoWindow", policy["undoWindow"]))
     body = "".join(f'<dt>{esc(key)}</dt><dd data-key="{esc(key)}">{esc(_guardrail_value(value))}</dd>' for key, value in entries)
     return f"<dl data-guardrails>{body}</dl>"
+
+
+def definition_list(attr: str, pairs: Sequence[tuple[str, object]]) -> str:
+    """`<dl attr>` of (term, already escaped HTML) pairs."""
+    rows = "".join(f"<dt>{esc(k)}</dt><dd>{v}</dd>" for k, v in pairs)
+    return f"<dl {attr}>{rows}</dl>"
+
+
+def signal_facts(sig: Any) -> str:
+    """The facts of an engine signal, its triage and the policy decision; `(none)` before triage (AC-124.18)."""
+    if not isinstance(sig, dict):
+        return ""
+    evidence = "".join(
+        f'<a href="{esc(e.get("url"))}">{esc(e.get("text") or e.get("url"))}</a> ' if e.get("url") else f"{esc(e.get('text'))} "
+        for e in sig.get("evidence") or [] if isinstance(e, dict))
+    facts = definition_list("data-signal", [
+        ("Component", esc(sig.get("component"))), ("Environment", esc(sig.get("environment"))),
+        ("Category", esc(sig.get("category"))), ("Criticality", esc(sig.get("criticality"))),
+        ("Seen", esc(sig.get("seen"))), ("First seen", esc(sig.get("first_seen"))), ("Last seen", esc(sig.get("last_seen"))),
+        ("Evidence", evidence or "(none)")])
+    tri = sig.get("triage")
+    if isinstance(tri, dict):
+        files = ", ".join(esc(f) for f in tri.get("suspected_files") or []) or "(none)"
+        triage = definition_list("data-triage", [("Route", esc(tri.get("route"))), ("Confidence", esc(tri.get("confidence"))),
+                                     ("Suspected files", files)])
+    else:
+        triage = definition_list("data-triage", [("Triage", "(none)")])
+    pol = sig.get("policy")
+    decision = esc(pol.get("decision")) if isinstance(pol, dict) and pol.get("decision") else "(none)"
+    level = f" (level {esc(pol.get('level'))})" if isinstance(pol, dict) and pol.get("level") else ""
+    return (f"<h3>The signal</h3>{facts}<h3>Triage</h3>{triage}"
+            f"<h3>Policy decision</h3><p data-policy-decision>{decision}{level}</p>")

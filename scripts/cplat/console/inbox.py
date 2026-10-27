@@ -18,7 +18,7 @@ from typing import Any
 import yaml
 
 from console import actions, handoff, layout, sources as sources_mod
-from console.html import action_button, command_block, engine_badge, esc, freshness, stage_badge, table, unavailable
+from console.html import action_button, command_block, definition_list, engine_badge, esc, freshness, signal_facts, stage_badge, table, unavailable
 
 DEFAULT_BUDGET = "15"
 WAY_BACK_TITLE = "The way back"
@@ -317,38 +317,7 @@ def _triage(ctx: Any, item: dict, d: Decide) -> str:
         ("Failing check", "check"), ("Failing test", "test"), ("Criterion", "criterion"), ("Last error", "error"),
         ("Diagnosis", "diagnosis")) if detail.get(key))
     facts = f"<h3>What failed</h3><dl>{rows}</dl>" if rows else ""
-    return f"{facts}{_signal(detail.get('signal'))}<h3>What to do with issue #{esc(issue)}</h3>{buttons}{dismiss}" + _way_back(item)
-
-
-def _dl(attr: str, pairs: list[tuple[str, Any]]) -> str:
-    rows = "".join(f"<dt>{esc(k)}</dt><dd>{v}</dd>" for k, v in pairs)
-    return f"<dl {attr}>{rows}</dl>"
-
-
-def _signal(sig: Any) -> str:
-    """The facts of an engine signal, its triage and the policy decision; `(none)` before triage (AC-124.18)."""
-    if not isinstance(sig, dict):
-        return ""
-    evidence = "".join(
-        f'<a href="{esc(e.get("url"))}">{esc(e.get("text") or e.get("url"))}</a> ' if e.get("url") else f"{esc(e.get('text'))} "
-        for e in sig.get("evidence") or [] if isinstance(e, dict))
-    facts = _dl("data-signal", [
-        ("Component", esc(sig.get("component"))), ("Environment", esc(sig.get("environment"))),
-        ("Category", esc(sig.get("category"))), ("Criticality", esc(sig.get("criticality"))),
-        ("Seen", esc(sig.get("seen"))), ("First seen", esc(sig.get("first_seen"))), ("Last seen", esc(sig.get("last_seen"))),
-        ("Evidence", evidence or "(none)")])
-    tri = sig.get("triage")
-    if isinstance(tri, dict):
-        files = ", ".join(esc(f) for f in tri.get("suspected_files") or []) or "(none)"
-        triage = _dl("data-triage", [("Route", esc(tri.get("route"))), ("Confidence", esc(tri.get("confidence"))),
-                                     ("Suspected files", files)])
-    else:
-        triage = _dl("data-triage", [("Triage", "(none)")])
-    pol = sig.get("policy")
-    decision = esc(pol.get("decision")) if isinstance(pol, dict) and pol.get("decision") else "(none)"
-    level = f" (level {esc(pol.get('level'))})" if isinstance(pol, dict) and pol.get("level") else ""
-    return (f"<h3>The signal</h3>{facts}<h3>Triage</h3>{triage}"
-            f"<h3>Policy decision</h3><p data-policy-decision>{decision}{level}</p>")
+    return f"{facts}{signal_facts(detail.get('signal'))}<h3>What to do with issue #{esc(issue)}</h3>{buttons}{dismiss}" + _way_back(item)
 
 
 def _review(ctx: Any, item: dict, d: Decide) -> str:
@@ -357,7 +326,7 @@ def _review(ctx: Any, item: dict, d: Decide) -> str:
     why = "".join(f'<li data-guardrail="{esc(w.get("guardrail"))}">{esc(w.get("text"))}</li>'
                   for w in c.get("why") or [] if isinstance(w, dict))
     reg = c.get("regression")
-    regression = (_dl("data-regression", [("Test", esc(reg.get("test"))), ("Before the fix", esc(reg.get("before"))),
+    regression = (definition_list("data-regression", [("Test", esc(reg.get("test"))), ("Before the fix", esc(reg.get("before"))),
                                           ("After the fix", esc(reg.get("after")))])
                   if isinstance(reg, dict) else "<p>No regression test.</p>")
     second = c.get("second_review") if isinstance(c.get("second_review"), dict) else {}
