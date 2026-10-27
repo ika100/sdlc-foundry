@@ -1,6 +1,6 @@
 # The local console
 
-The console is a page in your browser that answers three questions about a system: **what needs my decision**, **where is every change in the process**, and **what is the system made of and where does it run**. It runs on your machine, reads the same data as `cplat … --json`, and stores nothing of its own. Every change it makes is a slash command run by Claude Code in your local clone and ends in a pull request, so budgets, run records and resumes work as in the terminal. Design: [ADR-055](adr/055-local-console-over-cplat-json.md).
+The console is a page in your browser that answers three questions about a system: **what needs my decision**, **where is every change in the process**, and **what is the system made of and where does it run**. It is optional: everything it does is a slash command you can also run in Claude Code. It runs on your machine, reads the same data as `cplat … --json`, and stores nothing of its own. Every change it makes is a slash command run by Claude Code in your local clone and ends in a pull request, so budgets, run records and resumes work as in the terminal. Design: [ADR-055](adr/055-local-console-over-cplat-json.md).
 
 ![The Inbox with a promotion selected: what it changes, the command, and the way back](img/console/inbox.jpg)
 
@@ -15,7 +15,7 @@ The console is a page in your browser that answers three questions about a syste
    /platform:ui --port 8800      # fixed port; default is a free one
    ```
 
-3. The browser opens on the **Inbox**. Press `?` on any page for help on that page, or `⌘K` (`Ctrl+K`) to start something.
+3. The browser opens on the **Inbox**. Press `?` on any page for help on that page, `g` for this guide inside the console (also **Menu → Guide**), or `⌘K` (`Ctrl+K`) to start something.
 
 The server listens on `127.0.0.1` only. Stop it from **Menu → Stop console** (it asks first while actions run) or by ending the process. To work on another system, use **Menu → Switch system**: it lists the `gitops-app` repos of your GitHub account and organisations, and clones a missing one under `workspace` (default `~/src`).
 
@@ -64,9 +64,11 @@ Below are the components, libraries, APIs and resources with their relations, an
 
 ## Help in the console
 
-Every page has a one-line answer under its title and a **Help** button (or `?`). The help explains how to work on that page, the eight stages and where you decide, the keys, and where the data comes from.
+Every page has a one-line answer under its title and a **Help** button (or `?`). The help explains how to work on that page, the eight stages and where you decide, the keys, and where the data comes from. The whole guide is in the console too (**Menu → Guide** or `g`): this text with its screenshots, the process with every stage, and a reference of every command with its usage and a copy button.
 
 ![Help on the System page](img/console/help.jpg)
+
+![The guide inside the console: contents, this text with its screenshots, the process and every command](img/console/guide.jpg)
 
 ## Stages
 

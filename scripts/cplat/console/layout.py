@@ -18,7 +18,7 @@ from console.html import esc, freshness
 
 PLACES = (("inbox", "Inbox", "/inbox"), ("board", "Board", "/board"), ("system", "System", "/system"))
 
-MENU = (("Settings", "/settings"), ("Notifications", "/settings#notifications"), ("Switch system", "/switch"))
+MENU = (("Guide", "/guide"), ("Settings", "/settings"), ("Notifications", "/settings#notifications"), ("Switch system", "/switch"))
 
 
 def _nav(place: str, badge: int) -> str:

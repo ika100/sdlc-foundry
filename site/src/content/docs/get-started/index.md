@@ -55,6 +55,10 @@ Each command shows what it will do and asks before anything outward-facing (crea
 2. When CI has published the first image: `/component:add shop-api` in the GitOps repository, then merge the pull request.
 3. [Run it on your laptop](/sdlc-foundry/get-started/local-cluster/).
 
+## 6. Optional: the console
+
+Everything above runs in Claude Code; you never need a UI. If you like an overview, run `/platform:ui` in the GitOps repository: a local page shows what waits for your decision, every change by stage, and where each component runs. Every button there runs one of the same slash commands. See [The local console](/sdlc-foundry/guides/console/).
+
 ## Where to go next
 
 - The whole story with every command: [User journey](/sdlc-foundry/guides/user-journey/).

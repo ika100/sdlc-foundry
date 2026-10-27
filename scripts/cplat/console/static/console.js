@@ -154,6 +154,7 @@
     }
     if (event.metaKey || event.ctrlKey || event.altKey || inTextField(event.target)) { return; }
     if (!$("#palette").hidden) { return; }
+    if (key === "g") { window.location.href = "/guide"; event.preventDefault(); return; }
     if (key === "?") {
       openPanel("/panel/help/" + (document.body.getAttribute("data-place") || "inbox"), document.activeElement);
       event.preventDefault();

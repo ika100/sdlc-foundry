@@ -39,6 +39,7 @@ PAGES = {
     "/system": ("System", "system", "console.system_page:page"),
     "/settings": ("Settings", "system", "console.settings_page:page"),
     "/switch": ("Switch system", "system", "console.switcher:page"),
+    "/guide": ("Guide", "system", "console.guide:page"),
 }
 PANELS = {
     "need": "console.inbox:panel_need",
@@ -180,6 +181,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_html(200, self.page(title, place, target, query))
         elif path.startswith("/static/"):
             self.static(path[len("/static/"):])
+        elif path.startswith("/guide-img/"):
+            self.guide_image(path[len("/guide-img/"):])
         elif path.startswith("/panel/"):
             self.panel(path[len("/panel/"):])
         elif path == "/palette":
@@ -227,6 +230,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200, (STATIC / fname).read_bytes(), ctype)
                 return
         raise HttpError(404, "not found", f"/static/{name}")
+
+    def guide_image(self, name: str) -> None:
+        from console import guide  # noqa: PLC0415 - views load on first use
+
+        try:
+            data, ctype = guide.image(name)
+        except LookupError as e:
+            raise HttpError(404, "not found", str(e)) from e
+        self.reply(200, data, ctype)
 
     def panel(self, rest: str) -> None:
         kind, _, ident = rest.partition("/")

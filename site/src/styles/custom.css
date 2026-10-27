@@ -112,52 +112,48 @@
   }
 }
 
-/* ---------- wide diagrams from docs/img: readable size, scrolled sideways in the content column ---------- */
-.sl-markdown-content p:has(> img[src*='/img/sdlc-map.svg']),
-.sl-markdown-content p:has(> img[src*='/img/model-']) {
-  overflow-x: auto;
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 0.75rem;
-}
-
-.sl-markdown-content p > img[src*='/img/sdlc-map.svg'] {
-  display: block;
-  max-width: none;
-  width: 1240px;
-}
-
-/* the domain model diagrams (docs/DOMAIN-MODEL.md) are drawn 1000 wide with 12px labels: keep them at that size */
-.sl-markdown-content p > img[src*='/img/model-'] {
-  display: block;
-  max-width: none;
-  width: 1000px;
-}
-
-/* the same map on the landing page: the splash column is wider, so it fills it and scrolls only below 1080px */
-.map {
-  margin-block: 1.5rem;
-}
-
-.map-scroll {
-  overflow-x: auto;
-  border: 1px solid var(--sl-color-hairline);
-  border-radius: 0.75rem;
-}
-
-.map-scroll img {
+/* ---------- pictures from docs/img: fit the column, open full size on click (see the head script) ---------- */
+.sl-markdown-content img[src*='/img/'] {
   display: block;
   width: 100%;
-  min-width: 1080px;
-  max-width: none;
+  height: auto;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.75rem;
+  cursor: zoom-in;
 }
 
-.map figcaption {
-  margin-top: 0.6rem;
-  color: var(--sl-color-gray-2);
-  font-size: var(--sl-text-sm);
+/* screenshots of the console: a soft frame, like a window */
+.sl-markdown-content img[src*='/img/console/'] {
+  box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--brand-1) 35%, transparent);
 }
 
-/* the domain model example on the landing page is drawn 1000 wide: keep it readable, scroll below 760px */
-.map-model .map-scroll img {
-  min-width: 760px;
+/* ---------- layout: a narrow "On this page" bar at the right edge, more room for the text ---------- */
+@media (min-width: 72rem) {
+  :root {
+    --sl-content-width: 60rem;
+  }
+  .right-sidebar-container {
+    width: 14rem !important;
+    flex: none;
+  }
+  .main-pane {
+    width: calc(100% - 14rem) !important;
+  }
+  .right-sidebar-panel {
+    padding-inline: 1rem 1.25rem;
+  }
+  .right-sidebar-panel .sl-container {
+    width: 100%;
+  }
+}
+
+/* a screenshot in a landing-page figure: framed like the docs pictures */
+.map > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--brand-1) 35%, transparent);
+  cursor: zoom-in;
 }
