@@ -18,7 +18,6 @@ from core import PlatformError
 POLL_S = 10.0
 TIMEOUT_S = 30 * 60.0
 BACKUP_KIND = "backups.postgresql.cnpg.io"
-ENVS = ("dev", "staging", "prod")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def check(ns: argparse.Namespace, m: model.Model) -> None:
     db, env = ns.name, ns.env
-    if env not in ENVS:
+    if env not in model.ENVIRONMENTS:
         raise PlatformError("--env must be dev, staging or prod")
     res = {r.name: r for r in m.resources}
     if db not in res:
