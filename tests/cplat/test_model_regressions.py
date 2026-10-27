@@ -17,7 +17,8 @@ def test_status_with_an_empty_system_file_has_no_rows_ac_113_11(tmp_path, monkey
     monkeypatch.setattr(status, "sh", lambda cmd: None)
     monkeypatch.setattr(core, "platform_version", lambda: "4.8.0")
     assert status.main(["--repo-dir", str(tmp_path), "--context", "k3d-x", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"system": "shop", "environments": ["dev", "staging", "prod"], "rows": [], "resources": []}
+    doc = json.loads(capsys.readouterr().out)  # spec 122 adds keys; the 5.0 keys keep their values
+    assert {k: doc[k] for k in ("system", "environments", "rows", "resources")} == {"system": "shop", "environments": ["dev", "staging", "prod"], "rows": [], "resources": []}
 
 
 @pytest.mark.parametrize("text", ["", "# only a comment\n"])
