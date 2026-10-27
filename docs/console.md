@@ -33,7 +33,7 @@ The server listens on `127.0.0.1` only. Stop it from **Menu → Stop console** (
 
 ### Inbox: what needs your decision
 
-The Inbox lists every open decision, oldest first: a draft spec to **answer** or **approve**, a run that stopped (**escalation**), a release to **promote**, and an alert or failed smoke to **triage**. The sidebar badge shows how many there are.
+The Inbox lists every open decision, oldest first: a draft spec to **answer** or **approve**, a run that stopped (**escalation**), a release to **promote**, and an alert or failed smoke to **triage**. When autonomy is on, an engine's fix that waits for you appears as **review** (see below). The sidebar badge shows how many there are.
 
 Select one (`j`/`k`, `Enter`) and decide in the side panel. Each decision shows:
 - **the consequence**: for a promotion the commits, specs, criteria and migrations between the running and the new version and whether the digest is the one staging verified; for an approval the repos, the stages that run without you and the expected cost;
@@ -61,6 +61,14 @@ Open a card for its detail: the stage strip, one line per repo slice, every acce
 **Where it runs** has one row per component and resource and one column per environment with its promotion rule and policy. A cell shows the running version and its state: `pinned`, `healthy`, `verified` (smoke passed), `NOT VERIFIED`, `alert`, or `unknown` when the cluster cannot be read. A verified cell before a manual environment offers **Promote**, and a verified version newer than the last release offers **Cut release**; both open the decision with its consequence first.
 
 Below are the components, libraries, APIs and resources with their relations, and **Add to the model**: forms for a component, an API (`/component:add|set --provides|--consumes`), a resource, environment rules (`/system:set --env`) and a new system. Each change previews the exact command, the `system.yaml` diff and the renderer's checks on a scratch copy before anything runs; an invalid value names the key and the rule.
+
+### Autonomy: the System tab for what runs on its own
+
+Autonomy is optional and off by default: every environment is at `observe` until you declare more in `system.yaml`, and everything here also works from Claude Code alone (`/system:autonomy`). The full guide is [autonomy.md](autonomy.md).
+
+**System > Autonomy** shows, per environment, the declared level and the level it acts at, the guardrails now in force, the engine with its state (`ok`, `unreachable`, or none) and last heartbeat, and per-component caps. A level change opens a pull request; a higher level takes effect after the merge. An environment whose engine does not answer, or that declares none, is marked **not supervised**; a change the engine has not yet answered is marked **not confirmed**. **Pause** (and Resume) acts at once and is the one change that does not wait for a merge. Below, **Done on its own (last 24 hours)** lists what an engine did, with **Undo** where the policy allows it. The model form "Autonomy" previews a change on a scratch copy first.
+
+**The review decision.** A fix an engine will not merge by itself (at `propose`, or outside a guardrail at `act`) waits in the Inbox as **review**, showing the guardrails it is outside, the regression test, the second review and the summary. **Approve** (`a`) approves the pull request and merges it once every check passed. Signal issues in **triage** show the signal facts, and cards and rows of engine runs and issues carry an engine badge on the Board.
 
 ## Help in the console
 

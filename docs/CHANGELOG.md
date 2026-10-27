@@ -6,6 +6,14 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**Autonomy is declared per environment and supervised in the console.** Spec 124, [ADR-060](adr/060-autonomy-in-system-yaml-and-the-engine-contract.md), [guide](autonomy.md). Optional and off by default: a system without the new keys renders as before and every environment stays at `observe`. `environments.<env>.autonomy` (`level`, `engine`, `autoMerge`, `riskGate`, `budget`, `window`, `undoWindow`; prod at most `act`), a top-level `autonomy: {paused: true}` and `components.<c>.instances.<env>.autonomy: {max}` are validated by `render.py`, which writes `applications/<system>/autonomy.json` for an engine to read. `/system:autonomy show|set|pause|resume|undo|approve` (`cplat system autonomy`) changes it: lowering and pausing act at once by a signal to the engine and are recorded by a pull request, a higher level waits for the merge. The console gets **System > Autonomy**, a **review** decision in the Inbox for a fix an engine will not merge itself, engine badges and signal facts on the Board, and the notification events `review`, `signal` and `done-on-its-own`. `cplat model show --json` and `cplat needs --json` carry new keys.
+
+**Exception to "dev follows main".** `/instance:promote <component> --to dev --version <tag>` is now allowed when `<tag>` is a version dev pinned before (git history decides); it is the rollback and the undo for dev. Any other `--to dev` still fails.
+
+**Plugins:** `system` 1.2.0 (`/system:autonomy`), `instance` 1.1.0 (dev rollback in `/instance:promote`).
+
+**Action.** Only if you want autonomy: run `/platform:update` in each gitops-app repo that will declare it; create an engine token per engine and put it in `CPLAT_ENGINE_TOKEN` or the keychain (service `sdlc-foundry`, account `engine:<host>`) on every machine that runs `/system:autonomy`, and give the engine the same token; give the engine's GitHub identity write access to the private run store repo (`CPLAT_RUNS_REPO`) plus issues and pull requests in the system's repos. The engine itself is built in its own repository against the contract in the spec.
+
 ## [5.1.0] — 2026-10-27
 
 **A local console shows the system, its process and what needs you.** Spec 122, [ADR-055](adr/055-local-console-over-cplat-json.md), [guide](console.md). `/platform:ui` (`cplat ui`) serves a browser console on `127.0.0.1` with three places: Inbox (decisions waiting for you), Board (every item by stage) and System (components by environment). Actions run as `cplat headless` in the local clone; the console never writes to git, GitHub or the cluster itself.

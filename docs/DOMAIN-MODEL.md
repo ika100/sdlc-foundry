@@ -129,12 +129,12 @@ resources:
 
 | Where | Allowed keys |
 |---|---|
-| top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries` |
-| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators` |
+| top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries`, `autonomy` (only `paused`) |
+| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `autonomy` |
 | service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances` |
-| external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote`) |
+| external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote` and `autonomy`) |
 | library component | `type`, `lang`, `repo`, `provides`, `consumes` |
-| `components.<c>.instances.<env>` | `replicas`, `resources`, `env`, `promote`, `secrets` |
+| `components.<c>.instances.<env>` | `replicas`, `resources`, `env`, `promote`, `secrets`, `autonomy` (only `max`) |
 | `apis.<a>` | `type`: `openapi`, `grpc`, `graphql` or `events` |
 | `resources.<name>` | `type`, `external`, `remote`, `version`, `replicas`, `storage`, `resources`, `instances` |
 | `resources.<name>.remote` | `path`, `refreshInterval` |
@@ -156,6 +156,7 @@ Valid `type`/`lang` pairs: `service/python`, `service/java`, `service/go`, `webs
 - `external: true` means the resource lives outside the cluster. The platform renders no database, only an External Secrets `ExternalSecret` that fills `<system>-<name>-app` from the secret store, so components see the same contract. `remote` (`path`, `refreshInterval`) says where in the store; the default path is `{system}-{env}-{resource}`, and `remote` needs `external: true`. `instances.<env>` may override `external` and `remote`, for example an in-cluster database in dev and an external one in prod.
 - Prefix rule: a component that uses exactly one resource of a type gets the bare variables (`DATABASE_URL`, `PGHOST`, ...). With two or more resources of that type, every variable is prefixed with the upper-cased resource name, `-` becoming `_`: `uses: [orders-db, users-db]` yields `ORDERS_DB_DATABASE_URL`, `USERS_DB_PGHOST` and so on, and no bare `DATABASE_URL`. The variables are the same in every environment, in-cluster or external.
 - `operators: owner` on an environment (the only value) says the cluster owner installs the operators there. Otherwise the platform installs them from the repo's `operators/` folder (`operators/root.yaml`, applied once per cluster with `devbox run bootstrap`; `cluster-up` does it locally).
+- `autonomy` (optional, off by default: every environment is at `observe`) says what an engine may do on its own in an Environment: `level` (`observe`, `advise`, `propose`, `act`, `improve`; prod at most `act`), `engine`, `autoMerge`, `riskGate`, `budget`, `window` and `undoWindow`. On an Instance, `autonomy: {max: <level>}` can only lower it; the top-level `autonomy: {paused: true}` pauses every environment. A system that declares any of it also gets `applications/<system>/autonomy.json`, which an engine reads. `/system:autonomy` shows and changes it; every key and default is in [autonomy.md](autonomy.md).
 - Every name in `uses` is a resource or a library of the system; an API has exactly one provider.
 
 ## Commands follow the nouns
