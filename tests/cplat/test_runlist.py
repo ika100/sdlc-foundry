@@ -111,10 +111,10 @@ def test_active_runs_come_first_then_newest_ended_ac_122_5():  # AC-122.5
 
 def test_since_zero_lists_runs_older_than_the_default_window_ac_122_48(monkeypatch):  # AC-122.48
     long_ago = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=100)
-    monkeypatch.setattr(runs, "utcnow", lambda: long_ago)
-    rid = started(spec="009-old", phases=["plan", "build"])
-    runs.finish(rid, "done")
-    monkeypatch.undo()
+    with monkeypatch.context() as m:
+        m.setattr(runs, "utcnow", lambda: long_ago)
+        rid = started(spec="009-old", phases=["plan", "build"])
+        runs.finish(rid, "done")
     assert all(r["run_id"] != rid for r in collect(30)["runs"])
     assert any(r["run_id"] == rid for r in collect(0)["runs"])
 
