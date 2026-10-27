@@ -45,6 +45,7 @@ tasks:
     covers: [AC-125.1, AC-125.2, AC-125.17]
     parallel_safe: true
     depends_on: [t3, t4, t5]
+    done: true
   - id: t7
     title: register the shape cluster-gitops — shapes.yml, detect-shape, shapes.py contract, PRD table, shapecmd, update baseline, platform CI smoke job
     files: [shapes.yml, scripts/sync-template-copies.py, devbox.json, scripts/detect-shape.sh, scripts/test-detect-shape.sh, scripts/shapes.py, docs/requirements/platform-vision.md, scripts/cplat/shapecmd.py, scripts/cplat/update.py, .github/workflows/ci.yml]
