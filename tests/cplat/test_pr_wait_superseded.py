@@ -58,3 +58,42 @@ def test_a_failed_check_of_another_workflow_still_counts(wf, tmp_path):
     wf.checks = [[_run_check("lint", "fail", 41), _run_check("ci-success", "pass", 42)]]
     ok, lines = prmod.wait(tmp_path, PR, False, 600, 10, 300)
     assert not ok and lines[0].startswith("RED")
+
+
+class ConflictGh(Gh):
+    """Gh whose PR conflicts with its base: only CodeQL reported, as GitHub starts no pull_request workflow (#221)."""
+
+    mergeable = "CONFLICTING"
+
+    def __call__(self, args, *, cwd, check=True):
+        if args[:2] == ["pr", "view"] and "mergeable" in args:
+            return json.dumps({"mergeable": self.mergeable})
+        return super().__call__(args, cwd=cwd, check=check)
+
+
+@pytest.fixture()
+def conflict(fake, monkeypatch):  # noqa: F811
+    g = ConflictGh()
+    g.said, g.merges = fake.said, fake.merges
+    monkeypatch.setattr(ship, "gh", g)
+    return g
+
+
+def test_a_conflicting_pr_with_green_codeql_is_not_green_and_not_merged(conflict, tmp_path):   # #221
+    conflict.checks = [[_run_check("CodeQL", "pass", 41), _run_check("Analyze (python)", "pass", 41)]]
+    with pytest.raises(ship.Conflicting, match="conflicts with its base"):
+        prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert conflict.merges == []
+
+
+def test_a_conflicting_pr_without_checks_says_why(conflict, tmp_path):   # #221
+    conflict.checks = [[]] * 200
+    with pytest.raises(ship.Conflicting):
+        prmod.wait(tmp_path, PR, False, 600, 10, 300)
+
+
+def test_a_mergeable_pr_with_green_checks_is_still_green(conflict, tmp_path):   # #221
+    conflict.mergeable = "MERGEABLE"
+    conflict.checks = [[_run_check("ci-success", "pass", 41)]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert ok and conflict.merges == [PR]

@@ -482,6 +482,14 @@ class CheckWatch:
         self.refused: str | None = None                               # spec 102: the budget refused a rerun
         self.refused_checks: list[dict] = []
 
+    def conflicting(self) -> bool:
+        """GitHub starts no pull_request workflow while a PR conflicts with its base (#221): its green is not CI's."""
+        out = gh(["pr", "view", self.pr, "--json", "mergeable"], cwd=self.repo, check=False)
+        try:
+            return json.loads(out or "{}").get("mergeable") == "CONFLICTING"
+        except ValueError:
+            return False
+
     def head_sha(self) -> str | None:
         out = gh(["pr", "view", self.pr, "--json", "headRefOid"], cwd=self.repo, check=False)
         try:
@@ -662,6 +670,10 @@ class NoChecks(PlatformError):
     """No check was reported within the grace period (spec 087: told apart by type, not by message)."""
 
 
+class Conflicting(PlatformError):
+    """The PR conflicts with its base, so its CI never ran; the checks that did (CodeQL) prove nothing (#221)."""
+
+
 class ChecksPending(PlatformError):
     """The timeout ran out with checks still pending; `checks` holds their names."""
 
@@ -671,15 +683,20 @@ class ChecksPending(PlatformError):
 
 
 def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str, list[dict], list[dict]]:
-    """Poll until every check concluded or one is red. A PR without any check is never green."""
+    """Poll until every check concluded or one is red. A PR without any check, or one that conflicts with its base, is
+    never green."""
     begin = now()
     while True:
         status, cs, failed = watch.poll()
+        if status == "green" and watch.conflicting():
+            raise _conflicting(watch)
         if status != "pending":
             runs.ci_round(watch.run_id)
             return status, cs, failed
         waited = now() - begin
         if not cs and waited > NO_CHECKS_GRACE:
+            if watch.conflicting():
+                raise _conflicting(watch)
             raise NoChecks(f"no CI checks were reported on {watch.pr} after {NO_CHECKS_GRACE}s",
                            hint="is CI set up for pull requests, and is a runner online (vars.CI_RUNNER)? "
                                 "Merging without any check is never done automatically")
@@ -688,6 +705,11 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
             raise ChecksPending(f"checks on {watch.pr} still pending after {int(timeout)}s: {', '.join(pending)}",
                                 hint="run the command again later; a runner may be busy or offline", checks=pending)
         sleep(interval)
+
+
+def _conflicting(watch: CheckWatch) -> Conflicting:
+    return Conflicting(f"{watch.pr} conflicts with its base branch, so no pull_request workflow ran on it",
+                       hint="merge the base branch into the PR branch and push, then wait again")
 
 
 def red(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> list[str]:
