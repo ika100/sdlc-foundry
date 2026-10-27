@@ -13,6 +13,7 @@ tasks:
     covers: [AC-122.32, AC-122.10, AC-122.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: releases.py — commits, specs, fixes, migrations and next version between two refs; digests
     files: [scripts/cplat/releases.py]
