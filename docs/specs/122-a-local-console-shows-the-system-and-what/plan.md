@@ -121,6 +121,7 @@ tasks:
     covers: [AC-122.19, AC-122.21, AC-122.31, AC-122.38, AC-122.50, AC-122.51]
     parallel_safe: true
     depends_on: [t8, t9, t11, t12, t22, t23]
+    done: true
   - id: t18
     title: system switcher and settings page (notifications, workspace)
     files: [scripts/cplat/console/switcher.py, scripts/cplat/console/settings_page.py]
