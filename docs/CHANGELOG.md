@@ -10,6 +10,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **Plugins:** `resource` 1.4.0 (`/resource:add <name> --type cache`).
 
+## [5.3.0] — 2026-10-27
+
 **Autonomy is declared per environment and supervised in the console.** Spec 124, [ADR-063](adr/063-autonomy-in-system-yaml-and-the-engine-contract.md), [guide](autonomy.md). Optional and off by default: a system without the new keys renders as before and every environment stays at `observe`. `environments.<env>.autonomy` (`level`, `engine`, `autoMerge`, `riskGate`, `budget`, `window`, `undoWindow`; prod at most `act`), a top-level `autonomy: {paused: true}` and `components.<c>.instances.<env>.autonomy: {max}` are validated by `render.py`, which writes `applications/<system>/autonomy.json` for an engine to read. `/system:autonomy show|set|pause|resume|undo|approve` (`cplat system autonomy`) changes it: lowering and pausing act at once by a signal to the engine and are recorded by a pull request, a higher level waits for the merge. The console gets **System > Autonomy**, a **review** decision in the Inbox for a fix an engine will not merge itself, engine badges and signal facts on the Board, and the notification events `review`, `signal` and `done-on-its-own`. `cplat model show --json` and `cplat needs --json` carry new keys.
 
 **Exception to "dev follows main".** `/instance:promote <component> --to dev --version <tag>` is now allowed when `<tag>` is a version dev pinned before (git history decides); it is the rollback and the undo for dev. Any other `--to dev` still fails.
