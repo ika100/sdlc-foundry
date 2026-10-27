@@ -312,6 +312,14 @@ read, so confirm it is the newest), Docker Hub `velero/velero-plugin-for-aws:v1.
 no location; the plugin's `ObjectStore` field names; the SeaweedFS operator's `app.kubernetes.io/instance` label on its pods and
 StatefulSets (0.1.45). Where a pinned chart differs, follow it and update this section in the same PR.
 
+**Re-verified at build (2026-10-27):** the full indexes give each pin above as the newest release (velero 12.2.1 included), and
+`v1.14.4` is the newest stable `velero-plugin-for-aws` tag. `helm` was not available, so the pinned chart archives were read instead
+of rendered: the three CRD names are in the charts (cert-manager's behind `crds.enabled`); the three Deployments carry
+`app.kubernetes.io/name` = the chart name (no `nameOverride`); `backupStorageLocation: []` ranges over nothing, so no location is
+rendered; the `ObjectStore` CRD has `spec.retentionPolicy`, `spec.configuration.{destinationPath, endpointURL, s3Credentials.{accessKeyId,
+secretAccessKey, region}, wal.compression, data.compression}` (`gzip` allowed) and `status.serverRecoveryWindow.*.firstRecoverabilityPoint`.
+The SeaweedFS instance label on pods and StatefulSets is set by the operator, not the chart, so the e2e run (t14) checks it.
+
 ## Contract: `cplat model show` (AC-117.7)
 
 - `ResourceInstance.backup: dict | None` — for an in-cluster database instance with `backup`: `{"to", "schedule", "retention"}` with
