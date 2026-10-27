@@ -65,6 +65,7 @@ tasks:
     covers: [AC-122.20, AC-122.18, AC-122.34, AC-122.35, AC-122.50, AC-122.51]
     parallel_safe: true
     depends_on: [t22, t23]
+    done: true
   - id: t10
     title: console/handoff.py — Open in Claude Code and the deep links to evidence
     files: [scripts/cplat/console/handoff.py]
