@@ -308,6 +308,7 @@ SECRET_NAME = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 LITERAL_SECRET = re.compile(r"(PASSWORD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|CREDENTIAL)", re.I)
 ALERT_SEVERITIES = ("critical", "warning", "info")
+BROKER_ENV_NAMES = ("NATS_PASSWORD",)     # secret-looking names a broker provides: their clash text wins over the literal-secret text
 DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 EVENTS_API_NAME = DNS_LABEL     # a bound events API names a stream, a subject token and an object
 
@@ -618,10 +619,12 @@ def validate_secrets(label: str, secrets: list) -> None:
             check_placeholders(f"{label}.secrets.{sn}.remote.path", sec["remote"]["path"], ["system", "env", "secret", "component"])
 
 
-def validate_env_vars(label: str, env) -> None:
+def validate_env_vars(label: str, env, defer: bool = True) -> None:
     if env is not None and not isinstance(env, dict):
         fail(f"{label}: env must be a mapping of names to values")
     for k, v in (env or {}).items():
+        if k in BROKER_ENV_NAMES and defer:      # validate_uses reports a clash with a broker first, else checks it then
+            continue
         if LITERAL_SECRET.search(k) and str(v).strip():
             fail(f"{label}: env {k} looks like a secret; values in system.yaml are committed to git. "
                  f"Declare it under `secrets:` (generate: [{k}] or remote: {{keys: [{k}]}}) instead")
@@ -1196,6 +1199,8 @@ def validate_uses(comps: list[dict], resources: dict, events: dict | None = None
                 clash = [k for k in names if k in (eff.get("env") or {})]
                 if clash:
                     fail(f"components.{s['name']}: env {', '.join(clash)} is provided by the '{u}' resource; remove it from `env`")
+        for eff in (s.get("_eff") or {}).values():
+            validate_env_vars(f"components.{s['name']}", {k: v for k, v in (eff.get("env") or {}).items() if k in BROKER_ENV_NAMES}, defer=False)
 
 
 def check_cron(where: str, value) -> None:
@@ -1451,7 +1456,23 @@ def addon_env(app: str, svc: dict, resources: dict) -> list[dict]:
     out = []
     for u, names in variable_names(svc.get("uses") or [], resources):
         env = TYPES[resources[u]["type"]]["env"]
-        out += [{"name": name, "valueFrom": {"secretKeyRef": {"name": f"{app}-{u}-app", "key": key}}} for name, key in zip(names, env.values())]
+        secret = f"{app}-{u}-{svc['name']}-app" if resources[u]["type"] == "broker" else f"{app}-{u}-app"      # a broker: one Secret per component
+        out += [{"name": name, "valueFrom": {"secretKeyRef": {"name": secret, "key": key}}} for name, key in zip(names, env.values())]
+    return out
+
+
+def events_env(app: str, svc: dict, events: dict) -> dict[str, str]:
+    """Literal variables of the events APIs a component provides or consumes on a broker (spec 119): stream, subject prefix, consumer, inbox prefix."""
+    out: dict[str, str] = {}
+    for a in dict.fromkeys([*svc.get("provides", []), *svc.get("consumes", [])]):
+        if events.get(a, {}).get("broker") is None:
+            continue
+        prefix = "EVENTS_" + a.upper().replace("-", "_") + "_"
+        out[prefix + "STREAM"] = f"{app}-{a}"
+        out[prefix + "SUBJECT_PREFIX"] = f"{app}.{a}"
+        if a in svc.get("consumes", []):
+            out[prefix + "CONSUMER"] = svc["name"]
+        out["NATS_INBOX_PREFIX"] = f"_INBOX.{svc['name']}"
     return out
 
 
@@ -1462,10 +1483,10 @@ def obs_env(app: str, svc: dict, env: str) -> dict[str, str]:
             "OTEL_SDK_DISABLED": "false"}
 
 
-def deployment(app: str, svc: dict, env: str, obs: bool = False, resources: dict | None = None) -> dict:
+def deployment(app: str, svc: dict, env: str, obs: bool = False, resources: dict | None = None, events: dict | None = None) -> dict:
     labels = labels_for(app, svc)
     selector = {"app": svc["name"]}
-    env_vars = {"PORT": str(svc["port"]), **(obs_env(app, svc, env) if obs else {}), **{k: str(v) for k, v in (svc.get("env") or {}).items()}}
+    env_vars = {"PORT": str(svc["port"]), **(obs_env(app, svc, env) if obs else {}), **events_env(app, svc, events or {}), **{k: str(v) for k, v in (svc.get("env") or {}).items()}}
     container: dict = {
         "name": "app",
         "image": svc["image"],
@@ -1587,6 +1608,32 @@ def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dic
             doc["spec"]["target"]["template"] = {"engineVersion": "v2", "mergePolicy": "Merge",
                                                  "metadata": {"labels": backup_target_labels(app, name)}}
         out.setdefault(users[0], {})[f"externalsecret-{secret}.yaml"] = doc
+    return out
+
+
+def broker_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dict[str, dict[str, dict]]:
+    """{component: {file name: ExternalSecret}} for the external broker instances of `env` (spec 119): one `<system>-<broker>-<component>-app`
+    per running, non-external component that provides or consumes an API the broker carries, in that component's overlay."""
+    store = cfg.get("secretStore") or DEFAULT_STORE
+    out: dict[str, dict[str, dict]] = {}
+    for name, rc in cfg["resources"].items():
+        if rc["type"] != "broker" or not rc["envs"][env]["external"]:
+            continue
+        conf = rc["envs"][env]
+        apis = {a for a, e in cfg["events"].items() if e["broker"] == name}
+        for s in services:
+            if env not in envs_of(s) or "external" in s or not any(a in apis for a in [*s["provides"], *s["consumes"]]):
+                continue
+            secret = f"{app}-{name}-{s['name']}-app"
+            key = conf["store_key"].replace("{component}", s["name"])
+            out.setdefault(s["name"], {})[f"externalsecret-{secret}.yaml"] = {
+                "apiVersion": ESO_API, "kind": "ExternalSecret",
+                "metadata": {"name": secret, "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app,
+                                                        "app.kubernetes.io/managed-by": "gitops-app"}},
+                "spec": {"refreshInterval": conf["refreshInterval"],
+                         "secretStoreRef": {"name": store["name"], "kind": store.get("kind", "ClusterSecretStore")},
+                         "target": {"name": secret, "creationPolicy": "Orphan", "deletionPolicy": "Retain"},
+                         "data": [{"secretKey": k, "remoteRef": {"key": key, "property": k}} for k in TYPES["broker"]["keys"]]}}
     return out
 
 
@@ -2190,6 +2237,8 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
 
     for env in ENVS:
         ext_secrets = external_secrets(app, env, services, cfg)
+        for comp_name, extra in broker_secrets(app, env, services, cfg).items():
+            ext_secrets.setdefault(comp_name, {}).update(extra)
         for comp in services:
             if env not in envs_of(comp):
                 continue
@@ -2200,7 +2249,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                 for fname, doc in external_files(app, s, env, tag, server).items():
                     out[base / fname] = dump(doc)
                 continue
-            files = {"deployment.yaml": deployment(app, s, env, env in cfg["observability"], cfg["resources"]), "service.yaml": service(app, s)}
+            files = {"deployment.yaml": deployment(app, s, env, env in cfg["observability"], cfg["resources"], cfg["events"]), "service.yaml": service(app, s)}
             route = httproute(app, s, env, cfg)
             if route:
                 files["httproute.yaml"] = route
@@ -2271,6 +2320,59 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
     return files
 
 
+BROKER_STALE = re.compile(r"^(stream-.+|consumer-.+|externalsecret-.+)\.yaml$")     # broker files that are no longer rendered (spec 119)
+UNBOUND_NOTE = "note: applications/{app}: events API {api} is carried by no broker yet: add one with /resource:add <name> --type broker"
+
+
+def render_notes(app_dir: Path) -> tuple[list[str], list[str]]:
+    """(unbound events API notes, external broker notes) of one system (design.md, render notes)."""
+    system = load_system(app_dir)
+    app, services, cfg = app_dir.name, system["services"], system["cfg"]
+    unbound = [UNBOUND_NOTE.format(app=app, api=a) for a, e in cfg["events"].items() if e["broker"] is None]
+    external: list[str] = []
+    for name, rc in cfg["resources"].items():
+        if rc["type"] != "broker":
+            continue
+        for env in ENVS:
+            if not rc["envs"][env]["external"]:
+                continue
+            apis = {a: e for a, e in cfg["events"].items() if e["broker"] == name}
+            if not any(env in envs_of(s) and any(a in apis for a in [*s["provides"], *s["consumes"]]) for s in services):
+                continue
+            running = {s["name"] for s in services if env in envs_of(s)}
+            for a, e in apis.items():
+                consumers = [c for c in e["consumers"] if c in running]
+                extra = f" with the durable consumers {', '.join(consumers)} (pull, explicit ack, ack wait 30s)" if consumers else ""
+                external.append(f"note: applications/{app}: broker {name} is external in {env}: create stream {app}-{a} "
+                                f"(subjects {app}.{a}.>, file storage, max age 7d){extra}; the platform creates none on an external broker")
+    return unbound, external
+
+
+def retired_notes(app_dir: Path, stale: list[Path]) -> list[str]:
+    """Notes for the streams and consumers whose files a render removes (read before they are deleted)."""
+    notes: list[tuple[str, str]] = []
+    for st in stale:
+        for f in sorted(st.rglob("*.yaml")) if st.is_dir() else [st]:
+            rel = f.relative_to(app_dir).parts
+            if len(rel) != 4 or rel[0] != "addons" or not (rel[3].startswith("stream-") or rel[3].startswith("consumer-")) or not f.is_file():
+                continue
+            try:
+                doc = yaml.safe_load(f.read_text())
+                kind, spec = doc["kind"], doc["spec"]
+                where = f"applications/{app_dir.name}/addons/{rel[1]}/{rel[2]}"
+                if kind == "Stream":
+                    text = f"note: {where}: stream {spec['name']} is no longer declared; it and its messages stay on the broker until you delete them"
+                elif kind == "Consumer":
+                    text = (f"note: {where}: durable consumer {spec['durableName']} of stream {spec['streamName']} is no longer declared; "
+                            "it stays on the broker until you delete it")
+                else:
+                    continue
+            except (yaml.YAMLError, KeyError, TypeError):
+                continue
+            notes.append((str(f), text))
+    return [t for _, t in sorted(notes)]
+
+
 def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
     """Overlay component dirs for components/envs no longer declared, and generated files no longer produced."""
     stale: list[Path] = []
@@ -2307,7 +2409,8 @@ def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
                     stale.append(d)
                     continue
                 # database files that are no longer rendered; restore-state.yaml is input and never touched
-                stale += [f for f in d.iterdir() if f not in wanted and (f.name in DATABASE_FILES or DATABASE_GENERATION.match(f.name))]
+                stale += [f for f in d.iterdir() if f not in wanted and (f.name in DATABASE_FILES or DATABASE_GENERATION.match(f.name)
+                                                                         or BROKER_STALE.match(f.name))]
     return stale
 
 
@@ -2331,9 +2434,16 @@ def main() -> int:
         print("ERROR: no applications/*/system.yaml found", file=sys.stderr)
         return 1
     drift: list[str] = []
+    retired: list[str] = []
     try:
         plans = [(app_dir, render_app(app_dir, ans)) for app_dir in apps]     # every system is validated before anything is written
         operators = operator_files(apps, ans)
+        unbound_notes: list[str] = []
+        external_notes: list[str] = []
+        for app_dir in apps:
+            u, x = render_notes(app_dir)
+            unbound_notes += u
+            external_notes += x
     except RenderError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -2344,7 +2454,9 @@ def main() -> int:
                 if not check:
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(content)
-        for st in stale_paths(app_dir, set(rendered)):
+        stale = stale_paths(app_dir, set(rendered))
+        retired += retired_notes(app_dir, stale)
+        for st in stale:
             drift.append(f"{st.relative_to(ROOT)} (stale)")
             if not check:
                 shutil.rmtree(st) if st.is_dir() else st.unlink()
@@ -2364,6 +2476,8 @@ def main() -> int:
             for d in sorted((p for p in op_dir.rglob("*") if p.is_dir()), reverse=True) + [op_dir]:
                 if not any(d.iterdir()):
                     d.rmdir()
+    for note in [*unbound_notes, *external_notes, *retired]:
+        print(note)
     if check and drift:
         print("ERROR: rendered files are out of date — run `devbox run render`:", file=sys.stderr)
         for d in drift:
