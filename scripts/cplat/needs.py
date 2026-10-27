@@ -202,6 +202,28 @@ def _prod_promotion(m: model.Model) -> str:
     return (prod.promotion if prod else None) or "manual"
 
 
+def _staging_smoke(slug: str | None, stg: dict) -> dict:
+    """The run-store record of the staging smoke that verified this cell (`{at, digest}`); {} when it cannot be read."""
+    tag = stg.get("release") or stg.get("tag") or stg.get("version")
+    if not slug or not tag:
+        return {}
+    try:
+        return status._smoke(slug, tag, "staging") or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _commit_time(slug: str | None, ref: str | None) -> str:
+    """When the commit (or tag) was committed, "" when GitHub cannot say."""
+    if not slug or not ref:
+        return ""
+    try:
+        data = _json(["api", f"repos/{slug}/commits/{ref}"]) or {}
+        return str(((data.get("commit") or {}).get("committer") or {}).get("date") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str = "manual") -> list[dict]:
     """A promote item exists only where prod waits for a person (`manual`); otherwise the rule promotes by itself."""
     if prod_promotion != "manual":
@@ -219,15 +241,18 @@ def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str =
         between = releases.between(slug, frm, to) if slug and frm else {}
         migrations = between.get("migrations") or []
         digest = stg.get("digest")
+        verified = _staging_smoke(slug, stg)
+        since = verified.get("at") or _commit_time(slug, stg.get("release") or stg.get("tag")) or runs._iso(runs.utcnow())
+        verified_digest = verified.get("digest") or digest   # the cell is `verified`: without a readable record, its own digest was
         bad = [Path(m["file"]).name for m in migrations if not m.get("additive")]
         items.append({
             "id": f"promote:{name}:{to}", "kind": "promote", "stage": "Prod",
-            "object": _obj("release", slug, component=name, version=to), "since": stg.get("verified_at") or "",
+            "object": _obj("release", slug, component=name, version=to), "since": since,
             "reason": f"{to} is verified in staging; prod runs {frm or 'nothing'}",
             "command": f"/instance:promote {name} --to prod --version {to}", "cwd_repo": slug,
             "consequence": {"from": frm, "to": to, "specs": between.get("specs") or [], "criteria": between.get("criteria"),
                             "commits": between.get("commits"), "migrations": migrations, "digest": digest,
-                            "verified_digest": digest, "digest_matches": digest is not None},
+                            "verified_digest": verified_digest, "digest_matches": digest is not None and digest == verified_digest},
             "way_back": {"command": f"/instance:promote {name} --to prod --version {frm}" if frm else None,
                          "warning": (f"migration {', '.join(bad)} is not additive" if bad else None)}})
     return items
@@ -248,12 +273,30 @@ def _triage(slug: str) -> list[dict]:
     return items
 
 
-def collect(repo_dir: Path, system: str | None = None) -> dict:
-    """The needs document (schema 1); sources that fail are listed under `unavailable`."""
+def _issues(slug: str, since_days: int) -> list[dict]:
+    """Open issues of one repo without the `tracked` label, and closed ones of the last `since_days` days (the Board's
+    Issue column and the Done view): `{repo, number, title, labels, state, created_at, closed_at, url}`."""
+    cutoff = (runs.utcnow() - datetime.timedelta(days=since_days)).strftime("%Y-%m-%d")
+    out = []
+    for state, extra in (("open", []), ("closed", ["--search", f"closed:>={cutoff}"])):
+        rows = _json(["issue", "list", "-R", slug, "--state", state, "--limit", "200", *extra,
+                      "--json", "number,title,labels,createdAt,closedAt,url"]) or []
+        for i in rows:
+            names = [(x.get("name") if isinstance(x, dict) else str(x)) for x in i.get("labels") or []]
+            if "tracked" in names:
+                continue
+            out.append({"repo": slug, "number": i.get("number"), "title": i.get("title") or "", "labels": names, "state": state,
+                        "created_at": i.get("createdAt") or "", "closed_at": i.get("closedAt") or None, "url": i.get("url") or ""})
+    return out
+
+
+def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> dict:
+    """The needs document (schema 1); sources that fail are listed under `unavailable`. `issues` lists the untracked
+    issues of the system's repos (open, and closed within `since_days`)."""
     app_dir = find_system(repo_dir, system)
     m = model.load_dir(app_dir)
     gitops_slug, repos = _repos(repo_dir, m)
-    src, items = _Sources(), []
+    src, items, issues = _Sources(), [], []
     done: list[dict] = []
     try:
         rows = runlist.collect(30)["runs"]
@@ -270,6 +313,10 @@ def collect(repo_dir: Path, system: str | None = None) -> dict:
             items += _triage(slug)
         except Exception as e:  # noqa: BLE001
             src.fail("github", e, ["triage"])
+        try:
+            issues += _issues(slug, since_days)
+        except Exception as e:  # noqa: BLE001
+            src.fail("github", e, ["issues"])
     try:
         _, _, status_rows, _ = status.collect(repo_dir, system, None)
         items += _promotions(status_rows, {c.name: c.repo for c in m.components if c.repo}, _prod_promotion(m))
@@ -277,7 +324,7 @@ def collect(repo_dir: Path, system: str | None = None) -> dict:
         src.fail("cluster", e, ["promote"])
     items.sort(key=lambda i: i["since"] or "")
     return {"schema": SCHEMA, "system": app_dir.name, "read_at": runs._iso(runs.utcnow()), "items": items,
-            "unavailable": src.listing()}
+            "issues": issues, "unavailable": src.listing()}
 
 
 def render(doc: dict) -> str:
@@ -293,6 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
     p.add_argument("--repo-dir", default=".", metavar="DIR", help="a gitops-app clone (default .)")
     p.add_argument("--system", metavar="NAME")
+    p.add_argument("--since", type=int, default=90, metavar="DAYS", help="closed issues of the last DAYS days (default 90)")
     return p
 
 
@@ -301,7 +349,7 @@ def main(argv: list[str]) -> int:
         ns = build_parser().parse_args(argv)
     except SystemExit as e:
         return 1 if e.code else 0
-    doc = collect(Path(ns.repo_dir), ns.system)
+    doc = collect(Path(ns.repo_dir), ns.system, ns.since)
     print(json.dumps(doc, indent=2) if ns.json else render(doc))
     return 0
 

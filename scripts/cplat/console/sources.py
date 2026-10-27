@@ -152,7 +152,7 @@ def sync_spec_sources(sources: dict[str, Source], snapshot: Callable[[str | None
     return added
 
 
-PREREQUISITES = ("claude", "gh", "kube")
+PREREQUISITES = ("claude", "gh")   # exact names; `kube:<env>` is matched by its prefix (not the generic "kube context")
 
 
 def banner(doctor: Source | None) -> list[dict]:
@@ -163,7 +163,7 @@ def banner(doctor: Source | None) -> list[dict]:
         if not isinstance(row, Mapping) or row.get("status") == "ok" or not row.get("fix"):
             continue
         name = str(row.get("name", ""))
-        if name.startswith(PREREQUISITES):
+        if name in PREREQUISITES or name.startswith("kube:"):
             out.append({"piece": name, "fix": row["fix"]})
     return out
 
