@@ -52,6 +52,9 @@ def route(repo: Path) -> dict:
     out = {"shape": shape, "plugin": plugin, "deployable": entry["deployable"], "library": entry["library"], "agents": agents}
     if shape == "gitops-app":
         out["unsupported"] = "/component:* commands do not apply to a gitops-app repo; use /system:spec, /component:add or /instance:promote"
+    if shape == "cluster-gitops":
+        out["unsupported"] = ("/component:* commands do not apply to a cluster repo; use /cluster:add, /cluster:remove, "
+                              "/platform:update or /platform:doctor")
     return out
 
 

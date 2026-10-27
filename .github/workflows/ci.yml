@@ -54,6 +54,7 @@ jobs:
             echo "code=$code"
             echo "python=$(t '^templates/(service-python|library-python)/')"
             echo "gitops=$(t '^templates/gitops-app/')"
+            echo "cluster=$(t '^templates/cluster-gitops/|^templates/gitops-app/scripts/(render\.py|local-cluster\.sh|ports\.sh)$')"
             echo "web=$(t '^templates/web-nextjs/')"
             echo "go=$(t '^templates/service-go/')"
             echo "java=$(t '^templates/service-java/')"
@@ -98,6 +99,8 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: shapes.yml is valid and consistent with templates, plugins and the PRD table
         run: uv run scripts/shapes.py check
+      - name: the cluster template's copies equal their gitops-app sources
+        run: uv run scripts/sync-template-copies.py --check
       - name: shape detection fixtures
         run: bash scripts/test-detect-shape.sh
       - name: relative Markdown links resolve
@@ -109,7 +112,7 @@ jobs:
       - name: workflows (platform + every generated repo) pass actionlint
         run: |
           uv tool install copier
-          for t in service-python library-python service-java service-go web-nextjs gitops-app; do
+          for t in service-python library-python service-java service-go web-nextjs gitops-app cluster-gitops; do
             copier copy ./templates/$t /tmp/lint-$t --defaults --trust --skip-tasks --data project_name=lint-test
           done
           uv tool run --from actionlint-py actionlint .github/workflows/*.yml scripts/cplat/assets/workflows/*.yml /tmp/lint-*/.github/workflows/*.yml
@@ -319,6 +322,37 @@ jobs:
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz -C /tmp kubeconform
           /tmp/kubeconform -strict -ignore-missing-schemas -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -summary /tmp/test-gitops/applications/test/applicationset.yaml /tmp/test-gitops/bootstrap/test-root.yaml /tmp/test-gitops/applications/test/overlays/*/*/[dsh]*.yaml
+
+  smoke-test-cluster-gitops:
+    name: smoke-test cluster-gitops template
+    needs: changes
+    if: needs.changes.outputs.cluster == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install copier
+        run: uv tool install copier
+      - name: Generate test project
+        run: |
+          copier copy ./templates/cluster-gitops /tmp/test-cluster --defaults --trust --skip-tasks \
+            --data project_name=test-cluster --data description="Smoke test"
+      - name: Shape is detected as cluster-gitops
+        run: test "$(bash scripts/detect-shape.sh /tmp/test-cluster)" = "cluster-gitops"
+      - name: Rendered files are in sync and a cluster with no systems checks clean
+        run: |
+          cd /tmp/test-cluster
+          uv run scripts/render.py --check
+          uv run scripts/check.py
+      - name: scripts parse
+        run: |
+          for f in /tmp/test-cluster/scripts/*.sh; do bash -n "$f"; done
+          jq -e '.shell.scripts | has("cluster-up") and has("cluster-down") and has("bootstrap") and has("check")' /tmp/test-cluster/devbox.json
+      - name: kustomize build + kubeconform on cluster/
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz -C /tmp kubeconform
+          kubectl kustomize /tmp/test-cluster/cluster > /tmp/cluster-built.yaml
+          /tmp/kubeconform -strict -ignore-missing-schemas -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -summary /tmp/cluster-built.yaml
 
   smoke-test-web-nextjs:
     name: smoke-test web-nextjs template
@@ -593,7 +627,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [changes, validate-manifests, validate-shapes, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
+    needs: [changes, validate-manifests, validate-shapes, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: every needed job passed or was skipped

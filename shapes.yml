@@ -109,6 +109,19 @@ shapes:
     status: stable
     adr: [6, 14]
 
+  - id: cluster-gitops
+    plugin: cluster
+    template: cluster-gitops
+    deployable: false
+    test_globs: ["tests/**/*"]
+    ci_checks: ["quality (render-check + kustomize build + kubeconform)", "check (registered systems)", "security (detect-secrets)", "ci-extra"]
+    validation: {selector: null}
+    library: false
+    detection: {copier_src: templates/cluster-gitops, sniff: ["cluster.yaml + cluster/operators-root.yaml"]}
+    default_stack: {kind: argocd-app-of-apps}
+    status: stable
+    adr: [60]
+
   - id: service-java
     plugin: svc-java
     template: service-java
