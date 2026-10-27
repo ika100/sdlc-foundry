@@ -2,7 +2,7 @@
 title: "Agents and orchestration"
 description: "Scripts do the deterministic work; agents orchestrate and ask before anything outward-facing."
 sidebar:
-  order: 7
+  order: 8
 ---
 
 Two layers:

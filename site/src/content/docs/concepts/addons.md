@@ -2,7 +2,7 @@
 title: "Resources"
 description: "Backing services behind a stable connection contract: the Postgres resource and OpenTelemetry observability."
 sidebar:
-  order: 4
+  order: 5
 ---
 
 A **resource** is declared once under `resources:` in `system.yaml` and used by name from a component's `uses`. Components see a **contract** (a Secret and environment variables), never the implementation. Observability is not a resource: it is switched on per environment.

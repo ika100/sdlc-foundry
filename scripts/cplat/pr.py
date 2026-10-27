@@ -4,7 +4,7 @@
 
 The same watch as `cplat ship land` (spec 072): one line per concluded check, the first red check ends the wait, a
 stale or stuck run is rerun once, and a job that failed on a transient error (a download, a registry, the network)
-is rerun once before it counts. Every rerun is asked of the run's budget first (spec 102): a refusal ends the wait red with
+is rerun once before it counts. A PR that conflicts with its base is never green: GitHub runs no CI on it (#221). Every rerun is asked of the run's budget first (spec 102): a refusal ends the wait red with
 `budget exhausted: reruns`. Exit 0: green (and merged with --merge); 1: red, with the failing log tails.
 """
 from __future__ import annotations

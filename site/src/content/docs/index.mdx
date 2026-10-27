@@ -34,6 +34,17 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
   </Card>
 </CardGrid>
 
+## A model you can hold in your head
+
+A **system** is made of **components** (services, websites, libraries), the **APIs** between them and the **resources** they use. Each part runs once per **environment** as an **instance**, and promoting moves a version one cell to the right. Every command is named after the noun it acts on: `/system:new`, `/component:add`, `/resource:add`, `/instance:promote`.
+
+<figure class="map map-model">
+  <div class="map-scroll">
+    <img src="/sdlc-foundry/img/model-example.svg" width="1000" height="590" alt="The todo system. On the left its parts: the todo-web website calls the todo-api service's API, and todo-api uses a postgres database. On the right three environments, dev, staging and prod, each promoting to the next. Every part runs as one instance per environment, showing its version and state; todo-web is not yet in prod. Below, a Spec is shipped by a Run, which lands in dev." />
+  </div>
+  <figcaption>[The domain model](/sdlc-foundry/concepts/domain-model/) explains the nouns · [open it full size](/sdlc-foundry/img/model-example.svg)</figcaption>
+</figure>
+
 ## From an issue to production
 
 You decide at three points: route an issue, approve its spec, promote to prod. `/component:ship` runs everything in the green band, and every run, failure and alert comes back as an issue for the next round.

@@ -2,7 +2,7 @@
 title: "The GitOps model"
 description: "One file in, every manifest out; components ship only an image."
 sidebar:
-  order: 2
+  order: 3
 ---
 
 A system has one **GitOps repository** (shape `gitops-app`). It contains, per system, one file, `applications/<system>/system.yaml`: the environments (host, policy, observability, promotion), the components and how each runs (image, port, probes, env, secrets, `uses`, `instances`), the APIs and the resources.
