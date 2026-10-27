@@ -812,7 +812,9 @@ db_rows() { # reads the table e2e_rows with e2e-api's database variables; the ro
 }
 
 bstep "Database switch: a component reads the restored row A and not B (AC-117.9)"
-if ! out=$($cplat resource restore postgres --env dev --switch "${rargs[@]}" 2>&1); then bfail "switch failed: $out"; fi
+# streamed (tee) and bounded, so a slow plugin wait shows in the log instead of running into the job's timeout
+if ! out=$(timeout 900 $cplat resource restore postgres --env dev --switch "${rargs[@]}" 2>&1 | tee /dev/stderr); then
+  kc get clusters.postgresql.cnpg.io; kc get backups.postgresql.cnpg.io; bfail "switch failed or took longer than 15 minutes: $out"; fi
 case "$out" in *"switched postgres/dev to e2e-postgres-g1"*) ;; *) bfail "switch did not report e2e-postgres-g1: $out";; esac
 sb_cluster=$(kc get scheduledbackup.postgresql.cnpg.io e2e-postgres -o jsonpath='{.spec.cluster.name}' 2>&1) || bfail "after the switch the ScheduledBackup e2e-postgres is missing (AC-117.13): $sb_cluster"
 [ "$sb_cluster" = e2e-postgres-g1 ] || bfail "after the switch the ScheduledBackup e2e-postgres targets '$sb_cluster', not e2e-postgres-g1 (AC-117.13)"
