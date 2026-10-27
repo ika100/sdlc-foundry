@@ -44,6 +44,8 @@
 #   VELERO_AWS_PLUGIN_IMAGE  Velero AWS plugin image (default velero/velero-plugin-for-aws:v1.14.4)
 #   WITH_VELERO          1 = Velero, 0 = never; default: 1 exactly when operators/apps/velero.yaml exists.
 #                        All three are installed like CloudNativePG: from operators/root.yaml with Argo CD, k3s HelmCharts with WITH_ARGO=0.
+#   NACK_VERSION         NACK (NATS JetStream controller) chart version (default: the targetRevision of operators/apps/nack.yaml, else 0.35.0)
+#   WITH_NACK            1 = NACK, 0 = never; default: 1 exactly when operators/apps/nack.yaml exists. Installed like CloudNativePG.
 #   REGISTRY_PORT        also create a local image registry reachable as localhost:<port> from the host and as
 #                        k3d-<cluster>-registry:<port> from the cluster
 # Re-running `up` is safe; it re-applies credentials and the root Application.
@@ -125,6 +127,9 @@ barman_version="${BARMAN_CLOUD_VERSION:-$(rev_of "$barman_file" 0.8.1)}"
 certmgr_version="${CERT_MANAGER_VERSION:-$(rev_of "$certmgr_file" v1.21.3)}"
 velero_version="${VELERO_VERSION:-$(rev_of "$velero_file" 12.2.1)}"
 velero_aws_plugin_image="${VELERO_AWS_PLUGIN_IMAGE:-velero/velero-plugin-for-aws:v1.14.4}"
+nack_file=operators/apps/nack.yaml
+nack_version="${NACK_VERSION:-$(rev_of "$nack_file" 0.35.0)}"
+with_nack="${WITH_NACK:-auto}"
 with_barman="${WITH_BARMAN_CLOUD:-auto}"
 with_velero="${WITH_VELERO:-auto}"
 if [ "$with_barman" = auto ]; then
@@ -132,6 +137,9 @@ if [ "$with_barman" = auto ]; then
 fi
 if [ "$with_velero" = auto ]; then
   if [ -f "$velero_file" ]; then with_velero=1; else with_velero=0; fi
+fi
+if [ "$with_nack" = auto ]; then
+  if [ -f "$nack_file" ]; then with_nack=1; else with_nack=0; fi
 fi
 registry="${name}-registry"
 org=$(sed -n 's/^github_org:[[:space:]]*//p' .copier-answers.yml | head -1)
@@ -432,6 +440,29 @@ YAML
       k -n velero rollout status daemonset/node-agent --timeout=300s >/dev/null
     fi
 
+    if [ "$with_nack" = 1 ] && [ "$with_argo" = 1 ]; then
+      : # Argo CD installs NACK from operators/root.yaml (applied below, before bootstrap/)
+    elif [ "$with_nack" = 1 ]; then
+      echo "Installing NACK ($nack_version)"
+      # no values: the chart then runs the controller with -crd-connect (the versions table in render.py)
+      k apply -f - >/dev/null <<YAML
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: nack
+  namespace: kube-system
+spec:
+  repo: https://nats-io.github.io/k8s/helm/charts
+  chart: nack
+  version: ${nack_version}
+  targetNamespace: nack
+  createNamespace: true
+YAML
+      for _ in $(seq 1 60); do k get crd streams.jetstream.nats.io >/dev/null 2>&1 && break; sleep 3; done
+      for _ in $(seq 1 100); do [ -n "$(k -n nack get deploy -l app.kubernetes.io/name=nack -o name 2>/dev/null)" ] && break; sleep 3; done
+      k -n nack rollout status deploy -l app.kubernetes.io/name=nack --timeout=300s >/dev/null
+    fi
+
     if [ "$with_lgtm" = 1 ]; then
       echo "Installing the Grafana dev stack (otel-lgtm $lgtm_version): Grafana, Tempo, Loki, Prometheus in one pod (dev only)"
       # One shared stack in its own namespace: the all-in-one image runs as root, so it stays outside the application namespaces.
@@ -536,7 +567,7 @@ YAML
     if [ -n "$urls" ]; then urls="${urls}"$'\n'; fi   # command substitution strips the trailing newline
 
     if [ "$with_argo" = 1 ]; then
-      if { [ "$with_cnpg" = 1 ] || [ "$with_seaweedfs" = 1 ] || [ "$with_barman" = 1 ] || [ "$with_velero" = 1 ]; } && [ -f operators/root.yaml ]; then
+      if { [ "$with_cnpg" = 1 ] || [ "$with_seaweedfs" = 1 ] || [ "$with_barman" = 1 ] || [ "$with_velero" = 1 ] || [ "$with_nack" = 1 ]; } && [ -f operators/root.yaml ]; then
         legacy=0
         if [ "$with_cnpg" = 1 ] && k -n kube-system get helmchart cnpg >/dev/null 2>&1; then
           echo "CloudNativePG was installed by an older cluster-up (HelmChart kube-system/cnpg); keeping it. Recreate the cluster to let Argo CD manage it"
@@ -574,6 +605,11 @@ YAML
             k -n velero rollout status deploy/velero --timeout=300s >/dev/null
             for _ in $(seq 1 100); do k -n velero get daemonset/node-agent >/dev/null 2>&1 && break; sleep 3; done
             k -n velero rollout status daemonset/node-agent --timeout=300s >/dev/null
+          fi
+          if [ "$with_nack" = 1 ]; then
+            for _ in $(seq 1 200); do k get crd streams.jetstream.nats.io >/dev/null 2>&1 && break; sleep 3; done
+            for _ in $(seq 1 100); do k -n nack get deploy/nack >/dev/null 2>&1 && break; sleep 3; done
+            k -n nack rollout status deploy/nack --timeout=300s >/dev/null
           fi
         fi
       fi

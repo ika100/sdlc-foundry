@@ -70,8 +70,11 @@ def needs(system: dict) -> dict[str, set[str]]:
                 ops.add("external-secrets")
             elif typ in sr.OPERATOR_OF_TYPE:
                 ops.add(sr.OPERATOR_OF_TYPE[typ])
-                if typ == "bucket":
+                if typ in ("bucket", "broker"):
                     ops.add("external-secrets")
+            elif typ == "cache":
+                # a cache has no operator, but its password comes from External Secrets too
+                ops.add("external-secrets")
         for svc in services:
             if env in sr.envs_of(svc) and (svc.get("secretRefs") or sr.at(svc, env).get("secrets")):
                 ops.add("external-secrets")
