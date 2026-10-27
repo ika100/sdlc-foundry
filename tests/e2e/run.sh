@@ -11,6 +11,10 @@
 # again after the store's pods restarted, and shows that dev's keys are refused by staging's endpoint (AC-116.5 to AC-116.8,
 # AC-116.14). A third, external bucket (ext-files) proves its ExternalSecret creates no partial Secret while the store entry
 # lacks `secretAccessKey` (AC-116.18). The operator comes from operators/apps/seaweedfs.yaml (AC-116.19).
+# At the end it backs the system up (AC-117.24): a bucket `backups` is the target of the database's and the environment's backup, a
+# row A, the time T and a row B go into postgres, which is restored to T and switched to (a component reads A and not B); a file on
+# the volume of the external component e2e-files and an object in the bucket files are written, an environment backup is taken, both
+# are deleted, and `system restore --replace` brings both back unchanged while the database cluster keeps its UID.
 # It exercises: cplat system new, resource add, component ship, instance promote|secret|verify, the templates'
 # Dockerfiles (non-root numeric user, read-only filesystem), render.py on system.yaml, the generated
 # Deployment/Service/HTTPRoute against a real API server, and the Gateway API on k3s' Traefik.
@@ -119,7 +123,9 @@ step "Start the local cluster with a registry (the template's own script, Gatewa
 # CloudNativePG chart itself. WITH_CNPG=1: e2e-api uses postgres from the components step on, after the cluster is up, so
 # operators/ (which WITH_CNPG would auto-detect) does not exist yet; the components step checks it and its pinned version.
 # The same holds for the SeaweedFS operator (WITH_SEAWEEDFS=1): e2e-api and e2e-web use the bucket files from the components step on.
-(cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 WITH_CNPG=1 WITH_SEAWEEDFS=1 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
+# And for the backup operators (WITH_BARMAN_CLOUD=1, with cert-manager, and WITH_VELERO=1): the database and the environment get
+# `backup` only in the last steps, so operators/apps/ does not name them yet.
+(cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 WITH_CNPG=1 WITH_SEAWEEDFS=1 WITH_BARMAN_CLOUD=1 WITH_VELERO=1 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
 
 step "Build and push the images"
 # Rendered with --skip-tasks, so the web repo has no pnpm-lock.yaml yet; the template's bootstrap would run
@@ -187,28 +193,29 @@ done
 # The bucket addon in sync-wave order (what Argo CD does): the key generators and the ExternalSecret (wave -1) first, then, once
 # the Secret exists, the store, the bucket and the identity (wave 0), then the S3Credentials (wave 1), which adopt the key pair
 kn() { local n=$1; shift; kubectl --context k3d-$cluster -n "$n" "$@"; }
-apply_bucket() { # environment namespace
-  local d="$work/e2e-gitops/applications/e2e/addons/$1/files" k
+apply_bucket() { # environment namespace [bucket, default files]
+  local b=${3:-files} d k
+  d="$work/e2e-gitops/applications/e2e/addons/$1/$b"
   for f in access-key-generator.yaml secret-key-generator.yaml externalsecret.yaml seaweed.yaml bucket.yaml identity.yaml credentials.yaml kustomization.yaml; do
-    [ -f "$d/$f" ] || fail "render did not write addons/$1/files/$f"
+    [ -f "$d/$f" ] || fail "render did not write addons/$1/$b/$f"
   done
   kn "$2" apply -f "$d/access-key-generator.yaml" -f "$d/secret-key-generator.yaml" -f "$d/externalsecret.yaml" >/dev/null
   for _ in $(seq 1 40); do   # up to 120 s
-    [ -n "$(kn "$2" get secret e2e-files-app -o jsonpath='{.data.secretAccessKey}' 2>/dev/null)" ] && break; sleep 3
+    [ -n "$(kn "$2" get secret e2e-$b-app -o jsonpath='{.data.secretAccessKey}' 2>/dev/null)" ] && break; sleep 3
   done
   for k in endpoint bucket region forcePathStyle accessKeyId secretAccessKey; do
-    [ -n "$(kn "$2" get secret e2e-files-app -o jsonpath="{.data.$k}" 2>/dev/null)" ] || { kn "$2" get externalsecret e2e-files-app -o yaml | tail -25; fail "the Secret e2e-files-app in $2 lacks the key $k"; }
+    [ -n "$(kn "$2" get secret e2e-$b-app -o jsonpath="{.data.$k}" 2>/dev/null)" ] || { kn "$2" get externalsecret e2e-$b-app -o yaml | tail -25; kn "$2" get events --field-selector "involvedObject.name=e2e-$b-app" | tail -10; fail "the Secret e2e-$b-app in $2 lacks the key $k"; }
   done
   kn "$2" apply -f "$d/seaweed.yaml" -f "$d/bucket.yaml" -f "$d/identity.yaml" >/dev/null
   kn "$2" apply -f "$d/credentials.yaml" >/dev/null
   kn "$2" apply -k "$d" >/dev/null   # the whole kustomization is then a no-op
 }
-store_ready() { # namespace: the operator creates the master, volume and filer StatefulSets
-  local s
+store_ready() { # namespace [bucket, default files]: the operator creates the master, volume and filer StatefulSets
+  local s b=${2:-files}
   for s in master volume filer; do
-    for _ in $(seq 1 60); do kn "$1" get statefulset e2e-files-$s >/dev/null 2>&1 && break; sleep 3; done   # up to 180 s
-    kn "$1" rollout status statefulset/e2e-files-$s --timeout=300s || {
-      kn "$1" get pods; kn "$1" describe statefulset e2e-files-$s | tail -25; fail "the SeaweedFS $s of e2e-files in $1 did not become ready"; }
+    for _ in $(seq 1 60); do kn "$1" get statefulset e2e-$b-$s >/dev/null 2>&1 && break; sleep 3; done   # up to 180 s
+    kn "$1" rollout status statefulset/e2e-$b-$s --timeout=300s || {
+      kn "$1" get pods; kn "$1" describe statefulset e2e-$b-$s | tail -25; fail "the SeaweedFS $s of e2e-$b in $1 did not become ready"; }
   done
 }
 
@@ -600,3 +607,262 @@ esac
 
 step "End the ship run"
 (cd "$api_repo" && $cplat component ship finish)
+
+# ---- Backups (AC-117.24): dev backs up postgres and the namespace into the bucket backups; a point-in-time restore and an environment restore ----
+# These steps come last on purpose: restoring changes dev's database cluster and replaces volumes, which the ship steps above must not see.
+bstep_name=""
+bstep() { bstep_name="$*"; step "$*"; }
+bfail() { fail "[$bstep_name] $*"; }
+rargs=(--repo-dir "$gitops_repo" --context "k3d-$cluster")
+vn() { kubectl --context k3d-$cluster -n velero "$@"; }
+
+bstep "Backups: declare the bucket backups, instances.dev.backup on postgres, environments.dev.backup and the external component e2e-files"
+$cplat resource add backups --type bucket --repo-dir "$gitops_repo" >/dev/null
+commit "backups"   # each cplat write starts from a clean tree
+# e2e-files: an external component (a kustomize package in the gitops repo): a StatefulSet with a 1Gi volume `data`, busybox, non-root
+pkg="$gitops_repo/applications/e2e/external/e2e-files"
+mkdir -p "$pkg"
+cat > "$pkg/kustomization.yaml" <<'YAML'
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - statefulset.yaml
+YAML
+cat > "$pkg/statefulset.yaml" <<'YAML'
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: e2e-files
+  labels: {app: e2e-files}
+spec:
+  serviceName: e2e-files
+  replicas: 1
+  selector:
+    matchLabels: {app: e2e-files}
+  template:
+    metadata:
+      labels: {app: e2e-files}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: files
+          image: docker.io/library/busybox
+          command: [sh, -c, "while true; do sleep 3600; done"]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 1Gi}}
+YAML
+(cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" <<'PY'
+import sys
+sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
+import gitops
+from pathlib import Path
+app_dir = gitops.find_app(Path("."))
+y, data = gitops.load(app_dir)
+components = gitops.components_of(data)
+components["e2e-web"]["uses"] = [*(components["e2e-web"].get("uses") or []), "backups"]      # the target must be used by a component in dev
+pg = data["resources"]["postgres"]
+instances = pg.get("instances") or {}
+instances["dev"] = {**(instances.get("dev") or {}), "backup": {"to": "backups"}}              # instances.dev.backup
+pg["instances"] = instances
+data["environments"]["dev"]["backup"] = {"to": "backups"}                                     # environments.dev.backup
+components["e2e-files"] = {"type": "service", "lang": "unknown", "repo": "e2e/e2e-files", "image": "docker.io/library/busybox",
+                           "external": {"kustomize": "external/e2e-files"}, "instances": {"dev": {}}}
+gitops.save(app_dir, y, data)
+PY
+uv run scripts/render.py)
+commit "backups: dev backs up postgres and the namespace into backups; e2e-files"
+
+bstep "Backups: render writes the three operators and cluster-up installed exactly their pins"
+[ -f "$gitops_repo/operators/root.yaml" ] || bfail "render did not write operators/root.yaml"
+for op in plugin-barman-cloud cert-manager velero; do
+  f="$gitops_repo/operators/apps/$op.yaml"
+  [ -f "$f" ] || bfail "render did not write operators/apps/$op.yaml"
+  pin=$(sed -n 's/^[[:space:]]*targetRevision:[[:space:]]*["'"'"']\{0,1\}\([^"'"'"'[:space:]]*\).*/\1/p' "$f" | head -1)
+  have=$(kubectl --context k3d-$cluster -n kube-system get helmchart $op -o jsonpath='{.spec.version}' 2>/dev/null || true)
+  [ -n "$pin" ] && [ "$have" = "$pin" ] || bfail "the installed chart $op is '$have', operators/apps/$op.yaml pins '$pin'"
+  echo "ok   operators/apps/$op.yaml pins $op $pin, which is installed"
+done
+kubectl --context k3d-$cluster get crd objectstores.barmancloud.cnpg.io schedules.velero.io >/dev/null || bfail "the Barman Cloud or Velero CRDs are not installed"
+
+bstep "Backups: apply the bucket backups, postgres with its plugin and ObjectStore, backup/dev, e2e-files and e2e-web"
+apply_bucket dev $ns backups
+store_ready $ns backups
+kubectl --context k3d-$cluster apply -n $ns -k "$work/e2e-gitops/applications/e2e/addons/dev/postgres" >/dev/null || bfail "applying the postgres addon with backup failed"
+kubectl --context k3d-$cluster apply -k "$work/e2e-gitops/applications/e2e/backup/dev" >/dev/null || bfail "applying backup/dev failed"   # no -n: its objects carry their namespaces
+kubectl --context k3d-$cluster apply -n $ns -k "$work/e2e-gitops/applications/e2e/overlays/dev/e2e-files" >/dev/null || bfail "applying the e2e-files overlay failed"
+kubectl --context k3d-$cluster apply -n $ns -k "$work/e2e-gitops/applications/e2e/overlays/dev/e2e-web" >/dev/null || bfail "applying the e2e-web overlay failed"
+# the credentials of the environment backup come from an ExternalSecret in velero (ESO names a missing key only in its events)
+bk_secret=e2e-dev-backup
+for _ in $(seq 1 40); do [ -n "$(vn get secret $bk_secret -o jsonpath='{.data.cloud}' 2>/dev/null)" ] && break; sleep 3; done   # up to 120 s
+[ -n "$(vn get secret $bk_secret -o jsonpath='{.data.cloud}' 2>/dev/null)" ] || {
+  vn get externalsecret $bk_secret -o yaml | tail -25
+  vn get events --field-selector "involvedObject.name=$bk_secret" | tail -10
+  bfail "the Secret $bk_secret in velero (the backup credentials) did not appear"; }
+for _ in $(seq 1 60); do [ "$(vn get backupstoragelocation e2e-dev -o jsonpath='{.status.phase}' 2>/dev/null)" = Available ] && break; sleep 5; done   # up to 300 s
+[ "$(vn get backupstoragelocation e2e-dev -o jsonpath='{.status.phase}' 2>/dev/null)" = Available ] || {
+  vn get backupstoragelocation e2e-dev -o yaml | tail -25; bfail "the BackupStorageLocation e2e-dev is not Available"; }
+kc rollout status statefulset/e2e-files --timeout=240s || { kc describe pod -l app=e2e-files | tail -30; bfail "e2e-files did not become ready"; }
+kc rollout status deploy/e2e-web --timeout=240s || { kc describe pod -l app=e2e-web | tail -30; bfail "e2e-web did not become ready with the bucket backups"; }
+# the scheduled backup is immediate: wait for the first base backup of the database
+backups_done() { kc get backups.postgresql.cnpg.io -o jsonpath='{range .items[*]}{.status.phase}{"\n"}{end}' 2>/dev/null | grep -qx completed; }
+for _ in $(seq 1 100); do backups_done && break; sleep 5; done   # up to 500 s
+backups_done || { kc get backups.postgresql.cnpg.io; kc describe cluster e2e-postgres | tail -30; bfail "the immediate base backup of postgres did not complete"; }
+for _ in $(seq 1 60); do [ "$(kc get cluster e2e-postgres -o jsonpath='{.status.phase}' 2>/dev/null)" = "Cluster in healthy state" ] && break; sleep 5; done
+[ "$(kc get cluster e2e-postgres -o jsonpath='{.status.phase}')" = "Cluster in healthy state" ] || bfail "the Postgres cluster is not healthy with the plugin"
+
+status_field() { # path in the postgres/dev row of `system status --json` (backup.latest, previous.name, ...); empty when null
+  $cplat system status --json "${rargs[@]}" 2>/dev/null | python3 -c '
+import json, sys
+row = next(r for r in json.load(sys.stdin)["backups"]["resource_instances"] if r["resource"] == "postgres" and r["environment"] == "dev")
+v = row
+for k in sys.argv[1].split("."):
+    v = (v or {}).get(k)
+print("" if v is None else v)' "$1"
+}
+env_field() { # field of the dev row in backups.environments
+  $cplat system status --json "${rargs[@]}" 2>/dev/null | python3 -c '
+import json, sys
+row = next(r for r in json.load(sys.stdin)["backups"]["environments"] if r["environment"] == "dev")
+v = row["backup"].get(sys.argv[1])
+print("" if v is None else v)' "$1"
+}
+not_before() { # a b: success when the RFC 3339 time a is not before b (fractions ignored)
+  python3 -c '
+import re, sys
+from datetime import datetime
+t = lambda s: datetime.fromisoformat(re.sub(r"\.\d+", "", s).replace("Z", "+00:00"))
+sys.exit(0 if t(sys.argv[1]) >= t(sys.argv[2]) else 1)' "$1" "$2"
+}
+
+bstep "Database backup: /resource:backup completes and system status shows last_success (AC-117.31)"
+for _ in $(seq 1 60); do [ "$(status_field backup.archiving)" = ok ] && break; sleep 5; done   # WAL archiving works
+[ "$(status_field backup.archiving)" = ok ] || bfail "postgres/dev does not archive its WAL (state: $(status_field backup.state), error: $(status_field backup.error))"
+if ! out=$($cplat resource backup postgres --env dev "${rargs[@]}" 2>&1); then bfail "resource backup failed: $out"; fi
+case "$out" in *"backup completed: postgres/dev at "*) ;; *) bfail "resource backup did not say 'backup completed': $out";; esac
+at=$(sed -n 's/^backup completed: postgres\/dev at \([^ ]*\) .*/\1/p' <<< "$out")
+[ -n "$at" ] || bfail "no time in the output of resource backup: $out"
+[ "$(status_field backup.last_success)" = "$at" ] || bfail "system status last_success '$(status_field backup.last_success)' is not the time of the backup '$at'"
+echo "ok   $out"
+
+bstep "Database point in time: row A, the time T, row B; restore to T as a second instance (AC-117.8)"
+pg_uri=$(secret_val e2e-postgres-app uri)
+pg() { kc exec e2e-postgres-1 -c postgres -- psql "$pg_uri" -tAc "$1"; }
+pg 'create table e2e_rows (v text)' >/dev/null
+pg "insert into e2e_rows values ('A')" >/dev/null
+sleep 2
+T=$(pg "select to_char(clock_timestamp() at time zone 'utc', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')")   # the database's own clock: no skew with the host
+sleep 2
+pg "insert into e2e_rows values ('B')" >/dev/null
+[ "$(pg "select string_agg(v, ',' order by v) from e2e_rows")" = "A,B" ] || bfail "the database does not hold A and B before the restore"
+sleep 1
+kc exec e2e-postgres-1 -c postgres -- psql -d postgres -tAc 'select pg_switch_wal()' >/dev/null || bfail "pg_switch_wal failed"   # archive the segment with B and T now
+for _ in $(seq 1 60); do l=$(status_field backup.latest); [ -n "$l" ] && not_before "$l" "$T" && break; sleep 5; done   # up to 300 s
+l=$(status_field backup.latest)
+{ [ -n "$l" ] && not_before "$l" "$T"; } || bfail "the restore points of postgres/dev stop at '${l:-none}', before T $T"
+if ! out=$($cplat resource restore postgres --env dev --to "$T" "${rargs[@]}" 2>&1); then bfail "restore to $T failed: $out"; fi
+case "$out" in *"restored postgres/dev to $T as e2e-postgres-g1"*) ;; *) bfail "restore did not report the second instance e2e-postgres-g1: $out";; esac
+echo "ok   point-in-time restore to $T: $(echo "$out" | head -1)"
+
+# a probe pod (not a Deployment: the guard rails do not cover it) with e2e-api's own database variables
+read -r -d '' db_pod_py <<'PY' || true
+import json, sys
+name, image, script = sys.argv[1:4]
+dep = json.load(sys.stdin)
+names = ("DATABASE_URL", "PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD")
+env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and e["name"] in names]
+print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "dbprobe"}},
+                  "spec": {"restartPolicy": "Never", "containers": [{"name": "psql", "image": image, "command": ["sh", "-c", script], "env": env}]}}))
+PY
+dbn=0
+db_rows() { # reads the table e2e_rows with e2e-api's database variables; the rows in DB_OUT, one line
+  local name phase="" image
+  dbn=$((dbn + 1)); name="dbprobe-$dbn"
+  image=$(kc get cluster e2e-postgres-g1 -o jsonpath='{.spec.imageName}')
+  kc get deploy e2e-api -o json | python3 -c "$db_pod_py" "$name" "$image" 'psql "$DATABASE_URL" -tAc "select v from e2e_rows order by v"' | kc apply -f - >/dev/null || bfail "could not start the probe pod $name"
+  for _ in $(seq 1 60); do   # up to 180 s (the first run pulls the image)
+    phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+    case "$phase" in Succeeded|Failed) break;; esac; sleep 3
+  done
+  DB_OUT=$(kc logs "$name" 2>&1 | tr '\n' ' ' | sed 's/ *$//' || true)
+  kc delete pod "$name" --wait=false >/dev/null 2>&1 || true
+  [ "$phase" = Succeeded ]
+}
+
+bstep "Database switch: a component reads the restored row A and not B (AC-117.9)"
+if ! out=$($cplat resource restore postgres --env dev --switch "${rargs[@]}" 2>&1); then bfail "switch failed: $out"; fi
+case "$out" in *"switched postgres/dev to e2e-postgres-g1"*) ;; *) bfail "switch did not report e2e-postgres-g1: $out";; esac
+kc rollout status deploy/e2e-api --timeout=240s || { kc describe pod -l app=e2e-api | tail -30; bfail "e2e-api did not become ready on the restored database"; }
+rows_ok=""
+for _ in $(seq 1 10); do db_rows && rows_ok=1 && break; sleep 5; done
+[ -n "$rows_ok" ] || bfail "the probe pod with e2e-api's database variables failed: $DB_OUT"
+[ "$DB_OUT" = A ] || bfail "after the switch the restored database must hold row A and must not hold row B (read: '$DB_OUT')"
+echo "ok   restored database read through e2e-api's variables: row A, and not B (point in time $T)"
+
+bstep "Database discard: the previous instance and its volumes go; system status no longer shows previous (AC-117.9)"
+[ "$(status_field previous.name)" = e2e-postgres ] || bfail "system status does not show e2e-postgres as previous after the switch (shows '$(status_field previous.name)')"
+if ! out=$($cplat resource restore postgres --env dev --discard "${rargs[@]}" 2>&1); then bfail "discard failed: $out"; fi
+case "$out" in *"discarded e2e-postgres (previous)"*) ;; *) bfail "discard did not report e2e-postgres (previous): $out";; esac
+if kc get cluster e2e-postgres >/dev/null 2>&1; then bfail "the cluster e2e-postgres still exists after the discard"; fi
+[ -z "$(status_field previous.name)" ] || bfail "system status still shows previous '$(status_field previous.name)' after the discard"
+echo "ok   previous discarded; e2e-postgres-g1 stays active"
+
+bstep "Environment backup: a file on the volume of e2e-files-0 and an object in the bucket files, then a Velero Backup of dev"
+file_payload="file-$RANDOM-$RANDOM"
+kc exec e2e-files-0 -- sh -c "printf %s '$file_payload' > /data/hello.txt && sync" || bfail "could not write the file on the volume of e2e-files-0"
+object_payload="object-$RANDOM-$RANDOM"
+s3must "e2e-api writes an object into files" $ns e2e-api 'printf %s '"$object_payload"' > /tmp/in
+$A s3api put-object --bucket "$S3_BUCKET" --key backup/object.txt --body /tmp/in >/dev/null'
+sleep 10   # let the store write its volume files before the file-system backup reads them
+bname="e2e-dev-manual-$(date +%Y%m%d%H%M%S)"
+vn get schedule e2e-dev >/dev/null || bfail "the Velero Schedule e2e-dev does not exist"
+# kind: Backup (velero.io/v1) made from the Schedule's template, labelled like a scheduled one
+vn get schedule e2e-dev -o json | python3 -c 'import json, sys
+s = json.load(sys.stdin)
+print(json.dumps({"apiVersion": "velero.io/v1", "kind": "Backup", "metadata": {"name": sys.argv[1], "namespace": "velero",
+                  "labels": {"velero.io/schedule-name": "e2e-dev"}}, "spec": s["spec"]["template"]}))' "$bname" | vn apply -f - >/dev/null || bfail "could not create the Velero Backup $bname"
+bphase() { vn get backup "$bname" -o jsonpath='{.status.phase}' 2>/dev/null || true; }
+for _ in $(seq 1 180); do case "$(bphase)" in Completed|PartiallyFailed|Failed|FailedValidation) break;; esac; sleep 5; done   # up to 900 s
+[ "$(bphase)" = Completed ] || { vn describe backup "$bname" | tail -30; vn logs deploy/velero --tail=30; bfail "the Velero Backup $bname is '$(bphase)', not Completed"; }
+pvb=$(vn get podvolumebackups -l velero.io/backup-name="$bname" -o jsonpath='{.items[*].spec.volume}' 2>/dev/null || true)
+case " $pvb " in *" data "*) ;; *) bfail "the Backup $bname holds no volume data of e2e-files (volumes: '$pvb')";; esac
+for _ in $(seq 1 24); do [ -n "$(env_field last_success)" ] && break; sleep 5; done
+[ -n "$(env_field last_success)" ] || bfail "system status shows no last_success for the environment dev after the backup (state: $(env_field state))"
+echo "ok   Velero Backup $bname completed; system status last_success $(env_field last_success)"
+
+bstep "Environment restore: delete the file and the object; without --replace the restore refuses and lists the volumes (AC-117.20)"
+kc exec e2e-files-0 -- rm /data/hello.txt || bfail "could not delete the file"
+s3must "e2e-api deletes the object" $ns e2e-api '$A s3api delete-object --bucket "$S3_BUCKET" --key backup/object.txt >/dev/null
+$A s3api list-objects-v2 --bucket "$S3_BUCKET" --prefix backup/ --query "Contents[].Key" --output text > /tmp/keys
+echo "KEYS=$(cat /tmp/keys)"'
+case "$(s3_field KEYS)" in *backup/object.txt*) bfail "the object is still listed after its delete";; esac
+db_uid=$(kc get cluster e2e-postgres-g1 -o jsonpath='{.metadata.uid}')
+[ -n "$db_uid" ] || bfail "no cluster e2e-postgres-g1 before the restore"
+if out=$($cplat system restore dev --backup "$bname" "${rargs[@]}" 2>&1); then bfail "system restore without --replace succeeded although the volumes exist: $out"; fi
+case "$out" in *"volumes of $bname still exist in $ns"*"data-e2e-files-0"*) ;; *) bfail "the refusal does not list the volumes (wanted 'volumes of $bname still exist in $ns: ... data-e2e-files-0'): $out";; esac
+case "$out" in *"databases are not part of environment backups"*) ;; *) bfail "the refusal lacks 'databases are not part of environment backups': $out";; esac
+echo "ok   restore without --replace refused: $(echo "$out" | head -1 | cut -c1-200)"
+
+bstep "Environment restore: --replace stops the workloads, replaces their volumes from the backup and starts them again (AC-117.20)"
+if ! out=$($cplat system restore dev --backup "$bname" --replace "${rargs[@]}" 2>&1); then bfail "system restore --replace failed: $out"; fi
+case "$out" in *"restored $bname into $ns"*) ;; *) bfail "system restore --replace did not report 'restored $bname into $ns': $out";; esac
+case "$out" in *"databases are not part of environment backups"*) ;; *) bfail "the output lacks 'databases are not part of environment backups': $out";; esac
+kc rollout status statefulset/e2e-files --timeout=300s || { kc describe pod -l app=e2e-files | tail -30; bfail "e2e-files did not start again"; }
+store_ready $ns files
+got=""
+for _ in $(seq 1 30); do got=$(kc exec e2e-files-0 -- cat /data/hello.txt 2>/dev/null || true); [ -n "$got" ] && break; sleep 3; done
+[ "$got" = "$file_payload" ] || bfail "the file on the volume: content differs after the restore (wanted '$file_payload', got '$got')"
+s3_retry 20 "$bstep_name: e2e-api reads the object after the restore" $ns e2e-api '$A s3api get-object --bucket "$S3_BUCKET" --key backup/object.txt /tmp/out >/dev/null
+echo "CONTENT=$(cat /tmp/out)"'
+s3_same "$bstep_name: the object in files after the restore" "$object_payload" "$(s3_field CONTENT)"
+echo "ok   file and object are back unchanged ($file_payload, $object_payload)"
+
+bstep "Environment restore: the database cluster was not touched (same UID)"
+[ "$(kc get cluster e2e-postgres-g1 -o jsonpath='{.metadata.uid}')" = "$db_uid" ] || bfail "the UID of the cluster e2e-postgres-g1 changed: environment restores must leave databases alone"
+[ "$(kc get cluster e2e-postgres-g1 -o jsonpath='{.status.phase}')" = "Cluster in healthy state" ] || bfail "the Postgres cluster e2e-postgres-g1 is not healthy after the environment restore"
+echo "ok   e2e-postgres-g1 kept its UID $db_uid"
