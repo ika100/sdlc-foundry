@@ -118,6 +118,7 @@ tasks:
     covers: [AC-124.13, AC-124.15, AC-124.16, AC-124.19, AC-124.21, AC-124.22]
     parallel_safe: true
     depends_on: [t7, t12, t15]
+    done: true
   - id: t17
     title: Inbox — review decision, engine badge, signal facts in the triage detail
     files: [scripts/cplat/console/inbox.py]
