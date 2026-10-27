@@ -424,7 +424,7 @@ stays in git and the cluster for inspection until `--discard` (AC-117.12).
 
 **`--switch`**: state `restored` → `active`, old `active` → `previous` (`until` = now). Commit
 `chore(restore): switch <db>/<env> to <name>`; Argo or apply path; delete `ScheduledBackup <system>-<db>` so it is recreated for the
-new cluster; patch `Secret <system>-<db>-app`: remove `metadata.ownerReferences`, replace `<old>-rw` by `<new>-rw` in every value of
+new cluster (apply path: before `apply -k`, which creates it; Argo path: after the sync, Argo CD recreates it); patch `Secret <system>-<db>-app`: remove `metadata.ownerReferences`, replace `<old>-rw` by `<new>-rw` in every value of
 `host`, `uri`, `jdbc-uri`, `pgpass`, `fqdn-uri`, `fqdn-jdbc-uri` that exists; delete the pods (`-l app=<c>`) of every running
 component in `<env>` that uses `<db>` and wait for their rollout. Output:
 `switched <db>/<env> to <new>; <old> is previous (no connections); discard it with /resource:restore <db> --env <env> --discard`.

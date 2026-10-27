@@ -797,6 +797,8 @@ db_rows() { # reads the table e2e_rows with e2e-api's database variables; the ro
 bstep "Database switch: a component reads the restored row A and not B (AC-117.9)"
 if ! out=$($cplat resource restore postgres --env dev --switch "${rargs[@]}" 2>&1); then bfail "switch failed: $out"; fi
 case "$out" in *"switched postgres/dev to e2e-postgres-g1"*) ;; *) bfail "switch did not report e2e-postgres-g1: $out";; esac
+sb_cluster=$(kc get scheduledbackup.postgresql.cnpg.io e2e-postgres -o jsonpath='{.spec.cluster.name}' 2>&1) || bfail "after the switch the ScheduledBackup e2e-postgres is missing (AC-117.13): $sb_cluster"
+[ "$sb_cluster" = e2e-postgres-g1 ] || bfail "after the switch the ScheduledBackup e2e-postgres targets '$sb_cluster', not e2e-postgres-g1 (AC-117.13)"
 kc rollout status deploy/e2e-api --timeout=240s || { kc describe pod -l app=e2e-api | tail -30; bfail "e2e-api did not become ready on the restored database"; }
 rows_ok=""
 for _ in $(seq 1 10); do db_rows && rows_ok=1 && break; sleep 5; done

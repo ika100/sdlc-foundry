@@ -115,8 +115,10 @@ def _argo_app(name: str, context: str | None) -> bool:
         return False
 
 
-def _publish(repo: Path, app_dir: Path, ns: argparse.Namespace, title: str, action: str, kns: str, r: Report) -> None:
-    """Commit the change and bring it to the cluster: a merged pull request synced by Argo CD, else commit and `apply -k`."""
+def _publish(repo: Path, app_dir: Path, ns: argparse.Namespace, title: str, action: str, kns: str, r: Report) -> bool:
+    """Commit the change and bring it to the cluster: a merged pull request synced by Argo CD, else commit and `apply -k`.
+    Returns True on the Argo CD path. A ScheduledBackup's cluster cannot change in place, so on a switch the old one is deleted:
+    after the sync (Argo CD recreates it) or, on the apply path, before the apply (which creates it for the new active cluster)."""
     db, env, ctx = ns.name, ns.env, ns.context
     app = f"addon-{db}-{env}"
     if _argo_app(app, ctx):
@@ -143,12 +145,19 @@ def _publish(repo: Path, app_dir: Path, ns: argparse.Namespace, title: str, acti
                 raise PlatformError(f"Argo CD application {app} did not sync {head[:7]} within 10 minutes")
             time.sleep(POLL_S)
         r.did.append(f"merged and synced by Argo CD ({app})")
-        return
+        return True
     core.run(["git", "add", "-A"], cwd=repo)
     core.run(["git", *core.git_identity(repo), "commit", "-q", "-m", title], cwd=repo)
     r.did.append(f"committed: {title}")
+    if action == "switch":
+        _delete_scheduled_backup(f"{app_dir.name}-{db}", kns, ctx)
     _write(["apply", "-n", kns, "-k", str(app_dir / "addons" / env / db)], ctx, "cannot apply the database objects")
     r.did.append(f"applied applications/{app_dir.name}/addons/{env}/{db}")
+    return False
+
+
+def _delete_scheduled_backup(name: str, kns: str, ctx: str | None) -> None:
+    _write(["delete", "scheduledbackup.postgresql.cnpg.io", name, "-n", kns, "--ignore-not-found"], ctx, "cannot delete the ScheduledBackup")
 
 
 def _wait_ready(name: str, kns: str, ctx: str | None, db: str, env: str) -> None:
@@ -266,7 +275,7 @@ def main(argv: list[str]) -> int:
         raise PlatformError(str(e)) from e
     gitops.render(repo)
     r.did.append(f"updated restore-state.yaml and regenerated {len(gitops.rendered_changes(repo))} file(s)")
-    _publish(repo, app_dir, ns, title, action, kns, r)
+    via_argo = _publish(repo, app_dir, ns, title, action, kns, r)
 
     if ns.to:
         _wait_ready(name, kns, ctx, db, env)
@@ -276,7 +285,8 @@ def main(argv: list[str]) -> int:
                  f"switch to it: /resource:restore {db} --env {env} --switch"]
         r.data = {"result": "restored", "cluster": name, "to": when}
     elif ns.switch:
-        _write(["delete", "scheduledbackup.postgresql.cnpg.io", f"{system}-{db}", "-n", kns, "--ignore-not-found"], ctx, "cannot delete the ScheduledBackup")
+        if via_argo:
+            _delete_scheduled_backup(f"{system}-{db}", kns, ctx)
         secret_name = f"{system}-{db}-app"
         try:
             secret = backupstate.get_json(["secret", secret_name, "-n", kns], ctx)
