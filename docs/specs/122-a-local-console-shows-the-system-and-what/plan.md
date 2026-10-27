@@ -33,6 +33,7 @@ tasks:
     covers: [AC-122.13, AC-122.14, AC-122.15, AC-122.16, AC-122.17]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: system status --json — cell version and state, environment rules, per-env contexts, libraries, release candidate, unavailable
     files: [scripts/cplat/status.py]
