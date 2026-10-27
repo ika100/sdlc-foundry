@@ -1,5 +1,5 @@
 ---
-description: "Declare a resource of the system in system.yaml. Usage: /resource:add <name> --type database|bucket|cache [--version N] [--storage S] [--versioning] [--external [--path P]]"
+description: "Declare a resource of the system in system.yaml. Usage: /resource:add <name> --type database|bucket|cache [--version N] [--storage S] [--versioning] [--external [--path P]] (postgres is a database)"
 ---
 
 Run the platform script inside the gitops-app repo. **Request:** $ARGUMENTS
