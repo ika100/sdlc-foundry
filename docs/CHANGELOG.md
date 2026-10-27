@@ -8,9 +8,25 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **Databases and environments are backed up and restorable.** Spec 117 ([spec 117](specs/117-databases-and-environments-are-backed-up/spec.md)), [ADR-060](adr/060-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md) (database backups with the Barman Cloud plugin, restore by generation) and [ADR-061](adr/061-environment-backups-with-velero.md) (environment backups with Velero). Not breaking: a `system.yaml` without `backup` renders as before. `backup` on a database instance gives scheduled base backups and continuous archiving with point-in-time restore; `backup` on an environment gives Velero backups of its namespaces and volumes. `/system:status` shows a Backups section, `cplat doctor` warns about an unbacked-up prod, and a failing backup older than an hour files an alert issue. Pins: plugin-barman-cloud 0.8.1, cert-manager v1.21.3, velero 12.2.1, velero-plugin-for-aws v1.14.4.
 
-**Plugins:** `resource` 1.3.0 (`/resource:backup <db> --env <env>`, `/resource:restore <db> --env <env> (--to <time|latest> | --switch | --discard)`), `system` 1.1.0 (`/system:restore <env> [--backup <name|latest>] [--replace]`).
+**Plugins:** `resource` 1.3.0 (`/resource:backup <db> --env <env>`, `/resource:restore <db> --env <env> (--to <time|latest> | --switch | --discard)`), `system` 1.2.0 (`/system:restore <env> [--backup <name|latest>] [--replace]`).
 
 **Action for existing clusters:** after the first backup in a cluster, re-apply `operators/root.yaml` once (`KUBE_CONTEXT=<ctx> devbox run bootstrap`; local clusters: `devbox run cluster-up`). A cluster that already runs cert-manager or Velero (or wants to install the Barman Cloud plugin itself) sets `environments.<env>.operators: owner` first. Velero's node agent is a privileged DaemonSet in the `velero` namespace: clusters that enforce Pod Security restricted there need an exception (or `operators: owner`).
+
+**A local console shows the system, its process and what needs you.** Spec 122, [ADR-055](adr/055-local-console-over-cplat-json.md), [guide](console.md). `/platform:ui` (`cplat ui`) serves a browser console on `127.0.0.1` with three places: Inbox (decisions waiting for you), Board (every item by stage) and System (components by environment). Actions run as `cplat headless` in the local clone; the console never writes to git, GitHub or the cluster itself.
+
+**`cplat needs` and the run list.** `cplat needs --json` lists what waits for a human (approvals, answers, escalations, promotions). The run list (`cplat runs --json`) gives every run a phase and a stage.
+
+**Status and spec additions.** `cplat system status --json` and `cplat spec list --all --detail --json` carry more keys for the console. Deliberate test change: the AC-113.11 status tests now compare the 5.0 keys, because spec 122 adds keys.
+
+**Draft spec PRs.** `/component:spec` and `/system:spec` publish a spec as a draft pull request (`cplat spec publish`) and ask the owner to review; approving lands it (`cplat spec land`).
+
+**Notifications.** `~/.config/sdlc-foundry/notify.yaml` chooses per event whether GitHub, desktop, Slack or email is told, instantly or in a digest, with quiet hours. Secrets come from the environment or the OS keychain, never the file. `cplat ui notify --once` runs from cron or launchd.
+
+**`--provides` and `--consumes`.** `/component:add` and `/component:set` declare the APIs of one component; a new API goes into `apis:` in the same PR.
+
+**`/system:set`.** Changes system-wide settings such as `--env` (`cplat system set`).
+
+**Plugins:** `platform` 1.1.0 (`/platform:ui`), `system` 1.1.0 (`/system:set`), `component` 1.2.0 (`--provides`, `--consumes`, draft spec PRs).
 
 **`cplat pr wait` and `ship land` never call a conflicting PR green.** GitHub starts no `pull_request` workflow while a PR conflicts with its base, so only CodeQL reported and the wait said GREEN. The watch now asks whether the PR is mergeable and ends with "conflicts with its base branch" and how to fix it (#221).
 **Fixes to `platform update --migrate`.** A repo without `.claude/project-notes.md` now gets the file, created empty, because the new `CLAUDE.md` imports it; an existing notes file is still never changed (#239). The "left out N new starter file(s)" line no longer lists the `system.yaml` the migration writes on the next line (#238).

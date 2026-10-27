@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 from ruamel.yaml import YAML
@@ -82,6 +83,13 @@ def rendered_changes(repo: Path) -> list[str]:
 def require_clean(repo: Path) -> None:
     if run(["git", "status", "--porcelain"], cwd=repo).stdout.strip():
         raise PlatformError("the working tree has uncommitted changes", hint="commit or stash first; each operation is one reviewable PR")
+
+
+def scratch_tree(path: Path) -> None:
+    """Make a throwaway copy a clean one-commit git tree, so commands that require a clean tree run on it (console preview)."""
+    ident = ["-c", "user.name=preview", "-c", "user.email=preview@localhost", "-c", "commit.gpgsign=false"]
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "--allow-empty", "-m", "snapshot"]):
+        subprocess.run(["git", *ident, *args], cwd=path, text=True, capture_output=True, check=False)
 
 
 def slug(text: str) -> str:

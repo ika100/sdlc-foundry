@@ -84,6 +84,13 @@ STATUS_ROWS = [      # 5.0: one row per component with one cell per environment 
         "dev": cell("sha-" + SHA[:7], "Synced/Healthy", pin_pr="#12 sha-def5678"), "staging": cell(STAGING_PIN[:11], "missing"), "prod": None}},
     {"component": "stock", "platform": "4.0.0 (behind)", "cells": {"dev": cell("sha-abc1234", "missing"), "staging": None, "prod": None}},
 ]
+def legacy(rows):
+    """The 5.0 keys of status rows: spec 122 adds keys, the existing ones keep their meaning (AC-122.7)."""
+    keep = ("tag", "ci", "argo", "pin_pr")
+    return [{"component": r["component"], "platform": r["platform"],
+             "cells": {e: c and {k: c[k] for k in keep} for e, c in r["cells"].items()}} for r in rows]
+
+
 STATUS_RESOURCES = [
     {"resource": "postgres", "cells": {"dev": {"argo": "Synced/Progressing"}, "staging": {"argo": "missing"}, "prod": None}},
     {"resource": "observability", "cells": {"dev": {"argo": "missing"}, "staging": {"argo": "missing"}, "prod": None}},
@@ -110,7 +117,7 @@ def status_repo(tmp_path, monkeypatch):
 def test_status_rows_come_from_the_models_instances_ac_113_11(status_repo, monkeypatch):  # AC-113.11
     calls = spy(monkeypatch, "load_dir")
     app, envs, rows, resources = status.collect(status_repo, None, "k3d-x")
-    assert app == "shop" and envs == STATUS_ENVS and rows == STATUS_ROWS and resources == STATUS_RESOURCES
+    assert app == "shop" and envs == STATUS_ENVS and legacy(rows) == STATUS_ROWS and resources == STATUS_RESOURCES
     assert [c[0][0].name for c in calls] == ["shop"]
 
 
@@ -131,8 +138,10 @@ def test_status_pinned_tag_stays_and_reads_the_overlay_ac_113_11(status_repo):  
 def test_status_table_and_json_are_unchanged_ac_113_11(status_repo, monkeypatch, capsys):  # AC-113.11
     calls = spy(monkeypatch, "load_dir")
     assert status.main(["--repo-dir", str(status_repo), "--context", "k3d-x", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"system": "shop", "environments": STATUS_ENVS, "rows": STATUS_ROWS, "resources": STATUS_RESOURCES,
-                                                   "backups": STATUS_BACKUPS}  # spec 117: --json always has backups (AC-117.27)
+    doc = json.loads(capsys.readouterr().out)
+    doc["rows"] = legacy(doc["rows"])
+    assert {k: doc[k] for k in ("system", "environments", "rows", "resources")} == {"system": "shop", "environments": STATUS_ENVS, "rows": STATUS_ROWS, "resources": STATUS_RESOURCES}
+    assert doc["backups"] == STATUS_BACKUPS  # spec 117: --json always has backups (AC-117.27)
     assert status.main(["--repo-dir", str(status_repo), "--context", "k3d-x"]) == 0
     out = capsys.readouterr().out
     assert out.startswith("## shop (system) — platform 4.8.0 available, repo stamped none")

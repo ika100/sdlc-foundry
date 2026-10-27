@@ -43,7 +43,8 @@ Never edit specs from these modes. To change one, use `/component:spec --amend <
 
 1. `cplat spec approve <id>`. If it refuses, show the reasons and the fix (usually `/component:spec --amend <id> …` for open questions).
 2. Switch to `feature/<spec_id>` if it exists. Commit `docs/specs/<spec_id>/spec.md`: `docs(spec): approve <spec_id>`.
-3. Print the next step: `/component:plan <NNN>`.
+3. `cplat spec land <spec_id>`: approves the review, marks the draft PR ready and merges it once CI is green. Show its output; on a failure stop and show it.
+4. Print the next step: `/component:plan <NNN>`.
 
 ## B. New spec
 
@@ -52,14 +53,14 @@ Never edit specs from these modes. To change one, use `/component:spec --amend <
 3. **product-manager** agent (`agents.product-manager` from the routing; `svc:product-manager` in a repo without a shape), prompt: `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the `<project-map>` (`ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`), and the list of other specs (`cplat spec list --all`).
 4. `cplat spec check <spec_id>`. On errors, send them back to the product-manager once; if they persist, stop and show them.
 5. **Questions loop** (section Q).
-6. Commit `docs(spec): <spec_id> — <title>` and finish with section F.
+6. Commit `docs(spec): <spec_id> — <title>`, publish the draft: `cplat spec publish <spec_id>` (pushes only the spec's branch and opens or updates the draft PR; the owner is asked to review, which is their notification). Print its note if any. Then finish with section F.
 
 ## C. --amend <id> <change>
 
 1. `cplat spec list --all --json` to find the spec and its status. Switch to `feature/<spec_id>` (create it from `main` if the spec is already merged).
 2. If the status is not `draft`: `cplat spec set-status <id> draft --reason "amend: <one line>"`. Tell the user that it needs a new approval, and, if it has a plan and the criteria change, a new plan.
-3. **product-manager**: `MODE: amend`, `SPEC_DIR`, the change verbatim, plus any answers the user gave.
-4. `cplat spec check <id>`, then the questions loop (Q), then commit `docs(spec): amend <spec_id> — <one line>` and section F.
+3. Before the product-manager runs, read the review comments: `cplat spec review <id> --comments --json`, and pass them along with the change. If the request carries a review comment from the console ("Request changes"), first write it to a temp file and post it: `cplat spec review <id> --request-changes --body-file <file>`. **product-manager**: `MODE: amend`, `SPEC_DIR`, the change verbatim, the review comments, plus any answers the user gave.
+4. `cplat spec check <id>`, then the questions loop (Q), then commit `docs(spec): amend <spec_id> — <one line>`, run `cplat spec publish <spec_id>` and do section F.
 
 ## D. --from-plan <plan> [<repo-id>] (this repo's slice of a system plan)
 
@@ -76,7 +77,7 @@ The product-manager ends with an `OPEN QUESTIONS:` list. While it is not `none` 
 
 1. Ask the user with **AskUserQuestion**, up to 4 questions per call. For each: the question as the header text, the suggested answer as the first option marked "(Recommended)", one or two sensible alternatives; the user can always type their own answer.
 2. Send the answers to the product-manager: `MODE: amend`, "answers to open questions: …". It strikes the questions through and folds the answers into criteria.
-3. `cplat spec check <spec_id>` again.
+3. `cplat spec check <spec_id>` again. When the answers change a committed draft, commit them (`docs(spec): answer open questions for <spec_id>`) and run `cplat spec publish <spec_id>`.
 
 If the user wants to stop answering, leave the remaining questions in the spec: it stays `draft` and cannot be approved until they are answered.
 
@@ -98,6 +99,6 @@ If there are no open questions, ask with AskUserQuestion whether to approve now 
 
 - Never write code, a plan, or tests. Never change `status` except through `cplat spec`.
 - Never answer an open question on the user's behalf; never approve without the user's word (the only exception is D.3, where the user approved the system plan).
-- Commits stay local; nothing is pushed here (`/component:build` opens the PR).
+- The only push here is `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced, only `docs/specs/<id>/`); `/component:build` opens the code PR.
 
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.

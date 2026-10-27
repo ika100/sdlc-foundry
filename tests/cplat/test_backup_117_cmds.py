@@ -814,7 +814,7 @@ def test_the_restore_command_describes_the_three_actions_ac_117_8():  # AC-117.8
 
 
 def test_the_system_plugin_is_1_1_0_and_has_the_restore_command_ac_117_19():  # AC-117.19
-    assert plugin_version("system") == ("1.1.0", "1.1.0")
+    assert plugin_version("system") == ("1.2.0", "1.2.0")  # spec 117: 1.1.0 went to spec 122 (/system:set) first
     meta, body = front("plugins/system/commands/restore.md")
     assert len(meta["description"]) < 260
     assert "Usage: /system:restore <env> [--backup <name|latest>] [--replace] [--confirm prod]" in meta["description"]

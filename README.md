@@ -12,6 +12,10 @@
 You describe what you want in Claude Code; the platform scaffolds the repos (Python, Java, Go and Next.js services, plus a GitOps repo), builds and publishes multi-arch images, and renders every Kubernetes manifest from one declarative file in the GitOps repo. Secrets, a Postgres resource, OpenTelemetry observability and Kyverno guard rails are one declaration each; promotion between environments is a reviewed pull request. Everything that can be code is a tested script (`cplat`), and agents only orchestrate it.
 
 - **Documentation site:** <https://ika100.github.io/sdlc-foundry/> has the vision, the problem statement, client value, usage scenarios and the full user documentation with search.
+- **Console:** `/platform:ui` opens a local console that shows the system, its process and what needs you ([docs/console.md](docs/console.md)).
+
+  ![The console's Inbox: a promotion with its consequence, command and way back](docs/img/console/inbox.jpg)
+
 - **Start here:** [docs/USER-JOURNEY.md](docs/USER-JOURNEY.md) (end-to-end walk-through) and [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (diagrams).
 - **Needs:** [Claude Code](https://claude.com/claude-code), `git`, `gh`, `uv`, [devbox](https://www.jetify.com/devbox) and Docker for local clusters; run `/platform:doctor` to check.
 - **Status:** used end to end on a real test application; see the [changelog](docs/CHANGELOG.md) and [ADRs](docs/adr).
@@ -29,7 +33,7 @@ You describe what you want in Claude Code; the platform scaffolds the repos (Pyt
 │   ├── svc-go/                        Go agents
 │   ├── system/                        System specs across repos (/system:new, spec, plan, ship, status)
 │   ├── api/ resource/ instance/       /api:list, /resource:add|remove, /instance:promote|secret|verify
-│   ├── issue/ platform/               /issue:triage|report, /platform:doctor|update|fleet|runs|retro
+│   ├── issue/ platform/               /issue:triage|report, /platform:doctor|update|fleet|runs|retro|ui
 │   └── shared/                        cplat on the PATH, hooks, quality and security agents
 ├── shapes.yml                         Shape registry (single source of truth)
 ├── templates/
@@ -120,7 +124,7 @@ See `docs/ADOPTING.md` for the full migration guide.
 | `/instance:verify [<env>]` | instance | Smoke tests against a deployed instance |
 | `/platform:doctor` | platform | Preflight: tools, `gh` scopes, Docker, kube context, plugin versions, repo platform version, with a fix per problem |
 | `/platform:update [--ref <tag>] [--migrate]` | platform | Pull the latest skeleton (CI, devbox, Dockerfile, CLAUDE.md…) into an existing repo on a review branch; `--migrate` converts a 4.x repo |
-| `/platform:fleet update` · `/platform:runs` · `/platform:retro` | platform | Update every repo built from the platform · run records and cost · the weekly retro |
+| `/platform:fleet update` · `/platform:runs` · `/platform:retro` · `/platform:ui` | platform | Update every repo built from the platform · run records and cost · the weekly retro · the local console |
 | `/issue:report [what]` | issue | Draft a platform issue with diagnostics (secrets removed) and file it after your OK |
 | `/issue:triage` | issue | Route GitHub issues to specs, fixes or replies |
 
