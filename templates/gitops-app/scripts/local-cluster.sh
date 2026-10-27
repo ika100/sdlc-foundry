@@ -31,6 +31,9 @@
 #   WITH_CNPG            1 = CloudNativePG, 0 = never; default: 1 exactly when operators/apps/cloudnative-pg.yaml exists.
 #                        With Argo CD the operator comes from operators/root.yaml (applied before bootstrap/); only with
 #                        WITH_ARGO=0 does this script install it through a k3s HelmChart.
+#   SEAWEEDFS_OPERATOR_VERSION  SeaweedFS operator chart version (default: the targetRevision of operators/apps/seaweedfs.yaml, else 0.1.45)
+#   WITH_SEAWEEDFS       1 = SeaweedFS operator, 0 = never; default: 1 exactly when operators/apps/seaweedfs.yaml exists.
+#                        Installed like CloudNativePG: from operators/root.yaml with Argo CD, a k3s HelmChart with WITH_ARGO=0.
 #   REGISTRY_PORT        also create a local image registry reachable as localhost:<port> from the host and as
 #                        k3d-<cluster>-registry:<port> from the cluster
 # Re-running `up` is safe; it re-applies credentials and the root Application.
@@ -60,6 +63,14 @@ if [ -f "$cnpg_file" ]; then
 fi
 cnpg_version="${CNPG_VERSION:-$cnpg_default}"
 with_cnpg="${WITH_CNPG:-auto}"
+seaweedfs_file=operators/apps/seaweedfs.yaml
+seaweedfs_default=0.1.45
+if [ -f "$seaweedfs_file" ]; then
+  seaweedfs_default=$(sed -n 's/^[[:space:]]*targetRevision:[[:space:]]*["'"'"']\{0,1\}\([^"'"'"'[:space:]]*\).*/\1/p' "$seaweedfs_file" | head -1)
+  seaweedfs_default="${seaweedfs_default:-0.1.45}"
+fi
+seaweedfs_version="${SEAWEEDFS_OPERATOR_VERSION:-$seaweedfs_default}"
+with_seaweedfs="${WITH_SEAWEEDFS:-auto}"
 kyverno_version="${KYVERNO_VERSION:-3.9.1}"
 with_kyverno="${WITH_KYVERNO:-auto}"
 if [ "$with_kyverno" = auto ]; then
@@ -78,6 +89,9 @@ if [ "$with_lgtm" = auto ]; then
 fi
 if [ "$with_cnpg" = auto ]; then
   if [ -f "$cnpg_file" ]; then with_cnpg=1; else with_cnpg=0; fi
+fi
+if [ "$with_seaweedfs" = auto ]; then
+  if [ -f "$seaweedfs_file" ]; then with_seaweedfs=1; else with_seaweedfs=0; fi
 fi
 registry="${name}-registry"
 org=$(sed -n 's/^github_org:[[:space:]]*//p' .copier-answers.yml | head -1)
@@ -272,6 +286,28 @@ YAML
       k -n cnpg-system rollout status deploy/cnpg-cloudnative-pg --timeout=300s >/dev/null
     fi
 
+    if [ "$with_seaweedfs" = 1 ] && [ "$with_argo" = 1 ]; then
+      : # Argo CD installs the operator from operators/root.yaml (applied below, before bootstrap/)
+    elif [ "$with_seaweedfs" = 1 ]; then
+      echo "Installing the SeaweedFS operator ($seaweedfs_version)"
+      k apply -f - >/dev/null <<YAML
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: seaweedfs-operator
+  namespace: kube-system
+spec:
+  repo: https://seaweedfs.github.io/seaweedfs-operator
+  chart: seaweedfs-operator
+  version: ${seaweedfs_version}
+  targetNamespace: seaweedfs-operator
+  createNamespace: true
+YAML
+      for _ in $(seq 1 60); do k get crd buckets.seaweed.seaweedfs.com >/dev/null 2>&1 && break; sleep 3; done
+      for _ in $(seq 1 100); do [ -n "$(k -n seaweedfs-operator get deploy -l app.kubernetes.io/name=seaweedfs-operator -o name 2>/dev/null)" ] && break; sleep 3; done
+      k -n seaweedfs-operator rollout status deploy -l app.kubernetes.io/name=seaweedfs-operator --timeout=300s >/dev/null
+    fi
+
     if [ "$with_lgtm" = 1 ]; then
       echo "Installing the Grafana dev stack (otel-lgtm $lgtm_version): Grafana, Tempo, Loki, Prometheus in one pod (dev only)"
       # One shared stack in its own namespace: the all-in-one image runs as root, so it stays outside the application namespaces.
@@ -370,15 +406,28 @@ YAML
     if [ -n "$urls" ]; then urls="${urls}"$'\n'; fi   # command substitution strips the trailing newline
 
     if [ "$with_argo" = 1 ]; then
-      if [ "$with_cnpg" = 1 ] && [ -f operators/root.yaml ]; then
-        if k -n kube-system get helmchart cnpg >/dev/null 2>&1; then
+      if { [ "$with_cnpg" = 1 ] || [ "$with_seaweedfs" = 1 ]; } && [ -f operators/root.yaml ]; then
+        legacy=0
+        if [ "$with_cnpg" = 1 ] && k -n kube-system get helmchart cnpg >/dev/null 2>&1; then
           echo "CloudNativePG was installed by an older cluster-up (HelmChart kube-system/cnpg); keeping it. Recreate the cluster to let Argo CD manage it"
-        else
+          legacy=1
+        fi
+        if [ "$with_seaweedfs" = 1 ] && [ "$legacy" = 1 ]; then
+          echo "SeaweedFS (operators/apps/seaweedfs.yaml) is not installed either; recreate the cluster"
+        fi
+        if [ "$legacy" = 0 ]; then
           echo "Applying the operators (operators/root.yaml)"
           k apply -n argocd -f operators/root.yaml
-          for _ in $(seq 1 200); do k get crd clusters.postgresql.cnpg.io >/dev/null 2>&1 && break; sleep 3; done
-          for _ in $(seq 1 100); do k -n cnpg-system get deploy/cnpg-cloudnative-pg >/dev/null 2>&1 && break; sleep 3; done
-          k -n cnpg-system rollout status deploy/cnpg-cloudnative-pg --timeout=300s >/dev/null
+          if [ "$with_cnpg" = 1 ]; then
+            for _ in $(seq 1 200); do k get crd clusters.postgresql.cnpg.io >/dev/null 2>&1 && break; sleep 3; done
+            for _ in $(seq 1 100); do k -n cnpg-system get deploy/cnpg-cloudnative-pg >/dev/null 2>&1 && break; sleep 3; done
+            k -n cnpg-system rollout status deploy/cnpg-cloudnative-pg --timeout=300s >/dev/null
+          fi
+          if [ "$with_seaweedfs" = 1 ]; then
+            for _ in $(seq 1 200); do k get crd buckets.seaweed.seaweedfs.com >/dev/null 2>&1 && break; sleep 3; done
+            for _ in $(seq 1 100); do [ -n "$(k -n seaweedfs-operator get deploy -l app.kubernetes.io/name=seaweedfs-operator -o name 2>/dev/null)" ] && break; sleep 3; done
+            k -n seaweedfs-operator rollout status deploy -l app.kubernetes.io/name=seaweedfs-operator --timeout=300s >/dev/null
+          fi
         fi
       fi
       echo "Applying the root Application"
