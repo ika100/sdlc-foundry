@@ -150,6 +150,7 @@ tasks:
     covers: [AC-122.51]
     parallel_safe: true
     depends_on: []
+    done: true
 human_steps:
   - "Optional: to get notifications and digests while the console is closed, schedule `cplat ui notify --once` every few minutes (cron or launchd)"
   - "Optional: put Slack webhooks and the SMTP password in the environment or the OS keychain (service sdlc-foundry) as docs/console.md describes; /platform:doctor names what is missing"
