@@ -173,6 +173,14 @@ OPERATORS = {
     "seaweedfs": {"repo_url": "https://seaweedfs.github.io/seaweedfs-operator", "chart": "seaweedfs-operator", "chart_version": "0.1.45",
                   "operator_version": "1.0.42", "namespace": "seaweedfs-operator", "release": "seaweedfs-operator",
                   "crd": "buckets.seaweed.seaweedfs.com"},
+    # `selector` (optional, default `app.kubernetes.io/name=<chart>`): the operator Deployment whose image tag is the version; used by doctor.
+    "external-secrets": {"repo_url": "https://charts.external-secrets.io", "chart": "external-secrets", "chart_version": "2.12.0",
+                         "operator_version": "2.12.0", "namespace": "external-secrets", "release": "external-secrets",
+                         "crd": "clustersecretstores.external-secrets.io"},
+    "kyverno": {"repo_url": "https://kyverno.github.io/kyverno", "chart": "kyverno", "chart_version": "3.9.1",
+                "operator_version": "1.19.1", "namespace": "kyverno", "release": "kyverno",
+                "crd": "namespacedvalidatingpolicies.policies.kyverno.io",
+                "selector": "app.kubernetes.io/component=admission-controller,app.kubernetes.io/instance=kyverno"},
 }
 OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs"}
 DB_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
@@ -1344,6 +1352,21 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
     return out
 
 
+def operator_application(name: str, server: str) -> dict:
+    """The Argo CD application of one operator of the versions table (ADR-058); system and cluster repos render the same one."""
+    op = OPERATORS[name]
+    return {
+        "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+        "metadata": {"name": f"operator-{name}", "namespace": "argocd",
+                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+        "spec": {"project": "default",
+                 "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"],
+                            "helm": {"releaseName": op["release"]}},
+                 "destination": {"server": server, "namespace": op["namespace"]},
+                 "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
+                                "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}}
+
+
 def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
     """operators/ (AC-115.18): cluster-level, outside every system's tree; only when an in-cluster database runs in an environment
     whose operators are not owned by the cluster's owner."""
@@ -1370,17 +1393,7 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
     for name in OPERATORS:
         if name not in needed:
             continue
-        op = OPERATORS[name]
-        files[base / "apps" / f"{name}.yaml"] = dump({
-            "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
-            "metadata": {"name": f"operator-{name}", "namespace": "argocd",
-                         "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
-            "spec": {"project": "default",
-                     "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"],
-                                "helm": {"releaseName": op["release"]}},
-                     "destination": {"server": server, "namespace": op["namespace"]},
-                     "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
-                                    "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}})
+        files[base / "apps" / f"{name}.yaml"] = dump(operator_application(name, server))
     return files
 
 
