@@ -20,7 +20,7 @@ from system_fixtures import ALLOWED_TOP, ROOT
 PLUGINS = ROOT / "plugins"
 NOUNS = ["system", "component", "api", "resource", "instance", "issue", "platform"]
 WORKING = {
-    "system": ["new", "status", "spec", "plan", "ship", "set", "restore"],  # spec 117: system restore
+    "system": ["new", "status", "spec", "plan", "ship", "set", "restore", "autonomy"],  # spec 117: system restore; spec 124: system autonomy
     "component": ["new", "add", "set", "remove", "spec", "plan", "build", "verify", "check", "ship", "fix", "release"],
     "api": ["list"], "resource": ["add", "remove", "backup", "restore"],  # spec 117: resource backup, restore
     "instance": ["promote", "secret", "verify"], "issue": ["triage", "report"],
@@ -71,7 +71,7 @@ def changelog_5() -> str:
 
 # ---------------- AC-114.59: the working commands ----------------
 
-def test_exactly_the_32_working_commands_exist_ac_114_59():  # AC-114.59  (spec 122 adds /system:set and /platform:ui)
+def test_exactly_the_33_working_commands_exist_ac_114_59():  # AC-114.59  (spec 122 adds /system:set and /platform:ui, spec 124 /system:autonomy)
     found = {}
     for plugin in sorted(p.name for p in PLUGINS.iterdir() if p.is_dir()):
         for f in sorted((PLUGINS / plugin / "commands").glob("*.md")) if (PLUGINS / plugin / "commands").is_dir() else []:
@@ -79,7 +79,7 @@ def test_exactly_the_32_working_commands_exist_ac_114_59():  # AC-114.59  (spec 
             if "moved-to" not in fm:
                 found.setdefault(plugin, []).append(f.stem)
     assert {k: sorted(v) for k, v in found.items()} == {k: sorted(v) for k, v in WORKING.items()}
-    assert sum(len(v) for v in found.values()) == 38   # 32 (5.0 plus /platform:ui and /system:set), plus /cluster:new|add|remove (spec 125), plus /resource:backup|restore and /system:restore (spec 117)
+    assert sum(len(v) for v in found.values()) == 39   # 32 (5.0 plus /platform:ui and /system:set), plus /cluster:new|add|remove (spec 125), plus /resource:backup|restore and /system:restore (spec 117), plus /system:autonomy (spec 124)
     assert not (PLUGINS / "api" / "commands" / "check.md").exists()
 
 

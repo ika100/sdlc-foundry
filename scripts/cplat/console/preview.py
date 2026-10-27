@@ -10,6 +10,7 @@ import contextlib
 import difflib
 import hashlib
 import io
+import json
 import re
 import shlex
 import shutil
@@ -23,7 +24,11 @@ import yaml
 
 from . import actions
 
-FORMS = ("component", "api", "resource", "environment", "system")
+FORMS = ("component", "api", "resource", "environment", "system", "autonomy")
+AUTONOMY_FLAGS = (("routes", "--routes"), ("maxCriticality", "--max-criticality"), ("maxFiles", "--max-files"),
+                  ("maxLines", "--max-lines"), ("regressionTest", "--regression-test"), ("secondReview", "--second-review"),
+                  ("runsPerDay", "--runs-per-day"), ("mergesPerDay", "--merges-per-day"), ("days", "--days"), ("from", "--from"),
+                  ("to", "--to"), ("timezone", "--timezone"), ("undoWindow", "--undo-window"), ("engine", "--engine"))
 COPIED = ("applications", "bootstrap")
 _LOCK = threading.Lock()   # the commands print to the process streams
 _API_RE = re.compile(r"--(?:provides|consumes) ([\w-]+)(?::\w+)?: (.+)")
@@ -81,6 +86,14 @@ def command_of(form: str, fields: dict) -> list[str]:
         return words
     if form == "system":
         return ["/system:new", _need(fields, "name")]
+    if form == "autonomy":
+        words = ["/system:autonomy", "set", _need(fields, "env"), _need(fields, "level")]
+        for key, flag in AUTONOMY_FLAGS:
+            if _text(fields, key):
+                words += [flag, _text(fields, key)]
+        for key in sorted(k for k in fields if str(k).startswith("perRun.") and _text(fields, str(k))):
+            words += ["--per-run", f"{str(key)[len('perRun.'):]}={_text(fields, str(key))}"]
+        return words
     raise BadForm(f"unknown form {form!r}")
 
 
@@ -210,6 +223,44 @@ def _changed_envs(scratch: Path) -> list[str]:
     return sorted(envs)
 
 
+def autonomy_effect(scratch: Path, words: list[str]) -> str:
+    """`now`, `mixed` or `after-merge`: the effect `set --dry-run --json` reports for these words on the scratch copy."""
+    import autonomycmd
+    import core
+    out = io.StringIO()
+    with _LOCK, contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+        try:
+            autonomycmd.main([*words[1:], "--dry-run", "--json", "--repo-dir", str(scratch)])
+            return str(json.loads(out.getvalue()).get("effect") or "after-merge")
+        except (core.PlatformError, SystemExit, ValueError):
+            return "after-merge"
+
+
+def declared_level(snapshot: Path, env: str) -> str | None:
+    """The declared level of `env` in the model of the snapshot (None when it has none)."""
+    import gitops
+    import model
+    try:
+        m = model.load_dir(gitops.find_app(snapshot, None))
+    except Exception:   # noqa: BLE001 - a repo that cannot load has no level to go back to
+        return None
+    env_obj = next((e for e in m.environments if e.name == env), None)
+    return (getattr(env_obj, "autonomy", None) or {}).get("declared")
+
+
+def autonomy_consequence(fields: dict, effect: str) -> list[str]:
+    import autonomy
+    level = _text(fields, "level")
+    try:
+        first = autonomy.allows(level)
+    except KeyError:
+        first = f"{level} is not an autonomy level."
+    if effect in ("now", "mixed"):
+        rest = "the tighter values apply at once" + ("; the rest after the merge." if effect == "mixed" else ".")
+        return [first, f"Takes effect at once by a signal: {rest}"]
+    return [first, "Takes effect after the merge."]
+
+
 def consequence_of(form: str, fields: dict, snapshot: Path, envs: list[str]) -> list[str]:
     repo = _app_name(snapshot)
     lines = [f"Opens one pull request in {repo} with the regenerated files; nothing changes until it is merged."]
@@ -319,10 +370,13 @@ def preview(snapshot_dir: Path, form: str, fields: dict) -> dict:
                 "consequence": consequence_of(form, fields, snapshot, []),
                 "way_back": ["Close its pull request and delete the new repo."]}
     words = command_of(form, fields)
+    effect = ""
     with tempfile.TemporaryDirectory(prefix="console-preview-") as tmp:
         scratch = Path(tmp)
         make_scratch(snapshot, scratch)
         before = _read(system_yaml(scratch))
+        if form == "autonomy":
+            effect = autonomy_effect(scratch, words)
         rc, err = run_command(cplat_argv(words), scratch)
         checks = _checks_of(err, words[1]) if rc != 0 else []
         if rc == 0:
@@ -336,5 +390,10 @@ def preview(snapshot_dir: Path, form: str, fields: dict) -> dict:
         envs = _changed_envs(scratch) if rc == 0 else []
     if not checks:
         checks = [{"key": "render", "rule": "scripts/render.py --check passes", "ok": True}]
+    if form == "autonomy":
+        old = declared_level(snapshot, _text(fields, "env"))
+        return {"command": shown(words), "diff": diff, "checks": checks, "valid": all(c["ok"] for c in checks),
+                "consequence": autonomy_consequence(fields, effect),
+                "way_back": [f"/system:autonomy set {_text(fields, 'env')} {old}"] if old else ["Close its pull request before it is merged."]}
     return {"command": shown(words), "diff": diff, "checks": checks, "valid": all(c["ok"] for c in checks),
             "consequence": consequence_of(form, fields, snapshot, envs), "way_back": way_back_of(form, fields, words, snapshot)}

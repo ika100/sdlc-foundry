@@ -9,6 +9,7 @@ The GitOps repo owns every manifest. applications/<system>/system.yaml is the on
   applications/<system>/overlays/<env>/<component>/            deployment.yaml, service.yaml, [httproute.yaml], kustomization.yaml
   applications/<system>/addons/<env>/<resource>/               cluster.yaml, kustomization.yaml (only where a running component `uses` the resource)
   applications/<system>/policies/<env>/                        policy.yaml, kustomization.yaml (Kyverno guard rails, unless `policy: off`)
+  applications/<system>/autonomy.json                         only when system.yaml declares autonomy (spec 124): what an engine reads
   bootstrap/<system>-root.yaml                                 root Argo Application (app-of-apps), applied once by a human
 
 A component only runs in the environments that are keys of its `instances` (none = dev), so a new component never reaches
@@ -38,6 +39,16 @@ system.yaml (every value explicit and reviewable; the model is described in docs
     staging:
       promote: after-dev-smoke       # after-dev-smoke | manual (default); dev takes none; prod is always promoted by hand
     prod: {}
+  autonomy: {paused: true}           # optional: every environment acts as observe (the only key; spec 124)
+  # environments.<env>.autonomy (optional; prod at most act; every omitted field has its default; changes no manifest):
+  #   level: act                       # observe (default) | advise | propose | act | improve
+  #   engine: https://ai-ops.example.com   # http(s) URL of the engine serving this environment
+  #   autoMerge: {routes: [fix], maxCriticality: low}                    # low | medium | high
+  #   riskGate: {maxFiles: 5, maxLines: 200, regressionTest: true, secondReview: true}
+  #   budget: {runsPerDay: 5, mergesPerDay: 2, perRun: {minutes: 60, invocations: 20, reruns: 2, cost: 3}}
+  #   window: {days: [mon, tue, wed, thu, fri], from: "09:00", to: "17:00", timezone: UTC}
+  #   undoWindow: 24h                  # <n>m | <n>h | <n>d
+  # components.<c>.instances.<env>.autonomy: {max: propose}   # caps the instance below its environment
   components:
     todo-api:
       type: service                  # service | website | library, required with lang
@@ -110,10 +121,12 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import sys
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 
@@ -122,8 +135,8 @@ ENVS = ["dev", "staging", "prod"]
 NOT_MIGRATED = "not migrated to 5.0: run `cplat platform update --migrate`"
 MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml", "application.yaml"}
 MANAGED_PREFIXES = ("externalsecret-",)
-TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries"]
-ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup"]
+TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries", "autonomy"]
+ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
 VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"), ("library", "python"),
                ("service", "unknown")]
@@ -134,7 +147,7 @@ SERVICE_KEYS = [*COMMON_KEYS, "image", "port", "probes", "user", "volumes", "env
 # Keys an external component may carry: its package owns ports, probes, secrets and exposure (spec 069).
 EXTERNAL_KEYS = [*COMMON_KEYS, "image", "external", "provides", "consumes", "instances"]
 LIBRARY_KEYS = [*COMMON_KEYS, "provides", "consumes"]
-INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets"]
+INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets", "autonomy"]
 RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
 PLANNED_TYPES = {"cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
 RESOURCE_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
@@ -224,6 +237,20 @@ ADDONS = {
         "defaults": {"ui": "none"},
     },
 }
+LEVELS = ["observe", "advise", "propose", "act", "improve"]      # autonomy levels (spec 124); each includes the ones before
+LEVEL_CAP = {"dev": "improve", "staging": "improve", "prod": "act"}
+AUTONOMY_KEYS = ["level", "autoMerge", "riskGate", "budget", "window", "undoWindow", "engine"]
+AUTONOMY_DEFAULTS = {
+    "autoMerge": {"routes": ["fix"], "maxCriticality": "low"},
+    "riskGate": {"maxFiles": 5, "maxLines": 200, "regressionTest": True, "secondReview": True},
+    "budget": {"runsPerDay": 5, "mergesPerDay": 2, "perRun": {"minutes": 60, "invocations": 20, "reruns": 2, "cost": 3}},
+    "window": {"days": ["mon", "tue", "wed", "thu", "fri"], "from": "09:00", "to": "17:00", "timezone": "UTC"},
+    "undoWindow": "24h",
+}
+WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+CRITICALITIES = ["low", "medium", "high"]
+DURATION = re.compile(r"^([1-9][0-9]{0,3})[mhd]$")
+HHMM = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 POLICY_API = "policies.kyverno.io/v1"
 POLICY_MODES = {"Audit": "Audit", "Enforce": "Deny"}     # mode -> Kyverno validationActions
 LGTM_ENDPOINT = "http://lgtm.observability.svc:4318"    # the shared all-in-one UI stack `cluster-up` installs for `ui: lgtm`
@@ -293,6 +320,138 @@ def check_promote(where: str, env: str, value) -> None:
         fail(f"{where}: prod is always promoted by hand (manual), got '{value}'")
 
 
+def check_level(where: str, value) -> None:
+    if not isinstance(value, str) or value not in LEVELS:
+        fail(f"{where} must be one of {', '.join(LEVELS)}, got '{value}'")
+
+
+def check_keys(where: str, block, allowed: list[str]) -> dict:
+    if not isinstance(block, dict):
+        fail(f"{where} must be a mapping")
+    for k in block:
+        if k not in allowed:
+            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(allowed)})")
+    return block
+
+
+def check_int(where: str, value, low: int) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < low:
+        fail(f"{where} must be a whole number of at least {low}, got '{value}'")
+
+
+def check_flag(where: str, value) -> None:
+    if not isinstance(value, bool):
+        fail(f"{where} must be true or false, got '{value}'")
+
+
+def clock(where: str, value) -> str:
+    """`"HH:MM"`; YAML 1.1 reads an unquoted `17:00` as the number 1020 (minutes), which is accepted as that time."""
+    if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < 1440:
+        return f"{value // 60:02d}:{value % 60:02d}"
+    if not isinstance(value, str) or not HHMM.match(value):
+        fail(f'{where} must be "HH:MM", got \'{value}\'')
+    return value
+
+
+def validate_window(where: str, block) -> dict:
+    block = check_keys(where, block, list(AUTONOMY_DEFAULTS["window"]))
+    win = {**AUTONOMY_DEFAULTS["window"], **block}
+    days = win["days"]
+    if (not isinstance(days, list) or not days or len(set(map(str, days))) != len(days)
+            or any(not isinstance(d, str) or d not in WEEKDAYS for d in days)):
+        fail(f"{where}.days must be a non-empty list of {', '.join(WEEKDAYS)} without duplicates, got '{days}'")
+    win["from"], win["to"] = clock(f"{where}.from", win["from"]), clock(f"{where}.to", win["to"])
+    if win["from"] == win["to"]:
+        fail(f"{where}: from and to must differ, got '{win['from']}' twice")
+    tz = win["timezone"]
+    try:
+        if not isinstance(tz, str) or not tz or tz.startswith("/") or ".." in tz:
+            raise ValueError(tz)
+        ZoneInfo(tz)
+    except (ValueError, ZoneInfoNotFoundError, OSError):
+        fail(f"{where}.timezone must be an IANA time zone like Europe/Berlin, got '{tz}'")
+    return win
+
+
+def validate_autonomy(env: str, block) -> dict:
+    """`environments.<env>.autonomy` (spec 124): the declared level, engine and guardrails, every omitted field at its default."""
+    where = f"environments.{env}.autonomy"
+    block = check_keys(where, {} if block is None else block, AUTONOMY_KEYS)
+    level = block.get("level", "observe")
+    check_level(f"{where}.level", level)
+    if level == "improve" and LEVEL_CAP[env] == "act":
+        fail(f"{where}.level: act is the highest level allowed in {env}, got '{level}'")
+    engine = block.get("engine")
+    if "engine" in block and (not isinstance(engine, str) or not re.match(r"^https?://[^\s/]+\S*$", engine)):
+        fail(f"{where}.engine must be an http(s) URL, got '{engine}'")
+    merge = check_keys(f"{where}.autoMerge", block.get("autoMerge", {}), list(AUTONOMY_DEFAULTS["autoMerge"]))
+    routes = merge.get("routes", ["fix"])
+    if not isinstance(routes, list):
+        fail(f"{where}.autoMerge.routes must be a list (allowed: fix)")
+    for r in routes:
+        if r == "spec":
+            fail(f"{where}.autoMerge.routes: spec is refused: a spec always needs a person's approval (allowed: fix)")
+        if r != "fix":
+            fail(f"{where}.autoMerge.routes: '{r}' is not a route (allowed: fix)")
+    crit = merge.get("maxCriticality", "low")
+    if crit not in CRITICALITIES:
+        fail(f"{where}.autoMerge.maxCriticality must be one of {', '.join(CRITICALITIES)}, got '{crit}'")
+    risk = check_keys(f"{where}.riskGate", block.get("riskGate", {}), list(AUTONOMY_DEFAULTS["riskGate"]))
+    for k in ("maxFiles", "maxLines"):
+        if k in risk:
+            check_int(f"{where}.riskGate.{k}", risk[k], 1)
+    for k in ("regressionTest", "secondReview"):
+        if k in risk:
+            check_flag(f"{where}.riskGate.{k}", risk[k])
+    budget = check_keys(f"{where}.budget", block.get("budget", {}), list(AUTONOMY_DEFAULTS["budget"]))
+    for k in ("runsPerDay", "mergesPerDay"):
+        if k in budget:
+            check_int(f"{where}.budget.{k}", budget[k], 0)
+    per_run = check_keys(f"{where}.budget.perRun", budget.get("perRun", {}), list(AUTONOMY_DEFAULTS["budget"]["perRun"]))
+    for k, v in per_run.items():
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0:
+            fail(f"{where}.budget.perRun.{k} must be a number above 0, got '{v}'")
+    undo = block.get("undoWindow", "24h")
+    if not isinstance(undo, str) or not DURATION.match(undo):
+        fail(f"{where}.undoWindow must be a duration like 24h, 90m or 2d, got '{undo}'")
+    d = AUTONOMY_DEFAULTS
+    return {"declared": level, "engine": engine,
+            "autoMerge": {**d["autoMerge"], **merge, "routes": list(routes), "maxCriticality": crit},
+            "riskGate": {**d["riskGate"], **risk},
+            "budget": {**d["budget"], **budget, "perRun": {**d["budget"]["perRun"], **per_run}},
+            "window": validate_window(f"{where}.window", block.get("window", {})), "undoWindow": undo}
+
+
+def validate_pause(doc: dict) -> bool:
+    """The top-level `autonomy: {paused: true}`."""
+    block = check_keys("autonomy", {} if doc.get("autonomy") is None else doc["autonomy"], ["paused"])
+    if "paused" in block and not isinstance(block["paused"], bool):
+        fail("autonomy.paused must be true or false")
+    return block.get("paused", False)
+
+
+def lower_level(a: str, b: str) -> str:
+    return a if LEVELS.index(a) <= LEVELS.index(b) else b
+
+
+def autonomy_json(system: str, paused: bool, envs: dict, promote: dict, services: list[dict]) -> str:
+    """The rendered `autonomy.json` an engine reads (equal to the autonomy part of `cplat model show --json`)."""
+    out_envs: dict[str, dict] = {}
+    for e in ENVS:
+        declared = envs[e]["declared"]
+        effective = "observe" if paused else "act" if declared == "improve" else declared
+        out_envs[e] = {**envs[e], "effective": effective, "cap": LEVEL_CAP[e], "paused": paused,
+                       "promotion": "main" if e == "dev" else promote.get(e, "manual")}
+    instances = {}
+    for s in services:
+        for e in s["environments"]:
+            top = s["_eff"][e].get("autonomy_max")
+            eff = out_envs[e]["effective"]
+            instances[f"{s['name']}/{e}"] = {"max": top, "effective": eff if top is None else lower_level(eff, top)}
+    doc = {"schema": 1, "system": system, "paused": paused, "levels": LEVELS, "environments": out_envs, "instances": instances}
+    return json.dumps(doc, indent=2, sort_keys=True) + "\n"
+
+
 def validate_alerts(obs: dict, where: str) -> None:
     """Alert settings of an environment's observability (spec 092). Only the poll reads them; the manifests do not change."""
     if "alerts" in obs and not isinstance(obs["alerts"], bool):
@@ -356,7 +515,7 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
     if names != ENVS:
         fail(f"environments must be dev, staging, prod in this order (the promotion order), got {', '.join(map(str, names)) or 'none'}")
     hosts: dict[str, str] = {}
-    conf: dict = {"policy": {}, "observability": {}, "operators": {}, "backup": {}}
+    conf: dict = {"policy": {}, "observability": {}, "operators": {}, "backup": {}, "autonomy": {}, "promote": {}, "declared": False}
     for e in ENVS:
         c = envs[e] if envs[e] is not None else {}
         if not isinstance(c, dict):
@@ -386,6 +545,10 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
             conf["operators"][e] = "owner"
         if "backup" in c:
             conf["backup"][e] = c["backup"]       # checked by validate_backups, once the resources are known
+        conf["autonomy"][e] = validate_autonomy(e, c.get("autonomy"))
+        conf["declared"] = conf["declared"] or "autonomy" in c
+        if "promote" in c:
+            conf["promote"][e] = c["promote"]
     return hosts, conf
 
 
@@ -473,13 +636,18 @@ def validate_instances(c: str, spec: dict, external: bool) -> dict:
         label = f"components.{c}.instances.{e}"
         if not isinstance(i, dict):
             fail(f"{label} must be a mapping")
-        allowed = ["promote"] if external else INSTANCE_KEYS
+        allowed = ["promote", "autonomy"] if external else INSTANCE_KEYS
         for k in i:
             if k not in allowed:
                 fail(f"{label}: unknown key '{k}' (allowed: {', '.join(allowed)})")
         if "promote" in i:
             check_promote(f"{label}.promote", e, i["promote"])
         eff: dict = {}
+        if "autonomy" in i:
+            block = check_keys(f"{label}.autonomy", i["autonomy"] if i["autonomy"] is not None else {}, ["max"])
+            if "max" in block:
+                check_level(f"{label}.autonomy.max", block["max"])
+            eff["autonomy_max"] = block.get("max")
         if external:
             out[e] = eff
             continue
@@ -925,6 +1093,7 @@ def _load_system(app_dir: Path) -> dict:
     if not isinstance(doc.get("owner"), str) or not doc["owner"].strip():
         fail("owner is required: a non-empty string")
     hosts, env_conf = validate_environments(doc)
+    paused = validate_pause(doc)
     comps_doc = doc.get("components") or {}
     if not isinstance(comps_doc, dict):
         fail("components must be a mapping of names to components")
@@ -941,7 +1110,9 @@ def _load_system(app_dir: Path) -> dict:
     cfg = {"gateway": doc.get("gateway"), "secretStore": doc.get("secretStore"), "hosts": hosts, "registries": [str(r) for r in registries],
            "policy": env_conf["policy"], "observability": env_conf["observability"], "operators": env_conf["operators"],
            "backup": backups, "resources": resources}
-    return {"system": d, "owner": doc["owner"], "services": services, "libraries": [c["name"] for c in comps if c["type"] == "library"], "cfg": cfg}
+    declared = "autonomy" in doc or env_conf["declared"] or any("autonomy_max" in s["_eff"][e] for s in services for e in s["environments"])
+    autonomy = autonomy_json(d, paused, env_conf["autonomy"], env_conf["promote"], services) if declared else None
+    return {"system": d, "owner": doc["owner"], "autonomy": autonomy, "services": services, "libraries": [c["name"] for c in comps if c["type"] == "library"], "cfg": cfg}
 
 
 # ---------------- manifests ----------------
@@ -1679,6 +1850,8 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                 "apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
                 "resources": sorted(files), "images": [{"name": s["image"], "newTag": tag}],
             })
+    if system["autonomy"] is not None:
+        out[app_dir / "autonomy.json"] = system["autonomy"]
     return out
 
 
@@ -1738,6 +1911,8 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
 def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
     """Overlay component dirs for components/envs no longer declared, and generated files no longer produced."""
     stale: list[Path] = []
+    if (app_dir / "autonomy.json").is_file() and app_dir / "autonomy.json" not in wanted:
+        stale.append(app_dir / "autonomy.json")
     for env in ENVS:
         base = app_dir / "overlays" / env
         if not base.is_dir():

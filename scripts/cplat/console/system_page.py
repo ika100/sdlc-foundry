@@ -335,10 +335,25 @@ def model_forms(ctx: Any) -> str:
 
 # ---------------- the page ----------------
 
+TABS = ("overview", "autonomy")
+
+
+def _tabs(current: str) -> str:
+    links = "".join(f'<a href="/system?tab={t}" data-tab="{t}"{" aria-current=" + chr(34) + "page" + chr(34) if t == current else ""}>{t.capitalize()}</a>'
+                    for t in TABS)
+    return f'<nav aria-label="System sections" class="tabs">{links}</nav>'
+
+
 def page(ctx: Any, query: dict[str, str]) -> str:
     """The full HTML of `/system`."""
     from console import layout   # imported here: layout is shared and may be replaced in tests
 
+    tab = query.get("tab") or "overview"
+    if tab not in TABS:
+        raise LookupError(f"no such System tab {tab!r}")
+    if tab == "autonomy":
+        from console import autonomy_page
+        return layout.page("System", "system", _tabs(tab) + autonomy_page.body(ctx), state=ctx.state())
     status = ctx.data("status") or {}
     model = ctx.data("model") or {}
     gaps = _list([f'<strong>{esc(u.get("source"))}</strong> cannot be read: {esc(u.get("error"))}. Its cells show unknown.'
@@ -346,5 +361,5 @@ def page(ctx: Any, query: dict[str, str]) -> str:
     where = _part(ctx, "status", f"<h2>Where it runs</h2>{_grid(ctx, status, model)}{gaps}")
     parts = _part(ctx, "model", f"<h2>Parts and relations</h2>{_parts(status, model)}") if ctx.source("model") else \
         f"<h2>Parts and relations</h2>{_parts(status, model)}"
-    body = f"<section>{where}</section><section>{parts}</section>{model_forms(ctx)}"
+    body = _tabs(tab) + f"<section>{where}</section><section>{parts}</section>{model_forms(ctx)}"
     return layout.page("System", "system", body, state=ctx.state())

@@ -31,7 +31,7 @@ _PR_RE = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
 _RUN_RE = re.compile(r"\b\d{8}T\d{6}Z-[0-9a-f]{8}\b")
 _PRIVATE = ("_argv", "_key", "_pid", "_retried")
 SINGLE_SESSION = {"approve", "request-changes", "answer", "promote", "amend", "fix", "make-spec", "dismiss", "cut-release",
-                  "describe", "model"}
+                  "describe", "model", "pause", "resume", "undo", "review-approve"}
 REPO_LEVEL = {"describe", "model", "clone"}
 
 
@@ -85,9 +85,11 @@ REPO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 VERSION = re.compile(r"^v?[0-9A-Za-z][0-9A-Za-z._-]{0,62}$")
 NUMBER = re.compile(r"^[0-9]{1,6}(\.[0-9]{1,2})?$")
+EVENT = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[a-z0-9-]{1,40}$")   # design.md "Console actions": undo
+PR_NUMBER = re.compile(r"^[0-9]{1,6}$")
 LIMITS = ("minutes", "invocations", "reruns", "cost")
 MODEL_COMMANDS = ("/component:add ", "/component:set ", "/component:remove ", "/resource:add ", "/resource:remove ",
-                  "/system:set ", "/system:new ")
+                  "/system:set ", "/system:new ", "/system:autonomy set ")
 MAX_TEXT = 2000
 
 
@@ -150,10 +152,17 @@ def _slash(kind: str, obj: dict, args: dict) -> tuple[str, list[str]]:
     if kind == "describe":
         text = _need(args, "text")
         return (f"Let Claude decide: {text}" if level == "decide" else f"/{level}:spec {text}"), []
+    if kind in ("pause", "resume"):
+        return f"/system:autonomy {kind}", []
+    if kind == "undo":
+        return f"/system:autonomy undo {_match(EVENT, obj.get('event'), 'event')}", []
+    if kind == "review-approve":
+        return (f"/system:autonomy approve {_match(REPO, obj.get('pr_repo'), 'pr_repo')}#{_match(PR_NUMBER, obj.get('pr'), 'pr')}", [])
     if kind == "model":
         command = _need(args, "command")
         if not command.startswith(MODEL_COMMANDS):
-            raise ValueError("a model action runs only /component:add|set|remove, /resource:add|remove, /system:set or /system:new")
+            raise ValueError("a model action runs only /component:add|set|remove, /resource:add|remove, /system:set, /system:new "
+                             "or /system:autonomy set")
         return command, []
     raise ValueError(f"unknown action kind {kind!r}")
 
@@ -272,7 +281,7 @@ def _public(a: dict) -> dict:
 def _lock_key(kind: str, obj: dict, args: dict) -> str:
     if kind in REPO_LEVEL:
         return json.dumps([kind, obj.get("repo"), args], sort_keys=True)
-    ident = {k: obj.get(k) for k in ("repo", "spec", "run_id", "issue", "component", "version")}
+    ident = {k: obj.get(k) for k in ("repo", "spec", "run_id", "issue", "component", "version", "event", "pr_repo", "pr")}
     return json.dumps(ident, sort_keys=True)
 
 

@@ -99,7 +99,7 @@ def test_the_json_is_one_object_with_the_documented_keys_ac_113_15(tmp_path, cap
     rc, out, err = show(tmp_path, "--json", capsys=capsys)
     assert rc == 0 and err == ""
     d = json.loads(out)                                             # the whole stdout is one JSON object
-    assert set(d) == {"schema", "system", "environments", "components", "apis", "resources", "instances", "resource_instances", "relations"}
+    assert set(d) == {"schema", "system", "environments", "components", "apis", "resources", "instances", "resource_instances", "relations", "autonomy"}  # spec 124 adds autonomy
     assert d["schema"] == 2
     assert d["system"] == {"name": "shop", "owner": "acme", "components": ["shop-api", "stock"], "resources": ["postgres"], "apis": []}
 

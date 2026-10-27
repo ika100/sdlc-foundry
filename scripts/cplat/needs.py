@@ -16,6 +16,8 @@ import statistics
 import sys
 from pathlib import Path
 
+import autonomy
+import engine_issue
 import gitops
 import model
 import releases
@@ -30,7 +32,7 @@ SCHEMA = 1
 MARKER = re.compile(r"<!--\s*cplat:spec\s+(\S+)\s*-->")
 CREATED = re.compile(r"^\s*[-*]\s+(\d{4}-\d{2}-\d{2})\b", re.MULTILINE)
 UNATTENDED = ["Plan", "Build", "Land", "Dev", "Staging"]
-TRIAGE_LABELS = {"alert", "smoke-failure"}
+TRIAGE_LABELS = {"alert", "smoke-failure", "signal"}
 MIN_COMPARABLE = 3
 
 
@@ -186,13 +188,97 @@ def _escalations(rows: list[dict]) -> list[dict]:
         number = (spec_id or "").split("-", 1)[0]
         ref = f" pull request #{pr['number']}" if pr.get("number") else " any pull request"
         reason = (r.get("escalation") or {}).get("reason") or "run escalated"
+        issue = r.get("issue") if r.get("engine") and isinstance(r.get("issue"), dict) else None
+        command = f"/component:fix #{issue['number']}" if issue else f"/{r.get('level') or 'component'}:ship {number}".rstrip()
         items.append({
             "id": f"escalation:{r['run_id']}", "kind": "escalation", "stage": r.get("stage") or "Build",
             "object": _obj("run", r.get("repo"), spec=spec_id, run_id=r["run_id"], pr=pr.get("number"), url=pr.get("url")),
             "since": r.get("ended_at") or r.get("started_at") or "", "reason": reason,
-            "command": f"/{r.get('level') or 'component'}:ship {number}".rstrip(), "cwd_repo": r.get("repo"),
+            "command": command, "cwd_repo": issue.get("repo") if issue else r.get("repo"),
             "consequence": {"branch": f"feature/{spec_id}" if spec_id else None, "pr": pr.get("number"), "deployed": False},
             "way_back": {"text": f"Stopping keeps the branch and{ref}; nothing was deployed."}})
+    return items
+
+
+_GUARD_TEXT = {
+    "autoMerge.routes": lambda f, p: f"route {f.get('route')}, auto-merge only for {', '.join(p['autoMerge']['routes'])}",
+    "autoMerge.maxCriticality": lambda f, p: f"criticality {f.get('criticality')}, at most {p['autoMerge']['maxCriticality']}",
+    "riskGate.maxFiles": lambda f, p: f"{(f.get('change') or {}).get('files')} files, at most {p['riskGate']['maxFiles']}",
+    "riskGate.maxLines": lambda f, p: f"{(f.get('change') or {}).get('lines')} lines, at most {p['riskGate']['maxLines']}",
+    "riskGate.regressionTest": lambda f, p: "no regression test that failed before the fix and passes after it",
+    "riskGate.secondReview": lambda f, p: f"second review {(f.get('second_review') or {}).get('result') or 'missing'}",
+    "window": lambda f, p: f"outside the window ({p['window']['from']} to {p['window']['to']} {p['window']['timezone']})",
+}
+
+
+def _why(guardrail: str, fix: dict, policy: dict, merges: int, runs_today: int) -> dict:
+    if guardrail == "budget.mergesPerDay":
+        text = f"{merges} merges today, at most {policy['budget']['mergesPerDay']}"
+    elif guardrail == "budget.runsPerDay":
+        text = f"{runs_today} runs today, at most {policy['budget']['runsPerDay']}"
+    else:
+        text = _GUARD_TEXT[guardrail](fix, policy)
+    return {"guardrail": guardrail, "text": text}
+
+
+def _ci(slug: str, number: int) -> tuple[str, bool]:
+    """(`passed|failed|pending|unknown`, pull request still open); GitHub failing counts as unknown and open."""
+    try:
+        data = _json(["pr", "view", str(number), "-R", slug, "--json", "statusCheckRollup,state"]) or {}
+    except Exception:  # noqa: BLE001
+        return "unknown", True
+    if str(data.get("state") or "OPEN").upper() != "OPEN":
+        return "unknown", False
+    checks = data.get("statusCheckRollup") or []
+    bad = {"FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"}
+    if any(str(c.get("conclusion") or c.get("state") or "").upper() in bad for c in checks):
+        return "failed", True
+    if any(str(c.get("status") or "COMPLETED").upper() != "COMPLETED" or c.get("state") == "PENDING" for c in checks):
+        return "pending", True
+    return ("passed" if checks else "unknown"), True
+
+
+def _reviews(rows: list[dict], m: model.Model, gitops_slug: str | None) -> list[dict]:
+    """A `review` item per engine fix whose pull request is open and waits for a person: at `propose`, or at `act`
+    when the fix is outside a guardrail (AC-124.14, AC-124.17)."""
+    now = runs.utcnow()
+    today = runs._iso(now)[:10]
+    items = []
+    for r in rows:
+        pr = r.get("pr") or {}
+        if not r.get("engine") or r.get("kind") != "fix" or r.get("stopped") or r.get("outcome") or not pr.get("number"):
+            continue
+        env = next((e for e in m.environments if e.name == r.get("environment")), None)
+        inst = m.instance(r.get("component") or "", r.get("environment") or "")
+        if env is None or not env.autonomy:
+            continue
+        level = (inst.autonomy.get("effective") if inst and inst.autonomy else None) or env.autonomy["effective"]
+        fix = r.get("fix") or {}
+        if level not in ("propose", "act") or (fix.get("decision") or {}).get("action") == "stop":
+            continue
+        same = [o for o in rows if o.get("engine") and o.get("environment") == r.get("environment") and str(o.get("started_at") or "").startswith(today)]
+        merges = sum(1 for o in same if o is not r and ((o.get("fix") or {}).get("decision") or {}).get("action") == "merge")
+        if level == "propose":
+            why = [{"guardrail": "level", "text": "level propose: a person merges every fix"}]
+        else:
+            names = autonomy.outside(env.autonomy, {**fix, "route": fix.get("route")}, merges_today=merges, runs_today=len(same), now=now)
+            why = [_why(g, fix, env.autonomy, merges, len(same)) for g in names]
+        if not why:
+            continue
+        ci, is_open = _ci(pr.get("repo") or (r.get("repo") or ""), pr["number"])
+        if not is_open:
+            continue
+        repo = r.get("repo")
+        reason = "; ".join(f"outside {w['guardrail']} ({w['text']})" for w in why) if level == "act" else why[0]["text"]
+        items.append({
+            "id": f"review:{repo}#{pr['number']}", "kind": "review", "stage": "Land",
+            "object": _obj("run", repo, run_id=r["run_id"], issue=(r.get("issue") or {}).get("number"), component=r.get("component"),
+                           pr=pr["number"], url=pr.get("url"), engine=r.get("engine"), environment=r.get("environment")),
+            "since": r.get("started_at") or "", "reason": reason, "command": f"/system:autonomy approve {repo}#{pr['number']}",
+            "cwd_repo": gitops_slug,
+            "consequence": {"why": why, "level": level, "regression": fix.get("regression"), "ci": ci,
+                            "second_review": fix.get("second_review"), "summary": fix.get("summary"), "merges_to": "dev"},
+            "way_back": {"text": "After the merge, Undo or a revert pull request takes the change back; the issue stays linked."}})
     return items
 
 
@@ -295,6 +381,11 @@ def triage_detail(names: set[str], body: str) -> dict:
     return {k: v for k, v in out.items() if v}
 
 
+def _engine_of(names) -> str | None:
+    """The engine named by an `engine:<name>` label."""
+    return next((n[len("engine:"):] for n in sorted(n for n in names if n) if n.startswith("engine:")), None)
+
+
 def _triage(slug: str) -> list[dict]:
     issues = _json(["issue", "list", "-R", slug, "--state", "open", "--label", "triage",
                     "--json", "number,title,createdAt,url,labels,body"]) or []
@@ -303,8 +394,13 @@ def _triage(slug: str) -> list[dict]:
         names = {(x.get("name") if isinstance(x, dict) else x) for x in i.get("labels") or []}
         if "triage" not in names or not names & TRIAGE_LABELS:
             continue
+        extra: dict = {}
+        detail = triage_detail(names, i.get("body") or "")
+        if "signal" in names:
+            extra["engine"] = _engine_of(names)
+            detail = {**detail, "signal": engine_issue.parse(i.get("body") or "", sorted(names))}
         items.append({"id": f"triage:{slug}:{i['number']}", "kind": "triage", "stage": "Issue",
-                      "object": _obj("issue", slug, issue=i["number"], url=i.get("url"), detail=triage_detail(names, i.get("body") or "")), "since": i.get("createdAt") or "",
+                      "object": _obj("issue", slug, issue=i["number"], url=i.get("url"), detail=detail, **extra), "since": i.get("createdAt") or "",
                       "reason": f"{i.get('title') or 'issue'} (not routed yet)", "command": f"/issue:triage {i['number']}",
                       "cwd_repo": slug, "consequence": None, "way_back": None})
     return items
@@ -317,13 +413,14 @@ def _issues(slug: str, since_days: int) -> list[dict]:
     out = []
     for state, extra in (("open", []), ("closed", ["--search", f"closed:>={cutoff}"])):
         rows = _json(["issue", "list", "-R", slug, "--state", state, "--limit", "200", *extra,
-                      "--json", "number,title,labels,createdAt,closedAt,url"]) or []
+                      "--json", "number,title,labels,createdAt,closedAt,url,body"]) or []
         for i in rows:
             names = [(x.get("name") if isinstance(x, dict) else str(x)) for x in i.get("labels") or []]
             if "tracked" in names:
                 continue
             out.append({"repo": slug, "number": i.get("number"), "title": i.get("title") or "", "labels": names, "state": state,
-                        "created_at": i.get("createdAt") or "", "closed_at": i.get("closedAt") or None, "url": i.get("url") or ""})
+                        "created_at": i.get("createdAt") or "", "closed_at": i.get("closedAt") or None, "url": i.get("url") or "",
+                        "engine": _engine_of(names), "signal": engine_issue.parse(i.get("body") or "", names)})
     return out
 
 
@@ -351,6 +448,7 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
         rows = runlist.collect(30)["runs"]
         done = [r for r in rows if r.get("phase") == "done"]
         items += _escalations(rows)
+        items += _reviews(rows, m, gitops_slug)
     except Exception as e:  # noqa: BLE001
         src.fail("runs", e, ["escalation"])
     for slug in repos:

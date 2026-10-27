@@ -25,7 +25,7 @@ import yaml
 
 import stages
 from console import actions, handoff
-from console.html import action_button, command_block, esc, freshness, short_version, stage_badge
+from console.html import action_button, command_block, engine_badge, esc, freshness, short_version, signal_facts, stage_badge
 
 _SPLIT = re.compile(r"[:@/]")
 _BUDGET_LIMITS = ("minutes", "invocations", "reruns", "cost")
@@ -346,6 +346,33 @@ def _record_url(run: dict) -> str | None:
         return None
 
 
+def _engine_html(run: dict) -> str:
+    """What an engine fix run did: actor, issue, level, commit, regression test and the guardrails it stood outside of (AC-124.11)."""
+    engine = run.get("engine") or (run.get("actor") or {}).get("name")
+    fix = run.get("fix") if isinstance(run.get("fix"), dict) else {}
+    if not engine:
+        return ""
+    rows: list[tuple[str, str]] = [("Actor", f"by {esc(engine)} {engine_badge(engine)}")]
+    issue = run.get("issue") if isinstance(run.get("issue"), dict) else {}
+    if issue.get("url"):
+        rows.append(("Issue", _link(f"#{issue.get('number')}", issue["url"])))
+    policy = fix.get("policy") or {}
+    if policy.get("level"):
+        rows.append(("Level", esc(policy["level"])))
+    sha = str(policy.get("commit") or "")
+    if sha:
+        rows.append(("Policy commit", f"<code>{esc(sha[:7])}</code>"))
+    reg = fix.get("regression") or {}
+    if reg.get("test"):
+        rows.append(("Regression test", f"<code>{esc(reg['test'])}</code> {esc(reg.get('before'))} before, {esc(reg.get('after'))} after"))
+    decision = fix.get("decision") or {}
+    if decision.get("action"):
+        outside = decision.get("outside") or []
+        text = esc(decision["action"]) + (": outside " + ", ".join(f"<code>{esc(o)}</code>" for o in outside) if outside else "")
+        rows.append(("Decision", text))
+    return _section("Engine fix", _kv(rows))
+
+
 def panel_run(ctx: Any, ident: str) -> str:
     """One run: stage, budget, why it stopped, ways forward and the links to its evidence."""
     run = next((r for r in _runs(ctx) if r.get("run_id") == ident), None)
@@ -365,7 +392,7 @@ def panel_run(ctx: Any, ident: str) -> str:
     head = _kv([("Spec", esc(run.get("spec"))), ("Repo", esc(run.get("repo"))),
                 ("Stage", _stage_or_done(stage) + (" stopped" if run.get("stopped") else "")),
                 ("Budget", esc(_budget_line(run))), ("Smoke", esc(_smoke_text(run)))])
-    body = (head + (_section("Why it stopped", failure or "<p>The run stopped without a recorded failure.</p>") if troubled else "")
+    body = (head + _engine_html(run) + (_section("Why it stopped", failure or "<p>The run stopped without a recorded failure.</p>") if troubled else "")
             + (_ways_forward(run) if troubled else "") + (_smoke_ways(run) if _not_run(run) else "") + _section("Where the evidence lives", link_html))
     return _aside(f"Run {ident}", body, ctx, _read_at(ctx, "runs"))
 
@@ -377,16 +404,19 @@ def panel_issue(ctx: Any, ident: str) -> str:
     needs = ctx.data("needs") if isinstance(ctx.data("needs"), dict) else {}
     number = str(ident).rsplit("#", 1)[-1]             # `<n>`, `#<n>` or `<repo>#<n>`
     item = next((i for i in needs.get("items") or [] if str((i.get("object") or {}).get("issue")) == number), None)
+    signal = None
     if item is not None:
         obj = dict(item["object"])
         obj.setdefault("repo", item.get("cwd_repo"))
         stage, why, title = item.get("stage") or "Issue", item.get("reason"), ""
+        signal = (obj.get("detail") or {}).get("signal") if isinstance(obj.get("detail"), dict) else None
     else:
         found = next((i for i in needs.get("issues") or [] if isinstance(i, dict) and str(i.get("number")) == number), None)
         if found is None:
             raise LookupError(f"unknown issue {ident!r}")
         obj = {"type": "issue", "repo": found.get("repo"), "issue": found["number"], "spec": None}
         stage, why, title = "Issue", "Open and not tracked by a spec.", found.get("title") or ""
+        signal = found.get("signal")
     n, repo = obj["issue"], obj.get("repo")
     dismiss = (f'<form><textarea name="reason" aria-label="Reason" placeholder="Why is this not worth fixing?" required></textarea>'
                + _action("dismiss", "Dismiss", "d", obj, f"/issue:triage {n} dismiss as wontfix: <reason>",
@@ -397,7 +427,7 @@ def panel_issue(ctx: Any, ident: str) -> str:
     detail = obj.get("detail") if isinstance(obj.get("detail"), dict) else {}
     facts += [(label, esc(detail[key])) for label, key in (("Failing check", "check"), ("Failing test", "test"), ("Criterion", "criterion"),
                                                            ("Last error", "error"), ("Diagnosis", "diagnosis")) if detail.get(key)]
-    body = (_kv(facts)
+    body = (_kv(facts) + signal_facts(signal)
             + _section("What do you want to do", _action("fix", "Fix it", None, obj, f"/component:fix #{n}", primary=True)
                        + _action("make-spec", "Make a spec", None, obj, f"/component:spec #{n}") + dismiss))
     return _aside(f"Issue #{n}", body, ctx, _read_at(ctx, "needs"))
