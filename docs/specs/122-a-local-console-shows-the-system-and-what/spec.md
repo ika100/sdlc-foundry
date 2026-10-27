@@ -1,7 +1,7 @@
 ---
 spec_id: 122-a-local-console-shows-the-system-and-what
 title: A local console shows the system, its process and what needs you
-status: building
+status: done
 priority: P2
 ---
 
@@ -174,3 +174,4 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - 2026-10-27 building
 - 2026-10-27 done
 - 2026-10-27 amended: the documentation lives in the console too: an in-console guide with screenshots, stages and a command reference (AC-122.52)
+- 2026-10-27 done

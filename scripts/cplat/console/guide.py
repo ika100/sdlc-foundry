@@ -53,7 +53,7 @@ def inline(text: str) -> str:
     out = _html.escape(out, quote=True)
     out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
     out = re.sub(r"!\[([^\]]*)\]\(([^)\s]+)\)",
-                 lambda m: f'<img src="{_href(_html.unescape(m.group(2)))}" alt="{m.group(1)}">', out)
+                 lambda m: f'<img src="{_html.escape(_href(_html.unescape(m.group(2))), quote=True)}" alt="{m.group(1)}">', out)
 
     def link(m: re.Match) -> str:
         href = _href(_html.unescape(m.group(2)))

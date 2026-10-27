@@ -63,3 +63,9 @@ def test_the_renderer_escapes_text_ac_122_52():
     out, _ = guide.render('A <script>alert(1)</script> and `<b>` and [x](javascript:alert(1))\n')
     assert "<script>" not in out and "&lt;b&gt;" in out
     assert help_text.KEYS and any(k == "g" for k, _ in help_text.KEYS)
+
+
+def test_link_and_image_targets_cannot_break_out_of_their_attribute_ac_122_52():
+    """AC-122.52 a quote in a link or image target stays inside the attribute; javascript: never becomes an href."""
+    out, _ = guide.render('![a](https://a"onerror="alert(1)) [b](JavaScript:alert(1))\n')
+    assert 'onerror="' not in out and 'href="javascript' not in out.lower()
