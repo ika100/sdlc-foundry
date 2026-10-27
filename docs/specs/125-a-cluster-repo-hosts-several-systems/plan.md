@@ -17,6 +17,7 @@ tasks:
     covers: [AC-125.15]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: cluster renderer — cluster.yaml validation, cluster/ layout, --check/--crds/--systems/--name, system_render.py symlink
     files: [templates/cluster-gitops/scripts/render.py, templates/cluster-gitops/scripts/system_render.py]
@@ -59,6 +60,7 @@ tasks:
     covers: [AC-125.1, AC-125.7, AC-125.8, AC-125.18]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t10
     title: platform doctor in a cluster repo — operator versions per listed operator, sync and health per system application
     files: [scripts/cplat/doctor.py]
@@ -77,6 +79,7 @@ tasks:
     covers: [AC-125.14, AC-125.18]
     parallel_safe: true
     depends_on: []
+    done: true
 human_steps:
   - "After the release: run /plugin marketplace update sdlc-foundry so the new cluster plugin is available (a cluster repo enables cluster@sdlc-foundry in its own .claude/settings.json)."
   - "Per shared cluster: /cluster:new <name>, set the CI secret SYSTEMS_TOKEN (fine-grained token, Contents: read on the system repos), list the operators, /cluster:add each system, then once KUBE_CONTEXT=<ctx> REPO_TOKEN=<read-only token> devbox run bootstrap (docs/CLUSTERS.md)."
