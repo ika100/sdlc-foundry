@@ -41,6 +41,7 @@ tasks:
     covers: [AC-122.7, AC-122.8, AC-122.42, AC-122.47]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t6
     title: needs.py — `cplat needs --json` with the five kinds, consequence and way back
     files: [scripts/cplat/needs.py]
