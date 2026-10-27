@@ -18,7 +18,7 @@
   var opener = null;
   var activityTimer = null;
   var STALE_MS = 120000;
-  var LOCAL_ACTIONS = ["palette", "retry-source", "close-panel", "stop-console", "close-palette"];
+  var LOCAL_ACTIONS = ["open-system", "palette", "retry-source", "close-panel", "stop-console", "close-palette"];
   var DECISION_KEYS = {
     "a": ["approve", "approve-ship"],
     "p": ["promote"],
@@ -226,14 +226,30 @@
     if (form && typeof args === "object") {
       new FormData(form).forEach(function (value, name) { args[name] = value; });
     }
+    if (form && button.getAttribute("data-action") === "answer") { args = answerArgs(form, args); }
     return { kind: button.getAttribute("data-action"), object: parseValue(button.getAttribute("data-object")), args: args };
+  }
+
+  /* One text from the radios q1..qn and the free text, numbered by question: "1. Question: choice. 2. ... Own words." */
+  function answerArgs(form, args) {
+    var parts = [];
+    $all("fieldset", form).forEach(function (set, i) {
+      var legend = $("legend", set);
+      var chosen = $("input[type='radio']:checked", set);
+      if (chosen) { parts.push((i + 1) + ". " + (legend ? legend.textContent.trim() : "Question " + (i + 1)) + " " + chosen.value); }
+    });
+    var own = ((form.elements.answers || {}).value || "").trim();
+    if (own) { parts.push(own); }
+    args.answers = parts.join(" ");
+    Object.keys(args).forEach(function (k) { if (/^q\d+$/.test(k)) { delete args[k]; } });
+    return args;
   }
 
   function runAction(button) {
     var kind = button.getAttribute("data-action");
     var confirmText = button.getAttribute("data-confirm");
     if (confirmText && !window.confirm(confirmText)) { return; }
-    if (kind === "open-in-claude") {
+    if (kind === "open-in-claude" || kind === "take-over") {
       var object = parseValue(button.getAttribute("data-object"));
       var runId = object && typeof object === "object" ? object.run_id : object;
       return openInClaude(runId);
@@ -281,8 +297,68 @@
       if (out) {
         var d = r.data;
         out.textContent = d && typeof d === "object" ? (d.answer || d.command || d.error || JSON.stringify(d, null, 2)) : String(d || "");
+        if (d && Array.isArray(d.suggestions)) { showSuggestions(form, out, d.suggestions); }
       }
     });
+  }
+
+  /* Commands Claude proposes: shown with copy; nothing runs without the click on "Run this". */
+  function showSuggestions(form, out, suggestions) {
+    var old = $("[data-suggestions]", form.parentNode);
+    if (old) { old.remove(); }
+    if (!suggestions.length) { return; }
+    var list = el("ul", { "data-suggestions": "", "class": "plain" });
+    suggestions.forEach(function (s) {
+      var li = el("li", { "class": "act" });
+      var box = el("span", { "class": "command" });
+      box.appendChild(el("code", { "data-command": "" }, s.command));
+      box.appendChild(el("button", { type: "button", "class": "ghost", "data-copy": "", "aria-label": "Copy command" }, "Copy"));
+      li.appendChild(box);
+      if (s.diff) { li.appendChild(el("pre", {}, s.diff)); }
+      var run = el("button", { type: "button", "class": "btn", "data-suggestion-run": "" }, "Run this");
+      run.addEventListener("click", function () {
+        if (!window.confirm("Run this command?\n\n" + s.command)) { return; }
+        run.disabled = true;
+        api("POST", "/api/actions", { kind: "model", object: { type: "system", repo: s.repo }, args: { command: s.command, level: "system" } })
+          .then(function (r) {
+            run.disabled = false;
+            if (r.status === 202) { toast("Started"); toggleActivity(true); refreshState(); }
+            else if (r.status === 412) { toast("Needs " + (r.data && r.data.needs)); }
+            else { toast((r.data && r.data.error) || "Could not start the action"); }
+          });
+      });
+      li.appendChild(run);
+      list.appendChild(li);
+    });
+    out.insertAdjacentElement("afterend", list);
+  }
+
+  /* Opening another system starts its own console: show the command to run. */
+  function openSystem(button) {
+    var row = button.closest("[data-system]") || button.parentNode;
+    var note = $("[data-open-note]", row);
+    if (!note) {
+      note = el("p", { "data-open-note": "", "class": "muted" },
+        "Run the command below in a terminal. It starts that system's console on its own port and prints the address.");
+      row.appendChild(note);
+    }
+    var code = $("[data-command]", row);
+    toast(code ? "Run in a terminal: " + code.textContent : "Run the command shown");
+  }
+
+  /* "edit rules" in an environment column: open the form and preselect that environment. */
+  function editRules(link) {
+    var details = document.getElementById("form-environment");
+    if (!details) { return false; }
+    details.open = true;
+    var field = $("[name='env']", details);
+    if (field) {
+      field.value = link.getAttribute("data-edit-env");
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      field.focus();
+    }
+    details.scrollIntoView({ block: "nearest" });
+    return true;
   }
 
   /* ---------- copy ---------- */
@@ -316,6 +392,8 @@
     var target = event.target;
     var copy = target.closest("[data-copy]");
     if (copy) { copyCommand(copy); return; }
+    var edit = target.closest("a[data-edit-env]");
+    if (edit && editRules(edit)) { event.preventDefault(); return; }
     var link = target.closest("a[href^='/panel/']");
     if (link) { event.preventDefault(); openPanel(link.getAttribute("href"), link); return; }
     var button = target.closest("button[data-action], [data-activity]");
@@ -328,6 +406,7 @@
       else if (kind === "close-panel") { closePanel(); }
       else if (kind === "retry-source") { retrySource(button); }
       else if (kind === "stop-console") { stopConsole(); }
+      else if (kind === "open-system") { openSystem(button); }
       else if (LOCAL_ACTIONS.indexOf(kind) < 0) { runAction(button); }
       return;
     }
@@ -349,9 +428,8 @@
       var at = Date.parse(t.getAttribute("data-read-at"));
       var stale = isNaN(at) || now - at > STALE_MS;
       if (stale) { t.setAttribute("data-stale", "true"); } else { t.removeAttribute("data-stale"); }
-      var next = t.nextElementSibling;
-      var word = next && next.classList.contains("stale-word") ? next : null;
-      if (stale && !word) { t.insertAdjacentElement("afterend", el("span", { "class": "stale-word" }, "stale")); }
+      var word = $(".stale-word", t);
+      if (stale && !word) { t.appendChild(document.createTextNode(" ")); t.appendChild(el("span", { "class": "stale-word" }, "stale")); }
       if (!stale && word) { word.remove(); }
     });
   }

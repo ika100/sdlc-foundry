@@ -164,6 +164,19 @@ th { color: var(--muted); font-weight: 600; font-size: 0.875rem; white-space: no
 [data-need]:focus, [data-card]:focus { outline-width: 0; }
 [data-need]:focus-visible, [data-card]:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
 
+/* Board */
+.board { display: flex; gap: var(--s3); align-items: flex-start; }
+.column { flex: 0 0 16rem; min-width: 16rem; }
+.card { padding: var(--s2) var(--s3); margin-bottom: var(--s2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.card h3 { margin: 0 0 var(--s1); font-size: 1rem; }
+ul.plain { list-style: none; margin: 0; padding: 0; }
+.as-table { margin-top: var(--s3); }
+
+/* An action row: the command next to its button; wraps on narrow widths */
+.act { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
+.act .command { flex: 1 1 14rem; }
+.banner textarea.fix { display: block; width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; resize: none; }
+
 /* Palette, actions panel, toast */
 .palette { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; z-index: 20; }
 .palette[hidden], .activity-panel[hidden] { display: none; }

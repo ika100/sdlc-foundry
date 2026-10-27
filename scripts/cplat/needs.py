@@ -196,7 +196,16 @@ def _escalations(rows: list[dict]) -> list[dict]:
     return items
 
 
-def _promotions(rows: list[dict], repo_of: dict[str, str]) -> list[dict]:
+def _prod_promotion(m: model.Model) -> str:
+    """The `promote` rule of prod; a missing rule is `manual` (the default of spec 114)."""
+    prod = next((e for e in m.environments if e.name == "prod"), None)
+    return (prod.promotion if prod else None) or "manual"
+
+
+def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str = "manual") -> list[dict]:
+    """A promote item exists only where prod waits for a person (`manual`); otherwise the rule promotes by itself."""
+    if prod_promotion != "manual":
+        return []
     items = []
     for row in rows:
         cells = row.get("cells") or {}
@@ -263,7 +272,7 @@ def collect(repo_dir: Path, system: str | None = None) -> dict:
             src.fail("github", e, ["triage"])
     try:
         _, _, status_rows, _ = status.collect(repo_dir, system, None)
-        items += _promotions(status_rows, {c.name: c.repo for c in m.components if c.repo})
+        items += _promotions(status_rows, {c.name: c.repo for c in m.components if c.repo}, _prod_promotion(m))
     except Exception as e:  # noqa: BLE001
         src.fail("cluster", e, ["promote"])
     items.sort(key=lambda i: i["since"] or "")

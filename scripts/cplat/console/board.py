@@ -21,8 +21,6 @@ from console.html import action_button, esc, freshness, stage_badge, table, unav
 PERIODS = {"30": 30, "90": 90, "all": None}
 DEFAULT_PERIOD = "30"
 VIEWS = (("board", "Columns"), ("list", "List"), ("done", "Done"))
-COLUMN_STYLE = "display:flex;gap:var(--s3);align-items:flex-start"
-COLUMN_BOX = "flex:0 0 16rem;min-width:16rem"
 
 
 # ---------------- items ----------------
@@ -226,14 +224,14 @@ def _column(stage: str, cards: list[dict]) -> str:
     href = esc(_panel("stage", stage))
     ordered = sorted(cards, key=lambda i: (not i["stopped"], i["id"]))
     body = "".join(_card(i) for i in ordered)
-    return (f'<section class="column" data-column="{esc(stage)}"{decision} style="{COLUMN_BOX}" aria-label="{esc(stage)} column">'
+    return (f'<section class="column" data-column="{esc(stage)}"{decision} aria-label="{esc(stage)} column">'
             f'<h2><a href="{href}" data-open="{href}">{stage_badge(stage)}</a> <span class="count">{len(cards)}</span></h2>'
             f'{hints}{body}</section>')
 
 
 def _columns(items: list[dict]) -> str:
     cols = "".join(_column(s, [i for i in items if i["stage"] == s]) for s in stages.STAGES)
-    return f'<div class="scroll-x"><div class="board" style="{COLUMN_STYLE}">{cols}</div></div>'
+    return f'<div class="scroll-x"><div class="board">{cols}</div></div>'
 
 
 def _list(items: list[dict]) -> str:
@@ -312,6 +310,8 @@ def page(ctx: Any, query: dict[str, str]) -> str:
             body += "<h2>Done</h2>" + _done(finished, "")
     else:
         body = _columns(opened)
+        if opened:
+            body += f'<details class="as-table"><summary>Show the same items as a table</summary>{_list(opened)}</details>'
         if needle and finished:
             body += "<h2>Done</h2>" + _done(finished, "")
     return layout.page("Board", "board", _nav(view, period, needle) + _unavailable(ctx) + stamp + body, state=ctx.state())

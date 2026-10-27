@@ -42,10 +42,19 @@ def _activity(actions: Mapping[str, object]) -> str:
             f'<span data-activity-text>{running} running, {failed} failed</span></button>')
 
 
+def _fix(fix: object) -> str:
+    """The fix text. A placeholder such as `<prod-context>` would vanish as an unknown tag, so text with `<` goes
+    in a read-only textarea (its content is raw text, ends only at `</textarea`); `</` forces full escaping."""
+    text = str(fix or "")
+    if "<" in text and "</" not in text:
+        return f'<textarea class="fix" readonly rows="1" aria-label="Fix">{text.replace("&", "&amp;")}</textarea>'
+    return esc(text)
+
+
 def _banner(items: list) -> str:
     if not items:
         return '<div id="banner" class="banner" role="status" hidden></div>'
-    rows = "".join(f'<li><strong>{esc(i.get("piece"))}</strong> is missing. {esc(i.get("fix"))}</li>' for i in items)
+    rows = "".join(f'<li><strong>{esc(i.get("piece"))}</strong> is missing. {_fix(i.get("fix"))}</li>' for i in items)
     return (f'<div id="banner" class="banner" role="status"><p>Some actions are off until this is fixed '
             f'(<code>/platform:doctor</code> checks it):</p><ul>{rows}</ul></div>')
 

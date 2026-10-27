@@ -18,7 +18,7 @@ from typing import Any
 import yaml
 
 from console import actions, handoff, layout, sources as sources_mod
-from console.html import action_button, command_block, esc, freshness, stage_badge, unavailable
+from console.html import action_button, command_block, esc, freshness, stage_badge, table, unavailable
 
 DEFAULT_BUDGET = "15"
 WAY_BACK_TITLE = "The way back"
@@ -137,12 +137,13 @@ def _panel(label: str, body: str) -> str:
 
 # ---------------- the page ----------------
 
-def _row(item: dict, now: datetime) -> str:
-    ident = esc(item.get("id"))
-    return (f'<li data-need="{ident}" data-open="/panel/need/{esc(_quote(str(item.get("id"))))}" tabindex="0">'
-            f'<strong>{esc(item.get("kind"))}</strong> {stage_badge(str(item.get("stage")))} '
-            f'<time datetime="{esc(item.get("since"))}">{esc(age(item.get("since"), now))}</time> '
-            f'<span class="reason-text">{esc(item.get("reason"))}</span></li>')
+def _row(item: dict, now: datetime) -> tuple[str, list[str]]:
+    """The attributes of the `<tr>` and its cells."""
+    attrs = f'data-need="{esc(item.get("id"))}" data-open="/panel/need/{esc(_quote(str(item.get("id"))))}" tabindex="0"'
+    cells = [f'<strong>{esc(item.get("kind"))}</strong>', stage_badge(str(item.get("stage"))),
+             f'<time datetime="{esc(item.get("since"))}">{esc(age(item.get("since"), now))}</time>',
+             f'<span class="reason-text">{esc(item.get("reason"))}</span>']
+    return attrs, cells
 
 
 def _quote(text: str) -> str:
@@ -173,7 +174,9 @@ def page(ctx: Any, query: dict[str, str]) -> str:
         parts.append(unavailable("needs", source.unavailable_since, source.error))
     if items:
         now = _now(ctx)
-        parts.append('<ul class="needs" aria-label="Decisions">' + "".join(_row(i, now) for i in items) + "</ul>")
+        rows = [_row(i, now) for i in items]
+        parts.append(table([c for _, c in rows], ["Decision", "Stage", "Waiting", "Why"], caption="Decisions, oldest first",
+                           row_attrs=[a for a, _ in rows]))
     elif source is None or not source.error:
         parts.append(_first_steps(ctx))
     if source is not None:

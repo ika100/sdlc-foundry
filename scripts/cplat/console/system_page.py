@@ -67,7 +67,7 @@ def _rules(status: Mapping, model: Mapping) -> list[dict]:
 def _head(rule: Mapping) -> str:
     return (f'<th scope="col" data-env="{esc(rule.get("name"))}"><strong>{esc(rule.get("name"))}</strong> '
             f'<span class="muted">promote {esc(rule.get("promote") or "none")} policy {esc(rule.get("policy") or "none")}</span> '
-            '<a href="#form-environment">edit rules</a></th>')
+            '<a href="#form-environment" data-edit-env="{esc(rule.get("name"))}">edit rules</a></th>')
 
 
 # ---------------- cells ----------------
@@ -102,7 +102,7 @@ def _cut(ctx: Any, comp: str, repo: str, cand: Mapping, unknown: bool, pieces: d
     reason = "Health is unknown until the status can be read." if unknown else _missing(pieces, "claude", "gh")
     if not reason and actions.active_for(obj):
         reason = "Another action runs on this release."
-    panel = f"/panel/release/{quote(f'{comp}-{version}', safe='')}"
+    panel = f"/panel/release/{quote(f'{comp}:{version}', safe='')}"
     button = action_button("cut-release", f"Cut release {version}", None, reason,
                            attrs={"data_object": json.dumps(obj), "data_args": "{}"})
     return (f'<div class="offer"><a href="{panel}" data-open="{panel}">{esc(version)} is ready</a> {button}'
@@ -119,7 +119,7 @@ def _cell(ctx: Any, row: Mapping, env: str, index: int, rules: list[dict], down:
     raw = str(cell.get("state") or UNKNOWN)
     shown = UNKNOWN if down else raw
     version = str(cell.get("version") or "")
-    panel = f"/panel/instance/{quote(comp, safe='')}/{quote(env, safe='')}"
+    panel = f"/panel/instance/{quote(f'{comp}:{env}', safe='')}"
     link = f'<a href="{panel}" data-open="{panel}">{esc(version)}</a>' if version else ""
     out = [f'<div>{link} {_state_html(shown)}</div>']
     nxt = rules[index + 1] if index + 1 < len(rules) else None
@@ -258,11 +258,18 @@ def _form(kind: str, title: str, fields: str, repo: str) -> str:
             f'<div data-result></div><p>{confirm}</p></form></details>')
 
 
+def _own_slug(ctx: Any) -> str:
+    """`owner/name` of the repo the console serves (git remote origin), or "" when it cannot be read."""
+    import needs
+    import status
+    return needs._slug_of(status.sh(["git", "-C", str(ctx.repo_dir), "remote", "get-url", "origin"])) or ""
+
+
 def model_forms(ctx: Any) -> str:
     """The five "Add to the model" forms; each posts to /api/preview and keeps its confirm disabled until the preview is valid."""
     model = ctx.data("model") or {}
     system = model.get("system") if isinstance(model.get("system"), Mapping) else {}
-    repo = f"{system['owner']}/{system['name']}-gitops" if system.get("owner") and system.get("name") else ""
+    repo = _own_slug(ctx) or (f"{system['owner']}/{system['name']}-gitops" if system.get("owner") and system.get("name") else "")
     rules = _rules(ctx.data("status") or {}, model)
     envs = [str(r["name"]) for r in rules]
     forms = [
