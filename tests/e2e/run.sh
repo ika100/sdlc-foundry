@@ -15,6 +15,10 @@
 # row A, the time T and a row B go into postgres, which is restored to T and switched to (a component reads A and not B); a file on
 # the volume of the external component e2e-files and an object in the bucket files are written, an environment backup is taken, both
 # are deleted, and `system restore --replace` brings both back unchanged while the database cluster keeps its UID.
+# Two caches (spec 118) follow the external bucket: sessions (persistence in dev) and ratelimit (64Mi), both used by e2e-web. The steps prove
+# NOAUTH/WRONGPASS/PONG, maxmemory and eviction, SET and GET through SESSIONS_REDIS_URL from a probe pod, persistence across a pod
+# delete, a password that survives restart and force-sync, only ClusterIP, no operator (operators/ unchanged), doctor without a cache row,
+# and, in the backup steps, that neither the Schedule nor the Backup nor the restore knows a cache (AC-118.6 to .8, .11, .14, .15, .19, .23).
 # It exercises: cplat system new, resource add, component ship, instance promote|secret|verify, the templates'
 # Dockerfiles (non-root numeric user, read-only filesystem), render.py on system.yaml, the generated
 # Deployment/Service/HTTPRoute against a real API server, and the Gateway API on k3s' Traefik.
@@ -535,6 +539,208 @@ for v in FILES_S3_ENDPOINT EXT_FILES_S3_ENDPOINT EXT_FILES_AWS_SECRET_ACCESS_KEY
 done
 echo "ok   Secret $ext_es has endpoint, bucket, region, forcePathStyle, accessKeyId and secretAccessKey; e2e-web runs with prefixed bucket variables"
 
+# ---- Caches (spec 118): two Valkey nodes in dev, used by e2e-web; no operator, no route, nothing in a backup ----
+cstep_name=""
+cstep() { cstep_name="$*"; step "$*"; }
+cfail() { fail "[$cstep_name] $*"; }
+
+cstep "Caches: declare sessions (persistence in dev) and ratelimit (64Mi), both used by e2e-web (AC-118.15)"
+# the external bucket steps above leave nothing uncommitted, but cplat refuses a dirty tree: commit first if there is anything
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] || commit "before the caches"
+ops_before=$(cd "$gitops_repo" && find operators -type f | sort)
+$cplat resource add sessions --type cache --repo-dir "$gitops_repo" >/dev/null || cfail "resource add sessions --type cache failed"
+commit "sessions"
+$cplat resource add ratelimit --type cache --repo-dir "$gitops_repo" >/dev/null || cfail "resource add ratelimit --type cache failed"
+commit "ratelimit"
+(cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" <<'PY'
+import sys
+sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
+import gitops
+from pathlib import Path
+app_dir = gitops.find_app(Path("."))
+y, data = gitops.load(app_dir)
+data["resources"]["sessions"]["instances"] = {"dev": {"persistence": True}}   # AOF on a volume in dev only
+data["resources"]["ratelimit"]["memory"] = "64Mi"                              # maxmemory 53687091 bytes
+web = gitops.components_of(data)["e2e-web"]
+web["uses"] = [*(web.get("uses") or []), "sessions", "ratelimit"]              # two caches: the variables get the prefix
+gitops.save(app_dir, y, data)
+PY
+uv run scripts/render.py) || cfail "render.py failed with the two caches"
+commit "caches: sessions (persistence in dev), ratelimit (64Mi), used by e2e-web"
+# AC-118.23: a cache needs no operator, CRD or chart: operators/ is exactly what it was
+[ "$(cd "$gitops_repo" && find operators -type f | sort)" = "$ops_before" ] || cfail "the caches changed the files under operators/ (a cache has no operator; operators/apps must be unchanged)"
+for c in sessions ratelimit; do
+  [ -f "$gitops_repo/applications/e2e/addons/dev/$c/statefulset.yaml" ] || cfail "render did not write addons/dev/$c/statefulset.yaml"
+done
+web_rendered=$(kubectl kustomize "$gitops_repo/applications/e2e/overlays/dev/e2e-web") || cfail "kustomize of the e2e-web overlay failed"
+for v in SESSIONS_REDIS_URL SESSIONS_REDIS_HOST SESSIONS_REDIS_PORT SESSIONS_REDIS_PASSWORD RATELIMIT_REDIS_URL RATELIMIT_REDIS_HOST RATELIMIT_REDIS_PORT RATELIMIT_REDIS_PASSWORD; do
+  grep -q "name: $v\$" <<< "$web_rendered" || cfail "the e2e-web Deployment lacks $v"
+done
+for s in e2e-sessions-app e2e-ratelimit-app; do
+  grep -q "name: $s\$" <<< "$web_rendered" || cfail "the e2e-web Deployment does not read the Secret $s"
+done
+echo "ok   operators/ unchanged (no operator for a cache); e2e-web gets SESSIONS_REDIS_* from e2e-sessions-app and RATELIMIT_REDIS_* from e2e-ratelimit-app"
+
+cstep "Caches: apply both addons, wait for the Secrets (four keys) and the StatefulSets, then roll out e2e-web"
+for c in sessions ratelimit; do
+  kc apply -k "$gitops_repo/applications/e2e/addons/dev/$c" >/dev/null || cfail "applying addons/dev/$c failed"
+done
+for c in sessions ratelimit; do
+  for _ in $(seq 1 40); do [ -n "$(secret_val e2e-$c-app password)" ] && break; sleep 3; done   # up to 120 s
+  for k in url host port password; do
+    [ -n "$(secret_val e2e-$c-app $k)" ] || {
+      kc get externalsecrets.external-secrets.io e2e-$c-app -o yaml | tail -25
+      kc get events --field-selector involvedObject.kind=ExternalSecret,involvedObject.name=e2e-$c-app | tail -10   # ESO names a problem only here
+      cfail "the Secret e2e-$c-app lacks the key $k"; }
+  done
+done
+for c in sessions ratelimit; do
+  if ! kc rollout status statefulsets.apps/e2e-$c --timeout=180s 2>&1 | tee /dev/stderr; then
+    kc get pods -l app.kubernetes.io/name=$c; kc describe pod e2e-$c-0 | tail -30; kc logs e2e-$c-0 -c valkey --tail=20 || true
+    cfail "the StatefulSet e2e-$c did not become ready"
+  fi
+done
+kc apply -k "$gitops_repo/applications/e2e/overlays/dev/e2e-web" >/dev/null || cfail "applying the e2e-web overlay failed"
+if ! kc rollout status deploy/e2e-web --timeout=240s 2>&1 | tee /dev/stderr; then
+  kc describe pod -l app=e2e-web | tail -30; cfail "e2e-web did not become ready with the cache variables"
+fi
+echo "ok   e2e-sessions and e2e-ratelimit run; e2e-web is ready with both caches"
+
+cstep "Caches: the Secret holds a 32-character password and the designed url; a client needs the password (AC-118.11, AC-118.19)"
+vcli='valkey-cli --no-auth-warning'
+cx() { kc exec "e2e-$1-0" -c valkey -- sh -c "$2"; }   # the password is the container's own $VALKEY_PASSWORD
+pw_sessions=$(secret_val e2e-sessions-app password)
+pw_ratelimit=$(secret_val e2e-ratelimit-app password)
+[ "${#pw_sessions}" = 32 ] && [ "${#pw_ratelimit}" = 32 ] || cfail "the generated passwords are not 32 characters (${#pw_sessions}, ${#pw_ratelimit})"
+[ "$(cx sessions 'printf %s "$VALKEY_PASSWORD"')" = "$pw_sessions" ] || cfail "the server of e2e-sessions does not run with the password of the Secret e2e-sessions-app"
+[ "$(secret_val e2e-sessions-app url)" = "redis://:${pw_sessions}@e2e-sessions.e2e-dev.svc:6379/0" ] || cfail "the url of e2e-sessions-app is not redis://:<password>@e2e-sessions.e2e-dev.svc:6379/0"
+[ "$(secret_val e2e-sessions-app host)" = e2e-sessions.e2e-dev.svc ] && [ "$(secret_val e2e-sessions-app port)" = 6379 ] || cfail "host/port of e2e-sessions-app are not e2e-sessions.e2e-dev.svc and 6379"
+out=$(cx sessions "$vcli ping" 2>&1 || true)
+case "$out" in *NOAUTH*) ;; *) cfail "a client without a password was not refused with NOAUTH (got: $out)";; esac
+out=$(cx sessions "$vcli -a wrong-password ping" 2>&1 || true)
+case "$out" in *WRONGPASS*) ;; *) cfail "a client with a wrong password was not refused with WRONGPASS (got: $out)";; esac
+out=$(cx sessions "$vcli -a \"\$VALKEY_PASSWORD\" ping" 2>&1 || true)
+case "$out" in *PONG*) ;; *) cfail "PING with the password from the Secret did not answer PONG (got: $out)";; esac
+echo "ok   password of 32 characters, url redis://:<password>@e2e-sessions.e2e-dev.svc:6379/0; NOAUTH without, WRONGPASS with a wrong, PONG with the password"
+
+cstep "Caches: ratelimit reports maxmemory 53687091 (80 % of 64Mi) and allkeys-lru; the container limit is 64Mi (AC-118.6)"
+out=$(cx ratelimit "$vcli -a \"\$VALKEY_PASSWORD\" CONFIG GET maxmemory" 2>&1 | tr '\n' ' ') || true
+case "$out" in *53687091*) ;; *) cfail "ratelimit's maxmemory is not 53687091 (got: $out)";; esac
+out=$(cx ratelimit "$vcli -a \"\$VALKEY_PASSWORD\" CONFIG GET maxmemory-policy" 2>&1 | tr '\n' ' ') || true
+case "$out" in *allkeys-lru*) ;; *) cfail "ratelimit's maxmemory-policy is not allkeys-lru (got: $out)";; esac
+[ "$(kc get pod e2e-ratelimit-0 -o jsonpath='{.spec.containers[0].resources.limits.memory}')" = 64Mi ] || cfail "the container memory limit of e2e-ratelimit-0 is not 64Mi"
+echo "ok   maxmemory 53687091, allkeys-lru, limit 64Mi"
+
+cstep "Caches: only ClusterIP Services on 6379 and no route (AC-118.8)"
+for c in sessions ratelimit; do
+  [ "$(kc get services e2e-$c -o jsonpath='{.spec.type}')" = ClusterIP ] || cfail "the Service e2e-$c is not of type ClusterIP"
+  [ "$(kc get services e2e-$c -o jsonpath='{.spec.ports[*].port}')" = 6379 ] || cfail "the Service e2e-$c does not expose exactly 6379"
+done
+exposed=$(kc get services -o jsonpath='{range .items[*]}{.metadata.name}={.spec.type}{"\n"}{end}' | grep -E '^e2e-(sessions|ratelimit)[^=]*=(LoadBalancer|NodePort)' || true)
+[ -z "$exposed" ] || cfail "a Service of a cache is exposed outside the cluster: $exposed"
+routes=$(kc get httproutes.gateway.networking.k8s.io -o name | grep -E 'sessions|ratelimit' || true)
+[ -z "$routes" ] || cfail "a route names a cache: $routes"
+echo "ok   e2e-sessions and e2e-ratelimit are ClusterIP Services on 6379; no HTTPRoute names a cache"
+
+# probe pods (plain Pods, not Deployments: the guard rails do not cover them) with e2e-web's own cache variables, in the cache's Valkey image
+read -r -d '' cache_pod_py <<'PY' || true
+import json, re, sys
+name, image, script = sys.argv[1:4]
+dep = json.load(sys.stdin)
+env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and re.match(r"(SESSIONS|RATELIMIT)_REDIS_", e["name"])]
+ctx = {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
+print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "cacheprobe"}},
+                  "spec": {"restartPolicy": "Never",
+                           "securityContext": {"runAsNonRoot": True, "runAsUser": 999, "runAsGroup": 999, "seccompProfile": {"type": "RuntimeDefault"}},
+                           "containers": [{"name": "valkey", "image": image, "command": ["sh", "-c", script], "env": env, "securityContext": ctx}]}}))
+PY
+cache_image=$(kc get statefulsets.apps e2e-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')
+cn=0
+crun() { # script: runs it in a pod that carries e2e-web's SESSIONS_REDIS_* and RATELIMIT_REDIS_* variables; output in C_OUT
+  local name phase=""
+  cn=$((cn + 1)); name="cacheprobe-$cn"
+  kc get deploy e2e-web -o json | python3 -c "$cache_pod_py" "$name" "$cache_image" "set -e; $1" | kc apply -f - >/dev/null || cfail "could not start the probe pod $name"
+  for _ in $(seq 1 60); do   # up to 180 s
+    phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+    case "$phase" in Succeeded|Failed) break;; esac; sleep 3
+  done
+  C_OUT=$(kc logs "$name" 2>&1 || true)
+  [ "$phase" = Succeeded ] || { C_OUT="$C_OUT (pod phase: ${phase:-unknown}; $(kc get pod "$name" -o jsonpath='{.status.containerStatuses[*].state.waiting.reason}' 2>/dev/null))"; kc describe pod "$name" | tail -15; }
+  kc delete pod "$name" --wait=false >/dev/null 2>&1 || true
+  [ "$phase" = Succeeded ]
+}
+c_field() { sed -n "s/^$1=//p" <<< "$C_OUT" | head -1; }
+
+cstep "Caches: the component SETs a key and GETs the same value through SESSIONS_REDIS_URL (AC-118.15)"
+payload="cache-$RANDOM-$RANDOM"
+crun 'valkey-cli -u "$SESSIONS_REDIS_URL" SET probe:key '"$payload"' >/dev/null
+echo "VALUE=$(valkey-cli -u "$SESSIONS_REDIS_URL" GET probe:key)"
+echo "PING=$(valkey-cli -u "$RATELIMIT_REDIS_URL" PING)"' || cfail "the probe with e2e-web's variables failed: $(echo "$C_OUT" | tail -5 | tr '\n' ' ' | cut -c1-400)"
+[ "$(c_field VALUE)" = "$payload" ] || cfail "GET through SESSIONS_REDIS_URL returned '$(c_field VALUE)', not '$payload'"
+[ "$(c_field PING)" = PONG ] || cfail "PING through RATELIMIT_REDIS_URL answered '$(c_field PING)', not PONG"
+echo "ok   SET and GET through SESSIONS_REDIS_URL returned $payload; RATELIMIT_REDIS_URL answers PONG"
+
+cstep "Caches: filling ratelimit past maxmemory evicts keys without a restart; under noeviction a write gets OOM (AC-118.6)"
+crun 'v=$(head -c 65536 /dev/zero | tr "\0" x)
+i=0; while [ $i -lt 1200 ]; do echo "SET fill:$i $v"; i=$((i + 1)); done | valkey-cli -u "$RATELIMIT_REDIS_URL" >/dev/null
+echo "EVICTED=$(valkey-cli -u "$RATELIMIT_REDIS_URL" INFO stats | tr -d "\r" | sed -n "s/^evicted_keys://p")"
+echo "DBSIZE=$(valkey-cli -u "$RATELIMIT_REDIS_URL" DBSIZE)"
+valkey-cli -u "$RATELIMIT_REDIS_URL" CONFIG SET maxmemory-policy noeviction >/dev/null
+found=0
+for i in $(seq 1 100); do
+  r=$(echo "SET oom:$i $v" | valkey-cli -u "$RATELIMIT_REDIS_URL" 2>&1 || true)
+  case "$r" in *OOM*) found=$i; break;; esac
+done
+echo "OOMAT=$found"' || cfail "the fill probe failed: $(echo "$C_OUT" | tail -5 | tr '\n' ' ' | cut -c1-400)"
+ev=$(c_field EVICTED); dbs=$(c_field DBSIZE)
+[ "${ev:-0}" -gt 0 ] 2>/dev/null || cfail "no key was evicted although ~75 MB went into a 64Mi server (evicted_keys '$ev')"
+[ "${dbs:-1200}" -lt 1200 ] 2>/dev/null || cfail "DBSIZE is '$dbs' after 1200 writes: nothing was evicted"
+[ "$(c_field OOMAT)" != 0 ] && [ -n "$(c_field OOMAT)" ] || { kc logs e2e-ratelimit-0 -c valkey --tail=20 || true; cfail "under noeviction no write got an OOM error in 100 tries"; }
+restarts=$(kc get pod e2e-ratelimit-0 -o jsonpath='{.status.containerStatuses[0].restartCount}')
+reasons=$(kc get pod e2e-ratelimit-0 -o jsonpath='{.status.containerStatuses[0].state.terminated.reason} {.status.containerStatuses[0].lastState.terminated.reason}')
+if [ "$restarts" != 0 ] || [[ "$reasons" == *OOMKilled* ]]; then
+  kc describe pod e2e-ratelimit-0 | tail -25; cfail "the server of ratelimit was restarted or OOMKilled while filling (restartCount $restarts, reasons '$reasons')"
+fi
+echo "ok   evicted_keys $ev, DBSIZE $dbs of 1200, a write under noeviction was refused after $(c_field OOMAT) tries; restartCount 0, not OOMKilled"
+
+cstep "Caches: delete both pods; sessions keeps its key on the volume, ratelimit starts empty, the password stays (AC-118.7, AC-118.19)"
+cx sessions "$vcli -a \"\$VALKEY_PASSWORD\" SET persist:key kept" | grep -q OK || cfail "could not SET a key in sessions"
+cx ratelimit "$vcli -a \"\$VALKEY_PASSWORD\" SET persist:key lost" | grep -q OK || cfail "could not SET a key in ratelimit"
+[ "$(kc get persistentvolumeclaims data-e2e-sessions-0 -o jsonpath='{.metadata.name}' 2>/dev/null)" = data-e2e-sessions-0 ] || cfail "the PVC data-e2e-sessions-0 does not exist"
+[ -z "$(kc get persistentvolumeclaims -o name | grep ratelimit || true)" ] || cfail "ratelimit has a PersistentVolumeClaim"
+[ -z "$(kc get pod e2e-ratelimit-0 -o jsonpath='{.spec.volumes[*].persistentVolumeClaim.claimName}')" ] || cfail "the pod of ratelimit mounts a PersistentVolumeClaim"
+uid_s=$(kc get pod e2e-sessions-0 -o jsonpath='{.metadata.uid}'); uid_r=$(kc get pod e2e-ratelimit-0 -o jsonpath='{.metadata.uid}')
+sleep 2   # the append-only file is synced every second
+kc delete pod e2e-sessions-0 e2e-ratelimit-0 --wait=true --timeout=90s || cfail "could not delete the cache pods"
+for _ in $(seq 1 60); do   # up to 180 s for the StatefulSet controller to create the new pods
+  n_s=$(kc get pod e2e-sessions-0 -o jsonpath='{.metadata.uid}' 2>/dev/null || true); n_r=$(kc get pod e2e-ratelimit-0 -o jsonpath='{.metadata.uid}' 2>/dev/null || true)
+  [ -n "$n_s" ] && [ "$n_s" != "$uid_s" ] && [ -n "$n_r" ] && [ "$n_r" != "$uid_r" ] && break; sleep 3
+done
+[ -n "$n_s" ] && [ "$n_s" != "$uid_s" ] && [ -n "$n_r" ] && [ "$n_r" != "$uid_r" ] || cfail "the cache pods were not recreated with new UIDs"
+kc wait --for=condition=Ready pod/e2e-sessions-0 pod/e2e-ratelimit-0 --timeout=150s || { kc get pods -l app.kubernetes.io/part-of=e2e; kc describe pod e2e-sessions-0 e2e-ratelimit-0 | tail -40; cfail "the cache pods did not become Ready again"; }
+got=$(cx sessions "$vcli -a \"\$VALKEY_PASSWORD\" GET persist:key" 2>&1) || true
+[ "$got" = kept ] || { kc logs e2e-sessions-0 -c valkey --tail=20 || true; cfail "sessions lost its key across the restart of its pod (GET: '$got')"; }
+[ "$(cx ratelimit "$vcli -a \"\$VALKEY_PASSWORD\" DBSIZE" 2>&1)" = 0 ] || cfail "ratelimit is not empty after its pod came back (DBSIZE)"
+[ "$(secret_val e2e-sessions-app password)" = "$pw_sessions" ] && [ "$(secret_val e2e-ratelimit-app password)" = "$pw_ratelimit" ] || cfail "a password changed across the restart"
+kc apply -k "$gitops_repo/applications/e2e/addons/dev/sessions" >/dev/null && kc apply -k "$gitops_repo/applications/e2e/addons/dev/ratelimit" >/dev/null || cfail "re-applying the cache addons failed"
+for c in sessions ratelimit; do kc annotate externalsecrets.external-secrets.io e2e-$c-app force-sync="$(date +%s)" --overwrite >/dev/null || cfail "could not annotate the ExternalSecret e2e-$c-app"; done
+sleep 10   # ESO reconciles the annotated ExternalSecrets
+[ "$(secret_val e2e-sessions-app password)" = "$pw_sessions" ] && [ "$(secret_val e2e-ratelimit-app password)" = "$pw_ratelimit" ] || cfail "a password changed after re-applying the addons and a force-sync"
+echo "ok   sessions kept its key (PVC data-e2e-sessions-0), ratelimit is empty and has no volume; the passwords survived the restart, the re-apply and force-sync"
+
+cstep "Caches: platform doctor names no cache, valkey, sessions or ratelimit prerequisite (AC-118.15, AC-118.23)"
+doc_json="$work/doctor.json"
+timeout 180 $cplat platform doctor --repo "$gitops_repo" --json > "$doc_json" 2> "$work/doctor.err" || true   # any exit code: only its rows matter
+python3 - "$doc_json" <<'PY' || { tail -5 "$work/doctor.err" || true; cfail "doctor output unreadable, or a row mentions a cache (see above)"; }
+import json, re, sys
+rows = json.load(open(sys.argv[1]))
+bad = [r for r in rows if re.search(r"cache|valkey|sessions|ratelimit", f"{r.get('name', '')} {r.get('detail', '')}", re.I)]
+for r in bad:
+    print("doctor row names a cache:", r, file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+echo "ok   platform doctor lists no row for a cache"
+
 # ---- Ship a spec: dev is verified, the build is promoted to staging, applied and verified, the run ends ----
 sns=e2e-staging
 dev_url="http://e2e-api.e2e-dev.localhost:$port"
@@ -691,6 +897,15 @@ for op in plugin-barman-cloud cert-manager velero; do
   echo "ok   operators/apps/$op.yaml pins $op $pin, which is installed"
 done
 kubectl --context k3d-$cluster get crd objectstores.barmancloud.cnpg.io schedules.velero.io >/dev/null || bfail "the Barman Cloud or Velero CRDs are not installed"
+# AC-118.14: the rendered Schedule leaves every cache out by name (with or without persistence)
+uv run --with pyyaml python - "$gitops_repo/applications/e2e/backup/dev/schedule.yaml" <<'PY' || bfail "the rendered Schedule e2e-dev does not leave sessions and ratelimit out (NotIn)"
+import sys, yaml
+sched = yaml.safe_load(open(sys.argv[1]))
+exprs = sched["spec"]["template"]["labelSelector"]["matchExpressions"]
+values = [v for e in exprs if e["operator"] == "NotIn" and e["key"] == "app.kubernetes.io/name" for v in e["values"]]
+sys.exit(0 if {"sessions", "ratelimit"} <= set(values) else 1)
+PY
+echo "ok   the Schedule e2e-dev leaves sessions and ratelimit out by name (NotIn)"
 
 bstep "Backups: apply the bucket backups, postgres with its plugin and ObjectStore, backup/dev, e2e-files and e2e-web"
 apply_bucket dev $ns backups
@@ -856,6 +1071,11 @@ for _ in $(seq 1 180); do case "$(bphase)" in Completed|PartiallyFailed|Failed|F
 [ "$(bphase)" = Completed ] || { vn describe backups.velero.io "$bname" | tail -30; vn logs deploy/velero --tail=30; bfail "the Velero Backup $bname is '$(bphase)', not Completed"; }
 pvb=$(vn get podvolumebackups -l velero.io/backup-name="$bname" -o jsonpath='{.items[*].spec.volume}' 2>/dev/null || true)
 case " $pvb " in *" data "*) ;; *) bfail "the Backup $bname holds no volume data of e2e-files (volumes: '$pvb')";; esac
+# AC-118.14: sessions has a volume (persistence: true) and still no pod volume backup names it
+pvb_pods=$(vn get podvolumebackups.velero.io -l velero.io/backup-name="$bname" -o jsonpath='{.items[*].spec.pod.name}' 2>/dev/null || true)
+case " $pvb_pods " in *" e2e-files-0 "*) ;; *) bfail "the Backup $bname holds no pod volume backup of e2e-files-0 (pods: '$pvb_pods')";; esac
+case " $pvb_pods " in *e2e-sessions-0*|*e2e-ratelimit-0*) bfail "the Backup $bname holds cache data (pod volume backups of: $pvb_pods)";; esac
+vn get schedules.velero.io e2e-dev -o jsonpath='{.spec.template.labelSelector.matchExpressions[*].values}' | grep -q sessions || bfail "the live Schedule e2e-dev does not leave sessions out (NotIn)"
 for _ in $(seq 1 24); do [ -n "$(env_field last_success)" ] && break; sleep 5; done
 [ -n "$(env_field last_success)" ] || bfail "system status shows no last_success for the environment dev after the backup (state: $(env_field state))"
 echo "ok   Velero Backup $bname completed; system status last_success $(env_field last_success)"
@@ -871,6 +1091,7 @@ db_uid=$(kc get clusters.postgresql.cnpg.io e2e-postgres-g1 -o jsonpath='{.metad
 if out=$($cplat system restore dev --backup "$bname" "${rargs[@]}" 2>&1); then bfail "system restore without --replace succeeded although the volumes exist: $out"; fi
 case "$out" in *"volumes of $bname still exist in $ns"*"data-e2e-files-0"*) ;; *) bfail "the refusal does not list the volumes (wanted 'volumes of $bname still exist in $ns: ... data-e2e-files-0'): $out";; esac
 case "$out" in *"databases are not part of environment backups"*) ;; *) bfail "the refusal lacks 'databases are not part of environment backups': $out";; esac
+case "$out" in *data-e2e-sessions-0*) bfail "the refusal lists the volume data-e2e-sessions-0 of a cache, which no backup holds: $out";; esac
 echo "ok   restore without --replace refused: $(echo "$out" | head -1 | cut -c1-200)"
 
 bstep "Environment restore: --replace stops the workloads, replaces their volumes from the backup and starts them again (AC-117.20)"
