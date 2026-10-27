@@ -2,7 +2,7 @@
 spec_id: 125-a-cluster-repo-hosts-several-systems
 shape: platform
 spec_hash: 7c8fb8cc96d6
-summary: "A cluster repo (template cluster-gitops, plugin cluster, shape cluster-gitops) owns a cluster's shared services: cluster.yaml lists operators (pinned from the system renderer's OPERATORS table, linked by symlink, never copied; external-secrets and kyverno join the table), the ClusterSecretStore, and the registered systems; render writes cluster/ with the roots platform-operators (same name as ADR-058, so takeover is in place) and platform-systems; devbox run check finds missing operators and environments without operators: owner; bootstrap and cluster-up (reusing local-cluster.sh in a WITH_SYSTEM=0 mode); cplat cluster new|add|remove and /cluster:*; doctor rows; an e2e with two systems and one CloudNativePG; ADR-060, guide, domain model, changelog. A system repo's rendered tree is unchanged."
+summary: "A cluster repo (template cluster-gitops, plugin cluster, shape cluster-gitops) owns a cluster's shared services: cluster.yaml lists operators (pinned from the system renderer's OPERATORS table, a byte-identical copy kept equal by scripts/sync-template-copies.py, design decision 13; external-secrets and kyverno join the table), the ClusterSecretStore, and the registered systems; render writes cluster/ with the roots platform-operators (same name as ADR-058, so takeover is in place) and platform-systems; devbox run check finds missing operators and environments without operators: owner; bootstrap and cluster-up (reusing local-cluster.sh in a WITH_SYSTEM=0 mode); cplat cluster new|add|remove and /cluster:*; doctor rows; an e2e with two systems and one CloudNativePG; ADR-060, guide, domain model, changelog. A system repo's rendered tree is unchanged."
 tasks:
   - id: t1
     title: render.py (gitops-app) — OPERATORS rows external-secrets and kyverno, optional selector, operator_application() shared by operator_files()
@@ -19,7 +19,7 @@ tasks:
     depends_on: []
     done: true
   - id: t3
-    title: cluster renderer — cluster.yaml validation, cluster/ layout, --check/--crds/--systems/--name, system_render.py symlink
+    title: cluster renderer — cluster.yaml validation, cluster/ layout, --check/--crds/--systems/--name, system_render.py copy
     files: [templates/cluster-gitops/scripts/render.py, templates/cluster-gitops/scripts/system_render.py]
     covers: [AC-125.2, AC-125.3, AC-125.4, AC-125.5, AC-125.6, AC-125.14]
     parallel_safe: true
@@ -33,7 +33,7 @@ tasks:
     depends_on: [t3]
     done: true
   - id: t5
-    title: cluster bootstrap and cluster-up — bootstrap.sh, cluster-up.sh, local-cluster.sh and ports.sh symlinks
+    title: cluster bootstrap and cluster-up — bootstrap.sh, cluster-up.sh, local-cluster.sh and ports.sh copies
     files: [templates/cluster-gitops/scripts/bootstrap.sh, templates/cluster-gitops/scripts/cluster-up.sh, templates/cluster-gitops/scripts/local-cluster.sh, templates/cluster-gitops/scripts/ports.sh]
     covers: [AC-125.9, AC-125.15]
     parallel_safe: true
@@ -140,7 +140,7 @@ Acceptance tests live in `tests/cplat/test_cluster_125*.py` (written first by th
 **Goal:** `devbox run render` turns `cluster.yaml` into `cluster/` exactly as design §2 and §3 specify, using the system renderer's table and builder.
 
 **Implementation notes:**
-- `system_render.py` is a git symlink: `ln -s ../../gitops-app/scripts/render.py templates/cluster-gitops/scripts/system_render.py`. Prove that Copier copies its content: a copy of the template must contain a regular file equal to `templates/gitops-app/scripts/render.py`. If Copier keeps or refuses the link, stop and report a BLOCKER (design, Risks).
+- `system_render.py` is a byte-identical copy of `templates/gitops-app/scripts/render.py` (design decision 13: Copier refuses a symlink out of the template, found in this task); a copy of the template must contain a regular file equal to it.
 - `render.py` is a PEP 723 uv script (`dependencies = ["pyyaml"]`) with `ROOT = parent of scripts/`. It imports `system_render` from its own directory, reads `.copier-answers.yml` (`github_org`, `project_name`), and validates in the order and with the exact one-line messages of design §2 (`ERROR: cluster.yaml: <message>`, exit 1, nothing written).
 - Render the layout of design §3: the roots, `operator_application(op, server)` per listed operator in `cluster.yaml` order, `secret-store.yaml` (default provider with its Namespace, SA, Role and RoleBinding; custom provider: the store only; annotations sync-wave 1 and SkipDryRunOnMissingResource), `system-<s>` applications, `.gitkeep` in an empty folder, `cluster/kustomization.yaml`. Use `system_render.dump`.
 - Every file under `cluster/` that is not rendered is stale: delete it, or report it with `--check`. Remove `.gitkeep` once a folder has a manifest. Re-rendering changes nothing.
