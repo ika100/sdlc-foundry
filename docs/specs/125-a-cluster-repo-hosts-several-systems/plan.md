@@ -10,6 +10,7 @@ tasks:
     covers: [AC-125.3, AC-125.14]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: local-cluster.sh (gitops-app) — WITH_SYSTEM=0 cluster-only mode for up and down
     files: [templates/gitops-app/scripts/local-cluster.sh]
