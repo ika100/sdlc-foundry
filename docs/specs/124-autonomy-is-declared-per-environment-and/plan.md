@@ -69,6 +69,7 @@ tasks:
     covers: [AC-124.7, AC-124.12, AC-124.16]
     parallel_safe: true
     depends_on: [t2, t4]
+    done: true
   - id: t10
     title: runlist.py — engine fix runs (actor, issue, facts, active from the store)
     files: [scripts/cplat/runlist.py]
