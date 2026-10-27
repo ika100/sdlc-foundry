@@ -45,6 +45,7 @@ PANELS = {
     "spec": "console.panels:panel_spec", "run": "console.panels:panel_run", "issue": "console.panels:panel_issue",
     "instance": "console.panels:panel_instance", "release": "console.panels:panel_release", "stage": "console.panels:panel_stage",
     "slice": "console.panels:panel_slice",
+    "help": "console.help:panel_help",
 }
 PALETTE = "console.palette:fragment"
 ASK = "console.palette:ask"

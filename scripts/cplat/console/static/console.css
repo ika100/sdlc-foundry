@@ -206,3 +206,10 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
   aside[data-panel] { min-height: 0; border-left: 0; border-top: 1px solid var(--line); }
   .banner { margin: var(--s2); }
 }
+
+/* In-console help (console/help.py): the one-line answer of a place and the help panel. */
+.title .help { margin-left: auto; text-decoration: none; }
+.lede { color: var(--muted); margin: calc(-1 * var(--s2)) 0 var(--s3); }
+.help-stages li { margin-bottom: var(--s2); }
+.help-keys td { padding: var(--s1) var(--s2); vertical-align: top; }
+.help-keys td:first-child { white-space: nowrap; }

@@ -447,7 +447,8 @@ def panel_stage(ctx: Any, ident: str) -> str:
         e = stages.explain(ident)
     except ValueError:
         raise LookupError(f"unknown stage {ident!r}") from None
-    agents = "<ul>" + "".join(f"<li>{esc(a)}</li>" for a in e["agents"]) + "</ul>"
+    agents = ("<ul>" + "".join(f"<li>{esc(a)}</li>" for a in e["agents"]) + "</ul>" if e["agents"]
+              else "<p>No agent: the platform script, CI and Argo CD do it.</p>")
     commands = "".join(f"<p>{command_block(c)}</p>" for c in e["commands"])
     if e["decision"]:
         decide = (f'<p data-decision>{esc(e["decision"])}</p>'

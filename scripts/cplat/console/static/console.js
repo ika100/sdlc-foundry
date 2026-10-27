@@ -154,6 +154,11 @@
     }
     if (event.metaKey || event.ctrlKey || event.altKey || inTextField(event.target)) { return; }
     if (!$("#palette").hidden) { return; }
+    if (key === "?") {
+      openPanel("/panel/help/" + (document.body.getAttribute("data-place") || "inbox"), document.activeElement);
+      event.preventDefault();
+      return;
+    }
     if (key === "j") { moveInList(1); event.preventDefault(); }
     else if (key === "k") { moveInList(-1); event.preventDefault(); }
     else if (key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown") {

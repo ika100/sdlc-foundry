@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 
+from console import help as help_text
 from console.html import esc, freshness
 
 PLACES = (("inbox", "Inbox", "/inbox"), ("board", "Board", "/board"), ("system", "System", "/system"))
@@ -93,7 +94,8 @@ def page(title: str, place: str, body: str, *, panel: str | None = None, state: 
 {_banner(banner)}
 <div class="work">
 <main id="content" tabindex="-1">
-<div class="title"><h1>{esc(title)}</h1><span class="stamp">{stamp}</span></div>
+<div class="title"><h1>{esc(title)}</h1><span class="stamp">{stamp}</span><a class="btn help" href="/panel/help/{esc(place)}" aria-keyshortcuts="?">Help <kbd>?</kbd></a></div>
+{help_text.intro(place) if title == dict((k, v) for k, v, _ in PLACES).get(place) else ""}
 {body}
 </main>
 <div id="panel-slot">{panel or ""}</div>
