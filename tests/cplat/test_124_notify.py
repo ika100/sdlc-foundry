@@ -10,7 +10,7 @@ import pytest
 
 import runs
 from autonomy_support import ago, audit_event, iso, now, review_need, store  # noqa: F401
-from test_notify import INSTANT, TUE_NOON, WEBHOOK, World, write_cfg  # noqa: F401
+from test_notify import INSTANT, TUE_NOON, WEBHOOK, World, env, write_cfg  # noqa: F401  (env: the autouse state isolation)
 
 ALL = {"github": "instant", "slack": "instant", "email": "off", "desktop": "instant"}
 

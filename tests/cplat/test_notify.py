@@ -18,7 +18,8 @@ from console_support import need
 from system_fixtures import rich5, write_system
 
 WEBHOOK = "https://hooks.slack.test/services/T/B/X"
-EVENTS = ["approve", "answer", "escalation", "promote", "alert", "smoke", "run-done", "retro"]
+EVENTS = ["approve", "answer", "escalation", "promote", "alert", "smoke", "run-done", "retro",
+          "review", "signal", "done-on-its-own"]  # spec 124 (AC-124.20) adds three events
 CHANNELS = ["github", "slack", "email", "desktop"]
 
 
