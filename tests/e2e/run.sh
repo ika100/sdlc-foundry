@@ -659,7 +659,10 @@ cn=0
 crun() { # script: runs it in a pod that carries e2e-web's SESSIONS_REDIS_* and RATELIMIT_REDIS_* variables; output in C_OUT
   local name phase=""
   cn=$((cn + 1)); name="cacheprobe-$cn"
-  kc get deploy e2e-web -o json | python3 -c "$cache_pod_py" "$name" "$cache_image" "set -e; $1" | kc apply -f - >/dev/null || cfail "could not start the probe pod $name"
+  # valkey-cli reads redis://:<pw>@ as user "" and fails AUTH (client libraries treat the empty user as none); the probe names the
+  # default user so valkey-cli can stand in for the component. The variables themselves are the rendered ones.
+  local fix='for v in SESSIONS_REDIS_URL RATELIMIT_REDIS_URL; do eval "u=\${$v:-}"; [ -z "$u" ] || export "$v=$(printf %s "$u" | sed "s#^redis://:#redis://default:#")"; done; '
+  kc get deploy e2e-web -o json | python3 -c "$cache_pod_py" "$name" "$cache_image" "set -e; $fix$1" | kc apply -f - >/dev/null || cfail "could not start the probe pod $name"
   for _ in $(seq 1 60); do   # up to 180 s
     phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
     case "$phase" in Succeeded|Failed) break;; esac; sleep 3
