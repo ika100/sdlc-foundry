@@ -21,7 +21,9 @@
 #   PULL_TOKEN           token for the image pull secret: a classic PAT with only read:packages (default GH_TOKEN)
 #   WITH_ARGO=0          Gateway + namespaces only: no ArgoCD, no GitHub credentials, no root Application
 #                        (used by the platform's end-to-end test, which applies the rendered manifests directly)
-#   ESO_VERSION          External Secrets Operator chart version (default 2.12.0)
+#   WITH_SYSTEM=0        cluster only (a cluster repo, no applications/): needs LOCAL_CLUSTER; `up` stops after Argo CD and its
+#                        credential, before the namespaces and bootstrap/ (default 1)
+#   ESO_VERSION        External Secrets Operator chart version (default 2.12.0)
 #   WITH_ESO=0           skip External Secrets Operator (no `secrets:` support in that cluster)
 #   LGTM_VERSION         grafana/otel-lgtm image tag for `observability: {ui: lgtm}` (default 0.35.0)
 #   WITH_LGTM            1 = install the dev Grafana stack, 0 = never; default: only if system.yaml says `ui: lgtm`
@@ -43,7 +45,13 @@ here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=ports.sh
 . "$here/ports.sh"
 cd "$here/.."
-app=$(basename "$(find applications -mindepth 1 -maxdepth 1 -type d | sort | head -1)")
+with_system="${WITH_SYSTEM:-1}"
+if [ "$with_system" = 0 ]; then
+  app=""
+  if [ -z "${LOCAL_CLUSTER:-}" ]; then echo "ERROR: WITH_SYSTEM=0 needs LOCAL_CLUSTER" >&2; exit 2; fi
+else
+  app=$(basename "$(find applications -mindepth 1 -maxdepth 1 -type d | sort | head -1)")
+fi
 name="${LOCAL_CLUSTER:-$app-local}"
 ctx="k3d-$name"
 port="${LOCAL_HTTP_PORT:-default}"
@@ -73,6 +81,7 @@ seaweedfs_version="${SEAWEEDFS_OPERATOR_VERSION:-$seaweedfs_default}"
 with_seaweedfs="${WITH_SEAWEEDFS:-auto}"
 kyverno_version="${KYVERNO_VERSION:-3.9.1}"
 with_kyverno="${WITH_KYVERNO:-auto}"
+if [ "$with_kyverno" = auto ] && [ "$with_system" = 0 ]; then with_kyverno=0; fi
 if [ "$with_kyverno" = auto ]; then
   # Kyverno when any environment's policy is not off (an environment without `policy:` gets audit/audit/enforce)
   with_kyverno=$(awk '
@@ -84,6 +93,7 @@ if [ "$with_kyverno" = auto ]; then
 fi
 lgtm_version="${LGTM_VERSION:-0.35.0}"
 with_lgtm="${WITH_LGTM:-auto}"
+if [ "$with_lgtm" = auto ] && [ "$with_system" = 0 ]; then with_lgtm=0; fi
 if [ "$with_lgtm" = auto ]; then
   if grep -qE '^[^#]*ui:[[:space:]]*lgtm' applications/*/system.yaml 2>/dev/null; then with_lgtm=1; else with_lgtm=0; fi
 fi
@@ -173,8 +183,8 @@ spec:
 YAML
     ready=0
     for _ in $(seq 1 60); do
-      if [ "$(k get gatewayclass traefik -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null)" = "True" ] &&
-        [ "$(k -n kube-system get gateway traefik-gateway -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}' 2>/dev/null)" = "True" ]; then ready=1; break; fi
+      if k wait --for=condition=Accepted gatewayclass/traefik --timeout=1s >/dev/null 2>&1 &&
+        k -n kube-system wait --for=condition=Programmed gateway/traefik-gateway --timeout=1s >/dev/null 2>&1; then ready=1; break; fi
       sleep 5
     done
     if [ "$ready" != 1 ]; then
@@ -384,6 +394,12 @@ YAML
       k -n argocd create secret generic github-creds --from-literal=url="https://github.com/${org}" \
         --from-literal=username="${org}" --from-literal=password="$repo_token" --dry-run=client -o yaml | k apply -f - >/dev/null
       k -n argocd label secret github-creds argocd.argoproj.io/secret-type=repo-creds --overwrite >/dev/null
+    fi
+
+    if [ "$with_system" = 0 ]; then   # a cluster repo: no system, no namespaces, no bootstrap/ (its cluster-up does those)
+      case "$port" in default | auto) port=$(docker port "k3d-${name}-serverlb" 80/tcp 2>/dev/null | head -1 | sed 's/.*://' || true) ;; esac
+      echo "Cluster ${ctx} is ready (no system: WITH_SYSTEM=0) on host port ${port}"
+      exit 0
     fi
 
     # Namespaces are created up front so the GHCR pull secret exists before the first pod; Argo reuses them.
