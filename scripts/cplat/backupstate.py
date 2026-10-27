@@ -262,9 +262,14 @@ def create_backup(ns: str, cluster: str, name: str, context: str | None) -> None
         raise ReadError(_why(rc, err, out))
 
 
-def first_backup_pending(system: str, db: str, env: str, context: str | None, state: dict | None = None) -> bool:
+FIRST_GRACE = datetime.timedelta(minutes=2)
+
+
+def first_backup_pending(system: str, db: str, env: str, context: str | None, state: dict | None = None,
+                         now: datetime.datetime | None = None) -> bool:
     """True when the active cluster has loaded the plugin (ContinuousArchiving True), has no completed and no running Backup, and
-    at least one failed Backup says the plugin was not available then. ReadError on kubectl failure."""
+    either a failed Backup says the plugin was not available then, or (with `now`) it has no Backup at all although archiving has
+    run for FIRST_GRACE (the ScheduledBackup's immediate Backup did not appear; seen after a switch). ReadError on kubectl failure."""
     ns, active = f"{system}-{env}", cluster_roles(system, db, state)["active"]
     arch = _cond(get_json(["clusters.postgresql.cnpg.io", active, "-n", ns], context), "ContinuousArchiving")
     if not arch or arch.get("status") != "True":
@@ -272,13 +277,16 @@ def first_backup_pending(system: str, db: str, env: str, context: str | None, st
     mine = [b for b in get_items(["backups.postgresql.cnpg.io", "-n", ns], context) if _of(b, active)]
     if any(_phase(b) != "failed" for b in mine):  # completed or still running
         return False
-    return any(_plugin_failure(b) for b in mine)
+    if any(_plugin_failure(b) for b in mine):
+        return True
+    since = parse_time(arch.get("lastTransitionTime"))
+    return not mine and now is not None and since is not None and now - since >= FIRST_GRACE
 
 
 def take_first_backup(system: str, db: str, env: str, context: str | None, now: datetime.datetime,
                       state: dict | None = None) -> str | None:
     """Create Backup `<active>-first-<YYYYMMDDHHMMSS>` when the first base backup is pending; its name, else None."""
-    if not first_backup_pending(system, db, env, context, state):
+    if not first_backup_pending(system, db, env, context, state, now):
         return None
     active = cluster_roles(system, db, state)["active"]
     name = f"{active}-first-{now.astimezone(datetime.UTC).strftime('%Y%m%d%H%M%S')}"

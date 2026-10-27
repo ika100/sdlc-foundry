@@ -142,3 +142,18 @@ def test_resource_backup_creates_the_same_plugin_backup_as_before_ac_117_31(repo
     [made] = kube.created("Backup")
     assert made["metadata"]["name"].startswith("shop-orders-db-manual-") and made["metadata"]["namespace"] == NS
     assert made["spec"] == {"cluster": {"name": "shop-orders-db"}, "method": "plugin", "pluginConfiguration": {"name": backupstate.PLUGIN}}
+
+
+# ---------------- a cluster without any Backup (the ScheduledBackup's immediate one never appeared; seen after a switch in CI) ----------------
+
+def test_a_cluster_without_any_backup_is_pending_once_archiving_has_run_for_the_grace_ac_117_9(kube):  # AC-117.9
+    kube.healthy_database(backups=[], archiving_since="2026-10-27T11:57:00Z")
+    assert backupstate.first_backup_pending("shop", "orders-db", "dev", None, None, NOW)
+    assert backupstate.take_first_backup("shop", "orders-db", "dev", None, NOW).startswith("shop-orders-db-first-")
+
+
+@pytest.mark.parametrize("since,now", [("2026-10-27T11:59:00Z", NOW), ("2026-10-27T11:00:00Z", None)])
+def test_a_cluster_without_any_backup_is_not_pending_within_the_grace_or_without_a_clock_ac_117_9(kube, since, now):  # AC-117.9
+    kube.healthy_database(backups=[], archiving_since=since)
+    assert not backupstate.first_backup_pending("shop", "orders-db", "dev", None, None, now)
+    assert kube.created("Backup") == []

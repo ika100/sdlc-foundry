@@ -567,7 +567,8 @@ untouched (same UID).
    first schedule (up to 24 h without restore point). Race: when `backup` is added to an existing cluster, CloudNativePG restarts the
    instance to load the Barman Cloud plugin; the immediate `Backup` is created before that and fails with `requested plugin is not
    available`, and CloudNativePG never retries it. So cplat takes the first base backup itself once the cluster has loaded the plugin
-   (`ContinuousArchiving` True, no completed or running `Backup`, at least one failed with that error): `--switch` waits for it and
+   (`ContinuousArchiving` True, no completed or running `Backup`, and either one failed with that error or none at all for 2 minutes
+   of archiving: in CI the recreated ScheduledBackup of a switched cluster created no immediate `Backup`; `--switch` looks for 3 minutes): `--switch` waits for it and
    creates `Backup <active>-first-<YYYYMMDDHHMMSS>`, the alert poll does the same for any database in that state, and
    `/resource:backup` works as before. Until then status shows `pending`, and `pending` never raises "backup failing".
 8. **Environment backups cover persistent volumes only (`emptyDir` skipped)**, via Velero file-system backup. Alternative: back up
