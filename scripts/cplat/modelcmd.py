@@ -21,6 +21,26 @@ def _observability(o: model.Observability | None) -> str:
     return f"ui={_d(o.ui) if o.ui else 'none'} export={_d(o.export_to)} alerts={'off' if o.alerts is False else 'on'} rules={rules}"
 
 
+def _declares(a: dict) -> bool:
+    return bool(a) and (a.get("declared") != "observe" or a.get("engine") or a.get("paused"))
+
+
+def _env_autonomy(e: model.Environment) -> str:
+    """The autonomy text of an environment; empty unless it declares autonomy (the old text stays exact)."""
+    a = e.autonomy
+    if not _declares(a):
+        return ""
+    eff = f" (effective {a['effective']})" if a["effective"] != a["declared"] else ""
+    return f"\n    autonomy {a['declared']}{eff} engine {_d(a['engine'])}"
+
+
+def _inst_autonomy(i: model.Instance) -> str:
+    a = i.autonomy
+    if not a or not a.get("max"):
+        return ""
+    return f"\n    autonomy max {a['max']} (effective {a['effective']})"
+
+
 def render(m: model.Model) -> str:
     def section(title: str, lines: list[str]) -> str:
         return "\n".join([title, *(lines or ["  (none)"])])
@@ -28,7 +48,7 @@ def render(m: model.Model) -> str:
     envs = [f"  {e.name}  host {_d(e.host)}  url-template {_d(e.url_template)}  policy {e.policy}  "
             f"promote {'follows main' if e.promotion == 'main' else e.promotion}  observability {_observability(e.observability)}"
             f"{'  operators owner' if e.operators == 'owner' else ''}"
-            for e in m.environments]
+            f"{_env_autonomy(e)}" for e in m.environments]
     comps = []
     for c in m.components:
         ext = f"  external {c.external.kind}" if c.external else ""
@@ -37,7 +57,7 @@ def render(m: model.Model) -> str:
                      f"provides {','.join(c.provides) or '-'}  consumes {','.join(c.consumes) or '-'}  "
                      f"libraries {','.join(c.libraries) or '-'}")
     insts = [f"  {i.component}  {i.environment}  {i.tag or 'not pinned'}  replicas {_d(i.replicas)}  namespace {i.namespace}  url {_d(i.url)}"
-             for i in m.instances]
+             f"{_inst_autonomy(i)}" for i in m.instances]
     res: list[str] = []
     for r in m.resources:
         used = ",".join(c.name for c in m.components if r.name in c.uses) or "-"
