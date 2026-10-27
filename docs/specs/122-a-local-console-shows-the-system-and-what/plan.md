@@ -127,6 +127,7 @@ tasks:
     covers: [AC-122.29, AC-122.22]
     parallel_safe: true
     depends_on: [t11, t12, t19]
+    done: true
   - id: t19
     title: notify_config.py and doctor — notify.yaml schema, Recommended preset, secrets, channel and claude checks
     files: [scripts/cplat/notify_config.py, scripts/cplat/doctor.py]
