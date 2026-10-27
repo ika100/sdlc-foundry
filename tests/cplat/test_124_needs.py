@@ -62,8 +62,9 @@ def set_level(w, level, **block):
 
 # ---------------- AC-124.17: the review decision ----------------
 
-def test_a_fix_outside_a_guardrail_at_act_is_a_review_item_ac_124_17(w, capsys):  # AC-124.17
+def test_a_fix_outside_a_guardrail_at_act_is_a_review_item_ac_124_17(w, capsys, monkeypatch):  # AC-124.17
     """AC-124.17: a fix outside a guardrail at act is a review item."""
+    monkeypatch.setattr(runs, "utcnow", lambda: WED_10)  # inside the default window: only maxLines is outside
     w.store.add_run(run_record())
     [r] = kind(needs_doc(w, capsys), "review")
     assert r["id"] == "review:acme/shop-api#88" and r["stage"] == "Land"
@@ -76,8 +77,9 @@ def test_a_fix_outside_a_guardrail_at_act_is_a_review_item_ac_124_17(w, capsys):
     assert r["reason"] == "outside riskGate.maxLines (412 lines, at most 200)"
 
 
-def test_the_review_consequence_shows_why_regression_ci_second_review_and_the_way_back_ac_124_17(w, capsys):  # AC-124.17
+def test_the_review_consequence_shows_why_regression_ci_second_review_and_the_way_back_ac_124_17(w, capsys, monkeypatch):  # AC-124.17
     """AC-124.17: the review consequence shows why regression ci second review and the way back."""
+    monkeypatch.setattr(runs, "utcnow", lambda: WED_10)  # inside the default window: only maxLines is outside
     w.store.add_run(run_record())
     [r] = kind(needs_doc(w, capsys), "review")
     c = r["consequence"]
