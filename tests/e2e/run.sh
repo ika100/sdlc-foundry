@@ -88,8 +88,9 @@ commit "ext-db"
 [ ! -e "$gitops_repo/operators" ] || fail "render wrote operators/ although no component uses an in-cluster database yet"
 step "Declare the bucket files (in-cluster) and the external bucket ext-files (its store entry is filled in later)"
 $cplat resource add files --type bucket --repo-dir "$gitops_repo" >/dev/null
+commit "files"   # each resource add needs a clean tree
 $cplat resource add ext-files --type bucket --external --repo-dir "$gitops_repo" >/dev/null
-commit "files and ext-files"
+commit "ext-files"
 # no component uses a bucket yet: nothing asks for the SeaweedFS operator (cluster-up gets WITH_SEAWEEDFS=1 below)
 [ ! -e "$gitops_repo/operators" ] || fail "render wrote operators/ although no component uses an in-cluster database or bucket yet"
 step "Describe the environments in system.yaml: the OpenTelemetry collector and enforced Kyverno guard rails in dev, a staging host"
