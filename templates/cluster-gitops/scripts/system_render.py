@@ -1,0 +1,1 @@
+../../gitops-app/scripts/render.py
