@@ -146,6 +146,7 @@ tasks:
     covers: [AC-122.50]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t23
     title: system set --env with --promote, --policy and --host, and the /system:set command
     files: [scripts/cplat/systemset.py, plugins/system/commands/set.md]
