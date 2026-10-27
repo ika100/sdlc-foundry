@@ -1,0 +1,62 @@
+# CLAUDE.md
+
+Guidance for Claude Code (claude.ai/code) in this repository.
+
+## Project
+
+**{{ project_name }}** — {{ description }}
+
+This is a `cluster-gitops` repo: it describes **one Kubernetes cluster** and the systems that run on it. `cluster.yaml` registers the cluster-level operators and the systems (each one is the gitops repo of a system). Argo CD reads this repo and every registered system repo; the cluster repo owns no application manifests of its own. There is no application code here.
+
+## Layout
+
+```
+cluster.yaml                       the only hand-edited file: cluster name, owner, operators, secret store, registered systems
+cluster/operators-root.yaml        GENERATED: Application platform-operators (reads cluster/operators)
+cluster/systems-root.yaml          GENERATED: Application platform-systems (reads cluster/systems)
+cluster/operators/<op>.yaml        GENERATED: one Application per operator listed in cluster.yaml (+ secret-store.yaml with external-secrets)
+cluster/systems/<system>.yaml      GENERATED: one Application per registered system (it syncs the system repo's bootstrap/ folder)
+cluster/kustomization.yaml         GENERATED: lists every manifest so CI can build and validate them
+scripts/                           render.py, check.py, bootstrap.sh, cluster-up.sh (and the system renderer + local-cluster copies)
+```
+
+Everything marked GENERATED is derived from `cluster.yaml` by `devbox run render`. Never hand-edit files under `cluster/`; change `cluster.yaml` (by hand or with the commands below) and render. A render of an unchanged `cluster.yaml` changes nothing.
+
+## Commands
+
+- `/cluster:add <system-repo>` registers a system (a PR that edits `cluster.yaml` and renders). `/cluster:remove <system>` unregisters it.
+- `/platform:update` brings this repo's skeleton (scripts, recipes, CI) to the current platform release. `/platform:doctor` checks the repo and its setup.
+- `devbox run render` writes `cluster/`; `devbox run render-check` fails when it is out of date.
+- `devbox run check` reads every registered system repo and verifies that the cluster has what the system needs (operators, secret store, platform release, policy engine). It prints one line per problem and exits 1 on any error.
+- `devbox run bootstrap` (human only): `KUBE_CONTEXT=<context> devbox run bootstrap` installs the Argo CD credentials and applies the two root Applications to the named cluster. The context must be named explicitly so it never hits whatever cluster happens to be current. Agents never run `bootstrap` or any `kubectl apply`.
+- `devbox run cluster-up` creates a local k3d cluster named `{{ project_name }}-local` with Argo CD, runs the bootstrap against it and prints the URLs of exposed components; `devbox run cluster-down` removes it. Needs Docker running.
+- `devbox run quality` builds the manifests with kustomize and validates them with kubeconform.
+
+## Secrets
+
+CI's `check` job reads the system repos with the repository secret `SYSTEMS_TOKEN` (fine-grained token, Contents: read on every registered system repo): `gh secret set SYSTEMS_TOKEN -R {{ github_org }}/{{ project_name }}`. Never put secret values in this repo.
+
+## Specs
+
+Feature work is specified where the code lives: `/component:spec` in component repos, `/system:spec` in a system's gitops repo. This repo has no specs.
+
+Guide: [docs/CLUSTERS.md](https://github.com/ika100/sdlc-foundry/blob/main/docs/CLUSTERS.md) in the platform repo.
+
+## Where your additions go
+
+Updates (`/platform:update`) overwrite the skeleton files below. Put your own work next to them, where an update keeps it:
+
+| Updates overwrite | Your additions go in |
+|---|---|
+| the template's recipes in `devbox.json` (including `ci`) | gates: the `ci-extra` recipe (`devbox run ci` and the `ci-extra` CI check run it); other tools: recipes of your own in `devbox.json` (kept) |
+| `.github/workflows/ci.yml` | a workflow file of your own in `.github/workflows/` |
+| `.claude/settings.json` | your own permission entries (allow, ask, deny) in it; they are kept |
+| `CLAUDE.md` | `.claude/project-notes.md` |
+| other skeleton files (`scripts/`, lint config ...) | nowhere: propose the change to the platform (`/issue:report`) |
+
+## Conventions
+
+- Conventional Commits for commit messages and PR titles (CI checks the PR title).
+- Branch names for cluster changes: `cluster/<change>`; open a PR, never push to `main`.
+
+@.claude/project-notes.md
