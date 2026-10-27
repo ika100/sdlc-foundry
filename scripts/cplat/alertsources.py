@@ -21,12 +21,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import autoissue
+import backupstate
 import feedback
 import model
 from model import Model
 
 SEVERITIES = ("critical", "warning", "info")
 SERVICE_DOWN = "ServiceDown"
+BACKUP_FAILING = "backup failing"
 LGTM_QUERY_URL = "http://lgtm.observability.svc:9090"
 TIMEOUT_S = 10.0
 MAX_SERIES = 10
@@ -87,6 +89,7 @@ class AppConfig:
     skip: str | None = None
     notes: list[str] = field(default_factory=list)
     model: Model | None = None
+    backups: dict[str, list[str]] = field(default_factory=dict)   # env -> databases with backup; "" = the environment itself (spec 117)
 
     @property
     def rules(self) -> list[Rule]:
@@ -230,12 +233,17 @@ def load_app(app_dir: Path) -> AppConfig:
     for e in m.environments:
         if e.name not in envs or e.observability is None:
             continue
+        if e.observability.alerts is not False:
+            subjects = ([""] if e.backup else []) + [r.resource for r in m.resource_instances
+                                                    if r.environment == e.name and r.type == "database" and r.backup]
+            if subjects:
+                out.backups[e.name] = subjects
         src = _source(m, app, e.name, e.observability)
         if src.skip:
             skipped.append(src.skip)
         else:
             out.sources.append(src)
-    if not out.sources:
+    if not out.sources and not out.backups:
         out.skip = "; ".join(skipped) if skipped else "no environment declares observability"
     else:
         out.notes += [f"skipped {s}" for s in skipped] + [n for src in out.sources for n in src.notes]
@@ -348,7 +356,35 @@ def collect(cfg: AppConfig, *, now: datetime.datetime) -> tuple[list[Alert], lis
     found: dict[str, Alert] = {}
     for n, src in enumerate(cfg.sources):
         _collect_source(cfg, src, n == 0, now, found, errors)
+    _collect_backups(cfg, now, found, errors)
     return _finish(found), errors
+
+
+def _collect_backups(cfg: AppConfig, now: datetime.datetime, found: dict[str, Alert], errors: list[SourceError]) -> None:
+    """Database and environment backups failing for more than an hour (AC-117.28); the current kube context is read."""
+    for env, subjects in cfg.backups.items():
+        endpoint = f"{cfg.app}-{env} backup"
+        try:
+            for subject in subjects:
+                if subject:
+                    try:
+                        state = backupstate.restore_state(cfg.app_dir, env, subject)
+                    except backupstate.StateError:
+                        state = None
+                    fails = [(f["since"], f["error"]) for f in
+                             backupstate.database_failing_since(cfg.app, subject, env, None, now, state=state)]
+                else:
+                    f = backupstate.environment_failing_since(cfg.app, env, None, now)
+                    fails = [(f["since"], f["error"])] if f else []
+                if not fails:
+                    continue
+                since = min(x[0] for x in fails)
+                _merge(found, Alert(app=cfg.app, name=BACKUP_FAILING, severity="critical", environment=env,
+                                    service=subject or "environment", repo=None, started_at=_parse_time(since, now),
+                                    summary=fails[0][1], source="rule", query=f"backup state of {cfg.app}-{env} (kubectl)",
+                                    series=[{"since": x[0], "error": x[1]} for x in fails]))
+        except backupstate.ReadError as e:
+            errors.append(SourceError(endpoint, feedback.redact(str(e))))
 
 
 def _collect_source(cfg: AppConfig, src: EnvSource, first: bool, now: datetime.datetime, found: dict[str, Alert],
