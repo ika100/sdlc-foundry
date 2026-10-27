@@ -139,6 +139,7 @@ tasks:
     covers: [AC-124.2, AC-124.4, AC-124.9]
     parallel_safe: false
     depends_on: [t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18]
+    done: true
 human_steps:
   - "Run /platform:update in each gitops-app repo that will declare autonomy, so its scripts/render.py knows the new keys and renders autonomy.json"
   - "Create an engine token per engine; put it in CPLAT_ENGINE_TOKEN or the OS keychain (service sdlc-foundry, account engine:<host of the engine URL>) on every machine that runs /system:autonomy, and give the engine the same token"
