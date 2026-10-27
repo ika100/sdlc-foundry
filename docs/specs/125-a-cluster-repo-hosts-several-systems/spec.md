@@ -1,7 +1,7 @@
 ---
 spec_id: 125-a-cluster-repo-hosts-several-systems
 title: A cluster repo hosts several systems on shared operators
-status: building
+status: done
 priority: P1
 ---
 
@@ -83,3 +83,4 @@ This spec adds a **cluster repo**: a gitops repo per cluster, made from a new te
 - 2026-10-27 created; open questions answered up front by the user
 - 2026-10-27 approved
 - 2026-10-27 building
+- 2026-10-27 done
