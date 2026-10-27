@@ -800,7 +800,7 @@ def front(path):
 
 
 def test_the_resource_plugin_is_1_3_0_and_has_backup_and_restore_commands_ac_117_31():  # AC-117.31
-    assert plugin_version("resource") == ("1.4.0", "1.4.0")  # spec 118: resource plugin 1.4.0
+    assert plugin_version("resource") == ("1.5.0", "1.5.0")  # spec 119: resource plugin 1.5.0
     meta, body = front("plugins/resource/commands/backup.md")
     assert len(meta["description"]) < 260 and "Usage: /resource:backup <db> --env <env>" in meta["description"]
     assert "cplat resource backup" in body and "$ARGUMENTS" in body

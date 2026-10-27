@@ -676,7 +676,7 @@ def test_a_cache_adds_no_backup_object_ac_118_14(tmp_path):  # AC-118.14
 
 def test_cache_is_no_longer_a_planned_type_and_broker_still_is_ac_118_22(tmp_path):  # AC-118.22
     r = renderer("render_118_planned")
-    assert getattr(r, "PLANNED_TYPES", None) == {"broker": 119}
+    assert getattr(r, "PLANNED_TYPES", None) == {}  # spec 119: broker is built, no type is planned
     assert "cache" in r.RESOURCE_TYPES and tuple(r.RESOURCE_TYPES) == ("database", "bucket", "cache", "broker")
 
 
@@ -686,8 +686,8 @@ def test_a_cache_resource_is_not_refused_as_not_available_ac_118_22(tmp_path):  
 
 
 def test_the_broker_keeps_its_message_ac_118_22(tmp_path):  # AC-118.22
-    err = fails(tmp_path, system({"store": {"type": "broker"}}), P + "resources.store: type broker is not available yet: spec 119 brings it")
-    assert len(err.strip().splitlines()) == 1
+    g = ok(tmp_path, system({"store": {"type": "broker"}}))  # spec 119: an unused broker renders
+    assert not [k for k in g if "/addons/" in k]  # spec 119: and writes no addon path
 
 
 @pytest.mark.parametrize("value", ["queue", "Bucket", "s3", "memcached"])

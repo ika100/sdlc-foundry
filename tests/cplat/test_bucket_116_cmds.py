@@ -132,7 +132,7 @@ def test_add_pr_uses_the_resource_branch_and_title_for_a_bucket_ac_116_12(repo, 
 @pytest.mark.parametrize("argv, needle", [
     (["d", "--type", "database", "--storage", "5Gi"], "--storage and --versioning apply to --type bucket only"),
     (["d", "--type", "database", "--versioning"], "--storage and --versioning apply to --type bucket only"),
-    (["b", "--type", "bucket", "--version", "16"], "--version applies to --type database only"),
+    (["b", "--type", "bucket", "--version", "16"], "--version applies to --type database or broker only"),  # spec 119: broker takes --version
     (["b", "--type", "bucket", "--external", "--storage", "5Gi"], "an external bucket is sized and configured at its provider: --storage does not apply"),
     (["b", "--type", "bucket", "--external", "--versioning"], "an external bucket is sized and configured at its provider: --versioning does not apply"),
     (["b", "--type", "bucket", "--storage", "lots"], "storage 'lots' is not a size, e.g. 10Gi"),
@@ -158,7 +158,7 @@ def test_add_a_bucket_is_no_longer_refused_as_not_available_ac_116_20(repo, caps
     assert rc == 0 and "not available yet" not in err
 
 
-@pytest.mark.parametrize("typ, spec", [("broker", 119)])  # spec 118: cache is built
+@pytest.mark.parametrize("typ, spec", [])  # spec 119: broker is built, no type is planned (pytest skips the empty set)
 def test_add_of_the_other_planned_types_keeps_its_refusal_ac_116_20(repo, capsys, typ, spec):  # AC-116.20
     before = files(repo)
     rc, _, err = run("resource", "add", "store", "--type", typ, "--repo-dir", repo, capsys=capsys)

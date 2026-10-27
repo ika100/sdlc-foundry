@@ -657,10 +657,10 @@ def test_a_component_may_use_a_bucket_and_type_bucket_renders_ac_116_20(tmp_path
 
 def test_bucket_is_no_longer_a_planned_type_ac_116_20(tmp_path):  # AC-116.20
     r = platform_render_module("render_116_planned")
-    assert getattr(r, "PLANNED_TYPES", None) == {"broker": 119}  # spec 118: cache is built
+    assert getattr(r, "PLANNED_TYPES", None) == {}  # spec 119: broker is built, no type is planned
 
 
-@pytest.mark.parametrize("typ, spec", [("broker", 119)])  # spec 118: cache is built
+@pytest.mark.parametrize("typ, spec", [])  # spec 119: broker is built, no type is planned (pytest skips the empty set)
 def test_the_other_planned_types_keep_their_messages_ac_116_20(tmp_path, typ, spec):  # AC-116.20
     err = fails(tmp_path, system({"store": {"type": typ}}), P + f"resources.store: type {typ} is not available yet: spec {spec} brings it")
     assert len(err.strip().splitlines()) == 1

@@ -135,7 +135,7 @@ def test_add_errors_change_nothing_and_name_the_reason_ac_115_13(repo, capsys, a
     assert files(repo) == before
 
 
-@pytest.mark.parametrize("typ, spec", [("broker", 119)])  # spec 116: bucket is built; spec 118: cache is built
+@pytest.mark.parametrize("typ, spec", [])  # spec 119: broker is built, no type is planned (pytest skips the empty set)
 def test_add_of_a_type_that_is_not_built_yet_names_the_spec_ac_115_2(repo, capsys, typ, spec):  # AC-115.2
     before = files(repo)
     rc, _, err = run("resource", "add", "store", "--type", typ, "--repo-dir", repo, capsys=capsys)

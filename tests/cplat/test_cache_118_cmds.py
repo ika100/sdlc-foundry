@@ -121,7 +121,7 @@ def test_add_pr_uses_the_resource_branch_and_title_for_a_cache_ac_118_1(repo, mo
 
 
 @pytest.mark.parametrize("argv, needle", [
-    (["c", "--type", "cache", "--version", "9"], "--version applies to --type database only"),
+    (["c", "--type", "cache", "--version", "9"], "--version applies to --type database or broker only"),  # spec 119: broker takes --version
     (["c", "--type", "cache", "--storage", "1Gi"], "--storage and --versioning apply to --type bucket only"),
     (["c", "--type", "cache", "--versioning"], "--storage and --versioning apply to --type bucket only"),
     (["c", "--type", "cache", "--path", "x"], "--path needs --external"),
@@ -147,8 +147,8 @@ def test_add_a_cache_is_no_longer_refused_as_not_available_ac_118_1(repo, capsys
 
 def test_the_type_option_help_names_cache_ac_118_1():  # AC-118.1
     text = (ROOT / "scripts" / "cplat" / "addon.py").read_text()
-    assert "resource type: database, bucket or cache (broker is planned)" in text
-    assert re.search(r"PLANNED_TYPES\s*=\s*\{\s*\"broker\":\s*119\s*\}", text)
+    assert "resource type: database, bucket, cache or broker" in text  # spec 119: broker is built
+    assert re.search(r"PLANNED_TYPES\s*=\s*\{\s*\}", text)  # spec 119: no type is planned
 
 
 # ---------------- AC-118.22: add keeps the other messages ----------------
@@ -166,8 +166,8 @@ def test_add_of_redis_or_valkey_keeps_114s_message_and_adds_the_cache_hint_ac_11
 def test_add_of_the_broker_keeps_its_refusal_ac_118_22(repo, capsys):  # AC-118.22
     before = files(repo)
     rc, _, err = run("resource", "add", "store", "--type", "broker", "--repo-dir", repo, capsys=capsys)
-    assert rc == 1 and "resource type broker is not available yet: spec 119 brings it" in err
-    assert files(repo) == before
+    assert rc == 0, err  # spec 119: broker is built, add succeeds
+    assert files(repo) != before  # spec 119: and changes the tree
 
 
 def test_add_of_an_unknown_type_has_no_cache_hint_ac_118_22(repo, capsys):  # AC-118.22
@@ -514,7 +514,7 @@ def test_the_changelog_lists_the_cache_in_a_minor_section_that_is_not_breaking_a
 def test_the_resource_plugin_is_1_4_0_in_both_places_ac_118_22():  # AC-118.22
     manifest = json.loads((ROOT / "plugins/resource/.claude-plugin/plugin.json").read_text())
     market = next(p["version"] for p in json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"] if p["name"] == "resource")
-    assert manifest["version"] == market == "1.4.0"
+    assert manifest["version"] == market == "1.5.0"  # spec 119: resource plugin 1.5.0
     assert "caches" in manifest["description"]
     desc = re.search(r'(?m)^description:\s*"(.*)"\s*$', (ROOT / "plugins/resource/commands/add.md").read_text()).group(1)
     assert len(desc) < 260 and "--type database|bucket|cache" in desc

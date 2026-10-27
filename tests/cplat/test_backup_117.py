@@ -693,7 +693,7 @@ def test_the_versions_table_pins_each_operator_exactly_ac_117_26(name):  # AC-11
 
 def test_the_operators_keep_the_design_order_and_the_aws_plugin_is_pinned_ac_117_26():  # AC-117.26
     r = platform_render_module("render_117_order")
-    assert list(r.OPERATORS) == ["cloudnative-pg", "seaweedfs", "external-secrets", "kyverno", "plugin-barman-cloud", "cert-manager", "velero"]  # spec 117: spec 125 added external-secrets and kyverno first
+    assert list(r.OPERATORS) == ["cloudnative-pg", "seaweedfs", "external-secrets", "kyverno", "plugin-barman-cloud", "cert-manager", "velero", "nack"]  # spec 117: spec 125 added external-secrets and kyverno first; spec 119: nack is appended last
     assert getattr(r, "VELERO_AWS_PLUGIN_IMAGE", None) == AWS_IMAGE
     assert re.fullmatch(r"velero/velero-plugin-for-aws:v\d+\.\d+\.\d+", r.VELERO_AWS_PLUGIN_IMAGE)
 
