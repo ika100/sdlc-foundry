@@ -129,6 +129,7 @@ tasks:
     covers: [AC-124.11, AC-124.15, AC-124.18]
     parallel_safe: true
     depends_on: [t7, t10, t13]
+    done: true
   - id: t19
     title: docs, ADR index, CHANGELOG and plugin versions
     files: [docs/autonomy.md, docs/console.md, docs/DOMAIN-MODEL.md, docs/adr/README.md, docs/CHANGELOG.md, plugins/system/README.md, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
