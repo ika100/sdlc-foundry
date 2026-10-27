@@ -149,7 +149,7 @@ def check_repo(repo: Path) -> list[dict]:
         if declared == "cluster-gitops":
             out += check_cluster(repo)
         return out
-    det =run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False)
+    det = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False)
     shape = det.stdout.strip()
     out.append(check(OK, "repo shape", shape) if shape else check(WARN, "repo shape", "not a platform repo (no .copier-answers.yml / known markers)"))
     stamp = core.read_stamp(repo)

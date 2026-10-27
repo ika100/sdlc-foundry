@@ -23,7 +23,7 @@
 #                        (used by the platform's end-to-end test, which applies the rendered manifests directly)
 #   WITH_SYSTEM=0        cluster only (a cluster repo, no applications/): needs LOCAL_CLUSTER; `up` stops after Argo CD and its
 #                        credential, before the namespaces and bootstrap/ (default 1)
-#   ESO_VERSION        External Secrets Operator chart version (default 2.12.0)
+#   ESO_VERSION          External Secrets Operator chart version (default 2.12.0)
 #   WITH_ESO=0           skip External Secrets Operator (no `secrets:` support in that cluster)
 #   LGTM_VERSION         grafana/otel-lgtm image tag for `observability: {ui: lgtm}` (default 0.35.0)
 #   WITH_LGTM            1 = install the dev Grafana stack, 0 = never; default: only if system.yaml says `ui: lgtm`

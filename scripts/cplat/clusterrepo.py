@@ -122,9 +122,13 @@ def _gh_error(res) -> str:
 
 def discover(slug: str) -> list[str]:
     """The systems `applications/<d>/system.yaml` on the repo's main."""
+    hint = "check the name and that your gh login can read it"
+    top = run(["gh", "api", f"repos/{slug}/contents?ref=main"], check=False)  # the repo itself must be readable
+    if top.returncode != 0:
+        raise PlatformError(f"cannot read {slug}: {_gh_error(top)}", hint=hint)
     res = run(["gh", "api", f"repos/{slug}/contents/applications?ref=main"], check=False)
     if res.returncode != 0:
-        raise PlatformError(f"cannot read {slug}: {_gh_error(res)}", hint="check the name and that your gh login can read it")
+        raise PlatformError(f"{slug} is not a system's gitops repo: no applications/<system>/system.yaml on main")
     try:
         entries = json.loads(res.stdout)
     except ValueError:
