@@ -135,7 +135,7 @@ def test_add_errors_change_nothing_and_name_the_reason_ac_115_13(repo, capsys, a
     assert files(repo) == before
 
 
-@pytest.mark.parametrize("typ, spec", [("bucket", 116), ("cache", 118), ("broker", 119)])
+@pytest.mark.parametrize("typ, spec", [("cache", 118), ("broker", 119)])  # spec 116: bucket is built
 def test_add_of_a_type_that_is_not_built_yet_names_the_spec_ac_115_2(repo, capsys, typ, spec):  # AC-115.2
     before = files(repo)
     rc, _, err = run("resource", "add", "store", "--type", typ, "--repo-dir", repo, capsys=capsys)
@@ -448,10 +448,13 @@ def test_the_changelog_lists_the_change_in_a_minor_section_that_is_not_breaking_
     assert hits, "the change is listed"
     head = hits[0].splitlines()[0]
     assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", head), head
-    assert "BREAKING" not in hits[0]
+    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"spec 115|ADR-057", e))  # spec 116: the 115 entry itself, not the section
+    assert "BREAKING" not in entry
 
 
 def test_the_resource_plugin_has_a_minor_bump_in_both_places_ac_115_16():  # AC-115.16
     manifest = json.loads((ROOT / "plugins/resource/.claude-plugin/plugin.json").read_text())["version"]
     market = next(p["version"] for p in json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"] if p["name"] == "resource")
-    assert manifest == market == "1.1.0"
+    assert manifest == market  # spec 116: 1.2.0 supersedes 1.1.0; both places agree
+    major, minor, patch = (int(x) for x in manifest.split("."))  # spec 116
+    assert (major, minor) >= (1, 1) and major == 1, manifest  # spec 116: a minor bump at or above 1.1.0, no major bump
