@@ -9,72 +9,84 @@ tasks:
     covers: [AC-116.1, AC-116.2, AC-116.10, AC-116.20]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: render.py — TYPES["bucket"] contract and the in-cluster bucket instance (Seaweed, Bucket, S3Identity, S3Credentials, generated keys, Delete=false), SEAWEEDFS_IMAGE
     files: [templates/gitops-app/scripts/render.py]
     covers: [AC-116.2, AC-116.4, AC-116.5, AC-116.6, AC-116.7, AC-116.8, AC-116.12, AC-116.15, AC-116.16, AC-116.17, AC-116.18]
     parallel_safe: false
     depends_on: [t1]
+    done: true
   - id: t3
     title: render.py — OPERATORS["seaweedfs"] and operators/apps/seaweedfs.yaml when an in-cluster bucket runs in an environment without operators owner
     files: [templates/gitops-app/scripts/render.py]
     covers: [AC-116.15, AC-116.19]
     parallel_safe: false
     depends_on: [t2]
+    done: true
   - id: t4
     title: model — bucket sizing (storage, versioning) on in-cluster bucket instances and its model show text
     files: [scripts/cplat/model.py, scripts/cplat/modelcmd.py]
     covers: [AC-116.2, AC-116.20]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: cplat resource add <name> --type bucket [--storage S] [--versioning] [--external], bucket texts in remove
     files: [scripts/cplat/addon.py]
     covers: [AC-116.12, AC-116.20]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: platform doctor — operator seaweedfs row (owner-managed vs platform-managed, installed vs expected)
     files: [scripts/cplat/doctor.py]
     covers: [AC-116.19]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t7
     title: component set --uses — help text and the per-type prefix note for buckets
     files: [scripts/cplat/compose.py]
     covers: [AC-116.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: gitops-app template — cluster-up and bootstrap install or wait for the SeaweedFS operator from operators/
     files: [templates/gitops-app/scripts/local-cluster.sh, templates/gitops-app/scripts/bootstrap.sh, templates/gitops-app/CLAUDE.md.jinja]
     covers: [AC-116.19]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: e2e — a bucket shared by two components in dev and staging; write, read, list, delete, versions, restart, cross-environment refusal, an external bucket with a missing key
     files: [tests/e2e/run.sh]
     covers: [AC-116.5, AC-116.6, AC-116.7, AC-116.8, AC-116.14, AC-116.18, AC-116.19]
     parallel_safe: false
     depends_on: [t3, t5, t8]
+    done: true
   - id: t10
     title: resource plugin 1.2.0 (commands, README, manifest, catalog) and the CHANGELOG [Unreleased] entry
     files: [plugins/resource/commands/add.md, plugins/resource/commands/remove.md, plugins/resource/README.md, plugins/resource/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/CHANGELOG.md]
     covers: [AC-116.12, AC-116.20]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t11
     title: Docs — DOMAIN-MODEL.md, USER-JOURNEY.md and the site's resources page describe the bucket type
     files: [docs/DOMAIN-MODEL.md, docs/USER-JOURNEY.md, site/src/content/docs/concepts/addons.md]
     covers: [AC-116.4, AC-116.16, AC-116.17]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t12
     title: Amend the spec 115 assertions that treat bucket as not yet available
     files: [tests/cplat/test_resources_115.py, tests/cplat/test_resources_115_cmds.py]
     covers: [AC-116.20]
     parallel_safe: true
     depends_on: []
+    done: true
 human_steps:
   - "Consumer note for the release: a cluster whose owner installed the SeaweedFS operator by hand sets environments.<env>.operators: owner before operators/root.yaml is applied again; everyone else re-applies operators/root.yaml once per cluster after the first in-cluster bucket (KUBE_CONTEXT=<ctx> devbox run bootstrap; local clusters: devbox run cluster-up)"
 ---
