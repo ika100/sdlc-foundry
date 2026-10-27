@@ -51,6 +51,7 @@ tasks:
     covers: [AC-124.18, AC-124.19]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: model.py and model show — autonomy per environment and instance, paused
     files: [scripts/cplat/model.py, scripts/cplat/modelcmd.py]
