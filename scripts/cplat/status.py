@@ -182,9 +182,11 @@ def backup_lines(b: dict, context: str | None) -> list[str]:
         else:
             tail = f"{x['state']} ({x['reason']})" if x["reason"] else x["state"]
             rows.append((label, f"last backup {x['last_success'] or 'never'}  {tail}  {x['kept']} kept"))
-    w = max(len(label) for label, _ in rows) + 2 if rows else 0
+    # The column follows the database labels (design.md's example); a longer `environment <env>` label keeps two spaces.
+    db_labels = [label for label, _ in rows if not label.startswith("environment ")] or [label for label, _ in rows]
+    w = max(map(len, db_labels)) + 2 if rows else 0
     shown = context or backupstate_current() or "the current kube context"
-    return ["", f"Backups (read from the cluster {shown} now):", *(f"  {label.ljust(w)}{text}" for label, text in rows)]
+    return ["", f"Backups (read from the cluster {shown} now):", *(f"  {label.ljust(w - 2)}  {text}" for label, text in rows)]
 
 
 def backupstate_current() -> str | None:
