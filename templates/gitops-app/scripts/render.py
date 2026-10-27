@@ -158,7 +158,7 @@ EXTERNAL_KEYS = [*COMMON_KEYS, "image", "external", "provides", "consumes", "ins
 LIBRARY_KEYS = [*COMMON_KEYS, "provides", "consumes"]
 INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets", "autonomy"]
 RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
-PLANNED_TYPES = {"broker": 119}     # types no release runs yet: the spec that brings each
+PLANNED_TYPES: dict[str, int] = {}     # types no release runs yet: the spec that brings each (none since spec 119)
 RESOURCE_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
 RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources", "backup"]
 SIZING_KEYS = ["version", "replicas", "storage", "resources"]      # an external resource runs nothing: none of these
@@ -170,6 +170,12 @@ CACHE_INSTANCE_KEYS = ["external", "remote", "memory", "maxmemoryPolicy", "persi
 CACHE_SIZING_KEYS = ["version", "memory", "maxmemoryPolicy", "persistence", "storage"]   # an instance's are the same without `version`
 CACHE_SUFFIXES = ("-app", "-password")     # the cluster objects a cache creates, next to `<system>-<name>` itself (design.md)
 CACHE_VERSIONS = (8, 9)
+BROKER_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
+BROKER_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources"]
+BROKER_SIZING_KEYS = ["version", "replicas", "storage", "resources"]
+BROKER_VERSIONS = ("2.14", "2.15")
+BROKER_SUFFIXES = ("-headless", "-config", "-nack", "-password")    # the cluster objects a broker creates, next to `<system>-<name>` and the per-component Secrets
+BROKER_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
 MAXMEMORY_POLICIES = ("noeviction", "allkeys-lru", "allkeys-lfu", "allkeys-random", "volatile-lru", "volatile-lfu", "volatile-random",
                       "volatile-ttl")
 QUANTITY = re.compile(r"^([0-9]+(?:\.[0-9]+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$")     # a Kubernetes quantity without milli and exponent forms
@@ -205,6 +211,8 @@ TYPES = {
                        "AWS_ENDPOINT_URL_S3": "endpoint"}},
     "cache": {"keys": ["url", "host", "port", "password"],  # pragma: allowlist secret
               "env": {"REDIS_URL": "url", "REDIS_HOST": "host", "REDIS_PORT": "port", "REDIS_PASSWORD": "password"}},  # pragma: allowlist secret
+    "broker": {"keys": ["url", "user", "password"],  # pragma: allowlist secret
+               "env": {"NATS_URL": "url", "NATS_USER": "user", "NATS_PASSWORD": "password"}},  # pragma: allowlist secret
 }
 API_TYPES = ["openapi", "grpc", "graphql", "events"]
 POLICY_VALUES = {"audit": "Audit", "enforce": "Enforce", "off": "Off"}     # system.yaml policy -> the 4.x mode
@@ -293,6 +301,7 @@ ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 LITERAL_SECRET = re.compile(r"(PASSWORD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|CREDENTIAL)", re.I)
 ALERT_SEVERITIES = ("critical", "warning", "info")
 DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+EVENTS_API_NAME = DNS_LABEL     # a bound events API names a stream, a subject token and an object
 
 
 class RenderError(Exception):
@@ -783,9 +792,13 @@ def validate_apis(doc: dict, comps: list[dict]) -> None:
     for a, conf in apis.items():
         if not isinstance(conf, dict) or conf.get("type") not in API_TYPES:
             fail(f"apis.{a}: type must be openapi, grpc, graphql or events")
+        events_api = conf["type"] == "events"
+        if "broker" in conf and not events_api:
+            fail(f"apis.{a}: only events APIs are carried by a broker (remove broker from this {conf['type']} API)")
+        allowed = ["type", "broker"] if events_api else ["type"]
         for k in conf:
-            if k != "type":
-                fail(f"apis.{a}: unknown key '{k}' (allowed: type)")
+            if k not in allowed:
+                fail(f"apis.{a}: unknown key '{k}' (allowed: {', '.join(allowed)})")
     for c in comps:
         for key in ("provides", "consumes"):
             for a in c[key]:
@@ -816,7 +829,7 @@ def check_s3(where: str, s3) -> None:
         fail(f"{where}.forcePathStyle must be true or false")
 
 
-def check_remote(where: str, remote, keys: list[str] = REMOTE_KEYS) -> dict:
+def check_remote(where: str, remote, keys: list[str] = REMOTE_KEYS, placeholders: tuple[str, ...] = ("system", "env", "resource")) -> dict:
     """`remote` of a resource or of one of its instances: {path, refreshInterval}, both optional (a bucket also takes s3)."""
     if remote is None:
         return {}
@@ -826,7 +839,7 @@ def check_remote(where: str, remote, keys: list[str] = REMOTE_KEYS) -> dict:
         if k not in keys:
             fail(f"{where}: unknown key '{k}' (allowed: {', '.join(keys)})")
     if remote.get("path") is not None:
-        check_placeholders(f"{where}.path", remote["path"], ["system", "env", "resource"])
+        check_placeholders(f"{where}.path", remote["path"], list(placeholders))
     if remote.get("refreshInterval") is not None and not isinstance(remote["refreshInterval"], str):
         fail(f"{where}.refreshInterval must be a string, e.g. 1h")
     if "s3" in remote:
@@ -885,6 +898,24 @@ def check_cache(r: str, rc: dict, inst: dict, external: dict[str, bool]) -> int 
     return version
 
 
+def check_broker(r: str, rc: dict, inst: dict, external: dict[str, bool]) -> str | None:
+    """Value checks of a broker in the order of design.md (Render errors); returns the NATS minor line, None when external everywhere."""
+    version = None
+    if not all(external.values()):
+        version = rc.get("version", "2.15")
+        version = str(version) if isinstance(version, (int, float)) and not isinstance(version, bool) else version
+        if not isinstance(version, str) or version not in BROKER_VERSIONS:
+            fail(f"resources.{r}: version '{version}' is not a supported broker version ({', '.join(BROKER_VERSIONS)})")
+    for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
+        if "replicas" in conf and (isinstance(conf["replicas"], bool) or not isinstance(conf["replicas"], int) or conf["replicas"] not in (1, 3)):
+            fail(f"{where}: a broker runs with 1 or 3 replicas (replicas: {conf['replicas']})")
+        if "storage" in conf and not (isinstance(conf["storage"], str) and STORAGE_SIZE.match(conf["storage"])):
+            fail(f"{where}: storage must be a size such as 1Gi")
+        if "resources" in conf and not isinstance(conf["resources"], dict):
+            fail(f"{where}: resources must be a mapping with requests and limits, e.g. {{requests: {{cpu: 100m, memory: 256Mi}}, limits: {{memory: 512Mi}}}}")
+    return version
+
+
 def check_bucket(system: str, r: str, rc: dict, inst: dict, in_cluster: bool) -> None:
     """Value checks of a bucket (design.md, Render errors): versioning, storage, then the S3 name and length rule."""
     for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
@@ -920,9 +951,10 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         fail(f"resources.{r}: type {typ} is not available yet: spec {PLANNED_TYPES[typ]} brings it")
     bucket = typ == "bucket"
     cache = typ == "cache"
-    keys = BUCKET_KEYS if bucket else CACHE_KEYS if cache else RESOURCE_KEYS
-    instance_keys = BUCKET_INSTANCE_KEYS if bucket else CACHE_INSTANCE_KEYS if cache else RESOURCE_INSTANCE_KEYS
-    sizing_keys = BUCKET_SIZING_KEYS if bucket else CACHE_SIZING_KEYS if cache else SIZING_KEYS
+    brk = typ == "broker"
+    keys = BUCKET_KEYS if bucket else CACHE_KEYS if cache else BROKER_KEYS if brk else RESOURCE_KEYS
+    instance_keys = BUCKET_INSTANCE_KEYS if bucket else CACHE_INSTANCE_KEYS if cache else BROKER_INSTANCE_KEYS if brk else RESOURCE_INSTANCE_KEYS
+    sizing_keys = BUCKET_SIZING_KEYS if bucket else CACHE_SIZING_KEYS if cache else BROKER_SIZING_KEYS if brk else SIZING_KEYS
     for k in rc:
         if k not in keys:
             fail(f"resources.{r}: unknown key '{k}' (allowed: {', '.join(keys)})")
@@ -943,7 +975,7 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         i = i or {}
         if "external" in i and not isinstance(i["external"], bool):
             fail(f"{where}: external must be true or false")
-        if not bucket and "backup" in i and i.get("external", base_external) is True:
+        if typ == "database" and "backup" in i and i.get("external", base_external) is True:
             fail(f"{where}: an external database is backed up by its provider (remove backup)")
         if i.get("external", base_external):
             for k in sizing_keys:
@@ -968,9 +1000,10 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         if "remote" in i and not external[e]:
             fail(f"resources.{r}.instances.{e}: remote needs external: true in {e}")
     remote_keys = BUCKET_REMOTE_KEYS if bucket else REMOTE_KEYS
-    check_remote(f"resources.{r}.remote", rc.get("remote"), remote_keys)
+    holders = ("system", "env", "resource", "component") if brk else ("system", "env", "resource")
+    check_remote(f"resources.{r}.remote", rc.get("remote"), remote_keys, holders)
     for e, i in inst.items():
-        check_remote(f"resources.{r}.instances.{e}.remote", i.get("remote"), remote_keys)
+        check_remote(f"resources.{r}.instances.{e}.remote", i.get("remote"), remote_keys, holders)
     first = next((e for e in ENVS if external[e]), None)
     if first and not doc.get("secretStore"):
         fail(f"resources.{r}: external in {first} needs the system's secretStore (declare secretStore: {{name, kind}})")
@@ -979,17 +1012,20 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         check_bucket(system=str(doc.get("system")), r=r, rc=rc, inst=inst, in_cluster=not all(external.values()))
     elif cache:
         version = check_cache(r, rc, inst, external)
+    elif brk:
+        version = check_broker(r, rc, inst, external)
     elif not all(external.values()):
         version = database_version(r, rc.get("version", 17))
     for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
-        if "replicas" in conf:
+        if "replicas" in conf and not brk:
             check_replicas(f"resources.{r}", conf["replicas"])
     envs: dict[str, dict] = {}
     for e in ENVS:
         i = inst.get(e, {})
         if external[e]:
-            remote = {**(check_remote("", rc.get("remote"), remote_keys)), **check_remote("", i.get("remote"), remote_keys)}
-            key = str(remote.get("path") or "{system}-{env}-{resource}").format(system=str(doc.get("system")), env=e, resource=r)
+            remote = {**(check_remote("", rc.get("remote"), remote_keys, holders)), **check_remote("", i.get("remote"), remote_keys, holders)}
+            key = str(remote.get("path") or ("{system}-{env}-{resource}-{component}" if brk else "{system}-{env}-{resource}")).format(
+                system=str(doc.get("system")), env=e, resource=r, component="{component}")
             envs[e] = {"external": True, "version": None, "replicas": None, "storage": None, "resources": None,
                        "store_key": key, "refreshInterval": str(remote.get("refreshInterval") or "1h")}
             if bucket:
@@ -998,7 +1034,7 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
                 envs[e]["s3"] = dict(s3) if s3 else None
             elif cache:
                 envs[e].update({"memory": None, "maxmemory": None, "maxmemoryPolicy": None, "persistence": None})
-            else:
+            elif typ == "database":
                 envs[e]["backup"] = None
             continue
         if cache:
@@ -1014,6 +1050,11 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
             envs[e] = {"external": False, "version": None, "replicas": None, "storage": str(i.get("storage", rc.get("storage", "10Gi"))),
                        "resources": None, "versioning": i.get("versioning", rc.get("versioning", False)),
                        "store_key": None, "refreshInterval": None, "s3": None}
+            continue
+        if brk:
+            storage = i.get("storage", rc.get("storage", "1Gi"))
+            envs[e] = {"external": False, "version": version, "replicas": i.get("replicas", rc.get("replicas", 1)), "storage": str(storage),
+                       "resources": i.get("resources", rc.get("resources")), "store_key": None, "refreshInterval": None}
             continue
         storage = i.get("storage", rc.get("storage"))
         envs[e] = {"external": False, "version": version, "replicas": int(i.get("replicas", rc.get("replicas", 1))),
@@ -1031,23 +1072,73 @@ def validate_resources(doc: dict) -> dict:
     return {r: validate_resource(doc, r, rc) for r, rc in res.items()}
 
 
-def object_names(system: str, r: str, typ: str) -> list[str]:
-    """The cluster objects a resource creates (design.md): a database the CloudNativePG family, any other type the object and its Secret."""
+def object_names(system: str, r: str, typ: str, users: tuple[str, ...] | list[str] = ()) -> list[str]:
+    """The cluster objects a resource creates (design.md): a database the CloudNativePG family, a broker its chart objects and one Secret
+    per participating component (`users`), any other type the object and its Secret."""
     base = f"{system}-{r}"
+    if typ == "broker":
+        return [base, *(base + s for s in BROKER_SUFFIXES), *(f"{base}-{c}-app" for c in users)]
     return [base, *(base + s for s in (CNPG_SUFFIXES if typ == "database" else BUCKET_SUFFIXES if typ == "bucket" else CACHE_SUFFIXES if typ == "cache" else ("-app",)))]
 
 
-def check_resource_clashes(system: str, resources: dict, comps_doc: dict, comps: list[dict]) -> None:
+def broker_users(events: dict, comps: list[dict], broker_name: str) -> list[str]:
+    """The components (not libraries) that provide or consume an events API the broker carries, in `components:` order."""
+    return [c["name"] for c in comps if c["type"] != "library"
+            and any(events.get(a, {}).get("broker") == broker_name for a in [*c["provides"], *c["consumes"]])]
+
+
+def bind_events(doc: dict, comps: list[dict], resources: dict) -> dict:
+    """Binds every events API to a broker (design.md, Binding); returns {api: {broker, provider, consumers}} in `apis:` order.
+    An API with no `broker:` in a system without any broker stays unbound (`broker` None); the render prints a note."""
+    brokers = [r for r, rc in resources.items() if rc["type"] == "broker"]
+    out: dict[str, dict] = {}
+    for a, conf in (doc.get("apis") or {}).items():
+        if conf["type"] != "events":
+            continue
+        bound = None
+        if "broker" in conf:
+            bound = conf["broker"]
+            if not isinstance(bound, str) or bound not in brokers:
+                fail(f"apis.{a}: broker '{bound}' is not a broker resource of the system (brokers: {names_list(brokers)})")
+        elif len(brokers) > 1:
+            fail(f"apis.{a}: the system has several brokers ({', '.join(brokers)}): choose one with apis.{a}.broker")
+        elif brokers:
+            bound = brokers[0]
+        if bound is not None and not EVENTS_API_NAME.match(str(a)):
+            fail(f"apis.{a}: an events API carried by a broker needs a lowercase DNS label as its name "
+                 f"(it names the stream {doc.get('system')}-{a} and the subjects {doc.get('system')}.{a}.>)")
+        run = [c for c in comps if c["type"] != "library"]
+        out[a] = {"broker": bound, "provider": next((c["name"] for c in run if a in c["provides"]), None),
+                  "consumers": [c["name"] for c in run if a in c["consumes"]]}
+    return out
+
+
+def effective_uses(c: dict, resources: dict, events: dict) -> list[str]:
+    """The declared non-broker resources in `uses` order, then the brokers of the component's events APIs (provides, then consumes), once each."""
+    out = [u for u in c.get("uses") or [] if u in resources and resources[u]["type"] != "broker"]
+    for a in [*c["provides"], *c["consumes"]]:
+        b = events.get(a, {}).get("broker")
+        if b and b not in out:
+            out.append(b)
+    return out
+
+
+def check_resource_clashes(system: str, resources: dict, comps_doc: dict, comps: list[dict], events: dict | None = None) -> None:
     for r in resources:
         if r in comps_doc:
             fail(f"resources.{r}: components.{r} has the same name; a resource and a component need different names")
     names = list(resources)
     for n, a in enumerate(names):
         for b in names[n + 1:]:
-            both = [o for o in object_names(system, a, resources[a]["type"]) if o in object_names(system, b, resources[b]["type"])]
+            names_a = object_names(system, a, resources[a]["type"], broker_users(events or {}, comps, a))
+            names_b = object_names(system, b, resources[b]["type"], broker_users(events or {}, comps, b))
+            both = [o for o in names_a if o in names_b]
             if both:
                 fail(f"resources.{a} and resources.{b} would both create the object {both[0]}; rename one")
-    connection = {f"{system}-{r}-app": r for r in resources}
+    connection = {f"{system}-{r}-app": r for r in resources if resources[r]["type"] != "broker"}
+    for r in resources:
+        if resources[r]["type"] == "broker":
+            connection.update({f"{system}-{r}-{c}-app": r for c in broker_users(events or {}, comps, r)})
     for c in comps:
         for sec in (comps_doc.get(c["name"]) or {}).get("secrets") or []:
             if isinstance(sec, dict) and sec.get("name") in connection:
@@ -1067,17 +1158,32 @@ def variable_names(uses: list[str], resources: dict) -> list[tuple[str, list[str
     return out
 
 
-def validate_uses(comps: list[dict], resources: dict) -> None:
+def validate_uses(comps: list[dict], resources: dict, events: dict | None = None) -> None:
+    events = events or {}
     libs = [c["name"] for c in comps if c["type"] == "library"]
     for s in comps:
         for u in s.get("uses") or []:
             if u not in resources and u not in libs:
                 fail(f"components.{s['name']}: uses '{u}', which is neither a resource nor a library of the system "
                      f"(resources: {names_list(resources)}; libraries: {names_list(libs)})")
+        if s["type"] == "library":
+            continue
+        effective = effective_uses(s, resources, events)
         for u in s.get("uses") or []:
-            if u not in resources:
-                continue
-            names = dict(variable_names(s.get("uses") or [], resources))[u]
+            if u in resources and resources[u]["type"] == "broker" and u not in effective:
+                fail(f"components.{s['name']}: uses '{u}', a broker; a component reaches a broker through an events API it provides or "
+                     f"consumes, and none of {s['name']}'s is carried by {u}")
+        names_by = dict(variable_names(effective, resources))
+        first_broker = next((u for u in effective if resources[u]["type"] == "broker"), None)
+        for u in effective:
+            names = list(names_by[u])
+            if resources[u]["type"] == "broker":
+                for a in dict.fromkeys([*s["provides"], *s["consumes"]]):
+                    if events.get(a, {}).get("broker") == u:
+                        prefix = "EVENTS_" + a.upper().replace("-", "_") + "_"
+                        names += [prefix + "STREAM", prefix + "SUBJECT_PREFIX", *([prefix + "CONSUMER"] if a in s["consumes"] else [])]
+                if u == first_broker:
+                    names.append("NATS_INBOX_PREFIX")
             for env, eff in (s.get("_eff") or {}).items():
                 clash = [k for k in names if k in (eff.get("env") or {})]
                 if clash:
@@ -1181,16 +1287,17 @@ def _load_system(app_dir: Path) -> dict:
     comps = [validate_component(app_dir, str(c), spec) for c, spec in comps_doc.items()]
     validate_apis(doc, comps)
     resources = validate_resources(doc)
-    check_resource_clashes(d, resources, comps_doc, comps)
-    validate_uses(comps, resources)
+    events = bind_events(doc, comps, resources)
+    check_resource_clashes(d, resources, comps_doc, comps, events)
+    validate_uses(comps, resources, events)
     backups = validate_backups(doc, env_conf, resources, comps)
     registries = doc.get("registries") or []
     if not isinstance(registries, list):
         fail("registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
-    services = [{**c, "uses": [u for u in c.get("uses") or [] if u in resources]} for c in comps if c["type"] != "library"]
+    services = [{**c, "uses": effective_uses(c, resources, events)} for c in comps if c["type"] != "library"]
     cfg = {"gateway": doc.get("gateway"), "secretStore": doc.get("secretStore"), "hosts": hosts, "registries": [str(r) for r in registries],
            "policy": env_conf["policy"], "observability": env_conf["observability"], "operators": env_conf["operators"],
-           "backup": backups, "resources": resources}
+           "backup": backups, "resources": resources, "events": events}
     declared = "autonomy" in doc or env_conf["declared"] or any("autonomy_max" in s["_eff"][e] for s in services for e in s["environments"])
     autonomy = autonomy_json(d, paused, env_conf["autonomy"], env_conf["promote"], services) if declared else None
     return {"system": d, "owner": doc["owner"], "autonomy": autonomy, "services": services, "libraries": [c["name"] for c in comps if c["type"] == "library"], "cfg": cfg}
