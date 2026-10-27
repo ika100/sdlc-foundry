@@ -73,6 +73,7 @@ tasks:
     covers: [AC-124.7, AC-124.11, AC-124.18]
     parallel_safe: true
     depends_on: [t4]
+    done: true
   - id: t11
     title: autonomy_actions.py — undo (revert PR, pin back, reopen) and approve (review, merge when green)
     files: [scripts/cplat/autonomy_actions.py]
