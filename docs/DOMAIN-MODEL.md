@@ -161,13 +161,13 @@ Every command names the thing it acts on; the same verbs work for a system and f
 
 | Noun | Verbs |
 |---|---|
-| `system` | `new` · `status` · `spec` · `plan` · `ship` |
-| `component` | `new` · `add` · `set` · `remove` · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
+| `system` | `new` · `set` · `status` · `spec` · `plan` · `ship` |
+| `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
 | `api` | `list` (`check` comes with spec 110) |
 | `resource` | `add` · `remove` |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |
-| `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` |
+| `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` · `ui` |
 
 The contract check of an API is not built yet: it comes with spec 110.
 

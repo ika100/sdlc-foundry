@@ -6,6 +6,22 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**A local console shows the system, its process and what needs you.** Spec 122, [ADR-055](adr/055-local-console-over-cplat-json.md), [guide](console.md). `/platform:ui` (`cplat ui`) serves a browser console on `127.0.0.1` with three places: Inbox (decisions waiting for you), Board (every item by stage) and System (components by environment). Actions run as `cplat headless` in the local clone; the console never writes to git, GitHub or the cluster itself.
+
+**`cplat needs` and the run list.** `cplat needs --json` lists what waits for a human (approvals, answers, escalations, promotions). The run list (`cplat runs --json`) gives every run a phase and a stage.
+
+**Status and spec additions.** `cplat system status --json` and `cplat spec list --all --detail --json` carry more keys for the console. Deliberate test change: the AC-113.11 status tests now compare the 5.0 keys, because spec 122 adds keys.
+
+**Draft spec PRs.** `/component:spec` and `/system:spec` publish a spec as a draft pull request (`cplat spec publish`) and ask the owner to review; approving lands it (`cplat spec land`).
+
+**Notifications.** `~/.config/sdlc-foundry/notify.yaml` chooses per event whether GitHub, desktop, Slack or email is told, instantly or in a digest, with quiet hours. Secrets come from the environment or the OS keychain, never the file. `cplat ui notify --once` runs from cron or launchd.
+
+**`--provides` and `--consumes`.** `/component:add` and `/component:set` declare the APIs of one component; a new API goes into `apis:` in the same PR.
+
+**`/system:set`.** Changes system-wide settings such as `--env` (`cplat system set`).
+
+**Plugins:** `platform` 1.1.0 (`/platform:ui`), `system` 1.1.0 (`/system:set`), `component` 1.2.0 (`--provides`, `--consumes`, draft spec PRs).
+
 **Resources are named, typed and may be external.** [ADR-057](adr/057-named-typed-resources-with-fixed-contracts.md), [ADR-058](adr/058-pinned-versions-and-platform-installed-operators.md), spec 115. Not breaking: a 5.0 `system.yaml` renders as before. A system declares any number of resources under `resources.<name>` with a `type` (`database` is built; `bucket`, `cache` and `broker` are reserved for specs 116, 118 and 119). A database can be `external` (optionally with `remote.path` and a per-environment `instances.<env>.external`): the platform renders an ExternalSecret from the secret store and no cluster. A component that uses two or more resources of one type gets prefixed variables (`ORDERS_DB_DATABASE_URL`). `cplat model show` lists type and `external`; `cplat platform doctor` compares the installed operator.
 
 **Pinned database image, supported majors 15–18.** The database image is pinned exactly per major. The one narrowing against 5.0: another `version` (for example 14) now fails the render and names the supported majors 15, 16, 17 and 18.
