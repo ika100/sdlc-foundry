@@ -34,7 +34,7 @@ This is an additive 5.x extension of spec 114, which stays as approved and is no
 ### Binding events APIs to a broker
 
 - **AC-119.5** Given an API of `type: events` with `broker: <name>`, when it is rendered, then `<name>` must be a resource of `type: broker` in the same system; a name that is not a resource, or a resource of another type, fails naming the API and the system's brokers.
-- **AC-119.6** Given an events API without `broker:`, when it is rendered, then it is bound to the system's only broker; with no broker the render fails naming the API and `/resource:add <name> --type broker`, and with two or more brokers it fails naming the API and listing the brokers to choose from with `broker:`.
+- **AC-119.6** Given an events API without `broker:`, when it is rendered, then it is bound to the system's only broker; with no broker the API stays unbound and the render prints a note naming the API and `/resource:add <name> --type broker` (not a failure: a 5.0 `system.yaml` with an events API and no broker must render byte-identically, AC-119.24), and with two or more brokers it fails naming the API and listing the brokers to choose from with `broker:`.
 - **AC-119.7** Given a component that provides or consumes an events API, when it is rendered, then it uses that API's broker without listing it in `uses`; listing a broker in `uses` is accepted and changes nothing for such a component, and a component that lists a broker in `uses` but neither provides nor consumes an events API bound to it fails naming the component and saying a component reaches a broker through an events API.
 - **AC-119.8** Given `broker:` on an API whose type is not `events`, when it is rendered, then the render fails naming the API and saying only events APIs are carried by a broker.
 
@@ -95,3 +95,4 @@ This is an additive 5.x extension of spec 114, which stays as approved and is no
 - 2026-10-26 created
 - 2026-10-26 open questions answered: per-component Secret named `<system>-<name>-<component>-app` (AC-119.11 clarified); AC-119.18 withdrawn for the platform-installed controller and the `operators: owner` opt-out (AC-119.22, AC-119.23); added AC-119.21 (chart and declared streams), AC-119.24 (additive to 5.0), AC-119.25 (docs example); AC-119.20 to AC-119.25 under "Running the broker, upgrades and docs" so ids read in order; backups by spec 117 noted.
 - 2026-10-26 approved
+- 2026-10-28 AC-119.6 clarified at plan time: with no broker an events API stays unbound and the render prints a note instead of failing, because failing contradicted AC-119.24 (5.0 systems may declare events APIs and must render byte-identically) and would have made the release breaking
