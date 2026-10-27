@@ -10,6 +10,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **Plugins:** `resource` 1.4.0 (`/resource:add <name> --type cache`).
 
+**Fixes to the platform's own checks.** Release and docs-only PRs now run the cplat tests too: the tests read the changelog, specs and guides, and release 5.2.0 left `main` red because they were skipped. `uv run scripts/pin-actions.py`, which the pin check names as the fix, now moves the templates' pins to the platform's own: Dependabot reads only `/.github/workflows`, so its Actions PRs bump the platform's pins alone. `cplat spec test-diff` no longer reports a test file that a building spec's plan task creates after the red commit. The platform repo sets `worktree.baseRef: "head"`, so its build tasks can run in parallel worktrees.
+
 ## [5.2.0] — 2026-10-27
 
 **Databases and environments are backed up and restorable.** Spec 117 ([spec 117](specs/117-databases-and-environments-are-backed-up/spec.md)), [ADR-061](adr/061-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md) (database backups with the Barman Cloud plugin, restore by generation) and [ADR-062](adr/062-environment-backups-with-velero.md) (environment backups with Velero). Not breaking: a `system.yaml` without `backup` renders as before. `backup` on a database instance gives scheduled base backups and continuous archiving with point-in-time restore; `backup` on an environment gives Velero backups of its namespaces and volumes. `/system:status` shows a Backups section, `cplat doctor` warns about an unbacked-up prod, and a failing backup older than an hour files an alert issue. Pins: plugin-barman-cloud 0.8.1, cert-manager v1.21.3, velero 12.2.1, velero-plugin-for-aws v1.14.4.

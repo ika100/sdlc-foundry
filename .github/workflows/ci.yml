@@ -47,8 +47,9 @@ jobs:
           fi
           echo "changed files:"; awk '{print "  " $0}' <<< "$files"
           has() { if grep -Eq "$1" <<< "$files"; then echo true; else echo false; fi; }
-          # anything that is not documentation or repository metadata can break the tested code
-          code=$(grep -Evq '^(docs/|.*\.md$|LICENSE$|NOTICE$|\.github/(ISSUE_TEMPLATE/|CODEOWNERS|PULL_REQUEST_TEMPLATE|dependabot))' <<< "$files" && echo true || echo false)
+          # anything but images and repository metadata can break the tested code: the cplat tests read the
+          # Markdown too (changelog, specs, ADRs, guides), so a release or docs-only PR still runs them
+          code=$(grep -Evq '^(docs/img/|LICENSE$|NOTICE$|\.github/(ISSUE_TEMPLATE/|CODEOWNERS|PULL_REQUEST_TEMPLATE|dependabot))' <<< "$files" && echo true || echo false)
           shared=$(has '^(scripts/|shapes\.yml$|\.github/workflows/ci\.yml$|tests/fixtures/)')
           t() { if [ "$shared" = true ] || [ "$(has "$1")" = true ]; then echo true; else echo false; fi; }
           {
