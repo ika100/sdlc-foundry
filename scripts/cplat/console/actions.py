@@ -79,17 +79,39 @@ def clone_of(repo: str) -> Path:
 
 # ---------------- commands ----------------
 
+# What may flow from a request into a command: values become one argv element each (no shell), and each is checked
+# against a fixed pattern so a value can never be read as an option or a second command.
+REPO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
+NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+VERSION = re.compile(r"^v?[0-9A-Za-z][0-9A-Za-z._-]{0,62}$")
+NUMBER = re.compile(r"^[0-9]{1,6}(\.[0-9]{1,2})?$")
+LIMITS = ("minutes", "invocations", "reruns", "cost")
+MODEL_COMMANDS = ("/component:add ", "/component:set ", "/component:remove ", "/resource:add ", "/resource:remove ",
+                  "/system:set ", "/system:new ")
+MAX_TEXT = 2000
+
+
+def _match(pattern: re.Pattern, value: object, what: str) -> str:
+    text = str(value or "")
+    if not pattern.match(text):
+        raise ValueError(f"invalid {what}: {text[:60]!r}")
+    return text
+
+
 def _spec_no(obj: dict) -> str:
     spec = str(obj.get("spec") or "")
     if not spec:
         raise ValueError("the object names no spec")
-    return spec.split("-", 1)[0]
+    return _match(re.compile(r"^[0-9]{1,4}$"), spec.split("-", 1)[0], "spec number")
 
 
 def _need(args: dict, key: str) -> str:
-    value = str(args.get(key) or "").strip()
+    """A free-text argument: one line, no control characters, at most MAX_TEXT characters."""
+    value = " ".join(str(args.get(key) or "").split())
     if not value:
         raise ValueError(f"missing {key}")
+    if len(value) > MAX_TEXT or any(ord(c) < 32 for c in value):
+        raise ValueError(f"invalid {key}")
     return value
 
 
@@ -102,30 +124,37 @@ def _slash(kind: str, obj: dict, args: dict) -> tuple[str, list[str]]:
         return f"/{level}:spec approve {_spec_no(obj)}", []
     if kind == "approve-ship":
         n = _spec_no(obj)
-        return f"/{level}:spec approve {n} and then /{level}:ship {n}", ["--budget", f"cost={_need(args, 'budget')}"]
+        return f"/{level}:spec approve {n} and then /{level}:ship {n}", ["--budget", f"cost={_match(NUMBER, args.get('budget'), 'budget')}"]
     if kind == "request-changes":
         return f"/{level}:spec --amend {_spec_no(obj)} {_need(args, 'comment')}", []
     if kind == "answer":
         return f"/{level}:spec --amend {_spec_no(obj)} answers to open questions: {_need(args, 'answers')}", []
     if kind == "promote":
-        return (f"/instance:promote {obj['component']} --to {_need(args, 'to')} --version {obj['version']}", [])
+        return (f"/instance:promote {_match(NAME, obj['component'], 'component')} --to {_match(NAME, args.get('to'), 'environment')}"
+                f" --version {_match(VERSION, obj['version'], 'version')}", [])
     if kind == "more-budget":
-        return f"/{level}:ship {_spec_no(obj)}", ["--budget", f"{_need(args, 'limit')}={_need(args, 'value')}"]
+        limit = str(args.get("limit") or "")
+        if limit not in LIMITS:
+            raise ValueError(f"invalid limit: {limit[:20]!r}")
+        return f"/{level}:ship {_spec_no(obj)}", ["--budget", f"{limit}={_match(NUMBER, args.get('value'), 'budget value')}"]
     if kind == "amend":
         return f"/{level}:spec --amend {_spec_no(obj)} {_need(args, 'text')}", []
     if kind == "fix":
-        return f"/component:fix #{obj['issue']}", []
+        return f"/component:fix #{_match(NUMBER, obj['issue'], 'issue')}", []
     if kind == "make-spec":
-        return f"/component:spec #{obj['issue']}", []
+        return f"/component:spec #{_match(NUMBER, obj['issue'], 'issue')}", []
     if kind == "dismiss":
-        return (f"/issue:triage {obj['issue']} dismiss as wontfix: {_need(args, 'reason')} (confirmed by the user in the console)", [])
+        return (f"/issue:triage {_match(NUMBER, obj['issue'], 'issue')} dismiss as wontfix: {_need(args, 'reason')} (confirmed by the user in the console)", [])
     if kind == "cut-release":
         return "/component:release", []
     if kind == "describe":
         text = _need(args, "text")
         return (f"Let Claude decide: {text}" if level == "decide" else f"/{level}:spec {text}"), []
     if kind == "model":
-        return _need(args, "command"), []
+        command = _need(args, "command")
+        if not command.startswith(MODEL_COMMANDS):
+            raise ValueError("a model action runs only /component:add|set|remove, /resource:add|remove, /system:set or /system:new")
+        return command, []
     raise ValueError(f"unknown action kind {kind!r}")
 
 
@@ -134,6 +163,7 @@ def command_for(kind: str, obj: dict, args: dict) -> tuple[list[str], str, str]:
     repo = str(obj.get("repo") or "")
     if "/" not in repo:
         raise ValueError("the object names no repository")
+    repo = _match(REPO, repo, "repository")
     clone = clone_of(repo)
     if kind == "clone":
         argv = ["gh", "repo", "clone", repo, str(clone)]

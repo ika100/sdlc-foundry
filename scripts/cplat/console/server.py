@@ -221,9 +221,12 @@ class Handler(BaseHTTPRequestHandler):
             raise HttpError(404, "not found", str(e)) from e
 
     def static(self, name: str) -> None:
-        if name not in STATIC_FILES:
-            raise HttpError(404, "not found", f"/static/{name}")
-        self.reply(200, (STATIC / name).read_bytes(), STATIC_FILES[name])
+        # serve only the fixed files: the path is built from the allowlist's own key, never from the request
+        for fname, ctype in STATIC_FILES.items():
+            if fname == name:
+                self.reply(200, (STATIC / fname).read_bytes(), ctype)
+                return
+        raise HttpError(404, "not found", f"/static/{name}")
 
     def panel(self, rest: str) -> None:
         kind, _, ident = rest.partition("/")

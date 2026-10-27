@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import difflib
+import hashlib
 import io
 import re
 import shlex
@@ -269,7 +270,8 @@ def _system_manifest(fields: dict) -> tuple[list[str], str, list[dict]]:
 
     manifest = _manifest_of(fields)
     text = yaml.safe_dump(manifest, sort_keys=False)
-    path = actions.state_dir() / "manifests" / f"{re.sub(r'[^a-z0-9-]', '-', str(manifest['system'] or 'new'))}.yaml"
+    # the file name is a hash of the manifest, never a value of the form
+    path = actions.state_dir() / "manifests" / f"{hashlib.sha256(text.encode()).hexdigest()[:16]}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     try:
