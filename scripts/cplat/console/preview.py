@@ -117,9 +117,9 @@ def make_scratch(snapshot: Path, scratch: Path) -> None:
         if (snapshot / rel).is_file():
             (scratch / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(snapshot / rel, scratch / rel)
-    _git(scratch, "init", "-q", "-b", "main")
-    _git(scratch, "add", "-A")
-    _git(scratch, "commit", "-q", "--allow-empty", "-m", "snapshot")
+    import gitops  # noqa: PLC0415 - scripts/cplat is on sys.path when cplat runs
+
+    gitops.scratch_tree(scratch)
 
 
 def system_yaml(root: Path) -> Path | None:
