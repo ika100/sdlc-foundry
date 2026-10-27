@@ -1,7 +1,7 @@
 ---
 spec_id: 122-a-local-console-shows-the-system-and-what
 title: A local console shows the system, its process and what needs you
-status: building
+status: done
 priority: P2
 ---
 
@@ -168,3 +168,4 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - 2026-10-26 amended (planning blocker): the API form runs `/component:add|set --provides|--consumes` (AC-122.50), the environment-rules form runs the new `/system:set --env` (AC-122.51)
 - 2026-10-26 approved
 - 2026-10-27 building
+- 2026-10-27 done
