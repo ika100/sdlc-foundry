@@ -43,22 +43,22 @@ Print every output verbatim. After a state change run `devbox run plan-check` an
 
 ## A. approve <id>
 
-`cplat spec approve <id>`; on refusal show the reasons and the fix. Commit `docs(spec): approve <spec_id>`. Next: `/system:plan <NNN>`.
+`cplat spec approve <id>`; on refusal show the reasons and the fix. Commit `docs(spec): approve <spec_id>`, then `cplat spec land <spec_id>` (approves the review, marks the draft PR ready, merges it once CI is green); show its output. Next: `/system:plan <NNN>`.
 
 ## B. New system spec
 
 1. `cplat spec new "<short title>"` (the shape `gitops-app` is recorded), then `git checkout -b docs/spec-<spec_id>`.
 2. **product-manager** (`svc:product-manager`): `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the component list, and "this is a system spec: criteria describe what users of the system observe; each story names the repos that take part (`**Repos:** …`)".
 3. `cplat spec check <spec_id>`; errors go back once.
-4. Questions loop (Q), commit `docs(spec): <spec_id> — <title>`, finish (F).
+4. Questions loop (Q), commit `docs(spec): <spec_id> — <title>`, run `cplat spec publish <spec_id>` (draft PR; the owner is asked to review), finish (F).
 
 ## C. --amend <id> <change>
 
-If the spec is not `draft`: `cplat spec set-status <id> draft --reason "amend: <one line>"` and say that its plan must be redone if criteria change (`plan-check` reports criteria no repo implements). **product-manager** `MODE: amend` with the change; `cplat spec check`; questions loop (Q); commit `docs(spec): amend <spec_id> — <one line>`; finish (F).
+Read the review comments first (`cplat spec review <id> --comments --json`) and pass them to the product-manager; a console "Request changes" comment is posted first with `cplat spec review <id> --request-changes --body-file <file>`. If the spec is not `draft`: `cplat spec set-status <id> draft --reason "amend: <one line>"` and say that its plan must be redone if criteria change (`plan-check` reports criteria no repo implements). **product-manager** `MODE: amend` with the change; `cplat spec check`; questions loop (Q); commit `docs(spec): amend <spec_id> — <one line>`; `cplat spec publish <spec_id>`; finish (F).
 
 ## Q. Questions loop
 
-While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds): ask the user with **AskUserQuestion** (up to 4 per call; suggested answer first, marked "(Recommended)"; the user can type their own), send the answers back (`MODE: amend`, "answers to open questions: …"), run `cplat spec check` again. Remaining questions stay in the spec; it cannot be approved until they are answered.
+While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds): ask the user with **AskUserQuestion** (up to 4 per call; suggested answer first, marked "(Recommended)"; the user can type their own), send the answers back (`MODE: amend`, "answers to open questions: …"), run `cplat spec check` again, commit the answers and run `cplat spec publish <spec_id>`. Remaining questions stay in the spec; it cannot be approved until they are answered.
 
 ## F. Finish
 
@@ -67,6 +67,6 @@ Print the spec id, title, status, each criterion on one line, the repos named in
 ## Rules
 
 - Never answer an open question for the user; never approve without their word.
-- Never touch `system.yaml`, overlays or component repos. Commits stay local; pushing the branch and opening a PR need the user's confirmation.
+- Never touch `system.yaml`, overlays or component repos. The only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, only `docs/specs/<id>/`, never forced); anything else needs the user's confirmation.
 
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
