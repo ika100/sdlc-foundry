@@ -111,6 +111,7 @@ tasks:
     covers: [AC-124.6, AC-124.7, AC-124.16, AC-124.17, AC-124.19]
     parallel_safe: true
     depends_on: [t12]
+    done: true
   - id: t16
     title: System › Autonomy tab — levels, guardrails, diff and Open PR, pause/resume, engine, caps, done on its own with Undo
     files: [scripts/cplat/console/autonomy_page.py, scripts/cplat/console/system_page.py]
