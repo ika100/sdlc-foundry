@@ -22,6 +22,7 @@ if [ -f "$answers" ]; then
     */templates/library-python|templates/library-python) echo library-python; exit 0 ;;
     */templates/web-nextjs|templates/web-nextjs)         echo web-nextjs; exit 0 ;;
     */templates/gitops-app|templates/gitops-app)         echo gitops-app; exit 0 ;;
+    */templates/cluster-gitops|templates/cluster-gitops) echo cluster-gitops; exit 0 ;;
     */templates/service-java|templates/service-java)     echo service-java; exit 0 ;;
     */templates/service-go|templates/service-go)         echo service-go; exit 0 ;;
   esac
@@ -29,6 +30,7 @@ fi
 
 # Sniffing fallback — first match wins.
 shopt -s nullglob
+if [ -f cluster.yaml ] && [ -f cluster/operators-root.yaml ]; then echo cluster-gitops; exit 0; fi
 appsets=(applications/*/applicationset.yaml)
 if [ ${#appsets[@]} -gt 0 ]; then echo gitops-app; exit 0; fi
 

@@ -363,7 +363,7 @@ def test_an_unknown_resource_key_and_an_unknown_instance_key_fail_ac_115_11(tmp_
     fails(tmp_path / "a", system({"d": db(size="big")}, {"api": comp("api", ["d"])}),
           "resources.d: unknown key 'size' (allowed: type, external, remote, version, replicas, storage, resources, instances)")
     fails(tmp_path / "b", system({"d": db(instances={"dev": {"size": 1}})}, {"api": comp("api", ["d"])}),
-          "resources.d.instances.dev: unknown key 'size' (allowed: external, remote, replicas, storage, resources)")
+          "resources.d.instances.dev: unknown key 'size' (allowed: external, remote, replicas, storage, resources, backup)")  # spec 117: backup
 
 
 # ---------------- AC-115.12: an incomplete store entry makes no Secret ----------------
@@ -486,7 +486,7 @@ def test_any_operators_value_but_owner_fails_naming_environment_and_owner_ac_115
 def test_operators_is_an_allowed_environment_key_ac_115_18(tmp_path):  # AC-115.18 (adds to AC-114.4)
     doc = op_doc()
     doc["environments"]["staging"]["replicas"] = 2
-    fails(tmp_path, doc, "environments.staging: unknown key 'replicas' (allowed: host, url, policy, promote, observability, operators, autonomy)")  # spec 124: autonomy
+    fails(tmp_path, doc, "environments.staging: unknown key 'replicas' (allowed: host, url, policy, promote, observability, operators, backup, autonomy)")  # spec 117: backup; spec 124: autonomy
 
 
 def test_check_mode_covers_the_operators_and_stale_ones_go_ac_115_18(tmp_path):  # AC-115.18

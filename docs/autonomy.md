@@ -2,7 +2,7 @@
 
 Autonomy lets an always-on **engine** fix a running system without waiting for a person, within limits you declare per environment. It is optional and off by default: every environment is at `observe` until you say otherwise, and a system that never mentions autonomy renders exactly as before. Everything on the platform still works from Claude Code alone; the console and an engine only add to it.
 
-The decision behind it is [ADR-060](adr/060-autonomy-in-system-yaml-and-the-engine-contract.md). The full contract for engine authors is in [design.md](specs/124-autonomy-is-declared-per-environment-and/design.md) and [contract.openapi.yaml](specs/124-autonomy-is-declared-per-environment-and/contract.openapi.yaml).
+The decision behind it is [ADR-063](adr/063-autonomy-in-system-yaml-and-the-engine-contract.md). The full contract for engine authors is in [design.md](specs/124-autonomy-is-declared-per-environment-and/design.md) and [contract.openapi.yaml](specs/124-autonomy-is-declared-per-environment-and/contract.openapi.yaml).
 
 ## The five levels
 

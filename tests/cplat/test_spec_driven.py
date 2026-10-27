@@ -9,7 +9,8 @@ import newapp
 import newsvc
 
 ROOT = core.PLATFORM_ROOT
-SHAPES = [s for s in core.registry.load() if s["status"] != "planned"]
+# a cluster repo holds no feature specs (scripts/shapes.py NO_FEATURE_SPECS, spec 125): every other shape seeds them
+SHAPES = [s for s in core.registry.load() if s["status"] != "planned" and s["id"] != "cluster-gitops"]
 IDS = [s["id"] for s in SHAPES]
 
 

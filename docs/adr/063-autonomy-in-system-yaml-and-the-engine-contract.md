@@ -1,4 +1,4 @@
-# ADR-060: Autonomy is declared in system.yaml; an engine is bound by a contract and only signals can act before a merge
+# ADR-063: Autonomy is declared in system.yaml; an engine is bound by a contract and only signals can act before a merge
 
 **Status:** Accepted (2026-10-27)
 **Builds on:** [ADR-053](053-domain-model.md) (the domain model), [ADR-054](054-five-zero-interface-and-proved-migration.md) (the renderer is the only validator of `system.yaml`), [ADR-032](032-private-run-store.md) (run records), [ADR-055](055-local-console-over-cplat-json.md) (the console acts only through slash commands), spec 124

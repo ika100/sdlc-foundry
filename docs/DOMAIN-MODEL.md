@@ -9,7 +9,7 @@ The nouns the platform is built around: what a system is made of, where it runs,
 | You ask | The model answers with |
 |---|---|
 | What is my product made of? | the **System** and its parts: **Components**, **APIs**, **Resources**, and its **Owner** |
-| Where does it run, at which version? | **Environments** × parts: each cell is an **Instance** (or a **Resource instance**) |
+| Where does it run, at which version? | **Environments** × parts: each cell is an **Instance** (or a **Resource instance**); the environments run on a **Cluster** that several systems share |
 | How does it change? | an **Issue** becomes a **Spec**; a **Run** ships it; a **Release** goes to prod |
 
 ## The system model
@@ -19,7 +19,7 @@ The nouns the platform is built around: what a system is made of, where it runs,
 Three layers:
 
 - **What it is** is Backstage's system model, reduced to the kinds a user needs. An Owner owns a System; Components, APIs and Resources are part of it. A Component provides or consumes APIs, uses Resources, and may use a library (another Component).
-- **Where it runs** adds environments. Every Component and Resource exists once per Environment as an Instance (Resource instance). Environments are ordered (`promotes to`), so each Instance knows the Instance its version was promoted from.
+- **Where it runs** adds environments and the cluster. Every Component and Resource exists once per Environment as an Instance (Resource instance). Environments are ordered (`promotes to`), so each Instance knows the Instance its version was promoted from. Every Environment runs on a Cluster; the Cluster hosts the System and runs the shared operators that manage its Resource instances (see [Cluster](#cluster)).
 - **Work** connects changes to the model: a Spec changes the System or one Component, and the Run that ships it updates Instances, starting in dev.
 
 A library has no Instances; other Components use it.
@@ -57,6 +57,7 @@ Thick borders are where you decide: approving a spec, an escalation, promoting t
 | Component | Something you build, in its own repo: a service, a website or a library | todo-api | service, shape |
 | API | What a component offers others, and who uses it | todo-api REST | plan `## Contract` (prose) |
 | Resource | Something you use but don't build; named and typed, run by the platform or external | users-db (database) | addon |
+| Cluster | The place systems run, with its shared operators, External Secrets with the secret store, the Kyverno engine and the list of its systems | home | cluster repo, `operators/` |
 | Owner | Who is responsible for the system and its parts | team-todo | not modelled |
 | Environment | A stage the system passes through, with its own rules for getting in | staging | env key in several files |
 | Instance | One component running in one environment, at one version | todo-api in staging | pin, overlay, Argo app |
@@ -74,6 +75,18 @@ Three placements are decided ([ADR-053](adr/053-domain-model.md)):
 - **Observability** (the OpenTelemetry collector, alert rules, the UI) is a property of an Environment, not a Resource: every component in the environment gets it.
 - **Secrets** are declared on the Component (generated or read from the store) and can be overridden per Instance; their values are set per Instance.
 - **Names in the cluster do not change**: the namespace `<system>-<env>`, the Argo application `<component>-<env>`, every resource's Secret `<system>-<name>-app` (so `<system>-postgres-app` for a resource called `postgres`). The model maps onto them.
+
+### Cluster
+
+A Cluster is the place systems run. Its own repo (`cluster.yaml`, shape `cluster-gitops`) owns what several systems share: the operators (for example CloudNativePG), External Secrets with the secret store, and the Kyverno engine. The decision is [ADR-060](adr/060-a-cluster-repo-owns-shared-services.md); the steps are in [CLUSTERS.md](CLUSTERS.md).
+
+Its relations to the rest of the model:
+
+- **A Cluster hosts Systems.** `cluster.yaml` lists each system by its gitops repo, and the cluster repo renders one Argo application `system-<name>` per system (`/cluster:add`, `/cluster:remove`). A System is hosted by one Cluster; a cluster without a cluster repo hosts just the one system that installs its own operators.
+- **An Environment runs on its System's Cluster.** All environments of a system run on the same cluster, each in its namespace `<system>-<env>`. Spreading one system's environments over several clusters is not modelled yet.
+- **A Resource instance is managed by the Cluster's operators.** An in-cluster database instance is run by CloudNativePG, a bucket instance by the SeaweedFS operator, and an external resource's Secret is filled by External Secrets through the cluster's secret store. The cluster repo's check fails when a hosted system needs an operator that `cluster.yaml` does not list.
+- **A System hands its operators to the Cluster** by setting `operators: owner` in every environment; it then no longer renders `operators/`. Kyverno policies stay with each System; only the engine is the Cluster's.
+- **Components and their Instances do not know the Cluster.** Names in the cluster stay the same, so a system renders the same manifests whether it shares a cluster or has its own.
 
 ## One file per system
 
@@ -130,15 +143,16 @@ resources:
 | Where | Allowed keys |
 |---|---|
 | top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries`, `autonomy` (only `paused`) |
-| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `autonomy` |
+| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `backup`, `autonomy` |
 | service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances` |
 | external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote` and `autonomy`) |
 | library component | `type`, `lang`, `repo`, `provides`, `consumes` |
 | `components.<c>.instances.<env>` | `replicas`, `resources`, `env`, `promote`, `secrets`, `autonomy` (only `max`) |
 | `apis.<a>` | `type`: `openapi`, `grpc`, `graphql` or `events` |
 | `resources.<name>` | `type`, `external`, `remote`, `version`, `replicas`, `storage`, `resources`, `instances` |
-| `resources.<name>.remote` | `path`, `refreshInterval` |
-| `resources.<name>.instances.<env>` | `external`, `remote`, `replicas`, `storage`, `resources` |
+| `resources.<name>.remote` | `path`, `refreshInterval`; on a bucket also `s3` (`endpoint`, `bucket`, `region`, `forcePathStyle`) |
+| database `resources.<name>.instances.<env>` | `external`, `remote`, `replicas`, `storage`, `resources`, `backup` |
+| `backup` (environment or database instance) | `to`, `schedule`, `retention` |
 | bucket `resources.<name>` (`type: bucket`) | `type`, `external`, `remote`, `storage`, `versioning`, `instances` |
 | bucket `resources.<name>.instances.<env>` | `external`, `remote`, `storage`, `versioning` |
 
@@ -150,6 +164,7 @@ Valid `type`/`lang` pairs: `service/python`, `service/java`, `service/go`, `webs
 - `host` placeholders: `{component}`, `{system}`, `{env}`. `url` placeholders: `{host}`, `{component}`, `{system}`, `{env}`; a `url` is read by `instance verify` and ignored by the renderer.
 - `policy` is `audit`, `enforce` or `off` (default `audit` in dev and staging, `enforce` in prod).
 - `observability` on an environment gives that environment the collector and gives every instance there the `OTEL_*` variables.
+- `backup` on an environment backs up its persistent volumes and objects (Velero); on a database instance it backs up that database with continuous archiving and point-in-time restore. `to` is a bucket resource with an instance in that environment, `schedule` a five-field UTC cron (default `0 3 * * *`), `retention` `<n>d` or `<n>w` (default `30d`); an external bucket as target declares `remote.s3`. Databases are restored only with `/resource:restore`. See [BACKUP-AND-RESTORE.md](BACKUP-AND-RESTORE.md) (spec 117).
 - `promote`: `after-dev-smoke` or `manual` on staging (default `manual`), only `manual` on prod, none on dev. An instance value wins over the environment's.
 - `resources.<name>` declares any number of named, typed resources. `type` is required in `system.yaml`, `postgres` included (`/resource:add postgres` fills in `type: database` when `--type` is left out). The types are `database` and `bucket` (both rendered; the bucket is spec 116), and `cache` and `broker`, which are reserved: spec 118 and spec 119 deliver them. A resource is rendered in every environment where a running component uses it. Database instances take `replicas` (default 1), `storage` (default `1Gi`) and `version` (default 17; the supported majors are 15, 16, 17 and 18), with per-environment overrides under `instances.<env>`. The Argo application is `addon-<name>-<env>` and the Secret is `<system>-<name>-app`.
 - `type: bucket` is an S3-compatible object store for files and backups (spec 116). It takes `storage` (default `10Gi`) and `versioning` (default `false`; `true` keeps earlier versions of an overwritten object, `false` renders the S3 state `Suspended`), at the resource level or per instance under `instances.<env>`. For an in-cluster bucket the name `<system>-<name>` is the bucket name and may be at most 45 characters. Each bucket instance runs its own SeaweedFS, managed by the SeaweedFS operator that the platform installs from `operators/`. The component gets eight variables from the Secret `<system>-<name>-app` (keys `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId`, `secretAccessKey`): `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_FORCE_PATH_STYLE` (`true` in-cluster), `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` and `AWS_ENDPOINT_URL_S3`. With two or more buckets the prefix rule applies, for example `UPLOADS_S3_BUCKET`, and no bare `S3_*` or `AWS_*` variable is set. An `external: true` bucket renders no store; its secret store entry (default path `{system}-{env}-{resource}`) carries the same keys as the Secret: `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId` and `secretAccessKey`; `storage` and `versioning` are refused there, since an external bucket is sized and configured at its provider. Removing a bucket resource keeps the in-cluster bucket and its data until a human deletes them.
@@ -165,10 +180,11 @@ Every command names the thing it acts on; the same verbs work for a system and f
 
 | Noun | Verbs |
 |---|---|
-| `system` | `new` · `set` · `status` · `spec` · `plan` · `ship` |
+| `system` | `new` · `set` · `status` · `spec` · `plan` · `ship` · `restore` |
 | `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
 | `api` | `list` (`check` comes with spec 110) |
-| `resource` | `add` · `remove` |
+| `resource` | `add` · `remove` · `backup` · `restore` |
+| `cluster` | `new` · `add` · `remove` (`/cluster:new`, `/cluster:add`, `/cluster:remove`) |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |
 | `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` · `ui` |

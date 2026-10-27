@@ -21,6 +21,10 @@ def _observability(o: model.Observability | None) -> str:
     return f"ui={_d(o.ui) if o.ui else 'none'} export={_d(o.export_to)} alerts={'off' if o.alerts is False else 'on'} rules={rules}"
 
 
+def _backup(b: dict | None) -> str:
+    return f'  backup to {b["to"]} schedule "{b["schedule"]}" retention {b["retention"]}' if b else ""
+
+
 def _declares(a: dict) -> bool:
     return bool(a) and (a.get("declared") != "observe" or a.get("engine") or a.get("paused"))
 
@@ -47,7 +51,7 @@ def render(m: model.Model) -> str:
 
     envs = [f"  {e.name}  host {_d(e.host)}  url-template {_d(e.url_template)}  policy {e.policy}  "
             f"promote {'follows main' if e.promotion == 'main' else e.promotion}  observability {_observability(e.observability)}"
-            f"{'  operators owner' if e.operators == 'owner' else ''}"
+            f"{'  operators owner' if e.operators == 'owner' else ''}{_backup(e.backup)}"
             f"{_env_autonomy(e)}" for e in m.environments]
     comps = []
     for c in m.components:
@@ -66,7 +70,7 @@ def render(m: model.Model) -> str:
             sizing = "".join(f"  {k} {str(v).lower() if isinstance(v, bool) else v}" for k, v in ri.sizing.items())
             store = f"  store {ri.store_key}" if ri.external else ""
             res.append(f"    {ri.environment}  type {ri.type}  external {str(ri.external).lower()}{sizing}  "
-                       f"argo {_d(ri.argo_application)}  secret {_d(ri.secret)}{store}")
+                       f"argo {_d(ri.argo_application)}  secret {_d(ri.secret)}{store}{_backup(ri.backup)}")
     apis = [f"  {a.name}  type {a.type}  provider {_d(a.provider)}  consumers {','.join(a.consumers) or '-'}" for a in m.apis]
     return "\n\n".join([f"System: {m.system}\nOwner: {_d(m.owner)}",
                         section("Environments (promotion order):", envs), section("Components:", comps),

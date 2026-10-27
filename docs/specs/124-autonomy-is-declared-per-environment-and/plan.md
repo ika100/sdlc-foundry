@@ -149,7 +149,7 @@ human_steps:
 
 # Plan — 124 Autonomy is declared per environment and supervised in the console
 
-The contract in [design.md](design.md) and [contract.openapi.yaml](contract.openapi.yaml) binds every task. It covers the `system.yaml` keys and their errors, `autonomy.json` and the `model show` additions, the guardrail rules, the engine's issue, run record and audit event, the engine HTTP, `cplat system autonomy`, the `needs` additions, the three notification events and the console markup. The decision that outlives this spec is [ADR-060](../../adr/060-autonomy-in-system-yaml-and-the-engine-contract.md). The levels are:
+The contract in [design.md](design.md) and [contract.openapi.yaml](contract.openapi.yaml) binds every task. It covers the `system.yaml` keys and their errors, `autonomy.json` and the `model show` additions, the guardrail rules, the engine's issue, run record and audit event, the engine HTTP, `cplat system autonomy`, the `needs` additions, the three notification events and the console markup. The decision that outlives this spec is [ADR-063](../../adr/063-autonomy-in-system-yaml-and-the-engine-contract.md). The levels are:
 
 - **0:** t1, t2, t3, t4, t5, t6, t7
 - **1:** t8, t9, t10
@@ -438,7 +438,7 @@ The console views (t16–t18) do not import `needs.py`, `runlist.py`, `audit.py`
 **Implementation notes:**
 - `docs/autonomy.md` (new): the five levels and what each allows, every key with its default (the design table), the prod cap, the per-component cap, pause, resume and lowering (signals, then the PR), not confirmed and not supervised, Undo, the engine token, and a link to design.md and contract.openapi.yaml for engine authors.
 - `docs/console.md`: the Autonomy tab, the review decision and the engine badge. `docs/DOMAIN-MODEL.md`: autonomy on Environment and Instance.
-- `docs/adr/README.md`: the row for ADR-060. `docs/CHANGELOG.md`: the entry for this release.
+- `docs/adr/README.md`: the row for ADR-063. `docs/CHANGELOG.md`: the entry for this release.
 - `plugins/system/README.md`: `/system:autonomy`. Bump the system plugin's minor version in `plugin.json` and `marketplace.json`.
 - Keep the AC-114.52 prose rules.
 

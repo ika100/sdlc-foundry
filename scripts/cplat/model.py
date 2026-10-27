@@ -28,6 +28,8 @@ from core import registry as _registry
 ENVIRONMENTS: tuple[str, ...] = ("dev", "staging", "prod")
 DEFAULT_LOCAL_PORT = 8088
 SCHEMA = 2
+DEFAULT_SCHEDULE = "0 3 * * *"
+DEFAULT_RETENTION = "30d"
 NOT_MIGRATED = "not migrated to 5.0: run `cplat platform update --migrate`"
 
 _UNSET = object()
@@ -105,6 +107,7 @@ class Environment:
     promotion: str = "manual"
     observability: Observability | None = None
     operators: str | None = None  # "owner" or None
+    backup: dict | None = None  # {"to", "schedule", "retention"} (spec 117)
     autonomy: dict = field(default_factory=dict, compare=False)  # spec 124: declared and effective policy
 
 
@@ -207,6 +210,7 @@ class ResourceInstance:
     type: str = "unknown"
     external: bool = False
     store_key: str | None = None
+    backup: dict | None = None  # {"to", "schedule", "retention"} of an in-cluster database (spec 117)
 
 
 @dataclass
@@ -346,7 +350,7 @@ class Model:
                        "resources": [r.name for r in self.resources], "apis": [a.name for a in self.apis]},
             "environments": [{"name": e.name, "host": e.host, "url": e.url_template, "policy": e.policy,
                               "promotion": e.promotion, "observability": obs(e.observability),
-                              "operators": e.operators, "autonomy": copy.deepcopy(e.autonomy)} for e in self.environments],
+                              "operators": e.operators, "backup": e.backup, "autonomy": copy.deepcopy(e.autonomy)} for e in self.environments],
             "components": [{
                 "name": c.name, "type": c.type, "lang": c.lang, "shape": c.shape, "repo": c.repo, "image": c.image,
                 "external": {"kind": c.external.kind, "namespace": c.external.namespace} if c.external else None,
@@ -361,7 +365,8 @@ class Model:
             "instances": [inst(i) for i in self.instances],
             "resource_instances": [{"resource": r.resource, "environment": r.environment, "type": r.type,
                                     "external": r.external, "argo_application": r.argo_application, "secret": r.secret,
-                                    "store_key": r.store_key, "sizing": dict(r.sizing)} for r in self.resource_instances],
+                                    "store_key": r.store_key, "sizing": dict(r.sizing),
+                                    "backup": r.backup} for r in self.resource_instances],
             "relations": self.relations(),
         }
 
@@ -507,6 +512,14 @@ def _bucket_sizing(conf: dict, env: str) -> dict:
             "versioning": inst.get("versioning", conf.get("versioning")) is True}
 
 
+def _backup(value: object) -> dict | None:
+    """`{"to", "schedule", "retention"}` with defaults for a mapping with a string `to`; anything else is None (spec 117)."""
+    if not isinstance(value, dict) or not isinstance(value.get("to"), str) or not value["to"]:
+        return None
+    return {"to": value["to"], "schedule": str(value.get("schedule", DEFAULT_SCHEDULE)),
+            "retention": str(value.get("retention", DEFAULT_RETENTION))}
+
+
 def _store_key(template: str, system: str, env: str, resource: str) -> str:
     return template.replace("{system}", system).replace("{env}", env).replace("{resource}", resource)
 
@@ -545,7 +558,7 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
             o = Observability(ob.get("ui"), ob.get("exportTo"), ob.get("alerts"), ob.get("rules"), ob.get("queryURL"),
                               ob.get("alertmanagerURL"), f"addon-observability-{name}", ob.get("headersSecret"), ob.get("querySecret"))
         envs.append(Environment(name, order, _str_or_none(conf.get("host")), _str_or_none(conf.get("url")), _policy(conf, name),
-                                _promotion(conf, name), o, "owner" if conf.get("operators") == "owner" else None,
+                                _promotion(conf, name), o, "owner" if conf.get("operators") == "owner" else None, _backup(conf.get("backup")),
                                 _env_autonomy(name, conf, paused, _promotion(conf, name))))
     by_env = {e.name: e for e in envs}
 
@@ -589,7 +602,8 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
                     r.name, env, None if ext else f"addon-{r.name}-{env}", f"{system}-{r.name}-app",
                     {} if ext else _sizing(conf, env) if r.type == "database" else _bucket_sizing(conf, env) if r.type == "bucket" else {},
                     r.type, ext,
-                    _store_key(str(path or "{system}-{env}-{resource}"), system, env, r.name) if ext else None))
+                    _store_key(str(path or "{system}-{env}-{resource}"), system, env, r.name) if ext else None,
+                    None if ext or r.type != "database" else _backup(idoc.get("backup"))))
 
     cs = [c for _, c in components]
     apis = []

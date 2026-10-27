@@ -106,6 +106,8 @@ def title(alert: Alert) -> str:
         core = f"more than {CAP_PER_POLL} new alerts: {_line(alert.app)}"
     elif alert.service == META_SERVICE and alert.environment == "*" and alert.name == POLL_FAILING_NAME:
         core = f"alert poll is failing: {_line(alert.app)}"
+    elif alert.name == "backup failing":
+        core = f"backup failing: {_line(alert.service)}/{_line(alert.environment)}"
     else:
         core = f"{_line(alert.name)}: {_line(alert.service) or 'unknown'} in {_line(alert.environment)}"
     text = "[auto] [alert] " + core

@@ -502,13 +502,16 @@ def test_the_changelog_lists_the_bucket_in_a_minor_section_that_is_not_breaking_
     hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 116|ADR-059", s)]
     assert hits, "the change is listed"
     assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", hits[0].splitlines()[0])
-    assert "BREAKING" not in hits[0]
+    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"spec 116|ADR-059", e))  # spec 117: the 116 entry itself, not the section
+    assert "BREAKING" not in entry
 
 
 def test_the_resource_plugin_is_1_2_0_in_both_places_and_describes_buckets_ac_116_12():  # AC-116.12
     manifest = json.loads((ROOT / "plugins/resource/.claude-plugin/plugin.json").read_text())["version"]
     market = next(p["version"] for p in json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"] if p["name"] == "resource")
-    assert manifest == market == "1.2.0"
+    assert manifest == market  # spec 117: 1.3.0 supersedes 1.2.0; both places agree
+    major, minor, patch = (int(x) for x in manifest.split("."))  # spec 117
+    assert major == 1 and (major, minor) >= (1, 2), manifest  # spec 117: a minor bump at or above 1.2.0, no major bump
     add = (ROOT / "plugins/resource/commands/add.md").read_text()
     assert "--type database|bucket" in add and "--storage" in add and "--versioning" in add
     assert "bucket" in (ROOT / "plugins/resource/commands/remove.md").read_text()

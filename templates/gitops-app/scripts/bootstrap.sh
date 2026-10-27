@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time cluster bootstrap (human only): KUBE_CONTEXT=<ctx> devbox run bootstrap
-# Applies operators/root.yaml first (cluster-level operators such as CloudNativePG and SeaweedFS, rendered when a system needs them),
+# Applies operators/root.yaml first (cluster-level operators such as CloudNativePG, SeaweedFS, cert-manager, the Barman Cloud plugin and Velero, rendered when a system needs them),
 # waits for each operator's CRD, then applies bootstrap/ (the system roots). Argo CD does not retry a failed automated
 # sync of the same commit, so a database Cluster synced before its CRD exists would stay failed.
 set -euo pipefail
@@ -21,6 +21,9 @@ if [ -f operators/root.yaml ]; then
     case "$(basename "$f" .yaml)" in
       cloudnative-pg) crd=clusters.postgresql.cnpg.io ;;
       seaweedfs) crd=buckets.seaweed.seaweedfs.com ;;
+      plugin-barman-cloud) crd=objectstores.barmancloud.cnpg.io ;;
+      cert-manager) crd=certificates.cert-manager.io ;;
+      velero) crd=schedules.velero.io ;;
       *) continue ;;
     esac
     echo "Waiting for the CRD $crd (up to 10 minutes)"

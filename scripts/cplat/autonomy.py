@@ -1,4 +1,4 @@
-"""Spec 124 (ADR-060): every autonomy rule `cplat` needs, in one pure module (standard library only, no I/O).
+"""Spec 124 (ADR-063): every autonomy rule `cplat` needs, in one pure module (standard library only, no I/O).
 
   LEVELS, CAP, DEFAULTS, ROUTES, CRITICALITY, DAYS      the tables of design.md
   validate(env, block) / validate_instance(c, env, block) / validate_top(block)   PlatformError with the renderer's messages

@@ -38,6 +38,7 @@ The platform supports the following shapes. New shapes are added per §4.1.
 | `library-python` | `svc` (subset) | `library-python` | Python 3.12, uv | stable |
 | `web-nextjs` | `web` | `web-nextjs` | Node LTS, pnpm, Next.js App Router | stable |
 | `gitops-app` | `system` | `gitops-app` | Kustomize + ArgoCD ApplicationSet, env-only overlays | stable |
+| `cluster-gitops` | `cluster` | `cluster-gitops` | Argo CD app-of-apps for one cluster's shared services and systems | stable |
 | `service-java` | `svc-java` | `service-java` | JDK 21 LTS, Maven, Spring Boot 3.x | stable (extensibility case study) |
 | `service-go` | `svc-go` | `service-go` | Go 1.22+, stdlib `net/http` + `chi` router | stable (extensibility case study) |
 
