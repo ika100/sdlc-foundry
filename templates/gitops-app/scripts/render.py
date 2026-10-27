@@ -151,6 +151,10 @@ TYPES = {
     "database": {"keys": ["uri", "host", "port", "dbname", "user", "password"],  # pragma: allowlist secret
                  "env": {"DATABASE_URL": "uri", "PGHOST": "host", "PGPORT": "port", "PGDATABASE": "dbname", "PGUSER": "user",
                          "PGPASSWORD": "password"}},  # pragma: allowlist secret
+    "bucket": {"keys": ["endpoint", "bucket", "region", "forcePathStyle", "accessKeyId", "secretAccessKey"],
+               "env": {"S3_ENDPOINT": "endpoint", "S3_BUCKET": "bucket", "S3_REGION": "region", "S3_FORCE_PATH_STYLE": "forcePathStyle",
+                       "AWS_ACCESS_KEY_ID": "accessKeyId", "AWS_SECRET_ACCESS_KEY": "secretAccessKey", "AWS_REGION": "region",  # pragma: allowlist secret
+                       "AWS_ENDPOINT_URL_S3": "endpoint"}},
 }
 API_TYPES = ["openapi", "grpc", "graphql", "events"]
 POLICY_VALUES = {"audit": "Audit", "enforce": "Enforce", "off": "Off"}     # system.yaml policy -> the 4.x mode
@@ -162,6 +166,7 @@ POSTGRES_IMAGES = {
     17: "ghcr.io/cloudnative-pg/postgresql:17.11",
     18: "ghcr.io/cloudnative-pg/postgresql:18.6",
 }
+SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51"     # every in-cluster bucket runs its own SeaweedFS of this image
 OPERATORS = {
     "cloudnative-pg": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "cloudnative-pg", "chart_version": "0.29.1",
                        "operator_version": "1.30.1", "namespace": "cnpg-system", "release": "cnpg", "crd": "clusters.postgresql.cnpg.io"},
@@ -1086,6 +1091,68 @@ def database_cluster(app: str, name: str, env: str, conf: dict) -> dict:
     }
 
 
+def bucket_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | str]:
+    """The in-cluster bucket instance (ADR-059): its own SeaweedFS, a Bucket, an identity limited to it and generated keys.
+
+    Argo CD never deletes any of it (`Delete=false`, `reclaimPolicy: Retain`). No credential value is rendered: the keys come from
+    External Secrets `Password` generators and are written once to `<system>-<name>-app`."""
+    n = f"{app}-{name}"
+    labels = {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
+    keep = {"argocd.argoproj.io/sync-options": "Delete=false"}
+
+    def meta(obj: str, wave: str | None = None) -> dict:
+        ann = {**keep, **({"argocd.argoproj.io/sync-wave": wave} if wave else {})}
+        return {"name": obj, "labels": dict(labels), "annotations": ann}
+
+    seaweed_api = "seaweed.seaweedfs.com/v1"
+    gen_api = "generators.external-secrets.io/v1alpha1"
+    volume = lambda: {"enabled": True, "resources": {"requests": {"storage": "1Gi"}}}  # noqa: E731  (fresh dicts: no YAML anchors)
+
+    def generator(suffix: str, length: int, digits: int) -> dict:
+        return {"apiVersion": gen_api, "kind": "Password", "metadata": meta(f"{n}-{suffix}", "-1"),
+                "spec": {"length": length, "digits": digits, "symbols": 0, "noUpper": False, "allowRepeat": True}}
+
+    def source(suffix: str, key: str) -> dict:
+        return {"sourceRef": {"generatorRef": {"apiVersion": gen_api, "kind": "Password", "name": f"{n}-{suffix}"}},
+                "rewrite": [{"regexp": {"source": "^password$", "target": key}}]}
+
+    files: dict[str, dict | str] = {
+        "seaweed.yaml": {
+            "apiVersion": seaweed_api, "kind": "Seaweed", "metadata": meta(n),
+            "spec": {"image": SEAWEEDFS_IMAGE, "volumeServerDiskCount": 1,
+                     "master": {"replicas": 1, "volumeSizeLimitMB": 1024, "persistence": volume()},
+                     "volume": {"replicas": 1, "requests": {"storage": conf["storage"]}},
+                     "filer": {"replicas": 1, "persistence": volume(), "s3": {"enabled": True},
+                               "config": '[leveldb2]\nenabled = true\ndir = "/data/filerldb2"\n'}}},
+        "bucket.yaml": {
+            "apiVersion": seaweed_api, "kind": "Bucket", "metadata": meta(n),
+            "spec": {"name": n, "clusterRef": {"name": n}, "reclaimPolicy": "Retain",
+                     "versioning": "Enabled" if conf["versioning"] else "Suspended", "owner": n,
+                     "access": [{"user": n, "actions": ["Read", "Write", "List", "Tagging"]}]}},
+        "identity.yaml": {"apiVersion": seaweed_api, "kind": "S3Identity", "metadata": meta(n), "spec": {"seaweedRef": {"name": n}}},
+        "credentials.yaml": {
+            "apiVersion": seaweed_api, "kind": "S3Credentials", "metadata": meta(n, "1"),
+            "spec": {"seaweedRef": {"name": n}, "identityRef": {"name": n},
+                     "secretRef": {"name": f"{n}-app", "accessKeyField": "accessKeyId", "secretKeyField": "secretAccessKey"},
+                     "reclaimPolicy": "Retain"}},
+        "access-key-generator.yaml": generator("access-key", 20, 5),
+        "secret-key-generator.yaml": generator("secret-key", 40, 10),
+        "externalsecret.yaml": {
+            "apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": meta(f"{n}-app", "-1"),
+            "spec": {"refreshInterval": "0",
+                     "target": {"name": f"{n}-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
+                                "template": {"engineVersion": "v2", "data": {
+                                    "endpoint": f"http://{n}-filer.{app}-{env}.svc:8333", "bucket": n, "region": "us-east-1",
+                                    "forcePathStyle": "true", "accessKeyId": "{{ .accessKeyId }}",
+                                    "secretAccessKey": "{{ .secretAccessKey }}"}}},  # pragma: allowlist secret
+                     "dataFrom": [source("access-key", "accessKeyId"), source("secret-key", "secretAccessKey")]}},  # pragma: allowlist secret
+    }
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
+                                   "resources": ["access-key-generator.yaml", "bucket.yaml", "credentials.yaml", "externalsecret.yaml",
+                                                 "identity.yaml", "seaweed.yaml", "secret-key-generator.yaml"]}
+    return files
+
+
 def collector_config(app: str, env: str, conf: dict, services: list[dict]) -> dict:
     scrape = [{"job_name": s["name"], "scrape_interval": "30s", "metrics_path": s["metrics"],
                "static_configs": [{"targets": [f"{s['name']}.{app}-{env}.svc:80"]}]}
@@ -1150,7 +1217,9 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict]) 
     if name == "observability":
         return observability_files(app, env, cfg["observability"][env], services)
     res = cfg["resources"][name]
-    files = {"cluster.yaml": database_cluster(app, name, env, res["envs"][env])}   # the only type built so far; dispatch on res["type"] when more exist
+    if res["type"] == "bucket":
+        return bucket_files(app, name, env, res["envs"][env])
+    files = {"cluster.yaml": database_cluster(app, name, env, res["envs"][env])}   # database; cache and broker are not built yet
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["cluster.yaml"]}
     return files
 

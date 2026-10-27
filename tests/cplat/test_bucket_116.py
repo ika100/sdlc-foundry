@@ -244,7 +244,8 @@ def test_one_bucket_gives_the_eight_variables_in_table_order_ac_116_16(tmp_path)
 def test_the_variables_come_after_the_literal_env_ac_116_16(tmp_path):  # AC-116.16
     g = ok(tmp_path, bsys(comps={"api": comp("api", ["files"], env={"LOG": "debug"})}))
     names = [e["name"] for e in env_list(g, "dev", "api")]
-    assert names[0] == "LOG" and names[1:] == list(BVARS)
+    literals = [n for n in names if n not in BVARS]      # LOG plus the literals every deployment gets (PORT)
+    assert "LOG" in literals and names == literals + list(BVARS)
 
 
 def test_a_bucket_and_a_database_both_give_bare_variables_ac_116_16(tmp_path):  # AC-116.16
