@@ -62,6 +62,7 @@ tasks:
     covers: [AC-124.1, AC-124.2, AC-124.4, AC-124.5, AC-124.9, AC-124.22]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t9
     title: audit.py — event schema, read from the run store, undo eligibility
     files: [scripts/cplat/audit.py]
