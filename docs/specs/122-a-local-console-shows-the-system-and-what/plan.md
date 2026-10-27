@@ -90,6 +90,7 @@ tasks:
     covers: [AC-122.1, AC-122.2, AC-122.3, AC-122.41, AC-122.42, AC-122.43, AC-122.46]
     parallel_safe: true
     depends_on: [t8, t9, t10]
+    done: true
   - id: t13
     title: Inbox — decision list, detail with answer, approve, promote, take over, fix, dismiss; first-run steps
     files: [scripts/cplat/console/inbox.py]
