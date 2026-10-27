@@ -17,11 +17,13 @@ def main(argv: list[str]) -> int:
     ns = ap.parse_args(argv)
     m = model.load_dir(gitops.find_app(Path(ns.repo_dir).resolve(), ns.system))
     if ns.json:
-        apis = [{"name": a.name, "type": a.type, "provider": a.provider, "consumers": list(a.consumers)} for a in m.apis]
+        apis = [{"name": a.name, "type": a.type, "provider": a.provider, "consumers": list(a.consumers),
+                 **({"broker": a.broker} if a.type == "events" else {})} for a in m.apis]
         print(json.dumps({"system": m.system, "apis": apis}, indent=2))
     elif not m.apis:
         print("no APIs declared")
     else:
         for a in m.apis:
-            print(f"{a.name}  type {a.type}  provider {a.provider or '-'}  consumers {','.join(a.consumers) or '-'}")
+            print(f"{a.name}  type {a.type}  provider {a.provider or '-'}  consumers {','.join(a.consumers) or '-'}"
+                  f"{'  broker ' + a.broker if a.broker else ''}")
     return 0

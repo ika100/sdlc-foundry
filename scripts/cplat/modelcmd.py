@@ -71,7 +71,16 @@ def render(m: model.Model) -> str:
             store = f"  store {ri.store_key}" if ri.external else ""
             res.append(f"    {ri.environment}  type {ri.type}  external {str(ri.external).lower()}{sizing}  "
                        f"argo {_d(ri.argo_application)}  secret {_d(ri.secret)}{store}{_backup(ri.backup)}")
-    apis = [f"  {a.name}  type {a.type}  provider {_d(a.provider)}  consumers {','.join(a.consumers) or '-'}" for a in m.apis]
+            if ri.broker is not None:
+                b = ri.broker
+                users = ", ".join(f"{u['component']} ({u['secret']})" for u in b["users"]) or "-"
+                res.append(f"      address {_d(b['address'])}  monitoring {_d(b['monitoring'])}")
+                res.append(f"      users {users}")
+                for st in b["streams"]:
+                    cons = ",".join(c["name"] for c in st["consumers"]) or "-"
+                    res.append(f"      stream {st['stream']}  subjects {st['subjects']}  consumers {cons}")
+    apis = [f"  {a.name}  type {a.type}  provider {_d(a.provider)}  consumers {','.join(a.consumers) or '-'}"
+            f"{'  broker ' + a.broker if a.broker else ''}" for a in m.apis]
     return "\n\n".join([f"System: {m.system}\nOwner: {_d(m.owner)}",
                         section("Environments (promotion order):", envs), section("Components:", comps),
                         section("APIs:", apis), section("Instances:", insts), section("Resources:", res)]) + "\n"
