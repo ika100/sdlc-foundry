@@ -1,6 +1,6 @@
 """`resource add|remove`: declare or remove a named, typed resource in system.yaml (ADR-020, ADR-054, ADR-057).
 
-`resource add <name> --type database [--version N] [--external [--path P]]` writes `resources.<name>`; components then opt in
+`resource add <name> --type database|bucket|cache [--version N] [--external [--path P]]` writes `resources.<name>`; components then opt in
 with `component set --uses <name>` (or `uses: [<name>]`). The name rule, types and database majors mirror
 templates/gitops-app/scripts/render.py (the source). Observability is not a resource: it is set per environment under
 `environments.<env>.observability`.
@@ -16,19 +16,26 @@ from core import PlatformError, Report
 
 DEFAULT = {"type": "database", "version": 17, "replicas": 1, "storage": "1Gi", "instances": {"prod": {"replicas": 3, "storage": "20Gi"}}}
 RESOURCE_TYPES = ["database", "bucket", "cache", "broker"]
-PLANNED_TYPES = {"cache": 118, "broker": 119}
+PLANNED_TYPES = {"broker": 119}
 RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 DB_VERSIONS = (15, 16, 17, 18)
 STORAGE_SIZE = re.compile(r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei)?$")
 BUCKET_KEYS = "endpoint, bucket, region, forcePathStyle, accessKeyId, secretAccessKey"
 TYPES_LINE = "(database, bucket, cache or broker)"
+# External secret keys per type; mirrors TYPES[...]["keys"] in templates/gitops-app/scripts/render.py (the source).
+TYPE_KEYS = {
+    "database": "uri, host, port, dbname, user, password",
+    "bucket": BUCKET_KEYS,
+    "cache": "url, host, port, password",
+}
+CACHE_HINT = "the type is `cache` (Redis-compatible, runs Valkey): /resource:add <name> --type cache"
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cplat resource", description=__doc__)
     p.add_argument("action", choices=["add", "remove"])
     p.add_argument("name", help="resource name (lowercase letters, digits, hyphens; at most 30 characters)")
-    p.add_argument("--type", help="resource type: database or bucket (cache, broker are planned)")
+    p.add_argument("--type", help="resource type: database, bucket or cache (broker is planned)")
     p.add_argument("--version", help="database major version (15, 16, 17, 18)")
     p.add_argument("--storage", help="bucket size, e.g. 10Gi (default 10Gi)")
     p.add_argument("--versioning", action="store_true", help="keep object versions in the bucket")
@@ -50,7 +57,8 @@ def _check_add(ns: argparse.Namespace, data, declared, components) -> None:
     if typ is None:
         raise PlatformError(f"--type is required for {n} {TYPES_LINE}")
     if typ not in RESOURCE_TYPES:
-        raise PlatformError(f"unknown resource type '{typ}' {TYPES_LINE}")
+        hint = CACHE_HINT if typ in ("redis", "valkey") else None
+        raise PlatformError(f"unknown resource type '{typ}' {TYPES_LINE}", hint=hint)
     if typ in PLANNED_TYPES:
         raise PlatformError(f"resource type {typ} is not available yet: spec {PLANNED_TYPES[typ]} brings it")
     if n in declared:
@@ -97,6 +105,8 @@ def main(argv: list[str]) -> int:
             entry = {"type": typ, "external": True}
             if ns.path:
                 entry["remote"] = {"path": ns.path}
+        elif typ == "cache":
+            entry = {"type": "cache"}
         elif typ == "bucket":
             entry = {"type": "bucket", "storage": ns.storage or "10Gi", "versioning": bool(ns.versioning)}
         else:
@@ -114,15 +124,17 @@ def main(argv: list[str]) -> int:
             raise PlatformError(f"{ns.name} is still used by {', '.join(using)}", hint="remove it from their uses: first (/component:set)")
         res = declared[ns.name] or {}
         inst = res.get("instances") or {}
-        bucket = res.get("type") == "bucket"
+        rtype = res.get("type") or "database"
         flags = [bool((inst.get(e) or {}).get("external", res.get("external", False))) for e in gitops.ENVS]
         if not all(flags):
-            if bucket:
+            if rtype == "cache":
+                r.will_do.append(f"remove {ns.name} from system.yaml; the Argo Application disappears but the cache, its volume and its Secret {app_dir.name}-{ns.name}-app stay in the cluster (delete them by hand when you are sure)")
+            elif rtype == "bucket":
                 r.will_do.append(f"remove {ns.name} from system.yaml; the Argo Application disappears but the bucket, its data and its Secret {app_dir.name}-{ns.name}-app stay in the cluster (delete them by hand when you are sure)")
             else:
                 r.will_do.append(f"remove {ns.name} from system.yaml; the Argo Application disappears but the database and its data stay in the cluster (delete them by hand when you are sure)")
         if any(flags):
-            what = "bucket" if bucket else "database"
+            what = rtype if rtype in ("bucket", "cache") else "database"
             r.will_do.append(f"remove {ns.name} from system.yaml; the synced Secret {app_dir.name}-{ns.name}-app stays in the cluster (delete it by hand when you are sure); the external {what} is not touched")
     r.will_do.append("regenerate manifests (render.py)")
     if ns.pr:
@@ -154,8 +166,10 @@ def main(argv: list[str]) -> int:
             store = data["secretStore"]["name"]
             tpl = ns.path or "{system}-{env}-{resource}"
             keys = ", ".join(tpl.format(system=app_dir.name, env=e, resource=n, secret=n) for e in gitops.ENVS)
-            kl = BUCKET_KEYS if typ == "bucket" else "uri, host, port, dbname, user, password"
+            kl = TYPE_KEYS[typ]
             r.next_steps.append(f"put the keys {kl} in the secret store {store} under {keys}")
+        elif typ == "cache":
+            r.next_steps.append("no operator is needed: each environment where a component uses it runs one Valkey StatefulSet (defaults: Valkey 9, memory 256Mi, allkeys-lru, persistence false; set them in system.yaml)")
         elif typ == "bucket":
             r.next_steps.append("the platform installs the SeaweedFS operator through operators/ (apply operators/root.yaml once per cluster: KUBE_CONTEXT=<ctx> devbox run bootstrap); environments with operators: owner need it installed by their owner")
         else:
