@@ -31,6 +31,7 @@ tasks:
     covers: [AC-125.10, AC-125.11, AC-125.12, AC-125.15]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t5
     title: cluster bootstrap and cluster-up — bootstrap.sh, cluster-up.sh, local-cluster.sh and ports.sh symlinks
     files: [templates/cluster-gitops/scripts/bootstrap.sh, templates/cluster-gitops/scripts/cluster-up.sh, templates/cluster-gitops/scripts/local-cluster.sh, templates/cluster-gitops/scripts/ports.sh]
