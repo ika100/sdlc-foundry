@@ -1,7 +1,7 @@
 ---
 spec_id: 116-an-object-storage-resource-for-files-and
 title: An object storage resource for files and backups
-status: approved
+status: building
 priority: P1
 ---
 
@@ -82,3 +82,4 @@ A component that stores files (uploads, exports, generated reports) has nowhere 
 - 2026-10-26 created
 - 2026-10-26 open questions answered; Secret renamed to `<system>-<name>-app`, external store path and keys per spec 115, store installed per cluster as a pinned Argo CD application with `operators: owner` opt-out, extension of spec 114's closed lists stated (AC-116.3, .9, .11, .13 withdrawn; AC-116.16 to AC-116.20 added)
 - 2026-10-26 approved
+- 2026-10-27 building
