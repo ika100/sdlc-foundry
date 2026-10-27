@@ -117,6 +117,7 @@ tasks:
     covers: [AC-122.7, AC-122.8, AC-122.20, AC-122.40, AC-122.47, AC-122.50, AC-122.51]
     parallel_safe: true
     depends_on: [t1, t8, t9, t11, t12, t22, t23]
+    done: true
   - id: t17
     title: New or ask palette — describe a change, add to the model, go to, ask with read-only Claude
     files: [scripts/cplat/console/palette.py]
