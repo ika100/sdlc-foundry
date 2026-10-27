@@ -47,6 +47,7 @@ tasks:
     covers: [AC-124.15, AC-124.16]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: console/html.py — engine badge and guardrail list fragments
     files: [scripts/cplat/console/html.py]
