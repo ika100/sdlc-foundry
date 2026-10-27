@@ -9,7 +9,7 @@ The nouns the platform is built around: what a system is made of, where it runs,
 | You ask | The model answers with |
 |---|---|
 | What is my product made of? | the **System** and its parts: **Components**, **APIs**, **Resources**, and its **Owner** |
-| Where does it run, at which version? | **Environments** × parts: each cell is an **Instance** (or a **Resource instance**) |
+| Where does it run, at which version? | **Environments** × parts: each cell is an **Instance** (or a **Resource instance**); the environments run on a **Cluster** that several systems share |
 | How does it change? | an **Issue** becomes a **Spec**; a **Run** ships it; a **Release** goes to prod |
 
 ## The system model
@@ -19,7 +19,7 @@ The nouns the platform is built around: what a system is made of, where it runs,
 Three layers:
 
 - **What it is** is Backstage's system model, reduced to the kinds a user needs. An Owner owns a System; Components, APIs and Resources are part of it. A Component provides or consumes APIs, uses Resources, and may use a library (another Component).
-- **Where it runs** adds environments. Every Component and Resource exists once per Environment as an Instance (Resource instance). Environments are ordered (`promotes to`), so each Instance knows the Instance its version was promoted from.
+- **Where it runs** adds environments and the cluster. Every Component and Resource exists once per Environment as an Instance (Resource instance). Environments are ordered (`promotes to`), so each Instance knows the Instance its version was promoted from. Every Environment runs on a Cluster; the Cluster hosts the System and runs the shared operators that manage its Resource instances (see [Cluster](#cluster)).
 - **Work** connects changes to the model: a Spec changes the System or one Component, and the Run that ships it updates Instances, starting in dev.
 
 A library has no Instances; other Components use it.
@@ -78,7 +78,15 @@ Three placements are decided ([ADR-053](adr/053-domain-model.md)):
 
 ### Cluster
 
-A Cluster is the place systems run. Its own repo (`cluster.yaml`, shape `cluster-gitops`) owns what several systems share: the operators (for example CloudNativePG), External Secrets with the secret store, and the Kyverno engine. It also lists its systems by their gitops repo. One system runs all its environments on its cluster; a system that sets `operators: owner` in every environment leaves its operators to the cluster. The decision is [ADR-060](adr/060-a-cluster-repo-owns-shared-services.md); the steps are in [CLUSTERS.md](CLUSTERS.md).
+A Cluster is the place systems run. Its own repo (`cluster.yaml`, shape `cluster-gitops`) owns what several systems share: the operators (for example CloudNativePG), External Secrets with the secret store, and the Kyverno engine. The decision is [ADR-060](adr/060-a-cluster-repo-owns-shared-services.md); the steps are in [CLUSTERS.md](CLUSTERS.md).
+
+Its relations to the rest of the model:
+
+- **A Cluster hosts Systems.** `cluster.yaml` lists each system by its gitops repo, and the cluster repo renders one Argo application `system-<name>` per system (`/cluster:add`, `/cluster:remove`). A System is hosted by one Cluster; a cluster without a cluster repo hosts just the one system that installs its own operators.
+- **An Environment runs on its System's Cluster.** All environments of a system run on the same cluster, each in its namespace `<system>-<env>`. Spreading one system's environments over several clusters is not modelled yet.
+- **A Resource instance is managed by the Cluster's operators.** An in-cluster database instance is run by CloudNativePG, a bucket instance by the SeaweedFS operator, and an external resource's Secret is filled by External Secrets through the cluster's secret store. The cluster repo's check fails when a hosted system needs an operator that `cluster.yaml` does not list.
+- **A System hands its operators to the Cluster** by setting `operators: owner` in every environment; it then no longer renders `operators/`. Kyverno policies stay with each System; only the engine is the Cluster's.
+- **Components and their Instances do not know the Cluster.** Names in the cluster stay the same, so a system renders the same manifests whether it shares a cluster or has its own.
 
 ## One file per system
 
@@ -174,10 +182,10 @@ Every command names the thing it acts on; the same verbs work for a system and f
 
 | Noun | Verbs |
 |---|---|
-| `system` | `new` · `set` · `status` · `spec` · `plan` · `ship` |
+| `system` | `new` · `set` · `status` · `spec` · `plan` · `ship` · `restore` |
 | `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
 | `api` | `list` (`check` comes with spec 110) |
-| `resource` | `add` · `remove` |
+| `resource` | `add` · `remove` · `backup` · `restore` |
 | `cluster` | `new` · `add` · `remove` (`/cluster:new`, `/cluster:add`, `/cluster:remove`) |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |

@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 610" width="1000" height="610" role="img">
-  <title>System model. What it is: an Owner owns a System; Components, APIs and Resources are part of the System; a Component provides or consumes APIs, uses Resources and may use a library Component. Where it runs: an Instance is a Component running in an Environment, a Resource instance is a Resource in an Environment; Environments promote to the next, and an Instance is promoted from the one before. Work: a Spec changes the System or a Component and is shipped by a Run, which updates Instances.</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 680" width="1000" height="680" role="img">
+  <title>System model. What it is: an Owner owns a System; Components, APIs and Resources are part of the System; a Component provides or consumes APIs, uses Resources and may use a library Component. Where it runs: an Instance is a Component running in an Environment, a Resource instance is a Resource in an Environment; Environments promote to the next, and an Instance is promoted from the one before. A Cluster hosts Systems; every Environment runs on a Cluster, and the Cluster's shared operators manage the Resource instances. Work: a Spec changes the System or a Component and is shipped by a Run, which updates Instances.</title>
   <style>svg{--bg:#ffffff;--surface:#ffffff;--fg:#1d2330;--muted:#5b6475;--line:#d5d9e2;--accent:#3d4fc4;--accent-soft:#eceefc;--ok:#2f7d4f;--warn:#a3580b;--warn-soft:#fbefe1;--sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--fg)}@media (prefers-color-scheme: dark){svg{--bg:#1a1e28;--surface:#1a1e28;--fg:#e4e7ee;--muted:#9aa2b3;--line:#2f3545;--accent:#9aa6ff;--accent-soft:#232945;--ok:#6fcf97;--warn:#e8a85c;--warn-soft:#3a2a17;}}text{font-family:var(--sans)}.bg{fill:var(--bg)}.band { fill: none; stroke: var(--line); stroke-width: 1.4; }.band.acc { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 6 4; }.node.ext { fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }.node.core { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; }.node.gate { stroke-width: 3; }.pill { font-size: 13px; fill: currentColor; }.rowname { font-size: 14px; font-weight: 600; fill: currentColor; }.node { fill: var(--surface); stroke: currentColor; stroke-width: 1.4; }.node.env { fill: var(--accent-soft); stroke: var(--accent); }.node.inst { fill: var(--surface); stroke: var(--accent); stroke-width: 1.4; }.node.empty { fill: none; stroke: var(--muted); stroke-dasharray: 5 4; }.chip { fill: var(--surface); stroke: var(--muted); stroke-width: 1; }.edge { fill: none; stroke: currentColor; stroke-width: 1.4; }.edge.acc { stroke: var(--accent); }.edge.m { stroke: var(--muted); stroke-dasharray: 4 4; }.kind { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; fill: var(--muted); }.kind.acc { fill: var(--accent); }.name { font-size: 15px; font-weight: 600; fill: currentColor; }.big { font-size: 18px; font-weight: 600; fill: currentColor; }.sha { font-family: var(--mono); font-size: 14px; font-weight: 500; fill: currentColor; }.src { font-family: var(--mono); font-size: 11px; fill: var(--muted); }.okt { font-family: var(--mono); font-size: 11px; fill: var(--ok); }.lbl { font-size: 12px; fill: currentColor; }.lbl.m { fill: var(--muted); }.lbl.acc { fill: var(--accent); font-weight: 500; }.arrow { fill: currentColor; }.arrow.acc { fill: var(--accent); }.arrow.m { fill: var(--muted); }</style>
-  <rect class="bg" x="0" y="0" width="1000" height="610"/>
+  <rect class="bg" x="0" y="0" width="1000" height="680"/>
       <defs>
         <marker id="s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow"/></marker>
         <marker id="sa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow acc"/></marker>
@@ -31,7 +31,7 @@
 
       <rect x="690" y="200" width="180" height="54" rx="8" class="node"/>
       <text x="780" y="223" text-anchor="middle" class="name">Resource</text>
-      <text x="780" y="242" text-anchor="middle" class="src">database</text>
+      <text x="780" y="242" text-anchor="middle" class="src">database · bucket</text>
 
       <line x1="250" y1="200" x2="428" y2="106" class="edge" marker-end="url(#s)"/>
       <text x="330" y="146" text-anchor="end" class="lbl">part of</text>
@@ -50,8 +50,8 @@
       <text x="170" y="176" text-anchor="middle" class="lbl">uses library</text>
 
       <!-- Where it runs -->
-      <rect x="20" y="310" width="960" height="166" rx="14" class="band acc"/>
-      <text x="960" y="334" text-anchor="end" class="kind acc">WHERE IT RUNS · ENVIRONMENTS</text>
+      <rect x="20" y="310" width="960" height="236" rx="14" class="band acc"/>
+      <text x="955" y="334" text-anchor="end" class="kind acc">WHERE IT RUNS</text>
 
       <rect x="130" y="370" width="180" height="54" rx="8" class="node ext"/>
       <text x="220" y="393" text-anchor="middle" class="name">Instance</text>
@@ -80,22 +80,33 @@
       <path d="M470,424 V444 H530 V426" class="edge acc" marker-end="url(#sa)"/>
       <text x="500" y="462" text-anchor="middle" class="lbl acc">promotes to</text>
 
+      <rect x="690" y="474" width="180" height="54" rx="8" class="node ext"/>
+      <text x="780" y="497" text-anchor="middle" class="name">Cluster</text>
+      <text x="780" y="516" text-anchor="middle" class="src">cluster.yaml · operators</text>
+
+      <path d="M575,424 V501 H688" class="edge acc" marker-end="url(#sa)"/>
+      <text x="632" y="493" text-anchor="middle" class="lbl acc">runs on</text>
+      <line x1="780" y1="424" x2="780" y2="472" class="edge acc" marker-end="url(#sa)"/>
+      <text x="790" y="452" class="lbl acc">managed by its operators</text>
+      <path d="M870,501 H968 V32 H520 V48" class="edge acc" marker-end="url(#sa)"/>
+      <text x="960" y="304" text-anchor="end" class="lbl acc">hosts</text>
+
       <!-- Work -->
-      <rect x="20" y="496" width="960" height="100" rx="14" class="band"/>
-      <text x="960" y="520" text-anchor="end" class="kind">WORK · HOW IT CHANGES</text>
+      <rect x="20" y="566" width="960" height="100" rx="14" class="band"/>
+      <text x="955" y="590" text-anchor="end" class="kind">WORK · HOW IT CHANGES</text>
 
-      <rect x="130" y="530" width="180" height="54" rx="8" class="node"/>
-      <text x="220" y="553" text-anchor="middle" class="name">Spec</text>
-      <text x="220" y="572" text-anchor="middle" class="src">what should change</text>
+      <rect x="130" y="600" width="180" height="54" rx="8" class="node"/>
+      <text x="220" y="623" text-anchor="middle" class="name">Spec</text>
+      <text x="220" y="642" text-anchor="middle" class="src">what should change</text>
 
-      <rect x="410" y="530" width="180" height="54" rx="8" class="node"/>
-      <text x="500" y="553" text-anchor="middle" class="name">Run</text>
-      <text x="500" y="572" text-anchor="middle" class="src">an agent ships it</text>
+      <rect x="410" y="600" width="180" height="54" rx="8" class="node"/>
+      <text x="500" y="623" text-anchor="middle" class="name">Run</text>
+      <text x="500" y="642" text-anchor="middle" class="src">an agent ships it</text>
 
-      <line x1="310" y1="557" x2="408" y2="557" class="edge" marker-end="url(#s)"/>
-      <text x="359" y="549" text-anchor="middle" class="lbl">shipped by</text>
-      <path d="M130,557 H32 V227 H128" class="edge" marker-end="url(#s)"/>
+      <line x1="310" y1="627" x2="408" y2="627" class="edge" marker-end="url(#s)"/>
+      <text x="359" y="619" text-anchor="middle" class="lbl">shipped by</text>
+      <path d="M130,627 H32 V227 H128" class="edge" marker-end="url(#s)"/>
       <text x="40" y="219" class="lbl">changes</text>
-      <path d="M440,530 V488 H280 V426" class="edge" marker-end="url(#s)"/>
-      <text x="448" y="516" class="lbl">updates</text>
+      <path d="M440,600 V556 H280 V426" class="edge" marker-end="url(#s)"/>
+      <text x="448" y="586" class="lbl">updates</text>
     </svg>
