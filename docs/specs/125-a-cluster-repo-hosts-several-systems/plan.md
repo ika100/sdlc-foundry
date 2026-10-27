@@ -59,6 +59,7 @@ tasks:
     covers: [AC-125.1, AC-125.7, AC-125.8]
     parallel_safe: true
     depends_on: [t6, t7]
+    done: true
   - id: t9
     title: the cluster plugin — /cluster:new, /cluster:add, /cluster:remove, manifest, README, marketplace entry
     files: [plugins/cluster/.claude-plugin/plugin.json, plugins/cluster/README.md, plugins/cluster/commands/new.md, plugins/cluster/commands/add.md, plugins/cluster/commands/remove.md, .claude-plugin/marketplace.json]
@@ -72,6 +73,7 @@ tasks:
     covers: [AC-125.13]
     parallel_safe: true
     depends_on: [t1, t7]
+    done: true
   - id: t11
     title: end-to-end — two systems, one cluster render, one CloudNativePG operator (tests/e2e/cluster.sh, e2e workflow job)
     files: [tests/e2e/cluster.sh, .github/workflows/e2e.yml]
