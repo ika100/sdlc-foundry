@@ -83,6 +83,7 @@ tasks:
     covers: [AC-124.16, AC-124.17]
     parallel_safe: true
     depends_on: [t6, t9, t10]
+    done: true
   - id: t12
     title: cplat system autonomy show|set|pause|resume (+ undo|approve routing), dispatch and /system:autonomy
     files: [scripts/cplat/autonomycmd.py, scripts/cplat/cplat.py, plugins/system/commands/autonomy.md]
