@@ -29,7 +29,7 @@ def renderer(name="render_118"):
 def effective(tmp_path, doc, name="sessions") -> dict:
     r = renderer("render_118_api")
     app_dir = write_system(tmp_path, doc)
-    return r.load_system(app_dir)["resources"][name]["envs"]
+    return r.load_system(app_dir)["cfg"]["resources"][name]["envs"]  # spec 118 slip: load_system keeps resources under cfg
 
 
 # ---------------- AC-118.2: schema ----------------
@@ -108,7 +108,7 @@ def test_top_level_sizing_is_fine_while_one_environment_runs_the_cache_ac_118_2(
 
 def test_the_effective_values_default_to_valkey_9_256mi_allkeys_lru_no_persistence_ac_118_3(tmp_path):  # AC-118.3
     envs = effective(tmp_path, csys())
-    assert sorted(envs) == list(ENVS)
+    assert sorted(envs) == sorted(ENVS)  # spec 118 slip: compared a sorted list with ENVS order
     for e in ENVS:
         assert envs[e] == {"external": False, "version": 9, "replicas": None, "storage": None, "resources": None, "memory": "256Mi",
                            "maxmemory": 214748364, "maxmemoryPolicy": "allkeys-lru", "persistence": False, "store_key": None,
@@ -299,7 +299,7 @@ def test_a_version_change_changes_only_the_statefulset_image_ac_118_17(tmp_path)
     a = ok(tmp_path / "a", csys({"sessions": cache(version=8)}))
     b = ok(tmp_path / "b", csys({"sessions": cache(version=9)}))
     changed = sorted(k for k in a if a[k] != b.get(k))
-    assert changed == [f"{cdir(e)}/statefulset.yaml" for e in ENVS]
+    assert changed == sorted(f"{cdir(e)}/statefulset.yaml" for e in ENVS)  # spec 118 slip: both sides sorted
 
 
 # ---------------- AC-118.6: memory, maxmemory, policy ----------------
@@ -393,7 +393,7 @@ def test_the_only_service_is_a_clusterip_on_6379_ac_118_8(tmp_path):  # AC-118.8
 def test_no_route_or_gateway_object_names_the_cache_ac_118_8(tmp_path):  # AC-118.8
     g = ok(tmp_path, csys())
     for k, t in g.items():
-        if k.startswith(cdir("dev") + "/"):
+        if any(k.startswith(cdir(e) + "/") for e in ENVS):  # spec 118 slip: the cache's own Service lives in every environment's addon dir
             continue
         for doc in yaml.safe_load_all(t) if k.endswith((".yaml", ".yml")) else []:
             if isinstance(doc, dict) and doc.get("kind") in ("HTTPRoute", "Service", "Ingress", "Gateway"):
@@ -535,7 +535,7 @@ def test_the_kustomization_lists_the_four_files_sorted_ac_118_19(tmp_path):  # A
 def test_no_password_value_appears_in_the_rendered_tree_ac_118_19(tmp_path):  # AC-118.19
     g = ok(tmp_path, csys({"sessions": cache(persistence=True), "ratelimit": cache()}, {"api": comp("api", ["sessions", "ratelimit"])}))
     cache_files = {k: t for k, t in g.items() if "/sessions/" in k or "/ratelimit/" in k}
-    assert len(cache_files) == 2 * len(FILES)
+    assert len(cache_files) == 2 * len(FILES) * len(ENVS)  # spec 118 slip: both caches render in every environment
     for k, t in cache_files.items():
         for m in re.finditer(r"(?im)^\s*(password|url)\s*:\s*(.+)$", t):
             assert "{{ .password }}" in m.group(2), f"{k}: a literal credential in {m.group(0)!r}"
@@ -619,8 +619,8 @@ def _excluded(lbls: dict, exprs: list) -> bool:
     return False
 
 
-def backup_system(**cache_kw):
-    comps = {"api": comp("api", ["orders-db", "backups", "sessions"])}
+def backup_system(uses_ratelimit=False, **cache_kw):
+    comps = {"api": comp("api", ["orders-db", "backups", "sessions", *(["ratelimit"] if uses_ratelimit else [])])}  # spec 118 slip: an unused cache renders no objects
     return bdoc(envb={"dev": {"to": "backups"}}, resources={"sessions": cache(**cache_kw), "ratelimit": cache(persistence=True)}, comps=comps)
 
 
@@ -647,7 +647,7 @@ def test_the_schedule_leaves_out_every_cache_by_name_used_or_not_ac_118_14(tmp_p
 
 def test_no_cache_object_pod_or_volume_is_selected_by_the_schedule_with_or_without_persistence_ac_118_14(tmp_path):  # AC-118.14
     for persistence in (False, True):
-        g = ok(tmp_path / str(persistence), backup_system(persistence=persistence))
+        g = ok(tmp_path / str(persistence), backup_system(uses_ratelimit=True, persistence=persistence))
         exprs = y(g, f"{APP}/backup/dev/schedule.yaml")["spec"]["template"]["labelSelector"]["matchExpressions"]
         for name in ("sessions", "ratelimit"):
             sts = cdoc(g, "dev", "statefulset.yaml", name)
