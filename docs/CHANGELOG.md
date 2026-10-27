@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**A message broker resource behind events APIs.** Spec 119 ([spec 119](specs/119-a-message-broker-resource-behind-events/spec.md)), [ADR-065](adr/065-a-broker-is-nats-jetstream-with-declared-streams-and-per-component-users.md) (a broker is NATS with JetStream). Not breaking: a `system.yaml` without a broker renders as before. `type: broker` declares NATS with JetStream (`version`, `replicas`, `storage`, or `external`); an events API is bound with `apis.<api>.broker`, and its provider and consumers get `NATS_URL`, `NATS_USER`, `NATS_PASSWORD`, `NATS_INBOX_PREFIX` and `EVENTS_<API>_STREAM` from their own Secret. NACK is installed as an operator to create streams and consumers. An unbound events API only gets a note. Pins: `nats` chart 2.15.1, `nats:2.14.9-alpine`, `nats:2.15.2-alpine`, `nack` chart 0.35.0 with controller 0.24.0.
+
+**Plugins:** `resource` 1.5.0 (`/resource:add <name> --type broker`), `api` 1.1.0 (`/api:list` shows the broker of an events API).
+
 **A cache resource, compatible with Redis.** Spec 118 ([spec 118](specs/118-a-cache-resource-compatible-with-redis/spec.md)), [ADR-064](adr/064-a-cache-is-a-platform-rendered-valkey-statefulset.md) (a cache is a platform-rendered Valkey StatefulSet). Not breaking: a `system.yaml` without a cache renders as before. `type: cache` declares a Redis-compatible cache (Valkey 8 or 9, `memory`, `maxmemoryPolicy`, optional `persistence` with `storage`, or `external`); a component that uses it gets `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT` and `REDIS_PASSWORD`. No operator is installed, and cache data is not backed up. Pins: `valkey/valkey:8.1.11`, `valkey/valkey:9.1.3`.
 
 **Plugins:** `resource` 1.4.0 (`/resource:add <name> --type cache`).
