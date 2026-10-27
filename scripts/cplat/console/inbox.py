@@ -18,7 +18,7 @@ from typing import Any
 import yaml
 
 from console import actions, handoff, layout, sources as sources_mod
-from console.html import action_button, command_block, esc, freshness, stage_badge, table, unavailable
+from console.html import action_button, command_block, engine_badge, esc, freshness, stage_badge, table, unavailable
 
 DEFAULT_BUDGET = "15"
 WAY_BACK_TITLE = "The way back"
@@ -101,8 +101,9 @@ class Decide:
         return extra
 
     def button(self, kind: str, label: str, key: str | None, command: str, *, args: dict | None = None, primary: bool = False,
-               confirm: str | None = None, extra: str | None = None, needs: tuple[str, ...] = ("claude", "gh")) -> str:
-        attrs = {"data_object": json.dumps(self.obj), "data_args": json.dumps(args or {}), "data_confirm": confirm}
+               confirm: str | None = None, extra: str | None = None, needs: tuple[str, ...] = ("claude", "gh"),
+               obj: dict | None = None) -> str:
+        attrs = {"data_object": json.dumps(self.obj if obj is None else obj), "data_args": json.dumps(args or {}), "data_confirm": confirm}
         button = action_button(kind, label, key, self.reason(kind, extra, needs), attrs=attrs, primary=primary)
         return f'<div class="act">{button}{command_block(command)}</div>'
 
@@ -140,7 +141,8 @@ def _panel(label: str, body: str) -> str:
 def _row(item: dict, now: datetime) -> tuple[str, list[str]]:
     """The attributes of the `<tr>` and its cells."""
     attrs = f'data-need="{esc(item.get("id"))}" data-open="/panel/need/{esc(_quote(str(item.get("id"))))}" tabindex="0"'
-    cells = [f'<strong>{esc(item.get("kind"))}</strong>', stage_badge(str(item.get("stage"))),
+    badge = engine_badge((item.get("object") or {}).get("engine"))
+    cells = [f'<strong>{esc(item.get("kind"))}</strong> {badge}'.rstrip(), stage_badge(str(item.get("stage"))),
              f'<time datetime="{esc(item.get("since"))}">{esc(age(item.get("since"), now))}</time>',
              f'<span class="reason-text">{esc(item.get("reason"))}</span>']
     return attrs, cells
@@ -188,15 +190,19 @@ def page(ctx: Any, query: dict[str, str]) -> str:
 
 def panel_need(ctx: Any, ident: str) -> str:
     """The detail of one decision with the buttons that decide it. Raises LookupError for an unknown id."""
-    item = next((i for i in _items(ctx) if i.get("id") == ident), None)
+    found = [i for i in _items(ctx) if i.get("id") == ident]
+    # An id can name an issue twice (a plain triage and the same issue as an engine signal): the one with the signal facts wins.
+    item = next((i for i in found if isinstance((i.get("object") or {}).get("detail"), dict)), found[0] if found else None)
     if item is None:
         raise LookupError(ident)
     kind = str(item.get("kind"))
-    build = {"answer": _answer, "approve": _approve, "promote": _promote, "escalation": _escalation, "triage": _triage}.get(kind)
+    build = {"answer": _answer, "approve": _approve, "promote": _promote, "escalation": _escalation, "triage": _triage,
+             "review": _review}.get(kind)
     if build is None:
         raise LookupError(ident)
     d = Decide(ctx, item)
-    body = f'<h2>{esc(kind)} {esc(item.get("object", {}).get("spec") or "")}</h2>' + _head(item, _now(ctx)) + build(ctx, item, d)
+    badge = engine_badge((item.get("object") or {}).get("engine"))
+    body = f'<h2>{esc(kind)} {esc(item.get("object", {}).get("spec") or "")} {badge}</h2>' + _head(item, _now(ctx)) + build(ctx, item, d)
     return _panel(f"Decision: {kind}", body)
 
 
@@ -311,4 +317,57 @@ def _triage(ctx: Any, item: dict, d: Decide) -> str:
         ("Failing check", "check"), ("Failing test", "test"), ("Criterion", "criterion"), ("Last error", "error"),
         ("Diagnosis", "diagnosis")) if detail.get(key))
     facts = f"<h3>What failed</h3><dl>{rows}</dl>" if rows else ""
-    return f"{facts}<h3>What to do with issue #{esc(issue)}</h3>{buttons}{dismiss}" + _way_back(item)
+    return f"{facts}{_signal(detail.get('signal'))}<h3>What to do with issue #{esc(issue)}</h3>{buttons}{dismiss}" + _way_back(item)
+
+
+def _dl(attr: str, pairs: list[tuple[str, Any]]) -> str:
+    rows = "".join(f"<dt>{esc(k)}</dt><dd>{v}</dd>" for k, v in pairs)
+    return f"<dl {attr}>{rows}</dl>"
+
+
+def _signal(sig: Any) -> str:
+    """The facts of an engine signal, its triage and the policy decision; `(none)` before triage (AC-124.18)."""
+    if not isinstance(sig, dict):
+        return ""
+    evidence = "".join(
+        f'<a href="{esc(e.get("url"))}">{esc(e.get("text") or e.get("url"))}</a> ' if e.get("url") else f"{esc(e.get('text'))} "
+        for e in sig.get("evidence") or [] if isinstance(e, dict))
+    facts = _dl("data-signal", [
+        ("Component", esc(sig.get("component"))), ("Environment", esc(sig.get("environment"))),
+        ("Category", esc(sig.get("category"))), ("Criticality", esc(sig.get("criticality"))),
+        ("Seen", esc(sig.get("seen"))), ("First seen", esc(sig.get("first_seen"))), ("Last seen", esc(sig.get("last_seen"))),
+        ("Evidence", evidence or "(none)")])
+    tri = sig.get("triage")
+    if isinstance(tri, dict):
+        files = ", ".join(esc(f) for f in tri.get("suspected_files") or []) or "(none)"
+        triage = _dl("data-triage", [("Route", esc(tri.get("route"))), ("Confidence", esc(tri.get("confidence"))),
+                                     ("Suspected files", files)])
+    else:
+        triage = _dl("data-triage", [("Triage", "(none)")])
+    pol = sig.get("policy")
+    decision = esc(pol.get("decision")) if isinstance(pol, dict) and pol.get("decision") else "(none)"
+    level = f" (level {esc(pol.get('level'))})" if isinstance(pol, dict) and pol.get("level") else ""
+    return (f"<h3>The signal</h3>{facts}<h3>Triage</h3>{triage}"
+            f"<h3>Policy decision</h3><p data-policy-decision>{decision}{level}</p>")
+
+
+def _review(ctx: Any, item: dict, d: Decide) -> str:
+    """The review decision of an engine fix outside its guardrails (AC-124.17)."""
+    c = item.get("consequence") or {}
+    why = "".join(f'<li data-guardrail="{esc(w.get("guardrail"))}">{esc(w.get("text"))}</li>'
+                  for w in c.get("why") or [] if isinstance(w, dict))
+    reg = c.get("regression")
+    regression = (_dl("data-regression", [("Test", esc(reg.get("test"))), ("Before the fix", esc(reg.get("before"))),
+                                          ("After the fix", esc(reg.get("after")))])
+                  if isinstance(reg, dict) else "<p>No regression test.</p>")
+    second = c.get("second_review") if isinstance(c.get("second_review"), dict) else {}
+    findings = "".join(f"<li>{esc(f)}</li>" for f in second.get("findings") or [])
+    review = (f'<section data-second-review><h3>Second review</h3><p>{esc(second.get("result") or "none")}</p>'
+              f"{f'<ul>{findings}</ul>' if findings else ''}</section>")
+    obj = {"repo": item.get("cwd_repo"), "pr_repo": d.obj.get("repo"), "pr": d.obj.get("pr")}
+    button = d.button("review-approve", "Approve", "a", str(item.get("command") or ""), args={"level": "system"}, primary=True, obj=obj,
+                      needs=("claude", "gh"))
+    summary = f"<p>{esc(c.get('summary'))}</p>" if c.get("summary") else ""
+    link = f'<p><a href="{esc(d.obj.get("url"))}">Pull request #{esc(d.obj.get("pr"))}</a></p>' if d.obj.get("url") else ""
+    return (f"<h3>Why it waits</h3><ul data-why>{why}</ul><p>Level {esc(c.get('level'))}; CI {esc(c.get('ci') or 'unknown')}.</p>"
+            f"<h3>Regression test</h3>{regression}{review}<h3>Summary</h3>{summary}{link}{button}" + _way_back(item))
