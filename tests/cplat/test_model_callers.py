@@ -90,6 +90,14 @@ STATUS_RESOURCES = [
 ]
 
 
+_DB_OFF = {"last_success": None, "state": "off", "archiving": None, "error": None, "earliest": None, "latest": None}  # spec 117
+STATUS_BACKUPS = {  # spec 117: every database instance and all three environments, backups off (AC-117.27)
+    "resource_instances": [{"resource": "postgres", "environment": e, "cluster": "shop-postgres", "backup": _DB_OFF, "restored": None, "previous": None}
+                           for e in ("dev", "staging")],
+    "environments": [{"environment": e, "backup": {"last_success": None, "state": "off", "reason": None, "kept": 0}} for e in ("dev", "staging", "prod")],
+}
+
+
 @pytest.fixture()
 def status_repo(tmp_path, monkeypatch):
     write_app(tmp_path, SMALL_SERVICES, SMALL_APP, {**SMALL_PINS, ("staging", "shop-api"): STAGING_PIN})
@@ -123,7 +131,8 @@ def test_status_pinned_tag_stays_and_reads_the_overlay_ac_113_11(status_repo):  
 def test_status_table_and_json_are_unchanged_ac_113_11(status_repo, monkeypatch, capsys):  # AC-113.11
     calls = spy(monkeypatch, "load_dir")
     assert status.main(["--repo-dir", str(status_repo), "--context", "k3d-x", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"system": "shop", "environments": STATUS_ENVS, "rows": STATUS_ROWS, "resources": STATUS_RESOURCES}
+    assert json.loads(capsys.readouterr().out) == {"system": "shop", "environments": STATUS_ENVS, "rows": STATUS_ROWS, "resources": STATUS_RESOURCES,
+                                                   "backups": STATUS_BACKUPS}  # spec 117: --json always has backups (AC-117.27)
     assert status.main(["--repo-dir", str(status_repo), "--context", "k3d-x"]) == 0
     out = capsys.readouterr().out
     assert out.startswith("## shop (system) — platform 4.8.0 available, repo stamped none")

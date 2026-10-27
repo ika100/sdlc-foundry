@@ -17,7 +17,9 @@ def test_status_with_an_empty_system_file_has_no_rows_ac_113_11(tmp_path, monkey
     monkeypatch.setattr(status, "sh", lambda cmd: None)
     monkeypatch.setattr(core, "platform_version", lambda: "4.8.0")
     assert status.main(["--repo-dir", str(tmp_path), "--context", "k3d-x", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"system": "shop", "environments": ["dev", "staging", "prod"], "rows": [], "resources": []}
+    off = {"last_success": None, "state": "off", "reason": None, "kept": 0}  # spec 117
+    assert json.loads(capsys.readouterr().out) == {"system": "shop", "environments": ["dev", "staging", "prod"], "rows": [], "resources": [],
+                                                   "backups": {"resource_instances": [], "environments": [{"environment": e, "backup": off} for e in ("dev", "staging", "prod")]}}  # spec 117: --json always has backups (AC-117.27)
 
 
 @pytest.mark.parametrize("text", ["", "# only a comment\n"])
