@@ -26,6 +26,7 @@ LABELS = {
     "duplicate": ("cfd3d7", "Already reported"),
     "wontfix": ("ffffff", "Out of scope, will not be done"),
     "auto-filed": ("c5def5", "Filed automatically by the platform (spec 088)"),
+    "signal": ("5319e7", "Filed by an autonomy engine from a signal (spec 124)"),
 }
 DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix"}
 BODY_LIMIT = 4000
