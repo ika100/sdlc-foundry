@@ -19,7 +19,7 @@ import cplat
 import gitops
 from backup_fixtures import (PLUGIN, argo_app, bdoc, clock, cnpg_backup, cnpg_cluster, kube, make_repo, objectstore,  # noqa: F401  (fixtures)
                              pod_volume_backup, restored_state, state_path, switched_state, tree_state, velero_backup, write_state)
-from resources_fixtures import comp
+from resources_fixtures import APP, comp  # spec 117 slip: APP was used but not imported
 from system_fixtures import git as git_cmd
 
 DEV = {"to": "backups"}
@@ -410,7 +410,8 @@ def test_a_failed_recovery_job_reports_the_reason_ac_117_12(repo, kube, capsys, 
 
 def switch_world(repo, kube, env="dev", active_ready=True):
     with_state(repo, restored_state(), env)
-    kube.put("cluster", cnpg_cluster("shop-orders-db"), cnpg_cluster("shop-orders-db-g1", ready=active_ready, message="" if active_ready else "Setting up primary"))
+    kube.put("cluster", cnpg_cluster("shop-orders-db", ns="shop-" + env),  # spec 117 slip: the clusters sit in the environment's namespace
+             cnpg_cluster("shop-orders-db-g1", ns="shop-" + env, ready=active_ready, message="" if active_ready else "Setting up primary"))
     kube.put("objectstore", objectstore({"shop-orders-db": "2026-09-27T03:00:12Z"}))
     b64 = lambda s: base64.b64encode(s.encode()).decode()  # noqa: E731
     kube.put("secret", {"metadata": {"name": "shop-orders-db-app", "namespace": "shop-" + env, "ownerReferences": [{"kind": "Cluster", "name": "shop-orders-db"}]},
