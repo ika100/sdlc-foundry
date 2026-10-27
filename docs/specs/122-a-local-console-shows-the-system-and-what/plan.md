@@ -109,6 +109,7 @@ tasks:
     covers: [AC-122.13, AC-122.14, AC-122.15, AC-122.33, AC-122.34, AC-122.35, AC-122.36, AC-122.39, AC-122.47]
     parallel_safe: true
     depends_on: [t1, t8, t10, t11, t12]
+    done: true
   - id: t16
     title: System — where it runs, Promote and Cut release on cells, parts and relations, Add to the model forms
     files: [scripts/cplat/console/system_page.py]
