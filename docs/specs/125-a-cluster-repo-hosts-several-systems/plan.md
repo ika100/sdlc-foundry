@@ -38,6 +38,7 @@ tasks:
     covers: [AC-125.9, AC-125.15]
     parallel_safe: true
     depends_on: [t2, t3, t4]
+    done: true
   - id: t6
     title: cluster-gitops template skeleton — copier.yml, devbox.json, cluster.yaml, initial cluster/, CI, CLAUDE.md, README, settings
     files: [templates/cluster-gitops/copier.yml, templates/cluster-gitops/devbox.json, "templates/cluster-gitops/{{ _copier_conf.answers_file }}.jinja", templates/cluster-gitops/cluster.yaml.jinja, templates/cluster-gitops/cluster/operators-root.yaml.jinja, templates/cluster-gitops/cluster/systems-root.yaml.jinja, templates/cluster-gitops/cluster/kustomization.yaml, templates/cluster-gitops/cluster/operators/.gitkeep, templates/cluster-gitops/cluster/systems/.gitkeep, templates/cluster-gitops/CLAUDE.md.jinja, templates/cluster-gitops/README.md.jinja, templates/cluster-gitops/.claude/settings.json.jinja, templates/cluster-gitops/.claude/project-notes.md, templates/cluster-gitops/.github/workflows/ci.yml, templates/cluster-gitops/.github/dependabot.yml, templates/cluster-gitops/.github/ISSUE_TEMPLATE/bug_report.yml, templates/cluster-gitops/.github/ISSUE_TEMPLATE/config.yml, templates/cluster-gitops/.github/ISSUE_TEMPLATE/feature_request.yml, templates/cluster-gitops/.gitignore, templates/cluster-gitops/.secrets.baseline.json]
