@@ -25,6 +25,7 @@ READ_ONLY_TOOLS = (
     "Bash(cplat model show:*)", "Bash(cplat spec list:*)", "Bash(cplat needs:*)",
     "Bash(cplat system status:*)", "Bash(cplat runs:*)",
 )
+DISALLOWED_TOOLS = ("Edit", "Write", "NotebookEdit")   # the clone's own allowlist adds to --allowedTools; these stay denied
 PROMPT = (
     "You answer a question about this system from its gitops clone. You may only read files and run the read-only "
     "`cplat` commands you were given; change nothing. If a change would help, end your answer with one fenced block "
@@ -228,7 +229,8 @@ def ask(ctx: Any, question: str) -> dict:
     if not claude:
         return {"answer": "Claude Code is not installed, so I cannot answer. Run /platform:doctor for the fix.", "suggestions": []}
     cwd = ctx.repo_dir if Path(ctx.repo_dir).is_dir() else Path.cwd()
-    argv = [claude, "-p", PROMPT + question, "--allowedTools", ",".join(READ_ONLY_TOOLS)]
+    argv = [claude, "-p", PROMPT + question, "--permission-mode", "plan", "--allowedTools", ",".join(READ_ONLY_TOOLS),
+            "--disallowedTools", ",".join(DISALLOWED_TOOLS)]
     try:
         done = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=ASK_TIMEOUT, env=os.environ.copy())
     except (OSError, subprocess.TimeoutExpired) as e:

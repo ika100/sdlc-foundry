@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -58,6 +59,18 @@ def open_terminal(argv: list[str], cwd: str) -> bool:
         return False
 
 
+def _record_link(run: dict[str, Any]) -> str | None:
+    """The finished run's record in the run store (`CPLAT_RUNS_REPO`), when the store and the end of the run are known."""
+    slug = os.environ.get("CPLAT_RUNS_REPO", "").strip()
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", slug) or not run.get("ended_at") or not run.get("run_id"):
+        return None
+    try:
+        import runs_store  # noqa: PLC0415
+        return f"https://github.com/{slug}/blob/main/{runs_store.record_path(run)}"
+    except (ImportError, KeyError, ValueError):
+        return None
+
+
 def links_for_work(run: dict[str, Any]) -> list[dict[str, str]]:
     """The pull request, the CI run and the run record of a run, as `{label, url}` entries (missing ones are left out)."""
     links: list[dict[str, str]] = []
@@ -66,7 +79,7 @@ def links_for_work(run: dict[str, Any]) -> list[dict[str, str]]:
         links.append({"label": f"PR #{pr.get('number')}" if pr.get("number") else "PR", "url": pr["url"]})
     if run.get("ci_url"):
         links.append({"label": "CI run", "url": run["ci_url"]})
-    record = run.get("record_url") or run.get("store_url")
+    record = run.get("record_url") or run.get("store_url") or _record_link(run)
     if record:
         links.append({"label": "Run record", "url": record})
     return links

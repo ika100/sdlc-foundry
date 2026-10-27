@@ -281,7 +281,32 @@ def _failure_html(run: dict) -> str:
     failed = [(env, v) for env, v in ((run.get("smoke") or {}).items()) if isinstance(v, dict) and v.get("result") == "failed"]
     for env, v in failed:
         parts.append(f"<p>The smoke check in {esc(env)} failed on {esc(v.get('instance') or env)}: smoke result {esc(v.get('result'))}.</p>")
+    for env, v in _not_run(run):
+        parts.append(f"<p>The smoke check in {esc(env)} did not run on {esc(v.get('instance') or env)}: smoke result {esc(v.get('result'))}. "
+                     f"Why: {esc(v.get('reason') or 'no reason recorded')}.</p>")
+    unchecked = _unchecked(run)
+    if _not_run(run):
+        parts.append(f"<p>Criteria left unchecked: {esc(', '.join(unchecked) if unchecked else 'those of ' + str(run.get('spec')))}.</p>")
     return "".join(parts)
+
+
+def _not_run(run: dict) -> list[tuple[str, dict]]:
+    return [(env, v) for env, v in ((run.get("smoke") or {}).items()) if isinstance(v, dict) and v.get("result") == "not-run"]
+
+
+def _unchecked(run: dict) -> list[str]:
+    failure = run.get("failure") or {}
+    return [c for c in re.split(r"[,\s]+", str(failure.get("criterion") or "")) if c]
+
+
+def _smoke_ways(run: dict) -> str:
+    """The ways forward of a smoke that did not run: run it again, or check by hand."""
+    spec_no = str(run.get("spec") or "").split("-", 1)[0]
+    level = run.get("level") or "component"
+    return _section("Ways forward",
+                    f"<p>Run the smoke check again by shipping again:</p><p>{command_block(f'/{level}:ship {spec_no}')}</p>"
+                    "<p>Or check the criteria by hand against the instance (open it from the System page), then ship again "
+                    "once you are satisfied.</p>")
 
 
 def _ways_forward(run: dict) -> str:
@@ -332,7 +357,7 @@ def panel_run(ctx: Any, ident: str) -> str:
         stage = stages.stage_of_run(str(phase), stopped_in)[0]
     failure = _failure_html(run)
     troubled = bool(run.get("stopped") or run.get("failure") or run.get("escalation")
-                    or any(isinstance(v, dict) and v.get("result") == "failed" for v in (run.get("smoke") or {}).values()))
+                    or any(isinstance(v, dict) and v.get("result") in ("failed", "not-run") for v in (run.get("smoke") or {}).values()))
     links = handoff.links_for_work(run)
     if not any(x["label"] == "Run record" for x in links):
         links.append({"label": "Run record", "url": _record_url(run) or f"/panel/run/{ident}"})
@@ -341,7 +366,7 @@ def panel_run(ctx: Any, ident: str) -> str:
                 ("Stage", _stage_or_done(stage) + (" stopped" if run.get("stopped") else "")),
                 ("Budget", esc(_budget_line(run))), ("Smoke", esc(_smoke_text(run)))])
     body = (head + (_section("Why it stopped", failure or "<p>The run stopped without a recorded failure.</p>") if troubled else "")
-            + (_ways_forward(run) if troubled else "") + _section("Where the evidence lives", link_html))
+            + (_ways_forward(run) if troubled else "") + (_smoke_ways(run) if _not_run(run) else "") + _section("Where the evidence lives", link_html))
     return _aside(f"Run {ident}", body, ctx, _read_at(ctx, "runs"))
 
 
@@ -369,6 +394,9 @@ def panel_issue(ctx: Any, ident: str) -> str:
     facts = [("Issue", _link(f"#{n}", f"https://github.com/{repo}/issues/{n}") if repo else esc(f"#{n}"))]
     facts += [("Title", esc(title))] if title else []
     facts += [("Stage", stage_badge(stage)), ("Why it is here", esc(why))]
+    detail = obj.get("detail") if isinstance(obj.get("detail"), dict) else {}
+    facts += [(label, esc(detail[key])) for label, key in (("Failing check", "check"), ("Failing test", "test"), ("Criterion", "criterion"),
+                                                           ("Last error", "error"), ("Diagnosis", "diagnosis")) if detail.get(key)]
     body = (_kv(facts)
             + _section("What do you want to do", _action("fix", "Fix it", None, obj, f"/component:fix #{n}", primary=True)
                        + _action("make-spec", "Make a spec", None, obj, f"/component:spec #{n}") + dismiss))
@@ -437,6 +465,61 @@ def panel_release(ctx: Any, ident: str) -> str:
     cut = _action("cut-release", "Cut release", "r", obj, "/component:release", primary=True,
                   confirm=f"Cut release {version} of {component}?")
     return _aside(f"Release {component} {version}", _kv(facts) + _section("What happens", what + cut), ctx, _read_at(ctx, "status"))
+
+
+# ---------------- promote ----------------
+
+def _cell_ref(cell: dict) -> str:
+    return str(cell.get("commit") or cell.get("tag") or cell.get("release") or cell.get("version") or "")
+
+
+def panel_promote(ctx: Any, ident: str) -> str:
+    """Promote a verified cell to the next manual environment: what lies between the versions, the way back, then the button."""
+    from console import inbox   # noqa: PLC0415 - the decision markup belongs to the Inbox
+    import releases             # noqa: PLC0415
+    parts = ident.split(":")
+    if len(parts) != 3 or not all(parts):
+        raise LookupError(f"unknown promotion {ident!r}")
+    component, frm, to = parts
+    rows = _status_rows(ctx)
+    row = next((r for r in rows if r.get("component") == component), None)
+    repo = _repo_of(ctx, component)
+    cells = (row or {}).get("cells") or {}
+    src, dst = cells.get(frm) or {}, cells.get(to) or {}
+    version = str(src.get("version") or "")
+    obj = {"type": "release", "repo": repo, "component": component, "version": version}
+    source = ctx.source("status")
+    stale = bool(source and (source.error or source.unavailable_since))
+    down = row is None or not version or stale
+    item: dict = {"id": f"promote:{component}:{frm}:{to}", "kind": "promote", "stage": "Prod" if to == "prod" else "Staging",
+                  "object": obj, "way_back": {}, "consequence": {"to_env": to}}
+    if down:
+        item["consequence"]["blocked"] = "The status cannot be read, so the versions to compare are unknown."
+        item["way_back"] = {}
+        body = f"<p>{esc(item['consequence']['blocked'])}</p>"
+    else:
+        before, after = _cell_ref(dst), _cell_ref(src)
+        between = releases.between(repo, before, after) if repo and before and after else {}
+        migrations = between.get("migrations") or []
+        bad = [Path(m["file"]).name for m in migrations if not m.get("additive")]
+        digest = src.get("digest")
+        item["consequence"].update({"from": before or None, "to": after, "specs": between.get("specs") or [],
+                                    "criteria": between.get("criteria"), "commits": between.get("commits"),
+                                    "migrations": migrations, "digest": digest, "verified_digest": digest,
+                                    "digest_matches": digest is not None})
+        current = short_version(dst.get("version")) if dst.get("version") else ""
+        item["way_back"] = {"command": f"/instance:promote {component} --to {to} --version {dst['version']}" if dst.get("version") else None,
+                            "warning": f"migration {', '.join(bad)} is not additive" if bad else None,
+                            "text": None if current else f"{to} runs nothing yet, so there is no version to go back to."}
+        body = ""
+    status = ctx.data("status")
+    if not isinstance(status, dict):
+        item["consequence"]["blocked"] = "The status cannot be read right now."
+    d = inbox.Decide(ctx, item)
+    inner = inbox._promote(ctx, item, d) if not down else body + d.button(
+        "promote", "Promote", "p", f"/instance:promote {component} --to {to} --version <version>", args={"to": to}, primary=True,
+        extra=item["consequence"]["blocked"], needs=("claude", "gh", f"kube:{to}"))
+    return _aside(f"Promote {component} to {to}", inner, ctx, _read_at(ctx, "status"))
 
 
 # ---------------- stage ----------------

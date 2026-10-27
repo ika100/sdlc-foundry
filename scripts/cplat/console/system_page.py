@@ -100,7 +100,8 @@ def _need_panel(ctx: Any, comp: str, version: str) -> str | None:
     return None
 
 
-def _promote(ctx: Any, comp: str, repo: str, version: str, target: str, unknown: bool, pieces: dict[str, str]) -> str:
+def _promote(ctx: Any, comp: str, repo: str, version: str, target: str, unknown: bool, pieces: dict[str, str],
+             source: str = "") -> str:
     obj = {"type": "release", "repo": repo, "component": comp, "version": version}
     reason = None
     if unknown:
@@ -109,10 +110,11 @@ def _promote(ctx: Any, comp: str, repo: str, version: str, target: str, unknown:
         reason = _missing(pieces, "claude", "gh", f"kube:{target}")
     if not reason and actions.active_for(obj):
         reason = "Another action runs on this release."
-    panel = _need_panel(ctx, comp, version)
+    panel = _need_panel(ctx, comp, version) if target == "prod" else None
+    panel = panel or f"/panel/promote/{quote(f'{comp}:{source}:{target}', safe='')}"
     attrs = {"data_object": json.dumps(obj), "data_args": json.dumps({"to": target})}
     # The panel shows what lies between the versions and the way back; the confirm is there (AC-122.34, AC-122.35).
-    attrs.update({"data_open": panel} if panel else {"data_confirm": f"Promote {comp} {version} to {target}?"})
+    attrs["data_open"] = panel
     button = action_button("promote", f"Promote to {target}", None, reason, attrs=attrs, primary=True)
     return f'<div class="offer">{button}{command_block(f"/instance:promote {comp} --to {target} --version {version}")}</div>'
 
@@ -151,7 +153,7 @@ def _cell(ctx: Any, row: Mapping, env: str, index: int, rules: list[dict], down:
         target = str(nxt["name"])
         nxt_cell = cells.get(target) or {}
         unknown = down or raw == UNKNOWN or str(nxt_cell.get("state") or "") == UNKNOWN
-        out.append(_promote(ctx, comp, repo, raw_version, target, unknown, pieces))
+        out.append(_promote(ctx, comp, repo, raw_version, target, unknown, pieces, env))
     cand = row.get("release_candidate")
     if isinstance(cand, Mapping) and env == cut_env:
         out.append(_cut(ctx, comp, repo, cand, down, pieces))

@@ -260,9 +260,10 @@ def _promote(ctx: Any, item: dict, d: Decide) -> str:
     else:
         digest = (f'<p class="failed">Digest {esc(c.get("digest"))} is not the one verified in staging '
                   f'({esc(c.get("verified_digest") or "none")}).</p>')
-    command = f"/instance:promote {obj.get('component')} --to prod --version {obj.get('version')}"
-    button = d.button("promote", "Promote", "p", command, args={"to": "prod"}, primary=True,
-                      confirm=f"Promote {obj.get('component')} {obj.get('version')} to prod?", needs=("claude", "gh", "kube:prod"))
+    to_env = str(c.get("to_env") or "prod")
+    command = f"/instance:promote {obj.get('component')} --to {to_env} --version {obj.get('version')}"
+    button = d.button("promote", "Promote", "p", command, args={"to": to_env}, primary=True, extra=c.get("blocked"),
+                      confirm=f"Promote {obj.get('component')} {obj.get('version')} to {to_env}?", needs=("claude", "gh", f"kube:{to_env}"))
     return (f"<h3>Between {esc(c.get('from'))} and {esc(c.get('to'))}</h3><ul><li>{esc(c.get('commits'))} commits</li>"
             f"<li>{esc(c.get('criteria'))} criteria</li><li>Specs: {specs}</li></ul>"
             f"<h3>Migrations</h3>{migrations}{digest}{button}" + _way_back(item))
@@ -305,4 +306,9 @@ def _triage(ctx: Any, item: dict, d: Decide) -> str:
     dismiss = ('<form data-form="dismiss"><label>Reason for dismissing<br><textarea name="reason" rows="2"></textarea></label>'
                + d.button("dismiss", "Dismiss", None, f"/issue:triage {issue} dismiss as wontfix: <reason>",
                           confirm=f"Dismiss issue #{issue}?") + "</form>")
-    return f"<h3>What to do with issue #{esc(issue)}</h3>{buttons}{dismiss}" + _way_back(item)
+    detail = d.obj.get("detail") if isinstance(d.obj.get("detail"), dict) else {}
+    rows = "".join(f"<dt>{esc(label)}</dt><dd>{esc(detail[key])}</dd>" for label, key in (
+        ("Failing check", "check"), ("Failing test", "test"), ("Criterion", "criterion"), ("Last error", "error"),
+        ("Diagnosis", "diagnosis")) if detail.get(key))
+    facts = f"<h3>What failed</h3><dl>{rows}</dl>" if rows else ""
+    return f"{facts}<h3>What to do with issue #{esc(issue)}</h3>{buttons}{dismiss}" + _way_back(item)

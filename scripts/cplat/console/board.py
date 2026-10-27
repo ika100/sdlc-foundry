@@ -250,14 +250,15 @@ def done_items(ctx: Any) -> list[dict]:
         out.append({"kind": "issue", "stage": "Issue", "id": f"#{issue['number']}", "title": issue.get("title") or "",
                     "repo": issue.get("repo") or "", "component": "", "ended": issue["closed_at"], "release": "", "links": links,
                     "open": _panel("issue", issue["number"])})
-    repos = _components(ctx)
-    for row in (ctx.data("status") or {}).get("rows") or []:
-        prod = (row.get("cells") or {}).get("prod") or {}
-        release = prod.get("release")
-        if release:
-            out.append({"kind": "release", "stage": "Prod", "id": f"{row['component']} {short_version(release)}", "title": "",
-                        "repo": repos.get(row["component"]) or "", "component": row["component"], "ended": "",
-                        "release": short_version(release), "links": [], "open": _panel("instance", f"{row['component']}:prod")})
+    mine = system_repos(ctx)
+    for rel in (ctx.data("needs") or {}).get("releases") or []:
+        if not isinstance(rel, dict) or not rel.get("tag") or not rel.get("published_at") or not _mine(mine, rel.get("repo")):
+            continue
+        links = [{"label": "Release", "url": rel["url"]}] if rel.get("url") else []
+        out.append({"kind": "release", "stage": "Prod", "id": f"{rel.get('component')} {short_version(rel['tag'])}", "title": "",
+                    "repo": rel.get("repo") or "", "component": rel.get("component") or "", "ended": rel["published_at"],
+                    "release": short_version(rel["tag"]), "links": links,
+                    "open": _panel("instance", f"{rel.get('component')}:prod")})
     return sorted(out, key=lambda i: i["ended"], reverse=True)
 
 

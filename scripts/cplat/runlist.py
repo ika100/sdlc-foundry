@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -197,12 +198,12 @@ def _children(rec: dict) -> list[str]:
     return [c for c in rec.get("ships") or [] if isinstance(c, str)]
 
 
-def lookup_pr(repo: str, branch: str) -> dict | None:
+def lookup_pr(repo: str, branch: str, state: str = "all") -> dict | None:
     """The open or merged PR of a branch through `gh` (tests replace this); None when `gh` cannot say."""
     import json as _json
     from core import run
     try:
-        out = run(["gh", "pr", "list", "-R", repo, "--head", branch, "--state", "all", "--json", "number,url", "--limit", "1"],
+        out = run(["gh", "pr", "list", "-R", repo, "--head", branch, "--state", state, "--json", "number,url", "--limit", "1"],
                   check=False, timeout=10).stdout
         found = _json.loads(out or "[]")
     except Exception:  # noqa: BLE001
@@ -234,9 +235,41 @@ def _state_pr(rec: dict, repo_dir: str | None) -> dict | None:
 def _pr(rec: dict, repo_dir: str | None, phase: str) -> dict | None:
     """The run's PR: a recorded one, else the ship state's, else (running or stopped runs) the `feature/<spec>` branch's."""
     found = _as_pr(rec.get("pr")) or _state_pr(rec, repo_dir)
-    if found or phase == "done" or not rec.get("repo") or not rec.get("spec"):
+    if found or not rec.get("repo") or not rec.get("spec"):
         return found
+    if phase == "done":
+        return _merged_pr(rec)
     return _as_pr(lookup_pr(rec["repo"], f"feature/{rec['spec']}"))
+
+
+def _pr_cache_file() -> Path:
+    base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    return base / "sdlc-foundry" / "console" / "prs.json"
+
+
+def _merged_pr(rec: dict) -> dict | None:
+    """The merged PR of a finished run's `feature/<spec>` branch, cached per run so finished runs ask `gh` once."""
+    import json as _json
+    path, run_id = _pr_cache_file(), str(rec["run_id"])
+    try:
+        cache = _json.loads(path.read_text())
+        cache = cache if isinstance(cache, dict) else {}
+    except (OSError, ValueError):
+        cache = {}
+    if isinstance(cache.get(run_id), dict):
+        return _as_pr(cache[run_id])
+    try:
+        found = _as_pr(lookup_pr(rec["repo"], f"feature/{rec['spec']}", state="merged"))
+    except Exception:  # noqa: BLE001
+        return None
+    if found:
+        cache[run_id] = found
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(_json.dumps(cache))
+        except OSError:
+            pass
+    return found
 
 
 def _image(rec: dict) -> str | None:
@@ -253,7 +286,10 @@ def _smoke_cell(section, repo: str | None, env: str) -> dict | None:
     if not outcome:
         return None
     result = "passed" if outcome in _GREEN else "not-run" if outcome == "not-run" else "failed"
-    return {"result": result, "instance": f"{(repo or '').rsplit('/', 1)[-1]}/{env}"}
+    cell = {"result": result, "instance": f"{(repo or '').rsplit('/', 1)[-1]}/{env}"}
+    if reason := _one_line(section.get("reason") or ""):
+        cell["reason"] = reason
+    return cell
 
 
 def _smoke(rec: dict) -> dict:

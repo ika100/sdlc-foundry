@@ -258,16 +258,53 @@ def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str =
     return items
 
 
+def _section_text(body: str, heading: str) -> str:
+    m = re.search(rf"^## {re.escape(heading)}\n(.*?)(?=^## |\n_Filed automatically|\Z)", body, re.M | re.S)
+    return m.group(1).strip() if m else ""
+
+
+def _fact(text: str, key: str) -> str:
+    m = re.search(rf"^- {re.escape(key)}: *(.*)$", text, re.M)
+    return m.group(1).strip() if m else ""
+
+
+def _last_error(evidence: str) -> str:
+    lines = [ln.strip() for ln in evidence.splitlines() if ln.strip() and not ln.strip().startswith("`")]
+    return lines[-1] if lines and lines[-1] != "(none)" else ""
+
+
+def triage_detail(names: set[str], body: str) -> dict:
+    """The failing check or test, criterion, last error and diagnosis of an alert (spec 092) or smoke-failure (spec 091)
+    issue body; `{}` when the body has none of them."""
+    body = body or ""
+    out: dict[str, str] = {}
+    if "smoke-failure" in names:
+        smoke = _section_text(body, "Smoke")
+        tests = re.findall(r"^\s+- (\S.*)$", smoke.split("- failing tests:", 1)[-1], re.M) if "- failing tests:" in smoke else []
+        out["test"] = ", ".join(tests)
+        out["criterion"] = ", ".join(dict.fromkeys(re.findall(r"AC-\d+\.\d+", " ".join(tests) + " " + _section_text(body, "Reason"))))
+        out["error"] = _last_error(_section_text(body, "Evidence"))
+        klass = _fact(smoke, "failure class")
+        out["diagnosis"] = f"failure class {klass}" if klass and klass != "unknown" else _section_text(body, "Reason")
+    elif "alert" in names:
+        alert = _section_text(body, "Alert")
+        out["check"] = _fact(alert, "alert")
+        out["error"] = _section_text(body, "Summary") if _section_text(body, "Summary") != "(none)" else ""
+        where = ", ".join(x for x in (_fact(alert, "severity"), _fact(alert, "environment"), _fact(alert, "service")) if x)
+        out["diagnosis"] = f"alert firing ({where})" if where else ""
+    return {k: v for k, v in out.items() if v}
+
+
 def _triage(slug: str) -> list[dict]:
     issues = _json(["issue", "list", "-R", slug, "--state", "open", "--label", "triage",
-                    "--json", "number,title,createdAt,url,labels"]) or []
+                    "--json", "number,title,createdAt,url,labels,body"]) or []
     items = []
     for i in issues:
         names = {(x.get("name") if isinstance(x, dict) else x) for x in i.get("labels") or []}
         if "triage" not in names or not names & TRIAGE_LABELS:
             continue
         items.append({"id": f"triage:{slug}:{i['number']}", "kind": "triage", "stage": "Issue",
-                      "object": _obj("issue", slug, issue=i["number"], url=i.get("url")), "since": i.get("createdAt") or "",
+                      "object": _obj("issue", slug, issue=i["number"], url=i.get("url"), detail=triage_detail(names, i.get("body") or "")), "since": i.get("createdAt") or "",
                       "reason": f"{i.get('title') or 'issue'} (not routed yet)", "command": f"/issue:triage {i['number']}",
                       "cwd_repo": slug, "consequence": None, "way_back": None})
     return items
@@ -288,6 +325,18 @@ def _issues(slug: str, since_days: int) -> list[dict]:
             out.append({"repo": slug, "number": i.get("number"), "title": i.get("title") or "", "labels": names, "state": state,
                         "created_at": i.get("createdAt") or "", "closed_at": i.get("closedAt") or None, "url": i.get("url") or ""})
     return out
+
+
+def _releases(components: dict[str, str], since_days: int) -> list[dict]:
+    """The releases of the components' repos published within `since_days`: `{repo, component, tag, published_at, url}`."""
+    cutoff = (runs.utcnow() - datetime.timedelta(days=since_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = []
+    for name, repo in components.items():
+        for r in _json(["release", "list", "-R", repo, "--json", "tagName,publishedAt,url"]) or []:
+            at = r.get("publishedAt") or ""
+            if r.get("tagName") and at and at >= cutoff:
+                out.append({"repo": repo, "component": name, "tag": r["tagName"], "published_at": at, "url": r.get("url") or ""})
+    return sorted(out, key=lambda r: r["published_at"], reverse=True)
 
 
 def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> dict:
@@ -322,9 +371,14 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
         items += _promotions(status_rows, {c.name: c.repo for c in m.components if c.repo}, _prod_promotion(m))
     except Exception as e:  # noqa: BLE001
         src.fail("cluster", e, ["promote"])
+    releases: list[dict] = []
+    try:
+        releases = _releases({c.name: c.repo for c in m.components if c.repo}, since_days)
+    except Exception as e:  # noqa: BLE001
+        src.fail("github", e, ["releases"])
     items.sort(key=lambda i: i["since"] or "")
     return {"schema": SCHEMA, "system": app_dir.name, "read_at": runs._iso(runs.utcnow()), "items": items,
-            "issues": issues, "unavailable": src.listing()}
+            "issues": issues, "releases": releases, "unavailable": src.listing()}
 
 
 def render(doc: dict) -> str:
