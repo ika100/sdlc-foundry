@@ -37,7 +37,10 @@ def bdoc(dbb=None, envb=None, bucket_kw=None, db_kw=None, comps=None, resources=
     for the database's instances, `envb` {env: backup} for the environments."""
     db_kw = dict(db_kw or {})
     if dbb:
-        db_kw["instances"] = {e: {**db_kw.get("instances", {}).get(e, {}), "backup": copy.deepcopy(b)} for e, b in dbb.items()}
+        inst = copy.deepcopy(db_kw.get("instances", {}))
+        for e, b in dbb.items():
+            inst[e] = {**inst.get(e, {}), "backup": copy.deepcopy(b)}
+        db_kw["instances"] = inst  # spec 117 fixture fix: keep db_kw's other instances (an external prod) next to dbb's
     res = {"orders-db": db(**db_kw), "backups": bucket(**(bucket_kw or {}))}
     res.update(resources or {})
     doc = system(res, comps if comps is not None else {"api": comp("api", ["orders-db", "backups"])})
