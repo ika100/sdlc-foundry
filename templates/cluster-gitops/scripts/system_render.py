@@ -68,7 +68,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
     todo-lib: {type: library, lang: python, repo: org/todo-lib}    # a library has no instances and renders nothing
   apis:
     todo-api-rest: {type: openapi}   # openapi | grpc | graphql | events; changes no manifest
-  resources:                         # any number, each named, typed (database, bucket; cache, broker come with specs 118-119)
+  resources:                         # any number, each named, typed (database, bucket, cache; broker comes with spec 119)
     orders-db:                       # name: lowercase letters, digits, hyphens; at most 30 characters; not a component name
       type: database                 # required
       version: 17                    # 15 | 16 | 17 | 18 (default 17)
@@ -78,6 +78,14 @@ system.yaml (every value explicit and reviewable; the model is described in docs
       instances: {prod: {replicas: 3, storage: 20Gi,    # per-environment overrides: external, remote, replicas, storage, resources, backup
                          backup: {to: backups, schedule: "30 2 * * *", retention: 8w}}}   # spec 117: to = a bucket resource; schedule is
                                      # a five-field cron in UTC (default "0 3 * * *"), retention <n>d or <n>w (default 30d)
+    sessions:                        # a cache (spec 118): one Valkey node per environment, REDIS_URL and REDIS_* for a using component
+      type: cache
+      version: 9                     # 8 | 9 (default 9)
+      memory: 256Mi                  # default 256Mi, a quantity of at least 64Mi; the server gets 80 % as maxmemory
+      maxmemoryPolicy: allkeys-lru   # default; noeviction | allkeys-lru | allkeys-lfu | allkeys-random | volatile-lru | volatile-lfu | ...
+      persistence: false             # true = append-only file on a volume (default false)
+      storage: 1Gi                   # only with persistence: true
+      instances: {prod: {memory: 1Gi, persistence: true, storage: 5Gi}}   # per environment: external, remote, memory, maxmemoryPolicy, persistence, storage
     billing-db:                      # external: runs nothing, its connection Secret is synced from the secretStore
       type: database
       external: true                 # true | false (default false); per environment under instances.<env>.external
@@ -113,6 +121,7 @@ from __future__ import annotations
 import re
 import shutil
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 import yaml
@@ -136,13 +145,25 @@ EXTERNAL_KEYS = [*COMMON_KEYS, "image", "external", "provides", "consumes", "ins
 LIBRARY_KEYS = [*COMMON_KEYS, "provides", "consumes"]
 INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets"]
 RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
-PLANNED_TYPES = {"cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
+PLANNED_TYPES = {"broker": 119}     # types no release runs yet: the spec that brings each
 RESOURCE_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
 RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources", "backup"]
 SIZING_KEYS = ["version", "replicas", "storage", "resources"]      # an external resource runs nothing: none of these
 BUCKET_KEYS = ["type", "external", "remote", "storage", "versioning", "instances"]
 BUCKET_INSTANCE_KEYS = ["external", "remote", "storage", "versioning"]
 BUCKET_SIZING_KEYS = ["storage", "versioning"]
+CACHE_KEYS = ["type", "external", "remote", "version", "memory", "maxmemoryPolicy", "persistence", "storage", "instances"]
+CACHE_INSTANCE_KEYS = ["external", "remote", "memory", "maxmemoryPolicy", "persistence", "storage"]
+CACHE_SIZING_KEYS = ["version", "memory", "maxmemoryPolicy", "persistence", "storage"]   # an instance's are the same without `version`
+CACHE_SUFFIXES = ("-app", "-password")     # the cluster objects a cache creates, next to `<system>-<name>` itself (design.md)
+CACHE_VERSIONS = (8, 9)
+MAXMEMORY_POLICIES = ("noeviction", "allkeys-lru", "allkeys-lfu", "allkeys-random", "volatile-lru", "volatile-lfu", "volatile-random",
+                      "volatile-ttl")
+QUANTITY = re.compile(r"^([0-9]+(?:\.[0-9]+)?)(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$")     # a Kubernetes quantity without milli and exponent forms
+QUANTITY_FACTORS = {"": 1, "Ki": 1024, "Mi": 1024 ** 2, "Gi": 1024 ** 3, "Ti": 1024 ** 4, "Pi": 1024 ** 5, "Ei": 1024 ** 6,
+                    "k": 1000, "M": 1000 ** 2, "G": 1000 ** 3, "T": 1000 ** 4, "P": 1000 ** 5, "E": 1000 ** 6}
+CACHE_MEMORY_MIN = 64 * 1024 ** 2
+REDIS_TYPES = ("redis", "valkey")          # not resource types: the type is `cache`
 # The cluster objects an in-cluster bucket's SeaweedFS creates, next to `<system>-<name>` itself (design.md).
 BUCKET_SUFFIXES = ("-app", "-master", "-master-peer", "-volume", "-volume-0", "-volume-peer", "-filer", "-filer-peer", "-access-key",
                    "-secret-key")
@@ -169,6 +190,8 @@ TYPES = {
                "env": {"S3_ENDPOINT": "endpoint", "S3_BUCKET": "bucket", "S3_REGION": "region", "S3_FORCE_PATH_STYLE": "forcePathStyle",
                        "AWS_ACCESS_KEY_ID": "accessKeyId", "AWS_SECRET_ACCESS_KEY": "secretAccessKey", "AWS_REGION": "region",  # pragma: allowlist secret
                        "AWS_ENDPOINT_URL_S3": "endpoint"}},
+    "cache": {"keys": ["url", "host", "port", "password"],  # pragma: allowlist secret
+              "env": {"REDIS_URL": "url", "REDIS_HOST": "host", "REDIS_PORT": "port", "REDIS_PASSWORD": "password"}},  # pragma: allowlist secret
 }
 API_TYPES = ["openapi", "grpc", "graphql", "events"]
 POLICY_VALUES = {"audit": "Audit", "enforce": "Enforce", "off": "Off"}     # system.yaml policy -> the 4.x mode
@@ -652,6 +675,44 @@ def database_version(r: str, value) -> int:
     return value
 
 
+def quantity_bytes(text) -> int:
+    """The byte value of a quantity (binary suffixes are powers of 1024, decimal ones of 1000), fractions floored; -1 if it is none."""
+    match = QUANTITY.match(str(text)) if isinstance(text, (str, int)) and not isinstance(text, bool) else None
+    if not match:
+        return -1
+    return int(Fraction(match.group(1)) * QUANTITY_FACTORS[match.group(2) or ""])
+
+
+def check_cache(r: str, rc: dict, inst: dict, external: dict[str, bool]) -> int | None:
+    """Value checks of a cache in the order of design.md (Render errors); returns the Valkey major, None when external everywhere."""
+    version = None
+    if not all(external.values()):
+        version = rc.get("version", 9)
+        if isinstance(version, str) and version.isdigit():
+            version = int(version)
+        if isinstance(version, bool) or version not in CACHE_VERSIONS:
+            fail(f"resources.{r}: version '{version}' is not a supported cache version ({', '.join(map(str, CACHE_VERSIONS))})")
+    for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
+        if "memory" in conf and quantity_bytes(conf["memory"]) < CACHE_MEMORY_MIN:
+            fail(f"{where}: memory '{conf['memory']}' must be a Kubernetes quantity of at least 64Mi, e.g. 256Mi")
+        if "maxmemoryPolicy" in conf and conf["maxmemoryPolicy"] not in MAXMEMORY_POLICIES:
+            fail(f"{where}: maxmemoryPolicy '{conf['maxmemoryPolicy']}' is not allowed ({', '.join(MAXMEMORY_POLICIES)})")
+        if "persistence" in conf and not isinstance(conf["persistence"], bool):
+            fail(f"{where}: persistence must be true or false")
+        if "storage" in conf and not (isinstance(conf["storage"], str) and STORAGE_SIZE.match(conf["storage"])):
+            fail(f"{where}: storage must be a size such as 1Gi")
+
+    def persistent(e: str) -> bool:
+        return inst.get(e, {}).get("persistence", rc.get("persistence", False))
+
+    for e in ENVS:
+        if "storage" in inst.get(e, {}) and not external[e] and not persistent(e):
+            fail(f"resources.{r}.instances.{e}: storage needs persistence: true (persistence is false in {e})")
+    if "storage" in rc and not any(persistent(e) for e in ENVS if not external[e]):
+        fail(f"resources.{r}: storage needs persistence: true in at least one environment")
+    return version
+
+
 def check_bucket(system: str, r: str, rc: dict, inst: dict, in_cluster: bool) -> None:
     """Value checks of a bucket (design.md, Render errors): versioning, storage, then the S3 name and length rule."""
     for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
@@ -679,14 +740,17 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
     if not isinstance(rc, dict) or rc.get("type") is None:
         fail(f"resources.{r}: type is required {types}")
     typ = rc["type"]
+    if typ in REDIS_TYPES:
+        fail(f"resources.{r}: type '{typ}' is not a resource type: the type is `cache` (Redis-compatible, runs Valkey)")
     if typ not in RESOURCE_TYPES:
         fail(f"resources.{r}: type '{typ}' is not a resource type {types}")
     if typ in PLANNED_TYPES:
         fail(f"resources.{r}: type {typ} is not available yet: spec {PLANNED_TYPES[typ]} brings it")
     bucket = typ == "bucket"
-    keys = BUCKET_KEYS if bucket else RESOURCE_KEYS
-    instance_keys = BUCKET_INSTANCE_KEYS if bucket else RESOURCE_INSTANCE_KEYS
-    sizing_keys = BUCKET_SIZING_KEYS if bucket else SIZING_KEYS
+    cache = typ == "cache"
+    keys = BUCKET_KEYS if bucket else CACHE_KEYS if cache else RESOURCE_KEYS
+    instance_keys = BUCKET_INSTANCE_KEYS if bucket else CACHE_INSTANCE_KEYS if cache else RESOURCE_INSTANCE_KEYS
+    sizing_keys = BUCKET_SIZING_KEYS if bucket else CACHE_SIZING_KEYS if cache else SIZING_KEYS
     for k in rc:
         if k not in keys:
             fail(f"resources.{r}: unknown key '{k}' (allowed: {', '.join(keys)})")
@@ -711,8 +775,8 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
             fail(f"{where}: an external database is backed up by its provider (remove backup)")
         if i.get("external", base_external):
             for k in sizing_keys:
-                if k in i:
-                    fail(f"{where}: an external {typ} is sized and configured at its provider (remove {k})" if bucket
+                if k in i and not (cache and k == "version"):
+                    fail(f"{where}: an external {typ} is sized and configured at its provider (remove {k})" if bucket or cache
                          else f"{where}: an external resource runs nothing (remove {k})")
         for k in i:
             if k not in instance_keys:
@@ -724,7 +788,7 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         for k in sizing_keys:
             if k in rc:
                 fail(f"resources.{r}: external in every environment: an external {typ} is sized and configured at its provider "
-                     f"(remove {k})" if bucket else
+                     f"(remove {k})" if bucket or cache else
                      f"resources.{r}: external in every environment: an external resource runs nothing (remove {k})")
     if "remote" in rc and not any(external.values()):
         fail(f"resources.{r}: remote needs external: true")
@@ -741,6 +805,8 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
     version = None
     if bucket:
         check_bucket(system=str(doc.get("system")), r=r, rc=rc, inst=inst, in_cluster=not all(external.values()))
+    elif cache:
+        version = check_cache(r, rc, inst, external)
     elif not all(external.values()):
         version = database_version(r, rc.get("version", 17))
     for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
@@ -758,8 +824,19 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
                 s3 = (i.get("remote") or {}).get("s3") or (rc.get("remote") or {}).get("s3")
                 envs[e]["versioning"] = None
                 envs[e]["s3"] = dict(s3) if s3 else None
+            elif cache:
+                envs[e].update({"memory": None, "maxmemory": None, "maxmemoryPolicy": None, "persistence": None})
             else:
                 envs[e]["backup"] = None
+            continue
+        if cache:
+            memory = str(i.get("memory", rc.get("memory", "256Mi")))
+            persistence = i.get("persistence", rc.get("persistence", False))
+            envs[e] = {"external": False, "version": version, "replicas": None,
+                       "storage": str(i.get("storage", rc.get("storage", "1Gi"))) if persistence else None, "resources": None,
+                       "memory": memory, "maxmemory": quantity_bytes(memory) * 4 // 5,
+                       "maxmemoryPolicy": i.get("maxmemoryPolicy", rc.get("maxmemoryPolicy", "allkeys-lru")),
+                       "persistence": persistence, "store_key": None, "refreshInterval": None}
             continue
         if bucket:
             envs[e] = {"external": False, "version": None, "replicas": None, "storage": str(i.get("storage", rc.get("storage", "10Gi"))),
@@ -785,7 +862,7 @@ def validate_resources(doc: dict) -> dict:
 def object_names(system: str, r: str, typ: str) -> list[str]:
     """The cluster objects a resource creates (design.md): a database the CloudNativePG family, any other type the object and its Secret."""
     base = f"{system}-{r}"
-    return [base, *(base + s for s in (CNPG_SUFFIXES if typ == "database" else BUCKET_SUFFIXES if typ == "bucket" else ("-app",)))]
+    return [base, *(base + s for s in (CNPG_SUFFIXES if typ == "database" else BUCKET_SUFFIXES if typ == "bucket" else CACHE_SUFFIXES if typ == "cache" else ("-app",)))]
 
 
 def check_resource_clashes(system: str, resources: dict, comps_doc: dict, comps: list[dict]) -> None:
