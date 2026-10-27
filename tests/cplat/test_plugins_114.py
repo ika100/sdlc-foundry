@@ -24,7 +24,7 @@ WORKING = {
     "component": ["new", "add", "set", "remove", "spec", "plan", "build", "verify", "check", "ship", "fix", "release"],
     "api": ["list"], "resource": ["add", "remove"], "instance": ["promote", "secret", "verify"], "issue": ["triage", "report"],
     "platform": ["doctor", "update", "fleet", "runs", "retro"],
-    "cluster": ["new", "add", "remove"],   # spec 125 (AC-125.1, .7, .8) adds the cluster noun after 5.0
+    "cluster": ["new", "add", "remove"],   # spec 125 adds the cluster noun after 5.0
 }
 # the 27 slash commands of 4.7 and the new command each one names (AC-114.65 gives the special targets)
 OLD_TO_NEW = {
