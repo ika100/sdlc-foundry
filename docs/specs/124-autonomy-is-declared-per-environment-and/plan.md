@@ -19,6 +19,7 @@ tasks:
     covers: [AC-124.1, AC-124.2, AC-124.3, AC-124.4, AC-124.5, AC-124.6, AC-124.14, AC-124.22]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: engine_issue.py — the engine's issue format, signature and parser; the signal label
     files: [scripts/cplat/engine_issue.py, scripts/cplat/triage.py]
