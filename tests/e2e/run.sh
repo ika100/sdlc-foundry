@@ -392,6 +392,23 @@ s3_same "object after the restart" "$payload" "$(s3_field CONTENT)"
 s3_same "old version after the restart" one "$(s3_field OLD)"
 echo "ok   the store's pods were replaced; the object and the old version are still there"
 
+step "Bucket: syncing its application again keeps the keys and the data (AC-116.8)"
+# without Argo CD, applying the rendered addon again is what a re-sync does; the generated keys are written once
+key_before=$(secret_val e2e-files-app accessKeyId); secret_before=$(secret_val e2e-files-app secretAccessKey)
+[ -n "$key_before" ] && [ -n "$secret_before" ] || fail "the Secret e2e-files-app has no keys before the re-sync"
+kn $ns apply -k "$work/e2e-gitops/applications/e2e/addons/dev/files" >/dev/null || fail "applying addons/dev/files again failed"
+sleep 10   # give a wrongly regenerated key time to land
+[ "$(secret_val e2e-files-app accessKeyId)" = "$key_before" ] && [ "$(secret_val e2e-files-app secretAccessKey)" = "$secret_before" ] \
+  || fail "syncing the bucket's application again changed the keys of e2e-files-app"
+store_ready $ns
+s3_retry 20 "e2e-web reads after the re-sync" $ns e2e-web '$A s3api get-object --bucket "$S3_BUCKET" --key keep/restart.txt /tmp/out >/dev/null
+echo "CONTENT=$(cat /tmp/out)"
+$A s3api get-object --bucket "$S3_BUCKET" --key ver/v.txt --version-id '"$dev_vid"' /tmp/old >/dev/null
+echo "OLD=$(cat /tmp/old)"'
+s3_same "object after the re-sync" "$payload" "$(s3_field CONTENT)"
+s3_same "old version after the re-sync" one "$(s3_field OLD)"
+echo "ok   the re-synced bucket keeps its keys, the object and the old version"
+
 step "External database: a store entry without password creates no Secret and the ExternalSecret reports the key"
 # ext-db is external in every environment; the ExternalSecret <system>-ext-db-app lands in the overlay of the first
 # component that uses it. e2e-web uses it from here on, next to the bucket files (e2e-api keeps postgres and files, so DATABASE_URL stays as it was).
