@@ -22,6 +22,13 @@ export default defineConfig({
       head: [
         { tag: 'meta', attrs: { name: 'theme-color', content: '#4f46e5' } },
         { tag: 'meta', attrs: { property: 'og:type', content: 'website' } },
+        // a picture of the docs opens full size in a new tab (they fit the column instead of scrolling sideways)
+        {
+          tag: 'script',
+          content:
+            "document.addEventListener('click',e=>{const i=e.target.closest('.sl-markdown-content img[src*=\"/img/\"], .map img');"
+            + "if(i&&!i.closest('a')){window.open(i.currentSrc||i.src,'_blank','noopener');}});",
+        },
         { tag: 'meta', attrs: { name: 'keywords', content: 'claude code, gitops, kubernetes, argocd, copier, devbox, platform engineering, opentelemetry, kyverno' } },
       ],
       plugins: [starlightLinksValidator({ errorOnRelativeLinks: false, errorOnInvalidHashes: false })],
@@ -35,7 +42,7 @@ export default defineConfig({
             { label: 'Usage scenarios', slug: 'scenarios' },
           ],
         },
-        { label: 'Get started', items: [{ label: 'Your first product', slug: 'get-started' }, { label: 'Run it on your laptop', slug: 'get-started/local-cluster' }] },
+        { label: 'Get started', items: [{ label: 'Your first system', slug: 'get-started' }, { label: 'Run it on your laptop', slug: 'get-started/local-cluster' }] },
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Guides', items: [{ autogenerate: { directory: 'guides' } }] },
         {

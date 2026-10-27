@@ -5,6 +5,22 @@ description: "Install the plugins, check your setup and create a first system in
 
 <p class="lead">You need Claude Code, a GitHub account and a few tools. Everything else is created for you.</p>
 
+<div class="console-intro">
+<div>
+
+**Your control center: the console.** Once a system exists, `/platform:ui` opens a page in your browser that shows what needs your decision, where every change is in the process, and where your system runs at which version. You approve specs, answer questions, take over stopped runs and promote releases there. Every button shows the slash command it runs, and everything ends in a pull request.
+
+- `⌘K`: describe a change in one sentence and a spec is drafted for it
+- `?`: help on the page you are on
+- `g`: the full guide, the process and every command, inside the console
+
+[Read the console guide →](/sdlc-foundry/guides/console/)
+
+</div>
+
+<a class="console-shot" href="/sdlc-foundry/guides/console/"><img src="/sdlc-foundry/img/console/inbox.jpg" alt="The console's Inbox: a promotion with what it changes, its command and the way back" /></a>
+</div>
+
 ## 1. Prerequisites
 
 | Tool | Why | Check |
@@ -54,6 +70,16 @@ Each command shows what it will do and asks before anything outward-facing (crea
 1. In a component repository: `/component:spec <what you want>`, then `/component:plan <NNN>` and `/component:build <NNN>` (or `/component:fix` for a bug). See [Build a feature](/sdlc-foundry/scenarios/build-a-feature/).
 2. When CI has published the first image: `/component:add shop-api` in the GitOps repository, then merge the pull request.
 3. [Run it on your laptop](/sdlc-foundry/get-started/local-cluster/).
+
+## 6. Work from the console
+
+In the GitOps repository:
+
+```text
+/platform:ui
+```
+
+The **Inbox** lists what waits for you (specs to approve, stopped runs, releases to promote), the **Board** shows every change by stage, and **System** shows where each component runs. Press `?` on any page for help and `g` for the full guide. See [The local console](/sdlc-foundry/guides/console/).
 
 ## Where to go next
 

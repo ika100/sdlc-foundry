@@ -112,25 +112,70 @@
   }
 }
 
-/* ---------- wide diagrams from docs/img: readable size, scrolled sideways in the content column ---------- */
-.sl-markdown-content p:has(> img[src*='/img/sdlc-map.svg']),
-.sl-markdown-content p:has(> img[src*='/img/model-']) {
-  overflow-x: auto;
+/* ---------- pictures from docs/img: fit the column, open full size on click (see the head script) ---------- */
+.sl-markdown-content img[src*='/img/'] {
+  display: block;
+  width: 100%;
+  height: auto;
   border: 1px solid var(--sl-color-hairline);
   border-radius: 0.75rem;
+  cursor: zoom-in;
 }
 
-.sl-markdown-content p > img[src*='/img/sdlc-map.svg'] {
-  display: block;
-  max-width: none;
-  width: 1240px;
+/* screenshots of the console: a soft frame, like a window */
+.sl-markdown-content img[src*='/img/console/'] {
+  box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--brand-1) 35%, transparent);
 }
 
-/* the domain model diagrams (docs/DOMAIN-MODEL.md) are drawn 1000 wide with 12px labels: keep them at that size */
-.sl-markdown-content p > img[src*='/img/model-'] {
-  display: block;
-  max-width: none;
-  width: 1000px;
+/* ---------- layout: a narrow "On this page" bar at the right edge, more room for the text ---------- */
+@media (min-width: 72rem) {
+  :root {
+    --sl-content-width: 60rem;
+  }
+  .right-sidebar-container {
+    width: 14rem !important;
+    flex: none;
+  }
+  .main-pane {
+    width: calc(100% - 14rem) !important;
+  }
+  .right-sidebar-panel {
+    padding-inline: 1rem 1.25rem;
+  }
+  .right-sidebar-panel .sl-container {
+    width: 100%;
+  }
+}
+
+/* ---------- the console on the get-started page ---------- */
+.console-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin-block: 1.5rem 2rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.9rem;
+  background:
+    radial-gradient(30rem 14rem at 100% 0%, color-mix(in srgb, var(--brand-2) 14%, transparent), transparent 70%),
+    var(--sl-color-bg-nav);
+}
+
+.console-intro > div > :first-child {
+  margin-top: 0;
+}
+
+.console-intro .console-shot img {
+  margin: 0;
+}
+
+/* side by side only where the text column stays readable */
+@media (min-width: 110rem) {
+  .console-intro {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 1.5rem;
+    align-items: center;
+  }
 }
 
 /* the same map on the landing page: the splash column is wider, so it fills it and scrolls only below 1080px */
@@ -147,8 +192,8 @@
 .map-scroll img {
   display: block;
   width: 100%;
-  min-width: 1080px;
-  max-width: none;
+  max-width: 100%;
+  cursor: zoom-in;
 }
 
 .map figcaption {
@@ -157,7 +202,15 @@
   font-size: var(--sl-text-sm);
 }
 
-/* the domain model example on the landing page is drawn 1000 wide: keep it readable, scroll below 760px */
-.map-model .map-scroll img {
-  min-width: 760px;
+
+
+/* a screenshot in a landing-page figure: framed like the docs pictures */
+.map > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--brand-1) 35%, transparent);
+  cursor: zoom-in;
 }
