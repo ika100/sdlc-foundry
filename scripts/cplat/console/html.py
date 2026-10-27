@@ -88,7 +88,7 @@ def freshness(read_at: str | datetime | None, now: datetime | None = None, *, st
     shown = f"Read {when.astimezone(timezone.utc).strftime('%H:%M:%S')} UTC" if when else "Not read yet"
     mark = ' data-stale="true"' if stale else ""
     word = ' <span class="stale-word">stale</span>' if stale else ""
-    return f'<time class="read-at" data-read-at="{esc(iso)}" datetime="{esc(iso)}"{mark}>{esc(shown)}</time>{word}'
+    return f'<time class="read-at" data-read-at="{esc(iso)}" datetime="{esc(iso)}"{mark}>{esc(shown)}{word}</time>'
 
 
 def unavailable(source: str, since: str | datetime | None, error: str | None) -> str:
@@ -101,10 +101,13 @@ def unavailable(source: str, since: str | datetime | None, error: str | None) ->
             '<button type="button" class="btn" data-action="retry-source">Retry now</button></section>')
 
 
-def table(rows: Sequence[Sequence[object]], cols: Sequence[str], *, caption: str | None = None) -> str:
+def table(rows: Sequence[Sequence[object]], cols: Sequence[str], *, caption: str | None = None,
+          row_attrs: Sequence[str] | None = None) -> str:
     """A table in a box that scrolls sideways (AC-122.28). `cols` are plain-text headings (escaped);
-    each cell of `rows` is HTML, so the caller escapes with `esc` or builds it with the fragments above."""
+    each cell of `rows` is HTML, so the caller escapes with `esc` or builds it with the fragments above.
+    `row_attrs[i]` is ready-made, already escaped attribute text for the i-th `<tr>`."""
     head = "".join(f'<th scope="col">{esc(c)}</th>' for c in cols)
-    body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
+    body = "".join(f"<tr{' ' + row_attrs[i] if row_attrs else ''}>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
+                   for i, row in enumerate(rows))
     cap = f"<caption>{esc(caption)}</caption>" if caption else ""
     return f'<div class="scroll-x"><table>{cap}<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'

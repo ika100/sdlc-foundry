@@ -99,7 +99,7 @@ def _go_to(ctx: Any, q: str) -> str:
     hits: list[str] = []
     for s in _specs(ctx):
         if needle in f"{s.get('id', '')} {s.get('title', '')}".lower():
-            hits.append(_hit(f"{s.get('id')} {s.get('title') or ''}".strip(), f"/panel/spec/{quote(str(s.get('id')), safe='')}",
+            hits.append(_hit(f"{s.get('id')} {s.get('title') or ''}".strip(), f"/panel/spec/{quote(str(s.get('_repo')) + ':' + str(s.get('id')), safe='')}",
                              "spec", str(s.get("_repo"))))
     for r in _runs(ctx):
         if needle in f"{r.get('run_id', '')} {r.get('spec', '')}".lower():
@@ -111,7 +111,7 @@ def _go_to(ctx: Any, q: str) -> str:
         if needle in str(c["name"]).lower():
             hits.append(_hit(str(c["name"]), "/system", "component", str(c.get("type") or "")))
             for env in c.get("environments") or []:
-                ident = quote(f"{c['name']}/{env}", safe="")
+                ident = quote(f"{c['name']}:{env}", safe="")
                 hits.append(_hit(f"{c['name']} in {env}", f"/panel/instance/{ident}", "instance"))
     body = "".join(hits[:GO_LIMIT * 3]) or '<li class="muted">Nothing matches.</li>'
     return f'<section data-palette="goto"><h3>Go to</h3><ul class="plain">{body}</ul></section>'

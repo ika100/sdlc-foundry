@@ -7,7 +7,8 @@
   panel_release(ctx, ident)      a release candidate and what "Cut release" does
   panel_stage(ctx, stage)        what a Board column means (`stages.explain`)
 
-`ident` of an instance is `<component>:<env>`, of a release `<component>:<version>` (`/` and `@` also work).
+`ident` of a spec is `<repo>:<spec id>`, of an instance `<component>:<env>` (`/` and `@` also work), of a release
+`<component>:<version>` (or `<component>-<version>`), of an issue `<n>` (or `<repo>#<n>`).
 Each view returns an `<aside data-panel>` fragment and raises `LookupError` for an unknown id (HTTP 404).
 Stage names are computed by `stages`; this module never maps a status or a phase itself."""
 from __future__ import annotations
@@ -82,6 +83,14 @@ def _settings() -> dict:
 def _split(ident: str) -> tuple[str, str]:
     parts = _SPLIT.split(ident, 1)
     return (parts[0], parts[1]) if len(parts) == 2 and parts[0] and parts[1] else (ident, "")
+
+
+def _split_release(ident: str) -> str:
+    """The component of a release id: `<component>:<version>` (`/`, `@`) or `<component>-<version>`."""
+    if _SPLIT.search(ident):
+        return _split(ident)[0]
+    found = re.match(r"^(.+)-(\d.*)$", ident)
+    return found.group(1) if found else ident
 
 
 def _budget_line(run: dict | None) -> str:
@@ -194,7 +203,11 @@ def _evidence(repo: str, spec: dict, run: dict | None) -> str:
 def panel_spec(ctx: Any, ident: str) -> str:
     """A spec (or a system spec with its slices): stage strip, slices, criteria, evidence, contract change."""
     runs = _runs(ctx)
-    found = next(((repo, s) for repo, rows in _spec_sources(ctx) for s in rows if s.get("id") == ident), None)
+    want_repo, _, ident = ident.rpartition(":")        # `<repo>:<spec id>`; a bare spec id works too
+    found = next(((repo, s) for repo, rows in _spec_sources(ctx) for s in rows
+                  if s.get("id") == ident and want_repo in ("", repo)), None)
+    if found is None and want_repo:
+        found = next(((repo, s) for repo, rows in _spec_sources(ctx) for s in rows if s.get("id") == ident), None)
     if found is None:
         raise LookupError(f"unknown spec {ident!r}")
     repo, spec = found
@@ -291,7 +304,8 @@ def panel_run(ctx: Any, ident: str) -> str:
 def panel_issue(ctx: Any, ident: str) -> str:
     """A triage issue: fix it, make a spec of it, or dismiss it with a reason."""
     needs = (ctx.data("needs") or {}).get("items") if isinstance(ctx.data("needs"), dict) else None
-    item = next((i for i in needs or [] if str((i.get("object") or {}).get("issue")) == str(ident).lstrip("#")), None)
+    number = str(ident).rsplit("#", 1)[-1]             # `<n>`, `#<n>` or `<repo>#<n>`
+    item = next((i for i in needs or [] if str((i.get("object") or {}).get("issue")) == number), None)
     if item is None:
         raise LookupError(f"unknown issue {ident!r}")
     obj = dict(item["object"])
@@ -352,7 +366,7 @@ def _repo_of(ctx: Any, component: str) -> str:
 
 def panel_release(ctx: Any, ident: str) -> str:
     """A release candidate: version, specs, fixes and what "Cut release" does, with the way back."""
-    component, _ = _split(ident)
+    component = _split_release(ident)
     row = next((r for r in _status_rows(ctx) if r.get("component") == component and r.get("release_candidate")), None)
     if row is None:
         raise LookupError(f"no release candidate for {ident!r}")
