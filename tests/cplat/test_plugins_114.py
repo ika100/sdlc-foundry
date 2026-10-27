@@ -20,9 +20,10 @@ from system_fixtures import ALLOWED_TOP, ROOT
 PLUGINS = ROOT / "plugins"
 NOUNS = ["system", "component", "api", "resource", "instance", "issue", "platform"]
 WORKING = {
-    "system": ["new", "status", "spec", "plan", "ship"],
+    "system": ["new", "status", "spec", "plan", "ship", "restore"],  # spec 117: system restore
     "component": ["new", "add", "set", "remove", "spec", "plan", "build", "verify", "check", "ship", "fix", "release"],
-    "api": ["list"], "resource": ["add", "remove"], "instance": ["promote", "secret", "verify"], "issue": ["triage", "report"],
+    "api": ["list"], "resource": ["add", "remove", "backup", "restore"],  # spec 117: resource backup, restore
+    "instance": ["promote", "secret", "verify"], "issue": ["triage", "report"],
     "platform": ["doctor", "update", "fleet", "runs", "retro"],
 }
 # the 27 slash commands of 4.7 and the new command each one names (AC-114.65 gives the special targets)
@@ -77,7 +78,7 @@ def test_exactly_the_30_working_commands_exist_ac_114_59():  # AC-114.59
             if "moved-to" not in fm:
                 found.setdefault(plugin, []).append(f.stem)
     assert {k: sorted(v) for k, v in found.items()} == {k: sorted(v) for k, v in WORKING.items()}
-    assert sum(len(v) for v in found.values()) == 30
+    assert sum(len(v) for v in found.values()) == 33  # spec 117: 30 + 3 commands
     assert not (PLUGINS / "api" / "commands" / "check.md").exists()
 
 

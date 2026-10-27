@@ -134,7 +134,7 @@ def test_a_missing_environments_key_fails_ac_114_3(tmp_path):  # AC-114.3
 def test_an_unknown_environment_key_fails_naming_environment_key_and_allowed_ac_114_4(tmp_path):  # AC-114.4
     doc = full5()
     doc["environments"]["staging"]["replicas"] = 2
-    fails(tmp_path, doc, "environments.staging: unknown key 'replicas'", "(allowed: host, url, policy, promote, observability, operators)")  # spec 115: operators (AC-115.18)
+    fails(tmp_path, doc, "environments.staging: unknown key 'replicas'", "(allowed: host, url, policy, promote, observability, operators, backup)")  # spec 115: operators (AC-115.18); spec 117: backup
 
 
 @pytest.mark.parametrize("key", ["hosts", "urls", "mode", "addons"])
