@@ -1,7 +1,7 @@
 ---
 spec_id: 117-databases-and-environments-are-backed-up
 title: Databases and environments are backed up and restorable
-status: approved
+status: building
 priority: P1
 ---
 
@@ -103,3 +103,4 @@ This spec is an additive 5.x extension of lists that spec 114 closes. It adds th
 - 2026-10-26 open questions answered: two-step restore, off by default with doctor warnings, issue on failing backups (AC-117.28), same-cluster warning (AC-117.29), operators as pinned Argo CD applications with the `operators: owner` opt-out (AC-117.30), Secret `<system>-<name>-app`, cache excluded and broker included in environment backups, additive 5.x extension of spec 114
 - 2026-10-26 amended: on-demand database backup `/resource:backup <db> --env <env>` (AC-117.31, AC-117.32), used by spec 121 before a major upgrade
 - 2026-10-26 approved
+- 2026-10-27 building
