@@ -53,7 +53,7 @@ import runs_store
 from core import PlatformError
 
 SCHEMA = 1
-KINDS = ("ship", "build", "headless", "pr-wait", "fleet", "retro", "product-ship")   # documentation; any valid kind works
+KINDS = ("ship", "build", "headless", "pr-wait", "fleet", "retro", "product-ship", "fix")   # documentation; any valid kind works
 OUTCOMES = ("done", "escalated", "failed", "abandoned")
 CAUSES = ("platform", "code", "decision", "environment", "unknown")
 GATES = ("acceptance", "security")
@@ -207,6 +207,64 @@ def buffered_count() -> int:
         return len(_read_buffer())
     except Exception:  # noqa: BLE001
         return 0
+
+
+_AUDIT_PLAIN = {"schema", "event_id", "at", "kind", "system", "environment", "component", "type", "id", "name", "repo", "number",
+                "url", "run_id", "version", "previous", "signal", "level", "effective", "commit", "store", "hash", "undoes", "pr"}
+_AUDIT_REQUIRED = ("event_id", "at", "kind", "actor")
+
+
+def _scrub_audit(value, key: str = ""):
+    if isinstance(value, dict):
+        return {k: _scrub_audit(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_audit(v, key) for v in value]
+    if isinstance(value, str) and key not in _AUDIT_PLAIN:
+        return feedback.redact(value)
+    return value
+
+
+def _read_audit_buffer() -> list[dict]:
+    return [i for i in _read_lines("audit-buffer.jsonl") if "event_id" in i and "at" in i]
+
+
+def _write_audit_buffer(items: list[dict]) -> None:
+    _atomic_write(state_dir() / "audit-buffer.jsonl", "".join(_dump(i) + "\n" for i in items))
+
+
+def _flush_audit(store: runs_store.Store, deadline: float) -> None:
+    """Write the buffered audit events (one commit per batch) and drop what was written; raises StoreError."""
+    items = sorted(_read_audit_buffer(), key=lambda e: str(e["at"]))
+    for i in range(0, len(items), BATCH):
+        batch = items[i:i + BATCH]
+        store.put({runs_store.audit_path(e): _dump(e) + "\n" for e in batch}, f"audit: {len(batch)} event(s)", deadline=deadline)
+        ids = {e["event_id"] for e in batch}
+        with _locked():
+            _write_audit_buffer([x for x in _read_audit_buffer() if x["event_id"] not in ids])
+
+
+def record_audit(event: dict) -> str | None:
+    """Write an audit event to the run store at once; on any failure keep it in the local buffer.
+
+    Returns None when it is in the store, else the reason it is only buffered. Never raises, never prints."""
+    try:
+        if not all(event.get(k) for k in _AUDIT_REQUIRED):
+            return "audit event is incomplete"
+        runs_store.audit_path(event)
+        item = _scrub_audit(event)
+        with _locked():
+            _write_audit_buffer([x for x in _read_audit_buffer() if x["event_id"] != item["event_id"]] + [item])
+        slug = configured_repo()
+        if slug is None:
+            return "no run store: CPLAT_RUNS_REPO is not set"
+        deadline = monotonic() + BUDGET_SECONDS
+        store = open_store(slug)
+        if store.visibility(deadline=deadline) != "private":
+            return f"run store {slug} is public"
+        _flush_audit(store, deadline)
+        return None
+    except Exception as e:  # noqa: BLE001  (recording never changes an exit code)
+        return f"audit event buffered locally: {e}"
 
 
 def _read_filings() -> list[dict]:
@@ -736,6 +794,12 @@ def flush(*, budget: float = BUDGET_SECONDS, strict: bool = False) -> FlushResul
             _write_buffer([x for x in _read_buffer() if _key(x) not in keys])
         followups += sum(1 for item in batch if item.get("followup"))
         written += sum(1 for item in batch if not item.get("followup"))
+    try:
+        _flush_audit(store, deadline)
+    except runs_store.StoreError as e:
+        res = unreachable(str(e))
+        res.written, res.followups = written, followups
+        return res
     return _result(slug, None, "", written, followups)
 
 
