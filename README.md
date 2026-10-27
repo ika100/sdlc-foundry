@@ -13,6 +13,9 @@ You describe what you want in Claude Code; the platform scaffolds the repos (Pyt
 
 - **Documentation site:** <https://ika100.github.io/sdlc-foundry/> has the vision, the problem statement, client value, usage scenarios and the full user documentation with search.
 - **Console:** `/platform:ui` opens a local console that shows the system, its process and what needs you ([docs/console.md](docs/console.md)).
+
+  ![The console's Inbox: a promotion with its consequence, command and way back](docs/img/console/inbox.jpg)
+
 - **Start here:** [docs/USER-JOURNEY.md](docs/USER-JOURNEY.md) (end-to-end walk-through) and [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (diagrams).
 - **Needs:** [Claude Code](https://claude.com/claude-code), `git`, `gh`, `uv`, [devbox](https://www.jetify.com/devbox) and Docker for local clusters; run `/platform:doctor` to check.
 - **Status:** used end to end on a real test application; see the [changelog](docs/CHANGELOG.md) and [ADRs](docs/adr).

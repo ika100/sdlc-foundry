@@ -158,7 +158,7 @@ def _describe(ctx: Any, q: str) -> str:
         buttons.append('<li class="muted">The model is not available, so there is no repository to start in.</li>')
     return (f'<section data-palette="describe"><h3>Describe a change</h3>'
             f'<form data-describe onsubmit="return false"><label>What should change? '
-            f'<input type="text" name="text" value="{esc(sentence)}" placeholder="add a wishlist to the shop"></label>'
+            f'<input type="text" class="wide" name="text" value="{esc(sentence)}" placeholder="add a wishlist to the shop"></label>'
             f'{_matching_issues(ctx, sentence)}<ul class="plain">{"".join(buttons)}</ul></form></section>')
 
 
@@ -170,7 +170,8 @@ def _add(ctx: Any) -> str:
         forms = system_page.model_forms(ctx)
     except (ImportError, AttributeError):
         forms = '<p><a href="/system#add">Open the forms on the System page.</a></p>'
-    return f'<section data-palette="add"><h3>Add to the model</h3>{forms}</section>'
+    heading = "" if "<h2>Add to the model</h2>" in forms else "<h3>Add to the model</h3>"
+    return f'<section data-palette="add">{heading}{forms}</section>'
 
 
 # ---------------- ask ----------------
