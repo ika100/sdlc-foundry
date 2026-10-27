@@ -16,6 +16,9 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat component build schedule|merge|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
   cplat resource add|remove postgres [--version N]   the system's database resource (system.yaml)
+  cplat resource backup <db> --env ENV [--context C] [--json]   one base backup of a database now
+  cplat resource restore <db> --env ENV (--to TIME|latest | --switch | --discard) [--confirm prod] [--context C] [--dry-run] [--json]   restore a database
+  cplat system restore <env> [--backup NAME or latest] [--replace] [--confirm prod] [--context C] [--json]   restore an environment from its Velero backup
   cplat instance promote <component…|--all> --to <env> [--version V] [--sha S] [--pr]
   cplat instance secret set <component>/<env> <secret> <KEY> | list [--env dev]   remote secrets of the local cluster (values never go to git)
   cplat instance verify [ENV] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment
@@ -52,11 +55,13 @@ import core  # noqa: E402
 
 # noun -> verb -> (module, argv prefix put before the remaining args)
 NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
-    "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", [])},
+    "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", []),
+               "restore": ("envrestore", [])},
     "component": {"new": ("newsvc", []), "add": ("compose", ["add"]), "set": ("compose", ["set"]), "remove": ("compose", ["remove"]),
                   "ship": ("ship", []), "build": ("buildcmd", [])},
     "api": {"list": ("apilist", [])},
-    "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"])},
+    "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"]),
+                 "backup": ("dbbackup", []), "restore": ("dbrestore", [])},
     "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
     "issue": {"triage": ("triage", [])},
     "platform": {"doctor": ("doctor", []), "update": ("update", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", [])},
