@@ -1,6 +1,6 @@
 ---
 spec_id: 122-a-local-console-shows-the-system-and-what
-spec_hash: b71f519f6577
+spec_hash: 1e6813083f5e
 summary: A local console (`cplat ui`, stdlib server on 127.0.0.1, server-rendered HTML, one dependency-free script) over
   cplat JSON with three places, side panels and a palette; new `cplat needs` and the verb-less `cplat runs --json`; richer
   `system status` and `spec list --detail`; one stage vocabulary; actions through `cplat headless`; draft spec PRs with a
@@ -168,6 +168,12 @@ tasks:
     parallel_safe: true
     depends_on: []
     done: true
+  - id: t24
+    title: in-console guide — docs/console.md with screenshots, stages and the command reference, linked from menu, key g and help
+    files: [scripts/cplat/console/guide.py, scripts/cplat/console/server.py, scripts/cplat/console/layout.py, scripts/cplat/console/help.py, scripts/cplat/console/static/console.js, scripts/cplat/console/static/console.css]
+    covers: [AC-122.52]
+    parallel_safe: false
+    depends_on: [t11, t12, t21]
 human_steps:
   - "Optional: to get notifications and digests while the console is closed, schedule `cplat ui notify --once` every few minutes (cron or launchd)"
   - "Optional: put Slack webhooks and the SMTP password in the environment or the OS keychain (service sdlc-foundry) as docs/console.md describes; /platform:doctor names what is missing"
@@ -677,3 +683,16 @@ The views (t13–t17) do not import `needs.py`, `status.py` or `runlist.py`. The
 - `set.md` has a `description` with `Usage: /system:set --env <env> [--promote <rule>] [--policy <policy>] [--host <host>]` (at most 260 characters) and `$ARGUMENTS` in the body. It runs `--dry-run`, shows the plan, then runs with `--pr`, the same way as `/component:set`.
 
 **Done when:** the AC-122.51 tests pass (each key, prod promote only `manual`, none on dev, invalid value names the key and the allowed values, only that environment changes, one PR) when dispatched through `cplat system set` (after t3 merges). The updated AC-114.59 command tests pass for `/system:set`.
+
+## t24 — in-console guide
+
+**Files:** scripts/cplat/console/guide.py, server.py, layout.py, help.py, static/console.js, static/console.css
+**Covers:** AC-122.52
+**Goal:** the documentation is where the developer works: the console shows the guide, the stages and every command.
+
+**Implementation notes:**
+- `guide.page(ctx, query)` for `/guide` renders `docs/console.md` of the platform checkout (the repo root above `scripts/cplat`) with a small, escaping Markdown renderer (headings with anchors, paragraphs, lists, tables, code, links, images); a table of contents from the `##`/`###` headings.
+- Images are served from `docs/img/console/` by `GET /guide-img/<name>`, allowlisted by the folder's own file names.
+- The stages section reuses `stages.explain`; the command reference reads the `description` frontmatter of `plugins/<noun>/commands/*.md` for the 5.x nouns and splits it at `Usage:`.
+- Without the checkout's docs the page says so and links the documentation site.
+- Menu entry "Guide", key `g` (ignored in text fields), and a "Full guide" link in each help panel to the section of that place.

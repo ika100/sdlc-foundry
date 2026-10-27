@@ -1,7 +1,7 @@
 ---
 spec_id: 122-a-local-console-shows-the-system-and-what
 title: A local console shows the system, its process and what needs you
-status: done
+status: building
 priority: P2
 ---
 
@@ -129,6 +129,10 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - **AC-122.48** Given the Board, when "Done" is chosen, then it lists the specs, fix runs, issues and releases closed in the chosen period (30 days by default; 90 days or all), newest first, each with the date, the stage it reached, its release and links to its evidence.
 - **AC-122.49** Given the Board's search, when the user types an id, a title word, a component name or an issue number, then open and done items that match are shown, with their stage or the stage they reached.
 
+### Documentation in the console
+
+- **AC-122.52** Given the console, when **Menu → Guide** (or the key `g`, or "Full guide" in a page's help) is chosen, then it shows the guide in the console itself: the content of `docs/console.md` with its screenshots and a table of contents, the eight stages with what happens and where the user decides (from the same source as the Board), and a command reference listing every slash command of the 5.x nouns with what it does and its usage, each with a copy button. The guide is read from the platform checkout the console runs from, so the console, the documentation site and the commands never disagree; without that checkout the guide says so and links the documentation site. A page's help links to the guide's section for that page.
+
 ### Usable by everyone
 
 - **AC-122.28** Given any page, when it is used with the keyboard only, then every action is reachable and operable, text meets WCAG 2.2 AA contrast, and the layout works at 390 px width without horizontal page scroll (wide tables scroll inside their box).
@@ -169,3 +173,4 @@ This spec is an additive 5.x extension of spec 114. It adds `cplat ui`, `cplat n
 - 2026-10-26 approved
 - 2026-10-27 building
 - 2026-10-27 done
+- 2026-10-27 amended: the documentation lives in the console too: an in-console guide with screenshots, stages and a command reference (AC-122.52)

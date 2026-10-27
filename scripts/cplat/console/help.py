@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 import stages
+from console import guide
 from console.html import command_block, esc, stage_badge
 
 GUIDE = "https://github.com/ika100/sdlc-foundry/blob/main/docs/console.md"
@@ -45,6 +46,7 @@ STEPS = {
 KEYS = (
     ("⌘K / Ctrl+K", "New or ask: describe a change, add to the model, go to, ask"),
     ("?", "this help"),
+    ("g", "the full guide: the console, the process and every command"),
     ("j / k", "next / previous item in the Inbox"),
     ("← → ↑ ↓", "move across Board columns and cards"),
     ("Enter", "open the selected item"),
@@ -106,7 +108,9 @@ def panel_help(ctx: Any, place: str) -> str:
         "<h3>When something is missing</h3>"
         f"<p>A banner names a missing piece (Claude Code, a GitHub login, a cluster context) and its fix. "
         f"Run the full check in a terminal:</p><p>{command_block('/platform:doctor')}</p>"
-        f'<h3>More</h3><ul class="plain"><li><a href="{GUIDE}" target="_blank" rel="noopener">Console guide</a></li>'
+        f'<h3>More</h3><ul class="plain"><li><a href="/guide{guide.anchor(place)}">Full guide in the console</a> (<kbd>g</kbd>)</li>'
+        f'<li><a href="/guide#command-reference">Every command</a></li>'
+        f'<li><a href="{GUIDE}" target="_blank" rel="noopener">The guide on GitHub</a></li>'
         f'<li><a href="{PROCESS}" target="_blank" rel="noopener">How the agents work together</a></li></ul>'
     )
     from console.panels import _aside  # noqa: PLC0415 - one panel frame for every side panel

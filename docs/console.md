@@ -15,7 +15,7 @@ The console is a page in your browser that answers three questions about a syste
    /platform:ui --port 8800      # fixed port; default is a free one
    ```
 
-3. The browser opens on the **Inbox**. Press `?` on any page for help on that page, or `⌘K` (`Ctrl+K`) to start something.
+3. The browser opens on the **Inbox**. Press `?` on any page for help on that page, `g` for this guide inside the console (also **Menu → Guide**), or `⌘K` (`Ctrl+K`) to start something.
 
 The server listens on `127.0.0.1` only. Stop it from **Menu → Stop console** (it asks first while actions run) or by ending the process. To work on another system, use **Menu → Switch system**: it lists the `gitops-app` repos of your GitHub account and organisations, and clones a missing one under `workspace` (default `~/src`).
 
@@ -64,9 +64,11 @@ Below are the components, libraries, APIs and resources with their relations, an
 
 ## Help in the console
 
-Every page has a one-line answer under its title and a **Help** button (or `?`). The help explains how to work on that page, the eight stages and where you decide, the keys, and where the data comes from.
+Every page has a one-line answer under its title and a **Help** button (or `?`). The help explains how to work on that page, the eight stages and where you decide, the keys, and where the data comes from. The whole guide is in the console too (**Menu → Guide** or `g`): this text with its screenshots, the process with every stage, and a reference of every command with its usage and a copy button.
 
 ![Help on the System page](img/console/help.jpg)
+
+![The guide inside the console: contents, this text with its screenshots, the process and every command](img/console/guide.jpg)
 
 ## Stages
 

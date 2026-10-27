@@ -216,3 +216,20 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 
 .palette input.wide, .palette textarea { width: 100%; box-sizing: border-box; }
 .palette label { display: block; }
+
+/* The guide (console/guide.py): contents on the left, the text on the right; one column below 900px. */
+.guide { display: flex; gap: var(--s4); align-items: flex-start; }
+.guide-toc { position: sticky; top: var(--s3); flex: none; width: 220px; font-size: 0.875rem; }
+.guide-toc .toc-3 { padding-left: var(--s3); }
+.guide-toc li { margin-bottom: var(--s1); }
+.guide-body { min-width: 0; max-width: 820px; }
+.guide-body img { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 6px; }
+.guide-body figure { margin: var(--s3) 0; }
+.guide-body h2 { margin-top: var(--s5); }
+@media (max-width: 900px) { .guide { flex-direction: column; } .guide-toc { position: static; width: auto; } }
+.guide-body pre { overflow-x: auto; max-width: 100%; }
+.guide-commands .guide-cmd { padding: var(--s2) 0; border-bottom: 1px solid var(--border); }
+.guide-commands .guide-cmd p { margin-bottom: var(--s1); }
+.guide-body figure img { aspect-ratio: 1439 / 840; object-fit: contain; width: 100%; }
+.guide-stages .guide-stage { padding: var(--s2) 0; border-bottom: 1px solid var(--border); }
+.guide-stages .guide-stage p { margin-bottom: var(--s1); }
