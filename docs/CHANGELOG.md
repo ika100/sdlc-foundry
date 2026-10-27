@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**An object storage resource: `type: bucket`.** [ADR-059](adr/059-in-cluster-buckets-on-seaweedfs-per-instance.md), spec 116. Not breaking: a 5.0 or 115 `system.yaml` renders as before. A system declares buckets under `resources.<name>` with `type: bucket` (`storage`, default `10Gi`, and `versioning`, default off, per resource or instance). An in-cluster bucket is its own SeaweedFS per instance; `external` buckets read `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId` and `secretAccessKey` from the secret store. A component that uses a bucket gets `S3_*` and `AWS_*` (prefixed with two or more buckets). Pins: SeaweedFS image `chrislusf/seaweedfs:4.51` and operator chart `seaweedfs-operator` 0.1.45. `cplat platform doctor` compares the installed SeaweedFS operator.
+
+**Plugins:** `resource` 1.2.0 (`/resource:add <name> --type database|bucket [--storage S] [--versioning]`).
+
+**Action.** One human step per existing cluster, after the first in-cluster bucket: re-apply `operators/root.yaml` (`KUBE_CONTEXT=<ctx> devbox run bootstrap`; local clusters: `devbox run cluster-up`). A cluster whose owner installed the SeaweedFS operator by hand: set `environments.<env>.operators: owner` before `operators/root.yaml` is applied again. Existing repos: run `/platform:update`.
+
 **Resources are named, typed and may be external.** [ADR-057](adr/057-named-typed-resources-with-fixed-contracts.md), [ADR-058](adr/058-pinned-versions-and-platform-installed-operators.md), spec 115. Not breaking: a 5.0 `system.yaml` renders as before. A system declares any number of resources under `resources.<name>` with a `type` (`database` is built; `bucket`, `cache` and `broker` are reserved for specs 116, 118 and 119). A database can be `external` (optionally with `remote.path` and a per-environment `instances.<env>.external`): the platform renders an ExternalSecret from the secret store and no cluster. A component that uses two or more resources of one type gets prefixed variables (`ORDERS_DB_DATABASE_URL`). `cplat model show` lists type and `external`; `cplat platform doctor` compares the installed operator.
 
 **Pinned database image, supported majors 15–18.** The database image is pinned exactly per major. The one narrowing against 5.0: another `version` (for example 14) now fails the render and names the supported majors 15, 16, 17 and 18.
