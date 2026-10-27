@@ -31,6 +31,7 @@ Everything marked GENERATED is derived from `cluster.yaml` by `devbox run render
 - `devbox run bootstrap` (human only): `KUBE_CONTEXT=<context> devbox run bootstrap` installs the Argo CD credentials and applies the two root Applications to the named cluster. The context must be named explicitly so it never hits whatever cluster happens to be current. Agents never run `bootstrap` or any `kubectl apply`.
 - `devbox run cluster-up` creates a local k3d cluster named `{{ project_name }}-local` with Argo CD, runs the bootstrap against it and prints the URLs of exposed components; `devbox run cluster-down` removes it. Needs Docker running.
 - `devbox run quality` builds the manifests with kustomize and validates them with kubeconform.
+- `devbox run secrets-baseline` refreshes `.secrets.baseline.json` with fixed flags (never run `detect-secrets scan` by hand).
 
 ## Secrets
 
@@ -58,5 +59,9 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 
 - Conventional Commits for commit messages and PR titles (CI checks the PR title).
 - Branch names for cluster changes: `cluster/<change>`; open a PR, never push to `main`.
+
+## Project notes
+
+Project-specific guidance for Claude Code goes in `.claude/project-notes.md`, which is loaded below and never changed by updates.
 
 @.claude/project-notes.md
