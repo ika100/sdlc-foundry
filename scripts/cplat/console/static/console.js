@@ -496,12 +496,70 @@
     if (claude) { openInClaude(claude.getAttribute("data-claude")); }
   }
 
+  /* ---------- model forms: a new preview on every change ---------- */
+
+  var previewTimers = new WeakMap();
+
+  function formFields(form) {
+    var fields = {};
+    new FormData(form).forEach(function (value, name) {
+      name = name.replace(/\[\]$/, "");
+      if (Object.prototype.hasOwnProperty.call(fields, name)) {
+        fields[name] = [].concat(fields[name], value);
+      } else { fields[name] = value; }
+    });
+    return fields;
+  }
+
+  function showPreview(form, doc) {
+    var area = $("[data-preview]", form) || form;
+    var cmd = $("[data-command]", area) || $("[data-command]", form);
+    if (cmd) { cmd.textContent = doc.command || ""; }
+    var diff = $("[data-diff]", area);
+    if (!diff) { diff = el("pre", { "data-diff": "" }); area.appendChild(diff); }
+    diff.textContent = doc.diff || "";
+    var checks = $("[data-checks]", area);
+    if (!checks) { checks = el("ul", { "data-checks": "" }); area.appendChild(checks); }
+    checks.textContent = "";
+    (doc.checks || []).forEach(function (c) {
+      var li = el("li", { "data-ok": c.ok ? "true" : "false" }, (c.ok ? "ok: " : "failed: ") + c.key + " - " + c.rule);
+      checks.appendChild(li);
+    });
+    var confirm = $("button[data-action='model']", form);
+    if (confirm) {
+      var off = !doc.valid;
+      confirm.disabled = off;
+      confirm.setAttribute("aria-disabled", off ? "true" : "false");
+      confirm.setAttribute("data-args", JSON.stringify({ command: doc.command, level: "system" }));
+    }
+  }
+
+  function requestPreview(form) {
+    api("POST", "/api/preview", { form: form.getAttribute("data-form"), fields: formFields(form) }).then(function (r) {
+      if (r.ok && r.data) { showPreview(form, r.data); }
+      else {
+        var confirm = $("button[data-action='model']", form);
+        if (confirm) { confirm.disabled = true; confirm.setAttribute("aria-disabled", "true"); }
+        toast((r.data && r.data.detail) || "Could not preview this change");
+      }
+    });
+  }
+
+  function onFormChange(event) {
+    var form = event.target.closest ? event.target.closest("form[data-form]") : null;
+    if (!form) { return; }
+    window.clearTimeout(previewTimers.get(form));
+    previewTimers.set(form, window.setTimeout(function () { requestPreview(form); }, 200));
+  }
+
   /* ---------- start ---------- */
 
   function start() {
     document.addEventListener("keydown", onKey);
     document.addEventListener("click", onClick);
     document.addEventListener("submit", onSubmit);
+    document.addEventListener("input", onFormChange);
+    document.addEventListener("change", onFormChange);
     $("#activity-panel").addEventListener("click", onActivityClick);
     $("#palette-q").addEventListener("input", function () {
       window.clearTimeout(paletteTimer);
