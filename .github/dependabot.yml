@@ -3,7 +3,9 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    # the platform and every template in one grouped PR, so their pins never diverge (spec 055)
+    # the platform and every template in one grouped PR (spec 055). Dependabot reads workflows only under
+    # /.github/workflows, so its PR bumps the platform's pins alone; the pin check then fails, and
+    # `uv run scripts/pin-actions.py` on the PR branch moves the templates to the same pins.
     directories: ["/", "/templates/service-python", "/templates/library-python", "/templates/web-nextjs",
                   "/templates/service-java", "/templates/service-go", "/templates/gitops-app", "/templates/cluster-gitops"]
     schedule: {interval: monthly}

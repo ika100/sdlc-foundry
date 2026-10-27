@@ -473,16 +473,27 @@ def formatting_only(old: str, new: str, name: str) -> tuple[bool, str]:
 
 def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, str]]:
     """Each changed test file against `base`. Default: files under the shape's `test_globs` (never `docs/` or `*.md`, spec 063)
-    that name a criterion of a `building` spec."""
+    that name a criterion of a `building` spec. A file that did not exist at `base` and that a task of a `building`
+    spec's plan lists in `files:` is the build's own new file, not a changed acceptance test, and is left out."""
+    import fnmatch
     import subprocess
     if not files:
         changed = subprocess.run(["git", "-C", str(root), "diff", "--name-only", base], capture_output=True, text=True,
                                  check=True).stdout.split()
-        ids = {a for s in all_specs(root) if s.status == "building" for a in (x.id for x in s.acs())}
+        building = [s for s in all_specs(root) if s.status == "building"]
+        ids = {a for s in building for a in (x.id for x in s.acs())}
+        planned = [str(p) for s in building if s.plan for t in (s.plan[0].get("tasks") or []) if isinstance(t, dict)
+                   for p in (t.get("files") or [])]
         tests = {str(p.relative_to(root)) for g in test_globs(repo_shape(root)) for p in root.glob(g)}   # spec 063
+
+        def created_by_plan(f: str) -> bool:
+            if not any(p == f or (p.endswith("/") and f.startswith(p)) or fnmatch.fnmatch(f, p) for p in planned):
+                return False
+            return subprocess.run(["git", "-C", str(root), "cat-file", "-e", f"{base}:{f}"], capture_output=True).returncode != 0
+
         files = [f for f in changed if f in tests and (root / f).is_file() and not _ignored(Path(f))
                  and not f.startswith("docs/") and not f.endswith(".md")
-                 and set(AC_ANY.findall((root / f).read_text(errors="ignore"))) & ids]
+                 and set(AC_ANY.findall((root / f).read_text(errors="ignore"))) & ids and not created_by_plan(f)]
     out = {}
     for f in files:
         old = subprocess.run(["git", "-C", str(root), "show", f"{base}:{f}"], capture_output=True, text=True)

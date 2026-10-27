@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Pin every GitHub Action in workflows to a full commit SHA (supply chain, ADR-019).
 
-  pin-actions.py [PATH...]          rewrite `uses: owner/repo@v4` to `uses: owner/repo@<sha> # v4` (needs `gh`)
+  pin-actions.py [PATH...]          rewrite `uses: owner/repo@v4` to `uses: owner/repo@<sha> # v4` (needs `gh`), then
+                                    move every pin that differs from the platform's own (.github/workflows) to it, comment
+                                    included: Dependabot bumps only the platform's workflows, never the templates'
   pin-actions.py --check [PATH...]  exit 1 if any action is not pinned to a 40-character SHA, an action is pinned to
                                     different commits in different workflows (spec 055: the templates use the platform's
                                     pins), or a workflow has no top-level `permissions:` (offline; CI guard)
@@ -71,7 +73,34 @@ def main(argv: list[str]) -> int:
         print("OK: all actions are pinned")
         return 0
     print(f"pinned {unpinned} reference(s)")
+    print(f"aligned {align(paths)} reference(s) with the platform's pins")
     return 0
+
+
+def align(paths: list[str]) -> int:
+    """Rewrite each pin that differs from the one in the platform's .github/workflows to that pin and its comment."""
+    platform: dict[str, str] = {}
+    for f in workflow_files([".github/workflows"]):
+        for line in f.read_text().splitlines():
+            m = USES.match(line)
+            if m and SHA.match(m["ref"]):
+                platform.setdefault(m["action"], f"{m['ref']}{m['tail']}")
+    moved = 0
+    for f in workflow_files(paths):
+        lines = f.read_text().splitlines(keepends=True)
+        changed = False
+        for i, line in enumerate(lines):
+            m = USES.match(line.rstrip("\n"))
+            if not m or not SHA.match(m["ref"]) or m["action"] not in platform:
+                continue
+            want = platform[m["action"]]
+            if m["ref"] != want.split()[0]:
+                lines[i] = f"{m['head']}{m['action']}@{want}\n"
+                changed = True
+                moved += 1
+        if changed:
+            f.write_text("".join(lines))
+    return moved
 
 
 if __name__ == "__main__":
