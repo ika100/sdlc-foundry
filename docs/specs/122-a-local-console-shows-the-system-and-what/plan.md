@@ -27,6 +27,7 @@ tasks:
     covers: [AC-122.5, AC-122.9, AC-122.33, AC-122.36, AC-122.48, AC-122.51]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: spec list --detail — criteria with tests and verdicts, questions with options, check, slices, contract change
     files: [scripts/cplat/spec.py]
