@@ -183,8 +183,23 @@ Valid `type`/`lang` pairs: `service/python`, `service/java`, `service/go`, `webs
   - Example. A provider and a consumer each use half of this Python code (`nats-py`). No template ships publisher or subscriber code.
 
 ```python
-TYPES["broker"] = {"keys": ["url", "user", "password"],
-                   "env": {"NATS_URL": "url", "NATS_USER": "user", "NATS_PASSWORD": "password"}}
+import asyncio, os
+import nats
+
+async def main():
+    nc = await nats.connect(os.environ["NATS_URL"], user=os.environ["NATS_USER"], password=os.environ["NATS_PASSWORD"],
+                            inbox_prefix=os.environ["NATS_INBOX_PREFIX"])
+    js = nc.jetstream()
+    # provider of the events API `orders`: publish under its subject prefix
+    await js.publish(os.environ["EVENTS_ORDERS_SUBJECT_PREFIX"] + ".created", b'{"id": 42}')
+    # consumer: read through the component's own durable consumer, acknowledge within 30 s
+    sub = await js.pull_subscribe_bind(durable=os.environ["EVENTS_ORDERS_CONSUMER"], stream=os.environ["EVENTS_ORDERS_STREAM"])
+    for msg in await sub.fetch(10, timeout=5):
+        print(msg.subject, msg.data)
+        await msg.ack()
+    await nc.close()
+
+asyncio.run(main())
 ```
 
   - Removal. Streams and consumers hold messages, so nothing deletes them: not a render, not an Argo CD sync, not `/resource:remove`. `/resource:remove` is refused while an events API is bound to the broker. When you remove an events API or a consumer, the render prints a note such as `stream <system>-<api> is no longer declared; it and its messages stay on the broker until you delete them`, and the stream or consumer stays until a person deletes it. To delete one by hand, use the `nats` command line against the broker (`nats stream rm <system>-<api>`, `nats consumer rm <system>-<api> <component>`), or `kubectl delete stream.jetstream.nats.io` and `consumer.jetstream.nats.io` objects for the ones that NACK still holds. Removing the broker resource itself leaves its server, its volumes and its data in the cluster in the same way.
