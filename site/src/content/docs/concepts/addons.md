@@ -21,4 +21,6 @@ The service-python and web-nextjs templates count every request in one metrics m
 
 Operators are cluster prerequisites: `cluster-up` installs them locally; the platform installs them on real clusters from the `operators/` folder of the gitops repo (apply `operators/root.yaml` once), unless an environment sets `operators: owner`. Removing a resource never deletes a database (its Argo Application is not pruned).
 
+**Backups.** `backup: {to: <bucket>, schedule, retention}` on an environment backs up its persistent volumes and objects (Velero); on a database instance it backs up that database with continuous archiving and point-in-time restore (CloudNativePG with the Barman Cloud plugin). Databases are restored only with `/resource:restore`, environments with `/system:restore`; an external database is backed up by its provider. See [Backup and restore](/sdlc-foundry/guides/backup-and-restore/).
+
 Because the contract is stable, an implementation can be swapped without touching any service ([ADR-020](/sdlc-foundry/reference/adr/020/), [ADR-021](/sdlc-foundry/reference/adr/021/)). Try it: [Add Postgres, secrets and observability](/sdlc-foundry/scenarios/addons-secrets-observability/).

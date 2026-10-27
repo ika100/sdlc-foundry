@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+import backupstate
 import core
 import gitops
 import model
@@ -159,10 +160,15 @@ def _release_candidate(c, cell: dict, smoke: dict | None) -> dict | None:
             "fixes": diff["fixes"], "digest": (smoke or {}).get("digest")}
 
 
-def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None) -> dict:
-    """Everything `system status --json` reports; `collect` is its 4-tuple view."""
+def load(repo: Path, app: str | None) -> tuple[Path, model.Model]:
     app_dir = gitops.find_app(repo, app)
-    m = model.load_dir(app_dir)
+    return app_dir, model.load_dir(app_dir)
+
+
+def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
+                loaded: tuple[Path, model.Model] | None = None) -> dict:
+    """Everything `system status --json` reports except `backups`; `collect` is its 4-tuple view."""
+    app_dir, m = loaded or load(repo, app)
     envs = [e.name for e in m.environments]
     if isinstance(contexts, str):
         contexts = [contexts]
@@ -237,6 +243,89 @@ def collect(repo: Path, app: str | None, context: list[str] | str | None) -> tup
     return d["system"], d["environments"], d["rows"], d["resources"]
 
 
+def collect_backups(repo: Path, app: str | None, contexts: list[str] | str | None,
+                    loaded: tuple[Path, model.Model] | None = None) -> dict:
+    """Spec 117: backup state of every database instance and environment. The cluster is read (through backupstate's kubectl seam)
+    only when the system has a backup or a restore-state.yaml; otherwise every row is `off` and nothing is read."""
+    app_dir, m = loaded or load(repo, app)
+    by_env = parse_contexts([contexts] if isinstance(contexts, str) else contexts, [e.name for e in m.environments])
+    dbs = [ri for ri in m.resource_instances if ri.type == "database"]
+    states: dict[tuple[str, str], dict | None] = {}
+    for ri in dbs:
+        try:
+            states[(ri.resource, ri.environment)] = backupstate.restore_state(app_dir, ri.environment, ri.resource)
+        except backupstate.StateError:
+            states[(ri.resource, ri.environment)] = None
+    wanted = any(e.backup for e in m.environments) or any(ri.backup for ri in dbs if not ri.external) \
+        or any(v is not None for v in states.values())
+    out: dict = {"resource_instances": [], "environments": [], "_read": wanted, "_contexts": sorted(set(by_env.values()))}
+    for ri in dbs:
+        if wanted:
+            row = backupstate.database_state(m.system, ri.resource, ri.environment, by_env.get(ri.environment), backup=bool(ri.backup),
+                                             external=ri.external, state=states[(ri.resource, ri.environment)])
+        else:
+            row = backupstate.database_state(m.system, ri.resource, ri.environment, None, backup=False, external=ri.external)
+        out["resource_instances"].append(row)
+    for e in m.environments:
+        out["environments"].append(backupstate.environment_state(m.system, e.name, by_env.get(e.name), backup=bool(wanted and e.backup)))
+    return out
+
+
+def public_backups(b: dict) -> dict:
+    """The `backups` JSON: the contract fields only."""
+    return {"resource_instances": [{"resource": r["resource"], "environment": r["environment"], "cluster": r["cluster"],
+                                    "backup": r["backup"], "restored": r["restored"], "previous": r["previous"]}
+                                   for r in b["resource_instances"]],
+            "environments": b["environments"]}
+
+
+def backup_lines(b: dict) -> list[str]:
+    """The `Backups (...)` text section; [] when nothing has backup or a restore state."""
+    if not b["_read"]:
+        return []
+    rows: list[tuple[str, str]] = []
+    for r in b["resource_instances"]:
+        label, x = f"{r['resource']}/{r['environment']}", r["backup"]
+        st = x["state"]
+        if st == "off":
+            rows.append((label, "off"))
+        elif st == "external":
+            rows.append((label, "external (backed up by its provider)"))
+        elif st == "unknown":
+            rows.append((label, f"unknown ({x['error']})"))
+        elif st == "pending":
+            rows.append((label, f"last base backup never (first backup pending)  archiving ok  restore points "
+                                f"{x['earliest'] + ' … ' + (x['latest'] or x['earliest']) if x['earliest'] else 'none'}"))
+        else:
+            arch = {"ok": "archiving ok", "failing": f"archiving failing ({x['error']})" if x["error"] else "archiving failing"}.get(
+                x["archiving"] or "", "archiving unknown")
+            pts = f"{x['earliest']} … {x['latest'] or x['earliest']}" if x["earliest"] else "none"
+            rows.append((label, f"last base backup {x['last_success'] or 'never'}  {arch}  restore points {pts}"))
+        if r["restored"]:
+            why = "" if r["restored"]["ready"] else f" (not ready: {r['restored_phase']})" if r.get("restored_phase") else " (not ready)"
+            rows.append((label, f"restored {r['restored']['name']}{why}"))
+        if r["previous"]:
+            rows.append((label, f"previous {r['previous']['name']}"))
+    for e in b["environments"]:
+        x, label = e["backup"], f"environment {e['environment']}"
+        if x["state"] == "off":
+            rows.append((label, "off"))
+        elif x["state"] == "unknown":
+            rows.append((label, f"unknown ({x['reason']})"))
+        else:
+            tail = f"{x['state']} ({x['reason']})" if x["reason"] else x["state"]
+            rows.append((label, f"last backup {x['last_success'] or 'never'}  {tail}  {x['kept']} kept"))
+    # The column follows the database labels (design.md's example); a longer `environment <env>` label keeps two spaces.
+    db_labels = [label for label, _ in rows if not label.startswith("environment ")] or [label for label, _ in rows]
+    w = max(map(len, db_labels)) + 2 if rows else 0
+    shown = ", ".join(b["_contexts"]) or backupstate_current() or "the current kube context"
+    return ["", f"Backups (read from the cluster {shown} now):", *(f"  {label.ljust(w - 2)}  {text}" for label, text in rows)]
+
+
+def backupstate_current() -> str | None:
+    return sh(["kubectl", "config", "current-context"])
+
+
 def _short(tag: str | None) -> str:
     m = re.fullmatch(r"sha-([0-9a-f]{40})", tag or "")
     return f"sha-{m.group(1)[:7]}" if m else (tag or "?")
@@ -257,7 +346,8 @@ def _grid(header: list[str], body: list[list[str]]) -> list[str]:
     return [fmt(header), fmt(["-" * x for x in w]), *map(fmt, body)]
 
 
-def render_table(app: str, envs: list[str], rows: list[dict], resources: list[dict], stamp: dict, context: object) -> str:
+def render_table(app: str, envs: list[str], rows: list[dict], resources: list[dict], stamp: dict, context: object,
+                 backups: dict | None = None) -> str:
     lines = [f"## {app} (system) — platform {core.platform_version()} available, repo stamped {stamp.get('platform', 'none')}", ""]
     if rows:
         lines += _grid(["component", *envs, "platform"], [[r["component"], *(_cell(r["cells"].get(e)) for e in envs), r["platform"]] for r in rows])
@@ -265,6 +355,8 @@ def render_table(app: str, envs: list[str], rows: list[dict], resources: list[di
         lines.append("  (no components yet — /component:add <component>)")
     if resources:
         lines += [""] + _grid(["resource", *envs], [[r["resource"], *(_cell(r["cells"].get(e)) for e in envs)] for r in resources])
+    if backups:
+        lines += backup_lines(backups)
     if not context:
         lines += ["", "Argo column empty? pass --context <kube-context> (e.g. k3d-" + app + "-local)."]
     return "\n".join(lines)
@@ -278,9 +370,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv)
     repo = Path(ns.repo_dir).resolve()
+    loaded = load(repo, ns.system)
+    d = collect_all(repo, ns.system, ns.context, loaded)
+    backups = collect_backups(repo, ns.system, ns.context, loaded)
     if ns.json:
-        print(json.dumps(collect_all(repo, ns.system, ns.context), indent=2))
+        print(json.dumps({**d, "backups": public_backups(backups)}, indent=2))
     else:
-        system, envs, rows, resources = collect(repo, ns.system, ns.context)
-        print(render_table(system, envs, rows, resources, core.read_stamp(repo), ns.context))
+        print(render_table(d["system"], d["environments"], d["rows"], d["resources"], core.read_stamp(repo), ns.context, backups))
     return 0

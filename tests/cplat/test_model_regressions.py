@@ -19,6 +19,8 @@ def test_status_with_an_empty_system_file_has_no_rows_ac_113_11(tmp_path, monkey
     assert status.main(["--repo-dir", str(tmp_path), "--context", "k3d-x", "--json"]) == 0
     doc = json.loads(capsys.readouterr().out)  # spec 122 adds keys; the 5.0 keys keep their values
     assert {k: doc[k] for k in ("system", "environments", "rows", "resources")} == {"system": "shop", "environments": ["dev", "staging", "prod"], "rows": [], "resources": []}
+    off = {"last_success": None, "state": "off", "reason": None, "kept": 0}  # spec 117
+    assert doc["backups"] == {"resource_instances": [], "environments": [{"environment": e, "backup": off} for e in ("dev", "staging", "prod")]}  # spec 117 (AC-117.27)
 
 
 @pytest.mark.parametrize("text", ["", "# only a comment\n"])

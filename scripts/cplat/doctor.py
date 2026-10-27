@@ -179,6 +179,7 @@ def check_repo(repo: Path) -> list[dict]:
             out.append(check(WARN, "repo platform version", "platform source has no docs/CHANGELOG.md"))
         out += check_addons(repo)
         out += check_operators(repo)
+        out += check_backups(repo)
         out += check_policies(repo)
         if declared == "cluster-gitops":
             out += check_cluster(repo)
@@ -197,6 +198,7 @@ def check_repo(repo: Path) -> list[dict]:
             out.append(check(OK, "repo platform version", stamp.get("platform", "?")))
     out += check_addons(repo)
     out += check_operators(repo)
+    out += check_backups(repo)
     out += check_policies(repo)
     if shape == "cluster-gitops":
         out += check_cluster(repo)
@@ -311,15 +313,64 @@ def _operators() -> dict:
 
 
 def check_operators(repo: Path) -> list[dict]:
-    """AC-115.18, AC-116.19: the operators in-cluster resources need (cloudnative-pg, seaweedfs): installed vs expected version."""
+    """AC-115.18, AC-116.19, AC-117.30: the operators the in-cluster resources and backups need: installed vs expected version."""
     if not shutil.which("kubectl"):
         return []
     models = _models(repo)
     out = []
-    for op_name, rtype, chart_name in (("cloudnative-pg", "database", "cloudnative-pg"), ("seaweedfs", "bucket", "seaweedfs-operator")):
-        needs = sorted({ri.environment for m in models for ri in m.resource_instances if ri.type == rtype and not ri.external})
+    for op_name, chart_name in (("cloudnative-pg", "cloudnative-pg"), ("seaweedfs", "seaweedfs-operator"),
+                                ("plugin-barman-cloud", "plugin-barman-cloud"), ("cert-manager", "cert-manager"), ("velero", "velero")):
+        needs = _operator_needs(models, op_name)
         if needs:
             out += _operator_row(models, needs, op_name, chart_name)
+    return out
+
+
+def _operator_needs(models: list, op_name: str) -> list[str]:
+    """The environments that need operator `op_name` (design.md, versions section)."""
+    envs: set[str] = set()
+    for m in models:
+        if op_name == "velero":
+            envs |= {e.name for e in m.environments if e.backup}
+        elif op_name in ("plugin-barman-cloud", "cert-manager"):
+            envs |= {ri.environment for ri in m.resource_instances if ri.type == "database" and not ri.external and ri.backup}
+        else:
+            rtype = "database" if op_name == "cloudnative-pg" else "bucket"
+            envs |= {ri.environment for ri in m.resource_instances if ri.type == rtype and not ri.external}
+    return sorted(envs)
+
+
+def check_backups(repo: Path) -> list[dict]:
+    """AC-117.23, AC-117.29: prod without backup, and prod backups that live in the cluster they protect (models only, no kubectl)."""
+    import model
+    prod = model.ENVIRONMENTS[-1]
+    models = _models(repo)
+    missing: list[str] = []
+    same: list[str] = []
+    fix_items: list[str] = []
+    for m in models:
+        pre = f"{m.system}: " if len(models) > 1 else ""
+        env = next((e for e in m.environments if e.name == prod), None)
+        dbs = [ri for ri in m.resource_instances if ri.environment == prod and ri.type == "database" and not ri.external]
+        if any(i.environment == prod for i in m.instances):
+            if env is None or not env.backup:
+                missing.append(f"{pre}environment {prod}")
+                fix_items.append(f"environments.{prod}.backup")
+            for ri in dbs:
+                if not ri.backup:
+                    missing.append(f"{pre}{ri.resource}/{prod}")
+                    fix_items.append(f"resources.{ri.resource}.instances.{prod}.backup")
+        local = {ri.resource for ri in m.resource_instances if ri.environment == prod and not ri.external}
+        same += [f"{pre}{ri.resource}/{prod} (to {ri.backup['to']})" for ri in dbs if ri.backup and ri.backup.get("to") in local]
+        if env is not None and env.backup and env.backup.get("to") in local:
+            same.append(f"{pre}environment {prod} (to {env.backup['to']})")
+    out = []
+    if missing:
+        out.append(check(WARN, f"backup {prod}", f"{prod} has no backup: {', '.join(missing)}",
+                         f"set {' and '.join(dict.fromkeys(fix_items))} in system.yaml (docs/BACKUP-AND-RESTORE.md)"))
+    if same:
+        out.append(check(WARN, "backup location", f"{prod} backups live in the same cluster: {', '.join(same)}",
+                         f"use an external bucket as to for {prod}"))
     return out
 
 
@@ -332,6 +383,7 @@ def _operator_row(models: list, needs: list[str], op_name: str, chart_name: str)
              "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
     images = (p.stdout or "").split()
     have = images[0].split("@")[0].rsplit(":", 1)[-1] if images and ":" in images[0].split("@")[0].rsplit("/", 1)[-1] else None
+    have = have.removeprefix("v") if have else have
     owner = owner_envs == needs
     where = f"operators: owner in {', '.join(owner_envs)}" if owner else f"Argo CD application operator-{op_name}"
     if have == want:

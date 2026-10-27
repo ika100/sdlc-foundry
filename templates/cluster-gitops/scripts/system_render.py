@@ -34,6 +34,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
         queryURL: https://prom.example.com/api/prom # optional; querySecret: <name> or <namespace>/<name> (key AUTHORIZATION)
         alertmanagerURL: https://am.example.com     # optional
       operators: owner                              # optional, the only value: the platform installs no operator here (spec 115)
+      backup: {to: backups, schedule: "0 3 * * *", retention: 30d}   # optional (spec 117): back the environment up to a bucket resource
     staging:
       promote: after-dev-smoke       # after-dev-smoke | manual (default); dev takes none; prod is always promoted by hand
     prod: {}
@@ -74,7 +75,9 @@ system.yaml (every value explicit and reviewable; the model is described in docs
       replicas: 1
       storage: 1Gi
       resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 512Mi}}
-      instances: {prod: {replicas: 3, storage: 20Gi}}   # per-environment overrides: external, remote, replicas, storage, resources
+      instances: {prod: {replicas: 3, storage: 20Gi,    # per-environment overrides: external, remote, replicas, storage, resources, backup
+                         backup: {to: backups, schedule: "30 2 * * *", retention: 8w}}}   # spec 117: to = a bucket resource; schedule is
+                                     # a five-field cron in UTC (default "0 3 * * *"), retention <n>d or <n>w (default 30d)
     billing-db:                      # external: runs nothing, its connection Secret is synced from the secretStore
       type: database
       external: true                 # true | false (default false); per environment under instances.<env>.external
@@ -84,6 +87,10 @@ system.yaml (every value explicit and reviewable; the model is described in docs
       storage: 10Gi                  # default 10Gi
       versioning: false              # true | false (default false)
       instances: {dev: {versioning: true}, prod: {external: true}}   # per environment: external, remote, storage, versioning
+    backups:                         # an external bucket that backups write to needs the S3 coordinates in git (spec 117)
+      type: bucket
+      external: true
+      remote: {s3: {endpoint: "https://s3.eu-central-1.amazonaws.com", bucket: acme-backups, region: eu-central-1, forcePathStyle: false}}
 
 External component (spec 069, ADR-029): a component whose manifests this generator cannot express (CronJobs, volumes,
 a login proxy, a Helm chart with CRDs). The package is owned by this repo or pinned to the component repo's chart;
@@ -116,7 +123,7 @@ NOT_MIGRATED = "not migrated to 5.0: run `cplat platform update --migrate`"
 MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml", "application.yaml"}
 MANAGED_PREFIXES = ("externalsecret-",)
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries"]
-ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators"]
+ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
 VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"), ("library", "python"),
                ("service", "unknown")]
@@ -131,7 +138,7 @@ INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets"]
 RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
 PLANNED_TYPES = {"cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
 RESOURCE_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
-RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources"]
+RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources", "backup"]
 SIZING_KEYS = ["version", "replicas", "storage", "resources"]      # an external resource runs nothing: none of these
 BUCKET_KEYS = ["type", "external", "remote", "storage", "versioning", "instances"]
 BUCKET_INSTANCE_KEYS = ["external", "remote", "storage", "versioning"]
@@ -143,6 +150,13 @@ STORAGE_SIZE = re.compile(r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei)?$")    # a Kub
 S3_BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
 BUCKET_NAME_MAX = 45     # the StatefulSet `<name>-volume` plus a pod revision hash must fit a 63-character label
 REMOTE_KEYS = ["path", "refreshInterval"]
+BUCKET_REMOTE_KEYS = [*REMOTE_KEYS, "s3"]
+S3_KEYS = ["endpoint", "bucket", "region", "forcePathStyle"]
+BACKUP_KEYS = ["to", "schedule", "retention"]                     # spec 117: environments.<env>.backup and database instances' backup
+BACKUP_DEFAULTS = {"schedule": "0 3 * * *", "retention": "30d"}
+RETENTION = re.compile(r"^[1-9][0-9]*[dw]$")
+CRON_RANGES = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)]        # minute, hour, day of month, month, day of week
+CRON_ITEM = re.compile(r"^(\*|[0-9]+|[0-9]+-[0-9]+)(/[0-9]+)?$")
 RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 SUPPORTED_VERSIONS = (15, 16, 17, 18)
 CNPG_SUFFIXES = ("-app", "-ca", "-replication", "-server", "-superuser", "-rw", "-ro", "-r", "-primary")
@@ -166,6 +180,7 @@ POSTGRES_IMAGES = {
     17: "ghcr.io/cloudnative-pg/postgresql:17.11",
     18: "ghcr.io/cloudnative-pg/postgresql:18.6",
 }
+VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4"     # matches the Velero chart's appVersion line (1.14 <-> 1.18)
 SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51"     # every in-cluster bucket runs its own SeaweedFS of this image
 OPERATORS = {
     "cloudnative-pg": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "cloudnative-pg", "chart_version": "0.29.1",
@@ -181,7 +196,21 @@ OPERATORS = {
                 "operator_version": "1.19.1", "namespace": "kyverno", "release": "kyverno",
                 "crd": "namespacedvalidatingpolicies.policies.kyverno.io",
                 "selector": "app.kubernetes.io/component=admission-controller,app.kubernetes.io/instance=kyverno"},
+    # Spec 117: the Barman Cloud plugin (and its hard requirement cert-manager) for database backups, Velero for environment backups.
+    "plugin-barman-cloud": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "plugin-barman-cloud", "chart_version": "0.8.1",
+                            "operator_version": "0.15.1", "namespace": "cnpg-system", "release": "barman-cloud",
+                            "crd": "objectstores.barmancloud.cnpg.io", "retry": True},
+    "cert-manager": {"repo_url": "https://charts.jetstack.io", "chart": "cert-manager", "chart_version": "v1.21.3",
+                     "operator_version": "1.21.3", "namespace": "cert-manager", "release": "cert-manager",
+                     "crd": "certificates.cert-manager.io", "values": {"crds": {"enabled": True}}},
+    "velero": {"repo_url": "https://vmware-tanzu.github.io/helm-charts", "chart": "velero", "chart_version": "12.2.1",
+               "operator_version": "1.18.2", "namespace": "velero", "release": "velero", "crd": "schedules.velero.io", "finalizer": True,
+               "values": {"initContainers": [{"name": "velero-plugin-for-aws", "image": VELERO_AWS_PLUGIN_IMAGE,
+                                              "volumeMounts": [{"mountPath": "/target", "name": "plugins"}]}],
+                          "deployNodeAgent": True, "snapshotsEnabled": False, "credentials": {"useSecret": False},
+                          "configuration": {"backupStorageLocation": [], "volumeSnapshotLocation": [], "uploaderType": "kopia"}}},
 }
+OPERATOR_RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
 OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs"}
 DB_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
 # Resource contract (ADR-020, ADR-057): what a component gets when it `uses` a resource is in TYPES. Components never see the implementation.
@@ -198,7 +227,9 @@ ADDONS = {
 POLICY_API = "policies.kyverno.io/v1"
 POLICY_MODES = {"Audit": "Audit", "Enforce": "Deny"}     # mode -> Kyverno validationActions
 LGTM_ENDPOINT = "http://lgtm.observability.svc:4318"    # the shared all-in-one UI stack `cluster-up` installs for `ui: lgtm`
-ADDON_FILES = {"cluster.yaml", "kustomization.yaml"}
+ADDON_FILES = {"cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"}
+DATABASE_FILES = {"cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"}
+DATABASE_GENERATION = re.compile(r"^cluster-g[1-9][0-9]*\.yaml$")
 ESO_API = "external-secrets.io/v1"
 GEN_API = "generators.external-secrets.io/v1alpha1"
 DEFAULT_STORE = {"name": "platform-secrets", "kind": "ClusterSecretStore"}
@@ -325,7 +356,7 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
     if names != ENVS:
         fail(f"environments must be dev, staging, prod in this order (the promotion order), got {', '.join(map(str, names)) or 'none'}")
     hosts: dict[str, str] = {}
-    conf: dict = {"policy": {}, "observability": {}, "operators": {}}
+    conf: dict = {"policy": {}, "observability": {}, "operators": {}, "backup": {}}
     for e in ENVS:
         c = envs[e] if envs[e] is not None else {}
         if not isinstance(c, dict):
@@ -353,6 +384,8 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
             if c["operators"] != "owner":
                 fail(f"environments.{e}.operators must be owner, got '{c['operators']}'")
             conf["operators"][e] = "owner"
+        if "backup" in c:
+            conf["backup"][e] = c["backup"]       # checked by validate_backups, once the resources are known
     return hosts, conf
 
 
@@ -569,19 +602,40 @@ def validate_apis(doc: dict, comps: list[dict]) -> None:
             fail(f"apis.{a}: provided by {len(providers)} components ({names_list(providers)}); an API has exactly one provider")
 
 
-def check_remote(where: str, remote) -> dict:
-    """`remote` of a resource or of one of its instances: {path, refreshInterval}, both optional."""
+def check_s3(where: str, s3) -> None:
+    """`remote.s3` of a bucket: the coordinates of an external store that backups read from git (spec 117)."""
+    if not isinstance(s3, dict):
+        fail(f"{where} must be a mapping with endpoint, bucket, region and forcePathStyle")
+    for k in s3:
+        if k not in S3_KEYS:
+            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(S3_KEYS)})")
+    if any(k not in s3 for k in S3_KEYS):
+        fail(f"{where} needs endpoint, bucket, region and forcePathStyle")
+    if not (isinstance(s3["endpoint"], str) and re.match(r"^https?://[^\s/]+", s3["endpoint"])):
+        fail(f"{where}.endpoint must be an http(s) URL")
+    if not (isinstance(s3["bucket"], str) and S3_BUCKET_NAME.match(s3["bucket"])):
+        fail(f"{where}.bucket must be a valid S3 bucket name")
+    if not (isinstance(s3["region"], str) and s3["region"].strip()):
+        fail(f"{where}.region must be a non-empty string")
+    if not isinstance(s3["forcePathStyle"], bool):
+        fail(f"{where}.forcePathStyle must be true or false")
+
+
+def check_remote(where: str, remote, keys: list[str] = REMOTE_KEYS) -> dict:
+    """`remote` of a resource or of one of its instances: {path, refreshInterval}, both optional (a bucket also takes s3)."""
     if remote is None:
         return {}
     if not isinstance(remote, dict):
         fail(f"{where} must be a mapping, e.g. {{path: prod/{{resource}}}}")
     for k in remote:
-        if k not in REMOTE_KEYS:
-            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(REMOTE_KEYS)})")
+        if k not in keys:
+            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(keys)})")
     if remote.get("path") is not None:
         check_placeholders(f"{where}.path", remote["path"], ["system", "env", "resource"])
     if remote.get("refreshInterval") is not None and not isinstance(remote["refreshInterval"], str):
         fail(f"{where}.refreshInterval must be a string, e.g. 1h")
+    if "s3" in remote:
+        check_s3(f"{where}.s3", remote["s3"])
     return remote
 
 
@@ -653,6 +707,8 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         i = i or {}
         if "external" in i and not isinstance(i["external"], bool):
             fail(f"{where}: external must be true or false")
+        if not bucket and "backup" in i and i.get("external", base_external) is True:
+            fail(f"{where}: an external database is backed up by its provider (remove backup)")
         if i.get("external", base_external):
             for k in sizing_keys:
                 if k in i:
@@ -675,9 +731,10 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
     for e, i in inst.items():
         if "remote" in i and not external[e]:
             fail(f"resources.{r}.instances.{e}: remote needs external: true in {e}")
-    check_remote(f"resources.{r}.remote", rc.get("remote"))
+    remote_keys = BUCKET_REMOTE_KEYS if bucket else REMOTE_KEYS
+    check_remote(f"resources.{r}.remote", rc.get("remote"), remote_keys)
     for e, i in inst.items():
-        check_remote(f"resources.{r}.instances.{e}.remote", i.get("remote"))
+        check_remote(f"resources.{r}.instances.{e}.remote", i.get("remote"), remote_keys)
     first = next((e for e in ENVS if external[e]), None)
     if first and not doc.get("secretStore"):
         fail(f"resources.{r}: external in {first} needs the system's secretStore (declare secretStore: {{name, kind}})")
@@ -693,22 +750,26 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
     for e in ENVS:
         i = inst.get(e, {})
         if external[e]:
-            remote = {**(check_remote("", rc.get("remote"))), **check_remote("", i.get("remote"))}
+            remote = {**(check_remote("", rc.get("remote"), remote_keys)), **check_remote("", i.get("remote"), remote_keys)}
             key = str(remote.get("path") or "{system}-{env}-{resource}").format(system=str(doc.get("system")), env=e, resource=r)
             envs[e] = {"external": True, "version": None, "replicas": None, "storage": None, "resources": None,
                        "store_key": key, "refreshInterval": str(remote.get("refreshInterval") or "1h")}
             if bucket:
+                s3 = (i.get("remote") or {}).get("s3") or (rc.get("remote") or {}).get("s3")
                 envs[e]["versioning"] = None
+                envs[e]["s3"] = dict(s3) if s3 else None
+            else:
+                envs[e]["backup"] = None
             continue
         if bucket:
             envs[e] = {"external": False, "version": None, "replicas": None, "storage": str(i.get("storage", rc.get("storage", "10Gi"))),
                        "resources": None, "versioning": i.get("versioning", rc.get("versioning", False)),
-                       "store_key": None, "refreshInterval": None}
+                       "store_key": None, "refreshInterval": None, "s3": None}
             continue
         storage = i.get("storage", rc.get("storage"))
         envs[e] = {"external": False, "version": version, "replicas": int(i.get("replicas", rc.get("replicas", 1))),
                    "storage": "1Gi" if storage is None else str(storage), "resources": i.get("resources", rc.get("resources")),
-                   "store_key": None, "refreshInterval": None}
+                   "store_key": None, "refreshInterval": None, "backup": None}
     return {"type": typ, "external": bool(base_external), "envs": envs}
 
 
@@ -774,6 +835,68 @@ def validate_uses(comps: list[dict], resources: dict) -> None:
                     fail(f"components.{s['name']}: env {', '.join(clash)} is provided by the '{u}' resource; remove it from `env`")
 
 
+def check_cron(where: str, value) -> None:
+    fields = value.split() if isinstance(value, str) else []
+    ok = len(fields) == 5
+    for field, (lo, hi) in zip(fields, CRON_RANGES):
+        for item in field.split(","):
+            m = CRON_ITEM.match(item)
+            if not m:
+                ok = False
+                continue
+            if m.group(2) is not None and int(m.group(2)[1:]) < 1:
+                ok = False
+            nums = [int(x) for x in m.group(1).split("-")] if m.group(1) != "*" else []
+            if any(not lo <= x <= hi for x in nums) or (len(nums) == 2 and nums[0] > nums[1]):
+                ok = False
+    if not ok:
+        fail(f"{where}.schedule '{value}' is not a five-field cron expression (minute hour day-of-month month day-of-week, in UTC)")
+
+
+def check_backup(where: str, env: str, backup, resources: dict, comps: list[dict]) -> dict:
+    """One `backup` (design.md, Render errors): returns {to, schedule, retention} with the defaults filled."""
+    if not isinstance(backup, dict):
+        fail(f"{where} must be a mapping with to, schedule and retention")
+    for k in backup:
+        if k not in BACKUP_KEYS:
+            fail(f"{where}: unknown key '{k}' (allowed: {', '.join(BACKUP_KEYS)})")
+    if backup.get("to") is None:
+        fail(f"{where}.to is required: the name of a bucket resource of the system")
+    to = backup["to"]
+    buckets = [n for n, rc in resources.items() if rc["type"] == "bucket"]
+    if not isinstance(to, str) or to not in buckets:
+        fail(f"{where}.to: '{to}' is not a bucket resource of the system (buckets: {names_list(buckets)})")
+    if not any(env in s.get("environments", []) and to in (s.get("uses") or []) for s in comps):
+        fail(f"{where}.to: the bucket {to} has no resource instance in {env} (a component that runs in {env} must use it)")
+    target = resources[to]["envs"][env]
+    if target["external"] and not target.get("s3"):
+        fail(f"{where}.to: the external bucket {to} needs remote.s3 (endpoint, bucket, region, forcePathStyle) in {env}: "
+             "backups cannot read them from the secret store")
+    schedule = backup.get("schedule", BACKUP_DEFAULTS["schedule"])
+    check_cron(where, schedule)
+    retention = backup.get("retention", BACKUP_DEFAULTS["retention"])
+    if not (isinstance(retention, str) and RETENTION.match(retention) and not retention.endswith("\n")):
+        fail(f"{where}.retention '{retention}' must be <n>d or <n>w with n of at least 1")
+    return {"to": to, "schedule": schedule, "retention": retention}
+
+
+def validate_backups(doc: dict, env_conf: dict, resources: dict, comps: list[dict]) -> dict:
+    """Checks every backup, environments first, then each database with its instances in ENVS order; returns {env: backup} of the
+    environments and sets `backup` in the database instances' effective values."""
+    out = {}
+    for e in ENVS:
+        if e in env_conf["backup"]:
+            out[e] = check_backup(f"environments.{e}.backup", e, env_conf["backup"][e], resources, comps)
+    for r, rc in resources.items():
+        if rc["type"] != "database":
+            continue
+        inst = ((doc.get("resources") or {}).get(r) or {}).get("instances") or {}
+        for e in ENVS:
+            if "backup" in (inst.get(e) or {}):
+                rc["envs"][e]["backup"] = check_backup(f"resources.{r}.instances.{e}.backup", e, inst[e]["backup"], resources, comps)
+    return out
+
+
 def load_system(app_dir: Path) -> dict:
     """Parse and validate applications/<system>/system.yaml; returns the normalized system:
     `services` (components in the 4.x service shape, libraries left out), `cfg` (gateway, secretStore, hosts, policy and observability per
@@ -810,13 +933,14 @@ def _load_system(app_dir: Path) -> dict:
     resources = validate_resources(doc)
     check_resource_clashes(d, resources, comps_doc, comps)
     validate_uses(comps, resources)
+    backups = validate_backups(doc, env_conf, resources, comps)
     registries = doc.get("registries") or []
     if not isinstance(registries, list):
         fail("registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
     services = [{**c, "uses": [u for u in c.get("uses") or [] if u in resources]} for c in comps if c["type"] != "library"]
     cfg = {"gateway": doc.get("gateway"), "secretStore": doc.get("secretStore"), "hosts": hosts, "registries": [str(r) for r in registries],
            "policy": env_conf["policy"], "observability": env_conf["observability"], "operators": env_conf["operators"],
-           "resources": resources}
+           "backup": backups, "resources": resources}
     return {"system": d, "owner": doc["owner"], "services": services, "libraries": [c["name"] for c in comps if c["type"] == "library"], "cfg": cfg}
 
 
@@ -1061,6 +1185,15 @@ def secret_manifests(app: str, svc: dict, env: str, cfg: dict) -> dict[str, dict
     return out
 
 
+def is_backup_target(cfg: dict, env: str, name: str) -> bool:
+    """True when bucket `name` is the backup target of `env`."""
+    return (cfg.get("backup") or {}).get(env, {}).get("to") == name
+
+
+def backup_target_labels(app: str, name: str) -> dict:
+    return {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
+
+
 def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dict[str, dict[str, dict]]:
     """{component: {file name: ExternalSecret}} for the external resource instances of `env`.
 
@@ -1083,27 +1216,114 @@ def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dic
                         "target": {"name": secret, "creationPolicy": "Orphan", "deletionPolicy": "Retain"},
                         "data": [{"secretKey": k, "remoteRef": {"key": conf["store_key"], "property": k}}
                                  for k in TYPES[rc["type"]]["keys"]]}}
+        if is_backup_target(cfg, env, name):       # Velero's store reads the Secret by these labels (AC-117.17)
+            doc["spec"]["target"]["template"] = {"engineVersion": "v2", "mergePolicy": "Merge",
+                                                 "metadata": {"labels": backup_target_labels(app, name)}}
         out.setdefault(users[0], {})[f"externalsecret-{secret}.yaml"] = doc
     return out
 
 
-def database_cluster(app: str, name: str, env: str, conf: dict) -> dict:
+BARMAN_PLUGIN = "barman-cloud.cloudnative-pg.io"
+VELERO_EXCLUDED = ["clusters.postgresql.cnpg.io", "backups.postgresql.cnpg.io", "scheduledbackups.postgresql.cnpg.io", "objectstores.barmancloud.cnpg.io"]
+PRESERVED_FIELDS = {"annotations": ["argocd.argoproj.io/skip-reconcile"]}
+SERVER_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
+
+
+def utc_time(value) -> bool:
+    import datetime
+    if not isinstance(value, str) or not SERVER_TIME.match(value):
+        return False
+    try:
+        datetime.datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        return False
+    return True
+
+
+def read_restore_state(app_dir: Path, env: str, db: str) -> list[dict]:
+    """The clusters of addons/<env>/<db>/restore-state.yaml (spec 117, written by `cplat resource restore`): a list of
+    {name, role, from?, until?}. Absent file = one active cluster `<system>-<db>`."""
+    app = app_dir.name
+    base = f"{app}-{db}"
+    path = app_dir / "addons" / env / db / "restore-state.yaml"
+    if not path.is_file():
+        return [{"name": base, "role": "active"}]
+
+    def bad(reason: str):
+        raise RenderError(f"applications/{app}/addons/{env}/{db}/restore-state.yaml is not valid ({reason}); take it from git history")
+
+    try:
+        doc = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as e:
+        bad(f"does not parse: {str(e).splitlines()[0] if str(e) else e}")
+    if not isinstance(doc, dict) or not isinstance(doc.get("clusters"), list) or not doc["clusters"]:
+        bad("must be a mapping with next and clusters")
+    clusters = doc["clusters"]
+    numbers = []
+    for c in clusters:
+        if not isinstance(c, dict) or not isinstance(c.get("name"), str) or c.get("role") not in ("active", "restored", "previous"):
+            bad("every cluster needs a name and a role of active, restored or previous")
+        m = re.fullmatch(re.escape(base) + r"(-g([1-9][0-9]*))?", c["name"])
+        if not m:
+            bad(f"cluster '{c['name']}' is not {base} or {base}-g<n>")
+        if m.group(2):
+            numbers.append(int(m.group(2)))
+            frm = c.get("from")
+            if not isinstance(frm, dict) or not isinstance(frm.get("server"), str) or not frm["server"]:
+                bad(f"cluster '{c['name']}' needs from.server")
+            if frm.get("to") != "latest" and not utc_time(frm.get("to")):
+                bad(f"cluster '{c['name']}': from.to must be an RFC 3339 UTC time ending in Z, or latest")
+        if c["role"] == "previous" and not utc_time(c.get("until")):
+            bad(f"cluster '{c['name']}' is previous and needs until, an RFC 3339 UTC time ending in Z")
+    if sum(c["role"] == "active" for c in clusters) != 1:
+        bad("exactly one cluster must be active")
+    if sum(c["role"] != "active" for c in clusters) > 1:
+        bad("at most one cluster may be restored or previous, not both")
+    nxt = doc.get("next")
+    if isinstance(nxt, bool) or not isinstance(nxt, int) or any(nxt <= n for n in numbers):
+        bad("next must be an integer greater than every generation number")
+    return clusters
+
+
+def backup_target(app: str, env: str, cfg: dict, to: str) -> tuple[str, str, str]:
+    """(bucket, endpoint, secret) of the backup target bucket `to` in `env`."""
+    target = cfg["resources"][to]["envs"][env]
+    secret = f"{app}-{to}-app"
+    if target["external"]:
+        return target["s3"]["bucket"], target["s3"]["endpoint"], secret
+    return f"{app}-{to}", f"http://{app}-{to}-filer.{app}-{env}.svc:8333", secret
+
+
+def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | None = None, role: str = "active",
+                     frm: dict | None = None, backup: bool = False) -> dict:
     db = app.replace("-", "_")
+    base = f"{app}-{name}"
+    spec: dict = {
+        "instances": conf["replicas"],
+        "imageName": POSTGRES_IMAGES[conf["version"]],
+        "storage": {"size": conf["storage"]},
+        "enableSuperuserAccess": False,
+    }
+    if frm is None:
+        spec["bootstrap"] = {"initdb": {"database": db, "owner": db}}
+    else:
+        recovery: dict = {"source": "origin", "database": db, "owner": db, "secret": {"name": f"{base}-app"}}
+        if frm["to"] != "latest":
+            recovery["recoveryTarget"] = {"targetTime": frm["to"]}
+        spec["bootstrap"] = {"recovery": recovery}
+        spec["externalClusters"] = [{"name": "origin", "plugin": {"name": BARMAN_PLUGIN, "parameters": {"barmanObjectName": base, "serverName": frm["server"]}}}]
+    spec["resources"] = conf["resources"] or DB_DEFAULT_RESOURCES
+    if backup and role in ("active", "previous"):
+        spec["plugins"] = [{"name": BARMAN_PLUGIN, "isWALArchiver": True, "parameters": {"barmanObjectName": base}}]
     return {
         "apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster",
-        "metadata": {"name": f"{app}-{name}", "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}},
-        "spec": {
-            "instances": conf["replicas"],
-            "imageName": POSTGRES_IMAGES[conf["version"]],
-            "storage": {"size": conf["storage"]},
-            "enableSuperuserAccess": False,
-            "bootstrap": {"initdb": {"database": db, "owner": db}},
-            "resources": conf["resources"] or DB_DEFAULT_RESOURCES,
-        },
+        "metadata": {"name": cluster or base, "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}},
+        "spec": spec,
     }
 
 
-def bucket_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | str]:
+def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False) -> dict[str, dict | str]:
     """The in-cluster bucket instance (ADR-059): its own SeaweedFS, a Bucket, an identity limited to it and generated keys.
 
     Argo CD never deletes any of it (`Delete=false`, `reclaimPolicy: Retain`). No credential value is rendered: the keys come from
@@ -1159,9 +1379,72 @@ def bucket_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | 
                                     "secretAccessKey": "{{ .secretAccessKey }}"}}},  # pragma: allowlist secret
                      "dataFrom": [source("access-key", "accessKeyId"), source("secret-key", "secretAccessKey")]}},  # pragma: allowlist secret
     }
+    if target:       # the environment's backup target: Velero's store finds the Secret by its labels (AC-117.17)
+        files["externalsecret.yaml"]["spec"]["target"]["template"]["metadata"] = {"labels": dict(labels)}
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
                                    "resources": ["access-key-generator.yaml", "bucket.yaml", "credentials.yaml", "externalsecret.yaml",
                                                  "identity.yaml", "seaweed.yaml", "secret-key-generator.yaml"]}
+    return files
+
+
+def backup_files(app: str, env: str, cfg: dict) -> dict[str, dict]:
+    """backup/<env>/ (AC-117.15, AC-117.17): Velero's storage location, credentials from the target bucket's Secret, and the Schedule."""
+    backup = cfg["backup"][env]
+    to = backup["to"]
+    bucket, endpoint, secret = backup_target(app, env, cfg, to)
+    target = cfg["resources"][to]["envs"][env]
+    n, ns = f"{app}-{env}", f"{app}-{env}"
+    labels = {"app.kubernetes.io/name": "backup", "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
+
+    def meta(name: str, namespace: str) -> dict:
+        return {"name": name, "namespace": namespace, "labels": dict(labels)}
+
+    if target["external"]:
+        region, path_style = target["s3"]["region"], str(bool(target["s3"]["forcePathStyle"])).lower()
+    else:
+        region, path_style = "us-east-1", "true"
+    number, unit = int(backup["retention"][:-1]), backup["retention"][-1]
+    hours = number * (24 if unit == "d" else 168)
+    caches = sorted(r for r, rc in cfg["resources"].items() if rc["type"] == "cache")
+    policy = "version: v1\nvolumePolicies:\n- conditions:\n    volumeTypes:\n    - emptyDir\n  action:\n    type: skip\n"
+    cloud = "[default]\naws_access_key_id={{ .accessKeyId }}\naws_secret_access_key={{ .secretAccessKey }}\n"
+    files: dict[str, dict] = {
+        "serviceaccount.yaml": {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": meta(f"{n}-backup", "velero")},
+        "role.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role", "metadata": meta(f"{app}-backup-credentials", ns),
+                      "rules": [{"apiGroups": [""], "resources": ["secrets"], "resourceNames": [secret], "verbs": ["get"]},
+                                {"apiGroups": ["authorization.k8s.io"], "resources": ["selfsubjectrulesreviews"], "verbs": ["create"]}]},
+        "rolebinding.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "RoleBinding", "metadata": meta(f"{app}-backup-credentials", ns),
+                             "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": f"{app}-backup-credentials"},
+                             "subjects": [{"kind": "ServiceAccount", "name": f"{n}-backup", "namespace": "velero"}]},
+        "secretstore.yaml": {"apiVersion": ESO_API, "kind": "SecretStore", "metadata": meta(f"{n}-backup", "velero"),
+                             "spec": {"provider": {"kubernetes": {
+                                 "remoteNamespace": ns,
+                                 "server": {"caProvider": {"type": "ConfigMap", "name": "kube-root-ca.crt", "key": "ca.crt"}},
+                                 "auth": {"serviceAccount": {"name": f"{n}-backup"}}}}}},
+        "externalsecret.yaml": {"apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": meta(f"{n}-backup", "velero"),
+                                "spec": {"refreshInterval": "1h", "secretStoreRef": {"name": f"{n}-backup", "kind": "SecretStore"},
+                                         "target": {"name": f"{n}-backup", "creationPolicy": "Owner",
+                                                    "template": {"engineVersion": "v2", "data": {"cloud": cloud}}},
+                                         "data": [{"secretKey": k, "remoteRef": {"key": secret, "property": k}}
+                                                  for k in ("accessKeyId", "secretAccessKey")]}},  # pragma: allowlist secret
+        "storage-location.yaml": {"apiVersion": "velero.io/v1", "kind": "BackupStorageLocation", "metadata": meta(n, "velero"),
+                                  "spec": {"provider": "aws", "objectStorage": {"bucket": bucket, "prefix": f"environments/{n}"},
+                                           "credential": {"name": f"{n}-backup", "key": "cloud"},
+                                           "config": {"region": region, "s3ForcePathStyle": path_style, "s3Url": endpoint},
+                                           "accessMode": "ReadWrite"}},
+        "resource-policy.yaml": {"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta(f"{n}-backup-policy", "velero"),
+                                 "data": {"policy.yaml": policy}},
+        "schedule.yaml": {"apiVersion": "velero.io/v1", "kind": "Schedule", "metadata": meta(n, "velero"),
+                          "spec": {"schedule": backup["schedule"], "useOwnerReferencesInBackup": False,
+                                   "template": {"includedNamespaces": [ns], "excludedResources": list(VELERO_EXCLUDED),
+                                                "labelSelector": {"matchExpressions": [
+                                                    {"key": "cnpg.io/cluster", "operator": "DoesNotExist"},
+                                                    {"key": "app.kubernetes.io/name", "operator": "NotIn", "values": [to, *caches]},
+                                                    {"key": "app.kubernetes.io/instance", "operator": "NotIn", "values": [f"{app}-{to}"]}]},
+                                                "storageLocation": n, "ttl": f"{hours}h0m0s", "defaultVolumesToFsBackup": True,
+                                                "snapshotVolumes": False, "resourcePolicy": {"kind": "configmap", "name": f"{n}-backup-policy"}}}},
+    }
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
     return files
 
 
@@ -1225,14 +1508,35 @@ def observability_files(app: str, env: str, conf: dict, services: list[dict]) ->
     }
 
 
-def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict]) -> dict[str, dict | str]:
+def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], app_dir: Path | None = None) -> dict[str, dict | str]:
     if name == "observability":
         return observability_files(app, env, cfg["observability"][env], services)
     res = cfg["resources"][name]
     if res["type"] == "bucket":
-        return bucket_files(app, name, env, res["envs"][env])
-    files = {"cluster.yaml": database_cluster(app, name, env, res["envs"][env])}   # database; cache and broker are not built yet
-    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["cluster.yaml"]}
+        return bucket_files(app, name, env, res["envs"][env], is_backup_target(cfg, env, name))
+    conf = res["envs"][env]            # database; cache and broker are not built yet
+    backup = conf.get("backup")
+    base = f"{app}-{name}"
+    clusters = read_restore_state(app_dir, env, name) if app_dir is not None else [{"name": base, "role": "active"}]
+    files: dict[str, dict | str] = {}
+    for c in clusters:
+        fname = "cluster.yaml" if c["name"] == base else f"cluster-g{c['name'][len(base) + 2:]}.yaml"
+        files[fname] = database_cluster(app, name, env, conf, c["name"], c["role"], c.get("from"), bool(backup))
+    if backup:
+        labels = {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
+        bucket, endpoint, secret = backup_target(app, env, cfg, backup["to"])
+        active = next(c["name"] for c in clusters if c["role"] == "active")
+        files["objectstore.yaml"] = {
+            "apiVersion": "barmancloud.cnpg.io/v1", "kind": "ObjectStore", "metadata": {"name": base, "labels": dict(labels)},
+            "spec": {"retentionPolicy": backup["retention"],
+                     "configuration": {"destinationPath": f"s3://{bucket}/databases", "endpointURL": endpoint,
+                                       "s3Credentials": {k: {"name": secret, "key": k} for k in ("accessKeyId", "secretAccessKey", "region")},  # pragma: allowlist secret
+                                       "wal": {"compression": "gzip"}, "data": {"compression": "gzip"}}}}
+        files["scheduledbackup.yaml"] = {
+            "apiVersion": "postgresql.cnpg.io/v1", "kind": "ScheduledBackup", "metadata": {"name": base, "labels": dict(labels)},
+            "spec": {"schedule": f"0 {backup['schedule']}", "immediate": True, "backupOwnerReference": "none", "cluster": {"name": active},
+                     "method": "plugin", "pluginConfiguration": {"name": BARMAN_PLUGIN}}}
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
     return files
 
 
@@ -1261,6 +1565,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                         "syncPolicy": {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]},
                     },
                 },
+                **({"preservedFields": PRESERVED_FIELDS} if env in cfg["backup"] else {}),
             },
         })
     for env in ENVS:
@@ -1272,6 +1577,9 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             group = [n for n in names if (n == "observability") is prune]
             if not group:
                 continue
+            sync = {"automated": {"prune": prune, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]}
+            if any(cfg["resources"].get(n, {}).get("envs", {}).get(env, {}).get("backup") for n in group):
+                sync["retry"] = RETRY       # an ObjectStore may sync before its CRD exists
             docs.append({
                 "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",
                 "metadata": {"name": f"{app}-{suffix}-{env}", "namespace": "argocd"},
@@ -1283,13 +1591,14 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                             "project": "default",
                             "source": {"repoURL": gitops_repo, "targetRevision": "main", "path": f"applications/{app}/addons/{env}/" + "{{name}}"},
                             "destination": {"server": server, "namespace": f"{app}-{env}"},
-                            "syncPolicy": {"automated": {"prune": prune, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]},
+                            "syncPolicy": sync,
                         },
                     },
+                    **({"preservedFields": PRESERVED_FIELDS} if env in cfg["backup"] else {}),
                 },
             })
         for n in names:
-            for fname, doc in addon_files(app, n, env, cfg, services).items():
+            for fname, doc in addon_files(app, n, env, cfg, services, app_dir).items():
                 out[app_dir / "addons" / env / n / fname] = dump(doc) if not isinstance(doc, str) else doc
     for env in policy_envs(services, cfg):
         docs.append({
@@ -1311,6 +1620,27 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
         base = app_dir / "policies" / env
         out[base / "policy.yaml"] = dump(guardrail_policy(app, env, cfg["policy"][env], allowed_registries(services, cfg, env)))
         out[base / "kustomization.yaml"] = dump({"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["policy.yaml"]})
+    for env in ENVS:
+        if env not in cfg["backup"]:
+            continue
+        docs.append({
+            "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",
+            "metadata": {"name": f"{app}-backup-{env}", "namespace": "argocd"},
+            "spec": {
+                "generators": [{"list": {"elements": [{"name": "environment"}]}}],
+                "template": {
+                    "metadata": {"name": f"{app}-backup-{env}"},
+                    "spec": {
+                        "project": "default",
+                        "source": {"repoURL": gitops_repo, "targetRevision": "main", "path": f"applications/{app}/backup/{env}"},
+                        "destination": {"server": server, "namespace": "velero"},
+                        "syncPolicy": {"automated": {"prune": True, "selfHeal": True}, "retry": RETRY},
+                    },
+                },
+            },
+        })
+        for fname, doc in backup_files(app, env, cfg).items():
+            out[app_dir / "backup" / env / fname] = dump(doc)
     out[app_dir / "applicationset.yaml"] = "---\n".join(dump(d) for d in docs)
 
     out[ROOT / "bootstrap" / f"{app}-root.yaml"] = dump({
@@ -1355,16 +1685,18 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
 def operator_application(name: str, server: str) -> dict:
     """The Argo CD application of one operator of the versions table (ADR-058); system and cluster repos render the same one."""
     op = OPERATORS[name]
+    meta = {"name": f"operator-{name}", "namespace": "argocd",
+            "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}}
+    if op.get("finalizer"):  # spec 117: velero leaves the cluster with its resources
+        meta["finalizers"] = ["resources-finalizer.argocd.argoproj.io"]
+    helm = {"releaseName": op["release"], **({"valuesObject": op["values"]} if "values" in op else {})}
+    sync = {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"],
+            **({"retry": OPERATOR_RETRY} if op.get("retry") else {})}
     return {
-        "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
-        "metadata": {"name": f"operator-{name}", "namespace": "argocd",
-                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+        "apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "metadata": meta,
         "spec": {"project": "default",
-                 "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"],
-                            "helm": {"releaseName": op["release"]}},
-                 "destination": {"server": server, "namespace": op["namespace"]},
-                 "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
-                                "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}}
+                 "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"], "helm": helm},
+                 "destination": {"server": server, "namespace": op["namespace"]}, "syncPolicy": sync}}
 
 
 def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
@@ -1377,6 +1709,12 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
         for _, env, typ, ext in resource_instances(system):
             if not ext and env not in owned and typ in OPERATOR_OF_TYPE:
                 needed.add(OPERATOR_OF_TYPE[typ])
+        for r, rc in system["cfg"]["resources"].items():
+            for env, inst in rc["envs"].items():
+                if rc["type"] == "database" and not inst["external"] and env not in owned and inst.get("backup"):
+                    needed |= {"plugin-barman-cloud", "cert-manager"}
+        if any(env not in owned for env in system["cfg"]["backup"]):
+            needed.add("velero")
     if not needed:
         return {}
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
@@ -1411,7 +1749,7 @@ def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
                 stale.append(d)
                 continue
             stale += [f for f in d.iterdir() if (f.name in MANAGED_FILES or f.name.startswith(MANAGED_PREFIXES)) and f not in wanted]
-    for kind in ("addons", "policies"):
+    for kind in ("addons", "policies", "backup"):
         top = app_dir / kind
         if top.is_dir() and not any(top in p.parents for p in wanted):
             stale.append(top)          # nothing of this kind is wanted any more: remove the whole directory
@@ -1420,13 +1758,18 @@ def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
             base = app_dir / kind / env
             if not base.is_dir():
                 continue
-            if kind == "policies":
+            if kind in ("policies", "backup"):
                 if not any(p.parent == base for p in wanted):
                     stale.append(base)
                 continue
             for d in base.iterdir():
-                if d.is_dir() and not any(p.parent == d for p in wanted):
+                if not d.is_dir():
+                    continue
+                if not any(p.parent == d for p in wanted):
                     stale.append(d)
+                    continue
+                # database files that are no longer rendered; restore-state.yaml is input and never touched
+                stale += [f for f in d.iterdir() if f not in wanted and (f.name in DATABASE_FILES or DATABASE_GENERATION.match(f.name))]
     return stale
 
 

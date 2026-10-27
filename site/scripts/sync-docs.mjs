@@ -15,6 +15,7 @@ const PAGES = [
   { src: 'docs/HOW-IT-WORKS.md', slug: 'guides/how-it-works', title: 'How it works', order: 2 },
   { src: 'docs/console.md', slug: 'guides/console', title: 'The local console', order: 2 },
   { src: 'docs/DOMAIN-MODEL.md', slug: 'guides/domain-model', title: 'Domain model', order: 3 },
+  { src: 'docs/BACKUP-AND-RESTORE.md', slug: 'guides/backup-and-restore', title: 'Backup and restore', order: 4 },
   { src: 'docs/ADOPTING.md', slug: 'guides/adopting', title: 'Adopting the platform and troubleshooting', order: 3 },
   { src: 'docs/AGENTS.md', slug: 'guides/agents', title: 'The agent orchestration model', order: 4 },
   { src: 'docs/ARCHITECTURE.md', slug: 'guides/architecture', title: 'Architecture', order: 5 },
