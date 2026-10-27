@@ -789,6 +789,89 @@ def summary(root: Path, spec: Spec) -> dict:
             "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
 
 
+VERDICT_ROW = re.compile(r"^\|\s*(AC-\d{3,}\.\d+)\s*\|\s*([^|]*?)\s*\|")
+VERDICTS = {"met", "not met", "partial"}
+SUGGESTED = re.compile(r"\s*\(\s*suggested:\s*(.*?)\)\s*$", re.S | re.I)
+CONTRACT_CUT = 600
+
+
+def _verdicts(spec: Spec) -> dict[str, str]:
+    f = spec.dir / "verification.md"
+    rows = (VERDICT_ROW.match(ln) for ln in f.read_text().splitlines()) if f.is_file() else ()
+    return {m.group(1): m.group(2).lower() for m in rows if m and m.group(2).lower() in VERDICTS}
+
+
+def _question(text: str) -> dict:
+    """`Question? (suggested: A; alternatives: B, C)` -> text and options, the suggested answer first."""
+    m = SUGGESTED.search(text)
+    options: list[str] = []
+    if m:
+        head, *rest = [p.strip() for p in m.group(1).split(";")]
+        options = [head] if head else []
+        for part in rest:
+            alt = re.sub(r"^(alternatives?:|or\b)\s*", "", part, flags=re.I)
+            options += [o.strip() for o in re.split(r",|\bor\b", alt) if o.strip()]
+        text = text[:m.start()].strip()
+    return {"text": text, "options": options, "answered": False}
+
+
+def _criteria(root: Path, spec: Spec, shape: str | None) -> list[dict]:
+    traced = trace(root, spec, test_globs(shape)) if spec.dir.is_relative_to(root) else {}
+    smoke = _smoke_traced(root, spec, shape)
+    verdicts = _verdicts(spec)
+    lines = sections(spec.body).get("acceptance criteria", "").splitlines()
+    out = []
+    for ln in lines:
+        m = AC_LINE.match(ln)
+        if not m or m.group(1):
+            continue
+        ac = m.group(2)
+        text = re.sub(r"^\s*[-*]\s+\*\*AC-\d+\.\d+\*\*\s*", "", ln)
+        is_smoke = bool(SMOKE_MARK.search(ln))
+        out.append({"id": ac, "text": text.strip(), "smoke": is_smoke,
+                    "tests": smoke.get(ac, []) if is_smoke and smoke.get(ac) else traced.get(ac, []),
+                    "verdict": verdicts.get(ac, "not judged")})
+    return out
+
+
+def _slices(root: Path, spec: Spec) -> list[dict]:
+    plan = root / "docs" / "plan" / f"{spec.id}.md"
+    if spec.meta.get("shape") != "gitops-app" or not plan.is_file():
+        return []
+    meta, _ = load(plan)
+    return [{"repo": str(r.get("repo") or r.get("id")), "spec": str(r.get("spec") or spec.id),
+             "status": str(r.get("status") or "")} for r in meta.get("repos") or []]
+
+
+def _contract_change(spec: Spec) -> str | None:
+    for name in ("plan.md", "design.md"):
+        f = spec.dir / name
+        text = sections(f.read_text()).get("contract", "").strip() if f.is_file() else ""
+        if text:
+            return text[:CONTRACT_CUT]
+    return None
+
+
+def _draft_pr(spec: Spec) -> dict | None:
+    f = spec.dir / ".cplat-draft-pr.json"
+    try:
+        doc = json.loads(f.read_text())
+        return {"number": doc["number"], "url": doc["url"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def detail(root: Path, spec: Spec, shape: str | None) -> dict:
+    """`summary` plus what a spec panel shows (spec 122): criteria with tests and verdicts, questions, check, slices."""
+    own = spec_shape(spec, shape)
+    errors = check(spec, shape=shape)
+    return {**summary(root, spec), "level": "system" if spec.meta.get("shape") == "gitops-app" else "component",
+            "parent": spec.meta.get("parent"), "criteria": _criteria(root, spec, own),
+            "questions": [_question(q) for q in spec.open_questions()],
+            "check": {"ok": not errors, "errors": errors}, "slices": _slices(root, spec),
+            "contract_change": _contract_change(spec), "draft_pr": _draft_pr(spec)}
+
+
 def broken_summary(root: Path, b: BrokenSpec) -> dict:
     return {"id": b.id, "title": "", "status": "broken", "priority": "", "acs": 0, "open_questions": 0,
             "tasks": 0, "tasks_done": 0, "tracks": [], "next": f"fix {b.rel} line {b.line}: {b.hint}",
@@ -1032,6 +1115,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("list")
     p.add_argument("--all", action="store_true", help="include done and superseded")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--detail", action="store_true", help="with --json: criteria, questions, check, slices (spec 122)")
     p = sub.add_parser("test-diff", help="acceptance tests changed only in formatting since BASE? (exit 1 otherwise)")
     p.add_argument("base", help="the commit with the red acceptance tests (Phase 1)")
     p.add_argument("files", nargs="*")
@@ -1110,7 +1194,9 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "list":
         specs, bad = scan(root)
-        rows = [summary(root, s) for s in specs if ns.all or s.status not in {"done", "superseded"}]
+        shape = repo_shape(root) if ns.json and ns.detail else None
+        rows = [detail(root, s, shape) if ns.json and ns.detail else summary(root, s)
+                for s in specs if ns.all or s.status not in {"done", "superseded"}]
         rows += [broken_summary(root, b) for b in bad]
         if ns.json:
             print(json.dumps(rows, indent=2))
