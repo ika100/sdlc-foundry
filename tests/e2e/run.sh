@@ -800,7 +800,7 @@ dbn=0
 db_rows() { # reads the table e2e_rows with e2e-api's database variables; the rows in DB_OUT, one line
   local name phase="" image
   dbn=$((dbn + 1)); name="dbprobe-$dbn"
-  image=$(kc get cluster e2e-postgres-g1 -o jsonpath='{.spec.imageName}')
+  image=$(kc get clusters.postgresql.cnpg.io e2e-postgres-g1 -o jsonpath='{.spec.imageName}')
   kc get deploy e2e-api -o json | python3 -c "$db_pod_py" "$name" "$image" 'psql "$DATABASE_URL" -tAc "select v from e2e_rows order by v"' | kc apply -f - >/dev/null || bfail "could not start the probe pod $name"
   for _ in $(seq 1 60); do   # up to 180 s (the first run pulls the image)
     phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
@@ -845,15 +845,15 @@ s3must "e2e-api writes an object into files" $ns e2e-api 'printf %s '"$object_pa
 $A s3api put-object --bucket "$S3_BUCKET" --key backup/object.txt --body /tmp/in >/dev/null'
 sleep 10   # let the store write its volume files before the file-system backup reads them
 bname="e2e-dev-manual-$(date +%Y%m%d%H%M%S)"
-vn get schedule e2e-dev >/dev/null || bfail "the Velero Schedule e2e-dev does not exist"
+vn get schedules.velero.io e2e-dev >/dev/null || bfail "the Velero Schedule e2e-dev does not exist"
 # kind: Backup (velero.io/v1) made from the Schedule's template, labelled like a scheduled one
-vn get schedule e2e-dev -o json | python3 -c 'import json, sys
+vn get schedules.velero.io e2e-dev -o json | python3 -c 'import json, sys
 s = json.load(sys.stdin)
 print(json.dumps({"apiVersion": "velero.io/v1", "kind": "Backup", "metadata": {"name": sys.argv[1], "namespace": "velero",
                   "labels": {"velero.io/schedule-name": "e2e-dev"}}, "spec": s["spec"]["template"]}))' "$bname" | vn apply -f - >/dev/null || bfail "could not create the Velero Backup $bname"
-bphase() { vn get backup "$bname" -o jsonpath='{.status.phase}' 2>/dev/null || true; }
+bphase() { vn get backups.velero.io "$bname" -o jsonpath='{.status.phase}' 2>/dev/null || true; }
 for _ in $(seq 1 180); do case "$(bphase)" in Completed|PartiallyFailed|Failed|FailedValidation) break;; esac; sleep 5; done   # up to 900 s
-[ "$(bphase)" = Completed ] || { vn describe backup "$bname" | tail -30; vn logs deploy/velero --tail=30; bfail "the Velero Backup $bname is '$(bphase)', not Completed"; }
+[ "$(bphase)" = Completed ] || { vn describe backups.velero.io "$bname" | tail -30; vn logs deploy/velero --tail=30; bfail "the Velero Backup $bname is '$(bphase)', not Completed"; }
 pvb=$(vn get podvolumebackups -l velero.io/backup-name="$bname" -o jsonpath='{.items[*].spec.volume}' 2>/dev/null || true)
 case " $pvb " in *" data "*) ;; *) bfail "the Backup $bname holds no volume data of e2e-files (volumes: '$pvb')";; esac
 for _ in $(seq 1 24); do [ -n "$(env_field last_success)" ] && break; sleep 5; done
@@ -866,7 +866,7 @@ s3must "e2e-api deletes the object" $ns e2e-api '$A s3api delete-object --bucket
 $A s3api list-objects-v2 --bucket "$S3_BUCKET" --prefix backup/ --query "Contents[].Key" --output text > /tmp/keys
 echo "KEYS=$(cat /tmp/keys)"'
 case "$(s3_field KEYS)" in *backup/object.txt*) bfail "the object is still listed after its delete";; esac
-db_uid=$(kc get cluster e2e-postgres-g1 -o jsonpath='{.metadata.uid}')
+db_uid=$(kc get clusters.postgresql.cnpg.io e2e-postgres-g1 -o jsonpath='{.metadata.uid}')
 [ -n "$db_uid" ] || bfail "no cluster e2e-postgres-g1 before the restore"
 if out=$($cplat system restore dev --backup "$bname" "${rargs[@]}" 2>&1); then bfail "system restore without --replace succeeded although the volumes exist: $out"; fi
 case "$out" in *"volumes of $bname still exist in $ns"*"data-e2e-files-0"*) ;; *) bfail "the refusal does not list the volumes (wanted 'volumes of $bname still exist in $ns: ... data-e2e-files-0'): $out";; esac
@@ -888,6 +888,6 @@ s3_same "$bstep_name: the object in files after the restore" "$object_payload" "
 echo "ok   file and object are back unchanged ($file_payload, $object_payload)"
 
 bstep "Environment restore: the database cluster was not touched (same UID)"
-[ "$(kc get cluster e2e-postgres-g1 -o jsonpath='{.metadata.uid}')" = "$db_uid" ] || bfail "the UID of the cluster e2e-postgres-g1 changed: environment restores must leave databases alone"
-[ "$(kc get cluster e2e-postgres-g1 -o jsonpath='{.status.phase}')" = "Cluster in healthy state" ] || bfail "the Postgres cluster e2e-postgres-g1 is not healthy after the environment restore"
+[ "$(kc get clusters.postgresql.cnpg.io e2e-postgres-g1 -o jsonpath='{.metadata.uid}')" = "$db_uid" ] || bfail "the UID of the cluster e2e-postgres-g1 changed: environment restores must leave databases alone"
+[ "$(kc get clusters.postgresql.cnpg.io e2e-postgres-g1 -o jsonpath='{.status.phase}')" = "Cluster in healthy state" ] || bfail "the Postgres cluster e2e-postgres-g1 is not healthy after the environment restore"
 echo "ok   e2e-postgres-g1 kept its UID $db_uid"
