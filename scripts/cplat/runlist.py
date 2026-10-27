@@ -298,6 +298,34 @@ def _smoke(rec: dict) -> dict:
     return {"dev": _smoke_cell(smoke, rec.get("repo"), "dev"), "staging": _smoke_cell(smoke.get("staging"), rec.get("repo"), "staging")}
 
 
+def _engine(rec: dict) -> dict | None:
+    """The engine actor of a run record (`actor.type == "engine"`), else None."""
+    actor = rec.get("actor")
+    return actor if isinstance(actor, dict) and actor.get("type") == "engine" else None
+
+
+def _engine_active(rec: dict, now: datetime.datetime) -> bool:
+    """An engine run without an outcome that started less than 24 hours ago is still running (AC-124.11)."""
+    started = _ts(rec.get("started_at"))
+    return (_engine(rec) is not None and rec.get("outcome") is None and started is not None
+            and now - datetime.timedelta(hours=24) < started <= now + datetime.timedelta(minutes=5))
+
+
+_FIX_KEYS = ("route", "criticality", "change", "regression", "second_review", "summary", "policy", "decision")
+
+
+def _engine_keys(rec: dict) -> dict:
+    """The row keys of an engine fix run; all None for a platform run."""
+    actor = _engine(rec)
+    if actor is None:
+        return {k: None for k in ("actor", "engine", "issue", "system", "component", "environment", "fix")}
+    issue = rec.get("issue") if isinstance(rec.get("issue"), dict) else None
+    return {"actor": {"type": "engine", "name": actor.get("name"), "id": actor.get("id")}, "engine": actor.get("name"),
+            "issue": {k: issue.get(k) for k in ("repo", "number", "url")} if issue else None,
+            "system": rec.get("system"), "component": rec.get("component"), "environment": rec.get("environment"),
+            "fix": {k: rec.get(k) for k in _FIX_KEYS}}
+
+
 def row(rec: dict, active: bool) -> dict:
     """One row of the run list from a run record (active, buffered or stored)."""
     phase, stopped_in = _derive(rec)
@@ -313,7 +341,7 @@ def row(rec: dict, active: bool) -> dict:
         "escalation": esc, "failure": _failure(rec, esc, repo_dir), "budget": _budget(rec, active),
         "activity": _activity(rec, esc), "session_id": session, "repo_dir": repo_dir,
         "pr": pr, "ci_url": rec.get("ci_url") or (f"{pr['url']}/checks" if pr and pr.get("url") else None),
-        "image": _image(rec), "smoke": _smoke(rec),
+        "image": _image(rec), "smoke": _smoke(rec), **_engine_keys(rec),
     }
 
 
@@ -358,7 +386,7 @@ def collect(since_days: int = 30, repo: str | None = None, spec: str | None = No
     chosen: dict[str, tuple[dict, bool]] = {}
     for rec in stored:
         if rec.get("run_id"):
-            chosen[rec["run_id"]] = (rec, False)
+            chosen[rec["run_id"]] = (rec, _engine_active(rec, now))
     for rec in runs._safe_buffer():
         if rec.get("run_id") and not rec.get("followup"):
             chosen[rec["run_id"]] = (rec, False)
