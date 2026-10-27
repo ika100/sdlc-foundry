@@ -10,6 +10,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat system new <manifest.yml> [--resume] [--no-github] [--dry-run]   create a gitops-app repo + all component repos, one component PR
   cplat system status [--context KUBE_CONTEXT] [--json]   one table: components by environment, CI, Argo sync/health
   cplat system ship start|status|phase|publish|next|repo|entry|complete|escalate|finish|gate ...   /system:ship: a product spec → every repo → dev
+  cplat system autonomy show|set|pause|resume|undo|approve ...   /system:autonomy: autonomy per environment, pause, undo, approve
   cplat component new <name> <description…> [--type service|website|library] [--lang python|java|go|typescript] [--system OWNER/REPO] [--dry-run]
   cplat component add|set|remove <component…> [--type T] [--lang L] [--expose] [--env K=V] [--instance ENV --replicas N] [--from-k8s] [--pr]
   cplat component ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
@@ -57,7 +58,7 @@ import core  # noqa: E402
 # noun -> verb -> (module, argv prefix put before the remaining args)
 NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", []),
-               "set": ("systemset", [])},
+               "set": ("systemset", []), "autonomy": ("autonomycmd", [])},
     "component": {"new": ("newsvc", []), "add": ("compose", ["add"]), "set": ("compose", ["set"]), "remove": ("compose", ["remove"]),
                   "ship": ("ship", []), "build": ("buildcmd", [])},
     "api": {"list": ("apilist", [])},
