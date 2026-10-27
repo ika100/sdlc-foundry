@@ -44,7 +44,7 @@ tasks:
     depends_on: [t3, t4, t5]
   - id: t7
     title: register the shape cluster-gitops — shapes.yml, detect-shape, shapes.py contract, PRD table, shapecmd, update baseline, platform CI smoke job
-    files: [shapes.yml, scripts/detect-shape.sh, scripts/test-detect-shape.sh, scripts/shapes.py, docs/requirements/platform-vision.md, scripts/cplat/shapecmd.py, scripts/cplat/update.py, .github/workflows/ci.yml]
+    files: [shapes.yml, scripts/sync-template-copies.py, devbox.json, scripts/detect-shape.sh, scripts/test-detect-shape.sh, scripts/shapes.py, docs/requirements/platform-vision.md, scripts/cplat/shapecmd.py, scripts/cplat/update.py, .github/workflows/ci.yml]
     covers: [AC-125.1, AC-125.17]
     parallel_safe: true
     depends_on: [t6, t9]
@@ -166,7 +166,7 @@ Acceptance tests live in `tests/cplat/test_cluster_125*.py` (written first by th
 **Goal:** One human command installs the cluster's shared services and its systems; `devbox run cluster-up` does the same on a local k3d cluster.
 
 **Implementation notes:**
-- `local-cluster.sh` and `ports.sh` are git symlinks to `../../gitops-app/scripts/<same name>`.
+- `local-cluster.sh` and `ports.sh` are byte-identical copies of `templates/gitops-app/scripts/<same name>`, not symlinks (design decision 13: Copier refuses links out of the template).
 - `bootstrap.sh` follows design §5 steps 1 to 8 exactly (messages, the 200 × 3 s CRD wait per `render.py --crds` line, `--context` on every kubectl call, the idempotent `github-creds` apply).
 - `cluster-up.sh` follows design §6. It runs `local-cluster.sh` with `WITH_SYSTEM=0` and every operator flag `0`, creates the per-system namespaces with `ghcr-pull`, runs `bootstrap.sh` with `KUBE_CONTEXT=k3d-<name>`, reads the port with `docker port`, and prints the `Exposed:` lines from `check.py --urls` and the hints (decision 12).
 - `set -euo pipefail` in both scripts; `bash -n` clean.
@@ -191,11 +191,12 @@ Acceptance tests live in `tests/cplat/test_cluster_125*.py` (written first by th
 
 ## t7 — register the shape cluster-gitops
 
-**Files:** shapes.yml, scripts/detect-shape.sh, scripts/test-detect-shape.sh, scripts/shapes.py, docs/requirements/platform-vision.md, scripts/cplat/shapecmd.py, scripts/cplat/update.py, .github/workflows/ci.yml
+**Files:** shapes.yml, scripts/sync-template-copies.py, devbox.json, scripts/detect-shape.sh, scripts/test-detect-shape.sh, scripts/shapes.py, docs/requirements/platform-vision.md, scripts/cplat/shapecmd.py, scripts/cplat/update.py, .github/workflows/ci.yml
 **Covers:** AC-125.1, AC-125.17
 **Goal:** The platform knows the shape: creation, detection, `/platform:update` and the fleet treat a cluster repo like any platform repo, and `scripts/shapes.py check` passes.
 
 **Implementation notes:**
+- `scripts/sync-template-copies.py` (design decision 13): the copies `templates/cluster-gitops/scripts/{system_render.py,local-cluster.sh,ports.sh}` equal `templates/gitops-app/scripts/{render.py,local-cluster.sh,ports.sh}`. `--check` fails naming each differing copy and the fix; without `--check` it rewrites them. Add `uv run scripts/sync-template-copies.py --check` to the `quality` recipe of the root `devbox.json` and to the platform CI.
 - `shapes.yml` entry exactly as design §9; PRD §4 row `| \`cluster-gitops\` | \`cluster\` | \`cluster-gitops\` | Argo CD app-of-apps for one cluster's shared services and systems | stable |`.
 - `detect-shape.sh`: a `_src_path` case for `templates/cluster-gitops`, and the sniff (`cluster.yaml` and `cluster/operators-root.yaml`) before the gitops-app sniff. `test-detect-shape.sh`: a sniff fixture for it (the answers fixtures iterate the registry).
 - `shapes.py`: replace the `gitops-app` special cases with two sets, `NO_DEPS = {gitops-app, cluster-gitops}` (deps recipes, deps.sh, smoke.sh, backlog) and `NO_FEATURE_SPECS = {cluster-gitops}` (Spec first, docs/plan, docs/specs, spec-check, specs.yml). The agents check skips plugin `cluster` like `system`. Error texts stay unchanged for existing shapes.
