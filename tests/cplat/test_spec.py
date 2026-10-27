@@ -634,6 +634,30 @@ def test_test_diff_still_fails_on_a_changed_test(tmp_path, capsys):
     assert "tests/test_x.py: changed" in out and "plan.md" not in out
 
 
+def _add(root, rel, text):
+    import subprocess
+    (root / rel).write_text(text)
+    subprocess.run(["git", "-C", str(root), "add", rel], check=True, capture_output=True)
+
+
+def test_test_diff_leaves_out_a_new_test_file_the_plan_creates(tmp_path, monkeypatch):
+    """A file the plan's tasks create after the red commit is the build's own, not a changed acceptance test."""
+    d = _committed_repo(tmp_path)
+    monkeypatch.setattr(spec, "test_globs", lambda shape: ["tests/**"])
+    plan = d / "plan.md"
+    plan.write_text(plan.read_text().replace("files: [b.py]", "files: [b.py, tests/e2e.sh]"))
+    _add(tmp_path, "tests/e2e.sh", "# AC-007.2: the alert fires end to end\n")
+    assert spec.test_diff(tmp_path, "HEAD", []) == {}
+
+
+def test_test_diff_still_flags_a_new_test_file_no_task_lists(tmp_path, monkeypatch):
+    """A new file naming a criterion that no task of the plan lists is still reported."""
+    _committed_repo(tmp_path)
+    monkeypatch.setattr(spec, "test_globs", lambda shape: ["tests/**"])
+    _add(tmp_path, "tests/test_y.py", "def test_y():  # AC-007.1\n    pass\n")
+    assert spec.test_diff(tmp_path, "HEAD", []) == {"tests/test_y.py": (False, "new or deleted file")}
+
+
 def test_test_diff_never_selects_docs_even_under_broad_globs(tmp_path, monkeypatch):
     """AC-063.3: without a recorded shape (default globs) nothing under docs/ or *.md is selected."""
     d = _committed_repo(tmp_path)
