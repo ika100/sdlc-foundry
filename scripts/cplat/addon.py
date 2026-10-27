@@ -16,9 +16,11 @@ from core import PlatformError, Report
 
 DEFAULT = {"type": "database", "version": 17, "replicas": 1, "storage": "1Gi", "instances": {"prod": {"replicas": 3, "storage": "20Gi"}}}
 RESOURCE_TYPES = ["database", "bucket", "cache", "broker"]
-PLANNED_TYPES = {"bucket": 116, "cache": 118, "broker": 119}
+PLANNED_TYPES = {"cache": 118, "broker": 119}
 RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 DB_VERSIONS = (15, 16, 17, 18)
+STORAGE_SIZE = re.compile(r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei)?$")
+BUCKET_KEYS = "endpoint, bucket, region, forcePathStyle, accessKeyId, secretAccessKey"
 TYPES_LINE = "(database, bucket, cache or broker)"
 
 
@@ -26,8 +28,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cplat resource", description=__doc__)
     p.add_argument("action", choices=["add", "remove"])
     p.add_argument("name", help="resource name (lowercase letters, digits, hyphens; at most 30 characters)")
-    p.add_argument("--type", help="resource type: database (bucket, cache, broker are planned)")
+    p.add_argument("--type", help="resource type: database or bucket (cache, broker are planned)")
     p.add_argument("--version", help="database major version (15, 16, 17, 18)")
+    p.add_argument("--storage", help="bucket size, e.g. 10Gi (default 10Gi)")
+    p.add_argument("--versioning", action="store_true", help="keep object versions in the bucket")
     p.add_argument("--external", action="store_true", help="the resource runs outside the cluster; its secret is synced from the secret store")
     p.add_argument("--path", help="secret store key template for --external ({system}, {env}, {resource})")
     p.add_argument("--app")
@@ -55,12 +59,21 @@ def _check_add(ns: argparse.Namespace, data, declared, components) -> None:
         raise PlatformError(f"{n} is a component of the system; a resource needs a name of its own")
     if ns.path and not ns.external:
         raise PlatformError("--path needs --external")
+    if ns.version and typ != "database":
+        raise PlatformError("--version applies to --type database only")
+    if (ns.storage or ns.versioning) and typ != "bucket":
+        raise PlatformError("--storage and --versioning apply to --type bucket only")
     if ns.version and ns.external:
         raise PlatformError("an external resource runs nothing: --version does not apply")
+    if ns.external and (ns.storage or ns.versioning):
+        flag = "--storage" if ns.storage else "--versioning"
+        raise PlatformError(f"an external bucket is sized and configured at its provider: {flag} does not apply")
     if ns.version:
         v = int(ns.version) if ns.version.isdigit() else None
         if v not in DB_VERSIONS:
             raise PlatformError(f"version '{ns.version}' is not a supported database version (15, 16, 17, 18)")
+    if ns.storage and not STORAGE_SIZE.match(ns.storage):
+        raise PlatformError(f"storage '{ns.storage}' is not a size, e.g. 10Gi")
     if ns.external and not (data.get("secretStore") or {}):
         raise PlatformError("an external resource needs the system's secretStore", hint="declare secretStore: {name, kind} in system.yaml first")
 
@@ -79,10 +92,13 @@ def main(argv: list[str]) -> int:
 
     if ns.action == "add":
         _check_add(ns, data, declared, components)
+        typ = ns.type or "database"
         if ns.external:
-            entry = {"type": "database", "external": True}
+            entry = {"type": typ, "external": True}
             if ns.path:
                 entry["remote"] = {"path": ns.path}
+        elif typ == "bucket":
+            entry = {"type": "bucket", "storage": ns.storage or "10Gi", "versioning": bool(ns.versioning)}
         else:
             entry = {k: v for k, v in DEFAULT.items()}
             entry["instances"] = {e: dict(v) for e, v in DEFAULT["instances"].items()}
@@ -98,11 +114,16 @@ def main(argv: list[str]) -> int:
             raise PlatformError(f"{ns.name} is still used by {', '.join(using)}", hint="remove it from their uses: first (/component:set)")
         res = declared[ns.name] or {}
         inst = res.get("instances") or {}
+        bucket = res.get("type") == "bucket"
         flags = [bool((inst.get(e) or {}).get("external", res.get("external", False))) for e in gitops.ENVS]
         if not all(flags):
-            r.will_do.append(f"remove {ns.name} from system.yaml; the Argo Application disappears but the database and its data stay in the cluster (delete them by hand when you are sure)")
+            if bucket:
+                r.will_do.append(f"remove {ns.name} from system.yaml; the Argo Application disappears but the bucket, its data and its Secret {app_dir.name}-{ns.name}-app stay in the cluster (delete them by hand when you are sure)")
+            else:
+                r.will_do.append(f"remove {ns.name} from system.yaml; the Argo Application disappears but the database and its data stay in the cluster (delete them by hand when you are sure)")
         if any(flags):
-            r.will_do.append(f"remove {ns.name} from system.yaml; the synced Secret {app_dir.name}-{ns.name}-app stays in the cluster (delete it by hand when you are sure); the external database is not touched")
+            what = "bucket" if bucket else "database"
+            r.will_do.append(f"remove {ns.name} from system.yaml; the synced Secret {app_dir.name}-{ns.name}-app stays in the cluster (delete it by hand when you are sure); the external {what} is not touched")
     r.will_do.append("regenerate manifests (render.py)")
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch resource/…)")
@@ -133,7 +154,10 @@ def main(argv: list[str]) -> int:
             store = data["secretStore"]["name"]
             tpl = ns.path or "{system}-{env}-{resource}"
             keys = ", ".join(tpl.format(system=app_dir.name, env=e, resource=n, secret=n) for e in gitops.ENVS)
-            r.next_steps.append(f"put the keys uri, host, port, dbname, user, password in the secret store {store} under {keys}")
+            kl = BUCKET_KEYS if typ == "bucket" else "uri, host, port, dbname, user, password"
+            r.next_steps.append(f"put the keys {kl} in the secret store {store} under {keys}")
+        elif typ == "bucket":
+            r.next_steps.append("the platform installs the SeaweedFS operator through operators/ (apply operators/root.yaml once per cluster: KUBE_CONTEXT=<ctx> devbox run bootstrap); environments with operators: owner need it installed by their owner")
         else:
             r.next_steps.append("the platform installs CloudNativePG through operators/ (apply operators/root.yaml once per cluster: KUBE_CONTEXT=<ctx> devbox run bootstrap); environments with operators: owner need it installed by their owner")
     r.undo.append("git checkout -- . && git clean -fd applications")

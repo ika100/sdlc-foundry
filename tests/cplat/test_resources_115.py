@@ -39,7 +39,7 @@ def test_the_5_0_postgres_resource_needs_its_type_now_ac_115_1(tmp_path):  # AC-
 
 # ---------------- AC-115.2: types that no release runs yet ----------------
 
-@pytest.mark.parametrize("typ, spec", [("bucket", 116), ("cache", 118), ("broker", 119)])
+@pytest.mark.parametrize("typ, spec", [("cache", 118), ("broker", 119)])  # spec 116: bucket is built
 def test_a_type_that_is_not_built_yet_names_the_spec_and_writes_nothing_ac_115_2(tmp_path, typ, spec):  # AC-115.2
     err = fails(tmp_path, system({"store": {"type": typ}}), P + f"resources.store: type {typ} is not available yet: spec {spec} brings it")
     assert len(err.strip().splitlines()) == 1, "one line"
@@ -180,7 +180,7 @@ def test_the_contract_table_of_the_database_type_is_in_the_renderer_ac_115_7(tmp
     assert types is not None, "render.py has the TYPES table"
     assert types["database"]["keys"] == KEYS and types["database"]["env"] == VARS
     assert tuple(getattr(r, "RESOURCE_TYPES", ())) == ("database", "bucket", "cache", "broker")
-    assert dict(getattr(r, "PLANNED_TYPES", {})) == {"bucket": 116, "cache": 118, "broker": 119}
+    assert dict(getattr(r, "PLANNED_TYPES", {})) == {"cache": 118, "broker": 119}  # spec 116
 
 
 def test_two_databases_of_a_component_get_prefixed_variables_ac_115_8(tmp_path):  # AC-115.8

@@ -43,7 +43,7 @@ def render(m: model.Model) -> str:
         used = ",".join(c.name for c in m.components if r.name in c.uses) or "-"
         res.append(f"  {r.name}  type {r.type}  external {str(r.external).lower()}  used by {used}")
         for ri in m.resource_instances_of(r.name):
-            sizing = "".join(f"  {k} {v}" for k, v in ri.sizing.items())
+            sizing = "".join(f"  {k} {str(v).lower() if isinstance(v, bool) else v}" for k, v in ri.sizing.items())
             store = f"  store {ri.store_key}" if ri.external else ""
             res.append(f"    {ri.environment}  type {ri.type}  external {str(ri.external).lower()}{sizing}  "
                        f"argo {_d(ri.argo_application)}  secret {_d(ri.secret)}{store}")

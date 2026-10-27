@@ -156,3 +156,8 @@
   color: var(--sl-color-gray-2);
   font-size: var(--sl-text-sm);
 }
+
+/* the domain model example on the landing page is drawn 1000 wide: keep it readable, scroll below 760px */
+.map-model .map-scroll img {
+  min-width: 760px;
+}

@@ -315,6 +315,22 @@ def test_the_report_proves_the_identity_and_lists_the_deleted_files_ac_114_40(mi
     assert any(s.startswith(f"deleted {APP}/app.yaml") and f"{APP}/services.yaml" in s for s in migrated.data["did"])
 
 
+def test_the_written_system_yaml_is_not_reported_as_left_out(migrated):   # #238
+    assert migrated.rc == 0, migrated.err
+    assert not any(s.startswith("left out") and "system.yaml" in s for s in migrated.data["did"])
+
+
+def test_a_repo_without_project_notes_gets_the_file_claude_md_imports(old_base, tmp_path, monkeypatch):   # #239
+    repo = clone(old_base, tmp_path)
+    (repo / ".claude" / "project-notes.md").unlink(missing_ok=True)
+    git(repo, "commit", "-qam", "repo from before spec 086")
+    no_baseline(monkeypatch)
+    rc, out, err = run_cplat("platform", "update", "--repo", str(repo), "--migrate", "--skip-tasks", "--json")
+    assert rc == 0, err
+    assert "@.claude/project-notes.md" in (repo / "CLAUDE.md").read_text()
+    assert (repo / ".claude" / "project-notes.md").is_file()
+
+
 def test_migrate_writes_the_header_and_drops_the_comments_and_says_so_ac_114_48(migrated):  # AC-114.48
     assert migrated.rc == 0, migrated.err
     text = (migrated.repo / APP / "system.yaml").read_text()

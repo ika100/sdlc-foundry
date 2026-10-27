@@ -271,12 +271,13 @@ def test_the_notes_file_is_never_changed_and_claude_md_loads_it(pair, monkeypatc
     assert "@.claude/project-notes.md" in (repo / "CLAUDE.md").read_text()
 
 
-def test_a_repo_without_the_notes_file_gets_a_working_claude_md_and_no_new_file(pair, monkeypatch, capsys):  # AC-086.16
+def test_a_repo_without_the_notes_file_gets_a_working_claude_md_and_an_empty_notes_file(pair, monkeypatch, capsys):  # AC-086.16, #239
     repo, base = pair
     notes = repo / ".claude" / "project-notes.md"
     if notes.exists():
         notes.unlink()
         commit(repo, "no notes")
     out = go(repo, monkeypatch, capsys, base)
-    assert not notes.exists() and "@.claude/project-notes.md" in (repo / "CLAUDE.md").read_text()
+    assert "@.claude/project-notes.md" in (repo / "CLAUDE.md").read_text()
+    assert notes.read_text() == (update.PLATFORM_ROOT / "templates" / "service-python" / ".claude" / "project-notes.md").read_text()
     assert out["lost"] == [] or all(e["file"] != ".claude/project-notes.md" for e in out["lost"])

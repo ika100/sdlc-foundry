@@ -139,7 +139,7 @@
     {
       "name": "resource",
       "source": "./plugins/resource",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "description": "The resource noun: /resource:add and /resource:remove declare named, typed and external resources (postgres databases) of a system in system.yaml.",
       "category": "agents",
       "tags": [

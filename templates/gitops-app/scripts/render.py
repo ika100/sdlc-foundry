@@ -67,7 +67,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
     todo-lib: {type: library, lang: python, repo: org/todo-lib}    # a library has no instances and renders nothing
   apis:
     todo-api-rest: {type: openapi}   # openapi | grpc | graphql | events; changes no manifest
-  resources:                         # any number, each named, typed (database; bucket, cache, broker come with specs 116-119)
+  resources:                         # any number, each named, typed (database, bucket; cache, broker come with specs 118-119)
     orders-db:                       # name: lowercase letters, digits, hyphens; at most 30 characters; not a component name
       type: database                 # required
       version: 17                    # 15 | 16 | 17 | 18 (default 17)
@@ -79,6 +79,11 @@ system.yaml (every value explicit and reviewable; the model is described in docs
       type: database
       external: true                 # true | false (default false); per environment under instances.<env>.external
       remote: {path: "{system}-{env}-{resource}", refreshInterval: 1h}    # both optional; placeholders {system}, {env}, {resource}
+    files:                           # a bucket (spec 116): the bucket is <system>-files; at most 45 characters in-cluster
+      type: bucket
+      storage: 10Gi                  # default 10Gi
+      versioning: false              # true | false (default false)
+      instances: {dev: {versioning: true}, prod: {external: true}}   # per environment: external, remote, storage, versioning
 
 External component (spec 069, ADR-029): a component whose manifests this generator cannot express (CronJobs, volumes,
 a login proxy, a Helm chart with CRDs). The package is owned by this repo or pinned to the component repo's chart;
@@ -124,10 +129,19 @@ EXTERNAL_KEYS = [*COMMON_KEYS, "image", "external", "provides", "consumes", "ins
 LIBRARY_KEYS = [*COMMON_KEYS, "provides", "consumes"]
 INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets"]
 RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
-PLANNED_TYPES = {"bucket": 116, "cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
+PLANNED_TYPES = {"cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
 RESOURCE_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
 RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources"]
 SIZING_KEYS = ["version", "replicas", "storage", "resources"]      # an external resource runs nothing: none of these
+BUCKET_KEYS = ["type", "external", "remote", "storage", "versioning", "instances"]
+BUCKET_INSTANCE_KEYS = ["external", "remote", "storage", "versioning"]
+BUCKET_SIZING_KEYS = ["storage", "versioning"]
+# The cluster objects an in-cluster bucket's SeaweedFS creates, next to `<system>-<name>` itself (design.md).
+BUCKET_SUFFIXES = ("-app", "-master", "-master-peer", "-volume", "-volume-0", "-volume-peer", "-filer", "-filer-peer", "-access-key",
+                   "-secret-key")
+STORAGE_SIZE = re.compile(r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei)?$")    # a Kubernetes size; scripts/cplat/addon.py uses the same pattern
+S3_BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
+BUCKET_NAME_MAX = 45     # the StatefulSet `<name>-volume` plus a pod revision hash must fit a 63-character label
 REMOTE_KEYS = ["path", "refreshInterval"]
 RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 SUPPORTED_VERSIONS = (15, 16, 17, 18)
@@ -137,6 +151,10 @@ TYPES = {
     "database": {"keys": ["uri", "host", "port", "dbname", "user", "password"],  # pragma: allowlist secret
                  "env": {"DATABASE_URL": "uri", "PGHOST": "host", "PGPORT": "port", "PGDATABASE": "dbname", "PGUSER": "user",
                          "PGPASSWORD": "password"}},  # pragma: allowlist secret
+    "bucket": {"keys": ["endpoint", "bucket", "region", "forcePathStyle", "accessKeyId", "secretAccessKey"],
+               "env": {"S3_ENDPOINT": "endpoint", "S3_BUCKET": "bucket", "S3_REGION": "region", "S3_FORCE_PATH_STYLE": "forcePathStyle",
+                       "AWS_ACCESS_KEY_ID": "accessKeyId", "AWS_SECRET_ACCESS_KEY": "secretAccessKey", "AWS_REGION": "region",  # pragma: allowlist secret
+                       "AWS_ENDPOINT_URL_S3": "endpoint"}},
 }
 API_TYPES = ["openapi", "grpc", "graphql", "events"]
 POLICY_VALUES = {"audit": "Audit", "enforce": "Enforce", "off": "Off"}     # system.yaml policy -> the 4.x mode
@@ -148,10 +166,15 @@ POSTGRES_IMAGES = {
     17: "ghcr.io/cloudnative-pg/postgresql:17.11",
     18: "ghcr.io/cloudnative-pg/postgresql:18.6",
 }
+SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51"     # every in-cluster bucket runs its own SeaweedFS of this image
 OPERATORS = {
     "cloudnative-pg": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "cloudnative-pg", "chart_version": "0.29.1",
                        "operator_version": "1.30.1", "namespace": "cnpg-system", "release": "cnpg", "crd": "clusters.postgresql.cnpg.io"},
+    "seaweedfs": {"repo_url": "https://seaweedfs.github.io/seaweedfs-operator", "chart": "seaweedfs-operator", "chart_version": "0.1.45",
+                  "operator_version": "1.0.42", "namespace": "seaweedfs-operator", "release": "seaweedfs-operator",
+                  "crd": "buckets.seaweed.seaweedfs.com"},
 }
+OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs"}
 DB_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
 # Resource contract (ADR-020, ADR-057): what a component gets when it `uses` a resource is in TYPES. Components never see the implementation.
 ADDONS = {
@@ -567,6 +590,22 @@ def database_version(r: str, value) -> int:
     return value
 
 
+def check_bucket(system: str, r: str, rc: dict, inst: dict, in_cluster: bool) -> None:
+    """Value checks of a bucket (design.md, Render errors): versioning, storage, then the S3 name and length rule."""
+    for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
+        if "versioning" in conf and not isinstance(conf["versioning"], bool):
+            fail(f"{where}: versioning must be true or false")
+        if "storage" in conf and not (isinstance(conf["storage"], str) and STORAGE_SIZE.match(conf["storage"])):
+            fail(f"{where}: storage must be a size such as 10Gi")
+    if in_cluster:
+        name = f"{system}-{r}"
+        if not S3_BUCKET_NAME.match(name):
+            fail(f"resources.{r}: '{name}' is not a valid S3 bucket name (3 to 63 characters, lowercase letters, digits and hyphens, "
+                 "starting and ending with a letter or digit)")
+        if len(name) > BUCKET_NAME_MAX:
+            fail(f"resources.{r}: '{name}' is too long for the in-cluster store (at most {BUCKET_NAME_MAX} characters)")
+
+
 def validate_resource(doc: dict, r: str, rc) -> dict:
     """One resource, in the check order of design.md; returns {type, external, envs: {env: effective values}}."""
     types = f"({', '.join(RESOURCE_TYPES[:-1])} or {RESOURCE_TYPES[-1]})"
@@ -582,15 +621,19 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         fail(f"resources.{r}: type '{typ}' is not a resource type {types}")
     if typ in PLANNED_TYPES:
         fail(f"resources.{r}: type {typ} is not available yet: spec {PLANNED_TYPES[typ]} brings it")
+    bucket = typ == "bucket"
+    keys = BUCKET_KEYS if bucket else RESOURCE_KEYS
+    instance_keys = BUCKET_INSTANCE_KEYS if bucket else RESOURCE_INSTANCE_KEYS
+    sizing_keys = BUCKET_SIZING_KEYS if bucket else SIZING_KEYS
     for k in rc:
-        if k not in RESOURCE_KEYS:
-            fail(f"resources.{r}: unknown key '{k}' (allowed: {', '.join(RESOURCE_KEYS)})")
+        if k not in keys:
+            fail(f"resources.{r}: unknown key '{k}' (allowed: {', '.join(keys)})")
     if "external" in rc and not isinstance(rc["external"], bool):
         fail(f"resources.{r}: external must be true or false")
     inst = rc.get("instances")
     inst = {} if inst is None else inst
     if not isinstance(inst, dict):
-        fail(f"resources.{r}.instances must be a mapping of environments to {{external, remote, replicas, storage, resources}}")
+        fail(f"resources.{r}.instances must be a mapping of environments to {{{', '.join(instance_keys)}}}")
     base_external = rc.get("external", False)
     external: dict[str, bool] = {}
     for e, i in inst.items():
@@ -603,19 +646,22 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         if "external" in i and not isinstance(i["external"], bool):
             fail(f"{where}: external must be true or false")
         if i.get("external", base_external):
-            for k in SIZING_KEYS:
+            for k in sizing_keys:
                 if k in i:
-                    fail(f"{where}: an external resource runs nothing (remove {k})")
+                    fail(f"{where}: an external {typ} is sized and configured at its provider (remove {k})" if bucket
+                         else f"{where}: an external resource runs nothing (remove {k})")
         for k in i:
-            if k not in RESOURCE_INSTANCE_KEYS:
-                fail(f"{where}: unknown key '{k}' (allowed: {', '.join(RESOURCE_INSTANCE_KEYS)})")
+            if k not in instance_keys:
+                fail(f"{where}: unknown key '{k}' (allowed: {', '.join(instance_keys)})")
     inst = {e: i or {} for e, i in inst.items()}
     for e in ENVS:
         external[e] = inst.get(e, {}).get("external", base_external)
     if all(external.values()):
-        for k in SIZING_KEYS:
+        for k in sizing_keys:
             if k in rc:
-                fail(f"resources.{r}: external in every environment: an external resource runs nothing (remove {k})")
+                fail(f"resources.{r}: external in every environment: an external {typ} is sized and configured at its provider "
+                     f"(remove {k})" if bucket else
+                     f"resources.{r}: external in every environment: an external resource runs nothing (remove {k})")
     if "remote" in rc and not any(external.values()):
         fail(f"resources.{r}: remote needs external: true")
     for e, i in inst.items():
@@ -628,7 +674,9 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
     if first and not doc.get("secretStore"):
         fail(f"resources.{r}: external in {first} needs the system's secretStore (declare secretStore: {{name, kind}})")
     version = None
-    if not all(external.values()):
+    if bucket:
+        check_bucket(system=str(doc.get("system")), r=r, rc=rc, inst=inst, in_cluster=not all(external.values()))
+    elif not all(external.values()):
         version = database_version(r, rc.get("version", 17))
     for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
         if "replicas" in conf:
@@ -641,6 +689,13 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
             key = str(remote.get("path") or "{system}-{env}-{resource}").format(system=str(doc.get("system")), env=e, resource=r)
             envs[e] = {"external": True, "version": None, "replicas": None, "storage": None, "resources": None,
                        "store_key": key, "refreshInterval": str(remote.get("refreshInterval") or "1h")}
+            if bucket:
+                envs[e]["versioning"] = None
+            continue
+        if bucket:
+            envs[e] = {"external": False, "version": None, "replicas": None, "storage": str(i.get("storage", rc.get("storage", "10Gi"))),
+                       "resources": None, "versioning": i.get("versioning", rc.get("versioning", False)),
+                       "store_key": None, "refreshInterval": None}
             continue
         storage = i.get("storage", rc.get("storage"))
         envs[e] = {"external": False, "version": version, "replicas": int(i.get("replicas", rc.get("replicas", 1))),
@@ -661,7 +716,7 @@ def validate_resources(doc: dict) -> dict:
 def object_names(system: str, r: str, typ: str) -> list[str]:
     """The cluster objects a resource creates (design.md): a database the CloudNativePG family, any other type the object and its Secret."""
     base = f"{system}-{r}"
-    return [base, *(base + s for s in (CNPG_SUFFIXES if typ == "database" else ("-app",)))]
+    return [base, *(base + s for s in (CNPG_SUFFIXES if typ == "database" else BUCKET_SUFFIXES if typ == "bucket" else ("-app",)))]
 
 
 def check_resource_clashes(system: str, resources: dict, comps_doc: dict, comps: list[dict]) -> None:
@@ -1040,6 +1095,68 @@ def database_cluster(app: str, name: str, env: str, conf: dict) -> dict:
     }
 
 
+def bucket_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | str]:
+    """The in-cluster bucket instance (ADR-059): its own SeaweedFS, a Bucket, an identity limited to it and generated keys.
+
+    Argo CD never deletes any of it (`Delete=false`, `reclaimPolicy: Retain`). No credential value is rendered: the keys come from
+    External Secrets `Password` generators and are written once to `<system>-<name>-app`."""
+    n = f"{app}-{name}"
+    labels = {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
+    keep = {"argocd.argoproj.io/sync-options": "Delete=false"}
+
+    def meta(obj: str, wave: str | None = None) -> dict:
+        ann = {**keep, **({"argocd.argoproj.io/sync-wave": wave} if wave else {})}
+        return {"name": obj, "labels": dict(labels), "annotations": ann}
+
+    seaweed_api = "seaweed.seaweedfs.com/v1"
+    gen_api = "generators.external-secrets.io/v1alpha1"
+    volume = lambda: {"enabled": True, "resources": {"requests": {"storage": "1Gi"}}}  # noqa: E731  (fresh dicts: no YAML anchors)
+
+    def generator(suffix: str, length: int, digits: int) -> dict:
+        return {"apiVersion": gen_api, "kind": "Password", "metadata": meta(f"{n}-{suffix}", "-1"),
+                "spec": {"length": length, "digits": digits, "symbols": 0, "noUpper": False, "allowRepeat": True}}
+
+    def source(suffix: str, key: str) -> dict:
+        return {"sourceRef": {"generatorRef": {"apiVersion": gen_api, "kind": "Password", "name": f"{n}-{suffix}"}},
+                "rewrite": [{"regexp": {"source": "^password$", "target": key}}]}
+
+    files: dict[str, dict | str] = {
+        "seaweed.yaml": {
+            "apiVersion": seaweed_api, "kind": "Seaweed", "metadata": meta(n),
+            "spec": {"image": SEAWEEDFS_IMAGE, "volumeServerDiskCount": 1,
+                     "master": {"replicas": 1, "volumeSizeLimitMB": 1024, "persistence": volume()},
+                     "volume": {"replicas": 1, "requests": {"storage": conf["storage"]}},
+                     "filer": {"replicas": 1, "persistence": volume(), "s3": {"enabled": True},
+                               "config": '[leveldb2]\nenabled = true\ndir = "/data/filerldb2"\n'}}},
+        "bucket.yaml": {
+            "apiVersion": seaweed_api, "kind": "Bucket", "metadata": meta(n),
+            "spec": {"name": n, "clusterRef": {"name": n}, "reclaimPolicy": "Retain",
+                     "versioning": "Enabled" if conf["versioning"] else "Suspended", "owner": n,
+                     "access": [{"user": n, "actions": ["Read", "Write", "List", "Tagging"]}]}},
+        "identity.yaml": {"apiVersion": seaweed_api, "kind": "S3Identity", "metadata": meta(n), "spec": {"seaweedRef": {"name": n}}},
+        "credentials.yaml": {
+            "apiVersion": seaweed_api, "kind": "S3Credentials", "metadata": meta(n, "1"),
+            "spec": {"seaweedRef": {"name": n}, "identityRef": {"name": n},
+                     "secretRef": {"name": f"{n}-app", "accessKeyField": "accessKeyId", "secretKeyField": "secretAccessKey"},  # pragma: allowlist secret
+                     "reclaimPolicy": "Retain"}},
+        "access-key-generator.yaml": generator("access-key", 20, 5),
+        "secret-key-generator.yaml": generator("secret-key", 40, 10),
+        "externalsecret.yaml": {
+            "apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": meta(f"{n}-app", "-1"),
+            "spec": {"refreshInterval": "0",
+                     "target": {"name": f"{n}-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
+                                "template": {"engineVersion": "v2", "data": {
+                                    "endpoint": f"http://{n}-filer.{app}-{env}.svc:8333", "bucket": n, "region": "us-east-1",
+                                    "forcePathStyle": "true", "accessKeyId": "{{ .accessKeyId }}",
+                                    "secretAccessKey": "{{ .secretAccessKey }}"}}},  # pragma: allowlist secret
+                     "dataFrom": [source("access-key", "accessKeyId"), source("secret-key", "secretAccessKey")]}},  # pragma: allowlist secret
+    }
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
+                                   "resources": ["access-key-generator.yaml", "bucket.yaml", "credentials.yaml", "externalsecret.yaml",
+                                                 "identity.yaml", "seaweed.yaml", "secret-key-generator.yaml"]}
+    return files
+
+
 def collector_config(app: str, env: str, conf: dict, services: list[dict]) -> dict:
     scrape = [{"job_name": s["name"], "scrape_interval": "30s", "metrics_path": s["metrics"],
                "static_configs": [{"targets": [f"{s['name']}.{app}-{env}.svc:80"]}]}
@@ -1104,7 +1221,9 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict]) 
     if name == "observability":
         return observability_files(app, env, cfg["observability"][env], services)
     res = cfg["resources"][name]
-    files = {"cluster.yaml": database_cluster(app, name, env, res["envs"][env])}   # the only type built so far; dispatch on res["type"] when more exist
+    if res["type"] == "bucket":
+        return bucket_files(app, name, env, res["envs"][env])
+    files = {"cluster.yaml": database_cluster(app, name, env, res["envs"][env])}   # database; cache and broker are not built yet
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["cluster.yaml"]}
     return files
 
@@ -1228,35 +1347,41 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
 def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
     """operators/ (AC-115.18): cluster-level, outside every system's tree; only when an in-cluster database runs in an environment
     whose operators are not owned by the cluster's owner."""
-    needed = False
+    needed: set[str] = set()
     for app_dir in apps:
         system = load_system(app_dir)
         owned = system["cfg"]["operators"]
-        needed = needed or any(not ext and typ == "database" and env not in owned for _, env, typ, ext in resource_instances(system))
+        for _, env, typ, ext in resource_instances(system):
+            if not ext and env not in owned and typ in OPERATOR_OF_TYPE:
+                needed.add(OPERATOR_OF_TYPE[typ])
     if not needed:
         return {}
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
     org = ans.get("github_org", "ika100")
     repo = f"https://github.com/{org}/{ans.get('project_name', apps[0].name + '-gitops')}"
-    op = OPERATORS["cloudnative-pg"]
     base = ROOT / "operators"
-    return {
+    files = {
         base / "root.yaml": dump({
             "apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "metadata": {"name": "platform-operators", "namespace": "argocd"},
             "spec": {"project": "default", "source": {"repoURL": repo, "targetRevision": "main", "path": "operators/apps"},
                      "destination": {"server": server, "namespace": "argocd"},
                      "syncPolicy": {"automated": {"prune": True, "selfHeal": True}}}}),
-        base / "apps" / "cloudnative-pg.yaml": dump({
+    }
+    for name in OPERATORS:
+        if name not in needed:
+            continue
+        op = OPERATORS[name]
+        files[base / "apps" / f"{name}.yaml"] = dump({
             "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
-            "metadata": {"name": "operator-cloudnative-pg", "namespace": "argocd",
+            "metadata": {"name": f"operator-{name}", "namespace": "argocd",
                          "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
             "spec": {"project": "default",
                      "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"],
                                 "helm": {"releaseName": op["release"]}},
                      "destination": {"server": server, "namespace": op["namespace"]},
                      "syncPolicy": {"automated": {"prune": True, "selfHeal": True},
-                                    "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}}),
-    }
+                                    "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}})
+    return files
 
 
 def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:

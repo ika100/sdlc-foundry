@@ -2,7 +2,7 @@
 title: "Environments and promotion"
 description: "dev, staging and production, opt-in per service, moved by pull request."
 sidebar:
-  order: 3
+  order: 4
 ---
 
 Each system has three environments, each in its own namespace `<system>-<env>`. A component is rendered only for the environments that are keys of its `instances` (default dev only), so a new component never reaches production by accident.

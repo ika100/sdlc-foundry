@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--generate", action="append", default=[], metavar="SECRET=KEY,KEY", help="Secret whose values ESO generates randomly once per environment (single service only)")
     p.add_argument("--secret", action="append", default=[], metavar="SECRET=KEY,KEY", help="Secret read from the secret store (set the values with `cplat secret set`; single service only)")
     p.add_argument("--secret-ref", action="append", default=[], metavar="NAME", help="existing Secret in the namespace to expose as env vars, e.g. the one generated for another service (single service only)")
-    p.add_argument("--uses", action="append", default=[], metavar="ADDON", help="resource or library the component needs (a database gives DATABASE_URL and PG*); declare it first with `cplat resource add <name> --type database`")
+    p.add_argument("--uses", action="append", default=[], metavar="ADDON", help="resource or library the component needs (a database gives DATABASE_URL and PG*, a bucket S3_* and AWS_*); declare it first with `cplat resource add <name> --type database|bucket`")
     p.add_argument("--provides", action="append", default=[], metavar="NAME[:TYPE]", help="API the component provides (TYPE: openapi, grpc, graphql, events; default openapi; single component only)")
     p.add_argument("--consumes", action="append", default=[], metavar="NAME", help="API the component consumes; somebody must provide it (single component only)")
     p.add_argument("--replicas", type=int)
@@ -288,7 +288,8 @@ def main(argv: list[str]) -> int:
                     by_type[t] = by_type.get(t, 0) + 1
             for t, n in by_type.items():
                 if n >= 2:
-                    prefix_notes.append(f"{name} now uses {n} {t} resources: their variables are prefixed (<NAME>_DATABASE_URL, …) and DATABASE_URL, PG* are no longer injected")
+                    first, gone = {"bucket": ("S3_ENDPOINT", "S3_*, AWS_*")}.get(t, ("DATABASE_URL", "DATABASE_URL, PG*"))
+                    prefix_notes.append(f"{name} now uses {n} {t} resources: their variables are prefixed (<NAME>_{first}, …) and {gone} are no longer injected")
         if not ns.dry_run:  # mutate the round-trip entry in place, so comments and order in system.yaml survive
             if ns.env:
                 env = entry.setdefault("env", {})
