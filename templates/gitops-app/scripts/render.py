@@ -67,7 +67,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
     todo-lib: {type: library, lang: python, repo: org/todo-lib}    # a library has no instances and renders nothing
   apis:
     todo-api-rest: {type: openapi}   # openapi | grpc | graphql | events; changes no manifest
-  resources:                         # any number, each named, typed (database; bucket, cache, broker come with specs 116-119)
+  resources:                         # any number, each named, typed (database, bucket; cache, broker come with specs 118-119)
     orders-db:                       # name: lowercase letters, digits, hyphens; at most 30 characters; not a component name
       type: database                 # required
       version: 17                    # 15 | 16 | 17 | 18 (default 17)
@@ -79,6 +79,11 @@ system.yaml (every value explicit and reviewable; the model is described in docs
       type: database
       external: true                 # true | false (default false); per environment under instances.<env>.external
       remote: {path: "{system}-{env}-{resource}", refreshInterval: 1h}    # both optional; placeholders {system}, {env}, {resource}
+    files:                           # a bucket (spec 116): the bucket is <system>-files; at most 45 characters in-cluster
+      type: bucket
+      storage: 10Gi                  # default 10Gi
+      versioning: false              # true | false (default false)
+      instances: {dev: {versioning: true}, prod: {external: true}}   # per environment: external, remote, storage, versioning
 
 External component (spec 069, ADR-029): a component whose manifests this generator cannot express (CronJobs, volumes,
 a login proxy, a Helm chart with CRDs). The package is owned by this repo or pinned to the component repo's chart;
@@ -124,10 +129,19 @@ EXTERNAL_KEYS = [*COMMON_KEYS, "image", "external", "provides", "consumes", "ins
 LIBRARY_KEYS = [*COMMON_KEYS, "provides", "consumes"]
 INSTANCE_KEYS = ["replicas", "resources", "env", "promote", "secrets"]
 RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
-PLANNED_TYPES = {"bucket": 116, "cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
+PLANNED_TYPES = {"cache": 118, "broker": 119}     # types no release runs yet: the spec that brings each
 RESOURCE_KEYS = ["type", "external", "remote", "version", "replicas", "storage", "resources", "instances"]
 RESOURCE_INSTANCE_KEYS = ["external", "remote", "replicas", "storage", "resources"]
 SIZING_KEYS = ["version", "replicas", "storage", "resources"]      # an external resource runs nothing: none of these
+BUCKET_KEYS = ["type", "external", "remote", "storage", "versioning", "instances"]
+BUCKET_INSTANCE_KEYS = ["external", "remote", "storage", "versioning"]
+BUCKET_SIZING_KEYS = ["storage", "versioning"]
+# The cluster objects an in-cluster bucket's SeaweedFS creates, next to `<system>-<name>` itself (design.md).
+BUCKET_SUFFIXES = ("-app", "-master", "-master-peer", "-volume", "-volume-0", "-volume-peer", "-filer", "-filer-peer", "-access-key",
+                   "-secret-key")
+STORAGE_SIZE = re.compile(r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei)?$")    # a Kubernetes size; scripts/cplat/addon.py uses the same pattern
+S3_BUCKET_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
+BUCKET_NAME_MAX = 45     # the StatefulSet `<name>-volume` plus a pod revision hash must fit a 63-character label
 REMOTE_KEYS = ["path", "refreshInterval"]
 RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 SUPPORTED_VERSIONS = (15, 16, 17, 18)
@@ -567,6 +581,22 @@ def database_version(r: str, value) -> int:
     return value
 
 
+def check_bucket(system: str, r: str, rc: dict, inst: dict, in_cluster: bool) -> None:
+    """Value checks of a bucket (design.md, Render errors): versioning, storage, then the S3 name and length rule."""
+    for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
+        if "versioning" in conf and not isinstance(conf["versioning"], bool):
+            fail(f"{where}: versioning must be true or false")
+        if "storage" in conf and not (isinstance(conf["storage"], str) and STORAGE_SIZE.match(conf["storage"])):
+            fail(f"{where}: storage must be a size such as 10Gi")
+    if in_cluster:
+        name = f"{system}-{r}"
+        if not S3_BUCKET_NAME.match(name):
+            fail(f"resources.{r}: '{name}' is not a valid S3 bucket name (3 to 63 characters, lowercase letters, digits and hyphens, "
+                 "starting and ending with a letter or digit)")
+        if len(name) > BUCKET_NAME_MAX:
+            fail(f"resources.{r}: '{name}' is too long for the in-cluster store (at most {BUCKET_NAME_MAX} characters)")
+
+
 def validate_resource(doc: dict, r: str, rc) -> dict:
     """One resource, in the check order of design.md; returns {type, external, envs: {env: effective values}}."""
     types = f"({', '.join(RESOURCE_TYPES[:-1])} or {RESOURCE_TYPES[-1]})"
@@ -582,15 +612,19 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         fail(f"resources.{r}: type '{typ}' is not a resource type {types}")
     if typ in PLANNED_TYPES:
         fail(f"resources.{r}: type {typ} is not available yet: spec {PLANNED_TYPES[typ]} brings it")
+    bucket = typ == "bucket"
+    keys = BUCKET_KEYS if bucket else RESOURCE_KEYS
+    instance_keys = BUCKET_INSTANCE_KEYS if bucket else RESOURCE_INSTANCE_KEYS
+    sizing_keys = BUCKET_SIZING_KEYS if bucket else SIZING_KEYS
     for k in rc:
-        if k not in RESOURCE_KEYS:
-            fail(f"resources.{r}: unknown key '{k}' (allowed: {', '.join(RESOURCE_KEYS)})")
+        if k not in keys:
+            fail(f"resources.{r}: unknown key '{k}' (allowed: {', '.join(keys)})")
     if "external" in rc and not isinstance(rc["external"], bool):
         fail(f"resources.{r}: external must be true or false")
     inst = rc.get("instances")
     inst = {} if inst is None else inst
     if not isinstance(inst, dict):
-        fail(f"resources.{r}.instances must be a mapping of environments to {{external, remote, replicas, storage, resources}}")
+        fail(f"resources.{r}.instances must be a mapping of environments to {{{', '.join(instance_keys)}}}")
     base_external = rc.get("external", False)
     external: dict[str, bool] = {}
     for e, i in inst.items():
@@ -603,19 +637,22 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
         if "external" in i and not isinstance(i["external"], bool):
             fail(f"{where}: external must be true or false")
         if i.get("external", base_external):
-            for k in SIZING_KEYS:
+            for k in sizing_keys:
                 if k in i:
-                    fail(f"{where}: an external resource runs nothing (remove {k})")
+                    fail(f"{where}: an external {typ} is sized and configured at its provider (remove {k})" if bucket
+                         else f"{where}: an external resource runs nothing (remove {k})")
         for k in i:
-            if k not in RESOURCE_INSTANCE_KEYS:
-                fail(f"{where}: unknown key '{k}' (allowed: {', '.join(RESOURCE_INSTANCE_KEYS)})")
+            if k not in instance_keys:
+                fail(f"{where}: unknown key '{k}' (allowed: {', '.join(instance_keys)})")
     inst = {e: i or {} for e, i in inst.items()}
     for e in ENVS:
         external[e] = inst.get(e, {}).get("external", base_external)
     if all(external.values()):
-        for k in SIZING_KEYS:
+        for k in sizing_keys:
             if k in rc:
-                fail(f"resources.{r}: external in every environment: an external resource runs nothing (remove {k})")
+                fail(f"resources.{r}: external in every environment: an external {typ} is sized and configured at its provider "
+                     f"(remove {k})" if bucket else
+                     f"resources.{r}: external in every environment: an external resource runs nothing (remove {k})")
     if "remote" in rc and not any(external.values()):
         fail(f"resources.{r}: remote needs external: true")
     for e, i in inst.items():
@@ -628,7 +665,9 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
     if first and not doc.get("secretStore"):
         fail(f"resources.{r}: external in {first} needs the system's secretStore (declare secretStore: {{name, kind}})")
     version = None
-    if not all(external.values()):
+    if bucket:
+        check_bucket(system=str(doc.get("system")), r=r, rc=rc, inst=inst, in_cluster=not all(external.values()))
+    elif not all(external.values()):
         version = database_version(r, rc.get("version", 17))
     for where, conf in [(f"resources.{r}", rc), *[(f"resources.{r}.instances.{e}", i) for e, i in inst.items()]]:
         if "replicas" in conf:
@@ -641,6 +680,13 @@ def validate_resource(doc: dict, r: str, rc) -> dict:
             key = str(remote.get("path") or "{system}-{env}-{resource}").format(system=str(doc.get("system")), env=e, resource=r)
             envs[e] = {"external": True, "version": None, "replicas": None, "storage": None, "resources": None,
                        "store_key": key, "refreshInterval": str(remote.get("refreshInterval") or "1h")}
+            if bucket:
+                envs[e]["versioning"] = None
+            continue
+        if bucket:
+            envs[e] = {"external": False, "version": None, "replicas": None, "storage": str(i.get("storage", rc.get("storage", "10Gi"))),
+                       "resources": None, "versioning": i.get("versioning", rc.get("versioning", False)),
+                       "store_key": None, "refreshInterval": None}
             continue
         storage = i.get("storage", rc.get("storage"))
         envs[e] = {"external": False, "version": version, "replicas": int(i.get("replicas", rc.get("replicas", 1))),
@@ -661,7 +707,7 @@ def validate_resources(doc: dict) -> dict:
 def object_names(system: str, r: str, typ: str) -> list[str]:
     """The cluster objects a resource creates (design.md): a database the CloudNativePG family, any other type the object and its Secret."""
     base = f"{system}-{r}"
-    return [base, *(base + s for s in (CNPG_SUFFIXES if typ == "database" else ("-app",)))]
+    return [base, *(base + s for s in (CNPG_SUFFIXES if typ == "database" else BUCKET_SUFFIXES if typ == "bucket" else ("-app",)))]
 
 
 def check_resource_clashes(system: str, resources: dict, comps_doc: dict, comps: list[dict]) -> None:
