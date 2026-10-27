@@ -13,6 +13,7 @@ tasks:
     covers: [AC-124.1, AC-124.3, AC-124.4, AC-124.9, AC-124.22]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: autonomy.py — levels, caps, defaults, validate, effective, compare/tighten, allows, outside
     files: [scripts/cplat/autonomy.py]
