@@ -70,6 +70,7 @@ tasks:
     covers: [AC-122.36, AC-122.39]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t11
     title: console shell — layout, shared fragments, console.css and console.js (keys, palette, panels, polling)
     files: [scripts/cplat/console/layout.py, scripts/cplat/console/html.py, scripts/cplat/console/static/console.css, scripts/cplat/console/static/console.js]
