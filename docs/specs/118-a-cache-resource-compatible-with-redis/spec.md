@@ -1,7 +1,7 @@
 ---
 spec_id: 118-a-cache-resource-compatible-with-redis
 title: A cache resource compatible with Redis
-status: approved
+status: building
 priority: P1
 ---
 
@@ -87,3 +87,4 @@ Almost every web product needs a fast key-value store for sessions, rate limits,
 - 2026-10-26 created
 - 2026-10-26 open questions answered: Secret `<system>-<name>-app` (AC-118.9, .10, .12, .16 withdrawn, replaced by AC-118.18 to .21), `<NAME>_` prefix rule of spec 115, extension of AC-114.19 and AC-114.36 (AC-118.22), no operator and image pinned in spec 121's table (AC-118.23)
 - 2026-10-26 approved
+- 2026-10-27 building

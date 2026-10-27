@@ -21,7 +21,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [105-a-deploy-counts-only-after-its-checks](specs/105-a-deploy-counts-only-after-its-checks/spec.md) — A deploy counts only after its checks pass | P1 | approved | 8 | #155 |
 | [106-prod-runs-the-exact-image-staging-tested](specs/106-prod-runs-the-exact-image-staging-tested/spec.md) — Prod runs the exact image staging tested | P1 | approved | 12 | #157 |
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [118-a-cache-resource-compatible-with-redis](specs/118-a-cache-resource-compatible-with-redis/spec.md) — A cache resource compatible with Redis | P1 | approved | 19 |  |
+| [118-a-cache-resource-compatible-with-redis](specs/118-a-cache-resource-compatible-with-redis/spec.md) — A cache resource compatible with Redis | P1 | building | 19 |  |
 | [119-a-message-broker-resource-behind-events](specs/119-a-message-broker-resource-behind-events/spec.md) — A message broker resource behind events APIs | P1 | approved | 24 |  |
 | [120-instances-scale-on-load-and-queue-depth](specs/120-instances-scale-on-load-and-queue-depth/spec.md) — Instances scale on load and queue depth | P1 | approved | 28 |  |
 | [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | approved | 27 |  |
