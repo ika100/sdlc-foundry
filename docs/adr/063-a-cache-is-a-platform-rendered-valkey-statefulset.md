@@ -38,8 +38,9 @@ pin and upgrade.
 - A cache costs one pod (and one volume with persistence) per environment; it needs only External Secrets Operator, which every
   in-cluster resource already needs.
 - `/platform:doctor` and `cluster-up` know nothing about caches; a local cluster runs one as soon as a component uses it.
-- A change of `persistence` or `storage` recreates the StatefulSet (Argo CD `Force=true,Replace=true`), so the pod restarts; an
-  existing volume is reused and not resized.
+- A change of `persistence` or `storage` stops at the StatefulSet's immutable `volumeClaimTemplates`: delete it with
+  `kubectl delete statefulsets.apps <system>-<name> -n <system>-<env> --cascade=orphan` and sync; the pod restarts and an existing
+  volume is reused, not resized. No sync option replaces the StatefulSet, so ordinary syncs never restart or empty a cache.
 - The Valkey pins move under spec 121's rules (environments in order, downgrades refused, no backup precondition for a cache).
 - High availability (replicas, Sentinel, cluster mode) would need a different design, most likely an operator; this ADR would then be
   superseded for that case.

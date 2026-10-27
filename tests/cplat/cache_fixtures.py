@@ -107,7 +107,7 @@ def expected_statefulset(name="sessions", version=9, memory="256Mi", maxmemory=2
         spec["volumeClaimTemplates"] = [{"metadata": {"name": "data", "labels": labels(name)},
                                          "spec": {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": storage}}}}]
     return {"apiVersion": "apps/v1", "kind": "StatefulSet",
-            "metadata": {"name": n, "labels": labels(name), "annotations": {"argocd.argoproj.io/sync-options": "Force=true,Replace=true"}},
+            "metadata": {"name": n, "labels": labels(name)},  # spec 118 review: no Force/Replace sync option (design decision 8)
             "spec": spec}
 
 

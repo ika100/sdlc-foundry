@@ -1,6 +1,6 @@
 # resource plugin
 
-The `resource` noun of the domain model: things a system provides to its components. A resource has a name and a type and is declared under `resources:` in `system.yaml`. The types `database` (CloudNativePG, majors 15–18, or `external`) and `bucket` (S3 object storage, SeaweedFS per instance, or `external`) and `cache` (Redis-compatible, runs Valkey 8 or 9, or `external`) are built; `broker` is reserved for spec 119.
+The `resource` noun of the domain model: things a system provides to its components. A resource has a name and a type and is declared under `resources:` in `system.yaml`. The types `database` (CloudNativePG, majors 15–18, or `external`) and `bucket` (S3 object storage, SeaweedFS per instance, or `external`), and `cache` (Redis-compatible, runs Valkey 8 or 9, or `external`) are built; `broker` is reserved for spec 119.
 
 | Command | Does |
 |---|---|

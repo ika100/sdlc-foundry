@@ -366,9 +366,9 @@ def test_rdb_snapshots_are_off_in_both_modes_ac_118_7(tmp_path):  # AC-118.7
         assert args[args.index("--save") + 1] == ""
 
 
-def test_a_change_of_the_volume_recreates_the_statefulset_ac_118_7(tmp_path):  # AC-118.7
+def test_a_sync_never_replaces_the_statefulset_ac_118_7(tmp_path):  # AC-118.7
     sts = cdoc(ok(tmp_path, csys({"sessions": cache(persistence=True)})), "dev", "statefulset.yaml")
-    assert sts["metadata"]["annotations"] == {"argocd.argoproj.io/sync-options": "Force=true,Replace=true"}
+    assert "annotations" not in sts["metadata"]  # spec 118 review: Force/Replace recreated the cache on every sync (design decision 8)
 
 
 # ---------------- AC-118.8: not reachable from outside ----------------
@@ -786,3 +786,13 @@ def test_an_environment_without_a_running_user_gets_no_cache_ac_118_23(tmp_path)
     g = ok(tmp_path, csys(comps={"api": comp("api", ["sessions"], envs=("dev",)), "web": comp("web")}))
     assert addon_names(g, "dev") == ["sessions"] and "sessions" not in addon_names(g, "staging")
     assert not [k for k in g if "/addons/staging/sessions" in k or "/addons/prod/sessions" in k]
+
+
+def test_resource_add_names_the_same_store_keys_as_the_renderer_ac_118_1():  # AC-118.1
+    # spec 118 review: addon.py keeps its own copy of each built type's store keys; it must match the renderer's TYPES
+    import addon
+    r = renderer("render_118_keys")
+    built = [t for t in r.TYPES if t not in r.PLANNED_TYPES]
+    assert sorted(addon.TYPE_KEYS) == sorted(built)
+    for t in built:
+        assert addon.TYPE_KEYS[t] == ", ".join(r.TYPES[t]["keys"]), t

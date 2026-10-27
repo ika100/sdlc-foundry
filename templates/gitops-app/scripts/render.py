@@ -1527,7 +1527,7 @@ def cache_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | s
                      "ports": [{"name": "redis", "port": 6379, "targetPort": "redis"}]}},
         "statefulset.yaml": {
             "apiVersion": "apps/v1", "kind": "StatefulSet",
-            "metadata": {"name": n, "labels": labels(), "annotations": {"argocd.argoproj.io/sync-options": "Force=true,Replace=true"}},
+            "metadata": {"name": n, "labels": labels()},
             "spec": spec},
     }
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",

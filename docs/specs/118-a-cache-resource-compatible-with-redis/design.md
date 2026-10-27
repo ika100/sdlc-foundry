@@ -31,9 +31,10 @@ Schedule already leaves out every `cache` resource by its `app.kubernetes.io/nam
   template, Service, generator, ExternalSecret and, through the template, the Secret). Spec 117's Schedule leaves out exactly these
   objects and the pod volumes of those pods (`app.kubernetes.io/name NotIn [<target>, <cache names…>]`), so no cache data is in any
   backup (AC-118.14). `backup_files` does not change.
-- **A change of `persistence` or `storage` recreates the StatefulSet** (`argocd.argoproj.io/sync-options: Force=true,Replace=true`
-  on the StatefulSet), because `volumeClaimTemplates` cannot be updated in place. The pod restarts, which any template change does for
-  a single node anyway; an existing volume is kept and reused.
+- **A change of `persistence` or `storage` needs one manual step**, because `volumeClaimTemplates` cannot be updated in place: the sync
+  reports the immutable field, and `kubectl delete statefulsets.apps <system>-<name> -n <system>-<env> --cascade=orphan` followed by a
+  sync recreates the StatefulSet; the pod restarts and an existing volume is reused (not resized). No sync option recreates it, so an
+  ordinary sync (a platform update, a manual sync, self-heal) never restarts or empties a running cache.
 - **Kyverno guard rails (ADR-022) match Deployments only and do not change.** The cache is a StatefulSet; it still satisfies every rule
   (non-root UID 999, read-only root filesystem, no privilege escalation, `drop: [ALL]`, requests and a memory limit, the part-of
   label), so nothing has to be weakened now or if the rules ever cover StatefulSets.
@@ -195,7 +196,7 @@ spec:
 ```yaml
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: {name: <n>, labels: L, annotations: {argocd.argoproj.io/sync-options: "Force=true,Replace=true"}}
+metadata: {name: <n>, labels: L}
 spec:
   replicas: 1
   serviceName: <n>
@@ -322,8 +323,8 @@ Schedule's NotIn list holds both names, and neither the Velero Backup's pod volu
   the server is OOM-killed there, the minimum is raised (design and the AC-118.4 text change in the same PR).
 - **Fork during an AOF rewrite** (`persistence: true`) copies changed pages and can exceed the 20 % headroom for write-heavy caches
   near `maxmemory`. Documented: give persistent caches more `memory`.
-- **`Force=true,Replace=true`** recreates the StatefulSet for any change, so every change restarts the pod (as a single node does
-  anyway). Growing `storage` does not resize an existing volume (Kubernetes reuses the PVC `data-<n>-0`); documented.
+- **A `persistence` or `storage` change stops at the immutable field** until the StatefulSet is deleted with `--cascade=orphan` (one
+  documented command); growing `storage` does not resize an existing volume (Kubernetes reuses the PVC `data-<n>-0`); documented.
 - **Downgrades** (`version: 9` → `8`) are not refused before spec 121; an AOF written by 9 may not load in 8. With persistence the pod
   then crash-loops until the volume is deleted. Documented next to `version`.
 - **Read-only root filesystem with `persistence: false`**: Valkey writes nothing without AOF and RDB. The e2e run proves it; if the
@@ -341,8 +342,10 @@ Schedule's NotIn list holds both names, and neither the Velero Backup's pod volu
 5. **One ClusterIP Service is also the StatefulSet's `serviceName`**; no headless Service (one pod needs no per-pod DNS).
 6. **`persistence: false` renders no volume at all** (not an `emptyDir`), which is what AC-118.7 says.
 7. **RDB snapshots are off in both modes; persistence is AOF `everysec`** (the spec's answer), so no fork happens without persistence.
-8. **The StatefulSet is recreated on change (`Force=true,Replace=true`)**. Alternative: refuse `persistence`/`storage` changes, or
-   leave Argo CD stuck on an immutable field. Chosen because a cache tolerates a restart and the volume is kept.
+8. **No sync option replaces the StatefulSet; a `persistence`/`storage` change takes one documented `--cascade=orphan` delete.**
+   Changed after review: `Force=true,Replace=true` (the first choice) made Argo CD delete and recreate the StatefulSet on every sync of
+   the cache's application (Argo applies every resource on a sync), emptying caches without persistence on unrelated updates and
+   risking a replace loop under self-heal. Alternative: refuse the change in the renderer (no way back without a manual step either).
 9. **Resources: memory request = limit = `memory`, CPU request 50m, no CPU limit.** Alternative: make CPU configurable (not in the
    spec's key list, AC-118.2).
 10. **Valkey runs as UID 999, read-only root filesystem, `drop: [ALL]`, RuntimeDefault seccomp, no service-account token**, bypassing the
