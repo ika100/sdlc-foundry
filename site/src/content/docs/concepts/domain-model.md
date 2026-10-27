@@ -9,7 +9,7 @@ The platform is built around a small set of nouns you can hold in your head. The
 
 | You ask | The model answers with |
 |---|---|
-| What is my product made of? | the **System** and its parts: **Components**, **APIs**, **Resources**, and its **Owner** |
+| What is my system made of? | the **System** and its parts: **Components**, **APIs**, **Resources**, and its **Owner** |
 | Where does it run, at which version? | **Environments** × parts: each cell is an **Instance** |
 | How does it change? | an **Issue** becomes a **Spec**; a **Run** ships it; a **Release** goes to prod |
 
