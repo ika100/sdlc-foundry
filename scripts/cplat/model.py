@@ -15,6 +15,7 @@ Public API:
 from __future__ import annotations
 
 import copy
+import dataclasses
 import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -161,6 +162,7 @@ class Api:
     type: str = "openapi"
     provider: str | None = None
     consumers: tuple[str, ...] = ()
+    broker: str | None = None  # events APIs only: the broker resource that carries it (spec 119)
 
 
 @dataclass(frozen=True)
@@ -211,6 +213,7 @@ class ResourceInstance:
     external: bool = False
     store_key: str | None = None
     backup: dict | None = None  # {"to", "schedule", "retention"} of an in-cluster database (spec 117)
+    broker: dict | None = None  # brokers only: {"address", "monitoring", "users", "streams"} (spec 119)
 
 
 @dataclass
@@ -359,14 +362,17 @@ class Model:
                 "secret_refs": list(c.secret_refs), "provides": list(c.provides), "consumes": list(c.consumes),
                 "libraries": list(c.libraries),
                 "used_by": [o.name for o in self.components if c.name in o.libraries]} for c in self.components],
-            "apis": [{"name": a.name, "type": a.type, "provider": a.provider, "consumers": list(a.consumers)} for a in self.apis],
+            "apis": [{"name": a.name, "type": a.type, "provider": a.provider, "consumers": list(a.consumers),
+                      **({"broker": a.broker} if a.type == "events" else {})} for a in self.apis],
             "resources": [{"name": r.name, "type": r.type, "external": r.external,
                            "used_by": [c.name for c in self.components if r.name in c.uses]} for r in self.resources],
             "instances": [inst(i) for i in self.instances],
             "resource_instances": [{"resource": r.resource, "environment": r.environment, "type": r.type,
                                     "external": r.external, "argo_application": r.argo_application, "secret": r.secret,
                                     "store_key": r.store_key, "sizing": dict(r.sizing),
-                                    "backup": r.backup} for r in self.resource_instances],
+                                    "backup": r.backup,
+                                    **({"broker": copy.deepcopy(r.broker)} if r.type == "broker" else {})}
+                                   for r in self.resource_instances],
             "relations": self.relations(),
         }
 
@@ -528,6 +534,16 @@ def _cache_sizing(conf: dict, env: str) -> dict:
     return out
 
 
+def _broker_sizing(conf: dict, env: str) -> dict:
+    inst = _map(_map(conf.get("instances")).get(env))
+    try:
+        replicas = int(inst.get("replicas", conf.get("replicas", 1)))
+    except (TypeError, ValueError):
+        replicas = 1
+    version = inst.get("version", conf.get("version", "2.15"))
+    return {"version": str(version), "replicas": replicas, "storage": str(inst.get("storage", conf.get("storage", "1Gi")))}
+
+
 def _backup(value: object) -> dict | None:
     """`{"to", "schedule", "retention"}` with defaults for a mapping with a string `to`; anything else is None (spec 117)."""
     if not isinstance(value, dict) or not isinstance(value.get("to"), str) or not value["to"]:
@@ -557,6 +573,23 @@ def _instance_autonomy(env_obj: dict, idoc: dict) -> dict:
     return _autonomy.instance(env_obj, mx if mx in _autonomy.LEVELS else None)
 
 
+def _broker_instance(system: str, env: str, name: str, external: bool, store_key: str | None,
+                     api_broker: dict[str, str | None], components: list[tuple[dict, Component]]) -> dict:
+    """The broker view of one instance: address, monitoring, users and streams with consumers (spec 119)."""
+    carried = [a for a, b in api_broker.items() if b == name]
+    running = [c for _, c in components if env in c.environments]
+    users = [c for c in running if any(a in carried for a in (*c.provides, *c.consumes))]
+    svc, ns = f"{system}-{name}", f"{system}-{env}"
+    return {
+        "address": None if external else f"nats://{svc}.{ns}.svc:4222",
+        "monitoring": None if external else f"http://{svc}.{ns}.svc:8222",
+        "users": [{"component": c.name, "secret": f"{svc}-{c.name}-app",
+                   "store_key": store_key.replace("{component}", c.name) if external and store_key else None} for c in users],
+        "streams": [{"api": a, "stream": f"{system}-{a}", "subjects": f"{system}.{a}.>", "subject_prefix": f"{system}.{a}",
+                     "consumers": [{"name": c.name, "component": c.name} for c in running if a in c.consumes]} for a in carried],
+    }
+
+
 # ---------------- build ----------------
 
 def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: list[dict] | None = None) -> Model:
@@ -579,13 +612,29 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
     by_env = {e.name: e for e in envs}
 
     res_docs = {str(k): _map(v) for k, v in _map(doc.get("resources")).items()}
+    brokers = [k for k, v in res_docs.items() if v.get("type") == "broker"]
     comp_docs = {str(k): v for k, v in _map(doc.get("components")).items() if isinstance(v, dict)}
     libraries = {n for n, v in comp_docs.items() if v.get("type") == "library"}
     components, warnings = [], []
     for name, entry in comp_docs.items():
-        c, w = _component(name, entry, shapes, set(res_docs), libraries)
+        c, w = _component(name, entry, shapes, set(res_docs) - set(brokers), libraries)
         components.append((entry, c))
         warnings += w
+
+    # events APIs and the brokers that carry them (spec 119); the broker is an implicit `uses` of provider and consumers
+    api_broker: dict[str, str | None] = {}
+    for aname, adoc in _map(doc.get("apis")).items():
+        adoc = _map(adoc)
+        if adoc.get("type") != "events":
+            continue
+        explicit = adoc.get("broker")
+        if explicit is not None:
+            api_broker[str(aname)] = explicit if isinstance(explicit, str) and explicit in brokers else None
+        else:
+            api_broker[str(aname)] = brokers[0] if len(brokers) == 1 else None
+    components = [(e, dataclasses.replace(c, uses=(*c.uses, *dict.fromkeys(
+        b for a in (*c.provides, *c.consumes) for b in [api_broker.get(a)] if b and b not in c.uses))))
+        for e, c in components]
 
     resources = [Resource(k, str(v.get("type") or ("database" if k == "postgres" else "unknown")), v.get("external") is True)
                  for k, v in res_docs.items()]
@@ -614,20 +663,23 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
                 idoc = _map(_map(conf.get("instances")).get(env))
                 ext = idoc["external"] is True if "external" in idoc else r.external
                 path = _map(idoc.get("remote")).get("path") or _map(conf.get("remote")).get("path")
+                broker = r.type == "broker"
+                store_key = (_store_key(str(path or ("{system}-{env}-{resource}-{component}" if broker
+                                                      else "{system}-{env}-{resource}")), system, env, r.name) if ext else None)
                 ris.append(ResourceInstance(
-                    r.name, env, None if ext else f"addon-{r.name}-{env}", f"{system}-{r.name}-app",
+                    r.name, env, None if ext else f"addon-{r.name}-{env}", None if broker else f"{system}-{r.name}-app",
                     {} if ext else _sizing(conf, env) if r.type == "database" else _bucket_sizing(conf, env) if r.type == "bucket"
-                    else _cache_sizing(conf, env) if r.type == "cache" else {},
-                    r.type, ext,
-                    _store_key(str(path or "{system}-{env}-{resource}"), system, env, r.name) if ext else None,
-                    None if ext or r.type != "database" else _backup(idoc.get("backup"))))
+                    else _cache_sizing(conf, env) if r.type == "cache" else _broker_sizing(conf, env) if broker else {},
+                    r.type, ext, store_key,
+                    None if ext or r.type != "database" else _backup(idoc.get("backup")),
+                    _broker_instance(system, env, r.name, ext, store_key, api_broker, components) if broker else None))
 
     cs = [c for _, c in components]
     apis = []
     for name, adoc in _map(doc.get("apis")).items():
         apis.append(Api(str(name), str(_map(adoc).get("type") or "openapi"),
                         next((c.name for c in cs if name in c.provides), None),
-                        tuple(c.name for c in cs if name in c.consumes)))
+                        tuple(c.name for c in cs if name in c.consumes), api_broker.get(str(name))))
 
     return Model(system=system, owner=str(doc.get("owner") or ""), environments=tuple(envs), components=tuple(cs),
                  resources=tuple(resources), instances=tuple(instances), resource_instances=tuple(ris), apis=tuple(apis),
