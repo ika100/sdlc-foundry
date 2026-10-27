@@ -676,7 +676,7 @@ def test_no_password_value_appears_in_the_rendered_tree_ac_119_11(tmp_path):  # 
     broker_files = {k: t for k, t in g.items() if "/addons/" in k}
     assert broker_files
     for k, t in broker_files.items():
-        for m in re.finditer(r"(?im)^\s*(password|user)\s*:\s*(.+)$", t):
+        for m in re.finditer(r"(?im)^[ \t]*(password|user)[ \t]*:[ \t]*(.+)$", t):  # spec 119 slip: \s* crossed the newline after a mapping key
             assert re.fullmatch(r"""["']?(\{\{ \.password \}\}|<< \$[A-Z_]+ >>|password|[a-z_-]+)["']?""", m.group(2).strip()), f"{k}: {m.group(0)!r}"
     for e in env_list(g, "dev", "api"):
         if "NATS_PASSWORD" in e["name"]:
