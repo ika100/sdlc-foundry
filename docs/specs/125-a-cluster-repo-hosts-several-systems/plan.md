@@ -24,6 +24,7 @@ tasks:
     covers: [AC-125.2, AC-125.3, AC-125.4, AC-125.5, AC-125.6, AC-125.14]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: cluster check — devbox run check (operator gaps, operators owner, release warning) and --urls
     files: [templates/cluster-gitops/scripts/check.py]
