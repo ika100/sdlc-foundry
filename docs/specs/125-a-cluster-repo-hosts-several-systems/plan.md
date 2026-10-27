@@ -52,6 +52,7 @@ tasks:
     covers: [AC-125.1, AC-125.17]
     parallel_safe: true
     depends_on: [t6, t9]
+    done: true
   - id: t8
     title: cplat cluster new|add|remove (clusterrepo.py) and the cluster noun in cplat.py
     files: [scripts/cplat/clusterrepo.py, scripts/cplat/cplat.py]
@@ -77,6 +78,7 @@ tasks:
     covers: [AC-125.16]
     parallel_safe: true
     depends_on: [t3, t6]
+    done: true
   - id: t12
     title: docs — the Cluster in the domain model, the cluster guide (create, install a system, move an existing cluster), templates list, changelog
     files: [docs/DOMAIN-MODEL.md, docs/CLUSTERS.md, docs/templates.md, docs/CHANGELOG.md]
