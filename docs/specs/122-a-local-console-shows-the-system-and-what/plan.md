@@ -97,6 +97,7 @@ tasks:
     covers: [AC-122.6, AC-122.16, AC-122.17, AC-122.34, AC-122.35, AC-122.40]
     parallel_safe: true
     depends_on: [t1, t8, t11, t12]
+    done: true
   - id: t14
     title: Board — stage columns, list, column explanations, Done view and search
     files: [scripts/cplat/console/board.py]
