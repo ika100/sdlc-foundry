@@ -125,6 +125,7 @@ tasks:
     covers: [AC-124.14, AC-124.17, AC-124.18]
     parallel_safe: true
     depends_on: [t7, t13, t15]
+    done: true
   - id: t18
     title: Board and panels — engine badge on cards and rows, signal facts in the issue panel, engine actor on the run panel
     files: [scripts/cplat/console/board.py, scripts/cplat/console/panels.py]
