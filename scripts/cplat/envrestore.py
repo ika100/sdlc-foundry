@@ -90,6 +90,19 @@ def _wait_exists(root: dict, kns: str, ns: argparse.Namespace) -> None:
             time.sleep(POLL_S)
 
 
+ROLLOUT_KINDS = ("Deployment", "StatefulSet", "DaemonSet")
+
+
+def _wait_rollout(root: dict, kns: str, ns: argparse.Namespace) -> None:
+    """Wait until the restored workload has rolled out (kinds without a rollout, e.g. operator resources, only have to exist)."""
+    if root["kind"] not in ROLLOUT_KINDS:
+        return
+    rc, out, err = _k(["rollout", "status", f"{root['kind'].lower()}/{root['name']}", "-n", kns, f"--timeout={int(TIMEOUT_S)}s"], ns)
+    if rc != 0:
+        raise PlatformError(f"restore failed: {root['kind']} {root['name']} did not become ready after 30 minutes "
+                            f"({backupstate._why(rc, err, out)})")
+
+
 def _replace(vols: list[dict], kns: str, ns: argparse.Namespace, lines: list[str]) -> tuple[list[dict], list[tuple[str, str]]]:
     """Stop the workload roots and delete the PVCs. Returns (roots, [(application, root name)] that were paused)."""
     roots: dict[tuple[str, str], dict] = {}
@@ -176,6 +189,8 @@ def main(argv: list[str]) -> int:
         return _out(lines, ns, {"result": "listed", "backups": backups}, 0)
 
     completed = [b for b in backups if b["state"] == "completed"]
+    restorable = [b for b in backups if b["phase"] in ("Completed", "PartiallyFailed")]
+    available = ", ".join(b["name"] for b in restorable) or "none"
     if ns.backup == "latest":
         if not completed:
             raise PlatformError(f"{env} has no backups yet: the first scheduled backup has not finished")
@@ -185,7 +200,12 @@ def main(argv: list[str]) -> int:
         if chosen not in {b["name"] for b in backups}:
             if not backups:
                 raise PlatformError(f"{env} has no backups yet: the first scheduled backup has not finished")
-            raise PlatformError(f"no backup {chosen} in {env}; available: {', '.join(b['name'] for b in backups)}")
+            raise PlatformError(f"no backup {chosen} in {env}; available: {available}")
+        picked = next(b for b in backups if b["name"] == chosen)
+        if picked not in restorable:
+            text = (f"backup {chosen} is {picked['state']}: only a completed or partially failed backup can be restored "
+                    f"(available: {available})")
+            return _out([text, DB_LINE], ns, {"result": "refused", "backup": chosen, "namespace": kns}, 1)
 
     lines: list[str] = []
     try:
@@ -238,6 +258,7 @@ def main(argv: list[str]) -> int:
         try:
             for root in roots:
                 _wait_exists(root, kns, ns)
+                _wait_rollout(root, kns, ns)
                 say(f"started {root['kind']} {root['name']}")
         except PlatformError as ex:
             say(str(ex))
