@@ -2163,6 +2163,8 @@ def read_restore_state(app_dir: Path, env: str, db: str) -> tuple[list[dict], li
                 bad(f"cluster '{c['name']}': from.to must be an RFC 3339 UTC time ending in Z, or latest")
         if c["role"] == "previous" and not utc_time(c.get("until")):
             bad(f"cluster '{c['name']}' is previous and needs until, an RFC 3339 UTC time ending in Z")
+        if "archive" in c and (not isinstance(c["archive"], str) or not c["archive"]):
+            bad(f"cluster '{c['name']}': archive must be a server name")
     if sum(c["role"] == "active" for c in clusters) != 1:
         bad("exactly one cluster must be active")
     if sum(c["role"] != "active" for c in clusters) > 1:
@@ -2196,7 +2198,7 @@ def backup_target(app: str, env: str, cfg: dict, to: str) -> tuple[str, str, str
 
 
 def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | None = None, role: str = "active",
-                     frm: dict | None = None, backup: bool = False, archives: list[dict] | None = None) -> dict:
+                     frm: dict | None = None, backup: bool = False, archives: list[dict] | None = None, archive: str | None = None) -> dict:
     db = app.replace("-", "_")
     base = f"{app}-{name}"
     image = conf["pin"]
@@ -2219,8 +2221,9 @@ def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | N
     spec["resources"] = conf["resources"] or DB_DEFAULT_RESOURCES
     if backup and role in ("active", "previous"):
         params = {"barmanObjectName": base}
-        if archives and archives[-1]["server"] != (cluster or base):      # one Barman server per major (change it with imageName)
-            params["serverName"] = archives[-1]["server"]
+        server = archive or (archives[-1]["server"] if archives else None)      # one Barman server per major (change it with imageName)
+        if server and server != (cluster or base):      # spec 121 (changed after review): a switched generation has its own `archive`
+            params["serverName"] = server
         spec["plugins"] = [{"name": BARMAN_PLUGIN, "isWALArchiver": True, "parameters": params}]
     return {
         "apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster",
@@ -2594,7 +2597,7 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], 
     files: dict[str, dict | str] = {}
     for c in clusters:
         fname = "cluster.yaml" if c["name"] == base else f"cluster-g{c['name'][len(base) + 2:]}.yaml"
-        files[fname] = database_cluster(app, name, env, conf, c["name"], c["role"], c.get("from"), bool(backup), archives)
+        files[fname] = database_cluster(app, name, env, conf, c["name"], c["role"], c.get("from"), bool(backup), archives, c.get("archive") if c["role"] == "previous" else None)
     if backup:
         labels = {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
         bucket, endpoint, secret = backup_target(app, env, cfg, backup["to"])

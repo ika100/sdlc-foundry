@@ -106,7 +106,7 @@ def _major_before_upgrade(state: dict, server: str) -> tuple[int, int] | None:
     """(major of the archive `server`, major of the next archive) when the restore source is an archive before a later upgrade."""
     archives = state.get("archives") or []
     for i, a in enumerate(archives[:-1]):
-        if a.get("server") == server:
+        if a.get("server") == server and int(archives[i + 1]["major"]) > int(a["major"]):
             return int(a["major"]), int(archives[i + 1]["major"])
     return None
 
@@ -286,6 +286,15 @@ def main(argv: list[str]) -> int:
                 c["role"] = "active"
             elif c["name"] == old:
                 c["role"], c["until"] = "previous", _now()
+        archives = new.get("archives")
+        if archives:      # spec 121 (changed after review): the switched generation archives to its own server, the old one keeps its archive
+            frm = next((c.get("from") or {} for c in new["clusters"] if c["name"] == name), {})
+            major = next((a["major"] for a in archives if a["server"] == frm.get("server")), archives[-1]["major"])
+            for c in new["clusters"]:
+                if c["name"] == old:      # the previous cluster keeps the archive it wrote to; the new active one gets the entry below
+                    c["archive"] = c.get("archive") or archives[-1]["server"]
+            if name not in {a["server"] for a in archives}:
+                archives.append({"server": name, "major": major})
         title = f"chore(restore): switch {db}/{env} to {name}"
         action = "switch"
         what = f"switch {db}/{env} from {old} to {name}"

@@ -231,6 +231,14 @@ The last entry is the current archive. The renderer:
 - prints, when the active generation's major differs from the effective major,
   `note: applications/<s>: <db> in <env> runs <cluster> on <m> (restored from before the upgrade to <v>); set resources.<db>.instances.<env>.version: <m>, or upgrade it again with /resource:upgrade <db> --to <v> --env <env>`.
 
+**Changed after review (AC-121.16).** A restore reads the archives like this: `--to latest` restores from the current archive
+(`archives[-1]`); each archive's recovery window closes where the next archive starts (the time of the major step), so a time picks
+exactly one archive and a time inside the old window restores the old major. Switching to a restored generation gives it its own server
+name (spec 117's rule: one Barman server per generation, because CloudNativePG refuses a non-empty archive): `cplat resource restore
+--switch` appends `{server: <generation>, major: <major of its source archive>}` to `archives` and writes `archive: <server>` on the
+cluster that becomes `previous`, so both archive apart; the renderer gives a `previous` cluster `serverName: <its archive>` and the
+active one `archives[-1].server`. Databases without `archives` render as before.
+
 `read_restore_state` validates `archives` (a list of mappings with a non-empty `server` and an integer `major` in the table, servers
 unique) with 117's error form `… is not valid (archives: <reason>); take it from git history`.
 
@@ -290,7 +298,7 @@ table's pin of that major (releasing a hold, AC-121.11). Every check runs before
 | 5 | no instance in `<env>` | `<n> has no instance in <env> (no component that runs in <env> uses it)` | |
 | 6 | external in `<env>` (AC-121.13) | `<n> is external in <env>: its owner upgrades it, the platform does not` | |
 | 7 | `--to` lower (AC-121.14) | `<n> in <env> is on <cur>; <to> is lower and /resource:upgrade only moves up` | database: `the way back for a database is /resource:restore <n> --env <env> --to <time\|latest>` |
-| 8 | `--to` deprecated | `<to> is deprecated: upgrade to one of <SUPPORTED_MAJORS of the type>` | |
+| 8 | `--to` deprecated (major steps only; a pin move on the current major, even a deprecated one, is allowed) | `<to> is deprecated: upgrade to one of <SUPPORTED_MAJORS of the type>` | |
 | 9 | unsupported jump (AC-121.14) | `<n> in <env>: <cur> → <to> is not a supported upgrade path for <engine>; upgrade to <the highest of UPGRADE_PATHS[cur] below <to>> first` | `/resource:upgrade <n> --to <intermediate> --env <env>` |
 | 10 | earlier environment not ready (AC-121.9) | `<prev> is not ready for <env>: <n> in <prev> <state>` | see below |
 | 11 | held pin before a major step | `<n> in <env> still runs <held ref> from an earlier platform release; move it to this release's <cur> pin first` | `/resource:upgrade <n> --to <cur> --env <env>` |
@@ -304,12 +312,14 @@ table's pin of that major (releasing a hold, AC-121.11). Every check runs before
 `<state>`: `runs <major> (<ref>), not <to> (<this release's pin>)` → hint `/resource:upgrade <n> --to <to>` (plus ` --env <prev>` unless
 `<prev>` is the first environment); `is on <to> but not verified` → hint `cplat resource upgrade <n> --verify --env <prev>`;
 `failed its verification at <at> (<check>)` → same hint; `cannot be read (<reason>)` → hint `pass --context <prev>=<ctx>`. "Ready" means:
-`<prev>`'s rendered pin is the table's pin of `<to>` and its record (below) says `verified` for exactly that `image`.
+`<prev>`'s rendered pin is the table's pin of `<to>` and its record (below) says `verified` for exactly that `image`. For a pin move, `<prev>` may run `<to>` or a higher major: `<to>` then reads as `<prev>`'s own major (so a held staging can take its pin move once dev has moved on).
 
 Checks 13–15 call `status.collect_backups(repo, app, contexts)` in-process and take the entry of `<n>`/`<env>` from
 `status.public_backups(...)["resource_instances"]`, i.e. exactly what `cplat system status --json` shows as `backup.last_success`
 (`state` `unknown` → check 15). Age = `now − last_success` in UTC seconds; 3600 s is still recent. Cache and broker major steps and every
 pin move skip 13–15 (AC-121.11, AC-121.27).
+
+If the edit or the render fails, every file under `applications/` and `bootstrap/` is put back as it was and the command exits 1 with the error.
 
 **The step's edit** (round-trip YAML through `gitops.load`/`gitops.save`, comments kept), then `gitops.render`:
 - a major step on the last environment that has an instance: `resources.<n>.version: <to>`, every `instances.<e>.version` removed (an
@@ -709,3 +719,7 @@ Helm index (indexes read fully), its appVersion matches `operator_version`, and 
 CRD versions were read from the archives at their default values (NACK's `streamtemplates.jetstream.nats.io` has no served version
 and is left out). The plain Postgres tags `15.19`, `16.15`, `17.11` and `18.6` still exist. `uv run scripts/check-pins.py` reports
 81 references, all from the versions table.
+- Known gap (review, AC-121.16): an archive's window closes where the next archive's first recoverability point starts, because
+  `archives` records no time for the major step; a time between the step and the new archive's first base backup matches no archive
+  and is refused as outside the restore points (never restored from the wrong major). Verification takes that first base backup right
+  after the step, so the gap is short.
