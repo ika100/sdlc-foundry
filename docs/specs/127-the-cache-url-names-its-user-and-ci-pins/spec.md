@@ -1,7 +1,7 @@
 ---
 spec_id: 127-the-cache-url-names-its-user-and-ci-pins
 title: the cache URL names its user and CI pins its test tools
-status: approved
+status: done
 priority: P2
 shape: platform
 ---
@@ -49,3 +49,5 @@ Two loose ends from the 5.x resources round, decided by the user on 2026-10-28.
 - 2026-10-28 created
 - 2026-10-28 approved
 - 2026-10-28 AC-127.2 amended at plan time: the cache ExternalSecret is `refreshPolicy: CreatedOnce`, so an existing Secret keeps its url (rewriting it would regenerate the password); new caches get the new form
+- 2026-10-28 building
+- 2026-10-28 done

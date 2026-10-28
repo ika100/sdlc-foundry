@@ -25,7 +25,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [108-agents-get-a-compact-failure-summary-not](specs/108-agents-get-a-compact-failure-summary-not/spec.md) — Agents get a compact failure summary, not the full log | P2 | draft | 11 | #139 |
 | [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | draft | 12 | #164 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
-| [127-the-cache-url-names-its-user-and-ci-pins](specs/127-the-cache-url-names-its-user-and-ci-pins/spec.md) — the cache URL names its user and CI pins its test tools | P2 | approved | 6 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -140,6 +139,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [094-a-merge-conflict-re-plans-instead-of](specs/094-a-merge-conflict-re-plans-instead-of/spec.md) — A merge conflict re-plans instead of escalating | P2 | done | 15 |  |
 | [122-a-local-console-shows-the-system-and-what](specs/122-a-local-console-shows-the-system-and-what/spec.md) — A local console shows the system, its process and what needs you | P2 | done | 52 |  |
 | [124-autonomy-is-declared-per-environment-and](specs/124-autonomy-is-declared-per-environment-and/spec.md) — Autonomy is declared per environment and supervised in the console | P2 | done | 22 |  |
+| [127-the-cache-url-names-its-user-and-ci-pins](specs/127-the-cache-url-names-its-user-and-ci-pins/spec.md) — the cache URL names its user and CI pins its test tools | P2 | done | 6 |  |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)
