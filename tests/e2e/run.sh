@@ -41,6 +41,9 @@
 # Dockerfiles (non-root numeric user, read-only filesystem), render.py on system.yaml, the generated
 # Deployment/Service/HTTPRoute against a real API server, and the Gateway API on k3s' Traefik.
 #
+# The system answers `property_operators: owner` (spec 121): this test installs External Secrets, Kyverno and LGTM itself, so the
+# renderer writes no operator Applications for them. Image pins carry tag and digest (spec 121); checks here compare via the versions table.
+#
 # Needs: docker (running), k3d, kubectl, uv, curl, copier (or uv). Env: E2E_KEEP=1 keeps the cluster, E2E_PORT, E2E_WORK.
 set -euo pipefail
 
@@ -92,6 +95,19 @@ printf '%s\n' 'system: e2e' 'owner: e2e' 'components:' \
   '  - {name: e2e-web, description: "e2e web", type: website, lang: typescript}' > "$work/system.yml"
 $cplat system new "$work/system.yml" --no-github --skip-tasks --dir "$work" --org e2e >/dev/null
 [ -f "$gitops_repo/applications/e2e/system.yaml" ] || fail "system new did not write applications/e2e/system.yaml"
+
+step "Answer property_operators: owner (spec 121: this test installs External Secrets, Kyverno and LGTM itself)"
+uv run -q --with pyyaml python - "$gitops_repo/.copier-answers.yml" <<'PY' || fail "could not set property_operators: owner in .copier-answers.yml"
+import sys
+import yaml
+path = sys.argv[1]
+with open(path) as f:
+    answers = yaml.safe_load(f) or {}
+answers["property_operators"] = "owner"   # a string, as copier writes it
+with open(path, "w") as f:
+    yaml.safe_dump(answers, f, sort_keys=False)
+PY
+commit "property_operators: owner (spec 121: the e2e installs ESO, Kyverno and LGTM itself)"
 
 step "Declare the Postgres resource in system.yaml (cluster-up then installs the CloudNativePG operator)"
 $cplat resource add postgres --repo-dir "$gitops_repo" >/dev/null
@@ -858,6 +874,7 @@ nack_have=$(kubectl --context k3d-$cluster -n kube-system get helmcharts.helm.ca
 [ "$nack_pin" = 0.35.0 ] || nfail "operators/apps/nack.yaml pins '$nack_pin', expected the NACK chart 0.35.0"
 [ "$nack_have" = "$nack_pin" ] || nfail "the installed NACK chart is '$nack_have', operators/apps/nack.yaml pins '$nack_pin'"
 nack_image=$(kubectl --context k3d-$cluster -n nack get deploy -l app=nack -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null || true)
+nack_image=${nack_image%%@*}   # the reference may carry a digest (spec 121)
 [ "${nack_image##*:}" = 0.24.0 ] || nfail "the NACK Deployment runs '$nack_image', expected the tag 0.24.0"
 kubectl --context k3d-$cluster get crd streams.jetstream.nats.io consumers.jetstream.nats.io accounts.jetstream.nats.io >/dev/null || nfail "the NACK CRDs are not installed"
 for f in password-generator.yaml nack-secret.yaml externalsecret-e2e-api.yaml externalsecret-e2e-web.yaml server.yaml account.yaml \
@@ -867,17 +884,24 @@ done
 [ -z "$(ls "$bus_dir" | grep -E '^consumer-audit' || true)" ] || nfail "render wrote a consumer for audit, which nobody consumes"
 # the server pin (chart and image), and the variables of both components in the rendered overlays (kubectl kustomize overlays/dev/<component>)
 read -r -d '' decl_py <<'PY' || true
-import json, subprocess, sys
+import ast, json, os, subprocess, sys
 from pathlib import Path
 import yaml
 app, work = Path(sys.argv[1]), Path(sys.argv[2])
 bad = []
+# the expected NATS image is the versions table's (tag and digest), read from render.py without importing it (spec 121)
+nats_expected = None
+for node in ast.parse((Path(os.environ["E2E_ROOT"]) / "templates/gitops-app/scripts/render.py").read_text()).body:
+    if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "NATS_IMAGES" for t in node.targets):
+        nats_expected = ast.literal_eval(node.value)["2.15"]
+if not nats_expected:
+    bad.append("NATS_IMAGES['2.15'] not found in templates/gitops-app/scripts/render.py")
 src = yaml.safe_load((app / "addons/dev/bus/server.yaml").read_text())["spec"]["source"]
 image = src["helm"]["valuesObject"]["container"]["image"]
 if src["chart"] != "nats" or src["targetRevision"] != "2.15.1":
     bad.append(f"server.yaml pins chart {src['chart']} {src['targetRevision']}, expected nats 2.15.1")
-if f"{image['repository']}:{image['tag']}" != "nats:2.15.2-alpine":
-    bad.append(f"server.yaml pins the image {image['repository']}:{image['tag']}, expected nats:2.15.2-alpine")
+if f"{image['repository']}:{image['tag']}" != nats_expected:
+    bad.append(f"server.yaml pins the image {image['repository']}:{image['tag']}, expected {nats_expected} (NATS_IMAGES['2.15'])")
 
 def env_of(c):
     out = subprocess.run(["kubectl", "kustomize", str(app / "overlays/dev" / c)], capture_output=True, text=True)
@@ -913,7 +937,7 @@ check("e2e-api", {"EVENTS_ORDERS_STREAM": "e2e-orders", "EVENTS_ORDERS_SUBJECT_P
 print("\n".join(bad), file=sys.stderr)
 sys.exit(1 if bad else 0)
 PY
-(cd "$gitops_repo" && uv run -q --with pyyaml python -c "$decl_py" "$gitops_repo/applications/e2e" "$work") || nfail "the rendered broker files or component variables are not as designed (see above)"
+(cd "$gitops_repo" && E2E_ROOT="$root" uv run -q --with pyyaml python -c "$decl_py" "$gitops_repo/applications/e2e" "$work") || nfail "the rendered broker files or component variables are not as designed (see above)"
 echo "ok   operators/apps/nack.yaml pins nack $nack_pin (installed), the NACK Deployment runs 0.24.0; server.yaml pins nats chart 2.15.1 and nats:2.15.2-alpine; e2e-web and e2e-api get NATS_* from e2e-bus-<component>-app, EVENTS_ORDERS_*/EVENTS_AUDIT_* and NATS_INBOX_PREFIX"
 
 nstep "Broker: apply the addon without Argo CD (Secrets first, then the NATS server as a k3s HelmChart, then Account, streams and consumer) and wait for them (AC-119.21)"
