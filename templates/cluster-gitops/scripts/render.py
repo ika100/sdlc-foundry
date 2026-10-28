@@ -265,7 +265,8 @@ def main() -> int:
         print(c["cluster"])
     elif flag == "--crds":
         for op in c["operators"]:
-            print(f"{op} {system_render.OPERATORS[op]['crd']}")
+            if system_render.OPERATORS[op]["crd"] is not None:
+                print(f"{op} {system_render.OPERATORS[op]['crd']}")
     elif flag == "--systems":
         for s, repo in c["systems"].items():
             print(f"{s} {repo}")

@@ -80,6 +80,8 @@ def needs(system: dict) -> dict[str, set[str]]:
                 ops.add("external-secrets")
         if env in sr.policy_envs(services, cfg):
             ops.add("kyverno")
+        if (cfg.get("autoscaling") or {}).get(env) == "keda":
+            ops.add("keda")
         out[env] = ops
     return out
 

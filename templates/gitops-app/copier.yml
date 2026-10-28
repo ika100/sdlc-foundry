@@ -73,6 +73,12 @@ cluster_server:
   help: "Kubernetes API server Argo deploys to (in-cluster by default)."
   default: "https://kubernetes.default.svc"
 
+resource_metrics:
+  type: str
+  help: "Does the cluster already serve resource metrics (metrics.k8s.io)? provided: yes (k3s, k3d, GKE, AKS, EKS with its metrics-server add-on); install: the platform installs metrics-server when an instance scales on cpu or memory."
+  choices: [provided, install]
+  default: provided
+
 docker_registry:
   type: str
   help: "Container registry namespace the services push to."
