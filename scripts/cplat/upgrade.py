@@ -19,6 +19,7 @@ import backupstate
 import core
 import gitops
 import model
+import pr_rules
 import status
 from core import PlatformError
 
@@ -349,6 +350,7 @@ def body_of(plan: Plan, users: list[str], nxt: str | None) -> str:
 
 def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
     """Branch, commit (signed off), push and `gh pr create`; returns the URL."""
+    title = pr_rules.fit(title)
     core.run(["git", "checkout", "-q", "-b", branch], cwd=repo)
     core.run(["git", "add", "applications", "bootstrap"], cwd=repo, check=False)
     core.run(["git", *core.git_identity(repo), "commit", "-q", "-s", "-m", title], cwd=repo)
