@@ -8,7 +8,7 @@ It needs no branch protection or auto-merge, so it works for private repos on Gi
                                          (--system-dir: /system:ship only, links the run to a system ship, spec 097)
   cplat component ship status [--json]             the state of the current run
   cplat component ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
-  cplat component ship pr --title T --body-file F  run `devbox run ci`, push the feature branch and open (or reuse) its PR
+  cplat component ship pr --title T --body-file F [--no-spec]   check the title and the spec rule, run `devbox run ci`, push and open (or reuse) its PR
   cplat component ship gitops prepare <task>       a checkout of a gitops task's repo on spec/<spec>-<task> (spec 076)
   cplat component ship gitops pr <task> --title T --body-file F   push it and open (or reuse) its draft PR
   cplat component ship land [--timeout S]          wait for the PR's checks (the first red one ends the wait, stuck runs are rerun
@@ -40,6 +40,7 @@ import core
 import escalation_rules
 import feedback
 import model
+import pr_rules
 import runs
 import smoke
 import spec as specmod
@@ -391,13 +392,13 @@ def finish(repo: Path) -> Path:
 
 # ---------------- pr / land ----------------
 
-def run_ci(repo: Path) -> None:
+def run_ci(repo: Path, env: dict[str, str] | None = None) -> None:
     """Spec 075: `devbox run ci` (the gates of the CI workflow, in its order) must be green before anything is pushed."""
     f = repo / "devbox.json"
     if not f.is_file() or '"ci"' not in f.read_text():
         return
     say("running `devbox run ci` before pushing …")
-    res = run(["devbox", "run", "ci"], cwd=repo, check=False, timeout=3600)
+    res = run(["devbox", "run", "ci"], cwd=repo, check=False, timeout=3600, env=env)
     if res.returncode != 0:
         try:
             import validate
@@ -409,7 +410,12 @@ def run_ci(repo: Path) -> None:
                             hint="hand the failure to the coder agent, commit the fix, then `cplat component ship pr` again")
 
 
-def open_pr(repo: Path, title: str, body_file: Path) -> dict:
+def _is_platform(repo: Path, st: dict) -> bool:
+    import settings
+    return st.get("shape") == "platform" or settings.declared_shape(repo) == "platform"
+
+
+def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> dict:
     st = require_state(repo)
     branch = st["branch"]
     cur = run(["git", "symbolic-ref", "--short", "HEAD"], cwd=repo).stdout.strip()
@@ -418,17 +424,37 @@ def open_pr(repo: Path, title: str, body_file: Path) -> dict:
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
     check_title(title)
+    existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url,title,labels"], cwd=repo) or "[]")
+    open_pr_ = existing[0] if existing else None
+    labels = [lb["name"] for lb in (open_pr_ or {}).get("labels", [])]
+    body = body_file.read_text()
+    if _is_platform(repo, st):
+        if no_spec and pr_rules.NO_SPEC not in labels:
+            labels.append(pr_rules.NO_SPEC)
+        base = "origin/main" if run(["git", "rev-parse", "--verify", "--quiet", "origin/main"], cwd=repo, check=False).returncode == 0 else "main"
+        err = pr_rules.spec_error(body, labels, pr_rules.changed_files(repo, base))
+        if err:
+            raise PlatformError(err)
+    elif no_spec:
+        say("note: --no-spec ignored, only the platform repo has the spec rule")
+        no_spec = False
     missing = [t["id"] for t in gitops_tasks(repo, st) if not st.get("gitops", {}).get(t["id"], {}).get("pr")]
     if missing:
         raise PlatformError(f"gitops task(s) without a PR: {', '.join(missing)}",
                             hint="cplat component ship gitops prepare <task>, change and commit there, then cplat component ship gitops pr <task> ...")
-    run_ci(repo)
+    run_ci(repo, {"PR_TITLE": title, "PR_BODY": body, "PR_LABELS": ",".join(labels)})
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
-    existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url"], cwd=repo) or "[]")
-    if existing:
-        st["pr"] = existing[0]["url"]
+    if open_pr_:
+        st["pr"] = open_pr_["url"]
+        if open_pr_.get("title") != title:
+            gh(["pr", "edit", st["pr"], "--title", title], cwd=repo)
+        if no_spec and pr_rules.NO_SPEC not in [lb["name"] for lb in open_pr_.get("labels", [])]:
+            gh(["pr", "edit", st["pr"], "--add-label", pr_rules.NO_SPEC], cwd=repo)
     else:
-        out = gh(["pr", "create", "--base", "main", "--head", branch, "--title", title, "--body-file", str(body_file)], cwd=repo)
+        cmd = ["pr", "create", "--base", "main", "--head", branch, "--title", title, "--body-file", str(body_file)]
+        if no_spec:
+            cmd += ["--label", pr_rules.NO_SPEC]
+        out = gh(cmd, cwd=repo)
         st["pr"] = out.strip().splitlines()[-1]
     st["phase"] = "land"
     save_state(repo, st)
@@ -436,8 +462,9 @@ def open_pr(repo: Path, title: str, body_file: Path) -> dict:
 
 
 def check_title(title: str) -> None:
-    if not re.match(r"^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?: .{1,72}$", title):
-        raise PlatformError(f"PR title '{title}' is not a Conventional Commit (type(scope): text, at most 72 characters)")
+    err = pr_rules.title_error(title)
+    if err:
+        raise PlatformError(err)
 
 
 def checks(repo: Path, pr: str) -> list[dict]:
@@ -878,13 +905,13 @@ def with_service_ref(body: str, ref: str) -> str:
 
 def gitops_pr(repo: Path, task_id: str, title: str, body_file: Path) -> dict:
     """Push the task's gitops branch and open (or reuse) its draft PR."""
+    check_title(title)
     st = require_state(repo)
     t = _gitops_task(repo, st, task_id)
     info = st.get("gitops", {}).get(task_id)
     d = gitops_checkout(repo, t["repo"])
     if not info or not (d / ".git").exists():
         raise PlatformError(f"gitops task {task_id} has no checkout", hint=f"cplat component ship gitops prepare {task_id}")
-    check_title(title)
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist")
     ahead = run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=d, check=False).stdout.strip()
@@ -1452,6 +1479,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("pr")
     p.add_argument("--title", required=True)
     p.add_argument("--body-file", required=True)
+    p.add_argument("--no-spec", action="store_true", help="platform repo: add the label no-spec (a one-line fix or docs)")
     g = sub.add_parser("gitops").add_subparsers(dest="gcmd", required=True)
     p = g.add_parser("prepare")
     p.add_argument("task")
@@ -1506,7 +1534,7 @@ def main(argv: list[str]) -> int:
         print(describe(set_phase(repo, ns.phase)))
         return 0
     if ns.cmd == "pr":
-        st = open_pr(repo, ns.title, core.stage_pr_body(repo, ns.body_file))
+        st = open_pr(repo, ns.title, core.stage_pr_body(repo, ns.body_file), ns.no_spec)
         print(f"PR: {st['pr']}\n{describe(st)}")
         return 0
     if ns.cmd == "gitops" and ns.gcmd == "prepare":
