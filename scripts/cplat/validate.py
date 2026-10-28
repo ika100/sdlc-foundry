@@ -29,6 +29,7 @@ import sys
 from pathlib import Path
 
 import core
+import failsum
 import quiet
 import runs
 import settings
@@ -437,6 +438,7 @@ def execute(root: Path, p: dict) -> int:
     rid = runs.current(root)
     results: dict[str, str] = {}
     code = 0
+    on, reason = failsum.enabled(root)
     entries = {e["name"]: e for e in p["checks"]}
     for e in p["checks"]:
         n, label = e["name"], f"{e['name']} ({e['decision']}, {e['rule']})"
@@ -460,8 +462,13 @@ def execute(root: Path, p: dict) -> int:
         if rc == 0:
             print(f"ok: {label} ({len(lines)} lines, log: {log})")
         else:
-            print(f"FAILED (exit {rc}): {label} (log: {log})")
-            print("\n".join(lines[-TAIL:]))
+            title = f"FAILED (exit {rc}): {label} (log: {log})"
+            if on:
+                s = failsum.summarize(text, title=title, check=n, command=" ".join(command(e)), exit_code=rc, log=log, root=root)
+                print(s.render())
+                failsum.write_sidecar(log, s)
+            else:
+                print(failsum.raw(title, text, reason, TAIL))
             code = 1
             for later in p["checks"][p["checks"].index(e) + 1:]:   # never started: not a `run`
                 if later["decision"] == "run":
