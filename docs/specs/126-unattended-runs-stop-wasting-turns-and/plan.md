@@ -16,18 +16,21 @@ tasks:
     covers: [AC-126.1, AC-126.2, AC-126.3, AC-126.4, AC-126.5, AC-126.6, AC-126.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: plugin commands (ship, fix, build, system ship) and version bumps
     files: [plugins/component/commands/ship.md, plugins/component/commands/fix.md, plugins/component/commands/build.md, plugins/system/commands/ship.md, plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
     covers: [AC-126.5, AC-126.10]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: docs — AGENTS.md, unattended-delivery.md, ADR index and ADR-028 note, changelog, measurements.md for AC-126.15
     files: [docs/AGENTS.md, docs/unattended-delivery.md, docs/adr/README.md, docs/adr/028-unattended-delivery-without-branch-protection.md, docs/CHANGELOG.md, docs/specs/126-unattended-runs-stop-wasting-turns-and/measurements.md]
     covers: [AC-126.15]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: check-pr-local.py and its step in scripts/ci-local.sh (devbox run ci)
     files: [scripts/check-pr-local.py, scripts/ci-local.sh]
