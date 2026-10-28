@@ -64,6 +64,7 @@ tasks:
     covers: [AC-126.9, AC-126.10, AC-126.11]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t10
     title: cplat component ship pr — spec rule before devbox run ci, --no-spec, retitle an open PR, PR env for devbox run ci
     files: [scripts/cplat/ship.py, tests/cplat/test_ship.py, tests/cplat/test_platform_shape_123.py]
