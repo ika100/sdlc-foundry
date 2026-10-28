@@ -484,6 +484,8 @@ def _replicas(entry: dict, inst: dict) -> int | None:
 
 def _scale_of(value: object) -> dict | None:
     """A declared `scale` as the model keeps it; None when it is not a mapping with `max` and an `on` mapping (the renderer refuses it)."""
+    if isinstance(value, dict) and True in value and "on" not in value:   # YAML 1.1 reads an unquoted `on:` as true (the renderer's rule)
+        value = {("on" if k is True else k): v for k, v in value.items()}
     if not isinstance(value, dict) or "max" not in value or not isinstance(value.get("on"), dict):
         return None
     return {"min": value["min"] if "min" in value else 1, "max": value["max"], "on": copy.deepcopy(value["on"])}
