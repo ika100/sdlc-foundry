@@ -15,7 +15,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | draft | 12 | #164 |
+| [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | approved | 13 | #164 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
