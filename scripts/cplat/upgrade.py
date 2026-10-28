@@ -275,7 +275,13 @@ def write_archives(app_dir: Path, plan: Plan) -> str:
     archives = list(state.get("archives") or [])
     if not archives:
         archives.append({"server": backupstate.cluster_roles(app_dir.name, name, state)["active"], "major": plan.cur})
-    server = f"{base}-pg{plan.to}"
+    # a name that is new in `archives`: from the active cluster (it differs per generation), then the smallest free numeric suffix
+    taken = {a["server"] for a in archives}
+    server = f"{backupstate.cluster_roles(app_dir.name, name, state)['active']}-pg{plan.to}"
+    root, n = server, 1
+    while server in taken:
+        n += 1
+        server = f"{root}-{n}"
     archives.append({"server": server, "major": plan.to})
     backupstate.write_restore_state(app_dir, env, name, {**state, "archives": archives})
     return server

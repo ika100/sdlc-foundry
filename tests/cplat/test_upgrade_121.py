@@ -542,7 +542,7 @@ def test_a_switched_active_generation_on_an_older_major_prints_the_note_ac_121_1
     p = render(tmp_path)
     assert p.returncode == 0, p.stderr
     note = ("note: applications/shop: orders-db in dev runs shop-orders-db-g1 on 16 (restored from before the upgrade to 17); set "
-            "resources.orders-db.instances.dev.version: 16, or upgrade it again with /resource:upgrade orders-db --to 17 --env dev")
+            "resources.orders-db.instances.dev.version: 16, then /resource:upgrade orders-db --to 17 --env dev")  # spec 121 review: one working way forward
     assert note in (p.stdout + p.stderr).splitlines()
     assert cluster(tree(tmp_path), "dev", file="cluster-g1.yaml")["spec"]["imageName"] == PG[16]
 

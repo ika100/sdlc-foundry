@@ -11,7 +11,7 @@ import backupstate
 import cplat
 from backup_fixtures import bdoc, clock, cnpg_cluster, kube, make_repo, objectstore, state_path, write_state  # noqa: F401  (fixtures)
 from test_backup_117_restore import DEV, NS, switch_world, with_state
-from upgrade_fixtures import APP, PG, commit_all
+from upgrade_fixtures import APP, PG, backed_up, commit_all, make_world, rerender_commit, upgrade_doc
 
 OLD, NEW = "shop-orders-db", "shop-orders-db-pg17"
 ARCH = [{"server": OLD, "major": 16}, {"server": NEW, "major": 17}]
@@ -116,3 +116,49 @@ def test_a_hand_written_switched_state_renders_distinct_server_names_ac_121_16(t
     assert plugin_params(repo).get("serverName") == NEW
     assert "serverName" not in plugin_params(repo, "cluster-g1.yaml"), "the generation archives to its own name"
     assert NS == "shop-dev"
+
+
+def test_a_major_step_after_a_restore_and_a_switch_writes_a_new_archive_ac_121_16(tmp_path, monkeypatch, kube, clock, capsys):  # AC-121.16
+    w = make_world(tmp_path, monkeypatch, upgrade_doc(16))
+    g1_archive = {"server": "shop-orders-db-g1", "major": 16}
+    switched = {"next": 2, "archives": [*ARCH, g1_archive],
+                "clusters": [{"name": OLD, "role": "previous", "until": "2026-10-27T11:02:13Z", "archive": NEW},
+                             {"name": "shop-orders-db-g1", "role": "active", "from": {"server": OLD, "to": BEFORE}}]}
+    write_state(w.repo, switched)
+    rerender_commit(w.repo, upgrade_doc(16))        # the owner set instances/version back to 16
+    backed_up(kube, name="shop-orders-db-g1")        # the active generation is the cluster that is read
+    backed_up(kube, clusters=False)                  # the object store keeps the system name
+    rc, out = run_cmd(capsys, "resource", "upgrade", "orders-db", "--to", "17", "--repo-dir", w.repo, "--context", "kind-test")
+    assert rc == 0, out
+    new = yaml.safe_load(state_path(w.repo).read_text().split("\n", 1)[1])
+    servers = [a["server"] for a in new["archives"]]
+    assert new["archives"][:3] == [*ARCH, g1_archive], "every earlier entry is kept"
+    assert new["archives"][-1] == {"server": "shop-orders-db-g1-pg17", "major": 17}
+    assert len(servers) == len(set(servers)) == 4
+    p = subprocess.run([sys.executable, "scripts/render.py"], cwd=w.repo, capture_output=True, text=True)
+    assert p.returncode == 0, p.stderr
+    assert plugin_params(w.repo, "cluster-g1.yaml").get("serverName") == "shop-orders-db-g1-pg17"
+
+
+def test_a_taken_archive_name_gets_the_smallest_free_numeric_suffix_ac_121_16(tmp_path):  # AC-121.16
+    import upgrade
+    repo = tmp_path / APP
+    state = {"next": 1, "clusters": [{"name": OLD, "role": "active"}],
+             "archives": [{"server": OLD, "major": 16}, {"server": NEW, "major": 17}, {"server": NEW + "-2", "major": 17}]}
+    (repo / "addons/dev/orders-db").mkdir(parents=True)
+    backupstate.write_restore_state(repo, "dev", "orders-db", state)
+    plan = upgrade.Plan.__new__(upgrade.Plan)
+    plan.name, plan.env, plan.cur, plan.to = "orders-db", "dev", 17, 17
+    assert upgrade.write_archives(repo, plan) == NEW + "-3"
+
+
+def test_the_note_offers_only_the_working_way_forward_ac_121_16(tmp_path):  # AC-121.16
+    repo = upgraded_repo(tmp_path)
+    state = {"next": 2, "archives": [*ARCH, {"server": "shop-orders-db-g1", "major": 16}],
+             "clusters": [{"name": OLD, "role": "previous", "until": "2026-10-27T11:02:13Z", "archive": NEW},
+                          {"name": "shop-orders-db-g1", "role": "active", "from": {"server": OLD, "to": BEFORE}}]}
+    write_state(repo, state)
+    p = subprocess.run([sys.executable, "scripts/render.py"], cwd=repo, capture_output=True, text=True)
+    note = next(ln for ln in (p.stdout + p.stderr).splitlines() if ln.startswith("note: applications/shop: orders-db in dev runs"))
+    assert "instances.dev.version: 16, then /resource:upgrade orders-db --to 17 --env dev" in note
+    assert "or upgrade it again" not in note

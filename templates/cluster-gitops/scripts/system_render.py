@@ -2936,8 +2936,8 @@ def archive_notes(app_dir: Path) -> list[str]:
             major = next((a["major"] for a in archives if a["server"] == frm.get("server")), conf["version"])
             if major != conf["version"]:
                 notes.append(f"note: applications/{app}: {name} in {env} runs {active['name']} on {major} (restored from before the upgrade to "
-                             f"{conf['version']}); set resources.{name}.instances.{env}.version: {major}, or upgrade it again with "
-                             f"/resource:upgrade {name} --to {conf['version']} --env {env}")
+                             f"{conf['version']}); set resources.{name}.instances.{env}.version: {major}, "
+                             f"then /resource:upgrade {name} --to {conf['version']} --env {env}")
     return notes
 
 

@@ -229,7 +229,9 @@ The last entry is the current archive. The renderer:
 - renders a `restored` generation whose `from.server` is an archive entry with another major on **that** major's table image (the data
   of a physical backup only starts on its own major), and so does the active generation after a switch to it;
 - prints, when the active generation's major differs from the effective major,
-  `note: applications/<s>: <db> in <env> runs <cluster> on <m> (restored from before the upgrade to <v>); set resources.<db>.instances.<env>.version: <m>, or upgrade it again with /resource:upgrade <db> --to <v> --env <env>`.
+  `note: applications/<s>: <db> in <env> runs <cluster> on <m> (restored from before the upgrade to <v>); set resources.<db>.instances.<env>.version: <m>, then /resource:upgrade <db> --to <v> --env <env>`
+  (changed after review, AC-121.16: the version is set first, so the major step is a real step again; the earlier second option, upgrading
+  without that edit, did nothing because the effective major was already `<v>`).
 
 **Changed after review (AC-121.16).** A restore reads the archives like this: `--to latest` restores from the current archive
 (`archives[-1]`); each archive's recovery window closes where the next archive starts (the time of the major step), so a time picks
@@ -328,7 +330,9 @@ If the edit or the render fails, every file under `applications/` and `bootstrap
   unchanged;
 - a database major step with `backup` in `<env>`: `restore-state.yaml` of `<n>`/`<env>` gets `archives` (when absent:
   `[{server: <active cluster>, major: <cur>}]` first; the file is created as `{next: 1, clusters: [{name: <system>-<n>, role: active}]}`
-  when absent), then `{server: <system>-<n>-pg<to>, major: <to>}` appended.
+  when absent), then `{server: <active cluster>-pg<to>, major: <to>}` appended
+  (changed after review, AC-121.16: named after the active cluster, which differs per generation; when that name is already in `archives`
+  the smallest free numeric suffix is added, `-2`, `-3`, …; an existing archive's name is never reused).
 
 Without `--pr`: the tree is left changed (not committed), the report says `wrote the <env> step: <what>; apply it, then verify:
 cplat resource upgrade <n> --verify --env <env>`. With `--pr`: branch `resource/upgrade-<n>-<env>-<to>`, commit (signed off) and
