@@ -25,7 +25,7 @@ Two loose ends from the 5.x resources round, decided by the user on 2026-10-28.
 
 ### The cache URL
 - **AC-127.1** Given a component whose `uses` lists a cache resource `<name>`, when it is rendered in an environment, then the key `url` of the Secret `<system>-<name>-app` is `redis://default:<password>@<host>:6379/0` (amends the URL form of AC-118.18; the variables, keys and Secret name stay as spec 118 defines them).
-- **AC-127.2** Given a system whose cache Secret template still has the 5.3 form, when `/platform:update` re-renders it, then the change list names the new `url` form and that running pods take it on their next restart; the old and new form authenticate as the same user, so no component fails in between.
+- **AC-127.2** Given a system whose cache Secret template still has the 5.3 form, when `/platform:update` re-renders it, then the change list names the new `url` form per cache and environment and says that the existing Secret keeps its `url` (written once, so the password is never regenerated) and that both forms authenticate as the same user `default`; no component fails and nothing needs to be done.
 - **AC-127.3** Given the e2e cluster test, when it probes a cache with `valkey-cli -u "$<NAME>_REDIS_URL"`, then the probe uses the component's variable unchanged (the rewrite to `redis://default:` is removed from `tests/e2e/run.sh`; `tests/e2e/upgrade.sh` keeps it only for a cache created by the previous release).
 
 ### Pinned test tools
@@ -48,3 +48,4 @@ Two loose ends from the 5.x resources round, decided by the user on 2026-10-28.
 
 - 2026-10-28 created
 - 2026-10-28 approved
+- 2026-10-28 AC-127.2 amended at plan time: the cache ExternalSecret is `refreshPolicy: CreatedOnce`, so an existing Secret keeps its url (rewriting it would regenerate the password); new caches get the new form
