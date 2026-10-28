@@ -63,8 +63,10 @@ if ! command -v devbox >/dev/null; then
 #!/usr/bin/env bash
 [ "${1:-}" = run ] && [ -n "${2:-}" ] || { echo "e2e devbox shim: only 'devbox run <script>'" >&2; exit 2; }
 cmd=$(python3 -c 'import json, sys; s = json.load(open("devbox.json"))["shell"]["scripts"][sys.argv[1]]; print(s if isinstance(s, str) else "\n".join(s))' "$2") || exit 2
+# devbox runs the init_hook before every script (a v5.0.1 python service installs pytest there: uv sync --all-extras)
+hook=$(python3 -c 'import json; h = json.load(open("devbox.json"))["shell"].get("init_hook") or []; print(h if isinstance(h, str) else "\n".join(h))') || exit 2
 shift 2
-exec bash -c "$cmd" e2e-devbox "$@"
+exec bash -c "$hook"$'\n'"$cmd" e2e-devbox "$@"
 SH
   chmod +x "$work/bin/devbox"
   export PATH="$work/bin:$PATH"
