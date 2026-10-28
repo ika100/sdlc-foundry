@@ -1,7 +1,7 @@
 ---
 spec_id: 127-the-cache-url-names-its-user-and-ci-pins
 title: the cache URL names its user and CI pins its test tools
-status: draft
+status: approved
 priority: P2
 shape: platform
 ---
@@ -47,3 +47,4 @@ Two loose ends from the 5.x resources round, decided by the user on 2026-10-28.
 ## Changelog
 
 - 2026-10-28 created
+- 2026-10-28 approved
