@@ -17,6 +17,7 @@ import budget
 import model
 import runs
 import ship
+import stopgate
 import spec as specmod
 from core import PlatformError, run
 
@@ -24,7 +25,6 @@ PHASES = ["plan", "publish", "repos", "complete", "done"]
 STATE_FILE = "cplat-app-ship.json"
 STATE_LOCK = "cplat-app-ship.state.lock"
 DEFAULT_MAX = 3
-DEFAULT_MAX_BLOCKS = 8
 PASSED = ("passed", "done-before")
 
 
@@ -218,7 +218,7 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
             st["run_id"] = runs.start("product-ship", repo=origin, spec=sp.id, resumes=st.get("run_id"))
             st["recorded"] = False
         st["escalated"] = st["cause"] = None
-        st["blocks"] = 0
+        stopgate.claim(st, stopgate.session_of_env())
         st["context"] = ctx
         if max_:
             st["max"] = max_
@@ -234,8 +234,9 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
         return st
     phase = "publish" if plan_path(repo, sp.id).is_file() else "plan"
     st = {"spec": sp.id, "phase": phase, "max": max_ or DEFAULT_MAX, "context": ctx, "recorded": False,
-          "started": dt.datetime.now().isoformat(timespec="seconds"), "blocks": 0, "escalated": None, "cause": None,
+          "started": dt.datetime.now().isoformat(timespec="seconds"), "escalated": None, "cause": None,
           "repos": {}, "ships": [], "waiting": [], "gitops_merged": []}
+    stopgate.claim(st, stopgate.session_of_env())
     if st["phase"] != "plan":
         refresh_repos(repo, st)
     state_path(repo).parent.mkdir(parents=True, exist_ok=True)
@@ -251,7 +252,6 @@ def set_phase(repo: Path, phase: str) -> dict:
 
     def change(st: dict) -> None:
         st["phase"] = phase
-        st["blocks"] = 0
         if phase != "plan":
             refresh_repos(repo, st)
     return update(repo, change)
@@ -259,13 +259,14 @@ def set_phase(repo: Path, phase: str) -> dict:
 
 # ---------------- escalate / finish ----------------
 
-def escalate(repo: Path, reason: str, cause: str | None = None) -> dict:
-    """End the run escalated. The cause is the escalated repo's when there is one (spec 097, AC-097.12)."""
+def escalate(repo: Path, reason: str, cause: str | None = None, keep_cause: bool = False) -> dict:
+    """End the run escalated. The cause is the escalated repo's when there is one (spec 097, AC-097.12),
+    unless `keep_cause` (the Stop hook's no-progress escalation, AC-126.7) keeps the given one."""
     def change(st: dict) -> None:
         bad = next(((i, r) for i, r in st.get("repos", {}).items() if r.get("state") == "escalated"), None)
         why, final = reason, ship._coerce_cause(cause)[0]
         if bad:
-            if bad[1].get("cause"):
+            if bad[1].get("cause") and not keep_cause:
                 final = bad[1]["cause"]
             if cause is None and not reason.startswith(bad[0]):
                 why = f"{bad[0]}: {reason}"
@@ -304,31 +305,75 @@ def next_step(st: dict) -> str:
 def describe(st: dict) -> str:
     head = f"product ship {st['spec']}: phase {st['phase']}" + (f" — ESCALATED: {st['escalated']}" if st.get("escalated") else "")
     lines = [head]
+    lines.append(f"  session: {st['owner']}" if st.get("owner")
+                 else f"  session: none (resume with /system:ship {st['spec']} to own the run)")
     if st.get("context"):
         lines.append(f"  context: {st['context']}")
     lines.append(f"next: {next_step(st)}")
     return "\n".join(lines)
 
 
-def gate(repo: Path, hook_input: dict, max_blocks: int = DEFAULT_MAX_BLOCKS) -> dict | None:
-    """None lets the session stop; a dict is the hook's JSON answer."""
+def _code_red(repo: Path) -> bool:
+    """Product code-red evidence: the open PR of the current branch has a red required check. A gh failure is not red."""
+    view = run(["gh", "pr", "view", "--json", "url,state"], cwd=repo, check=False)
+    if view.returncode != 0:
+        return False
+    try:
+        info = json.loads(view.stdout or "{}")
+    except ValueError:
+        return False
+    if not isinstance(info, dict) or info.get("state") != "OPEN" or not info.get("url"):
+        return False
+    checks = run(["gh", "pr", "checks", info["url"], "--required", "--json", "bucket"], cwd=repo, check=False)
+    if checks.returncode != 0:
+        return False
+    try:
+        rows = json.loads(checks.stdout or "[]")
+    except ValueError:
+        return False
+    return any(isinstance(r, dict) and r.get("bucket") in {"fail", "cancel"} for r in rows)
+
+
+def _mark(repo: Path, st: dict) -> dict:
+    head = run(["git", "rev-parse", "HEAD"], cwd=repo, check=False).stdout.strip() or None
+    repos = {i: r.get("state") for i, r in sorted((st.get("repos") or {}).items())}
+    return {"head": head, "phase": f"{st['phase']} {json.dumps(repos)}"}
+
+
+def gate(repo: Path, hook_input: dict) -> dict | None:
+    """None lets the session stop; a dict is the hook's JSON answer (spec 126: the same stop rules as the component gate)."""
     try:
         st = load_state(repo)
     except PlatformError:
         return None
     if not st or st.get("escalated") or st["phase"] == "done":
         return None
-    if st.get("blocks", 0) >= max_blocks:
-        with contextlib.redirect_stderr(io.StringIO()):     # the hook's output is its answer only
-            escalate(repo, f"gave up after {max_blocks} attempts to stop in phase {st['phase']}", "environment")
+    session = str(hook_input.get("session_id") or "").strip() or None
+    spec_id, phase = st["spec"], st["phase"]
+    command = f"/system:ship {spec_id}"
+    if not st.get("owner"):
+        return {"systemMessage": f"product ship {spec_id}: unfinished in phase {phase}, no session owns it; resume it with {command}"}
+    if session != st["owner"]:
         return None
-    blocks = st.get("blocks", 0) + 1
-    st = update(repo, lambda s: s.__setitem__("blocks", s.get("blocks", 0) + 1))
-    reason = [f"The product ship of {st['spec']} is not finished (phase {st['phase']}, stop attempt {blocks}/{max_blocks}).",
-              f"Next: {next_step(st)}.",
-              "Keep going. Only if a rule needs the user (a question of a repo spec, a conflict, a decision the spec does not answer) "
-              "or the user asked you to stop: run `cplat system ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop."]
-    return {"decision": "block", "reason": "\n".join(reason)}
+    mark = _mark(repo, st)
+    box: dict = {}
+
+    def change(s: dict) -> None:
+        box["verdict"] = stopgate.check(s, session, mark)
+
+    st = update(repo, change)
+    verdict = box["verdict"]
+    if verdict.action == "escalate":
+        message = stopgate.last_message(hook_input)
+        reason = stopgate.no_progress_reason(phase, message)
+        with contextlib.redirect_stderr(io.StringIO()):     # the hook's output is its answer only
+            escalate(repo, reason, stopgate.cause(message, _code_red(repo)), keep_cause=True)
+        return {"systemMessage": f"product ship {spec_id}: escalated ({reason}); resume it with {command}"}
+    text = [f"The product ship of {spec_id} is not finished (phase {phase}, stops without progress: {verdict.no_progress}/2).",
+            f"Next: {next_step(st)}.",
+            "Keep going. Only if a rule needs the user (a question of a repo spec, a conflict, a decision the spec does not answer) "
+            "or the user asked you to stop: run `cplat system ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop."]
+    return {"decision": "block", "reason": "\n".join(text)}
 
 
 _ID = re.compile(r"^[a-z0-9][a-z0-9._-]*$")

@@ -627,18 +627,11 @@ jobs:
     # Dependabot's grouped titles ("bump the all group across 1 directory with N updates") exceed the subject limit
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Validate PR title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          pattern='^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?: .{1,72}$'
-          if ! echo "$PR_TITLE" | grep -qE "$pattern"; then
-            echo "ERROR: PR title does not follow Conventional Commits."
-            echo "  Got:     $PR_TITLE"
-            echo "  Pattern: type(scope): description (≤72 chars)"
-            exit 1
-          fi
-          echo "OK: PR title is valid."
+        run: python3 scripts/check-pr-title.py
 
   # The single status required by branch protection. Jobs skipped by `changes` count as passed; a failed or cancelled job fails it.
   ci-success:

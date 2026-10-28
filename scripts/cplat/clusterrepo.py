@@ -14,6 +14,7 @@ from ruamel.yaml.comments import CommentedMap
 import core
 import gitops
 import newsvc
+import pr_rules
 from core import PlatformError, Report, run
 
 NAME_RE = re.compile(r"^[a-z]([a-z0-9-]{0,38}[a-z0-9])?$")
@@ -178,6 +179,7 @@ def _render(repo: Path, original: str) -> None:
 
 
 def _pr(repo: Path, branch: str, title: str, body: str) -> str:
+    title = pr_rules.fit(title)
     run(["git", "checkout", "-q", "-b", branch], cwd=repo)
     run(["git", "add", "cluster.yaml", "cluster"], cwd=repo)
     run(["git", *core.git_identity(repo), "commit", "-q", "-s", "-m", title], cwd=repo)

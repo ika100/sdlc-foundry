@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-10-22
 **Amends:** [ADR-027](027-dev-follows-main-through-pin-prs.md) (pin PRs no longer depend on auto-merge), [ADR-026](026-feature-specs.md) (a spec can be shipped unattended after approval)
+**Amended by:** [ADR-070](070-the-stop-hook-holds-only-the-owning-session-until-it-stops-progressing.md) (the 8-stop limit)
 
 ## Context
 

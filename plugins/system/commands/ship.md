@@ -20,7 +20,7 @@ cplat system ship start <spec> [--max N] [--context C]
 
 The shape must be `gitops-app`; `system ship start` refuses a component repo (use `/component:ship`), a spec that is not approved, a missing kube context for the system's cluster (pass `--context` or `kubectl config use-context`) and another unfinished system run. In each case show its hint and stop; nothing was changed. It prints the phase, the repo table and the next step; a re-run **resumes** where the run stopped. Print both outputs verbatim.
 
-**While the run is not finished, the shared plugin's Stop hook refuses to let the session end** (`cplat system ship gate`). Keep working. You may stop only after `cplat system ship escalate` or when the run is done.
+**While the run is not finished, the shared plugin's Stop hook holds only the session that started or resumed the run** (`cplat system ship gate`). A stop without a new commit or a phase change counts; after two such stops the run escalates by itself, so commit each finished task. Keep working. You may stop earlier only after `cplat system ship escalate` or when the run is done.
 
 ## Rules
 

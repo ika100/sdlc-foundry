@@ -8,7 +8,7 @@ It needs no branch protection or auto-merge, so it works for private repos on Gi
                                          (--system-dir: /system:ship only, links the run to a system ship, spec 097)
   cplat component ship status [--json]             the state of the current run
   cplat component ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
-  cplat component ship pr --title T --body-file F  run `devbox run ci`, push the feature branch and open (or reuse) its PR
+  cplat component ship pr --title T --body-file F [--no-spec]   check the title and the spec rule, run `devbox run ci`, push and open (or reuse) its PR
   cplat component ship gitops prepare <task>       a checkout of a gitops task's repo on spec/<spec>-<task> (spec 076)
   cplat component ship gitops pr <task> --title T --body-file F   push it and open (or reuse) its draft PR
   cplat component ship land [--timeout S]          wait for the PR's checks (the first red one ends the wait, stuck runs are rerun
@@ -17,14 +17,16 @@ It needs no branch protection or auto-merge, so it works for private repos on Gi
                                          then merge the after-release gitops PRs and wait for every app they name
   cplat component ship escalate <reason>           a rule needs the user: stop here, the Stop hook lets the session end
   cplat component ship finish                      end the run (archives the state)
-  cplat component ship gate [--max-blocks N]       Stop hook: keep an unfinished run going (reads the hook's JSON on stdin)
+  cplat component ship gate                        Stop hook: keep an unfinished run going (reads the hook's JSON on stdin)
 
 The state lives in `<git common dir>/cplat-ship.json`: local to the clone, shared by worktrees, never committed.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
+import io
 import json
 import re
 import sys
@@ -38,15 +40,16 @@ import core
 import escalation_rules
 import feedback
 import model
+import pr_rules
 import runs
 import smoke
 import spec as specmod
 import staging_deploy
+import stopgate
 from core import PlatformError, run
 
 PHASES = ["plan", "build", "pr", "land", "deploy", "done"]
 STATE_FILE = "cplat-ship.json"
-DEFAULT_MAX_BLOCKS = 8
 FAILED = {"fail", "cancel"}           # `gh pr checks --json bucket` values that mean red
 NO_CHECKS_GRACE = 300                 # seconds to wait for the first check to be reported
 QUEUE_TIMEOUT = 300                   # seconds a run may have only queued jobs before it is cancelled and rerun
@@ -160,6 +163,8 @@ def next_step(st: dict) -> str:
 
 def describe(st: dict) -> str:
     lines = [f"ship {st['spec']}: phase {st['phase']}" + (f" — ESCALATED: {st['escalated']}" if st.get("escalated") else "")]
+    lines.append(f"  session: {st['owner']}" if st.get("owner")
+                 else f"  session: none (resume with /component:ship {st['spec']} to own the run)")
     for k in ("branch", "pr", "merge_sha", "deployed"):
         if st.get(k):
             lines.append(f"  {k}: {st[k]}")
@@ -225,7 +230,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
             st["product"] = link
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
         st.pop("cause", None)
-        st["blocks"] = 0
+        stopgate.claim(st, stopgate.session_of_env())
         if shape:
             st["shape"] = shape
         save_state(repo, st)
@@ -247,8 +252,9 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         phase = "plan"
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated") and not st.get("recorded"):
         runs.finish(st.get("run_id"), "abandoned")   # take-over: only after every check that can still refuse
-    st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "blocks": 0, "fix_rounds": 0,
+    st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "fix_rounds": 0,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "recorded": False}
+    stopgate.claim(st, stopgate.session_of_env())
     if link:
         st["product"] = link
     if shape:
@@ -301,7 +307,6 @@ def set_phase(repo: Path, phase: str) -> dict:
         raise PlatformError(f"unknown phase '{phase}'", hint="one of " + ", ".join(PHASES))
     st = require_state(repo)
     st["phase"] = phase
-    st["blocks"] = 0
     save_state(repo, st)
     if phase != "done" and (limit := budget.check(st.get("run_id"), "phase end")):   # spec 102: a safe point
         reason = budget_stop(repo, st, limit, "phase end")
@@ -387,13 +392,13 @@ def finish(repo: Path) -> Path:
 
 # ---------------- pr / land ----------------
 
-def run_ci(repo: Path) -> None:
+def run_ci(repo: Path, env: dict[str, str] | None = None) -> None:
     """Spec 075: `devbox run ci` (the gates of the CI workflow, in its order) must be green before anything is pushed."""
     f = repo / "devbox.json"
     if not f.is_file() or '"ci"' not in f.read_text():
         return
     say("running `devbox run ci` before pushing …")
-    res = run(["devbox", "run", "ci"], cwd=repo, check=False, timeout=3600)
+    res = run(["devbox", "run", "ci"], cwd=repo, check=False, timeout=3600, env=env)
     if res.returncode != 0:
         try:
             import validate
@@ -405,7 +410,12 @@ def run_ci(repo: Path) -> None:
                             hint="hand the failure to the coder agent, commit the fix, then `cplat component ship pr` again")
 
 
-def open_pr(repo: Path, title: str, body_file: Path) -> dict:
+def _is_platform(repo: Path, st: dict) -> bool:
+    import settings
+    return st.get("shape") == "platform" or settings.declared_shape(repo) == "platform"
+
+
+def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> dict:
     st = require_state(repo)
     branch = st["branch"]
     cur = run(["git", "symbolic-ref", "--short", "HEAD"], cwd=repo).stdout.strip()
@@ -414,27 +424,47 @@ def open_pr(repo: Path, title: str, body_file: Path) -> dict:
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
     check_title(title)
+    existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url,title,labels"], cwd=repo) or "[]")
+    open_pr_ = existing[0] if existing else None
+    labels = [lb["name"] for lb in (open_pr_ or {}).get("labels", [])]
+    body = body_file.read_text()
+    if _is_platform(repo, st):
+        if no_spec and pr_rules.NO_SPEC not in labels:
+            labels.append(pr_rules.NO_SPEC)
+        base = "origin/main" if run(["git", "rev-parse", "--verify", "--quiet", "origin/main"], cwd=repo, check=False).returncode == 0 else "main"
+        err = pr_rules.spec_error(body, labels, pr_rules.changed_files(repo, base))
+        if err:
+            raise PlatformError(err)
+    elif no_spec:
+        say("note: --no-spec ignored, only the platform repo has the spec rule")
+        no_spec = False
     missing = [t["id"] for t in gitops_tasks(repo, st) if not st.get("gitops", {}).get(t["id"], {}).get("pr")]
     if missing:
         raise PlatformError(f"gitops task(s) without a PR: {', '.join(missing)}",
                             hint="cplat component ship gitops prepare <task>, change and commit there, then cplat component ship gitops pr <task> ...")
-    run_ci(repo)
+    run_ci(repo, {"PR_TITLE": title, "PR_BODY": body, "PR_LABELS": ",".join(labels)})
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
-    existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url"], cwd=repo) or "[]")
-    if existing:
-        st["pr"] = existing[0]["url"]
+    if open_pr_:
+        st["pr"] = open_pr_["url"]
+        if open_pr_.get("title") != title:
+            gh(["pr", "edit", st["pr"], "--title", title], cwd=repo)
+        if no_spec and pr_rules.NO_SPEC not in [lb["name"] for lb in open_pr_.get("labels", [])]:
+            gh(["pr", "edit", st["pr"], "--add-label", pr_rules.NO_SPEC], cwd=repo)
     else:
-        out = gh(["pr", "create", "--base", "main", "--head", branch, "--title", title, "--body-file", str(body_file)], cwd=repo)
+        cmd = ["pr", "create", "--base", "main", "--head", branch, "--title", title, "--body-file", str(body_file)]
+        if no_spec:
+            cmd += ["--label", pr_rules.NO_SPEC]
+        out = gh(cmd, cwd=repo)
         st["pr"] = out.strip().splitlines()[-1]
     st["phase"] = "land"
-    st["blocks"] = 0
     save_state(repo, st)
     return st
 
 
 def check_title(title: str) -> None:
-    if not re.match(r"^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?: .{1,72}$", title):
-        raise PlatformError(f"PR title '{title}' is not a Conventional Commit (type(scope): text, at most 72 characters)")
+    err = pr_rules.title_error(title)
+    if err:
+        raise PlatformError(err)
 
 
 def checks(repo: Path, pr: str) -> list[dict]:
@@ -797,7 +827,6 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
 def _merged(repo: Path, st: dict, sha: str, lines: list[str]) -> tuple[bool, list[str]]:
     st["merge_sha"] = sha
     st["phase"] = "deploy"
-    st["blocks"] = 0
     save_state(repo, st)
     run(["git", "switch", "-q", "main"], cwd=repo, check=False)
     run(["git", "pull", "-q", "--ff-only"], cwd=repo, check=False)
@@ -876,13 +905,13 @@ def with_service_ref(body: str, ref: str) -> str:
 
 def gitops_pr(repo: Path, task_id: str, title: str, body_file: Path) -> dict:
     """Push the task's gitops branch and open (or reuse) its draft PR."""
+    check_title(title)
     st = require_state(repo)
     t = _gitops_task(repo, st, task_id)
     info = st.get("gitops", {}).get(task_id)
     d = gitops_checkout(repo, t["repo"])
     if not info or not (d / ".git").exists():
         raise PlatformError(f"gitops task {task_id} has no checkout", hint=f"cplat component ship gitops prepare {task_id}")
-    check_title(title)
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist")
     ahead = run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=d, check=False).stdout.strip()
@@ -1333,7 +1362,6 @@ def _ahead(slug: str, base: str, rev: str) -> bool:
 
 def _done(repo: Path, st: dict, lines: list[str]) -> tuple[bool, list[str]]:
     st["phase"] = "done"
-    st["blocks"] = 0
     save_state(repo, st)
     steps = plan_meta(repo, st).get("human_steps") or []
     if steps:
@@ -1343,23 +1371,57 @@ def _done(repo: Path, st: dict, lines: list[str]) -> tuple[bool, list[str]]:
 
 # ---------------- Stop hook ----------------
 
-def gate(repo: Path, hook_input: dict, max_blocks: int, run_tests: bool = True) -> dict | None:
-    """None lets the session stop; a dict is the hook's JSON answer ({"decision": "block", "reason": …})."""
+def _head(repo: Path, branch: str) -> str | None:
+    r = run(["git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}"], cwd=repo, check=False)
+    return (r.stdout.strip() or None) if r.returncode == 0 else None
+
+
+def required_red(repo: Path, pr: str) -> bool:
+    """True when a required check of the PR failed or was cancelled; false when `gh` fails (spec 126)."""
+    try:
+        out = gh(["pr", "checks", pr, "--required", "--json", "bucket"], cwd=repo, check=False)
+        return any(c.get("bucket") in {"fail", "cancel"} for c in json.loads(out or "[]"))
+    except (ValueError, AttributeError, PlatformError):
+        return False
+
+
+def no_progress_cause(repo: Path, st: dict, message: str, run_tests: bool = True) -> str:
+    """The cause of a no-progress escalation: the rules on the last message, else the code-red evidence (spec 126)."""
+    red = False
+    phase = st.get("phase")
+    if phase in ("plan", "build") and run_tests:
+        red = build_red(repo, st["spec"])[1]
+    elif phase in ("land", "deploy") and st.get("pr"):
+        red = required_red(repo, st["pr"])
+    return stopgate.cause(message, red)
+
+
+def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
+    """None lets the session stop silently; a dict is the hook's JSON answer (spec 126: only the owner is held)."""
     try:
         st = load_state(repo)
     except PlatformError:
         return None
     if not st or st.get("escalated") or st["phase"] == "done":
         return None
-    if st.get("blocks", 0) >= max_blocks:
-        st["escalated"] = f"gave up after {max_blocks} attempts to stop in phase {st['phase']}"
-        st["cause"] = "environment"            # AC-088.18
-        save_state(repo, st)
-        return {"systemMessage": f"ship {st['spec']}: stopped after {max_blocks} blocked stops in phase {st['phase']}; "
-                                 "resume with /component:ship " + st["spec"]}
-    st["blocks"] = st.get("blocks", 0) + 1
+    session = hook_input.get("session_id") or None
+    mark = {"head": _head(repo, st["branch"]), "phase": st["phase"]}
+    verdict = stopgate.check(st, session, mark)
+    command = f"/component:ship {st['spec']}"
+    if verdict.action == "silent":
+        return None
+    if verdict.action == "notice":
+        return {"systemMessage": f"ship {st['spec']}: unfinished in phase {st['phase']}, no session owns it; resume it with {command}"}
     save_state(repo, st)
-    reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, stop attempt {st['blocks']}/{max_blocks}).",
+    if verdict.action == "escalate":
+        message = stopgate.last_message(hook_input)
+        cause = no_progress_cause(repo, st, message, run_tests)
+        why = stopgate.no_progress_reason(st["phase"], message)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            escalate(repo, why, cause)
+        return {"systemMessage": f"ship {st['spec']}: escalated ({why}); resume it with {command}"}
+    reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
+              f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
               f"Next: {next_step(st)}."]
     if st["phase"] == "build" and run_tests:
         reason += build_status(repo, st["spec"])
@@ -1369,24 +1431,32 @@ def gate(repo: Path, hook_input: dict, max_blocks: int, run_tests: bool = True) 
     return {"decision": "block", "reason": "\n".join(reason)}
 
 
-def build_status(repo: Path, spec_id: str) -> list[str]:
-    """Trace and fast tests, so the model sees exactly what is still red."""
+def build_red(repo: Path, spec_id: str) -> tuple[list[str], bool]:
+    """Trace and fast tests as lines, plus whether anything is red (a criterion without a test, red or unfinished tests)."""
     out: list[str] = []
+    red = False
     tr = run([sys.executable, str(Path(__file__).with_name("cplat.py")), "spec", "trace", spec_id], cwd=repo, check=False, timeout=120)
     if tr.returncode != 0:
+        red = True
         out.append("Criteria without a test:\n" + "\n".join(ln for ln in tr.stdout.splitlines() if ln.startswith("MISS")))
     if not (repo / "devbox.json").is_file():
-        return out
+        return out, red
     try:
         t = run(["devbox", "run", "test-fast"], cwd=repo, check=False, timeout=900)
     except PlatformError as e:
-        return out + [f"`devbox run test-fast` did not finish: {e}"]
+        return out + [f"`devbox run test-fast` did not finish: {e}"], True
     if t.returncode != 0:
         tail = [ln for ln in (t.stdout + t.stderr).splitlines() if ln.strip()][-30:]
         out.append("`devbox run test-fast` is red:\n" + "\n".join(tail))
+        red = True
     else:
         out.append("`devbox run test-fast` is green.")
-    return out
+    return out, red
+
+
+def build_status(repo: Path, spec_id: str) -> list[str]:
+    """Trace and fast tests, so the model sees exactly what is still red."""
+    return build_red(repo, spec_id)[0]
 
 
 # ---------------- CLI ----------------
@@ -1409,6 +1479,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("pr")
     p.add_argument("--title", required=True)
     p.add_argument("--body-file", required=True)
+    p.add_argument("--no-spec", action="store_true", help="platform repo: add the label no-spec (a one-line fix or docs)")
     g = sub.add_parser("gitops").add_subparsers(dest="gcmd", required=True)
     p = g.add_parser("prepare")
     p.add_argument("task")
@@ -1432,8 +1503,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--command", default=None, help="the failing command (cause platform; default /component:ship)")
     p.add_argument("--evidence-file", default=None, help="failing output for the issue (cause platform); - reads stdin")
     sub.add_parser("finish")
-    p = sub.add_parser("gate")
-    p.add_argument("--max-blocks", type=int, default=DEFAULT_MAX_BLOCKS)
+    sub.add_parser("gate")
     ns = ap.parse_args(argv)
     repo = Path(ns.repo).resolve()
 
@@ -1444,7 +1514,7 @@ def main(argv: list[str]) -> int:
         except ValueError:
             hook = {}
         cwd = Path(hook.get("cwd") or repo)
-        answer = gate(cwd, hook, ns.max_blocks)
+        answer = gate(cwd, hook)
         if answer:
             print(json.dumps(answer))
         return 0
@@ -1464,7 +1534,7 @@ def main(argv: list[str]) -> int:
         print(describe(set_phase(repo, ns.phase)))
         return 0
     if ns.cmd == "pr":
-        st = open_pr(repo, ns.title, core.stage_pr_body(repo, ns.body_file))
+        st = open_pr(repo, ns.title, core.stage_pr_body(repo, ns.body_file), ns.no_spec)
         print(f"PR: {st['pr']}\n{describe(st)}")
         return 0
     if ns.cmd == "gitops" and ns.gcmd == "prepare":

@@ -107,7 +107,7 @@ Not run by fix: `devbox run security` (use `/component:check` for a full audit b
 Then make **one** Bash call (it commits everything with `-s`, finds the open issues to close, pushes the branch and opens the PR):
 
 ```bash
-cplat pr open --title "<type>(<scope>): <imperative description of the task>" [--issues "#NNN …"]
+cplat pr open --title "<type>(<scope>): <imperative description of the task>" [--issues "#NNN …"] [--no-spec]
 ```
 
 Use `fix:` for bug fixes, `chore:` for tooling, `docs:` for documentation, etc.; the title must be a Conventional Commits title (the `pr-title` CI check). Pass `--issues` for `#NNN` references in `$ARGUMENTS`.

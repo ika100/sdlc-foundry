@@ -12,6 +12,7 @@ import re
 import sys
 from pathlib import Path
 
+import pr_rules
 import spec as specmod
 from core import PlatformError, run
 
@@ -105,8 +106,9 @@ def owner_of(root: Path) -> str | None:
 def _commit(root: Path, spec: specmod.Spec, message: str) -> None:
     rel = f"docs/specs/{spec.id}"
     _git_ok(root, "add", "--", rel)
-    if git(["diff", "--cached", "--quiet", "--", rel], cwd=root)[0] != 0:
-        _git_ok(root, "commit", "-s", "-m", message, "--", rel)
+    rc, _ = git(["commit", "-s", "-m", message, "--", rel], cwd=root)
+    if rc != 0 and git(["diff", "--cached", "--quiet", "--", rel], cwd=root)[0] != 0:
+        raise PlatformError(f"`git commit` failed (exit {rc})")   # a clean folder (nothing to commit) is fine
 
 
 def _ask_review(root: Path, number: int, owner: str | None, author: str | None) -> tuple[str | None, str]:
@@ -131,7 +133,7 @@ def _ask_review(root: Path, number: int, owner: str | None, author: str | None) 
 def publish(root: Path, spec: specmod.Spec) -> dict:
     """Push the spec's branch and open or update its draft PR; ask the owner for review."""
     branch = branch_of(root, spec)
-    title = f"docs(spec): {spec.id} — {spec.meta.get('title') or spec.id}"
+    title = pr_rules.fit(f"docs(spec): {spec.id} — {spec.meta.get('title') or spec.id}")
     _commit(root, spec, title)
     _git_ok(root, "push", "-u", "origin", branch)
     row = find_pr(root, spec, branch)

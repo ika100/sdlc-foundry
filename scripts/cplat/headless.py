@@ -37,6 +37,7 @@ import budget
 import runs as runlog
 import settings
 import ship
+import stopgate
 import telemetry
 from core import PlatformError
 
@@ -133,18 +134,35 @@ def unfinished(repo: Path) -> dict | None:
 def progress_key(repo: Path, st: dict) -> tuple:
     """What a session can change: phase, HEAD, fix rounds and the rest of the ship state (spec 080)."""
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
-    rest = {k: v for k, v in st.items() if k not in {"updated", "blocks"}}
+    rest = {k: v for k, v in st.items() if k not in {"updated", "blocks", "owner", "stop_gate"}}
     return st.get("phase"), head, st.get("fix_rounds", 0), repr(sorted(rest.items()))
 
 
-def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str | None = None) -> int:
+def session_of(cmd: list[str]) -> str | None:
+    return cmd[cmd.index("--session-id") + 1] if "--session-id" in cmd[:-1] else None
+
+
+def last_message(log: Path, start: int) -> str:
+    """The text a session wrote to the log after its `===` header."""
+    try:
+        with log.open("rb") as fh:
+            fh.seek(start)
+            text = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+    return "\n".join(ln for ln in text.splitlines() if not ln.startswith("===")).strip()
+
+
+def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str | None = None, session_id: str | None = None) -> int:
+    session_id = session_id or session_of(cmd)
+    session_env = {"CPLAT_SESSION_ID": session_id} if session_id else {}
     prompt = cmd[cmd.index("-p") + 1] if "-p" in cmd[:-1] else ""
     with log.open("a") as fh, telemetry.session(repo, run_id, settings.workflow_of(prompt) or "headless") as otel:
         fh.write(f"\n=== {clock():%Y-%m-%d %H:%M:%S} {shlex.join(cmd)}\n")
         fh.flush()
         try:
             p = subprocess.run(cmd, cwd=repo, stdout=fh, stderr=subprocess.STDOUT, timeout=minutes * 60,
-                               env=telemetry.merge_env({**os.environ, "CPLAT_HEADLESS": "1", **({"CPLAT_RUN_PARENT": run_id} if run_id else {})}, otel))
+                               env=telemetry.merge_env({**os.environ, "CPLAT_HEADLESS": "1", **session_env, **({"CPLAT_RUN_PARENT": run_id} if run_id else {})}, otel))
             return p.returncode
         except subprocess.TimeoutExpired:
             fh.write(f"\n=== timed out after {minutes:.0f} min\n")
@@ -201,8 +219,8 @@ def main(argv: list[str]) -> int:
         if rid:
             reason, outcome = stop_of(state["result"], state["code"])
             esc = {"reason": state["result"], "cause": "decision"} if reason == "budget" else None
-            if reason == "escalated" and state["result"].startswith("no progress"):   # AC-088.18
-                esc = {"reason": state["result"], "cause": "environment"}
+            if reason == "escalated" and state["result"].startswith("no progress"):   # AC-088.18, AC-126.7
+                esc = {"reason": state["result"], "cause": state.get("cause") or "decision"}
             runlog.finish(rid, outcome, escalation=esc, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason, **state_fields})
 
 
@@ -259,7 +277,8 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         if rid:
             import runs_usage
             runs_usage.register(rid, mode="own", session=sid)
-        code = run_once(cmd + ["--session-id", sid], repo, log, left, rid)
+        before = log.stat().st_size if log.exists() else 0
+        code = run_once(cmd + ["--session-id", sid], repo, log, left, rid, sid)
         st = unfinished(repo)
         if st is None:
             result = describe_end(repo, code)
@@ -267,7 +286,11 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         key = progress_key(repo, st)
         if key == last:
             result = f"no progress: two runs in a row ended in phase {st['phase']} with nothing changed"
-            ship.escalate(repo, result, "environment")
+            msg = last_message(log, before)
+            if excerpt := stopgate.excerpt(msg):
+                result += f"; last message: {excerpt}"
+            state["cause"] = ship.no_progress_cause(repo, st, msg)
+            ship.escalate(repo, result, state["cause"])
             snapped = True
             break
         last = key

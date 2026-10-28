@@ -179,7 +179,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
 2. Make **one** Bash call; it commits what is left with `-s`, pushes the feature branch, opens the PR and adds "Contains WIP commits from an interrupted build: squash-merge." to the body when the branch has `wip(` commits (spec 047):
 
    ```bash
-   cplat pr open --spec <spec_id> --title "feat(<scope>): <spec title, ≤72 chars>"
+   cplat pr open --spec <spec_id> --title "feat(<scope>): <spec title, ≤72 chars>" [--no-spec]
    ```
 
    Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report the failed part and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
