@@ -107,6 +107,10 @@ jobs:
         run: bash scripts/test-detect-shape.sh
       - name: relative Markdown links resolve
         run: python3 scripts/check-links.py
+      - name: pyyaml for the pin check
+        run: python3 -c 'import yaml' 2>/dev/null || uv pip install --system --break-system-packages pyyaml
+      - name: every image and chart comes from the versions table
+        run: python3 scripts/check-pins.py
       - name: every file has license and copyright metadata (REUSE)
         run: uvx --from "reuse[charset-normalizer]" reuse lint
       - name: actions are pinned by commit SHA and workflows declare least-privilege permissions
@@ -138,6 +142,17 @@ jobs:
       - name: rendered manifests satisfy the Kyverno guard rails (offline)
         run: bash /tmp/v2/scripts/check-policies.sh
 
+
+  release-check:
+    name: release-check (versions table)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - name: the changelog lists every changed versions row, and a major move is a major release
+        run: uv run scripts/release-check.py rows
 
   platform-tests:
     name: cplat unit + integration tests (shard ${{ matrix.shard }}/4)
@@ -629,7 +644,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [changes, validate-manifests, validate-shapes, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
+    needs: [changes, validate-manifests, validate-shapes, release-check, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: every needed job passed or was skipped
