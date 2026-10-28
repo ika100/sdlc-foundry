@@ -1,5 +1,5 @@
 ---
-description: "Move one environment of a database or cache to a new major, one PR per environment, then verify it. Usage: /resource:upgrade <name> --to <major> [--env <env>]"
+description: "Move one environment of a database, cache or broker to a new major (or version line), one PR per environment, then verify it. Usage: /resource:upgrade <name> --to <major> [--env <env>]"
 ---
 
 Run the platform script inside the gitops-app repo. **Request:** $ARGUMENTS
