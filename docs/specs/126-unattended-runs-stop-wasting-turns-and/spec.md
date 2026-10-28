@@ -1,7 +1,7 @@
 ---
 spec_id: 126-unattended-runs-stop-wasting-turns-and
 title: Unattended runs stop wasting turns and CI rounds
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -77,3 +77,4 @@ Success measure.
 - 2026-10-28 created
 - 2026-10-28 amended: folded in the user's answers (all suggested answers: progress is a new commit or a phase change, 2 stops without progress, no cap beyond the budget of spec 102, cause rule replacing AC-088.18 for these escalations, non-owning sessions never blocked and silent, takeover on resume, `--no-spec`, no local title check in component repos, retitle of an open PR); kept as one spec.
 - 2026-10-28 approved
+- 2026-10-28 building
