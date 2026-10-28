@@ -258,7 +258,8 @@ def test_the_json_keeps_schema_2_and_adds_the_fields_ac_115_15(mrepo, capsys):  
     assert res["ext"]["external"] is True and res["ext"]["used_by"] == ["api"] and res["idle-db"]["used_by"] == []
     ri = {(r["resource"], r["environment"]): r for r in d["resource_instances"]}
     assert ri[("orders-db", "prod")] == {"resource": "orders-db", "environment": "prod", "type": "database", "external": True, "argo_application": None,
-                                         "secret": "shop-orders-db-app", "store_key": "shop-prod-orders-db", "sizing": {}, "backup": None}  # spec 117: backup field
+                                         "secret": "shop-orders-db-app", "store_key": "shop-prod-orders-db", "sizing": {}, "backup": None,  # spec 117: backup field
+                                         "version": None, "pinned": None}  # spec 121: an external instance has no version or pin
     assert ri[("orders-db", "dev")]["argo_application"] == "addon-orders-db-dev" and ri[("orders-db", "dev")]["external"] is False
     assert {e["name"]: e.get("operators") for e in d["environments"]} == {"dev": "owner", "staging": None, "prod": None}
 
