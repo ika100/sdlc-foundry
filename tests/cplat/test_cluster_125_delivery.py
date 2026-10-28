@@ -185,6 +185,13 @@ def test_ac_125_17_the_devbox_recipes_and_ci_of_the_template(repo):  # AC-125.17
     assert "${{ secrets.SYSTEMS_TOKEN }}" in json.dumps(check_job)
 
 
+def test_ac_125_17_the_validate_recipe_gives_kubeconform_a_yaml_file(repo):  # AC-125.17
+    cmd = json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]["validate"]
+    target = re.search(r'kustomize build cluster > "([^"]+)"', cmd).group(1)
+    assert target.endswith(".yaml"), f"kubeconform reads {target!r}, which kubeconform skips (no .yaml/.yml/.json extension)"
+    assert f'"{target}"' in cmd.split("kubeconform", 1)[1]
+
+
 def test_ac_125_17_the_claude_files_of_the_template(repo):  # AC-125.17
     settings = json.loads((repo / ".claude" / "settings.json").read_text())
     enabled = settings["enabledPlugins"]
