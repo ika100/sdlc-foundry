@@ -1,0 +1,3 @@
+POLICY VIOLATION in apps/shop (dev):
+  policy require-limits -> resource Deployment/shop/shop-api failed:
+    autogen-validate-resources: validation error: CPU and memory limits are required. rule autogen-validate-resources failed at path /spec/template/spec/containers/0/resources/limits/

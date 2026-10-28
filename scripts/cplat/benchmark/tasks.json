@@ -35,6 +35,13 @@
       "prompt": "/component:ship 900",
       "max_runs": 4,
       "max_minutes": 240
+    },
+    "fix-rounds": {
+      "task_version": 1,
+      "prompt": "/component:build 901",
+      "max_runs": 2,
+      "max_minutes": 90,
+      "seed": "seeds/fix-rounds.json"
     }
   }
 }

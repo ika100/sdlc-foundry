@@ -1,0 +1,6 @@
+...F.                                                                    [100%]
+=================================== FAILURES ===================================
+/work/todo-api/src/todo_api/todos/router.py:58: AssertionError: expected 204, got 200
+=========================== short test summary info ============================
+FAILED tests/test_todos_api.py::test_delete_todo - AssertionError: expected 204, got 200
+1 failed, 4 passed in 0.30s

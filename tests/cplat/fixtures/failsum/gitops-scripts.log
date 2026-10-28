@@ -1,0 +1,3 @@
+checking apps/shop ...
+ERROR: apps/shop/dev/values.yaml: missing key image.tag
+ERROR: apps/shop/prod/values.yaml:12: replicas must be >= 2

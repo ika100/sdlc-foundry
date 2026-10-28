@@ -10,6 +10,8 @@
 
 `shape` (spec 123, ADR-056) is read by `declared_shape` only: the platform repo declares `shape: platform` in the committed
 project file; the personal file may not have the key.
+
+`failure_summary` (spec 108) is `on` (default) or `off`, read from the project file only; `off` restores the raw log tails.
 """
 from __future__ import annotations
 
@@ -165,3 +167,20 @@ def declared_shape(repo: Path) -> str | None:
             f"{path}: unknown shape '{value}'; the shapes that can be declared are: {', '.join(core.registry.declared_ids())}",
             hint="fix or remove the `shape:` line in .platform-settings.yml")
     return value
+
+
+def failure_summary(repo: Path) -> tuple[bool, str]:
+    """`failure_summary: on|off` (spec 108) from the committed project file only: (on, reason); the reason is empty when on."""
+    path = repo / PROJECT_FILE
+    if not path.is_file():
+        return True, ""
+    data = _yaml(path)
+    if not isinstance(data, dict) or "failure_summary" not in data:
+        return True, ""
+    value = data["failure_summary"]
+    word = value.strip().lower() if isinstance(value, str) else value
+    if word is False or word in ("off", "false"):    # YAML 1.1 reads a bare `off` as False
+        return False, f"{PROJECT_FILE} failure_summary: off"
+    if word is True or word in ("on", "true"):
+        return True, ""
+    raise PlatformError(f"{path}: failure_summary must be on or off, got '{value}'")

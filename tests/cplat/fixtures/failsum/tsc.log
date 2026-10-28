@@ -1,0 +1,4 @@
+src/lib/price.ts(12,7): error TS2322: Type 'string' is not assignable to type 'number'.
+src/app/page.tsx:5:3 - error TS2304: Cannot find name 'foo'.
+
+Found 2 errors.

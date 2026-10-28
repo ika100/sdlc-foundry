@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "4.0.0",
+      "version": "4.0.1",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": [
@@ -23,7 +23,7 @@
     {
       "name": "web",
       "source": "./plugins/web",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "description": "Agents for Next.js (App Router, pnpm, TypeScript) web repos: coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
@@ -49,7 +49,7 @@
     {
       "name": "svc-go",
       "source": "./plugins/svc-go",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "description": "Agents for Go service repos (chi, slog, golangci-lint, distroless): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
@@ -62,7 +62,7 @@
     {
       "name": "svc-java",
       "source": "./plugins/svc-java",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "description": "Agents for Java service repos (Spring Boot 3, Maven, JDK 21, distroless): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
@@ -88,7 +88,7 @@
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "Common quality and security agents plus the cplat launcher and session hooks.",
       "category": "agents",
       "tags": [
@@ -114,7 +114,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [

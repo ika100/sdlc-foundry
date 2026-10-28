@@ -12,6 +12,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import failsum
+from core import PlatformError
+
 TAIL = 40
 
 
@@ -31,11 +34,20 @@ def _log_path(cwd: Path, script: str) -> Path:
 
 def main(argv: list[str]) -> int:
     cwd = Path.cwd()
-    if len(argv) != 1 or argv[0] not in _scripts(cwd):
-        print("usage: cplat quiet <devbox-script>   (a key of shell.scripts in ./devbox.json; no other arguments)",
+    raw = bool(argv) and argv[0] == "--raw"
+    args = argv[1:] if raw else argv
+    if len(args) != 1 or args[0] not in _scripts(cwd):
+        print("usage: cplat quiet [--raw] <devbox-script>   (a key of shell.scripts in ./devbox.json; no other arguments)",
               file=sys.stderr)
         return 2
-    script = argv[0]
+    script = args[0]
+    try:
+        on, reason = failsum.enabled(cwd)
+    except PlatformError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    if raw:
+        on, reason = False, "--raw"
     log = _log_path(cwd, script)
     with log.open("wb") as fh:
         rc = subprocess.run(["devbox", "run", script], cwd=cwd, stdout=fh, stderr=subprocess.STDOUT).returncode
@@ -46,6 +58,12 @@ def main(argv: list[str]) -> int:
         if nonempty:
             print(nonempty[-1])
     else:
-        print(f"FAILED (exit {rc}): devbox run {script} (log: {log})")
-        print("\n".join(lines[-TAIL:]))
+        title = f"FAILED (exit {rc}): devbox run {script} (log: {log})"
+        if on:
+            s = failsum.summarize("\n".join(lines), title=title, check=script, command=f"devbox run {script}",
+                                  exit_code=rc, log=log, root=cwd)
+            print(s.render())
+            failsum.write_sidecar(log, s)
+        else:
+            print(failsum.raw(title, "\n".join(lines), reason, TAIL))
     return rc

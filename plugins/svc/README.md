@@ -33,7 +33,7 @@ This plugin ships no commands any more (the old `/svc:*` files are tombstones th
 | Small change or bug without a spec | `/component:fix <desc>` |
 | Release | `/component:release` |
 
-Agents get a compact brief (criteria, task, contract, tests, commands) and run green scripts through `cplat quiet <script>`, which prints one line on success and the tail plus the log path on failure (spec 100). Fix rounds validate with `cplat validate run`; the final gate before the PR always runs `devbox run ci` in full (spec 103, [guide](../../docs/unattended-delivery.md#change-aware-validation-in-fix-rounds)).
+Agents get a compact brief (criteria, task, contract, tests, commands) and run green scripts through `cplat quiet <script>`, which prints one line on success and on failure a failure summary plus the log path; agents open the full log only when the summary is not enough (specs 100 and 108). Fix rounds validate with `cplat validate run`; the final gate before the PR always runs `devbox run ci` in full (spec 103, [guide](../../docs/unattended-delivery.md#change-aware-validation-in-fix-rounds)).
 
 ## Coordinator model
 

@@ -1,0 +1,66 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.3.4, pluggy-1.5.0
+rootdir: /work/todo-api
+configfile: pyproject.toml
+plugins: cov-6.0.0, anyio-4.7.0
+collected 6 items
+
+tests/test_todos_api.py .F.F                                             [ 66%]
+tests/test_todos_model.py .E                                             [100%]
+
+==================================== ERRORS ====================================
+____________________ ERROR at setup of test_fixture_user _______________________
+
+    @pytest.fixture
+    def user():
+>       return make_user()
+
+tests/conftest.py:12:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def make_user():
+>       raise RuntimeError("db closed")
+E       RuntimeError: db closed
+
+tests/helpers.py:5: RuntimeError
+=================================== FAILURES ===================================
+______________________________ test_create_todo ________________________________
+
+client = <starlette.testclient.TestClient object at 0x7f1c2a3b4d50>
+
+    def test_create_todo(client):
+>       response = client.post("/todos", json={"title": ""})
+
+tests/test_todos_api.py:12:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv/lib/python3.12/site-packages/starlette/testclient.py:597: in post
+    return super().post(
+.venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+src/todo_api/todos/service.py:42: in create
+    raise ValueError("title must not be empty")
+E   ValueError: title must not be empty
+
+src/todo_api/todos/service.py:42: ValueError
+______________________________ test_delete_todo ________________________________
+
+client = <starlette.testclient.TestClient object at 0x7f1c2a3b4e10>
+
+    def test_delete_todo(client):
+        response = client.delete("/todos/1")
+>       assert response.status_code == 204
+E       assert 200 == 204
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/test_todos_api.py:31: AssertionError
+---------- coverage: platform linux, python 3.12.3-final-0 -----------
+Name                       Stmts   Miss  Cover
+----------------------------------------------
+src/todo_api/main.py          10      0   100%
+----------------------------------------------
+TOTAL                         10      0   100%
+=========================== short test summary info ============================
+FAILED tests/test_todos_api.py::test_create_todo - ValueError: title must not be empty
+FAILED tests/test_todos_api.py::test_delete_todo - assert 200 == 204
+ERROR tests/test_todos_model.py::test_fixture_user - RuntimeError: db closed
+==================== 2 failed, 3 passed, 1 error in 0.41s =====================

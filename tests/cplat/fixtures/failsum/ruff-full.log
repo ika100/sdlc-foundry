@@ -1,0 +1,17 @@
+F401 [*] `os` imported but unused
+ --> src/todo_api/main.py:3:8
+  |
+3 | import os
+  |        ^^
+  |
+help: Remove unused import: `os`
+
+E501 Line too long (120 > 100)
+   --> src/todo_api/todos/router.py:20:101
+    |
+ 20 |     return {"title": todo.title, "done": todo.done, "created": todo.created, "owner": todo.owner, "tags": todo.tags}
+    |                                                                                                     ^^^^^^^^^^^^^^^^
+    |
+
+Found 2 errors.
+[*] 1 fixable with the `--fix` option.

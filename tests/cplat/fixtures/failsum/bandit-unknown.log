@@ -1,0 +1,10 @@
+Run started:2026-10-28 10:15:00.123456
+
+Test results:
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'hunter2'
+   Severity: Low   Confidence: Medium
+   Location: ./src/todo_api/settings.py:7:11
+7	PASSWORD = "hunter2"
+
+Code scanned:
+	Total lines of code: 120

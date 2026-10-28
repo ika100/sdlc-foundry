@@ -1,0 +1,7 @@
+[INFO] --- checkstyle:3.6.0:check (default) @ shop-api ---
+[INFO] You have 2 Checkstyle violations.
+[ERROR] src/main/java/com/acme/shop/PriceService.java:[3,8] (imports) UnusedImports: Unused import - java.util.Map.
+[ERROR] src/main/java/com/acme/shop/Item.java:[12] (whitespace) WhitespaceAround: '{' is not preceded with whitespace.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0:check (default) on project shop-api: You have 2 Checkstyle violations. -> [Help 1]

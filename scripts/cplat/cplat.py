@@ -43,7 +43,7 @@ Plumbing keeps its name:
   cplat model show [--json] [--app APP] [--repo-dir DIR]   the declared domain model of a gitops-app
   cplat spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
   cplat pr wait|open …   wait <number|url> [-R owner/repo] [--merge]: CI watch; open --title T: commit -s, push, PR in one step
-  cplat quiet <devbox-script>   run it with output in a log: one line on success, the tail and log path on failure
+  cplat quiet [--raw] <script>  run it with output in a log: one line on success, the failure summary and log path on failure (--raw: the tail)
   cplat validate plan|run|final [--base REF] [--full] [--risk low|medium|high]   change-aware validation of the inner loop
   cplat headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume
   cplat deps findings|patch|report ...   patch fixable dependency findings of a red security gate

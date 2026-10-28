@@ -1,0 +1,11 @@
+[INFO] --- spotless:2.43.0:check (default) @ shop-api ---
+[INFO] Spotless.Java is keeping 14 files clean - 2 needs changes to be clean, 12 were already clean
+[ERROR] Failed to execute goal com.diffplug.spotless:spotless-maven-plugin:2.43.0:check (default) on project shop-api: The following files had format violations:
+[ERROR]     src/main/java/com/acme/shop/PriceService.java
+[ERROR]         @@ -1,5 +1,5 @@
+[ERROR]         -import java.util.List ;
+[ERROR]         +import java.util.List;
+[ERROR]     src/main/java/com/acme/shop/Item.java
+[ERROR]         @@ -10,3 +10,3 @@
+[ERROR] Run 'mvn spotless:apply' to fix these violations.
+[ERROR] -> [Help 1]

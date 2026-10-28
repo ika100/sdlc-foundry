@@ -1,0 +1,13 @@
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shop-api ---
+[INFO] Compiling 12 source files with javac [debug release 21] to target/classes
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR :
+[INFO] -------------------------------------------------------------
+[ERROR] /work/shop-api/src/main/java/com/acme/shop/PriceService.java:[19,21] cannot find symbol
+  symbol:   method sizee()
+  location: variable items of type java.util.List<com.acme.shop.Item>
+[INFO] 1 error
+[INFO] -------------------------------------------------------------
+[INFO] BUILD FAILURE
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.13.0:compile (default-compile) on project shop-api: Compilation failure
+[ERROR] -> [Help 1]

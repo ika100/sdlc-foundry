@@ -1,0 +1,3 @@
+# example.com/shop/internal/alerts
+internal/alerts/alerts.go:14:2: undefined: Missing
+internal/alerts/alerts.go:20:9: cannot use "x" (untyped string constant) as int value in return statement

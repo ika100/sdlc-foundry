@@ -194,6 +194,12 @@ Inside a build or ship, fix rounds run only what the change can affect (spec 103
 
 The final gate is never selective: before a PR is marked ready or landed, `devbox run ci` runs in full, and the PR's CI is unchanged. A check that the loop skipped or reused and the final gate then finds red is counted as a `miss` for its rule; `cplat platform runs report` shows the counts and misses per rule. The same holds for the red checks of the PR's CI (`cplat component ship land` records them). `--full` (also as an argument of `/component:build` and `/component:ship`), `validation: full` in `.platform-settings.yml` or `CPLAT_VALIDATION=full` turn selection off. Every spec file under `docs/specs/` counts as a spec change, never as documentation; checks that never started because an earlier one was red are reported as `not started`. Java, Go and gitops-app repos have no test selector yet and always run everything.
 
+## Failure summaries
+
+Spec 108, [ADR-071](adr/071-a-failing-check-reaches-an-agent-as-a-rule-made-summary.md). A failing check reaches an agent as a compact summary made by fixed rules, not as a raw log tail: `cplat quiet`, `cplat validate run`, the pre-push `devbox run ci` and the red CI checks of `cplat component ship land` and `cplat pr wait` print, per failed check, its format, the failing tests or files with line and message, repeated entries counted once, with secrets redacted. A format the parsers do not know is printed as `format: unknown` with the last 40 lines. The full log stays on disk next to a `<log>.summary.json` sidecar, and the agents are told to read the summary first and to open the full log only when the summary is not enough. Spec 102's no-progress signature and recovery snapshot use the summary.
+
+To get the earlier output back, run `cplat quiet --raw <script>` or set `failure_summary: off` in `.platform-settings.yml`. `cplat platform runs benchmark fix-rounds` compares a build with summaries on and off.
+
 ## Live usage in Grafana (optional)
 
 `cplat headless` and `cplat platform runs benchmark` can turn on Claude Code's own OpenTelemetry export for the sessions they start (spec 101), so tokens and estimated cost show up live, per run, model and day. The run store stays the system of record: phases, roles and the figures in `cplat platform runs report` always come from the transcripts.
