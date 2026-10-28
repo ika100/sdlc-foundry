@@ -181,7 +181,7 @@ def test_another_format_says_unknown_and_shows_the_last_40_lines_ac_108_4(fixtur
     shown = out.splitlines()[2:]
     assert shown == lines[-40:]
     bandit = render(sample(fixture), "security")
-    assert "format: unknown" in bandit and "hunter2" in bandit
+    assert "format: unknown" in bandit and "B105:hardcoded_password_string" in bandit  # spec 108 build: the tail is redacted (AC-108.7)
 
 
 def test_output_the_summary_cannot_read_is_never_an_empty_summary_ac_108_4():  # AC-108.4
