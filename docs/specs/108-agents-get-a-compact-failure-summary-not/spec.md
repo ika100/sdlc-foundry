@@ -10,7 +10,7 @@ tracks: [139]
 
 ## Problem
 
-When a test, lint, type check or build fails during `/svc:build` or a ship fix round, the agent that has to fix it reads raw output. `cplat quiet` (spec 100, AC-100.12) already keeps successes to one line, but a failure prints the last 40 lines and the log path, and the agent instructions say to read that log. So the agent often reads the whole log, with progress bars, passing tests, stack frames from libraries and repeated warnings, and it does so again in every fix round. A CI failure in ship is handed over the same way. Most of these tokens carry nothing the fix needs: which check failed, which tests or which file and line, the error, and a few lines around it. A deterministic step can pull those out, with no model involved, while the full log stays on disk for the cases where the summary is not enough. Spec 099 can measure the saving. Part of #139.
+When a test, lint, type check or build fails during `/component:build` or a ship fix round, the agent that has to fix it reads raw output. `cplat quiet` (spec 100, AC-100.12) already keeps successes to one line, but a failure prints the last 40 lines and the log path, and the agent instructions say to read that log. So the agent often reads the whole log, with progress bars, passing tests, stack frames from libraries and repeated warnings, and it does so again in every fix round. A CI failure in ship is handed over the same way. Most of these tokens carry nothing the fix needs: which check failed, which tests or which file and line, the error, and a few lines around it. A deterministic step can pull those out, with no model involved, while the full log stays on disk for the cases where the summary is not enough. Spec 099 can measure the saving. Part of #139.
 
 ## Stories
 
@@ -58,3 +58,4 @@ The scope. A summary is made for every failing command that `cplat quiet` runs (
 - 2026-10-25 created
 - 2026-10-25 open questions answered (suggested answers)
 - 2026-10-25 approved
+- 2026-10-28 editorial: `/svc:build` is `/component:build` since 5.0; reading: the cluster-gitops template (new in 5.x) is outside AC-108.4's six and falls back to the last 40 lines
