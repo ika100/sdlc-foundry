@@ -1181,6 +1181,9 @@ $cplat resource remove bus --repo-dir "$gitops_repo" 2>&1 | tee /dev/stderr >/de
 for o in consumers.jetstream.nats.io/e2e-orders.e2e-web streams.jetstream.nats.io/e2e-orders streams.jetstream.nats.io/e2e-audit accounts.jetstream.nats.io/e2e-bus; do
   kc delete "$o" --timeout=60s || { kc get "$o" -o yaml | tail -20; kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=20 || true; nfail "could not delete $o"; }
 done
+# preventDelete: deleting the objects removed only the declarations; the server still holds the stream e2e-orders and its messages
+jsz_wait 5 S.e2e-orders.messages=3 || { echo "$J"; nfail "after the Stream objects were deleted (preventDelete) the stream e2e-orders should still be on the server with its 3 messages"; }
+echo "ok   preventDelete: the stream e2e-orders and its 3 messages are still on the server after its Stream object was deleted"
 kubectl --context k3d-$cluster -n kube-system delete helmcharts.helm.cattle.io e2e-bus --timeout=120s || nfail "could not delete the HelmChart e2e-bus"
 for _ in $(seq 1 30); do kc get statefulsets.apps e2e-bus >/dev/null 2>&1 || break; sleep 3; done   # up to 90 s
 if kc get statefulsets.apps e2e-bus >/dev/null 2>&1; then

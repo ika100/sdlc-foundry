@@ -352,9 +352,14 @@ def check_brokers(repo: Path) -> list[dict]:
             if ri.type != "broker" or ri.external:
                 continue
             n = f"{m.system}-{ri.resource}"
-            image_want = images[ri.sizing.get("version", "2.15")]
-            expected = f"nats chart {chart_want}, server {image_want}"
+            version = ri.sizing.get("version", "2.15")
             name = f"broker {pre}{ri.resource} ({ri.environment})"
+            image_want = images.get(str(version))
+            if image_want is None:
+                out.append(check(WARN, name, f"unsupported NATS version {version}; supported: {', '.join(images)}",
+                                 "set the broker's version in system.yaml to a supported one"))
+                continue
+            expected = f"nats chart {chart_want}, server {image_want}"
             app = f"{n}-{ri.environment}-nats"
             p = run(["kubectl", "-n", f"{m.system}-{ri.environment}", "get", "statefulsets.apps", n, "-o",
                      'jsonpath={.metadata.labels.helm\\.sh/chart} {.spec.template.spec.containers[?(@.name=="nats")].image}'], check=False)

@@ -38,9 +38,10 @@ spec 120 the names and the monitoring endpoint to scale on.
 - An in-cluster broker needs External Secrets Operator and NACK on its cluster; `operators: owner` leaves NACK to the cluster's owner,
   and doctor compares NACK and each broker's chart and image with the table.
 - Spec 120 scales a consumer on `num_pending` of its durable consumer, read from the server's monitoring endpoint
-  (`http://<system>-<name>.<system>-<env>.svc:8222`), authenticated with the component's own Secret.
-- Adding a component to a broker restarts the broker's pods once (its password is a new container variable); rights-only changes are
-  reloaded without a restart.
+  (`http://<system>-<name>.<system>-<env>.svc:8222`), which is unauthenticated on the ClusterIP Service (design decision 17).
+- Rights changes are hot-reloaded by the config reloader (the chart's `podTemplate.configChecksumAnnotation` defaults to `false`, verified
+  in the nats chart 2.15.1 `values.yaml`). Adding or removing a component restarts the broker pods once, because its password reaches the
+  server as a container variable (decision 5).
 - Broker volumes are part of the environment backup (ADR-062); there is no stream-level backup or replay.
 - Spec 121 moves the chart, image and NACK pins; this ADR defines no upgrade procedure.
 - The resource-instance-as-a-chart pattern (a nested Argo CD application in an addon directory) is available to later resource types
