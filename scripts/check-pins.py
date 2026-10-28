@@ -279,7 +279,7 @@ def check_test_tools() -> None:
             if f"--with-requirements {REQ_FILE}" not in line:
                 error(where, line.strip(), "installs the test tools without requirements-test.txt")
             for pkg in TEST_TOOLS:
-                if re.search(rf"--with[= ]\s*{re.escape(pkg)}(\s|$|[\"'])", line):
+                if re.search(rf"--with[= ]\s*[\"']?{re.escape(pkg)}(\s|$|[\"'=<>!~\[])", line):   # also `--with pytest==9`, `--with 'pytest>=9'`
                     checked += 1
                     error(where, f"--with {pkg}", f"installs {pkg} without requirements-test.txt")
     req = REPO / REQ_FILE

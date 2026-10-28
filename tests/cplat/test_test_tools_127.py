@@ -142,7 +142,7 @@ def test_check_pins_fails_on_a_suite_command_without_the_requirements_file_ac_12
 
 
 @pytest.mark.parametrize("pkg", PACKAGES)
-@pytest.mark.parametrize("form", ["--with {p}", "--with={p}"])
+@pytest.mark.parametrize("form", ["--with {p}", "--with={p}", "--with {p}==1.0", "--with '{p}>=1'"])  # spec 127 review: a version spec too
 def test_check_pins_fails_on_a_with_flag_for_any_of_the_four_packages_ac_127_5(tmp_path, pkg, form):  # AC-127.5
     devbox = (ROOT / "devbox.json").read_text().replace(NEW_TOOLS, f"{NEW_TOOLS} {form.format(p=pkg)}")  # spec 127 build: the repo has the new form
     assert form.format(p=pkg) in devbox
