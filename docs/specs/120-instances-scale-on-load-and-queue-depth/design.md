@@ -362,7 +362,7 @@ Before anything is written (after the component and instance lookups), with `--r
 - `check_operators` gains `("keda", "keda")` and `("metrics-server", "metrics-server")` after `nack`. `_operator_needs`: `keda` = the
   environments whose model `autoscaling` is `keda`; `metrics-server` = the environments with a `cpu`/`memory` instance, only when the
   repo answer is `install`. The rows use 115's texts; a `keda` row's detail ends with `; queue-triggered: <c> (<env>), …` (instances in
-  model order). With `operators: owner` and KEDA missing (AC-120.18):
+  model order; with several systems in the repo, doctor prefixes each instance name with `<system>/`). With `operators: owner` and KEDA missing (AC-120.18):
   WARN `operator keda`: `not installed in the current kube context, expected 2.19.0 (operators: owner in dev); queue-triggered: worker (dev)`,
   fix `install the keda chart 2.19.0 (operator 2.19.0)`.
 - New `check_metrics(repo)` after `check_brokers`, only with `kubectl` and only when some instance has a `cpu`/`memory` trigger; row
@@ -545,3 +545,5 @@ with step 5); KEDA at cluster-up and the worker image at most 1.5 minutes more. 
 
 **Verified at plan time (2026-10-28, orchestrator):** `docker manifest inspect` finds `ghcr.io/kedacore/keda:2.19.0`,
 `keda-metrics-apiserver:2.19.0`, `keda-admission-webhooks:2.19.0` and `registry.k8s.io/metrics-server/metrics-server:v0.9.0`.
+
+**Re-verified at build (2026-10-28):** `docker manifest inspect` finds the KEDA 2.19.0 images and metrics-server v0.9.0. The KEDA chart 2.19.0 Deployments `keda-operator`, `keda-operator-metrics-apiserver`, `keda-admission-webhooks` and the label `app.kubernetes.io/name=keda-operator` were read from the chart archive.

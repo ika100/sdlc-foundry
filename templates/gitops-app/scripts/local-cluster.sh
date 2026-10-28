@@ -478,7 +478,10 @@ YAML
       k -n velero rollout status daemonset/node-agent --timeout=300s >/dev/null
     fi
 
-    if [ "$with_nack" = 1 ] && [ "$with_argo" = 1 ]; then
+    if [ "$with_nack" = 1 ] && [ "$with_argo" = 1 ] && [ ! -f "$nack_file" ]; then
+      echo "WARNING: WITH_NACK=1 with Argo CD, but NACK comes from $nack_file and it does not exist; render a NATS broker first, or use WITH_ARGO=0. Skipping the NACK wait." >&2
+      with_nack=0
+    elif [ "$with_nack" = 1 ] && [ "$with_argo" = 1 ]; then
       : # Argo CD installs NACK from operators/root.yaml (applied below, before bootstrap/)
     elif [ "$with_nack" = 1 ]; then
       echo "Installing NACK ($nack_version)"
@@ -501,7 +504,10 @@ YAML
       k -n nack rollout status deploy -l app=nack --timeout=300s >/dev/null
     fi
 
-    if [ "$with_keda" = 1 ] && [ "$with_argo" = 1 ]; then
+    if [ "$with_keda" = 1 ] && [ "$with_argo" = 1 ] && [ ! -f "$keda_file" ]; then
+      echo "WARNING: WITH_KEDA=1 with Argo CD, but KEDA comes from $keda_file and it does not exist; render a queue-triggered instance first, or use WITH_ARGO=0. Skipping the KEDA wait." >&2
+      with_keda=0
+    elif [ "$with_keda" = 1 ] && [ "$with_argo" = 1 ]; then
       : # Argo CD installs KEDA from operators/root.yaml (applied below, before bootstrap/)
     elif [ "$with_keda" = 1 ]; then
       echo "Installing KEDA ($keda_version)"
