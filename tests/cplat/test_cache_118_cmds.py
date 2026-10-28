@@ -444,7 +444,7 @@ def test_the_e2e_script_proves_the_cache_is_not_exposed_ac_118_8():  # AC-118.8 
 
 
 def test_the_e2e_script_proves_the_secret_contract_and_that_the_password_survives_ac_118_19():  # AC-118.19 (needs a cluster)
-    need(e2e(), "redis://:", "e2e-sessions.e2e-dev.svc:6379/0", "force-sync", "externalsecrets.external-secrets.io")
+    need(e2e(), "redis://default:", "e2e-sessions.e2e-dev.svc:6379/0", "force-sync", "externalsecrets.external-secrets.io")  # spec 127
 
 
 def test_the_e2e_script_proves_no_operator_is_added_for_a_cache_ac_118_23():  # AC-118.23 (needs a cluster)
@@ -514,7 +514,7 @@ def test_the_changelog_lists_the_cache_in_a_minor_section_that_is_not_breaking_a
 def test_the_resource_plugin_is_1_4_0_in_both_places_ac_118_22():  # AC-118.22
     manifest = json.loads((ROOT / "plugins/resource/.claude-plugin/plugin.json").read_text())
     market = next(p["version"] for p in json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"] if p["name"] == "resource")
-    assert manifest["version"] == market == "1.6.0"  # spec 121: resource plugin 1.6.0
+    assert manifest["version"] == market == "1.6.1"  # spec 127: resource plugin 1.6.1
     assert "caches" in manifest["description"]
     desc = re.search(r'(?m)^description:\s*"(.*)"\s*$', (ROOT / "plugins/resource/commands/add.md").read_text()).group(1)
     assert len(desc) < 260 and "--type database|bucket|cache" in desc

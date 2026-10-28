@@ -706,7 +706,7 @@ pw_sessions=$(secret_val e2e-sessions-app password)
 pw_ratelimit=$(secret_val e2e-ratelimit-app password)
 [ "${#pw_sessions}" = 32 ] && [ "${#pw_ratelimit}" = 32 ] || cfail "the generated passwords are not 32 characters (${#pw_sessions}, ${#pw_ratelimit})"
 [ "$(cx sessions 'printf %s "$VALKEY_PASSWORD"')" = "$pw_sessions" ] || cfail "the server of e2e-sessions does not run with the password of the Secret e2e-sessions-app"
-[ "$(secret_val e2e-sessions-app url)" = "redis://:${pw_sessions}@e2e-sessions.e2e-dev.svc:6379/0" ] || cfail "the url of e2e-sessions-app is not redis://:<password>@e2e-sessions.e2e-dev.svc:6379/0"
+[ "$(secret_val e2e-sessions-app url)" = "redis://default:${pw_sessions}@e2e-sessions.e2e-dev.svc:6379/0" ] || cfail "the url of e2e-sessions-app is not redis://default:<password>@e2e-sessions.e2e-dev.svc:6379/0"
 [ "$(secret_val e2e-sessions-app host)" = e2e-sessions.e2e-dev.svc ] && [ "$(secret_val e2e-sessions-app port)" = 6379 ] || cfail "host/port of e2e-sessions-app are not e2e-sessions.e2e-dev.svc and 6379"
 out=$(cx sessions "$vcli ping" 2>&1 || true)
 case "$out" in *NOAUTH*) ;; *) cfail "a client without a password was not refused with NOAUTH (got: $out)";; esac
@@ -714,7 +714,7 @@ out=$(cx sessions "$vcli -a wrong-password ping" 2>&1 || true)
 case "$out" in *WRONGPASS*) ;; *) cfail "a client with a wrong password was not refused with WRONGPASS (got: $out)";; esac
 out=$(cx sessions "$vcli -a \"\$VALKEY_PASSWORD\" ping" 2>&1 || true)
 case "$out" in *PONG*) ;; *) cfail "PING with the password from the Secret did not answer PONG (got: $out)";; esac
-echo "ok   password of 32 characters, url redis://:<password>@e2e-sessions.e2e-dev.svc:6379/0; NOAUTH without, WRONGPASS with a wrong, PONG with the password"
+echo "ok   password of 32 characters, url redis://default:<password>@e2e-sessions.e2e-dev.svc:6379/0; NOAUTH without, WRONGPASS with a wrong, PONG with the password"
 
 cstep "Caches: ratelimit reports maxmemory 53687091 (80 % of 64Mi) and allkeys-lru; the container limit is 64Mi (AC-118.6)"
 out=$(cx ratelimit "$vcli -a \"\$VALKEY_PASSWORD\" CONFIG GET maxmemory" 2>&1 | tr '\n' ' ') || true
@@ -752,10 +752,7 @@ cn=0
 crun() { # script: runs it in a pod that carries e2e-web's SESSIONS_REDIS_* and RATELIMIT_REDIS_* variables; output in C_OUT
   local name phase=""
   cn=$((cn + 1)); name="cacheprobe-$cn"
-  # valkey-cli reads redis://:<pw>@ as user "" and fails AUTH (client libraries treat the empty user as none); the probe names the
-  # default user so valkey-cli can stand in for the component. The variables themselves are the rendered ones.
-  local fix='for v in SESSIONS_REDIS_URL RATELIMIT_REDIS_URL; do eval "u=\${$v:-}"; [ -z "$u" ] || export "$v=$(printf %s "$u" | sed "s#^redis://:#redis://default:#")"; done; '
-  kc get deploy e2e-web -o json | python3 -c "$cache_pod_py" "$name" "$cache_image" "set -e; $fix$1" | kc apply -f - >/dev/null || cfail "could not start the probe pod $name"
+  kc get deploy e2e-web -o json | python3 -c "$cache_pod_py" "$name" "$cache_image" "set -e; $1" | kc apply -f - >/dev/null || cfail "could not start the probe pod $name"
   for _ in $(seq 1 60); do   # up to 180 s
     phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
     case "$phase" in Succeeded|Failed) break;; esac; sleep 3

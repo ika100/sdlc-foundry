@@ -70,7 +70,7 @@ def expected_externalsecret(env="dev", name="sessions") -> dict:
             "spec": {"refreshPolicy": "CreatedOnce",
                      "target": {"name": f"{n}-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
                                "template": {"engineVersion": "v2", "metadata": {"labels": labels(name)},
-                                            "data": {"url": "redis://:{{ .password }}@" + f"{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc",
+                                            "data": {"url": "redis://default:{{ .password }}@" + f"{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc",  # spec 127
                                                      "port": "6379", "password": "{{ .password }}"}}},
                      "dataFrom": [{"sourceRef": {"generatorRef": {"apiVersion": "generators.external-secrets.io/v1alpha1", "kind": "Password",
                                                                   "name": f"{n}-password"}}}]}}

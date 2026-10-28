@@ -506,7 +506,7 @@ def test_the_url_names_database_zero_and_the_secret_is_the_same_in_every_environ
     g = ok(tmp_path, csys())
     for env in ENVS:
         data = cdoc(g, env, "externalsecret.yaml")["spec"]["target"]["template"]["data"]
-        assert data["url"] == "redis://:{{ .password }}@" + f"shop-sessions.shop-{env}.svc:6379/0"
+        assert data["url"] == "redis://default:{{ .password }}@" + f"shop-sessions.shop-{env}.svc:6379/0"  # spec 127
         assert cdoc(g, env, "externalsecret.yaml")["metadata"]["name"] == "shop-sessions-app"
 
 
@@ -540,7 +540,7 @@ def test_no_password_value_appears_in_the_rendered_tree_ac_118_19(tmp_path):  # 
     for k, t in cache_files.items():
         for m in re.finditer(r"(?im)^\s*(password|url)\s*:\s*(.+)$", t):
             assert "{{ .password }}" in m.group(2), f"{k}: a literal credential in {m.group(0)!r}"
-        assert not re.search(r"redis://:[^{\s\"']", t), k
+        assert not re.search(r"redis://(?:default)?:[^{\s\"']", t), k  # spec 127
     for e in env_list(g, "dev", "api"):
         if "REDIS" in e["name"]:
             assert "value" not in e

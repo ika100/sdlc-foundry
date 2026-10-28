@@ -2362,7 +2362,7 @@ def cache_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | s
             "spec": {"refreshPolicy": "CreatedOnce",
                      "target": {"name": f"{n}-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
                                 "template": {"engineVersion": "v2", "metadata": {"labels": labels()}, "data": {
-                                    "url": f"redis://:{{{{ .password }}}}@{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc",
+                                    "url": "redis://default:{{ .password }}@" + f"{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc",
                                     "port": "6379", "password": "{{ .password }}"}}},  # pragma: allowlist secret
                      "dataFrom": [{"sourceRef": {"generatorRef": {"apiVersion": gen_api, "kind": "Password", "name": f"{n}-password"}}}]}},
         "service.yaml": {

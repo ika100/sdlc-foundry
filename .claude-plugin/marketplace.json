@@ -139,7 +139,7 @@
     {
       "name": "resource",
       "source": "./plugins/resource",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "description": "The resource noun: /resource:add and /resource:remove declare named, typed resources (databases, buckets, caches, brokers) of a system in system.yaml; /resource:backup and /resource:restore back up and restore a database; /resource:upgrade moves one environment to a new major, in verified steps.",
       "category": "agents",
       "tags": [
