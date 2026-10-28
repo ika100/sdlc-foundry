@@ -420,9 +420,32 @@ _CLUSTER_FILE = re.compile(r"^applications/[^/]+/addons/[^/]+/[^/]+/cluster\.yam
 _DB_IMAGE = re.compile(rb"(imageName: ghcr\.io/cloudnative-pg/postgresql:)(\d+)\S*")
 
 
-def _normalised(tree: dict[str, bytes]) -> dict[str, bytes]:
-    """The migration proof ignores the database image beyond its major (AC-115.6, AC-115.17)."""
-    return {p: _DB_IMAGE.sub(rb"\1\2", b) if _CLUSTER_FILE.match(p) else b for p, b in tree.items()}
+def _digested_refs(repo: Path) -> list[bytes]:
+    """The engine image references of the repo's renderer table that carry a digest (spec 121), except the database ones."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("render_repo_pins", repo / "scripts" / "render.py")
+    if spec is None or spec.loader is None:
+        return []
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:  # noqa: BLE001 - an unreadable renderer is reported by the render itself
+        return []
+    refs = [*mod.VALKEY_IMAGES.values(), *mod.NATS_IMAGES.values(), mod.SEAWEEDFS_IMAGE, mod.VELERO_AWS_PLUGIN_IMAGE, mod.COLLECTOR_IMAGE,
+            mod.LGTM_IMAGE]
+    return [r.encode() for r in refs if "@sha256:" in r]
+
+
+def _normalised(tree: dict[str, bytes], pins: list[bytes] = ()) -> dict[str, bytes]:
+    """The migration proof ignores the database image beyond its major (AC-115.6, AC-115.17) and the digest the versions
+    table (spec 121) adds to the other engine images: exactly those references, mapped back to tag only."""
+    out = {}
+    for p, b in tree.items():
+        b = _DB_IMAGE.sub(rb"\1\2", b) if _CLUSTER_FILE.match(p) else b
+        for ref in pins:
+            b = b.replace(ref, ref.split(b"@", 1)[0])
+        out[p] = b
+    return out
 
 
 def convert_systems(repo: Path) -> list[dict]:
@@ -469,8 +492,9 @@ def apply_systems(repo: Path, systems: list[dict], reference: dict[str, bytes]) 
         for rel in s["deleted"]:
             (repo / rel).unlink()
     gitops.render(repo)
+    pins = _digested_refs(repo)
     reference = _normalised(reference)
-    after = _normalised(_tree(repo))
+    after = _normalised(_tree(repo), pins)
     diff =[f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
     diff += [f"{p} (missing)" for p in sorted(reference) if p not in after]
     diff += [f"{p} (extra)" for p in sorted(after) if p not in reference]
@@ -588,10 +612,11 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
                     continue   # the repo never touched it: a template change
             except (OSError, UnicodeDecodeError):
                 pass
-        if _CLUSTER_FILE.match(path):   # generated output: only the pinned database image moved (AC-115.6, AC-115.17)
+        if path.startswith("applications/"):   # generated output: only the pinned engine images moved (AC-115.6, AC-115.17, spec 121)
             was = run(["git", "show", f"HEAD:{path}"], cwd=repo, check=False)
             try:
-                if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}):
+                pins = _digested_refs(repo)
+                if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}, pins):
                     continue
             except OSError:
                 pass
