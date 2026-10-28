@@ -6,6 +6,34 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**Resources and environment properties upgrade safely.** Spec 121 ([spec 121](specs/121-resources-and-environment-properties/spec.md)), [ADR-068](adr/068-resource-and-operator-upgrades-roll-through-environments-in-verified-steps.md) (resource and operator upgrades roll through the environments in verified steps) and [ADR-069](adr/069-one-versions-table-pins-everything-and-every-release-proves-the-upgrade.md) (one versions table pins everything, and every release proves the upgrade). Not breaking: a `system.yaml` without the new keys renders as before, except that engine image references gain exact tags and digests (CloudNativePG publishes no plain tags for PostgreSQL, so they move to immutable build tags). Every image and chart the platform writes or installs is a row of one versions table (`cplat platform versions [--diff <ref>] [--changelog]`). `/resource:upgrade <name> --to <major> [--env <env>]` moves one environment per pull request, needs a backup from the last 60 minutes for a database, waits for health and runs the smoke tests; staging follows dev, prod is by hand. `/platform:update` keeps staging and prod on their held pins and prints the versions that change per environment, and `cplat platform update --verify` checks the operators once per cluster. The gitops repo answers `property_operators: owner | install` (existing repos keep `owner`; new ones get `install`, which renders External Secrets, Kyverno and LGTM). `/platform:doctor --context [ENV=]CTX` lists each operator as `ok`, `missing`, `older` or `newer` with its CRD versions, and `/system:status` gets a Resource versions section. A new end-to-end upgrade test and a release gate (`scripts/release-check.py`) prove every release upgrades from the previous one.
+
+**Plugins:** `resource` 1.6.0 (`/resource:upgrade`), `platform` 1.3.0 (`doctor --context`, `update --verify`), `system` 1.5.0 (status).
+
+**Versions** (`cplat platform versions --diff v5.3.0 --changelog`):
+
+- `postgres 15` 15.19 (digest none) → 15.19 (digest f617efc0)
+- `postgres 16` 16.15 (digest none) → 16.15 (digest 1ec419e9)
+- `postgres 17` 17.11 (digest none) → 17.11 (digest ed6923f9)
+- `postgres 18` 18.6 (digest none) → 18.6 (digest 39add80f)
+- `valkey 8` 8.1.11 (new)
+- `valkey 9` 9.1.3 (new)
+- `nats 2.14` 2.14.9 (new)
+- `nats 2.15` 2.15.2 (new)
+- `nats` 2.15.1 (new)
+- `seaweedfs` 4.51 (digest none) → 4.51 (digest f7a49e3f)
+- `opentelemetry-collector` 0.162.0 (digest none) → 0.162.0 (digest 39923a8e)
+- `lgtm` 0.35.0 (new)
+- `velero-plugin-for-aws` v1.14.4 (digest none) → v1.14.4 (digest c85a7fa8)
+- `argo-cd` v3.4.12 (new)
+- `k3s` v1.32.5-k3s1 (new)
+- `gateway-api` v1.2.1 (new)
+- `operator nack` 0.35.0 (new)
+- `operator keda` 2.19.0 (new)
+- `operator metrics-server` 3.14.0 (new)
+
+**Action:** run `/platform:update` in each repo. Optionally answer `property_operators: install` after removing a hand-installed External Secrets, Kyverno or LGTM.
+
 **Instances scale on load and queue depth.** Spec 120 ([spec 120](specs/120-instances-scale-on-load-and-queue-depth/spec.md)), [ADR-066](adr/066-instances-scale-with-an-hpa-or-keda-installed-per-cluster.md) (instances scale with an HPA or KEDA, installed per cluster) and [ADR-067](adr/067-argo-cd-leaves-autoscaled-replica-counts-alone.md) (Argo CD leaves autoscaled replica counts alone). Not breaking: a `system.yaml` without `scale` renders byte-identically. `scale: {min, max, on}` on a service or website component, or on one of its instances, follows one of four triggers: `cpu`, `memory`, a cache or a broker queue depth (`lag`). Only queue triggers may scale to zero; `scale` and `replicas` exclude each other. Argo CD ignores the replica count of a scaled workload through a `RespectIgnoreDifferences` rule. KEDA 2.19.0 and metrics-server 3.14.0 are installed as operators; the gitops repo answers `resource_metrics: provided | install` (default `provided`). The two "allowed:" key lists gain `scale`, and the e2e job limit is 90 minutes. `/component:set --replicas` refuses a scaled instance, `/system:status` shows `replicas <n> (<min>–<max>)`, and `/platform:doctor` lists the KEDA and metrics rows.
 
 **Plugins:** `component` 1.3.0, `system` 1.4.0, `platform` 1.2.0.
