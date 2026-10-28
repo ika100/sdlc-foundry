@@ -9,6 +9,7 @@ from ruamel.yaml import YAML
 
 import core
 import model
+import pr_rules
 from core import PlatformError, run
 
 ENVS = list(model.ENVIRONMENTS)
@@ -98,6 +99,7 @@ def slug(text: str) -> str:
 
 def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
     """Create the branch, commit everything under applications/ and bootstrap/, push, and open a PR. Returns the URL."""
+    title = pr_rules.fit(title)
     run(["git", "checkout", "-q", "-b", branch], cwd=repo)
     run(["git", "add", "applications", "bootstrap"], cwd=repo, check=False)
     run(["git", *core.git_identity(repo), "commit", "-q", "-m", title], cwd=repo)

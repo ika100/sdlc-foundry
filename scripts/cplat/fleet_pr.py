@@ -12,6 +12,7 @@ from pathlib import Path
 
 import core
 import pr
+import pr_rules
 import ship
 import update as upd
 from core import PlatformError, run
@@ -224,7 +225,7 @@ def update(ctx: Ctx, old: str | None, target: str, ref: str | None) -> Result:  
             _git(ctx, "push", "-q", f"--force-with-lease={head}:{sha}", "origin", branch)
     else:
         _git(ctx, "push", "-q", "-u", "origin", branch)
-    title = f"chore: platform update {old or 'none'} → {target}"
+    title = pr_rules.fit(f"chore: platform update {old or 'none'} → {target}")
     body = pr_body(old, target, report.data, nxt)
     if existing:
         url = existing["url"]
