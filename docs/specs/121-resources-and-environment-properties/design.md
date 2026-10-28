@@ -239,7 +239,9 @@ exactly one archive and a time inside the old window restores the old major. Swi
 name (spec 117's rule: one Barman server per generation, because CloudNativePG refuses a non-empty archive): `cplat resource restore
 --switch` appends `{server: <generation>, major: <major of its source archive>}` to `archives` and writes `archive: <server>` on the
 cluster that becomes `previous`, so both archive apart; the renderer gives a `previous` cluster `serverName: <its archive>` and the
-active one `archives[-1].server`. Databases without `archives` render as before.
+active one `archives[-1].server`. Databases without `archives` render as before. The active generation keeps its archive's older
+major image only while `archives[-1]` is that older major; a later major step appends an archive of the effective major, and from then on
+the active cluster renders on the effective major's pin and the note is no longer printed (changed after review, AC-121.16).
 
 `read_restore_state` validates `archives` (a list of mappings with a non-empty `server` and an integer `major` in the table, servers
 unique) with 117's error form `… is not valid (archives: <reason>); take it from git history`.

@@ -2197,12 +2197,20 @@ def backup_target(app: str, env: str, cfg: dict, to: str) -> tuple[str, str, str
     return f"{app}-{to}", f"http://{app}-{to}-filer.{app}-{env}.svc:8333", secret
 
 
+def stepped_since(archives: list[dict], cluster: str, version: int) -> bool:
+    """True when a major step appended an archive of the effective major after the generation's own archive (spec 121, AC-121.16)."""
+    own = next((i for i, a in enumerate(archives) if a["server"] == cluster), None)
+    return own is not None and own < len(archives) - 1 and archives[-1]["major"] == version
+
+
 def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | None = None, role: str = "active",
                      frm: dict | None = None, backup: bool = False, archives: list[dict] | None = None, archive: str | None = None) -> dict:
     db = app.replace("-", "_")
     base = f"{app}-{name}"
     image = conf["pin"]
-    if frm is not None:      # a physical backup only starts on the major of its archive
+    # a physical backup only starts on the major of its archive; the active generation keeps that image only while the archive it
+    # writes to (archives[-1]) is still that older major (spec 121, changed after review: a later major step moves it to the pin)
+    if frm is not None and (role != "active" or not stepped_since(archives or [], cluster or base, conf["version"])):
         image = next((POSTGRES_IMAGES[a["major"]] for a in archives or [] if a["server"] == frm["server"] and a["major"] != conf["version"]), image)
     spec: dict = {
         "instances": conf["replicas"],
@@ -2934,6 +2942,8 @@ def archive_notes(app_dir: Path) -> list[str]:
             active = next(c for c in clusters if c["role"] == "active")
             frm = active.get("from") or {}
             major = next((a["major"] for a in archives if a["server"] == frm.get("server")), conf["version"])
+            if stepped_since(archives, active["name"], conf["version"]):
+                major = conf["version"]      # a major step since the switch: the active generation runs the effective major
             if major != conf["version"]:
                 notes.append(f"note: applications/{app}: {name} in {env} runs {active['name']} on {major} (restored from before the upgrade to "
                              f"{conf['version']}); set resources.{name}.instances.{env}.version: {major}, "

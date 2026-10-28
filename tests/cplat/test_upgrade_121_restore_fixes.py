@@ -128,6 +128,10 @@ def test_a_major_step_after_a_restore_and_a_switch_writes_a_new_archive_ac_121_1
     rerender_commit(w.repo, upgrade_doc(16))        # the owner set instances/version back to 16
     backed_up(kube, name="shop-orders-db-g1")        # the active generation is the cluster that is read
     backed_up(kube, clusters=False)                  # the object store keeps the system name
+    image = lambda f: yaml.safe_load((w.repo / APP / "addons/dev/orders-db" / f).read_text())["spec"]["imageName"]  # noqa: E731
+    before = subprocess.run([sys.executable, "scripts/render.py"], cwd=w.repo, capture_output=True, text=True)
+    assert image("cluster-g1.yaml") == PG[16], "before the step the active generation runs the 16 image"
+    assert "restored from before the upgrade" not in before.stdout + before.stderr, "version 16 is the generation's own major"
     rc, out = run_cmd(capsys, "resource", "upgrade", "orders-db", "--to", "17", "--repo-dir", w.repo, "--context", "kind-test")
     assert rc == 0, out
     new = yaml.safe_load(state_path(w.repo).read_text().split("\n", 1)[1])
@@ -138,6 +142,9 @@ def test_a_major_step_after_a_restore_and_a_switch_writes_a_new_archive_ac_121_1
     p = subprocess.run([sys.executable, "scripts/render.py"], cwd=w.repo, capture_output=True, text=True)
     assert p.returncode == 0, p.stderr
     assert plugin_params(w.repo, "cluster-g1.yaml").get("serverName") == "shop-orders-db-g1-pg17"
+    assert image("cluster-g1.yaml") == PG[17], "the active generation moves to the effective major"
+    assert image("cluster.yaml") == PG[17], "the previous cluster keeps its own image"
+    assert "restored from before the upgrade" not in p.stdout + p.stderr
 
 
 def test_a_taken_archive_name_gets_the_smallest_free_numeric_suffix_ac_121_16(tmp_path):  # AC-121.16
