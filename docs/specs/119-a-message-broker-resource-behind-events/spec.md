@@ -1,7 +1,7 @@
 ---
 spec_id: 119-a-message-broker-resource-behind-events
 title: A message broker resource behind events APIs
-status: building
+status: done
 priority: P1
 ---
 
@@ -97,3 +97,4 @@ This is an additive 5.x extension of spec 114, which stays as approved and is no
 - 2026-10-26 approved
 - 2026-10-28 AC-119.6 clarified at plan time: with no broker an events API stays unbound and the render prints a note instead of failing, because failing contradicted AC-119.24 (5.0 systems may declare events APIs and must render byte-identically) and would have made the release breaking
 - 2026-10-28 building
+- 2026-10-28 done
