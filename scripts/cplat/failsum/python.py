@@ -12,7 +12,7 @@ _LOC = re.compile(r"^(?P<path>[^\s:]+\.py):(?P<line>\d+):(?: (?P<rest>.*))?$")
 _TBLINE = re.compile(rf"^(?P<path>\S+?\.py):(?P<line>\d+): (?P<type>{_TYPE})(?:: (?P<msg>.*))?$")
 _TYPED = re.compile(rf"^(?P<type>{_TYPE})(?:: ?(?P<msg>.*))?$")
 _E_LINE = re.compile(r"^E +(?P<text>.*)$")
-_TOTAL = re.compile(r"(?:^|\s)(?P<counts>(?:\d+ \w+(?:, )?)+) in [\d.:]+s")
+_TOTAL = re.compile(r"(?:^|\s)(?P<counts>\d+ \w+(?:, \d+ \w+)*) in [\d.:]+s")   # one ", " between counts: no backtracking
 _SETUP = re.compile(r"^ERROR (?:at (?:setup|teardown) of|collecting) ")
 
 
