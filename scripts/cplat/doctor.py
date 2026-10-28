@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -163,7 +164,7 @@ def check_platform_source() -> list[dict]:
     return [check(OK, "platform scripts", f"{kind}: {where} (v{core.platform_version()})")]
 
 
-def check_repo(repo: Path) -> list[dict]:
+def check_repo(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
     if not (repo / ".git").exists():
         return []
     out = []
@@ -178,7 +179,7 @@ def check_repo(repo: Path) -> list[dict]:
         except OSError:
             out.append(check(WARN, "repo platform version", "platform source has no docs/CHANGELOG.md"))
         out += check_addons(repo)
-        out += check_operators(repo)
+        out += check_operators(repo, contexts)
         out += check_brokers(repo)
         out += check_metrics(repo)
         out += check_backups(repo)
@@ -199,7 +200,7 @@ def check_repo(repo: Path) -> list[dict]:
         else:
             out.append(check(OK, "repo platform version", stamp.get("platform", "?")))
     out += check_addons(repo)
-    out += check_operators(repo)
+    out += check_operators(repo, contexts)
     out += check_brokers(repo)
     out += check_metrics(repo)
     out += check_backups(repo)
@@ -316,19 +317,48 @@ def _operators() -> dict:
     return mod.OPERATORS
 
 
-def check_operators(repo: Path) -> list[dict]:
-    """AC-115.18, AC-116.19, AC-117.30: the operators the in-cluster resources and backups need: installed vs expected version."""
+OPERATOR_ORDER = (("cloudnative-pg", "cloudnative-pg"), ("seaweedfs", "seaweedfs-operator"),
+                  ("plugin-barman-cloud", "plugin-barman-cloud"), ("cert-manager", "cert-manager"), ("velero", "velero"),
+                  ("nack", "nack"), ("keda", "keda"), ("metrics-server", "metrics-server"))
+PROPERTY_OPERATORS = (("external-secrets", "external-secrets"), ("kyverno", "kyverno"), ("lgtm", "lgtm"))
+
+
+def check_operators(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
+    """AC-115.18, AC-116.19, AC-117.30, AC-121.18 .. .22: the operators the resources, backups and properties need: installed vs expected.
+
+    `contexts` (environment -> kube context, from `--context`) reads those environments in their cluster and fails on `missing`
+    and a major `older`; without it the rows are today's warnings against the current context."""
     if not shutil.which("kubectl"):
         return []
     models = _models(repo)
+    ops = OPERATOR_ORDER + (PROPERTY_OPERATORS if _property_operators_answer(repo) == "install" else ())
     out = []
-    for op_name, chart_name in (("cloudnative-pg", "cloudnative-pg"), ("seaweedfs", "seaweedfs-operator"),
-                                ("plugin-barman-cloud", "plugin-barman-cloud"), ("cert-manager", "cert-manager"), ("velero", "velero"),
-                                ("nack", "nack"), ("keda", "keda"), ("metrics-server", "metrics-server")):
+    for op_name, chart_name in ops:
         needs = _operator_needs(models, op_name, repo)
         if needs:
-            out += _operator_row(models, needs, op_name, chart_name)
+            out += _operator_row(models, needs, op_name, chart_name, contexts)
     return out
+
+
+def _property_operators_answer(repo: Path) -> str:
+    """The repo's `property_operators` copier answer (`owner` when absent or unreadable)."""
+    import yaml
+    try:
+        answers = yaml.safe_load((repo / ".copier-answers.yml").read_text()) or {}
+        return str(answers.get("property_operators") or "owner")
+    except (OSError, AttributeError, yaml.YAMLError):
+        return "owner"
+
+
+def _lgtm_operator() -> dict:
+    """LGTM is not a chart: its row is the pinned image of the `lgtm` Deployment (selector `app=lgtm`)."""
+    import importlib.util
+    path = PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"
+    spec = importlib.util.spec_from_file_location("cplat_doctor_render", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    tag = mod.LGTM_IMAGE.split("@")[0].rsplit(":", 1)[-1]
+    return {"chart": "lgtm", "chart_version": tag, "operator_version": tag, "selector": "app=lgtm", "crds": {}}
 
 
 def _nats_expected() -> tuple[str, dict]:
@@ -357,6 +387,7 @@ def check_brokers(repo: Path) -> list[dict]:
             version = ri.sizing.get("version", "2.15")
             name = f"broker {pre}{ri.resource} ({ri.environment})"
             image_want = images.get(str(version))
+            image_want = image_want.split("@")[0] if image_want else image_want   # the digest is the pin check's concern (AC-121.19)
             if image_want is None:
                 out.append(check(WARN, name, f"unsupported NATS version {version}; supported: {', '.join(images)}",
                                  "set the broker's version in system.yaml to a supported one"))
@@ -371,7 +402,7 @@ def check_brokers(repo: Path) -> list[dict]:
                                  f"sync the Argo CD application {app} (local: devbox run cluster-up)"))
                 continue
             chart_have = parts[0].removeprefix("nats-").removeprefix("v")
-            image_have = parts[1] if len(parts) > 1 else "-"
+            image_have = parts[1].split("@")[0] if len(parts) > 1 else "-"
             if chart_have == chart_want.removeprefix("v") and image_have == image_want:
                 out.append(check(OK, name, f"{expected} (expected)"))
             else:
@@ -403,11 +434,13 @@ def _operator_needs(models: list, op_name: str, repo: Path | None = None) -> lis
     """The environments that need operator `op_name` (design.md, versions section)."""
     envs: set[str] = set()
     if op_name == "keda":
-        return sorted({e.name for m in models for e in m.environments if e.autoscaling == "keda"})
+        return _in_env_order({e.name for m in models for e in m.environments if e.autoscaling == "keda"})
     if op_name == "metrics-server":
         if repo is None or _resource_metrics_answer(repo) != "install":
             return []
-        return sorted({i.environment for _, i in _scaled_on(models, ("cpu", "memory"))})
+        return _in_env_order({i.environment for _, i in _scaled_on(models, ("cpu", "memory"))})
+    if op_name in ("external-secrets", "kyverno", "lgtm"):
+        return _property_needs(models, op_name)
     for m in models:
         if op_name == "velero":
             envs |= {e.name for e in m.environments if e.backup}
@@ -416,7 +449,34 @@ def _operator_needs(models: list, op_name: str, repo: Path | None = None) -> lis
         else:
             rtype = {"cloudnative-pg": "database", "nack": "broker"}.get(op_name, "bucket")
             envs |= {ri.environment for ri in m.resource_instances if ri.type == rtype and not ri.external}
-    return sorted(envs)
+    return _in_env_order(envs)
+
+
+def _property_needs(models: list, op_name: str) -> list[str]:
+    """The environments that need External Secrets, Kyverno or LGTM (design.md, AC-121.17): where an instance runs."""
+    envs: set[str] = set()
+    for m in models:
+        for e in m.environments:
+            ins = [i for i in m.instances if i.environment == e.name]
+            if not ins:
+                continue
+            if op_name == "kyverno" and e.policy != "off":
+                envs.add(e.name)
+            elif op_name == "lgtm" and e.observability is not None and e.observability.ui == "lgtm":
+                envs.add(e.name)
+            elif op_name == "external-secrets":
+                ris = [ri for ri in m.resource_instances if ri.environment == e.name]
+                comps = {c.name: c for c in m.components}
+                if (any(i.secrets or (comps.get(i.component) and comps[i.component].secret_refs) for i in ins)
+                        or any(ri.external or ri.type in ("bucket", "cache", "broker") for ri in ris) or e.backup):
+                    envs.add(e.name)
+    return _in_env_order(envs)
+
+
+def _in_env_order(envs) -> list[str]:
+    """`envs` in the order of model.ENVIRONMENTS (dev, staging, prod)."""
+    import model
+    return [e for e in model.ENVIRONMENTS if e in envs]
 
 
 def check_metrics(repo: Path) -> list[dict]:
@@ -477,30 +537,98 @@ def check_backups(repo: Path) -> list[dict]:
     return out
 
 
-def _operator_row(models: list, needs: list[str], op_name: str, chart_name: str) -> list[dict]:
-    owner_envs = sorted({e.name for m in models for e in m.environments if e.name in needs and e.operators == "owner"})
-    op = _operators()[op_name]
+def _numbers(v: str | None) -> tuple[int, ...]:
+    return tuple(int(x) for x in re.findall(r"\d+", (v or "").split("@")[0])[:3])
+
+
+def _is_major_older(have: str, want: str) -> bool:
+    h, w = _numbers(have), _numbers(want)
+    if not h or not w:
+        return True
+    if h[0] != w[0]:
+        return h[0] < w[0]
+    return w[0] == 0 and h[1:2] < w[1:2]    # a 0.x version: the second number is the major
+
+
+def _operator_state(have: str | None, want: str, crds: dict) -> str:
+    if have is None:
+        return "missing"
+    h, w = _numbers(have), _numbers(want)
+    if have != want and (h < w or not h):
+        return "older"
+    if h > w:
+        return "newer"
+    if any(not set(c["expected"]) <= set(c["served"]) for c in crds.values()):
+        return "older"
+    return "ok"
+
+
+def _crd_served(name: str, ctx: str | None) -> list[str]:
+    cmd = ["kubectl", *(["--context", ctx] if ctx else []), "get", "customresourcedefinitions.apiextensions.k8s.io", name, "-o",
+           "jsonpath={.spec.versions[?(@.served==true)].name}"]
+    p = run(cmd, check=False)
+    return (p.stdout or "").split() if p.returncode == 0 else []
+
+
+def _operator_row(models: list, needs: list[str], op_name: str, chart_name: str, contexts: dict[str, str] | None = None) -> list[dict]:
+    op = _lgtm_operator() if op_name == "lgtm" else _operators()[op_name]
+    covered = [e for e in needs if contexts and contexts.get(e)]
+    if not covered:
+        return [_one_operator_row(models, needs, op_name, chart_name, op, None, needs)]
+    ctxs = list(dict.fromkeys(contexts[e] for e in covered))
+    return [_one_operator_row(models, [e for e in covered if contexts[e] == c], op_name, chart_name, op, c, covered, many=len(ctxs) > 1)
+            for c in ctxs]
+
+
+def _one_operator_row(models: list, needs: list[str], op_name: str, chart_name: str, op: dict, ctx: str | None, _all: list[str],
+                      many: bool = False) -> dict:
+    owner_set = {e.name for m in models for e in m.environments if e.name in needs and e.operators == "owner"}
+    owner_envs = _in_env_order(owner_set) if ctx else sorted(owner_set)   # today's texts list them alphabetically
     want, chart = op["operator_version"], op["chart_version"]
-    name = f"operator {op_name}"
+    name = f"operator {op_name}" + (f" ({ctx})" if many else "")
     suffix = f"; queue-triggered: {_names(models, _scaled_on(models, ('consumes', 'cache')))}" if op_name == "keda" else ""
     selector = op.get("selector") or f"app.kubernetes.io/name={chart_name}"   # nack's chart labels its Deployment app: nack
-    p = run(["kubectl", "get", "deploy", "-A", "-l", selector, "-o",
+    kube = ["kubectl", *(["--context", ctx] if ctx else [])]
+    p = run([*kube, "get", "deploy", "-A", "-l", selector, "-o",
              "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
     images = (p.stdout or "").split()
     have = images[0].split("@")[0].rsplit(":", 1)[-1] if images and ":" in images[0].split("@")[0].rsplit("/", 1)[-1] else None
     have = have.removeprefix("v") if have else have
-    owner = owner_envs == needs
+    expected_crds = op.get("crds") or {}
+    crds = {c: {"expected": list(v), "served": _crd_served(c, ctx)} for c, v in expected_crds.items()}
+    state = _operator_state(have, want, crds)
+    info = {"state": state, "expected": want, "installed": have, "crds": crds, "shared": list(needs)}
+    owner = set(owner_envs) == set(needs)
     where = f"operators: owner in {', '.join(owner_envs)}" if owner else f"Argo CD application operator-{op_name}"
-    if have == want:
-        return [check(OK, name, f"installed {have}, expected {want} ({where}){suffix}")]
     if have is None:
-        detail = f"not installed in the current kube context, expected {want} ({where}){suffix}"
         if owner:
-            return [check(WARN, name, detail, f"install the {chart_name} chart {chart} (operator {want})")]
-        ctx = (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
-        return [check(WARN, name, detail, f"apply operators/root.yaml once: KUBE_CONTEXT={ctx} devbox run bootstrap (local: devbox run cluster-up)")]
-    detail = f"installed {have}, expected {want} ({where}){suffix}"
-    return [check(WARN, name, detail, f"move the {chart_name} chart to {chart} (operator {want})" if owner else f"sync operator-{op_name} in Argo CD")]
+            fix = f"install the {chart_name} chart {chart} (operator {want})"
+        else:
+            cur = ctx or (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
+            fix = f"apply operators/root.yaml once: KUBE_CONTEXT={cur} devbox run bootstrap (local: devbox run cluster-up)"
+    else:
+        fix = f"move the {chart_name} chart to {chart} (operator {want})" if owner else f"sync operator-{op_name} in Argo CD"
+    if ctx is None:     # today's rows and texts (AC-121.19)
+        if have == want:
+            row = check(OK, name, f"installed {have}, expected {want} ({where}){suffix}")
+        elif have is None:
+            row = check(WARN, name, f"not installed in the current kube context, expected {want} ({where}){suffix}", fix)
+        else:
+            row = check(WARN, name, f"installed {have}, expected {want} ({where}){suffix}", fix)
+        row["operator"] = info
+        return row
+    crd_text = "; crds " + ", ".join(f"{c} {'/'.join(v['served']) or 'missing'}" for c, v in crds.items()) if crds else ""
+    shared = f"; shared by {', '.join(needs)}" if len(needs) > 1 else ""
+    detail = f"{state}: installed {have or 'none'}, expected {want} ({where}){crd_text}{shared}{suffix}"
+    if state == "ok":
+        status = OK
+    elif state == "missing" or (state == "older" and have is not None and _is_major_older(have, want)):
+        status = FAIL
+    else:
+        status = WARN
+    row = check(status, name, detail, None if status == OK else fix)
+    row["operator"] = info
+    return row
 
 
 def check_policies(repo: Path) -> list[dict]:
@@ -629,20 +757,36 @@ def check_retro_schedule() -> list[dict]:
     return [check(WARN, name, f"{slug}: " + "; ".join(miss), " ; ".join(fixes))]
 
 
-def run_checks(repo: Path) -> list[dict]:
+def run_checks(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
     import gates
     import notify_config
-    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_kube_envs(repo), *check_plugins(), *check_platform_source(), *check_migration(repo), *check_repo(repo),
+    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_kube_envs(repo), *check_plugins(), *check_platform_source(), *check_migration(repo), *(check_repo(repo, contexts) if contexts else check_repo(repo)),
             *gates.check_gates(repo), *check_gitops_token(repo),
             *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule(), *notify_config.doctor_checks()]
+
+
+def parse_contexts(values: list[str]) -> dict[str, str]:
+    """`--context [ENV=]CTX` values -> environment -> context; a plain CTX covers every environment, ENV=CTX overrides it."""
+    import model
+    out: dict[str, str] = {}
+    for v in [x for x in values if x.partition("=")[0] not in model.ENVIRONMENTS or "=" not in x]:
+        out.update({e: v for e in model.ENVIRONMENTS})
+    for v in values:
+        env, eq, ctx = v.partition("=")
+        if eq and env in model.ENVIRONMENTS and ctx:
+            out[env] = ctx
+    return out
 
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat platform doctor", description=__doc__)
     ap.add_argument("--repo", default=".")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--context", action="append", default=[], metavar="[ENV=]CTX",
+                    help="the kube context an environment (or, without ENV=, every environment) runs on; operators are then checked there and fail when missing or a major older")
     ns = ap.parse_args(argv)
-    results = run_checks(Path(ns.repo).resolve())
+    contexts = parse_contexts(ns.context)
+    results = run_checks(Path(ns.repo).resolve(), contexts) if contexts else run_checks(Path(ns.repo).resolve())
     if ns.json:
         print(json.dumps(results, indent=2))
     else:
