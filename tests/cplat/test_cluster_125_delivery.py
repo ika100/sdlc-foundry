@@ -192,6 +192,20 @@ def test_ac_125_17_the_validate_recipe_gives_kubeconform_a_yaml_file(repo):  # A
     assert f'"{target}"' in cmd.split("kubeconform", 1)[1]
 
 
+@pytest.mark.parametrize("summary, rc", [("Summary: 0 resource found in 0 file - Valid: 0, Invalid: 0, Errors: 0, Skipped: 0", 1),
+                                         ("Summary: 11 resources found in 1 file - Valid: 11, Invalid: 0, Errors: 0, Skipped: 0", 0)])
+def test_ac_125_17_the_validate_recipe_fails_when_kubeconform_checks_nothing(repo, tmp_path, summary, rc):  # AC-125.17
+    cmd = json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]["validate"]
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    for tool, body in (("uv", "exit 0"), ("kustomize", "echo 'kind: Namespace'"), ("kubeconform", f"echo '{summary}'")):
+        (bin_ / tool).write_text(f"#!/bin/sh\n{body}\n")
+        (bin_ / tool).chmod(0o755)
+    run = subprocess.run(["sh", "-c", cmd], cwd=repo, capture_output=True, text=True, env={"PATH": f"{bin_}:/usr/bin:/bin"})
+    assert run.returncode == rc, run.stdout + run.stderr
+    assert summary in run.stdout
+
+
 def test_ac_125_17_the_claude_files_of_the_template(repo):  # AC-125.17
     settings = json.loads((repo / ".claude" / "settings.json").read_text())
     enabled = settings["enabledPlugins"]
