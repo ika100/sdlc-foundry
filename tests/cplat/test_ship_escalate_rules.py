@@ -71,16 +71,17 @@ def test_a_classified_escalation_is_not_filed_and_keeps_exit_zero(repo, tr, stor
     assert "classified as environment by rule dirty-working-tree" in out and "issue:" not in out and tr.calls == []
 
 
-def test_the_stop_gate_giving_up_records_environment_given(repo, store):
-    """AC-088.18: the stop gate giving up after its blocked stops escalates with cause `environment`, `cause_source` `given`."""
+def test_the_stop_gate_giving_up_records_decision_given(repo, store, monkeypatch):
+    """AC-126.7: the stop gate escalating on no progress records the cause by the rule (here `decision`), `cause_source` `given`."""
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     ship.start(repo, "7", True)
-    for _ in range(3):
-        assert ship.gate(repo, {}, 3, run_tests=False)["decision"] == "block"
-    ship.gate(repo, {}, 3, run_tests=False)
-    assert ship.load_state(repo)["cause"] == "environment"
+    for _ in range(2):
+        assert ship.gate(repo, {"session_id": "A"}, run_tests=False)["decision"] == "block"
+    ship.gate(repo, {"session_id": "A"}, run_tests=False)
+    assert ship.load_state(repo)["cause"] == "decision"
     (r,) = stored(store)
-    assert r["outcome"] == "escalated" and "gave up" in r["escalation"]["reason"]
-    assert (r["escalation"]["cause"], r["escalation"]["cause_source"]) == ("environment", "given") and "rule" not in r["escalation"]
+    assert r["outcome"] == "escalated" and "no progress" in r["escalation"]["reason"]
+    assert (r["escalation"]["cause"], r["escalation"]["cause_source"]) == ("decision", "given") and "rule" not in r["escalation"]
     assert r["filed"] == []
 
 

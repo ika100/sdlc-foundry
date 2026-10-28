@@ -725,14 +725,14 @@ def test_the_cause_must_be_one_of_the_known_ones(repo, store, capsys):
         assert ship.load_state(repo)["cause"] == cause
 
 
-def test_the_gate_giving_up_records_an_escalation(repo, store):
-    """AC-087.16 AC-088.18: the stop gate giving up ends the run as escalated with cause environment (given)."""
+def test_the_gate_giving_up_records_an_escalation(repo, store, monkeypatch):
+    """AC-087.16 AC-126.7: the stop gate escalating on no progress ends the run as escalated with cause decision (given)."""
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     ship.start(repo, "7", True)
     for _ in range(3):
-        ship.gate(repo, {}, 3, run_tests=False)
-    ship.gate(repo, {}, 3, run_tests=False)
+        ship.gate(repo, {"session_id": "A"}, run_tests=False)
     (r,) = stored(store)
-    assert r["outcome"] == "escalated" and (r["escalation"]["cause"], r["escalation"]["cause_source"]) == ("environment", "given") and "gave up" in r["escalation"]["reason"]
+    assert r["outcome"] == "escalated" and (r["escalation"]["cause"], r["escalation"]["cause_source"]) == ("decision", "given") and "no progress" in r["escalation"]["reason"]
 
 
 def test_a_resumed_ship_is_a_new_run_linked_to_the_escalated_one(repo, store, clock):

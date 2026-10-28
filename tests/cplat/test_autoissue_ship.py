@@ -94,10 +94,11 @@ def test_the_filing_is_part_of_the_escalated_record(repo, tr, store):
     assert r["run_id"] in tr.created()[0][3]
 
 
-def test_the_stop_gate_names_the_cause_flag(repo, capsys):
+def test_the_stop_gate_names_the_cause_flag(repo, capsys, monkeypatch):
     """AC-088.1: the gate's escalate hint tells the orchestrator to state the cause."""
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     started(repo)
-    res = ship.gate(repo, {}, 3, run_tests=False)
+    res = ship.gate(repo, {"session_id": "A"}, run_tests=False)
     assert res["decision"] == "block" and "--cause <platform|code|decision|environment>" in res["reason"]
 
 
