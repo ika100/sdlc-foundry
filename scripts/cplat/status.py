@@ -165,6 +165,17 @@ def load(repo: Path, app: str | None) -> tuple[Path, model.Model]:
     return app_dir, model.load_dir(app_dir)
 
 
+def _replicas_of(system: str, component: str, env: str, context: str | None) -> int | None:
+    """Spec 120: the Deployment's `.spec.replicas` in <system>-<env>; None without a context or when it cannot be read."""
+    if not context:
+        return None
+    out = sh(["kubectl", "--context", context, "-n", f"{system}-{env}", "get", "deployments.apps", component, "-o", "jsonpath={.spec.replicas}"])
+    try:
+        return int(out) if out is not None and out.strip() != "" else None
+    except ValueError:
+        return None
+
+
 def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
                 loaded: tuple[Path, model.Model] | None = None) -> dict:
     """Everything `system status --json` reports except `backups`; `collect` is its 4-tuple view."""
@@ -212,6 +223,9 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
                           "version": tag, "state": cell_state(env not in unreadable, env in alerts, smoke, seen),
                           "digest": (smoke or {}).get("digest") or (pin if pin.startswith("sha256:") else None),
                           "release": pin if re.fullmatch(r"v?\d+\.\d+\.\d+", pin) else None}
+            if inst.scale:
+                cells[env]["scale"] = {"replicas": _replicas_of(m.system, c.name, env, by_env.get(env)),
+                                       "min": inst.scale["min"], "max": inst.scale["max"]}
             if env == "staging":
                 candidate = _release_candidate(c, cells[env], smoke)
         row = {"component": c.name, "type": c.type, "platform": plat, "cells": cells}
@@ -337,7 +351,11 @@ def _cell(c: dict | None) -> str:
     if "tag" not in c:
         return f"argo {c['argo']}"
     out = f"{c['state'] + ' ' if c.get('state') else ''}{c['tag']} ci {c['ci']} argo {c['argo']}"
-    return out + (f"  pin PR {c['pin_pr']}" if c.get("pin_pr") else "")
+    out += f"  pin PR {c['pin_pr']}" if c.get("pin_pr") else ""
+    if c.get("scale"):
+        sc = c["scale"]
+        out += f"  replicas {'?' if sc['replicas'] is None else sc['replicas']} ({sc['min']}\u2013{sc['max']})"
+    return out
 
 
 def _grid(header: list[str], body: list[list[str]]) -> list[str]:
