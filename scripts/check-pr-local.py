@@ -27,8 +27,8 @@ def _git_ok(*args: str) -> bool:
 def _pull_request() -> dict | None:
     """The open pull request of the current branch, or None (no gh, an error, not OPEN)."""
     try:
-        p = subprocess.run(["gh", "pr", "view", "--json", "title,body,labels,baseRefName,state"], capture_output=True, text=True)
-    except OSError:
+        p = subprocess.run(["gh", "pr", "view", "--json", "title,body,labels,baseRefName,state"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
         return None
     if p.returncode != 0:
         return None
