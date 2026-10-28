@@ -149,7 +149,8 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 ENVS = ["dev", "staging", "prod"]
 NOT_MIGRATED = "not migrated to 5.0: run `cplat platform update --migrate`"
-MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml", "application.yaml"}
+MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml", "application.yaml",
+                 "hpa.yaml", "scaledobject.yaml", "triggerauthentication.yaml"}
 MANAGED_PREFIXES = ("externalsecret-",)
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries", "autonomy"]
 ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy"]
@@ -1605,8 +1606,61 @@ def labels_for(app: str, svc: dict) -> dict:
     return {"app": svc["name"], "app.kubernetes.io/name": svc["name"], "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
 
 
+KEDA_POLLING = 15
+KEDA_COOLDOWN = 315
+SCALE_DOWN_WINDOW = 345
+
+
 def replicas_for(svc: dict, env: str) -> int:
+    if svc.get("scale"):
+        return int(svc["scale"]["min"])
     return int(svc.get("replicas", 1))
+
+
+def autoscaler_files(app: str, svc: dict, env: str, cfg: dict) -> dict[str, dict]:
+    """The autoscaler documents of a scaled instance (spec 120): an HPA for cpu and memory, a KEDA ScaledObject for queue triggers."""
+    scale = svc.get("scale")
+    if not scale:
+        return {}
+    name, mn, mx, trigger, on = svc["name"], scale["min"], scale["max"], scale["trigger"], scale["on"]
+    target = {"apiVersion": "apps/v1", "kind": "Deployment", "name": name}
+    if trigger in ("cpu", "memory"):
+        return {"hpa.yaml": {
+            "apiVersion": "autoscaling/v2", "kind": "HorizontalPodAutoscaler",
+            "metadata": {"name": name, "labels": labels_for(app, svc)},
+            "spec": {"scaleTargetRef": target, "minReplicas": mn, "maxReplicas": mx,
+                     "metrics": [{"type": "Resource", "resource": {"name": trigger, "target": {"type": "Utilization", "averageUtilization": on[trigger]}}}]},
+        }}
+    files: dict[str, dict] = {}
+    if trigger == "consumes":
+        api = on["consumes"]
+        broker = cfg["events"][api]["broker"]
+        entry: dict = {"type": "nats-jetstream", "metadata": {
+            "natsServerMonitoringEndpoint": f"{app}-{broker}.{app}-{env}.svc:8222", "account": "$G", "stream": f"{app}-{api}",
+            "consumer": name, "lagThreshold": str(on["lag"]), "activationLagThreshold": "0", "useHttps": "false"}}
+    else:
+        entry = {"type": "redis", "metadata": {"listName": on["list"], "listLength": str(on["length"]), "activationListLength": "0",
+                                               "databaseIndex": "0"},
+                 "authenticationRef": {"name": name, "kind": "TriggerAuthentication"}}
+        secret = f"{app}-{on['cache']}-app"
+        files["triggerauthentication.yaml"] = {
+            "apiVersion": "keda.sh/v1alpha1", "kind": "TriggerAuthentication",
+            "metadata": {"name": name, "labels": labels_for(app, svc),
+                         "annotations": {"argocd.argoproj.io/sync-options": "SkipDryRunOnMissingResource=true"}},
+            "spec": {"secretTargetRef": [{"parameter": p, "name": secret, "key": p} for p in ("host", "port", "password")]},
+        }
+    files["scaledobject.yaml"] = {
+        "apiVersion": "keda.sh/v1alpha1", "kind": "ScaledObject",
+        "metadata": {"name": name, "labels": labels_for(app, svc),
+                     "annotations": {"argocd.argoproj.io/sync-wave": "1", "argocd.argoproj.io/sync-options": "SkipDryRunOnMissingResource=true"}},
+        "spec": {"scaleTargetRef": target, "pollingInterval": KEDA_POLLING, "cooldownPeriod": KEDA_COOLDOWN,
+                 "minReplicaCount": mn, "maxReplicaCount": mx,
+                 "advanced": {"horizontalPodAutoscalerConfig": {"behavior": {"scaleDown": {
+                     "stabilizationWindowSeconds": SCALE_DOWN_WINDOW,
+                     "policies": [{"type": "Percent", "value": 100, "periodSeconds": 15}]}}}},
+                 "triggers": [entry]},
+    }
+    return files
 
 
 def addon_env(app: str, svc: dict, resources: dict) -> list[dict]:
@@ -2288,6 +2342,12 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
 
     docs = []
     for env in ENVS:
+        scaled = scaled_instances(services, env)
+        comp_sync: dict = {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]}
+        if scaled:
+            comp_sync["syncOptions"].append("RespectIgnoreDifferences=true")
+            if cfg["autoscaling"][env] == "keda":
+                comp_sync["retry"] = RETRY      # a ScaledObject may sync before KEDA's CRD exists
         docs.append({
             "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",
             "metadata": {"name": f"{app}-{env}", "namespace": "argocd"},
@@ -2299,7 +2359,9 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
                         "project": "default",
                         "source": {"repoURL": gitops_repo, "targetRevision": "main", "path": f"applications/{app}/overlays/{env}/" + "{{name}}"},
                         "destination": {"server": server, "namespace": f"{app}-{env}"},
-                        "syncPolicy": {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]},
+                        "syncPolicy": comp_sync,
+                        **({"ignoreDifferences": [{"group": "apps", "kind": "Deployment", "name": n, "jsonPointers": ["/spec/replicas"]}
+                                                  for n in scaled]} if scaled else {}),
                     },
                 },
                 **({"preservedFields": PRESERVED_FIELDS} if env in cfg["backup"] else {}),
@@ -2411,6 +2473,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             route = httproute(app, s, env, cfg)
             if route:
                 files["httproute.yaml"] = route
+            files.update(autoscaler_files(app, s, env, cfg))
             files.update(secret_manifests(app, s, env, cfg))
             files.update(ext_secrets.get(s["name"], {}))
             for fname, doc in files.items():
