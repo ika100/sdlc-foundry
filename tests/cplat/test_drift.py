@@ -32,7 +32,7 @@ def test_the_suite_runs_in_parallel_locally_and_in_ci():
     """AC-084.1: `pytest -n auto` with pytest-xdist in scripts/ci-local.sh and the platform CI."""
     for f in ("scripts/ci-local.sh", ".github/workflows/ci.yml"):
         text = (core.PLATFORM_ROOT / f).read_text()
-        assert "--with pytest-xdist" in text and "pytest tests/cplat -q -n auto" in text, f
+        assert "--with-requirements requirements-test.txt" in text and "pytest tests/cplat -q -n auto" in text, f  # spec 127
 
 
 def test_smoke_matrices_run_to_the_end_and_maven_retries():

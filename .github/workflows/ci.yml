@@ -175,7 +175,7 @@ jobs:
           mkdir -p "$HOME/.local/bin" && tar xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: pytest
-        run: uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto --shard ${{ matrix.shard }}/4 --shard-report shard-${{ matrix.shard }}.json
+        run: uv run --with-requirements requirements-test.txt pytest tests/cplat -q -n auto --shard ${{ matrix.shard }}/4 --shard-report shard-${{ matrix.shard }}.json
       - name: Upload the shard report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

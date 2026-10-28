@@ -1,4 +1,5 @@
-# Monthly, grouped dependency PRs (security updates still arrive immediately and separately): the language ecosystem, the
+# Monthly, grouped dependency PRs (security updates still arrive immediately and separately): the language ecosystem, the platform's
+# own test tools (requirements-test.txt, spec 127), the
 # GitHub Actions used by CI (pinned by commit SHA; Dependabot updates the SHA and the version comment), and Docker base images.
 version: 2
 updates:
@@ -20,3 +21,10 @@ updates:
       minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+  - package-ecosystem: pip
+    # the cplat suite's test tools, exact pins compiled from requirements-test.in (spec 127); the PR's CI proves the set
+    directory: "/"
+    schedule: {interval: monthly}
+    groups:
+      test-tools:
+        patterns: ["*"]

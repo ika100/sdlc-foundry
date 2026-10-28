@@ -4,10 +4,11 @@
 # ///
 """Pin check (spec 121, AC-121.2, ADR-069): every image and chart the platform ships comes from the versions table.
 
-Three parts: (1) every row of `versions_table()` is exact (images `<repo>:<tag>@sha256:<64 hex>`, charts and manifests exact versions,
+Four parts: (1) every row of `versions_table()` is exact (images `<repo>:<tag>@sha256:<64 hex>`, charts and manifests exact versions,
 no floating tag); (2) a coverage render (a temporary gitops-app with every resource type, backups, `ui: lgtm`, `policy: enforce`, a cpu
 and a queue `scale`, `resource_metrics: install`, `property_operators: install`) whose every image, `repository`+`tag` pair and Argo
-chart source must equal a row; (3) the cluster scripts of both templates: every image reference, chart `version:` and `*_VERSION` default.
+chart source must equal a row; (3) the cluster scripts of both templates: every image reference, chart `version:` and `*_VERSION` default; (4) the test tools: the cplat suite command of `.github/workflows/ci.yml`, `scripts/ci-local.sh` and
+`devbox.json` installs them only with `--with-requirements requirements-test.txt` (spec 127), whose every requirement is `==`.
 
 One line per finding, `ERROR: <file>:<line or document path>: <reference>: <reason>`, then `FAILED: <n> reference(s)` (exit 1); else
 `OK: <n> references, all from the versions table` (exit 0). Run it from the repository root: `python3 scripts/check-pins.py`.
@@ -257,12 +258,48 @@ def check_scripts(rows: list[dict]) -> None:
                     error(where, value, "not in the versions table")
 
 
+SUITE_FILES = [".github/workflows/ci.yml", "scripts/ci-local.sh", "devbox.json"]
+TEST_TOOLS = ["pytest", "pytest-xdist", "pyyaml", "ruamel.yaml"]
+REQ_FILE = "requirements-test.txt"
+PINNED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*==[^\s;=]+(\s*;\s*.+)?$")
+
+
+def check_test_tools() -> None:
+    """Part 4: the suite commands install the test tools only from requirements-test.txt, which pins every requirement."""
+    global checked
+    for rel in SUITE_FILES:
+        path = REPO / rel
+        lines = [(n, ln) for n, ln in enumerate(path.read_text().splitlines(), 1) if "pytest tests/cplat" in ln] if path.is_file() else []
+        if not lines:
+            error(f"{rel}:0", "pytest tests/cplat", "the cplat suite command is missing")
+            continue
+        for n, line in lines:
+            checked += 1
+            where = f"{rel}:{n}"
+            if f"--with-requirements {REQ_FILE}" not in line:
+                error(where, line.strip(), "installs the test tools without requirements-test.txt")
+            for pkg in TEST_TOOLS:
+                if re.search(rf"--with[= ]\s*{re.escape(pkg)}(\s|$|[\"'])", line):
+                    checked += 1
+                    error(where, f"--with {pkg}", f"installs {pkg} without requirements-test.txt")
+    req = REPO / REQ_FILE
+    if not req.is_file():
+        return error(f"{REQ_FILE}:0", REQ_FILE, "the compiled test-tool pins are missing")
+    for n, line in enumerate(req.read_text().splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith(("#", "-")) or line.startswith((" ", "\t")):
+            continue
+        checked += 1
+        if not PINNED.match(line.strip()):
+            error(f"{REQ_FILE}:{n}", line.strip(), "not pinned to an exact version")
+
+
 def main() -> int:
     render = REPO / RENDER
     rows = table_rows(render)
     if rows is not None:
         coverage_render(render, rows)
         check_scripts(rows)
+    check_test_tools()
     for line in findings:
         print(line)
     if findings:

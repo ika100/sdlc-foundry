@@ -40,7 +40,7 @@ uv run scripts/shapes.py check                                              # re
 python3 scripts/pin-actions.py --check                                      # every GitHub Action pinned by SHA, workflows have permissions
 python3 scripts/check-links.py                                               # relative Markdown links resolve
 uvx --from "reuse[charset-normalizer]" reuse lint                           # every file has license + copyright metadata (REUSE)
-uv run --with pytest --with pyyaml --with ruamel.yaml pytest tests/cplat -q # CLI + render tests (3 tests need the Kyverno CLI and skip without it)
+uv run --with-requirements requirements-test.txt pytest tests/cplat -q # CLI + render tests (3 tests need the Kyverno CLI and skip without it)
 copier copy ./templates/web-nextjs /tmp/try --defaults --trust --skip-tasks --data project_name=try   # render a template you touched
 bash tests/e2e/run.sh                                                       # whole stack on a local k3d cluster (Docker, k3d, kubectl)
 ```
