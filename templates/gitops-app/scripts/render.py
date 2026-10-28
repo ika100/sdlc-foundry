@@ -76,6 +76,13 @@ system.yaml (every value explicit and reviewable; the model is described in docs
         dev: {}
         staging: {promote: manual}
         prod: {replicas: 2, env: {LOG_LEVEL: WARN}}    # replicas, resources, env (merged), promote, secrets (replace declared fields by name)
+      # scale (spec 120): on the component (default for every instance) or on an instance; excludes `replicas` on the same level.
+      #   scale: {min: 2, max: 10, on: {cpu: 70}}                          # HPA on CPU utilisation percent (needs resources.requests.cpu)
+      #   scale: {max: 6, on: {memory: 80}}                                # HPA on memory utilisation percent; min defaults to 1
+      #   scale: {min: 0, max: 8, on: {consumes: orders, lag: 50}}         # KEDA on a broker's events API queue; min 0 = scale to zero
+      #   scale: {max: 5, on: {cache: sessions, list: jobs, length: 20}}   # KEDA on a Redis/Valkey list length
+      #   min and max are whole numbers, 1..20 (at most 20 replicas); min <= max; min: 0 only with a queue trigger (consumes, cache).
+      #   cpu/memory need a metrics server: answer resource_metrics (provided | install) in .copier-answers.yml; install renders it.
     todo-lib: {type: library, lang: python, repo: org/todo-lib}    # a library has no instances and renders nothing
   apis:
     todo-api-rest: {type: openapi}   # openapi | grpc | graphql | events; changes no manifest
@@ -279,6 +286,13 @@ OPERATORS = {
     "nack": {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nack", "chart_version": "0.35.0",
              "operator_version": "0.24.0", "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io",
              "selector": "app=nack"},   # the chart's useLegacyNames (default true) labels the Deployment app: <release>
+    # Spec 120: KEDA scales queue-triggered instances; metrics-server serves cpu/memory to the HPA when the cluster lacks one.
+    "keda": {"repo_url": "https://kedacore.github.io/charts", "chart": "keda", "chart_version": "2.19.0",
+             "operator_version": "2.19.0", "namespace": "keda", "release": "keda", "crd": "scaledobjects.keda.sh",
+             "selector": "app.kubernetes.io/name=keda-operator"},   # the chart names the Deployment keda-operator; the default label would match nothing
+    "metrics-server": {"repo_url": "https://kubernetes-sigs.github.io/metrics-server", "chart": "metrics-server",
+                       "chart_version": "3.14.0", "operator_version": "0.9.0", "namespace": "kube-system",
+                       "release": "metrics-server", "crd": None, "selector": "app.kubernetes.io/name=metrics-server"},
 }
 OPERATOR_RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
 OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}
@@ -2521,6 +2535,14 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
                     needed |= {"plugin-barman-cloud", "cert-manager"}
         if any(env not in owned for env in system["cfg"]["backup"]):
             needed.add("velero")
+        for env, kind in system["cfg"]["autoscaling"].items():
+            if env not in owned and kind == "keda":
+                needed.add("keda")
+        if ans.get("resource_metrics", "provided") == "install":
+            for s in system["services"]:
+                if "external" not in s and any(e not in owned and s["_eff"][e].get("scale") and s["_eff"][e]["scale"]["trigger"] in ("cpu", "memory")
+                                               for e in s["environments"]):
+                    needed.add("metrics-server")
     if not needed:
         return {}
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
