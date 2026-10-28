@@ -419,7 +419,7 @@ def kube(monkeypatch, keda=None, metrics_server=None, metrics=None, kubectl=True
             if sel == "app.kubernetes.io/name=metrics-server":
                 return out(f"registry.k8s.io/metrics-server/metrics-server:v{metrics_server}") if metrics_server else out("")
             return out("")
-        if "v1beta1.metrics.k8s.io" in cmd:
+        if any(arg == "v1beta1.metrics.k8s.io" for arg in cmd):   # an argv element (CodeQL read `in` as URL sanitizing)
             return out(metrics or "", 0 if metrics else 1)
         if cmd[:3] == ["kubectl", "config", "current-context"]:
             return out(ctx + "\n")
