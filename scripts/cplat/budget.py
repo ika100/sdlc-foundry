@@ -493,6 +493,7 @@ def _holder(repo: Path):
 
 # ---------------- no progress ----------------
 
+SUMMARY_LINES = 80   # spec 108: a failure summary is kept whole in the snapshot
 normalise = failsum.normalise   # moved to failsum (spec 108); kept here for callers and tests
 
 
@@ -502,11 +503,13 @@ def _progress(prev: dict, cur: dict) -> bool:
     return bool(prev["names"]) and bool(set(prev["names"]) - set(cur["names"]))
 
 
-def attempt(repo: Path, stage: str, error: str, failing: int, names: list[str] | None = None) -> str | None:
+def attempt(repo: Path, stage: str, error: str, failing: int, names: list[str] | None = None, *,
+            normalized: str | None = None) -> str | None:
     """Record a failed attempt of `stage`; the reason when the last 3 are equivalent without progress between them, else None.
-    The attempts are kept in the ship state (or the ledger without a ship)."""
+    The attempts are kept in the ship state (or the ledger without a ship). `normalized` (spec 108: the failure summary's
+    normalized message) is the text that is signed and stored, instead of the normalised last lines of `error`."""
     try:
-        text = normalise("\n".join(str(error).strip().splitlines()[-EXCERPT_LINES:]))
+        text = normalized if normalized is not None else normalise("\n".join(str(error).strip().splitlines()[-EXCERPT_LINES:]))
         entry = {"at": _iso(runs.utcnow()), "failing": int(failing), "names": sorted(names or []),
                  "sig": hashlib.sha1(text.encode()).hexdigest()[:12], "error": feedback.redact(text)[:400]}
         holder = _holder(Path(repo))
@@ -556,15 +559,19 @@ def changed_files(repo: Path) -> list[str]:
     return sorted(names)[:200]
 
 
-def snapshot(repo: Path, stage: str, excerpt: str, criteria: list[str] | tuple = ()) -> Path | None:
-    """`<git dir>/cplat-recovery.json`: stage, redacted last 40 lines, changed files, criteria ids, the stage's attempts.
-    Local only; no prompts and no full logs. Never raises."""
+def snapshot(repo: Path, stage: str, excerpt: str, criteria: list[str] | tuple = (), *,
+             summary: str | None = None) -> Path | None:
+    """`<git dir>/cplat-recovery.json`: stage, redacted last 40 lines (or the whole failure summary, spec 108), changed files,
+    criteria ids, the stage's attempts. Local only; no prompts and no full logs. Never raises."""
     try:
         repo = Path(repo)
         common = core.git_dir(repo)
         if common is None:
             return None
-        text = feedback.redact("\n".join(str(excerpt).strip().splitlines()[-EXCERPT_LINES:]))
+        if summary is not None:
+            text = feedback.redact("\n".join(str(summary).strip().splitlines()[:SUMMARY_LINES]))
+        else:
+            text = feedback.redact("\n".join(str(excerpt).strip().splitlines()[-EXCERPT_LINES:]))
         files = changed_files(repo)
         ids: list[str] = list(criteria) + _AC.findall(text)
         for f in files:
@@ -685,7 +692,10 @@ def _attempt_cli(ns: argparse.Namespace, repo: Path) -> int:
     except OSError as e:
         raise PlatformError(f"cannot read {ns.error_file}: {e.strerror}") from None
     names = [n.strip() for n in (ns.names or "").split(",") if n.strip()]
-    reason = attempt(repo, ns.stage, error, ns.failing, names)
+    side = failsum.read_sidecar(Path(ns.error_file)) if ns.error_file else None   # spec 108: the printed summary
+    if side:
+        error = str(side["text"])
+    reason = attempt(repo, ns.stage, error, ns.failing, names, normalized=str(side["normalized"]) if side else None)
     if not reason:
         return 0
     print(reason)
@@ -695,9 +705,9 @@ def _attempt_cli(ns: argparse.Namespace, repo: Path) -> int:
     except PlatformError:
         st = None
     if st and not st.get("escalated") and st.get("phase") != "done":
-        ship.escalate(repo, reason, "code", evidence=error, stage=ns.stage)
+        ship.escalate(repo, reason, "code", evidence=error, stage=ns.stage, summary=error if side else None)
     else:
-        snapshot(repo, ns.stage, error, [])
+        snapshot(repo, ns.stage, error, [], summary=error if side else None)
     return 3
 
 

@@ -38,9 +38,11 @@ import budget
 import cluster
 import core
 import escalation_rules
+import failsum
 import feedback
 import model
 import pr_rules
+import quiet
 import runs
 import smoke
 import spec as specmod
@@ -354,7 +356,7 @@ def _file_platform_failure(repo: Path, st: dict, reason: str, command: str | Non
 
 
 def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str | None = None, evidence: str = "",
-             report: list[str] | None = None, stage: str | None = None) -> dict:
+             report: list[str] | None = None, stage: str | None = None, summary: str | None = None) -> dict:
     st = require_state(repo)
     report = report if report is not None else []
     cause, message = _coerce_cause(cause)
@@ -368,7 +370,7 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
     st["cause"] = cause
     if cause == "platform":
         _file_platform_failure(repo, st, reason, command, evidence, report)
-    budget.snapshot(repo, stage or st.get("phase") or "none", evidence or reason, [])   # spec 102: local only
+    budget.snapshot(repo, stage or st.get("phase") or "none", evidence or reason, [], summary=summary)   # spec 102: local only
     save_state(repo, st)
     try:
         tracks = specmod.find(repo, st["spec"]).meta.get("tracks") or []
@@ -405,8 +407,19 @@ def run_ci(repo: Path, env: dict[str, str] | None = None) -> None:
             validate.record_final_gate(repo)   # spec 103: a check the loop skipped or reused that is red now is a miss
         except Exception:  # noqa: BLE001  (recording never changes the gate)
             pass
-        tail = [ln for ln in (res.stdout + res.stderr).splitlines() if ln.strip()][-40:]
-        raise PlatformError("`devbox run ci` is red; nothing was pushed:\n" + "\n".join(tail),
+        title = "`devbox run ci` is red; nothing was pushed:"
+        out = res.stdout + res.stderr
+        on, reason = failsum.enabled(repo)
+        if on:
+            log = quiet._log_path(repo, "ship-ci")
+            log.write_text(out)
+            summary = failsum.summarize(out, title=title, check="ci", command="devbox run ci", exit_code=res.returncode,
+                                        log=log, root=repo)
+            failsum.write_sidecar(log, summary)
+            message = summary.render()
+        else:
+            message = failsum.raw(title, out, reason, tail=40)
+        raise PlatformError(message,
                             hint="hand the failure to the coder agent, commit the fix, then `cplat component ship pr` again")
 
 
@@ -612,6 +625,7 @@ class CheckWatch:
             log = gh(["run", "view", r[1], "-R", r[0], "--log-failed"], cwd=self.repo, check=False)
             hit = TRANSIENT.search("\n".join(log.splitlines()[-80:]))
             if not hit:
+                c["_log_failed"] = log   # spec 108: the red brief reuses this fetch instead of asking gh again
                 final.append(c)
                 continue
             if not budget.allow_rerun(self.run_id):
@@ -757,9 +771,46 @@ def _conflicting(watch: CheckWatch) -> Conflicting:
                        hint="merge the base branch into the PR branch and push, then wait again")
 
 
+def _ci_checks(repo: Path, failed: list[dict]) -> list[failsum.CiCheck]:
+    """Spec 108: one `gh run view --log-failed` per run; each failed check's own lines are saved under the quiet log directory."""
+    fetched: dict[tuple[str, str], str] = {}
+    out: list[failsum.CiCheck] = []
+    for c in failed:
+        r = run_of(c)
+        link = c.get("link") or ""
+        if not r:
+            out.append(failsum.CiCheck(c["name"], link, None, None))
+            continue
+        if r not in fetched and c.get("_log_failed") is not None:
+            fetched[r] = c["_log_failed"]
+        if r not in fetched:
+            fetched[r] = gh(["run", "view", r[1], "-R", r[0], "--log-failed"], cwd=repo, check=False)
+        rows = fetched[r].splitlines(keepends=True)
+        own = [ln for ln in rows if ln.split("\t", 1)[0] == c["name"]] or rows
+        text = "".join(own)
+        log = None
+        if text.strip():
+            log = quiet._log_path(repo, "ci-" + (re.sub(r"[^A-Za-z0-9._-]+", "-", c["name"]).strip("-") or "check"))
+            log.write_text(text)
+        out.append(failsum.CiCheck(c["name"], link, log, text if log else None))
+    return out
+
+
+def red_summary(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> tuple[list[str], failsum.Summary | None]:
+    """The lines that brief the agent on red checks, and the failure summary they hold (None when summaries are off)."""
+    title = f"RED: {len(failed)} of {len(cs)} check(s) failed on {pr}: " + ", ".join(c["name"] for c in failed)
+    on, reason = failsum.enabled(repo)
+    if not on:
+        return [title, f"summaries: off ({reason})", *failure_logs(repo, failed)], None
+    summary = failsum.summarize_ci(title, _ci_checks(repo, failed), root=repo)
+    for c in summary.checks:
+        if c.log and not c.log.startswith("none"):
+            failsum.write_sidecar(Path(c.log), failsum.Summary(title, [c]))
+    return summary.render().splitlines(), summary
+
+
 def red(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> list[str]:
-    lines = [f"RED: {len(failed)} of {len(cs)} check(s) failed on {pr}: " + ", ".join(c["name"] for c in failed)]
-    return lines + failure_logs(repo, failed)
+    return red_summary(repo, pr, cs, failed)[0]
 
 
 def refused(repo: Path, st: dict, reason: str, lines: list[str]) -> list[str]:
@@ -796,13 +847,14 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
             pass
         st["fix_rounds"] = st.get("fix_rounds", 0) + 1
         save_state(repo, st)
-        lines = red(repo, pr, cs, failed)
+        lines, summary = red_summary(repo, pr, cs, failed)
         if watch.refused:
             return False, refused(repo, st, watch.refused, lines)
         text = "\n".join(lines)
-        why = budget.attempt(repo, "ci", text, len(failed), [c["name"] for c in failed])   # spec 102: no progress
+        why = budget.attempt(repo, "ci", text, len(failed), [c["name"] for c in failed],
+                             normalized=summary.normalized() if summary else None)   # spec 102: no progress
         if why:
-            escalate(repo, why, "code", evidence=text, stage="ci")
+            escalate(repo, why, "code", evidence=text, stage="ci", summary=text if summary else None)
             lines.append(why)
         return False, lines
     lines = [f"GREEN: all {len(cs)} check(s) passed on {pr}"]
