@@ -702,3 +702,10 @@ Budget: about 40 minutes (FROM's setup 10, update and pin moves 9, backups 5, th
   Kyverno, SeaweedFS-operator, cert-manager, Velero, KEDA and metrics-server indexes (unchanged pins, verified by specs 116–120 and 125);
   `docker manifest inspect` of every image above, and of the current `ghcr.io/cloudnative-pg/postgresql:17.11`; that the tags
   `v5.0.0`/`v5.0.1` exist in this repository.
+
+**Re-verified at build (2026-10-28, t1):** every one of the 13 image references matches its designed digest
+(`docker buildx imagetools inspect` and `docker manifest inspect <image>@<digest>`); every operator chart version is in its
+Helm index (indexes read fully), its appVersion matches `operator_version`, and the archive's sha256 equals the index digest; served
+CRD versions were read from the archives at their default values (NACK's `streamtemplates.jetstream.nats.io` has no served version
+and is left out). The plain Postgres tags `15.19`, `16.15`, `17.11` and `18.6` still exist. `uv run scripts/check-pins.py` reports
+81 references, all from the versions table.
