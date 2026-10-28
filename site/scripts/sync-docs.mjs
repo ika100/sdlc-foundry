@@ -17,6 +17,7 @@ const PAGES = [
   { src: 'docs/autonomy.md', slug: 'guides/autonomy', title: 'Autonomy per environment', order: 2 },
   { src: 'docs/DOMAIN-MODEL.md', slug: 'guides/domain-model', title: 'Domain model', order: 3 },
   { src: 'docs/BACKUP-AND-RESTORE.md', slug: 'guides/backup-and-restore', title: 'Backup and restore', order: 4 },
+  { src: 'docs/UPGRADES.md', slug: 'guides/upgrades', title: 'Upgrades', order: 4 },
   { src: 'docs/CLUSTERS.md', slug: 'guides/clusters', title: 'Clusters shared by several systems', order: 4 },
   { src: 'docs/ADOPTING.md', slug: 'guides/adopting', title: 'Adopting the platform and troubleshooting', order: 3 },
   { src: 'docs/AGENTS.md', slug: 'guides/agents', title: 'The agent orchestration model', order: 4 },

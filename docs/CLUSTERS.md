@@ -17,6 +17,10 @@ A cluster repo owns what several systems on one cluster share: the operators, Ex
 
 To take a system away, run `/cluster:remove <system>`. Merging deletes nothing: the namespaces `<system>-dev`, `<system>-staging` and `<system>-prod`, the application `<system>-root` and everything it created, and all data stay until a human deletes them.
 
+## Upgrading operators
+
+An operator exists once per cluster, so its version moves once: a system's `/platform:update` moves it with dev's step, and the other environments on that cluster are checked by the smoke tests. In a cluster repo the operator list in `cluster.yaml` is the owner of that move; keep the cluster repo and its systems on the same platform release. `lgtm` is not a cluster-repo operator: a cluster repo never installs it. A system repo answers `property_operators: install` to have the platform render External Secrets, Kyverno and LGTM under its own `operators/` (new systems do), or `property_operators: owner` (older repos) when the cluster's owner installs them, as an environment with `operators: owner` does. See [UPGRADES.md](UPGRADES.md).
+
 ## Moving an existing cluster
 
 A cluster whose owning system installed CloudNativePG through its own `operators/root.yaml` ([ADR-058](adr/058-pinned-versions-and-platform-installed-operators.md)) moves to a cluster repo in place. Do the steps in this order.
