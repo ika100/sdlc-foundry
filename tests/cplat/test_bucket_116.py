@@ -494,6 +494,7 @@ def test_the_store_image_is_pinned_to_an_exact_version_ac_116_15(tmp_path):  # A
 
 def test_the_operator_is_pinned_in_the_versions_table_ac_116_15(tmp_path):  # AC-116.15
     op = getattr(platform_render_module("render_116_ops"), "OPERATORS", {}).get("seaweedfs")
+    op = {k: v for k, v in op.items() if k != "crds"}   # spec 121: the table gains a crds key
     assert op == {"repo_url": "https://seaweedfs.github.io/seaweedfs-operator", "chart": "seaweedfs-operator", "chart_version": "0.1.45",
                   "operator_version": "1.0.42", "namespace": "seaweedfs-operator", "release": "seaweedfs-operator",
                   "crd": "buckets.seaweed.seaweedfs.com"}

@@ -18,7 +18,7 @@ import yaml
 
 import cplat
 import gitops
-from resources_fixtures import (APP, ENVS, KEYS, PIN_RE, comp, db, normalized, platform_render_module, system, tree)
+from resources_fixtures import (APP, ENVS, KEYS, PIN_RE, comp, db, normalized, platform_render_module, system, tree, unpin)
 from system_fixtures import (FULL5, RENDER5, ROOT, build_old_gitops, files, generated, git, init_git, load, mod, write_system)
 
 SYS = f"{APP}/system.yaml"
@@ -424,10 +424,11 @@ def test_migrate_renders_the_4_7_tree_except_the_pinned_image_ac_115_6(migrated)
     assert sorted(after) == sorted(migrated.before)
     diff = [k for k in sorted(after) if after[k] != migrated.before[k]]
     assert diff, "the database image moves from the major-only tag to the pin (AC-115.17)"
-    assert all(k.endswith("/cluster.yaml") for k in diff), diff
+    assert all(k.endswith(("/cluster.yaml", "/collector.yaml")) for k in diff), diff   # spec 121: the collector image carries a digest too
     for k in diff:
-        assert PIN_RE.match(yaml.safe_load(after[k])["spec"]["imageName"])
-    assert next((k for k in sorted(after) if normalized(after[k]) != normalized(migrated.before[k])), None) is None
+        if k.endswith("/cluster.yaml"):   # spec 121
+            assert PIN_RE.match(yaml.safe_load(after[k])["spec"]["imageName"])
+    assert next((k for k in sorted(after) if normalized(unpin({k: after[k]})[k]) != normalized(migrated.before[k])), None) is None   # spec 121: unpin maps the designed references back
     mig = migrated.data["migration"]
     assert mig["ran"] is True and mig["byte_identical"] is True
 

@@ -841,9 +841,13 @@ def test_the_e2e_system_renders_the_scaled_consumer_and_its_ignore_rule_ac_120_2
 
 # ---------------- AC-120.25 / .27 / .17: operators ----------------
 
+def _no_crds(op):   # spec 121: the table gains a crds key
+    return {k: v for k, v in (op or {}).items() if k != "crds"}
+
+
 def test_keda_and_metrics_server_are_pinned_in_the_versions_table_ac_120_25(tmp_path):  # AC-120.25
     r = renderer("render_120_table")
-    assert r.OPERATORS.get("keda") == KEDA and r.OPERATORS.get("metrics-server") == METRICS
+    assert _no_crds(r.OPERATORS.get("keda")) == KEDA and _no_crds(r.OPERATORS.get("metrics-server")) == METRICS   # spec 121: the table gains a crds key
     assert list(r.OPERATORS)[-3:] == ["nack", "keda", "metrics-server"]
     assert r.OPERATOR_OF_TYPE == {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}
 
@@ -861,7 +865,7 @@ def test_the_cluster_repo_copy_of_the_renderer_has_the_same_pins_ac_120_25(tmp_p
     spec = importlib.util.spec_from_file_location("system_render_120", path)
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
-    assert m.OPERATORS.get("keda") == KEDA and m.OPERATORS.get("metrics-server") == METRICS
+    assert _no_crds(m.OPERATORS.get("keda")) == KEDA and _no_crds(m.OPERATORS.get("metrics-server")) == METRICS   # spec 121: the table gains a crds key
     assert hasattr(m, "scaled_instances")
 
 

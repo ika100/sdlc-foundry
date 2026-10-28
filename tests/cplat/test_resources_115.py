@@ -12,7 +12,7 @@ import yaml
 
 from resources_fixtures import (APP, ENVS, KEYS, LABELS, PIN_RE, SEMVER, TYPES_LINE, VARS, addon_names, cluster, comp, contract_vars, db, env_list,
                                 external_secret, external_secret_path, fails, kustomization, ok, platform_render_module, render_50, secret_vars,
-                                sets, system, tree, two_dbs, var_order, y, normalized)
+                                sets, system, tree, two_dbs, var_order, y, normalized, unpin)
 from system_fixtures import FULL5, ROOT, component, full5, rich5, render5, tiny
 
 P = "applications/shop/system.yaml: "
@@ -152,8 +152,9 @@ def test_a_5_0_system_renders_as_5_0_did_except_the_pinned_image_ac_115_6(tmp_pa
     from system_fixtures import generated
     new = generated(tmp_path / "new")
     assert sorted(old) == sorted(new), f"files differ: {sorted(set(old) ^ set(new))}"
+    unpinned = unpin(new)   # spec 121: the designed engine references mapped back to what 5.0 rendered
     for k in old:
-        assert normalized(old[k]) == normalized(new[k]), f"{k} differs from the 5.0 render beyond the image"
+        assert normalized(old[k]) == normalized(unpinned[k]), f"{k} differs from the 5.0 render beyond the image"
     clusters = [k for k in new if k.endswith("/cluster.yaml")]
     assert clusters
     for k in clusters:
