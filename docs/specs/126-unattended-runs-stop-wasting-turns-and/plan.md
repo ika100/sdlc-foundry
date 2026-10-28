@@ -59,6 +59,7 @@ tasks:
     covers: [AC-126.11]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t9
     title: cplat pr open — title rule, spec rule in the platform repo, --no-spec
     files: [scripts/cplat/pr_open.py, scripts/cplat/pr.py]
