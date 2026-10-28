@@ -180,6 +180,7 @@ def check_repo(repo: Path) -> list[dict]:
         out += check_addons(repo)
         out += check_operators(repo)
         out += check_brokers(repo)
+        out += check_metrics(repo)
         out += check_backups(repo)
         out += check_policies(repo)
         if declared == "cluster-gitops":
@@ -200,6 +201,7 @@ def check_repo(repo: Path) -> list[dict]:
     out += check_addons(repo)
     out += check_operators(repo)
     out += check_brokers(repo)
+    out += check_metrics(repo)
     out += check_backups(repo)
     out += check_policies(repo)
     if shape == "cluster-gitops":
@@ -322,8 +324,8 @@ def check_operators(repo: Path) -> list[dict]:
     out = []
     for op_name, chart_name in (("cloudnative-pg", "cloudnative-pg"), ("seaweedfs", "seaweedfs-operator"),
                                 ("plugin-barman-cloud", "plugin-barman-cloud"), ("cert-manager", "cert-manager"), ("velero", "velero"),
-                                ("nack", "nack")):
-        needs = _operator_needs(models, op_name)
+                                ("nack", "nack"), ("keda", "keda"), ("metrics-server", "metrics-server")):
+        needs = _operator_needs(models, op_name, repo)
         if needs:
             out += _operator_row(models, needs, op_name, chart_name)
     return out
@@ -378,9 +380,34 @@ def check_brokers(repo: Path) -> list[dict]:
     return out
 
 
-def _operator_needs(models: list, op_name: str) -> list[str]:
+def _resource_metrics_answer(repo: Path) -> str:
+    """The repo's `resource_metrics` copier answer (`provided` when absent or unreadable)."""
+    import yaml
+    try:
+        answers = yaml.safe_load((repo / ".copier-answers.yml").read_text()) or {}
+        return str(answers.get("resource_metrics") or "provided")
+    except (OSError, AttributeError, yaml.YAMLError):
+        return "provided"
+
+
+def _scaled_on(models: list, keys: tuple[str, ...]) -> list[tuple[object, object]]:
+    """(model, instance) of every instance whose scale triggers include one of `keys`, in model order."""
+    return [(m, i) for m in models for i in m.instances if i.scale and any(k in i.scale["on"] for k in keys)]
+
+
+def _names(models: list, pairs: list) -> str:
+    return ", ".join(f"{m.system}/{i.component} ({i.environment})" if len(models) > 1 else f"{i.component} ({i.environment})" for m, i in pairs)
+
+
+def _operator_needs(models: list, op_name: str, repo: Path | None = None) -> list[str]:
     """The environments that need operator `op_name` (design.md, versions section)."""
     envs: set[str] = set()
+    if op_name == "keda":
+        return sorted({e.name for m in models for e in m.environments if e.autoscaling == "keda"})
+    if op_name == "metrics-server":
+        if repo is None or _resource_metrics_answer(repo) != "install":
+            return []
+        return sorted({i.environment for _, i in _scaled_on(models, ("cpu", "memory"))})
     for m in models:
         if op_name == "velero":
             envs |= {e.name for e in m.environments if e.backup}
@@ -390,6 +417,30 @@ def _operator_needs(models: list, op_name: str) -> list[str]:
             rtype = {"cloudnative-pg": "database", "nack": "broker"}.get(op_name, "bucket")
             envs |= {ri.environment for ri in m.resource_instances if ri.type == rtype and not ri.external}
     return sorted(envs)
+
+
+def check_metrics(repo: Path) -> list[dict]:
+    """AC-120.17, AC-120.27: whether the current cluster serves metrics.k8s.io, when an instance scales on cpu or memory."""
+    if not shutil.which("kubectl"):
+        return []
+    models = _models(repo)
+    pairs = _scaled_on(models, ("cpu", "memory"))
+    if not pairs:
+        return []
+    names = _names(models, pairs)
+    p = run(["kubectl", "get", "apiservices.apiregistration.k8s.io", "v1beta1.metrics.k8s.io", "-o",
+             'jsonpath={.status.conditions[?(@.type=="Available")].status}'], check=False)
+    if p.returncode == 0 and (p.stdout or "").strip() == "True":
+        return [check(OK, "resource metrics", f"the cluster serves metrics.k8s.io; cpu and memory triggers: {names}")]
+    detail = f"the current kube context serves no resource metrics (metrics.k8s.io); the cpu and memory triggers of {names} cannot scale"
+    if _resource_metrics_answer(repo) == "install":
+        ctx = (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
+        fix = f"apply operators/root.yaml once: KUBE_CONTEXT={ctx} devbox run bootstrap (local: devbox run cluster-up)"
+    else:
+        fix = ("set resource_metrics: install in .copier-answers.yml and run devbox run render "
+               f"(the platform then installs metrics-server {_operators()['metrics-server']['chart_version']}), "
+               "or install a metrics server yourself")
+    return [check(WARN, "resource metrics", detail, fix)]
 
 
 def check_backups(repo: Path) -> list[dict]:
@@ -431,6 +482,7 @@ def _operator_row(models: list, needs: list[str], op_name: str, chart_name: str)
     op = _operators()[op_name]
     want, chart = op["operator_version"], op["chart_version"]
     name = f"operator {op_name}"
+    suffix = f"; queue-triggered: {_names(models, _scaled_on(models, ('consumes', 'cache')))}" if op_name == "keda" else ""
     selector = op.get("selector") or f"app.kubernetes.io/name={chart_name}"   # nack's chart labels its Deployment app: nack
     p = run(["kubectl", "get", "deploy", "-A", "-l", selector, "-o",
              "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
@@ -440,14 +492,14 @@ def _operator_row(models: list, needs: list[str], op_name: str, chart_name: str)
     owner = owner_envs == needs
     where = f"operators: owner in {', '.join(owner_envs)}" if owner else f"Argo CD application operator-{op_name}"
     if have == want:
-        return [check(OK, name, f"installed {have}, expected {want} ({where})")]
+        return [check(OK, name, f"installed {have}, expected {want} ({where}){suffix}")]
     if have is None:
-        detail = f"not installed in the current kube context, expected {want} ({where})"
+        detail = f"not installed in the current kube context, expected {want} ({where}){suffix}"
         if owner:
             return [check(WARN, name, detail, f"install the {chart_name} chart {chart} (operator {want})")]
         ctx = (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
         return [check(WARN, name, detail, f"apply operators/root.yaml once: KUBE_CONTEXT={ctx} devbox run bootstrap (local: devbox run cluster-up)")]
-    detail = f"installed {have}, expected {want} ({where})"
+    detail = f"installed {have}, expected {want} ({where}){suffix}"
     return [check(WARN, name, detail, f"move the {chart_name} chart to {chart} (operator {want})" if owner else f"sync operator-{op_name} in Argo CD")]
 
 
