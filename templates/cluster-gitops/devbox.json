@@ -20,7 +20,7 @@
       "bootstrap": "bash scripts/bootstrap.sh",
       "cluster-up": "bash scripts/cluster-up.sh",
       "cluster-down": "WITH_SYSTEM=0 LOCAL_CLUSTER=${LOCAL_CLUSTER:-$(uv run scripts/render.py --name)-local} bash scripts/local-cluster.sh down",
-      "validate": "uv run scripts/render.py --check && out=$(mktemp) && kustomize build cluster > \"$out\" && kubeconform -strict -ignore-missing-schemas -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -summary \"$out\"; rc=$?; rm -f \"$out\"; exit $rc",
+      "validate": "uv run scripts/render.py --check && dir=$(mktemp -d) && kustomize build cluster > \"$dir/cluster.yaml\" && kubeconform -strict -ignore-missing-schemas -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -summary \"$dir/cluster.yaml\" > \"$dir/report\"; rc=$?; cat \"$dir/report\"; if [ $rc -eq 0 ] && grep -q '^Summary: 0 resource' \"$dir/report\"; then echo 'validate: kubeconform checked 0 resources' >&2; rc=1; fi; rm -rf \"$dir\"; exit $rc",
       "lint": "devbox run validate",
       "lint-fix": "devbox run render",
       "quality": "devbox run validate",
