@@ -45,6 +45,20 @@ def _inst_autonomy(i: model.Instance) -> str:
     return f"\n    autonomy max {a['max']} (effective {a['effective']})"
 
 
+def _trigger(on: dict) -> str:
+    if "cpu" in on:
+        return f"cpu {on['cpu']}%"
+    if "memory" in on:
+        return f"memory {on['memory']}%"
+    if "consumes" in on:
+        return f"consumes {on['consumes']} lag {on.get('lag')}"
+    return f"cache {on.get('cache')} list {on.get('list')} length {on.get('length')}"
+
+
+def _scale(i: model.Instance) -> str:
+    return f"  scale {i.scale['min']}\u2013{i.scale['max']} on {_trigger(i.scale['on'])}" if i.scale else ""
+
+
 def render(m: model.Model) -> str:
     def section(title: str, lines: list[str]) -> str:
         return "\n".join([title, *(lines or ["  (none)"])])
@@ -52,6 +66,7 @@ def render(m: model.Model) -> str:
     envs = [f"  {e.name}  host {_d(e.host)}  url-template {_d(e.url_template)}  policy {e.policy}  "
             f"promote {'follows main' if e.promotion == 'main' else e.promotion}  observability {_observability(e.observability)}"
             f"{'  operators owner' if e.operators == 'owner' else ''}{_backup(e.backup)}"
+            f"{'  autoscaling keda' if e.autoscaling == 'keda' else ''}"
             f"{_env_autonomy(e)}" for e in m.environments]
     comps = []
     for c in m.components:
@@ -61,7 +76,7 @@ def render(m: model.Model) -> str:
                      f"provides {','.join(c.provides) or '-'}  consumes {','.join(c.consumes) or '-'}  "
                      f"libraries {','.join(c.libraries) or '-'}")
     insts = [f"  {i.component}  {i.environment}  {i.tag or 'not pinned'}  replicas {_d(i.replicas)}  namespace {i.namespace}  url {_d(i.url)}"
-             f"{_inst_autonomy(i)}" for i in m.instances]
+             f"{_scale(i)}{_inst_autonomy(i)}" for i in m.instances]
     res: list[str] = []
     for r in m.resources:
         used = ",".join(c.name for c in m.components if r.name in c.uses) or "-"
