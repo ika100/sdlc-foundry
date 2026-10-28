@@ -124,6 +124,7 @@ def main(argv: list[str]) -> int:
     o.add_argument("--issues", default="")
     o.add_argument("--spec")
     o.add_argument("--no-pr", action="store_true")
+    o.add_argument("--no-spec", action="store_true", help="platform repo: label the PR no-spec")
     o.add_argument("--json", action="store_true")
     o.add_argument("--repo", default=".")
     ns = ap.parse_args(argv)
@@ -135,7 +136,7 @@ def main(argv: list[str]) -> int:
 
 
 def _open(ns: argparse.Namespace) -> int:
-    opts = pr_open.Opts(ns.title, ns.body_file, ns.message, ns.base, ns.issues, ns.spec, ns.no_pr)
+    opts = pr_open.Opts(ns.title, ns.body_file, ns.message, ns.base, ns.issues, ns.spec, ns.no_pr, ns.no_spec)
     try:
         res = pr_open.open_pr(Path(ns.repo).resolve(), opts)
     except pr_open.Refused as e:
