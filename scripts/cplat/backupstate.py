@@ -413,6 +413,10 @@ def source_server(row: dict, state: dict | None, when: str, system: str, db: str
             later = [parse_time(row["windows"][x]) for x in order[order.index(server) + 1:] if row["windows"].get(x)]
             if later and later[0] and (not hi or later[0] <= hi):
                 hi, closed = later[0], True
+        elif order:              # a server missing from the list predates it: its window ends where the list's first archive starts
+            first_listed = next((parse_time(row["windows"][x]) for x in order if row["windows"].get(x)), None)
+            if first_listed and (not hi or first_listed <= hi):
+                hi, closed = first_listed, True
         if t and lo and hi and lo <= t and (t < hi if closed else t <= hi):
             n = int(GEN.search(server).group(1)) if GEN.search(server) else 0
             if best is None or n > best[0]:

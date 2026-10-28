@@ -202,3 +202,16 @@ def test_a_previous_cluster_runs_the_major_of_the_archive_it_wrote_to_ac_121_16(
     image = lambda f: yaml.safe_load((repo / APP / "addons/dev/orders-db" / f).read_text())["spec"]["imageName"]  # noqa: E731
     assert image("cluster-g1.yaml") == PG[16], "the previous cluster keeps the major of the archive it wrote to"
     assert image("cluster-g2.yaml") == PG[17]
+
+
+def test_a_server_older_than_the_archive_list_closes_where_the_list_starts_ac_121_16():  # AC-121.16
+    # spec 121 review: a 117 switch (OLD → g1) before the major step leaves OLD out of `archives`; its window must not reach past g1's
+    g1, g1_17 = "shop-orders-db-g1", "shop-orders-db-g1-pg17"
+    row = {"backup": {"latest": "2026-10-27T10:41:02Z"},
+           "windows": {OLD: "2026-09-01T03:00:00Z", g1: "2026-09-15T03:00:00Z", g1_17: "2026-10-27T09:00:00Z"}}
+    state = {"next": 2, "clusters": [{"name": g1, "role": "active", "from": {"server": OLD, "to": "2026-09-14T00:00:00Z"}}],
+             "archives": [{"server": g1, "major": 16}, {"server": g1_17, "major": 17}]}
+    pick = lambda when: backupstate.source_server(row, state, when, "shop", "orders-db")  # noqa: E731
+    assert pick("2026-10-27T09:30:00Z") == g1_17, "after the step the new archive wins"
+    assert pick("2026-10-01T00:00:00Z") == g1, "between the switch and the step the listed 16 archive"
+    assert pick("2026-09-10T00:00:00Z") == OLD, "before the switch the older server"

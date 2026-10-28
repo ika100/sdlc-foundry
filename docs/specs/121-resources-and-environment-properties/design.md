@@ -732,3 +732,4 @@ and is left out). The plain Postgres tags `15.19`, `16.15`, `17.11` and `18.6` s
   and is refused as outside the restore points (never restored from the wrong major). Verification takes that first base backup right
   after the step, so the gap is short.
 - Image of a database cluster after restores across a major (changed after review, AC-121.16): a previous cluster runs the major of the archive it wrote to (its `archive`, recorded at the switch); a restored generation runs the major of its source archive; the active generation keeps its source archive's major only until a major step appended a later archive with the effective major.
+- Restore source (changed after review, AC-121.16): a server missing from a non-empty `archives` (it predates the list, e.g. the cluster before a spec 117 switch) has its window closed where the list's first archive starts, so a time after a major step never picks it.
