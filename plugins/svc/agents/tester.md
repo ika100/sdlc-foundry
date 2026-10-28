@@ -38,7 +38,7 @@ A criterion whose line ends with `(smoke)` is also checked in dev after deploy b
 
 **Files go through Write and Edit, never through the shell:** no `cat > file`, heredocs, `tee` or `echo >`. Those are not on the allowlist and are refused in headless runs; `Write`/`Edit` work inside the repo.
 
-**Shell rule:** every command goes through `devbox run <script>` — canonical recipes in `devbox.json`. Never call `pytest`, `coverage`, or `bandit` directly; add a missing recipe to `devbox.json` first. Run test, quality and lint recipes as `cplat quiet <script>` (for example `cplat quiet test-fast`): it prints one line on success and the tail plus a log path on failure; read that log, do not rerun with full output.
+**Shell rule:** every command goes through `devbox run <script>` — canonical recipes in `devbox.json`. Never call `pytest`, `coverage`, or `bandit` directly; add a missing recipe to `devbox.json` first. Run test, quality and lint recipes as `cplat quiet <script>` (for example `cplat quiet test-fast`): it prints one line on success and a failure summary (the failed checks with file, line and message) plus the log path on failure; read the summary first and open the full log only when the summary is not enough, never rerun with full output.
 
 | Need | Command |
 |---|---|
