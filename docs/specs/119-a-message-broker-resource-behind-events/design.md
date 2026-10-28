@@ -575,3 +575,8 @@ run exactly as before. The broker steps take at most 5 minutes; NACK at cluster-
 25. **The e2e unbinds and deletes the broker after its steps**, so staging (where e2e-api is promoted) never needs a broker and spec 117's
     backup steps keep their time and assertions. Alternative: run a second broker in staging and back it up (several more minutes).
 26. **Plugins: `resource` 1.5.0, `api` 1.1.0**; `platform` (doctor) does not change its commands.
+
+**Re-verified at build (2026-10-28):** the full NATS Helm index gives nats 2.15.1 and nack 0.35.0 as the newest; `nats:2.15.2-alpine` and
+`2.14.9-alpine` are still the newest tags per line (their digests changed on 2026-10-27, the tags did not); the nats chart's
+`podTemplate.configChecksumAnnotation` defaults to `false` (rights changes hot-reload); the rendered Stream and Consumer documents
+validate against the datreeio CRDs-catalog schemas `jetstream.nats.io/{stream,consumer}_v1beta2` that `devbox run validate` uses.
