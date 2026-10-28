@@ -1,7 +1,7 @@
 ---
 spec_id: 121-resources-and-environment-properties
 title: Resources and environment properties upgrade safely
-status: building
+status: done
 priority: P1
 ---
 
@@ -123,3 +123,4 @@ This spec is an additive 5.x extension of spec 114, which stays as approved. It 
 - 2026-10-26 approved
 - 2026-10-28 readings recorded at plan time (design.md, "Spec readings"): an engine image carries an exact tag and a digest, so a `system.yaml` without the new keys renders identically except for its image references (AC-121.2, AC-121.3); Postgres 16–18 are the supported upgrade targets and 15 stays renderable as deprecated, since dropping it would need a major release (AC-121.3, AC-121.26); a bucket has no `version` and `/resource:upgrade` refuses it, its image moving like a minor pin (AC-121.3, AC-121.27); External Secrets, Kyverno and LGTM are installed only for the answer `property_operators: install`, the default for new repos, `owner` for existing ones (AC-121.17); "with access to an environment's cluster" means `doctor --context` (AC-121.19); a gitops repo deploys every environment to one cluster, so AC-121.21 governs instead of AC-121.20; the first upgrade run adds backups after the update, creates other resources only where the previous release supports them, and "not tagged" is a CI check plus the release procedure, not automation (AC-121.24)
 - 2026-10-28 building
+- 2026-10-28 done

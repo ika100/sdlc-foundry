@@ -21,7 +21,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [105-a-deploy-counts-only-after-its-checks](specs/105-a-deploy-counts-only-after-its-checks/spec.md) — A deploy counts only after its checks pass | P1 | approved | 8 | #155 |
 | [106-prod-runs-the-exact-image-staging-tested](specs/106-prod-runs-the-exact-image-staging-tested/spec.md) — Prod runs the exact image staging tested | P1 | approved | 12 | #157 |
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | building | 27 |  |
 | [108-agents-get-a-compact-failure-summary-not](specs/108-agents-get-a-compact-failure-summary-not/spec.md) — Agents get a compact failure summary, not the full log | P2 | draft | 11 | #139 |
 | [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | draft | 12 | #164 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
@@ -120,6 +119,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [118-a-cache-resource-compatible-with-redis](specs/118-a-cache-resource-compatible-with-redis/spec.md) — A cache resource compatible with Redis | P1 | done | 19 |  |
 | [119-a-message-broker-resource-behind-events](specs/119-a-message-broker-resource-behind-events/spec.md) — A message broker resource behind events APIs | P1 | done | 24 |  |
 | [120-instances-scale-on-load-and-queue-depth](specs/120-instances-scale-on-load-and-queue-depth/spec.md) — Instances scale on load and queue depth | P1 | done | 28 |  |
+| [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | done | 27 |  |
 | [123-the-platform-repo-declares-its-own-shape](specs/123-the-platform-repo-declares-its-own-shape/spec.md) — The platform repo declares its own shape | P1 | done | 24 |  |
 | [125-a-cluster-repo-hosts-several-systems](specs/125-a-cluster-repo-hosts-several-systems/spec.md) — A cluster repo hosts several systems on shared operators | P1 | done | 18 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
