@@ -10,6 +10,7 @@ tasks:
     covers: [AC-126.11, AC-126.14]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: stopgate.py — owner, progress check, verdict, last message, no-progress reason, cause rule
     files: [scripts/cplat/stopgate.py]
