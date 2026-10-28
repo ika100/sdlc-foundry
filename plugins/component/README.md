@@ -5,7 +5,7 @@ The commands that work on one component (a service, a website or a library) and 
 | Command | What it does |
 |---|---|
 | `/component:new <name> <description> [--type T] [--lang L] [--system OWNER/REPO]` | Create a component repo from its template (default `service`/`python`) |
-| `/component:add`, `set`, `remove` | Edit `components:` of `system.yaml` in a gitops-app repo; one PR; `--provides NAME[:TYPE]` and `--consumes NAME` declare the APIs of one component (`openapi`, `grpc`, `graphql`, `events`); `/component:spec` publishes the spec as a draft PR for review (`set <component> --instance <env> --replicas <n>` changes one instance) |
+| `/component:add`, `set`, `remove` | Edit `components:` of `system.yaml` in a gitops-app repo; one PR; `--provides NAME[:TYPE]` and `--consumes NAME` declare the APIs of one component (`openapi`, `grpc`, `graphql`, `events`); `/component:spec` publishes the spec as a draft PR for review (`set <component> --instance <env> --replicas <n>` changes one instance; `--replicas` is refused on a component or instance with a `scale`, which is edited in `system.yaml`) |
 | `/component:spec [<description> \| --amend <id> <change> \| approve <id> \| --from-plan <plan> \| --all \| index \| migrate]` | Write, amend, approve or list feature specs |
 | `/component:plan <spec-id>` | Architect writes `design.md` and `plan.md` |
 | `/component:build <spec-id>` | Failing acceptance tests, coders, quality/tests/security, verification, PR |
