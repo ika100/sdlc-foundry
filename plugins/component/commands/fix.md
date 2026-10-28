@@ -110,7 +110,6 @@ Then make **one** Bash call (it commits everything with `-s`, finds the open iss
 cplat pr open --title "<type>(<scope>): <imperative description of the task>" [--issues "#NNN …"] [--no-spec]
 ```
 
-`--no-spec` (platform repo only) labels the PR `no-spec`, for a one-line fix or docs-only change that closes an issue. The title is checked before anything is pushed.
 
 Use `fix:` for bug fixes, `chore:` for tooling, `docs:` for documentation, etc.; the title must be a Conventional Commits title (the `pr-title` CI check). Pass `--issues` for `#NNN` references in `$ARGUMENTS`.
 
