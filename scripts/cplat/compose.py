@@ -264,6 +264,21 @@ def main(argv: list[str]) -> int:
         entry = components[name]
         if ns.instance and ns.instance not in (entry.get("instances") or {}):
             raise PlatformError(f"{name} has no instance in {ns.instance}", hint="instances: " + ", ".join(entry.get("instances") or {}))
+        if ns.replicas:
+            fix = f"edit applications/{app_dir.name}/system.yaml, then run component set again"
+            if ns.instance:
+                inst_entry = (entry.get("instances") or {}).get(ns.instance) or {}
+                if "scale" in inst_entry:
+                    key = f"components.{name}.instances.{ns.instance}.scale"
+                elif "replicas" in inst_entry or "scale" not in entry:
+                    key = ""
+                else:
+                    key = f"components.{name}.scale"
+                if key:
+                    raise PlatformError(f"{name} is scaled in {ns.instance} ({key}): scale and replicas exclude each other; remove {key} from system.yaml first", hint=fix)
+            elif "scale" in entry:
+                key = f"components.{name}.scale"
+                raise PlatformError(f"{name} is scaled ({key}): scale and replicas exclude each other; remove {key} from system.yaml first", hint=fix)
         changes = []
         for kv in ns.env:
             k, sep, v = kv.partition("=")
