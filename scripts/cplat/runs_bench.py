@@ -82,7 +82,7 @@ def snapshot(repo: str, clone: Path) -> dict:
             "newest_pr": _newest_pr(repo)}
 
 
-EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged"}
+EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged", "fix-rounds": "open"}
 
 
 def result(workflow: str, repo: str, keep: dict) -> str | None:
@@ -193,6 +193,18 @@ def stage_arm(arm: dict, clone: Path) -> None:
     _ok(["git", *GIT_IDENTITY, "commit", "--allow-empty", "-m", f"bench: arm {arm['name']}"], clone)
 
 
+def load_seed(workflow: str) -> dict:
+    """The seed of a workflow (`fix-rounds`, spec 108): arm-shaped, `files` only. Raises PlatformError."""
+    task = json.loads((BENCH_DIR / "tasks.json").read_text())["workflows"][workflow]
+    try:
+        seed = json.loads((BENCH_DIR / task["seed"]).read_text())
+        if not isinstance(seed, dict) or not isinstance(seed.get("files"), dict):
+            raise ValueError("no files")
+    except (OSError, ValueError) as e:
+        raise PlatformError(f"benchmark seed {task.get('seed')} is not readable: {e}") from None
+    return seed
+
+
 def push_arm(url: str, clone: Path) -> None:
     """Push the arm commit (not forced) to main. The reset after the run puts main back."""
     _ok(["git", "push", url, "HEAD:refs/heads/main"], clone)
@@ -298,6 +310,36 @@ def _pass_summary(label: str, rid: str | None, started: str, ended: str, new: li
             "checks": checks}
 
 
+def _fix_pass(label: str, rid: str | None, started: str, ended: str, new: list[dict], outcome: str, check: str | None) -> dict:
+    """One pass of `fix-rounds` (spec 108): outcome, fix rounds, the fixing agents' (coder, quality) and the whole pass's usage, failed gates."""
+    usage = None
+    try:
+        active = runs.active(rid)
+        if active is not None:
+            usage = runs_usage.for_run({**active, "started_at": started}, ended_at=ended)
+    except Exception:  # noqa: BLE001
+        pass
+    tokens, cost, _ = _summary(usage)
+    roles = [v for k, v in ((usage or {}).get("by_role") or {}).items() if str(k).endswith((":coder", ":quality")) and isinstance(v, dict)]
+    fixing = _summary({"totals": {f: sum(int(v.get(f) or 0) for v in roles) for f in ("input", "output", "cache_read", "cache_write")}
+                       | {"cost_usd": sum(float(v.get("cost_usd") or 0) for v in roles)}})
+    rounds = sum(1 for r in new for a in r.get("agents") or [] if isinstance(a, dict)
+                 for e in a.get("events") or [] if isinstance(e, dict) and e.get("kind") == "fix-round")
+    gates = sorted({g for r in new if isinstance(r.get("gates"), dict) for g, v in r["gates"].items() if v == "failed"})
+    return {"pass": label, "outcome": outcome, "result_check": check, "fix_rounds": rounds,
+            "fixing": {"tokens": fixing[0], "cost_usd": fixing[1]}, "total": {"tokens": tokens, "cost_usd": cost}, "gates_failed": gates}
+
+
+def _summary_verdict(on: dict, off: dict) -> str | None:
+    if on["outcome"] != "done":
+        return "summaries pass not done"
+    if on["gates_failed"]:
+        return "gate failed with summaries: " + ", ".join(on["gates_failed"])
+    if on["fix_rounds"] > off["fix_rounds"]:
+        return f"more fix rounds with summaries ({on['fix_rounds']}) than without ({off['fix_rounds']})"
+    return None
+
+
 def _required_missing(selective: dict) -> list[str]:
     """Checks a rule requires (mandatory categories; lint, typecheck and security always) that the change-aware pass did not run or reuse."""
     return sorted({f"{c['name']} ({c['rule']})" for c in selective["checks"] if c["decision"] == "skipped"
@@ -320,7 +362,7 @@ def _summary(usage: dict | None) -> tuple[int, str, str]:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat platform runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("workflow", choices=["quick-task", "build", "ship"])
+    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
     ap.add_argument("--model", help="coordinator model for the run (sonnet, opus, haiku); else the settings files, else sonnet")
     ap.add_argument("--plugins", metavar="DIR", help="run with the plugins in DIR (this worktree's plugins/) instead of the installed ones")
@@ -330,7 +372,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--recall", action="store_true",
                     help="after the session run the full suite in the clone; a failing test fails the record (spec 107)")
     ns = ap.parse_args(argv)
+    if ns.workflow == "fix-rounds" and (ns.arm or ns.compare_validation):
+        raise PlatformError("benchmark fix-rounds always runs its own two passes (summaries on, then off)",
+                            hint="drop --arm and --compare-validation")
     arm = load_arm(ns.arm, ns.workflow) if ns.arm else None
+    seed = load_seed(ns.workflow) if ns.workflow == "fix-rounds" else None
     tasks = json.loads((BENCH_DIR / "tasks.json").read_text())
     repo, rev = tasks["sample"]["repo"], tasks["sample"]["rev"]
     task = tasks["workflows"][ns.workflow]
@@ -364,8 +410,14 @@ def main(argv: list[str]) -> int:
     if rid:
         runs_usage.register(rid, mode="own", project_dir=str(runs_usage.projects_root() / transcripts.cwd_slug(clone)))
     outcome, reset, note, check = "failed", "not run", None, None
-    usage, compare = None, None
+    usage, compare, fix_compare = None, None, None
     try:
+        if seed:   # fix-rounds: the seed goes to main like an arm, then the spec commit (none: the seed carries spec 901)
+            try:
+                stage_arm({"name": "fix-rounds", **seed}, clone)
+                push_arm(url, clone)
+            except RuntimeError as e:
+                raise PlatformError(f"the seed could not be applied to {repo}: {e}") from None
         if arm:   # after every refusal above, so the reset below always removes it; then the spec commit on top of it
             try:
                 push_arm(url, clone)
@@ -389,7 +441,23 @@ def main(argv: list[str]) -> int:
                 out = "failed" if why else out
             return out, why
 
-        if not ns.compare_validation:
+        if seed:
+            passes, seen = [], set(_children(rid))
+            for label in ("on", "off"):
+                if label == "off":   # the sample back to the pinned state; this pass adds the setting that turns the summaries off
+                    reset_sample(repo, rev, clone, keep)
+                    _prepare(url, rev, task, clone, spec=False)
+                    stage_arm({"name": "fix-rounds", "files": {**seed["files"], ".platform-settings.yml": "failure_summary: off\n"}}, clone)
+                    push_arm(url, clone)
+                started = runs._iso(runs.utcnow())
+                out, why = one_pass(f":{label}")
+                children = _children(rid)
+                new = [children[k] for k in sorted(children) if k not in seen]
+                seen |= set(children)
+                passes.append(_fix_pass(label, rid, started, runs._iso(runs.utcnow()), new, out, why))
+            fix_compare = {"passes": passes, "verdict": _summary_verdict(*passes)}
+            outcome, check = ("done", None) if fix_compare["verdict"] is None else ("failed", fix_compare["verdict"])
+        elif not ns.compare_validation:
             outcome, check = one_pass()
         else:
             passes, seen = [], set(_children(rid))
@@ -439,7 +507,8 @@ def main(argv: list[str]) -> int:
             "workflow": ns.workflow, "task_version": task["task_version"], "sample_repo": repo, "sample_rev": rev,
             "reset": reset, "reset_note": note, "result_check": check, "arm": ns.arm or "baseline",
             "plugins": plugin_info, "coordinator_model": model,
-            **({"validation_compare": compare} if compare else {})}})
+            **({"validation_compare": compare} if compare else {}),
+            **({"summary_compare": fix_compare} if fix_compare else {})}})
     if reset == "failed":
         raise PlatformError(f"reset of sample repo {repo} failed: {note}; the benchmark record was written",
                             hint=f"cplat platform runs benchmark {ns.workflow} --reset-first")
@@ -457,4 +526,11 @@ def main(argv: list[str]) -> int:
         if compare["required_missing"]:
             print("  validation: required check(s) did not run in the change-aware pass: " + ", ".join(compare["required_missing"]))
             return 1
+    if fix_compare:
+        for p in fix_compare["passes"]:
+            print(f"  summaries {p['pass']}: {p['outcome']}, fix rounds {p['fix_rounds']}, fixing agents {p['fixing']['tokens']} tokens est. "
+                  f"USD {p['fixing']['cost_usd']}, total {p['total']['tokens']} tokens est. USD {p['total']['cost_usd']}")
+        if fix_compare["verdict"]:
+            print(f"  summaries: {fix_compare['verdict']}")
+        return 0 if fix_compare["verdict"] is None else 1
     return 0 if outcome == "done" else 1
