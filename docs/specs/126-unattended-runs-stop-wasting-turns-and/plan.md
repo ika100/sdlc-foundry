@@ -45,6 +45,7 @@ tasks:
     covers: [AC-126.1, AC-126.2, AC-126.3, AC-126.4, AC-126.5, AC-126.6, AC-126.7]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t7
     title: product ship Stop hook and owner (appship_state), built titles in appship
     files: [scripts/cplat/appship_state.py, scripts/cplat/appship.py, tests/cplat/test_appship_097.py]
