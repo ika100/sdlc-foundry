@@ -28,6 +28,7 @@ from test_spec import make
 SLUG = "acme/shop-gitops"
 GITOPS = "shop-gitops"
 SPEC = "012-shop"
+OWNER_HOOK = json.dumps({"session_id": "A"})      # the Stop hook's input of the session that owns the run (spec 126)
 SHA = "0123456789abcdef0123456789abcdef01234567"
 REPO_SPEC = "007-price-alerts"
 
@@ -443,11 +444,12 @@ def test_the_current_context_is_used_when_none_is_named(w):  # AC-097.18
 
 # ---------------- AC-097.2: plan unattended ----------------
 
-def test_a_product_spec_without_a_plan_starts_in_the_plan_phase(w):  # AC-097.2
+def test_a_product_spec_without_a_plan_starts_in_the_plan_phase(w, monkeypatch):  # AC-097.2
     (w.gitops / "docs" / "plan" / f"{SPEC}.md").unlink()
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     w.started()
     assert w.state()["phase"] == "plan"
-    assert json.loads(w.app("gate", stdin="{}").out)["decision"] == "block"      # the session cannot end while planning
+    assert json.loads(w.app("gate", stdin=OWNER_HOOK).out)["decision"] == "block"      # the session cannot end while planning
 
 
 def test_blocked_planning_ends_the_run_escalated_with_the_reason(w):  # AC-097.2
@@ -521,11 +523,11 @@ def test_resume_keeps_passed_repos_and_restarts_the_escalated_one(w):  # AC-097.
     st0 = w.started(states={"shop-gitops": "passed", "shop-lib": "passed",
                             "shop-api": {"state": "escalated", "reason": "smoke red", "cause": "code"},
                             "shop-worker": "running"},
-                    escalated="shop-api: smoke red", cause="code", blocks=5)
+                    escalated="shop-api: smoke red", cause="code")
     r = w.app("start", SPEC, "--context", "kind-shop")
     assert r.rc == 0 and "next:" in r.out
     st = w.state()
-    assert st["escalated"] is None and st["cause"] is None and st["blocks"] == 0
+    assert st["escalated"] is None and st["cause"] is None and "blocks" not in st
     assert st["run_id"] != st0["run_id"]
     assert [st["repos"][i]["state"] for i in ("shop-gitops", "shop-lib", "shop-api", "shop-worker")] == \
         ["passed", "passed", "ready", "running"]
@@ -540,11 +542,12 @@ def test_a_plan_repo_done_by_an_earlier_build_counts_as_past_its_gate(w):  # AC-
     assert [s["id"] for s in w.app("next", "--json").json["start"]] == ["shop-lib"]
 
 
-def test_the_stop_hook_blocks_until_the_run_is_done_or_escalated(w):  # AC-097.4
+def test_the_stop_hook_blocks_until_the_run_is_done_or_escalated(w, monkeypatch):  # AC-097.4
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     w.started()
-    ans = w.app("gate", stdin="{}").json
+    ans = w.app("gate", stdin=OWNER_HOOK).json
     assert ans["decision"] == "block"
-    assert f"The product ship of {SPEC} is not finished (phase publish, stop attempt 1/8)" in ans["reason"]
+    assert f"The product ship of {SPEC} is not finished (phase publish, stops without progress: 0/2)" in ans["reason"]
     assert "Next:" in ans["reason"]
     w.edit(lambda st: st.update(escalated="x", cause="code"))
     assert w.app("gate", stdin="{}").out.strip() == ""
@@ -552,12 +555,13 @@ def test_the_stop_hook_blocks_until_the_run_is_done_or_escalated(w):  # AC-097.4
     assert w.app("gate", stdin="{}").out.strip() == ""
 
 
-def test_the_stop_hook_gives_up_after_max_blocks(w):  # AC-097.4
+def test_the_stop_hook_escalates_after_two_stops_without_progress(w, monkeypatch):  # AC-097.4
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     w.started()
-    for _ in range(3):
-        assert w.app("gate", "--max-blocks", "3", stdin="{}").json["decision"] == "block"
-    assert w.app("gate", "--max-blocks", "3", stdin="{}").out.strip() == ""
-    assert "gave up after 3 attempts to stop" in w.state()["escalated"]
+    for _ in range(2):
+        assert w.app("gate", stdin=OWNER_HOOK).json["decision"] == "block"
+    assert "systemMessage" in w.app("gate", stdin=OWNER_HOOK).json
+    assert w.state()["escalated"].startswith("no progress: 2 stops in phase publish")
 
 
 def test_the_stop_hook_is_registered_for_the_product_state_file(w):  # AC-097.4

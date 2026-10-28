@@ -15,7 +15,7 @@ Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-a
   cplat system ship complete [--timeout S]                 spec done + plan completed through a PR merged on green; prints the report
   cplat system ship escalate <reason> --cause C            end the run escalated
   cplat system ship finish                                 archive the state (an unrecorded run is recorded abandoned)
-  cplat system ship gate [--max-blocks N]                  Stop hook (reads the hook's JSON on stdin)
+  cplat system ship gate                                   Stop hook (reads the hook's JSON on stdin)
 """
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ import appship_sched
 import appship_state as state
 import budget
 import core
+import pr_rules
 import ship
 import spec as specmod
 from core import PlatformError, run
@@ -55,6 +56,7 @@ def show(st: dict) -> None:
 # ---------------- gitops-app PRs ----------------
 
 def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
+    title = pr_rules.fit(title)
     existing = json.loads(ship.gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url"], cwd=repo) or "[]")
     if existing:
         return existing[0]["url"]
@@ -102,7 +104,7 @@ def publish(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     _switch(repo, branch)
     git(repo, "add", "--", *paths)
     if run(["git", "diff", "--cached", "--quiet"], cwd=repo, check=False).returncode != 0:
-        git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", f"docs(spec): {sid} — product spec and plan")
+        git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", pr_rules.fit(f"docs(spec): {sid} — product spec and plan"))
     git(repo, "push", "-q", "-u", "origin", branch)
     acs = len(specmod.find(repo, sid).active_acs())
     repos = ", ".join(r["id"] for r in state.plan_repos(repo, sid))
@@ -189,7 +191,7 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     specmod.write_index(repo)
     git(repo, "add", "-A")
     if run(["git", "diff", "--cached", "--quiet"], cwd=repo, check=False).returncode != 0:
-        git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", f"docs(spec): {sid} done")
+        git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", pr_rules.fit(f"docs(spec): {sid} done"))
     git(repo, "push", "-q", "-u", "origin", branch)
     pr = open_pr(repo, branch, f"docs(spec): {sid} done",
                  f"## Summary\n\nEvery repo of {sid} passed its gate; the spec is `done` and the plan completed (`/system:ship`).\n")
@@ -249,7 +251,6 @@ def main(argv: list[str]) -> int:
     p.add_argument("--cause", default=None)
     sub.add_parser("finish")
     p = sub.add_parser("gate")
-    p.add_argument("--max-blocks", type=int, default=state.DEFAULT_MAX_BLOCKS)
     ns = ap.parse_args(argv)
     repo = Path(ns.repo).resolve()
 
@@ -259,7 +260,7 @@ def main(argv: list[str]) -> int:
             hook = json.loads(raw) if raw.strip() else {}
         except ValueError:
             hook = {}
-        answer = state.gate(Path(hook.get("cwd") or repo), hook, ns.max_blocks)
+        answer = state.gate(Path(hook.get("cwd") or repo), hook)
         if answer:
             print(json.dumps(answer))
         return 0
