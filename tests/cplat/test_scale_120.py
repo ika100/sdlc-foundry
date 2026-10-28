@@ -1018,3 +1018,15 @@ def test_an_unquoted_on_key_is_read_as_on_ac_120_1(tmp_path):  # AC-120.1
     doc = yaml.safe_load(text)
     assert True in doc["components"]["worker"]["scale"]
     ok(tmp_path, doc)
+
+
+@pytest.mark.parametrize("mangle, needle", [
+    (lambda d: d.update(components=["worker"]), "must be a mapping"),
+    (lambda d: d["components"]["worker"].update(instances=["dev"]), "instances"),
+])
+def test_a_malformed_tree_still_fails_with_its_own_message_ac_120_26(tmp_path, mangle, needle):  # AC-120.26
+    # spec 120 review: reading an unquoted `on:` must not crash on a non-mapping components or instances
+    doc = cache_system({"max": 4, "on": {"cpu": 70}})
+    mangle(doc)
+    err = fails(tmp_path, doc)
+    assert needle in err and "Traceback" not in err

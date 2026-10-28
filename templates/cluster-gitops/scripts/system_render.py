@@ -703,10 +703,12 @@ def yaml_text(v) -> str:
 
 def scale_on_keys(doc: dict) -> None:
     """YAML 1.1 reads an unquoted `on:` as the boolean true; inside a `scale` mapping that key is `on` (as `off` is for a policy)."""
-    for c in (doc.get("components") or {}).values():
+    comps = doc.get("components")
+    for c in (comps.values() if isinstance(comps, dict) else []):      # a malformed tree fails later with 114's own message
         if not isinstance(c, dict):
             continue
-        for holder in [c, *[i for i in (c.get("instances") or {}).values() if isinstance(i, dict)]]:
+        insts = c.get("instances")
+        for holder in [c, *[i for i in (insts.values() if isinstance(insts, dict) else []) if isinstance(i, dict)]]:
             s = holder.get("scale")
             if isinstance(s, dict) and True in s and "on" not in s:
                 holder["scale"] = {("on" if k is True else k): v for k, v in s.items()}
