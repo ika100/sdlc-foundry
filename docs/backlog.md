@@ -122,6 +122,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | done | 27 |  |
 | [123-the-platform-repo-declares-its-own-shape](specs/123-the-platform-repo-declares-its-own-shape/spec.md) — The platform repo declares its own shape | P1 | done | 24 |  |
 | [125-a-cluster-repo-hosts-several-systems](specs/125-a-cluster-repo-hosts-several-systems/spec.md) — A cluster repo hosts several systems on shared operators | P1 | done | 18 |  |
+| [126-unattended-runs-stop-wasting-turns-and](specs/126-unattended-runs-stop-wasting-turns-and/spec.md) — Unattended runs stop wasting turns and CI rounds | P1 | done | 15 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
