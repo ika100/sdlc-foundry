@@ -31,6 +31,7 @@ import re
 import sys
 from pathlib import Path
 
+import failsum
 import feedback
 import runs
 import settings
@@ -492,23 +493,7 @@ def _holder(repo: Path):
 
 # ---------------- no progress ----------------
 
-_NORMALISE = [
-    (re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?"), ""),
-    (re.compile(r"\b\d{1,2}:\d{2}:\d{2}(?:[.,]\d+)?\b"), ""),
-    (re.compile(r"\b\d+(?:\.\d+)?\s?(?:ms|s|m)\b"), ""),
-    (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I), "<id>"),
-    (re.compile(r"(?:\.{0,2}/)?(?:[\w.~@+-]+/)+[\w.~@+-]+"), "<path>"),
-    (re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{7,}\b"), "<id>"),
-    (re.compile(r"(?i)\bline \d+"), "line"),
-    (re.compile(r"(?<=[\w>]):\d+(?::\d+)?\b"), ""),
-]
-
-
-def normalise(text: str) -> str:
-    """The error without what changes between equivalent runs: times, paths, ids, line numbers, whitespace."""
-    for pattern, repl in _NORMALISE:
-        text = pattern.sub(repl, text)
-    return re.sub(r"\s+", " ", text).strip()
+normalise = failsum.normalise   # moved to failsum (spec 108); kept here for callers and tests
 
 
 def _progress(prev: dict, cur: dict) -> bool:
