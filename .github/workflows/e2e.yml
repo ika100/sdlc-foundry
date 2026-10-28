@@ -31,7 +31,7 @@ jobs:
   e2e:
     name: e2e (render → build → k3d → Gateway)
     runs-on: ubuntu-latest
-    timeout-minutes: 75   # spec 117's backup and restore steps add about 20 minutes; spec 119's broker steps and NACK about 6.5 more
+    timeout-minutes: 90   # about 60 minutes before spec 120 (backups, broker); its scaling steps and KEDA add about 15 (the 5-minute scale-down is the floor)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2

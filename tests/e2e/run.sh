@@ -26,7 +26,17 @@
 # redelivery of an acknowledged message, pending counts, Permissions Violation refusals, doctor's nack and broker rows, the refused
 # removal while the APIs are bound and the retired names (AC-119.4, .9 to .14, .16, .19 to .22). The broker is then unbound and deleted by
 # hand, so the ship and backup steps run as before. Time budget: the broker steps take at most 5 minutes in the log, NACK at cluster-up and
-# the probe build at most 1.5 minutes more (the e2e job has 75 minutes).
+# the probe build at most 1.5 minutes more.
+# Scaling (spec 120) runs inside the broker block, after its doctor step and before the refused removal, while the broker is up: KEDA comes
+# from cluster-up (WITH_KEDA=1) and the image e2e-worker:latest (FROM the probe image) is built with the others. A component e2e-worker
+# consumes the events API jobs (stream e2e-jobs) and scales 0..5 on the queue; the steps prove the pins and rendered files (AC-120.25),
+# a wake from zero within 60 s (AC-120.14), a burst of 100 messages to 5 replicas within 120 s (AC-120.10), the sync emulation that keeps
+# the live replica count (AC-120.19), system status (AC-120.22), a CPU autoscaler on e2e-web (AC-120.6, .17), doctor's keda and resource
+# metrics rows (AC-120.18), the refusal of --replicas (AC-120.5), the return to zero replicas 295 to 420 s after the queue emptied
+# (AC-120.15, AC-120.23), the cache trigger with 30 list entries (AC-120.12, .13) and the switch back to replicas (AC-120.20); the clean-up
+# removes every scaling object (AC-120.27). Time budget: the scaling steps take at most 13 minutes in the log (the scale-down is the floor, a
+# bounded background watcher overlaps it with the status, cpu, doctor and refusal steps), KEDA at cluster-up and the worker image at most
+# 1.5 minutes more; the e2e job has 90 minutes.
 # It exercises: cplat system new, resource add, component ship, instance promote|secret|verify, the templates'
 # Dockerfiles (non-root numeric user, read-only filesystem), render.py on system.yaml, the generated
 # Deployment/Service/HTTPRoute against a real API server, and the Gateway API on k3s' Traefik.
@@ -138,7 +148,8 @@ step "Start the local cluster with a registry (the template's own script, Gatewa
 # And for the backup operators (WITH_BARMAN_CLOUD=1, with cert-manager, and WITH_VELERO=1): the database and the environment get
 # `backup` only in the last steps, so operators/apps/ does not name them yet.
 # And for NACK (WITH_NACK=1): the broker is declared only after the caches, so operators/apps/nack.yaml does not exist yet either.
-(cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 WITH_CNPG=1 WITH_SEAWEEDFS=1 WITH_BARMAN_CLOUD=1 WITH_VELERO=1 WITH_NACK=1 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
+# And for KEDA (WITH_KEDA=1): the queue-triggered instance e2e-worker is declared only inside the broker steps, so operators/apps/keda.yaml does not exist yet.
+(cd "$work/e2e-gitops" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 WITH_CNPG=1 WITH_SEAWEEDFS=1 WITH_BARMAN_CLOUD=1 WITH_VELERO=1 WITH_NACK=1 WITH_KEDA=1 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up)
 
 step "Build and push the images"
 # Rendered with --skip-tasks, so the web repo has no pnpm-lock.yaml yet; the template's bootstrap would run
@@ -152,6 +163,58 @@ done
 # the broker steps probe with what a component uses (nats-py, spec 119): python:3.13-slim + nats-py, built from a Dockerfile on stdin
 printf 'FROM python:3.13-slim\nRUN pip install --no-cache-dir nats-py==2.16.0\n' | docker build -q -t "localhost:$regport/e2e-natsprobe:1" - >/dev/null
 docker push -q "localhost:$regport/e2e-natsprobe:1" >/dev/null
+# the scaling steps (spec 120) need a consumer that works off a queue: e2e-worker answers 200 to every GET on $PORT, pulls from its durable
+# consumer with the component's NATS_* and EVENTS_JOBS_* variables, sleeps WORK_SECONDS per message and acknowledges (FROM the probe image)
+mkdir -p "$work/e2e-worker-ctx"
+cat > "$work/e2e-worker-ctx/worker.py" <<'PY'
+import asyncio
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import nats
+from nats.errors import TimeoutError as NatsTimeout
+
+
+class Health(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+
+    def log_message(self, *args):
+        pass
+
+
+threading.Thread(target=ThreadingHTTPServer(("", int(os.environ.get("PORT", "8080"))), Health).serve_forever, daemon=True).start()
+
+
+async def main():
+    while True:
+        try:
+            nc = await nats.connect(os.environ["NATS_URL"], user=os.environ["NATS_USER"], password=os.environ["NATS_PASSWORD"],
+                                    inbox_prefix=os.environ["NATS_INBOX_PREFIX"], connect_timeout=5)
+            js = nc.jetstream()
+            sub = await js.pull_subscribe_bind(durable=os.environ["EVENTS_JOBS_CONSUMER"], stream=os.environ["EVENTS_JOBS_STREAM"])
+            print("worker bound to " + os.environ["EVENTS_JOBS_STREAM"], flush=True)
+            while True:
+                try:
+                    msgs = await sub.fetch(1, timeout=5)
+                except (asyncio.TimeoutError, NatsTimeout):
+                    continue
+                for m in msgs:
+                    await asyncio.sleep(float(os.environ.get("WORK_SECONDS", "3")))
+                    await m.ack()
+        except Exception as e:   # printed and retried: the broker may restart under the worker
+            print("ERR=%s" % e, flush=True)
+            await asyncio.sleep(2)
+
+
+asyncio.run(main())
+PY
+printf 'FROM localhost:%s/e2e-natsprobe:1\nCOPY worker.py /worker.py\nUSER 1000\nCMD ["python", "-u", "/worker.py"]\n' "$regport" > "$work/e2e-worker-ctx/Dockerfile"
+docker build -q -t "localhost:$regport/e2e-worker:latest" "$work/e2e-worker-ctx" >/dev/null
+docker push -q "localhost:$regport/e2e-worker:latest" >/dev/null
 
 step "Describe the components like /component:add does (into components: of system.yaml) and render the manifests"
 (cd "$work/e2e-gitops" && uv run --with pyyaml --with ruamel.yaml python - "$root" "$registry:$regport" <<'PY'
@@ -1134,6 +1197,571 @@ print("\n".join(bad), file=sys.stderr)
 sys.exit(1 if bad else 0)
 PY
 echo "ok   platform doctor: operator nack (0.24.0) and broker bus (dev) (nats chart 2.15.1, nats:2.15.2-alpine) are ok"
+
+# ---- Scaling (spec 120): the queue-triggered consumer e2e-worker (KEDA) and a CPU autoscaler, against the running broker ----
+# Everything is applied without Argo CD, the way its sync would: the rendered files, the HelmChart for the broker, KEDA's objects by their full
+# kind names. Probes connect with the variables of the component they stand for. The time budget is in the header.
+sstep_name=""
+scaling_t0=$SECONDS
+sstep_t=$SECONDS
+sstep() { sstep_name="$*"; sstep_t=$SECONDS; step "$*"; }
+sfail() { fail "[$sstep_name] $*"; }
+sok() { echo "ok   $* [this step $((SECONDS - sstep_t)) s, scaling steps $((SECONDS - scaling_t0)) s]"; }
+sapp="$gitops_repo/applications/e2e"
+ovd() { echo "$sapp/overlays/dev/$1"; }
+clean_tree() { [ -z "$(git -C "$gitops_repo" status --porcelain)" ] || commit "$1"; }   # cplat refuses a dirty tree
+wdep() { kc get deployments.apps e2e-worker -o jsonpath="{$1}" 2>/dev/null || true; }
+pin_of() { sed -n 's/^[[:space:]]*targetRevision:[[:space:]]*["'"'"']\{0,1\}\([^"'"'"'[:space:]]*\).*/\1/p' "$1" | head -1; }
+sdiag() { # what a failure shows: the scaler objects, the Deployment, the events and KEDA's own log
+  kc get scaledobjects.keda.sh,triggerauthentications.keda.sh,horizontalpodautoscalers.autoscaling,deployments.apps,pods 2>&1 | tail -25 || true
+  kc describe scaledobjects.keda.sh e2e-worker 2>&1 | tail -30 || true
+  kc get events --sort-by=.lastTimestamp 2>&1 | tail -15 || true
+  kubectl --context k3d-$cluster -n keda logs -l app.kubernetes.io/name=keda-operator --tail=40 2>&1 | tail -40 || true
+}
+
+# edits of system.yaml: python statements over data (the document) and comps (its components); saved, then rendered (output in S_RENDER)
+read -r -d '' sedit_pre <<'PY' || true
+import sys
+sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
+import compose, core, gitops
+from pathlib import Path
+registry = sys.argv[2]
+app_dir = gitops.find_app(Path("."))
+y, data = gitops.load(app_dir)
+comps = gitops.components_of(data)
+PY
+sedit() {
+  S_RENDER=$(cd "$gitops_repo" && uv run -q --with pyyaml --with ruamel.yaml python -c "$sedit_pre
+$1
+gitops.save(app_dir, y, data)" "$root" "$registry:$regport" && uv run scripts/render.py 2>&1 | tee /dev/stderr) || sfail "could not change system.yaml or render it"
+}
+# the documents of some kinds from a rendered overlay (a kustomize build), applied alone: what Argo CD's waves and prune amount to here
+read -r -d '' pick_py <<'PY' || true
+import sys
+import yaml
+want = set(sys.argv[1:])
+print(yaml.safe_dump_all([d for d in yaml.safe_load_all(sys.stdin) if d and d["kind"] in want]), end="")
+PY
+apply_kinds() { # overlay kind...
+  local ov=$1; shift
+  kubectl kustomize "$ov" | (cd "$gitops_repo" && uv run -q --with pyyaml python -c "$pick_py" "$@") | kc apply -f - >/dev/null
+}
+bus_files() { # the rendered addon as objects to apply, like the broker steps do
+  kubectl kustomize "$bus_dir" | (cd "$gitops_repo" && uv run -q --with pyyaml python -c "$apply_py" "$work/bus-1.yaml" "$work/bus-chart.yaml" "$work/bus-2.yaml")
+}
+bus_roll() { # previous updateRevision: the StatefulSet takes the new chart values (the users are container variables) and becomes ready
+  local i
+  for i in $(seq 1 60); do   # up to 120 s
+    if [ "$(kc get statefulsets.apps e2e-bus -o jsonpath='{.status.updateRevision}' 2>/dev/null)" != "$1" ]; then break; fi; sleep 2
+  done
+  [ "$(kc get statefulsets.apps e2e-bus -o jsonpath='{.status.updateRevision}' 2>/dev/null)" != "$1" ] || { kubectl --context k3d-$cluster -n kube-system logs job/helm-install-e2e-bus --tail=20 || true; sfail "the StatefulSet e2e-bus did not take the new chart values within 120 s"; }
+  if ! kc rollout status statefulsets.apps/e2e-bus --timeout=180s 2>&1 | tee /dev/stderr; then
+    kc get pods; kc describe pod e2e-bus-0 | tail -30; kc logs e2e-bus-0 -c nats --tail=20 || true
+    sfail "the StatefulSet e2e-bus did not become ready with the new chart values"
+  fi
+}
+
+sstep "Scaling: declare the events API jobs and the component e2e-worker (service, min 0, max 5, consumes jobs, lag 10), render, check the pins, the rendered files and the model (AC-120.23, AC-120.25)"
+clean_tree "before the scaling steps"
+[ ! -e "$gitops_repo/operators/apps/keda.yaml" ] || sfail "operators/apps/keda.yaml exists before any instance scales on a queue"
+read -r -d '' decl_scale_py <<'PY' || true
+data["apis"]["jobs"] = {"type": "events"}   # bound to bus, the only broker of the system
+comps["e2e-api"]["provides"] = [*(comps["e2e-api"].get("provides") or []), "jobs"]
+shapes = {s["id"]: s for s in core.registry.load()}
+ns = compose.build_parser().parse_args(["add", "e2e-worker"])   # real parser defaults
+ns.uses = ["sessions"]                                          # one cache: REDIS_URL, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+entry = compose.build_entry("e2e-worker", "e2e/e2e-worker", shapes["service-python"], None, registry, ns, {})
+entry["port"] = 8080
+entry["probes"] = {"liveness": "/health", "readiness": "/health"}
+entry["user"] = 1000
+entry["volumes"] = {"tmp": "/tmp"}
+entry["env"] = {"PYTHONDONTWRITEBYTECODE": "1", "WORK_SECONDS": "3"}
+entry["resources"] = {"requests": {"cpu": "50m", "memory": "64Mi"}, "limits": {"memory": "128Mi"}}
+entry["consumes"] = ["jobs"]
+entry["instances"] = {"dev": {"scale": {"min": 0, "max": 5, "on": {"consumes": "jobs", "lag": 10}}}}
+comps["e2e-worker"] = entry
+PY
+sedit "$decl_scale_py"
+commit "scaling: jobs and the scaled consumer e2e-worker"
+# the operator file exists now; the HelmChart that cluster-up installed (WITH_KEDA=1) is its pin (AC-120.25)
+[ -f "$gitops_repo/operators/apps/keda.yaml" ] || sfail "render did not write operators/apps/keda.yaml for the queue-triggered instance"
+keda_pin=$(pin_of "$gitops_repo/operators/apps/keda.yaml")
+keda_have=$(kubectl --context k3d-$cluster -n kube-system get helmcharts.helm.cattle.io keda -o jsonpath='{.spec.version}' 2>/dev/null || true)
+[ "$keda_pin" = 2.19.0 ] || sfail "operators/apps/keda.yaml pins '$keda_pin', expected the KEDA chart 2.19.0"
+[ "$keda_have" = "$keda_pin" ] || sfail "the installed KEDA chart is '$keda_have', operators/apps/keda.yaml pins '$keda_pin'"
+keda_image=$(kubectl --context k3d-$cluster -n keda get deployments.apps keda-operator -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
+keda_image=${keda_image%%@*}
+[ "${keda_image##*:}" = 2.19.0 ] || sfail "the Deployment keda-operator runs '$keda_image', expected the tag 2.19.0"
+kubectl --context k3d-$cluster get crd scaledobjects.keda.sh triggerauthentications.keda.sh >/dev/null || sfail "KEDA's CRDs (scaledobjects.keda.sh, triggerauthentications.keda.sh) are not installed"
+[ ! -e "$gitops_repo/operators/apps/metrics-server.yaml" ] || sfail "operators/apps/metrics-server.yaml exists although resource_metrics is not install (the cluster serves resource metrics itself)"
+read -r -d '' scale_decl_py <<'PY' || true
+import json, subprocess, sys
+from pathlib import Path
+import yaml
+app, work = Path(sys.argv[1]), Path(sys.argv[2])
+bad = []
+ov = app / "overlays/dev/e2e-worker"
+for f in ("hpa.yaml", "triggerauthentication.yaml"):
+    if (ov / f).exists():
+        bad.append(f"overlays/dev/e2e-worker/{f} exists, but a queue trigger on the broker has neither")
+if not (ov / "scaledobject.yaml").exists():
+    bad.append("overlays/dev/e2e-worker/scaledobject.yaml is missing")
+else:
+    so = yaml.safe_load((ov / "scaledobject.yaml").read_text())
+    trig = (so["spec"].get("triggers") or [{}])[0]
+    md = trig.get("metadata") or {}
+    if trig.get("type") != "nats-jetstream":
+        bad.append(f"the trigger is {trig.get('type')!r}, expected nats-jetstream")
+    for k, v in {"natsServerMonitoringEndpoint": "e2e-bus.e2e-dev.svc:8222", "stream": "e2e-jobs", "consumer": "e2e-worker", "lagThreshold": "10"}.items():
+        if md.get(k) != v:
+            bad.append(f"scaledobject.yaml: {k} is {md.get(k)!r}, expected {v!r}")
+    if (so["spec"].get("minReplicaCount"), so["spec"].get("maxReplicaCount")) != (0, 5):
+        bad.append(f"scaledobject.yaml: min/max are {so['spec'].get('minReplicaCount')}/{so['spec'].get('maxReplicaCount')}, expected 0/5")
+
+def env_of(c):
+    out = subprocess.run(["kubectl", "kustomize", str(app / "overlays/dev" / c)], capture_output=True, text=True)
+    if out.returncode:
+        bad.append(f"kubectl kustomize overlays/dev/{c} failed: {out.stderr[-300:]}")
+        return None, []
+    for d in yaml.safe_load_all(out.stdout):
+        if d and d.get("kind") == "Deployment":
+            env = [e for e in d["spec"]["template"]["spec"]["containers"][0].get("env", []) if e["name"].startswith(("NATS_", "EVENTS_"))]
+            (work / f"natsenv-{c}.json").write_text(json.dumps(env))   # the probes of the next steps carry these
+            return d, env
+    bad.append(f"overlays/dev/{c} has no Deployment")
+    return None, []
+
+dep, env = env_of("e2e-worker")
+if dep is not None and dep["spec"].get("replicas") != 0:
+    bad.append(f"the Deployment e2e-worker has replicas {dep['spec'].get('replicas')}, expected 0 (scale to zero starts at min)")
+have = {e["name"]: e for e in env}
+for k, v in {"EVENTS_JOBS_STREAM": "e2e-jobs", "EVENTS_JOBS_SUBJECT_PREFIX": "e2e.jobs", "EVENTS_JOBS_CONSUMER": "e2e-worker", "NATS_INBOX_PREFIX": "_INBOX.e2e-worker"}.items():
+    if have.get(k, {}).get("value") != v:
+        bad.append(f"e2e-worker: {k} is {have.get(k, {}).get('value')!r}, expected {v!r}")
+for k, key in (("NATS_URL", "url"), ("NATS_USER", "user"), ("NATS_PASSWORD", "password")):
+    ref = have.get(k, {}).get("valueFrom", {}).get("secretKeyRef", {})
+    if ref != {"name": "e2e-bus-e2e-worker-app", "key": key}:
+        bad.append(f"e2e-worker: {k} reads {ref}, expected the key {key} of e2e-bus-e2e-worker-app")
+_, api_env = env_of("e2e-api")
+api = {e["name"]: e for e in api_env}
+if api.get("EVENTS_JOBS_SUBJECT_PREFIX", {}).get("value") != "e2e.jobs" or "EVENTS_JOBS_CONSUMER" in api:
+    bad.append("e2e-api: EVENTS_JOBS_SUBJECT_PREFIX must be e2e.jobs and EVENTS_JOBS_CONSUMER must be absent (it provides jobs)")
+# the dev ApplicationSet leaves .spec.replicas of the scaled Deployment to the autoscaler, respects that, and retries a ScaledObject that is early
+dev = next((d for d in yaml.safe_load_all((app / "applicationset.yaml").read_text()) if d and d["metadata"]["name"] == "e2e-dev"), None)
+if dev is None:
+    bad.append("applicationset.yaml has no ApplicationSet e2e-dev")
+else:
+    tpl = dev["spec"]["template"]["spec"]
+    if not any(i.get("name") == "e2e-worker" and i.get("kind") == "Deployment" and i.get("jsonPointers") == ["/spec/replicas"] for i in tpl.get("ignoreDifferences") or []):
+        bad.append("the dev ApplicationSet has no ignoreDifferences entry for the Deployment e2e-worker (/spec/replicas)")
+    if "RespectIgnoreDifferences=true" not in tpl["syncPolicy"].get("syncOptions", []):
+        bad.append("the dev ApplicationSet lacks the sync option RespectIgnoreDifferences=true")
+    if not tpl["syncPolicy"].get("retry"):
+        bad.append("the dev ApplicationSet has no retry although a ScaledObject may sync before KEDA's CRD exists")
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+(cd "$gitops_repo" && uv run -q --with pyyaml python -c "$scale_decl_py" "$sapp" "$work") || sfail "the rendered scaling files are not as designed (see above)"
+read -r -d '' scale_model_py <<'PY' || true
+import json, sys
+m = json.load(open(sys.argv[1]))
+bad = []
+envs = {e["name"]: e.get("autoscaling") for e in m["environments"]}
+if envs.get("dev") != "keda" or envs.get("staging") is not None or envs.get("prod") is not None:
+    bad.append(f"autoscaling per environment is {envs}, expected dev keda and staging/prod null")
+inst = {(i["component"], i["environment"]): i for i in m["instances"]}
+w = inst.get(("e2e-worker", "dev"))
+if w is None:
+    bad.append("the model has no instance e2e-worker/dev")
+else:
+    sc = w.get("scale") or {}
+    if (sc.get("min"), sc.get("max"), (sc.get("on") or {}).get("consumes"), (sc.get("on") or {}).get("lag")) != (0, 5, "jobs", 10) or w.get("replicas") is not None:
+        bad.append(f"e2e-worker/dev has scale {sc} and replicas {w.get('replicas')}, expected min 0, max 5, consumes jobs, lag 10 and replicas null")
+if (inst.get(("e2e-api", "dev")) or {}).get("scale") is not None:
+    bad.append("e2e-api/dev has a scale")
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+$cplat model show --json --repo-dir "$gitops_repo" > "$work/model-scale.json" || sfail "cplat model show --json failed"
+python3 -c "$scale_model_py" "$work/model-scale.json" || sfail "cplat model show --json does not describe the scaled instance (see above)"
+sok "operators/apps/keda.yaml pins keda $keda_pin (installed, keda-operator $keda_image); scaledobject.yaml (nats-jetstream, e2e-bus.e2e-dev.svc:8222, stream e2e-jobs, consumer e2e-worker, lag 10), no hpa.yaml or triggerauthentication.yaml, replicas 0; ignoreDifferences, RespectIgnoreDifferences and the retry in the dev ApplicationSet; model: dev autoscaling keda"
+
+sstep "Scaling: apply the bus addon again (user e2e-worker, stream e2e-jobs, consumer e2e-worker), then the worker (Deployment, Service), then the ScaledObject (AC-120.14, AC-120.25)"
+bus_files || sfail "could not turn the rendered addon into objects to apply"
+kc apply -f "$work/bus-1.yaml" >/dev/null || sfail "applying the generator and the ExternalSecrets failed"
+for _ in $(seq 1 40); do [ -n "$(secret_val e2e-bus-e2e-worker-app password)" ] && break; sleep 3; done   # up to 120 s
+[ -n "$(secret_val e2e-bus-e2e-worker-app password)" ] || {
+  kc get externalsecrets.external-secrets.io e2e-bus-e2e-worker-app -o yaml | tail -25
+  kc get events --field-selector involvedObject.kind=ExternalSecret,involvedObject.name=e2e-bus-e2e-worker-app | tail -10
+  sfail "the Secret e2e-bus-e2e-worker-app has no password after 120 s"; }
+[ "$(secret_val e2e-bus-e2e-worker-app user)" = e2e-worker ] || sfail "the user of e2e-bus-e2e-worker-app is not e2e-worker"
+rev_before=$(kc get statefulsets.apps e2e-bus -o jsonpath='{.status.updateRevision}')
+kubectl --context k3d-$cluster apply -f "$work/bus-chart.yaml" >/dev/null || sfail "applying the HelmChart e2e-bus failed"
+bus_roll "$rev_before"
+kc apply -f "$work/bus-2.yaml" >/dev/null || sfail "applying the Account, the streams and the consumers failed"
+for o in streams.jetstream.nats.io/e2e-jobs consumers.jetstream.nats.io/e2e-jobs.e2e-worker; do
+  for _ in $(seq 1 40); do bus_ready "${o%%/*}" "${o#*/}" && break; sleep 3; done   # up to 120 s
+  bus_ready "${o%%/*}" "${o#*/}" || {
+    kc describe "${o%%/*}" "${o#*/}" | tail -25; kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=30 || true
+    sfail "$o is not Ready after 120 s"; }
+done
+apply_kinds "$(ovd e2e-worker)" Deployment Service || sfail "applying the Deployment and the Service of e2e-worker failed"
+for _ in $(seq 1 20); do [ -n "$(wdep .spec.replicas)" ] && break; sleep 2; done
+[ "$(wdep .spec.replicas)" = 0 ] || sfail "the Deployment e2e-worker has $(wdep .spec.replicas) replicas, expected 0"
+apply_kinds "$(ovd e2e-worker)" ScaledObject || sfail "applying the ScaledObject e2e-worker failed"
+for _ in $(seq 1 30); do bus_ready scaledobjects.keda.sh e2e-worker && break; sleep 3; done   # up to 90 s
+bus_ready scaledobjects.keda.sh e2e-worker || { sdiag; sfail "the ScaledObject e2e-worker is not Ready after 90 s"; }
+for _ in $(seq 1 15); do kc get horizontalpodautoscalers.autoscaling keda-hpa-e2e-worker >/dev/null 2>&1 && break; sleep 2; done
+kc get horizontalpodautoscalers.autoscaling keda-hpa-e2e-worker >/dev/null 2>&1 || { sdiag; sfail "KEDA created no HorizontalPodAutoscaler keda-hpa-e2e-worker"; }
+[ "$(wdep .spec.replicas)" = 0 ] || sfail "the Deployment e2e-worker has $(wdep .spec.replicas) replicas with an empty queue, expected 0"
+sok "the Secret e2e-bus-e2e-worker-app, stream e2e-jobs and consumer e2e-jobs.e2e-worker are Ready; the ScaledObject e2e-worker is Ready (keda-hpa-e2e-worker exists) and the Deployment has 0 replicas"
+
+sstep "Scaling: one message on e2e.jobs.one wakes the worker, readyReplicas is at least 1 within 60 seconds (AC-120.14)"
+n_must e2e-api "$natspre"'
+async def main():
+    nc = await connect()
+    js = nc.jetstream()
+    ack = await js.publish(os.environ["EVENTS_JOBS_SUBJECT_PREFIX"] + ".one", b"one")   # e2e.jobs.one
+    print("PUBLISHED=%s" % ack.stream)
+    print("T=%d" % int(time.time()))
+    await nc.close()
+asyncio.run(main())'
+[ "$(n_field PUBLISHED)" = e2e-jobs ] || sfail "e2e-api published on e2e.jobs.one but the stream is '$(n_field PUBLISHED)', not e2e-jobs: $N_OUT"
+t_wake=$(n_field T)
+ready=""
+while [ $(( $(date +%s) - t_wake )) -le 60 ]; do   # 60 s from the publish
+  ready=$(wdep .status.readyReplicas)
+  [ -n "$ready" ] && [ "$ready" -ge 1 ] && break
+  sleep 2
+done
+[ -n "$ready" ] && [ "$ready" -ge 1 ] || { sdiag; sfail "readyReplicas of e2e-worker is '${ready:-0}' $(( $(date +%s) - t_wake )) s after the message on e2e.jobs.one, expected at least 1 within 60 s"; }
+sok "the worker was ready $(( $(date +%s) - t_wake )) s after the publish on e2e.jobs.one (readyReplicas $ready)"
+
+sstep "Scaling: a burst of 100 messages; .spec.replicas reaches 5 within 120 seconds of the publish; a background watcher records the replicas and the lag (AC-120.10, AC-120.23)"
+scale_watch() { # file seconds: one line per 5 s: epoch replicas num_pending num_ack_pending; ends with END once the count is back to zero after 5, or TIMEOUT
+  local out=$1 end=$(( $(date +%s) + $2 )) r p a seen=0
+  : > "$out"
+  while [ "$(date +%s)" -lt "$end" ]; do
+    kill -0 $$ 2>/dev/null || return 0   # the script is gone
+    r=$(kc get deployments.apps e2e-worker -o jsonpath='{.spec.replicas}' 2>/dev/null || true)
+    J=$(jsz 2>/dev/null) || J=""
+    p=$(jf C.e2e-jobs.e2e-worker.num_pending); a=$(jf C.e2e-jobs.e2e-worker.num_ack_pending)
+    echo "$(date +%s) ${r:-?} ${p:-?} ${a:-?}" >> "$out"
+    if [ -n "$r" ] && [ "$r" -ge 5 ] 2>/dev/null; then seen=1; fi
+    if [ "$seen" = 1 ] && [ "$r" = 0 ]; then echo END >> "$out"; return 0; fi
+    sleep 5
+  done
+  echo TIMEOUT >> "$out"
+}
+scale_watch "$work/scale-watch.txt" 600 >/dev/null 2>&1 &
+watch_pid=$!
+n_must e2e-api "$natspre"'
+async def main():
+    nc = await connect()
+    js = nc.jetstream()
+    for i in range(100):
+        await js.publish(os.environ["EVENTS_JOBS_SUBJECT_PREFIX"] + ".work", b"job-%d" % i)
+    print("PUBLISHED=100")
+    print("T=%d" % int(time.time()))
+    await nc.close()
+asyncio.run(main())'
+[ "$(n_field PUBLISHED)" = 100 ] || sfail "e2e-api could not publish the 100 messages: $N_OUT"
+t_burst=$(n_field T)
+reps=""
+while [ $(( $(date +%s) - t_burst )) -le 120 ]; do   # 120 s from the publish
+  reps=$(wdep .spec.replicas)
+  [ "$reps" = 5 ] && break
+  sleep 2
+done
+[ "$reps" = 5 ] || { sdiag; sfail ".spec.replicas of e2e-worker is '$reps' $(( $(date +%s) - t_burst )) s after 100 messages were published, expected 5 within 120 s"; }
+sok ".spec.replicas of e2e-worker reached 5 $(( $(date +%s) - t_burst )) s after the 100 messages were published (the watcher keeps recording)"
+
+sstep "Scaling: while the watcher runs, the sync emulation: the rendered Deployment with the live replica count is applied and neither .spec.replicas nor .metadata.generation changes (AC-120.19)"
+# RespectIgnoreDifferences makes Argo CD's sync keep the live .spec.replicas of a Deployment whose application ignores it: the same manifest, with
+# the live count in place of the rendered one, is what this applies (no Argo CD here); a Deployment that stays Synced stays unchanged
+read -r -d '' sync_py <<'PY' || true
+import sys
+import yaml
+docs = [d for d in yaml.safe_load_all(sys.stdin) if d and d["kind"] == "Deployment"]
+for d in docs:
+    d["spec"]["replicas"] = int(sys.argv[1])
+print(yaml.safe_dump_all(docs), end="")
+PY
+live_replicas=$(wdep .spec.replicas); gen_before=$(wdep .metadata.generation)
+[ -n "$live_replicas" ] && [ -n "$gen_before" ] || sfail "could not read .spec.replicas and .metadata.generation of e2e-worker"
+kubectl kustomize "$(ovd e2e-worker)" | (cd "$gitops_repo" && uv run -q --with pyyaml python -c "$sync_py" "$live_replicas") | kc apply -f - >/dev/null || sfail "applying the rendered Deployment with the live replica count failed"
+sleep 5
+[ "$(wdep .spec.replicas)" = "$live_replicas" ] && [ "$(wdep .metadata.generation)" = "$gen_before" ] || sfail "the sync changed the Deployment: .spec.replicas $live_replicas -> $(wdep .spec.replicas), .metadata.generation $gen_before -> $(wdep .metadata.generation) (expected both unchanged)"
+sok "after the sync emulation .spec.replicas ($live_replicas) and .metadata.generation ($gen_before) are unchanged"
+
+sstep "Scaling: system status --json shows scale min 0, max 5 and a live replica count for e2e-worker, none for e2e-api; the text shows replicas <n> (0–5) (AC-120.22)"
+sargs=(--repo-dir "$gitops_repo" --context "k3d-$cluster")
+PYTHONIOENCODING=utf-8 $cplat system status --json "${sargs[@]}" > "$work/status-scale.json" 2> "$work/status-scale.err" || { tail -5 "$work/status-scale.err" || true; sfail "system status --json failed"; }
+PYTHONIOENCODING=utf-8 $cplat system status "${sargs[@]}" > "$work/status-scale.txt" 2> "$work/status-scale.err" || { tail -5 "$work/status-scale.err" || true; sfail "system status failed"; }
+status_rep=$(python3 - "$work/status-scale.json" "$work/status-scale.txt" <<'PY'
+import json, re, sys
+rows = {r["component"]: r for r in json.load(open(sys.argv[1]))["rows"]}
+bad = []
+sc = ((rows.get("e2e-worker") or {}).get("cells") or {}).get("dev", {}).get("scale")
+if not sc or (sc.get("min"), sc.get("max")) != (0, 5) or not isinstance(sc.get("replicas"), int) or isinstance(sc.get("replicas"), bool):
+    bad.append(f"the dev cell of e2e-worker has scale {sc}, expected min 0, max 5 and an integer replicas")
+if ((rows.get("e2e-api") or {}).get("cells") or {}).get("dev", {}).get("scale"):
+    bad.append("the dev cell of e2e-api has a scale")
+text = open(sys.argv[2], encoding="utf-8").read()
+if not re.search(r"\breplicas [0-5] \(0–5\)", text):
+    bad.append("the text output has no 'replicas <n> (0–5)'")
+print("\n".join(bad), file=sys.stderr)
+if not bad:
+    print(sc["replicas"])
+sys.exit(1 if bad else 0)
+PY
+) || sfail "system status does not show the scale of e2e-worker as expected (see above)"
+sok "system status: e2e-worker (dev) scale 0–5 with replicas $status_rep (live .spec.replicas); e2e-api has no scale"
+
+sstep "Scaling: a CPU autoscaler on e2e-web (min 1, max 2, cpu 80): hpa.yaml, no ScaledObject, only the HPA applied, currentMetrics within 120 seconds, resource metrics served (AC-120.6, AC-120.17)"
+clean_tree "before the cpu step"
+sedit '
+dev = comps["e2e-web"].get("instances", {}).get("dev")
+if dev is None:
+    comps["e2e-web"].setdefault("instances", {})["dev"] = dev = {}
+dev["scale"] = {"min": 1, "max": 2, "on": {"cpu": 80}}'
+commit "scaling: e2e-web scales on cpu"
+[ -f "$(ovd e2e-web)/hpa.yaml" ] || sfail "render did not write overlays/dev/e2e-web/hpa.yaml"
+[ ! -e "$(ovd e2e-web)/scaledobject.yaml" ] || sfail "render wrote a ScaledObject for the cpu trigger"
+grep -q 'averageUtilization: 80' "$(ovd e2e-web)/hpa.yaml" || sfail "hpa.yaml does not target averageUtilization 80"
+[ "$(kubectl --context k3d-$cluster get apiservices.apiregistration.k8s.io v1beta1.metrics.k8s.io -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null)" = True ] || sfail "the cluster serves no resource metrics (v1beta1.metrics.k8s.io is not Available)"
+apply_kinds "$(ovd e2e-web)" HorizontalPodAutoscaler || sfail "applying the HorizontalPodAutoscaler e2e-web failed"
+cpu_now=""
+for _ in $(seq 1 60); do   # up to 120 s
+  cpu_now=$(kc get horizontalpodautoscalers.autoscaling e2e-web -o jsonpath='{.status.currentMetrics[0].resource.current.averageUtilization}' 2>/dev/null || true)
+  [ -n "$cpu_now" ] && break; sleep 2
+done
+[ -n "$cpu_now" ] || { kc describe horizontalpodautoscalers.autoscaling e2e-web | tail -25; sfail "the HorizontalPodAutoscaler e2e-web reports no currentMetrics within 120 s"; }
+sok "hpa.yaml targets averageUtilization 80; the HPA e2e-web reports $cpu_now % (currentMetrics); no ScaledObject"
+
+sstep "Scaling: platform doctor shows operator keda ok (2.19.0, e2e-worker) and resource metrics ok, and no operator metrics-server row (AC-120.18)"
+timeout 180 $cplat platform doctor --repo "$gitops_repo" --json > "$work/doctor-scale.json" 2> "$work/doctor-scale.err" || true   # any exit code: only its rows matter
+python3 - "$work/doctor-scale.json" <<'PY' || { tail -5 "$work/doctor-scale.err" || true; sfail "doctor output unreadable, or the keda or resource metrics row is not as expected (see above)"; }
+import json, re, sys
+rows = {r["name"]: r for r in json.load(open(sys.argv[1]))}
+bad = []
+keda = rows.get("operator keda")
+if keda is None:
+    bad.append("no row 'operator keda'")
+elif keda["status"] != "ok" or not re.search(r"\b2\.19\.0\b", keda["detail"]) or not re.search(r"\be2e-worker\b", keda["detail"]):
+    bad.append(f"row 'operator keda' is {keda['status']}: {keda['detail']}")
+rm = rows.get("resource metrics")
+if rm is None:
+    bad.append("no row 'resource metrics'")
+elif rm["status"] != "ok":
+    bad.append(f"row 'resource metrics' is {rm['status']}: {rm['detail']}")
+if "operator metrics-server" in rows:
+    bad.append("a row 'operator metrics-server' exists although the cluster serves resource metrics and resource_metrics is not install")
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+sok "platform doctor: operator keda (2.19.0, queue-triggered e2e-worker) and resource metrics are ok; no operator metrics-server row"
+
+sstep "Scaling: component set e2e-worker --instance dev --replicas 2 is refused and names components.e2e-worker.instances.dev.scale; then e2e-web's scale is removed and its HPA deleted (AC-120.5)"
+clean_tree "before the refusal"
+head_before=$(git -C "$gitops_repo" rev-parse HEAD)
+if out=$($cplat component set e2e-worker --instance dev --replicas 2 --repo-dir "$gitops_repo" 2>&1); then sfail "component set --replicas succeeded on the scaled instance e2e-worker/dev"; fi
+case "$out" in *components.e2e-worker.instances.dev.scale*) ;; *) sfail "the refusal does not name components.e2e-worker.instances.dev.scale: $out";; esac
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] && [ "$(git -C "$gitops_repo" rev-parse HEAD)" = "$head_before" ] || sfail "the refused component set changed the tree"
+sedit 'del comps["e2e-web"]["instances"]["dev"]["scale"]'
+[ ! -e "$(ovd e2e-web)/hpa.yaml" ] || sfail "render did not delete overlays/dev/e2e-web/hpa.yaml once the scale was removed"
+kc delete horizontalpodautoscalers.autoscaling e2e-web --timeout=60s || sfail "could not delete the HorizontalPodAutoscaler e2e-web (what Argo CD's prune does)"
+commit "scaling: e2e-web scale removed"
+sok "refused: $(echo "$out" | tr '\n' ' ' | cut -c1-200); hpa.yaml is gone and the HPA e2e-web deleted"
+
+sstep "Scaling: join the watcher; the maximum is 5, the lag reached 0 at the time Z minus T is between 295 and 420 seconds when the count is back to zero (AC-120.15, AC-120.23)"
+for _ in $(seq 1 130); do kill -0 "$watch_pid" 2>/dev/null || break; sleep 5; done   # the watcher has its own 600 s bound; this waits up to 650 s
+if kill -0 "$watch_pid" 2>/dev/null; then kill "$watch_pid" 2>/dev/null || true; fi
+wait "$watch_pid" 2>/dev/null || true
+echo "time replicas num_pending num_ack_pending (epoch seconds, 5 s period)"; cat "$work/scale-watch.txt"
+read -r -d '' join_py <<'PY' || true
+import sys
+rows, tail = [], ""
+for ln in open(sys.argv[1]):
+    p = ln.split()
+    if len(p) == 4 and p[0].isdigit():
+        rows.append((int(p[0]), p[1], p[2], p[3]))
+    elif p:
+        tail = p[0]
+pub = int(sys.argv[2])
+num = lambda x: int(x) if x.isdigit() else None  # noqa: E731
+reps = [(t, num(r)) for t, r, _, _ in rows if num(r) is not None]
+bad = []
+if tail != "END":
+    bad.append(f"the watcher ended with '{tail or 'nothing'}', not END: the count never came back to zero after 5 within its 600 s")
+top = max((r for _, r in reps), default=None)
+if top != 5:
+    bad.append(f"the maximum replica count seen is {top}, expected 5")
+t5 = next((t for t, r in reps if r >= 5), None)
+if t5 is None or t5 - pub > 120:
+    bad.append(f"the count reached 5 at {t5}, {None if t5 is None else t5 - pub} s after the publish (more than 120 s)")
+lag = [(t, num(p) + num(a)) for t, _, p, a in rows if num(p) is not None and num(a) is not None]
+seen, T = False, None
+for t, n in lag:
+    if t >= pub and n > 0:
+        seen = True
+    elif seen and n == 0:
+        T = t
+        break
+Z = next((t for t, r in reps if t5 is not None and t >= t5 and r == 0), None)
+if T is None:
+    bad.append("the lag never fell back to 0 in the samples")
+if Z is None:
+    bad.append("the count never came back to zero replicas in the samples")
+if T is not None and Z is not None:
+    print(f"lag 0 at T, zero replicas at Z: Z - T = {Z - T} s (allowed 295 to 420 s, 5 s sampling); 5 replicas {t5 - pub} s after the publish; maximum {top}")
+    if not 295 <= Z - T <= 420:
+        bad.append(f"Z - T is {Z - T} s, expected 295 to 420 s (five to seven minutes)")
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+python3 -c "$join_py" "$work/scale-watch.txt" "$t_burst" || { sdiag; sfail "the burst did not behave as designed (see above)"; }
+sok "maximum 5; the count came back to zero replicas 295 to 420 s after the queue was worked off"
+
+sstep "Scaling: the trigger becomes the cache list (sessions, list jobs, length 10); 30 entries bring the worker to 3 replicas within 120 seconds and no further (AC-120.11, AC-120.12, AC-120.13)"
+clean_tree "before the cache trigger"
+sedit 'comps["e2e-worker"]["instances"]["dev"]["scale"]["on"] = {"cache": "sessions", "list": "jobs", "length": 10}'
+commit "scaling: e2e-worker scales on the cache list"
+[ -f "$(ovd e2e-worker)/triggerauthentication.yaml" ] && [ -f "$(ovd e2e-worker)/scaledobject.yaml" ] || sfail "render did not write triggerauthentication.yaml and scaledobject.yaml for the cache trigger"
+python3 - "$(ovd e2e-worker)" <<'PY' || sfail "the TriggerAuthentication or the redis trigger is not as designed (see above)"
+import sys
+from pathlib import Path
+import yaml
+ov = Path(sys.argv[1])
+bad = []
+ta = yaml.safe_load((ov / "triggerauthentication.yaml").read_text())
+refs = {(r["parameter"], r["name"], r["key"]) for r in ta["spec"]["secretTargetRef"]}
+want = {(p, "e2e-sessions-app", p) for p in ("host", "port", "password")}
+if refs != want:
+    bad.append(f"the TriggerAuthentication reads {sorted(refs)}, expected host, port and password of e2e-sessions-app")
+trig = yaml.safe_load((ov / "scaledobject.yaml").read_text())["spec"]["triggers"][0]
+md = trig.get("metadata") or {}
+if trig.get("type") != "redis" or md.get("listName") != "jobs" or md.get("listLength") != "10" or (trig.get("authenticationRef") or {}).get("name") != "e2e-worker":
+    bad.append(f"the trigger is {trig}, expected redis on the list jobs, listLength 10, authenticationRef e2e-worker")
+print("\n".join(bad), file=sys.stderr)
+sys.exit(1 if bad else 0)
+PY
+apply_kinds "$(ovd e2e-worker)" TriggerAuthentication || sfail "applying the TriggerAuthentication e2e-worker failed"
+apply_kinds "$(ovd e2e-worker)" ScaledObject || sfail "applying the ScaledObject e2e-worker (cache trigger) failed"
+for _ in $(seq 1 30); do bus_ready scaledobjects.keda.sh e2e-worker && break; sleep 3; done   # up to 90 s
+bus_ready scaledobjects.keda.sh e2e-worker || { sdiag; sfail "the ScaledObject e2e-worker is not Ready with the cache trigger after 90 s"; }
+# AC-120.13: scaledobject.yaml and triggerauthentication.yaml name the keys of the Secrets, never a value; neither do the live objects
+pw_cache=$(secret_val e2e-sessions-app password); pw_bus=$(secret_val e2e-bus-e2e-worker-app password)
+[ "${#pw_cache}" = 32 ] && [ "${#pw_bus}" = 32 ] || sfail "the passwords of e2e-sessions-app and e2e-bus-e2e-worker-app are not 32 characters"
+if grep -rqF -e "$pw_cache" -e "$pw_bus" "$(ovd e2e-worker)"; then sfail "a password is in the rendered overlay of e2e-worker"; fi
+live_scalers=$(kc get scaledobjects.keda.sh,triggerauthentications.keda.sh -o yaml)
+if grep -qF -e "$pw_cache" -e "$pw_bus" <<< "$live_scalers"; then sfail "a password is in the live ScaledObject or TriggerAuthentication"; fi
+# the probe connects like the component: a Valkey client with the component's own REDIS_HOST, REDIS_PORT and REDIS_PASSWORD (e2e-worker's Deployment)
+read -r -d '' wcache_pod_py <<'PY' || true
+import json, sys
+name, image, script = sys.argv[1:4]
+dep = json.load(sys.stdin)
+env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and e["name"].startswith("REDIS_")]
+ctx = {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
+print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "cacheprobe"}},
+                  "spec": {"restartPolicy": "Never",
+                           "securityContext": {"runAsNonRoot": True, "runAsUser": 999, "runAsGroup": 999, "seccompProfile": {"type": "RuntimeDefault"}},
+                           "containers": [{"name": "valkey", "image": image, "command": ["sh", "-c", script], "env": env, "securityContext": ctx}]}}))
+PY
+wn=0
+wcrun() { # script: runs it in a pod that carries e2e-worker's REDIS_* variables; output in C_OUT
+  local name phase=""
+  wn=$((wn + 1)); name="cacheprobe-w$wn"
+  kc get deployments.apps e2e-worker -o json | python3 -c "$wcache_pod_py" "$name" "$cache_image" "set -e; $1" | kc apply -f - >/dev/null || sfail "could not start the probe pod $name"
+  for _ in $(seq 1 60); do   # up to 180 s
+    phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+    case "$phase" in Succeeded|Failed) break;; esac; sleep 3
+  done
+  C_OUT=$(kc logs "$name" 2>&1 || true)
+  [ "$phase" = Succeeded ] || { C_OUT="$C_OUT (pod phase: ${phase:-unknown})"; kc describe pod "$name" | tail -15; }
+  kc delete pod "$name" --wait=false >/dev/null 2>&1 || true
+  [ "$phase" = Succeeded ]
+}
+rcli='valkey-cli --no-auth-warning -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD"'
+wcrun "$rcli RPUSH jobs \$(seq 1 30) >/dev/null; echo LEN=\$($rcli LLEN jobs)" || sfail "the cache probe could not push 30 entries to the list jobs: $C_OUT"   # 30 entries, length 10 each: 3 replicas
+[ "$(c_field LEN)" = 30 ] || sfail "the list jobs holds '$(c_field LEN)' entries, expected 30: $C_OUT"
+t_push=$(date +%s); reps=""; top=0
+while [ $(( $(date +%s) - t_push )) -le 120 ]; do   # 120 s from the push
+  reps=$(wdep .spec.replicas)
+  if [ -n "$reps" ] && [ "$reps" -gt "$top" ]; then top=$reps; fi
+  [ "$reps" = 3 ] && break
+  sleep 2
+done
+[ "$reps" = 3 ] || { sdiag; sfail ".spec.replicas of e2e-worker is '$reps' $(( $(date +%s) - t_push )) s after 30 entries were pushed, expected 3 within 120 s"; }
+for _ in $(seq 1 10); do   # the count stays at 3 while the list holds 30 (30 s)
+  reps=$(wdep .spec.replicas)
+  if [ -n "$reps" ] && [ "$reps" -gt "$top" ]; then top=$reps; fi
+  sleep 3
+done
+[ "$top" = 3 ] || sfail "the highest .spec.replicas seen with 30 entries in the list is $top, expected 3 and no more"
+wcrun "$rcli DEL jobs >/dev/null; echo LEN=\$($rcli LLEN jobs)" || sfail "the cache probe could not delete the list jobs: $C_OUT"
+[ "$(c_field LEN)" = 0 ] || sfail "the list jobs still holds '$(c_field LEN)' entries after DEL"
+sok "30 entries in the list jobs gave 3 replicas (never more); no password in scaledobject.yaml, triggerauthentication.yaml or the live objects; the list is deleted"
+
+sstep "Scaling: scale becomes replicas: 1; scaledobject.yaml, triggerauthentication.yaml and the dev ignore entry are gone; the ScaledObject is deleted, the count never falls below 1, keda-hpa-e2e-worker is gone (AC-120.20)"
+clean_tree "before the switch back"
+sedit 'comps["e2e-worker"]["instances"]["dev"] = {"replicas": 1}'
+commit "scaling: e2e-worker back to replicas 1"
+for f in scaledobject.yaml triggerauthentication.yaml hpa.yaml; do
+  [ ! -e "$(ovd e2e-worker)/$f" ] || sfail "render did not delete overlays/dev/e2e-worker/$f once the scale was replaced by replicas"
+done
+kubectl kustomize "$(ovd e2e-worker)" | grep -qE '^  replicas: 1$' || sfail "the rendered Deployment e2e-worker does not have replicas: 1"
+python3 - "$sapp/applicationset.yaml" <<'PY' || sfail "the dev ApplicationSet still ignores the replicas of e2e-worker"
+import sys
+import yaml
+dev = next(d for d in yaml.safe_load_all(open(sys.argv[1])) if d and d["metadata"]["name"] == "e2e-dev")
+ign = dev["spec"]["template"]["spec"].get("ignoreDifferences") or []
+sys.exit(1 if any(i.get("name") == "e2e-worker" for i in ign) else 0)
+PY
+rmin=99
+sample() { local v; v=$(wdep .spec.replicas); if [ -n "$v" ] && [ "$v" -lt "$rmin" ]; then rmin=$v; fi; last=$v; }
+sample
+# Argo CD's prune deletes the ScaledObject and the TriggerAuthentication (waiting for KEDA's finalizer), then the sync applies the Deployment
+kc delete scaledobjects.keda.sh e2e-worker --timeout=90s || { sdiag; sfail "could not delete the ScaledObject e2e-worker"; }
+kc delete triggerauthentications.keda.sh e2e-worker --timeout=60s || sfail "could not delete the TriggerAuthentication e2e-worker"
+sample
+for _ in $(seq 1 30); do kc get horizontalpodautoscalers.autoscaling keda-hpa-e2e-worker >/dev/null 2>&1 || break; sample; sleep 2; done   # up to 60 s
+if kc get horizontalpodautoscalers.autoscaling keda-hpa-e2e-worker >/dev/null 2>&1; then sdiag; sfail "keda-hpa-e2e-worker is still there 60 s after the ScaledObject was deleted"; fi
+apply_kinds "$(ovd e2e-worker)" Deployment || sfail "applying the Deployment e2e-worker (replicas 1) failed"
+for _ in $(seq 1 15); do sample; sleep 2; done   # every 2 s for 30 s
+[ "$rmin" -ge 1 ] && [ "$last" = 1 ] || { sdiag; sfail "the count fell to $rmin and ended at '$last', expected never below 1 and ending at 1"; }
+sok "replicas: 1 applied; the ScaledObject, the TriggerAuthentication and keda-hpa-e2e-worker are gone; the count never fell below $rmin and ends at 1"
+
+sstep "Scaling: clean-up: jobs, e2e-api's provides and e2e-worker are removed; operators/apps/keda.yaml goes; the worker, its user, stream e2e-jobs and consumer are deleted (AC-120.27)"
+clean_tree "before the clean-up"
+sedit '
+del data["apis"]["jobs"]
+comps["e2e-api"]["provides"] = [a for a in comps["e2e-api"]["provides"] if a != "jobs"]
+del comps["e2e-worker"]'
+commit "scaling: remove jobs and e2e-worker"
+for needle in "stream e2e-jobs is no longer declared" "durable consumer e2e-worker of stream e2e-jobs is no longer declared"; do
+  case "$S_RENDER" in *"$needle"*) ;; *) sfail "the render did not print a note with '$needle'";; esac
+done
+[ ! -e "$gitops_repo/operators/apps/keda.yaml" ] || sfail "operators/apps/keda.yaml still exists although no instance scales on a queue"
+[ ! -e "$(ovd e2e-worker)" ] || sfail "overlays/dev/e2e-worker still exists although e2e-worker is removed"
+[ -f "$bus_dir/stream-orders.yaml" ] && [ ! -e "$bus_dir/stream-jobs.yaml" ] && [ ! -e "$bus_dir/consumer-jobs.e2e-worker.yaml" ] || sfail "addons/dev/bus does not hold exactly the streams of orders and audit"
+# the cluster: the bus chart without the user first (the pod no longer reads its Secret), then the objects the removal leaves behind
+bus_files || sfail "could not turn the rendered addon into objects to apply"
+rev_before=$(kc get statefulsets.apps e2e-bus -o jsonpath='{.status.updateRevision}')
+kubectl --context k3d-$cluster apply -f "$work/bus-chart.yaml" >/dev/null || sfail "applying the HelmChart e2e-bus without the user e2e-worker failed"
+bus_roll "$rev_before"
+kc delete deployments.apps/e2e-worker services/e2e-worker --ignore-not-found --timeout=90s || sfail "could not delete the Deployment and the Service of e2e-worker"
+for o in consumers.jetstream.nats.io/e2e-jobs.e2e-worker streams.jetstream.nats.io/e2e-jobs; do
+  kc delete "$o" --timeout=60s || { kc get "$o" -o yaml | tail -20; kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=20 || true; sfail "could not delete $o"; }
+done
+kc delete externalsecrets.external-secrets.io e2e-bus-e2e-worker-app --timeout=60s || sfail "could not delete the ExternalSecret e2e-bus-e2e-worker-app"
+kc delete secrets e2e-bus-e2e-worker-app --ignore-not-found --timeout=60s >/dev/null || sfail "could not delete the Secret e2e-bus-e2e-worker-app"
+left=$(kc get deployments.apps,services,scaledobjects.keda.sh,triggerauthentications.keda.sh,horizontalpodautoscalers.autoscaling,secrets,externalsecrets.external-secrets.io,streams.jetstream.nats.io,consumers.jetstream.nats.io -o name 2>/dev/null | grep -E 'e2e-worker|e2e-jobs' || true)
+[ -z "$left" ] || sfail "objects of the scaling steps are still in e2e-dev: $left"
+# the broker steps below see their own cluster again: the server (restarted without the user) still holds e2e-orders and its 3 messages
+jsz_wait 15 S.e2e-orders.messages=3 || { echo "$J"; sfail "after the clean-up /jsz should still show e2e-orders with its 3 messages"; }
+broker_t0=$((broker_t0 + SECONDS - scaling_t0))   # the broker steps' own budget does not count the scaling steps
+sok "jobs, e2e-worker and operators/apps/keda.yaml are removed; the render named the retired stream e2e-jobs and consumer e2e-worker; the scaling steps took $((SECONDS - scaling_t0)) s in total (budget 780 s)"
 
 nstep "Broker: resource remove bus is refused while the events APIs orders and audit are bound (AC-119.4)"
 [ -z "$(git -C "$gitops_repo" status --porcelain)" ] || nfail "the tree is dirty before the removal"
