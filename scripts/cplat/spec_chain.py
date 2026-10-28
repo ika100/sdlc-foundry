@@ -15,6 +15,7 @@ from pathlib import Path
 import core
 import evidence
 import model
+import settings
 import ship
 import spec as specmod
 import spec_chain_remote as remote_mod
@@ -122,7 +123,12 @@ class Chain:
         self.root, self.spec = root, spec
         self.remote = remote_mod.Remote(root)
         self.status = spec.status
-        self.repo_shape = specmod.repo_shape(root)
+        try:
+            self.repo_shape = specmod.repo_shape(root)
+        except settings.ShapeDeclarationError:
+            raise
+        except Exception:  # noqa: BLE001 - an unreadable shape never ends the run; the own shape of the spec decides
+            self.repo_shape = None
         self.own_shape = specmod.spec_shape(spec, self.repo_shape)
         self.product = spec.meta.get("shape") == "gitops-app"
         self.done = self.status == "done"
@@ -430,7 +436,10 @@ def build(root: Path, spec: specmod.Spec) -> dict:
                 + "; the links that need them are unknown")
     verification = None
     if c.done:
-        verification = specmod.verification_result(spec) or "none"
+        try:
+            verification = specmod.verification_result(spec) or "none"
+        except Exception:  # noqa: BLE001 - an unreadable verification.md never ends the run (the verdict links say why)
+            verification = "unknown"
     return {
         "spec": spec.id, "status": spec.status, "verification": verification, "repo": c.remote.slug,
         "criteria": criteria,

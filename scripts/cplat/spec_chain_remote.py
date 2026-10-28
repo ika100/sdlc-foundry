@@ -169,9 +169,17 @@ class Remote:
             return [], "applications/ not readable"
         systems = [e["name"] for e in entries if isinstance(e, dict) and e.get("type") == "dir" and e.get("name")]
 
+        failures: list[str] = []
+
         def read(path: str) -> dict | None:
-            rc2, text, _ = self._call(["api", f"repos/{app}/contents/{path}{ref}", "-H", "Accept: application/vnd.github.raw"])
-            if rc2 != 0 or not text.strip():
+            """None = the file does not exist (a real 404) or is not a mapping; any other failure is recorded as a reason."""
+            rc2, text, err2 = self._call(["api", f"repos/{app}/contents/{path}{ref}", "-H", "Accept: application/vnd.github.raw"])
+            if rc2 != 0:
+                if not self._down and "HTTP 404" in err2:
+                    return None
+                failures.append(self._why(rc2, err2))
+                return None
+            if not text.strip():
                 return None
             try:
                 data = yaml.safe_load(text)
@@ -185,6 +193,8 @@ class Remote:
                 models.append(model.load_remote(s, read))
             except model.ModelError:
                 continue
+        if failures:
+            return [], failures[0]
         return models, None
 
     def _local_checkout(self, app: str) -> Path | None:
