@@ -836,6 +836,7 @@ def test_a_broker_needs_the_secret_of_every_provider_and_consumer_ac_121_15(tmp_
 
 def test_after_dev_smoke_the_staging_step_starts_by_itself_after_a_verified_dev_ac_121_8(vw, capsys, clock):  # AC-121.8
     dev17(vw, promote="after-dev-smoke")
+    vw.kube.put("cluster", cnpg_cluster("shop-orders-db", "shop-staging"))   # spec 121 slip: the staging step's backup guard reads staging's cluster
     rc, out, err = run_cmd(capsys, *vargs(vw))
     assert rc == 0, out + err
     assert read_system(vw.repo)["resources"]["orders-db"]["instances"]["staging"]["version"] == 17
