@@ -52,6 +52,7 @@ tasks:
     covers: [AC-126.8, AC-126.11]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t8
     title: built PR titles through pr_rules.fit — spec draft PRs, gitops, resource upgrade, cluster repo, platform update
     files: [scripts/cplat/spec_pr.py, scripts/cplat/gitops.py, scripts/cplat/upgrade.py, scripts/cplat/clusterrepo.py, scripts/cplat/fleet_pr.py]
