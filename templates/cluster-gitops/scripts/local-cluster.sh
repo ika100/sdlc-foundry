@@ -172,13 +172,16 @@ if [ "$with_metrics" = auto ]; then
 fi
 # With Argo CD the property operators come from operators/apps/<name>.yaml when it exists (spec 121); a cluster-up of an older
 # release left External Secrets or Kyverno as k3s HelmCharts, and those stay.
-argo_managed() {   # argo_managed <name>: 1 when Argo CD installs the operator from operators/root.yaml
-  if [ "$with_argo" = 1 ] && [ "$with_system" != 0 ] && [ -f operators/root.yaml ] && [ -f "operators/apps/$1.yaml" ]; then echo 1; else echo 0; fi
+eso_file=operators/apps/external-secrets.yaml
+kyverno_file=operators/apps/kyverno.yaml
+lgtm_file=operators/apps/lgtm.yaml
+argo_managed() {   # argo_managed <operator file>: 1 when Argo CD installs the operator from operators/root.yaml
+  if [ "$with_argo" = 1 ] && [ "$with_system" != 0 ] && [ -f operators/root.yaml ] && [ -f "$1" ]; then echo 1; else echo 0; fi
 }
 eso_argo=0; kyverno_argo=0; lgtm_argo=0
-[ "$with_eso" = 1 ] && eso_argo=$(argo_managed external-secrets)
-[ "$with_kyverno" = 1 ] && kyverno_argo=$(argo_managed kyverno)
-[ "$with_lgtm" = 1 ] && lgtm_argo=$(argo_managed lgtm)
+[ "$with_eso" = 1 ] && eso_argo=$(argo_managed "$eso_file")
+[ "$with_kyverno" = 1 ] && kyverno_argo=$(argo_managed "$kyverno_file")
+[ "$with_lgtm" = 1 ] && lgtm_argo=$(argo_managed "$lgtm_file")
 registry="${name}-registry"
 org=$(sed -n 's/^github_org:[[:space:]]*//p' .copier-answers.yml | head -1)
 k() { kubectl --context "$ctx" "$@"; }
