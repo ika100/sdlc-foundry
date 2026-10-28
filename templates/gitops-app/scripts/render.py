@@ -2209,8 +2209,9 @@ def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | N
     base = f"{app}-{name}"
     image = conf["pin"]
     # a physical backup only starts on the major of its archive; the active generation keeps that image only while the archive it
-    # writes to (archives[-1]) is still that older major (spec 121, changed after review: a later major step moves it to the pin)
-    if frm is not None and (role != "active" or not stepped_since(archives or [], cluster or base, conf["version"])):
+    # writes to (archives[-1]) is still that older major (spec 121, changed after review: a later major step moves it to the pin, and
+    # it stays there when the generation later becomes previous)
+    if frm is not None and (role == "restored" or not stepped_since(archives or [], cluster or base, conf["version"])):
         image = next((POSTGRES_IMAGES[a["major"]] for a in archives or [] if a["server"] == frm["server"] and a["major"] != conf["version"]), image)
     spec: dict = {
         "instances": conf["replicas"],
