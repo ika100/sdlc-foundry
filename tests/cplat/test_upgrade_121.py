@@ -613,9 +613,8 @@ def test_a_component_with_secrets_or_secret_refs_needs_external_secrets_ac_121_1
 def test_an_external_resource_and_an_environment_backup_need_external_secrets_ac_121_17(tmp_path):  # AC-121.17
     ext = system({"d": db(external=True)}, {"api": comp("api", ["d"])})
     assert "external-secrets" in apps_of(with_answers(tmp_path / "ext", ext, property_operators="install"))
-    bk = plain()
+    bk = system({"backups": bucket()}, {"api": comp("api", ["backups"])})   # spec 121 slip: 117 requires the target bucket to be used there
     bk["environments"]["staging"]["backup"] = {"to": "backups"}
-    bk["resources"] = {"backups": bucket()}
     assert "external-secrets" in apps_of(with_answers(tmp_path / "bk", bk, property_operators="install"))
 
 
