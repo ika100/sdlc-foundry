@@ -350,7 +350,7 @@ def test_instances_override_replicas_resources_and_merge_env_ac_114_13(tmp_path)
 
 def test_an_unknown_instance_key_fails_listing_the_allowed_ones_ac_114_13(tmp_path):  # AC-114.13
     fails(tmp_path, tiny(instances={"dev": {"port": 9}}),
-          "components.api.instances.dev: unknown key 'port' (allowed: replicas, resources, env, promote, secrets, autonomy)")  # spec 124: autonomy
+          "components.api.instances.dev: unknown key 'port' (allowed: replicas, resources, env, promote, secrets, autonomy, scale)")  # spec 124: autonomy; spec 120: scale
 
 
 # ---------------- AC-114.14: libraries ----------------

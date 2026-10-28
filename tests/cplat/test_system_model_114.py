@@ -195,12 +195,12 @@ def normalize_4x(d: dict) -> dict:
 def normalize_5(d: dict) -> dict:
     out = {"system": {k: v for k, v in d["system"].items() if k in ("name", "components", "resources")}}
     # spec 117: backup and spec 124: autonomy are dropped too (environments, instances and resource_instances)
-    out["environments"] = [{**{k: v for k, v in e.items() if k not in ("operators", "backup", "autonomy")}, "observability": {k: v for k, v in (e["observability"] or {}).items() if k not in ("headersSecret", "querySecret")} or None}
+    out["environments"] = [{**{k: v for k, v in e.items() if k not in ("operators", "backup", "autonomy", "autoscaling")}, "observability": {k: v for k, v in (e["observability"] or {}).items() if k not in ("headersSecret", "querySecret")} or None}  # spec 120: the environment key autoscaling is dropped too
                            for e in d["environments"]]
     out["components"] = [{k: v for k, v in c.items() if k not in ("provides", "consumes", "libraries", "used_by")} for c in d["components"]]
     # spec 115 (AC-115.15): the added fields (resource external; instance type, external, store_key; environment operators) are dropped
     out["resources"] = [{k: v for k, v in r.items() if k != "external"} for r in d["resources"]]
-    out["instances"] = [{**{k: v for k, v in i.items() if k != "autonomy"}, "secrets": [{k: v for k, v in s.items() if k != "overridden"} for s in i["secrets"]]} for i in d["instances"]]
+    out["instances"] = [{**{k: v for k, v in i.items() if k not in ("autonomy", "scale")}, "secrets": [{k: v for k, v in s.items() if k != "overridden"} for s in i["secrets"]]} for i in d["instances"]]  # spec 120: the instance key scale and the environment key autoscaling are dropped too
     out["resource_instances"] = [{k: v for k, v in r.items() if k not in ("type", "external", "store_key", "backup")} for r in d["resource_instances"]]  # spec 117: backup dropped too
     out["relations"] = [r for r in d["relations"] if r["type"] not in ("provides", "consumes") and not r["to"].startswith(("api:",))
                         and not r["from"].startswith("api:")]

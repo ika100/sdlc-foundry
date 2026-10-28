@@ -1024,7 +1024,7 @@ def test_the_nats_pins_are_exact_in_the_versions_table_ac_119_20(tmp_path):  # A
 def test_the_nack_operator_is_pinned_exactly_ac_119_20(tmp_path):  # AC-119.20
     r = renderer("render_119_nack")
     assert getattr(r, "OPERATORS", {}).get("nack") == NACK
-    assert list(r.OPERATORS)[-1] == "nack" and r.OPERATOR_OF_TYPE == {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}
+    assert list(r.OPERATORS).index("nack") == 7 and r.OPERATOR_OF_TYPE == {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}  # spec 120: nack stays the eighth entry (keda and metrics-server follow)
     assert r.BROKER_DEFAULT_RESOURCES == DEFAULT_RESOURCES
 
 

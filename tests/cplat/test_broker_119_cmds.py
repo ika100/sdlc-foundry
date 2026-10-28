@@ -736,7 +736,7 @@ def test_the_e2e_script_declares_a_broker_with_two_events_apis_ac_119_19():  # A
 
 def test_the_e2e_script_header_budgets_the_broker_steps_and_the_job_gets_75_minutes_ac_119_19():  # AC-119.19 (needs a cluster)
     assert re.search(r"(?is)broker.{0,300}5 minutes", e2e()[:6000])
-    assert re.search(r"(?m)^\s*timeout-minutes:\s*75\b", (ROOT / ".github" / "workflows" / "e2e.yml").read_text())
+    assert re.search(r"(?m)^\s*timeout-minutes:\s*90\b", (ROOT / ".github" / "workflows" / "e2e.yml").read_text())  # spec 120: the e2e job gets 90 minutes (AC-120.23)
 
 
 def test_the_e2e_script_delivers_one_message_within_30_seconds_ac_119_13():  # AC-119.13 (needs a cluster)
