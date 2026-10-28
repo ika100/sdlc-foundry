@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import yaml
@@ -31,6 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-tasks", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--verify", action="store_true", help="after the update is merged and synced: operators, moved dev pins, every environment's smoke tests (spec 121)")
+    p.add_argument("--context", action="append", metavar="[ENV=]CTX", help="with --verify: kube context (of one environment, or of all); repeatable")
+    p.add_argument("--component-dir", action="append", metavar="C=DIR", help="with --verify: a checkout of a component for the smoke tests; repeatable")
+    p.add_argument("--app", help="with --verify: the application (when the repo has several)")
     return p
 
 
@@ -519,6 +524,189 @@ def rollback(repo: Path, cur: str, branch: str, created: bool, ignored: set[str]
         run(["git", "branch", "-D", branch], cwd=repo, check=False)
 
 
+# ---------------- versions: the change list of a gitops-app update (spec 121, AC-121.11, AC-121.20, AC-121.23) ----------------
+
+def _targets(mod, app_dir: Path, system: str, r: str, typ: str, env: str):
+    """The rendered file of an instance: (path, type)."""
+    folder = app_dir / "addons" / env / r
+    if typ == "database":
+        base = f"{system}-{r}"
+        try:
+            active = next(c["name"] for c in mod.read_restore_state(app_dir, env, r)[0] if c["role"] == "active")
+        except (mod.RenderError, StopIteration):
+            return None
+        return folder / ("cluster.yaml" if active == base else f"cluster-g{active[len(base) + 2:]}.yaml")
+    return folder / {"cache": "statefulset.yaml", "broker": "server.yaml", "bucket": "seaweed.yaml"}[typ]
+
+
+def _instances(mod, repo: Path) -> dict[tuple[str, str, str], dict]:
+    """{(system, resource, env): {type, major, pin (rendered now, or None), table}} of every in-cluster resource instance."""
+    out: dict[tuple[str, str, str], dict] = {}
+    for sysfile in sorted((repo / "applications").glob("*/system.yaml")):
+        app_dir = sysfile.parent
+        try:
+            doc = yaml.safe_load(sysfile.read_text()) or {}
+            cfgs = mod.validate_resources(doc, app_dir)
+        except Exception:  # noqa: BLE001 - an invalid system is reported by the render itself
+            continue
+        system = str(doc.get("system") or app_dir.name)
+        for r, rc in cfgs.items():
+            typ = rc["type"]
+            for env, e in rc["envs"].items():
+                if e.get("external"):
+                    continue
+                major = e.get("version")
+                path = _targets(mod, app_dir, system, r, typ, env)
+                held = mod.rendered_pin(path, typ) if path else None
+                try:
+                    table = mod.table_pin(typ, major if typ != "bucket" else None)["pin"]
+                except KeyError:
+                    table = None
+                out[(system, r, env)] = {"type": typ, "major": major, "pin": held["pin"] if held else None, "table": table}
+    return out
+
+
+_OPERATOR_REV = re.compile(r"^\s*targetRevision:\s*['\"]?([^\s'\"]+)", re.M)
+
+
+def _operator_revisions(repo: Path) -> dict[str, str]:
+    out = {}
+    for p in sorted((repo / "operators" / "apps").glob("*.yaml")):
+        m = _OPERATOR_REV.search(p.read_text())
+        if m:
+            out[p.stem] = m.group(1)
+    return out
+
+
+def render_and_compare(req: dict, repo: Path) -> dict | None:
+    """Re-render with the repo's new renderer (held pins follow from it) and list what moves, per environment; None when nothing does."""
+    import upgrade
+    mod = upgrade.load_renderer(repo)
+    before = _instances(mod, repo)
+    ops_before = _operator_revisions(repo)
+    gitops.render(repo)
+    after = _instances(mod, repo)
+    ops_after = _operator_revisions(repo)
+    order = {e: i for i, e in enumerate(core_envs())}
+    rows: list[dict] = []
+    moved_now = {k[:2] for k in after if k in before and before[k]["pin"] and after[k]["pin"] and before[k]["pin"] != after[k]["pin"]}
+    for key in sorted(after, key=lambda k: (k[0], k[1], order.get(k[2], 9))):
+        system, r, env = key
+        a, b = after[key], before.get(key)
+        if b is None or b["pin"] is None or a["pin"] is None:
+            continue
+        label = f"{r} {a['major']}" if a["type"] != "bucket" else r
+        if a["pin"] != b["pin"]:
+            rows.append({"env": env, "resource": r, "kind": "pin", "from": b["pin"], "to": a["pin"], "moves": True,
+                         "text": f"{env:<8} {label}: {b['pin']} → {a['pin']} (moves now)"})
+        elif env != "dev" and (system, r) in moved_now and a["table"] and a["table"] != a["pin"]:
+            until = (f"/resource:upgrade {r} --to {a['major']} --env {env}" if a["type"] != "bucket"
+                     else "dev is verified and /platform:update runs again")
+            rows.append({"env": env, "resource": r, "kind": "pin", "from": a["pin"], "to": a["table"], "moves": False,
+                         "text": f"{env:<8} {label}: keeps {a['pin']} until {until}"})
+    envs = [e for e in core_envs() if any(k[2] == e for k in after)] or core_envs()
+    for name in sorted(ops_after):
+        if name in ops_before and ops_before[name] != ops_after[name]:
+            rows.append({"env": "cluster", "resource": name, "kind": "operator", "from": ops_before[name], "to": ops_after[name], "moves": True,
+                         "text": f"{'cluster':<8} operator {name} {ops_before[name]} → {ops_after[name]} "
+                                 f"(operators/apps; shared by {', '.join(envs)}: moves with {envs[0]}'s step)"})
+    if not rows:
+        return None
+    return {"from": req["old"] or "none", "to": req["new"], "rows": rows, "lines": [x["text"] for x in rows]}
+
+
+def core_envs() -> list[str]:
+    import model
+    return list(model.ENVIRONMENTS)
+
+
+def versions_block(versions: dict) -> str:
+    return "\n".join([f"versions in this system (platform {versions['from']} → {versions['to']}):", *[f"  {ln}" for ln in versions["lines"]]])
+
+
+# ---------------- --verify (spec 121, AC-121.20 .. AC-121.22) ----------------
+
+OPERATOR_WAIT_S = 900.0
+OPERATOR_POLL_S = 10.0
+
+
+def _wait_operators(repo: Path, contexts: dict[str, str]) -> bool:
+    """Wait for every operator row to read `ok` (installed = the table's version and its CRDs serve the table's versions)."""
+    import doctor
+    start = time.monotonic()
+    while True:
+        rows = [row for row in doctor.check_operators(repo, contexts) if row.get("operator")]
+        pending = [row for row in rows if row["operator"]["state"] != "ok"]
+        if not pending:
+            for row in rows:
+                print(f"  ok   {row['name']}: {row['detail']}")
+            return True
+        elapsed = time.monotonic() - start
+        if elapsed >= OPERATOR_WAIT_S:
+            for row in pending:
+                print(f"  FAIL {row['name']}: {row['detail']} (not ok after {int(OPERATOR_WAIT_S // 60)} minutes)")
+                if row.get("fix"):
+                    print(f"       fix: {row['fix']}")
+            return False
+        time.sleep(OPERATOR_POLL_S)
+
+
+def verify_update(ns: argparse.Namespace) -> int:
+    """After the update is merged and synced: operators once per cluster, the moved dev pins, then every environment's smoke tests; on
+    success the staging pin moves. (One cluster_server per gitops repo today, so all environments are one group; grouping by server would
+    run AC-121.20's order, dev's cluster first, when a later release gives an environment its own cluster.)"""
+    import model
+    import status
+    import upgradeverify as uv
+    repo = Path(ns.repo).resolve()
+    app_dir = gitops.find_app(repo, ns.app)
+    m = model.load_dir(app_dir)
+    contexts = status.parse_contexts(ns.context, list(model.ENVIRONMENTS))
+    dirs = uv.parse_dirs(ns.component_dir)
+    print("verify platform update: operators")
+    if not _wait_operators(repo, contexts):
+        print("NOT VERIFIED: an operator is not at the table's version; no environment is checked until it is")
+        return 1
+    moved = []
+    for res in m.resources:
+        ri = next((x for x in m.resource_instances if x.resource == res.name and x.environment == "dev"), None)
+        if res.type not in ("database", "cache", "broker") or ri is None or ri.external:
+            continue
+        moved.append(res.name)
+    results = []
+    for name in moved:
+        result = uv.verify(repo, ns.app, name, "dev", contexts, dirs)
+        for line in result.lines:
+            print(line)
+        if not result.ok:
+            return 1
+        results.append(result)
+    print("smoke tests of every component instance")
+    comps = {c.name: c for c in m.components}
+    for inst in m.instances:
+        comp = comps.get(inst.component)
+        if comp is None or comp.external:
+            continue
+        passed, text = uv.run_component_smoke(m, comp, inst.environment, dirs)
+        print(f"  {'ok  ' if passed else 'FAIL'} smoke {comp.name} ({inst.environment}): {text}")
+        if not passed:
+            print("NOT VERIFIED: no later step is started")
+            return 1
+    import upgrade
+    rc = 0
+    for result in results:
+        if result.auto_staging:
+            sub = argparse.Namespace(repo_dir=str(repo), app=ns.app, context=ns.context, component_dir=ns.component_dir, pr=False, wait=False)
+            try:
+                rc = upgrade.main(uv.staging_argv(sub, result.resource, result.major)) or rc
+            except PlatformError as e:
+                print(f"the staging step was not started: {e}")
+                rc = 1
+        elif result.next:
+            print(f"next: {result.next}")
+    return rc
+
+
 def _list(names: list[str]) -> str:
     return ", ".join(names) or "none"
 
@@ -638,7 +826,8 @@ def execute(req: dict) -> Report:
     cur = run(["git", "symbolic-ref", "--short", "HEAD"], cwd=repo).stdout.strip()
     branch = branch_name(repo)
     created = cur in ("main", "master")
-    ignored = _ignored(repo) if migrating else set()
+    rendering = req["shape"] == "gitops-app" and not migrating
+    ignored = _ignored(repo) if migrating or rendering else set()
     if created:
         run(["git", "checkout", "-q", "-b", branch], cwd=repo)
         r.did.append(f"created branch {branch}")
@@ -680,8 +869,13 @@ def execute(req: dict) -> Report:
                 r.did.append(f"the 5.0 render is byte-identical to 4.7 ({mig['compared']} files compared)")
         elif req["migrate"]:
             r.did.append("already migrated to 5.0: nothing of the migration ran")
+        if rendering:
+            versions = render_and_compare(req, repo)
+            if versions:
+                r.data["versions"] = versions
+                r.did.append(f"re-rendered with the new renderer; {len(versions['lines'])} version change(s) listed below")
     except BaseException:
-        if migrating:
+        if migrating or rendering:
             rollback(repo, cur, branch, created, ignored)
         tmp.cleanup()
         raise
@@ -776,6 +970,9 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
 
 
 def main(argv: list[str]) -> int:
+    ns = build_parser().parse_args(argv)
+    if ns.verify:
+        return verify_update(ns)
     req = resolve(argv)
     if req["dry_run"]:
         r = plan(req)
@@ -783,5 +980,8 @@ def main(argv: list[str]) -> int:
             plan_migration(req, r)
         r.emit(True, req["json"])
         return 0
-    execute(req).emit(False, req["json"])
+    report = execute(req)
+    report.emit(False, req["json"])
+    if report.data.get("versions") and not req["json"]:
+        print("\n" + versions_block(report.data["versions"]))
     return 0
