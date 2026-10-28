@@ -1,4 +1,4 @@
-"""Spec 094: the rules of a re-plan after a merge conflict. A library for `cplat build` (buildcmd.py).
+"""Spec 094: the rules of a re-plan after a merge conflict. A library for `cplat component build` (buildcmd.py).
 
 The re-plan history is the git history of the feature branch: every amended plan is one commit with `Replan-Spec` and
 `Replan-Task` trailers. Only the conflicts of the current batch that have no re-plan commit yet are kept in
@@ -42,7 +42,7 @@ def short(sha: str) -> str:
 def _load(repo: Path, ref: str) -> specmod.Spec:
     sp = specmod.find(repo, ref)
     if not sp.plan:
-        raise PlatformError(f"{sp.id} has no plan.md", hint=f"run `/svc:plan {sp.number}`")
+        raise PlatformError(f"{sp.id} has no plan.md", hint=f"run `/component:plan {sp.number}`")
     return sp
 
 

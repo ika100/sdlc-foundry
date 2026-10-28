@@ -1,0 +1,324 @@
+# Design — 125 A cluster repo hosts several systems on shared operators
+
+## Decisions
+
+- **A new template `templates/cluster-gitops`, shape `cluster-gitops`, plugin `cluster`.** The cluster repo has a different job and a different hand-edited file (`cluster.yaml`) than a system's gitops repo, so it is a separate shape. Folding it into `gitops-app` would change every system repo's tree. ADR: [docs/adr/060-a-cluster-repo-owns-shared-services.md](../../adr/060-a-cluster-repo-owns-shared-services.md).
+- **The versions table is shared through an exact copy.** `templates/cluster-gitops/scripts/system_render.py` is a byte-identical copy of `../../gitops-app/scripts/render.py`, kept equal by `scripts/sync-template-copies.py` (decision 13; the planned symlink failed because Copier refuses links out of the template), so a generated cluster repo gets the system renderer's exact content. The cluster renderer and the check import it as a module (`import system_render`). They use its `OPERATORS`, `OPERATOR_OF_TYPE`, `ENVS`, `load_system`, `resource_instances`, `policy_envs`, `envs_of`, `DNS_LABEL`, `RenderError` and the new `operator_application()`. Rows that specs 117–121 add to `OPERATORS` reach the cluster repo with no change here (AC-125.3).
+- **One builder for an operator application.** `render.py` (gitops-app) gets `operator_application(name, server) -> dict`. `operator_files()` uses it (its output is byte-identical) and the cluster renderer uses it too. `operator-<name>` is then the same document in both repo kinds, which is what makes takeover seamless (AC-125.3, AC-125.14).
+- **`cluster-up` reuses the system's `local-cluster.sh`; `bootstrap` is the cluster's own.** `templates/cluster-gitops/scripts/local-cluster.sh` and `scripts/ports.sh` are exact copies of the gitops-app files (decision 13). `local-cluster.sh` gains one additive mode, `WITH_SYSTEM=0`: it creates or reuses the k3d cluster, the Gateway, Argo CD and the `github-creds` credential exactly as for a system, then stops before anything system-specific (namespaces, `operators/root.yaml`, `bootstrap/`). The cluster's `scripts/cluster-up.sh` calls it in that mode and then runs the cluster bootstrap. Refactoring `local-cluster.sh` into a shared library was rejected: existing tests copy only `local-cluster.sh` and `ports.sh` into skeletons, and specs 117–121 edit its operator blocks in parallel. The cluster's `bootstrap.sh` is new (about 40 lines): it reads the CRDs from the versions table (`render.py --crds`), where the system's `bootstrap.sh` has a hard-coded `case`.
+- **The ClusterSecretStore lives in the operators root, retried until its CRD exists.** It is applied with `SkipDryRunOnMissingResource=true` and sync-wave `1`. `platform-operators` carries an Argo CD `retry` policy. Argo CD does not retry a failed automated sync of the same commit without one, and the store's CRD only appears once `operator-external-secrets` has synced (AC-125.4, AC-125.9).
+- **The check clones each system repo shallowly** (`gh repo clone <repo> <tmp> -- --depth 1 --branch main`) and loads every `applications/*/system.yaml` with the linked system renderer. A system can reference files in its repo (external kustomize packages), so a full checkout of `main` is the only faithful input. The rules are applied to the instances the system actually renders (AC-125.10).
+- **`cplat cluster` is a new module, `scripts/cplat/clusterrepo.py`.** `scripts/cplat/cluster.py` already exists (spec 105: `running_digest`) and keeps its name. `cluster new` delegates repo creation to `newsvc` (`--shape cluster-gitops`), as `system new` does for the gitops-app.
+- **The cluster repo has no feature-spec pipeline.** It holds no product code. Every change is a reviewed PR made by `/cluster:add`, `/cluster:remove` or `/platform:update`, or a hand edit of `cluster.yaml`. `scripts/shapes.py` exempts `cluster-gitops` from the spec, plan, backlog and deps contract (as it already exempts `gitops-app` from deps, smoke and backlog), and from the agents check, like plugin `system`.
+
+### Decisions taken by default
+
+1. **`org` must equal the cluster repo's owner** (`github_org` in `.copier-answers.yml`; default `org` is that value). AC-125.9 stores one credential template for `https://github.com/<org>`, and Argo CD must read the cluster repo with it too. Another value fails: `org: must be <github_org>, the owner of this repo (Argo CD reads this repo and every system with one credential for https://github.com/<org>)`.
+2. **`external-secrets` in `operators` always renders the store.** Without `secretStore` it gets the defaults (`platform-secrets`, the Kubernetes provider over `secrets-store`), because systems reference `platform-secrets` by default.
+3. **The default provider brings its supporting objects**: Namespace `secrets-store`, ServiceAccount/Role/RoleBinding `eso-store` (exactly what `local-cluster.sh` creates). A custom `provider` renders only the `ClusterSecretStore`.
+4. **An in-cluster bucket also needs `external-secrets`.** ADR-059: its keys are generated by External Secrets Operator. AC-125.10 lists only secrets, secretRefs and external resources. This widens it by one rule and drops none.
+5. **"An environment has `policy`" means the environment renders Kyverno policies** (`system_render.policy_envs`: policy not `off` and at least one component runs there), which is exactly where the system needs the engine.
+6. **The platform release of a system is read from `.platform-version` (`platform: x.y.z`)** on its `main`, and the cluster's from its own `.platform-version`. AC-125.12 names `.copier-answers.yml`, but platform-created repos record the release in `.platform-version`, the stamp `/platform:update` writes next to the answers. `.copier-answers.yml` holds a `_commit` only for git-sourced templates. The check falls back to `_commit` (without a leading `v`) when `.platform-version` is missing. With neither, it warns `release unknown`.
+7. **A registered repo with several systems** (`applications/a/`, `applications/b/`): `system-<name>` syncs the whole `bootstrap/` folder, so the check checks every system in that repo. `/cluster:add` needs `--name` when there are several.
+8. **The systems root is named `platform-systems`**, next to `platform-operators`.
+9. **`cluster/kustomization.yaml` (CI only)** lists every rendered manifest, so `kustomize build cluster` proves there are no duplicate objects and feeds kubeconform (AC-125.17). The Argo CD roots use directory sources on `cluster/operators` and `cluster/systems` and never read it.
+10. **Kyverno's operator version** is the chart's `appVersion` read from `https://kyverno.github.io/kyverno/index.yaml` for chart 3.9.1, without a leading `v`. External Secrets' chart version equals its app version (2.12.0). Both chart versions are the ones `local-cluster.sh` installs today. The coder must not guess these values.
+11. **Every environment of a registered system must set `operators: owner`**, including one that runs no resources. That is the literal AC-125.11, and it keeps a later resource from silently rendering `operators/` in the system repo.
+13. **Copies, not symlinks (taken in the build, replaces the symlink decision above).** Copier 9.15 refuses a symlink whose target lies outside the template root (`ForbiddenPathError`), so `templates/cluster-gitops/scripts/system_render.py`, `local-cluster.sh` and `ports.sh` are byte-identical copies of the gitops-app files. `scripts/sync-template-copies.py` (`--check` in `devbox run quality` and the platform CI; without it, it rewrites the copies) fails naming each copy that differs and the fix `uv run scripts/sync-template-copies.py`. A change to the gitops-app renderer (specs 117–121) therefore also updates the cluster template's copy in the same PR. Rejected: a `templates/` template root with `_subdirectory` (changes every path cplat, detect-shape and update use for a template) and a Copier task copying the file at copy time (tasks are skipped with `--skip-tasks` and on update).
+12. **The cluster repo has no `cluster-ui` recipe.** A cluster spans many namespaces, so `kubectl --context k3d-<name> -n argocd get applications` and plain `k9s --context k3d-<name>` are the hints `cluster-up` prints instead.
+
+## Modules
+
+| Module | Responsibility | New / changed |
+|---|---|---|
+| `templates/gitops-app/scripts/render.py` | `OPERATORS` rows `external-secrets`, `kyverno`; optional row key `selector`; `operator_application()` | changed (t1) |
+| `templates/gitops-app/scripts/local-cluster.sh` | `WITH_SYSTEM=0` cluster-only mode (`up`, `down`) | changed (t2) |
+| `templates/cluster-gitops/scripts/render.py` | validate `cluster.yaml`, render `cluster/`, `--check`, `--crds`, `--systems`, `--name` | new (t3) |
+| `templates/cluster-gitops/scripts/system_render.py` | copy of `../../gitops-app/scripts/render.py` (decision 13) | new (t3) |
+| `templates/cluster-gitops/scripts/check.py` | `devbox run check`; `--urls` for `cluster-up` | new (t4) |
+| `templates/cluster-gitops/scripts/bootstrap.sh`, `cluster-up.sh` | one-time bootstrap; local cluster | new (t5) |
+| `templates/cluster-gitops/scripts/local-cluster.sh`, `ports.sh` | copies of gitops-app's (decision 13) | new (t5) |
+| `templates/cluster-gitops/**` (skeleton) | copier.yml, devbox.json, cluster.yaml, initial `cluster/`, CI, CLAUDE.md, settings | new (t6) |
+| `shapes.yml`, `scripts/shapes.py`, `scripts/detect-shape.sh`, `scripts/test-detect-shape.sh`, PRD §4, `shapecmd.py`, `update.py`, platform `ci.yml` | register the shape; updates and the fleet treat it like any shape | changed (t7) |
+| `scripts/cplat/clusterrepo.py`, `scripts/cplat/cplat.py` | `cplat cluster new|add|remove` | new / changed (t8) |
+| `plugins/cluster/**`, `.claude-plugin/marketplace.json` | `/cluster:new`, `/cluster:add`, `/cluster:remove` | new (t9) |
+| `scripts/cplat/doctor.py` | cluster repo rows | changed (t10) |
+| `tests/e2e/cluster.sh`, `.github/workflows/e2e.yml` | two systems, one operator | new / changed (t11) |
+| `docs/DOMAIN-MODEL.md`, `docs/CLUSTERS.md`, `docs/templates.md`, `docs/CHANGELOG.md` | Cluster noun, guide, release note | changed / new (t12) |
+
+## Contract
+
+### 1. Versions table (`templates/gitops-app/scripts/render.py`, AC-125.3)
+
+```python
+OPERATORS["external-secrets"] = {"repo_url": "https://charts.external-secrets.io", "chart": "external-secrets", "chart_version": "2.12.0",
+                                 "operator_version": "2.12.0", "namespace": "external-secrets", "release": "external-secrets",
+                                 "crd": "clustersecretstores.external-secrets.io"}
+OPERATORS["kyverno"] = {"repo_url": "https://kyverno.github.io/kyverno", "chart": "kyverno", "chart_version": "3.9.1",
+                        "operator_version": "<appVersion of chart 3.9.1, no leading v>", "namespace": "kyverno", "release": "kyverno",
+                        "crd": "namespacedvalidatingpolicies.policies.kyverno.io",
+                        "selector": "app.kubernetes.io/component=admission-controller,app.kubernetes.io/instance=kyverno"}
+```
+
+- Every row keeps the keys `repo_url, chart, chart_version, operator_version, namespace, release, crd`. `selector` is optional: the label selector of the operator's Deployment whose image tag is the operator version. The default is `app.kubernetes.io/name=<chart>`.
+- `OPERATOR_OF_TYPE` is unchanged. `external-secrets` and `kyverno` are never rendered into a system's `operators/`, because no resource type maps to them.
+- `def operator_application(name: str, server: str) -> dict` returns exactly the document `operator_files()` writes today for `operators/apps/<name>.yaml`: name `operator-<name>`, namespace `argocd`, labels `{app.kubernetes.io/managed-by: gitops-app, app.kubernetes.io/component: operator}`, source `{repoURL, chart, targetRevision: chart_version, helm: {releaseName: release}}`, destination `{server, namespace}`, `syncPolicy {automated {prune: true, selfHeal: true}, syncOptions [CreateNamespace=true, ServerSideApply=true]}`, no `finalizers`. `operator_files()` calls it, and a system's rendered tree stays byte-identical.
+
+### 2. `cluster.yaml` (AC-125.2 to AC-125.5)
+
+```yaml
+cluster: home                     # required; lowercase DNS label, at most 40 characters
+owner: acme                       # required; non-empty string
+server: https://kubernetes.default.svc   # optional (default as shown); an http(s) URL
+org: acme                         # optional (default: github_org of .copier-answers.yml); must equal it (decision 1)
+operators: [cloudnative-pg, external-secrets]   # optional (default []); names from OPERATORS, no duplicates
+secretStore:                      # optional; only with external-secrets in operators
+  name: platform-secrets          # optional (default platform-secrets); lowercase DNS subdomain
+  provider: {vault: {...}}        # optional; a mapping with exactly one key (an External Secrets provider block)
+systems:                          # optional (default {}); null is {}
+  todo: {repo: acme/todo-gitops}  # name: lowercase DNS label; only key `repo`: "<owner>/<name>"
+```
+
+The template writes `cluster: <project_name>`, `owner: <owner answer>`, `org: <github_org>`, `operators: []`, `systems: {}`, with comments that document every key.
+
+**Render errors.** `uv run scripts/render.py` prints exactly one line on stderr, `ERROR: cluster.yaml: <message>`, exits 1 and writes nothing. Checks run in this order (top-level keys in the order above):
+
+| Case | `<message>` |
+|---|---|
+| not YAML / not a mapping | `is not valid YAML (<first line>)` / `must be a mapping with cluster and owner` |
+| unknown key | `unknown key '<k>' (allowed: cluster, owner, server, org, operators, secretStore, systems)` |
+| `cluster` missing / bad | `cluster is required` / `cluster: '<v>' must be a lowercase DNS label of at most 40 characters` |
+| `owner` missing / empty / not a string | `owner is required: a non-empty string` |
+| `server` wrong type | `server must be an http(s) URL` |
+| `org` wrong type / mismatch | `org must be a GitHub owner name` / decision 1 text |
+| `operators` not a list of strings | `operators must be a list of operator names` |
+| unknown operator | `operators: '<n>' is not an operator (allowed: <sorted OPERATORS keys, comma-separated>)` |
+| duplicate operator | `operators: '<n>' is listed twice` |
+| `secretStore` wrong type / unknown key | `secretStore must be a mapping with name and provider` / `secretStore: unknown key '<k>' (allowed: name, provider)` |
+| `secretStore.name` bad | `secretStore.name: '<v>' must be a lowercase DNS name` |
+| `secretStore.provider` bad | `secretStore.provider must be a mapping with exactly one provider, e.g. {vault: {...}}` |
+| store without operator | `secretStore needs external-secrets in operators` |
+| `systems` wrong type | `systems must be a mapping of system names to {repo: <owner>/<name>}` |
+| bad system name | `systems.<s>: the name must be a lowercase DNS label` |
+| entry not a mapping / unknown key / missing repo | `systems.<s> must be {repo: <owner>/<name>}` / `systems.<s>: unknown key '<k>' (allowed: repo)` / `systems.<s>: repo is required (<owner>/<name>)` |
+| bad repo | `systems.<s>: repo '<v>' must be <owner>/<name>` |
+| repo outside org | `systems.<s>: repo '<v>' is outside org '<org>' (Argo CD reads only https://github.com/<org>)` |
+| duplicate repo | `systems.<s>: repo '<v>' is already registered as systems.<first>` |
+
+### 3. Rendered layout (AC-125.3 to AC-125.6)
+
+`render.py` owns every file under `cluster/`. Any other file there is stale: the render deletes it, and `--check` reports it as `cluster/<path> (stale)`. A second render of an unchanged `cluster.yaml` changes nothing.
+
+```
+cluster/operators-root.yaml        Application platform-operators
+cluster/systems-root.yaml          Application platform-systems
+cluster/operators/<op>.yaml        operator_application(op, server), one per listed operator, in cluster.yaml order
+cluster/operators/secret-store.yaml   only with external-secrets listed (multi-document)
+cluster/operators/.gitkeep         only when cluster/operators has no other file (empty file)
+cluster/systems/<system>.yaml      Application system-<system>, in cluster.yaml order
+cluster/systems/.gitkeep           only when no system is registered (empty file)
+cluster/kustomization.yaml         {apiVersion: kustomize.config.k8s.io/v1beta1, kind: Kustomization, resources: [operators-root.yaml,
+                                    systems-root.yaml, operators/<op>.yaml..., operators/secret-store.yaml?, systems/<s>.yaml...]}
+```
+
+`<repo-url>` is `https://github.com/<github_org>/<project_name>` (from `.copier-answers.yml`). Every document is written by the gitops-app renderer's `dump()` (`yaml.safe_dump(sort_keys=False)`). Multi-document files are joined with `---\n`.
+
+```yaml
+# cluster/operators-root.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: {name: platform-operators, namespace: argocd}
+spec:
+  project: default
+  source: {repoURL: <repo-url>, targetRevision: main, path: cluster/operators}
+  destination: {server: <server>, namespace: argocd}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    retry: {limit: 10, backoff: {duration: 30s, factor: 2, maxDuration: 5m}}
+# cluster/systems-root.yaml: the same with name platform-systems, path cluster/systems, no retry
+# cluster/systems/<s>.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: system-<s>
+  namespace: argocd
+  labels: {app.kubernetes.io/managed-by: cluster-gitops, app.kubernetes.io/component: system}
+spec:
+  project: default
+  source: {repoURL: https://github.com/<repo>, targetRevision: main, path: bootstrap}
+  destination: {server: <server>, namespace: argocd}
+  syncPolicy: {automated: {prune: true, selfHeal: true}}
+```
+
+No application of the cluster repo has `metadata.finalizers`.
+
+`cluster/operators/secret-store.yaml`. With the default provider it holds Namespace `secrets-store`, ServiceAccount `eso-store`, Role `eso-store` (secrets get/list/watch; selfsubjectrulesreviews create), RoleBinding `eso-store` (all in `secrets-store`, as `local-cluster.sh` creates them), then:
+
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: <secretStore.name | platform-secrets>
+  annotations: {argocd.argoproj.io/sync-wave: "1", argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true}
+spec:
+  provider: <secretStore.provider | {kubernetes: {remoteNamespace: secrets-store,
+             server: {caProvider: {type: ConfigMap, name: kube-root-ca.crt, namespace: secrets-store, key: ca.crt}},
+             auth: {serviceAccount: {name: eso-store, namespace: secrets-store}}}}>
+```
+
+**CLI of `scripts/render.py` (cluster):**
+
+| Invocation | Output, exit |
+|---|---|
+| `render.py` | writes; `rendered (<n> file(s) changed)`, 0 |
+| `render.py --check` | `OK: up to date`, 0; or `ERROR: rendered files are out of date — run \`devbox run render\`:` plus one `  <path>` per drift, 1 |
+| `render.py --crds` | one line `<operator> <crd>` per listed operator, in `cluster.yaml` order, 0 (validates first) |
+| `render.py --systems` | one line `<system> <owner>/<repo>` per registered system, 0 |
+| `render.py --name` | the `cluster` value, 0 |
+
+### 4. `devbox run check` (`scripts/check.py`, AC-125.10 to AC-125.12)
+
+It validates `cluster.yaml` first (render errors as above, exit 1). With no systems it prints `OK: no systems registered` and exits 0, with no token and no network. Otherwise, for each registered system, in order:
+
+1. Clone `main` shallowly with `gh` (token from `GH_TOKEN`; in CI `GH_TOKEN: ${{ secrets.SYSTEMS_TOKEN }}`). On failure:
+   `ERROR: <system>: cannot read <owner>/<repo> (main): <first line of gh's error>; the check needs a token with Contents: read on it (CI: the SYSTEMS_TOKEN secret; locally: gh auth login)`.
+2. `applications/<system>/system.yaml` missing: `ERROR: <system>: <owner>/<repo> has no applications/<system>/system.yaml on main`.
+3. Load each `applications/*/system.yaml` with `system_render.load_system`. A `RenderError` gives `ERROR: <system>: <owner>/<repo> does not render with this cluster's platform release <cluster release>: <error>`.
+4. For every loaded system `<s>` and every environment `<env>` in `ENVS`:
+   - without `operators: owner`: `ERROR: <s> (<env>): would install operators itself: set environments.<env>.operators: owner in <owner>/<repo>`;
+   - needed operators (each needed one not in `operators` gives `ERROR: <s> (<env>): needs <operator>, which cluster.yaml does not list in operators`):
+     - `OPERATOR_OF_TYPE[type]` for each in-cluster resource instance in `<env>` (`resource_instances`, `external` false, type in the table);
+     - `external-secrets` when a component running in `<env>` has effective `secrets` or any `secretRefs`, or a used resource instance in `<env>` is external, or an in-cluster bucket instance runs in `<env>` (decision 4);
+     - `kyverno` when `<env>` is in `policy_envs(services, cfg)` (decision 5).
+5. Release: when the system repo's release differs from the cluster's (decision 6): `WARNING: <system> is on platform <x>, this cluster repo on <y>` (never fails).
+
+Output order: all `WARNING:` and `ERROR:` lines per system as found. If no `ERROR` line was printed, one line per registered system follows, `OK: <system> <owner>/<repo> needs: <sorted operators, comma-separated | none>` (the union over environments and the repo's systems), and the exit code is 0. Otherwise the last line is `FAILED: <n> problem(s)` and the exit code is 1.
+
+`check.py --urls` (used by `cluster-up`) prints one line `<system> <host>` per distinct hostname in the cloned repo's `applications/*/overlays/*/*/httproute.yaml` (`spec.hostnames`). It exits 0 even when a repo cannot be read: it prints `WARNING: <system>: cannot read <repo>` on stderr.
+
+### 5. Bootstrap (`scripts/bootstrap.sh`, AC-125.9)
+
+`KUBE_CONTEXT=<ctx> REPO_TOKEN=<token> devbox run bootstrap`, run by a human once:
+
+1. No `KUBE_CONTEXT`: print `Set KUBE_CONTEXT to the cluster to bootstrap, e.g. KUBE_CONTEXT=my-cluster devbox run bootstrap. Contexts:` and the contexts; exit 1.
+2. No `REPO_TOKEN`: `ERROR: set REPO_TOKEN to a read-only token (Contents: read) for the cluster repo and every system repo under https://github.com/<org>`; exit 1.
+3. `uv run scripts/render.py --check` must pass (exit 1 otherwise).
+4. No namespace `argocd`: `ERROR: Argo CD is not installed in <ctx> (it is a cluster prerequisite)`; exit 1.
+5. Apply Secret `argocd/github-creds` with label `argocd.argoproj.io/secret-type=repo-creds`, `url=https://github.com/<org>`, `username=<org>`, `password=$REPO_TOKEN` (`--dry-run=client -o yaml | kubectl apply`: idempotent; the same name `local-cluster.sh` uses).
+6. `kubectl apply -n argocd -f cluster/operators-root.yaml`.
+7. For each `<op> <crd>` of `render.py --crds`: poll `kubectl get crd <crd>` every 3 s, at most 200 times (10 minutes). On timeout:
+   `ERROR: the CRD <crd> did not appear within 10 minutes.` and `  fix: inspect the Argo CD application operator-<op>: kubectl --context <ctx> -n argocd get application operator-<op> -o yaml`; exit 1.
+8. `kubectl apply -n argocd -f cluster/systems-root.yaml`. Every kubectl call passes `--context "$KUBE_CONTEXT"`.
+
+### 6. Local cluster (AC-125.15)
+
+**`local-cluster.sh` (gitops-app), `WITH_SYSTEM` (default `1`).** With `WITH_SYSTEM=0`:
+- `LOCAL_CLUSTER` is required (`ERROR: WITH_SYSTEM=0 needs LOCAL_CLUSTER`, exit 2). No `applications/` directory is needed, and `app` is empty.
+- `up`: the port checks, k3d create or reuse, the Gateway, and the `WITH_ESO`, `WITH_KYVERNO`, `WITH_LGTM`, `WITH_CNPG` and `WITH_SEAWEEDFS` blocks (callers pass `0`). With `WITH_ARGO=1` it also installs Argo CD and the `github-creds` credential. It then prints `Cluster k3d-<name> is ready (no system: WITH_SYSTEM=0) on host port <port>` and exits 0, before the namespaces loop, `operators/root.yaml` and `bootstrap/`.
+- `down`: as today.
+- With `WITH_SYSTEM=1` the behaviour, and every message, is unchanged.
+
+**`scripts/cluster-up.sh` (cluster)**, run by `devbox run cluster-up`:
+1. `name=${LOCAL_CLUSTER:-$(render.py --name)-local}`. The token is taken as in `local-cluster.sh`: `GH_TOKEN`, else `gh auth token`; `REPO_TOKEN` and `PULL_TOKEN` default to it.
+2. `WITH_SYSTEM=0 WITH_ESO=0 WITH_KYVERNO=0 WITH_LGTM=0 WITH_CNPG=0 WITH_SEAWEEDFS=0 LOCAL_CLUSTER=$name bash scripts/local-cluster.sh up`. It reads `github_org` from `.copier-answers.yml`, which equals `org` (decision 1).
+3. For each system of `render.py --systems` and each of `dev staging prod`: create the namespace `<system>-<env>`, the `docker-registry` Secret `ghcr-pull` (`ghcr.io`, user `<org>`, the pull token), and patch the `default` ServiceAccount's `imagePullSecrets`, as `local-cluster.sh` does for a system.
+4. `KUBE_CONTEXT=k3d-$name REPO_TOKEN=$repo_token bash scripts/bootstrap.sh`.
+5. The host port is read from `docker port k3d-$name-serverlb 80/tcp`. Then one line per `check.py --urls` entry, `Exposed: http://<host>:<port>/   (<system>, once the workloads are running)`, and the hints `kubectl --context k3d-<name> -n argocd get applications`, `k9s --context k3d-<name>` and `devbox run cluster-down`.
+
+`devbox run cluster-down` runs `WITH_SYSTEM=0 LOCAL_CLUSTER=${LOCAL_CLUSTER:-<cluster>-local} bash scripts/local-cluster.sh down`.
+
+### 7. `cplat cluster` (`scripts/cplat/clusterrepo.py`; AC-125.1, AC-125.7, AC-125.8)
+
+All three verbs take `--dry-run` (they print the plan as a `Report`, like `system new`) and `--json`. Errors are `core.PlatformError` (`ERROR: <text>` plus `  fix: <hint>`, exit 1) and change nothing.
+
+**`cplat cluster new <name> [--org O] [--public] [--dir D] [--no-github] [--ref R] [--skip-tasks]`**
+- `<name>` must match `^[a-z]([a-z0-9-]{0,38}[a-z0-9])?$`. Otherwise: `invalid cluster name '<name>'`, hint `lowercase letters, digits and hyphens, at most 40 characters, starting with a letter and not ending with a hyphen`.
+- With gh, when `gh repo view <org>/<name>` succeeds: `GitHub repository <org>/<name> already exists`, hint `choose another name`.
+- Otherwise it delegates to `newsvc` with `[<name>, "--description", "Cluster repo for <name>", "--shape", "cluster-gitops", "--org", O, "--data", "owner=<O>", ...]`, private unless `--public`. Report title `New cluster repo: <org>/<name>`. Next steps, in order:
+  `cd <name>`;
+  `list the operators the cluster installs in cluster.yaml (operators: [...]) and run devbox run render`;
+  `let CI read the systems: gh secret set SYSTEMS_TOKEN -R <org>/<name> (a fine-grained token with Contents: read on the system repos)`;
+  `/cluster:add <owner>/<system-gitops-repo> for each system`;
+  `once per cluster: KUBE_CONTEXT=<ctx> REPO_TOKEN=<read-only token> devbox run bootstrap (local: devbox run cluster-up)`.
+
+**`cplat cluster add <owner>/<repo> [--name S] [--repo-dir D]`**, in a cluster repo (`D/cluster.yaml`; otherwise `not a cluster repo: <D> has no cluster.yaml`, hint `run it in the cluster repo (/cluster:new creates one)`):
+- Requires a clean tree (same error as `gitops.require_clean`).
+- Reads `gh api repos/<repo>/contents/applications?ref=main`, then `applications/<d>/system.yaml` for each directory. Failures:
+  - `cannot read <repo>: <gh error>`, hint `check the name and that your gh login can read it`;
+  - `<repo> is not a system's gitops repo: no applications/<system>/system.yaml on main`;
+  - several systems and no `--name`: `<repo> holds several systems (<a, b>): pass --name`;
+  - `--name` not among them: `<repo> has no applications/<name>/system.yaml on main`.
+- Already listed (same name or same repo): `<system> is already registered (systems.<x>: <repo>)`. Repo owner ≠ `org`: `<repo> is outside org '<org>'`.
+- Otherwise it adds `systems.<system>: {repo: <repo>}` to `cluster.yaml` with comments preserved (ruamel), runs `uv run scripts/render.py`, then branch `cluster/add-<system>`, commit `feat(cluster): install <system> from <repo>` (signed off), push, and `gh pr create`. If render fails, `cluster.yaml` is restored and the render error is raised. Output: the PR URL, and the next step `merge it: Argo CD then syncs <repo>'s bootstrap/; the CI check names any operator the system still needs`.
+
+**`cplat cluster remove <system> [--repo-dir D]`**
+- Unknown name: `unknown system '<system>' (registered: <a, b | none>)`.
+- Otherwise it removes the entry, renders (`cluster/systems/<system>.yaml` disappears), then branch `cluster/remove-<system>`, commit `feat(cluster): remove <system>`, push and PR. It always prints:
+  `kept in the cluster: the namespaces <system>-dev, <system>-staging, <system>-prod, the Argo CD application <system>-root and everything it created, and all data stay until a human deletes them (system-<system> has no resources finalizer, so merging deletes nothing)`.
+
+`cplat.py`: `NOUNS["cluster"] = {"new": ("clusterrepo", ["new"]), "add": ("clusterrepo", ["add"]), "remove": ("clusterrepo", ["remove"])}`, plus a usage line in the module docstring.
+
+### 8. Doctor in a cluster repo (AC-125.13)
+
+When `detect-shape.sh` resolves `cluster-gitops` and `kubectl` is on PATH, `check_repo` adds, after the repo shape and version rows:
+
+- per listed operator `<op>`: name `operator <op>`. The installed version is the image tag (without a leading `v`) of the first Deployment matching the row's `selector` (default `app.kubernetes.io/name=<chart>`) in all namespaces. The expected version is `operator_version` of the platform's `OPERATORS`.
+  - equal: OK `installed <have>, expected <want> (cluster.yaml)`;
+  - missing: WARN `not installed in the current kube context, expected <want> (cluster.yaml)`, fix `KUBE_CONTEXT=<ctx> devbox run bootstrap (local: devbox run cluster-up)`;
+  - differs: WARN `installed <have>, expected <want> (cluster.yaml)`, fix `sync operator-<op> in Argo CD`.
+- per registered system `<s>`: name `system <s>`. `kubectl -n argocd get application system-<s> -o jsonpath={.status.sync.status} {.status.health.status}`.
+  - `Synced Healthy`: OK `system-<s>: Synced, Healthy`;
+  - other states: WARN `system-<s>: <sync>, <health>`, fix `kubectl -n argocd get application system-<s> -o yaml`;
+  - not found: WARN `system-<s>: no such application in the current kube context`, fix `KUBE_CONTEXT=<ctx> devbox run bootstrap`.
+
+An unreadable `cluster.yaml` gives one WARN row `cluster.yaml`, fix `devbox run render`.
+
+### 9. Shape registry (AC-125.1, AC-125.17)
+
+```yaml
+- id: cluster-gitops
+  plugin: cluster
+  template: cluster-gitops
+  deployable: false
+  test_globs: ["tests/**/*"]
+  ci_checks: ["quality (render-check + kustomize build + kubeconform)", "check (registered systems)", "security (detect-secrets)", "ci-extra"]
+  validation: {selector: null}
+  library: false
+  detection: {copier_src: templates/cluster-gitops, sniff: ["cluster.yaml + cluster/operators-root.yaml"]}
+  default_stack: {kind: argocd-app-of-apps}
+  status: stable
+  adr: [60]
+```
+
+The `detect-shape.sh` sniff comes before the gitops-app sniff: `cluster.yaml` and `cluster/operators-root.yaml` both exist → `cluster-gitops`. `shapecmd` gives `unsupported`: `/component:* commands do not apply to a cluster repo; use /cluster:add, /cluster:remove, /platform:update or /platform:doctor`.
+
+### 10. Template `templates/cluster-gitops` (AC-125.1, AC-125.17)
+
+- `copier.yml`: `_templates_suffix: .jinja`. Questions: `project_name` (validator `^[a-z]([a-z0-9-]{0,38}[a-z0-9])?$`), `description`, `github_org` (default `ika100`), `owner` (default `{{ github_org }}`), `platform_marketplace_ref` (default `main`). `_skip_if_exists`: `.secrets.baseline.json`, `.claude/project-notes.md`, `README.md`, `.github/ISSUE_TEMPLATE/**`, `cluster.yaml`, `cluster/**`. `_tasks` as in gitops-app.
+- `devbox.json` packages: uv, kustomize, kubeconform, k3d, detect-secrets, jq, git, gh, kubectl, k9s (the gitops-app pins). Scripts:
+  - cluster: `render`, `render-check`, `check` (`uv run scripts/check.py`), `bootstrap` (`bash scripts/bootstrap.sh`), `cluster-up` (`bash scripts/cluster-up.sh`), `cluster-down` (§6); no `cluster-ui` (decision 12);
+  - `validate`: render `--check`, `kustomize build cluster` into a temp file, kubeconform `-strict -ignore-missing-schemas` with the datreeio catalog on that output;
+  - the contract recipes: `lint`, `lint-fix`, `quality`, `test`, `test-fast` (`render --check`), `secrets-scan`, `secrets-baseline`, `security`;
+  - `ci`: `devbox run validate && devbox run check && devbox run security && <CI_EXTRA_STEP>`.
+
+  There are no deps recipes.
+- `.github/workflows/ci.yml`: jobs `quality (render-check + kustomize build + kubeconform)` (`devbox run quality`), `check (registered systems)` (`devbox run check` with `GH_TOKEN: ${{ secrets.SYSTEMS_TOKEN }}`), `security (detect-secrets)`, `ci-extra`, `pr-title`. On push to main and pull_request. The file is not `.jinja`, so `${{ }}` stays verbatim.
+- `.claude/settings.json.jinja` enables `cluster`, `platform`, `issue`, `shared` and allows `Bash(git push -u origin cluster/*)`. `CLAUDE.md.jinja` has `## Where your additions go` and `@.claude/project-notes.md`.
+- The initial `cluster/` is the render of the default `cluster.yaml`: `operators-root.yaml.jinja` and `systems-root.yaml.jinja` (with `{{ github_org }}/{{ project_name }}`), `kustomization.yaml`, `operators/.gitkeep`, `systems/.gitkeep`. `devbox run render` right after `copier copy --defaults` changes nothing.
+
+### 11. End-to-end (`tests/e2e/cluster.sh`, AC-125.16)
+
+1. Copy gitops-app twice (`alpha-gitops`, `beta-gitops`; `--skip-tasks`, `github_org=e2e`). Each gets a `system.yaml` with one service component `api` (image `ghcr.io/e2e/<s>-api`, `uses: [db]`) and a resource `db: {type: database}`, with `operators: owner` in dev, staging and prod. Render; neither has `operators/`.
+2. Copy cluster-gitops (`e2e-cluster`, `github_org=e2e`) with `operators: [cloudnative-pg, external-secrets]` and systems `alpha` and `beta`. Render, and read the pins from `cluster/operators/cloudnative-pg.yaml` and `cluster/operators/external-secrets.yaml`.
+3. In `alpha-gitops`: `LOCAL_CLUSTER=e2e-cluster-local LOCAL_HTTP_PORT=${E2E_CLUSTER_PORT:-8098} WITH_ARGO=0 WITH_CNPG=1 CNPG_VERSION=<pin> WITH_ESO=1 ESO_VERSION=<pin> WITH_KYVERNO=0 WITH_LGTM=0 WITH_SEAWEEDFS=0 bash scripts/local-cluster.sh up` (the operators once).
+4. `kubectl apply -n <s>-dev -k applications/<s>/addons/dev/db` for both (creating `beta-dev` first). Both Clusters reach `Cluster in healthy state` within 400 s.
+5. `kubectl get deploy -A -l app.kubernetes.io/name=cloudnative-pg -o name | wc -l` is `1`. Cleanup runs `local-cluster.sh down` unless `E2E_KEEP=1`. The script prints `E2E CLUSTER OK`.
+6. `.github/workflows/e2e.yml` gets a job `e2e-cluster` (`name: e2e cluster (two systems, one operator)`, timeout 20 min, runs `bash tests/e2e/cluster.sh`), and `templates/cluster-gitops/**` joins the paths.
+
+## Risks
+
+- **Copier symlink handling.** If Copier copies a symlink pointing outside the template as a link (or refuses it), the generated repo breaks. t3's done-when includes a copy test. It did fail (Copier refuses the link); the build took the fallback, a byte-equality check plus a sync step (decision 13).
+- **`/platform:update` baseline of a symlinked template.** `update.render_baseline` archives only `templates/<template>`, so the links dangle there. t7 archives `templates` instead (the baseline is advisory either way).
+- **Parallel specs 117–121** add `OPERATORS` rows and operator blocks in `local-cluster.sh`. t1 and t2 touch other hunks (rows appended at the end of the table; one early-exit block after the Argo CD credentials). Their new rows need `crd`, and `selector` when the operator's Deployment is not labelled `app.kubernetes.io/name=<chart>`.
+- **An operator added in the same PR as the system that needs it.** The system's ApplicationSet apps have no retry. The guide says to add operators in an earlier PR, and the check makes the gap visible.
+- **Takeover of `seaweedfs` or others.** Takeover prunes `operator-<x>` when the cluster does not list an operator that the system's `operators/apps` had. Without a finalizer the operator stays but is unmanaged. The guide's first step is to list every operator `operators/apps/` holds.

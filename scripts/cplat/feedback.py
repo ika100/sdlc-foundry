@@ -1,6 +1,6 @@
 """`feedback`: turn a problem or idea into a GitHub issue on the platform repo, with diagnostics and without secrets.
 
-Agents and commands tell the user to run `/shared:report-issue` when something fails in a way that looks like a platform
+Agents and commands tell the user to run `/issue:report` when something fails in a way that looks like a platform
 defect. This command drafts the issue (versions, shape, OS, tool availability, the error text) and shows it; with
 `--submit` it files it through `gh`, or prints a prefilled browser link when `gh` is missing or not logged in.
 Nothing is sent unless `--submit` is passed, and every piece of text goes through `redact()` first.
@@ -81,7 +81,7 @@ def build_body(kind: str, what: str, command: str | None, details: str, repo: Pa
         parts += ["## Command / step", f"`{redact(command)}`", ""]
     if details.strip():
         parts += ["## Output", "```", redact(tail(details)), "```", ""]
-    parts += ["## Environment", *diagnostics(repo), "", "_Filed with `/shared:report-issue`; secrets, e-mail addresses and home-directory names were removed automatically._"]
+    parts += ["## Environment", *diagnostics(repo), "", "_Filed with `/issue:report`; secrets, e-mail addresses and home-directory names were removed automatically._"]
     return "\n".join(parts)
 
 
@@ -110,7 +110,7 @@ def create_issue(title: str, body: str, labels: list[str]) -> str:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cplat feedback", description=__doc__)
     p.add_argument("--kind", choices=["bug", "idea"], default="bug")
-    p.add_argument("--title", required=True, help="one line, e.g. 'new-service fails on Python 3.14'")
+    p.add_argument("--title", required=True, help="one line, e.g. 'component new fails on Python 3.14'")
     p.add_argument("--what", default="", help="what you did, what you expected, what happened")
     p.add_argument("--command", help="the slash command or script that was running")
     p.add_argument("--details-file", help="file with the error output ('-' = stdin)")

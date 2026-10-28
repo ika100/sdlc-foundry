@@ -77,7 +77,7 @@ def poll(repo_dir: Path, *, gitops_repo: str, state_file: Path, dry_run: bool, a
     lines: list[str] = []
     red = False
     apps_dir = repo_dir / "applications"
-    dirs = sorted(d for d in apps_dir.glob("*") if (d / "services.yaml").exists()) if apps_dir.is_dir() else []
+    dirs = sorted(d for d in apps_dir.glob("*") if any((d / f).exists() for f in ("system.yaml", "services.yaml", "app.yaml"))) if apps_dir.is_dir() else []
     if app:
         dirs = [d for d in dirs if d.name == app]
     state: dict | None = None

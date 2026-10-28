@@ -149,9 +149,9 @@ def test_headless_budget_option_applies_after_multiplying(hl_repo, tmp_path, mon
 def test_a_ship_under_headless_uses_the_headless_ledger(hl_repo, tmp_path, monkeypatch):
     """AC-102.2: the ship a headless session starts does not open a ledger; `budget show` names the headless run as root."""
     drop_tracks(hl_repo)
-    fake_claude(tmp_path, monkeypatch, f'"{sys.executable}" "{CPLAT}" ship --repo . start 7 >/dev/null && '
+    fake_claude(tmp_path, monkeypatch, f'"{sys.executable}" "{CPLAT}" component ship --repo . start 7 >/dev/null && '
                                        f'"{sys.executable}" "{CPLAT}" budget show --json > shown.json && '
-                                       f'"{sys.executable}" "{CPLAT}" ship --repo . phase done >/dev/null')
+                                       f'"{sys.executable}" "{CPLAT}" component ship --repo . phase done >/dev/null')
     assert headless.main(["/svc:ship 7", "--repo", str(hl_repo)]) == 0
     (h,) = [r for r in buffered_lines() if r["kind"] == "headless"]
     shown = json.loads((hl_repo / "shown.json").read_text())
@@ -187,7 +187,7 @@ def test_a_product_ship_shares_its_budget_with_the_repo_ships(w, budget, capsys,
     assert data["limits"] == {"minutes": 180 * n, "invocations": 60 * n, "reruns": 6 * n, "cost": 15 * n}
     clone = w.clone("shop-api")
     make(clone, status="approved")
-    assert ship.main(["--repo", str(clone), "start", REPO_SPEC, "--product", str(w.gitops)]) == 0
+    assert ship.main(["--repo", str(clone), "start", REPO_SPEC, "--system-dir", str(w.gitops)]) == 0
     assert len(ledgers()) == 1
     monkeypatch.chdir(clone)
     assert show(budget, capsys)["root"] == st["run_id"]
@@ -271,7 +271,7 @@ def test_the_pre_tool_use_hook_gates_task_and_agent():
 
 def test_cplat_knows_budget():
     """AC-102.3: the command is registered and documented."""
-    assert cplat.COMMANDS["budget"] == "budget" and "cplat.py budget" in cplat.__doc__
+    assert cplat.PLUMBING["budget"] == "budget" and "cplat budget" in cplat.__doc__
 
 
 def test_headless_starts_no_session_after_the_budget_is_used_up(hl_repo, tmp_path, monkeypatch, capsys):
@@ -317,7 +317,7 @@ def test_a_ship_stopped_by_the_budget_is_escalated_with_the_decision_cause(here,
     st = ship.load_state(here)
     assert st["escalated"] == "budget exhausted: minutes" and st["cause"] == "decision"
     (r,) = stored(store)
-    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "budget exhausted: minutes", "cause": "decision"}
+    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": "budget exhausted: minutes", "cause": "decision", "cause_source": "given"}
 
 
 def test_the_record_holds_the_budget_section(here, gh, budget, clock, usage, store):
@@ -638,7 +638,7 @@ def test_a_headless_budget_stop_is_an_escalation_with_the_decision_cause(hl_repo
     fake_claude(tmp_path, monkeypatch, "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m step")
     assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--max-runs", "5", "--budget", "invocations=1"]) == 1
     (h,) = [r for r in buffered_lines() if r["kind"] == "headless"]
-    assert h["escalation"] == {"reason": "budget exhausted: invocations", "cause": "decision"}
+    assert h["escalation"] == {"reason": "budget exhausted: invocations", "cause": "decision", "cause_source": "given"}
 
 
 def test_unreadable_usage_is_an_unknown_cost_never_zero(here, gh, budget, monkeypatch, capsys):

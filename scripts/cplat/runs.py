@@ -6,7 +6,7 @@ Public API for the callers (ship, pr wait, headless, doctor) and for later specs
   phase / ci_round / rerun / event / set_section / add_to / filed    change it in place (never raise, print nothing)
   finish(run_id, outcome, escalation=, fields=)                      redact, buffer, flush; at most one stderr line
   flush(budget=, strict=) -> FlushResult                             buffer (and pending filings) -> store
-  store_status() / buffered_count() / pending_count()                for `cplat doctor`
+  store_status() / buffered_count() / pending_count()                for `cplat platform doctor`
   attach_point(repo) / link_parent(run_id)                           nested runs and headless parents
   current(repo_dir) -> run_id | None                                 the recorded run a command in repo_dir runs inside
   init(slug)                                                         create the private store repo
@@ -18,12 +18,12 @@ A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (o
   mutate(run_id, change) -> "ok"|"none"|"error" / current_run(repo) / mark_incomplete(run_id, section, problem)
                                                                      hooks for agent metrics (spec 089, runs_agents)
 
-  cplat runs init <owner/name> | flush | report [--json] [--since DAYS] [--repo R]
+  cplat platform runs init <owner/name> | flush | report [--json] [--since DAYS] [--repo R]
               [--agents [--by-version] [--agent NAME] [--shape SHAPE] | --benchmarks]
-  cplat runs begin <kind> [--spec S] [--budget KEY=VALUE] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
-  cplat runs agent <event> ...                                       agent metrics of the current run (spec 089)
-  cplat runs usage <run_id> | --session <id> [--json]                tokens and estimated cost per run (spec 099)
-  cplat runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR] fixed task on the sample repo (spec 099)
+  cplat platform runs begin <kind> [--spec S] [--budget KEY=VALUE] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
+  cplat platform runs agent <event> ...                                       agent metrics of the current run (spec 089)
+  cplat platform runs usage <run_id> | --session <id> [--json]                tokens and estimated cost per run (spec 099)
+  cplat platform runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR] fixed task on the sample repo (spec 099)
 
 Usage (spec 099, ADR-035): `start` registers the Claude Code session as a claim, `finish` adds the `usage` section
 from the local transcripts (runs_usage) and fills missing `gates` of ship / build runs with "not run".
@@ -46,13 +46,14 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 import core
+import escalation_rules
 import feedback
 import runs_report
 import runs_store
 from core import PlatformError
 
 SCHEMA = 1
-KINDS = ("ship", "build", "headless", "pr-wait", "fleet", "retro", "product-ship")   # documentation; any valid kind works
+KINDS = ("ship", "build", "headless", "pr-wait", "fleet", "retro", "product-ship", "fix")   # documentation; any valid kind works
 OUTCOMES = ("done", "escalated", "failed", "abandoned")
 CAUSES = ("platform", "code", "decision", "environment", "unknown")
 GATES = ("acceptance", "security")
@@ -208,6 +209,64 @@ def buffered_count() -> int:
         return 0
 
 
+_AUDIT_PLAIN = {"schema", "event_id", "at", "kind", "system", "environment", "component", "type", "id", "name", "repo", "number",
+                "url", "run_id", "version", "previous", "signal", "level", "effective", "commit", "store", "hash", "undoes", "pr"}
+_AUDIT_REQUIRED = ("event_id", "at", "kind", "actor")
+
+
+def _scrub_audit(value, key: str = ""):
+    if isinstance(value, dict):
+        return {k: _scrub_audit(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_audit(v, key) for v in value]
+    if isinstance(value, str) and key not in _AUDIT_PLAIN:
+        return feedback.redact(value)
+    return value
+
+
+def _read_audit_buffer() -> list[dict]:
+    return [i for i in _read_lines("audit-buffer.jsonl") if "event_id" in i and "at" in i]
+
+
+def _write_audit_buffer(items: list[dict]) -> None:
+    _atomic_write(state_dir() / "audit-buffer.jsonl", "".join(_dump(i) + "\n" for i in items))
+
+
+def _flush_audit(store: runs_store.Store, deadline: float) -> None:
+    """Write the buffered audit events (one commit per batch) and drop what was written; raises StoreError."""
+    items = sorted(_read_audit_buffer(), key=lambda e: str(e["at"]))
+    for i in range(0, len(items), BATCH):
+        batch = items[i:i + BATCH]
+        store.put({runs_store.audit_path(e): _dump(e) + "\n" for e in batch}, f"audit: {len(batch)} event(s)", deadline=deadline)
+        ids = {e["event_id"] for e in batch}
+        with _locked():
+            _write_audit_buffer([x for x in _read_audit_buffer() if x["event_id"] not in ids])
+
+
+def record_audit(event: dict) -> str | None:
+    """Write an audit event to the run store at once; on any failure keep it in the local buffer.
+
+    Returns None when it is in the store, else the reason it is only buffered. Never raises, never prints."""
+    try:
+        if not all(event.get(k) for k in _AUDIT_REQUIRED):
+            return "audit event is incomplete"
+        runs_store.audit_path(event)
+        item = _scrub_audit(event)
+        with _locked():
+            _write_audit_buffer([x for x in _read_audit_buffer() if x["event_id"] != item["event_id"]] + [item])
+        slug = configured_repo()
+        if slug is None:
+            return "no run store: CPLAT_RUNS_REPO is not set"
+        deadline = monotonic() + BUDGET_SECONDS
+        store = open_store(slug)
+        if store.visibility(deadline=deadline) != "private":
+            return f"run store {slug} is public"
+        _flush_audit(store, deadline)
+        return None
+    except Exception as e:  # noqa: BLE001  (recording never changes an exit code)
+        return f"audit event buffered locally: {e}"
+
+
 def _read_filings() -> list[dict]:
     return [e for e in _read_lines("filings.jsonl") if "run_id" in e and "signature" in e]
 
@@ -320,7 +379,7 @@ def attach_point(repo_dir: Path) -> str | None:
 def current(repo_dir: Path) -> str | None:
     """The recorded run a command in repo_dir runs inside (spec 088), or None.
 
-    Candidates in order: the repo's ship run, the `cplat runs begin` pointer, $CPLAT_RUN_PARENT. The first one with an
+    Candidates in order: the repo's ship run, the `cplat platform runs begin` pointer, $CPLAT_RUN_PARENT. The first one with an
     active record wins. Never raises."""
     try:
         candidates: list[str | None] = [attach_point(repo_dir)]
@@ -545,8 +604,11 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
             rec["ended_at"] = now
             rec["outcome"] = outcome if outcome in OUTCOMES else "failed"
             if escalation is not None:
-                cause = escalation.get("cause")
-                rec["escalation"] = {"reason": str(escalation.get("reason", "")), "cause": cause if cause in CAUSES else "unknown"}
+                reason = str(escalation.get("reason", ""))
+                res = escalation_rules.resolve(escalation.get("cause"), reason)
+                rec["escalation"] = {"reason": reason, "cause": res.cause, "cause_source": res.source}
+                if res.rule:
+                    rec["escalation"]["rule"] = res.rule
             for k, v in (fields or {}).items():
                 if k not in RESERVED:
                     rec[k] = v
@@ -690,10 +752,10 @@ def flush(*, budget: float = BUDGET_SECONDS, strict: bool = False) -> FlushResul
     deadline = monotonic() + budget
     slug = configured_repo()
     if slug is None:
-        res = _result(None, "unset", "no run store: set CPLAT_RUNS_REPO=<owner/name>, see cplat runs init")
+        res = _result(None, "unset", "no run store: set CPLAT_RUNS_REPO=<owner/name>, see cplat platform runs init")
         if strict:
             raise PlatformError("no run store configured (CPLAT_RUNS_REPO is not set)",
-                                hint="cplat runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
+                                hint="cplat platform runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
         return res
     store = open_store(slug)
 
@@ -732,6 +794,12 @@ def flush(*, budget: float = BUDGET_SECONDS, strict: bool = False) -> FlushResul
             _write_buffer([x for x in _read_buffer() if _key(x) not in keys])
         followups += sum(1 for item in batch if item.get("followup"))
         written += sum(1 for item in batch if not item.get("followup"))
+    try:
+        _flush_audit(store, deadline)
+    except runs_store.StoreError as e:
+        res = unreachable(str(e))
+        res.written, res.followups = written, followups
+        return res
     return _result(slug, None, "", written, followups)
 
 
@@ -764,7 +832,7 @@ def store_status(timeout: float = 10.0) -> StoreStatus:
 def init(slug: str) -> list[str]:
     """Create the private store repo if it is missing; raises PlatformError for a public repo or a gh failure."""
     if not _SLUG_RE.match(slug or ""):
-        raise PlatformError(f"`{slug}` is not owner/name", hint="cplat runs init <owner/name>")
+        raise PlatformError(f"`{slug}` is not owner/name", hint="cplat platform runs init <owner/name>")
     store = open_store(slug)
     lines = []
     try:
@@ -803,11 +871,11 @@ def _report(ns: argparse.Namespace) -> int:
     if ns.benchmarks and ns.agents:
         raise PlatformError("--benchmarks and --agents cannot be combined", hint="run them as two reports")
     if not ns.agents and (ns.by_version or ns.agent or ns.shape):
-        raise PlatformError("--by-version, --agent and --shape need --agents", hint="cplat runs report --agents ...")
+        raise PlatformError("--by-version, --agent and --shape need --agents", hint="cplat platform runs report --agents ...")
     slug = configured_repo()
     if slug is None:
         raise PlatformError("no run store configured (CPLAT_RUNS_REPO is not set)",
-                            hint="cplat runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
+                            hint="cplat platform runs init <owner/name>, then set CPLAT_RUNS_REPO=<owner/name>")
     store = open_store(slug)
     now = utcnow()
     days = [now.date() - datetime.timedelta(days=n) for n in range(ns.since, -1, -1)]
@@ -843,7 +911,7 @@ def _positive(text: str) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat runs", description="Private run records (spec 087, ADR-032).")
+    p = argparse.ArgumentParser(prog="cplat platform runs", description="Private run records (spec 087, ADR-032).")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init", help="create the private run store repo").add_argument("slug", help="owner/name")
     sub.add_parser("flush", help="write the local buffer to the store")

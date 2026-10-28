@@ -23,7 +23,7 @@ def test_every_plugin_root_reference_resolves_inside_its_plugin():
         for rel in re.findall(r"\$\{CLAUDE_PLUGIN_ROOT\}/([\w./-]+[\w])", md.read_text()):
             refs.append((md, PLUGINS / plugin / rel))
     assert refs, "expected the agents to reference the spec-format skill"
-    missing = [f"{md.relative_to(ROOT)} -> {target.relative_to(ROOT)}" for md, target in refs if not target.is_file()]
+    missing = [f"{md.relative_to(ROOT)} -> {target.relative_to(ROOT)}" for md, target in refs if not target.exists()]
     assert not missing
 
 
@@ -80,7 +80,7 @@ def test_agents_doc_matches_the_agent_files():
     blocks = re.split(r"^### `([\w-]+)` plugin.*$", doc, flags=re.M)
     listed = {}
     for plugin, body in zip(blocks[1::2], blocks[2::2]):
-        for name, model in re.findall(r"^\| `([\w-]+)` \| (\w+) \|", body.split("\n## ", 1)[0], re.M):
+        for name, model in re.findall(r"^\| `(?:[\w-]+:)?([\w-]+)` \| (\w+) \|", body.split("\n## ", 1)[0], re.M):
             listed[(plugin, name)] = model
     actual = {(p.parent.parent.name, p.stem): front(p)["model"] for p in PLUGINS.glob("*/agents/*.md")}
     assert listed == actual
@@ -88,13 +88,13 @@ def test_agents_doc_matches_the_agent_files():
 
 # ---------------- svc 3.0 commands (STORY-039) ----------------
 
-COMMANDS = PLUGINS / "svc" / "commands"
+COMMANDS = PLUGINS / "component" / "commands"
 
 
-@pytest.mark.parametrize("name", ["spec", "plan", "build", "verify", "specs"])
+@pytest.mark.parametrize("name", ["spec", "plan", "build", "verify"])
 def test_spec_commands_exist_with_a_usage_line(name):
     meta = front(COMMANDS / f"{name}.md")
-    assert f"/svc:{name}" in meta["description"] and len(meta["description"]) < 260
+    assert f"/component:{name}" in meta["description"] and len(meta["description"]) < 260
 
 
 def test_spec_command_asks_the_user_and_never_approves_alone():
@@ -117,31 +117,32 @@ def test_build_writes_tests_first_verifies_and_resumes():
     assert "skip tasks with `done: true`" in text and "cplat spec task-done" in text and "set-status <id> done" in text
 
 
-@pytest.mark.parametrize("name", ["quick-task", "fix-bug"])
+@pytest.mark.parametrize("name", ["fix"])
 def test_small_pipelines_stop_at_a_spec_change(name):
-    assert "/svc:spec --amend <NNN>" in (COMMANDS / f"{name}.md").read_text()
+    assert "/component:spec --amend <NNN>" in (COMMANDS / f"{name}.md").read_text()
 
 
 # ---------------- app 1.0 commands (STORY-040) ----------------
 
-APP = PLUGINS / "app"
+APP = PLUGINS / "system"
 
 
-@pytest.mark.parametrize("name", ["spec", "plan", "build", "specs"])
+@pytest.mark.parametrize("name", ["spec", "plan", "ship"])
 def test_app_commands_exist_with_a_usage_line(name):
     meta = front(APP / "commands" / f"{name}.md")
-    assert f"/app:{name}" in meta["description"] and len(meta["description"]) < 260
+    assert f"/system:{name}" in meta["description"] and len(meta["description"]) < 260
 
 
 def test_app_plan_and_build_need_an_approved_product_spec():
-    for name in ("plan", "build"):
-        assert "spec check <id> --require approved" in (APP / "commands" / f"{name}.md").read_text() \
-            or "spec check <spec_id> --require approved" in (APP / "commands" / f"{name}.md").read_text()
+    plan = (APP / "commands" / "plan.md").read_text()
+    assert "spec check <id> --require approved" in plan or "spec check <spec_id> --require approved" in plan
+    # /system:ship has no build step of its own: cplat system ship start refuses a spec that is not approved
+    assert "a spec that is not approved" in (APP / "commands" / "ship.md").read_text()
 
 
 def test_app_build_runs_each_repo_through_its_own_spec_and_never_answers_questions():
-    text = (APP / "commands" / "build.md").read_text()
-    assert "/svc:spec --from-plan <abs plan path> <repo-id>" in text and "never answer them" in text
+    text = (APP / "commands" / "ship.md").read_text()
+    assert "/component:spec --from-plan <absolute plan path> <repo-id>" in text and "never answer them" in text
     assert "never merge" in text.lower()
 
 
@@ -151,9 +152,9 @@ def test_planner_assigns_criteria_instead_of_writing_prompts():
 
 
 def test_repo_specs_come_from_the_deterministic_slice():
-    text = (PLUGINS / "svc" / "commands" / "spec.md").read_text()
-    assert "cplat spec new --from-plan <abs plan path> <repo-id>" in text
-    assert "Product context" in (PLUGINS / "svc" / "agents" / "product-manager.md").read_text()
+    text = (COMMANDS / "spec.md").read_text()
+    assert "cplat spec new --from-plan <abs plan path> <repo-id>" in text and "**System context**" in text
+    assert "System context" in (PLUGINS / "svc" / "agents" / "product-manager.md").read_text()
 
 
 def test_build_checks_the_worktree_base_before_fanning_out():
@@ -166,15 +167,17 @@ def test_build_checks_the_worktree_base_before_fanning_out():
 
 def test_app_build_runs_the_gitops_entry_itself():
     """AC-045.1 AC-045.3 AC-045.4: cplat operations in the gitops repo, merge first, no leftover worktree."""
-    text = (APP / "commands" / "build.md").read_text()
-    assert "cplat compose set" in text and "cplat addon add" in text and "merge first" in text and "git worktree remove" in text
-    assert "never `/svc:*`" in text
+    text = (APP / "commands" / "ship.md").read_text()
+    assert "cplat component set" in text and "cplat resource add" in text and "starts before it is merged" in text
+    # the worktree is removed by cplat system ship, not by the command file
+    assert '"worktree", "remove"' in (ROOT / "scripts" / "cplat" / "appship.py").read_text()
+    assert "is built by you in the printed worktree" in text
 
 
 def test_planner_writes_gitops_operations():
     """AC-045.2"""
     text = (APP / "agents" / "planner.md").read_text()
-    assert "gitops:" in text and "{uses: postgres, service:" in text
+    assert "gitops:" in text and "{uses: postgres, component:" in text
 
 
 def test_criteria_stay_environment_neutral():
@@ -207,7 +210,7 @@ def test_security_agent_summarises_unfixable_base_image_findings():
 
 def test_app_build_waits_for_repo_agents_in_the_foreground():
     """AC-046.1: print mode stops background agents after 600 s; foreground calls in one message still run in parallel."""
-    text = (APP / "commands" / "build.md").read_text()
+    text = (APP / "commands" / "ship.md").read_text()
     assert "foreground" in text and "never `run_in_background`" in text
 
 
@@ -254,15 +257,16 @@ def test_app_plan_pushes_the_spec_branch_and_opens_the_pr():
     assert "git push -u origin docs/spec-<spec_id>" in text and "gh pr create" in text
 
 
-def test_app_build_checks_the_plan_is_on_main():
-    """AC-050.2"""
-    pre = (APP / "commands" / "build.md").read_text().split("## Pre-flight", 1)[1].split("## Loop", 1)[0]
-    assert "origin/main" in pre and "git fetch" in pre and "local file" in pre
+def test_app_ship_checks_the_plan_is_on_main():
+    """AC-050.2: /system:ship publishes the spec and plan to main (a PR merged on green) before any repo starts."""
+    text = (APP / "commands" / "ship.md").read_text()
+    assert "## Phase `publish`" in text and "not on `main`" in text
+    assert "origin/main" in (ROOT / "scripts" / "cplat" / "appship.py").read_text()
 
 
 # ---------------- waves 4-5 (specs 051, 052) ----------------
 
-PR_COMMANDS = [COMMANDS / "build.md", COMMANDS / "quick-task.md", COMMANDS / "fix-bug.md", APP / "commands" / "build.md"]
+PR_COMMANDS = [COMMANDS / "build.md", COMMANDS / "fix.md"]
 
 
 @pytest.mark.parametrize("path", PR_COMMANDS, ids=lambda p: f"{p.parent.parent.name}:{p.stem}")
@@ -272,20 +276,15 @@ def test_pipelines_end_with_a_ready_pr_command(path):
     assert "gh pr create" in text and "PR_BODY.md" in text and "last line" in text and "not an error" in text
 
 
-def test_app_build_lists_one_pr_command_per_repo():
-    """AC-051.2"""
-    assert "one `gh pr create` command per repo" in (APP / "commands" / "build.md").read_text()
-
-
 def test_build_asks_only_for_missing_gitops_wiring():
     """AC-052.2"""
     text = (COMMANDS / "build.md").read_text()
-    assert "Provided by the product" in text and "only for" in text
+    assert "Provided by the system" in text and "only for" in text
 
 
 def test_build_stops_on_an_acceptance_test_change():
-    """AC-063.4: every `cplat spec test-diff` step in /svc:build stops on exit 1 instead of judging it."""
-    build = (PLUGINS / "svc" / "commands" / "build.md").read_text()
+    """AC-063.4: every `cplat spec test-diff` step in /component:build stops on exit 1 instead of judging it."""
+    build = (COMMANDS / "build.md").read_text()
     steps = [p for p in re.split(r"\n(?=\d+\. |After |## )", build) if "cplat spec test-diff" in p]
     assert len(steps) >= 2
     for step in steps:

@@ -176,9 +176,9 @@ def test_a_gitops_entry_with_valid_operations_passes(spec_repo):
 
 @pytest.mark.parametrize("ops, msg", [
     (["{scale: shop-api}"], "unknown gitops operation"),
-    (["{env: {A: b}, service: shop-x}"], "unknown service 'shop-x'"),
-    (["{uses: postgres}"], "needs a service"),
-    (["{addon: redis}"], "unknown addon 'redis'"),
+    (["{env: {A: b}, service: shop-x}"], "unknown component 'shop-x'"),
+    (["{uses: postgres}"], "needs a component"),
+    (["{addon: redis}"], "unknown resource 'redis'"),
 ])
 def test_invalid_gitops_operations_are_rejected(spec_repo, ops, msg):
     """AC-045.2"""

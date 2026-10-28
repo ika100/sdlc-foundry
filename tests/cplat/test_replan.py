@@ -35,7 +35,7 @@ tasks:
 
 def build(capsys, repo, *args):
     capsys.readouterr()
-    rc = cplat.main(["build", args[0], SPEC_ID, *args[1:], "--repo", str(repo)])
+    rc = cplat.main(["component", "build", args[0], SPEC_ID, *args[1:], "--repo", str(repo)])
     out = capsys.readouterr()
     return rc, out.out, out.err
 
@@ -404,11 +404,11 @@ def test_resolved_refuses_a_replanned_task_that_is_not_done(world, capsys):
 
 def test_the_rerun_prompt_gives_the_old_diff_as_reference():
     """AC-094.5: build.md hands the set-aside branch's diff to the coder as reference only."""
-    text = (core.PLATFORM_ROOT / "plugins" / "svc" / "commands" / "build.md").read_text()
+    text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
     assert "git diff HEAD...<branch>" in text
     assert "Your earlier attempt is a reference only" in text
     assert "already contains every merged task" in text
-    assert "cplat build resolved" in text
+    assert "cplat component build resolved" in text
 
 
 # ---------------- AC-094.6 a second conflict of the same task escalates ----------------
@@ -464,8 +464,8 @@ def test_replan_abort_restores_the_last_valid_plan_and_escalates(world, capsys):
 
 def test_the_prompts_send_errors_once_then_escalate_with_replan_abort():
     """AC-094.7: build.md retries the architect once on exit 1, then calls replan-abort and escalates."""
-    text = (core.PLATFORM_ROOT / "plugins" / "svc" / "commands" / "build.md").read_text()
-    assert "cplat build replan-commit" in text and "cplat build replan-abort" in text
+    text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
+    assert "cplat component build replan-commit" in text and "cplat component build replan-abort" in text
     assert "BLOCKER" in text and "once" in text
     arch = (core.PLATFORM_ROOT / "plugins" / "svc" / "agents" / "architect.md").read_text()
     assert "Re-plan mode" in arch and "BLOCKER" in arch
@@ -494,9 +494,9 @@ def test_state_without_replans_prints_one_line(world, capsys):
 
 def test_the_final_report_row_states_the_amended_plan():
     """AC-094.8 AC-094.14: build.md's Implementation row names the re-plans, the files and the clean re-run."""
-    text = (core.PLATFORM_ROOT / "plugins" / "svc" / "commands" / "build.md").read_text()
+    text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
     assert "plan amended" in text and "after merge conflicts" in text and "re-run merged cleanly" in text
-    assert "cplat build state" in text
+    assert "cplat component build state" in text
 
 
 # ---------------- AC-094.9 plan-accuracy recording (spec 089) ----------------
@@ -624,9 +624,9 @@ def test_a_conflict_leaves_no_markers_anywhere(world, capsys):
 
 
 def test_the_build_rules_forbid_hand_resolution():
-    """AC-094.12: build.md says never to edit conflicting hunks and routes conflicts through cplat build merge."""
-    text = (core.PLATFORM_ROOT / "plugins" / "svc" / "commands" / "build.md").read_text()
-    assert "Never edit conflicting hunks" in text and "cplat build merge" in text
+    """AC-094.12: build.md says never to edit conflicting hunks and routes conflicts through cplat component build merge."""
+    text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
+    assert "Never edit conflicting hunks" in text and "cplat component build merge" in text
 
 
 # ---------------- AC-094.13 the cap of 3 re-plans per build ----------------
@@ -664,8 +664,8 @@ def test_two_replans_still_leave_room_for_a_third(world, capsys):
 
 def test_an_attended_build_replans_without_asking():
     """AC-094.14: build.md re-plans without asking, also interactively, and the Final Report says so."""
-    text = (core.PLATFORM_ROOT / "plugins" / "svc" / "commands" / "build.md").read_text()
+    text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
     assert "without asking" in text and "attended" in text
     assert "plan amended" in text
-    ship = (core.PLATFORM_ROOT / "plugins" / "svc" / "commands" / "ship.md").read_text()
+    ship = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "ship.md").read_text()
     assert "re-plan" in ship.lower()

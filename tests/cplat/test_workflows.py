@@ -65,3 +65,20 @@ def test_dependabot_updates_the_template_actions_with_the_platform():
     assert len(gha) == 1
     dirs = set(gha[0].get("directories") or [gha[0].get("directory")])
     assert "/" in dirs and {f"/templates/{t.name}" for t in (_ROOT / "templates").iterdir() if (t / ".github" / "workflows").is_dir()} <= dirs
+
+
+def test_the_fix_moves_template_pins_to_the_platform_pins(tmp_path):
+    """Dependabot bumps only /.github/workflows; `pin-actions.py` (the fix the check names) aligns the templates."""
+    new, old = "a" * 40, "b" * 40
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "ci.yml").write_text(f"permissions: {{}}\njobs:\n  x:\n    steps:\n      - uses: actions/checkout@{new} # v7.0.1\n")
+    tpl = tmp_path / "templates" / "t" / ".github" / "workflows" / "ci.yml"
+    tpl.parent.mkdir(parents=True)
+    tpl.write_text(f"permissions: {{}}\njobs:\n  x:\n    steps:\n      - uses: actions/checkout@{old} # v4\n        with: {{fetch-depth: 0}}\n")
+    script = str(_ROOT / "scripts" / "pin-actions.py")
+    out = _sp.run([_sys.executable, script], capture_output=True, text=True, cwd=tmp_path)
+    assert out.returncode == 0, out.stderr
+    assert "aligned 1 reference(s)" in out.stdout
+    assert f"      - uses: actions/checkout@{new} # v7.0.1\n        with: {{fetch-depth: 0}}\n" in tpl.read_text()
+    check = _sp.run([_sys.executable, script, "--check"], capture_output=True, text=True, cwd=tmp_path)
+    assert check.returncode == 0, check.stderr

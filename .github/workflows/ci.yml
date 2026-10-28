@@ -29,6 +29,7 @@ jobs:
       go: ${{ steps.diff.outputs.go }}
       java: ${{ steps.diff.outputs.java }}
       site: ${{ steps.diff.outputs.site }}
+      cluster: ${{ steps.diff.outputs.cluster }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,14 +47,16 @@ jobs:
           fi
           echo "changed files:"; awk '{print "  " $0}' <<< "$files"
           has() { if grep -Eq "$1" <<< "$files"; then echo true; else echo false; fi; }
-          # anything that is not documentation or repository metadata can break the tested code
-          code=$(grep -Evq '^(docs/|.*\.md$|LICENSE$|NOTICE$|\.github/(ISSUE_TEMPLATE/|CODEOWNERS|PULL_REQUEST_TEMPLATE|dependabot))' <<< "$files" && echo true || echo false)
+          # anything but images and repository metadata can break the tested code: the cplat tests read the
+          # Markdown too (changelog, specs, ADRs, guides), so a release or docs-only PR still runs them
+          code=$(grep -Evq '^(docs/img/|LICENSE$|NOTICE$|\.github/(ISSUE_TEMPLATE/|CODEOWNERS|PULL_REQUEST_TEMPLATE|dependabot))' <<< "$files" && echo true || echo false)
           shared=$(has '^(scripts/|shapes\.yml$|\.github/workflows/ci\.yml$|tests/fixtures/)')
           t() { if [ "$shared" = true ] || [ "$(has "$1")" = true ]; then echo true; else echo false; fi; }
           {
             echo "code=$code"
             echo "python=$(t '^templates/(service-python|library-python)/')"
             echo "gitops=$(t '^templates/gitops-app/')"
+            echo "cluster=$(t '^templates/cluster-gitops/|^templates/gitops-app/scripts/(render\.py|local-cluster\.sh|ports\.sh)$')"
             echo "web=$(t '^templates/web-nextjs/')"
             echo "go=$(t '^templates/service-go/')"
             echo "java=$(t '^templates/service-java/')"
@@ -95,13 +98,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: shapes.yml is valid and consistent with templates, plugins and the PRD table
         run: uv run scripts/shapes.py check
+      - name: the cluster template's copies equal their gitops-app sources
+        run: uv run scripts/sync-template-copies.py --check
       - name: shape detection fixtures
         run: bash scripts/test-detect-shape.sh
       - name: relative Markdown links resolve
         run: python3 scripts/check-links.py
+      - name: pyyaml for the pin check
+        run: python3 -c 'import yaml' 2>/dev/null || uv pip install --system --break-system-packages pyyaml
+      - name: every image and chart comes from the versions table
+        run: python3 scripts/check-pins.py
       - name: every file has license and copyright metadata (REUSE)
         run: uvx --from "reuse[charset-normalizer]" reuse lint
       - name: actions are pinned by commit SHA and workflows declare least-privilege permissions
@@ -109,7 +118,7 @@ jobs:
       - name: workflows (platform + every generated repo) pass actionlint
         run: |
           uv tool install copier
-          for t in service-python library-python service-java service-go web-nextjs gitops-app; do
+          for t in service-python library-python service-java service-go web-nextjs gitops-app cluster-gitops; do
             copier copy ./templates/$t /tmp/lint-$t --defaults --trust --skip-tasks --data project_name=lint-test
           done
           uv tool run --from actionlint-py actionlint .github/workflows/*.yml scripts/cplat/assets/workflows/*.yml /tmp/lint-*/.github/workflows/*.yml
@@ -117,10 +126,9 @@ jobs:
         run: |
           uv tool install copier
           copier copy ./templates/gitops-app /tmp/v2 --defaults --trust --skip-tasks --data project_name=fx-gitops --data app_name=fx
-          cp tests/fixtures/gitops/services.yaml /tmp/v2/applications/fx/services.yaml
-          cp tests/fixtures/gitops/app.yaml /tmp/v2/applications/fx/app.yaml
+          cp tests/fixtures/gitops/system.yaml /tmp/v2/applications/fx/system.yaml
           (cd /tmp/v2 && uv run scripts/render.py)
-          # what `/gitops:promote` does: staging/prod run pinned tags, never :latest (the guard rails below require it)
+          # what `/instance:promote` does: staging/prod run pinned tags, never :latest (the guard rails below require it)
           sed -i 's/newTag: latest/newTag: sha-1234567/' /tmp/v2/applications/fx/overlays/staging/*/kustomization.yaml
           (cd /tmp/v2 && uv run scripts/render.py --check)
           uv run scripts/check-k8s-labels.py /tmp/v2
@@ -129,30 +137,68 @@ jobs:
         run: |
           curl -fsSL -o /tmp/kyverno-cli.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
           echo "b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae  /tmp/kyverno-cli.tgz" | sha256sum -c -
-          mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
+          mkdir -p "$HOME/.local/bin" && tar xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: rendered manifests satisfy the Kyverno guard rails (offline)
         run: bash /tmp/v2/scripts/check-policies.sh
 
 
-  platform-tests:
-    name: cplat unit + integration tests
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+  release-check:
+    name: release-check (versions table)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - name: the changelog lists every changed versions row, and a major move is a major release
+        run: uv run scripts/release-check.py rows
+
+  platform-tests:
+    name: cplat unit + integration tests (shard ${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false   # spec 112: a failing shard must not cancel the others; each log names its failing tests
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Install copier
         run: uv tool install copier
       - name: Install the Kyverno CLI (pinned, checksum-verified)
         run: |
           curl -fsSL -o /tmp/kyverno-cli.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
           echo "b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae  /tmp/kyverno-cli.tgz" | sha256sum -c -
-          mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
+          mkdir -p "$HOME/.local/bin" && tar xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: pytest
-        run: uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto
+        run: uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto --shard ${{ matrix.shard }}/4 --shard-report shard-${{ matrix.shard }}.json
+      - name: Upload the shard report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cplat-shard-${{ matrix.shard }}
+          path: shard-${{ matrix.shard }}.json
+          retention-days: 1
+          if-no-files-found: ignore
+
+  platform-tests-cover:
+    name: cplat shards cover the suite
+    needs: [changes, platform-tests]
+    if: always() && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: cplat-shard-*
+          merge-multiple: true
+          path: shards
+      - name: every collected test ran in exactly one shard
+        run: python3 scripts/check-shards.py shards/*.json
 
   smoke-test-templates:
     name: smoke-test Copier templates
@@ -165,7 +211,7 @@ jobs:
         template: [service-python, library-python]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Install copier
         run: uv tool install copier
       - name: Generate test project
@@ -252,7 +298,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Install copier
         run: uv tool install copier
       - name: Generate test project
@@ -263,7 +309,7 @@ jobs:
         run: |
           test -f /tmp/test-gitops/devbox.json
           test -f /tmp/test-gitops/.claude/settings.json
-          test -f /tmp/test-gitops/applications/test/services.yaml
+          test -f /tmp/test-gitops/applications/test/system.yaml
           test -f /tmp/test-gitops/applications/test/applicationset.yaml
           test -d /tmp/test-gitops/applications/test/overlays/dev
           test -d /tmp/test-gitops/applications/test/overlays/staging
@@ -275,8 +321,7 @@ jobs:
         run: |
           cd /tmp/test-gitops
           uv run scripts/render.py --check
-          cp "$GITHUB_WORKSPACE/tests/fixtures/gitops/services.yaml" applications/test/services.yaml
-          cp "$GITHUB_WORKSPACE/tests/fixtures/gitops/app.yaml" applications/test/app.yaml
+          sed 's/^system: fx$/system: test/' "$GITHUB_WORKSPACE/tests/fixtures/gitops/system.yaml" > applications/test/system.yaml
           uv run scripts/render.py
           uv run scripts/render.py --check
           test -f applications/test/overlays/dev/fx-api/deployment.yaml
@@ -295,6 +340,37 @@ jobs:
           curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz -C /tmp kubeconform
           /tmp/kubeconform -strict -ignore-missing-schemas -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -summary /tmp/test-gitops/applications/test/applicationset.yaml /tmp/test-gitops/bootstrap/test-root.yaml /tmp/test-gitops/applications/test/overlays/*/*/[dsh]*.yaml
 
+  smoke-test-cluster-gitops:
+    name: smoke-test cluster-gitops template
+    needs: changes
+    if: needs.changes.outputs.cluster == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - name: Install copier
+        run: uv tool install copier
+      - name: Generate test project
+        run: |
+          copier copy ./templates/cluster-gitops /tmp/test-cluster --defaults --trust --skip-tasks \
+            --data project_name=test-cluster --data description="Smoke test"
+      - name: Shape is detected as cluster-gitops
+        run: test "$(bash scripts/detect-shape.sh /tmp/test-cluster)" = "cluster-gitops"
+      - name: Rendered files are in sync and a cluster with no systems checks clean
+        run: |
+          cd /tmp/test-cluster
+          uv run scripts/render.py --check
+          uv run scripts/check.py
+      - name: scripts parse
+        run: |
+          for f in /tmp/test-cluster/scripts/*.sh; do bash -n "$f"; done
+          jq -e '.shell.scripts | has("cluster-up") and has("cluster-down") and has("bootstrap") and has("check")' /tmp/test-cluster/devbox.json
+      - name: kustomize build + kubeconform on cluster/
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz -C /tmp kubeconform
+          kubectl kustomize /tmp/test-cluster/cluster > /tmp/cluster-built.yaml
+          /tmp/kubeconform -strict -ignore-missing-schemas -schema-location default -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -summary /tmp/cluster-built.yaml
+
   smoke-test-web-nextjs:
     name: smoke-test web-nextjs template
     needs: changes
@@ -302,8 +378,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - name: Install copier
@@ -379,7 +455,7 @@ jobs:
         observability: [true, false]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.25'
@@ -444,8 +520,8 @@ jobs:
           - {observability: true, database: true}     # PostgreSQL support: JPA, Flyway, Testcontainers tests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: '21'
@@ -499,12 +575,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: site/package-lock.json
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Install dependencies (no install scripts)
         working-directory: site
         run: npm ci --ignore-scripts
@@ -551,24 +627,17 @@ jobs:
     # Dependabot's grouped titles ("bump the all group across 1 directory with N updates") exceed the subject limit
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Validate PR title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          pattern='^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?: .{1,72}$'
-          if ! echo "$PR_TITLE" | grep -qE "$pattern"; then
-            echo "ERROR: PR title does not follow Conventional Commits."
-            echo "  Got:     $PR_TITLE"
-            echo "  Pattern: type(scope): description (≤72 chars)"
-            exit 1
-          fi
-          echo "OK: PR title is valid."
+        run: python3 scripts/check-pr-title.py
 
   # The single status required by branch protection. Jobs skipped by `changes` count as passed; a failed or cancelled job fails it.
   ci-success:
     name: ci-success
     if: always()
-    needs: [changes, validate-manifests, validate-shapes, platform-tests, smoke-test-templates, smoke-test-gitops-app, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
+    needs: [changes, validate-manifests, validate-shapes, release-check, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, site, dco, spec-required, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: every needed job passed or was skipped

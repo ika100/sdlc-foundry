@@ -12,12 +12,18 @@ import statistics
 from collections import Counter
 
 import core
+import escalation_rules
 import feedback
 import runs_usage_report
 
 UNKNOWN = "unknown"
 FILED_RESULTS = ("new", "+1", "suppressed", "pending")
 TOP_REASONS = 10
+PR_WAIT_RESULTS = ("green", "merged", "red", "budget-refused", "timeout", "no-checks", "closed", "merge-failed", "error")
+RED_RESULTS = ("red", "budget-refused")
+RED_CI = "red-ci"    # a reader's count, never an outcome in a record
+TOP_RED_CHECKS = 5
+MAX_UNCLASSIFIED = 20
 
 
 def parse(texts: list[str]) -> tuple[list[dict], list[dict], int]:
@@ -61,6 +67,80 @@ def _count_sorted(counter: Counter) -> dict:
     return dict(sorted(counter.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
+def pr_wait_result(record: dict) -> str | None:
+    """None for a record whose kind is not pr-wait; "unrecorded" when it has no `pr_wait` dict; "unknown" when the
+    dict has no string `result`; otherwise the result (an unlisted one is kept under its own name)."""
+    if record.get("kind") != "pr-wait":
+        return None
+    section = record.get("pr_wait")
+    if not isinstance(section, dict):
+        return "unrecorded"
+    result = section.get("result")
+    return result.strip() if isinstance(result, str) and result.strip() else UNKNOWN
+
+
+def count_outcome(record: dict) -> str:
+    """The outcome a reader counts: RED_CI for kind pr-wait, outcome failed and a result in RED_RESULTS; otherwise
+    _text(record["outcome"])."""
+    outcome = _text(record.get("outcome"))
+    if outcome == "failed" and pr_wait_result(record) in RED_RESULTS:
+        return RED_CI
+    return outcome
+
+
+def red_check_names(record: dict) -> set[str]:
+    """The distinct check names of a red or budget-refused pr-wait record (non-list and non-string entries skipped)."""
+    if pr_wait_result(record) not in RED_RESULTS:
+        return set()
+    names = record["pr_wait"].get("checks")
+    return {c for c in (names if isinstance(names, list) else []) if isinstance(c, str)}
+
+
+def aggregate_pr_wait(kept: list[dict]) -> dict:
+    results: Counter = Counter()
+    checks: Counter = Counter()
+    for r in kept:
+        result = pr_wait_result(r)
+        if result is None:
+            continue
+        results[result] += 1
+        checks.update(red_check_names(r))
+    ordered = {k: results.get(k, 0) for k in (*PR_WAIT_RESULTS, "unrecorded")}
+    ordered.update({k: results[k] for k in sorted(results) if k not in ordered})
+    top = sorted(checks.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_RED_CHECKS]
+    return {"results": ordered, "red_checks": [{"check": c, "count": n} for c, n in top]}
+
+
+class Unclassified(dict):
+    """The `unclassified` figures; `more` (reasons beyond the cap) is for the text only and not a JSON key."""
+    more = 0
+
+
+def effective_escalation(record: dict) -> escalation_rules.Resolved | None:
+    """None without an escalation dict; otherwise the cause as the current rules read it (spec 088, AC-088.21)."""
+    esc = record.get("escalation")
+    return escalation_rules.effective(esc) if isinstance(esc, dict) else None
+
+
+def aggregate_unclassified(kept: list[dict]) -> dict:
+    unknown: Counter = Counter()
+    total = by_rule = 0
+    for r in kept:
+        res = effective_escalation(r)
+        if res is None:
+            continue
+        total += 1
+        by_rule += res.source == "rule"
+        if res.cause == UNKNOWN:
+            unknown[_text(r["escalation"].get("reason"))] += 1
+    count = sum(unknown.values())
+    out = Unclassified(
+        count=count, escalations=total, share=round(count / total, 3) if total else None, by_rule=by_rule,
+        reasons=[{"reason": t, "count": n} for t, n in sorted(unknown.items(), key=lambda kv: (-kv[1], kv[0]))[:MAX_UNCLASSIFIED]])
+    out.more = max(0, len(unknown) - MAX_UNCLASSIFIED)
+    return out
+
+
 def select(records: list[dict], *, since_days: int, repo: str | None, now: datetime.datetime) -> list[dict]:
     """Window, repo filter and run_id dedupe, shared by both reports."""
     cutoff = now - datetime.timedelta(days=since_days)
@@ -96,7 +176,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
     by_check: Counter = Counter()
     filed: Counter = Counter({k: 0 for k in FILED_RESULTS})
     for r in kept:
-        kinds.setdefault(_text(r.get("kind")), Counter())[_text(r.get("outcome"))] += 1
+        kinds.setdefault(_text(r.get("kind")), Counter())[count_outcome(r)] += 1
         for p in _list(r.get("phases")):
             if not isinstance(p, dict):
                 continue
@@ -105,7 +185,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
                 durations.setdefault(_text(p.get("name")), []).append((b - a).total_seconds())
         esc = r.get("escalation")
         if isinstance(esc, dict):
-            causes[_text(esc.get("cause"))] += 1
+            causes[effective_escalation(r).cause] += 1
             reasons[_text(esc.get("reason"))] += 1
         for rr in _list(r.get("reruns")):
             rr = rr if isinstance(rr, dict) else {}
@@ -140,6 +220,8 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         "filed": dict(filed),
         "buffered": buffered,
         "usage": runs_usage_report.aggregate_usage(kept),
+        "pr_wait": aggregate_pr_wait(kept),
+        "unclassified": aggregate_unclassified(kept),
     }
     validation = aggregate_validation(kept)
     if validation["rules"]:   # spec 103: only when a run recorded a validation section
@@ -176,17 +258,33 @@ def _pairs(counts: dict) -> str:
     return ", ".join(f"{k} {n}" for k, n in counts.items()) or "none"
 
 
+def _unclassified_lines(u: dict) -> list[str]:
+    if not u["escalations"]:
+        return ["Unclassified escalations: none"]
+    pct = (200 * u["count"] + u["escalations"]) // (2 * u["escalations"])   # floor(100 * n / m + 0.5)
+    lines = [f"Unclassified escalations: {u['count']} of {u['escalations']} ({pct}%)", f"  classified by rule: {u['by_rule']}"]
+    lines += [f"  {x['count']}  {x['reason']}" for x in u["reasons"]]
+    more = getattr(u, "more", 0)
+    if more:
+        lines.append(f"  … and {more} more")
+    return lines
+
+
 def render_text(agg: dict) -> str:
     w = agg["window"]
     lines = [f"Runs {w['since']} to {w['until']} ({w['days']} days) in {w['store']}" + (f", repo {w['repo']}" if w["repo"] else "")
              + f": {w['records']} record(s); {w['malformed']} malformed line(s) skipped",
              "Runs per kind and outcome:"]
     lines += [f"  {kind}: {_pairs(outcomes)}" for kind, outcomes in agg["runs"].items()] or ["  none"]
+    pw = agg["pr_wait"]
+    lines.append("pr-wait results: " + (", ".join(f"{k} {n}" for k, n in pw["results"].items()) if any(pw["results"].values()) else "none"))
+    lines.append("Red checks: " + (", ".join(f"{c['check']} {c['count']}" for c in pw["red_checks"]) or "none"))
     lines.append("Phases (median / p90):")
     lines += [f"  {n}: {_dur(p['median_s'])} / {_dur(p['p90_s'])} (n={p['count']})" for n, p in agg["phases"].items()] or ["  none"]
     lines.append(f"Escalations per cause: {_pairs(agg['causes'])}")
     lines.append("Top escalation reasons:")
     lines += [f"  {e['count']}  {e['reason']}" for e in agg["escalations"]] or ["  none"]
+    lines += _unclassified_lines(agg["unclassified"])
     lines.append(f"Reruns by reason: {_pairs(agg['reruns']['by_reason'])}")
     lines.append(f"Reruns by check: {_pairs(agg['reruns']['by_check'])}")
     lines.append("Filed issues: " + ", ".join(f"{k} {n}" for k, n in agg["filed"].items()))
@@ -196,7 +294,7 @@ def render_text(agg: dict) -> str:
         lines.append("Validation checks per rule: " + "; ".join(
             f"{rule} " + ", ".join(f"{d} {n}" for d, n in counts.items()) for rule, counts in validation["rules"].items()))
         lines.append(f"Validation misses per rule: {_pairs(validation['misses'])}")
-    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
+    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat platform runs flush)")
     return "\n".join(lines)
 
 
@@ -410,5 +508,5 @@ def render_agents_text(agg: dict) -> str:
         lines.append(f"  causes: {causes}")
     if not agg["rows"]:
         lines.append("  none")
-    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat runs flush)")
+    lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat platform runs flush)")
     return "\n".join(lines)

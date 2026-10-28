@@ -6,8 +6,237 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
-- **Fix: run state is per worktree.** `cplat-ship.json`, the app-ship state, the `cplat runs begin` pointer, the recovery snapshot and pending replans now live in the worktree's own git dir instead of the dir every worktree shares, so one session's ship run no longer blocks another session's Stop hook, and a build in one worktree cannot attach to another's run. A worktree no longer sees another checkout's run; a run started inside a worktree before this fix must be resumed from the main checkout or restarted. The main checkout's `.git` is unchanged. The gitops merge slot and the validation evidence cache stay shared (ADR-051).
+**Unattended runs stop wasting turns and CI rounds.** Spec 126 ([spec 126](specs/126-unattended-runs-stop-wasting-turns-and/spec.md)), [ADR-070](adr/070-the-stop-hook-holds-only-the-owning-session-until-it-stops-progressing.md) (the Stop hook holds only the owning session until it stops progressing). Not breaking. The Stop hook now holds only the session that started or resumed the run (the owner); other sessions are never held, and a run without an owner holds nobody and says so. The 8-stop limit is gone: two owner stops without a new commit or phase change escalate as `no progress`, with the last message as an excerpt and a cause chosen by a fixed rule (a matching escalation rule, else `code` on red evidence, else `decision`), so `environment` appears only with a matched rule. `cplat component ship pr` and `cplat pr open` check the title and, in the platform repo, the spec rule before `devbox run ci` and any push; `--no-spec` adds the `no-spec` label (platform repo only). `devbox run ci` in the platform repo runs the `pr-title` and `spec-required` checks locally through the same code as the CI jobs, and titles the platform builds are shortened to fit 72 characters and bytes. Action: resume runs that were open before the update once with `/component:ship <NNN>` (or `/system:ship`), so they get an owner.
+
+**Plugins:** `component` 1.4.0, `system` 1.5.1.
+
+**The cluster-gitops `validate` gate checks the built manifests.** `devbox run validate` (and `quality`, `test`, `lint` and the CI job `quality`) wrote the kustomize build to an extension-less temp file, which kubeconform skips, so the gate reported `0 resource found` and passed without checking anything (#260). The build now goes to a `.yaml` file (#266), and the recipe fails when kubeconform checks 0 resources. **Action:** run `/platform:update` in each cluster repo; a repo with invalid manifests turns red.
+
+**Resources and environment properties upgrade safely.** Spec 121 ([spec 121](specs/121-resources-and-environment-properties/spec.md)), [ADR-068](adr/068-resource-and-operator-upgrades-roll-through-environments-in-verified-steps.md) (resource and operator upgrades roll through the environments in verified steps) and [ADR-069](adr/069-one-versions-table-pins-everything-and-every-release-proves-the-upgrade.md) (one versions table pins everything, and every release proves the upgrade). Not breaking: a `system.yaml` without the new keys renders as before, except that engine image references gain exact tags and digests (CloudNativePG publishes no plain tags for PostgreSQL, so they move to immutable build tags). Every image and chart the platform writes or installs is a row of one versions table (`cplat platform versions [--diff <ref>] [--changelog]`). `/resource:upgrade <name> --to <major> [--env <env>]` moves one environment per pull request, needs a backup from the last 60 minutes for a database, waits for health and runs the smoke tests; staging follows dev, prod is by hand. `/platform:update` keeps staging and prod on their held pins and prints the versions that change per environment, and `cplat platform update --verify` checks the operators once per cluster. The gitops repo answers `property_operators: owner | install` (existing repos keep `owner`; new ones get `install`, which renders External Secrets, Kyverno and LGTM). `/platform:doctor --context [ENV=]CTX` lists each operator as `ok`, `missing`, `older` or `newer` with its CRD versions, and `/system:status` gets a Resource versions section. A new end-to-end upgrade test and a release gate (`scripts/release-check.py`) prove every release upgrades from the previous one.
+
+**Plugins:** `resource` 1.6.0 (`/resource:upgrade`), `platform` 1.3.0 (`doctor --context`, `update --verify`), `system` 1.5.0 (status).
+
+**Versions** (`cplat platform versions --diff v5.3.0 --changelog`):
+
+- `postgres 15` 15.19 (digest none) → 15.19 (digest f617efc0)
+- `postgres 16` 16.15 (digest none) → 16.15 (digest 1ec419e9)
+- `postgres 17` 17.11 (digest none) → 17.11 (digest ed6923f9)
+- `postgres 18` 18.6 (digest none) → 18.6 (digest 39add80f)
+- `valkey 8` 8.1.11 (new)
+- `valkey 9` 9.1.3 (new)
+- `nats 2.14` 2.14.9 (new)
+- `nats 2.15` 2.15.2 (new)
+- `nats` 2.15.1 (new)
+- `seaweedfs` 4.51 (digest none) → 4.51 (digest f7a49e3f)
+- `opentelemetry-collector` 0.162.0 (digest none) → 0.162.0 (digest 39923a8e)
+- `lgtm` 0.35.0 (new)
+- `velero-plugin-for-aws` v1.14.4 (digest none) → v1.14.4 (digest c85a7fa8)
+- `argo-cd` v3.4.12 (new)
+- `k3s` v1.32.5-k3s1 (new)
+- `gateway-api` v1.2.1 (new)
+- `operator nack` 0.35.0 (new)
+- `operator keda` 2.19.0 (new)
+- `operator metrics-server` 3.14.0 (new)
+
+**Action:** run `/platform:update` in each repo. Optionally answer `property_operators: install` after removing a hand-installed External Secrets, Kyverno or LGTM.
+
+**Instances scale on load and queue depth.** Spec 120 ([spec 120](specs/120-instances-scale-on-load-and-queue-depth/spec.md)), [ADR-066](adr/066-instances-scale-with-an-hpa-or-keda-installed-per-cluster.md) (instances scale with an HPA or KEDA, installed per cluster) and [ADR-067](adr/067-argo-cd-leaves-autoscaled-replica-counts-alone.md) (Argo CD leaves autoscaled replica counts alone). Not breaking: a `system.yaml` without `scale` renders byte-identically. `scale: {min, max, on}` on a service or website component, or on one of its instances, follows one of four triggers: `cpu`, `memory`, a cache or a broker queue depth (`lag`). Only queue triggers may scale to zero; `scale` and `replicas` exclude each other. Argo CD ignores the replica count of a scaled workload through a `RespectIgnoreDifferences` rule. KEDA 2.19.0 and metrics-server 3.14.0 are installed as operators; the gitops repo answers `resource_metrics: provided | install` (default `provided`). The two "allowed:" key lists gain `scale`, and the e2e job limit is 90 minutes. `/component:set --replicas` refuses a scaled instance, `/system:status` shows `replicas <n> (<min>–<max>)`, and `/platform:doctor` lists the KEDA and metrics rows.
+
+**Plugins:** `component` 1.3.0, `system` 1.4.0, `platform` 1.2.0.
+
+**A message broker resource behind events APIs.** Spec 119 ([spec 119](specs/119-a-message-broker-resource-behind-events/spec.md)), [ADR-065](adr/065-a-broker-is-nats-jetstream-with-declared-streams-and-per-component-users.md) (a broker is NATS with JetStream). Not breaking: a `system.yaml` without a broker renders as before. `type: broker` declares NATS with JetStream (`version`, `replicas`, `storage`, or `external`); an events API is bound with `apis.<api>.broker`, and its provider and consumers get `NATS_URL`, `NATS_USER` and `NATS_PASSWORD` from their own Secret, plus `NATS_INBOX_PREFIX` and `EVENTS_<API>_*` as literal values. NACK is installed as an operator to create streams and consumers. An unbound events API only gets a note. Pins: `nats` chart 2.15.1, `nats:2.14.9-alpine`, `nats:2.15.2-alpine`, `nack` chart 0.35.0 with controller 0.24.0.
+
+**Plugins:** `resource` 1.5.0 (`/resource:add <name> --type broker`), `api` 1.1.0 (`/api:list` shows the broker of an events API).
+
+**A cache resource, compatible with Redis.** Spec 118 ([spec 118](specs/118-a-cache-resource-compatible-with-redis/spec.md)), [ADR-064](adr/064-a-cache-is-a-platform-rendered-valkey-statefulset.md) (a cache is a platform-rendered Valkey StatefulSet). Not breaking: a `system.yaml` without a cache renders as before. `type: cache` declares a Redis-compatible cache (Valkey 8 or 9, `memory`, `maxmemoryPolicy`, optional `persistence` with `storage`, or `external`); a component that uses it gets `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT` and `REDIS_PASSWORD`. No operator is installed, and cache data is not backed up. Pins: `valkey/valkey:8.1.11`, `valkey/valkey:9.1.3`.
+
+**Plugins:** `resource` 1.4.0 (`/resource:add <name> --type cache`).
+
+## [5.3.0] — 2026-10-27
+
+**Autonomy is declared per environment and supervised in the console.** Spec 124, [ADR-063](adr/063-autonomy-in-system-yaml-and-the-engine-contract.md), [guide](autonomy.md). Optional and off by default: a system without the new keys renders as before and every environment stays at `observe`. `environments.<env>.autonomy` (`level`, `engine`, `autoMerge`, `riskGate`, `budget`, `window`, `undoWindow`; prod at most `act`), a top-level `autonomy: {paused: true}` and `components.<c>.instances.<env>.autonomy: {max}` are validated by `render.py`, which writes `applications/<system>/autonomy.json` for an engine to read. `/system:autonomy show|set|pause|resume|undo|approve` (`cplat system autonomy`) changes it: lowering and pausing act at once by a signal to the engine and are recorded by a pull request, a higher level waits for the merge. The console gets **System > Autonomy**, a **review** decision in the Inbox for a fix an engine will not merge itself, engine badges and signal facts on the Board, and the notification events `review`, `signal` and `done-on-its-own`. `cplat model show --json` and `cplat needs --json` carry new keys.
+
+**Exception to "dev follows main".** `/instance:promote <component> --to dev --version <tag>` is now allowed when `<tag>` is a version dev pinned before (git history decides); it is the rollback and the undo for dev. Any other `--to dev` still fails.
+
+**Plugins:** `system` 1.3.0 (`/system:autonomy`), `instance` 1.1.0 (dev rollback in `/instance:promote`).
+
+**Action.** Only if you want autonomy: run `/platform:update` in each gitops-app repo that will declare it; create an engine token per engine and put it in `CPLAT_ENGINE_TOKEN` or the keychain (service `sdlc-foundry`, account `engine:<host>`) on every machine that runs `/system:autonomy`, and give the engine the same token; give the engine's GitHub identity write access to the private run store repo (`CPLAT_RUNS_REPO`) plus issues and pull requests in the system's repos. The engine itself is built in its own repository against the contract in the spec.
+
+**`cplat pr wait` and `ship land` wait for a queued workflow run.** GitHub reports no checks for a run that is still queued, so a PR whose CI waited for a runner showed only CodeQL, and the wait called it green and tried to merge (the merge was refused). The wait now also asks for the head commit's workflow runs and stays pending while one has not completed; a run that never starts ends in the usual timeout, unmerged.
+
+**Fixes to the platform's own checks.** Release and docs-only PRs now run the cplat tests too: the tests read the changelog, specs and guides, and release 5.2.0 left `main` red because they were skipped. `uv run scripts/pin-actions.py`, which the pin check names as the fix, now moves the templates' pins to the platform's own: Dependabot reads only `/.github/workflows`, so its Actions PRs bump the platform's pins alone. `cplat spec test-diff` no longer reports a test file that a building spec's plan task creates after the red commit. The platform repo sets `worktree.baseRef: "head"`, so its build tasks can run in parallel worktrees.
+
+## [5.2.0] — 2026-10-27
+
+**Databases and environments are backed up and restorable.** Spec 117 ([spec 117](specs/117-databases-and-environments-are-backed-up/spec.md)), [ADR-061](adr/061-database-backups-with-the-barman-cloud-plugin-and-restore-by-generation.md) (database backups with the Barman Cloud plugin, restore by generation) and [ADR-062](adr/062-environment-backups-with-velero.md) (environment backups with Velero). Not breaking: a `system.yaml` without `backup` renders as before. `backup` on a database instance gives scheduled base backups and continuous archiving with point-in-time restore; `backup` on an environment gives Velero backups of its namespaces and volumes. `/system:status` shows a Backups section, `cplat doctor` warns about an unbacked-up prod, and a failing backup older than an hour files an alert issue. Pins: plugin-barman-cloud 0.8.1, cert-manager v1.21.3, velero 12.2.1, velero-plugin-for-aws v1.14.4.
+
+**Plugins:** `resource` 1.3.0 (`/resource:backup <db> --env <env>`, `/resource:restore <db> --env <env> (--to <time|latest> | --switch | --discard)`), `system` 1.2.0 (`/system:restore <env> [--backup <name|latest>] [--replace]`).
+
+**Action for existing clusters:** after the first backup in a cluster, re-apply `operators/root.yaml` once (`KUBE_CONTEXT=<ctx> devbox run bootstrap`; local clusters: `devbox run cluster-up`). A cluster that already runs cert-manager or Velero (or wants to install the Barman Cloud plugin itself) sets `environments.<env>.operators: owner` first. Velero's node agent is a privileged DaemonSet in the `velero` namespace: clusters that enforce Pod Security restricted there need an exception (or `operators: owner`). A cluster with a cluster repo (spec 125) lists `plugin-barman-cloud`, `cert-manager` and `velero` in its `cluster.yaml` instead.
+
+**A cluster repo hosts several systems.** [ADR-060](adr/060-a-cluster-repo-owns-shared-services.md), spec 125. Not breaking: a system repo renders as before. The new shape `cluster-gitops` is a repo for one cluster: `cluster.yaml` lists the shared operators, the secret store and the systems (`cluster/systems/<system>.yaml`, one Argo CD application each). A system with `operators: owner` in every environment leaves its operators to the cluster, and a CI check names any operator or release a system still needs. The versions table pins `external-secrets` 2.12.0 and `kyverno` 3.9.1.
+
+**Plugins:** new `cluster` 1.0.0 (`/cluster:new <name>`, `/cluster:add <owner>/<repo>`, `/cluster:remove <system>`).
+
+**Action** for shared clusters, once per cluster: create the cluster repo and move the cluster to it as described in [CLUSTERS.md](CLUSTERS.md). Nothing is reinstalled. Clusters with one system need nothing.
+
+## [5.1.0] — 2026-10-27
+
+**A local console shows the system, its process and what needs you.** Spec 122, [ADR-055](adr/055-local-console-over-cplat-json.md), [guide](console.md). `/platform:ui` (`cplat ui`) serves a browser console on `127.0.0.1` with three places: Inbox (decisions waiting for you), Board (every item by stage) and System (components by environment). Actions run as `cplat headless` in the local clone; the console never writes to git, GitHub or the cluster itself.
+
+**The documentation is in the console.** **Menu → Guide** (or `g`) shows the console guide with its screenshots, the process with every stage, and a reference of every 5.x slash command with its usage and a copy button, read from the platform checkout the console runs from; each page's help links to its section (AC-122.52).
+
+**`cplat needs` and the run list.** `cplat needs --json` lists what waits for a human (approvals, answers, escalations, promotions). The run list (`cplat runs --json`) gives every run a phase and a stage.
+
+**Status and spec additions.** `cplat system status --json` and `cplat spec list --all --detail --json` carry more keys for the console. Deliberate test change: the AC-113.11 status tests now compare the 5.0 keys, because spec 122 adds keys.
+
+**Draft spec PRs.** `/component:spec` and `/system:spec` publish a spec as a draft pull request (`cplat spec publish`) and ask the owner to review; approving lands it (`cplat spec land`).
+
+**Notifications.** `~/.config/sdlc-foundry/notify.yaml` chooses per event whether GitHub, desktop, Slack or email is told, instantly or in a digest, with quiet hours. Secrets come from the environment or the OS keychain, never the file. `cplat ui notify --once` runs from cron or launchd.
+
+**`--provides` and `--consumes`.** `/component:add` and `/component:set` declare the APIs of one component; a new API goes into `apis:` in the same PR.
+
+**`/system:set`.** Changes system-wide settings such as `--env` (`cplat system set`).
+
+**Plugins:** `platform` 1.1.0 (`/platform:ui`), `system` 1.1.0 (`/system:set`), `component` 1.2.0 (`--provides`, `--consumes`, draft spec PRs).
+
+**`cplat pr wait` and `ship land` never call a conflicting PR green.** GitHub starts no `pull_request` workflow while a PR conflicts with its base, so only CodeQL reported and the wait said GREEN. The watch now asks whether the PR is mergeable and ends with "conflicts with its base branch" and how to fix it (#221).
+**Fixes to `platform update --migrate`.** A repo without `.claude/project-notes.md` now gets the file, created empty, because the new `CLAUDE.md` imports it; an existing notes file is still never changed (#239). The "left out N new starter file(s)" line no longer lists the `system.yaml` the migration writes on the next line (#238).
+
+**An object storage resource: `type: bucket`.** [ADR-059](adr/059-in-cluster-buckets-on-seaweedfs-per-instance.md), spec 116. Not breaking: a 5.0 or 115 `system.yaml` renders as before. A system declares buckets under `resources.<name>` with `type: bucket` (`storage`, default `10Gi`, and `versioning`, default off, per resource or instance). An in-cluster bucket is its own SeaweedFS per instance; `external` buckets read `endpoint`, `bucket`, `region`, `forcePathStyle`, `accessKeyId` and `secretAccessKey` from the secret store. A component that uses a bucket gets `S3_*` and `AWS_*` (prefixed with two or more buckets). Pins: SeaweedFS image `chrislusf/seaweedfs:4.51` and operator chart `seaweedfs-operator` 0.1.45. `cplat platform doctor` compares the installed SeaweedFS operator.
+
+**Plugins:** `resource` 1.2.0 (`/resource:add <name> --type database|bucket [--storage S] [--versioning]`).
+
+**Action.** One human step per existing cluster, after the first in-cluster bucket: re-apply `operators/root.yaml` (`KUBE_CONTEXT=<ctx> devbox run bootstrap`; local clusters: `devbox run cluster-up`). A cluster whose owner installed the SeaweedFS operator by hand: set `environments.<env>.operators: owner` before `operators/root.yaml` is applied again. Existing repos: run `/platform:update`.
+
+**Resources are named, typed and may be external.** [ADR-057](adr/057-named-typed-resources-with-fixed-contracts.md), [ADR-058](adr/058-pinned-versions-and-platform-installed-operators.md), spec 115. Not breaking: a 5.0 `system.yaml` renders as before. A system declares any number of resources under `resources.<name>` with a `type` (`database` is built; `bucket`, `cache` and `broker` are reserved for specs 116, 118 and 119). A database can be `external` (optionally with `remote.path` and a per-environment `instances.<env>.external`): the platform renders an ExternalSecret from the secret store and no cluster. A component that uses two or more resources of one type gets prefixed variables (`ORDERS_DB_DATABASE_URL`). `cplat model show` lists type and `external`; `cplat platform doctor` compares the installed operator.
+
+**Pinned database image, supported majors 15–18.** The database image is pinned exactly per major. The one narrowing against 5.0: another `version` (for example 14) now fails the render and names the supported majors 15, 16, 17 and 18.
+
+**Operators live under `operators/`.** The platform installs CloudNativePG through `operators/` instead of leaving it to the cluster. `environments.<env>.operators: owner` leaves the operator to the cluster owner.
+
+**Plugins:** `resource` 1.1.0 (`/resource:add <name> --type database [--version N] [--external [--path P]]`, `/resource:remove <name>`).
+
+**Action.** One human step per existing cluster: `kubectl apply -f operators/root.yaml` (or `KUBE_CONTEXT=<ctx> devbox run bootstrap`; local clusters get it from `devbox run cluster-up`). A cluster that already runs a hand-installed CloudNativePG: set `environments.<env>.operators: owner` before anyone applies it. Existing repos: run `/platform:update`; databases on a major other than 15–18 must move to a supported one before the render passes.
+
+## [5.0.1] — 2026-10-26
+
+**Fixes:**
+- `cplat platform doctor` in the platform repo reports `gate recipes` and `gate CI jobs` as not applicable instead of warning and suggesting `/platform:update`, which refuses there (#231, AC-123.24).
+
+## [5.0.0] — 2026-10-26
+
+**BREAKING: the platform speaks the domain model.** [ADR-054](adr/054-five-zero-interface-and-proved-migration.md), [ADR-053](adr/053-domain-model.md), [guide](DOMAIN-MODEL.md), spec 114. A system is one file, `applications/<system>/system.yaml`, that the renderer checks; slash commands and `cplat` subcommands are grouped by noun (`system`, `component`, `api`, `resource`, `instance`, `issue`, `platform`). Cluster names (namespaces, Argo applications, image names) never change, so a migrated system renders the same manifests.
+
+**Plugins:** new `system`, `api`, `resource`, `instance`, `issue`, `platform` 1.0.0 and `component` 1.1.0; svc 4.0.0, shared 1.0.0, app 2.0.0, gitops 2.0.0; web, svc-go, svc-java 0.4.0. `shared` keeps the `cplat` launcher, the hooks and the quality and security agents and no working command; the planner agent moved to `system`; the v1-only gitops deployment agent is gone. The last major of `app` and `gitops` holds only tombstone commands (no agents, no hooks), and `app` and `gitops` leave the marketplace in 6.0.
+
+**The platform repo declares its own shape.** [ADR-056](adr/056-the-platform-repo-declares-its-shape.md), spec 123. This repo declares `shape: platform` in `.platform-settings.yml`, so `/component:spec`, `plan`, `build`, `verify` and `ship` work here like in a component repo (svc agents, not deployable: ship ends at merge). `/component:release` and `cplat platform update` refuse in it (the platform is released through CONTRIBUTING.md, Releases), `cplat platform doctor` reports the platform source version, and the fleet skips it. Only `platform` can be declared; a `shape:` key in the personal settings file, a component shape or a declaration next to a template `.copier-answers.yml` is an error.
+
+**Fixes:**
+- A bare `off` in `budget:` (`.platform-settings.yml` or the user settings file) is read as off; YAML parsed it as `false`, which was refused.
+- `cplat pr open` and `cplat component ship pr` in a git worktree no longer commit the PR body: it moves into the worktree's own git dir, and a `.git/…` `--body-file` resolves there (#227).
+
+**Old → new.** Every 4.7 slash command stays as a tombstone: it runs nothing and prints where the command went. A 4.7 `cplat` name prints `` `cplat <old>` is `cplat <new>` in 5.0 `` to stderr and exits 2.
+
+| 4.7 slash command | 5.0 |
+|---|---|
+| `/svc:build` | `/component:build` |
+| `/svc:fix-bug` | `/component:fix` |
+| `/svc:plan` | `/component:plan` |
+| `/svc:quick-task` | `/component:fix` |
+| `/svc:release` | `/component:release` |
+| `/svc:ship` | `/component:ship` |
+| `/svc:spec` | `/component:spec` |
+| `/svc:specs` | `/component:spec` |
+| `/svc:verify` | `/component:verify` |
+| `/app:build` | `/system:ship` |
+| `/app:plan` | `/system:plan` |
+| `/app:ship` | `/system:ship` |
+| `/app:spec` | `/system:spec` |
+| `/app:specs` | `/system:spec` |
+| `/gitops:addon` | `/resource:add` and `/resource:remove`; observability is set under `environments.<env>.observability` in `system.yaml` |
+| `/gitops:compose` | `/component:add` (also `set`, `remove`) |
+| `/gitops:promote` | `/instance:promote` (now `--to <env>`) |
+| `/gitops:secret` | `/instance:secret` (list: `/instance:secret list`) |
+| `/shared:check-quality` | `/component:check` |
+| `/shared:doctor` | `/platform:doctor` |
+| `/shared:fleet` | `/platform:fleet` |
+| `/shared:new-app` | `/system:new` |
+| `/shared:new-service` | `/component:new` |
+| `/shared:report-issue` | `/issue:report` |
+| `/shared:status` | `/system:status` |
+| `/shared:triage` | `/issue:triage` |
+| `/shared:update-service` | `/platform:update` |
+
+| 4.7 cplat subcommand | 5.0 |
+|---|---|
+| `cplat new-app` | `cplat system new` |
+| `cplat status` | `cplat system status` |
+| `cplat app-ship` | `cplat system ship` |
+| `cplat new-service` | `cplat component new` (`--type` and `--lang` replace `--web`, `--library`, `--gitops`, `--app` and shape ids) |
+| `cplat compose` | `cplat component add`, `set`, `remove` |
+| `cplat ship` | `cplat component ship` |
+| `cplat build` | `cplat component build` |
+| `cplat addon` | `cplat resource add`, `remove` |
+| `cplat promote` | `cplat instance promote` (`<component> --to <env>`) |
+| `cplat secret` | `cplat instance secret` |
+| `cplat smoke` | `cplat instance verify` |
+| `cplat triage` | `cplat issue triage` |
+| `cplat doctor` | `cplat platform doctor` |
+| `cplat update-service` | `cplat platform update` |
+| `cplat fleet` | `cplat platform fleet` |
+| `cplat runs` | `cplat platform runs` |
+| `cplat retro` | `cplat platform retro` |
+
+New: `cplat api list`. Unchanged plumbing: `spec`, `pr`, `headless`, `budget`, `quiet`, `validate`, `deps`, `shape`, `feedback`, `adopt`, `alerts`, `model` (`cplat model show --json` carries `schema: 2`).
+
+| 4.x file or key | 5.0 |
+|---|---|
+| `applications/<system>/app.yaml` and `services.yaml` | one `applications/<system>/system.yaml` (comments are not carried over) |
+| directory name | `system` |
+| `gateway`, `secretStore`, `policies.registries` | top-level `gateway`, `secretStore`, `registries` |
+| `hosts.<env>`, `urls.<env>` | `environments.<env>.host`, `.url` (`{service}` is `{component}`, `{app}` is `{system}`) |
+| `policies` absent or `false` | `policy: "off"` on every environment |
+| `policies.mode` | `environments.<env>.policy`, lowercased |
+| `promotion.staging: auto` or `manual` | `environments.staging.promote: after-dev-smoke` or `manual` |
+| `promotion.prod: manual` | dropped (prod is always manual) |
+| `addons.observability` | `environments.<env>.observability` on every environment |
+| `addons.postgres` | `resources.postgres` with `type: database` (per-environment values under `instances.<env>`) |
+| service entry | `components.<name>` |
+| `shape` | `type` and `lang` |
+| `environments` of a service | `instances` keys |
+| per-service `replicas` map and `promotion.staging` | `instances.<env>.replicas` and `instances.<env>.promote` |
+| `cplat promote <from> <to>` | `cplat instance promote … --to <env>` |
+| "addon", "product", "service" in docs and prompts | resource, system, component |
+
+**Migration steps** (a repo that is not migrated keeps working only through the tombstones, which tell you what to run):
+1. Run `/plugin marketplace update`, then enable `system`, `component`, `api`, `resource`, `instance`, `issue` and `platform`; the migration switches the repo's plugin settings for you.
+2. In every repo run `cplat platform update --migrate`, or from one place run `/platform:fleet update` over the whole fleet. In a gitops-app it converts `app.yaml` and `services.yaml` into `system.yaml`, proves that the render is unchanged (or says exactly which key or file differs), and opens a PR; the fleet merges a proved one on green CI and reports the repos that failed.
+3. A repo the converter cannot convert (an unknown key, a per-environment `version` that differs) stops with the key named; fix that key by hand and run it again.
+4. Replace old command names in your own scripts, CI and notes with the table above.
+
+## [4.8.0] — 2026-10-26
+
+**A domain model core in cplat, run state per worktree, and gates for the platform repo itself.**
+
+**Domain model and tests (112, 113):**
+- **Feat (113): a domain model core in cplat.** [ADR-053](adr/053-domain-model.md), [guide](DOMAIN-MODEL.md) One module now answers "this component in that environment" for `status`, `promote`, `smoke`, the staging promotion, the alert poll, `secret` and the `/app:ship` gate. New `cplat model show [--json]` prints a product in the model's nouns (cplat only, no slash command). No command, flag, output format or file schema changed, so there is no action for existing repos. The JSON carries `schema: 1` and may change in 5.0.
+- **Perf (112): the cplat test job is faster without being weaker.** Tests that only need a rendered repo share one render per process and get private copies (`new_service`, `shared_renders`; ADR-052), and CI runs `tests/cplat` in 4 round-robin shards (`--shard I/N`) with a `cplat shards cover the suite` job that fails when a test runs in no shard or in two; `ci-success` needs it. Measured locally: the full suite went from 149 s to 90 s wall on 12 cores.
+
+**Run records and escalations (087, 088, 090):**
+- **Feat (087, #207): the run records say why a `pr wait` ended.** [guide](unattended-delivery.md#run-records) A `pr-wait` record has a `pr_wait` section: the result (`green`, `merged`, `red`, `budget-refused`, `timeout`, `no-checks`, `closed`, `merge-failed`, `error`) and the failing or pending check names. `cplat runs report` and the weekly retro show `pr-wait results:` and the top 5 red checks, and count red CI as `red-ci` instead of `failed` (the record keeps `outcome: failed`). The public retro issue shows checks as `check <n>`. Older records count as `unrecorded`.
+- **Feat (088, #207): escalations without a cause are classified.** [guide](unattended-delivery.md#auto-filed-platform-issues) Fixed rules match the reason of an escalation that names no allowed cause: git approval waits and a dirty working tree become `environment`, a spec/test conflict and a build left open for review become `decision`. The record gets `cause_source` (`given`, `rule`, `none`); a stated cause always wins and no rule yields `platform`. The ship stop gate giving up and headless `no progress` now record `environment`. `cplat runs report` shows `Unclassified escalations: <n> of <m> (<p>%)` with the reasons still unknown (`--json` key `unclassified`), and the weekly retro shows the unknown share week over week. Older records are classified when read.
 - **Fix (090): a failing retro proposal step shows why.** When `claude` exits non-zero, `cplat retro propose` prints the last 20 lines of its output to the job log. `claude exited with 1` alone could not be diagnosed: the output stayed in `propose.log` on the ephemeral runner. The posted issue keeps the short reason.
+
+**Parallel sessions and the platform repo:**
+- **Fix: run state is per worktree.** `cplat-ship.json`, the app-ship state, the `cplat runs begin` pointer, the recovery snapshot and pending replans now live in the worktree's own git dir instead of the dir every worktree shares, so one session's ship run no longer blocks another session's Stop hook, and a build in one worktree cannot attach to another's run. A worktree no longer sees another checkout's run; a run started inside a worktree before this fix must be resumed from the main checkout or restarted. The main checkout's `.git` is unchanged. The gitops merge slot and the validation evidence cache stay shared (ADR-051).
+- **Fix: `cplat pr wait` ignores runs a newer run superseded.** When several runs of one workflow exist for the PR's head commit (a label added to a fresh PR starts a second run that cancels the first), only the newest run's checks count, so the cancelled `ci-success` of the older run no longer ends the wait red.
+- **Chore: devbox gates in the platform repo.** `devbox run test-fast`, `test`, `quality`, `ci` and `lint-fix` now exist here, so the `/svc:ship` and `/svc:build` gates and the ship Stop hook find their scripts. No action for existing repos.
+
+**Action for existing repos:**
+1. Run `/plugin marketplace update` (shared 0.17.0; svc, gitops, app, web, svc-go, svc-java unchanged).
+2. Nothing else is required: no command, flag, output format or file schema changed.
+3. `cplat fleet update` brings repos to 4.8.0 when wanted.
 
 ## [4.7.0] — 2026-10-26
 

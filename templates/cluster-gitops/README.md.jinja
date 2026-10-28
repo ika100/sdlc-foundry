@@ -1,0 +1,18 @@
+# {{ project_name }}
+
+{{ description }}
+
+Cluster repo (platform shape `cluster-gitops`): it names the operators the cluster runs and registers the systems that run on it. See `CLAUDE.md` for the layout and commands.
+
+```bash
+devbox shell
+devbox run cluster-up              # a local k3d cluster with Argo CD, this repo's root Applications and every registered system
+# real cluster, by a human: KUBE_CONTEXT=<ctx> devbox run bootstrap
+/cluster:add my-system-gitops      # in Claude Code: register a system (edits cluster.yaml, renders, opens a PR)
+devbox run check                   # does the cluster have what every registered system needs?
+devbox run quality                 # render check + kustomize build + kubeconform
+```
+
+`cluster.yaml` is the only file you edit by hand; `devbox run render` writes everything under `cluster/`. CI's `check` job reads the system repos with the secret `SYSTEMS_TOKEN` (Contents: read on each): `gh secret set SYSTEMS_TOKEN -R {{ github_org }}/{{ project_name }}`.
+
+Guide: [docs/CLUSTERS.md](https://github.com/ika100/sdlc-foundry/blob/main/docs/CLUSTERS.md). Updates to this skeleton: `/platform:update`.

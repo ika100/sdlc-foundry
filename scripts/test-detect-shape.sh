@@ -17,9 +17,9 @@ expect() { # name expected dir
 
 mk() { local d="$tmp/$1"; mkdir -p "$d"; echo "$d"; }
 
-# (a) copier answers — local path form (what /shared:new-service produces) and gh: form
+# (a) copier answers — local path form (what /component:new produces) and gh: form
 shapes=$(uv run "$here/shapes.py" ids 2>/dev/null || python3 - <<'PY'
-print("service-python library-python web-nextjs gitops-app service-java service-go")
+print("service-python library-python web-nextjs gitops-app service-java service-go cluster-gitops")
 PY
 )
 for s in $(echo "$shapes"); do
@@ -31,6 +31,7 @@ done
 
 # (b) sniffing fallback
 d=$(mk sniff-gitops);  mkdir -p "$d/applications/app"; touch "$d/applications/app/applicationset.yaml"; expect "sniff gitops-app" gitops-app "$d"
+d=$(mk sniff-cluster); mkdir -p "$d/cluster"; touch "$d/cluster.yaml" "$d/cluster/operators-root.yaml"; expect "sniff cluster-gitops" cluster-gitops "$d"
 d=$(mk sniff-next-cfg); touch "$d/next.config.mjs"; expect "sniff next.config" web-nextjs "$d"
 d=$(mk sniff-next-pkg); echo '{"dependencies":{"next":"15.0.0"}}' > "$d/package.json"; expect "sniff package.json next" web-nextjs "$d"
 d=$(mk sniff-pom);      touch "$d/pom.xml"; expect "sniff pom.xml" service-java "$d"

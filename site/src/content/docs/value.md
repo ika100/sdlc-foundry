@@ -16,7 +16,7 @@ description: "What sdlc-foundry gives you, by role, with the measured evidence a
 
 ### Developer working on one service
 
-- `/svc:spec` → `/svc:plan` → `/svc:build` (spec-driven pipeline) and `/svc:quick-task` (small change) work the same in Python, Java, Go and Next.js repositories; the right agents are routed automatically.
+- `/component:spec` → `/component:plan` → `/component:build` (spec-driven pipeline) and `/component:fix` (small change) work the same in Python, Java, Go and Next.js repositories; the right agents are routed automatically.
 - You never need to know the manifests. A service repository contains code and a Dockerfile, nothing about Kubernetes.
 - `devbox run <recipe>` runs identically on your laptop, in CI and for agents.
 
@@ -24,7 +24,7 @@ description: "What sdlc-foundry gives you, by role, with the measured evidence a
 
 - **Everything that can be code is tested code.** The `cplat` CLI has an automated test suite, and an end-to-end test builds three repositories, a cluster and the whole flow in CI.
 - **Defaults are policy.** The conventions (non-root, read-only filesystem, limits, allowed registries, no `latest` outside dev) are checked in the pull request and enforced in the cluster.
-- **Extensible by contract:** a new language is a new *shape* (a registry entry, a template, a plugin) following a documented contract; a new addon implements a stable connection contract, so your services never depend on the implementation.
+- **Extensible by contract:** a new language is a new *shape* (a registry entry, a template, a plugin) following a documented contract; a new resource type implements a stable connection contract, so your services never depend on the implementation.
 
 ### Security and compliance
 
@@ -61,9 +61,9 @@ Measured on one test application and Apple-silicon laptops with GitHub-hosted ru
 
 - **Claude Code and GitHub are assumed.** The commands are Claude Code plugins, the templates target GitHub Actions and GHCR. Other hosts need work.
 - **Slash commands are prompts around scripts.** The scripts are tested; the prompts that call them are not deterministic and always ask before outward actions.
-- **Cross-repository work is planned centrally, built per repository.** `/app:spec` and `/app:plan` produce a product spec and a validated plan that assigns every criterion to a repository; each repository builds its part from its own spec, and nothing merges without you.
+- **Cross-repository work is planned centrally, built per repository.** `/system:spec` and `/system:plan` produce a system spec and a validated plan that assigns every criterion to a repository; each repository builds its part from its own spec, and nothing merges without you.
 - **The cluster is yours.** The platform installs operators and ArgoCD on a local k3d cluster; real clusters are bootstrapped by a human once (`devbox run bootstrap`), and operators (External Secrets, CloudNativePG, Kyverno) must exist there if you use their features.
-- **Addons are deliberately small.** The Postgres addon has no backups, point-in-time recovery or pooling; observability collects and forwards but ships no alert rules; Go services expose Prometheus metrics but no OpenTelemetry traces yet.
+- **Resources are deliberately small.** The Postgres resource has no backups, point-in-time recovery or pooling; observability collects and forwards but ships no alert rules; Go services expose Prometheus metrics but no OpenTelemetry traces yet.
 - **Guard rails cover what the platform renders.** Policies check Deployments; pods created by operators are out of scope.
 - **Single maintainer.** It is an open-source project with best-effort support.
 

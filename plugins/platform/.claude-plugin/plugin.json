@@ -1,0 +1,13 @@
+{
+  "name": "platform",
+  "version": "1.3.0",
+  "description": "The platform noun: /platform:doctor, update, fleet, runs and retro look after the platform itself.",
+  "author": {
+    "name": "Eike Hensler",
+    "email": "eike.hensler@gmail.com"
+  },
+  "homepage": "https://github.com/ika100/sdlc-foundry",
+  "repository": "https://github.com/ika100/sdlc-foundry",
+  "license": "Apache-2.0",
+  "keywords": ["platform", "doctor", "update", "fleet", "retro", "cplat"]
+}

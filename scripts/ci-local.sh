@@ -22,6 +22,9 @@ echo "OK: plugin manifests match the marketplace"
 step "shape registry, templates, plugins, descriptions"
 uv run scripts/shapes.py check
 
+step "4.x slash-command tombstones"
+python3 scripts/tombstones.py check
+
 step "GitHub Actions pinned by SHA, workflows have permissions"
 python3 scripts/pin-actions.py --check
 
@@ -30,6 +33,9 @@ python3 scripts/check-links.py
 
 step "license and copyright metadata (REUSE)"
 uvx --quiet --from "reuse[charset-normalizer]" reuse lint | tail -3
+
+step "pull request title and spec rule (skipped without a pull request)"
+python3 scripts/check-pr-local.py
 
 step "cplat tests (Kyverno CLI tests skip without the kyverno binary)"
 uv run --with pytest --with pytest-xdist --with pyyaml --with ruamel.yaml pytest tests/cplat -q -n auto

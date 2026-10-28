@@ -18,6 +18,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import yaml
+
 import core
 import fleet_pr
 import runs
@@ -61,7 +63,7 @@ def _first(text: str) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="cplat fleet", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="cplat platform fleet", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("update", help="bring every platform repo to the installed release")
     p.add_argument("--owner", action="append", default=[], help="repo owner (repeatable; default: the gh login)")
@@ -136,6 +138,17 @@ def process(slug: str, entry: dict | None, only: bool, target: str, ref: str | N
         answers = _read(slug, ".copier-answers.yml") if stamp is not None else None
     except PlatformError as e:
         return _row(slug, None, None, "failed", str(e))
+    if stamp is None and only:
+        try:
+            settings = _read(slug, ".platform-settings.yml")
+        except PlatformError as e:
+            return _row(slug, None, None, "failed", str(e))
+        try:
+            declared = yaml.safe_load(settings) if settings is not None else None
+        except yaml.YAMLError:
+            declared = None
+        if isinstance(declared, dict) and declared.get("shape") == "platform":
+            return _row(slug, None, None, "skipped", "the platform repo is not updated from a template")
     if stamp is None or answers is None or not is_platform(answers, templates):
         return _row(slug, None, None, "skipped", "not a platform repo") if only else None
     m = re.search(r"^platform:\s*(\d+\.\d+\.\d+)", stamp, re.M)
@@ -168,7 +181,9 @@ def _dry(slug: str, default: str, frm: str, old: str | None, target: str) -> dic
         prs = [p for p in json.loads(out or "[]") if str(p.get("headRefName", "")).startswith(fleet_pr.BRANCH_PREFIX)]
         if prs:
             nxt.append("would update open PR " + max(prs, key=lambda p: p["number"])["url"])
-    if old is None or core.vtuple(old)[0] < core.vtuple(target)[0]:
+    if old is not None and core.vtuple(old)[0] == 4 and core.vtuple(target)[0] >= 5:
+        nxt.append("5.0 migration: merges on green CI when proved")
+    elif old is None or core.vtuple(old)[0] < core.vtuple(target)[0]:
         nxt.append("major version: the PR will stay open")
     return _row(slug, frm, target, "would update", nxt=nxt)
 

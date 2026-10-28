@@ -19,20 +19,20 @@ def test_defaults_to_service_python_with_python_answers():
     assert r["data"]["module_name"] == "my_api" and r["data"]["python_version"] == "3.12"
 
 
-@pytest.mark.parametrize("flag,shape", [("--web", "web-nextjs"), ("--gitops", "gitops-app"), ("--library", "library-python")])
-def test_aliases(flag, shape):
-    assert resolve("x1", "desc", flag)["shape"] == shape
+@pytest.mark.parametrize("flags,shape", [(["--type", "website"], "web-nextjs"), (["--shape", "gitops-app"], "gitops-app"), (["--type", "library"], "library-python")])
+def test_aliases(flags, shape):
+    assert resolve("x1", "desc", *flags)["shape"] == shape
 
 
 def test_flags_may_appear_anywhere():
-    r = resolve("--web", "my-web", "Frontend", "app")
+    r = resolve("--type", "website", "my-web", "Frontend", "app")
     assert (r["name"], r["description"], r["shape"]) == ("my-web", "Frontend app", "web-nextjs")
 
 
 def test_non_python_shapes_do_not_get_module_name_or_python_version():
     """Regression: module_name=my_saas turned the Go module path into `my_saas`."""
     for shape in ("service-go", "service-java", "web-nextjs", "gitops-app"):
-        data = resolve("my-saas", "d", "--type", shape)["data"]
+        data = resolve("my-saas", "d", "--shape", shape)["data"]
         assert "module_name" not in data and "python_version" not in data, shape
 
 
@@ -40,8 +40,8 @@ def test_non_python_shapes_do_not_get_module_name_or_python_version():
     (["Bad_Name", "d"], "invalid project name"),
     (["ok"], "description is required"),
     ([], "name is required"),
-    (["ok", "d", "--web", "--gitops"], "conflicting"),
-    (["ok", "d", "--type", "nope"], "unknown shape"),
+    (["ok", "d", "--web", "--shape", "gitops-app"], "`--web` is `--type website --lang typescript` in 5.0"),
+    (["ok", "d", "--type", "nope"], "not a valid component type"),
 ])
 def test_bad_input_has_a_clear_error(argv, msg):
     with pytest.raises(core.PlatformError, match=msg):
@@ -55,9 +55,9 @@ def test_errors_carry_a_hint():
 
 
 def test_app_is_ignored_for_non_deployable_shapes():
-    r = resolve("g1", "d", "--gitops", "--app", "acme/g1")
+    r = resolve("g1", "d", "--shape", "gitops-app", "--system", "acme/g1")
     assert r["app"] is None and r["ignored_app"]
-    assert resolve("s1", "d", "--app", "acme/g1")["app"] == "acme/g1"
+    assert resolve("s1", "d", "--system", "acme/g1")["app"] == "acme/g1"
 
 
 def test_existing_nonempty_target_is_refused(tmp_path):
@@ -68,7 +68,7 @@ def test_existing_nonempty_target_is_refused(tmp_path):
 
 
 def test_dry_run_makes_no_changes(tmp_path, capsys):
-    assert newsvc.main(["dry-1", "d", "--web", "--no-github", "--dry-run", "--dir", str(tmp_path)]) == 0
+    assert newsvc.main(["dry-1", "d", "--type", "website", "--no-github", "--dry-run", "--dir", str(tmp_path)]) == 0
     assert not (tmp_path / "dry-1").exists()
     assert "dry run" in capsys.readouterr().out
 
@@ -77,7 +77,7 @@ def test_dry_run_makes_no_changes(tmp_path, capsys):
 def test_real_local_render_of_each_shape(tmp_path):
     for shape in ("gitops-app", "service-go"):
         name = f"t-{shape}"
-        newsvc.main([name, "desc", "--type", shape, "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme", "--app", "acme/app-gitops"])
+        newsvc.main([name, "desc", "--shape", shape, "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme", "--system", "acme/app-gitops"])
         repo = tmp_path / name
         answers = (repo / ".copier-answers.yml").read_text()
         assert f"_src_path: gh:ika100/sdlc-foundry/templates/{shape}" in answers  # stable, not a temp path
@@ -126,10 +126,10 @@ def test_public_conflicts_are_rejected():
 
 
 def test_data_sets_template_options_and_rejects_unknown_ones(tmp_path):
-    req = newsvc.resolve(["opt-svc", "d", "--type", "service-java", "--data", "needs_observability=false", "--dir", str(tmp_path)])
+    req = newsvc.resolve(["opt-svc", "d", "--type", "service", "--lang", "java", "--data", "needs_observability=false", "--dir", str(tmp_path)])
     assert req["data"]["needs_observability"] == "false" and "needs_observability" in req["set_keys"]
     with pytest.raises(core.PlatformError) as e:
-        newsvc.resolve(["opt-svc", "d", "--type", "service-java", "--data", "needs_everything=true"])
+        newsvc.resolve(["opt-svc", "d", "--type", "service", "--lang", "java", "--data", "needs_everything=true"])
     assert "no option 'needs_everything'" in str(e.value) and "needs_observability" in (e.value.hint or "")
     with pytest.raises(core.PlatformError, match="KEY=VALUE"):
         newsvc.resolve(["opt-svc", "d", "--data", "oops"])
@@ -138,7 +138,7 @@ def test_data_sets_template_options_and_rejects_unknown_ones(tmp_path):
 def test_next_steps_tell_the_agent_to_start_a_feature_without_waiting_for_ci():
     steps = newsvc._next_steps({"name": "svc-a", "shape": "service-python", "description": "Task API"})
     joined = "\n".join(steps)
-    assert "/svc:build <NNN>" in joined and "do not wait" in joined
+    assert "/component:build <NNN>" in joined and "do not wait" in joined
 
 
 # ---------------- spec 054: new repos protect main with their CI checks ----------------
@@ -197,7 +197,7 @@ def test_every_shape_lists_ci_checks_that_exist_in_its_workflow():
 def test_a_new_gitops_app_allows_pin_prs_to_merge_themselves(tmp_path, monkeypatch, capsys):
     """AC-062.4: auto-merge on, and Actions may open pull requests."""
     calls = _gh_recorder(monkeypatch)
-    assert newsvc.main(["pin-app", "d", "--gitops", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
+    assert newsvc.main(["pin-app", "d", "--shape", "gitops-app", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
     flat = [" ".join(c) for c in calls]
     assert any("-X PATCH repos/acme/pin-app" in c and "allow_auto_merge=true" in c for c in flat)
     assert any("repos/acme/pin-app/actions/permissions/workflow" in c and "can_approve_pull_request_reviews=true" in c for c in flat)
@@ -216,7 +216,7 @@ def test_settings_failure_warns_with_the_commands(tmp_path, monkeypatch, capsys)
         return real(cmd, **kw)
     monkeypatch.setattr(newsvc, "run", fake)
     monkeypatch.setattr(newsvc.core, "has_gh", lambda: True)
-    assert newsvc.main(["pin-app2", "d", "--gitops", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
+    assert newsvc.main(["pin-app2", "d", "--shape", "gitops-app", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
     out = capsys.readouterr().out
     assert "auto-merge is not available on this plan, pin-dev merges itself" in out and "could not let Actions" not in out
 
@@ -233,7 +233,7 @@ def test_actions_permission_failure_names_the_command(tmp_path, monkeypatch, cap
         return real(cmd, **kw)
     monkeypatch.setattr(newsvc, "run", fake)
     monkeypatch.setattr(newsvc.core, "has_gh", lambda: True)
-    assert newsvc.main(["pin-app3", "d", "--gitops", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
+    assert newsvc.main(["pin-app3", "d", "--shape", "gitops-app", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0
     out = capsys.readouterr().out
     assert "could not let Actions open pull requests" in out and "repos/acme/pin-app3/actions/permissions/workflow" in out
 
@@ -257,7 +257,7 @@ def test_free_plan_warning_says_merges_still_wait_for_ci(tmp_path, monkeypatch, 
 
 def test_a_linked_service_names_the_one_token_step(tmp_path, capsys):
     """AC-062.4: the only manual step, with the exact command."""
-    assert newsvc.main(["pin-svc", "d", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme", "--app", "acme/shop"]) == 0
+    assert newsvc.main(["pin-svc", "d", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme", "--system", "acme/shop"]) == 0
     out = capsys.readouterr().out
     assert "gh secret set GITOPS_TOKEN -R acme/pin-svc" in out and "acme/shop" in out and "Contents" in out
     assert newsvc.main(["nopin-svc", "d", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]) == 0

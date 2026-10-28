@@ -7,8 +7,10 @@ placeholders, never a repo, spec or store name).
 from __future__ import annotations
 
 import datetime
+import math
 import re
 import statistics
+from collections import Counter
 
 import autoissue
 import runs_report
@@ -78,13 +80,14 @@ def _shape_of(r: dict) -> str:
 
 
 def _outcome(r: dict) -> str:
+    if runs_report.count_outcome(r) == runs_report.RED_CI:
+        return runs_report.RED_CI
     o = r.get("outcome")
     return o if o in OUTCOMES else UNKNOWN
 
 
 def _cause(esc: dict) -> str:
-    c = esc.get("cause")
-    return c if c in CAUSES else UNKNOWN
+    return runs_report.escalation_rules.effective(esc).cause
 
 
 def _escalation(r: dict) -> dict | None:
@@ -131,7 +134,8 @@ def _runs(cur: list[dict], prev: list[dict]) -> dict:
             c = counts.setdefault(_text(r.get("kind")), {})
             c.setdefault(_outcome(r), [0, 0])[i] += 1
     seen_unknown = any(UNKNOWN in c for c in counts.values())
-    names = OUTCOMES + ((UNKNOWN,) if seen_unknown else ())
+    seen_red = any(runs_report.RED_CI in c for c in counts.values())
+    names = OUTCOMES[:3] + ((runs_report.RED_CI,) if seen_red else ()) + OUTCOMES[3:] + ((UNKNOWN,) if seen_unknown else ())
     return {k: {o: _fig(*counts[k].get(o, [0, 0])) for o in names} for k in sorted(counts)}
 
 
@@ -173,6 +177,27 @@ def _ci(cur: list[dict], prev: list[dict]) -> dict:
             "rounds_per_run": _fig(per(rc, cur), per(rp, prev)), "reruns_per_run": _fig(per(kc, cur), per(kp, prev))}
 
 
+def _pr_wait(cur: list[dict], prev: list[dict]) -> dict:
+    c, p = runs_report.aggregate_pr_wait(cur), runs_report.aggregate_pr_wait(prev)
+    names = list(c["results"]) + [k for k in p["results"] if k not in c["results"]]
+    results = {k: _fig(c["results"].get(k, 0), p["results"].get(k, 0)) for k in names}
+
+    def counts(g):
+        n: Counter = Counter()
+        ids: dict[str, set] = {}
+        for r in g:
+            for name in runs_report.red_check_names(r):
+                n[name] += 1
+                ids.setdefault(name, set()).add(str(r.get("run_id")))
+        return n, ids
+    cn, ids = counts(cur)
+    pn, _ = counts(prev)
+    ranked = sorted(cn, key=lambda k: (-cn[k], k))[:runs_report.TOP_RED_CHECKS]
+    red = [{"rank": i, "check": k, "count": _fig(cn[k], pn.get(k, 0)), "run_ids": sorted(ids[k])[:MAX_RUN_IDS]}
+           for i, k in enumerate(ranked, 1)]
+    return {"results": results, "red_checks": red}
+
+
 def _escalations(cur: list[dict], prev: list[dict]) -> dict:
     out: dict = {}
     for cause in CAUSES:
@@ -188,6 +213,11 @@ def _escalations(cur: list[dict], prev: list[dict]) -> dict:
                    for i, (reason, rs) in enumerate(ranked, 1)]
         out[cause] = {"count": _fig(len(c), len(p)), "reasons": reasons}
     return out
+
+
+def _unclassified(cur: list[dict], prev: list[dict]) -> dict:
+    c, p = runs_report.aggregate_unclassified(cur), runs_report.aggregate_unclassified(prev)
+    return {k: _fig(c[k], p[k]) for k in ("count", "escalations", "share", "by_rule")}
 
 
 def _rerun_view(cur: list[dict], prev: list[dict]) -> dict:
@@ -321,11 +351,19 @@ def _index(rep: dict, side: str = "current") -> dict:
             put(f"phases.{names[name]}.{k}", st[k][side])
     for k, f in rep["ci"].items():
         put(f"ci.{k}", f[side])
+    pw = rep.get("pr_wait") or {"results": {}, "red_checks": []}   # a report.json from before AC-087.27
+    for k, f in pw["results"].items():
+        put(f"pr_wait.{k}", f[side])
+    for c in pw["red_checks"]:
+        put(f"pr_wait.check{c['rank']}", c["count"][side])
     for cause, e in rep["escalations"].items():
         put(f"escalations.{cause}", e["count"][side])
         if side == "current":
             for r in e["reasons"]:
                 put(f"escalations.{cause}.reason{r['rank']}", r["runs"])
+    for k, f in (rep.get("unclassified") or {}).items():   # a report.json from before spec 088 (#207)
+        if k in ("count", "share", "by_rule"):
+            put(f"unclassified.{k}", f[side])
     for k, f in rep["reruns"]["by_reason"].items():
         put(f"reruns.{k}", f[side])
     for c in rep["reruns"]["by_check"]:
@@ -368,7 +406,8 @@ def build(records: list[dict], *, auto_issues: list[dict], open_issues: list[dic
         "records": {"current": len(cur), "previous": len(prev), "malformed": malformed},
         "repos": {"by_shape": by_shape, "list": repo_list, "specs": specs_seen},
         "runs": _runs(cur, prev), "phases": _phases(cur, prev), "ci": _ci(cur, prev),
-        "escalations": _escalations(cur, prev), "reruns": _rerun_view(cur, prev),
+        "pr_wait": _pr_wait(cur, prev), "escalations": _escalations(cur, prev),
+        "unclassified": _unclassified(cur, prev), "reruns": _rerun_view(cur, prev),
         "issues": issues, "agents": agents, "no_data": no_data,
         "context": {"specs": specs, "open_issues": open_issues},
     }
@@ -437,6 +476,14 @@ def _agent_cell(row: dict, path: str) -> str:
     return f"{_a(cur)} (prev {_a(prev)}, {'n/a' if diff is None else f'{diff:+.2f}'})"
 
 
+def _unknown_share(u: dict) -> str:
+    def pct(x):
+        return "n/a" if x is None else f"{math.floor(100 * x + 0.5)}%"
+    s, n, m, b = u["share"], u["count"], u["escalations"], u["by_rule"]
+    return (f"unknown share: {pct(s['current'])} (prev {pct(s['previous'])}) · unknown {n['current']} of {m['current']} "
+            f"(prev {n['previous']} of {m['previous']}) · classified by rule {b['current']} (prev {b['previous']})")
+
+
 def _render(report: dict, proposals_md: str | None, public: bool) -> str:
     r = report
     kinds = _alias(list(r["runs"]), "kind") if public else {k: k for k in r["runs"]}
@@ -485,10 +532,23 @@ def _render(report: dict, proposals_md: str | None, public: bool) -> str:
         out.append(f"CI rounds per run {_cell(ci['rounds_per_run'], _a)} · reruns per run {_cell(ci['reruns_per_run'], _a)} · "
                    f"rounds {_cell(ci['rounds'])} · reruns {_cell(ci['reruns'])}")
 
+    out.append("## pr-wait")
+    pw = r.get("pr_wait")   # absent in a report.json from before AC-087.27
+    if "runs" in nd or not pw:
+        out.append(none)
+    else:
+        out.append("results: " + ", ".join(f"{k} {_cell(f)}" for k, f in pw["results"].items()))
+        out.append("red checks:" + ("" if pw["red_checks"] else " none"))
+        for x in pw["red_checks"]:
+            label = f"check {x['rank']}" if public else x["check"]
+            out.append(f"  {x['rank']}. {label} — {_cell(x['count'])} ({', '.join(x['run_ids'])})")
+
     out.append("## Escalations")
     if "runs" in nd:
         out.append(none)
     else:
+        if r.get("unclassified"):
+            out.append(_unknown_share(r["unclassified"]))
         for cause, e in r["escalations"].items():
             out.append(f"{cause}: {_cell(e['count'])}")
             for x in e["reasons"]:
@@ -533,7 +593,7 @@ def _render(report: dict, proposals_md: str | None, public: bool) -> str:
                     causes = "; ".join(f"{c['count']}× {c['cause']} ({c['run_id']})" for c in row["top_causes"]) or "none"
                     out.append(f"{row['agent']} on {row['shape']} causes: {causes}")
 
-    out += ["---", f"_Generated by `cplat retro` (spec 090) at {r['generated_at']}. Repos appear as counts per shape, runs by run id._"]
+    out += ["---", f"_Generated by `cplat platform retro` (spec 090) at {r['generated_at']}. Repos appear as counts per shape, runs by run id._"]
     body = "\n".join(out) + "\n"
     if public:
         body = autoissue.scrub(body, private_names(report))

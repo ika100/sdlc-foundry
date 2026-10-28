@@ -1,8 +1,8 @@
-"""cplat retro: the weekly platform retro (spec 090, ADR-039).
+"""cplat platform retro: the weekly platform retro (spec 090, ADR-039).
 
-  cplat retro [--week W] [--json] [--out DIR]       build the report of the last complete week (reads only)
-  cplat retro propose --dir DIR [--model M] [--max-minutes N]   headless Claude writes DIR/proposals.json (always exit 0)
-  cplat retro post [--dir DIR] [--week W]           check the proposals, post the public issue and the full report to the run store
+  cplat platform retro [--week W] [--json] [--out DIR]       build the report of the last complete week (reads only)
+  cplat platform retro propose --dir DIR [--model M] [--max-minutes N]   headless Claude writes DIR/proposals.json (always exit 0)
+  cplat platform retro post [--dir DIR] [--week W]           check the proposals, post the public issue and the full report to the run store
 """
 from __future__ import annotations
 
@@ -202,7 +202,7 @@ def _post(ns: argparse.Namespace) -> int:
         try:
             report = json.loads((d / "report.json").read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
-            raise PlatformError(f"no usable report in {d}: {e}", hint="cplat retro --out DIR") from None
+            raise PlatformError(f"no usable report in {d}: {e}", hint="cplat platform retro --out DIR") from None
         slug, store = _store()
     else:
         report = build_report(_week(ns.week))
@@ -214,7 +214,7 @@ def _post(ns: argparse.Namespace) -> int:
     found = retro_report.leaks(public, report)
     if found:
         raise PlatformError(f"the public retro would name {len(found)} private name(s); nothing was posted",
-                            hint="fix the proposal text or report a platform bug with /shared:report-issue")
+                            hint="fix the proposal text or report a platform bug with /issue:report")
     repo = autoissue.default_repo()
     title = f"Weekly retro {week}"
     try:
@@ -244,7 +244,7 @@ def _post(ns: argparse.Namespace) -> int:
         store.put({f"retros/{week}.md": md, f"retros/{week}.json": autoissue.scrub(json.dumps(doc, indent=2)) + "\n",
                    "retros/README.md": index}, f"retro: {week}")
     except runs_store.StoreError as e:
-        retry = f"cplat retro post --dir {d}" if d else "cplat retro post"
+        retry = f"cplat platform retro post --dir {d}" if d else "cplat platform retro post"
         raise PlatformError(f"retro posted as {url}, but the run store could not be updated: {e}",
                             hint=f"{retry}   (replaces the issue body and retries the store)") from None
     print(f"retro: {url} ({verb}); closed {closed} earlier retro issue(s); report in the run store")
@@ -252,18 +252,18 @@ def _post(ns: argparse.Namespace) -> int:
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat retro", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="cplat platform retro", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--week")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--out")
     if argv and argv[0] == "propose":
-        pp = argparse.ArgumentParser(prog="cplat retro propose")
+        pp = argparse.ArgumentParser(prog="cplat platform retro propose")
         pp.add_argument("--dir", required=True)
         pp.add_argument("--model")
         pp.add_argument("--max-minutes", type=float, default=20.0)
         return _propose(pp.parse_args(argv[1:]))
     if argv and argv[0] == "post":
-        pp = argparse.ArgumentParser(prog="cplat retro post")
+        pp = argparse.ArgumentParser(prog="cplat platform retro post")
         pp.add_argument("--dir")
         pp.add_argument("--week")
         return _post(pp.parse_args(argv[1:]))

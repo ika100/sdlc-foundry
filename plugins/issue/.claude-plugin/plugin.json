@@ -1,0 +1,13 @@
+{
+  "name": "issue",
+  "version": "1.0.0",
+  "description": "The issue noun: /issue:triage routes GitHub issues to specs and fixes; /issue:report files a platform issue.",
+  "author": {
+    "name": "Eike Hensler",
+    "email": "eike.hensler@gmail.com"
+  },
+  "homepage": "https://github.com/ika100/sdlc-foundry",
+  "repository": "https://github.com/ika100/sdlc-foundry",
+  "license": "Apache-2.0",
+  "keywords": ["issue", "triage", "feedback", "cplat"]
+}

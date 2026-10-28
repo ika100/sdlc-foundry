@@ -2,6 +2,7 @@
 #
 # Adding a shape: add an entry here, a template under templates/<template>/, a plugin
 # under plugins/<plugin>/, and a matching sniff rule in scripts/detect-shape.sh.
+# A declared shape (detection.declared, e.g. platform) needs only an entry and a plugin: no template, no sniff rule (ADR-056).
 # `scripts/shapes.py check` (run in CI) keeps this file, the templates, and the PRD §4 table consistent.
 shapes:
   - id: service-python
@@ -89,7 +90,7 @@ shapes:
     adr: [2, 3, 4, 5]
 
   - id: gitops-app
-    plugin: gitops
+    plugin: system
     template: gitops-app
     deployable: false
     test_globs: ["tests/**/*"]   # where `cplat spec trace` looks for AC ids (ADR-026)
@@ -107,6 +108,19 @@ shapes:
       kind: kustomize+argocd
     status: stable
     adr: [6, 14]
+
+  - id: cluster-gitops
+    plugin: cluster
+    template: cluster-gitops
+    deployable: false
+    test_globs: ["tests/**/*"]
+    ci_checks: ["quality (render-check + kustomize build + kubeconform)", "check (registered systems)", "security (detect-secrets)", "ci-extra"]
+    validation: {selector: null}
+    library: false
+    detection: {copier_src: templates/cluster-gitops, sniff: ["cluster.yaml + cluster/operators-root.yaml"]}
+    default_stack: {kind: argocd-app-of-apps}
+    status: stable
+    adr: [60]
 
   - id: service-java
     plugin: svc-java
@@ -173,3 +187,13 @@ shapes:
       resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 500m, memory: 256Mi}}
     status: stable
     adr: [10]
+
+  - id: platform
+    plugin: svc
+    template: null          # no template: the platform repo is never created, adopted, updated or rolled out from one (ADR-056)
+    deployable: false
+    library: false
+    detection:
+      declared: .platform-settings.yml   # only `shape: platform` in the committed settings file; never sniffed
+    status: stable
+    adr: [56]

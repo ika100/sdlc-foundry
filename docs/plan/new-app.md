@@ -1,12 +1,12 @@
 ---
 plan_id: new-app
-shape: none   # the platform repo itself; not a key in shapes.yml, so /svc:build-feature cannot run here, work by hand or with the generic coder
-summary: /shared:new-app creates the gitops-app repo and all component repos from an app.yml and opens one compose PR
+shape: none   # the platform repo itself; not a key in shapes.yml, so /component:build cannot run here, work by hand or with the generic coder
+summary: /system:new creates the gitops-app repo and all component repos from an app.yml and opens one compose PR
 story: STORY-033
 status: implemented   # t1-t5 done on branch feature/new-app
 tasks:
   - id: t1
-    title: Manifest loading, validation, ordering and dry-run preview (cplat new-app)
+    title: Manifest loading, validation, ordering and dry-run preview (cplat system new)
     files: [scripts/cplat/newapp.py, scripts/cplat/cplat.py]
     parallel_safe: true
     depends_on: []
@@ -32,24 +32,24 @@ tasks:
     depends_on: [t2]
 ---
 
-# Plan: `/shared:new-app`
+# Plan: `/system:new`
 
 Implements [STORY-033](../backlog.md). Design follows the existing conventions: the slash command is thin and runs `scripts/cplat/cplat.py`; all logic lives in a tested Python module that returns a `core.Report` (will do / did / next / undo).
 
 ## Design decisions
 
-1. **Reuse, do not reimplement.** `newapp.py` builds argv lists and calls `newsvc.resolve` / `newsvc.execute` for every repo and `compose.main([... "add", ... "--pr"])` for the wiring. Rendering, bootstrap commit, topic rules, `.platform-app.yml` and plugin enablement therefore stay identical to `/shared:new-service`. The only new logic is the manifest, the order, the pre-flight and the failure handling.
+1. **Reuse, do not reimplement.** `newapp.py` builds argv lists and calls `newsvc.resolve` / `newsvc.execute` for every repo and `compose.main([... "add", ... "--pr"])` for the wiring. Rendering, bootstrap commit, topic rules, `.platform-app.yml` and plugin enablement therefore stay identical to `/component:new`. The only new logic is the manifest, the order, the pre-flight and the failure handling.
 2. **Manifest is YAML, strict.** Unknown keys are errors (typos should not be silently ignored). The `app` value is both the gitops-app repo name and the `--app <org>/<app>` link, which matches `docs/USER-JOURNEY.md` (`<you>/taskboard`). The end-to-end scenario's `taskboard-app` name is changed to `taskboard` in t5 so the docs agree.
 3. **Order is computed, not trusted.** gitops-app, then library shapes, then deployable services, then web (key: `shapes.yml` `library` flag, then shape id order `service-python`, `service-java`, `service-go`, `web-nextjs`). This resolves scenario question Q1.
 4. **Pre-flight is all-or-nothing and runs for `--dry-run` too**, so a dry run is a trustworthy prediction. `gh repo view` is read-only. Without `gh`, pre-flight skips the remote checks and the run degrades like `new-service` (local render, printed commands).
 5. **Failure model: stop, report, resume.** No rollback (deleting repos needs `delete_repo` and is destructive). The report lists created repos with their undo commands. `--resume` treats an existing local directory whose `.copier-answers.yml` matches the manifest's shape, and an existing GitHub repo, as done and continues.
 6. **One compose PR.** `compose add <svc...> --pr` run inside the new gitops-app directory (`--repo-dir`). Compose already verifies the `deployable-service` topic, so the ordering (topics set during creation) is a hard requirement.
-7. **Out of scope:** interactive mode, `compose` options per component (`--expose`, env wiring; use `/gitops:compose` afterwards, the next steps say so), `/shared:shapes`.
+7. **Out of scope:** interactive mode, `compose` options per component (`--expose`, env wiring; use `/component:add` afterwards, the next steps say so), `shapes`.
 
 ## t1 — Manifest loading, validation, ordering and dry-run preview
 
 **Files:** `scripts/cplat/newapp.py`, `scripts/cplat/cplat.py`
-**Goal:** `cplat new-app <app.yml> [--org] [--public] [--ref] [--dir] [--no-github] [--skip-tasks] [--dry-run] [--json]` parses and validates the manifest and prints the ordered plan.
+**Goal:** `cplat system new <app.yml> [--org] [--public] [--ref] [--dir] [--no-github] [--skip-tasks] [--dry-run] [--json]` parses and validates the manifest and prints the ordered plan.
 
 **Implementation notes:**
 - Register `"new-app": "newapp"` in `COMMANDS` and add a usage line to the module docstring in `cplat.py`.
@@ -72,7 +72,7 @@ Implements [STORY-033](../backlog.md). Design follows the existing conventions: 
 - `--resume`: skip a component when the target directory contains a repo with the right shape and (with `gh`) the GitHub repo exists. Skipped repos show as `already exists` in `did`.
 - After the loop (GitHub mode only): run `compose.main(["add", *deployable_names, "--repo-dir", str(app_dir), "--pr"])`; capture its PR URL from the report. In `--no-github` mode print the commands (as `new-service` does).
 - `Report.data` holds `repos`, `pr`, and the paths, for `--json`.
-- `next_steps`: `cd <app> && devbox run cluster-up` after merging the PR; "adjust env wiring or `--expose` with `/gitops:compose`"; "start a feature in any repo with `/svc:build-feature`".
+- `next_steps`: `cd <app> && devbox run cluster-up` after merging the PR; "adjust env wiring or `--expose` with `/component:add`"; "start a feature in any repo with `/component:build`".
 
 **Acceptance:** with a faked `gh` and `--skip-tasks`, a three-component manifest produces four local repos, calls `compose add` once with exactly the deployable names, and a forced failure on the third repo yields a report that names the two created repos and `--resume` finishes the rest without recreating them.
 
@@ -94,7 +94,7 @@ Implements [STORY-033](../backlog.md). Design follows the existing conventions: 
 ## t4 — Slash command and plugin bump
 
 **Files:** `plugins/shared/commands/new-app.md`, `plugins/shared/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `plugins/shared/README.md`
-**Goal:** `/shared:new-app <manifest|--from file> [flags]` available after a version bump.
+**Goal:** `/system:new <manifest|--from file> [flags]` available after a version bump.
 
 **Implementation notes:**
 - Copy the structure of `plugins/shared/commands/new-service.md` (cached checkout prefix, preview with `--dry-run`, run, relay output, report-issue footer). Keep the description under about 200 characters; always-on descriptions are token-budgeted (CHANGELOG 2.1.0).
@@ -118,7 +118,7 @@ Implements [STORY-033](../backlog.md). Design follows the existing conventions: 
 
 ## Order and parallelism
 
-`t1` and `t4` can start together. `t2` follows `t1` (same file). `t3` and `t5` follow `t2` and can run together. Because this repo has no shape, `/svc:build-feature` cannot orchestrate it; run the tasks by hand or with `general-purpose` agents in worktrees, one per parallel-safe group.
+`t1` and `t4` can start together. `t2` follows `t1` (same file). `t3` and `t5` follow `t2` and can run together. Because this repo has no shape, `/component:build` cannot orchestrate it; run the tasks by hand or with `general-purpose` agents in worktrees, one per parallel-safe group.
 
 ## Risks
 

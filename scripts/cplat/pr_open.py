@@ -17,11 +17,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import core
+import pr_rules
+import settings
 import spec as specmod
 from core import PlatformError, run
 
 BRANCH = re.compile(r"^(feature|fix|chore|docs|refactor|perf|test|release)/[A-Za-z0-9._/-]+$")
-TITLE = re.compile(r"^(feat|fix|refactor|perf|test|docs|chore|ci|build|revert|style)(\([^)]+\))?!?: \S.*$")
 WIP_NOTE = "Contains WIP commits from an interrupted build: squash-merge."
 PR_RULES = ("Bash(gh pr create *)", "Bash(gh pr create:*)", "Bash(gh pr *)", "Bash(gh pr:*)", "Bash(gh *)", "Bash(gh:*)")
 
@@ -39,6 +40,7 @@ class Opts:
     issues: str = ""
     spec: str | None = None
     no_pr: bool = False
+    no_spec: bool = False
 
 
 @dataclass
@@ -47,6 +49,7 @@ class Result:
     push: tuple[str, str] = ("not run", "")
     pr: tuple[str, str | None, str | None, str] = ("not run", None, None, "")
     closes: list[int] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
     @property
     def exit(self) -> int:
@@ -65,7 +68,7 @@ class Result:
             pr = f"pr: ready: {r[2]}"
         else:
             pr = f"pr: {one(r[0], r[3])}"
-        return [commit, push, pr]
+        return [commit, push, pr, *self.notes]
 
     def as_json(self) -> dict:
         return {"commit": {"status": self.commit[0], "sha": self.commit[1], "detail": self.commit[2]},
@@ -104,7 +107,8 @@ def pr_allowed(repo: Path) -> bool:
     return bool(rules["allow"] & listed) and not (rules["deny"] & listed) and not (rules["ask"] & listed)
 
 
-def _closes(repo: Path, o: Opts, base_ref: str, have_gh: bool, body_path: Path) -> list[int]:
+def _closes(repo: Path, o: Opts, base_ref: str, have_gh: bool, body_path: Path) -> tuple[list[int], str]:
+    """The issues to close and the body as it will be sent (`{{CLOSES}}` resolved in memory, nothing written)."""
     cands: set[int] = {int(n) for n in re.findall(r"#(\d+)", o.issues)}
     if o.spec:
         try:
@@ -116,9 +120,18 @@ def _closes(repo: Path, o: Opts, base_ref: str, have_gh: bool, body_path: Path) 
     kept = sorted(n for n in cands if have_gh and
                   _out(["gh", "issue", "view", str(n), "--json", "state", "-q", ".state"], repo) == "OPEN")
     text = body_path.read_text()
-    if "{{CLOSES}}" in text:
-        body_path.write_text(text.replace("{{CLOSES}}", "\n".join(f"Closes #{n}" for n in kept) or "N/A"))
-    return kept
+    return kept, text.replace("{{CLOSES}}", "\n".join(f"Closes #{n}" for n in kept) or "N/A")
+
+
+def _uncommitted(repo: Path) -> list[str]:
+    """The paths `git add -A` would commit, from `git status --porcelain`."""
+    paths = []
+    out = run(["git", "status", "--porcelain"], cwd=repo, check=False).stdout or ""
+    for line in out.splitlines():
+        path = line[3:].split(" -> ")[-1].strip().strip('"')
+        if path:
+            paths.append(path)
+    return paths
 
 
 def open_pr(repo: Path, o: Opts) -> Result:
@@ -132,13 +145,25 @@ def open_pr(repo: Path, o: Opts) -> Result:
     if branch == o.base or not BRANCH.match(branch):
         raise Refused(f"branch '{branch}' cannot be pushed from here",
                       hint=f"work on feature/*, fix/*, chore/*, docs/*, refactor/*, perf/*, test/* or release/*, not {o.base}")
-    if not TITLE.match(o.title):
-        raise Refused(f"title '{o.title}' is not a Conventional Commits title", hint="<type>(<scope>): <subject>")
+    bad = pr_rules.title_error(o.title)
+    if bad:
+        raise Refused(bad)
 
     base_ref = f"origin/{o.base}" if _ok(["git", "rev-parse", "--verify", "--quiet", f"origin/{o.base}"], repo) else o.base
     have_gh = _ok(["gh", "auth", "status"], repo)
     res = Result()
-    res.closes = _closes(repo, o, base_ref, have_gh, body_path)
+    res.closes, resolved = _closes(repo, o, base_ref, have_gh, body_path)
+    branch_files: list[str] = []
+    if settings.declared_shape(repo) == "platform":
+        files = branch_files = [f for f in _out(["git", "diff", "--name-only", f"{base_ref}...HEAD"], repo).splitlines() if f]
+        no_spec = [pr_rules.NO_SPEC] if o.no_spec else []
+        err = pr_rules.spec_error(resolved, no_spec, files + _uncommitted(repo))
+        if err:
+            raise Refused(err)
+    elif o.no_spec:
+        res.notes.append("note: --no-spec ignored, only the platform repo has the spec rule")
+    if "{{CLOSES}}" in body_path.read_text():
+        body_path.write_text(resolved)
 
     subjects = _out(["git", "log", f"{base_ref}..HEAD", "--format=%s"], repo).splitlines()
     text = body_path.read_text()
@@ -156,6 +181,7 @@ def open_pr(repo: Path, o: Opts) -> Result:
             res.commit = ("failed", None, _last(com))
     else:
         ahead = int(_out(["git", "rev-list", "--count", f"{base_ref}..HEAD"], repo) or 0)
+        ahead = ahead or int(bool(branch_files))   # a diff against the base means the branch is ahead
         if ahead:
             res.commit = ("skipped", None, f"skipped (clean tree, {ahead} commits ahead)")
         else:
@@ -179,6 +205,8 @@ def open_pr(repo: Path, o: Opts) -> Result:
         res.pr = ("failed", existing[0]["url"], None, f"already open {existing[0]['url']}")
         return res
     create = ["gh", "pr", "create", "--base", o.base, "--head", branch, "--title", o.title, "--body-file", o.body_file]
+    if o.no_spec and settings.declared_shape(repo) == "platform":
+        create += ["--label", pr_rules.NO_SPEC]
     if o.no_pr or not have_gh or not pr_allowed(repo):
         res.pr = ("ready", None, shlex.join(create), "")
         return res

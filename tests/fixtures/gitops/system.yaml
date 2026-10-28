@@ -1,0 +1,76 @@
+# system.yaml of the fx system: the only hand-edited file of this system (sdlc-foundry 5.0).
+# Schema: https://github.com/ika100/sdlc-foundry/blob/main/docs/DOMAIN-MODEL.md#one-file-per-system
+# CI fixture (ci.yml): two components, fx-api in dev and staging, fx-web exposed in dev only.
+system: fx
+owner: acme
+gateway:
+  name: traefik-gateway
+  namespace: kube-system
+environments:
+  dev:
+    host: '{component}.{system}-dev.localhost'
+    policy: audit
+    observability: {}
+  staging:
+    policy: audit
+    observability: {}
+  prod:
+    policy: enforce
+    observability: {}
+components:
+  fx-api:
+    repo: acme/fx-api
+    type: service
+    lang: java
+    image: ghcr.io/acme/fx-api
+    port: 8080
+    probes:
+      liveness: /actuator/health/liveness
+      readiness: /actuator/health/readiness
+    user: 65532
+    volumes:
+      tmp: /tmp
+    env:
+      LOG_LEVEL: INFO
+    resources:
+      requests:
+        cpu: 200m
+        memory: 384Mi
+      limits:
+        cpu: 1000m
+        memory: 768Mi
+    instances:
+      dev:
+        replicas: 1
+      staging:
+        replicas: 2
+  fx-web:
+    repo: acme/fx-web
+    type: website
+    lang: typescript
+    image: ghcr.io/acme/fx-web
+    port: 3000
+    probes:
+      liveness: /api/health
+      readiness: /api/ready
+    user: 1000
+    volumes:
+      tmp: /tmp
+      next-cache: /app/.next/cache
+    env:
+      NODE_ENV: production
+      API_URL: http://fx-api
+    secretRefs:
+    - fx-web-secrets
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 192Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+    expose:
+      host: fx-web
+    instances:
+      dev: {}

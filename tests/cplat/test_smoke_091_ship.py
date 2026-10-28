@@ -164,7 +164,7 @@ def test_red_smoke_stops_the_run_with_evidence_and_an_issue_ac_091_9(world, caps
     in_order(out, f"smoke (dev) against {BASE}:", f"FAIL  {TEST_ID}", "smoke: 1 passed, 1 failed, 0 skipped",
              "retried after 30s: 1 failing again", "criterion AC-007.1 (smoke): failed", f"failing: {TEST_ID}",
              "--- smoke output (last 60 lines, secrets redacted) ---", f"issue: https://github.com/{SLUG}/issues/1 new",
-             f"ship {SPEC_ID}: escalated ({REASON}); dev keeps running sha-{SHA}. Resume with /svc:ship {SPEC_ID}",
+             f"ship {SPEC_ID}: escalated ({REASON}); dev keeps running sha-{SHA}. Resume with /component:ship {SPEC_ID}",
              f"Smoke (dev): red (1 failing, issue https://github.com/{SLUG}/issues/1)")
     text = "\n".join(out)
     assert SECRET not in text and "line 28" not in text and "line 90" in text           # redacted, and cut to the last 60 lines
@@ -179,7 +179,7 @@ def test_red_smoke_escalates_as_code_and_rolls_nothing_back_ac_091_9(world, caps
     assert st["escalated"] == REASON and st["cause"] == "code" and st["phase"] == "deploy"
     assert st["deployed"] == f"sha-{SHA}" and world.gh.merges == []
     r = world.record()
-    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": REASON, "cause": "code"}
+    assert r["outcome"] == "escalated" and r["escalation"] == {"reason": REASON, "cause": "code", "cause_source": "given"}
     assert len(stored(world.store)) == 1                                     # escalated once, not twice
 
 
@@ -244,7 +244,7 @@ def test_a_run_that_hits_the_limit_is_red_without_a_retry_ac_091_8(world, capsys
     out = lines_of(capsys)
     assert limits == [600] and world.sleeps == []
     assert any("timed out after 600s" in ln for ln in out)
-    assert f"ship {SPEC_ID}: escalated ({REASON}); dev keeps running sha-{SHA}. Resume with /svc:ship {SPEC_ID}" in out
+    assert f"ship {SPEC_ID}: escalated ({REASON}); dev keeps running sha-{SHA}. Resume with /component:ship {SPEC_ID}" in out
     assert world.record()["smoke"]["outcome"] == "timed-out"
     assert world.state()["cause"] == "code"
 
@@ -365,17 +365,17 @@ def test_a_resumed_red_result_files_again_as_a_plus_one_ac_091_12(world, capsys)
     assert f"issue: https://github.com/{SLUG}/issues/1 +1" in out
     assert len(world.tr.created()) == 1 and len(world.tr.commented()) == 1
     assert world.state()["escalated"] == REASON and world.state()["cause"] == "code"
-    assert f"ship {SPEC_ID}: escalated ({REASON}); dev keeps running sha-{SHA}. Resume with /svc:ship {SPEC_ID}" in out
+    assert f"ship {SPEC_ID}: escalated ({REASON}); dev keeps running sha-{SHA}. Resume with /component:ship {SPEC_ID}" in out
 
 
 # ---------------- AC-091.15: the final report ----------------
 
 def test_the_ship_command_reports_the_smoke_row_ac_091_15():  # AC-091.15
-    text = (core.PLATFORM_ROOT / "plugins/svc/commands/ship.md").read_text()
+    text = (core.PLATFORM_ROOT / "plugins/component/commands/ship.md").read_text()
     assert "Smoke (dev)" in text and "passed on retry" in text and "not run" in text
     assert "(smoke)" in text and "unchecked" in text
 
 
 def test_the_ship_command_does_not_escalate_red_smoke_twice_ac_091_9():  # AC-091.9
-    text = (core.PLATFORM_ROOT / "plugins/svc/commands/ship.md").read_text()
+    text = (core.PLATFORM_ROOT / "plugins/component/commands/ship.md").read_text()
     assert "smoke red in dev" in text and "--base-url" in text

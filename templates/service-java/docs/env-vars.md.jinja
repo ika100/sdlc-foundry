@@ -1,6 +1,6 @@
 # Environment variables
 
-Configuration is read exclusively from environment variables. Defaults below are the application defaults. The deployed values are set per environment in the product's gitops-app repo (`services.yaml` → `env`, `replicas`, `resources`).
+Configuration is read exclusively from environment variables. Defaults below are the application defaults. The deployed values are set per environment in the system's gitops-app repo (`system.yaml`: a component's `env`, and `replicas`, `resources` under `instances.<env>`).
 
 ## Core
 
@@ -13,7 +13,7 @@ Configuration is read exclusively from environment variables. Defaults below are
 
 ## Database (PostgreSQL)
 
-Set by the platform's `postgres` addon when the service declares `uses: [postgres]`; the defaults match `devbox run db-up`.
+Set by the platform's `postgres` resource when the service declares `uses: [postgres]`; the defaults match `devbox run db-up`.
 
 | Variable | Default | Description |
 |---|---|---|

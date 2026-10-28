@@ -29,8 +29,46 @@ STATUSES = {"stable", "planned", "deprecated"}
 PRD = ROOT / "docs" / "requirements" / "platform-vision.md"
 
 
-def load() -> list[dict]:
+DECLARED_IN = ".platform-settings.yml"
+
+
+def load_all() -> list[dict]:
+    """Every registry entry in file order, including declared shapes (ADR-056)."""
     return yaml.safe_load((ROOT / "shapes.yml").read_text())["shapes"]
+
+
+def is_declared(entry: dict) -> bool:
+    return (entry.get("detection") or {}).get("declared") is not None
+
+
+def load() -> list[dict]:
+    """The template shapes: what every creating, adopting and rolling-out caller sees."""
+    return [e for e in load_all() if not is_declared(e)]
+
+
+def get(sid: str) -> dict | None:
+    return next((e for e in load_all() if e.get("id") == sid), None)
+
+
+def declared_ids() -> list[str]:
+    return [e["id"] for e in load_all() if is_declared(e)]
+
+
+def _declared_errors(sid: str, s: dict) -> list[str]:
+    errs: list[str] = []
+    det = s.get("detection") or {}
+    if det.get("declared") != DECLARED_IN:
+        errs.append(f"{sid}: detection.declared must be {DECLARED_IN} (ADR-056)")
+    if "copier_src" in det or "sniff" in det:
+        errs.append(f"{sid}: a declared shape has no copier_src or sniff rule (ADR-056)")
+    if s.get("template") is not None:
+        errs.append(f"{sid}: a declared shape has no template (template: null, ADR-056)")
+    if s.get("deployable") or s.get("library"):
+        errs.append(f"{sid}: a declared shape is neither deployable nor a library (ADR-056)")
+    for k in ("runtime", "smoke_tag", "smoke_globs", "default_stack"):
+        if k in s:
+            errs.append(f"{sid}: a declared shape has no {k} (ADR-056)")
+    return errs
 
 
 def validate(shapes: list[dict]) -> list[str]:
@@ -46,7 +84,12 @@ def validate(shapes: list[dict]) -> list[str]:
         seen.add(sid)
         if s.get("status") not in STATUSES:
             errs.append(f"{sid}: status must be one of {sorted(STATUSES)}")
-        det = s.get("detection", {})
+        if is_declared(s):
+            errs += _declared_errors(sid, s)
+            continue
+        if s.get("template") is None:
+            errs.append(f"{sid}: template missing: only a shape declared in {DECLARED_IN} has none (ADR-056)")
+        det = s.get("detection") or {}
         if det.get("copier_src") != f"templates/{s.get('template')}":
             errs.append(f"{sid}: detection.copier_src must be templates/{s.get('template')}")
         if not det.get("sniff"):
@@ -109,8 +152,12 @@ def _validation_errors(sid: str, s: dict) -> list[str]:
 def check_files(shapes: list[dict]) -> list[str]:
     errs: list[str] = []
     for s in shapes:
-        tdir = ROOT / "templates" / s["template"]
         pdir = ROOT / "plugins" / s["plugin"]
+        if is_declared(s):
+            if s["status"] != "planned" and not pdir.is_dir():
+                errs.append(f"{s['id']}: plugins/{s['plugin']}/ missing (status {s['status']})")
+            continue
+        tdir = ROOT / "templates" / s["template"]
         if s["status"] != "planned":
             if not (tdir / "copier.yml").is_file():
                 errs.append(f"{s['id']}: templates/{s['template']}/copier.yml missing (status {s['status']})")
@@ -121,6 +168,8 @@ def check_files(shapes: list[dict]) -> list[str]:
 
 CORE_RECIPES = ["lint", "lint-fix", "quality", "test", "test-fast", "security", "secrets-baseline", "ci"]   # ci, secrets-baseline: specs 073, 075
 DEPLOY_RECIPES = ["image-build", "image-scan", "smoke"]   # smoke: spec 091
+NO_DEPS = {"gitops-app", "cluster-gitops"}   # repos that never bump dependencies: deps recipes, deps.sh, smoke.sh, backlog
+NO_FEATURE_SPECS = {"cluster-gitops"}   # repos with no feature specs: Spec first, docs/plan, docs/specs, spec-check
 DEPS_RECIPES = ["deps-findings", "deps-bump"]   # spec 095: the recipes `cplat deps` calls
 CONTRACT_AGENTS = ["coder", "tester"]
 DEPLOY_AGENTS = ["deployment", "observability", "release"]
@@ -173,7 +222,7 @@ def check_contract(shapes: list[dict]) -> list[str]:
     detect = (ROOT / "scripts" / "detect-shape.sh").read_text()
     fixtures = (ROOT / "scripts" / "test-detect-shape.sh").read_text()
     for s in shapes:
-        if s["status"] == "planned":
+        if s["status"] == "planned" or is_declared(s):
             continue
         sid, tdir, pdir = s["id"], ROOT / "templates" / s["template"], ROOT / "plugins" / s["plugin"]
         # 1. template: devbox recipes, CLAUDE.md, plugin enablement
@@ -188,34 +237,36 @@ def check_contract(shapes: list[dict]) -> list[str]:
                     errs.append(f"{sid}: devbox.json missing canonical recipe '{r}'")
             # spec 095: every dependency-owning shape bumps through the platform recipes; gitops-app never does
             for r in DEPS_RECIPES:
-                if sid == "gitops-app":
+                if sid in NO_DEPS:
                     if f'"{r}"' in text:
-                        errs.append(f"{sid}: devbox.json must not define '{r}': gitops-app repos never bump dependencies (spec 095)")
+                        errs.append(f"{sid}: devbox.json must not define '{r}': {sid} repos never bump dependencies (spec 095)")
                 elif f'"{r}"' not in text:
                     errs.append(f"{sid}: devbox.json missing deps recipe '{r}' (spec 095)")
-            if sid != "gitops-app" and not (tdir / "scripts" / "deps.sh").is_file():
+            if sid not in NO_DEPS and not (tdir / "scripts" / "deps.sh").is_file():
                 errs.append(f"{sid}: template has no scripts/deps.sh (spec 095)")
-            if s["deployable"] and sid != "gitops-app" and not (tdir / "scripts" / "smoke.sh").is_file():
+            if s["deployable"] and sid not in NO_DEPS and not (tdir / "scripts" / "smoke.sh").is_file():
                 errs.append(f"{sid}: template has no scripts/smoke.sh (spec 091)")
         claude = _template_file(tdir, "CLAUDE.md")
         if claude is None:
             errs.append(f"{sid}: template has no CLAUDE.md")
+        elif sid in NO_FEATURE_SPECS:
+            pass   # a cluster repo has no feature specs: its systems own them
         elif "### Spec first" not in claude.read_text():
             errs.append(f"{sid}: CLAUDE.md has no '### Spec first' section (ADR-024)")
-        elif ("/app:spec" if sid == "gitops-app" else "/svc:spec") not in claude.read_text():
-            errs.append(f"{sid}: CLAUDE.md 'Spec first' does not name {'/app:spec' if sid == 'gitops-app' else '/svc:spec'} (ADR-026)")
-        if not (tdir / "docs" / "plan").is_dir():
+        elif ("/system:spec" if sid == "gitops-app" else "/component:spec") not in claude.read_text():
+            errs.append(f"{sid}: CLAUDE.md 'Spec first' does not name {'/system:spec' if sid == 'gitops-app' else '/component:spec'} (ADR-026)")
+        if sid not in NO_FEATURE_SPECS and not (tdir / "docs" / "plan").is_dir():
             errs.append(f"{sid}: template has no docs/plan/ (ADR-024)")
         # ADR-026: specs live in docs/specs/ (project-owned) and are checked by the warn-only `specs` workflow
-        for need in ("docs/specs/README.md", "scripts/spec-check.sh", ".github/workflows/specs.yml"):
+        for need in () if sid in NO_FEATURE_SPECS else ("docs/specs/README.md", "scripts/spec-check.sh", ".github/workflows/specs.yml"):
             if not (tdir / need).is_file():
                 errs.append(f"{sid}: template has no {need} (ADR-026)")
-        if devbox is not None and '"spec-check"' not in devbox.read_text():
+        if sid not in NO_FEATURE_SPECS and devbox is not None and '"spec-check"' not in devbox.read_text():
             errs.append(f"{sid}: devbox.json has no spec-check recipe (ADR-026)")
-        if "docs/specs/**" not in (tdir / "copier.yml").read_text():
+        if sid not in NO_FEATURE_SPECS and "docs/specs/**" not in (tdir / "copier.yml").read_text():
             errs.append(f"{sid}: copier.yml must list docs/specs/** in _skip_if_exists (project-owned, ADR-026)")
         ci = tdir / ".github" / "workflows" / "ci.yml"
-        if s.get("deployable") and sid != "gitops-app" and ci.is_file() and not re.search(
+        if s.get("deployable") and sid not in NO_DEPS and ci.is_file() and not re.search(
                 r"^  pin-dev:\n(?:    .*\n)*?    needs: docker-publish$", ci.read_text(), re.M):
             errs.append(f"{sid}: ci.yml needs a `pin-dev` job after docker-publish (dev follows main, spec 062)")
         errs += _check_ci_extra(sid, tdir, devbox, claude)
@@ -225,7 +276,7 @@ def check_contract(shapes: list[dict]) -> list[str]:
         for form in ("bug_report.yml", "feature_request.yml", "config.yml"):
             if not (tdir / ".github" / "ISSUE_TEMPLATE" / form).is_file():
                 errs.append(f"{sid}: template has no .github/ISSUE_TEMPLATE/{form} (ADR-025)")
-        if sid != "gitops-app" and not (tdir / "docs" / "backlog.md").is_file():
+        if sid not in NO_DEPS and not (tdir / "docs" / "backlog.md").is_file():
             errs.append(f"{sid}: template has no docs/backlog.md (ADR-024)")
         settings = _template_file(tdir / ".claude", "settings.json")
         if settings is None:
@@ -239,7 +290,7 @@ def check_contract(shapes: list[dict]) -> list[str]:
                 if f'"{plugin}@sdlc-foundry": true' not in st:
                     errs.append(f"{sid}: .claude/settings.json does not enable '{plugin}'")
         # 2. plugin: agents
-        if s["plugin"] != "gitops":
+        if s["plugin"] not in ("system", "cluster"):
             agents = CONTRACT_AGENTS + (DEPLOY_AGENTS if s["deployable"] else [])
             for a in agents:
                 if s["plugin"] == "svc":
@@ -341,7 +392,7 @@ def prd_rows() -> dict[str, tuple[str, str]]:
 def check_prd(shapes: list[dict]) -> list[str]:
     errs: list[str] = []
     rows = prd_rows()
-    by_id = {s["id"]: s for s in shapes}
+    by_id = {s["id"]: s for s in shapes if not is_declared(s)}
     for sid in sorted(set(rows) | set(by_id)):
         if sid not in rows:
             errs.append(f"{sid}: in shapes.yml but not in PRD §4 table")
@@ -356,9 +407,9 @@ def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__)
         return 2
-    cmd, shapes = argv[0], load()
+    cmd, shapes = argv[0], load_all()
     if cmd == "ids":
-        print("\n".join(s["id"] for s in shapes))
+        print("\n".join(s["id"] for s in load()))
         return 0
     if cmd == "get":
         sid, field = argv[1], argv[2]

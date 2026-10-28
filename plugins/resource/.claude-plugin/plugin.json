@@ -1,0 +1,13 @@
+{
+  "name": "resource",
+  "version": "1.6.0",
+  "description": "The resource noun: /resource:add and /resource:remove declare named, typed resources (databases, buckets, caches, brokers) of a system in system.yaml; /resource:backup and /resource:restore back up and restore a database.",
+  "author": {
+    "name": "Eike Hensler",
+    "email": "eike.hensler@gmail.com"
+  },
+  "homepage": "https://github.com/ika100/sdlc-foundry",
+  "repository": "https://github.com/ika100/sdlc-foundry",
+  "license": "Apache-2.0",
+  "keywords": ["resource", "postgres", "domain-model", "cplat"]
+}

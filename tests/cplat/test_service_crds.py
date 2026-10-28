@@ -136,8 +136,13 @@ def gitops(tmp_path):
         shutil.copy(SCRIPT, root / "scripts" / "check-service-crds.py")
     app = root / "applications" / "shop"
     app.mkdir(parents=True)
-    (app / "services.yaml").write_text(dump({"services": [{"name": "api", "repo": "acme/shop-api", "shape": "service-go"}]}))
+    (app / "system.yaml").write_text(dump(system({"api": {"type": "service", "lang": "go", "repo": "acme/shop-api"}})))
     return root
+
+
+def system(components: dict) -> dict:
+    """A system.yaml document with these components (5.0: the only input file of a system)."""
+    return {"system": "shop", "owner": "acme", "environments": {"dev": {}, "staging": {}, "prod": {}}, "components": components}
 
 
 def write(root, rel, text):
@@ -243,10 +248,11 @@ def test_ac_098_3_crds_come_from_chart_crds_and_untemplated_templates(gitops):
 
 
 def test_ac_098_3_external_helm_path_selects_the_chart(gitops):
-    """AC-098.3: <chart> is external.helm.path of the marker repo's services; other charts are not read."""
-    write(gitops, "applications/shop/services.yaml", dump({"services": [{
-        "name": "api", "repo": "acme/shop-api", "shape": "service-go",
-        "external": {"helm": {"repoURL": "https://github.com/acme/shop-api", "path": "charts/api", "revision": "main"}}}]}))
+    """AC-098.3: <chart> is external.helm.path of the marker repo's components; other charts are not read."""
+    write(gitops, "applications/shop/system.yaml", dump(system({"api": {
+        "type": "service", "lang": "unknown", "repo": "acme/shop-api", "image": "ghcr.io/acme/shop-api",
+        "external": {"helm": {"repoURL": "https://github.com/acme/shop-api", "path": "charts/api", "revision": "main"}},
+        "instances": {"dev": {}}}})))
     def setup(f):
         f.files = {"charts/other/crds/p.yaml": dump(PIPELINE_CRD), "charts/api/crds/c.yaml": dump(CRD)}
     p, fake = with_fake(gitops, setup)
@@ -336,14 +342,14 @@ def test_ac_098_8_a_repo_that_is_not_a_service_fails_and_nothing_is_fetched(gito
     """AC-098.8"""
     p, fake = with_fake(gitops, body="Service-ref: acme/elsewhere@main")
     assert p.returncode == 1 and p.stdout == ""
-    assert ("ERROR: Service-ref names acme/elsewhere, which is not a service repo in applications/*/services.yaml; "
+    assert ("ERROR: Service-ref names acme/elsewhere, which is not a component repo in applications/*/system.yaml; "
             "nothing was fetched") in p.lines
     assert fake.requests == []
     never_leaks(p)
 
 
 def test_ac_098_8_the_repo_comparison_ignores_case(gitops):
-    """AC-098.8: services.yaml is compared case-insensitively."""
+    """AC-098.8: system.yaml is compared case-insensitively."""
     p, fake = with_fake(gitops, body="Service-ref: ACME/Shop-API@feature/x")
     assert p.returncode == 0, p.stderr
     assert fake.requests
@@ -571,7 +577,7 @@ def test_ac_098_17_triggers_and_job_names_are_unchanged():
     wf = ci()
     triggers = wf.get("on", wf.get(True))
     assert triggers["push"]["branches"] == ["main"] and "workflow_dispatch" in triggers and "workflow_call" in triggers
-    assert set(wf["jobs"]) == {"quality", "security", "ci-extra", "pr-title"}  # ci-extra: spec 086
+    assert set(wf["jobs"]) == {"quality", "security", "ci-extra", "pr-title", "upgrade-check"}  # ci-extra: spec 086; spec 121: upgrade-check
     assert any(s.get("run") == "devbox run quality" for s in quality_steps())
 
 

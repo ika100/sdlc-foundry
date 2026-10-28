@@ -4,7 +4,7 @@ Every deployable template ships `devbox run smoke`, which prints the same result
 and `smoke: <p> passed, <f> failed, <s> skipped`). This module reads only those lines, so it has no per-shape code. Ship deploy
 (spec 091) and the staging promotion (spec 093) use `run_smoke`, `file_issue` and `SmokeResult.section`.
 
-  cplat smoke run [--env dev] [--base-url URL] [--spec SPEC] [--timeout 600] [--no-retry] [--json]
+  cplat instance verify [ENV] [--base-url URL] [--spec SPEC] [--timeout 600] [--no-retry] [--json]
 
 Exit codes: 0 passed or passed on retry, 1 red or timed out, 3 not run. It files no issue and touches no ship state.
 """
@@ -28,6 +28,7 @@ import yaml
 import autoissue
 import core
 import feedback
+import model
 import spec as specmod
 from core import PlatformError, run
 
@@ -37,7 +38,7 @@ ENV_ATTEMPTS = 3                    # spec 105: an environment failure is tried 
 GATEWAY = {502, 503, 504}
 RECIPE_FAILED = "(smoke recipe)"
 TIMED_OUT = "(timed out)"
-DEFAULT_LOCAL_PORT = 8088
+DEFAULT_LOCAL_PORT = model.DEFAULT_LOCAL_PORT
 RESULT = re.compile(r"^(PASS|FAIL|SKIP)  (\S.*?)\s*$")
 SUMMARY = re.compile(r"^smoke: (\d+) passed, (\d+) failed, (\d+) skipped\s*$")
 WORDS = {"PASS": "passed", "FAIL": "failed", "SKIP": "skipped"}
@@ -271,7 +272,7 @@ def run_smoke(repo: Path, base_url: str, *, env: str = "dev", spec: specmod.Spec
     acs = spec.smoke_acs() if spec else []
     base_url = base_url.rstrip("/")
     if not has_recipe(repo):
-        return not_run(env, "the repo has no smoke recipe (update it with /shared:update-service)", acs)
+        return not_run(env, "the repo has no smoke recipe (update it with /platform:update)", acs)
     if probe and (err := reachable(base_url + probe)):
         return not_run(env, f"dev URL {base_url} is not reachable: {err}" if env == "dev" else f"{env} URL {base_url} is not reachable: {err}", acs)
     t0 = monotonic()
@@ -339,28 +340,12 @@ def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> t
             unread.append(slug)
             continue
         for a in dirs:
-            services = _read(slug, f"applications/{a}/services.yaml", repo)
-            entries = [e for e in (services or {}).get("services") or [] if isinstance(e, dict)]
-            entry = next((e for e in entries if e.get("repo") == me), None) or next((e for e in entries if e.get("name") == service), None)
-            if entry is None:
+            m = model.load_remote(a, lambda p, slug=slug: _read(slug, p, repo))
+            c = m.find_component(me, service)
+            if c is None:
                 continue
-            hidden = f"{service} has no {env} URL (not exposed in {env})"
-            expose = entry.get("expose")
-            if not expose or env not in (entry.get("environments") or ["dev"]):
-                return None, hidden
-            app = _read(slug, f"applications/{a}/app.yaml", repo) or {}
-            template = (app.get("hosts") or {}).get(env)
-            if not template:
-                return None, hidden
-            name = entry.get("name") or service
-            host = str(template).format(service=(expose.get("host") if isinstance(expose, dict) else None) or name, app=a, env=env)
-            urls = app.get("urls") or {}
-            if urls.get(env):
-                return str(urls[env]).format(host=host, service=name, app=a, env=env), None
-            if host.endswith(".localhost"):
-                port = os.environ.get("LOCAL_HTTP_PORT", "")
-                return f"http://{host}:{port if port.isdigit() else DEFAULT_LOCAL_PORT}", None
-            return f"https://{host}", None
+            url, why = m.url(c.name, env) if m.instance(c.name, env) else (None, f"not exposed in {env}")
+            return (url, None) if url else (None, f"{service} has no {env} URL ({why})")
     if unread and len(unread) == len(apps):
         return None, f"{service} has no {env} URL (could not read the gitops-app {', '.join(unread)})"
     return None, f"{service} has no {env} URL (not in the linked gitops-app)"
@@ -386,7 +371,7 @@ def issue_draft(result: SmokeResult, *, service_slug: str, spec_id: str | None, 
                f"- base URL: {result.base_url}\n- failure class: {result.failure_class or 'unknown'}\n- failing tests:\n" + "\n".join(f"  - {i}" for i in failing))
     return autoissue.Draft(
         kind="smoke", signature=autoissue.signature("smoke", service_slug, result.env, "\n".join(failing)),
-        reason=f"Smoke red in {result.env}: " + ", ".join(failing), command="cplat ship deploy", phase="deploy",
+        reason=f"Smoke red in {result.env}: " + ", ".join(failing), command="cplat component ship deploy", phase="deploy",
         evidence="\n".join(result.tail.splitlines()[-TAIL_LINES:]), run_id=run_id, shape=shape, repo=service_slug, names={},
         sections=[("Smoke", details)])
 
@@ -405,24 +390,24 @@ def file_issue(result: SmokeResult, **draft_kw) -> autoissue.Outcome:
 # ---------------- CLI ----------------
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat smoke")
+    ap = argparse.ArgumentParser(prog="cplat instance verify")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("run", help="run the repo's smoke tests against an environment")
     p.add_argument("--repo", default=".")
-    p.add_argument("--env", default="dev")
+    p.add_argument("env_pos", nargs="?", metavar="ENV", help="the environment to verify (default dev)")
+    p.add_argument("--env")
     p.add_argument("--base-url")
     p.add_argument("--spec")
     p.add_argument("--timeout", type=float, default=LIMIT_S)
     p.add_argument("--no-retry", action="store_true")
     p.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv)
+    ns.env = ns.env_pos or ns.env or "dev"
     repo = Path(ns.repo).resolve()
     sp = specmod.find(repo, ns.spec) if ns.spec else None
     acs = sp.smoke_acs() if sp else []
     url, why = ns.base_url, None
     if not url:
-        if ns.env != "dev":
-            raise PlatformError(f"--env {ns.env} needs --base-url", hint="only dev resolves its URL from the gitops-app")
         import ship
         apps = ship.gitops_apps(repo)
         url, why = dev_url(repo, apps, ship.service_name(repo), env=ns.env) if apps else (None, "the repo is not linked to a gitops-app")

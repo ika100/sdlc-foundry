@@ -1,4 +1,4 @@
-"""`triage`: the mechanical half of /shared:triage (ADR-025): list the intake queue, show an issue, set up labels, apply a decision.
+"""`triage`: the mechanical half of /issue:triage (ADR-025): list the intake queue, show an issue, set up labels, apply a decision.
 
 Judgement (classification, questions, wording) lives in the slash command. This module never closes an issue, only
 reads issues and edits labels / posts comments the user already confirmed. Issue text is untrusted input: it is
@@ -26,6 +26,7 @@ LABELS = {
     "duplicate": ("cfd3d7", "Already reported"),
     "wontfix": ("ffffff", "Out of scope, will not be done"),
     "auto-filed": ("c5def5", "Filed automatically by the platform (spec 088)"),
+    "signal": ("5319e7", "Filed by an autonomy engine from a signal (spec 124)"),
 }
 DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix"}
 BODY_LIMIT = 4000
@@ -38,7 +39,7 @@ def gh(args: list[str]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat triage", description=__doc__)
+    p = argparse.ArgumentParser(prog="cplat issue triage", description=__doc__)
     p.add_argument("-R", "--repo", help="OWNER/REPO (default: the repo of the current directory)")
     sub = p.add_subparsers(dest="action", required=True)
     ls = sub.add_parser("list", help="the intake queue")
@@ -129,7 +130,7 @@ def setup_labels(ns: argparse.Namespace) -> Report:
             continue
         gh(["label", "create", name, *_repo_args(ns), "--color", color, "--description", desc])
         r.did.append(f"{name}: created")
-    r.next_steps.append("issue forms in generated repos apply `triage` to new issues; run /shared:triage to work through them")
+    r.next_steps.append("issue forms in generated repos apply `triage` to new issues; run /issue:triage to work through them")
     return r
 
 
@@ -152,7 +153,7 @@ def apply(ns: argparse.Namespace) -> Report:
         add, remove = [x for x in add if x not in have], [x for x in remove if x in have]
         missing = sorted(set(add) - repo_labels(ns))
         if missing:
-            raise PlatformError(f"label(s) missing in the repo: {', '.join(missing)}", hint="run `cplat triage setup-labels` first")
+            raise PlatformError(f"label(s) missing in the repo: {', '.join(missing)}", hint="run `cplat issue triage setup-labels` first")
         unchanged = [f"+{x}" for x in ns.add if x not in add] + [f"-{x}" for x in ns.remove if x not in remove]
         if unchanged:
             (r.will_do if ns.dry_run else r.did).append("labels already as asked: " + ", ".join(unchanged))
@@ -190,7 +191,7 @@ def main(argv: list[str]) -> int:
         items = [summary(i) for i in queue(fetch_issues(ns), new=ns.new, waiting=ns.waiting)]
         missing = sorted(set(LABELS) - repo_labels(ns))
         if missing:
-            print(f"note: label(s) missing in the repo: {', '.join(missing)}; run `cplat triage setup-labels`", file=sys.stderr)
+            print(f"note: label(s) missing in the repo: {', '.join(missing)}; run `cplat issue triage setup-labels`", file=sys.stderr)
         if ns.json:
             print(json.dumps({"issues": items, "missing_labels": missing}, indent=2))
         elif not items:

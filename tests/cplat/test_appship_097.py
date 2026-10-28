@@ -28,6 +28,7 @@ from test_spec import make
 SLUG = "acme/shop-gitops"
 GITOPS = "shop-gitops"
 SPEC = "012-shop"
+OWNER_HOOK = json.dumps({"session_id": "A"})      # the Stop hook's input of the session that owns the run (spec 126)
 SHA = "0123456789abcdef0123456789abcdef01234567"
 REPO_SPEC = "007-price-alerts"
 
@@ -82,12 +83,17 @@ DEFAULT_REPOS = [
     ("shop-web", "web-nextjs", ["shop-api"], ["AC-012.2"], False),
 ]
 
-SERVICES = """services:
-  - {name: shop-api, repo: acme/shop-api, expose: {port: 8080}}
-  - {name: shop-web, repo: acme/shop-web, expose: {port: 3000}}
-  - {name: shop-worker, repo: acme/shop-worker}
+SYSTEM_YAML = """system: shop
+owner: acme
+environments:
+  dev: {host: '{component}.dev.example.test'}
+  staging: {}
+  prod: {}
+components:
+  shop-api: {type: service, lang: python, repo: acme/shop-api, expose: true}
+  shop-web: {type: website, lang: typescript, repo: acme/shop-web, expose: true}
+  shop-worker: {type: service, lang: python, repo: acme/shop-worker}
 """
-APP_YAML = "name: shop\nhosts:\n  dev: '{service}.dev.example.test'\n"
 
 FAKE_GH = '''#!%(py)s
 import json, os, subprocess, sys
@@ -270,8 +276,7 @@ class World:
         (g / "docs" / "plan").mkdir(parents=True)
         (g / "docs" / "plan" / f"{SPEC}.md").write_text(plan_text())
         (g / "applications" / "shop").mkdir(parents=True)
-        (g / "applications" / "shop" / "services.yaml").write_text(SERVICES)
-        (g / "applications" / "shop" / "app.yaml").write_text(APP_YAML)
+        (g / "applications" / "shop" / "system.yaml").write_text(SYSTEM_YAML)
         (g / "scripts").mkdir()
         shutil.copy(core.PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "plan.py", g / "scripts" / "plan.py")
         git(g, "add", "-A")
@@ -381,7 +386,7 @@ def table_of(out):
 def test_refuses_a_component_repo_with_a_hint_and_changes_nothing(w):  # AC-097.1
     r = w.app("start", REPO_SPEC, "--context", "kind-shop", repo=w.clone("shop-api"))
     assert r.rc == 1
-    assert "this is a service-python repo: a component spec ships with /svc:ship" in r.out
+    assert "this is a service-python repo: a component spec ships with /component:ship" in r.out
     assert not (w.clone("shop-api") / ".git" / "cplat-app-ship.json").exists()
     assert not w.state_file.exists()
 
@@ -392,7 +397,7 @@ def test_refuses_a_product_spec_that_is_not_approved(w):  # AC-097.1
     r = w.app("start", SPEC, "--context", "kind-shop")
     assert r.rc == 1
     assert f"{SPEC} is 'draft'; only an approved product spec is shipped" in r.out
-    assert "/app:spec approve" in r.out
+    assert "/system:spec approve" in r.out
     assert not w.state_file.exists()
 
 
@@ -410,7 +415,7 @@ def test_refuses_a_second_unfinished_run_for_another_spec(w):  # AC-097.1
     other.mkdir()
     (other / "spec.md").write_text(PRODUCT_SPEC.format(status="approved").replace("012-shop", "013-other").replace("AC-012", "AC-013"))
     r = w.app("start", "013-other", "--context", "kind-shop")
-    assert r.rc == 1 and "cplat app-ship finish" in r.out
+    assert r.rc == 1 and "cplat system ship finish" in r.out
     assert w.state()["spec"] == SPEC
 
 
@@ -439,11 +444,12 @@ def test_the_current_context_is_used_when_none_is_named(w):  # AC-097.18
 
 # ---------------- AC-097.2: plan unattended ----------------
 
-def test_a_product_spec_without_a_plan_starts_in_the_plan_phase(w):  # AC-097.2
+def test_a_product_spec_without_a_plan_starts_in_the_plan_phase(w, monkeypatch):  # AC-097.2
     (w.gitops / "docs" / "plan" / f"{SPEC}.md").unlink()
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     w.started()
     assert w.state()["phase"] == "plan"
-    assert json.loads(w.app("gate", stdin="{}").out)["decision"] == "block"      # the session cannot end while planning
+    assert json.loads(w.app("gate", stdin=OWNER_HOOK).out)["decision"] == "block"      # the session cannot end while planning
 
 
 def test_blocked_planning_ends_the_run_escalated_with_the_reason(w):  # AC-097.2
@@ -517,11 +523,11 @@ def test_resume_keeps_passed_repos_and_restarts_the_escalated_one(w):  # AC-097.
     st0 = w.started(states={"shop-gitops": "passed", "shop-lib": "passed",
                             "shop-api": {"state": "escalated", "reason": "smoke red", "cause": "code"},
                             "shop-worker": "running"},
-                    escalated="shop-api: smoke red", cause="code", blocks=5)
+                    escalated="shop-api: smoke red", cause="code")
     r = w.app("start", SPEC, "--context", "kind-shop")
     assert r.rc == 0 and "next:" in r.out
     st = w.state()
-    assert st["escalated"] is None and st["cause"] is None and st["blocks"] == 0
+    assert st["escalated"] is None and st["cause"] is None and "blocks" not in st
     assert st["run_id"] != st0["run_id"]
     assert [st["repos"][i]["state"] for i in ("shop-gitops", "shop-lib", "shop-api", "shop-worker")] == \
         ["passed", "passed", "ready", "running"]
@@ -536,11 +542,12 @@ def test_a_plan_repo_done_by_an_earlier_build_counts_as_past_its_gate(w):  # AC-
     assert [s["id"] for s in w.app("next", "--json").json["start"]] == ["shop-lib"]
 
 
-def test_the_stop_hook_blocks_until_the_run_is_done_or_escalated(w):  # AC-097.4
+def test_the_stop_hook_blocks_until_the_run_is_done_or_escalated(w, monkeypatch):  # AC-097.4
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     w.started()
-    ans = w.app("gate", stdin="{}").json
+    ans = w.app("gate", stdin=OWNER_HOOK).json
     assert ans["decision"] == "block"
-    assert f"The product ship of {SPEC} is not finished (phase publish, stop attempt 1/8)" in ans["reason"]
+    assert f"The product ship of {SPEC} is not finished (phase publish, stops without progress: 0/2)" in ans["reason"]
     assert "Next:" in ans["reason"]
     w.edit(lambda st: st.update(escalated="x", cause="code"))
     assert w.app("gate", stdin="{}").out.strip() == ""
@@ -548,18 +555,19 @@ def test_the_stop_hook_blocks_until_the_run_is_done_or_escalated(w):  # AC-097.4
     assert w.app("gate", stdin="{}").out.strip() == ""
 
 
-def test_the_stop_hook_gives_up_after_max_blocks(w):  # AC-097.4
+def test_the_stop_hook_escalates_after_two_stops_without_progress(w, monkeypatch):  # AC-097.4
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     w.started()
-    for _ in range(3):
-        assert w.app("gate", "--max-blocks", "3", stdin="{}").json["decision"] == "block"
-    assert w.app("gate", "--max-blocks", "3", stdin="{}").out.strip() == ""
-    assert "gave up after 3 attempts to stop" in w.state()["escalated"]
+    for _ in range(2):
+        assert w.app("gate", stdin=OWNER_HOOK).json["decision"] == "block"
+    assert "systemMessage" in w.app("gate", stdin=OWNER_HOOK).json
+    assert w.state()["escalated"].startswith("no progress: 2 stops in phase publish")
 
 
 def test_the_stop_hook_is_registered_for_the_product_state_file(w):  # AC-097.4
     hooks = json.loads((core.PLATFORM_ROOT / "plugins" / "shared" / "hooks" / "hooks.json").read_text())
     cmds = [h["command"] for e in hooks["hooks"]["Stop"] for h in e["hooks"]]
-    assert any("cplat-app-ship.json" in c and "app-ship gate" in c and "|| exit 0" in c for c in cmds)
+    assert any("cplat-app-ship.json" in c and "system ship gate" in c and "|| exit 0" in c for c in cmds)
 
 
 # ---------------- AC-097.6: questions escalate verbatim ----------------
@@ -615,7 +623,7 @@ def test_ship_start_with_product_links_the_repo_run_to_the_product_run(w):  # AC
     st = w.started()
     clone = w.clone("shop-api")
     make(clone, status="approved")
-    assert ship.main(["--repo", str(clone), "start", REPO_SPEC, "--product", str(w.gitops)]) == 0
+    assert ship.main(["--repo", str(clone), "start", REPO_SPEC, "--system-dir", str(w.gitops)]) == 0
     linked = ship.load_state(clone)
     assert linked["product"] == {"dir": str(w.gitops), "run_id": st["run_id"], "context": "kind-shop"}
     assert runs._read_active(linked["run_id"])["parent"] == st["run_id"]
@@ -780,7 +788,7 @@ def test_no_record_at_start_and_one_escalated_record_with_the_repos_cause(w, sto
     assert w.app("escalate", "shop-api: smoke not run", "--cause", "code").rc == 0
     [rec] = stored(store)
     assert rec["kind"] == "product-ship" and rec["repo"] == SLUG and rec["spec"] == SPEC and rec["outcome"] == "escalated"
-    assert rec["escalation"] == {"reason": "shop-api: smoke not run", "cause": "environment"}
+    assert rec["escalation"] == {"reason": "shop-api: smoke not run", "cause": "environment", "cause_source": "given"}
     assert rec["ships"] == ["20261025T080000Z-aaaa", "20261025T081000Z-bbbb"]
     assert rec["repos"]["shop-api"] == "escalated" and rec["resumes"] is None
 
@@ -956,8 +964,8 @@ def test_complete_report_has_a_row_per_repo_the_checklist_and_promote_commands(w
     assert "(entry)" in out
     for step in ("Create the payment provider account", "Publish the lib to the registry", "Set the queue URL"):
         assert f"- [ ] {step}" in out
-    assert "/gitops:promote shop-api dev staging" in out and "/gitops:promote shop-web dev staging" in out
-    assert "/gitops:promote shop-lib" not in out
+    assert "/instance:promote shop-api --to staging" in out and "/instance:promote shop-web --to staging" in out
+    assert "/instance:promote shop-lib" not in out
 
 
 def test_complete_with_a_red_pr_escalates_and_merges_nothing(w):  # AC-097.20

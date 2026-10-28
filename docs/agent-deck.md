@@ -10,8 +10,8 @@ This guide was written against **dot-agent-deck v0.48.1** (2026-10-25) and its d
 |---|---|
 | Which sessions are running, which is waiting for me, which is stuck? | dot-agent-deck (live status from Claude Code hooks) |
 | Type into a session, or stop one | dot-agent-deck (the agent's pane, `Ctrl+w` in command mode, `dot-agent-deck close`) |
-| Did the run finish, with which outcome, PR and gates? | The run store: `cplat runs report`, `cplat ship status` ([run records](unattended-delivery.md#run-records)) |
-| What did it cost in tokens and dollars? | `cplat runs usage` and the run record's `usage` section (spec 099), never the dashboard |
+| Did the run finish, with which outcome, PR and gates? | The run store: `cplat platform runs report`, `cplat component ship status` ([run records](unattended-delivery.md#run-records)) |
+| What did it cost in tokens and dollars? | `cplat platform runs usage` and the run record's `usage` section (spec 099), never the dashboard |
 | Is the change correct and safe? | Tests, the reviewer's `verification.md`, CI, `cplat pr wait`, and the ship gates |
 | Is the run within its limits? | The platform's own budgets (spec 102), not the dashboard |
 
@@ -28,7 +28,7 @@ dot-agent-deck --version      # prints: dot-agent-deck 0.48.1 (or newer)
 
 To stay on the release this guide was checked against, download the `v0.48.1` binary from the [release page](https://github.com/vfarcic/dot-agent-deck/releases/tag/v0.48.1) instead of tracking Homebrew.
 
-**What gets installed in your Claude Code setup.** Whenever the deck's TUI or daemon starts, it writes hook entries into `~/.claude/settings.json` (`SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop`, `PreCompact`, `SubagentStart`, `SubagentStop`, and `StopFailure` on Claude Code 2.1.78+). They call the binary by its absolute path. Your own hooks, and the platform's plugin hooks (the shared plugin's `SessionStart` and the `Stop` gate of `/svc:ship`), are left as they are. Because these are user-level hooks, they also fire in `cplat headless` and `cplat runs benchmark` sessions, which then show up on the dashboard too. To install them by hand or remove them:
+**What gets installed in your Claude Code setup.** Whenever the deck's TUI or daemon starts, it writes hook entries into `~/.claude/settings.json` (`SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop`, `PreCompact`, `SubagentStart`, `SubagentStop`, and `StopFailure` on Claude Code 2.1.78+). They call the binary by its absolute path. Your own hooks, and the platform's plugin hooks (the shared plugin's `SessionStart` and the `Stop` gate of `/component:ship`), are left as they are. Because these are user-level hooks, they also fire in `cplat headless` and `cplat platform runs benchmark` sessions, which then show up on the dashboard too. To install them by hand or remove them:
 
 ```bash
 dot-agent-deck hooks install      # Claude Code is the default agent
@@ -44,16 +44,16 @@ dot-agent-deck config set default_command "claude"
 dot-agent-deck config get default_command     # prints: claude
 ```
 
-This writes `~/.config/dot-agent-deck/config.toml`. A project's `.dot-agent-deck.toml` is only for the deck's own orchestrations (several cooperating agents it starts and delegates between). The platform already coordinates its agents (`/svc:build`, `/svc:ship`), so don't add one to a generated repo. If you experiment with it, `dot-agent-deck init` creates it and adds `.dot-agent-deck/` to `.git/info/exclude`, and `dot-agent-deck validate` checks it. Unknown keys are silently ignored, so check against the [configuration reference](https://github.com/vfarcic/dot-agent-deck/blob/v0.48.1/docs/configuration.md#dot-agent-decktoml-reference).
+This writes `~/.config/dot-agent-deck/config.toml`. A project's `.dot-agent-deck.toml` is only for the deck's own orchestrations (several cooperating agents it starts and delegates between). The platform already coordinates its agents (`/component:build`, `/component:ship`), so don't add one to a generated repo. If you experiment with it, `dot-agent-deck init` creates it and adds `.dot-agent-deck/` to `.git/info/exclude`, and `dot-agent-deck validate` checks it. Unknown keys are silently ignored, so check against the [configuration reference](https://github.com/vfarcic/dot-agent-deck/blob/v0.48.1/docs/configuration.md#dot-agent-decktoml-reference).
 
 ## A session with the deck open
 
-1. Set up the repo as usual (`/shared:doctor` green, the plugins installed).
+1. Set up the repo as usual (`/platform:doctor` green, the plugins installed).
 2. Start the deck: `dot-agent-deck`. On a first run it shows `No active agents. Press Ctrl+n to create an agent.`
-3. `Ctrl+n`, pick the repo's directory, accept the name, submit the command (`claude`). In that pane, run the platform command, for example `/svc:build 042`.
+3. `Ctrl+n`, pick the repo's directory, accept the name, submit the command (`claude`). In that pane, run the platform command, for example `/component:build 042`.
 4. Watch the card: subagents (coder, tester, reviewer) show as activity of that session, and **Needs Input** means the session is waiting for you, for example on a permission prompt.
-5. To step in, select the card and type into its pane. To stop it, close the pane (`Ctrl+w` in command mode; it asks to confirm) or, from another terminal, `dot-agent-deck close`. A `/svc:ship` run stopped this way is unfinished, not lost: its state is in `<git dir>/cplat-ship.json`, and `/svc:ship <id>` or `cplat headless` resumes it.
-6. Judge the result the normal way: the PR's CI (`cplat pr wait <pr>`), `verification.md`, and `cplat runs report` for the run's outcome and cost.
+5. To step in, select the card and type into its pane. To stop it, close the pane (`Ctrl+w` in command mode; it asks to confirm) or, from another terminal, `dot-agent-deck close`. A `/component:ship` run stopped this way is unfinished, not lost: its state is in `<git dir>/cplat-ship.json`, and `/component:ship <id>` or `cplat headless` resumes it.
+6. Judge the result the normal way: the PR's CI (`cplat pr wait <pr>`), `verification.md`, and `cplat platform runs report` for the run's outcome and cost.
 
 `dot-agent-deck daemon status` prints the same view as text (pane, agent, role, status, current tool, directory) without starting anything. That is handy for checking over ssh whether a headless run is still working.
 
@@ -73,4 +73,4 @@ This writes `~/.config/dot-agent-deck/config.toml`. A project's `.dot-agent-deck
 
 ## Troubleshooting
 
-Start with `dot-agent-deck docs troubleshooting` (it matches your version), then the [upstream issues](https://github.com/vfarcic/dot-agent-deck/issues). Problems with the platform commands themselves go to `/shared:report-issue`; check first that they also happen with the deck closed.
+Start with `dot-agent-deck docs troubleshooting` (it matches your version), then the [upstream issues](https://github.com/vfarcic/dot-agent-deck/issues). Problems with the platform commands themselves go to `/issue:report`; check first that they also happen with the deck closed.

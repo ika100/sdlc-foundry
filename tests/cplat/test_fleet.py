@@ -86,9 +86,9 @@ def test_a_failing_repo_list_is_an_error(world):  # AC-096.1
 
 
 def test_the_command_is_registered_and_has_a_slash_command():  # AC-096.1
-    assert cplat.COMMANDS["fleet"] == "fleet"
-    cmd = (ROOT / "plugins" / "shared" / "commands" / "fleet.md").read_text()
-    assert "cplat fleet update" in cmd and "$ARGUMENTS" in cmd
+    assert cplat.NOUNS["platform"]["fleet"] == ("fleet", [])
+    cmd = (ROOT / "plugins" / "platform" / "commands" / "fleet.md").read_text()
+    assert "cplat platform fleet update" in cmd and "$ARGUMENTS" in cmd
 
 
 def test_fleet_takes_only_the_update_subcommand(world):  # AC-096.1
@@ -148,12 +148,12 @@ def test_a_behind_repo_gets_update_services_commit_on_a_pushed_branch_and_one_pr
     bare = world.repos["acme/todo"]["bare"]
     assert git(bare, "log", "-1", "--format=%s", branch) == f"chore: update skeleton from platform {TARGET}"
     assert git(bare, "rev-list", "--count", f"main..{branch}") == "1"
-    # the same commit /shared:update-service makes on a plain clone of the repo
+    # the same commit /platform:update --migrate makes on a plain clone of the repo
     ref = tmp_path / "reference"
     subprocess.run(["git", "clone", "-q", str(bare), str(ref)], check=True)
     git(ref, "checkout", "-q", "main")
     git(ref, "checkout", "-q", "-b", "reference")
-    update.execute(update.resolve(["--repo", str(ref), "--skip-tasks"]))
+    update.execute(update.resolve(["--repo", str(ref), "--skip-tasks", "--migrate"]))
     assert git(bare, "rev-parse", f"{branch}^{{tree}}") == git(ref, "rev-parse", "HEAD^{tree}")
     assert git(bare, "show", f"{branch}:.platform-version").count(f"platform: {TARGET}") == 1
     assert git(bare, "rev-parse", "main") == git(bare, "rev-parse", "main")                    # the default branch is not moved
@@ -517,7 +517,7 @@ def test_the_report_has_a_row_per_repo_and_a_count_per_outcome(world):  # AC-096
     b = cells(next(ln for ln in lines if "acme/b-current" in ln))
     assert b == ["acme/b-current", TARGET, "-", "up to date", "-"]
     c = cells(next(ln for ln in lines if "acme/c-open" in ln))
-    assert c[3] == "left open: local customisation" and c[4] == "https://github.com/acme/c-open/pull/1"
+    assert c[3].startswith("left open: local customisation") and c[4] == "https://github.com/acme/c-open/pull/1"
     assert lines[-1] == "3 repo(s): up to date 1, merged 1, left open 1" and rc == 1
 
 
@@ -578,7 +578,7 @@ def test_the_fleet_run_is_recorded_with_each_repos_outcome(world):  # AC-096.12
     assert rec["outcome"] == "escalated" and rec["escalation"]["reason"] == "1 repo(s) left open for review"
     assert rec["fleet"]["target"] == TARGET and rec["fleet"]["counts"] == {"merged": 1, "left open": 1}
     by = {e["id"]: e for e in rec["repos"]}
-    assert by["acme/a-open"]["outcome"] == "left open" and by["acme/a-open"]["reason"] == "local customisation"
+    assert by["acme/a-open"]["outcome"] == "left open" and by["acme/a-open"]["reason"].startswith("local customisation")
     assert by["acme/a-open"]["pr"] == row(doc, "acme/a-open")["pr"] and by["acme/a-open"]["from"] == OLD
     assert by["acme/b-merged"]["outcome"] == "merged" and by["acme/b-merged"]["to"] == TARGET
     assert not [r for r in buffered() if r["kind"] != "fleet"]

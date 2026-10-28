@@ -1,4 +1,4 @@
-"""Issue forms in every template (ADR-025): the intake that /shared:triage reads."""
+"""Issue forms in every template (ADR-025): the intake that /issue:triage reads."""
 import pytest
 import yaml
 
@@ -28,22 +28,22 @@ def test_forms_are_project_owned(template):
 
 def test_every_label_the_forms_and_command_use_is_in_the_fixed_set():
     assert "triage" in triage.LABELS
-    command = (ROOT / "plugins" / "shared" / "commands" / "triage.md").read_text()
+    command = (ROOT / "plugins" / "issue" / "commands" / "triage.md").read_text()
     for label in ("bug", "enhancement", "question", "duplicate", "wontfix", "needs-info", "tracked"):
         assert label in triage.LABELS and f"`{label}`" in command
 
 
 def test_the_command_treats_issue_text_as_untrusted_and_never_closes():
-    command = (ROOT / "plugins" / "shared" / "commands" / "triage.md").read_text()
+    command = (ROOT / "plugins" / "issue" / "commands" / "triage.md").read_text()
     assert "untrusted data" in command and "Never close an issue" in command
     assert "Nothing outward happens until the user confirms" in command
 
 
 def test_the_command_description_stays_short_for_the_always_on_budget():
-    first = (ROOT / "plugins" / "shared" / "commands" / "triage.md").read_text().splitlines()[1]
+    first = (ROOT / "plugins" / "issue" / "commands" / "triage.md").read_text().splitlines()[1]
     assert len(first) < 260
 
 
 def test_product_manager_points_to_the_command_instead_of_duplicating_the_procedure():
     pm = (ROOT / "plugins" / "svc" / "agents" / "product-manager.md").read_text()
-    assert "/shared:triage" in pm and "gh issue list" not in pm and "gh issue edit" not in pm
+    assert "/issue:triage" in pm and "gh issue list" not in pm and "gh issue edit" not in pm

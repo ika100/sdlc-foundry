@@ -7,7 +7,7 @@ README) into a scratch directory and copies over only what the repo lacks: CLAUD
 recipes, spec and ADR scaffolding, CI files. Nothing that exists is overwritten: devbox.json gets the template's
 missing recipes and packages added (yours win), .gitignore the missing lines, and every other file that differs is
 listed so you can compare it with the template. Starter app code and tests are never added. Afterwards the repo has a
-.copier-answers.yml and .platform-version, so `/shared:update-service` and every /svc:* command work. One commit on
+.copier-answers.yml and .platform-version, so `/platform:update` and every /component:* command work. One commit on
 chore/adopt-platform; nothing is pushed.
 """
 from __future__ import annotations
@@ -82,7 +82,7 @@ def resolve(argv: list[str]) -> dict:
     if not (repo / ".git").exists():
         raise PlatformError(f"{repo} is not a git repository")
     if (repo / ".copier-answers.yml").is_file():
-        raise PlatformError("this repo already has a .copier-answers.yml", hint="use /shared:update-service to pull template changes")
+        raise PlatformError("this repo already has a .copier-answers.yml", hint="use /platform:update to pull template changes")
     entry = next((s for s in core.registry.load() if s["id"] == ns.type), None)
     if entry is None:
         raise PlatformError(f"unknown shape '{ns.type}'", hint="one of: " + ", ".join(s["id"] for s in core.registry.load()))
@@ -170,18 +170,18 @@ def execute(req: dict) -> Report:
         (repo / ".copier-answers.yml").write_text(answers)
         core.write_stamp(repo, req["shape"], "main")
     if files["differs"]:
-        r.next_steps.append("kept yours, differ from the template (compare, adopt what you want; /shared:update-service will "
+        r.next_steps.append("kept yours, differ from the template (compare, adopt what you want; /platform:update will "
                             "overwrite skeleton files from now on): " + ", ".join(files["differs"]))
     if files["skipped_code"]:
         r.next_steps.append(f"not added (starter code/tests of the template): {len(files['skipped_code'])} file(s)")
     r.next_steps += ["make every `devbox run` recipe in devbox.json fit this repo (test, test-fast, quality, security): agents only "
                      "run recipes", "devbox install && devbox run quality && devbox run test-fast",
-                     "start new work with /svc:spec; push the branch and open a PR"]
+                     "start new work with /component:spec; push the branch and open a PR"]
     import gates
     gaps = gates.ci_gaps(repo)
     if gaps:
         r.next_steps.append("your CI runs no " + ", ".join(f"`devbox run {g}`" for g in gaps) + " (spec 081): copy the job(s) "
-                            f"from templates/{req['template']}/.github/workflows/ci.yml; `cplat doctor` keeps reporting it")
+                            f"from templates/{req['template']}/.github/workflows/ci.yml; `cplat platform doctor` keeps reporting it")
     r.data["ci_gaps"] = gaps
     run(["git", "add", "-A"], cwd=repo)
     run(["git", *core.git_identity(repo), "commit", "-q", "-m", f"chore: adopt the {req['shape']} platform template"], cwd=repo)

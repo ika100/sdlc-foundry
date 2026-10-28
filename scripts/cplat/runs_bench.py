@@ -1,4 +1,4 @@
-"""`cplat runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR]` (spec 099, ADR-035): one fixed task on a clean clone of the
+"""`cplat platform runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR]` (spec 099, ADR-035): one fixed task on a clean clone of the
 sample repo (one fixed, trusted folder per workflow), run through `cplat headless`, recorded as a run of kind `benchmark` with its usage, and the sample repo reset.
 
 The tasks and the pinned sample revision are in benchmark/tasks.json. Every git / gh call goes through `run`, which tests replace.
@@ -319,7 +319,7 @@ def _summary(usage: dict | None) -> tuple[int, str, str]:
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="cplat platform runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("workflow", choices=["quick-task", "build", "ship"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
     ap.add_argument("--model", help="coordinator model for the run (sonnet, opus, haiku); else the settings files, else sonnet")
@@ -341,7 +341,7 @@ def main(argv: list[str]) -> int:
         raise PlatformError(f"sample repo {repo} cannot be reached: {e}") from None
     if main_now != rev and not ns.reset_first:
         raise PlatformError(f"sample repo {repo}: main is at {main_now[:7] or 'nothing'}, not the pinned {rev[:7]}",
-                            hint=f"cplat runs benchmark {ns.workflow} --reset-first")
+                            hint=f"cplat platform runs benchmark {ns.workflow} --reset-first")
     clone = runs.state_dir() / "benchmark" / ns.workflow
     try:
         _prepare(url, rev, task, clone, spec=arm is None)
@@ -442,7 +442,7 @@ def main(argv: list[str]) -> int:
             **({"validation_compare": compare} if compare else {})}})
     if reset == "failed":
         raise PlatformError(f"reset of sample repo {repo} failed: {note}; the benchmark record was written",
-                            hint=f"cplat runs benchmark {ns.workflow} --reset-first")
+                            hint=f"cplat platform runs benchmark {ns.workflow} --reset-first")
     tokens, cost, prices = _summary(usage)
     print(f"benchmark {ns.workflow} v{task['task_version']} on {repo}@{rev[:7]}: {outcome}, {tokens} tokens, "
           f"est. USD {cost} (prices of {prices}); reset {reset}" + (f"; {check}" if check else ""))

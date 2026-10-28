@@ -1,15 +1,18 @@
-"""Helpers for commands that edit a gitops-app repo: services.yaml (comment-preserving), render, branch/commit/PR."""
+"""Helpers for commands that edit a gitops-app repo: system.yaml (comment-preserving), render, branch/commit/PR."""
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 from ruamel.yaml import YAML
 
 import core
+import model
+import pr_rules
 from core import PlatformError, run
 
-ENVS = ["dev", "staging", "prod"]
+ENVS = list(model.ENVIRONMENTS)
 
 
 def _yaml() -> YAML:
@@ -21,9 +24,13 @@ def _yaml() -> YAML:
 
 
 def find_app(repo: Path, app: str | None = None) -> Path:
-    apps = sorted(p.parent for p in (repo / "applications").glob("*/services.yaml"))
+    base = repo / "applications"
+    apps = sorted(p.parent for p in base.glob("*/system.yaml"))
+    old = sorted({p.parent for f in ("app.yaml", "services.yaml") for p in base.glob(f"*/{f}")})
+    if old and (not app or any(o.name == app for o in old) or not apps):
+        raise model.NotMigrated()
     if not apps:
-        raise PlatformError("no applications/*/services.yaml here", hint="run this inside a gitops-app repo (/shared:new-service <name> --gitops)")
+        raise PlatformError("no applications/*/system.yaml here", hint="run this inside a gitops-app repo (/system:new <manifest>)")
     if app:
         match = [a for a in apps if a.name == app]
         if not match:
@@ -42,25 +49,26 @@ def answers(repo: Path) -> dict:
 
 def load(app_dir: Path):
     y = _yaml()
-    data = y.load((app_dir / "services.yaml").read_text())
+    data = y.load((app_dir / "system.yaml").read_text())
     if data is None:
         from ruamel.yaml.comments import CommentedMap
         data = CommentedMap()
     return y, data
 
 
-def services_of(data) -> list:
-    if data.get("services") is None or data["services"] == []:
-        from ruamel.yaml.comments import CommentedSeq
-        data["services"] = CommentedSeq()
-    return data["services"]
+def components_of(data):
+    """The `components` mapping of a loaded system.yaml (created when missing)."""
+    if data.get("components") is None:
+        from ruamel.yaml.comments import CommentedMap
+        data["components"] = CommentedMap()
+    return data["components"]
 
 
 def save(app_dir: Path, y: YAML, data) -> None:
     import io
     buf = io.StringIO()
     y.dump(data, buf)
-    (app_dir / "services.yaml").write_text(buf.getvalue())
+    (app_dir / "system.yaml").write_text(buf.getvalue())
 
 
 def render(repo: Path) -> None:
@@ -78,12 +86,20 @@ def require_clean(repo: Path) -> None:
         raise PlatformError("the working tree has uncommitted changes", hint="commit or stash first; each operation is one reviewable PR")
 
 
+def scratch_tree(path: Path) -> None:
+    """Make a throwaway copy a clean one-commit git tree, so commands that require a clean tree run on it (console preview)."""
+    ident = ["-c", "user.name=preview", "-c", "user.email=preview@localhost", "-c", "commit.gpgsign=false"]
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "--allow-empty", "-m", "snapshot"]):
+        subprocess.run(["git", *ident, *args], cwd=path, text=True, capture_output=True, check=False)
+
+
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40]
 
 
 def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
     """Create the branch, commit everything under applications/ and bootstrap/, push, and open a PR. Returns the URL."""
+    title = pr_rules.fit(title)
     run(["git", "checkout", "-q", "-b", branch], cwd=repo)
     run(["git", "add", "applications", "bootstrap"], cwd=repo, check=False)
     run(["git", *core.git_identity(repo), "commit", "-q", "-m", title], cwd=repo)

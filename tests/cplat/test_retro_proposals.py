@@ -121,7 +121,7 @@ def test_each_proposal_renders_with_its_evidence_and_spec_command():
     assert s.startswith("## Proposed specs\n1. **Merges stop failing** (P1)")
     assert "Merges fail often. It costs hours." in s
     assert f"Evidence: `{PLAT}` = 4 (prev 1), #101 (2 this week)" in s
-    assert "`/svc:spec Merges land on a fresh base`" in s
+    assert "`/component:spec Merges land on a fresh base`" in s
     assert "## Agent prompt proposals\nnone" in s
 
 

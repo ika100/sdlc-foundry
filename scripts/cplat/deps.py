@@ -30,7 +30,7 @@ GATE_TIMEOUT = 3600
 STATE_FILE = "cplat-deps.json"
 REPORT_FILE = "cplat-deps-report.json"
 SECTION = "## Dependency patches"
-HINT = "/shared:update-service adds the deps recipes"
+HINT = "/platform:update adds the deps recipes"
 
 
 # ---------------- seams (tests replace these) ----------------
@@ -219,7 +219,7 @@ def _gates(repo: Path) -> tuple[str, str] | None:
     """Run the steps of the repo's `ci` recipe; (step, log) of the first red one, or None when all are green."""
     scripts = gates.recipes(repo)
     if "ci" not in scripts:
-        raise PlatformError("devbox.json has no ci recipe", hint="/shared:update-service adds it")
+        raise PlatformError("devbox.json has no ci recipe", hint="/platform:update adds it")
     for step in gates.chain(scripts["ci"]):
         if step == gates.CI_EXTRA and step not in scripts:
             continue
@@ -396,7 +396,7 @@ def _cmd_report(ns: argparse.Namespace) -> int:
             raise PlatformError("--update-pr needs --body-file")
         print(section, end="")
         return 0
-    body = Path(ns.body_file)
+    body = core.git_path(repo, ns.body_file)
     body.write_text(_merge(body.read_text() if body.exists() else "", section))
     if ns.update_pr:
         try:

@@ -1,4 +1,4 @@
-"""Gates that can fail (spec 081): static checks that a repo's CI gates are real, used by `cplat doctor` and `cplat adopt`.
+"""Gates that can fail (spec 081): static checks that a repo's CI gates are real, used by `cplat platform doctor` and `cplat adopt`.
 
 A gate can pass while checking nothing: a secrets baseline without its filters, a scanner that changes with every
 machine, a `ci` recipe that skips a job, or a CI workflow that never runs a gate. Each check here is a file read, so it
@@ -11,6 +11,8 @@ import re
 from pathlib import Path
 
 import yaml
+
+import settings
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 GATES = ("quality", "test", "security")
@@ -80,6 +82,14 @@ def ci_gaps(repo: Path) -> list[str]:
     return [g for g in GATES if g in scripts and _real(g, scripts) not in have]
 
 
+def _is_platform_repo(repo: Path) -> bool:
+    """The repo declares `shape: platform` (spec 123, ADR-056): it has no template, so the template checks do not apply."""
+    try:
+        return settings.declared_shape(repo) == "platform"
+    except settings.ShapeDeclarationError:
+        return False
+
+
 def check_gates(repo: Path) -> list[dict]:
     if not (repo / "devbox.json").is_file():
         return []
@@ -104,10 +114,15 @@ def check_gates(repo: Path) -> list[dict]:
             v = pkgs[tool]
             out.append(_check(OK, f"gate {tool} pinned", v) if v != "latest" else
                        _check(FAIL, f"gate {tool} pinned", "@latest: local and CI can disagree",
-                              f"pin it in devbox.json (the template's version: /shared:update-service)"))
+                              f"pin it in devbox.json (the template's version: /platform:update)"))
+    platform = _is_platform_repo(repo)   # #231
+    na = "not applicable: the platform repo has no template (ADR-056)"
     missing = [r for r in ("ci", "secrets-baseline") if r not in scripts]
-    out.append(_check(WARN, "gate recipes", "missing: " + ", ".join(missing), "/shared:update-service adds them") if missing else
-               _check(OK, "gate recipes", "ci, secrets-baseline"))
+    if platform:
+        out.append(_check(OK, "gate recipes", na))
+    else:
+        out.append(_check(WARN, "gate recipes", "missing: " + ", ".join(missing), "/platform:update adds them") if missing else
+                   _check(OK, "gate recipes", "ci, secrets-baseline"))
     wf = workflow_gates(repo)
     if "ci" in scripts and wf:
         chained = chain(scripts["ci"])
@@ -116,7 +131,7 @@ def check_gates(repo: Path) -> list[dict]:
         name = "gate ci = CI workflow"
         if CI_EXTRA in scripts and CI_EXTRA not in want:
             out.append(_check(WARN, name, "CI does not run ci-extra: no job of .github/workflows/ci.yml runs devbox run ci-extra",
-                              "/shared:update-service"))
+                              "/platform:update"))
         elif real == want:
             if CI_EXTRA in scripts:
                 inner = " → ".join(chain(scripts[CI_EXTRA])) or scripts[CI_EXTRA]
@@ -136,8 +151,10 @@ def check_gates(repo: Path) -> list[dict]:
             else:
                 out.append(_check(WARN, name, f"`devbox run ci` runs {' → '.join(real) or 'nothing'}, the "
                                   f"workflow runs {' → '.join(want)}", "make the ci recipe chain the workflow's gates in its order"))
-    gaps = ci_gaps(repo)
-    if gaps:
+    gaps = [] if platform else ci_gaps(repo)
+    if platform:
+        out.append(_check(OK, "gate CI jobs", na))
+    elif gaps:
         out.append(_check(WARN, "gate CI jobs", "no CI job runs " + ", ".join(f"`devbox run {g}`" for g in gaps),
                           "copy the template's job(s) " + ", ".join(gaps) + " from its .github/workflows/ci.yml"))
     return out

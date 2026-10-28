@@ -1,4 +1,4 @@
-"""Spec 092: `cplat doctor` warns when a gitops-app with the observability addon and service repos has no ALERTS_TOKEN secret (AC-092.25).
+"""Spec 092: `cplat platform doctor` warns when a gitops-app with observability in an environment and service repos has no ALERTS_TOKEN secret (AC-092.25).
 `ship.gh` is replaced; no GitHub call is made."""
 import json
 import subprocess
@@ -8,6 +8,7 @@ import yaml
 
 import doctor
 import ship
+from model_fixtures import system_doc
 
 SLUG = "acme/shop-gitops"
 GITOPS_SHAPE = "_src_path: gh:ika100/sdlc-foundry/templates/gitops-app\n"
@@ -20,9 +21,9 @@ def make_repo(tmp_path, *, addon="default", services=None, shape=GITOPS_SHAPE):
     subprocess.run(["git", "remote", "add", "origin", f"https://github.com/{SLUG}.git"], cwd=r, check=True)
     (r / ".copier-answers.yml").write_text(shape)
     addons = {"observability": {"ui": "lgtm"}} if addon == "default" else addon
-    (r / "applications" / "shop" / "app.yaml").write_text(yaml.safe_dump({"addons": addons} if addons else {}))
     svcs = [{"name": "shop-api", "repo": "acme/shop-api"}] if services is None else services
-    (r / "applications" / "shop" / "services.yaml").write_text(yaml.safe_dump({"services": svcs}))
+    # 5.0: one system.yaml; the observability of the 4.x addon is set on every environment
+    (r / "applications" / "shop" / "system.yaml").write_text(yaml.safe_dump(system_doc(svcs, {"addons": addons} if addons else {}, "shop"), sort_keys=False))
     return r
 
 

@@ -4,10 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 
 import core
+import settings
+import shapecmd
 from core import PLATFORM_ROOT, run
 
 OK, WARN, FAIL = "ok", "warn", "fail"
@@ -21,9 +24,13 @@ def check(status: str, name: str, detail: str, fix: str | None = None) -> dict:
 
 def check_tools() -> list[dict]:
     out = []
-    for tool, required in (("git", True), ("uv", True), ("gh", True), ("devbox", False), ("docker", False)):
+    for tool, required in (("git", True), ("uv", True), ("gh", True), ("devbox", False), ("docker", False), ("claude", False)):
+        if tool == "gh" and shutil.which(tool):
+            continue   # `check_gh` reports the one `gh` row (installed and logged in)
         if shutil.which(tool):
             out.append(check(OK, tool, shutil.which(tool)))
+        elif tool == "claude":
+            out.append(check(WARN, tool, "not found", "install Claude Code: https://docs.anthropic.com/claude-code"))
         else:
             out.append(check(FAIL if required else WARN, tool, "not found", core.install_hint(tool)))
     copier = shutil.which("copier") or (str(Path.home() / ".local/bin/copier") if (Path.home() / ".local/bin/copier").is_file() else None)
@@ -37,8 +44,8 @@ def check_gh() -> list[dict]:
     p = run(["gh", "auth", "status"], check=False)
     text = (p.stdout or "") + (p.stderr or "")
     if p.returncode != 0:
-        return [check(FAIL, "gh login", "not logged in", "gh auth login")]
-    out = [check(OK, "gh login", "logged in")]
+        return [check(FAIL, "gh", "installed, not logged in", "gh auth login")]
+    out = [check(OK, "gh", "logged in")]
     scopes = text.split("Token scopes:")[-1].splitlines()[0] if "Token scopes:" in text else ""
     for needed, why in (("repo", "create repos / PRs"), ("workflow", "push CI workflows")):
         out.append(check(OK if needed in scopes else FAIL, f"gh scope {needed}", why, None if needed in scopes else f"gh auth refresh -s {needed}"))
@@ -65,6 +72,36 @@ def check_kube() -> list[dict]:
     if cur.startswith(LOCAL_CONTEXT_PREFIXES):
         return [check(OK, "kube context", f"{cur} (local)")]
     return [check(WARN, "kube context", f"{cur} looks like a NON-local cluster", "scripts always pass an explicit --context; never run kubectl apply by hand here")]
+
+
+def _contexts() -> set[str]:
+    return set(run(["kubectl", "config", "get-contexts", "-o", "name"], check=False).stdout.split())
+
+
+def check_kube_envs(repo: Path) -> list[dict]:
+    """One `kube:<env>` row per environment of the system in `repo`: the context `status` would use (spec 122, AC-122.41).
+
+    That is CPLAT_KUBE_CONTEXT or `kube_context:` of the settings files, else the current context; ok when kubectl knows it."""
+    if not shutil.which("kubectl"):
+        return []
+    try:
+        import gitops
+        import model
+        envs = [e.name for e in model.load_dir(gitops.find_app(repo, None)).environments]
+        ctx = settings.kube_context(repo)[0] or run(["kubectl", "config", "current-context"], check=False).stdout.strip()
+        known = _contexts() if ctx else set()
+    except Exception:  # noqa: BLE001  (not a gitops-app repo, or an unreadable settings file: nothing to report)
+        return []
+    out = []
+    for env in envs:
+        if ctx and ctx in known:
+            out.append(check(OK, f"kube:{env}", f"{ctx}"))
+        elif ctx:
+            out.append(check(WARN, f"kube:{env}", f"context {ctx} is not in the kubeconfig", f"kubectl config use-context <the {env} context>"))
+        else:
+            out.append(check(WARN, f"kube:{env}", "no kube context set",
+                             f"kubectl config use-context <the {env} context>, or set kube_context in .platform-settings.yml"))
+    return out
 
 
 MARKETPLACE = "sdlc-foundry"
@@ -127,10 +164,29 @@ def check_platform_source() -> list[dict]:
     return [check(OK, "platform scripts", f"{kind}: {where} (v{core.platform_version()})")]
 
 
-def check_repo(repo: Path) -> list[dict]:
+def check_repo(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
     if not (repo / ".git").exists():
         return []
     out = []
+    try:
+        declared = settings.declared_shape(repo) and shapecmd.resolve(repo)   # resolve also refuses a conflicting .copier-answers.yml
+    except settings.ShapeDeclarationError as e:
+        return [check(FAIL, "repo shape", str(e), getattr(e, "hint", None))]
+    if declared:
+        out.append(check(OK, "repo shape", declared))
+        try:
+            out.append(check(OK, "repo platform version", f"platform source at v{core.platform_version(repo)}"))
+        except OSError:
+            out.append(check(WARN, "repo platform version", "platform source has no docs/CHANGELOG.md"))
+        out += check_addons(repo)
+        out += check_operators(repo, contexts)
+        out += check_brokers(repo)
+        out += check_metrics(repo)
+        out += check_backups(repo)
+        out += check_policies(repo)
+        if declared == "cluster-gitops":
+            out += check_cluster(repo)
+        return out
     det = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False)
     shape = det.stdout.strip()
     out.append(check(OK, "repo shape", shape) if shape else check(WARN, "repo shape", "not a platform repo (no .copier-answers.yml / known markers)"))
@@ -138,45 +194,450 @@ def check_repo(repo: Path) -> list[dict]:
     if shape:
         cur = core.platform_version()
         if not stamp:
-            out.append(check(WARN, "repo platform version", "no .platform-version stamp", "/shared:update-service"))
+            out.append(check(WARN, "repo platform version", "no .platform-version stamp", "/platform:update"))
         elif core.vtuple(stamp.get("platform", "0.0.0")) < core.vtuple(cur):
-            out.append(check(WARN, "repo platform version", f"{stamp['platform']} (platform is {cur})", "/shared:update-service"))
+            out.append(check(WARN, "repo platform version", f"{stamp['platform']} (platform is {cur})", "/platform:update"))
         else:
             out.append(check(OK, "repo platform version", stamp.get("platform", "?")))
     out += check_addons(repo)
+    out += check_operators(repo, contexts)
+    out += check_brokers(repo)
+    out += check_metrics(repo)
+    out += check_backups(repo)
     out += check_policies(repo)
+    if shape == "cluster-gitops":
+        out += check_cluster(repo)
+    return out
+
+
+def check_cluster(repo: Path) -> list[dict]:
+    """AC-125.13: per listed operator installed vs expected version, per registered system its application's sync and health."""
+    if not shutil.which("kubectl"):
+        return []
+    import yaml
+    try:
+        data = yaml.safe_load((repo / "cluster.yaml").read_text()) or {}
+        operators = [str(o) for o in (data.get("operators") or [])]
+        systems = [str(s) for s in (data.get("systems") or {})]
+        table = _operators()
+        for o in operators:
+            table[o]
+    except (OSError, ValueError, AttributeError, KeyError, TypeError, yaml.YAMLError):
+        return [check(WARN, "cluster.yaml", "unreadable or not valid", "devbox run render")]
+    ctx = (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
+    bootstrap = f"KUBE_CONTEXT={ctx} devbox run bootstrap"
+    out = []
+    for op_name in operators:
+        op = table[op_name]
+        want = op["operator_version"]
+        selector = op.get("selector") or f"app.kubernetes.io/name={op['chart']}"
+        p = run(["kubectl", "get", "deploy", "-A", "-l", selector, "-o",
+                 "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
+        images = (p.stdout or "").split()
+        ref = images[0].split("@")[0] if images else ""
+        have = ref.rsplit(":", 1)[-1].removeprefix("v") if ":" in ref.rsplit("/", 1)[-1] else None
+        name = f"operator {op_name}"
+        if have == want:
+            out.append(check(OK, name, f"installed {have}, expected {want} (cluster.yaml)"))
+        elif have is None:
+            out.append(check(WARN, name, f"not installed in the current kube context, expected {want} (cluster.yaml)",
+                             f"{bootstrap} (local: devbox run cluster-up)"))
+        else:
+            out.append(check(WARN, name, f"installed {have}, expected {want} (cluster.yaml)", f"sync operator-{op_name} in Argo CD"))
+    for s in systems:
+        p = run(["kubectl", "-n", "argocd", "get", "application", f"system-{s}", "-o",
+                 "jsonpath={.status.sync.status} {.status.health.status}"], check=False)
+        name = f"system {s}"
+        if p.returncode != 0:
+            out.append(check(WARN, name, f"system-{s}: no such application in the current kube context", bootstrap))
+            continue
+        sync, _, health = (p.stdout or "").strip().partition(" ")
+        if (sync, health) == ("Synced", "Healthy"):
+            out.append(check(OK, name, f"system-{s}: Synced, Healthy"))
+        else:
+            out.append(check(WARN, name, f"system-{s}: {sync or '?'}, {health or '?'}", f"kubectl -n argocd get application system-{s} -o yaml"))
+    return out
+
+
+def check_migration(repo: Path) -> list[dict]:
+    """AC-114.39: the 4.x plugins or files are still in place; the fix is the migration."""
+    fix = "cplat platform update --migrate"
+    out = []
+    old: list[str] = []
+    for f in (repo / ".claude" / "settings.json", Path.home() / ".claude" / "settings.json"):
+        try:
+            enabled = (json.loads(f.read_text()) or {}).get("enabledPlugins") or {}
+        except (OSError, ValueError, AttributeError):
+            continue
+        old += [k for k in ("app@sdlc-foundry", "gitops@sdlc-foundry") if enabled.get(k) is True and k not in old]
+    if old:
+        out.append(check(WARN, "plugins (4.x)", f"{', '.join(old)} enabled: these plugins hold only tombstones in 5.0", fix))
+    files = sorted(str(p.relative_to(repo)) for n in ("app.yaml", "services.yaml") for p in (repo / "applications").glob(f"*/{n}"))
+    if files:
+        out.append(check(WARN, "system.yaml", f"4.x files still in place: {', '.join(files)}", fix))
+    return out
+
+
+def _models(repo: Path) -> list:
+    """The model of every system in the repo; an unmigrated or unreadable one is skipped (check_migration warns)."""
+    import model
+    out = []
+    for f in sorted((repo / "applications").glob("*/system.yaml")):
+        try:
+            out.append(model.load_dir(f.parent))
+        except model.ModelError:
+            continue
     return out
 
 
 def check_addons(repo: Path) -> list[dict]:
-    """A gitops-app repo that declares addons needs their cluster-side parts in the cluster the user is pointed at."""
-    import yaml
-    declared: dict = {}
-    for f in (repo / "applications").glob("*/app.yaml"):
-        declared.update((yaml.safe_load(f.read_text()) or {}).get("addons") or {})
-    if not declared or not shutil.which("kubectl"):
+    """A gitops-app repo that declares the lgtm dev stack needs its cluster-side parts in the cluster the user is pointed at.
+
+    The database operator is `check_operators`' row.
+    """
+    models = _models(repo)
+    lgtm = any(e.observability is not None and e.observability.ui == "lgtm" for m in models for e in m.environments)
+    if not lgtm or not shutil.which("kubectl"):
         return []
     out = []
-    if "postgres" in declared:
-        have = run(["kubectl", "get", "crd", "clusters.postgresql.cnpg.io"], check=False).returncode == 0
-        out.append(check(OK, "addon postgres", "CloudNativePG operator is installed in the current kube context") if have else
-                   check(WARN, "addon postgres", "CloudNativePG operator not found in the current kube context", "local: devbox run cluster-up; real clusters: install the cloudnative-pg chart"))
-    if (declared.get("observability") or {}).get("ui") == "lgtm":
+    if lgtm:
         have = run(["kubectl", "-n", "observability", "get", "deploy", "lgtm"], check=False).returncode == 0
         out.append(check(OK, "addon observability", "the Grafana dev stack (lgtm) is installed") if have else
                    check(WARN, "addon observability", "`ui: lgtm` is declared but the dev stack is missing in the current kube context", "local: devbox run cluster-up"))
     return out
 
 
-def check_policies(repo: Path) -> list[dict]:
-    """`policies:` in app.yaml needs Kyverno (and its CEL policy CRDs) in the cluster the user is pointed at."""
+def _operators() -> dict:
+    """OPERATORS of the platform's render.py (the expected operator versions)."""
+    import importlib.util
+    path = PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"
+    spec = importlib.util.spec_from_file_location("cplat_doctor_render", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.OPERATORS
+
+
+OPERATOR_ORDER = (("cloudnative-pg", "cloudnative-pg"), ("seaweedfs", "seaweedfs-operator"),
+                  ("plugin-barman-cloud", "plugin-barman-cloud"), ("cert-manager", "cert-manager"), ("velero", "velero"),
+                  ("nack", "nack"), ("keda", "keda"), ("metrics-server", "metrics-server"))
+PROPERTY_OPERATORS = (("external-secrets", "external-secrets"), ("kyverno", "kyverno"), ("lgtm", "lgtm"))
+
+
+def check_operators(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
+    """AC-115.18, AC-116.19, AC-117.30, AC-121.18 .. .22: the operators the resources, backups and properties need: installed vs expected.
+
+    `contexts` (environment -> kube context, from `--context`) reads those environments in their cluster and fails on `missing`
+    and a major `older`; without it the rows are today's warnings against the current context."""
+    if not shutil.which("kubectl"):
+        return []
+    models = _models(repo)
+    ops = OPERATOR_ORDER + (PROPERTY_OPERATORS if _property_operators_answer(repo) == "install" else ())
+    out = []
+    for op_name, chart_name in ops:
+        needs = _operator_needs(models, op_name, repo)
+        if needs:
+            out += _operator_row(models, needs, op_name, chart_name, contexts)
+    return out
+
+
+def _property_operators_answer(repo: Path) -> str:
+    """The repo's `property_operators` copier answer (`owner` when absent or unreadable)."""
     import yaml
-    if not shutil.which("kubectl") or not any((yaml.safe_load(f.read_text()) or {}).get("policies") is not None and (yaml.safe_load(f.read_text()) or {}).get("policies") is not False
-                                                for f in (repo / "applications").glob("*/app.yaml")):
+    try:
+        answers = yaml.safe_load((repo / ".copier-answers.yml").read_text()) or {}
+        return str(answers.get("property_operators") or "owner")
+    except (OSError, AttributeError, yaml.YAMLError):
+        return "owner"
+
+
+def _lgtm_operator() -> dict:
+    """LGTM is not a chart: its row is the pinned image of the `lgtm` Deployment (selector `app=lgtm`)."""
+    import importlib.util
+    path = PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"
+    spec = importlib.util.spec_from_file_location("cplat_doctor_render", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    tag = mod.LGTM_IMAGE.split("@")[0].rsplit(":", 1)[-1]
+    return {"chart": "lgtm", "chart_version": tag, "operator_version": tag, "selector": "app=lgtm", "crds": {}}
+
+
+def _nats_expected() -> tuple[str, dict]:
+    """NATS_CHART's chart version and NATS_IMAGES of the platform's render.py."""
+    import importlib.util
+    path = PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"
+    spec = importlib.util.spec_from_file_location("cplat_doctor_render", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.NATS_CHART["chart_version"], mod.NATS_IMAGES
+
+
+def check_brokers(repo: Path) -> list[dict]:
+    """AC-119.22: one row per in-cluster broker instance: the running NATS chart and server image vs render.py's pins."""
+    if not shutil.which("kubectl"):
+        return []
+    models = _models(repo)
+    chart_want, images = _nats_expected()
+    out = []
+    for m in models:
+        pre = f"{m.system}/" if len(models) > 1 else ""
+        for ri in m.resource_instances:
+            if ri.type != "broker" or ri.external:
+                continue
+            n = f"{m.system}-{ri.resource}"
+            version = ri.sizing.get("version", "2.15")
+            name = f"broker {pre}{ri.resource} ({ri.environment})"
+            image_want = images.get(str(version))
+            image_want = image_want.split("@")[0] if image_want else image_want   # the digest is the pin check's concern (AC-121.19)
+            if image_want is None:
+                out.append(check(WARN, name, f"unsupported NATS version {version}; supported: {', '.join(images)}",
+                                 "set the broker's version in system.yaml to a supported one"))
+                continue
+            expected = f"nats chart {chart_want}, server {image_want}"
+            app = f"{n}-{ri.environment}-nats"
+            p = run(["kubectl", "-n", f"{m.system}-{ri.environment}", "get", "statefulsets.apps", n, "-o",
+                     'jsonpath={.metadata.labels.helm\\.sh/chart} {.spec.template.spec.containers[?(@.name=="nats")].image}'], check=False)
+            parts = (p.stdout or "").split() if p.returncode == 0 else []
+            if not parts:
+                out.append(check(WARN, name, f"not running in the current kube context; expected {expected}",
+                                 f"sync the Argo CD application {app} (local: devbox run cluster-up)"))
+                continue
+            chart_have = parts[0].removeprefix("nats-").removeprefix("v")
+            image_have = parts[1].split("@")[0] if len(parts) > 1 else "-"
+            if chart_have == chart_want.removeprefix("v") and image_have == image_want:
+                out.append(check(OK, name, f"{expected} (expected)"))
+            else:
+                out.append(check(WARN, name, f"nats chart {chart_have}, server {image_have}; expected {expected}",
+                                 f"sync the Argo CD application {app}"))
+    return out
+
+
+def _resource_metrics_answer(repo: Path) -> str:
+    """The repo's `resource_metrics` copier answer (`provided` when absent or unreadable)."""
+    import yaml
+    try:
+        answers = yaml.safe_load((repo / ".copier-answers.yml").read_text()) or {}
+        return str(answers.get("resource_metrics") or "provided")
+    except (OSError, AttributeError, yaml.YAMLError):
+        return "provided"
+
+
+def _scaled_on(models: list, keys: tuple[str, ...]) -> list[tuple[object, object]]:
+    """(model, instance) of every instance whose scale triggers include one of `keys`, in model order."""
+    return [(m, i) for m in models for i in m.instances if i.scale and any(k in i.scale["on"] for k in keys)]
+
+
+def _names(models: list, pairs: list) -> str:
+    return ", ".join(f"{m.system}/{i.component} ({i.environment})" if len(models) > 1 else f"{i.component} ({i.environment})" for m, i in pairs)
+
+
+def _operator_needs(models: list, op_name: str, repo: Path | None = None) -> list[str]:
+    """The environments that need operator `op_name` (design.md, versions section)."""
+    envs: set[str] = set()
+    if op_name == "keda":
+        return _in_env_order({e.name for m in models for e in m.environments if e.autoscaling == "keda"})
+    if op_name == "metrics-server":
+        if repo is None or _resource_metrics_answer(repo) != "install":
+            return []
+        return _in_env_order({i.environment for _, i in _scaled_on(models, ("cpu", "memory"))})
+    if op_name in ("external-secrets", "kyverno", "lgtm"):
+        return _property_needs(models, op_name)
+    for m in models:
+        if op_name == "velero":
+            envs |= {e.name for e in m.environments if e.backup}
+        elif op_name in ("plugin-barman-cloud", "cert-manager"):
+            envs |= {ri.environment for ri in m.resource_instances if ri.type == "database" and not ri.external and ri.backup}
+        else:
+            rtype = {"cloudnative-pg": "database", "nack": "broker"}.get(op_name, "bucket")
+            envs |= {ri.environment for ri in m.resource_instances if ri.type == rtype and not ri.external}
+    return _in_env_order(envs)
+
+
+def _property_needs(models: list, op_name: str) -> list[str]:
+    """The environments that need External Secrets, Kyverno or LGTM (design.md, AC-121.17): where an instance runs."""
+    envs: set[str] = set()
+    for m in models:
+        for e in m.environments:
+            ins = [i for i in m.instances if i.environment == e.name]
+            if not ins:
+                continue
+            if op_name == "kyverno" and e.policy != "off":
+                envs.add(e.name)
+            elif op_name == "lgtm" and e.observability is not None and e.observability.ui == "lgtm":
+                envs.add(e.name)
+            elif op_name == "external-secrets":
+                ris = [ri for ri in m.resource_instances if ri.environment == e.name]
+                comps = {c.name: c for c in m.components}
+                if (any(i.secrets or (comps.get(i.component) and comps[i.component].secret_refs) for i in ins)
+                        or any(ri.external or ri.type in ("bucket", "cache", "broker") for ri in ris) or e.backup):
+                    envs.add(e.name)
+    return _in_env_order(envs)
+
+
+def _in_env_order(envs) -> list[str]:
+    """`envs` in the order of model.ENVIRONMENTS (dev, staging, prod)."""
+    import model
+    return [e for e in model.ENVIRONMENTS if e in envs]
+
+
+def check_metrics(repo: Path) -> list[dict]:
+    """AC-120.17, AC-120.27: whether the current cluster serves metrics.k8s.io, when an instance scales on cpu or memory."""
+    if not shutil.which("kubectl"):
+        return []
+    models = _models(repo)
+    pairs = _scaled_on(models, ("cpu", "memory"))
+    if not pairs:
+        return []
+    names = _names(models, pairs)
+    p = run(["kubectl", "get", "apiservices.apiregistration.k8s.io", "v1beta1.metrics.k8s.io", "-o",
+             'jsonpath={.status.conditions[?(@.type=="Available")].status}'], check=False)
+    if p.returncode == 0 and (p.stdout or "").strip() == "True":
+        return [check(OK, "resource metrics", f"the cluster serves metrics.k8s.io; cpu and memory triggers: {names}")]
+    detail = f"the current kube context serves no resource metrics (metrics.k8s.io); the cpu and memory triggers of {names} cannot scale"
+    if _resource_metrics_answer(repo) == "install":
+        ctx = (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
+        fix = f"apply operators/root.yaml once: KUBE_CONTEXT={ctx} devbox run bootstrap (local: devbox run cluster-up)"
+    else:
+        fix = ("set resource_metrics: install in .copier-answers.yml and run devbox run render "
+               f"(the platform then installs metrics-server {_operators()['metrics-server']['chart_version']}), "
+               "or install a metrics server yourself")
+    return [check(WARN, "resource metrics", detail, fix)]
+
+
+def check_backups(repo: Path) -> list[dict]:
+    """AC-117.23, AC-117.29: prod without backup, and prod backups that live in the cluster they protect (models only, no kubectl)."""
+    import model
+    prod = model.ENVIRONMENTS[-1]
+    models = _models(repo)
+    missing: list[str] = []
+    same: list[str] = []
+    fix_items: list[str] = []
+    for m in models:
+        pre = f"{m.system}: " if len(models) > 1 else ""
+        env = next((e for e in m.environments if e.name == prod), None)
+        dbs = [ri for ri in m.resource_instances if ri.environment == prod and ri.type == "database" and not ri.external]
+        if any(i.environment == prod for i in m.instances):
+            if env is None or not env.backup:
+                missing.append(f"{pre}environment {prod}")
+                fix_items.append(f"environments.{prod}.backup")
+            for ri in dbs:
+                if not ri.backup:
+                    missing.append(f"{pre}{ri.resource}/{prod}")
+                    fix_items.append(f"resources.{ri.resource}.instances.{prod}.backup")
+        local = {ri.resource for ri in m.resource_instances if ri.environment == prod and not ri.external}
+        same += [f"{pre}{ri.resource}/{prod} (to {ri.backup['to']})" for ri in dbs if ri.backup and ri.backup.get("to") in local]
+        if env is not None and env.backup and env.backup.get("to") in local:
+            same.append(f"{pre}environment {prod} (to {env.backup['to']})")
+    out = []
+    if missing:
+        out.append(check(WARN, f"backup {prod}", f"{prod} has no backup: {', '.join(missing)}",
+                         f"set {' and '.join(dict.fromkeys(fix_items))} in system.yaml (docs/BACKUP-AND-RESTORE.md)"))
+    if same:
+        out.append(check(WARN, "backup location", f"{prod} backups live in the same cluster: {', '.join(same)}",
+                         f"use an external bucket as to for {prod}"))
+    return out
+
+
+def _numbers(v: str | None) -> tuple[int, ...]:
+    return tuple(int(x) for x in re.findall(r"\d+", (v or "").split("@")[0])[:3])
+
+
+def _is_major_older(have: str, want: str) -> bool:
+    h, w = _numbers(have), _numbers(want)
+    if not h or not w:
+        return True
+    if h[0] != w[0]:
+        return h[0] < w[0]
+    return w[0] == 0 and h[1:2] < w[1:2]    # a 0.x version: the second number is the major
+
+
+def _operator_state(have: str | None, want: str, crds: dict) -> str:
+    if have is None:
+        return "missing"
+    h, w = _numbers(have), _numbers(want)
+    if have != want and (h < w or not h):
+        return "older"
+    if h > w:
+        return "newer"
+    if any(not set(c["expected"]) <= set(c["served"]) for c in crds.values()):
+        return "older"
+    return "ok"
+
+
+def _crd_served(name: str, ctx: str | None) -> list[str]:
+    cmd = ["kubectl", *(["--context", ctx] if ctx else []), "get", "customresourcedefinitions.apiextensions.k8s.io", name, "-o",
+           "jsonpath={.spec.versions[?(@.served==true)].name}"]
+    p = run(cmd, check=False)
+    return (p.stdout or "").split() if p.returncode == 0 else []
+
+
+def _operator_row(models: list, needs: list[str], op_name: str, chart_name: str, contexts: dict[str, str] | None = None) -> list[dict]:
+    op = _lgtm_operator() if op_name == "lgtm" else _operators()[op_name]
+    covered = [e for e in needs if contexts and contexts.get(e)]
+    if not covered:
+        return [_one_operator_row(models, needs, op_name, chart_name, op, None, needs)]
+    ctxs = list(dict.fromkeys(contexts[e] for e in covered))
+    return [_one_operator_row(models, [e for e in covered if contexts[e] == c], op_name, chart_name, op, c, covered, many=len(ctxs) > 1)
+            for c in ctxs]
+
+
+def _one_operator_row(models: list, needs: list[str], op_name: str, chart_name: str, op: dict, ctx: str | None, _all: list[str],
+                      many: bool = False) -> dict:
+    owner_set = {e.name for m in models for e in m.environments if e.name in needs and e.operators == "owner"}
+    owner_envs = _in_env_order(owner_set) if ctx else sorted(owner_set)   # today's texts list them alphabetically
+    want, chart = op["operator_version"], op["chart_version"]
+    name = f"operator {op_name}" + (f" ({ctx})" if many else "")
+    suffix = f"; queue-triggered: {_names(models, _scaled_on(models, ('consumes', 'cache')))}" if op_name == "keda" else ""
+    selector = op.get("selector") or f"app.kubernetes.io/name={chart_name}"   # nack's chart labels its Deployment app: nack
+    kube = ["kubectl", *(["--context", ctx] if ctx else [])]
+    p = run([*kube, "get", "deploy", "-A", "-l", selector, "-o",
+             "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
+    images = (p.stdout or "").split()
+    have = images[0].split("@")[0].rsplit(":", 1)[-1] if images and ":" in images[0].split("@")[0].rsplit("/", 1)[-1] else None
+    have = have.removeprefix("v") if have else have
+    expected_crds = op.get("crds") or {}
+    crds = {c: {"expected": list(v), "served": _crd_served(c, ctx)} for c, v in expected_crds.items()}
+    state = _operator_state(have, want, crds)
+    info = {"state": state, "expected": want, "installed": have, "crds": crds, "shared": list(needs)}
+    owner = set(owner_envs) == set(needs)
+    where = f"operators: owner in {', '.join(owner_envs)}" if owner else f"Argo CD application operator-{op_name}"
+    if have is None:
+        if owner:
+            fix = f"install the {chart_name} chart {chart} (operator {want})"
+        else:
+            cur = ctx or (run(["kubectl", "config", "current-context"], check=False).stdout or "").strip() or "<ctx>"
+            fix = f"apply operators/root.yaml once: KUBE_CONTEXT={cur} devbox run bootstrap (local: devbox run cluster-up)"
+    else:
+        fix = f"move the {chart_name} chart to {chart} (operator {want})" if owner else f"sync operator-{op_name} in Argo CD"
+    if ctx is None:     # today's rows and texts (AC-121.19)
+        if have == want:
+            row = check(OK, name, f"installed {have}, expected {want} ({where}){suffix}")
+        elif have is None:
+            row = check(WARN, name, f"not installed in the current kube context, expected {want} ({where}){suffix}", fix)
+        else:
+            row = check(WARN, name, f"installed {have}, expected {want} ({where}){suffix}", fix)
+        row["operator"] = info
+        return row
+    crd_text = "; crds " + ", ".join(f"{c} {'/'.join(v['served']) or 'missing'}" for c, v in crds.items()) if crds else ""
+    shared = f"; shared by {', '.join(needs)}" if len(needs) > 1 else ""
+    detail = f"{state}: installed {have or 'none'}, expected {want} ({where}){crd_text}{shared}{suffix}"
+    if state == "ok":
+        status = OK
+    elif state == "missing" or (state == "older" and have is not None and _is_major_older(have, want)):
+        status = FAIL
+    else:
+        status = WARN
+    row = check(status, name, detail, None if status == OK else fix)
+    row["operator"] = info
+    return row
+
+
+def check_policies(repo: Path) -> list[dict]:
+    """An environment policy other than `off` needs Kyverno (and its CEL policy CRDs) in the cluster the user is pointed at."""
+    if not shutil.which("kubectl") or not any(e.policy != "off" for m in _models(repo) for e in m.environments):
         return []
     have = run(["kubectl", "get", "crd", "namespacedvalidatingpolicies.policies.kyverno.io"], check=False).returncode == 0
     return [check(OK, "policies", "Kyverno is installed in the current kube context")] if have else \
-        [check(WARN, "policies", "app.yaml declares `policies:` but Kyverno (1.17+) is missing in the current kube context", "local: devbox run cluster-up; real clusters: install the kyverno chart")]
+        [check(WARN, "policies", "system.yaml sets an environment `policy` but Kyverno (1.17+) is missing in the current kube context", "local: devbox run cluster-up; real clusters: install the kyverno chart")]
 
 
 def check_gitops_token(repo: Path) -> list[dict]:
@@ -190,7 +651,7 @@ def check_gitops_token(repo: Path) -> list[dict]:
     return [check(OK, "secret GITOPS_TOKEN", "set (or not readable with this token)")]
 
 
-SERVICE_REPOS_TOKEN_FIX = ("create a fine-grained token with Contents: read on every service repo in services.yaml, then: "
+SERVICE_REPOS_TOKEN_FIX = ("create a fine-grained token with Contents: read on every component repo in system.yaml, then: "
                            "gh secret set SERVICE_REPOS_READ_TOKEN -R {slug}")
 
 
@@ -209,42 +670,24 @@ def check_service_repos_token(repo: Path) -> list[dict]:
     if names is None:
         return [check(WARN, name, "could not be read with this gh login", fix)]
     if "SERVICE_REPOS_READ_TOKEN" not in names:
-        return [check(WARN, name, "not set: gitops PRs with a Service-ref marker (opened by /svc:ship) fail their CRD check", fix)]
+        return [check(WARN, name, "not set: gitops PRs with a Service-ref marker (opened by /component:ship) fail their CRD check", fix)]
     return [check(OK, name, "set: gitops CI can read the service repos named by Service-ref markers")]
 
 
-ALERTS_TOKEN_FIX = ("create a fine-grained token with Issues: read and write on every service repo in services.yaml, then: "
+ALERTS_TOKEN_FIX = ("create a fine-grained token with Issues: read and write on every component repo in system.yaml, then: "
                     "gh secret set ALERTS_TOKEN -R {slug}")
 
 
 def check_alerts_token(repo: Path) -> list[dict]:
     """Spec 092: the alert poll files issues in the service repos with ALERTS_TOKEN; without it they land in the gitops repo."""
-    import yaml
-
     import ship
     name = "secret ALERTS_TOKEN"
     shape = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False).stdout.strip()
     if shape != "gitops-app":
         return []
-
-    def load(path: Path) -> dict:
-        try:
-            data = yaml.safe_load(path.read_text())
-        except (OSError, yaml.YAMLError):
-            return {}
-        return data if isinstance(data, dict) else {}
-
-    polled = has_repo = False
-    for app in sorted((repo / "applications").glob("*/app.yaml")):
-        obs = (load(app).get("addons") or {})
-        if not isinstance(obs, dict) or "observability" not in obs:
-            continue
-        conf = obs["observability"] if isinstance(obs["observability"], dict) else {}
-        if conf.get("alerts") is False:
-            continue
-        polled = True
-        services = load(app.parent / "services.yaml").get("services") or []
-        has_repo = has_repo or any(isinstance(s, dict) and s.get("repo") for s in services)
+    models = _models(repo)
+    polled = any(e.observability is not None and e.observability.alerts is not False for m in models for e in m.environments)
+    has_repo = any(c.repo for m in models for c in m.components)
     if not (polled and has_repo):
         return []
     try:
@@ -314,19 +757,36 @@ def check_retro_schedule() -> list[dict]:
     return [check(WARN, name, f"{slug}: " + "; ".join(miss), " ; ".join(fixes))]
 
 
-def run_checks(repo: Path) -> list[dict]:
+def run_checks(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
     import gates
-    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_plugins(), *check_platform_source(), *check_repo(repo),
+    import notify_config
+    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_kube_envs(repo), *check_plugins(), *check_platform_source(), *check_migration(repo), *(check_repo(repo, contexts) if contexts else check_repo(repo)),
             *gates.check_gates(repo), *check_gitops_token(repo),
-            *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule()]
+            *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule(), *notify_config.doctor_checks()]
+
+
+def parse_contexts(values: list[str]) -> dict[str, str]:
+    """`--context [ENV=]CTX` values -> environment -> context; a plain CTX covers every environment, ENV=CTX overrides it."""
+    import model
+    out: dict[str, str] = {}
+    for v in [x for x in values if x.partition("=")[0] not in model.ENVIRONMENTS or "=" not in x]:
+        out.update({e: v for e in model.ENVIRONMENTS})
+    for v in values:
+        env, eq, ctx = v.partition("=")
+        if eq and env in model.ENVIRONMENTS and ctx:
+            out[env] = ctx
+    return out
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat doctor", description=__doc__)
+    ap = argparse.ArgumentParser(prog="cplat platform doctor", description=__doc__)
     ap.add_argument("--repo", default=".")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--context", action="append", default=[], metavar="[ENV=]CTX",
+                    help="the kube context an environment (or, without ENV=, every environment) runs on; operators are then checked there and fail when missing or a major older")
     ns = ap.parse_args(argv)
-    results = run_checks(Path(ns.repo).resolve())
+    contexts = parse_contexts(ns.context)
+    results = run_checks(Path(ns.repo).resolve(), contexts) if contexts else run_checks(Path(ns.repo).resolve())
     if ns.json:
         print(json.dumps(results, indent=2))
     else:

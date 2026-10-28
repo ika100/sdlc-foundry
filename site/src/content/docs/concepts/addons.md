@@ -1,23 +1,28 @@
 ---
-title: "Addons"
-description: "Backing services behind a stable connection contract: Postgres and OpenTelemetry observability."
+title: "Resources"
+description: "Backing services behind a stable connection contract: the Postgres resource and OpenTelemetry observability."
 sidebar:
-  order: 4
+  order: 5
 ---
 
-An **addon** is declared once in `app.yaml` and used by name. Services see a **contract** (a Secret and environment variables), never the implementation.
+A **resource** is declared once under `resources:` in `system.yaml` and used by name from a component's `uses`. Components see a **contract** (a Secret and environment variables), never the implementation. Observability is not a resource: it is switched on per environment.
 
-| Addon | Declare | Services get | Implementation |
+| Resource or setting | Declare | Components get | Implementation |
 |---|---|---|---|
-| `postgres` | `addons: {postgres: {version: 17, instances: {dev: 1, prod: 3}}}` and `uses: [postgres]` on a service | `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` from the operator's Secret | CloudNativePG `Cluster` per environment |
-| `observability` | `addons: {observability: {ui: lgtm}}` (no `uses` needed) | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` and friends | an OpenTelemetry Collector per environment that receives OTLP and scrapes each service's Prometheus path; backend is `ui: lgtm` (local Grafana, dev only) or your own `exportTo` endpoint |
+| any name, `type: database` | `resources: {orders-db: {type: database, version: 17, instances: {prod: {replicas: 3}}}}` and `uses: [orders-db]` on a component (or `/resource:add orders-db`); `external: true` (with optional `remote.path`) for a database outside the cluster | `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` from the Secret `<system>-orders-db-app`; with two databases used, prefixed: `ORDERS_DB_DATABASE_URL`, `USERS_DB_PGHOST` | CloudNativePG `Cluster` (majors 15 to 18) per environment, or an ExternalSecret from the secret store |
+| any name, `type: bucket` | `resources: {uploads: {type: bucket, storage: 20Gi, versioning: true}}` and `uses: [uploads]` on a component (or `/resource:add uploads --type bucket`); `external: true` for a bucket outside the cluster | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_FORCE_PATH_STYLE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_ENDPOINT_URL_S3` from the Secret `<system>-uploads-app`; with two buckets used, prefixed: `UPLOADS_S3_BUCKET` | A SeaweedFS store per bucket instance (name `<system>-<name>`, at most 45 characters; `versioning: false` is S3 `Suspended`), or an ExternalSecret from the secret store; removal keeps the data |
+| any name, `type: cache` | `resources: {sessions: {type: cache, memory: 256Mi, persistence: false}}` and `uses: [sessions]` on a component (or `/resource:add sessions --type cache`); `external: true` for a cache outside the cluster | `REDIS_URL`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` from the Secret `<system>-sessions-app`; with two caches used, prefixed: `SESSIONS_REDIS_URL` | One Valkey StatefulSet per cache instance (Redis protocol, no operator; `maxmemory` is 80 % of `memory`, `maxmemoryPolicy` defaults to `allkeys-lru`), or an ExternalSecret from the secret store; cache data is not backed up |
+| any name, `type: broker` | `resources: {bus: {type: broker}}` (or `/resource:add bus --type broker`), then an events API in `apis` (`broker: bus` when there are several brokers) that components provide or consume; no `uses` is needed; `external: true` for a broker outside the cluster | `NATS_URL`, `NATS_USER`, `NATS_PASSWORD` from the per-component Secret `<system>-bus-<component>-app`, `NATS_INBOX_PREFIX`, and per events API `EVENTS_<API>_STREAM`, `EVENTS_<API>_SUBJECT_PREFIX` and, for consumers, `EVENTS_<API>_CONSUMER` | One NATS server with JetStream per broker instance (the official chart, with the NACK operator creating a stream per events API and a durable consumer per consumer); streams and consumers are never deleted by the platform; broker volumes are in the environment backup |
+| `observability` | `environments.<env>.observability: {ui: lgtm}` (no `uses` needed) | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` and friends | an OpenTelemetry Collector per environment that receives OTLP and scrapes each component's Prometheus path; backend is `ui: lgtm` (local Grafana, dev only) or your own `exportTo` endpoint |
 
-A Spring Boot service generated with `--data needs_database=true` is already wired to these variables (JPA, Flyway, Testcontainers tests, `devbox run db-up` for local development).
+A Spring Boot component generated with `--data needs_database=true` is already wired to these variables (JPA, Flyway, Testcontainers tests, `devbox run db-up` for local development).
 
-With the observability addon, firing alerts become issues. A scheduled poll on the gitops-app repo's self-hosted runner (every 15 minutes) evaluates rules declared under the addon in `app.yaml` (plus a built-in `ServiceDown`) and files one `[auto] [alert]` issue per alert in the owning service's repository, falling back to the gitops-app. A repeat comments on the existing issue, and a resolved alert is commented on (and closed if nobody triaged it). Route these issues with `/shared:triage`.
+With observability on, firing alerts become issues. A scheduled poll on the gitops-app repo's self-hosted runner (every 15 minutes) evaluates rules declared under the environment's `observability` in `system.yaml` (plus a built-in `ServiceDown`) and files one `[auto] [alert]` issue per alert in the owning component's repository, falling back to the gitops-app. A repeat comments on the existing issue, and a resolved alert is commented on (and closed if nobody triaged it). Route these issues with `/issue:triage`.
 
 The service-python and web-nextjs templates count every request in one metrics middleware with a `route` label (the matched path template; this was `endpoint` before 4.7.0, so update dashboards and alerts that used it). For run usage, an optional live OpenTelemetry export (metrics only) feeds a Grafana dashboard in the lgtm stack.
 
-Operators are cluster prerequisites: `cluster-up` installs them locally; real clusters need them installed by the cluster owner. Removing an addon never deletes a database (its Argo Application is not pruned).
+Operators are cluster prerequisites: `cluster-up` installs them locally; the platform installs them on real clusters from the `operators/` folder of the gitops repo (apply `operators/root.yaml` once), unless an environment sets `operators: owner`. Removing a resource never deletes a database (its Argo Application is not pruned).
+
+**Backups.** `backup: {to: <bucket>, schedule, retention}` on an environment backs up its persistent volumes and objects (Velero); on a database instance it backs up that database with continuous archiving and point-in-time restore (CloudNativePG with the Barman Cloud plugin). Databases are restored only with `/resource:restore`, environments with `/system:restore`; an external database is backed up by its provider. See [Backup and restore](/sdlc-foundry/guides/backup-and-restore/).
 
 Because the contract is stable, an implementation can be swapped without touching any service ([ADR-020](/sdlc-foundry/reference/adr/020/), [ADR-021](/sdlc-foundry/reference/adr/021/)). Try it: [Add Postgres, secrets and observability](/sdlc-foundry/scenarios/addons-secrets-observability/).

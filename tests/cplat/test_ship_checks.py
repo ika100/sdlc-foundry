@@ -406,8 +406,8 @@ def test_a_sync_error_in_a_named_app_stops_the_deploy(repo, gh, monkeypatch):
 
 def test_architect_and_plan_command_plan_gitops_tasks_with_expand_contract():
     """AC-076.6: the guidance exists where plans are written."""
-    root = core.PLATFORM_ROOT / "plugins" / "svc"
-    for f in (root / "agents" / "architect.md", root / "commands" / "plan.md"):
+    plugins = core.PLATFORM_ROOT / "plugins"
+    for f in (plugins / "svc" / "agents" / "architect.md", plugins / "component" / "commands" / "plan.md"):      # 5.0: /svc:plan is /component:plan
         text = f.read_text()
         assert "order: before-merge" in text and "after-release" in text and "expand/contract" in text, f
     ref = yaml.safe_load((core.PLATFORM_ROOT / "plugins" / "svc" / "skills" / "spec-format" / "references" / "plan.md")

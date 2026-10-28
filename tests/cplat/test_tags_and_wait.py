@@ -47,7 +47,7 @@ def test_promote_pins_the_full_sha_and_falls_back_to_the_short_one(gitops_repo, 
     """AC-078.2: staging gets `sha-<40>`; an image built before 4.4.0 only has `sha-<7>`, which is then used."""
     composed(gitops_repo, "todo-api")
     gitops_gh.image_tags["todo-api"] |= {"sha-" + SHA}
-    promote.main(["todo-api", "dev", "staging", "--repo-dir", str(gitops_repo)])
+    promote.main(["todo-api", "--to", "staging", "--repo-dir", str(gitops_repo)])
     assert pin(gitops_repo, "staging", "todo-api") == "sha-" + SHA
 
 
@@ -165,7 +165,7 @@ def test_a_real_failure_is_not_rerun(fake, tmp_path):
 def test_cplat_knows_pr_wait():
     """AC-079.1: the command is registered."""
     import cplat
-    assert cplat.COMMANDS["pr"] == "pr" and "pr wait" in cplat.__doc__
+    assert cplat.PLUMBING["pr"] == "pr" and "pr wait" in cplat.__doc__
 
 
 def _run_check(name, bucket, run):

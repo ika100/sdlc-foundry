@@ -5,6 +5,7 @@ The smoke recipe is replaced by a fake `devbox` on PATH that prints scripted res
 group, limit, parser) is exercised for real. Clock and sleep go through the seams `smoke.sleep` / `smoke.monotonic`; GitHub
 through `smoke.gh` and the autoissue fake tracker. `smoke` is imported inside the tests: it does not exist yet."""
 import base64
+import copy
 import importlib
 import json
 import os
@@ -14,6 +15,7 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 
 import core
 import spec as specmod
@@ -275,10 +277,11 @@ def test_an_unreachable_dev_url_is_not_run_not_red_ac_091_11(svc, fake, monkeypa
 # ---------------- AC-091.11: the dev URL from the linked gitops-app ----------------
 
 class GitopsApi:
-    """`gh api` of the gitops-app repo: the application dirs, services.yaml and app.yaml of each."""
+    """`gh api` of the gitops-app repo: the application dirs and the system.yaml of each (5.0: the one input file)."""
 
-    def __init__(self, services: str, app: str, name="shop"):
-        self.files = {f"applications/{name}/services.yaml": services, f"applications/{name}/app.yaml": app}
+    def __init__(self, components: dict, top: dict, name="shop"):
+        doc = {"system": name, "owner": "acme", **copy.deepcopy(top), "components": copy.deepcopy(components)}
+        self.files = {f"applications/{name}/system.yaml": yaml.safe_dump(doc, sort_keys=False)}
         self.name = name
         self.calls: list[list[str]] = []
 
@@ -286,7 +289,7 @@ class GitopsApi:
         self.calls.append(args)
         joined = " ".join(args)
         assert args[0] == "api", args
-        if "services.yaml" not in joined and "app.yaml" not in joined:        # the listing of the application directories
+        if "system.yaml" not in joined:        # the listing of the application directories
             if "--jq" in args:
                 return self.name + "\n"
             return json.dumps([{"name": self.name, "type": "dir"}])
@@ -300,10 +303,28 @@ class GitopsApi:
         raise AssertionError(f"unexpected gh call {args}")
 
 
-EXPOSED = "services:\n  - name: shop-api\n    repo: acme/shop-api\n    shape: service-python\n    port: 8080\n    expose: {host: shop-api}\n    environments: [dev]\n"
-HIDDEN = "services:\n  - name: shop-api\n    repo: acme/shop-api\n    shape: service-python\n    port: 8080\n    environments: [dev]\n"
-OTHER = "services:\n  - name: other\n    repo: acme/other\n    shape: service-python\n    port: 8080\n    expose: {host: other}\n"
-APP = 'gateway: {name: traefik-gateway, namespace: kube-system}\nhosts:\n  dev: "{service}.{app}-dev.localhost"\n'
+def _shop_api(**kw) -> dict:
+    return {"shop-api": {"type": "service", "lang": "python", "repo": "acme/shop-api", "port": 8080, **kw}}
+
+
+def runs_in(components: dict, *envs: str) -> dict:
+    """The components with their instances replaced by one per listed environment."""
+    out = copy.deepcopy(components)
+    for c in out.values():
+        c["instances"] = {e: {} for e in envs}
+    return out
+
+
+EXPOSED = _shop_api(expose={"host": "shop-api"}, instances={"dev": {}})
+HIDDEN = _shop_api(instances={"dev": {}})
+OTHER = {"other": {"type": "service", "lang": "python", "repo": "acme/other", "port": 8080, "expose": {"host": "other"}}}
+APP = {"gateway": {"name": "traefik-gateway", "namespace": "kube-system"},
+       "environments": {"dev": {"host": "{component}.{system}-dev.localhost"}}}
+
+
+def env_conf(**envs: dict) -> dict:
+    """A top-level part with only these environments' settings."""
+    return {"environments": copy.deepcopy(envs)}
 
 
 def link(repo):
@@ -324,16 +345,16 @@ def test_dev_url_is_computed_from_the_gitops_app_ac_091_11(svc, monkeypatch):  #
 
 def test_dev_url_uses_https_for_real_hosts_and_urls_dev_wins_ac_091_11(svc, monkeypatch):  # AC-091.11
     smoke = smoke_mod()
-    monkeypatch.setattr(smoke, "gh", GitopsApi(EXPOSED, 'hosts:\n  dev: "{service}.dev.example.com"\n'))
+    monkeypatch.setattr(smoke, "gh", GitopsApi(EXPOSED, env_conf(dev={"host": "{component}.dev.example.com"})))
     assert smoke.dev_url(svc, [GITOPS], "shop-api") == ("https://shop-api.dev.example.com", None)
-    monkeypatch.setattr(smoke, "gh", GitopsApi(EXPOSED, 'hosts:\n  dev: "{service}.dev.example.com"\nurls:\n  dev: "https://{host}/shop"\n'))
+    monkeypatch.setattr(smoke, "gh", GitopsApi(EXPOSED, env_conf(dev={"host": "{component}.dev.example.com", "url": "https://{host}/shop"})))
     assert smoke.dev_url(svc, [GITOPS], "shop-api") == ("https://shop-api.dev.example.com/shop", None)
 
 
 @pytest.mark.parametrize("services, app, reason", [
     (HIDDEN, APP, "shop-api has no dev URL (not exposed in dev)"),
-    (EXPOSED, "gateway: {name: g, namespace: kube-system}\n", "shop-api has no dev URL (not exposed in dev)"),
-    (EXPOSED.replace("[dev]", "[staging]"), APP, "shop-api has no dev URL (not exposed in dev)"),
+    (EXPOSED, {"gateway": {"name": "g", "namespace": "kube-system"}}, "shop-api has no dev URL (not exposed in dev)"),
+    (runs_in(EXPOSED, "staging"), APP, "shop-api has no dev URL (not exposed in dev)"),
     (OTHER, APP, "shop-api has no dev URL (not in the linked gitops-app)"),
 ])
 def test_dev_url_says_why_there_is_none_ac_091_11(svc, monkeypatch, services, app, reason):  # AC-091.11
@@ -390,7 +411,7 @@ def test_the_draft_follows_the_convention_ac_091_14(svc, fake, seams, ai):  # AC
     smoke = smoke_mod()
     res = red(svc, fake, seams, ids=("tests/test_b.py::test_two", TEST_ID), output=["boom at line 4", f"TOKEN={SECRET}"])
     draft = smoke.issue_draft(res, **KW)
-    assert (draft.kind, draft.repo, draft.command, draft.phase, draft.shape) == ("smoke", SLUG, "cplat ship deploy", "deploy", "service-python")
+    assert (draft.kind, draft.repo, draft.command, draft.phase, draft.shape) == ("smoke", SLUG, "cplat component ship deploy", "deploy", "service-python")
     assert draft.signature == ai.signature("smoke", SLUG, "dev", "\n".join(sorted(["tests/test_b.py::test_two", TEST_ID])))
     assert draft.run_id == KW["run_id"] and draft.names == {}
     assert draft.label_list() == ["triage", "auto-filed", "smoke-failure"]

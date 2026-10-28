@@ -211,9 +211,12 @@ def slugify(text: str) -> str:
 
 
 def repo_shape(root: Path) -> str | None:
+    import settings
     import shapecmd
     try:
         return shapecmd.route(root)["shape"]
+    except settings.ShapeDeclarationError:
+        raise
     except PlatformError:
         return None  # shape-less repo (the platform itself): specs work, shape matching is skipped
 
@@ -237,6 +240,11 @@ def smoke_globs(shape: str | None) -> list[str]:
 
 # ---------------- check ----------------
 
+def spec_shape(spec: Spec, repo_shape: str | None) -> str | None:
+    """A spec's own shape, else the repo's unless that is a declared shape (specs written before it stay shape-less)."""
+    return spec.meta.get("shape") or (None if repo_shape in core.registry.declared_ids() else repo_shape)
+
+
 def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -> list[str]:
     errs: list[str] = []
     meta = spec.meta
@@ -251,7 +259,7 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
         errs.append(f"spec.md: status must be one of {STATUSES}")
     if meta.get("priority") not in PRIORITIES:
         errs.append(f"spec.md: priority must be one of {sorted(PRIORITIES)}")
-    known = {s["id"] for s in core.registry.load()}
+    known = {s["id"] for s in core.registry.load_all()}
     if meta.get("shape") and meta["shape"] not in known:
         errs.append(f"spec.md: unknown shape '{meta['shape']}' (valid: {', '.join(sorted(known))})")
     if shape and meta.get("shape") and meta["shape"] != shape:
@@ -263,13 +271,13 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
     for a in acs:
         if a.spec_no != spec.number:
             errs.append(f"{a.id} belongs to spec {a.spec_no}, not {spec.number} (ids are AC-{spec.number}.<n>)")
-    eff_shape = meta.get("shape") or shape
+    eff_shape = spec_shape(spec, shape)
     if eff_shape in known and smoke_tag(eff_shape) is None:
         errs += [f"{ac}: (smoke) needs a deployable shape ({eff_shape} has no smoke tests)" for ac in spec.smoke_acs()]
     rank = RANK.get(spec.status, -1)  # superseded has no rank: it never satisfies --require
     if require and rank < RANK[require]:
         errs.append(f"status is '{spec.status}', needs '{require}' or later"
-                    + (f" — approve it with `/svc:spec approve {spec.number}`" if require == "approved" else ""))
+                    + (f" — approve it with `/component:spec approve {spec.number}`" if require == "approved" else ""))
     if spec.status == "superseded":
         return errs
     if rank >= RANK["approved"]:
@@ -294,7 +302,7 @@ def check_plan(spec: Spec, meta: dict, _body: str) -> list[str]:
     if spec.meta.get("shape") and meta.get("shape") != spec.meta["shape"]:
         errs.append(f"shape '{meta.get('shape')}' must equal the spec's shape '{spec.meta['shape']}'")
     if meta["spec_hash"] != spec.ac_hash():
-        errs.append("the acceptance criteria changed after this plan was written; re-plan with `/svc:plan "
+        errs.append("the acceptance criteria changed after this plan was written; re-plan with `/component:plan "
                     f"{spec.number}` (or set spec_hash: {spec.ac_hash()} if the change does not affect the tasks)")
     tasks = meta["tasks"]
     if not isinstance(tasks, list) or not tasks:
@@ -465,16 +473,27 @@ def formatting_only(old: str, new: str, name: str) -> tuple[bool, str]:
 
 def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, str]]:
     """Each changed test file against `base`. Default: files under the shape's `test_globs` (never `docs/` or `*.md`, spec 063)
-    that name a criterion of a `building` spec."""
+    that name a criterion of a `building` spec. A file that did not exist at `base` and that a task of a `building`
+    spec's plan lists in `files:` is the build's own new file, not a changed acceptance test, and is left out."""
+    import fnmatch
     import subprocess
     if not files:
         changed = subprocess.run(["git", "-C", str(root), "diff", "--name-only", base], capture_output=True, text=True,
                                  check=True).stdout.split()
-        ids = {a for s in all_specs(root) if s.status == "building" for a in (x.id for x in s.acs())}
+        building = [s for s in all_specs(root) if s.status == "building"]
+        ids = {a for s in building for a in (x.id for x in s.acs())}
+        planned = [str(p) for s in building if s.plan for t in (s.plan[0].get("tasks") or []) if isinstance(t, dict)
+                   for p in (t.get("files") or [])]
         tests = {str(p.relative_to(root)) for g in test_globs(repo_shape(root)) for p in root.glob(g)}   # spec 063
+
+        def created_by_plan(f: str) -> bool:
+            if not any(p == f or (p.endswith("/") and f.startswith(p)) or fnmatch.fnmatch(f, p) for p in planned):
+                return False
+            return subprocess.run(["git", "-C", str(root), "cat-file", "-e", f"{base}:{f}"], capture_output=True).returncode != 0
+
         files = [f for f in changed if f in tests and (root / f).is_file() and not _ignored(Path(f))
                  and not f.startswith("docs/") and not f.endswith(".md")
-                 and set(AC_ANY.findall((root / f).read_text(errors="ignore"))) & ids]
+                 and set(AC_ANY.findall((root / f).read_text(errors="ignore"))) & ids and not created_by_plan(f)]
     out = {}
     for f in files:
         old = subprocess.run(["git", "-C", str(root), "show", f"{base}:{f}"], capture_output=True, text=True)
@@ -551,19 +570,40 @@ def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: lis
     return spec
 
 
-def addon_env(app_root: Path, addon: str) -> list[str]:
-    """Env variables an addon gives a service that uses it: render.py's ADDONS table (the contract, ADR-020)."""
+def _resource_type(app_root: Path, name: str) -> str | None:
+    """The `type` of resource `name` in the system's system.yaml; `postgres` alone is a database (spec 115)."""
+    for f in sorted((app_root / "applications").glob("*/system.yaml")):
+        try:
+            entry = ((yaml.safe_load(f.read_text()) or {}).get("resources") or {}).get(name)
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(entry, dict) and entry.get("type"):
+            return str(entry["type"])
+    return "database" if name == "postgres" else None
+
+
+def resource_env(app_root: Path, addon: str) -> list[str]:
+    """Env variables a resource gives a component that uses it: the TYPES contract of render.py for the resource's type
+    (spec 115, ADR-057); a 5.0 render.py still holds it in its ADDONS table under the resource's name (ADR-020)."""
+    rtype = _resource_type(app_root, addon)
     for render in (app_root / "scripts" / "render.py", core.PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py"):
-        if render.is_file():
-            block = render.read_text().split("ADDONS = {", 1)[-1]
-            m = re.search(rf'^    "{re.escape(addon)}": \{{.*?"env": \{{([^}}]*)\}}', block, re.M | re.S)
+        if not render.is_file():
+            continue
+        text = render.read_text()
+        for table, key in (("TYPES = {", rtype), ("ADDONS = {", addon)):
+            if key is None or table not in text:
+                continue
+            m = re.search(rf'^    "{re.escape(key)}": \{{.*?"env": \{{([^}}]*)\}}', text.split(table, 1)[1], re.M | re.S)
             if m:
                 return re.findall(r'"([A-Z0-9_]+)":', m.group(1))
     return []
 
 
-def provided_by_product(app_root: Path, repos: list[dict], repo_id: str) -> list[str]:
-    """Spec 052: what the plan's gitops entry wires for this repo (env, addons with their env, exposure)."""
+def provided_by_system(app_root: Path, repos: list[dict], repo_id: str) -> list[str]:
+    """Spec 052: what the plan's gitops entry wires for this repo (env, resources with their env, exposure).
+
+    An operation names its component with `component:` (5.0) or `service:` (plans written before), as plan.py accepts.
+    """
     lines = []
     for entry in repos:
         if entry.get("shape") != "gitops-app":
@@ -571,10 +611,11 @@ def provided_by_product(app_root: Path, repos: list[dict], repo_id: str) -> list
         for op in entry.get("gitops") or []:
             if not isinstance(op, dict):
                 continue
-            if op.get("uses") and op.get("service") == repo_id:
-                names = addon_env(app_root, op["uses"])
-                lines.append(f"- addon `{op['uses']}`" + (f": env {', '.join(f'`{n}`' for n in names)}" if names else ""))
-            elif isinstance(op.get("env"), dict) and op.get("service") == repo_id:
+            target = op.get("component") or op.get("service")
+            if op.get("uses") and target == repo_id:
+                names = resource_env(app_root, op["uses"])
+                lines.append(f"- resource `{op['uses']}`" + (f": env {', '.join(f'`{n}`' for n in names)}" if names else ""))
+            elif isinstance(op.get("env"), dict) and target == repo_id:
                 lines += [f"- env `{k}={v}`" for k, v in op["env"].items()]
             elif op.get("expose") == repo_id:
                 lines.append(f"- exposed through the Gateway at host `{op.get('host') or repo_id}`")
@@ -582,7 +623,7 @@ def provided_by_product(app_root: Path, repos: list[dict], repo_id: str) -> list
 
 
 def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
-    """This repo's part of a product plan (ADR-026): title, priority, parent and the Product context section.
+    """This repo's part of a system plan (ADR-026): title, priority, parent and the System context section.
 
     The plan lives in the gitops-app repo (docs/plan/<spec_id>.md); its spec next to it in docs/specs/<spec_id>/.
     Plans written before ADR-026 have no `spec:`; their `arguments` prompt is then the whole context.
@@ -595,9 +636,9 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
         ids = ", ".join(str(r.get("id")) for r in meta.get("repos") or [])
         raise PlatformError(f"plan {plan_path.name} has no repo '{repo_id}' (repos: {ids})")
     app_root = plan_path.resolve().parents[2]
-    parts = [f"Slice of the product plan `{meta.get('plan_id')}` in `{meta.get('gitops_app')}` for `{repo_id}` "
-             f"({repo.get('shape')}). The product criteria and the contract below are binding: every criterion of this "
-             "spec implements one of them and names it: `(product AC-<NNN>.<n>)`."]
+    parts = [f"Slice of the system plan `{meta.get('plan_id')}` in `{meta.get('gitops_app')}` for `{repo_id}` "
+             f"({repo.get('shape')}). The system criteria and the contract below are binding: every criterion of this "
+             "spec implements one of them and names it: `(system AC-<NNN>.<n>)`."]
     priority, problem = "P1", ""
     if meta.get("spec"):
         product = read(app_root / SPECS_DIR / str(meta["spec"]))
@@ -606,7 +647,7 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
         wanted = set(repo.get("acs") or [])
         lines = [ln for ln in sections(product.body).get("acceptance criteria", "").splitlines()
                  if (m := AC_LINE.match(ln)) and m.group(2) in wanted and not m.group(1)]
-        parts.append("### Product criteria\n\n" + ("\n".join(lines) or "(none assigned)"))
+        parts.append("### System criteria\n\n" + ("\n".join(lines) or "(none assigned)"))
         design = product.dir / "design.md"
         contract = sections(design.read_text()).get("contract", "").strip() if design.is_file() else ""
     else:
@@ -614,9 +655,9 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
     contract = contract or sections(body).get("contract", "").strip()
     if contract:
         parts.append("### Contract\n\n" + contract)
-    provided = provided_by_product(app_root, meta.get("repos") or [], repo_id)
+    provided = provided_by_system(app_root, meta.get("repos") or [], repo_id)
     if provided:
-        parts.append("### Provided by the product\n\nThe gitops part of this plan wires these for this repo; rely on them, "
+        parts.append("### Provided by the system\n\nThe gitops part of this plan wires these for this repo; rely on them, "
                      "do not ask for them again:\n\n" + "\n".join(provided))
     if repo.get("arguments"):
         parts.append("### Notes for this repo\n\n" + str(repo["arguments"]).strip())
@@ -628,7 +669,7 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
 def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | None) -> Spec:
     sl = slice_from_plan(plan_path, repo_id)
     spec = new(root, sl["title"], shape=shape, priority=sl["priority"], tracks=[], parent=sl["parent"])
-    body = spec.body.replace("## Stories", f"## Product context\n\n{sl['context']}\n\n## Stories", 1)
+    body = spec.body.replace("## Stories", f"## System context\n\n{sl['context']}\n\n## Stories", 1)
     if sl["problem"]:
         body = re.sub(r"(## Problem\n\n)<!--.*?-->", lambda m: m.group(1) + sl["problem"], body, count=1, flags=re.S)
     save(spec.dir / "spec.md", spec.meta, body)
@@ -642,7 +683,7 @@ def approve(spec: Spec, shape: str | None) -> None:
     errs = check(trial, shape=shape)
     if errs:
         raise PlatformError(f"{spec.id} cannot be approved: " + "; ".join(errs),
-                            hint=f"fix the spec (`/svc:spec --amend {spec.number}`), then approve again")
+                            hint=f"fix the spec (`/component:spec --amend {spec.number}`), then approve again")
     spec.meta["status"] = "approved"
     save(spec.dir / "spec.md", spec.meta, add_changelog(spec.body, "approved"))
 
@@ -669,7 +710,7 @@ def set_status(spec: Spec, status: str, reason: str | None, *, unverified: bool 
         if result != "pass" and not unverified:
             why = "has no verification.md" if result is None else "verification.md does not say **Result:** pass"
             raise PlatformError(f"{spec.id} {why}; done means a reviewer checked every criterion",
-                                hint=f"run `/svc:verify {spec.number}` (or `--unverified --reason <why>` to record an exception)")
+                                hint=f"run `/component:verify {spec.number}` (or `--unverified --reason <why>` to record an exception)")
         if result != "pass":
             if not reason:
                 raise PlatformError("--unverified needs --reason: the exception is recorded in the spec's changelog")
@@ -734,19 +775,19 @@ def _set_done_in_text(text: str, task_id: str) -> str | None:
 # ---------------- list / index ----------------
 
 def next_step(spec: Spec) -> str:
-    """The command that moves this spec on. Product specs (gitops-app) use /app:*, with the plan in docs/plan/<id>.md."""
+    """The command that moves this spec on. Product specs (gitops-app) use /system:*, with the plan in docs/plan/<id>.md."""
     n = spec.number
     product = spec.meta.get("shape") == "gitops-app"
-    prefix = "/app" if product else "/svc"
+    prefix = "/system" if product else "/component"
     planned = (spec.dir.parents[2] / "docs" / "plan" / f"{spec.id}.md").is_file() if product else bool(spec.plan)
     if spec.status == "draft":
         return f"{prefix}:spec --amend {n}" if spec.open_questions() or not spec.active_acs() else f"{prefix}:spec approve {n}"
     if spec.status == "approved" and not planned:
         return f"{prefix}:plan {n}"
     if spec.status in {"approved", "building"}:
-        return f"{prefix}:build {n}"
+        return f"/system:ship {n}" if product else f"/component:build {n}"
     if spec.status == "done" and not product and verification_result(spec) != "pass":
-        return f"/svc:verify {n}"   # spec 068: done without evidence
+        return f"/component:verify {n}"   # spec 068: done without evidence
     return "—"
 
 
@@ -757,6 +798,89 @@ def summary(root: Path, spec: Spec) -> dict:
             "open_questions": len(spec.open_questions()), "tasks": len(tasks),
             "tasks_done": sum(1 for t in tasks if t.get("done")), "tracks": spec.meta.get("tracks") or [],
             "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
+
+
+VERDICT_ROW = re.compile(r"^\|\s*(AC-\d{3,}\.\d+)\s*\|\s*([^|]*?)\s*\|")
+VERDICTS = {"met", "not met", "partial"}
+SUGGESTED = re.compile(r"\s*\(\s*suggested:\s*(.*?)\)\s*$", re.S | re.I)
+CONTRACT_CUT = 600
+
+
+def _verdicts(spec: Spec) -> dict[str, str]:
+    f = spec.dir / "verification.md"
+    rows = (VERDICT_ROW.match(ln) for ln in f.read_text().splitlines()) if f.is_file() else ()
+    return {m.group(1): m.group(2).lower() for m in rows if m and m.group(2).lower() in VERDICTS}
+
+
+def _question(text: str) -> dict:
+    """`Question? (suggested: A; alternatives: B, C)` -> text and options, the suggested answer first."""
+    m = SUGGESTED.search(text)
+    options: list[str] = []
+    if m:
+        head, *rest = [p.strip() for p in m.group(1).split(";")]
+        options = [head] if head else []
+        for part in rest:
+            alt = re.sub(r"^(alternatives?:|or\b)\s*", "", part, flags=re.I)
+            options += [o.strip() for o in re.split(r",|\bor\b", alt) if o.strip()]
+        text = text[:m.start()].strip()
+    return {"text": text, "options": options, "answered": False}
+
+
+def _criteria(root: Path, spec: Spec, shape: str | None) -> list[dict]:
+    traced = trace(root, spec, test_globs(shape)) if spec.dir.is_relative_to(root) else {}
+    smoke = _smoke_traced(root, spec, shape)
+    verdicts = _verdicts(spec)
+    lines = sections(spec.body).get("acceptance criteria", "").splitlines()
+    out = []
+    for ln in lines:
+        m = AC_LINE.match(ln)
+        if not m or m.group(1):
+            continue
+        ac = m.group(2)
+        text = re.sub(r"^\s*[-*]\s+\*\*AC-\d+\.\d+\*\*\s*", "", ln)
+        is_smoke = bool(SMOKE_MARK.search(ln))
+        out.append({"id": ac, "text": text.strip(), "smoke": is_smoke,
+                    "tests": smoke.get(ac, []) if is_smoke and smoke.get(ac) else traced.get(ac, []),
+                    "verdict": verdicts.get(ac, "not judged")})
+    return out
+
+
+def _slices(root: Path, spec: Spec) -> list[dict]:
+    plan = root / "docs" / "plan" / f"{spec.id}.md"
+    if spec.meta.get("shape") != "gitops-app" or not plan.is_file():
+        return []
+    meta, _ = load(plan)
+    return [{"repo": str(r.get("repo") or r.get("id")), "spec": str(r.get("spec") or spec.id),
+             "status": str(r.get("status") or "")} for r in meta.get("repos") or []]
+
+
+def _contract_change(spec: Spec) -> str | None:
+    for name in ("plan.md", "design.md"):
+        f = spec.dir / name
+        text = sections(f.read_text()).get("contract", "").strip() if f.is_file() else ""
+        if text:
+            return text[:CONTRACT_CUT]
+    return None
+
+
+def _draft_pr(spec: Spec) -> dict | None:
+    f = spec.dir / ".cplat-draft-pr.json"
+    try:
+        doc = json.loads(f.read_text())
+        return {"number": doc["number"], "url": doc["url"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def detail(root: Path, spec: Spec, shape: str | None) -> dict:
+    """`summary` plus what a spec panel shows (spec 122): criteria with tests and verdicts, questions, check, slices."""
+    own = spec_shape(spec, shape)
+    errors = check(spec, shape=shape)
+    return {**summary(root, spec), "level": "system" if spec.meta.get("shape") == "gitops-app" else "component",
+            "parent": spec.meta.get("parent"), "criteria": _criteria(root, spec, own),
+            "questions": [_question(q) for q in spec.open_questions()],
+            "check": {"ok": not errors, "errors": errors}, "slices": _slices(root, spec),
+            "contract_change": _contract_change(spec), "draft_pr": _draft_pr(spec)}
 
 
 def broken_summary(root: Path, b: BrokenSpec) -> dict:
@@ -775,7 +899,7 @@ def index_table(root: Path) -> str:
         lines.append(f"| [{r['id']}]({Path('specs') / r['id'] / 'spec.md'}) — {r['title']} | {r['priority']} | "
                      f"{r['status']} | {r['acs']} | {tracks} |")
     if not rows:
-        lines.append("| (no specs yet: `/svc:spec <description>`) | | | | |")
+        lines.append("| (no specs yet: `/component:spec <description>`) | | | | |")
     return "\n".join(lines)
 
 
@@ -931,7 +1055,7 @@ def ci_problems(root: Path) -> list[tuple[Spec, str]]:
     out: list[tuple[Spec, str]] = []
     for s in all_specs(root):
         out += [(s, e) for e in check(s, shape=shape)]
-        own_shape = s.meta.get("shape") or shape
+        own_shape = spec_shape(s, shape)
         if s.status in {"building", "done"} and own_shape != "gitops-app":
             out += [(s, f"{ac} is not named by any test") for ac, files in trace(root, s, test_globs(own_shape)).items() if not files]
             out += [(s, f"{ac} smoke: no smoke-tagged test") for ac, files in _smoke_traced(root, s, own_shape).items() if not files]
@@ -1002,6 +1126,18 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("list")
     p.add_argument("--all", action="store_true", help="include done and superseded")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--detail", action="store_true", help="with --json: criteria, questions, check, slices (spec 122)")
+    p = sub.add_parser("publish", help="push the spec's branch and open or update its draft PR; ask the owner to review (spec 122)")
+    p.add_argument("id")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("land", help="approved spec: approve the review, mark the draft PR ready and merge it (spec 122)")
+    p.add_argument("id")
+    p = sub.add_parser("review", help="post a changes-requested review, or list the PR's review comments (spec 122)")
+    p.add_argument("id")
+    p.add_argument("--request-changes", action="store_true")
+    p.add_argument("--body-file")
+    p.add_argument("--comments", action="store_true")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("test-diff", help="acceptance tests changed only in formatting since BASE? (exit 1 otherwise)")
     p.add_argument("base", help="the commit with the red acceptance tests (Phase 1)")
     p.add_argument("files", nargs="*")
@@ -1058,7 +1194,7 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "trace":
         spec = find(root, ns.id)
-        own_shape = spec.meta.get("shape") or repo_shape(root)
+        own_shape = spec_shape(spec, repo_shape(root))
         result = trace(root, spec, test_globs(own_shape))
         smoke = _smoke_traced(root, spec, own_shape)
         missing = [a for a, f in result.items() if not f or (a in smoke and not smoke[a])]
@@ -1080,18 +1216,23 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "list":
         specs, bad = scan(root)
-        rows = [summary(root, s) for s in specs if ns.all or s.status not in {"done", "superseded"}]
+        shape = repo_shape(root) if ns.json and ns.detail else None
+        rows = [detail(root, s, shape) if ns.json and ns.detail else summary(root, s)
+                for s in specs if ns.all or s.status not in {"done", "superseded"}]
         rows += [broken_summary(root, b) for b in bad]
         if ns.json:
             print(json.dumps(rows, indent=2))
         elif not rows:
-            print("(no open specs — start one with `/svc:spec <description>`)")
+            print("(no open specs — start one with `/component:spec <description>`)")
         else:
             for r in rows:
                 tasks = f"{r['tasks_done']}/{r['tasks']} tasks" if r["tasks"] else "no plan"
                 oq = f", {r['open_questions']} open q" if r["open_questions"] else ""
                 print(f"{r['id']:40} {r['priority']:3} {r['status']:10} {r['acs']:>2} AC{oq:12} {tasks:12} next: {r['next']}")
         return 0
+    if ns.cmd in ("publish", "land", "review"):
+        import spec_pr
+        return spec_pr.main(ns, root, find(root, ns.id))
     if ns.cmd == "test-diff":
         result = test_diff(root, ns.base, ns.files)
         for f, (ok, why) in result.items():

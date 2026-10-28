@@ -10,58 +10,198 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "3.6.0",
+      "version": "4.0.0",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
-      "tags": ["python", "fastapi", "devbox", "k8s"]
+      "tags": [
+        "python",
+        "fastapi",
+        "devbox",
+        "k8s"
+      ]
     },
     {
       "name": "web",
       "source": "./plugins/web",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Agents for Next.js (App Router, pnpm, TypeScript) web repos: coder, tester, deployment, observability, release.",
       "category": "agents",
-      "tags": ["nextjs", "typescript", "pnpm", "devbox", "k8s"]
+      "tags": [
+        "nextjs",
+        "typescript",
+        "pnpm",
+        "devbox",
+        "k8s"
+      ]
     },
     {
       "name": "app",
       "source": "./plugins/app",
-      "version": "1.1.0",
-      "description": "Spec-driven features across a product's repos: /app:spec, /app:plan (criteria per repo, contract), /app:build (ready repos in parallel through their own specs), /app:specs.",
+      "version": "2.0.0",
+      "description": "Tombstones only (the 4.x app commands moved to /system and /component); leaves the marketplace in 6.0.",
       "category": "agents",
-      "tags": ["planning", "multi-repo", "gitops"]
+      "tags": [
+        "planning",
+        "multi-repo",
+        "gitops"
+      ]
     },
     {
       "name": "svc-go",
       "source": "./plugins/svc-go",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Agents for Go service repos (chi, slog, golangci-lint, distroless): coder, tester, deployment, observability, release.",
       "category": "agents",
-      "tags": ["go", "chi", "devbox", "k8s"]
+      "tags": [
+        "go",
+        "chi",
+        "devbox",
+        "k8s"
+      ]
     },
     {
       "name": "svc-java",
       "source": "./plugins/svc-java",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "Agents for Java service repos (Spring Boot 3, Maven, JDK 21, distroless): coder, tester, deployment, observability, release.",
       "category": "agents",
-      "tags": ["java", "spring-boot", "maven", "devbox", "k8s"]
+      "tags": [
+        "java",
+        "spring-boot",
+        "maven",
+        "devbox",
+        "k8s"
+      ]
     },
     {
       "name": "gitops",
       "source": "./plugins/gitops",
-      "version": "1.6.0",
-      "description": "Promotion and ApplicationSet management for the GitOps repo (ArgoCD).",
+      "version": "2.0.0",
+      "description": "Tombstones only (the 4.x gitops commands moved to the noun plugins); leaves the marketplace in 6.0.",
       "category": "agents",
-      "tags": ["argocd", "gitops", "k8s"]
+      "tags": [
+        "argocd",
+        "gitops",
+        "k8s"
+      ]
     },
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "0.16.0",
-      "description": "Common quality and security agents plus the /new-service bootstrap command (shape-aware via shapes.yml).",
+      "version": "1.0.0",
+      "description": "Common quality and security agents plus the cplat launcher and session hooks.",
       "category": "agents",
-      "tags": ["quality", "security", "bootstrap"]
+      "tags": [
+        "quality",
+        "security",
+        "bootstrap"
+      ]
+    },
+    {
+      "name": "system",
+      "source": "./plugins/system",
+      "version": "1.5.1",
+      "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
+      "category": "agents",
+      "tags": [
+        "planning",
+        "multi-repo",
+        "gitops",
+        "agents",
+        "system"
+      ]
+    },
+    {
+      "name": "component",
+      "source": "./plugins/component",
+      "version": "1.4.0",
+      "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
+      "category": "agents",
+      "tags": [
+        "component",
+        "devbox",
+        "k8s",
+        "agents"
+      ]
+    },
+    {
+      "name": "api",
+      "source": "./plugins/api",
+      "version": "1.1.0",
+      "description": "The api noun: /api:list shows the APIs a system declares, with provider and consumers.",
+      "category": "agents",
+      "tags": [
+        "api",
+        "domain-model",
+        "cplat"
+      ]
+    },
+    {
+      "name": "resource",
+      "source": "./plugins/resource",
+      "version": "1.6.0",
+      "description": "The resource noun: /resource:add and /resource:remove declare named, typed resources (databases, buckets, caches, brokers) of a system in system.yaml; /resource:backup and /resource:restore back up and restore a database; /resource:upgrade moves one environment to a new major, in verified steps.",
+      "category": "agents",
+      "tags": [
+        "resource",
+        "postgres",
+        "domain-model",
+        "cplat"
+      ]
+    },
+    {
+      "name": "instance",
+      "source": "./plugins/instance",
+      "version": "1.1.0",
+      "description": "The instance noun: /instance:promote, /instance:secret and /instance:verify act on where a component runs, per environment.",
+      "category": "agents",
+      "tags": [
+        "instance",
+        "promote",
+        "secrets",
+        "smoke",
+        "cplat"
+      ]
+    },
+    {
+      "name": "issue",
+      "source": "./plugins/issue",
+      "version": "1.0.0",
+      "description": "The issue noun: /issue:triage routes GitHub issues to specs and fixes; /issue:report files a platform issue.",
+      "category": "agents",
+      "tags": [
+        "issue",
+        "triage",
+        "feedback",
+        "cplat"
+      ]
+    },
+    {
+      "name": "platform",
+      "source": "./plugins/platform",
+      "version": "1.3.0",
+      "description": "The platform noun: /platform:doctor, update, fleet, runs and retro look after the platform itself.",
+      "category": "agents",
+      "tags": [
+        "platform",
+        "doctor",
+        "update",
+        "fleet",
+        "retro"
+      ]
+    },
+    {
+      "name": "cluster",
+      "source": "./plugins/cluster",
+      "version": "1.0.0",
+      "description": "The cluster noun: /cluster:new creates a cluster repo, /cluster:add installs a system in it, /cluster:remove takes one out. The cluster repo owns the shared operators and the secret store.",
+      "category": "agents",
+      "tags": [
+        "cluster",
+        "gitops",
+        "argocd",
+        "operators"
+      ]
     }
   ]
 }

@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 770" width="1000" height="770" role="img">
+  <title>Today&#x27;s domain model in three bands. Composition: a Repo is rendered from a Shape; a Service names its repo and is listed in a Product; services use Addons declared in the Product and carry Secrets; a Library is a repo nobody references. Environment: there is no environment entity, only keys in paths and maps; per environment there are Pins and Addon instances, and the observed Argo state, smoke and alerts are computed by status. Delivery: product spec, plan with a prose contract, repo spec, run.</title>
+  <style>svg{--bg:#ffffff;--surface:#ffffff;--fg:#1d2330;--muted:#5b6475;--line:#d5d9e2;--accent:#3d4fc4;--accent-soft:#eceefc;--ok:#2f7d4f;--warn:#a3580b;--warn-soft:#fbefe1;--sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--fg)}@media (prefers-color-scheme: dark){svg{--bg:#1a1e28;--surface:#1a1e28;--fg:#e4e7ee;--muted:#9aa2b3;--line:#2f3545;--accent:#9aa6ff;--accent-soft:#232945;--ok:#6fcf97;--warn:#e8a85c;--warn-soft:#3a2a17;}}text{font-family:var(--sans)}.bg{fill:var(--bg)}.band { fill: none; stroke: var(--line); stroke-width: 1.4; }.node { fill: var(--surface); stroke: currentColor; stroke-width: 1.4; }.node.imp { fill: none; stroke: var(--muted); stroke-dasharray: 6 4; }.node.obs { fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-dasharray: 1.5 5; stroke-linecap: round; }.edge { fill: none; stroke: currentColor; stroke-width: 1.4; }.edge.imp { stroke: var(--muted); stroke-dasharray: 5 4; }.kind { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; fill: var(--muted); }.name { font-size: 15px; font-weight: 600; fill: currentColor; }.src { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }.lbl { font-size: 12px; fill: currentColor; }.lbl.m { fill: var(--muted); }.warn { font-family: var(--mono); font-size: 10.5px; fill: var(--warn); font-weight: 500; }.arrow { fill: currentColor; }.arrow.m { fill: var(--muted); }</style>
+  <rect class="bg" x="0" y="0" width="1000" height="770"/>
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow"/></marker>
+        <marker id="am" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow m"/></marker>
+      </defs>
+
+      <!-- Band A: composition -->
+      <rect x="20" y="20" width="960" height="310" rx="14" class="band"/>
+      <text x="44" y="44" class="kind">COMPOSITION · WHAT A PRODUCT IS MADE OF</text>
+
+      <rect x="40" y="60" width="170" height="92" rx="8" class="node"/>
+      <text x="52" y="84" class="name">Shape</text>
+      <text x="52" y="104" class="src">shapes.yml</text>
+      <text x="52" y="120" class="src">template + plugin pair</text>
+
+      <rect x="290" y="60" width="170" height="92" rx="8" class="node"/>
+      <text x="302" y="84" class="name">Repo</text>
+      <text x="302" y="104" class="src">GitHub repo</text>
+      <text x="302" y="120" class="src">.copier-answers.yml</text>
+      <text x="302" y="138" class="src">topic deployable-service</text>
+
+      <rect x="540" y="60" width="170" height="92" rx="8" class="node"/>
+      <text x="552" y="84" class="name">Service</text>
+      <text x="552" y="104" class="src">services.yaml entry</text>
+      <text x="552" y="120" class="src">generated | external</text>
+      <text x="552" y="138" class="warn">a.k.a. component</text>
+
+      <rect x="790" y="60" width="170" height="92" rx="8" class="node"/>
+      <text x="802" y="84" class="name">Product</text>
+      <text x="802" y="104" class="src">gitops-app repo</text>
+      <text x="802" y="120" class="src">app.yaml</text>
+      <text x="802" y="138" class="warn">a.k.a. app, application</text>
+
+      <line x1="290" y1="106" x2="212" y2="106" class="edge" marker-end="url(#a)"/>
+      <text x="251" y="98" text-anchor="middle" class="lbl">from</text>
+      <line x1="540" y1="106" x2="462" y2="106" class="edge" marker-end="url(#a)"/>
+      <text x="501" y="98" text-anchor="middle" class="lbl">repo:</text>
+      <line x1="710" y1="106" x2="788" y2="106" class="edge" marker-end="url(#a)"/>
+      <text x="749" y="98" text-anchor="middle" class="lbl">listed in</text>
+
+      <rect x="40" y="210" width="170" height="92" rx="8" class="node"/>
+      <text x="52" y="234" class="name">Library</text>
+      <text x="52" y="254" class="src">library-python repo</text>
+      <text x="52" y="270" class="src">users not recorded</text>
+
+      <rect x="290" y="210" width="170" height="92" rx="8" class="node"/>
+      <text x="302" y="234" class="name">Secret</text>
+      <text x="302" y="254" class="src">generate | remote</text>
+      <text x="302" y="270" class="src">via ESO secretStore</text>
+      <text x="302" y="288" class="warn">also secretRefs</text>
+
+      <rect x="790" y="210" width="170" height="92" rx="8" class="node"/>
+      <text x="802" y="234" class="name">Addon</text>
+      <text x="802" y="254" class="src">app.yaml addons:</text>
+      <text x="802" y="270" class="src">postgres, observability</text>
+      <text x="802" y="288" class="warn">a.k.a. backing service</text>
+
+      <line x1="125" y1="210" x2="298" y2="154" class="edge imp" marker-end="url(#am)"/>
+      <text x="168" y="176" class="lbl m">is a repo</text>
+      <path d="M560,152 V180 H375 V208" class="edge" marker-end="url(#a)"/>
+      <text x="468" y="174" text-anchor="middle" class="lbl">secrets:</text>
+      <line x1="680" y1="152" x2="788" y2="238" class="edge" marker-end="url(#a)"/>
+      <text x="742" y="186" text-anchor="end" class="lbl">uses:</text>
+      <line x1="875" y1="152" x2="875" y2="208" class="edge" marker-end="url(#a)"/>
+      <text x="885" y="184" class="lbl">addons:</text>
+
+      <!-- Band B: environment -->
+      <rect x="20" y="340" width="960" height="232" rx="14" class="band"/>
+      <text x="44" y="364" class="kind">ENVIRONMENT · ENVS = DEV, STAGING, PROD, HARD-CODED IN RENDER.PY</text>
+
+      <rect x="40" y="380" width="420" height="172" rx="8" class="node imp"/>
+      <text x="56" y="404" class="name">Environment</text>
+      <text x="160" y="404" class="lbl m">no entity, only a key</text>
+      <text x="56" y="432" class="src">overlays/&lt;env&gt;/</text>
+      <text x="56" y="452" class="src">hosts.&lt;env&gt;</text>
+      <text x="56" y="472" class="src">urls.&lt;env&gt;</text>
+      <text x="56" y="492" class="src">policies.mode.&lt;env&gt;</text>
+      <text x="256" y="432" class="src">promotion.staging</text>
+      <text x="256" y="452" class="src">environments: [dev]</text>
+      <text x="256" y="472" class="src">replicas: {dev: 1, prod: 2}</text>
+      <text x="256" y="492" class="src">instances: {prod: 3}</text>
+      <text x="56" y="530" class="lbl m">one key, spread over app.yaml, services.yaml and overlays/</text>
+
+      <rect x="540" y="390" width="170" height="72" rx="8" class="node"/>
+      <text x="552" y="414" class="name">Pin</text>
+      <text x="552" y="434" class="src">overlays/&lt;env&gt;/&lt;svc&gt;/</text>
+      <text x="552" y="450" class="src">image = full commit SHA</text>
+
+      <rect x="790" y="390" width="170" height="72" rx="8" class="node"/>
+      <text x="802" y="414" class="name">Addon instance</text>
+      <text x="802" y="434" class="src">addons/&lt;env&gt;/&lt;addon&gt;/</text>
+      <text x="802" y="450" class="src">only where used</text>
+
+      <line x1="625" y1="152" x2="625" y2="388" class="edge" marker-end="url(#a)"/>
+      <text x="635" y="300" class="lbl">one per env</text>
+      <line x1="875" y1="302" x2="875" y2="388" class="edge" marker-end="url(#a)"/>
+      <text x="885" y="356" class="lbl">one per env</text>
+      <line x1="460" y1="426" x2="538" y2="426" class="edge imp" marker-end="url(#am)"/>
+      <text x="499" y="418" text-anchor="middle" class="lbl m">path key</text>
+
+      <rect x="540" y="490" width="420" height="62" rx="8" class="node obs"/>
+      <text x="556" y="514" class="name">Observed</text>
+      <text x="636" y="514" class="lbl m">not stored, computed by /shared:status</text>
+      <text x="556" y="536" class="src">Argo app &lt;svc&gt;-&lt;env&gt; · sync, health · smoke · alerts</text>
+      <line x1="625" y1="462" x2="625" y2="488" class="edge imp" marker-end="url(#am)"/>
+      <line x1="875" y1="462" x2="875" y2="488" class="edge imp" marker-end="url(#am)"/>
+
+      <!-- Band C: delivery -->
+      <rect x="20" y="600" width="960" height="152" rx="14" class="band"/>
+      <text x="44" y="624" class="kind">DELIVERY · HOW A CHANGE REACHES A PRODUCT</text>
+
+      <rect x="40" y="640" width="170" height="92" rx="8" class="node"/>
+      <text x="52" y="664" class="name">Product spec</text>
+      <text x="52" y="684" class="src">gitops-app docs/specs/</text>
+      <text x="52" y="700" class="src">/app:spec</text>
+
+      <rect x="290" y="640" width="170" height="92" rx="8" class="node"/>
+      <text x="302" y="664" class="name">Plan</text>
+      <text x="302" y="684" class="src">docs/plan/&lt;id&gt;.md</text>
+      <text x="302" y="700" class="src">## Contract</text>
+      <text x="302" y="718" class="warn">the only API, as prose</text>
+
+      <rect x="540" y="640" width="170" height="92" rx="8" class="node"/>
+      <text x="552" y="664" class="name">Spec</text>
+      <text x="552" y="684" class="src">repo docs/specs/&lt;NNN&gt;</text>
+      <text x="552" y="700" class="src">AC-&lt;NNN&gt;.&lt;n&gt;</text>
+
+      <rect x="790" y="640" width="170" height="92" rx="8" class="node"/>
+      <text x="802" y="664" class="name">Run</text>
+      <text x="802" y="684" class="src">private run store</text>
+      <text x="802" y="700" class="src">ship, build, budget</text>
+
+      <line x1="210" y1="686" x2="288" y2="686" class="edge" marker-end="url(#a)"/>
+      <text x="249" y="678" text-anchor="middle" class="lbl">/app:plan</text>
+      <line x1="460" y1="686" x2="538" y2="686" class="edge" marker-end="url(#a)"/>
+      <text x="499" y="678" text-anchor="middle" class="lbl">from-plan</text>
+      <line x1="710" y1="686" x2="788" y2="686" class="edge" marker-end="url(#a)"/>
+      <text x="749" y="678" text-anchor="middle" class="lbl">/svc:ship</text>
+    </svg>

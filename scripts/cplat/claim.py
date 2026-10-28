@@ -2,7 +2,7 @@
 
 A claim is the `in-progress` label, the user as assignee, and a comment naming the branch. A session that finds an
 issue claimed for another branch stops instead of building it a second time; `--take-over` moves the claim.
-`cplat ship escalate` releases it. Claims are best effort where GitHub is unreachable: they never block offline work.
+`cplat component ship escalate` releases it. Claims are best effort where GitHub is unreachable: they never block offline work.
 """
 from __future__ import annotations
 

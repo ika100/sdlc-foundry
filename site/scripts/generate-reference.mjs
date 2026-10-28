@@ -15,26 +15,32 @@ const write = (name, title, description, body, order) =>
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
 // ---- commands ----
+// Grouped by noun, in the order of the domain model; files with `moved-to` are 4.x tombstones and are skipped.
+const NOUNS = ['system', 'component', 'api', 'resource', 'instance', 'issue', 'platform'];
 const plugins = fs.readdirSync(path.join(ROOT, 'plugins')).sort();
 const pluginMeta = Object.fromEntries(plugins.map((p) => [p, JSON.parse(read(`plugins/${p}/.claude-plugin/plugin.json`))]));
+const ordered = [...NOUNS.filter((n) => plugins.includes(n)), ...plugins.filter((p) => !NOUNS.includes(p)).sort()];
 let commands = '';
 let count = 0;
-for (const plugin of plugins) {
+for (const plugin of ordered) {
   const dir = path.join(ROOT, 'plugins', plugin, 'commands');
   if (!fs.existsSync(dir)) continue;
-  const rows = fs.readdirSync(dir).filter((f) => f.endsWith('.md')).sort().map((f) => {
-    const front = fs.readFileSync(path.join(dir, f), 'utf8').match(/^---\n([\s\S]*?)\n---/);
-    const { summary, usage } = splitDescription(YAML.parse(front[1]).description);
+  const rows = [];
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.md')).sort()) {
+    const front = YAML.parse(fs.readFileSync(path.join(dir, f), 'utf8').match(/^---\n([\s\S]*?)\n---/)[1]);
+    if (front['moved-to']) continue;
+    const { summary, usage } = splitDescription(front.description);
     count += 1;
-    return `| \`/${plugin}:${f.replace(/\.md$/, '')}\` | ${mdTableCell(summary)} | ${usage ? `\`${mdTableCell(usage)}\`` : ''} |`;
-  });
+    rows.push(`| \`/${plugin}:${f.replace(/\.md$/, '')}\` | ${mdTableCell(summary)} | ${usage ? `\`${mdTableCell(usage)}\`` : ''} |`);
+  }
+  if (!rows.length) continue;
   commands += `\n## ${plugin} (version ${pluginMeta[plugin].version})\n\n${mdTableCell(pluginMeta[plugin].description).replace(/\\\|/g, '|')}\n\n| Command | What it does | Usage |\n|---|---|---|\n${rows.join('\n')}\n`;
 }
-write('commands.md', 'Slash commands', `All ${count} slash commands of the sdlc-foundry plugins, generated from the plugin sources.`,
-  `These pages are generated from \`plugins/*/commands/*.md\`. Install the plugins with \`/plugin marketplace add ika100/sdlc-foundry\` and \`/plugin install <name>@sdlc-foundry\`.\n${commands}`, 1);
+write('commands.md', 'Slash commands', `All ${count} slash commands of the sdlc-foundry plugins, grouped by noun and generated from the plugin sources.`,
+  `These pages are generated from \`plugins/*/commands/*.md\`, one section per noun of the domain model. Install the plugins with \`/plugin marketplace add ika100/sdlc-foundry\` and \`/plugin install <name>@sdlc-foundry\`.\n${commands}`, 1);
 
 // ---- shapes ----
-const shapes = YAML.parse(read('shapes.yml')).shapes;
+const shapes = YAML.parse(read('shapes.yml')).shapes.filter((s) => !s.detection?.declared);
 const shapeRows = shapes.map((s) => `| \`${s.id}\` | ${s.plugin} | \`templates/${s.template}\` | ${s.deployable ? 'yes' : 'no'} | ${s.default_stack ? mdTableCell(Object.values(s.default_stack).join(' / ')) : ''} | ${s.runtime ? `${s.runtime.port}; \`${s.runtime.probes.readiness}\`; \`${s.runtime.metrics ?? '-'}\`` : '-'} | ${s.status} |`);
 write('shapes.md', 'Shapes', 'The repository shapes the platform can create and operate, generated from shapes.yml.',
   `A **shape** is a kind of repository. It decides which template creates it and which agents work on it. This table is generated from \`shapes.yml\`, the single source of truth.\n\n| Shape | Plugin | Template | Deployable | Default stack | Port; readiness probe; metrics path | Status |\n|---|---|---|---|---|---|---|\n${shapeRows.join('\n')}\n\nTo add a shape, follow [Adding a new shape](/sdlc-foundry/guides/add-a-shape/).\n`, 2);
@@ -43,16 +49,17 @@ write('shapes.md', 'Shapes', 'The repository shapes the platform can create and 
 const render = read('templates/gitops-app/scripts/render.py');
 const doc = render.match(/"""([\s\S]*?)"""/)[1].split('\n').slice(1).join('\n').replace(/^Usage:[\s\S]*$/m, '').trim();
 const cluster = read('templates/gitops-app/scripts/local-cluster.sh').split('\n').slice(1).filter((l) => l.startsWith('#')).map((l) => l.replace(/^# ?/, '')).join('\n').split('set -euo')[0].trim();
-write('configuration.md', 'Configuration reference', 'services.yaml, app.yaml and the cluster-up environment variables, generated from the renderer and the cluster script.',
-  `The GitOps repository is configured by two files per application: \`applications/<app>/services.yaml\` (which services, how they run) and \`applications/<app>/app.yaml\` (how the application is exposed, which addons and policies it uses). Everything below is extracted from the source of \`render.py\` and \`local-cluster.sh\`, so it is always current.\n\n## services.yaml and app.yaml (render.py)\n\n\`\`\`text\n${doc}\n\`\`\`\n\n## devbox run cluster-up (local-cluster.sh)\n\n\`\`\`text\n${cluster}\n\`\`\`\n`, 3);
+write('configuration.md', '`system.yaml` reference', 'system.yaml and the cluster-up environment variables, generated from the renderer and the cluster script.',
+  `The GitOps repository is configured by one file per system: \`applications/<system>/system.yaml\` (its environments, components, APIs and resources). Everything below is extracted from the source of \`render.py\` and \`local-cluster.sh\`, so it is always current.\n\n## system.yaml (render.py)\n\n\`\`\`text\n${doc}\n\`\`\`\n\n## devbox run cluster-up (local-cluster.sh)\n\n\`\`\`text\n${cluster}\n\`\`\`\n`, 3);
 
 // ---- cplat CLI ----
 const cplatPy = path.join(ROOT, 'scripts', 'cplat', 'cplat.py');
 const overview = read('scripts/cplat/cplat.py').match(/"""([\s\S]*?)"""/)[1].trim();
-const subs = [...read('scripts/cplat/cplat.py').matchAll(/^\s+"([a-z-]+)": "[a-z]+",$/gm)].map((m) => m[1]);
+// Subcommands come from the usage lines of the docstring: `cplat <noun> <verb> ...` and the plumbing `cplat <name> ...`.
+const subs = [...new Set([...overview.matchAll(/^ {2}cplat ([a-z-]+)(?: ([a-z-]+))?/gm)].map((m) => (NOUNS.includes(m[1]) && m[2] ? `${m[1]} ${m[2]}` : m[1])))];
 let helpText = '';
 for (const sub of subs) {
-  const r = spawnSync('uv', ['run', cplatPy, sub, '--help'], { encoding: 'utf8', cwd: ROOT });
+  const r = spawnSync('uv', ['run', cplatPy, ...sub.split(' '), '--help'], { encoding: 'utf8', cwd: ROOT });
   if (r.status === 0 && r.stdout.trim()) helpText += `\n### ${sub}\n\n\`\`\`text\n${r.stdout.trim()}\n\`\`\`\n`;
 }
 write('cplat.md', 'The cplat CLI', 'The tested command-line tool behind the slash commands.',

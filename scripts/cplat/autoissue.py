@@ -33,7 +33,9 @@ KIND_LABELS = {"platform": ["bug"], "smoke": ["smoke-failure"], "alert": ["alert
 BASE_LABELS = ["triage", "auto-filed"]
 SIGNATURE_LINE = re.compile(r"^Signature: (platform|smoke|alert):[0-9a-f]{16}$", re.M)
 DEFAULT_BRANCHES = {"main", "master", "trunk", "develop"}
-SUBCOMMAND_GROUPS = {"ship", "spec", "runs", "triage", "compose", "addon", "secret", "pr", "shape"}
+SUBCOMMAND_GROUPS = {"system", "component", "api", "resource", "instance", "issue", "platform", "spec", "pr", "shape"}
+VERB_GROUPS = {("system", "ship"), ("component", "ship"), ("component", "build"), ("instance", "secret"),
+               ("platform", "runs"), ("platform", "retro")}   # a noun's verb that has subcommands of its own
 
 CAP = 10                        # new issues per window, per machine and target repo
 WINDOW_S = 24 * 3600
@@ -522,7 +524,7 @@ def _off_lines(draft: Draft, repo: str) -> list[str]:
     title, body = render(draft)
     lines = [f"## Draft issue for {repo}", "", f"**{title}**   (labels: {', '.join(draft.label_list())})", ""]
     lines += body.splitlines()
-    lines += ["", "Automatic filing is off (CPLAT_AUTO_ISSUES=off); nothing was sent. Run /shared:report-issue to file it; nothing is sent without your OK."]
+    lines += ["", "Automatic filing is off (CPLAT_AUTO_ISSUES=off); nothing was sent. Run /issue:report to file it; nothing is sent without your OK."]
     return lines
 
 
@@ -622,19 +624,21 @@ def retry_filing(entry: dict, timeout: float) -> tuple[str, str]:
 # ---------------- crashes ----------------
 
 def _crash_command(argv: list[str]) -> str:
+    """`cplat <argv[0]>` plus the subcommand words of a group (a noun's verb, and a verb's own subcommand), never option values."""
     if not argv:
         return "cplat"
-    command = f"cplat {argv[0]}"
-    if argv[0] in SUBCOMMAND_GROUPS:
-        skip = False
-        for token in argv[1:]:
-            if skip:
-                skip = False
-            elif token.startswith("--"):
-                skip = "=" not in token
-            elif re.fullmatch(r"[a-z][a-z-]*", token):
-                return f"{command} {token}"
-    return command
+    words = [argv[0]]
+    skip = False
+    for token in argv[1:]:
+        if not (len(words) == 1 and words[0] in SUBCOMMAND_GROUPS or tuple(words) in VERB_GROUPS):
+            break
+        if skip:
+            skip = False
+        elif token.startswith("--"):
+            skip = "=" not in token
+        elif re.fullmatch(r"[a-z][a-z-]*", token):
+            words.append(token)
+    return "cplat " + " ".join(words)
 
 
 def _innermost_frame(exc: BaseException) -> str:

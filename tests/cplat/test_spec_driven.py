@@ -9,7 +9,8 @@ import newapp
 import newsvc
 
 ROOT = core.PLATFORM_ROOT
-SHAPES = [s for s in core.registry.load() if s["status"] != "planned"]
+# a cluster repo holds no feature specs (scripts/shapes.py NO_FEATURE_SPECS, spec 125): every other shape seeds them
+SHAPES = [s for s in core.registry.load() if s["status"] != "planned" and s["id"] != "cluster-gitops"]
 IDS = [s["id"] for s in SHAPES]
 
 
@@ -28,7 +29,7 @@ def test_template_seeds_plan_dir_and_the_spec_first_rule(shape):
     assert (t / "docs" / "plan").is_dir()
     text = claude_md(shape)
     assert "### Spec first" in text
-    assert ("/app:spec <description>" if shape == "gitops-app" else "/svc:spec <description>") in text
+    assert ("/system:spec <description>" if shape == "gitops-app" else "/component:spec <description>") in text
     assert "plan-feature" not in text and "build-feature --" not in text
 
 
@@ -55,23 +56,23 @@ def test_gitops_app_keeps_plans_project_owned():
 @pytest.mark.parametrize("shape", [i for i in IDS if i != "gitops-app"])
 def test_bootstrap_leads_with_the_plan_not_a_bare_build(shape):
     steps = newsvc._next_steps({"name": "x-svc", "shape": shape, "description": "Task API"})
-    order = [next(i for i, s in enumerate(steps) if s.startswith(p)) for p in ('/svc:spec "Task API"', "/svc:plan <NNN>", "/svc:build <NNN>")]
+    order = [next(i for i, s in enumerate(steps) if s.startswith(p)) for p in ('/component:spec "Task API"', "/component:plan <NNN>", "/component:build <NNN>")]
     assert order == sorted(order)
     assert not any(re.search(r"build-feature|plan-feature", s) for s in steps)
 
 
 def test_gitops_bootstrap_points_to_the_product_plan():
     steps = newsvc._next_steps({"name": "shop", "shape": "gitops-app", "description": "Shop"})
-    assert any(s.startswith('/app:spec "') for s in steps)
+    assert any(s.startswith('/system:spec "') for s in steps)
 
 
 def test_new_app_ends_with_the_product_plan(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(newapp.newsvc, "execute", lambda req: (req["target"].mkdir(parents=True), core.Report(title="x"))[1])
     manifest = tmp_path / "app.yml"
-    manifest.write_text(yaml.safe_dump({"app": "shop", "components": [{"name": "shop-api", "description": "API", "shape": "service-python"}]}))
+    manifest.write_text(yaml.safe_dump({"system": "shop", "owner": "acme", "components": [{"name": "shop-api", "description": "API", "type": "service", "lang": "python"}]}))
     assert newapp.main([str(manifest), "--no-github", "--org", "acme", "--dir", str(tmp_path / "out")]) == 0
     out = capsys.readouterr().out
-    assert 'cd shop and run /app:spec "<first feature of the product>"' in out and "/app:build <NNN>" in out
+    assert 'and run /system:spec "<first feature of the system>"' in out and "/system:ship <NNN>" in out
 
 
 PLUGIN = ROOT / "plugins" / "svc"
@@ -80,7 +81,7 @@ PLUGIN = ROOT / "plugins" / "svc"
 def test_the_old_commands_are_gone_and_nothing_points_to_them():
     """svc 3.0 (ADR-026) replaced plan-feature and build-feature; no command, agent, template or script may still name them."""
     assert not (PLUGIN / "commands" / "build-feature.md").exists() and not (PLUGIN / "commands" / "plan-feature.md").exists()
-    assert sorted(p.stem for p in (ROOT / "plugins" / "app" / "commands").glob("*.md")) == ["build", "plan", "ship", "spec", "specs"]
+    assert sorted(p.stem for p in (ROOT / "plugins" / "app" / "commands").glob("*.md")) == ["build", "plan", "ship", "spec", "specs"]  # tombstones (5.0)
     stale = [str(p.relative_to(ROOT)) for d in ("plugins", "templates", "scripts") for p in (ROOT / d).rglob("*")
              if p.is_file() and p.suffix in {".md", ".jinja", ".py", ".json"} and "__pycache__" not in p.parts
              and re.search(r"/svc:(plan-feature|build-feature)|/app:(build-feature|run-plan|plans)\b", p.read_text(errors="ignore"))]
@@ -110,7 +111,8 @@ def _as_rendered(shape_id, rel):
 
 @pytest.mark.parametrize("rel", SPEC_FILES)
 def test_every_template_ships_the_same_spec_files(rel):
-    copies = {_as_rendered(s, rel) for s in IDS}
+    # the gitops-app's README names the system commands (/system:spec), the others the component commands
+    copies = {_as_rendered(s, rel) for s in IDS if not (rel == "docs/specs/README.md" and s == "gitops-app")}
     assert len(copies) == 1, f"{rel} differs between templates"
     text = copies.pop()
     assert "{%" not in text and "{#" not in text
@@ -297,8 +299,8 @@ DEPLOYABLE = [s["id"] for s in SHAPES if s.get("deployable") and s["id"] != "git
 @pytest.mark.parametrize("shape", DEPLOYABLE)
 def test_every_merge_to_main_asks_the_gitops_app_to_pin_dev(shape, tmp_path):
     """AC-062.1 AC-062.4: the rendered CI has a pin-dev job after the image is published, on main only, never red without a token."""
-    newsvc.main([f"pin-{shape}", "d", "--type", shape, "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme",
-                 "--app", "acme/shop"])
+    newsvc.main([f"pin-{shape}", "d", "--shape", shape, "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme",
+                 "--system", "acme/shop"])
     wf = yaml.safe_load((tmp_path / f"pin-{shape}" / ".github" / "workflows" / "ci.yml").read_text())
     job = wf["jobs"]["pin-dev"]
     assert job["needs"] == "docker-publish" and "refs/heads/main" in job["if"] and "tags" not in job["if"]

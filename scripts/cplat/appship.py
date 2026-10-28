@@ -1,21 +1,21 @@
-"""`cplat app-ship` — /app:ship: ship a whole product spec across the repos of its plan (spec 097, ADR-042).
+"""`cplat system ship` — /system:ship: ship a whole product spec across the repos of its plan (spec 097, ADR-042).
 
 Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-app-ship.json (never committed).
 
-  cplat app-ship start <spec> [--max N] [--context C] [--budget KEY=VALUE]   refuse or begin/resume; prints phase, repo table and the next step
-  cplat app-ship status [--json]                        the state and what the scheduler does next
-  cplat app-ship phase <plan|publish|repos|complete|done>
-  cplat app-ship publish [--timeout S]                  spec and plan on main: PR merged on green checks (nothing to do when they are)
-  cplat app-ship next [--json]                          which repos start, run, wait, escalated; the action
-  cplat app-ship repo start <id>                        mark running; prints the clone path (the entry: its worktree on compose/<spec>)
-  cplat app-ship repo result <id>                       read the clone's finished ship, evaluate the gate (exit 1: escalated)
-  cplat app-ship repo escalate <id> <reason> --cause C  a repo that escalated before its ship existed (open questions)
-  cplat app-ship entry pr <id> --title T --body-file F  push the entry's branch and open (or reuse) its PR
-  cplat app-ship entry land <id> [--timeout S]          wait for all checks, merge through the merge slot
-  cplat app-ship complete [--timeout S]                 spec done + plan completed through a PR merged on green; prints the report
-  cplat app-ship escalate <reason> --cause C            end the run escalated
-  cplat app-ship finish                                 archive the state (an unrecorded run is recorded abandoned)
-  cplat app-ship gate [--max-blocks N]                  Stop hook (reads the hook's JSON on stdin)
+  cplat system ship start <spec> [--max N] [--context C] [--budget KEY=VALUE]   refuse or begin/resume; prints phase, repo table and the next step
+  cplat system ship status [--json]                        the state and what the scheduler does next
+  cplat system ship phase <plan|publish|repos|complete|done>
+  cplat system ship publish [--timeout S]                  spec and plan on main: PR merged on green checks (nothing to do when they are)
+  cplat system ship next [--json]                          which repos start, run, wait, escalated; the action
+  cplat system ship repo start <id>                        mark running; prints the clone path (the entry: its worktree on compose/<spec>)
+  cplat system ship repo result <id>                       read the clone's finished ship, evaluate the gate (exit 1: escalated)
+  cplat system ship repo escalate <id> <reason> --cause C  a repo that escalated before its ship existed (open questions)
+  cplat system ship entry pr <id> --title T --body-file F  push the entry's branch and open (or reuse) its PR
+  cplat system ship entry land <id> [--timeout S]          wait for all checks, merge through the merge slot
+  cplat system ship complete [--timeout S]                 spec done + plan completed through a PR merged on green; prints the report
+  cplat system ship escalate <reason> --cause C            end the run escalated
+  cplat system ship finish                                 archive the state (an unrecorded run is recorded abandoned)
+  cplat system ship gate                                   Stop hook (reads the hook's JSON on stdin)
 """
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ import appship_sched
 import appship_state as state
 import budget
 import core
+import pr_rules
 import ship
 import spec as specmod
 from core import PlatformError, run
@@ -55,6 +56,7 @@ def show(st: dict) -> None:
 # ---------------- gitops-app PRs ----------------
 
 def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
+    title = pr_rules.fit(title)
     existing = json.loads(ship.gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url"], cwd=repo) or "[]")
     if existing:
         return existing[0]["url"]
@@ -102,12 +104,12 @@ def publish(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     _switch(repo, branch)
     git(repo, "add", "--", *paths)
     if run(["git", "diff", "--cached", "--quiet"], cwd=repo, check=False).returncode != 0:
-        git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", f"docs(spec): {sid} — product spec and plan")
+        git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", pr_rules.fit(f"docs(spec): {sid} — product spec and plan"))
     git(repo, "push", "-q", "-u", "origin", branch)
     acs = len(specmod.find(repo, sid).active_acs())
     repos = ", ".join(r["id"] for r in state.plan_repos(repo, sid))
     pr = open_pr(repo, branch, f"docs(spec): {sid} — product spec and plan",
-                 f"## Summary\n\nThe product spec and plan of {sid} ({acs} acceptance criteria), published by `/app:ship` before "
+                 f"## Summary\n\nThe product spec and plan of {sid} ({acs} acceptance criteria), published by `/system:ship` before "
                  f"any repo starts.\n\nRepos: {repos}\n")
     ok, lines = appship_merge.land(repo, pr, "publish", timeout, INTERVAL)
     if not ok:
@@ -125,7 +127,7 @@ def entry_pr(repo: Path, repo_id: str, title: str, body_file: Path) -> str:
     st = state.require_state(repo)
     wt = Path((st["repos"].get(repo_id) or {}).get("clone") or "")
     if not wt.is_dir():
-        raise PlatformError(f"{repo_id} has no worktree yet", hint=f"cplat app-ship repo start {repo_id}")
+        raise PlatformError(f"{repo_id} has no worktree yet", hint=f"cplat system ship repo start {repo_id}")
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first")
     ship.check_title(title)
@@ -149,7 +151,7 @@ def entry_land(repo: Path, repo_id: str, timeout: float) -> tuple[bool, list[str
     cur = st["repos"].get(repo_id) or {}
     pr = cur.get("pr")
     if not pr:
-        raise PlatformError(f"{repo_id} has no PR", hint=f"cplat app-ship entry pr {repo_id} --title T --body-file F")
+        raise PlatformError(f"{repo_id} has no PR", hint=f"cplat system ship entry pr {repo_id} --title T --body-file F")
     ok, lines = appship_merge.land(repo, pr, repo_id, timeout, INTERVAL)
     if not ok:
         appship_sched.escalate_repo(repo, repo_id, red_reason("gitops entry PR", pr, lines), "code")
@@ -171,7 +173,7 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     sid = st["spec"]
     open_ = [i for i, r in st["repos"].items() if r.get("state") not in state.PASSED]
     if open_:
-        raise PlatformError("repos not past their gate: " + ", ".join(open_), hint="cplat app-ship next --json")
+        raise PlatformError("repos not past their gate: " + ", ".join(open_), hint="cplat system ship next --json")
     _guard_clean(repo, [])
     branch = f"docs/done-{sid}"
     _switch(repo, branch)
@@ -180,7 +182,7 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
         specmod.set_status(sp, "building", None)
         sp = specmod.find(repo, sid)
     if sp.status == "building":
-        specmod.set_status(sp, "done", None if sp.meta.get("shape") == "gitops-app" else "product shipped by /app:ship",
+        specmod.set_status(sp, "done", None if sp.meta.get("shape") == "gitops-app" else "product shipped by /system:ship",
                            unverified=sp.meta.get("shape") != "gitops-app")
     plan = {r["id"]: r for r in state.plan_repos(repo, sid)}
     for rid in st["repos"]:
@@ -189,10 +191,10 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     specmod.write_index(repo)
     git(repo, "add", "-A")
     if run(["git", "diff", "--cached", "--quiet"], cwd=repo, check=False).returncode != 0:
-        git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", f"docs(spec): {sid} done")
+        git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", pr_rules.fit(f"docs(spec): {sid} done"))
     git(repo, "push", "-q", "-u", "origin", branch)
     pr = open_pr(repo, branch, f"docs(spec): {sid} done",
-                 f"## Summary\n\nEvery repo of {sid} passed its gate; the spec is `done` and the plan completed (`/app:ship`).\n")
+                 f"## Summary\n\nEvery repo of {sid} passed its gate; the spec is `done` and the plan completed (`/system:ship`).\n")
     ok, lines = appship_merge.land(repo, pr, "complete", timeout, INTERVAL)
     if not ok:
         reason = red_reason("completion PR", pr, lines)
@@ -208,7 +210,7 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
 # ---------------- CLI ----------------
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="cplat app-ship", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="cplat system ship", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("start")
@@ -249,7 +251,6 @@ def main(argv: list[str]) -> int:
     p.add_argument("--cause", default=None)
     sub.add_parser("finish")
     p = sub.add_parser("gate")
-    p.add_argument("--max-blocks", type=int, default=state.DEFAULT_MAX_BLOCKS)
     ns = ap.parse_args(argv)
     repo = Path(ns.repo).resolve()
 
@@ -259,7 +260,7 @@ def main(argv: list[str]) -> int:
             hook = json.loads(raw) if raw.strip() else {}
         except ValueError:
             hook = {}
-        answer = state.gate(Path(hook.get("cwd") or repo), hook, ns.max_blocks)
+        answer = state.gate(Path(hook.get("cwd") or repo), hook)
         if answer:
             print(json.dumps(answer))
         return 0
@@ -318,7 +319,7 @@ def main(argv: list[str]) -> int:
         return 0 if ok else 1
     if ns.cmd == "escalate":
         st = state.escalate(repo, " ".join(ns.reason), ns.cause)
-        say([f"product ship {st['spec']}: escalated ({st['escalated']}); the session may stop. Resume with /app:ship {st['spec']}",
+        say([f"product ship {st['spec']}: escalated ({st['escalated']}); the session may stop. Resume with /system:ship {st['spec']}",
              *appship_report.state_table(st)])
         return 0
     if ns.cmd == "finish":

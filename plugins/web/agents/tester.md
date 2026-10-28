@@ -50,4 +50,4 @@ A criterion whose line ends with `(smoke)` is also checked in dev after deploy b
 
 A clear test report: tests written, passed/failed, coverage %, uncovered critical paths, and any open issues.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.

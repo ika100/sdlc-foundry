@@ -1,0 +1,72 @@
+---
+spec_id: 113-a-domain-model-core-in-cplat
+title: A domain model core in cplat
+status: done
+priority: P1
+---
+
+# 113 — A domain model core in cplat
+
+## Problem
+
+Every delivery command works out "this service in that environment" on its own. `cplat status` reads the overlay pins and the addon list itself, `cplat promote` has its own environment order and reads the staging pin for the digest check of spec 106, `cplat smoke run` and the staging promotion of `cplat ship deploy` each read `services.yaml` and `app.yaml` from the linked gitops-app and rebuild the URL and the promotion rule, and the alert poll keeps its own environment list to map a firing series to a service and an environment. The environment list `dev, staging, prod` is written down four times in the platform and once more in the gitops-app's renderer. A rule such as "prod runs the digest staging verified" has no shared place to live, and the 5.0 switch to the domain model (ADR-053, spec 114) needs one tested core to stand on. This spec builds that core in 4.x, behind the commands people already use, and adds one read-only command that shows the model.
+
+## Stories
+
+- As a platform maintainer, I want one tested model of a gitops-app (System, Component, Resource, Environment, Instance, Resource instance and their relations), so that a rule about a component in an environment is written and tested once, not in every command.
+- As a product owner, I want `cplat model show` to print my product in the model's nouns, so that I can see what runs where and under which rules without reading four files.
+- As a user of `/shared:status`, `/gitops:promote`, `cplat smoke` and `/svc:ship`, I want nothing to change for me in this release, so that the refactor costs me no migration.
+
+## Acceptance criteria
+
+The model is loaded from a gitops-app's declared files: `applications/<app>/app.yaml`, `applications/<app>/services.yaml`, the image pins in `overlays/<env>/<service>/` and the shape registry. "Before" means the platform release this spec ships on top of.
+
+- **AC-113.1** Given a gitops-app repo with one application, when the model is loaded, then it has one System named after the application, one Component per `services.yaml` entry and one Resource per addon declared in `app.yaml` other than `observability`, each part of the System; and the Environments are `dev`, `staging`, `prod` in that order. A test fails if this order differs from the environment list of the gitops-app template's renderer.
+- **AC-113.2** Given a `services.yaml` entry, when the model is loaded, then its Component keeps the entry's `name`, `repo`, `image` and `shape`, and has `type` `service` for the shapes service-python, service-java and service-go, `type` `website` for web-nextjs, and `lang` equal to the shape's language in the shape registry (python, java, go, typescript). An entry without a `shape` or with a shape the registry does not know has `type` `service` and `lang` `unknown`. An `external:` entry (spec 069) is a Component marked as external with its package kind (`kustomize` or `helm`).
+- **AC-113.3** Given a Component whose entry lists `environments: [dev, staging]` (no `environments` key means `[dev]`), when the model is loaded, then it has exactly one Instance in `dev` and one in `staging` and none in `prod`. Each Instance has: the pinned tag from the overlay of that environment (none when the overlay or its tag is missing), replicas (the entry's per-environment value, default 1, or its single integer; none for an external entry, whose package sets them), the namespace `<system>-<env>` (or the external entry's `namespace`) and the Argo application `<component>-<env>`. An environment name in the list other than dev, staging or prod creates no Instance.
+- **AC-113.4** Given an `app.yaml`, when the model is loaded, then each Environment carries its rules: the host template from `hosts.<env>` (none means nothing is exposed there), the URL template from `urls.<env>`, the policy mode (`off` when `policies` is absent or false, else `policies.mode.<env>`, defaulting to Enforce in prod and Audit elsewhere), the promotion rule (dev follows main; staging is `promotion.staging` of `app.yaml`, `auto` or `manual`, default `manual`; prod is always `manual`), and observability (present with `ui`, `exportTo`, `alerts`, `rules`, `queryURL`, `alertmanagerURL` as declared when `app.yaml` declares the `observability` addon, absent otherwise). Observability is never a Resource and never a Resource instance.
+- **AC-113.5** Given an Instance, when its rules are asked for, then its staging promotion is the Component's `promotion.staging` when the entry sets it, else the Environment's; and its URL is the one `cplat smoke run` resolved before for the same files: none, with the reason "not exposed in <env>", unless the entry has `expose`, the Component runs in the environment and the Environment has a host template; otherwise the host is the template filled with `{service}` (the `expose.host`, else the component name), `{app}` and `{env}`, and the URL is `urls.<env>` filled with `{host}`, `{service}`, `{app}`, `{env}` when set, else the same local-cluster fallback for a `.localhost` host as before, else `https://<host>`.
+- **AC-113.6** Given an entry with `secrets` and `secretRefs`, when the model is loaded, then the Component declares each secret with its name and either its generated keys or its remote keys, plus the referenced Secret names; each of its Instances carries the same declarations with the secret-store key resolved for its environment (`remote.path`, default `<system>-<env>-<secret>`). Because today's files cannot declare a per-Instance override, every Instance's secrets equal its Component's. No secret value is read or shown.
+- **AC-113.7** Given `app.yaml` declaring `postgres` and Components whose entries list it in `uses`, when the model is loaded, then each such Component `uses` the postgres Resource, and there is one postgres Resource instance in every Environment where at least one of those Components has an Instance, with its sizing for that environment (`instances`, `version`, `storage`, each a per-environment map or a single value, defaults 1, 17 and 1Gi), the Argo application `addon-postgres-<env>` and the connection Secret `<system>-postgres-app`. A declared postgres that no Instance uses has no Resource instance.
+- **AC-113.8** Given the loaded model, when its relations are asked for, then: every Component and Resource is part of the System; a Component uses the Resources in its `uses`; every Instance and Resource instance runs in exactly one Environment; a staging Instance is promoted from the dev Instance of the same Component and a prod Instance from the staging one, and the promoted-from Instance is none when the Component has no Instance in the directly preceding environment (and always for dev).
+- **AC-113.9** Given a gitops-app, when the model is loaded, then only declared state is read: no cluster, registry or other GitHub call is made apart from reading those files. Observed state (Argo sync and health, running image and digest, smoke result, firing alerts) is attached to an Instance by the command that computed it, only for that command's run; after `cplat status --context <ctx>` and `cplat promote ... --dry-run`, the repo's working tree is unchanged.
+- **AC-113.10** Given a service repo linked to a gitops-app, when the model is loaded from that gitops-app through GitHub (as `cplat smoke run` and the staging promotion of `cplat ship deploy` read it), then it equals the model loaded from a checkout of the same files, and the service's Component is found by its `repo` first and by its name second, as before. A gitops-app that cannot be read gives the same "has no <env> URL" and "is not in the linked gitops-app" reasons as before.
+- **AC-113.11** Given the same repo files, when `cplat status` (table and `--json`), `cplat promote` (including `--dry-run`, `--json`, the digest check against the staging Instance's pinned tag, and the files and pins it writes), `cplat smoke run` (dev and staging URL), the staging promotion decision of `cplat ship deploy` (its promotion rule and staging pin lookup) and `cplat alerts poll` (the environments it polls, the built-in `ServiceDown` rule per Instance with metrics, and the mapping of a series to a component and environment) run, then each takes these answers from the model, and its output, exit code, JSON and written files are the same as before.
+- **AC-113.12** Given the existing tests of `cplat status`, `cplat promote` (including the digest tests of spec 106), `cplat smoke`, the staging promotion of spec 093, `cplat alerts poll` and the gitops helpers, when the test suite runs after the change, then they all pass with no existing test file changed, and the whole suite is green.
+- **AC-113.13** Given the platform's code after the change, when the test suite runs, then a test fails if any part of cplat other than the model (commands and shared helpers alike) defines its own list of the environments `dev, staging, prod` or reads an overlay image pin itself.
+- **AC-113.14** Given a gitops-app repo, when `cplat model show` runs, then it exits 0, changes no file and prints, in this order: the System; the Environments in promotion order with their rules (host, URL template, policy mode, promotion, observability); the Components with type, lang, repo, image, the Resources they use and their secret names; one line per Instance with component, environment, pinned tag (or `not pinned`), replicas, namespace and URL (or `-`); the Resources and their Resource instances with sizing. It prints no observed state.
+- **AC-113.15** Given `cplat model show --json`, when it runs, then it prints one JSON object with the keys `schema` (value 1), `system`, `environments` (a list in promotion order), `components`, `resources`, `instances`, `resource_instances` and `relations`; every instance has `component`, `environment`, `image`, `tag` (null when not pinned), `replicas`, `namespace`, `argo_application`, `url`, `promoted_from` and `secrets`; secrets list names and keys, never values; there are no observed-state fields.
+- **AC-113.16** Given `cplat model show` outside a gitops-app, then it exits 1 with the same message and fix as `cplat status` there. Given a repo with several applications, then without `--app` it exits 1 naming them, and with `--app <name>` it shows that one; `--repo-dir` works as for `cplat status`. Given an unparseable `services.yaml` or `app.yaml`, then it exits 1 naming the file. Given an entry that lists an unknown environment, then it exits 0, shows no Instance for it and prints one warning line naming the component and the environment.
+- **AC-113.17** Given the release that ships this spec, when it is published, then it is a 4.x minor: `cplat --help` lists `model show [--json]`, no existing command, flag, output format or file schema changed, the changelog says so, and the "Status" of the domain model guide says the internal core is in place, names `cplat model show` and says that its JSON (`schema: 1`) may change in 5.0. No slash command is added for `cplat model show`.
+- **AC-113.18** Given the same repo files, when `cplat secret` (the secret-store key per secret and environment) and the gate class of `/app:ship` (whether a component is "exposed in dev": `expose`, `dev` in its environments and a dev host template) run, then each takes these answers from the model's Instances, its output, exit code and written state are the same as before, and its existing tests pass with no existing test file changed.
+
+## Non-goals
+
+- `system.yaml`, renamed or noun-grouped commands, aliases and the migration of existing repos (spec 114, release 5.0).
+- Declaring per-Instance overrides of secrets or other settings: the model can hold them, but today's files cannot express them (spec 114).
+- API entities beyond what spec 110's contract defines, Owner, and the "uses a library" relation: today's gitops-app files contain neither libraries nor ownership.
+- Moving the gitops-app's own pin script and the pin-dev and pin-staging workflows onto the model: they run inside the gitops-app without cplat, so moving them would change the template.
+- Moving `cplat compose` and `cplat addon`: they edit `services.yaml` and `app.yaml` and do not compute a component in an environment.
+- Storing observed state anywhere, or a `cplat model show` option that fetches it.
+- A slash command for `cplat model show` (cplat only until the noun-based commands of spec 114).
+- Any change to cluster names: namespace `<system>-<env>`, Argo applications `<component>-<env>` and `addon-<addon>-<env>`, the Secret `<system>-postgres-app`, the `app.kubernetes.io/part-of` label.
+- Behaviour observable through a deployed URL: this spec has no `(smoke)` criteria.
+
+## Open questions
+
+- ~~What is `lang` of a web-nextjs Component: `typescript` or `nextjs`?~~ Answered: `typescript` from the shape registry; spec 114 corrects the guide's sketch. See AC-113.2.
+- ~~Confirm: an entry without a shape or with an unknown shape is `type` `service` with `lang` `unknown`.~~ Answered: yes, not an error. See AC-113.2.
+- ~~Confirm: "promoted from" is only the directly preceding environment.~~ Answered: yes; a dev→prod promotion leaves the prod Instance without a promoted-from Instance. See AC-113.8.
+- ~~Confirm: `cplat model show` takes `--app` and `--repo-dir` like `cplat status`.~~ Answered: yes. See AC-113.16.
+- ~~Confirm: an unknown environment is a warning in `cplat model show`, not an error.~~ Answered: yes. See AC-113.16.
+- ~~Should `cplat secret` and the `/app:ship` gate class move onto the model too?~~ Answered: yes. See AC-113.18 (and AC-113.13 for the structural check).
+- ~~Should `cplat model show` get a `/gitops:model` slash command?~~ Answered: no, cplat only in this release. See AC-113.17 and Non-goals.
+- ~~Confirm: the JSON carries `schema: 1` and is documented as subject to change in 5.0.~~ Answered: yes. See AC-113.15 and AC-113.17.
+
+## Changelog
+
+- 2026-10-26 created
+- 2026-10-26 open questions answered
+- 2026-10-26 approved
+- 2026-10-26 building
+- 2026-10-26 done

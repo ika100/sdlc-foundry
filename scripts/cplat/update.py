@@ -9,25 +9,33 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import yaml
 
 import core
 import gates
+import gitops
+import migrate5
 import settingsmerge
+import shapecmd
 from core import PLATFORM_ROOT, PlatformError, Report, run
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat update-service", description=__doc__)
+    p = argparse.ArgumentParser(prog="cplat platform update", description=__doc__)
     p.add_argument("--ref", default=None, help="platform ref being applied (informational; the running checkout is the source)")
     p.add_argument("--data", action="append", default=[], metavar="KEY=VALUE", help="change a template answer (repeatable)")
     p.add_argument("--repo", default=".", help="repo to update (default: current directory)")
-    p.add_argument("--migrate", action="store_true", help="v1 → v2: also delete the service's k8s/ directory (the gitops-app repo owns manifests now; import them first with `compose add <service> --from-k8s`)")
+    p.add_argument("--migrate", action="store_true", help="4.x → 5.0 (system.yaml, plugins; v1 `k8s/` removal included)")
     p.add_argument("--skip-tasks", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--verify", action="store_true", help="after the update is merged and synced: operators, moved dev pins, every environment's smoke tests (spec 121)")
+    p.add_argument("--context", action="append", metavar="[ENV=]CTX", help="with --verify: kube context (of one environment, or of all); repeatable")
+    p.add_argument("--component-dir", action="append", metavar="C=DIR", help="with --verify: a checkout of a component for the smoke tests; repeatable")
+    p.add_argument("--app", help="with --verify: the application (when the repo has several)")
     return p
 
 
@@ -43,6 +51,9 @@ def resolve(argv: list[str]) -> dict:
     repo = Path(ns.repo).resolve()
     if not (repo / ".git").exists():   # a file in a git worktree
         raise PlatformError(f"{repo} is not a git repository")
+    if shapecmd.resolve(repo) == "platform":
+        raise PlatformError("the platform repo is not updated from a template",
+                            hint="the platform is released through its own procedure: CONTRIBUTING.md, Releases")
     if not (repo / ".copier-answers.yml").is_file():
         raise PlatformError("no .copier-answers.yml in the repo", hint="see docs/ADOPTING.md → 'Adopt the template for skeleton updates'")
     if run(["git", "status", "--porcelain"], cwd=repo).stdout.strip():
@@ -53,9 +64,26 @@ def resolve(argv: list[str]) -> dict:
     shape = detect_shape(repo)
     entry = next(s for s in core.registry.load() if s["id"] == shape)
     stamp = core.read_stamp(repo)
-    return {"repo": repo, "shape": shape, "template": entry["template"], "data": ns.data, "old": stamp.get("platform"),
+    unmigrated = _major(stamp.get("platform")) < 5 or (shape == "gitops-app" and bool(_old_files(repo)))
+    if unmigrated and not ns.migrate:
+        raise PlatformError(f"this repo is on platform {stamp.get('platform') or 'none'}: 5.0 changes its files and plugins",
+                            hint="run cplat platform update --migrate (or /platform:update --migrate)")
+    return {"unmigrated": unmigrated,"repo": repo, "shape": shape, "template": entry["template"], "data": ns.data, "old": stamp.get("platform"),
             "new": core.platform_version(), "ref": ns.ref or stamp.get("ref") or "main", "skip_tasks": ns.skip_tasks, "migrate": ns.migrate,
             "dry_run": ns.dry_run, "json": ns.json}
+
+
+def _major(version: str | None) -> int:
+    try:
+        return int(str(version).split(".")[0])
+    except ValueError:
+        return -1
+
+
+def _old_files(repo: Path) -> list[str]:
+    """The 4.x inputs (applications/*/app.yaml, services.yaml) a gitops-app repo still has, as repo-relative paths."""
+    base = repo / "applications"
+    return sorted(p.relative_to(repo).as_posix() for f in ("app.yaml", "services.yaml") for p in base.glob(f"*/{f}"))
 
 
 def branch_name(repo: Path | None = None) -> str:
@@ -79,7 +107,8 @@ def project_owned_patterns(template: str) -> list[str]:
         return []
 
 
-SEEDS = {".secrets.baseline.json"}   # repo-owned once they exist, but the skeleton needs them: added when missing, never replaced
+# repo-owned once they exist, but the skeleton needs them: added when missing, never replaced (CLAUDE.md imports the notes, #239)
+SEEDS = {".secrets.baseline.json", ".claude/project-notes.md"}
 
 
 def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
@@ -175,7 +204,7 @@ def render_baseline(template: str, old: str | None, answers: str, dest: Path, ro
     try:
         src = dest / "src"
         src.mkdir(parents=True, exist_ok=True)
-        archive = _archive(f"v{old}", f"templates/{template}", root)
+        archive = _archive(f"v{old}", "templates", root)
         subprocess.run(["tar", "-x", "-C", str(src)], input=archive, capture_output=True, check=True)
         data = dest / "answers.yml"
         data.write_text(answers)
@@ -368,6 +397,352 @@ def pin_dev_steps(repo: Path, shape: str) -> list[str]:
     return []
 
 
+RENDER_V4 = PLATFORM_ROOT / "scripts" / "cplat" / "assets" / "render_v4.py"   # the frozen 4.7 renderer (spec 114)
+OLD_NAMES = ("app.yaml", "services.yaml")
+NOT_RENDERED = (*OLD_NAMES, "system.yaml")
+
+
+def _owner(repo: Path) -> str | None:
+    org = gitops.answers(repo).get("github_org")
+    if org:
+        return str(org)
+    url = run(["git", "remote", "get-url", "origin"], cwd=repo, check=False).stdout.strip()
+    m = re.search(r"github\.com[:/]([^/]+)/", url)
+    return m.group(1) if m else None
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    """Every generated file under applications/ and bootstrap/ (path -> bytes); the system's inputs are not generated."""
+    out: dict[str, bytes] = {}
+    for base in ("applications", "bootstrap"):
+        for p in sorted((root / base).rglob("*")) if (root / base).is_dir() else []:
+            if p.is_file() and p.name not in NOT_RENDERED:
+                out[p.relative_to(root).as_posix()] = p.read_bytes()
+    return out
+
+
+_CLUSTER_FILE = re.compile(r"^applications/[^/]+/addons/[^/]+/[^/]+/cluster\.yaml$")
+_DB_IMAGE = re.compile(rb"(imageName: ghcr\.io/cloudnative-pg/postgresql:)(\d+)\S*")
+
+
+def _digested_refs(repo: Path) -> list[bytes]:
+    """The engine image references of the repo's renderer table that carry a digest (spec 121), except the database ones."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("render_repo_pins", repo / "scripts" / "render.py")
+    if spec is None or spec.loader is None:
+        return []
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:  # noqa: BLE001 - an unreadable renderer is reported by the render itself
+        return []
+    refs = [*mod.VALKEY_IMAGES.values(), *mod.NATS_IMAGES.values(), mod.SEAWEEDFS_IMAGE, mod.VELERO_AWS_PLUGIN_IMAGE, mod.COLLECTOR_IMAGE,
+            mod.LGTM_IMAGE]
+    return [r.encode() for r in refs if "@sha256:" in r]
+
+
+def _normalised(tree: dict[str, bytes], pins: list[bytes] = ()) -> dict[str, bytes]:
+    """The migration proof ignores the database image beyond its major (AC-115.6, AC-115.17) and the digest the versions
+    table (spec 121) adds to the other engine images: exactly those references, mapped back to tag only."""
+    out = {}
+    for p, b in tree.items():
+        b = _DB_IMAGE.sub(rb"\1\2", b) if _CLUSTER_FILE.match(p) else b
+        for ref in pins:
+            b = b.replace(ref, ref.split(b"@", 1)[0])
+        out[p] = b
+    return out
+
+
+def convert_systems(repo: Path) -> list[dict]:
+    """Convert every 4.x application directory; any problem stops the migration before anything changes."""
+    owner = _owner(repo)
+    found: list[dict] = []
+    problems: list[str] = []
+    for rel in _old_files(repo):
+        d = Path(rel).parent
+        if any(f["dir"] == d for f in found):
+            continue
+        texts = {n: (repo / d / n).read_text() if (repo / d / n).is_file() else "" for n in OLD_NAMES}
+        try:
+            docs = {n: yaml.safe_load(t) or {} for n, t in texts.items()}
+        except yaml.YAMLError as e:
+            raise PlatformError(f"cannot migrate {d} to 5.0: {str(e).splitlines()[0]}", hint="nothing was changed; fix the YAML and run again") from e
+        conv = migrate5.convert(d.name, docs["app.yaml"], docs["services.yaml"], owner)
+        problems += [f"{d}/{p}" if p.startswith(OLD_NAMES) else p for p in conv.problems]
+        found.append({"dir": d, "text": migrate5.dump(conv.doc), "comments": any(migrate5.has_comments(t) for t in texts.values()),
+                      "deleted": [f"{d.as_posix()}/{n}" for n in OLD_NAMES if (repo / d / n).is_file()]})
+    if problems:
+        names = ", ".join(f["dir"].as_posix() for f in found)
+        raise PlatformError(f"cannot migrate {names} to 5.0: these values have no place in system.yaml:\n  " + "\n  ".join(problems),
+                            hint="nothing was changed; remove or move them, commit, and run again")
+    return found
+
+
+def reference_render(repo: Path, tmp: Path) -> dict[str, bytes]:
+    """What the frozen 4.7 renderer makes of HEAD (in a temporary copy)."""
+    root = tmp / "v4"
+    root.mkdir()
+    archive = subprocess.run(["git", "archive", "HEAD"], cwd=repo, capture_output=True, check=True).stdout
+    subprocess.run(["tar", "-x", "-C", str(root)], input=archive, capture_output=True, check=True)
+    (root / "scripts").mkdir(exist_ok=True)
+    shutil.copyfile(RENDER_V4, root / "scripts" / "render.py")
+    run(["uv", "run", "scripts/render.py"], cwd=root)
+    return _tree(root)
+
+
+def apply_systems(repo: Path, systems: list[dict], reference: dict[str, bytes]) -> None:
+    """Write system.yaml, delete the old inputs, render with the repo's 5.0 renderer and compare with the 4.7 render."""
+    for s in systems:
+        (repo / s["dir"] / "system.yaml").write_text(s["text"])
+        for rel in s["deleted"]:
+            (repo / rel).unlink()
+    gitops.render(repo)
+    pins = _digested_refs(repo)
+    reference = _normalised(reference)
+    after = _normalised(_tree(repo), pins)
+    diff =[f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
+    diff += [f"{p} (missing)" for p in sorted(reference) if p not in after]
+    diff += [f"{p} (extra)" for p in sorted(after) if p not in reference]
+    if diff:
+        names = ", ".join(s["dir"].as_posix() for s in systems)
+        raise PlatformError(f"cannot migrate {names} to 5.0: the 5.0 render differs from 4.7:\n  " + "\n  ".join(diff),
+                            hint="nothing was changed; report it with /issue:report")
+
+
+def _ignored(repo: Path) -> set[str]:
+    return set(run(["git", "ls-files", "--others", "--ignored", "--exclude-standard"], cwd=repo, check=False).stdout.splitlines())
+
+
+def rollback(repo: Path, cur: str, branch: str, created: bool, ignored: set[str]) -> None:
+    """Back to the state before the migration: tracked files, untracked files and the ignored files the migration made."""
+    run(["git", "reset", "--hard", "-q"], cwd=repo, check=False)
+    run(["git", "clean", "-fdq"], cwd=repo, check=False)
+    for rel in _ignored(repo) - ignored:
+        (repo / rel).unlink(missing_ok=True)
+    if created:
+        run(["git", "checkout", "-q", cur], cwd=repo, check=False)
+        run(["git", "branch", "-D", branch], cwd=repo, check=False)
+
+
+# ---------------- versions: the change list of a gitops-app update (spec 121, AC-121.11, AC-121.20, AC-121.23) ----------------
+
+def _targets(mod, app_dir: Path, system: str, r: str, typ: str, env: str):
+    """The rendered file of an instance: (path, type)."""
+    folder = app_dir / "addons" / env / r
+    if typ == "database":
+        base = f"{system}-{r}"
+        try:
+            active = next(c["name"] for c in mod.read_restore_state(app_dir, env, r)[0] if c["role"] == "active")
+        except (mod.RenderError, StopIteration):
+            return None
+        return folder / ("cluster.yaml" if active == base else f"cluster-g{active[len(base) + 2:]}.yaml")
+    return folder / {"cache": "statefulset.yaml", "broker": "server.yaml", "bucket": "seaweed.yaml"}[typ]
+
+
+def _instances(mod, repo: Path) -> dict[tuple[str, str, str], dict]:
+    """{(system, resource, env): {type, major, pin (rendered now, or None), table}} of every in-cluster resource instance."""
+    out: dict[tuple[str, str, str], dict] = {}
+    for sysfile in sorted((repo / "applications").glob("*/system.yaml")):
+        app_dir = sysfile.parent
+        try:
+            doc = yaml.safe_load(sysfile.read_text()) or {}
+            cfgs = mod.validate_resources(doc, app_dir)
+        except Exception:  # noqa: BLE001 - an invalid system is reported by the render itself
+            continue
+        system = str(doc.get("system") or app_dir.name)
+        for r, rc in cfgs.items():
+            typ = rc["type"]
+            for env, e in rc["envs"].items():
+                if e.get("external"):
+                    continue
+                major = e.get("version")
+                path = _targets(mod, app_dir, system, r, typ, env)
+                held = mod.rendered_pin(path, typ) if path else None
+                try:
+                    table = mod.table_pin(typ, major if typ != "bucket" else None)["pin"]
+                except KeyError:
+                    table = None
+                out[(system, r, env)] = {"type": typ, "major": major, "pin": held["pin"] if held else None, "table": table}
+    return out
+
+
+_OPERATOR_REV = re.compile(r"^\s*targetRevision:\s*['\"]?([^\s'\"]+)", re.M)
+
+
+def _operator_revisions(repo: Path) -> dict[str, str]:
+    out = {}
+    for p in sorted((repo / "operators" / "apps").glob("*.yaml")):
+        m = _OPERATOR_REV.search(p.read_text())
+        if m:
+            out[p.stem] = m.group(1)
+    return out
+
+
+def _generated_snapshot(repo: Path) -> dict[str, bytes]:
+    out: dict[str, bytes] = {}
+    for top in ("applications", "operators"):
+        for p in sorted((repo / top).rglob("*")) if (repo / top).is_dir() else []:
+            if p.is_file():
+                out[p.relative_to(repo).as_posix()] = p.read_bytes()
+    return out
+
+
+def render_and_compare(req: dict, repo: Path, written: set[str] | None = None) -> dict | None:
+    """Re-render with the repo's new renderer (held pins follow from it) and list what moves, per environment; None when nothing does.
+    `written` (optional) receives every path under applications/ and operators/ the render created or changed: generated output."""
+    import upgrade
+    mod = upgrade.load_renderer(repo)
+    before = _instances(mod, repo)
+    ops_before = _operator_revisions(repo)
+    snap = _generated_snapshot(repo) if written is not None else {}
+    gitops.render(repo)
+    if written is not None:
+        now = _generated_snapshot(repo)
+        written |= {k for k, v in now.items() if snap.get(k) != v}
+    after = _instances(mod, repo)
+    ops_after = _operator_revisions(repo)
+    order = {e: i for i, e in enumerate(core_envs())}
+    rows: list[dict] = []
+    moved_now = {k[:2] for k in after if k in before and before[k]["pin"] and after[k]["pin"] and before[k]["pin"] != after[k]["pin"]}
+    for key in sorted(after, key=lambda k: (k[0], k[1], order.get(k[2], 9))):
+        system, r, env = key
+        a, b = after[key], before.get(key)
+        if b is None or b["pin"] is None or a["pin"] is None:
+            continue
+        label = f"{r} {a['major']}" if a["type"] != "bucket" else r
+        if a["pin"] != b["pin"]:
+            rows.append({"env": env, "resource": r, "kind": "pin", "from": b["pin"], "to": a["pin"], "moves": True,
+                         "text": f"{env:<8} {label}: {b['pin']} → {a['pin']} (moves now)"})
+        elif env != "dev" and (system, r) in moved_now and a["table"] and a["table"] != a["pin"]:
+            until = (f"/resource:upgrade {r} --to {a['major']} --env {env}" if a["type"] != "bucket"
+                     else "dev is verified and /platform:update runs again")
+            rows.append({"env": env, "resource": r, "kind": "pin", "from": a["pin"], "to": a["table"], "moves": False,
+                         "text": f"{env:<8} {label}: keeps {a['pin']} until {until}"})
+    envs = [e for e in core_envs() if any(k[2] == e for k in after)] or core_envs()
+    for name in sorted(ops_after):
+        if name in ops_before and ops_before[name] != ops_after[name]:
+            rows.append({"env": "cluster", "resource": name, "kind": "operator", "from": ops_before[name], "to": ops_after[name], "moves": True,
+                         "text": f"{'cluster':<8} operator {name} {ops_before[name]} → {ops_after[name]} "
+                                 f"(operators/apps; shared by {', '.join(envs)}: moves with {envs[0]}'s step)"})
+    if not rows:
+        return None
+    return {"from": req["old"] or "none", "to": req["new"], "rows": rows, "lines": [x["text"] for x in rows]}
+
+
+def core_envs() -> list[str]:
+    import model
+    return list(model.ENVIRONMENTS)
+
+
+def versions_block(versions: dict) -> str:
+    return "\n".join([f"versions in this system (platform {versions['from']} → {versions['to']}):", *[f"  {ln}" for ln in versions["lines"]]])
+
+
+# ---------------- --verify (spec 121, AC-121.20 .. AC-121.22) ----------------
+
+OPERATOR_WAIT_S = 900.0
+OPERATOR_POLL_S = 10.0
+
+
+def _wait_operators(repo: Path, contexts: dict[str, str]) -> bool:
+    """Wait for every operator row to read `ok` (installed = the table's version and its CRDs serve the table's versions)."""
+    import doctor
+    start = time.monotonic()
+    while True:
+        rows = [row for row in doctor.check_operators(repo, contexts) if row.get("operator")]
+        pending = [row for row in rows if row["operator"]["state"] != "ok"]
+        if not pending:
+            for row in rows:
+                print(f"  ok   {row['name']}: {row['detail']}")
+            return True
+        elapsed = time.monotonic() - start
+        if elapsed >= OPERATOR_WAIT_S:
+            for row in pending:
+                print(f"  FAIL {row['name']}: {row['detail']} (not ok after {int(OPERATOR_WAIT_S // 60)} minutes)")
+                if row.get("fix"):
+                    print(f"       fix: {row['fix']}")
+            return False
+        time.sleep(OPERATOR_POLL_S)
+
+
+def verify_update(ns: argparse.Namespace) -> int:
+    """After the update is merged and synced: operators once per cluster, the moved dev pins, then every environment's smoke tests; on
+    success the staging pin moves. (One cluster_server per gitops repo today, so all environments are one group; grouping by server would
+    run AC-121.20's order, dev's cluster first, when a later release gives an environment its own cluster.)"""
+    import model
+    import status
+    import upgradeverify as uv
+    repo = Path(ns.repo).resolve()
+    app_dir = gitops.find_app(repo, ns.app)
+    m = model.load_dir(app_dir)
+    contexts = status.parse_contexts(ns.context, list(model.ENVIRONMENTS))
+    dirs = uv.parse_dirs(ns.component_dir)
+    print("verify platform update: operators")
+    if not _wait_operators(repo, contexts):
+        print("NOT VERIFIED: an operator is not at the table's version; no environment is checked until it is")
+        return 1
+    moved = []
+    for res in m.resources:
+        ri = next((x for x in m.resource_instances if x.resource == res.name and x.environment == "dev"), None)
+        if res.type not in ("database", "cache", "broker") or ri is None or ri.external:
+            continue
+        moved.append(res.name)
+    results = []
+    for name in moved:
+        result = uv.verify(repo, ns.app, name, "dev", contexts, dirs)
+        for line in result.lines:
+            print(line)
+        if not result.ok:
+            return 1
+        results.append(result)
+    print("smoke tests of every component instance")
+    comps = {c.name: c for c in m.components}
+    for inst in m.instances:
+        comp = comps.get(inst.component)
+        if comp is None or comp.external:
+            continue
+        passed, text = uv.run_component_smoke(m, comp, inst.environment, dirs)
+        print(f"  {'ok  ' if passed else 'FAIL'} smoke {comp.name} ({inst.environment}): {text}")
+        if not passed:
+            print("NOT VERIFIED: no later step is started")
+            return 1
+    import upgrade
+    rc = 0
+    for result in results:
+        if result.auto_staging:
+            sub = argparse.Namespace(repo_dir=str(repo), app=ns.app, context=ns.context, component_dir=ns.component_dir, pr=False, wait=False)
+            try:
+                rc = upgrade.main(uv.staging_argv(sub, result.resource, result.major)) or rc
+            except PlatformError as e:
+                print(f"the staging step was not started: {e}")
+                rc = 1
+        elif result.next:
+            print(f"next: {result.next}")
+    return rc
+
+
+def _list(names: list[str]) -> str:
+    return ", ".join(names) or "none"
+
+
+def plan_migration(req: dict, r: Report) -> None:
+    """--dry-run --migrate: the converted system.yaml, the files to delete and the plugin switch; nothing is written."""
+    for s in convert_systems(req["repo"]) if req["shape"] == "gitops-app" else []:
+        r.will_do.append(f"would write {s['dir'].as_posix()}/system.yaml:\n" + "\n".join("    " + ln if ln else ln for ln in s["text"].splitlines()))
+        r.will_do.append("would delete " + ", ".join(s["deleted"]))
+    mine = _load_json(req["repo"] / settingsmerge.REL) or {}
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td) / "out"
+        cmd = [*core.find_copier(), "copy", str(PLATFORM_ROOT / "templates" / req["template"]), str(out), "--data-file",
+               str(req["repo"] / ".copier-answers.yml"), "--overwrite", "--defaults", "--trust", "--skip-tasks"]
+        for kv in req["data"]:
+            cmd += ["--data", kv]
+        run(cmd, cwd=Path(td))
+        _, report = settingsmerge.merge_settings(mine, _load_json(out / settingsmerge.REL) or {}, None)
+    p = report["plugins"]
+    r.will_do.append(f"plugins: would add {_list(p['added'])}; would remove {_list(p['removed'])}")
+
+
 def plan(req: dict) -> Report:
     was = req["old"] or "none — this repo has no .platform-version stamp yet"
     r = Report(title=f"Update {req['repo'].name} ({req['shape']}) from platform {was} → {req['new']}")
@@ -377,8 +752,8 @@ def plan(req: dict) -> Report:
     r.will_do.append(f"re-apply templates/{req['template']} with the repo's recorded answers" + (f" plus {', '.join(req['data'])}" if req["data"] else ""))
     r.will_do.append("OVERWRITE skeleton files (CI, Dockerfile, CLAUDE.md, …); project-owned files (README, app code, tests, ADRs) are never touched, and new starter files in those paths are not added")
     r.will_do.append("MERGE devbox.json: the template's recipes and packages, plus the ones only this repo has")
-    if req["migrate"]:
-        r.will_do.append("DELETE k8s/ (v1 → v2 migration: manifests are generated in the product's gitops-app repo; recoverable from git history)")
+    if req["migrate"] and req["unmigrated"]:
+        r.will_do.append("DELETE k8s/ (v1 → v2 migration: manifests are generated in the system's gitops-app repo; recoverable from git history)")
     r.will_do.append("restore the stable template source in .copier-answers.yml and stamp .platform-version")
     r.will_do.append("commit once (nothing is pushed)")
     return r
@@ -413,11 +788,11 @@ NOT_CUSTOMISATION = ("devbox.json", settingsmerge.REL, ".copier-answers.yml", ".
 
 
 def _where_file(path: str) -> str:
-    return WHERE_FILES.get(path) or f"it has no repo-owned companion: keep yours with git checkout HEAD~1 -- {path} and propose the change with /shared:report-issue"
+    return WHERE_FILES.get(path) or f"it has no repo-owned companion: keep yours with git checkout HEAD~1 -- {path} and propose the change with /issue:report"
 
 
 def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], dropped_gates: list[str], settings: dict,
-          base_root: Path | None, current_extra: str, notes: list[str | None] = ()) -> list[dict]:
+          base_root: Path | None, current_extra: str, notes: list[str | None] = (), generated: frozenset[str] | set[str] = frozenset()) -> list[dict]:
     """Everything the repo had added that the update overwrote (spec 086): empty exactly when nothing was lost."""
     lost: list[dict] = [{"kind": "recipe", "file": "devbox.json", "entry": k, "was": v, "where": WHERE_RECIPE} for k, v in replaced]
     lost += [{"kind": "gate", "file": "devbox.json", "entry": g, "was": None,
@@ -429,7 +804,7 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
             m = re.search(r"re-add.*", note)
             lost.append({"kind": "file", "file": path, "entry": None, "was": None, "where": m.group(0) if m else note})
     for path in modified:
-        if path in NOT_CUSTOMISATION:
+        if path in NOT_CUSTOMISATION or path in generated:   # generated: the update's own re-render wrote it (spec 121)
             continue
         if base_root is not None:
             mine = run(["git", "show", f"HEAD:{path}"], cwd=repo, check=False)
@@ -439,6 +814,14 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
                     continue   # the repo never touched it: a template change
             except (OSError, UnicodeDecodeError):
                 pass
+        if path.startswith("applications/"):   # generated output: only the pinned engine images moved (AC-115.6, AC-115.17, spec 121)
+            was = run(["git", "show", f"HEAD:{path}"], cwd=repo, check=False)
+            try:
+                pins = _digested_refs(repo)
+                if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}, pins):
+                    continue
+            except OSError:
+                pass
         lost.append({"kind": "file", "file": path, "entry": None, "was": None, "where": _where_file(path)})
     return lost
 
@@ -446,9 +829,20 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
 def execute(req: dict) -> Report:
     repo: Path = req["repo"]
     r = plan(req)
+    migrating = req["migrate"] and req["unmigrated"]
+    systems: list[dict] = []
+    reference: dict[str, bytes] = {}
+    tmp = tempfile.TemporaryDirectory()
+    if migrating and req["shape"] == "gitops-app":   # before anything changes: problems stop here, the 4.7 render is the reference
+        systems = convert_systems(repo)
+        if systems:
+            reference = reference_render(repo, Path(tmp.name))
     cur = run(["git", "symbolic-ref", "--short", "HEAD"], cwd=repo).stdout.strip()
     branch = branch_name(repo)
-    if cur in ("main", "master"):
+    created = cur in ("main", "master")
+    rendering = req["shape"] == "gitops-app" and not migrating
+    ignored = _ignored(repo) if migrating or rendering else set()
+    if created:
         run(["git", "checkout", "-q", "-b", branch], cwd=repo)
         r.did.append(f"created branch {branch}")
     before = (repo / ".copier-answers.yml").read_text()
@@ -462,27 +856,54 @@ def execute(req: dict) -> Report:
            "--overwrite", "--defaults", "--trust", "--skip-tasks"]
     for kv in req["data"]:
         cmd += ["--data", kv]
-    run(cmd, cwd=repo)
-    dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
-    if dropped:
-        r.did.append(f"left out {len(dropped)} new starter file(s) in project-owned paths (app code, tests, docs): {', '.join(dropped[:4])}{' ...' if len(dropped) > 4 else ''}")
-    answers = repo / ".copier-answers.yml"
-    answers.write_text(re.sub(r"^_src_path:.*$", f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}", answers.read_text(), flags=re.M))
-    core.write_stamp(repo, req["shape"], req["ref"])
-    if req["migrate"] and (repo / "k8s").is_dir():
-        import shutil
-        shutil.rmtree(repo / "k8s")
-        r.did.append("removed k8s/ (v1 manifests; import them with `compose add <service> --from-k8s` if you have not yet)")
-
-    tmp = tempfile.TemporaryDirectory()
+    mig: dict = {"ran": False, "already_migrated": True}
+    generated: set[str] = set()
     try:
-        return _finish(req, r, before, devbox_before, settings_before, had_pin_dev, cur, branch, Path(tmp.name))
+        run(cmd, cwd=repo)
+        dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
+        written = {f"{s['dir'].as_posix()}/system.yaml" for s in systems}   # the migration writes these next, not left out (#238)
+        dropped = [d for d in dropped if d not in written]
+        if dropped:
+            r.did.append(f"left out {len(dropped)} new starter file(s) in project-owned paths (app code, tests, docs): {', '.join(dropped[:4])}{' ...' if len(dropped) > 4 else ''}")
+        answers = repo / ".copier-answers.yml"
+        answers.write_text(re.sub(r"^_src_path:.*$", f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}", answers.read_text(), flags=re.M))
+        core.write_stamp(repo, req["shape"], req["ref"])
+        if migrating and (repo / "k8s").is_dir():
+            shutil.rmtree(repo / "k8s")
+            r.did.append("removed k8s/ (v1 manifests; import them with `cplat component add <component> --from-k8s` if you have not yet)")
+        if migrating:
+            mig = {"ran": True, "kind": "system" if req["shape"] == "gitops-app" else "component", "byte_identical": None, "compared": 0,
+                   "system_yaml": None, "deleted": [], "plugins": {"added": [], "removed": []}, "comments_dropped": False}
+            if systems:
+                apply_systems(repo, systems, reference)
+                mig.update(byte_identical=True, compared=len(reference), system_yaml=f"{systems[0]['dir'].as_posix()}/system.yaml",
+                           deleted=sorted(p for s in systems for p in s["deleted"]), comments_dropped=any(s["comments"] for s in systems))
+                for s in systems:
+                    r.did.append(f"wrote {s['dir'].as_posix()}/system.yaml" + (" (the comments of app.yaml and services.yaml were not carried over)" if s["comments"] else ""))
+                r.did.append("deleted " + ", ".join(mig["deleted"]))
+                r.did.append(f"the 5.0 render is byte-identical to 4.7 ({mig['compared']} files compared)")
+        elif req["migrate"]:
+            r.did.append("already migrated to 5.0: nothing of the migration ran")
+        if rendering:
+            versions = render_and_compare(req, repo, generated)
+            if versions:
+                r.data["versions"] = versions
+                r.did.append(f"re-rendered with the new renderer; {len(versions['lines'])} version change(s) listed below")
+    except BaseException:
+        if migrating or rendering:
+            rollback(repo, cur, branch, created, ignored)
+        tmp.cleanup()
+        raise
+    if req["migrate"]:
+        r.data["migration"] = mig
+    try:
+        return _finish(req, r, before, devbox_before, settings_before, had_pin_dev, cur, branch, Path(tmp.name), generated)
     finally:
         tmp.cleanup()
 
 
 def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settings_before: str | None, had_pin_dev: bool,
-            cur: str, branch: str, tmp: Path) -> Report:
+            cur: str, branch: str, tmp: Path, generated: set[str] = frozenset()) -> Report:
     repo: Path = req["repo"]
     answers = repo / ".copier-answers.yml"
     base_root: Path | None = None
@@ -504,6 +925,9 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
     changed = [ln[3:] for ln in run(["git", "status", "--porcelain"], cwd=repo).stdout.splitlines()]
     modified = [ln[3:] for ln in run(["git", "status", "--porcelain"], cwd=repo).stdout.splitlines() if ln[:2].strip() == "M"
                 and not (ln[3:] == "devbox.json" and not replaced and not devbox_note)]   # merged, nothing lost (spec 060)
+    if r.data.get("migration", {}).get("ran"):
+        r.data["migration"]["plugins"] = settings["plugins"]
+        r.did.append(f"plugins added: {_list(settings['plugins']['added'])}; removed: {_list(settings['plugins']['removed'])}")
     if kept:
         r.did.append("kept in devbox.json: " + "; ".join(kept))
     if moved:
@@ -519,7 +943,7 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
         r.did.append(f"already up to date with platform {req['new']} — nothing changed")
         return r
     current_extra = _current_ci_extra(devbox_before)
-    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra, [devbox_note, settings_note])
+    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra, [devbox_note, settings_note], generated)
     lock_step = refresh_devbox_lock(repo, changed)
     if lock_step:
         r.next_steps.append(lock_step)
@@ -529,7 +953,7 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
     run(["git", *core.git_identity(repo), "commit", "-q", "-m", f"chore: update skeleton from platform {req['new']}"], cwd=repo)
     r.did.append(f"re-applied the template; {len(changed)} file(s) changed, committed on {branch if cur in ('main','master') else cur}")
     notes = core.changelog_between(req["old"], req["new"])
-    r.data = {"changed": changed, "modified": modified, "new_answers": new_keys, "changelog": notes,
+    r.data |= {"changed": changed, "modified": modified, "new_answers": new_keys, "changelog": notes,
               "baseline": req["old"] if base_root else None,
               "devbox": {"kept": kept, "replaced": [{"entry": k, "was": v} for k, v in replaced],
                          "moved_to_ci_extra": moved, "dropped_gates": dropped_gates},
@@ -561,9 +985,18 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
 
 
 def main(argv: list[str]) -> int:
+    ns = build_parser().parse_args(argv)
+    if ns.verify:
+        return verify_update(ns)
     req = resolve(argv)
     if req["dry_run"]:
-        plan(req).emit(True, req["json"])
+        r = plan(req)
+        if req["migrate"] and req["unmigrated"]:
+            plan_migration(req, r)
+        r.emit(True, req["json"])
         return 0
-    execute(req).emit(False, req["json"])
+    report = execute(req)
+    report.emit(False, req["json"])
+    if report.data.get("versions") and not req["json"]:
+        print("\n" + versions_block(report.data["versions"]))
     return 0

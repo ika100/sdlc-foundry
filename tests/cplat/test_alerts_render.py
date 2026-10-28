@@ -5,17 +5,19 @@ import subprocess
 import pytest
 import yaml
 
-from test_gitops import commit, gh, gitops_repo, render_check, run_compose  # noqa: F401  (fixtures)
+from test_gitops import commit, composed_todo_api, gh, render_check  # noqa: F401  (fixtures)
 
 APP = "applications/todo"
 GOOD = {"name": "HighErrorRate", "query": "up == 0", "severity": "warning", "summary": "down"}
 
 
 def obs(repo, **conf):
-    f = repo / APP / "app.yaml"
+    """5.0: observability is a setting of each environment; the 4.x addon applied to all of them."""
+    f = repo / APP / "system.yaml"
     cfg = yaml.safe_load(f.read_text()) or {}
-    cfg.setdefault("addons", {})["observability"] = conf
-    f.write_text(yaml.safe_dump(cfg))
+    for env in cfg["environments"].values():
+        env["observability"] = dict(conf)
+    f.write_text(yaml.safe_dump(cfg, sort_keys=False))
 
 
 def render(repo):
@@ -23,10 +25,8 @@ def render(repo):
 
 
 @pytest.fixture()
-def repo(gitops_repo, gh):  # noqa: F811
-    run_compose(gitops_repo, "add", "todo-api")
-    commit(gitops_repo, "service")
-    return gitops_repo
+def repo(tmp_path, new_service, shared_renders, gh):  # noqa: F811
+    return composed_todo_api(tmp_path, new_service, shared_renders)
 
 
 @pytest.mark.parametrize("rules, message", [
@@ -64,11 +64,11 @@ def test_the_quality_gate_is_red_for_an_invalid_rule(repo):
 
 
 @pytest.mark.parametrize("conf, message", [
-    ({"alerts": "yes"}, "app.yaml: observability.alerts must be true or false"),
-    ({"exportTo": "https://o.example.com", "queryURL": "prom.example.com"}, "app.yaml: observability.queryURL must be an http(s) URL"),
-    ({"ui": "lgtm", "alertmanagerURL": "ftp://am.example.com"}, "app.yaml: observability.alertmanagerURL must be an http(s) URL"),
+    ({"alerts": "yes"}, "environments.dev.observability.alerts must be true or false"),
+    ({"exportTo": "https://o.example.com", "queryURL": "prom.example.com"}, "environments.dev.observability.queryURL must be an http(s) URL"),
+    ({"ui": "lgtm", "alertmanagerURL": "ftp://am.example.com"}, "environments.dev.observability.alertmanagerURL must be an http(s) URL"),
     ({"exportTo": "https://o.example.com", "queryURL": "https://p.example.com", "querySecret": "A_b"},
-     "app.yaml: observability.querySecret must be <name> or <namespace>/<name>"),
+     "environments.dev.observability.querySecret must be <name> or <namespace>/<name>"),
 ])
 def test_invalid_alert_settings_fail_the_render(repo, conf, message):
     """AC-092.6: `alerts`, `queryURL`, `alertmanagerURL` and `querySecret` are validated with a clear message."""
@@ -78,7 +78,7 @@ def test_invalid_alert_settings_fail_the_render(repo, conf, message):
 
 
 def snapshot(repo):
-    return {str(p.relative_to(repo)): p.read_bytes() for p in sorted((repo / APP).rglob("*")) if p.is_file() and p.name != "app.yaml"}
+    return {str(p.relative_to(repo)): p.read_bytes() for p in sorted((repo / APP).rglob("*")) if p.is_file() and p.name != "system.yaml"}
 
 
 def test_valid_rules_render_exactly_the_same_manifests(repo):

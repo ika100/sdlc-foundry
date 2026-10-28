@@ -24,7 +24,7 @@ Your job is **write migrations and runbooks**, not init the framework.
 
 ### 1. Verify the scaffolding
 
-If `alembic.ini` or `migrations/env.py` is missing, the template was bootstrapped with `needs_migrations=false`. Ask the user to run `/shared:update-service --data needs_migrations=true` rather than running `alembic init` by hand — that drifts from the template.
+If `alembic.ini` or `migrations/env.py` is missing, the template was bootstrapped with `needs_migrations=false`. Ask the user to run `/platform:update --data needs_migrations=true` rather than running `alembic init` by hand — that drifts from the template.
 
 ### 2. Wire `target_metadata`
 
@@ -76,4 +76,4 @@ Maintain `docs/migrations/runbook.md` with: apply/rollback commands, migration h
 - **Migration scripts must be committed** before running in any shared environment.
 - **`DATABASE_URL` is required.** The templated `env.py` raises if it's missing — surface this clearly to the user when troubleshooting.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/shared:report-issue` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.

@@ -106,6 +106,8 @@ def title(alert: Alert) -> str:
         core = f"more than {CAP_PER_POLL} new alerts: {_line(alert.app)}"
     elif alert.service == META_SERVICE and alert.environment == "*" and alert.name == POLL_FAILING_NAME:
         core = f"alert poll is failing: {_line(alert.app)}"
+    elif alert.name == "backup failing":
+        core = f"backup failing: {_line(alert.service)}/{_line(alert.environment)}"
     else:
         core = f"{_line(alert.name)}: {_line(alert.service) or 'unknown'} in {_line(alert.environment)}"
     text = "[auto] [alert] " + core
@@ -151,8 +153,8 @@ def render_body(alert: Alert, *, gitops_repo: str, closed: Issue | None = None, 
         repo, reason = intended
         parts += ["## Intended repo",
                   f"This alert belongs to {_line(repo)}, but the poll's credential cannot write issues there: {_line(reason)}.",
-                  "Set the ALERTS_TOKEN secret (`cplat doctor` shows how).", ""]
-    parts += ["_Filed automatically by the alert poll (spec 092). Secrets were removed. Route it with /shared:triage._", "",
+                  "Set the ALERTS_TOKEN secret (`cplat platform doctor` shows how).", ""]
+    parts += ["_Filed automatically by the alert poll (spec 092). Secrets were removed. Route it with /issue:triage._", "",
               f"Signature: {alert.signature}"]
     return "\n".join(parts)
 

@@ -160,7 +160,7 @@ def one_advisory(w, pkg="urllib3", adv=("GHSA-1", "1.26.18")):
 
 def test_cplat_registers_the_deps_command():  # AC-095.12
     import cplat
-    assert cplat.COMMANDS["deps"] == "deps"
+    assert cplat.PLUMBING["deps"] == "deps"
 
 
 def test_patch_bumps_to_the_lowest_fixed_version_reruns_the_gates_and_continues(make, capsys):  # AC-095.12

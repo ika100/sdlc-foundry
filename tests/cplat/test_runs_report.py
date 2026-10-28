@@ -105,7 +105,7 @@ def test_the_report_counts_locally_buffered_records_but_does_not_include_them(st
     store.reachable = True
     assert report_json(capsys)["buffered"] == 2
     assert runs.main(["report"]) == 0
-    assert "Buffered locally, not included: 2 record(s) (cplat runs flush)" in capsys.readouterr().out
+    assert "Buffered locally, not included: 2 record(s) (cplat platform runs flush)" in capsys.readouterr().out
 
 
 def test_the_text_report_prints_the_documented_lines(filled, capsys):
@@ -140,7 +140,7 @@ def test_json_output_has_stable_keys_and_nothing_else_on_stdout(filled, capsys):
     assert runs.main(["report", "--json"]) == 0
     out = capsys.readouterr().out
     agg = json.loads(out)                                                                         # the whole of stdout parses
-    assert list(agg) == ["window", "runs", "phases", "causes", "escalations", "reruns", "filed", "buffered", "usage"]  # AC-099.11 appends usage
+    assert list(agg) == ["window", "runs", "phases", "causes", "escalations", "reruns", "filed", "buffered", "usage", "pr_wait", "unclassified"]  # AC-099.11 appends usage; AC-087.25 appends pr_wait; AC-088.19 appends unclassified
     assert {"since", "until", "days", "repo", "store", "records", "malformed"} <= set(agg["window"])
     assert agg["window"]["store"] == "acme/runs" and agg["window"]["until"] == "2026-10-24" and agg["buffered"] == 0
     assert set(agg["reruns"]) == {"by_reason", "by_check"}

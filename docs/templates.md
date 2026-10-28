@@ -6,8 +6,8 @@ Deliver all of it in one PR.
 
 ## 1. Registry entry — `shapes.yml` [checked]
 
-Deployable shapes also need a `runtime:` block (port, probes, numeric `user`, `volumes`, `env`, `resources`): `/gitops:compose` copies it into the service's `services.yaml` entry (ADR-017). 
-Add the shape (see [ADR-015](adr/015-shape-registry-as-code.md) for every field). Start with `status: planned` while the template is incomplete; switch to `stable` in the same PR that makes the check pass. `deployable: true` means `/shared:new-service` adds the `deployable-service` topic. Add a row to the PRD §4 table (the check compares shape id, plugin and template).
+Deployable shapes also need a `runtime:` block (port, probes, numeric `user`, `volumes`, `env`, `resources`): `/component:add` copies it into the component's entry in `system.yaml` (ADR-017). 
+Add the shape (see [ADR-015](adr/015-shape-registry-as-code.md) for every field). Start with `status: planned` while the template is incomplete; switch to `stable` in the same PR that makes the check pass. `deployable: true` means `/component:new` adds the `deployable-service` topic. Add a row to the PRD §4 table (the check compares shape id, plugin and template).
 
 ## 2. Copier template — `templates/<id>/`
 
@@ -20,14 +20,21 @@ Required files [checked unless noted]:
 | `devbox.json[.jinja]` | The canonical recipes: `lint`, `lint-fix`, `quality`, `test`, `test-fast`, `security`; deployable shapes also `image-build`, `image-scan`, `deploy-check` (plus `dev`, `deploy`, `typecheck`, `audit`, `secrets-scan` by convention). Recipes wrap the language tools — agents never call them directly |
 | `CLAUDE.md[.jinja]` | Shape-specific: recipe table, the "never call X directly" rule, a `### Spec first` section ([ADR-024](adr/024-spec-driven-bootstrap.md)), conventions, branch workflow **[checked]** |
 | `devbox.json[.jinja]` `ci`, `.github/workflows/ci.yml`, `.claude/project-notes.md`, `CLAUDE.md[.jinja]` | Repo-owned companions ([spec 086](specs/086-repo-gates-survive-skeleton-updates/spec.md), [ADR-031](adr/031-repo-owned-companions-for-skeleton-files.md)): the `ci` recipe ends with the `ci-extra` step and no template defines a `ci-extra` recipe; `ci.yml` has a `ci-extra` job running `devbox run ci-extra`; an empty `.claude/project-notes.md` is in `_skip_if_exists`; `CLAUDE.md` has a `## Where your additions go` section and ends with the `@.claude/project-notes.md` import **[checked]** |
-| `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml` | Issue forms that apply the `triage` label and require the fields `/shared:triage` needs ([ADR-025](adr/025-issue-triage.md)); in `_skip_if_exists` **[checked]** |
+| `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml` | Issue forms that apply the `triage` label and require the fields `/issue:triage` needs ([ADR-025](adr/025-issue-triage.md)); in `_skip_if_exists` **[checked]** |
 | `docs/backlog.md`, `docs/plan/` | Seed for spec-driven development ([ADR-024](adr/024-spec-driven-bootstrap.md)): the backlog skeleton (all shapes except gitops-app) and the plan directory; both in `_skip_if_exists` **[checked]** |
 | `.claude/settings.json[.jinja]` | Enables the shape's plugin **and `shared`** and, for shapes driven by `/svc:*`, **`svc`** ([ADR-013 amendment](adr/013-plugin-auto-enable.md)); pins the marketplace ref |
 | `.github/workflows/ci.yml` | `quality`, `test`, `security`, `pr-title`, `branch-name`, and `docker` for deployable shapes |
 | `Dockerfile` | Deployable shapes: multi-stage, non-root with a **numeric** `USER`, runs with a read-only root filesystem. **No `k8s/` directory** — the gitops-app repo generates manifests (ADR-017); `shapes.py check` fails if one appears |
 | `docs/adr/000-bootstrap.md`, `docs/env-vars.md`, `README.md` | Project-owned after generation |
 
-**Always re-templated vs project-owned.** Skeleton files (CI, devbox, Dockerfile, CLAUDE.md, lint config) are overwritten by `/shared:update-service`. Application files (`src/`, `app/`, `cmd/`, `internal/`, `tests/`, language manifests such as `go.mod`/`pom.xml`/`package.json` once created, `docs/adr/**`) go in `_skip_if_exists`.
+**Always re-templated vs project-owned.** Skeleton files (CI, devbox, Dockerfile, CLAUDE.md, lint config) are overwritten by `/platform:update`. Application files (`src/`, `app/`, `cmd/`, `internal/`, `tests/`, language manifests such as `go.mod`/`pom.xml`/`package.json` once created, `docs/adr/**`) go in `_skip_if_exists`.
+
+### Repos that are not a component
+
+| Shape | Template | Plugin | What the repo holds |
+|---|---|---|---|
+| `gitops-app` | `templates/gitops-app` | `gitops` | One system: `system.yaml`, rendered manifests, the system's own operators when it owns them |
+| `cluster-gitops` | `templates/cluster-gitops` | `cluster` | One cluster: `cluster.yaml`, the shared operators and secret store, and the list of systems that run there ([ADR-060](adr/060-a-cluster-repo-owns-shared-services.md), [guide](CLUSTERS.md)). Not deployable, no library |
 
 ### Pitfalls found while building the Go, Java and web shapes
 

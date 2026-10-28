@@ -14,7 +14,7 @@ Accepted on bootstrap.
 - ruff + mypy for quality
 - pip-audit + detect-secrets + bandit + trivy for security
 - Multi-stage Docker build → `{{ docker_registry }}/{{ project_name }}`
-- No Kubernetes manifests here: the product's gitops-app repo owns them (platform ADR-017); this repo ships a container image
+- No Kubernetes manifests here: the system's gitops-app repo owns them (platform ADR-017); this repo ships a container image
 - GitHub topic `deployable-service` for ArgoCD auto-discovery
 - Claude Code agents from the `sdlc-foundry` marketplace (`svc` + `shared`)
 {%- if needs_observability %}

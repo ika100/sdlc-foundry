@@ -149,13 +149,18 @@ class FakeNet:
         return [u for u, _ in self.calls if "/api/v2/alerts" in u]
 
 
-def make_app(root: Path, *, addon, services=None, app: str = APP) -> Path:
-    """applications/<app>/{app.yaml,services.yaml}; `addon=None` declares no observability addon."""
+def make_app(root: Path, *, addon, services=None, app: str = APP, envs=None) -> Path:
+    """applications/<app>/system.yaml (5.0); `addon` is the observability setting of the environments `envs` (default: all three;
+    None: no environment declares observability); `services` are the components in the 4.x vocabulary of model_fixtures.system_doc."""
+    from model_fixtures import system_doc
     d = root / "applications" / app
     d.mkdir(parents=True, exist_ok=True)
     cfg = {"addons": {"observability": addon}} if addon is not None else {}
-    (d / "app.yaml").write_text(yaml.safe_dump(cfg))
-    (d / "services.yaml").write_text(yaml.safe_dump({"services": SERVICES if services is None else services}))
+    doc = system_doc(SERVICES if services is None else services, cfg, app)
+    for e, conf in doc["environments"].items():
+        if envs is not None and e not in envs:
+            conf.pop("observability", None)
+    (d / "system.yaml").write_text(yaml.safe_dump(doc, sort_keys=False))
     return d
 
 

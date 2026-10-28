@@ -1,12 +1,12 @@
 # Contributing to sdlc-foundry
 
-Thanks for helping. sdlc-foundry is a marketplace of Claude Code plugins (agents and slash commands), Copier templates and a small tested CLI (`cplat`) that together take a product from "new repo" to "running in Kubernetes via GitOps". Changes here reach every repo generated from it, so we favour small, tested, well-explained pull requests.
+Thanks for helping. sdlc-foundry is a marketplace of Claude Code plugins (agents and slash commands), Copier templates and a small tested CLI (`cplat`) that together take a system from "new repo" to "running in Kubernetes via GitOps". Changes here reach every repo generated from it, so we favour small, tested, well-explained pull requests.
 
 By contributing you agree that your contribution is licensed under the [Apache License 2.0](LICENSE) (inbound = outbound; no CLA) and that you have the right to submit it: sign your commits as described under [Sign your commits](#sign-your-commits-dco). Please read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Ways to contribute
 
-- **Report a problem or an idea.** In Claude Code run `/shared:report-issue`: it drafts the issue with your versions and the error output and removes secrets before anything is sent. Or [open an issue](https://github.com/ika100/sdlc-foundry/issues/new/choose) yourself.
+- **Report a problem or an idea.** In Claude Code run `/issue:report`: it drafts the issue with your versions and the error output and removes secrets before anything is sent. Or [open an issue](https://github.com/ika100/sdlc-foundry/issues/new/choose) yourself.
 - **Ask a question or share a use case** in [Discussions](https://github.com/ika100/sdlc-foundry/discussions).
 - **Fix a bug, improve docs, add a template, agent or command** with a pull request (below). For anything larger than a fix, open an issue first so we can agree on the approach.
 - **Security issues** go through [SECURITY.md](SECURITY.md), not public issues.
@@ -19,7 +19,7 @@ By contributing you agree that your contribution is licensed under the [Apache L
 | `.claude-plugin/marketplace.json` | Marketplace catalog; plugin versions must match each `plugin.json` |
 | `templates/<shape>/` | Copier templates (`service-python`, `service-java`, `service-go`, `web-nextjs`, `library-python`, `gitops-app`) |
 | `shapes.yml` | The shape registry (single source of truth, validated by `scripts/shapes.py`) |
-| `scripts/cplat/` | The tested CLI behind the commands (`new-service`, `compose`, `promote`, `addon`, `doctor`, `feedback`, ...) |
+| `scripts/cplat/` | The tested CLI behind the commands (`component`, `system`, `resource`, `instance`, `platform`, `feedback`, ...) |
 | `tests/` | `tests/cplat` (pytest), `tests/e2e` (full cluster test), fixtures |
 | `docs/` | Guides, ADRs (`docs/adr`), the changelog |
 
@@ -45,7 +45,7 @@ copier copy ./templates/web-nextjs /tmp/try --defaults --trust --skip-tasks --da
 bash tests/e2e/run.sh                                                       # whole stack on a local k3d cluster (Docker, k3d, kubectl)
 ```
 
-`bash scripts/ci-local.sh` (or `devbox run ci-local`; add `--render` to render every template) runs the first five in one go.
+`bash scripts/ci-local.sh` (or `devbox run ci-local`; add `--render` to render every template) runs the first five in one go. The same checks are devbox scripts for the `/component:*` gates: `devbox run test-fast` (cplat tests), `quality` (static checks, no tests), `ci` (= `ci-local.sh`), `lint-fix` (no-op, no formatter here).
 
 CI runs the same checks plus a smoke test per template (generated repos must pass their own `quality` and `test` recipes). Pull requests that only touch documentation run a reduced set of jobs.
 
@@ -91,8 +91,10 @@ The sign-off e-mail must be the commit's author or committer e-mail (use your Gi
 
 ## Releases
 
-Maintainers release: move `[Unreleased]` under a new `## [x.y.z] - date` heading in `docs/CHANGELOG.md` (the platform version is read from the first such heading), make sure plugin and marketplace versions match, merge, tag `vX.Y.Z` and publish a GitHub release with the changelog section as notes.
+Maintainers release: move `[Unreleased]` under a new `## [x.y.z] - date` heading in `docs/CHANGELOG.md` (the platform version is read from the first such heading), make sure plugin and marketplace versions match, merge, tag `vX.Y.Z` and publish a GitHub release with the changelog section as notes. `/component:release` refuses in this repo (it has no release role); this section is the procedure.
+
+CI runs `uv run scripts/release-check.py rows` on every PR: the `docs/CHANGELOG.md` section that will be released must list every changed row of the versions table, and an operator major move, a removed CRD version or a dropped resource major needs a major platform release. Before `git tag`, run `python3 scripts/release-check.py gate <merge sha>` and tag only when it passes: it needs a green upgrade e2e (`e2e upgrade (previous release → candidate)`) on that commit. The release gate workflow turns a tag push without one red; a maintainer then deletes that tag (no workflow creates, moves or deletes a tag).
 
 ## CI cost
 
-CI is free for this public repository, but forks and private copies may pay per minute. A `changes` job decides which template smoke tests a PR needs (docs-only PRs run only the validation jobs), the cluster test runs only when the GitOps template, the CLI or the e2e files change (plus nightly), superseded runs of the same PR are cancelled, and Dependabot batches its updates monthly. The only required status is `ci-success`, which passes when every job that ran passed (skipped jobs count as passed). Run `scripts/ci-local.sh` to avoid waiting for CI.
+CI is free for this public repository, but forks and private copies may pay per minute. A `changes` job decides which template smoke tests a PR needs (docs-only PRs skip them but still run the cplat tests, which read the changelog, specs and guides; only image and repository-metadata changes skip those too), the cluster test runs only when the GitOps template, the CLI or the e2e files change (plus nightly), superseded runs of the same PR are cancelled, and Dependabot batches its updates monthly. The only required status is `ci-success`, which passes when every job that ran passed (skipped jobs count as passed). The `tests/cplat` suite runs in 4 round-robin shards (`pytest --shard I/N`), and the `cplat shards cover the suite` job fails when a test runs in no shard or in two; a failing shard does not cancel the others. Tests that only need a rendered repo take the `new_service` or `shared_renders` fixture (one shared render, private copies); tests whose subject is the rendering itself still render (ADR-052). Run `scripts/ci-local.sh` (unsharded) to avoid waiting for CI.

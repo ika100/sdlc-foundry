@@ -7,7 +7,7 @@ import newsvc
 
 
 def generate(tmp_path, name, *data):
-    argv = [name, "desc", "--type", "service-java", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]
+    argv = [name, "desc", "--type", "service", "--lang", "java", "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"]
     for kv in data:
         argv += ["--data", kv]
     assert newsvc.main(argv) == 0

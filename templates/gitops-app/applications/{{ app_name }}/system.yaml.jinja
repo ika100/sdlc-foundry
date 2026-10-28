@@ -1,0 +1,30 @@
+# The {{ app_name }} system (read by scripts/render.py). One file describes it: owner, environments and components.
+# Reference: docs/DOMAIN-MODEL.md. Edit with `/system:*` and `/component:*`, then `devbox run render` regenerates the
+# ApplicationSets and every Kubernetes manifest under overlays/. Versions are never written here: they are pinned in overlays/.
+system: {{ app_name }}
+owner: {{ owner }}
+# secretStore: where `remote` secrets of a component are read from (External Secrets Operator). `cluster-up` creates
+# `platform-secrets`; real clusters point this at their Vault / AWS / GCP store.
+secretStore:
+  name: platform-secrets
+  kind: ClusterSecretStore
+# gateway: the Gateway API gateway that exposed components attach to (`cluster-up` installs Traefik's).
+gateway:
+  name: traefik-gateway
+  namespace: kube-system
+# environments: host is the hostname template ({component}, {system}, {env}); no host = not exposed there.
+# policy: Kyverno guard rails per environment: off | audit | enforce (starter: off everywhere).
+# promote: after-dev-smoke = a green dev smoke promotes staging by itself; manual (default) = only /instance:promote.
+environments:
+  dev:
+    host: "{component}.{system}-dev.localhost"
+    policy: "off"
+  staging:
+    promote: after-dev-smoke
+    policy: "off"
+    # host: "{component}.staging.example.com"
+  prod:
+    policy: "off"
+    # host: "{component}.example.com"
+# components: add with `/component:new`; each runs in the environments listed under its `instances`.
+components: {}

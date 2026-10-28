@@ -1,4 +1,4 @@
-"""`new-app`: create a whole product (gitops-app repo + component repos) from an app.yml manifest.
+"""`system new`: create a whole system (gitops-app repo + component repos) from a manifest.
 
 Everything per repo is delegated to `new-service` (same rendering, bootstrap commit, topics, plugin enablement); this
 module only adds the manifest, the creation order, an all-or-nothing pre-flight and the failure/resume handling.
@@ -19,15 +19,15 @@ import core
 import newsvc
 from core import PlatformError, Report, run
 
-TOP_KEYS = {"app", "org", "visibility", "components"}
-COMPONENT_KEYS = {"name", "description", "shape", "data"}
+TOP_KEYS = {"system", "owner", "org", "visibility", "components"}
+COMPONENT_KEYS = {"name", "description", "type", "lang", "data"}
 # creation order after the gitops-app repo: libraries before the services that use them, web frontends last
 SHAPE_ORDER = {"service-python": 1, "service-java": 2, "service-go": 3, "web-nextjs": 4}
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat new-app", description=__doc__)
-    p.add_argument("manifest", help="path to app.yml")
+    p = argparse.ArgumentParser(prog="cplat system new", description=__doc__)
+    p.add_argument("manifest", help="path to the system manifest (system.yml)")
     p.add_argument("--org", help="GitHub org/user (default: the manifest's org, else your gh login)")
     p.add_argument("--public", action="store_true", help="create the GitHub repos as public (default: the manifest's visibility, else private)")
     p.add_argument("--ref", default="main", help="platform git ref recorded for the plugin marketplace (default main)")
@@ -44,42 +44,53 @@ def load_manifest(path: Path) -> dict:
     try:
         raw = yaml.safe_load(path.read_text())
     except OSError as e:
-        raise PlatformError(f"cannot read {path}: {e.strerror}", hint="pass the path to your app.yml") from None
+        raise PlatformError(f"cannot read {path}: {e.strerror}", hint="pass the path to your system manifest") from None
     except yaml.YAMLError as e:
         raise PlatformError(f"{path} is not valid YAML: {e}") from None
     if not isinstance(raw, dict):
-        raise PlatformError(f"{path} must be a mapping with `app` and `components`")
+        raise PlatformError(f"{path} must be a mapping with `system`, `owner` and `components`")
+    if "app" in raw:
+        raise PlatformError("`app` is `system` in 5.0")
     unknown = set(raw) - TOP_KEYS
     if unknown:
         raise PlatformError(f"unknown key(s) in {path.name}: {', '.join(sorted(unknown))}", hint="allowed: " + ", ".join(sorted(TOP_KEYS)))
-    app = raw.get("app")
+    app = raw.get("system")
     if not isinstance(app, str) or not newsvc.NAME_RE.match(app):
-        raise PlatformError(f"invalid app name '{app}'", hint="kebab-case, 2-40 chars, must start with a letter: ^[a-z][a-z0-9-]{1,39}$")
+        raise PlatformError(f"invalid system name '{app}'", hint="kebab-case, 2-40 chars, must start with a letter: ^[a-z][a-z0-9-]{1,39}$")
+    if not isinstance(raw.get("owner"), str) or not raw["owner"].strip():
+        raise PlatformError("`owner` is required (a team or person that owns the system)")
     if raw.get("visibility", "private") not in ("private", "public"):
         raise PlatformError(f"visibility must be private or public, got '{raw['visibility']}'")
     comps = raw.get("components")
     if not isinstance(comps, list) or not comps:
         raise PlatformError("`components` must be a non-empty list")
-    seen = {app}
+    seen = {app, f"{app}-gitops"}
     for i, c in enumerate(comps, 1):
         if not isinstance(c, dict):
-            raise PlatformError(f"component {i} must be a mapping with name, description and shape")
+            raise PlatformError(f"component {i} must be a mapping with name, description, type and lang")
+        if "shape" in c:
+            raise PlatformError(f"component '{c.get('name', i)}': shape is replaced by type and lang in 5.0")
         bad = set(c) - COMPONENT_KEYS
         if bad:
             raise PlatformError(f"component {i}: unknown key(s) {', '.join(sorted(bad))}", hint="allowed: " + ", ".join(sorted(COMPONENT_KEYS)))
-        for key in ("name", "description", "shape"):
+        for key in ("name", "description", "type", "lang"):
             if not isinstance(c.get(key), str) or not c[key].strip():
                 raise PlatformError(f"component {i}: `{key}` is required")
         name = c["name"]
         if name in seen:
-            raise PlatformError(f"component {i}: name '{name}' is " + ("the app name" if name == app else "used twice"),
-                                hint="the gitops-app repo is created from `app`; every component needs its own name")
+            raise PlatformError(f"component {i}: name '{name}' is " + ("the gitops repo name" if name in (app, f"{app}-gitops") else "used twice"),
+                                hint=f"the gitops repo is created as {app}-gitops; every component needs its own name")
         seen.add(name)
-        if c["shape"] == "gitops-app":
-            raise PlatformError(f"component '{name}': shape gitops-app is implicit", hint="remove it; the gitops-app repo is created from `app`")
+        if (c["type"], c["lang"]) not in newsvc.valid_pairs():
+            raise PlatformError(f"component '{name}': {c['type']}/{c['lang']} is not a valid component type (valid: {newsvc.pairs_text()})")
         if c.get("data") is not None and not isinstance(c["data"], dict):
             raise PlatformError(f"component '{name}': `data` must be a mapping of template options")
     return raw
+
+
+def shape_of(component: dict) -> str:
+    """The shape id (template) a manifest component's type and lang map to."""
+    return newsvc.shape_of_pair(component["type"], component["lang"])
 
 
 def order(components: list[dict]) -> list[dict]:
@@ -87,10 +98,11 @@ def order(components: list[dict]) -> list[dict]:
     shapes = {s["id"]: s for s in core.registry.load()}
 
     def key(c: dict) -> int:
-        entry = shapes.get(c["shape"])
+        shape = shape_of(c)
+        entry = shapes.get(shape)
         if entry is not None and entry["library"]:
             return 0
-        return SHAPE_ORDER.get(c["shape"], 5)
+        return SHAPE_ORDER.get(shape, 5)
     return sorted(components, key=key)
 
 
@@ -110,7 +122,8 @@ def resolve(argv: list[str]) -> dict:
     """Parse and validate everything; no side effects. Each repo is validated by new-service's own resolver."""
     ns = build_parser().parse_args(argv)
     manifest = load_manifest(Path(ns.manifest))
-    app = manifest["app"]
+    system = manifest["system"]
+    app = f"{system}-gitops"  # the gitops repo; the system name stays the application directory
     github = not ns.no_github and core.has_gh()
     org = ns.org or manifest.get("org") or (core.gh_login() if not ns.no_github else None) or "ika100"
     visibility = "public" if ns.public else manifest.get("visibility", "private")
@@ -121,12 +134,14 @@ def resolve(argv: list[str]) -> dict:
     if ns.skip_tasks:
         base.append("--skip-tasks")
 
-    entries = [{"name": app, "shape": "gitops-app", "description": f"GitOps repo for {app}", "args": ["--gitops"]}]
+    entries = [{"name": app, "shape": "gitops-app", "description": f"GitOps repo for the {system} system",
+                "args": ["--shape", "gitops-app", "--data", f"owner={manifest['owner'].strip()}",
+                         "--data", "property_operators=install"]}]
     for c in order(manifest["components"]):
-        args = ["--type", c["shape"], "--app", f"{org}/{app}"]
+        args = ["--type", c["type"], "--lang", c["lang"], "--system", f"{org}/{app}"]
         for k, v in (c.get("data") or {}).items():
             args += ["--data", f"{k}={v}"]
-        entries.append({"name": c["name"], "shape": c["shape"], "description": c["description"].strip(), "args": args})
+        entries.append({"name": c["name"], "shape": shape_of(c), "description": c["description"].strip(), "args": args})
 
     shapes = {s["id"]: s for s in core.registry.load()}
     for e in entries:
@@ -147,7 +162,7 @@ def resolve(argv: list[str]) -> dict:
 
 
 def plan(req: dict) -> Report:
-    r = Report(title=f"New app: {req['app']} ({len(req['entries'])} repos)")
+    r = Report(title=f"New system: {req['app']} ({len(req['entries'])} repos)")
     for i, e in enumerate(req["entries"], 1):
         if e["req"] is None:
             r.will_do.append(f"{e['name']} ({e['shape']}): already exists, skipped (--resume)")
@@ -155,9 +170,9 @@ def plan(req: dict) -> Report:
             r.will_do.append(f"{e['name']} ({e['shape']}): " + "; ".join(newsvc.plan(e["req"]).will_do))
     if req["deployable"]:
         if req["github"]:
-            r.will_do.append(f"[outward] open one pull request in {req['org']}/{req['app']} adding to services.yaml: {', '.join(req['deployable'])}")
+            r.will_do.append(f"[outward] open one pull request in {req['org']}/{req['app']} adding to system.yaml: {', '.join(req['deployable'])}")
         else:
-            r.will_do.append("gh is not available or --no-github: print the compose command instead of running it")
+            r.will_do.append("gh is not available or --no-github: try the component add; print its command if the pull request cannot be opened")
     return r
 
 
@@ -193,24 +208,25 @@ def execute(req: dict) -> Report:
 
     app_dir = req["dir"] / req["app"]
     names = req["deployable"]
-    compose_cmd = f"cd {req['app']} && /gitops:compose add {' '.join(names)} --pr"
-    if names and req["github"]:
+    compose_cmd = f"cd {req['app']} && /component:add {' '.join(names)} --pr"
+    if names:
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
                 compose.main(["add", *names, "--repo-dir", str(app_dir), "--pr"])
         except Exception as err:  # noqa: BLE001
-            raise PlatformError(f"repos created, but wiring them into {req['app']} failed: {err}",
-                                hint=f"run it again by hand: {compose_cmd}") from err
-        url = re.search(r"https://\S+/pull/\d+", buf.getvalue())
-        r.did.append("composed " + ", ".join(names) + (f"; opened {url.group(0)}" if url else ""))
-        r.next_steps.append(f"review and merge the pull request in {req['org']}/{req['app']}; then `cd {req['app']} && devbox run cluster-up`")
-    elif names:
-        r.next_steps.append(f"after the repos are on GitHub: {compose_cmd}")
-    if names:
+            if req["github"]:
+                raise PlatformError(f"repos created, but wiring them into {req['app']} failed: {err}",
+                                    hint=f"run it again by hand: {compose_cmd}") from err
+            r.next_steps.append(f"after the repos are on GitHub: {compose_cmd}")  # local-only repos have no remote to open the PR on
+        else:
+            url = re.search(r"https://\S+/pull/\d+", buf.getvalue())
+            r.did.append("composed " + ", ".join(names) + (f"; opened {url.group(0)}" if url else ""))
+            r.next_steps.append(f"review and merge the pull request in {req['org']}/{req['app']}; then `cd {req['app']} && devbox run cluster-up`")
         r.next_steps.append(newsvc.token_step(f"{req['org']}/{req['app']}", [f"{req['org']}/{n}" for n in names]))
-    r.next_steps.append(f'spec first: cd {req["app"]} and run /app:spec "<first feature of the product>" (answer, approve), then /app:plan <NNN> (review the plan) and /app:build <NNN>')
-    r.next_steps.append("env wiring and exposure per service: /gitops:compose (see its --env and --expose)")
+    r.next_steps.append(f'spec first: cd {req["app"]} and run /system:spec "<first feature of the system>" (answer, approve), then /system:plan <NNN> (review the plan) and /system:ship <NNN>')
+    r.next_steps.append("more components later: /component:new, then /component:add <name> in the gitops repo")
+    r.next_steps.append("env wiring and exposure per component: /component:set (see its --env and --expose)")
     r.data = {"app": req["app"], "repos": created, "composed": names if req["github"] else []}
     return r
 

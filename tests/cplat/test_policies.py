@@ -1,4 +1,4 @@
-"""Kyverno guard rails (ADR-022): rendering per environment, and evaluation of rendered manifests with the Kyverno CLI."""
+"""Kyverno guard rails (ADR-022, 5.0): `environments.<env>.policy` renders per environment; evaluation of rendered manifests with the Kyverno CLI."""
 import copy
 import shutil
 import subprocess
@@ -6,18 +6,28 @@ import subprocess
 import pytest
 import yaml
 
-from test_gitops import gh, gitops_repo, run_compose, render_check, commit  # noqa: F401  (fixtures)
+from test_gitops import commit, gh, gitops_repo, render_check, run_compose, system_file  # noqa: F401  (fixtures)
 
 APP = "applications/todo"
 needs_kyverno = pytest.mark.skipif(shutil.which("kyverno") is None, reason="the Kyverno CLI is not installed (CI always has it)")
 
 
-def app_cfg(repo, **extra):
-    f = repo / APP / "app.yaml"
-    cfg = yaml.safe_load(f.read_text()) or {}
-    cfg.update(extra)
-    f.write_text(yaml.safe_dump(cfg))
+def cfg(repo, env_policy=None, observability=None, **top):
+    """Edit system.yaml: `env_policy` maps environments to a policy (audit | enforce | off), `observability` is set on every environment
+    (the 4.x addon), `top` are top-level keys (registries). Committed."""
+    f = system_file(repo)
+    doc = yaml.safe_load(f.read_text())
+    for env, mode in (env_policy or {}).items():
+        doc["environments"][env]["policy"] = mode
+    if observability is not None:
+        for env in doc["environments"].values():
+            env["observability"] = dict(observability)
+    doc.update(top)
+    f.write_text(yaml.safe_dump(doc, sort_keys=False))
     commit(repo, "cfg")
+
+
+ON = {"dev": "audit", "staging": "audit", "prod": "enforce"}      # what 4.x `policies: {}` meant
 
 
 def render(repo):
@@ -29,20 +39,20 @@ def policy(repo, env="dev"):
 
 
 def set_envs(repo, envs):
-    f = repo / APP / "services.yaml"
+    f = system_file(repo)
     d = yaml.safe_load(f.read_text())
-    d["services"][0]["environments"] = envs
-    f.write_text(yaml.safe_dump(d))
+    d["components"]["todo-api"]["instances"] = {e: {} for e in envs}
+    f.write_text(yaml.safe_dump(d, sort_keys=False))
 
 
-def test_nothing_without_the_policies_key(gitops_repo, gh):
+def test_nothing_while_every_policy_is_off(gitops_repo, gh):
     run_compose(gitops_repo, "add", "todo-api")
     assert not (gitops_repo / APP / "policies").exists()
     assert "policies" not in (gitops_repo / APP / "applicationset.yaml").read_text().replace("# policies:", "")
 
 
 def test_enabled_with_defaults_audit_in_dev_enforce_in_prod(gitops_repo, gh):
-    app_cfg(gitops_repo, policies={})
+    cfg(gitops_repo, ON)
     run_compose(gitops_repo, "add", "todo-api")
     set_envs(gitops_repo, ["dev", "staging", "prod"])
     assert render(gitops_repo).returncode == 0
@@ -56,7 +66,7 @@ def test_enabled_with_defaults_audit_in_dev_enforce_in_prod(gitops_repo, gh):
 
 
 def test_latest_is_only_forbidden_outside_dev(gitops_repo, gh):
-    app_cfg(gitops_repo, policies={})
+    cfg(gitops_repo, ON)
     run_compose(gitops_repo, "add", "todo-api")
     set_envs(gitops_repo, ["dev", "staging"])
     assert render(gitops_repo).returncode == 0
@@ -66,7 +76,7 @@ def test_latest_is_only_forbidden_outside_dev(gitops_repo, gh):
 
 
 def test_modes_per_environment_and_off_prunes(gitops_repo, gh):
-    app_cfg(gitops_repo, policies={"mode": {"dev": "Enforce", "staging": "Off"}})
+    cfg(gitops_repo, {"dev": "enforce", "staging": "off"})
     run_compose(gitops_repo, "add", "todo-api")
     set_envs(gitops_repo, ["dev", "staging"])
     assert render(gitops_repo).returncode == 0
@@ -75,29 +85,29 @@ def test_modes_per_environment_and_off_prunes(gitops_repo, gh):
 
 
 def test_allowed_registries_follow_the_images_and_addons(gitops_repo, gh):
-    app_cfg(gitops_repo, policies={"registries": ["registry.example.com/team/"]}, addons={"observability": {}})
+    cfg(gitops_repo, {"dev": "audit"}, observability={}, registries=["registry.example.com/team/"])
     run_compose(gitops_repo, "add", "todo-api")
     regs = yaml.safe_load(policy(gitops_repo)["spec"]["variables"][1]["expression"])
     assert regs == ["ghcr.io/acme/", "otel/", "registry.example.com/team/"]
 
 
-def test_removing_the_policies_key_prunes_the_files(gitops_repo, gh):
-    app_cfg(gitops_repo, policies={})
+def test_switching_every_policy_off_prunes_the_files(gitops_repo, gh):
+    cfg(gitops_repo, ON)
     run_compose(gitops_repo, "add", "todo-api")
     commit(gitops_repo)
-    f = gitops_repo / APP / "app.yaml"
-    cfg = yaml.safe_load(f.read_text())
-    del cfg["policies"]
-    f.write_text(yaml.safe_dump(cfg))
+    cfg(gitops_repo, {"dev": "off", "staging": "off", "prod": "off"})
     assert render(gitops_repo).returncode == 0
     assert not (gitops_repo / APP / "policies").exists()
 
 
-@pytest.mark.parametrize("conf,msg", [({"mode": {"dev": "Block"}}, "must be Audit, Enforce or Off"), ({"registries": "ghcr.io"}, "list of image prefixes")])
-def test_invalid_policy_config_is_rejected(gitops_repo, gh, conf, msg):
+@pytest.mark.parametrize("env_policy, top, msg", [
+    ({"dev": "block"}, {}, "environments.dev.policy must be audit, enforce or off, got 'block'"),
+    ({}, {"registries": "ghcr.io"}, "list of image prefixes"),
+])
+def test_invalid_policy_config_is_rejected(gitops_repo, gh, env_policy, top, msg):
     run_compose(gitops_repo, "add", "todo-api")
     commit(gitops_repo)
-    app_cfg(gitops_repo, policies=conf)
+    cfg(gitops_repo, env_policy, **top)
     p = render(gitops_repo)
     assert p.returncode == 1 and msg in p.stderr
 
@@ -133,7 +143,7 @@ MUTATIONS = {
 
 @needs_kyverno
 def test_a_rendered_deployment_passes_and_each_violation_is_caught(tmp_path, gitops_repo, gh):
-    app_cfg(gitops_repo, policies={})
+    cfg(gitops_repo, ON)
     run_compose(gitops_repo, "add", "todo-api")
     ok, out = evaluate(tmp_path, gitops_repo, good_deployment(gitops_repo))
     assert ok, out
@@ -146,7 +156,7 @@ def test_a_rendered_deployment_passes_and_each_violation_is_caught(tmp_path, git
 
 @needs_kyverno
 def test_latest_and_untagged_images_fail_outside_dev(tmp_path, gitops_repo, gh):
-    app_cfg(gitops_repo, policies={})
+    cfg(gitops_repo, ON)
     run_compose(gitops_repo, "add", "todo-api")
     set_envs(gitops_repo, ["dev", "staging"])
     assert render(gitops_repo).returncode == 0
@@ -161,7 +171,7 @@ def test_latest_and_untagged_images_fail_outside_dev(tmp_path, gitops_repo, gh):
 
 @needs_kyverno
 def test_the_otel_collector_satisfies_the_guard_rails(tmp_path, gitops_repo, gh):
-    app_cfg(gitops_repo, policies={}, addons={"observability": {}})
+    cfg(gitops_repo, ON, observability={})
     run_compose(gitops_repo, "add", "todo-api")
     dep = yaml.safe_load((gitops_repo / APP / "addons/dev/observability/collector.yaml").read_text())
     ok, out = evaluate(tmp_path, gitops_repo, dep)

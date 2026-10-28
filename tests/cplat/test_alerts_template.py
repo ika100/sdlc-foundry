@@ -76,7 +76,7 @@ def test_a_generated_gitops_repo_has_the_poll(gitops_repo, gh):  # noqa: F811
 
 
 def test_update_service_delivers_the_poll_to_existing_repos():
-    """AC-092.1: neither the workflow nor the script is project-owned, so `/shared:update-service` adds them."""
+    """AC-092.1: neither the workflow nor the script is project-owned, so `/platform:update` adds them."""
     assert WORKFLOW.is_file() and SCRIPT.is_file()
     skip = yaml.safe_load((TEMPLATE / "copier.yml").read_text())["_skip_if_exists"]
     for path in (".github/workflows/alerts.yml", "scripts/alert-poll.sh", "devbox.json"):
@@ -157,7 +157,7 @@ def test_a_hand_started_dry_run_reaches_the_command(sh):
 
 
 def test_a_platform_without_the_alert_poll_is_a_green_run_that_says_to_update(sh):
-    """AC-092.1: a repo pinned to a platform older than spec 092 exits 0 and tells the operator to run /shared:update-service."""
+    """AC-092.1: a repo pinned to a platform older than spec 092 exits 0 and tells the operator to run /platform:update."""
     p, _, log, summary = sh(platform_has_alerts=False)
-    msg = "has no alert poll (spec 092); run /shared:update-service"
+    msg = "has no alert poll (spec 092); run /platform:update"
     assert p.returncode == 0 and log is None and msg in p.stdout and msg in summary

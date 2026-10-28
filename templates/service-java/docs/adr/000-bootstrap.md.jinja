@@ -13,7 +13,7 @@ Accepted on bootstrap.
 - JUnit 5 + Spring Boot Test, JaCoCo with an 80% line gate
 - Actuator probes{% if needs_observability %}, Micrometer Prometheus and the OpenTelemetry Java agent{% endif %}
 - Multi-stage build → `gcr.io/distroless/java{{ java_version }}-debian12:nonroot` → `{{ docker_registry }}/{{ project_name }}`
-- No Kubernetes manifests here: the product's gitops-app repo owns them (platform ADR-017); this repo ships a container image
+- No Kubernetes manifests here: the system's gitops-app repo owns them (platform ADR-017); this repo ships a container image
 - GitHub topic `deployable-service` for ArgoCD discovery
 - Claude Code agents from the `sdlc-foundry` marketplace (`svc-java` + `svc` + `shared`)
 

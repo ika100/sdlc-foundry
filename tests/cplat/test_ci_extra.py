@@ -135,7 +135,7 @@ def test_doctor_shows_what_ci_extra_runs(tmp_path, extra, shown):  # AC-086.7
 def test_doctor_warns_when_ci_does_not_run_ci_extra(tmp_path):  # AC-086.8
     r = repo_with(tmp_path, ci=BASE, extra="devbox run chart-lint", wf=["quality", "test", "security"])
     c = by_name(gates.check_gates(r))["gate ci = CI workflow"]
-    assert c["status"] == "warn" and "CI does not run ci-extra" in c["detail"] and "/shared:update-service" in c["fix"]
+    assert c["status"] == "warn" and "CI does not run ci-extra" in c["detail"] and "/platform:update" in c["fix"]
 
 
 @pytest.mark.parametrize("extra, line", [
@@ -229,7 +229,7 @@ def test_template_loads_an_empty_repo_owned_notes_file(shape):  # AC-086.16
 
 @pytest.mark.parametrize("shape", IDS)
 def test_a_new_repo_has_the_section_and_an_empty_notes_file(shape, tmp_path):  # AC-086.15 AC-086.16
-    newsvc.main([f"n-{shape}", "d", "--type", shape, "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
+    newsvc.main([f"n-{shape}", "d", "--shape", shape, "--no-github", "--skip-tasks", "--dir", str(tmp_path), "--org", "acme"])
     repo = tmp_path / f"n-{shape}"
     notes = repo / ".claude" / "project-notes.md"
     assert notes.is_file() and notes.stat().st_size == 0

@@ -50,7 +50,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [065-merges-wait-for-green-ci-without-branch](specs/065-merges-wait-for-green-ci-without-branch/spec.md) — Merges wait for green CI without branch protection | P0 | done | 5 |  |
 | [067-ship-an-approved-spec-to-dev](specs/067-ship-an-approved-spec-to-dev/spec.md) — Ship an approved spec to dev unattended | P0 | done | 5 |  |
 | [077-ship-deploy-reports-what-really-runs](specs/077-ship-deploy-reports-what-really-runs/spec.md) — Ship deploy reports what really runs | P0 | done | 4 | #113, #114, #115 |
-| [087-every-run-is-recorded-in-a-private-run](specs/087-every-run-is-recorded-in-a-private-run/spec.md) — Every run is recorded in a private run store | P0 | done | 20 |  |
+| [087-every-run-is-recorded-in-a-private-run](specs/087-every-run-is-recorded-in-a-private-run/spec.md) — Every run is recorded in a private run store | P0 | done | 24 | #207 |
 | [091-ship-checks-the-spec-in-dev-with-smoke](specs/091-ship-checks-the-spec-in-dev-with-smoke/spec.md) — Ship checks the spec in dev with smoke tests | P0 | done | 14 |  |
 | [004-preflight-check-of-the-setup](specs/004-preflight-check-of-the-setup/spec.md) — Preflight check of the setup | P1 | done | 2 |  |
 | [007-a-shape-is-added-by-following-a](specs/007-a-shape-is-added-by-following-a/spec.md) — A shape is added by following a documented contract | P1 | done | 3 |  |
@@ -99,7 +99,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [082-sessions-do-not-collide](specs/082-sessions-do-not-collide/spec.md) — Sessions do not collide: claimed issues and specs required | P1 | done | 2 | #121, #122 |
 | [085-a-broken-spec-names-itself-and-stops](specs/085-a-broken-spec-names-itself-and-stops/spec.md) — A broken spec names itself and stops nothing else | P1 | done | 12 | #129 |
 | [086-repo-gates-survive-skeleton-updates](specs/086-repo-gates-survive-skeleton-updates/spec.md) — Repo gates survive skeleton updates | P1 | done | 16 | #132 |
-| [088-platform-failures-become-deduplicated](specs/088-platform-failures-become-deduplicated/spec.md) — Platform failures become deduplicated issues | P1 | done | 14 |  |
+| [088-platform-failures-become-deduplicated](specs/088-platform-failures-become-deduplicated/spec.md) — Platform failures become deduplicated issues | P1 | done | 21 | #207 |
 | [089-agent-quality-is-measured-per-agent-and](specs/089-agent-quality-is-measured-per-agent-and/spec.md) — Agent quality is measured per agent and shape | P1 | done | 14 |  |
 | [090-a-weekly-retro-proposes-the-next-specs](specs/090-a-weekly-retro-proposes-the-next-specs/spec.md) — A weekly retro proposes the next specs | P1 | done | 14 |  |
 | [092-firing-alerts-become-issues-in-the](specs/092-firing-alerts-become-issues-in-the/spec.md) — Firing alerts become issues in the owning repo | P1 | done | 22 |  |
@@ -110,6 +110,19 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [098-gitops-ci-checks-components-against-the](specs/098-gitops-ci-checks-components-against-the/spec.md) — Gitops CI checks Components against the service branch CRDs | P1 | done | 17 | #110 |
 | [099-token-usage-and-cost-are-measured-per](specs/099-token-usage-and-cost-are-measured-per/spec.md) — Token usage and cost are measured per run | P1 | done | 14 | #140 |
 | [100-leaner-runs-cheaper-coordinator-fewer](specs/100-leaner-runs-cheaper-coordinator-fewer/spec.md) — Leaner runs: cheaper coordinator, fewer turns, smaller context | P1 | done | 17 | #139 |
+| [112-fast-cplat-test-job-shared-renders-and](specs/112-fast-cplat-test-job-shared-renders-and/spec.md) — Fast cplat test job: shared renders and sharding | P1 | done | 15 |  |
+| [113-a-domain-model-core-in-cplat](specs/113-a-domain-model-core-in-cplat/spec.md) — A domain model core in cplat | P1 | done | 18 |  |
+| [114-the-platform-speaks-the-domain-model-5-0](specs/114-the-platform-speaks-the-domain-model-5-0/spec.md) — The platform speaks the domain model (5.0) | P1 | done | 67 |  |
+| [115-resources-are-named-typed-and-may-be](specs/115-resources-are-named-typed-and-may-be/spec.md) — Resources are named, typed and may be external | P1 | done | 18 |  |
+| [116-an-object-storage-resource-for-files-and](specs/116-an-object-storage-resource-for-files-and/spec.md) — An object storage resource for files and backups | P1 | done | 16 |  |
+| [117-databases-and-environments-are-backed-up](specs/117-databases-and-environments-are-backed-up/spec.md) — Databases and environments are backed up and restorable | P1 | done | 32 |  |
+| [118-a-cache-resource-compatible-with-redis](specs/118-a-cache-resource-compatible-with-redis/spec.md) — A cache resource compatible with Redis | P1 | done | 19 |  |
+| [119-a-message-broker-resource-behind-events](specs/119-a-message-broker-resource-behind-events/spec.md) — A message broker resource behind events APIs | P1 | done | 24 |  |
+| [120-instances-scale-on-load-and-queue-depth](specs/120-instances-scale-on-load-and-queue-depth/spec.md) — Instances scale on load and queue depth | P1 | done | 28 |  |
+| [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | done | 27 |  |
+| [123-the-platform-repo-declares-its-own-shape](specs/123-the-platform-repo-declares-its-own-shape/spec.md) — The platform repo declares its own shape | P1 | done | 24 |  |
+| [125-a-cluster-repo-hosts-several-systems](specs/125-a-cluster-repo-hosts-several-systems/spec.md) — A cluster repo hosts several systems on shared operators | P1 | done | 18 |  |
+| [126-unattended-runs-stop-wasting-turns-and](specs/126-unattended-runs-stop-wasting-turns-and/spec.md) — Unattended runs stop wasting turns and CI rounds | P1 | done | 15 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
@@ -124,6 +137,8 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [083-platform-drift-in-status](specs/083-platform-drift-in-status/spec.md) — Platform drift in /shared:status | P2 | done | 1 | #125 |
 | [084-platform-ci-in-minutes](specs/084-platform-ci-in-minutes/spec.md) — Platform CI in minutes | P2 | done | 2 | #124, #127 |
 | [094-a-merge-conflict-re-plans-instead-of](specs/094-a-merge-conflict-re-plans-instead-of/spec.md) — A merge conflict re-plans instead of escalating | P2 | done | 15 |  |
+| [122-a-local-console-shows-the-system-and-what](specs/122-a-local-console-shows-the-system-and-what/spec.md) — A local console shows the system, its process and what needs you | P2 | done | 52 |  |
+| [124-autonomy-is-declared-per-environment-and](specs/124-autonomy-is-declared-per-environment-and/spec.md) — Autonomy is declared per environment and supervised in the console | P2 | done | 22 |  |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)

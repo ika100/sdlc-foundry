@@ -28,9 +28,9 @@ def install_schedule(store, slug: str) -> list[str]:
             lines.append(f"retro schedule: added {WORKFLOW_PATH} (Mondays 06:00 UTC)")
     except Exception as e:  # noqa: BLE001  (init must succeed without the workflow scope)
         lines.append(f"WARNING: retro schedule not added: {e or type(e).__name__}")
-        lines.append(f"  fix: gh auth refresh -h github.com -s workflow, then cplat runs init {slug}")
+        lines.append(f"  fix: gh auth refresh -h github.com -s workflow, then cplat platform runs init {slug}")
     lines.append(f"retro: set the secrets CLAUDE_CODE_OAUTH_TOKEN (claude setup-token) and {GH_SECRET} in {slug}, and a "
-                 "self-hosted runner (repo variable CI_RUNNER); cplat doctor checks them")
+                 "self-hosted runner (repo variable CI_RUNNER); cplat platform doctor checks them")
     return lines
 
 

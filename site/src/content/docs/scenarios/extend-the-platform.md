@@ -1,9 +1,9 @@
 ---
 title: "Extend the platform"
-description: "Add a new language shape, an addon or an agent through the documented contracts."
+description: "Add a new language shape, a resource or an agent through the documented contracts."
 ---
 
-**Situation.** Your team uses Rust or Kotlin, or needs a Redis addon.
+**Situation.** Your team uses Rust or Kotlin, or needs a Redis resource.
 
 ## A new shape
 
@@ -17,9 +17,9 @@ A shape is a registry entry plus a template plus a plugin:
 
 Step-by-step with the contract: [Adding a new shape](/sdlc-foundry/guides/add-a-shape/).
 
-## A new addon
+## A new resource
 
-Addons are declared in `app.yaml` and implement a **connection contract** (the Secret and environment variables services receive). Add an entry to the `ADDONS` table in `templates/gitops-app/scripts/render.py` plus a manifest function, tests in `tests/cplat`, and an ADR. Services never learn the implementation, so it can later be swapped (a spike evaluated kro this way; see [ADR-020](/sdlc-foundry/reference/adr/020/)).
+Resources are declared under `resources:` in `system.yaml` and implement a **connection contract** (the Secret and environment variables components receive). Add an entry to the resource table in `templates/gitops-app/scripts/render.py` plus a manifest function, tests in `tests/cplat`, and an ADR. Components never learn the implementation, so it can later be swapped (a spike evaluated kro this way; see [ADR-020](/sdlc-foundry/reference/adr/020/)).
 
 ## An agent or command
 

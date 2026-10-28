@@ -1,4 +1,4 @@
-"""Usage in reports (spec 099, ADR-035): the `usage` view of `cplat runs report`, `--benchmarks` and the `runs usage` text.
+"""Usage in reports (spec 099, ADR-035): the `usage` view of `cplat platform runs report`, `--benchmarks` and the `runs usage` text.
 
 Pure functions without I/O, tolerant of records without or with odd `usage` sections.
 """

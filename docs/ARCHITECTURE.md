@@ -16,21 +16,21 @@ Two channels of distribution:
 
 1. **Claude Code marketplace** — seven plugins (`svc`, `web`, `svc-java`, `svc-go`, `gitops`, `app`, `shared`) published from this repo. Consumers reference the marketplace in their `.claude/settings.json`; updates flow via `/plugin marketplace update`.
 
-2. **Copier templates** — one template per shape (see `shapes.yml`) that ships the project skeleton: `devbox.json`, CI workflow, `CLAUDE.md`, Dockerfile, language manifests (no Kubernetes files: the gitops-app repo owns them, ADR-017). Updates flow via `/shared:update-service`, which re-applies the template with the repo's recorded answers on a review branch.
+2. **Copier templates** — one template per shape (see `shapes.yml`) that ships the project skeleton: `devbox.json`, CI workflow, `CLAUDE.md`, Dockerfile, language manifests (no Kubernetes files: the gitops-app repo owns them, ADR-017). Updates flow via `/platform:update`, which re-applies the template with the repo's recorded answers on a review branch.
 
-These two channels run at different speeds — agents evolve frequently, project skeletons evolve rarely — and `/shared:update-service` keeps the skeleton current without touching project-owned files. Maintaining two artifacts is cheaper than maintaining one big one that conflates both.
+These two channels run at different speeds — agents evolve frequently, project skeletons evolve rarely — and `/platform:update` keeps the skeleton current without touching project-owned files. Maintaining two artifacts is cheaper than maintaining one big one that conflates both.
 
 ## Shapes
 
 The platform is multi-shape: `service-python`, `library-python`, `web-nextjs`, `gitops-app`, `service-java`, `service-go`. `shapes.yml` is the registry (id → plugin, template, deployable?, detection). Commands detect a repo's shape from `.copier-answers.yml` (fallback: file sniffing, `scripts/detect-shape.sh`) and route each role to `<plugin>:<role>`; the `/svc:*` orchestrators, product-manager and architect stay shape-agnostic. Adding a shape is a documented checklist (`docs/templates.md`) enforced by `scripts/shapes.py check` in CI. Decisions: ADR-008 (detection), ADR-013 (plugin enablement), ADR-015 (registry).
 
-**GitOps owns the manifests (v2).** Services ship an image; the product's `gitops-app` repo describes how each one runs in `services.yaml` and generates Deployment/Service/HTTPRoute with `render.py`. Argo reads only that repo, wiring between services is product configuration, and promotion pins an image tag (ADR-017).
+**GitOps owns the manifests (v2).** Services ship an image; the system's `gitops-app` repo describes how each one runs in `system.yaml` and generates Deployment/Service/HTTPRoute with `render.py`. Argo reads only that repo, wiring between components is system configuration, and promotion pins an image tag (ADR-017).
 
-**Two kinds of GitOps repo.** The *platform* GitOps repo (one per fleet) discovers every `deployable-service` repo by topic. A *`gitops-app`* repo (one per SaaS product) lists the product's services in `services.yaml` and pins versions per environment (`dev` tracks main, `staging`/`prod` are pinned by `/gitops:promote`); the ApplicationSets and overlays are generated from it (ADR-006/014). `/app:spec`, `/app:plan` and `/app:build` take a feature across a product's repos: one product spec, its criteria assigned per repo, each repo built from its own slice (ADR-011/023/026).
+**Two kinds of GitOps repo.** The *platform* GitOps repo (one per fleet) discovers every `deployable-service` repo by topic. A *`gitops-app`* repo (one per SaaS system) lists the system's components in `system.yaml` and pins versions per environment (`dev` tracks main, `staging`/`prod` are pinned by `/instance:promote`); the ApplicationSets and overlays are generated from it (ADR-006/014). `/system:spec`, `/system:plan` and `/system:ship` take a feature across a system's repos: one system spec, its criteria assigned per repo, each repo built from its own slice (ADR-011/023/026).
 
 ## Why not GitHub Templates
 
-GitHub Templates fork once and then drift forever. Copier re-applies a template to an existing repo from recorded answers, skipping project-owned files (`_skip_if_exists`), so improvements to the CI workflow or devbox recipes flow into existing repos without re-cloning. (Copier's own 3-way `copier update` is not usable here: it needs the template's git history, and our templates live in subdirectories of this repo — hence `/shared:update-service`.)
+GitHub Templates fork once and then drift forever. Copier re-applies a template to an existing repo from recorded answers, skipping project-owned files (`_skip_if_exists`), so improvements to the CI workflow or devbox recipes flow into existing repos without re-cloning. (Copier's own 3-way `copier update` is not usable here: it needs the template's git history, and our templates live in subdirectories of this repo — hence `/platform:update`.)
 
 ## Why several plugins, not one
 
@@ -54,7 +54,7 @@ The contract enforced by this convention:
 - Every service has `k8s/overlays/prod/kustomization.yaml`.
 - Argo `Application` name == GitHub repo name.
 
-Promotion to production (staging → prod) is the one explicit, human-approved step — `/gitops:promote` pins an image tag in the target overlay, shows an evidence summary and opens a PR. Staging follows a green dev smoke by itself through the gitops-app's self-merging `pin-staging` PR (spec 093, ADR-041; `promotion: {staging: manual}` switches it off). Argo reconciles after merge.
+Promotion to production (staging → prod) is the one explicit, human-approved step — `/instance:promote` pins an image tag in the target overlay, shows an evidence summary and opens a PR. Staging follows a green dev smoke by itself through the gitops-app's self-merging `pin-staging` PR (spec 093, ADR-041; `promotion: {staging: manual}` switches it off). Argo reconciles after merge.
 
 ## What this is NOT
 

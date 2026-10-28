@@ -1,4 +1,4 @@
-"""The evidence summary `cplat promote … staging prod` shows before a production promotion (spec 093, ADR-041).
+"""The evidence summary `cplat instance promote … staging prod` shows before a production promotion (spec 093, ADR-041).
 
 It reads the run store (spec 085) for the smoke outcomes of the release's commit in dev and in staging, and the open
 `smoke-failure` and `alert` issues of the service repo. It never blocks and never raises: what it cannot read becomes

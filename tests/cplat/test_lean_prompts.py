@@ -1,11 +1,11 @@
-"""Spec 100 step 4: rare branches of build, ship and quick-task live in reference files."""
+"""Spec 100 step 4: rare branches of build, ship and fix live in reference files."""
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-COMMANDS = ROOT / "plugins" / "svc" / "commands"
-REFS = ROOT / "plugins" / "svc" / "references"
+COMMANDS = ROOT / "plugins" / "component" / "commands"
+REFS = ROOT / "plugins" / "component" / "references"
 POINTER = "${CLAUDE_PLUGIN_ROOT}/references/"
 
 # command -> reference file -> key text that must now live in the reference file
@@ -17,18 +17,18 @@ MOVED = {
         "build-security-red.md": ["cplat deps patch", "Exit 4", "agents.security"],
     },
     "ship": {
-        "ship-gitops.md": ["cplat ship gitops prepare", "cplat ship gitops pr"],
+        "ship-gitops.md": ["cplat component ship gitops prepare", "cplat component ship gitops pr"],
         "ship-land-red.md": ["RED, the security check", "fix_rounds"],
     },
-    "quick-task": {
-        "quick-task-on-main.md": ["Skipping PR creation"],
+    "fix": {
+        "fix-on-main.md": ["Skipping PR creation"],
     },
 }
 
 
 # Sizes on main (2026-10-25, after specs 091–097, before spec 100 moved the rare branches): a fixed baseline, because
 # `origin/main` is missing in CI checkouts and equals the file itself once this change is merged.
-BEFORE = {"build": 19912, "ship": 12106, "quick-task": 7961}
+BEFORE = {"build": 19912, "ship": 12106, "fix": 7961}
 
 
 @pytest.mark.parametrize("name", sorted(MOVED))

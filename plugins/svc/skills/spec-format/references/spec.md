@@ -10,7 +10,7 @@ status: draft                      # changed only by `cplat spec approve|set-sta
 priority: P1                       # P0 | P1 | P2
 shape: service-python              # the repo's shape (omitted in a repo without one)
 tracks: [42]                       # optional: GitHub issues this spec answers
-parent: acme/shop-gitops:012-checkout   # optional: the product spec this repo's spec is a slice of
+parent: acme/shop-gitops:012-checkout   # optional: the system spec this component's spec is a slice of
 ---
 
 # 007 — Price alerts
@@ -53,7 +53,7 @@ As a trader, I want an alert when a watched symbol crosses my threshold, so that
 - **Concrete:** numbers, limits, field names the user sees, error responses. "Fast" and "user-friendly" are not criteria.
 - **Cover the unhappy paths:** invalid input, missing permission, a dependency down, limits reached. Most defects live there.
 - **Behaviour, not implementation:** "the price is stored" is untestable from outside; say what the user or caller can observe.
-- **Environment-neutral:** no host ports, local hostnames or machine paths (`:8088`, `todo-web.todo-dev.localhost`, `/Users/...`). Say what is observable wherever the product runs: "the todo list page loads at the web app's root URL".
+- **Environment-neutral:** no host ports, local hostnames or machine paths (`:8088`, `todo-web.todo-dev.localhost`, `/Users/...`). Say what is observable wherever the system runs: "the todo list page loads at the web app's root URL".
 - **Smoke marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL; after deploy, `devbox run smoke` checks it in dev against `SMOKE_BASE_URL`. Only for deployable shapes (not libraries), and only for behaviour a test can check using nothing but the base URL.
 - **Small features have few criteria.** Three to eight is typical. More than twelve usually means two specs.
 

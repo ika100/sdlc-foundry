@@ -225,40 +225,44 @@ def test_unlinked_repos_finish_without_waiting(repo, gh):
 
 def test_no_run_never_blocks(repo):
     """AC-066.3: sessions without a ship run stop as before."""
-    assert ship.gate(repo, {}, 8, run_tests=False) is None
+    assert ship.gate(repo, {"session_id": "A"}, run_tests=False) is None
 
 
-def test_an_unfinished_run_blocks_with_the_next_step(repo):
+def test_an_unfinished_run_blocks_with_the_next_step(repo, monkeypatch):
     """AC-066.1: an unfinished run blocks the stop and says what to do next."""
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     ship.start(repo, "7", True)
     ship.set_phase(repo, "land")
-    ans = ship.gate(repo, {"stop_hook_active": True}, 8, run_tests=False)
-    assert ans["decision"] == "block" and "cplat ship land" in ans["reason"] and "cplat ship escalate" in ans["reason"]
+    ans = ship.gate(repo, {"session_id": "A", "stop_hook_active": True}, run_tests=False)
+    assert ans["decision"] == "block" and "cplat component ship land" in ans["reason"] and "cplat component ship escalate" in ans["reason"]
 
 
-def test_the_build_phase_reports_what_is_still_red(repo):
+def test_the_build_phase_reports_what_is_still_red(repo, monkeypatch):
     """AC-066.1: in the build phase the reason names untraced criteria."""
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     ship.start(repo, "7", True)
-    ans = ship.gate(repo, {}, 8, run_tests=True)
+    ans = ship.gate(repo, {"session_id": "A"}, run_tests=True)
     assert "Criteria without a test" in ans["reason"] and "AC-007.1" in ans["reason"]
 
 
-def test_escalation_finish_and_the_block_cap_let_the_session_stop(repo):
-    """AC-066.2: escalated or done runs stop; after N blocked stops the gate gives up and records why."""
+def test_escalation_finish_and_no_progress_let_the_session_stop(repo, monkeypatch):
+    """AC-066.2: escalated or done runs stop; after two stops without progress the gate escalates and records why."""
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
+    hook = {"session_id": "A"}
     ship.start(repo, "7", True)
-    for _ in range(3):
-        assert ship.gate(repo, {}, 3, run_tests=False)["decision"] == "block"
-    final = ship.gate(repo, {}, 3, run_tests=False)
-    assert "decision" not in final and "stopped after 3" in final["systemMessage"]
-    assert "gave up" in ship.load_state(repo)["escalated"]
-    assert ship.gate(repo, {}, 3, run_tests=False) is None
+    for _ in range(2):
+        assert ship.gate(repo, hook, run_tests=False)["decision"] == "block"
+    final = ship.gate(repo, hook, run_tests=False)
+    assert "decision" not in final and "escalated (no progress: 2 stops" in final["systemMessage"]
+    assert "no progress" in ship.load_state(repo)["escalated"]
+    assert ship.gate(repo, hook, run_tests=False) is None
     st = ship.start(repo, "7", True)                       # resume clears the escalation and the counter
-    assert "escalated" not in st and st["blocks"] == 0
+    assert "escalated" not in st and st["stop_gate"] == {}
     ship.escalate(repo, "merge conflict in alerts.go")
-    assert ship.gate(repo, {}, 3, run_tests=False) is None
+    assert ship.gate(repo, hook, run_tests=False) is None
     ship.start(repo, "7", True)
     ship.set_phase(repo, "done")
-    assert ship.gate(repo, {}, 3, run_tests=False) is None
+    assert ship.gate(repo, hook, run_tests=False) is None
 
 
 def test_the_stop_hook_only_starts_cplat_when_a_run_exists():
@@ -269,10 +273,11 @@ def test_the_stop_hook_only_starts_cplat_when_a_run_exists():
 
 
 def test_gate_cli_reads_the_hook_input(repo, capsys, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
     ship.start(repo, "7", True)
     ship.set_phase(repo, "deploy")
     import io
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"cwd": str(repo), "stop_hook_active": False})))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"session_id": "A", "cwd": str(repo), "stop_hook_active": False})))
     assert ship.main(["gate"]) == 0
     assert json.loads(capsys.readouterr().out)["decision"] == "block"
 

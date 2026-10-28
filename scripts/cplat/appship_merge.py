@@ -1,4 +1,4 @@
-"""`cplat app-ship` merge slot (spec 097, ADR-042): the one place where a product run, and the repo ships it drives, merge
+"""`cplat system ship` merge slot (spec 097, ADR-042): the one place where a product run, and the repo ships it drives, merge
 into the gitops-app. One at a time, in plan order; a PR that no longer merges cleanly is never merged or rebased."""
 from __future__ import annotations
 

@@ -1,0 +1,2 @@
+# Project settings (ADR-036). The platform repo declares its own shape here (ADR-056); component repos never do.
+shape: platform

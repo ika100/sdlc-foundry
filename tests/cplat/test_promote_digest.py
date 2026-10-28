@@ -63,7 +63,7 @@ def reg(monkeypatch):
 def at_staging(gitops_repo, gh, ev, reg, capsys):  # noqa: F811
     gh.image_tags["todo-api"] |= {STAGING}
     composed(gitops_repo, "todo-api")
-    promote.main(["todo-api", "dev", "staging", "--sha", SHA, "--repo-dir", str(gitops_repo)])
+    promote.main(["todo-api", "--to", "staging", "--sha", SHA, "--repo-dir", str(gitops_repo)])
     commit(gitops_repo, "promote")
     reg.calls.clear()
     capsys.readouterr()
@@ -85,7 +85,7 @@ def attempt(argv, capsys):
 
 
 def prod(repo, *extra):
-    return ["todo-api", "staging", "prod", "--repo-dir", str(repo), *extra]
+    return ["todo-api", "--to", "prod", "--repo-dir", str(repo), *extra]
 
 
 def unchanged(repo):
@@ -250,7 +250,7 @@ def test_no_verify_skips_the_digest_check_for_prod(at_staging, reg, capsys):
 def test_staging_promotion_makes_no_digest_check(gitops_repo, gh, reg, ev, capsys):  # noqa: F811
     """AC-106.6: dev to staging is unchanged, no digest lookup."""
     composed(gitops_repo, "todo-api")
-    rc, out = attempt(["todo-api", "dev", "staging", "--repo-dir", str(gitops_repo)], capsys)
+    rc, out = attempt(["todo-api", "--to", "staging", "--repo-dir", str(gitops_repo)], capsys)
     assert rc == 0 and reg.calls == [] and "image identity not verified" not in out
 
 
@@ -389,7 +389,7 @@ def two_at_staging(gitops_repo, gh, ev, reg, capsys):  # noqa: F811
     gh.image_tags["todo-web"] |= {STAGING, "2.0.0"}
     gh.git_tags["acme/todo-web"] = ["v2.0.0"]
     composed(gitops_repo, "todo-api", "todo-web")
-    promote.main(["todo-api", "todo-web", "dev", "staging", "--sha", SHA, "--repo-dir", str(gitops_repo)])
+    promote.main(["todo-api", "todo-web", "--to", "staging", "--sha", SHA, "--repo-dir", str(gitops_repo)])
     commit(gitops_repo, "promote")
     (reg.extra).extend({"name": d, "metadata": {"container": {"tags": [t]}}} for t, d in ())
     capsys.readouterr()
@@ -397,7 +397,7 @@ def two_at_staging(gitops_repo, gh, ev, reg, capsys):  # noqa: F811
 
 
 def _both(repo, *extra):
-    return ["todo-api", "todo-web", "staging", "prod", "--repo-dir", str(repo), *extra]
+    return ["todo-api", "todo-web", "--to", "prod", "--repo-dir", str(repo), *extra]
 
 
 def test_one_failing_service_promotes_none_and_is_named(two_at_staging, reg, capsys):
@@ -420,7 +420,7 @@ def test_every_failing_service_is_named(two_at_staging, reg, capsys):
 
 # ---------------- AC-106.12 ----------------
 
-@pytest.mark.parametrize("doc", ["plugins/gitops/commands/promote.md", "docs/unattended-delivery.md"])
+@pytest.mark.parametrize("doc", ["plugins/instance/commands/promote.md", "docs/unattended-delivery.md"])
 def test_the_docs_state_the_digest_rule_the_dry_run_and_the_override(doc):
     """AC-106.12: digest rule, dry-run output and the override are described."""
     text = (ROOT / doc).read_text()

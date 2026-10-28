@@ -1,0 +1,13 @@
+{
+  "name": "instance",
+  "version": "1.1.0",
+  "description": "The instance noun: /instance:promote, /instance:secret and /instance:verify act on where a component runs, per environment.",
+  "author": {
+    "name": "Eike Hensler",
+    "email": "eike.hensler@gmail.com"
+  },
+  "homepage": "https://github.com/ika100/sdlc-foundry",
+  "repository": "https://github.com/ika100/sdlc-foundry",
+  "license": "Apache-2.0",
+  "keywords": ["instance", "promote", "secrets", "smoke", "cplat"]
+}

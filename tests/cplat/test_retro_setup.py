@@ -146,7 +146,7 @@ def test_a_rejected_workflow_write_is_a_warning_with_the_scope_fix(mem, monkeypa
     monkeypatch.setattr(runs, "open_store", lambda slug: mem)
     assert runs.main(["init", "acme/runs"]) == 0
     out = capsys.readouterr().out
-    assert "WARNING: retro schedule not added: " in out and "gh auth refresh -h github.com -s workflow, then cplat runs init acme/runs" in out
+    assert "WARNING: retro schedule not added: " in out and "gh auth refresh -h github.com -s workflow, then cplat platform runs init acme/runs" in out
     assert out.splitlines()[-1].startswith("export CPLAT_RUNS_REPO=acme/runs")
 
 
@@ -155,7 +155,7 @@ def test_a_public_store_gets_no_schedule(mem, monkeypatch, capsys):
     mem.vis = "public"
     monkeypatch.setattr(runs, "open_store", lambda slug: mem)
     import cplat
-    assert cplat.main(["runs", "init", "acme/runs"]) == 1
+    assert cplat.main(["platform", "runs", "init", "acme/runs"]) == 1
     assert mem.puts == [] and WORKFLOW not in mem.files
 
 

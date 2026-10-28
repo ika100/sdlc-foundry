@@ -1,4 +1,4 @@
-"""`promote`: pin services to a newer image in the next environment (dev → staging → prod)."""
+"""`instance promote`: pin components to a newer image in the next environment (dev → staging → prod)."""
 from __future__ import annotations
 
 import argparse
@@ -12,10 +12,10 @@ import yaml
 import core
 import evidence
 import gitops
+import model
 import registry
 from core import PlatformError, Report, run
 
-ORDER = ["dev", "staging", "prod"]
 SEMVER = re.compile(r"^v?(\d+\.\d+\.\d+)$")
 
 
@@ -25,15 +25,16 @@ def gh(args: list[str]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cplat promote", description=__doc__)
-    p.add_argument("items", nargs="*", help="<service...> <from-env> <to-env>   (or --all <from-env> <to-env>)")
-    p.add_argument("--all", action="store_true", help="every service that is in <from-env>")
+    p = argparse.ArgumentParser(prog="cplat instance promote", description=__doc__)
+    p.add_argument("items", nargs="*", metavar="component", help="the components to promote (or --all)")
+    p.add_argument("--to", help="the environment to promote into (the source is the environment before it)")
+    p.add_argument("--all", action="store_true", help="every component that has an instance in the source environment")
     p.add_argument("--version", help="prod: release to pin (vX.Y.Z); default: newest release tag with a published image")
     p.add_argument("--sha", help="staging: full commit SHA to pin; default: head of the service's main branch")
     p.add_argument("--no-verify", action="store_true", help="do not check that the image tag exists in GHCR")
     p.add_argument("--accept-digest-mismatch", metavar="REASON", default=None,
                    help="prod: promote although the release image is not the one staging tested; REASON is a sentence")
-    p.add_argument("--app")
+    p.add_argument("--system", dest="app", help="the system (applications/<name>) when the repo holds several")
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--pr", action="store_true")
     p.add_argument("--dry-run", action="store_true")
@@ -85,16 +86,7 @@ def pick_tag(svc: dict, to_env: str, ns: argparse.Namespace) -> tuple[str, str]:
         plain = SEMVER.match(v).group(1)
         if ns.no_verify or plain in tags:
             return plain, f"release v{plain}"
-    raise PlatformError(f"no release of {slug} has a published image", hint=f"cut one with /svc:release in {slug} (CI publishes X.Y.Z images on v*.*.* tags)")
-
-
-def _staging_tag(app_dir: Path, name: str) -> str | None:
-    """The newTag staging runs now (the local overlay), or None when the service is not pinned there."""
-    try:
-        doc = yaml.safe_load((app_dir / "overlays" / "staging" / name / "kustomization.yaml").read_text())
-        return str(doc["images"][0]["newTag"])
-    except (OSError, yaml.YAMLError, KeyError, IndexError, TypeError):
-        return None
+    raise PlatformError(f"no release of {slug} has a published image", hint=f"cut one with /component:release in {slug} (CI publishes X.Y.Z images on v*.*.* tags)")
 
 
 SHA_TAG = re.compile(r"^sha-[0-9a-f]{40}$")
@@ -128,37 +120,89 @@ def _check_digests(svc: dict, staging_tag: str | None, release_tag: str) -> dict
     return rec
 
 
+def _dev_pins_before(repo: Path, app_dir: Path, component: str) -> set[str]:
+    """Every tag the dev overlay of `component` pinned, according to the git history of its kustomization.yaml."""
+    rel = (app_dir / model.pin_path("dev", component)).relative_to(repo)
+    revisions = run(["git", "log", "--format=%H", "--", str(rel)], cwd=repo).stdout.split()
+    tags: set[str] = set()
+    for rev in revisions:
+        shown = run(["git", "show", f"{rev}:{rel}"], cwd=repo, check=False)
+        if shown.returncode == 0 and (tag := model.pin_of(yaml.safe_load(shown.stdout))):
+            tags.add(tag)
+    return tags
+
+
+def _rollback_dev(ns: argparse.Namespace, repo: Path, app_dir: Path, names: list[str]) -> int:
+    """Spec 124 (AC-124.15): the one promotion into dev, a pin back to a tag dev ran before (git history decides)."""
+    if ns.all or len(names) != 1:
+        raise PlatformError("a dev rollback is for one component: cplat instance promote <component> --to dev --version <tag>")
+    n, tag = names[0], ns.version
+    m = model.load_dir(app_dir)
+    if m.component(n) is None:
+        raise PlatformError(f"{n} is not a component of {m.system}", hint="components: " + ", ".join(c.name for c in m.components))
+    if m.instance(n, "dev") is None:
+        raise PlatformError(f"{n} has no instance in dev")
+    if tag not in _dev_pins_before(repo, app_dir, n):
+        raise PlatformError(f"{tag} is not a version dev ran before; dev follows main (a rollback pins only a previous dev version)")
+    previous = model.read_pin(app_dir, "dev", n)
+    r = Report(title=f"rollback {n}: dev → {tag} ({app_dir.name})")
+    r.will_do.append(f"{n}: dev {previous} → {tag} (rollback)")
+    r.data.update({"previous": previous, "version": tag, "pins": {n: tag}})
+    if ns.pr:
+        r.will_do.append("[outward] open a pull request (branch promote/…)")
+    if ns.dry_run:
+        r.emit(True, ns.json)
+        return 0
+    model.write_pin(app_dir, "dev", n, tag)
+    r.did.append(f"pinned {n}={tag}")
+    if ns.pr:
+        title = f"chore(promote): rollback {n} dev to {tag}"
+        body = f"- {n}: `{tag}` (rollback, was `{previous}`)"
+        r.did.append("opened " + gitops.open_pr(repo, f"promote/{gitops.slug(n)}-dev-rollback", title, body))
+        r.next_steps.append("review and merge; Argo rolls dev after the merge")
+    else:
+        r.next_steps.append("review `git diff`, then commit (or re-run with --pr)")
+    r.undo.append(f"promote {n} --to dev --version {previous} (the tag dev ran before)")
+    r.emit(False, ns.json)
+    return 0
+
+
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
-    if len(ns.items) < (2 if ns.all else 3):
-        raise PlatformError("usage: promote <service...> <from> <to>   |   promote --all <from> <to>")
-    *names, frm, to = ns.items
+    names = list(ns.items)
+    if not ns.to or (not names and not ns.all):
+        raise PlatformError("promote names its target with --to: cplat instance promote <component...|--all> --to <env>")
+    to = ns.to
+    if to not in model.ENVIRONMENTS:
+        raise PlatformError(f"unknown environment '{to}' (environments: {', '.join(model.ENVIRONMENTS)})")
+    if to == model.ENVIRONMENTS[0] and not ns.version:
+        raise PlatformError(f"{to} is the first environment: nothing is promoted to it (dev follows main)")
+    frm = model.ENVIRONMENTS[model.ENVIRONMENTS.index(to) - 1]
     if ns.all and names:
-        raise PlatformError("--all and explicit services are mutually exclusive")
-    for e in (frm, to):
-        if e not in ORDER:
-            raise PlatformError(f"unknown environment '{e}'", hint="dev, staging or prod")
-    if ORDER.index(to) <= ORDER.index(frm):
-        raise PlatformError(f"cannot promote {frm} → {to}", hint="promotion only moves forward: dev → staging → prod (dev tracks the service's main branch)")
-    if to == "dev":
-        raise PlatformError("dev is not a promotion target")
+        raise PlatformError("--all and explicit components are mutually exclusive")
     if ns.accept_digest_mismatch is not None and not _reason_ok(ns.accept_digest_mismatch):
         raise PlatformError("--accept-digest-mismatch needs a reason of at least one sentence (3 or more words, ending in . ! or ?)",
                             hint='e.g. --accept-digest-mismatch "The release was rebuilt on purpose."')
     if ns.version and len(names) > 1:
-        raise PlatformError("--version applies to a single service")
+        raise PlatformError("--version applies to a single component")
 
     repo = Path(ns.repo_dir).resolve()
     app_dir = gitops.find_app(repo, ns.app)
     if not ns.dry_run:
         gitops.require_clean(repo)
+    if to == model.ENVIRONMENTS[0]:
+        return _rollback_dev(ns, repo, app_dir, names)
     y, data = gitops.load(app_dir)
-    services = gitops.services_of(data)
-    by_name = {s["name"]: s for s in services}
+    m = model.load_dir(app_dir)
+    by_name = {}
+    for c in m.components:
+        if c.type == "library":
+            continue
+        by_name[c.name] = {"name": c.name, "repo": c.repo, "image": c.image}
     if ns.all:
-        names = [s["name"] for s in services if frm in (s.get("environments") or ["dev"])]
+        names = [c for c in by_name if m.instance(c, frm)]
         if not names:
-            raise PlatformError(f"no service is in {frm}")
+            raise PlatformError(f"no component is in {frm}")
     r = Report(title=f"promote {', '.join(names)}: {frm} → {to} ({app_dir.name})")
     plan: list[tuple[str, str]] = []
     checks: dict[str, dict] = {}
@@ -169,10 +213,11 @@ def main(argv: list[str]) -> int:
     summaries: dict[str, evidence.Evidence] = {}
     for n in names:
         svc = by_name.get(n)
-        if svc is None:
-            raise PlatformError(f"{n} is not in services.yaml", hint="current: " + ", ".join(by_name))
-        if frm not in (svc.get("environments") or ["dev"]):
-            raise PlatformError(f"{n} is not in {frm} yet", hint=f"promote it through the earlier environment first")
+        if m.instance(n, frm) is None:
+            runs = ", ".join(i.environment for i in m.instances_of(n)) or "none"
+            if m.component(n) is None:
+                raise PlatformError(f"{n} is not a component of {m.system}", hint="components: " + ", ".join(c.name for c in m.components))
+            raise PlatformError(f"{n} has no instance in {frm} (it runs in: {runs})", hint=f"promote it through {frm} first")
         tag, what = pick_tag(svc, to, ns)
         if not ns.no_verify and to == "staging":
             have = image_tags(svc["image"])
@@ -182,7 +227,7 @@ def main(argv: list[str]) -> int:
                 raise PlatformError(f"image {svc['image']}:{tag} does not exist yet", hint=f"wait for CI on {svc['repo']}'s main to finish (it publishes sha-<40> tags), or pass --sha of a built commit")
         elif not ns.no_verify and to == "prod" and tag not in image_tags(svc["image"]):
             raise PlatformError(f"image {svc['image']}:{tag} does not exist", hint=f"the release v{tag} must have been built by CI in {svc['repo']}")
-        staging_tag = _staging_tag(app_dir, n) if to == "prod" else None
+        staging_tag = (inst.tag if (inst := m.instance(n, "staging")) else None) if to == "prod" else None
         rec = None
         if to == "prod" and not ns.no_verify:
             rec = checks[n] = _check_digests(svc, staging_tag, tag)
@@ -214,7 +259,7 @@ def main(argv: list[str]) -> int:
         raise PlatformError("\n".join(problems), hint="re-publish the release from the tested image with the release job (it re-tags "
                             "the staging sha-<40> image), or promote the release whose image is the staging one; "
                             "a mismatch alone can be accepted with --accept-digest-mismatch \"<reason>\"")
-    r.will_do.append("add the environment to the service's `environments`, regenerate manifests, pin the tag")
+    r.will_do.append(f"add `instances.{to}` to each component, regenerate manifests, pin the tag")
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch promote/…)")
     if summaries:
@@ -226,19 +271,15 @@ def main(argv: list[str]) -> int:
         return 0
 
     for n, _ in plan:
-        envs = by_name[n].get("environments")
-        if envs is None:
-            by_name[n]["environments"] = ["dev"]
-            envs = by_name[n]["environments"]
-        if to not in envs:
-            envs.append(to)
+        entry = gitops.components_of(data)[n]
+        if entry.get("instances") is None:
+            entry["instances"] = {"dev": {}}
+        if to not in entry["instances"]:
+            entry["instances"][to] = {}
     gitops.save(app_dir, y, data)
     gitops.render(repo)
     for n, tag in plan:  # render created the overlay at `latest`; pin the tag (render preserves it from now on)
-        k = app_dir / "overlays" / to / n / "kustomization.yaml"
-        doc = yaml.safe_load(k.read_text())
-        doc["images"][0]["newTag"] = tag
-        k.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False))
+        model.write_pin(app_dir, to, n, tag)
     gitops.render(repo)  # idempotent: proves the pin survives a re-render
     if accepted:
         r.did.append(accepted)

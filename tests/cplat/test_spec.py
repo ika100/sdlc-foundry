@@ -210,7 +210,7 @@ def test_done_needs_a_passing_verification(tmp_path):
     s = make(tmp_path, status="building")
     with pytest.raises(core.PlatformError, match="has no verification.md") as e:
         spec.set_status(s, "done", None)
-    assert "/svc:verify 007" in e.value.hint
+    assert "/component:verify 007" in e.value.hint
     (s.dir / "verification.md").write_text(PASSING.replace("pass", "fail"))
     with pytest.raises(core.PlatformError, match="does not say"):
         spec.set_status(spec.read(s.dir), "done", None)
@@ -238,19 +238,19 @@ def test_product_specs_need_no_verification(tmp_path):
 
 
 def test_done_without_verification_points_to_verify(tmp_path):
-    """AC-068.3: specs that were closed without evidence show `/svc:verify` as their next step; verified ones show none."""
+    """AC-068.3: specs that were closed without evidence show `/component:verify` as their next step; verified ones show none."""
     s = make(tmp_path, status="done")
-    assert spec.next_step(s) == "/svc:verify 007"
+    assert spec.next_step(s) == "/component:verify 007"
     (s.dir / "verification.md").write_text(PASSING)
     assert spec.next_step(spec.read(s.dir)) == "—"
 
 
 @pytest.mark.parametrize("kw, step", [
-    ({"questions": "- ?"}, "/svc:spec --amend 007"),
-    ({}, "/svc:spec approve 007"),
-    ({"status": "approved", "plan": False}, "/svc:plan 007"),
-    ({"status": "building"}, "/svc:build 007"),
-    ({"status": "done"}, "/svc:verify 007"),
+    ({"questions": "- ?"}, "/component:spec --amend 007"),
+    ({}, "/component:spec approve 007"),
+    ({"status": "approved", "plan": False}, "/component:plan 007"),
+    ({"status": "building"}, "/component:build 007"),
+    ({"status": "done"}, "/component:verify 007"),
 ])
 def test_next_step(tmp_path, kw, step):
     assert spec.next_step(make(tmp_path, **kw)) == step
@@ -455,7 +455,7 @@ def test_a_repo_spec_is_sliced_from_the_product_plan(tmp_path, product):
     s = spec.new_from_plan(repo, product / "docs" / "plan" / "012-billing.md", "shop-api", shape="service-python")
     assert s.meta == {"spec_id": "001-checkout-and-webhook-api", "title": "Checkout and webhook API", "status": "draft",
                       "priority": "P0", "shape": "service-python", "parent": "acme/shop-gitops:012-billing"}
-    ctx = spec.sections(s.body)["product context"]
+    ctx = spec.sections(s.body)["system context"]
     assert "**AC-012.1**" in ctx and "**AC-012.2**" in ctx and "AC-012.3" not in ctx
     assert "POST /billing/checkout" in ctx and "existing orders table" in ctx
     assert spec.sections(s.body)["problem"].strip() == "Customers cannot pay."
@@ -473,14 +473,14 @@ def test_slice_of_a_legacy_plan_uses_its_prompt(tmp_path, product):
     legacy.write_text(PRODUCT_PLAN.replace("spec: 012-billing\n", "").replace("plan_id: 012-billing", "plan_id: old"))
     sl = spec.slice_from_plan(legacy, "shop-api")
     assert sl["parent"] == "acme/shop-gitops:old" and "existing orders table" in sl["context"]
-    assert "Product criteria" not in sl["context"]
+    assert "System criteria" not in sl["context"]
 
 
 def test_product_specs_point_to_the_app_commands(product):
     s = spec.read(product / "docs" / "specs" / "012-billing")
-    assert spec.next_step(s) == "/app:build 012"
+    assert spec.next_step(s) == "/system:ship 012"
     (product / "docs" / "plan" / "012-billing.md").unlink()
-    assert spec.next_step(s) == "/app:plan 012"
+    assert spec.next_step(s) == "/system:plan 012"
 
 
 # ---------------- ci (STORY-041) ----------------
@@ -634,6 +634,30 @@ def test_test_diff_still_fails_on_a_changed_test(tmp_path, capsys):
     assert "tests/test_x.py: changed" in out and "plan.md" not in out
 
 
+def _add(root, rel, text):
+    import subprocess
+    (root / rel).write_text(text)
+    subprocess.run(["git", "-C", str(root), "add", rel], check=True, capture_output=True)
+
+
+def test_test_diff_leaves_out_a_new_test_file_the_plan_creates(tmp_path, monkeypatch):
+    """A file the plan's tasks create after the red commit is the build's own, not a changed acceptance test."""
+    d = _committed_repo(tmp_path)
+    monkeypatch.setattr(spec, "test_globs", lambda shape: ["tests/*"])
+    plan = d / "plan.md"
+    plan.write_text(plan.read_text().replace("files: [b.py]", "files: [b.py, tests/e2e.sh]"))
+    _add(tmp_path, "tests/e2e.sh", "# AC-007.2: the alert fires end to end\n")
+    assert spec.test_diff(tmp_path, "HEAD", []) == {}
+
+
+def test_test_diff_still_flags_a_new_test_file_no_task_lists(tmp_path, monkeypatch):
+    """A new file naming a criterion that no task of the plan lists is still reported."""
+    _committed_repo(tmp_path)
+    monkeypatch.setattr(spec, "test_globs", lambda shape: ["tests/*"])
+    _add(tmp_path, "tests/test_y.py", "def test_y():  # AC-007.1\n    pass\n")
+    assert spec.test_diff(tmp_path, "HEAD", []) == {"tests/test_y.py": (False, "new or deleted file")}
+
+
 def test_test_diff_never_selects_docs_even_under_broad_globs(tmp_path, monkeypatch):
     """AC-063.3: without a recorded shape (default globs) nothing under docs/ or *.md is selected."""
     d = _committed_repo(tmp_path)
@@ -652,10 +676,10 @@ def _with_gitops_entry(product):
     summary: wiring
     acs: [AC-012.1]
     gitops:
-      - {addon: postgres}
-      - {uses: postgres, service: shop-api}
+      - {resource: postgres}
+      - {uses: postgres, component: shop-api}
       - {expose: shop-web, host: shop}
-      - {env: {API_URL: 'http://shop-api'}, service: shop-web}
+      - {env: {API_URL: 'http://shop-api'}, component: shop-web}
     depends_on: []
     done: false
 gitops_pin: []""", 1).replace("repos:\n", "repos:\n", 1))
@@ -667,16 +691,16 @@ def test_the_slice_lists_what_the_product_provides(tmp_path, product):
     plan = _with_gitops_entry(product)
     api = spec.slice_from_plan(plan, "shop-api")["context"]
     web = spec.slice_from_plan(plan, "shop-web")["context"]
-    provided_api = api.split("### Provided by the product", 1)[1]
+    provided_api = api.split("### Provided by the system", 1)[1]
     assert "postgres" in provided_api and "DATABASE_URL" in provided_api and "PGPASSWORD" in provided_api
     assert "API_URL" not in provided_api
-    provided_web = web.split("### Provided by the product", 1)[1]
+    provided_web = web.split("### Provided by the system", 1)[1]
     assert "API_URL=http://shop-api" in provided_web and "shop" in provided_web and "DATABASE_URL" not in provided_web
 
 
 def test_no_gitops_operations_means_no_provided_section(tmp_path, product):
     """AC-052.1"""
-    assert "Provided by the product" not in spec.slice_from_plan(product / "docs" / "plan" / "012-billing.md", "shop-api")["context"]
+    assert "Provided by the system" not in spec.slice_from_plan(product / "docs" / "plan" / "012-billing.md", "shop-api")["context"]
 
 
 @pytest.mark.parametrize("front, expect", [
