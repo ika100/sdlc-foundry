@@ -5,7 +5,7 @@ A cluster repo owns what several systems on one cluster share: the operators, Ex
 ## Create a cluster repo
 
 1. Run `/cluster:new <name>`. It creates a private repo from the `cluster-gitops` shape.
-2. Edit `cluster.yaml`. List the operators the cluster installs (`operators: [cloudnative-pg, external-secrets]`); add `nack` if any system on the cluster runs an in-cluster broker (`type: broker`), since NACK creates its streams and consumers; add `secretStore` only if you do not want the default `platform-secrets` store. Run `devbox run render` and commit the result under `cluster/`.
+2. Edit `cluster.yaml`. List the operators the cluster installs (`operators: [cloudnative-pg, external-secrets]`); add `nack` if any system on the cluster runs an in-cluster broker (`type: broker`), since NACK creates its streams and consumers; add `keda` if any instance scales on a queue (`scale.on.consumes` or `scale.on.cache`); add `metrics-server` only on a cluster that serves no resource metrics, where `cpu` or `memory` scaling needs it (the system's `resource_metrics: install`); add `secretStore` only if you do not want the default `platform-secrets` store. Run `devbox run render` and commit the result under `cluster/`.
 3. Let CI read the systems: `gh secret set SYSTEMS_TOKEN -R <org>/<name>`, a fine-grained token with Contents: read on the system repos.
 4. Bootstrap once per cluster: `KUBE_CONTEXT=<ctx> REPO_TOKEN=<read-only token> devbox run bootstrap`. Locally, run `devbox run cluster-up`; it prints the `kubectl` and `k9s` commands to look at Argo CD.
 

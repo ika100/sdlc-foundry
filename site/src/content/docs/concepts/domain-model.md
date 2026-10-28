@@ -66,6 +66,10 @@ resources:
     instances: {prod: {replicas: 3, storage: 20Gi}}
 ```
 
+## Scaling an instance
+
+`scale` is an Instance property: `scale: {min: 0, max: 5, on: {consumes: jobs, lag: 10}}` lets the autoscaler choose the replicas between `min` and `max`, instead of a fixed `replicas` (the two exclude each other). The trigger is `cpu`, `memory`, a queue of an events API (`consumes` and `lag`) or a cache list (`cache`, `list`, `length`); only queue triggers may scale to zero. A component's `scale` is the default of its instances, and an instance's `scale` replaces it. The platform renders a HorizontalPodAutoscaler or a KEDA ScaledObject, derives the environment's `autoscaling`, and Argo CD leaves the replica count alone. See the [domain model guide](/sdlc-foundry/guides/domain-model/) for the rules.
+
 ## Commands follow the nouns
 
 Every slash command names the noun it acts on, and the same verbs work for a system and for a component.

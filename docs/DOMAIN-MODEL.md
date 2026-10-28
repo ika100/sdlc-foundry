@@ -144,10 +144,10 @@ resources:
 |---|---|
 | top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries`, `autonomy` (only `paused`) |
 | `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `backup`, `autonomy` |
-| service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances` |
+| service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances`, `scale` |
 | external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote` and `autonomy`) |
 | library component | `type`, `lang`, `repo`, `provides`, `consumes` |
-| `components.<c>.instances.<env>` | `replicas`, `resources`, `env`, `promote`, `secrets`, `autonomy` (only `max`) |
+| `components.<c>.instances.<env>` | `replicas`, `resources`, `env`, `promote`, `secrets`, `autonomy` (only `max`), `scale` |
 | `apis.<api>` | `type`: `openapi`, `grpc`, `graphql` or `events`; an events API also takes `broker` (`apis.<api>.broker`, the name of a broker resource) |
 | `resources.<name>` | `type`, `external`, `remote`, `version`, `replicas`, `storage`, `resources`, `instances` |
 | `resources.<name>.remote` | `path`, `refreshInterval`; on a bucket also `s3` (`endpoint`, `bucket`, `region`, `forcePathStyle`) |
@@ -210,6 +210,51 @@ asyncio.run(main())
 - `operators: owner` on an environment (the only value) says the cluster owner installs the operators there. Otherwise the platform installs them from the repo's `operators/` folder (`operators/root.yaml`, applied once per cluster with `devbox run bootstrap`; `cluster-up` does it locally).
 - `autonomy` (optional, off by default: every environment is at `observe`) says what an engine may do on its own in an Environment: `level` (`observe`, `advise`, `propose`, `act`, `improve`; prod at most `act`), `engine`, `autoMerge`, `riskGate`, `budget`, `window` and `undoWindow`. On an Instance, `autonomy: {max: <level>}` can only lower it; the top-level `autonomy: {paused: true}` pauses every environment. A system that declares any of it also gets `applications/<system>/autonomy.json`, which an engine reads. `/system:autonomy` shows and changes it; every key and default is in [autonomy.md](autonomy.md).
 - Every name in `uses` is a resource or a library of the system; an API has exactly one provider.
+
+### Scaling an instance
+
+An instance can scale between a minimum and a maximum number of replicas instead of running a fixed count (spec 120). `scale` is an Instance property. Written on `components.<c>`, it is the default of every instance of that component that has neither `scale` nor `replicas`; an instance `scale` replaces the component's as a whole, key by key nothing is merged. `scale` and `replicas` exclude each other on one level (the render refuses both: `replicas` is a fixed number, `scale` lets the autoscaler choose), and `component set --replicas` is refused on a scaled instance. An external component takes no `scale`.
+
+`scale` has `min` (0 to `max`, default 1), `max` (1 to 20, required) and `on` (required, exactly one trigger). The four trigger forms (`on` is written in quotes in the examples so that YAML 1.1 readers do not turn it into `true`; the renderer accepts it either way):
+
+```yaml
+components:
+  web:
+    instances:
+      prod:
+        scale: {min: 2, max: 10, "on": {cpu: 70}}       # average CPU use, in percent of the CPU request
+```
+
+```yaml
+components:
+  report:
+    instances:
+      prod:
+        scale: {max: 6, "on": {memory: 80}}             # average memory use, in percent of the memory request
+```
+
+```yaml
+components:
+  worker:
+    consumes: [jobs]
+    instances:
+      dev:
+        scale: {min: 0, max: 5, "on": {consumes: jobs, lag: 10}}   # one replica per 10 pending messages of the events API jobs
+```
+
+```yaml
+components:
+  mailer:
+    uses: [sessions]
+    scale: {min: 1, max: 4, "on": {cache: sessions, list: jobs, length: 10}}   # one replica per 10 entries of the cache list jobs
+```
+
+- Resource triggers. `cpu` and `memory` render a plain HorizontalPodAutoscaler; the instance needs the matching resource request. They need a metrics source: the cluster repo declares it with `resource_metrics: provided | install` (default `provided`, the cluster already serves resource metrics; `install` adds the pinned metrics-server as an operator, `/platform:doctor` checks it).
+- Queue triggers. `consumes` (the lag is the pending plus the unacknowledged messages of the consumer, read from the broker's monitoring endpoint, which needs no credentials) and `cache` (the length of a list, read with the cache's own credentials) render a KEDA `ScaledObject`, and a `TriggerAuthentication` for a cache. KEDA is a platform operator, pinned and installed per cluster like NACK: `operators/apps/keda.yaml` appears when an instance has a queue trigger, `operators: owner` leaves it to the cluster owner, and `/platform:doctor` has a row `operator keda`. An external broker has no monitoring endpoint in its contract, so a `consumes` trigger on one is refused.
+- Scale to zero. `min: 0` is allowed for queue triggers only, since a CPU trigger has nothing to measure at zero replicas. It is refused for a component that is exposed or provides a request API (openapi, grpc or graphql), because a request would find no pod. Zero replicas are woken within a minute of the first message.
+- Timings. The queue is polled every 15 seconds. Scaling up follows the load at once; scaling down waits: a queue-scaled instance returns to its minimum, or to zero, between 315 and 345 seconds (about 5 minutes) after the queue is empty.
+- `autoscaling`. The environment property `autoscaling` is derived: it is true when an instance there is scaled. It is exposed in `/system:model` and `/system:status`, which shows the replica count and bounds of a scaled instance. Setting `environments.<env>.autoscaling` yourself fails with an unknown key.
+- Argo CD. A scaled Deployment renders `replicas: <min>`, and the environment's ApplicationSet carries an `ignoreDifferences` entry for `/spec/replicas` of each scaled Deployment, so Argo CD does not undo the autoscaler and the application stays Synced. A render that drops `scale` removes the autoscaler object and the entry (ADR-066, ADR-067).
 
 ## Commands follow the nouns
 
