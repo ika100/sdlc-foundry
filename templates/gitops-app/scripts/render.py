@@ -10,6 +10,10 @@ The GitOps repo owns every manifest. applications/<system>/system.yaml is the on
   applications/<system>/addons/<env>/<resource>/               cluster.yaml, kustomization.yaml (only where a running component `uses` the resource)
   applications/<system>/policies/<env>/                        policy.yaml, kustomization.yaml (Kyverno guard rails, unless `policy: off`)
   applications/<system>/autonomy.json                         only when system.yaml declares autonomy (spec 124): what an engine reads
+  operators/                                                   Argo CD applications of the operators the system needs (versions table); with the answer
+                                                               property_operators: install (.copier-answers.yml, default owner) also External Secrets,
+                                                               Kyverno and LGTM (operators/apps/lgtm.yaml, operators/lgtm/); never for operators: owner
+  applications/<system>/addons/<env>/<db>/restore-state.yaml  written by `cplat resource restore`/`upgrade`: clusters and archives (server, major)
   bootstrap/<system>-root.yaml                                 root Argo Application (app-of-apps), applied once by a human
 
 A component only runs in the environments that are keys of its `instances` (none = dev), so a new component never reaches
@@ -90,7 +94,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
   resources:                         # any number, each named, typed (database, bucket, cache, broker)
     orders-db:                       # name: lowercase letters, digits, hyphens; at most 30 characters; not a component name
       type: database                 # required
-      version: 17                    # 15 | 16 | 17 | 18 (default 17)
+      version: 17                    # 15 | 16 | 17 | 18 (default 17); instances.<env>.version sets one environment's major (spec 121)
       replicas: 1
       storage: 1Gi
       resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 512Mi}}
@@ -2807,6 +2811,8 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
                 if "external" not in s and any(e not in owned and s["_eff"][e].get("scale") and s["_eff"][e]["scale"]["trigger"] in ("cpu", "memory")
                                                for e in s["environments"]):
                     needed.add("metrics-server")
+        if ans.get("property_operators", "owner") == "install":      # AC-121.17: a missing answer reads as owner
+            needed |= property_operators(system, owned)
     if not needed:
         return {}
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
@@ -2824,7 +2830,62 @@ def operator_files(apps: list[Path], ans: dict) -> dict[Path, str]:
         if name not in needed:
             continue
         files[base / "apps" / f"{name}.yaml"] = dump(operator_application(name, server))
+    if "lgtm" in needed:
+        files[base / "apps" / "lgtm.yaml"] = dump(lgtm_application(repo, server))
+        for fname, doc in lgtm_manifests().items():
+            files[base / "lgtm" / fname] = dump(doc)
     return files
+
+
+def property_operators(system: dict, owned: dict) -> set[str]:
+    """External Secrets, Kyverno and LGTM for the environments that are not owned (AC-121.17); only with `property_operators: install`."""
+    needed: set[str] = set()
+    cfg = system["cfg"]
+    for env in ENVS:
+        if env in owned:
+            continue
+        running = [s for s in system["services"] if env in envs_of(s)]
+        if not running:
+            continue
+        comps = [s for s in running if "external" not in s]
+        if (any(at(s, env).get("secrets") or at(s, env).get("secretRefs") for s in comps)
+                or any(e == env and (ext or typ in ("bucket", "cache", "broker")) for _, e, typ, ext in resource_instances(system))
+                or cfg["backup"].get(env)):
+            needed.add("external-secrets")
+        if cfg["policy"][env] != "Off":
+            needed.add("kyverno")
+        if (cfg["observability"].get(env) or {}).get("ui") == "lgtm":
+            needed.add("lgtm")
+    return needed
+
+
+def lgtm_application(repo: str, server: str) -> dict:
+    """The dev Grafana stack as an Argo CD application over plain manifests in operators/lgtm/ (not a chart; no finalizer)."""
+    return {
+        "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+        "metadata": {"name": "operator-lgtm", "namespace": "argocd",
+                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+        "spec": {"project": "default", "source": {"repoURL": repo, "targetRevision": "main", "path": "operators/lgtm"},
+                 "destination": {"server": server, "namespace": "observability"},
+                 "syncPolicy": {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}}
+
+
+def lgtm_manifests() -> dict[str, dict]:
+    """deployment.yaml, service.yaml and kustomization.yaml of operators/lgtm/, as local-cluster.sh applies them (no dashboards, no route)."""
+    ports = [("grafana", 3000), ("otlp-grpc", 4317), ("otlp-http", 4318), ("prometheus", 9090)]
+    return {
+        "deployment.yaml": {
+            "apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "lgtm", "namespace": "observability", "labels": {"app": "lgtm"}},
+            "spec": {"replicas": 1, "selector": {"matchLabels": {"app": "lgtm"}},
+                     "template": {"metadata": {"labels": {"app": "lgtm"}}, "spec": {"containers": [{
+                         "name": "lgtm", "image": LGTM_IMAGE, "ports": [{"name": n, "containerPort": p} for n, p in ports],
+                         "readinessProbe": {"httpGet": {"path": "/api/health", "port": "grafana"}, "initialDelaySeconds": 20, "periodSeconds": 5},
+                         "resources": {"requests": {"cpu": "200m", "memory": "512Mi"}, "limits": {"memory": "2Gi"}}}]}}}},
+        "service.yaml": {
+            "apiVersion": "v1", "kind": "Service", "metadata": {"name": "lgtm", "namespace": "observability"},
+            "spec": {"selector": {"app": "lgtm"}, "ports": [{"name": n, "port": p, "targetPort": n} for n, p in ports]}},
+        "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["deployment.yaml", "service.yaml"]},
+    }
 
 
 BROKER_STALE = re.compile(r"^(stream-.+|consumer-.+|externalsecret-.+)\.yaml$")     # broker files that are no longer rendered (spec 119)
