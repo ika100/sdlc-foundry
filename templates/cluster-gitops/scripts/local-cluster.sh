@@ -459,8 +459,8 @@ spec:
   createNamespace: true
 YAML
       for _ in $(seq 1 60); do k get crd streams.jetstream.nats.io >/dev/null 2>&1 && break; sleep 3; done
-      for _ in $(seq 1 100); do [ -n "$(k -n nack get deploy -l app.kubernetes.io/name=nack -o name 2>/dev/null)" ] && break; sleep 3; done
-      k -n nack rollout status deploy -l app.kubernetes.io/name=nack --timeout=300s >/dev/null
+      for _ in $(seq 1 100); do [ -n "$(k -n nack get deploy -l app=nack -o name 2>/dev/null)" ] && break; sleep 3; done
+      k -n nack rollout status deploy -l app=nack --timeout=300s >/dev/null
     fi
 
     if [ "$with_lgtm" = 1 ]; then

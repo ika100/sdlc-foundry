@@ -19,7 +19,8 @@ DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {
 CHART = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nats", "chart_version": "2.15.1"}
 NATS_IMAGES = {"2.14": "nats:2.14.9-alpine", "2.15": "nats:2.15.2-alpine"}
 NACK = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nack", "chart_version": "0.35.0", "operator_version": "0.24.0",
-        "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io"}
+        "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io",
+        "selector": "app=nack"}  # spec 119 CI: the chart's legacy names label the Deployment app: nack
 RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
 SEC_CTX = {"runAsNonRoot": True, "runAsUser": 1000, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
 # the files of the default system's broker directory (users api and web, stream orders, consumer web), sorted

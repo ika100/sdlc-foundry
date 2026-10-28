@@ -794,7 +794,7 @@ nack_pin=$(sed -n 's/^[[:space:]]*targetRevision:[[:space:]]*["'"'"']\{0,1\}\([^
 nack_have=$(kubectl --context k3d-$cluster -n kube-system get helmcharts.helm.cattle.io nack -o jsonpath='{.spec.version}' 2>/dev/null || true)
 [ "$nack_pin" = 0.35.0 ] || nfail "operators/apps/nack.yaml pins '$nack_pin', expected the NACK chart 0.35.0"
 [ "$nack_have" = "$nack_pin" ] || nfail "the installed NACK chart is '$nack_have', operators/apps/nack.yaml pins '$nack_pin'"
-nack_image=$(kubectl --context k3d-$cluster -n nack get deploy -l app.kubernetes.io/name=nack -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null || true)
+nack_image=$(kubectl --context k3d-$cluster -n nack get deploy -l app=nack -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null || true)
 [ "${nack_image##*:}" = 0.24.0 ] || nfail "the NACK Deployment runs '$nack_image', expected the tag 0.24.0"
 kubectl --context k3d-$cluster get crd streams.jetstream.nats.io consumers.jetstream.nats.io accounts.jetstream.nats.io >/dev/null || nfail "the NACK CRDs are not installed"
 for f in password-generator.yaml nack-secret.yaml externalsecret-e2e-api.yaml externalsecret-e2e-web.yaml server.yaml account.yaml \

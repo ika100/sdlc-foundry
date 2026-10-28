@@ -483,7 +483,7 @@ def kube(monkeypatch, nack=None, brokers=None, kubectl=True):
             ns = cmd[cmd.index("-n") + 1] if "-n" in cmd else ""
             have = brokers.get(ns)
             return SimpleNamespace(stdout=have or "", stderr="", returncode=0 if have else 1)
-        if "app.kubernetes.io/name=nack" in text and nack:
+        if "app=nack" in text and nack:  # spec 119 CI: the chart labels its Deployment app: nack
             return SimpleNamespace(stdout=f"natsio/jetstream-controller:{nack}", stderr="", returncode=0)
         return SimpleNamespace(stdout="", stderr="", returncode=0)
     monkeypatch.setattr(doctor, "run", fake_run)
@@ -630,7 +630,8 @@ def test_bootstrap_waits_for_the_nack_crd_ac_119_22():  # AC-119.22
 def test_cluster_up_installs_or_waits_for_nack_ac_119_22():  # AC-119.22
     text = (T / "scripts" / "local-cluster.sh").read_text()
     for needle in ("WITH_NACK", "NACK_VERSION", "operators/apps/nack.yaml", "0.35.0", "https://nats-io.github.io/k8s/helm/charts", "streams.jetstream.nats.io",
-                   "deploy/nack", "app.kubernetes.io/name=nack", 'with_nack" = 1', "operators/root.yaml", "targetNamespace: nack", "name: nack"):
+                   "deploy/nack", "app=nack",  # spec 119 CI: the chart's legacy label
+                   'with_nack" = 1', "operators/root.yaml", "targetNamespace: nack", "name: nack"):
         assert needle in text, f"local-cluster.sh lacks {needle!r}"
 
 

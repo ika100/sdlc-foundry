@@ -431,7 +431,8 @@ def _operator_row(models: list, needs: list[str], op_name: str, chart_name: str)
     op = _operators()[op_name]
     want, chart = op["operator_version"], op["chart_version"]
     name = f"operator {op_name}"
-    p = run(["kubectl", "get", "deploy", "-A", "-l", f"app.kubernetes.io/name={chart_name}", "-o",
+    selector = op.get("selector") or f"app.kubernetes.io/name={chart_name}"   # nack's chart labels its Deployment app: nack
+    p = run(["kubectl", "get", "deploy", "-A", "-l", selector, "-o",
              "jsonpath={.items[*].spec.template.spec.containers[*].image}"], check=False)
     images = (p.stdout or "").split()
     have = images[0].split("@")[0].rsplit(":", 1)[-1] if images and ":" in images[0].split("@")[0].rsplit("/", 1)[-1] else None

@@ -361,13 +361,14 @@ NATS_IMAGES = {                    # matches ^nats:\d+\.\d+\.\d+-alpine(@sha256:
 BROKER_VERSIONS = ("2.14", "2.15")  # default "2.15"
 BROKER_DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
 OPERATORS["nack"] = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nack", "chart_version": "0.35.0",
-                     "operator_version": "0.24.0", "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io"}
+                     "operator_version": "0.24.0", "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io",
+                     "selector": "app=nack"}
 OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}
 ```
 
 `nack` is appended last to `OPERATORS` (after `velero`). Its application is 058/125's `operator_application("nack", server)` without
-`values`: the chart then passes `-crd-connect` to the controller. The doctor selector is the default `app.kubernetes.io/name=nack`
-(the chart's Deployment `nack`, image `natsio/jetstream-controller:0.24.0`). `NATS_CHART` is not an operator (it is per broker
+`values`: the chart then passes `-crd-connect` to the controller. The doctor selector is `app=nack`, not the default `app.kubernetes.io/name=nack`: the chart's `useLegacyNames` defaults to `true`
+and labels its Deployment `app: <release>` (seen in CI; read in nack 0.35.0's `_helpers.tpl`) (the chart's Deployment `nack`, image `natsio/jetstream-controller:0.24.0`). `NATS_CHART` is not an operator (it is per broker
 instance, never in `operators/` or `cluster.yaml`). The config reloader image (`natsio/nats-server-config-reloader:0.24.0`) is pinned by
 the chart pin. Changing any of these follows spec 121.
 
