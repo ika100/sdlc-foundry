@@ -105,6 +105,11 @@ def _retarget_secret(secret: dict, old: str, new: str) -> list[dict]:
 def _major_before_upgrade(state: dict, server: str) -> tuple[int, int] | None:
     """(major of the archive `server`, major of the next archive) when the restore source is an archive before a later upgrade."""
     archives = state.get("archives") or []
+    if archives and server not in {a.get("server") for a in archives}:
+        # spec 121 (changed after review, AC-121.16): a server missing from the archives predates the first major step
+        if len(archives) > 1 and int(archives[1]["major"]) > int(archives[0]["major"]):
+            return int(archives[0]["major"]), int(archives[1]["major"])
+        return None
     for i, a in enumerate(archives[:-1]):
         if a.get("server") == server and int(archives[i + 1]["major"]) > int(a["major"]):
             return int(a["major"]), int(archives[i + 1]["major"])

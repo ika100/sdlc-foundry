@@ -2211,11 +2211,15 @@ def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | N
     # a physical backup only starts on the major of its archive (spec 121, changed after review): a previous cluster runs the major of
     # the archive it wrote to (its `archive`, recorded at the switch); a restored generation runs the major of its source archive; the
     # active generation keeps its source archive's major only until a major step appended a later archive with the effective major
-    previous_major = next((a["major"] for a in archives or [] if a["server"] == archive), None) if role == "previous" and archive else None
+    # a server missing from a non-empty `archives` predates the first major step: it ran archives[0]'s major (AC-121.16, changed after review)
+    major_of = lambda server: next((a["major"] for a in archives or [] if a["server"] == server), archives[0]["major"] if archives else None)  # noqa: E731
+    previous_major = major_of(archive) if role == "previous" and archive else None
     if previous_major is not None:
         image = conf["pin"] if previous_major == conf["version"] else POSTGRES_IMAGES[previous_major]
     elif frm is not None and (role == "restored" or not stepped_since(archives or [], cluster or base, conf["version"])):
-        image = next((POSTGRES_IMAGES[a["major"]] for a in archives or [] if a["server"] == frm["server"] and a["major"] != conf["version"]), image)
+        source_major = major_of(frm["server"])
+        if source_major is not None and source_major != conf["version"]:
+            image = POSTGRES_IMAGES[source_major]
     spec: dict = {
         "instances": conf["replicas"],
         "imageName": image,
@@ -2945,12 +2949,15 @@ def archive_notes(app_dir: Path) -> list[str]:
             clusters, archives = read_restore_state(app_dir, env, name)
             active = next(c for c in clusters if c["role"] == "active")
             frm = active.get("from") or {}
-            major = next((a["major"] for a in archives if a["server"] == frm.get("server")), conf["version"])
+            major = next((a["major"] for a in archives if a["server"] == frm.get("server")), archives[0]["major"] if archives and frm else conf["version"])
             if stepped_since(archives, active["name"], conf["version"]):
                 major = conf["version"]      # a major step since the switch: the active generation runs the effective major
             if major != conf["version"]:
                 notes.append(f"note: applications/{app}: {name} in {env} runs {active['name']} on {major} (restored from before the upgrade to "
-                             f"{conf['version']}); set resources.{name}.instances.{env}.version: {major}, "
+                             f"{conf['version']}); "
+                             + (f"discard the previous instance (/resource:restore {name} --env {env} --discard), "
+                                if any(c["role"] in ("previous", "restored") for c in clusters) else "")
+                             + f"set resources.{name}.instances.{env}.version: {major}, "
                              f"then /resource:upgrade {name} --to {conf['version']} --env {env}")
     return notes
 

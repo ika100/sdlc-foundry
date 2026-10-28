@@ -214,6 +214,14 @@ def checks(ns: argparse.Namespace, repo: Path, app_dir: Path, m: model.Model, r,
     if major_step and held:
         raise PlatformError(f"{name} in {env} still runs {env_cfg['pin']} from an earlier platform release; move it to this release's {cur} pin first",
                             hint=f"/resource:upgrade {name} --to {cur} --env {env}")
+    if major_step and typ == "database":      # spec 121 (changed after review, AC-121.16): an open restore is switched or discarded first
+        roles = backupstate.cluster_roles(app_dir.name, name, backupstate.restore_state(app_dir, env, name))
+        role = "restored" if roles["restored"] else "previous" if roles["previous"] else None
+        if role:
+            inst = roles[role] if role == "restored" else roles[role]["name"]
+            alt = f" (or --switch to {inst})" if role == "restored" else ""
+            raise PlatformError(f"{name} in {env} has the {role} instance {inst} from a restore; switch to it or discard it first",
+                                hint=f"/resource:restore {name} --env {env} --discard{alt}")
     if not major_step and not held:
         return f"{name} in {env} already runs {env_cfg['pin']}; nothing to do"
     if major_step and typ == "database":

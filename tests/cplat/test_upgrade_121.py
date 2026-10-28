@@ -541,8 +541,9 @@ def test_a_switched_active_generation_on_an_older_major_prints_the_note_ac_121_1
     (tmp_path / APP / "addons/dev/orders-db/restore-state.yaml").write_text(yaml.safe_dump(state, sort_keys=False))
     p = render(tmp_path)
     assert p.returncode == 0, p.stderr
-    note = ("note: applications/shop: orders-db in dev runs shop-orders-db-g1 on 16 (restored from before the upgrade to 17); set "
-            "resources.orders-db.instances.dev.version: 16, then /resource:upgrade orders-db --to 17 --env dev")  # spec 121 review: one working way forward
+    note = ("note: applications/shop: orders-db in dev runs shop-orders-db-g1 on 16 (restored from before the upgrade to 17); "
+            "discard the previous instance (/resource:restore orders-db --env dev --discard), set "
+            "resources.orders-db.instances.dev.version: 16, then /resource:upgrade orders-db --to 17 --env dev")  # spec 121 review: the working way forward, which discards the previous instance first (a major step is refused while it exists)
     assert note in (p.stdout + p.stderr).splitlines()
     assert cluster(tree(tmp_path), "dev", file="cluster-g1.yaml")["spec"]["imageName"] == PG[16]
 

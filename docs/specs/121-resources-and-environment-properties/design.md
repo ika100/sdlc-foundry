@@ -242,6 +242,7 @@ cluster that becomes `previous`, so both archive apart; the renderer gives a `pr
 active one `archives[-1].server`. Databases without `archives` render as before. The active generation keeps its archive's older
 major image only while `archives[-1]` is that older major; a later major step appends an archive of the effective major, and from then on
 the active cluster renders on the effective major's pin and the note is no longer printed (changed after review, AC-121.16).
+A server missing from a non-empty `archives` predates the first major step and counts as major `archives[0].major`, for the image of a restored, active or previous cluster and for the "data from before the upgrade" line (changed after review, AC-121.16).
 
 `read_restore_state` validates `archives` (a list of mappings with a non-empty `server` and an integer `major` in the table, servers
 unique) with 117's error form `… is not valid (archives: <reason>); take it from git history`.
@@ -306,6 +307,7 @@ table's pin of that major (releasing a hold, AC-121.11). Every check runs before
 | 9 | unsupported jump (AC-121.14) | `<n> in <env>: <cur> → <to> is not a supported upgrade path for <engine>; upgrade to <the highest of UPGRADE_PATHS[cur] below <to>> first` | `/resource:upgrade <n> --to <intermediate> --env <env>` |
 | 10 | earlier environment not ready (AC-121.9) | `<prev> is not ready for <env>: <n> in <prev> <state>` | see below |
 | 11 | held pin before a major step | `<n> in <env> still runs <held ref> from an earlier platform release; move it to this release's <cur> pin first` | `/resource:upgrade <n> --to <cur> --env <env>` |
+| 11a | database major step with a `restored` or `previous` instance in `restore-state.yaml` of `<n>`/`<env>` (changed after review, AC-121.16; a pin move stays allowed) | `<n> in <env> has the <role> instance <name> from a restore; switch to it or discard it first` | `/resource:restore <n> --env <env> --discard` (for `restored` plus ` (or --switch to <name>)`) |
 | 12 | nothing to do | — prints `<n> in <env> already runs <ref>; nothing to do`, exit 0 | |
 | 13 | database major step, no `instances.<env>.backup` (AC-121.12) | `<n> in <env> has no backup: resources.<n>.instances.<env>.backup is required for a major upgrade` | `set it in system.yaml, then /resource:backup <n> --env <env>` |
 | 14 | database major step, `last_success` null or older than 60 minutes | `<n> in <env>: the last successful backup is <time> (more than 60 minutes ago); a major upgrade needs one from the last 60 minutes` (`<time>` = `never` when null) | `take one now: /resource:backup <n> --env <env>` |
