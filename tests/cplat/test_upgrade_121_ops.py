@@ -826,7 +826,7 @@ def description(path) -> str:
 
 
 def test_the_resource_platform_and_system_plugins_are_bumped_in_both_places_ac_121_6():  # AC-121.6
-    assert plugin_versions("resource") == ("1.6.0", "1.6.0")
+    assert plugin_versions("resource") == ("1.6.1", "1.6.1")  # spec 127: 1.6.1
     assert plugin_versions("platform") == ("1.3.0", "1.3.0")
     assert plugin_versions("system") == ("1.5.0", "1.5.0")
 
@@ -901,7 +901,7 @@ def test_the_changelog_lists_the_upgrade_entry_above_scaling_with_every_changed_
     assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", hits[0].splitlines()[0])
     entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"(?i)spec 121|ADR-068", e))
     assert "BREAKING" not in entry
-    for needle in ("ADR-068", "ADR-069", "/resource:upgrade", "property_operators", "1.6.0", "1.3.0", "1.5.0", "Versions", "Action", "/platform:update"):
+    for needle in ("ADR-068", "ADR-069", "/resource:upgrade", "property_operators", "1.6.1", "1.3.0", "1.5.0", "Versions", "Action", "/platform:update"):  # spec 127: resource 1.6.1
         assert needle in hits[0], needle
     assert re.search(r"(?i)spec 121", hits[0]).start() < re.search(r"(?i)spec 120", hits[0]).start(), "the 121 entry sits above the 120 entry"
     for line in ("- `argo-cd` v3.4.12 (new)", "- `k3s` v1.32.5-k3s1 (new)"):

@@ -176,7 +176,8 @@ _DIGESTED = (
     "2.14.9-alpine@sha256:127c5ccbc538a93f53ebb19461dc193130df386c2d6dab8199661a28a30d85bd",
     "2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5")
 UNPIN = {**{f"ghcr.io/cloudnative-pg/postgresql:{_PG[m]}-standard-trixie@sha256:{_PG_DIGEST[m]}": f"ghcr.io/cloudnative-pg/postgresql:{_PG[m].split('-')[0]}"
-            for m in _PG}, **{ref: ref.split("@")[0] for ref in _DIGESTED}}
+            for m in _PG}, **{ref: ref.split("@")[0] for ref in _DIGESTED},
+         "redis://default:{{ .password }}@": "redis://:{{ .password }}@"}   # spec 127: the cache url names its user (AC-127.1)
 
 
 def unpin(g: dict) -> dict:
