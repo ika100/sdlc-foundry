@@ -1,4 +1,5 @@
 """scripts/bump_template_pins.py: bumping pins inside Jinja templates without parsing Jinja (issue #56)."""
+import re
 import shutil
 import subprocess
 import sys
@@ -42,7 +43,7 @@ def java_template(tmp_path):
 def test_bump_updates_the_template_source_and_the_rerender_matches(java_template):
     def fake_updater(cmd, cwd, **_):
         pom = Path(cwd) / "pom.xml"
-        pom.write_text(pom.read_text().replace("<jacoco.version>0.8.15</jacoco.version>", "<jacoco.version>0.8.99</jacoco.version>"))
+        pom.write_text(re.sub(r"<jacoco.version>[^<]+</jacoco.version>", "<jacoco.version>0.8.99</jacoco.version>", pom.read_text()))  # any current pin
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
     changed, skipped = b.bump("service-java", java_template, core.find_copier(), run=fake_updater)
