@@ -578,13 +578,27 @@ def _operator_revisions(repo: Path) -> dict[str, str]:
     return out
 
 
-def render_and_compare(req: dict, repo: Path) -> dict | None:
-    """Re-render with the repo's new renderer (held pins follow from it) and list what moves, per environment; None when nothing does."""
+def _generated_snapshot(repo: Path) -> dict[str, bytes]:
+    out: dict[str, bytes] = {}
+    for top in ("applications", "operators"):
+        for p in sorted((repo / top).rglob("*")) if (repo / top).is_dir() else []:
+            if p.is_file():
+                out[p.relative_to(repo).as_posix()] = p.read_bytes()
+    return out
+
+
+def render_and_compare(req: dict, repo: Path, written: set[str] | None = None) -> dict | None:
+    """Re-render with the repo's new renderer (held pins follow from it) and list what moves, per environment; None when nothing does.
+    `written` (optional) receives every path under applications/ and operators/ the render created or changed: generated output."""
     import upgrade
     mod = upgrade.load_renderer(repo)
     before = _instances(mod, repo)
     ops_before = _operator_revisions(repo)
+    snap = _generated_snapshot(repo) if written is not None else {}
     gitops.render(repo)
+    if written is not None:
+        now = _generated_snapshot(repo)
+        written |= {k for k, v in now.items() if snap.get(k) != v}
     after = _instances(mod, repo)
     ops_after = _operator_revisions(repo)
     order = {e: i for i, e in enumerate(core_envs())}
@@ -778,7 +792,7 @@ def _where_file(path: str) -> str:
 
 
 def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], dropped_gates: list[str], settings: dict,
-          base_root: Path | None, current_extra: str, notes: list[str | None] = ()) -> list[dict]:
+          base_root: Path | None, current_extra: str, notes: list[str | None] = (), generated: frozenset[str] | set[str] = frozenset()) -> list[dict]:
     """Everything the repo had added that the update overwrote (spec 086): empty exactly when nothing was lost."""
     lost: list[dict] = [{"kind": "recipe", "file": "devbox.json", "entry": k, "was": v, "where": WHERE_RECIPE} for k, v in replaced]
     lost += [{"kind": "gate", "file": "devbox.json", "entry": g, "was": None,
@@ -790,7 +804,7 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
             m = re.search(r"re-add.*", note)
             lost.append({"kind": "file", "file": path, "entry": None, "was": None, "where": m.group(0) if m else note})
     for path in modified:
-        if path in NOT_CUSTOMISATION:
+        if path in NOT_CUSTOMISATION or path in generated:   # generated: the update's own re-render wrote it (spec 121)
             continue
         if base_root is not None:
             mine = run(["git", "show", f"HEAD:{path}"], cwd=repo, check=False)
@@ -843,6 +857,7 @@ def execute(req: dict) -> Report:
     for kv in req["data"]:
         cmd += ["--data", kv]
     mig: dict = {"ran": False, "already_migrated": True}
+    generated: set[str] = set()
     try:
         run(cmd, cwd=repo)
         dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
@@ -870,7 +885,7 @@ def execute(req: dict) -> Report:
         elif req["migrate"]:
             r.did.append("already migrated to 5.0: nothing of the migration ran")
         if rendering:
-            versions = render_and_compare(req, repo)
+            versions = render_and_compare(req, repo, generated)
             if versions:
                 r.data["versions"] = versions
                 r.did.append(f"re-rendered with the new renderer; {len(versions['lines'])} version change(s) listed below")
@@ -882,13 +897,13 @@ def execute(req: dict) -> Report:
     if req["migrate"]:
         r.data["migration"] = mig
     try:
-        return _finish(req, r, before, devbox_before, settings_before, had_pin_dev, cur, branch, Path(tmp.name))
+        return _finish(req, r, before, devbox_before, settings_before, had_pin_dev, cur, branch, Path(tmp.name), generated)
     finally:
         tmp.cleanup()
 
 
 def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settings_before: str | None, had_pin_dev: bool,
-            cur: str, branch: str, tmp: Path) -> Report:
+            cur: str, branch: str, tmp: Path, generated: set[str] = frozenset()) -> Report:
     repo: Path = req["repo"]
     answers = repo / ".copier-answers.yml"
     base_root: Path | None = None
@@ -928,7 +943,7 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
         r.did.append(f"already up to date with platform {req['new']} — nothing changed")
         return r
     current_extra = _current_ci_extra(devbox_before)
-    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra, [devbox_note, settings_note])
+    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra, [devbox_note, settings_note], generated)
     lock_step = refresh_devbox_lock(repo, changed)
     if lock_step:
         r.next_steps.append(lock_step)
