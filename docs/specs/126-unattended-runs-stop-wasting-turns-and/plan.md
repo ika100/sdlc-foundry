@@ -38,6 +38,7 @@ tasks:
     covers: [AC-126.13, AC-126.14]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t6
     title: component ship Stop hook — owner on start/resume, gate on stopgate, session in status, code-red evidence
     files: [scripts/cplat/ship.py, tests/cplat/test_ship.py, tests/cplat/test_autoissue_ship.py, tests/cplat/test_ship_escalate_rules.py, tests/cplat/test_runs.py]
