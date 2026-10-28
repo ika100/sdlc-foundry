@@ -1,7 +1,7 @@
 ---
 spec_id: 108-agents-get-a-compact-failure-summary-not
 title: Agents get a compact failure summary, not the full log
-status: approved
+status: done
 priority: P2
 tracks: [139]
 ---
@@ -59,3 +59,5 @@ The scope. A summary is made for every failing command that `cplat quiet` runs (
 - 2026-10-25 open questions answered (suggested answers)
 - 2026-10-25 approved
 - 2026-10-28 editorial: `/svc:build` is `/component:build` since 5.0; reading: the cluster-gitops template (new in 5.x) is outside AC-108.4's six and falls back to the last 40 lines
+- 2026-10-28 building
+- 2026-10-28 done
