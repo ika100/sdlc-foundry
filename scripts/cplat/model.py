@@ -110,6 +110,7 @@ class Environment:
     operators: str | None = None  # "owner" or None
     backup: dict | None = None  # {"to", "schedule", "retention"} (spec 117)
     autonomy: dict = field(default_factory=dict, compare=False)  # spec 124: declared and effective policy
+    autoscaling: str | None = None  # "keda" when a running instance scales on a queue (spec 120)
 
 
 @dataclass(frozen=True)
@@ -184,6 +185,7 @@ class Instance:
     staging_promotion: str
     secrets: tuple[InstanceSecret, ...] = ()
     autonomy: dict = field(default_factory=dict, compare=False)  # spec 124: {"max", "effective"}
+    scale: dict | None = None  # effective {"min", "max", "on"} (spec 120); replicas is None when set
     observed: dict = field(default_factory=dict, compare=False, repr=False)
     _pins: Pins | None = field(default=None, compare=False, repr=False)
     _tag: object = field(default=_UNSET, compare=False, repr=False)
@@ -341,7 +343,7 @@ class Model:
         def inst(i: Instance) -> dict:
             prev = self.promoted_from(i)
             return {"component": i.component, "environment": i.environment, "image": i.image, "tag": i.tag,
-                    "replicas": i.replicas, "namespace": i.namespace, "argo_application": i.argo_application,
+                    "replicas": i.replicas, "scale": copy.deepcopy(i.scale), "namespace": i.namespace, "argo_application": i.argo_application,
                     "url": i.url, "exposed": i.exposed,
                     "promoted_from": f"{prev.component}/{prev.environment}" if prev else None,
                     "secrets": [sec(s) for s in i.secrets], "autonomy": dict(i.autonomy)}
@@ -353,7 +355,7 @@ class Model:
                        "resources": [r.name for r in self.resources], "apis": [a.name for a in self.apis]},
             "environments": [{"name": e.name, "host": e.host, "url": e.url_template, "policy": e.policy,
                               "promotion": e.promotion, "observability": obs(e.observability),
-                              "operators": e.operators, "backup": e.backup, "autonomy": copy.deepcopy(e.autonomy)} for e in self.environments],
+                              "operators": e.operators, "backup": e.backup, "autoscaling": e.autoscaling, "autonomy": copy.deepcopy(e.autonomy)} for e in self.environments],
             "components": [{
                 "name": c.name, "type": c.type, "lang": c.lang, "shape": c.shape, "repo": c.repo, "image": c.image,
                 "external": {"kind": c.external.kind, "namespace": c.external.namespace} if c.external else None,
@@ -478,6 +480,25 @@ def _replicas(entry: dict, inst: dict) -> int | None:
         return int(r)
     except (TypeError, ValueError):
         return 1
+
+
+def _scale_of(value: object) -> dict | None:
+    """A declared `scale` as the model keeps it; None when it is not a mapping with `max` and an `on` mapping (the renderer refuses it)."""
+    if not isinstance(value, dict) or "max" not in value or not isinstance(value.get("on"), dict):
+        return None
+    return {"min": value["min"] if "min" in value else 1, "max": value["max"], "on": copy.deepcopy(value["on"])}
+
+
+def _effective_scale(entry: dict, inst: dict) -> dict | None:
+    if entry.get("external"):
+        return None
+    if "scale" in inst:
+        return _scale_of(inst["scale"])
+    if "replicas" in inst:
+        return None
+    if "replicas" in entry:
+        return None
+    return _scale_of(entry.get("scale"))
 
 
 def _component(name: str, entry: dict, shapes: list[dict], resources: set[str], libraries: set[str]) -> tuple[Component, list[str]]:
@@ -646,14 +667,20 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
             e = by_env[env]
             idoc = _map(inst_docs.get(env))
             ext = c.external
+            scale = _effective_scale(entry, idoc)
             overrides = {str(s["name"]): s for s in _secret_entries(idoc)}
             instances.append(Instance(
-                component=c.name, environment=env, image=c.image, replicas=_replicas(entry, idoc),
+                component=c.name, environment=env, image=c.image, replicas=None if scale else _replicas(entry, idoc), scale=scale,
                 namespace=(ext.namespace if ext and ext.namespace else None) or f"{system}-{env}",
                 argo_application=f"{c.name}-{env}", exposed=bool(c.expose and e.host), _rule=(system, c, e),
                 staging_promotion=c.promotion_staging or by_env["staging"].promotion,
                 secrets=_instance_secrets(system, c, env, overrides), _pins=pins,
                 autonomy=_instance_autonomy(e.autonomy, idoc)))
+
+    for e in envs:
+        if any(i.environment == e.name and i.scale and ("consumes" in i.scale["on"] or "cache" in i.scale["on"]) for i in instances):
+            by_env[e.name] = dataclasses.replace(e, autoscaling="keda")
+    envs = [by_env[e.name] for e in envs]
 
     ris = []
     for r in resources:
