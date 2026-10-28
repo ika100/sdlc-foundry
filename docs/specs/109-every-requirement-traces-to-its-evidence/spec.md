@@ -86,4 +86,4 @@ The chain. For one spec, the chain per active criterion is: issue(s) the spec tr
 - 2026-10-25 created
 - 2026-10-25 open questions answered (suggested answers)
 - 2026-10-25 approved
-- 2026-10-28 reading for 5.x: "a service whose repo is registered in a gitops-app" is a component of a system; its pinned tags are read from `instances.<env>` in `system.yaml`
+- 2026-10-28 reading for 5.x: "a service whose repo is registered in a gitops-app" is a component of a system; system.yaml decides which instances exist, and the pinned tag is the overlay's `newTag` (`applications/<system>/overlays/<env>/<component>/kustomization.yaml`, read through `model`)
