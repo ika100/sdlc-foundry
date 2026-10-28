@@ -1109,7 +1109,7 @@ def test_the_cluster_repo_copy_of_the_renderer_knows_nack_ac_119_22(tmp_path):  
     from system_fixtures import ROOT
     for path in ("templates/gitops-app/scripts/render.py", "templates/cluster-gitops/scripts/system_render.py"):
         text = (ROOT / path).read_text()
-        assert '"nack"' in text and "streams.jetstream.nats.io" in text, path
+        assert '"nack"' in text and re.search(r"\bstreams\.jetstream\.nats\.io\b", text), path  # a CRD name, matched as a word
 
 
 def test_a_cluster_with_only_external_brokers_gets_no_nack_ac_119_22(tmp_path):  # AC-119.22
