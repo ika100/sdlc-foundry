@@ -539,6 +539,16 @@ def _targets(mod, app_dir: Path, system: str, r: str, typ: str, env: str):
     return folder / {"cache": "statefulset.yaml", "broker": "server.yaml", "bucket": "seaweed.yaml"}[typ]
 
 
+def _cache_url(app_dir: Path, env: str, name: str) -> str | None:
+    """The rendered `spec.target.template.data.url` of a cache's ExternalSecret; None when the file or the key is missing (spec 127)."""
+    f = app_dir / "addons" / env / name / "externalsecret.yaml"
+    try:
+        url = yaml.safe_load(f.read_text())["spec"]["target"]["template"]["data"]["url"]
+    except Exception:  # noqa: BLE001 - a missing file or key means no url to compare
+        return None
+    return url if isinstance(url, str) else None
+
+
 def _instances(mod, repo: Path) -> dict[tuple[str, str, str], dict]:
     """{(system, resource, env): {type, major, pin (rendered now, or None), table}} of every in-cluster resource instance."""
     out: dict[tuple[str, str, str], dict] = {}
@@ -562,7 +572,8 @@ def _instances(mod, repo: Path) -> dict[tuple[str, str, str], dict]:
                     table = mod.table_pin(typ, major if typ != "bucket" else None)["pin"]
                 except KeyError:
                     table = None
-                out[(system, r, env)] = {"type": typ, "major": major, "pin": held["pin"] if held else None, "table": table}
+                out[(system, r, env)] = {"type": typ, "major": major, "pin": held["pin"] if held else None, "table": table,
+                                         "url": _cache_url(app_dir, env, r) if typ == "cache" else None}
     return out
 
 
@@ -587,6 +598,16 @@ def _generated_snapshot(repo: Path) -> dict[str, bytes]:
     return out
 
 
+def _url_row(rows: list[dict], system: str, r: str, env: str, b: dict, a: dict) -> None:
+    """Append the `url` row of a cache whose rendered url template changed with the re-render (spec 127)."""
+    if not b.get("url") or not a.get("url") or b["url"] == a["url"]:
+        return
+    old, new = (u.replace("{{ .password }}", "<password>") for u in (b["url"], a["url"]))
+    rows.append({"env": env, "resource": r, "kind": "url", "from": old, "to": new, "moves": False,
+                 "text": f"{env:<8} {r}: url {new} (was {old}); the Secret {system}-{r}-app was written once and keeps its url, "
+                         "which authenticates as the same user default: running pods need nothing, new Secrets get the new form"})
+
+
 def render_and_compare(req: dict, repo: Path, written: set[str] | None = None) -> dict | None:
     """Re-render with the repo's new renderer (held pins follow from it) and list what moves, per environment; None when nothing does.
     `written` (optional) receives every path under applications/ and operators/ the render created or changed: generated output."""
@@ -607,7 +628,10 @@ def render_and_compare(req: dict, repo: Path, written: set[str] | None = None) -
     for key in sorted(after, key=lambda k: (k[0], k[1], order.get(k[2], 9))):
         system, r, env = key
         a, b = after[key], before.get(key)
-        if b is None or b["pin"] is None or a["pin"] is None:
+        if b is None:
+            continue
+        if b["pin"] is None or a["pin"] is None:
+            _url_row(rows, system, r, env, b, a)
             continue
         label = f"{r} {a['major']}" if a["type"] != "bucket" else r
         if a["pin"] != b["pin"]:
@@ -618,6 +642,7 @@ def render_and_compare(req: dict, repo: Path, written: set[str] | None = None) -
                      else "dev is verified and /platform:update runs again")
             rows.append({"env": env, "resource": r, "kind": "pin", "from": a["pin"], "to": a["table"], "moves": False,
                          "text": f"{env:<8} {label}: keeps {a['pin']} until {until}"})
+        _url_row(rows, system, r, env, b, a)
     envs = [e for e in core_envs() if any(k[2] == e for k in after)] or core_envs()
     for name in sorted(ops_after):
         if name in ops_before and ops_before[name] != ops_after[name]:
