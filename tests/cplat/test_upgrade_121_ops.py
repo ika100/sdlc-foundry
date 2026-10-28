@@ -242,6 +242,7 @@ def doc_everything_for_doctor():
     d = doc_with_everything()
     d["environments"]["dev"]["observability"] = {"ui": "lgtm"}
     d["environments"]["dev"]["policy"] = "audit"
+    d["environments"]["dev"]["backup"] = {"to": "backups"}  # spec 121 slip: velero is needed only where an environment has `backup` (spec 117); the fixture had instance backups only
     return d
 
 
