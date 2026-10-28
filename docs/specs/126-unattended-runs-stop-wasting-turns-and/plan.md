@@ -72,6 +72,7 @@ tasks:
     covers: [AC-126.9, AC-126.10, AC-126.11, AC-126.12, AC-126.13]
     parallel_safe: true
     depends_on: [t1, t6]
+    done: true
   - id: t11
     title: cplat headless — CPLAT_SESSION_ID, progress key without owner/stop_gate, no-progress cause by the rule
     files: [scripts/cplat/headless.py, tests/cplat/test_headless.py]
