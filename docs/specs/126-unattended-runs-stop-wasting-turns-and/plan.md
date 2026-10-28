@@ -78,6 +78,7 @@ tasks:
     covers: [AC-126.2, AC-126.7]
     parallel_safe: true
     depends_on: [t2, t6]
+    done: true
 human_steps:
   - "AC-126.15, seven days after the release that ships spec 126: run the commands in docs/specs/126-unattended-runs-stop-wasting-turns-and/measurements.md (cplat platform runs report --since 7 and the gh query for red pr-title / spec-required checks on PRs opened by platform commands), fill its table, and open an issue for any line that fails."
   - "After updating the plugins: resume each ship run that was open before the update once (/component:ship <spec> or /system:ship <spec>); until then the Stop hook only prints a notice for it and holds no session (AC-126.3)."

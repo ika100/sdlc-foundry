@@ -85,17 +85,17 @@ def test_the_stop_gate_giving_up_records_decision_given(repo, store, monkeypatch
     assert r["filed"] == []
 
 
-def test_headless_no_progress_records_environment_given(hl_repo, tmp_path, monkeypatch, store, capsys):
-    """AC-088.18: `cplat headless` stopping on `no progress` records the ship escalation and its own as `environment`, `given`."""
+def test_headless_no_progress_records_the_rule_cause_given(hl_repo, tmp_path, monkeypatch, store, capsys):
+    """AC-126.7: `cplat headless` stopping on `no progress` records the ship escalation and its own with the rule's cause (here `code`: the spec has criteria without a test), `given`."""
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"], cwd=hl_repo, check=True)
     ship.start(hl_repo, "7", True)
     fake_claude(tmp_path, monkeypatch, "true")
     assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--max-runs", "6"]) == 1
     assert "no progress" in capsys.readouterr().out
-    assert ship.load_state(hl_repo)["cause"] == "environment" and "no progress" in ship.load_state(hl_repo)["escalated"]
+    assert ship.load_state(hl_repo)["cause"] == "code" and "no progress" in ship.load_state(hl_repo)["escalated"]
     recs = stored(store) + [r for r in buffered_lines() if r["run_id"] not in {x["run_id"] for x in stored(store)}]
     (s,) = [r for r in recs if r["kind"] == "ship"]
     (h,) = [r for r in recs if r["kind"] == "headless"]
     for r in (s, h):
         assert r["outcome"] == "escalated" and r["escalation"]["reason"].startswith("no progress")
-        assert (r["escalation"]["cause"], r["escalation"]["cause_source"]) == ("environment", "given"), r["kind"]
+        assert (r["escalation"]["cause"], r["escalation"]["cause_source"]) == ("code", "given"), r["kind"]
