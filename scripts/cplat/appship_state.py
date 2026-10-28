@@ -259,13 +259,14 @@ def set_phase(repo: Path, phase: str) -> dict:
 
 # ---------------- escalate / finish ----------------
 
-def escalate(repo: Path, reason: str, cause: str | None = None) -> dict:
-    """End the run escalated. The cause is the escalated repo's when there is one (spec 097, AC-097.12)."""
+def escalate(repo: Path, reason: str, cause: str | None = None, keep_cause: bool = False) -> dict:
+    """End the run escalated. The cause is the escalated repo's when there is one (spec 097, AC-097.12),
+    unless `keep_cause` (the Stop hook's no-progress escalation, AC-126.7) keeps the given one."""
     def change(st: dict) -> None:
         bad = next(((i, r) for i, r in st.get("repos", {}).items() if r.get("state") == "escalated"), None)
         why, final = reason, ship._coerce_cause(cause)[0]
         if bad:
-            if bad[1].get("cause"):
+            if bad[1].get("cause") and not keep_cause:
                 final = bad[1]["cause"]
             if cause is None and not reason.startswith(bad[0]):
                 why = f"{bad[0]}: {reason}"
@@ -366,7 +367,7 @@ def gate(repo: Path, hook_input: dict) -> dict | None:
         message = stopgate.last_message(hook_input)
         reason = stopgate.no_progress_reason(phase, message)
         with contextlib.redirect_stderr(io.StringIO()):     # the hook's output is its answer only
-            escalate(repo, reason, stopgate.cause(message, _code_red(repo)))
+            escalate(repo, reason, stopgate.cause(message, _code_red(repo)), keep_cause=True)
         return {"systemMessage": f"product ship {spec_id}: escalated ({reason}); resume it with {command}"}
     text = [f"The product ship of {spec_id} is not finished (phase {phase}, stops without progress: {verdict.no_progress}/2).",
             f"Next: {next_step(st)}.",
@@ -375,7 +376,7 @@ def gate(repo: Path, hook_input: dict) -> dict | None:
     return {"decision": "block", "reason": "\n".join(text)}
 
 
-_ID =re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+_ID = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 
 def valid_id(repo_id: str) -> str:
