@@ -1,0 +1,76 @@
+name: e2e-upgrade
+
+# Spec 121 (AC-121.24): the previous release's system is updated to this checkout, one environment at a time, and a database moves from
+# Postgres 16 to 17 through dev, staging and prod (tests/e2e/upgrade.sh). It is a workflow of its own because the e2e job uses about 75 of
+# its 90 minutes. The release gate (scripts/release-check.py gate, workflow release-guard) looks for the check named
+# "e2e upgrade (previous release → candidate)" on the commit someone wants to tag. This workflow only reads and tests: it never
+# creates, moves or deletes a tag or a release.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '47 3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'templates/gitops-app/scripts/render.py'
+      - 'templates/gitops-app/scripts/local-cluster.sh'
+      - 'scripts/cplat/upgrade*.py'
+      - 'scripts/cplat/update.py'
+      - 'scripts/cplat/versions.py'
+      - 'scripts/release-check.py'
+      - 'tests/e2e/upgrade.sh'
+      - '.github/workflows/e2e-upgrade.yml'
+      - 'docs/CHANGELOG.md'
+  pull_request:
+    paths:
+      - 'templates/gitops-app/scripts/render.py'
+      - 'templates/gitops-app/scripts/local-cluster.sh'
+      - 'scripts/cplat/upgrade*.py'
+      - 'scripts/cplat/update.py'
+      - 'scripts/cplat/versions.py'
+      - 'scripts/release-check.py'
+      - 'tests/e2e/upgrade.sh'
+      - '.github/workflows/e2e-upgrade.yml'
+      - 'docs/CHANGELOG.md'
+
+# Least privilege: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# A newer push to the same pull request cancels the older run (main and the nightly run always complete).
+concurrency:
+  group: e2e-upgrade-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  decide:
+    name: does this change need the upgrade e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.needs.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the release tags and the base of the comparison
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - id: needs
+        run: uv run scripts/release-check.py needs-upgrade-e2e | tee -a "$GITHUB_OUTPUT"
+
+  upgrade:
+    name: e2e upgrade (previous release → candidate)
+    needs: decide
+    if: needs.decide.outputs.run == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75   # about 40 minutes in the log (tests/e2e/upgrade.sh), plus the images and the charts it pulls
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the previous release is a tag, checked out next to this commit
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - name: Install copier and k3d
+        run: |
+          uv tool install copier
+          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash
+      - name: Run the upgrade end-to-end test
+        run: bash tests/e2e/upgrade.sh
