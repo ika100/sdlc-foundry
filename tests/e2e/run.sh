@@ -1007,7 +1007,8 @@ async def connect():
                               inbox_prefix=os.environ["NATS_INBOX_PREFIX"], error_cb=on_error, connect_timeout=5)
 
 def violations(subject=None):
-    return len([e for e in ERRS if "Permissions Violation" in e and (subject is None or subject in e)])
+    # the server says "Permissions Violation"; nats-py reports it as "nats: permissions violation for ..."
+    return len([e for e in ERRS if "permissions violation" in e.lower() and (subject is None or subject in e)])
 
 async def settle(nc):
     await nc.flush()
@@ -1056,8 +1057,8 @@ t_got=$(n_field T)
 echo "ok   e2e-web fetched m1 $((t_got - t_pub)) s after e2e-api published it, and acknowledged it"
 
 nstep "Broker: refusals of e2e-web (AC-119.12): no publish on e2e.orders.created, no subscribe to e2e.orders.>, publish on e2e.audit.done allowed"
-grep -q 'Permissions Violation.*e2e.orders.created' <<< "$N_OUT" || nfail "publishing on e2e.orders.created was not refused with a Permissions Violation: $N_OUT"
-grep -q 'Permissions Violation.*e2e.orders.>' <<< "$N_OUT" || nfail "subscribing to e2e.orders.> was not refused with a Permissions Violation: $N_OUT"
+grep -qi 'Permissions Violation.*e2e.orders.created' <<< "$N_OUT" || nfail "publishing on e2e.orders.created was not refused with a Permissions Violation: $N_OUT"
+grep -qi 'Permissions Violation.*e2e.orders.>' <<< "$N_OUT" || nfail "subscribing to e2e.orders.> was not refused with a Permissions Violation: $N_OUT"
 [ "$(n_field REFUSED_PUBLISH_ORDERS)" = 1 ] && [ "$(n_field REFUSED_SUBSCRIBE_ORDERS)" = 1 ] || nfail "expected one refusal for each of the two actions: $N_OUT"
 [ "$(n_field AUDIT_PUBLISHED)" = e2e-audit ] || nfail "e2e-web could not publish on e2e.audit.done (stream '$(n_field AUDIT_PUBLISHED)'): $N_OUT"
 jsz_wait 15 S.e2e-orders.messages=1 S.e2e-audit.messages=1 C.e2e-orders.e2e-web.num_pending=0 C.e2e-orders.e2e-web.num_ack_pending=0 \
@@ -1083,8 +1084,8 @@ async def main():
     await nc.close()
 asyncio.run(main())'
 [ "$(n_field PUBLISHED)" = m2,m3 ] && [ "$(n_field VIOLATIONS_BEFORE_REFUSALS)" = 0 ] || nfail "e2e-api could not publish m2 and m3: $N_OUT"
-grep -q 'Permissions Violation.*e2e.audit.>' <<< "$N_OUT" || nfail "e2e-api subscribing to e2e.audit.> was not refused with a Permissions Violation: $N_OUT"
-grep -q 'Permissions Violation.*e2e.audit.x' <<< "$N_OUT" || nfail "e2e-api publishing on e2e.audit.x was not refused with a Permissions Violation: $N_OUT"
+grep -qi 'Permissions Violation.*e2e.audit.>' <<< "$N_OUT" || nfail "e2e-api subscribing to e2e.audit.> was not refused with a Permissions Violation: $N_OUT"
+grep -qi 'Permissions Violation.*e2e.audit.x' <<< "$N_OUT" || nfail "e2e-api publishing on e2e.audit.x was not refused with a Permissions Violation: $N_OUT"
 # the consumer e2e-web reads /jsz while no consumer process runs: m2 and m3 wait on the server (m1 is acknowledged)
 jsz_wait 15 S.e2e-orders.messages=3 S.e2e-audit.messages=1 C.e2e-orders.e2e-web.num_pending=2 C.e2e-orders.e2e-web.num_ack_pending=0 \
   || { echo "$J"; nfail "/jsz should show 3 messages in e2e-orders (1 in e2e-audit: the refused e2e.audit.x stored nothing), num_pending 2 and num_ack_pending 0"; }
