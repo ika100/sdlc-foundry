@@ -443,7 +443,8 @@ def test_the_cache_must_be_a_cache_resource_ac_120_11(tmp_path):  # AC-120.11
     scale["on"]["cache"] = "nope"
     fails(tmp_path / "b", cache_system(scale, resources={"sessions": cache(), "other": cache()}),
           cref(W_SCALE, "'nope' is not a cache resource of the system (caches: sessions, other)"))
-    fails(tmp_path / "c", cache_system(scale, resources={"d": db()}), cref(W_SCALE, "'nope' is not a cache resource of the system (caches: none)"))
+    worker = {**comp("worker", ["d"], resources=RES), "scale": scale}   # spec 120 slip: the worker must use an existing resource, or uses fails first
+    fails(tmp_path / "c", system({"d": db()}, {"worker": worker}), cref(W_SCALE, "'nope' is not a cache resource of the system (caches: none)"))
 
 
 def test_the_cache_must_be_listed_in_uses_ac_120_11(tmp_path):  # AC-120.11
@@ -1008,3 +1009,12 @@ def test_no_autoscaler_file_and_no_ignore_rule_appear_without_scale_ac_120_26(tm
         assert not [k for k in g if k.endswith(AUTOSCALER_FILES)], label
         assert "ignoreDifferences" not in g[f"{APP}/applicationset.yaml"] and "RespectIgnoreDifferences" not in g[f"{APP}/applicationset.yaml"], label
         assert "operators/apps/keda.yaml" not in g and "operators/apps/metrics-server.yaml" not in g, label
+
+
+def test_an_unquoted_on_key_is_read_as_on_ac_120_1(tmp_path):  # AC-120.1
+    # YAML 1.1 reads `on:` as true; people write it unquoted
+    text = yaml.safe_dump(cache_system({"max": 4, "on": {"cpu": 70}}), sort_keys=False).replace("'on':", "on:")
+    assert "'on'" not in text
+    doc = yaml.safe_load(text)
+    assert True in doc["components"]["worker"]["scale"]
+    ok(tmp_path, doc)
