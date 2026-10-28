@@ -38,7 +38,7 @@ def overlay(g, env, comp, fname):
     return yaml.safe_load(g[f"{APP}/overlays/{env}/{comp}/{fname}"])
 
 
-PINNED_IMAGE = re.compile(r"(imageName: ghcr\.io/cloudnative-pg/postgresql:)(\d+)\S*")  # spec 115: the design's normalisation regex
+PINNED_IMAGE = re.compile(r"(imageName: ghcr\.io/cloudnative-pg/postgresql:)(\d+)\S*|(otel/opentelemetry-collector-contrib:[^\s@\"]+)@sha256:[0-9a-f]{64}")  # spec 115: the design's normalisation regex  # spec 121: the collector digest is stripped too
 
 
 def same_as_4x(tmp_path, doc5, app4=None, services4=None, pins=None):
@@ -52,7 +52,7 @@ def same_as_4x(tmp_path, doc5, app4=None, services4=None, pins=None):
     assert p5.returncode == 0, p5.stdout + p5.stderr
     a, b = generated(r4), generated(r5)
     # spec 115 (AC-115.6): the database image is pinned to a patch release; only imageName is normalised, to its major version
-    a, b = ({k: PINNED_IMAGE.sub(r"\1\2", v) for k, v in t.items()} for t in (a, b))
+    a, b = ({k: PINNED_IMAGE.sub(lambda m: m.group(3) or m.group(1) + m.group(2), v) for k, v in t.items()} for t in (a, b))  # spec 121: the collector digest is stripped too
     assert sorted(a) == sorted(b), f"files differ: only 4.7 {sorted(set(a) - set(b))}, only 5.0 {sorted(set(b) - set(a))}"
     first = next((k for k in sorted(a) if a[k] != b[k]), None)
     assert first is None, f"{first} differs between the 4.7 and the 5.0 render"

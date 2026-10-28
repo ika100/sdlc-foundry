@@ -206,7 +206,7 @@ def test_backup_is_not_a_key_of_the_resource_or_of_a_bucket_instance_ac_117_2(tm
 
 def test_the_unknown_key_texts_name_backup_ac_117_2(tmp_path):  # AC-117.2
     fails(tmp_path, bdoc(db_kw={"instances": {"dev": {"bogus": 1}}}),
-          P + "resources.orders-db.instances.dev: unknown key 'bogus' (allowed: external, remote, replicas, storage, resources, backup)")
+          P + "resources.orders-db.instances.dev: unknown key 'bogus' (allowed: external, remote, replicas, storage, resources, backup, version)")  # spec 121: version is an instance key
     doc = bdoc()
     doc["environments"]["dev"]["bogus"] = 1
     fails(tmp_path / "e", doc, P + "environments.dev: unknown key 'bogus' (allowed: host, url, policy, promote, observability, operators, backup, autonomy)")  # spec 124: autonomy
@@ -658,7 +658,7 @@ PINS = {
                "namespace": "velero", "release": "velero", "crd": "schedules.velero.io"},
 }
 RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
-AWS_IMAGE = "velero/velero-plugin-for-aws:v1.14.4"
+AWS_IMAGE = "velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa"  # spec 121: the designed digest
 VELERO_VALUES = {"initContainers": [{"name": "velero-plugin-for-aws", "image": AWS_IMAGE, "volumeMounts": [{"mountPath": "/target", "name": "plugins"}]}],
                  "deployNodeAgent": True, "snapshotsEnabled": False, "credentials": {"useSecret": False},
                  "configuration": {"backupStorageLocation": [], "volumeSnapshotLocation": [], "uploaderType": "kopia"}}
@@ -695,7 +695,7 @@ def test_the_operators_keep_the_design_order_and_the_aws_plugin_is_pinned_ac_117
     r = platform_render_module("render_117_order")
     assert list(r.OPERATORS) == ["cloudnative-pg", "seaweedfs", "external-secrets", "kyverno", "plugin-barman-cloud", "cert-manager", "velero", "nack", "keda", "metrics-server"]  # spec 120: keda and metrics-server follow nack; spec 117: spec 125 added external-secrets and kyverno first; spec 119: nack is appended last
     assert getattr(r, "VELERO_AWS_PLUGIN_IMAGE", None) == AWS_IMAGE
-    assert re.fullmatch(r"velero/velero-plugin-for-aws:v\d+\.\d+\.\d+", r.VELERO_AWS_PLUGIN_IMAGE)
+    assert re.fullmatch(r"velero/velero-plugin-for-aws:v\d+\.\d+\.\d+@sha256:[0-9a-f]{64}", r.VELERO_AWS_PLUGIN_IMAGE)  # spec 121: digested
 
 
 def test_database_backup_installs_the_plugin_and_cert_manager_but_not_velero_ac_117_26(tmp_path):  # AC-117.26

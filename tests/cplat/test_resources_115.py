@@ -363,7 +363,7 @@ def test_an_unknown_resource_key_and_an_unknown_instance_key_fail_ac_115_11(tmp_
     fails(tmp_path / "a", system({"d": db(size="big")}, {"api": comp("api", ["d"])}),
           "resources.d: unknown key 'size' (allowed: type, external, remote, version, replicas, storage, resources, instances)")
     fails(tmp_path / "b", system({"d": db(instances={"dev": {"size": 1}})}, {"api": comp("api", ["d"])}),
-          "resources.d.instances.dev: unknown key 'size' (allowed: external, remote, replicas, storage, resources, backup)")  # spec 117: backup
+          "resources.d.instances.dev: unknown key 'size' (allowed: external, remote, replicas, storage, resources, backup, version)")  # spec 117: backup  # spec 121: version is an instance key
 
 
 # ---------------- AC-115.12: an incomplete store entry makes no Secret ----------------

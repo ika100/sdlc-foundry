@@ -16,7 +16,7 @@ from cache_fixtures import (ALLOWED_INST, ALLOWED_TOP, CKEYS, CVARS, FILES, IMAG
                             expected_externalsecret, expected_generator, expected_kustomization, expected_service, expected_statefulset, labels,
                             tree_digest)
 from resources_fixtures import (APP, ENVS, LABELS, addon_names, comp, db, env_list, external_secret, external_secret_path, fails, ok,
-                                platform_render_module, render5, secret_vars, sets, system, var_order, y)
+                                platform_render_module, render5, secret_vars, sets, system, unpin, var_order, y)  # spec 121: unpin
 from system_fixtures import full5, rich5, write_system
 
 QUANTITY_MSG = "memory '{v}' must be a Kubernetes quantity of at least 64Mi, e.g. 256Mi"
@@ -60,9 +60,9 @@ def test_an_unknown_instance_key_fails_ac_118_2(tmp_path):  # AC-118.2
           P + f"resources.sessions.instances.dev: unknown key 'replicas' (allowed: {ALLOWED_INST})")
 
 
-def test_version_is_not_an_instance_key_ac_118_2(tmp_path):  # AC-118.2
-    fails(tmp_path, csys({"sessions": cache(instances={"dev": {"version": 8}})}),
-          P + f"resources.sessions.instances.dev: unknown key 'version' (allowed: {ALLOWED_INST})")
+def test_an_unsupported_instance_version_fails_ac_118_2(tmp_path):  # AC-118.2  # spec 121: the key is allowed now
+    fails(tmp_path, csys({"sessions": cache(instances={"dev": {"version": 7}})}),
+          P + "resources.sessions.instances.dev: version '7' is not a supported cache version (8, 9)")  # spec 121: spec 121 adds the key
 
 
 def test_instances_must_be_a_mapping_ac_118_2(tmp_path):  # AC-118.2
@@ -731,7 +731,7 @@ def _before_docs():
 def test_a_5x_system_without_a_cache_renders_byte_identically_to_before_ac_118_22(tmp_path, label):  # AC-118.22
     g = ok(tmp_path, _before_docs()[label])
     digest, count = BEFORE_118[label]
-    assert (len(g), tree_digest(g)) == (count, digest), f"{label}: the render changed although the system has no cache"
+    assert (len(g), tree_digest(unpin(g))) == (count, digest), f"{label}: the render changed although the system has no cache"  # spec 121: only the engine references changed
 
 
 def test_an_unused_cache_changes_nothing_in_the_tree_ac_118_22(tmp_path):  # AC-118.22

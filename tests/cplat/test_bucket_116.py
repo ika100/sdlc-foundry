@@ -488,7 +488,7 @@ def test_removing_the_resource_removes_the_addon_directory_but_nothing_in_the_cl
 def test_the_store_image_is_pinned_to_an_exact_version_ac_116_15(tmp_path):  # AC-116.15
     img = image()
     assert re.match(r"^chrislusf/seaweedfs:\d+\.\d+(@sha256:[0-9a-f]{64})?$", img), img
-    assert img == "chrislusf/seaweedfs:4.51"
+    assert img == "chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8"  # spec 121: the designed digest
     assert bdoc(ok(tmp_path, bsys()), "dev", "seaweed.yaml")["spec"]["image"] == img
 
 

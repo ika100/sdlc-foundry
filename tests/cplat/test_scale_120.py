@@ -16,7 +16,7 @@ from broker_fixtures import ext_comp, lib_comp, wide
 from scale_fixtures import (AUTOSCALER_FILES, ENV_KEYS, INSTANCE_KEYS, KEDA, METRICS, ON_FORMS, P, RES, RETRY, SCALE_EXAMPLE, SERVICE_KEYS, cache,
                             cache_system, cpu, db, events, expected_hpa, expected_operator, expected_scaledobject, expected_trigger_auth, files_of,
                             ignore_entry, labels, lag, length, nats_trigger, odir, queue_system, redis_trigger, sdoc, shape, tree_digest)
-from resources_fixtures import APP, ENVS, comp, fails, ok, platform_render_module, render5, sets, system, tree, y
+from resources_fixtures import APP, ENVS, comp, fails, ok, platform_render_module, render5, sets, system, tree, unpin, y  # spec 121: unpin
 from system_fixtures import ROOT, write_system
 from test_broker_119 import _before_docs
 from broker_fixtures import broker, bsys
@@ -998,7 +998,7 @@ def _before_120_docs() -> dict:
 def test_a_5x_system_without_scale_renders_byte_identically_to_before_ac_120_26(tmp_path, label):  # AC-120.26
     g = ok(tmp_path, _before_120_docs()[label])
     digest, count = BEFORE_120[label]
-    assert (len(g), tree_digest(g)) == (count, digest), f"{label}: the render changed although the system has no scale"
+    assert (len(g), tree_digest(unpin(g))) == (count, digest), f"{label}: the render changed although the system has no scale"  # spec 121: only the engine references changed
 
 
 def test_no_autoscaler_file_and_no_ignore_rule_appear_without_scale_ac_120_26(tmp_path):  # AC-120.26

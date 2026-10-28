@@ -60,18 +60,7 @@ ROW_ORDER = [*IMAGE_ROWS, "nats", "seaweedfs", "opentelemetry-collector", "lgtm"
 # the pre-121 reference of every new engine reference (the byte-identity tests compare after this mapping)
 OLD_PG = {15: "ghcr.io/cloudnative-pg/postgresql:15.19", 16: "ghcr.io/cloudnative-pg/postgresql:16.15",
           17: "ghcr.io/cloudnative-pg/postgresql:17.11", 18: "ghcr.io/cloudnative-pg/postgresql:18.6"}
-UNPIN = {**{PG[m]: OLD_PG[m] for m in PG}, **{ref: ref.split("@")[0] for ref in (*VK.values(), SEAWEED, VELERO_PLUGIN, COLLECTOR)},
-         **{ref.split(":", 1)[1]: ref.split(":", 1)[1].split("@")[0] for ref in NATS.values()}}
-
-
-def unpin(g: dict) -> dict:
-    """Every designed reference of a rendered tree mapped back to what releases before 121 wrote (string replacement per file)."""
-    out = {}
-    for path, text in g.items():
-        for new, old in UNPIN.items():
-            text = text.replace(new, old)
-        out[path] = text
-    return out
+from resources_fixtures import UNPIN, unpin  # noqa: E402,F401  (one definition; the same table, checked equal)
 
 
 def digest_of(ref: str) -> str:

@@ -11,11 +11,12 @@ CKEYS = ["url", "host", "port", "password"]
 CVARS = {"REDIS_URL": "url", "REDIS_HOST": "host", "REDIS_PORT": "port", "REDIS_PASSWORD": "password"}
 POLICIES = ["noeviction", "allkeys-lru", "allkeys-lfu", "allkeys-random", "volatile-lru", "volatile-lfu", "volatile-random", "volatile-ttl"]
 ALLOWED_TOP = "type, external, remote, version, memory, maxmemoryPolicy, persistence, storage, instances"
-ALLOWED_INST = "external, remote, memory, maxmemoryPolicy, persistence, storage"
+ALLOWED_INST = "external, remote, memory, maxmemoryPolicy, persistence, storage, version"  # spec 121: version is an instance key
 SIZING = ["memory", "maxmemoryPolicy", "persistence", "storage"]
 WAVE = "argocd.argoproj.io/sync-wave"
 FILES = ["externalsecret.yaml", "kustomization.yaml", "password-generator.yaml", "service.yaml", "statefulset.yaml"]
-IMAGES = {8: "valkey/valkey:8.1.11", 9: "valkey/valkey:9.1.3"}
+IMAGES = {8: "valkey/valkey:8.1.11@sha256:8f836008e0986c36adf50da714c7060cf689dbb335f61fe077939d90fa650809",
+          9: "valkey/valkey:9.1.3@sha256:3add1a336a920ea54770a001ab6feb3da5fceea96a40373a3a2cd469b815f0b7"}  # spec 121: the designed digests
 CONTAINER_KEYS = ["name", "image", "command", "args", "env", "ports", "resources", "readinessProbe", "livenessProbe", "securityContext", "volumeMounts"]
 
 

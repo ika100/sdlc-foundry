@@ -17,7 +17,7 @@ STORE = {"name": "platform-secrets", "kind": "ClusterSecretStore"}
 ENVS = ("dev", "staging", "prod")
 KEYS = ["uri", "host", "port", "dbname", "user", "password"]
 VARS = {"DATABASE_URL": "uri", "PGHOST": "host", "PGPORT": "port", "PGDATABASE": "dbname", "PGUSER": "user", "PGPASSWORD": "password"}
-PIN_RE = re.compile(r"^ghcr\.io/cloudnative-pg/postgresql:(\d+)\.\d+(@sha256:[0-9a-f]{64})?$")
+PIN_RE = re.compile(r"^ghcr\.io/cloudnative-pg/postgresql:(\d+)\.\d+-\d{12}-standard-trixie@sha256:[0-9a-f]{64}$")  # spec 121: the digest is required
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 TYPES_LINE = "(database, bucket, cache or broker)"
 LABELS = {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/part-of": "shop"}
@@ -161,3 +161,29 @@ def render_50(tmp_path: Path, doc) -> dict[str, str]:
 def normalized(text: str) -> str:
     """The migration proof's rule (design.md): the database image is compared by its major only."""
     return IMAGE_LINE.sub(rb"\1\2", text.encode()).decode()
+
+
+# spec 121: the designed engine references mapped back to what releases before 121 wrote (kept consistent with upgrade_fixtures.unpin)
+_PG = {"15": "15.19-202610260819", "16": "16.15-202610260820", "17": "17.11-202610260819", "18": "18.6-202610260820"}
+_PG_DIGEST = {"15": "f617efc030d3099362e7fca616bb6d83d102599abf9b7b5e225482e4d0306aa3", "16": "1ec419e997a8bde5263b6951f4c5ebc4aa2e1937927001f2561025c0a816e174",
+              "17": "ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3", "18": "39add80f5b1e573e2f6b641c66fd1a2f8dede67ca0330e870285bc1078551390"}
+_DIGESTED = (
+    "valkey/valkey:8.1.11@sha256:8f836008e0986c36adf50da714c7060cf689dbb335f61fe077939d90fa650809",
+    "valkey/valkey:9.1.3@sha256:3add1a336a920ea54770a001ab6feb3da5fceea96a40373a3a2cd469b815f0b7",
+    "chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8",
+    "velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa",
+    "otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6",
+    "2.14.9-alpine@sha256:127c5ccbc538a93f53ebb19461dc193130df386c2d6dab8199661a28a30d85bd",
+    "2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5")
+UNPIN = {**{f"ghcr.io/cloudnative-pg/postgresql:{_PG[m]}-standard-trixie@sha256:{_PG_DIGEST[m]}": f"ghcr.io/cloudnative-pg/postgresql:{_PG[m].split('-')[0]}"
+            for m in _PG}, **{ref: ref.split("@")[0] for ref in _DIGESTED}}
+
+
+def unpin(g: dict) -> dict:
+    """Every designed reference of a rendered tree mapped back to its pre-121 string (string replacement per file)."""
+    out = {}
+    for path, text in g.items():
+        for new, old in UNPIN.items():
+            text = text.replace(new, old)
+        out[path] = text
+    return out

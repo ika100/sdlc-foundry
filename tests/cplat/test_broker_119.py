@@ -17,7 +17,7 @@ from broker_fixtures import (ALLOWED_INST, ALLOWED_TOP, BKEYS, BVARS, CHART, DEF
                              expected_user_secret, ext_comp, lib_comp, shape, tree_digest, upper, wide)
 from cache_fixtures import cache
 from resources_fixtures import (APP, ENVS, addon_names, comp, db, env_list, fails, ok, platform_render_module, render, render5, render_50,
-                                secret_vars, sets, system, tree, var_order, y)
+                                secret_vars, sets, system, tree, unpin, var_order, y)  # spec 121: unpin
 from system_fixtures import full5, rich5, write_system
 
 USERS = [("api", ["orders"], []), ("web", [], ["orders"])]
@@ -72,7 +72,7 @@ def test_other_unknown_top_level_keys_fail_ac_119_1(tmp_path, key):  # AC-119.1
     fails(tmp_path, bsys({"bus": broker(**{key: 1})}), P + f"resources.bus: unknown key '{key}' (allowed: {ALLOWED_TOP})")
 
 
-@pytest.mark.parametrize("key", ["version", "backup", "bogus"])
+@pytest.mark.parametrize("key", ["backup", "bogus"])  # spec 121: version is an instance key
 def test_an_unknown_instance_key_fails_ac_119_1(tmp_path, key):  # AC-119.1
     fails(tmp_path, bsys({"bus": broker(instances={"dev": {key: 1}})}), P + f"resources.bus.instances.dev: unknown key '{key}' (allowed: {ALLOWED_INST})")
 
@@ -1169,7 +1169,7 @@ def _before_docs():
 def test_a_5x_system_without_a_broker_renders_byte_identically_to_before_ac_119_24(tmp_path, label):  # AC-119.24
     g = ok(tmp_path, _before_docs()[label])
     digest, count = BEFORE_119[label]
-    assert (len(g), tree_digest(g)) == (count, digest), f"{label}: the render changed although the system has no broker"
+    assert (len(g), tree_digest(unpin(g))) == (count, digest), f"{label}: the render changed although the system has no broker"  # spec 121: only the engine references changed
 
 
 def _events_only() -> dict:
