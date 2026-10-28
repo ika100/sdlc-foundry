@@ -1,0 +1,2 @@
+kustomize build apps/shop/overlays/dev
+Error: accumulating resources: accumulation err='accumulating resources from '../../base': evalsymlink failure on '/work/gitops/apps/shop/base' : lstat /work/gitops/apps/shop/base: no such file or directory

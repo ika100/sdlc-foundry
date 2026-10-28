@@ -1,0 +1,6 @@
+[INFO] --- jacoco:0.8.12:check (check) @ shop-api ---
+[INFO] Loading execution data file /work/shop-api/target/jacoco.exec
+[INFO] Analyzed bundle 'shop-api' with 9 classes
+[WARNING] Rule violated for bundle shop-api: lines covered ratio is 0.62, but expected minimum is 0.80
+[INFO] BUILD FAILURE
+[ERROR] Failed to execute goal org.jacoco:jacoco-maven-plugin:0.8.12:check (check) on project shop-api: Coverage checks have not been met. -> [Help 1]

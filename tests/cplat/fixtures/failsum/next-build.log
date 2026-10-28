@@ -1,0 +1,17 @@
+   ▲ Next.js 15.1.0
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+Failed to compile.
+
+./src/app/page.tsx:7:11
+Type error: Type 'number' is not assignable to type 'string'.
+
+   5 | export default function Page() {
+   6 |   const n: number = 1
+>  7 |   const s: string = n
+     |         ^
+   8 |   return <p>{s}</p>
+   9 | }
+ ELIFECYCLE  Command failed with exit code 1.

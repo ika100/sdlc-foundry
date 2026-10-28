@@ -1,0 +1,9 @@
+internal/alerts/alerts.go:31:2: Error return value of `s.Close` is not checked (errcheck)
+	s.Close()
+	^
+internal/fee/fee.go:7:6: printf: fmt.Sprintf format %d has arg "x" of wrong type string (govet)
+	_ = fmt.Sprintf("%d", "x")
+	    ^
+2 issues:
+* errcheck: 1
+* govet: 1

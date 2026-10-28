@@ -1,0 +1,6 @@
+src/todo_api/main.py:3:8: F401 [*] `os` imported but unused
+src/todo_api/main.py:9:8: F401 [*] `os` imported but unused
+src/todo_api/main.py:14:8: F401 [*] `os` imported but unused
+src/todo_api/todos/router.py:20:101: E501 Line too long (120 > 100)
+Found 4 errors.
+[*] 3 fixable with the `--fix` option.

@@ -1,0 +1,2 @@
+apps/shop/rendered/dev.yaml - Deployment shop-api is invalid: problem validating schema. Check JSON formatting: jsonschema: '/spec/replicas' does not validate with assets/apps/v1/deployment.json#/properties/spec/properties/replicas/type: expected integer or null, but got string
+Summary: 12 resources found in 1 file - Valid: 11, Invalid: 1, Errors: 0, Skipped: 0

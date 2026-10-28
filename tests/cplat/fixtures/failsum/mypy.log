@@ -1,0 +1,3 @@
+src/todo_api/todos/service.py:17: error: Incompatible return value type (got "str", expected "int")  [return-value]
+src/todo_api/main.py:9: error: Name "x" is not defined  [name-defined]
+Found 2 errors in 2 files (checked 8 source files)

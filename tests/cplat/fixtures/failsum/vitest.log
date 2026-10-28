@@ -1,0 +1,32 @@
+ RUN  v2.1.8 /work/web
+
+ ✓ src/lib/slug.test.ts (3 tests) 2ms
+ ❯ src/lib/price.test.ts (2 tests | 1 failed) 5ms
+   ✓ formats cents > pads zero 1ms
+   × formats cents > rounds half up 3ms
+     → expected '$1.00' to be '$1.01' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/price.test.ts > formats cents > rounds half up
+AssertionError: expected '$1.00' to be '$1.01' // Object.is equality
+
+- Expected
++ Received
+
+- $1.01
++ $1.00
+
+ ❯ src/lib/price.test.ts:9:31
+      7|   it('rounds half up', () => {
+      8|     const price = format(1.005)
+      9|     expect(price).toBe('$1.01')
+       |                   ^
+     10|   })
+ ❯ node_modules/vitest/dist/chunks/runtime.js:120:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 4 passed (5)
+   Duration  812ms

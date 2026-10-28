@@ -1,0 +1,33 @@
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.acme.shop.PriceServiceTest
+[ERROR] Tests run: 3, Failures: 1, Errors: 1, Skipped: 0, Time elapsed: 0.05 s <<< FAILURE! - in com.acme.shop.PriceServiceTest
+[ERROR] com.acme.shop.PriceServiceTest.discountApplies  Time elapsed: 0.01 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: expected: <90> but was: <100>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:132)
+	at com.acme.shop.PriceServiceTest.discountApplies(PriceServiceTest.java:27)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+
+[ERROR] com.acme.shop.PriceServiceTest.nullCart  Time elapsed: 0 s  <<< ERROR!
+java.lang.NullPointerException: Cannot invoke "java.util.List.size()" because "items" is null
+	at com.acme.shop.PriceService.total(PriceService.java:19)
+	at com.acme.shop.PriceServiceTest.nullCart(PriceServiceTest.java:35)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+
+[INFO]
+[INFO] Results:
+[INFO]
+[ERROR] Failures:
+[ERROR]   PriceServiceTest.discountApplies:27 expected: <90> but was: <100>
+[ERROR] Errors:
+[ERROR]   PriceServiceTest.nullCart:35 » NullPointer Cannot invoke "java.util.List.size()" because "items" is null
+[INFO]
+[ERROR] Tests run: 3, Failures: 1, Errors: 1, Skipped: 0
+[INFO]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.2:test (default-test) on project shop-api: There are test failures.
+[ERROR] -> [Help 1]

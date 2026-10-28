@@ -1,0 +1,7 @@
+
+/work/web/src/app/page.tsx
+  3:10  error  'useState' is defined but never used  @typescript-eslint/no-unused-vars
+  8:5   error  Unexpected console statement          no-console
+
+✖ 2 problems (2 errors, 0 warnings)
+
