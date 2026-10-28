@@ -81,7 +81,7 @@
   <link>)`. `entries: <n>` is the total before the 20-entry cut and is omitted for `format: unknown`.
 - Entry `<locator>`: for a test, `<test id> at <file:line>` (`<test id> at <file>` when the log carries no own-code line, see Risks);
   for a finding, `<file:line>`. `<kind>`: the error type (`AssertionError`, `panic`, `TS2322`) or rule code (`F401`, `no-unused-vars`,
-  `UnusedImports`, `errcheck`, `spotless`, `coverage`). `<message>`: the tool's message through `failsum.normalise`.
+  `UnusedImports`, `errcheck`, `spotless`, `coverage`). `<message>`: the tool's message through `failsum.message`, which is `failsum.normalise` and then every remaining number as `<n>` (so "expected 204, got 200" and "…got 500" are one failure for the no-progress stop).
 - Excerpt lines: raw log lines (ANSI stripped), at most 10 per entry, `    > ` prefix. For tests: the assertion/error lines and the
   own-code frames of that failure; for findings: the code frame the tool printed, if any.
 - Deduplication (AC-108.3, findings only, never tests): entries with the same file, kind and message are one entry at the first
@@ -268,6 +268,13 @@ ship.escalate(..., summary: str | None = None)    # passes it to snapshot
   then `  summaries: <reason>` when the verdict is not null.
 - Exit 1 exactly when the verdict is not null: `summaries pass not done`, `gate failed with summaries: <names>`, or
   `more fix rounds with summaries (<a>) than without (<b>)`; else 0. No savings target.
+
+## Seed check (2026-10-28)
+
+The seed was applied to a clone of `ika100/todo-api@9cba320` and checked through devbox: `devbox run test-fast` has exactly one
+failure, `tests/unit/test_validation.py::test_parse_id` (`tests/test_ac_901.py` passes); `devbox run lint` reports exactly one
+finding, F401 (`os` imported but unused); `devbox run typecheck` is clean; `cplat spec check` is OK and `cplat spec hash 901` is
+`f7e886e34fd7`, the plan's `spec_hash`. So `/component:build 901` starts in Phase 3 with one failing test and one lint finding.
 
 ## Risks
 
