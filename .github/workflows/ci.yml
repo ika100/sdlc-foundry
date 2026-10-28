@@ -107,10 +107,8 @@ jobs:
         run: bash scripts/test-detect-shape.sh
       - name: relative Markdown links resolve
         run: python3 scripts/check-links.py
-      - name: pyyaml for the pin check
-        run: python3 -c 'import yaml' 2>/dev/null || uv pip install --system --break-system-packages pyyaml
       - name: every image and chart comes from the versions table
-        run: python3 scripts/check-pins.py
+        run: uv run --with-requirements requirements-test.txt python scripts/check-pins.py   # pyyaml from the pinned file (spec 127)
       - name: every file has license and copyright metadata (REUSE)
         run: uvx --from "reuse[charset-normalizer]" reuse lint
       - name: actions are pinned by commit SHA and workflows declare least-privilege permissions
