@@ -1,7 +1,7 @@
 ---
 spec_id: 103-validation-runs-what-a-change-can-affect
 title: Validation runs what a change can affect
-status: approved
+status: done
 priority: P1
 tracks: [142]
 ---
@@ -56,3 +56,5 @@ The scope. Change-aware selection applies to the checks a build or ship runs on 
 - 2026-10-25 created
 - 2026-10-25 amended: folded in the user's answers (per-shape mandatory categories, default on, mapping source, no savings target, local evidence).
 - 2026-10-25 approved
+- 2026-10-28 building
+- 2026-10-28 done

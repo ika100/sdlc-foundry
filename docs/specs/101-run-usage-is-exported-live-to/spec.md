@@ -1,7 +1,7 @@
 ---
 spec_id: 101-run-usage-is-exported-live-to
 title: Run usage is exported live to OpenTelemetry
-status: approved
+status: done
 priority: P1
 ---
 
@@ -59,3 +59,5 @@ As a platform maintainer, I want OTel totals compared with transcript totals, so
 - 2026-10-25 approved
 - 2026-10-25 amended: AC-101.9 and AC-101.10 say "metrics store (Prometheus or Mimir query API)" instead of "Mimir"; the addon's local stack (otel-lgtm) stores metrics in Prometheus, with the same query API (found while planning).
 - 2026-10-25 amended: AC-101.7 names what Claude Code always attaches (`user.id`, `user.email`, `organization.id`, `terminal.type` have no switch, verified in its monitoring docs) and makes the export metrics-only with every switchable identity attribute off (found in review).
+- 2026-10-28 building
+- 2026-10-28 done

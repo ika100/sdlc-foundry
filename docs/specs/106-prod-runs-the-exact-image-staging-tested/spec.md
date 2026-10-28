@@ -1,7 +1,7 @@
 ---
 spec_id: 106-prod-runs-the-exact-image-staging-tested
 title: Prod runs the exact image staging tested
-status: approved
+status: done
 priority: P1
 tracks: [157]
 ---
@@ -56,3 +56,5 @@ As a release manager, I want releases published from the already-tested image ra
 - 2026-10-25 created
 - 2026-10-25 amended: folded in the user's answers (release job re-tags, override kept with a mandatory reason, `--no-verify` skips the digest check, failed lookups refuse).
 - 2026-10-25 approved
+- 2026-10-28 building
+- 2026-10-28 done

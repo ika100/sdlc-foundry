@@ -1,7 +1,7 @@
 ---
 spec_id: 102-runs-stay-within-a-budget-and-stop
 title: Runs stay within a budget and stop repeating failures
-status: approved
+status: done
 priority: P1
 tracks: [141, 144]
 ---
@@ -66,3 +66,5 @@ No-progress. Two failures are equivalent when they come from the same stage or c
 - 2026-10-25 created
 - 2026-10-25 amended: folded in the user's answers (default limits, multiplied limits for multi-spec runs, cause `decision`, stop after 2 equivalent failures, on by default).
 - 2026-10-25 approved
+- 2026-10-28 building
+- 2026-10-28 done

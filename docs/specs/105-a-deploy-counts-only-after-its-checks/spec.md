@@ -1,7 +1,7 @@
 ---
 spec_id: 105-a-deploy-counts-only-after-its-checks
 title: A deploy counts only after its checks pass
-status: approved
+status: done
 priority: P1
 tracks: [155]
 ---
@@ -53,3 +53,5 @@ As a maintainer of the platform, I want one place that says which gate steps the
 - 2026-10-25 amended: folded in the user's answers (digest check added, environment failures escalate without an issue, 3 attempts 30 s apart, symptom classification, `not-run` stays a note).
 - 2026-10-25 approved
 - 2026-10-25 amended: AC-105.5 names the existing escalation cause `environment` instead of `infra`, which the platform does not have (same meaning).
+- 2026-10-28 building
+- 2026-10-28 done

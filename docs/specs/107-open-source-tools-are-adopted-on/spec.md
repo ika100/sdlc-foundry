@@ -60,3 +60,4 @@ Candidates, exactly the ones issue #164 names: (1) Codebase-Memory MCP, for code
 - 2026-10-25 created
 - 2026-10-25 amended: folded in the user's answers (5 runs per arm, native alternative on paper, ADRs, two records for testmon/impact, evaluation order).
 - 2026-10-25 approved
+- 2026-10-28 part 1 shipped in 4.7.0; part 2 (the benchmark trials, about 30 runs) has not run — the spec stays approved until it does (tracked in #164)

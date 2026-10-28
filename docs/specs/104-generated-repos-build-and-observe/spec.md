@@ -1,7 +1,7 @@
 ---
 spec_id: 104-generated-repos-build-and-observe
 title: Generated repos build and observe reliably
-status: approved
+status: done
 priority: P1
 tracks: [143]
 ---
@@ -53,3 +53,5 @@ As a platform maintainer, I want the platform's own tests to generate a repo and
 - 2026-10-25 created
 - 2026-10-25 amended: folded in the user's answers (Java/Go and the bundle check stay out of scope).
 - 2026-10-25 approved
+- 2026-10-28 building
+- 2026-10-28 done
