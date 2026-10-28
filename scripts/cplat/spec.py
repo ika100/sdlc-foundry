@@ -3,6 +3,7 @@
 A spec folder holds spec.md (what: stories, acceptance criteria AC-<NNN>.<n>, non-goals, open questions), optional
 design.md (how, contract) and plan.md (tasks with `covers: [AC-…]`). The slash commands do the judgement; every
 check and every state change of a spec goes through this module so it is deterministic and tested.
+`trace --chain` shows the chain from issue to environment (spec 109); `ci` warns about tests naming withdrawn or unknown criteria.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 
@@ -415,6 +417,32 @@ def _smoke_traced(root: Path, spec: Spec, shape: str | None) -> dict[str, list[s
     if not spec.smoke_acs() or tag is None:
         return {}
     return smoke_trace(root, spec, smoke_globs(shape), tag)
+
+
+class Orphan(NamedTuple):
+    file: str
+    id: str
+    spec_id: str
+    kind: str     # "withdrawn" | "unknown"
+
+
+def orphan_tests(root: Path, specs: list[Spec], globs: list[str]) -> list[Orphan]:
+    """Test references to withdrawn or unknown criteria of the given specs (spec 109), sorted by file, then id."""
+    by_number = {s.number: s for s in specs}
+    files = sorted({p for g in globs for p in root.glob(g) if p.is_file() and not _ignored(p.relative_to(root))})
+    found: set[Orphan] = set()
+    for p in files:
+        rel = str(p.relative_to(root))
+        for ac_id in set(AC_ANY.findall(p.read_text(errors="ignore"))):
+            s = by_number.get(ac_id[3:].split(".", 1)[0])
+            if s is None:
+                continue
+            acs = {a.id: a for a in s.acs()}
+            if ac_id not in acs:
+                found.add(Orphan(rel, ac_id, s.id, "unknown"))
+            elif acs[ac_id].withdrawn:
+                found.add(Orphan(rel, ac_id, s.id, "withdrawn"))
+    return sorted(found, key=lambda o: (o.file, o.id))
 
 
 def _ignored(rel: Path) -> bool:
@@ -1076,6 +1104,14 @@ def ci(root: Path, strict: bool) -> int:
         print(f"::{level} file={(s.dir / 'spec.md').relative_to(root)},title=spec {s.id}::{msg}")
     n = len(all_specs(root)) + len(bad)
     print(f"spec-check: {n} spec(s), {len(problems) + len(bad)} problem(s)" + ("" if strict or not problems else " (warnings only; fix them before this check becomes required)"))
+    specs = all_specs(root)
+    shape = repo_shape(root)
+    globs = sorted({g for s in specs for g in test_globs(spec_shape(s, shape))})
+    orphans = orphan_tests(root, specs, globs)
+    for o in orphans:
+        print(f"::warning file={o.file},title=spec {o.spec_id}::{o.file} names {o.kind} criterion {o.id}")
+    if orphans:
+        print(f"spec-check: {len(orphans)} orphan test reference(s) (warnings only)")
     return 1 if bad or (strict and problems) else 0
 
 
@@ -1122,6 +1158,7 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("trace", help="every active criterion must be named by at least one test")
     p.add_argument("id")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--chain", action="store_true", help="the chain from issue to environment per criterion; report only, exit 0")
     sub.add_parser("index", help="regenerate the spec table in docs/backlog.md")
     p = sub.add_parser("list")
     p.add_argument("--all", action="store_true", help="include done and superseded")
@@ -1194,6 +1231,9 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "trace":
         spec = find(root, ns.id)
+        if ns.chain:
+            import spec_chain
+            return spec_chain.main_chain(root, spec, as_json=ns.json)
         own_shape = spec_shape(spec, repo_shape(root))
         result = trace(root, spec, test_globs(own_shape))
         smoke = _smoke_traced(root, spec, own_shape)
