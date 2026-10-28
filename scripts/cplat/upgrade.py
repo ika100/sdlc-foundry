@@ -121,6 +121,10 @@ def check_previous(r, plan: Plan, cfg: dict, contexts: dict[str, str]) -> None:
     env_cfg = cfg["envs"][prev]
     if env_cfg.get("external"):
         return
+    order = order_of(r, typ)
+    ahead = env_cfg["version"] in order and order.index(env_cfg["version"]) > order.index(to)
+    if not plan.major_step and ahead:
+        to = env_cfg["version"]     # a pin move: the earlier environment may already run a higher major (verified at its own pin)
     table = r.table_pin(typ, to)["pin"]
     where = f"{prev} is not ready for {plan.env}: {name} in {prev}"
     if env_cfg["version"] != to or env_cfg["pin"] != table:
@@ -193,9 +197,9 @@ def checks(ns: argparse.Namespace, repo: Path, app_dir: Path, m: model.Model, r,
     if cur in order and order.index(to) < order.index(cur):
         raise PlatformError(f"{name} in {env} is on {cur}; {to} is lower and /resource:upgrade only moves up",
                             hint=f"the way back for a database is /resource:restore {name} --env {env} --to <time|latest>" if typ == "database" else None)
-    if to in r.DEPRECATED_MAJORS.get(typ, ()):
-        raise PlatformError(f"{to} is deprecated: upgrade to one of {list_text(r.SUPPORTED_MAJORS[typ])}")
     major_step = to != cur
+    if major_step and to in r.DEPRECATED_MAJORS.get(typ, ()):
+        raise PlatformError(f"{to} is deprecated: upgrade to one of {list_text(r.SUPPORTED_MAJORS[typ])}")
     if major_step and to not in r.UPGRADE_PATHS[typ].get(cur, ()):
         below = [p for p in r.UPGRADE_PATHS[typ].get(cur, ()) if order.index(p) < order.index(to)]
         first = f"; upgrade to {below[-1]} first" if below else ""
@@ -357,6 +361,32 @@ def wait_for_argo(name: str, env: str, system: str, ctx: str | None, say) -> Non
         time.sleep(POLL_S)
 
 
+# ---------------- rollback of a failed edit or render ----------------
+
+TREES = ("applications", "bootstrap")
+
+
+def snapshot_tree(repo: Path) -> dict[Path, bytes]:
+    """Every file the command can write (applications/ and bootstrap/), to put back when the edit or the render fails."""
+    return {f: f.read_bytes() for t in TREES if (repo / t).is_dir() for f in (repo / t).rglob("*") if f.is_file()}
+
+
+def restore_tree(repo: Path, saved: dict[Path, bytes]) -> None:
+    for t in TREES:
+        if (repo / t).is_dir():
+            for f in [f for f in (repo / t).rglob("*") if f.is_file() and f not in saved]:
+                f.unlink()
+    for f, data in saved.items():
+        if not f.is_file() or f.read_bytes() != data:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(data)
+    for t in TREES:
+        if (repo / t).is_dir():
+            for d in sorted((d for d in (repo / t).rglob("*") if d.is_dir()), reverse=True):
+                if not any(d.iterdir()):
+                    d.rmdir()
+
+
 # ---------------- command ----------------
 
 def main(argv: list[str]) -> int:
@@ -403,13 +433,18 @@ def main(argv: list[str]) -> int:
         print(f"  would run the smoke tests of {', '.join(users) or 'no component'}")
         return 0
     what = []
-    if plan.major_step:
-        what.append(edit_system(app_dir, plan))
-        if plan.type == "database" and plan.ri.backup:
-            what.append(f"archive {write_archives(app_dir, plan)}")
-    else:
-        what.append(f"moved the pin ({drop_rendered_pin(app_dir, plan)})")
-    gitops.render(repo)
+    saved = snapshot_tree(repo)
+    try:
+        if plan.major_step:
+            what.append(edit_system(app_dir, plan))
+            if plan.type == "database" and plan.ri.backup:
+                what.append(f"archive {write_archives(app_dir, plan)}")
+        else:
+            what.append(f"moved the pin ({drop_rendered_pin(app_dir, plan)})")
+        gitops.render(repo)
+    except BaseException:
+        restore_tree(repo, saved)
+        raise
     if not ns.pr:
         if ns.json:
             print(json.dumps(result, indent=2))

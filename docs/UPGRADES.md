@@ -38,7 +38,7 @@ Each refusal happens before anything is written and leaves the tree unchanged. I
 - the target is not a version of that type, is deprecated, or is lower than the current one (`/resource:upgrade` only moves up; for a database the way back is `/resource:restore`);
 - the jump is not a supported path for the engine; the message names the intermediate major to go to first;
 - the earlier environment is not ready: it does not run the target, or is on it but not verified, or failed its verification; the message names the command that fixes it;
-- the environment still holds an older pin from an earlier platform release: move it to this release's pin of the current major first with `/resource:upgrade <name> --to <current major> --env <env>` (a pin move needs no backup);
+- the environment still holds an older pin from an earlier platform release: move it to this release's pin of the current major first with `/resource:upgrade <name> --to <current major> --env <env>` (a pin move needs no backup, and it is ready when the earlier environment runs the same or a higher major, verified at its own pin, so a held environment can catch up after dev has moved on; a pin move is also allowed on a deprecated major, e.g. Postgres 15, to release a hold);
 - the resource already runs the target (it says so and exits 0);
 - a database major step has no `backup` in that environment, or the last successful backup is older than 60 minutes, or the backups cannot be read.
 
