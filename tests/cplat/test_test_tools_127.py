@@ -134,7 +134,8 @@ def test_check_pins_passes_on_a_checkout_whose_suite_commands_install_from_the_f
 
 
 def test_check_pins_fails_on_a_suite_command_without_the_requirements_file_ac_127_5(tmp_path):  # AC-127.5
-    old_ci = (ROOT / ".github/workflows/ci.yml").read_text().replace(OLD_TOOLS, "--with pytest-xdist")
+    old_ci = (ROOT / ".github/workflows/ci.yml").read_text().replace(NEW_TOOLS, "--with pytest-xdist")  # spec 127 build: the repo has the new form
+    assert NEW_TOOLS not in old_ci
     p = check(scratch(tmp_path, ci=old_ci))
     assert p.returncode == 1, p.stdout + p.stderr
     assert re.search(r"ERROR: \.github/workflows/ci\.yml:\d+: .*installs the test tools without requirements-test\.txt", p.stdout), p.stdout
@@ -143,7 +144,8 @@ def test_check_pins_fails_on_a_suite_command_without_the_requirements_file_ac_12
 @pytest.mark.parametrize("pkg", PACKAGES)
 @pytest.mark.parametrize("form", ["--with {p}", "--with={p}"])
 def test_check_pins_fails_on_a_with_flag_for_any_of_the_four_packages_ac_127_5(tmp_path, pkg, form):  # AC-127.5
-    devbox = (ROOT / "devbox.json").read_text().replace(OLD_TOOLS, f"{NEW_TOOLS} {form.format(p=pkg)}")
+    devbox = (ROOT / "devbox.json").read_text().replace(NEW_TOOLS, f"{NEW_TOOLS} {form.format(p=pkg)}")  # spec 127 build: the repo has the new form
+    assert form.format(p=pkg) in devbox
     p = check(scratch(tmp_path, devbox=devbox))
     assert p.returncode == 1, p.stdout + p.stderr
     assert f"devbox.json:" in p.stdout and f"installs {pkg} without requirements-test.txt" in p.stdout, p.stdout
