@@ -33,9 +33,8 @@ Print `## Phase 0 — on $WORK_BRANCH, BASE_REF=<short-sha>`.
 Use the **coder** agent. Prompt prelude: the `<project-map>` block. Then:
 - The task description verbatim
 - Instruction to read relevant files first, make the minimal change, and report touched files
-- Instruction: a failing `cplat quiet` prints a failure summary and the log path; work from the summary and open the full log only when the summary is not enough (spec 108)
 - Instruction to use `cplat quiet lint-fix` and `cplat quiet test-fast` as needed during implementation
-- The **brief** (coder, tester, quality): under the headings `Criteria` (id and full text of every criterion the task covers), `Task` (the task text and files), `Contract` (the relevant part of the design, or `none`), `Tests` (the test files) and `Commands` (`cplat quiet test-fast`, `cplat quiet quality`). The agent starts from the brief, so copy the facts into it; do not tell it to read the spec files. If a quiet command fails, give the agent the log path it printed. Criteria: the active criteria the task touches, or `none`; Contract: `none`.
+- The **brief** (coder, tester, quality): under the headings `Criteria` (id and full text of every criterion the task covers), `Task` (the task text and files), `Contract` (the relevant part of the design, or `none`), `Tests` (the test files) and `Commands` (`cplat quiet test-fast`, `cplat quiet quality`). The agent starts from the brief, so copy the facts into it; do not tell it to read the spec files. If a quiet command fails, give the agent the printed summary and log path (log if not enough). Criteria: the active criteria the task touches, or `none`; Contract: `none`.
 
 One coder, one pass — no worktrees, no fan-out.
 
