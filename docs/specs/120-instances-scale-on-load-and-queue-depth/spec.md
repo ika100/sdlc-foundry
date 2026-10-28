@@ -1,7 +1,7 @@
 ---
 spec_id: 120-instances-scale-on-load-and-queue-depth
 title: Instances scale on load and queue depth
-status: building
+status: done
 priority: P1
 ---
 
@@ -104,3 +104,4 @@ In 5.0 (spec 114) an Instance runs a fixed number of replicas: `components.<c>.r
 - 2026-10-26 approved
 - 2026-10-28 readings recorded at plan time (design.md, "Spec readings"): `on` is required (AC-120.1); an external broker is refused as a trigger and the broker trigger needs no credentials because the monitoring endpoint is unauthenticated (AC-120.9, AC-120.13); whether a cluster serves resource metrics is declared by the gitops repo's `resource_metrics` answer, since a render cannot see it (AC-120.27); the 5-minute lower bound of AC-120.15 holds for `min: 0` and, for `min` ≥ 1, when the last `min × lag` items are worked off within 30 s; the local cluster installs KEDA from `operators/apps/keda.yaml`, and a cluster whose KEDA environments are all `operators: owner` forces it with `WITH_KEDA=1` and `WITH_ARGO=0` (AC-120.17); without Argo CD in the e2e, AC-120.23's "stays Synced" is shown by an unchanged replica count and generation plus render tests of the ignore rule
 - 2026-10-28 building
+- 2026-10-28 done
