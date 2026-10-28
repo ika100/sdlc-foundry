@@ -19,7 +19,6 @@ import ship
 import spec as specmod
 import spec_chain_remote as remote_mod
 
-ENVS = ("dev", "staging", "prod")
 STATES = ("ok", "missing", "stale", "unknown", "n/a")
 NA_LATER = {"draft": "spec not yet built", "approved": "spec not yet built", "building": "spec not yet done",
             "superseded": "spec superseded"}
@@ -413,7 +412,7 @@ def build(root: Path, spec: specmod.Spec) -> dict:
             _link("criterion", "ok", ac),
             tests.get(ac) or _link("tests", "unknown", "not resolved", files=[]),
             verdict, pr, rel,
-            *[c.env(e) for e in ENVS],
+            *[c.env(e) for e in model.ENVIRONMENTS],
         ]
         criteria.append({"id": ac, "complete": all(link["state"] in {"ok", "n/a"} for link in links), "links": links})
     count = {s: sum(1 for cr in criteria for link in cr["links"] if link["state"] == s) for s in ("missing", "stale", "unknown")}
