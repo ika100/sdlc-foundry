@@ -1487,12 +1487,19 @@ for d in docs:
     d["spec"]["replicas"] = int(sys.argv[1])
 print(yaml.safe_dump_all(docs), end="")
 PY
-live_replicas=$(wdep .spec.replicas); gen_before=$(wdep .metadata.generation)
-[ -n "$live_replicas" ] && [ -n "$gen_before" ] || sfail "could not read .spec.replicas and .metadata.generation of e2e-worker"
+# the claim (AC-120.19) is the replica count; .metadata.generation also counts the autoscaler's own replica writes, so the rest of
+# the spec is compared field by field instead, and the generations are only printed
+spec_wo_replicas() { kc get deployments.apps e2e-worker -o json | python3 -c 'import json,sys; s=json.load(sys.stdin)["spec"]; s.pop("replicas",None); print(json.dumps(s,sort_keys=True))'; }
+live_replicas=$(wdep .spec.replicas); gen_before=$(wdep .metadata.generation); spec_before=$(spec_wo_replicas)
+[ -n "$live_replicas" ] && [ -n "$gen_before" ] && [ -n "$spec_before" ] || sfail "could not read .spec and .metadata.generation of e2e-worker"
 kubectl kustomize "$(ovd e2e-worker)" | (cd "$gitops_repo" && uv run -q --with pyyaml python -c "$sync_py" "$live_replicas") | kc apply -f - >/dev/null || sfail "applying the rendered Deployment with the live replica count failed"
 sleep 5
-[ "$(wdep .spec.replicas)" = "$live_replicas" ] && [ "$(wdep .metadata.generation)" = "$gen_before" ] || sfail "the sync changed the Deployment: .spec.replicas $live_replicas -> $(wdep .spec.replicas), .metadata.generation $gen_before -> $(wdep .metadata.generation) (expected both unchanged)"
-sok "after the sync emulation .spec.replicas ($live_replicas) and .metadata.generation ($gen_before) are unchanged"
+spec_after=$(spec_wo_replicas); rep_after=$(wdep .spec.replicas); gen_after=$(wdep .metadata.generation)
+if [ "$rep_after" != "$live_replicas" ] || [ "$spec_after" != "$spec_before" ]; then
+  diff <(tr ',' '\n' <<< "$spec_before") <(tr ',' '\n' <<< "$spec_after") | head -20 || true
+  sfail "the sync changed the Deployment: .spec.replicas $live_replicas -> $rep_after, the rest of .spec $( [ "$spec_after" = "$spec_before" ] && echo unchanged || echo changed ) (.metadata.generation $gen_before -> $gen_after)"
+fi
+sok "after the sync emulation .spec.replicas ($live_replicas) and the rest of .spec are unchanged (.metadata.generation $gen_before -> $gen_after)"
 
 sstep "Scaling: system status --json shows scale min 0, max 5 and a live replica count for e2e-worker, none for e2e-api; the text shows replicas <n> (0–5) (AC-120.22)"
 sargs=(--repo-dir "$gitops_repo" --context "k3d-$cluster")
