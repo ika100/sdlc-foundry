@@ -110,7 +110,6 @@ Then make **one** Bash call (it commits everything with `-s`, finds the open iss
 cplat pr open --title "<type>(<scope>): <imperative description of the task>" [--issues "#NNN …"] [--no-spec]
 ```
 
-
 Use `fix:` for bug fixes, `chore:` for tooling, `docs:` for documentation, etc.; the title must be a Conventional Commits title (the `pr-title` CI check). Pass `--issues` for `#NNN` references in `$ARGUMENTS`.
 
 Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report which part failed and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
