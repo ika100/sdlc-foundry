@@ -480,7 +480,7 @@ def test_the_root_validate_recipe_and_ci_run_the_pin_check_ac_121_2():  # AC-121
     assert "scripts/check-pins.py" in (recipe if isinstance(recipe, str) else " ".join(recipe))
     ci = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
     step = next((s for s in ci["jobs"]["validate-shapes"]["steps"] if s.get("name") == "every image and chart comes from the versions table"), None)
-    assert step is not None and step["run"] == "python3 scripts/check-pins.py"
+    assert step is not None and step["run"].split("  #")[0].strip() == "uv run --with-requirements requirements-test.txt python scripts/check-pins.py"  # spec 127: pyyaml from the pinned test tools
 
 
 # ---------------- AC-121.23 / .26: the release check ----------------
