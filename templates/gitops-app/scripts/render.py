@@ -236,63 +236,210 @@ TYPES = {
 }
 API_TYPES = ["openapi", "grpc", "graphql", "events"]
 POLICY_VALUES = {"audit": "Audit", "enforce": "Enforce", "off": "Off"}     # system.yaml policy -> the 4.x mode
-# Pinned versions (ADR-058). Changing a pin follows spec 121. A database image is `ghcr.io/cloudnative-pg/postgresql:<major>.<minor>`
-# (optionally with an `@sha256:` digest); the operator row is the CloudNativePG chart and the operator version it installs.
+# The versions table (ADR-058, ADR-069, spec 121): every image and chart the renderer writes or the local cluster installs is a row of
+# `versions_table()` with an exact version; an image reference is `<repository>:<tag>@sha256:<digest>`. Changing a pin follows spec 121
+# and ADR-069 (CHANGELOG lists every changed row). A database image is CloudNativePG's `standard-trixie` build of a minor.
 POSTGRES_IMAGES = {
-    15: "ghcr.io/cloudnative-pg/postgresql:15.19",
-    16: "ghcr.io/cloudnative-pg/postgresql:16.15",
-    17: "ghcr.io/cloudnative-pg/postgresql:17.11",
-    18: "ghcr.io/cloudnative-pg/postgresql:18.6",
+    15: "ghcr.io/cloudnative-pg/postgresql:15.19-202610260819-standard-trixie@sha256:f617efc030d3099362e7fca616bb6d83d102599abf9b7b5e225482e4d0306aa3",
+    16: "ghcr.io/cloudnative-pg/postgresql:16.15-202610260820-standard-trixie@sha256:1ec419e997a8bde5263b6951f4c5ebc4aa2e1937927001f2561025c0a816e174",
+    17: "ghcr.io/cloudnative-pg/postgresql:17.11-202610260819-standard-trixie@sha256:ed6923f9ba2399cf9070379a353c710c29ced8a294be73986a2c3dae7e599ce3",
+    18: "ghcr.io/cloudnative-pg/postgresql:18.6-202610260820-standard-trixie@sha256:39add80f5b1e573e2f6b641c66fd1a2f8dede67ca0330e870285bc1078551390",
 }
-VALKEY_IMAGES = {         # matches ^valkey/valkey:\d+\.\d+\.\d+(@sha256:[0-9a-f]{64})?$; no bare major, no latest
-    8: "valkey/valkey:8.1.11",
-    9: "valkey/valkey:9.1.3",
+VALKEY_IMAGES = {         # no bare major, no latest
+    8: "valkey/valkey:8.1.11@sha256:8f836008e0986c36adf50da714c7060cf689dbb335f61fe077939d90fa650809",
+    9: "valkey/valkey:9.1.3@sha256:3add1a336a920ea54770a001ab6feb3da5fceea96a40373a3a2cd469b815f0b7",
 }
 NATS_CHART = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nats", "chart_version": "2.15.1"}   # per broker instance, not an operator
-NATS_IMAGES = {           # matches ^nats:\d+\.\d+\.\d+-alpine(@sha256:[0-9a-f]{64})?$; no bare minor, no latest
-    "2.14": "nats:2.14.9-alpine",
-    "2.15": "nats:2.15.2-alpine",
+NATS_IMAGES = {           # no bare minor, no latest
+    "2.14": "nats:2.14.9-alpine@sha256:127c5ccbc538a93f53ebb19461dc193130df386c2d6dab8199661a28a30d85bd",
+    "2.15": "nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5",
 }
-VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4"     # matches the Velero chart's appVersion line (1.14 <-> 1.18)
-SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51"     # every in-cluster bucket runs its own SeaweedFS of this image
+VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa"   # matches the Velero chart's appVersion line (1.14 <-> 1.18)
+SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8"     # every in-cluster bucket runs its own SeaweedFS of this image
+COLLECTOR_IMAGE = "otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6"
+LGTM_IMAGE = "grafana/otel-lgtm:0.35.0@sha256:2de1094c593c671cbfca878a28ffcd7e46ff5e32f2ce966c0cf33003f6cf4266"
+CLUSTER_PINS = {          # installed by local-cluster.sh, never rendered
+    "argo-cd": {"version": "v3.4.12", "manifest": "https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.12/manifests/install.yaml"},
+    "k3s": {"image": "rancher/k3s:v1.32.5-k3s1@sha256:b75eac801bbc91b4584769c840f346683c7740d72f83e630088370f8e1eb2c8a"},
+    "gateway-api": {"version": "v1.2.1",
+                    "manifest": "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml"},
+}
+SUPPORTED_MAJORS = {"database": (16, 17, 18), "cache": (8, 9), "broker": ("2.14", "2.15")}   # upgrade targets
+DEPRECATED_MAJORS = {"database": (15,)}                                                       # render, upgrade from, never to
+UPGRADE_PATHS = {"database": {15: (16, 17, 18), 16: (17, 18), 17: (18,), 18: ()},
+                 "cache": {8: (9,), 9: ()}, "broker": {"2.14": ("2.15",), "2.15": ()}}
+# The CRDs of every operator chart version below and the versions each serves (`served: true` at the chart's default values), read from the
+# chart archives on 2026-10-28; the comment above each constant says where the chart keeps them (`crds/` is installed once by Helm and
+# never upgraded, `templates/` follows every upgrade).
+# cloudnative-pg: templates/crds/crds.yaml, gate crds.create (default true): installed by the chart, not from crds/
+_CRDS_CLOUDNATIVE_PG = {
+    "backups.postgresql.cnpg.io": ["v1"],
+    "clusterimagecatalogs.postgresql.cnpg.io": ["v1"],
+    "clusters.postgresql.cnpg.io": ["v1"],
+    "databaseroles.postgresql.cnpg.io": ["v1"],
+    "databases.postgresql.cnpg.io": ["v1"],
+    "failoverquorums.postgresql.cnpg.io": ["v1"],
+    "imagecatalogs.postgresql.cnpg.io": ["v1"],
+    "poolers.postgresql.cnpg.io": ["v1"],
+    "publications.postgresql.cnpg.io": ["v1"],
+    "scheduledbackups.postgresql.cnpg.io": ["v1"],
+    "subscriptions.postgresql.cnpg.io": ["v1"],
+}
+# seaweedfs: templates/crd-seaweed.yaml, gate crds.create (default true)
+_CRDS_SEAWEEDFS = {
+    "adminscripts.seaweed.seaweedfs.com": ["v1"],
+    "bucketlifecyclepolicies.seaweed.seaweedfs.com": ["v1"],
+    "bucketnotifications.seaweed.seaweedfs.com": ["v1"],
+    "buckets.seaweed.seaweedfs.com": ["v1"],
+    "resourcereferencegrants.seaweed.seaweedfs.com": ["v1"],
+    "s3credentials.seaweed.seaweedfs.com": ["v1"],
+    "s3identities.seaweed.seaweedfs.com": ["v1"],
+    "s3oidcproviders.seaweed.seaweedfs.com": ["v1"],
+    "s3policies.seaweed.seaweedfs.com": ["v1"],
+    "s3policybindings.seaweed.seaweedfs.com": ["v1"],
+    "seaweedbackups.seaweed.seaweedfs.com": ["v1"],
+    "seaweedcsidrivers.seaweed.seaweedfs.com": ["v1"],
+    "seaweedrestores.seaweed.seaweedfs.com": ["v1"],
+    "seaweeds.seaweed.seaweedfs.com": ["v1"],
+}
+# external-secrets: templates/crds/*.yaml, gates installCRDs and crds.create* (default true); v1beta1 is served only with crds.unsafeServeV1Beta1 (default false)
+_CRDS_EXTERNAL_SECRETS = {
+    "acraccesstokens.generators.external-secrets.io": ["v1alpha1"],
+    "beyondtrustworkloadcredentialsdynamicsecrets.generators.external-secrets.io": ["v1alpha1"],
+    "cloudsmithaccesstokens.generators.external-secrets.io": ["v1alpha1"],
+    "clusterexternalsecrets.external-secrets.io": ["v1"],
+    "clustergenerators.generators.external-secrets.io": ["v1alpha1"],
+    "clusterpushsecrets.external-secrets.io": ["v1alpha1"],
+    "clustersecretstores.external-secrets.io": ["v1"],
+    "ecrauthorizationtokens.generators.external-secrets.io": ["v1alpha1"],
+    "externalsecrets.external-secrets.io": ["v1"],
+    "fakes.generators.external-secrets.io": ["v1alpha1"],
+    "gcraccesstokens.generators.external-secrets.io": ["v1alpha1"],
+    "generatorstates.generators.external-secrets.io": ["v1alpha1"],
+    "githubaccesstokens.generators.external-secrets.io": ["v1alpha1"],
+    "gitlabdeploytokens.generators.external-secrets.io": ["v1alpha1"],
+    "grafanas.generators.external-secrets.io": ["v1alpha1"],
+    "mfas.generators.external-secrets.io": ["v1alpha1"],
+    "passwords.generators.external-secrets.io": ["v1alpha1"],
+    "pushsecrets.external-secrets.io": ["v1alpha1"],
+    "quayaccesstokens.generators.external-secrets.io": ["v1alpha1"],
+    "secretstores.external-secrets.io": ["v1"],
+    "sshkeys.generators.external-secrets.io": ["v1alpha1"],
+    "stssessiontokens.generators.external-secrets.io": ["v1alpha1"],
+    "uuids.generators.external-secrets.io": ["v1alpha1"],
+    "vaultdynamicsecrets.generators.external-secrets.io": ["v1alpha1"],
+    "webhooks.generators.external-secrets.io": ["v1alpha1"],
+}
+# kyverno: subcharts crds/ and kyverno-api templates, gate crds.install (default true); openreports CRDs need openreports.installCrds (default false); updaterequests v1beta1 is not served
+_CRDS_KYVERNO = {
+    "cleanuppolicies.kyverno.io": ["v2", "v2beta1"],
+    "clustercleanuppolicies.kyverno.io": ["v2", "v2beta1"],
+    "clusterpolicies.kyverno.io": ["v1", "v2beta1"],
+    "globalcontextentries.kyverno.io": ["v2", "v2alpha1", "v2beta1"],
+    "policies.kyverno.io": ["v1", "v2beta1"],
+    "policyexceptions.kyverno.io": ["v2", "v2beta1"],
+    "updaterequests.kyverno.io": ["v2"],
+    "clusterephemeralreports.reports.kyverno.io": ["v1"],
+    "ephemeralreports.reports.kyverno.io": ["v1"],
+    "clusterpolicyreports.wgpolicyk8s.io": ["v1alpha2"],
+    "policyreports.wgpolicyk8s.io": ["v1alpha2"],
+    "deletingpolicies.policies.kyverno.io": ["v1", "v1alpha1", "v1beta1"],
+    "generatingpolicies.policies.kyverno.io": ["v1", "v1alpha1", "v1beta1"],
+    "imagevalidatingpolicies.policies.kyverno.io": ["v1", "v1alpha1", "v1beta1"],
+    "mutatingpolicies.policies.kyverno.io": ["v1", "v1alpha1", "v1beta1"],
+    "namespaceddeletingpolicies.policies.kyverno.io": ["v1", "v1beta1"],
+    "namespacedgeneratingpolicies.policies.kyverno.io": ["v1", "v1beta1"],
+    "namespacedimagevalidatingpolicies.policies.kyverno.io": ["v1", "v1beta1"],
+    "namespacedmutatingpolicies.policies.kyverno.io": ["v1", "v1beta1"],
+    "namespacedvalidatingpolicies.policies.kyverno.io": ["v1", "v1beta1"],
+    "policyexceptions.policies.kyverno.io": ["v1", "v1alpha1", "v1beta1"],
+    "validatingpolicies.policies.kyverno.io": ["v1", "v1alpha1", "v1beta1"],
+}
+# plugin-barman-cloud: templates/crds/crds.yaml, gate crds.create (default true)
+_CRDS_PLUGIN_BARMAN_CLOUD = {
+    "objectstores.barmancloud.cnpg.io": ["v1"],
+}
+# cert-manager: templates/crd-*.yaml, gate crds.enabled (default false, set true in `values` below)
+_CRDS_CERT_MANAGER = {
+    "challenges.acme.cert-manager.io": ["v1"],
+    "orders.acme.cert-manager.io": ["v1"],
+    "certificaterequests.cert-manager.io": ["v1"],
+    "certificates.cert-manager.io": ["v1"],
+    "clusterissuers.cert-manager.io": ["v1"],
+    "issuers.cert-manager.io": ["v1"],
+}
+# velero: crds/ (Helm installs them once and never upgrades them)
+_CRDS_VELERO = {
+    "backuprepositories.velero.io": ["v1"],
+    "backups.velero.io": ["v1"],
+    "backupstoragelocations.velero.io": ["v1"],
+    "datadownloads.velero.io": ["v2alpha1"],
+    "datauploads.velero.io": ["v2alpha1"],
+    "deletebackuprequests.velero.io": ["v1"],
+    "downloadrequests.velero.io": ["v1"],
+    "podvolumebackups.velero.io": ["v1"],
+    "podvolumerestores.velero.io": ["v1"],
+    "restores.velero.io": ["v1"],
+    "schedules.velero.io": ["v1"],
+    "serverstatusrequests.velero.io": ["v1"],
+    "volumesnapshotlocations.velero.io": ["v1"],
+}
+# nack: crds/crds.yml (Helm installs them once and never upgrades them); v1beta1 is not served
+_CRDS_NACK = {
+    "streams.jetstream.nats.io": ["v1beta2"],   # streamtemplates.jetstream.nats.io is installed but serves no version (v1beta1 served: false), so it has no entry
+    "consumers.jetstream.nats.io": ["v1beta2"],
+    "accounts.jetstream.nats.io": ["v1beta2"],
+    "keyvalues.jetstream.nats.io": ["v1beta2"],
+    "objectstores.jetstream.nats.io": ["v1beta2"],
+}
+# keda: templates/crds/*.yaml, gate crds.install (default true)
+_CRDS_KEDA = {
+    "cloudeventsources.eventing.keda.sh": ["v1alpha1"],
+    "clustercloudeventsources.eventing.keda.sh": ["v1alpha1"],
+    "clustertriggerauthentications.keda.sh": ["v1alpha1"],
+    "scaledjobs.keda.sh": ["v1alpha1"],
+    "scaledobjects.keda.sh": ["v1alpha1"],
+    "triggerauthentications.keda.sh": ["v1alpha1"],
+}
+
 OPERATORS = {
     "cloudnative-pg": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "cloudnative-pg", "chart_version": "0.29.1",
-                       "operator_version": "1.30.1", "namespace": "cnpg-system", "release": "cnpg", "crd": "clusters.postgresql.cnpg.io"},
+                       "operator_version": "1.30.1", "namespace": "cnpg-system", "release": "cnpg", "crd": "clusters.postgresql.cnpg.io", "crds": _CRDS_CLOUDNATIVE_PG},
     "seaweedfs": {"repo_url": "https://seaweedfs.github.io/seaweedfs-operator", "chart": "seaweedfs-operator", "chart_version": "0.1.45",
                   "operator_version": "1.0.42", "namespace": "seaweedfs-operator", "release": "seaweedfs-operator",
-                  "crd": "buckets.seaweed.seaweedfs.com"},
+                  "crd": "buckets.seaweed.seaweedfs.com", "crds": _CRDS_SEAWEEDFS},
     # `selector` (optional, default `app.kubernetes.io/name=<chart>`): the operator Deployment whose image tag is the version; used by doctor.
     "external-secrets": {"repo_url": "https://charts.external-secrets.io", "chart": "external-secrets", "chart_version": "2.12.0",
                          "operator_version": "2.12.0", "namespace": "external-secrets", "release": "external-secrets",
-                         "crd": "clustersecretstores.external-secrets.io"},
+                         "crd": "clustersecretstores.external-secrets.io", "crds": _CRDS_EXTERNAL_SECRETS},
     "kyverno": {"repo_url": "https://kyverno.github.io/kyverno", "chart": "kyverno", "chart_version": "3.9.1",
                 "operator_version": "1.19.1", "namespace": "kyverno", "release": "kyverno",
-                "crd": "namespacedvalidatingpolicies.policies.kyverno.io",
+                "crd": "namespacedvalidatingpolicies.policies.kyverno.io", "crds": _CRDS_KYVERNO,
                 "selector": "app.kubernetes.io/component=admission-controller,app.kubernetes.io/instance=kyverno"},
     # Spec 117: the Barman Cloud plugin (and its hard requirement cert-manager) for database backups, Velero for environment backups.
     "plugin-barman-cloud": {"repo_url": "https://cloudnative-pg.github.io/charts", "chart": "plugin-barman-cloud", "chart_version": "0.8.1",
                             "operator_version": "0.15.1", "namespace": "cnpg-system", "release": "barman-cloud",
-                            "crd": "objectstores.barmancloud.cnpg.io", "retry": True},
+                            "crd": "objectstores.barmancloud.cnpg.io", "crds": _CRDS_PLUGIN_BARMAN_CLOUD, "retry": True},
     "cert-manager": {"repo_url": "https://charts.jetstack.io", "chart": "cert-manager", "chart_version": "v1.21.3",
                      "operator_version": "1.21.3", "namespace": "cert-manager", "release": "cert-manager",
-                     "crd": "certificates.cert-manager.io", "values": {"crds": {"enabled": True}}},
+                     "crd": "certificates.cert-manager.io", "crds": _CRDS_CERT_MANAGER, "values": {"crds": {"enabled": True}}},
     "velero": {"repo_url": "https://vmware-tanzu.github.io/helm-charts", "chart": "velero", "chart_version": "12.2.1",
-               "operator_version": "1.18.2", "namespace": "velero", "release": "velero", "crd": "schedules.velero.io", "finalizer": True,
+               "operator_version": "1.18.2", "namespace": "velero", "release": "velero", "crd": "schedules.velero.io", "crds": _CRDS_VELERO, "finalizer": True,
                "values": {"initContainers": [{"name": "velero-plugin-for-aws", "image": VELERO_AWS_PLUGIN_IMAGE,
                                               "volumeMounts": [{"mountPath": "/target", "name": "plugins"}]}],
                           "deployNodeAgent": True, "snapshotsEnabled": False, "credentials": {"useSecret": False},
                           "configuration": {"backupStorageLocation": [], "volumeSnapshotLocation": [], "uploaderType": "kopia"}}},
     # Spec 119: the NATS JetStream controller (NACK) reconciles the Account, Stream and Consumer objects of in-cluster brokers.
     "nack": {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nack", "chart_version": "0.35.0",
-             "operator_version": "0.24.0", "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io",
+             "operator_version": "0.24.0", "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io", "crds": _CRDS_NACK,
              "selector": "app=nack"},   # the chart's useLegacyNames (default true) labels the Deployment app: <release>
     # Spec 120: KEDA scales queue-triggered instances; metrics-server serves cpu/memory to the HPA when the cluster lacks one.
     "keda": {"repo_url": "https://kedacore.github.io/charts", "chart": "keda", "chart_version": "2.19.0",
-             "operator_version": "2.19.0", "namespace": "keda", "release": "keda", "crd": "scaledobjects.keda.sh",
+             "operator_version": "2.19.0", "namespace": "keda", "release": "keda", "crd": "scaledobjects.keda.sh", "crds": _CRDS_KEDA,
              "selector": "app.kubernetes.io/name=keda-operator"},   # the chart names the Deployment keda-operator; the default label would match nothing
     "metrics-server": {"repo_url": "https://kubernetes-sigs.github.io/metrics-server", "chart": "metrics-server",
                        "chart_version": "3.14.0", "operator_version": "0.9.0", "namespace": "kube-system",
-                       "release": "metrics-server", "crd": None, "selector": "app.kubernetes.io/name=metrics-server"},
+                       "release": "metrics-server", "crd": None, "crds": {}, "selector": "app.kubernetes.io/name=metrics-server"},
 }
 OPERATOR_RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
 OPERATOR_OF_TYPE = {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}
@@ -304,7 +451,7 @@ ADDONS = {
     "observability": {
         "scope": "all",
         "prune": True,                      # configuration only: removing it removes the collector (a database keeps its data)
-        "image": "otel/opentelemetry-collector-contrib:0.162.0",
+        "image": COLLECTOR_IMAGE,
         "defaults": {"ui": "none"},
     },
 }
@@ -2259,7 +2406,9 @@ def broker_files(app: str, name: str, env: str, cfg: dict, services: list[dict],
         cenv[f"USER_{secret_env(c)}_PASSWORD"] = {"valueFrom": {"secretKeyRef": {"name": f"{n}-{c}-app", "key": "password"}}}  # pragma: allowlist secret
     sec = lambda: {"runAsNonRoot": True, "runAsUser": 1000, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,  # noqa: E731
                    "capabilities": {"drop": ["ALL"]}}
-    repository, tag = NATS_IMAGES[conf["version"]].rsplit(":", 1)
+    image, digest = NATS_IMAGES[conf["version"]].split("@", 1)
+    repository, tag = image.rsplit(":", 1)
+    tag = f"{tag}@{digest}"
     replicas = conf["replicas"]
     files["server.yaml"] = {
         "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
@@ -2666,7 +2815,45 @@ def unmigrated_dirs() -> list[Path]:
     return sorted(p for p in top.iterdir() if p.is_dir() and ((p / "app.yaml").is_file() or (p / "services.yaml").is_file()))
 
 
+def versions_table() -> list[dict]:
+    """The versions table (spec 121, ADR-069): one row per image, chart and manifest the renderer writes or the local cluster installs."""
+    def image_row(name, engine, major, status, ref_digest, part=None):
+        ref, digest = ref_digest.split("@", 1)
+        tag = ref.rsplit(":", 1)[1]
+        return {"name": name, "kind": "image", "engine": engine, "major": major, "status": status,
+                "version": tag.split("-")[0] if part else tag, "ref": ref, "digest": digest, "app_version": None, "crds": None}
+
+    def status_of(engine, major):
+        return "deprecated" if major in DEPRECATED_MAJORS.get(engine, ()) else "supported"
+
+    rows = [image_row(f"postgres {m}", "database", m, status_of("database", m), ref, True) for m, ref in POSTGRES_IMAGES.items()]
+    rows += [image_row(f"valkey {m}", "cache", m, status_of("cache", m), ref) for m, ref in VALKEY_IMAGES.items()]
+    rows += [image_row(f"nats {m}", "broker", m, status_of("broker", m), ref, True) for m, ref in NATS_IMAGES.items()]
+    rows.append({"name": "nats", "kind": "chart", "engine": "broker", "major": None, "status": None, "version": NATS_CHART["chart_version"],
+                 "ref": f"{NATS_CHART['repo_url']} {NATS_CHART['chart']}", "digest": None, "app_version": None, "crds": None})
+    rows += [image_row("seaweedfs", "bucket", None, None, SEAWEEDFS_IMAGE),
+             image_row("opentelemetry-collector", None, None, None, COLLECTOR_IMAGE),
+             image_row("lgtm", None, None, None, LGTM_IMAGE),
+             image_row("velero-plugin-for-aws", None, None, None, VELERO_AWS_PLUGIN_IMAGE)]
+
+    def manifest_row(name):
+        pin = CLUSTER_PINS[name]
+        return {"name": name, "kind": "manifest", "engine": None, "major": None, "status": None, "version": pin["version"],
+                "ref": pin["manifest"], "digest": None, "app_version": None, "crds": None}
+
+    rows.append(manifest_row("argo-cd"))
+    rows.append(image_row("k3s", None, None, None, CLUSTER_PINS["k3s"]["image"]))
+    rows.append(manifest_row("gateway-api"))
+    rows += [{"name": f"operator {n}", "kind": "chart", "engine": None, "major": None, "status": None, "version": op["chart_version"],
+              "ref": f"{op['repo_url']} {op['chart']}", "digest": None, "app_version": op["operator_version"], "crds": op["crds"]}
+             for n, op in OPERATORS.items()]
+    return rows
+
+
 def main() -> int:
+    if "--versions" in sys.argv[1:]:
+        print(json.dumps(versions_table(), indent=2))
+        return 0
     check = "--check" in sys.argv[1:]
     old = unmigrated_dirs()
     if old:
