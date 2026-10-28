@@ -17,7 +17,7 @@ from broker_fixtures import (ALLOWED_INST, ALLOWED_TOP, BKEYS, BVARS, CHART, DEF
                              expected_user_secret, ext_comp, lib_comp, shape, tree_digest, upper, wide)
 from cache_fixtures import cache
 from resources_fixtures import (APP, ENVS, addon_names, comp, db, env_list, fails, ok, platform_render_module, render, render5, render_50,
-                                secret_vars, sets, system, tree, var_order, y)
+                                secret_vars, sets, system, tree, unpin, var_order, y)  # spec 121: unpin
 from system_fixtures import full5, rich5, write_system
 
 USERS = [("api", ["orders"], []), ("web", [], ["orders"])]
@@ -72,14 +72,14 @@ def test_other_unknown_top_level_keys_fail_ac_119_1(tmp_path, key):  # AC-119.1
     fails(tmp_path, bsys({"bus": broker(**{key: 1})}), P + f"resources.bus: unknown key '{key}' (allowed: {ALLOWED_TOP})")
 
 
-@pytest.mark.parametrize("key", ["version", "backup", "bogus"])
+@pytest.mark.parametrize("key", ["backup", "bogus"])  # spec 121: version is an instance key
 def test_an_unknown_instance_key_fails_ac_119_1(tmp_path, key):  # AC-119.1
     fails(tmp_path, bsys({"bus": broker(instances={"dev": {key: 1}})}), P + f"resources.bus.instances.dev: unknown key '{key}' (allowed: {ALLOWED_INST})")
 
 
 def test_instances_must_be_a_mapping_ac_119_1(tmp_path):  # AC-119.1
     fails(tmp_path, bsys({"bus": broker(instances=["dev"])}),
-          P + "resources.bus.instances must be a mapping of environments to {external, remote, replicas, storage, resources}")
+          P + "resources.bus.instances must be a mapping of environments to {external, remote, replicas, storage, resources, version}")   # spec 121: version per environment
 
 
 def test_an_unused_broker_is_validated_too_ac_119_1(tmp_path):  # AC-119.1
@@ -226,7 +226,7 @@ def test_the_effective_values_default_to_2_15_one_replica_1gi_and_no_resources_a
     assert sorted(envs) == sorted(ENVS)
     for e in ENVS:
         assert envs[e] == {"external": False, "version": "2.15", "replicas": 1, "storage": "1Gi", "resources": None, "store_key": None,
-                           "refreshInterval": None}, e
+                           "refreshInterval": None, "pin": "nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5", "chart_version": "2.15.1"}, e   # spec 121: pin and chart_version
         assert isinstance(envs[e]["version"], str) and isinstance(envs[e]["replicas"], int)
 
 
@@ -247,7 +247,7 @@ def test_a_float_or_a_string_version_is_read_as_its_text_ac_119_3(tmp_path, give
 def test_an_external_instance_has_no_sizing_and_keeps_the_component_placeholder_ac_119_3(tmp_path):  # AC-119.3
     envs = effective(tmp_path, bsys({"bus": broker(instances={"prod": {"external": True}})}))
     assert envs["prod"] == {"external": True, "version": None, "replicas": None, "storage": None, "resources": None,
-                            "store_key": "shop-prod-bus-{component}", "refreshInterval": "1h"}
+                            "store_key": "shop-prod-bus-{component}", "refreshInterval": "1h", "pin": None}   # spec 121: pin
     assert envs["dev"]["external"] is False and envs["dev"]["version"] == "2.15"
 
 
@@ -255,7 +255,7 @@ def test_a_default_broker_uses_the_pinned_server_1gi_and_the_default_requests_an
     g = ok(tmp_path, bsys())
     for env in ENVS:
         values = bdoc(g, env, "server.yaml")["spec"]["source"]["helm"]["valuesObject"]
-        assert values["container"]["image"] == {"repository": "nats", "tag": "2.15.2-alpine"}
+        assert values["container"]["image"] == {"repository": "nats", "tag": "2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5"}  # spec 121: digest
         assert values["config"]["jetstream"]["fileStore"]["pvc"]["size"] == "1Gi"
         assert values["container"]["merge"]["resources"] == DEFAULT_RESOURCES
         assert bdoc(g, env, "server.yaml") == expected_server(USERS, env=env)
@@ -296,10 +296,14 @@ def test_an_instance_resources_must_be_a_mapping_ac_119_3(tmp_path):  # AC-119.3
     fails(tmp_path, bsys({"bus": broker(instances={"staging": {"resources": "lots"}})}), P + "resources.bus.instances.staging: resources must be a mapping")
 
 
+DIGESTS = {"2.14.9-alpine": "127c5ccbc538a93f53ebb19461dc193130df386c2d6dab8199661a28a30d85bd",   # spec 121
+           "2.15.2-alpine": "823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5"}
+
+
 @pytest.mark.parametrize("version, tag", [("2.14", "2.14.9-alpine"), ("2.15", "2.15.2-alpine")])
 def test_each_minor_line_runs_its_pinned_release_ac_119_3(tmp_path, version, tag):  # AC-119.3
     values = bdoc(ok(tmp_path, bsys({"bus": broker(version=version)})), "dev", "server.yaml")["spec"]["source"]["helm"]["valuesObject"]
-    assert values["container"]["image"] == {"repository": "nats", "tag": tag}
+    assert values["container"]["image"] == {"repository": "nats", "tag": tag + "@sha256:" + DIGESTS[tag]}   # spec 121: digest
 
 
 def test_a_version_change_changes_only_the_server_image_ac_119_3(tmp_path):  # AC-119.3
@@ -1023,7 +1027,7 @@ def test_the_nats_pins_are_exact_in_the_versions_table_ac_119_20(tmp_path):  # A
 
 def test_the_nack_operator_is_pinned_exactly_ac_119_20(tmp_path):  # AC-119.20
     r = renderer("render_119_nack")
-    assert getattr(r, "OPERATORS", {}).get("nack") == NACK
+    assert {k: v for k, v in getattr(r, "OPERATORS", {}).get("nack", {}).items() if k != "crds"} == NACK   # spec 121: the table gains a crds key
     assert list(r.OPERATORS).index("nack") == 7 and r.OPERATOR_OF_TYPE == {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}  # spec 120: nack stays the eighth entry (keda and metrics-server follow)
     assert r.BROKER_DEFAULT_RESOURCES == DEFAULT_RESOURCES
 
@@ -1036,7 +1040,8 @@ def test_no_floating_tag_is_rendered_ac_119_20(tmp_path, version):  # AC-119.20
     server = bdoc(g, "dev", "server.yaml")["spec"]["source"]
     assert server["targetRevision"] == "2.15.1" and server["chart"] == "nats" and server["repoURL"] == "https://nats-io.github.io/k8s/helm/charts"
     image = server["helm"]["valuesObject"]["container"]["image"]
-    assert re.fullmatch(r"\d+\.\d+\.\d+-alpine", image["tag"]) and image["repository"] == "nats"
+    assert re.fullmatch(r"\d+\.\d+\.\d+-alpine@sha256:[0-9a-f]{64}", image["tag"])   # spec 121: digest
+    assert image["repository"] == "nats"
 
 
 def test_the_nack_application_pins_the_chart_exactly_ac_119_20(tmp_path):  # AC-119.20
@@ -1169,7 +1174,7 @@ def _before_docs():
 def test_a_5x_system_without_a_broker_renders_byte_identically_to_before_ac_119_24(tmp_path, label):  # AC-119.24
     g = ok(tmp_path, _before_docs()[label])
     digest, count = BEFORE_119[label]
-    assert (len(g), tree_digest(g)) == (count, digest), f"{label}: the render changed although the system has no broker"
+    assert (len(g), tree_digest(unpin(g))) == (count, digest), f"{label}: the render changed although the system has no broker"  # spec 121: only the engine references changed
 
 
 def _events_only() -> dict:

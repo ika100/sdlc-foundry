@@ -7,6 +7,7 @@ The `resource` noun of the domain model: things a system provides to its compone
 | `/resource:add` | `cplat resource add <name> --type database|bucket|cache|broker [--version V] [--replicas N] [--storage S] [--versioning] [--external [--path P]]`: declare a resource, one PR |
 | `/resource:remove` | `cplat resource remove <name>`: refused while a component uses it |
 | `/resource:backup` | `cplat resource backup <db> --env <env>`: one on-demand database backup now |
+| `/resource:upgrade` | `cplat resource upgrade <name> --to <major> [--env <env>] --pr --wait`: move one environment of a database or cache to a new major, one PR per environment, then verify (a database needs a backup from the last 60 minutes) |
 | `/resource:restore` | `cplat resource restore <db> --env <env> (--to <time\|latest> \| --switch \| --discard) [--confirm prod]`: restore by generation |
 
 Observability is not a resource: it is set per environment under `environments.<env>.observability` in `system.yaml`.

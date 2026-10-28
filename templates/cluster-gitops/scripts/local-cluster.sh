@@ -11,9 +11,12 @@
 #   LOCAL_CLUSTER        cluster name (default <app>-local)
 #   LOCAL_HTTP_PORT      host port of the Gateway (unset: 8088, or the next free port when 8088 is busy; `auto`: the first free port; an explicit busy port is reported
 #                        with its owner before anything is created)
-#   ARGOCD_VERSION       default stable
-#   K3S_IMAGE            default rancher/k3s:v1.32.5-k3s1 — the version the Gateway setup below is verified against
+#   ARGOCD_VERSION       default v3.4.12 (the versions table of this platform release)
+#   K3S_IMAGE            default rancher/k3s:v1.32.5-k3s1@sha256:b75eac801bbc91b4584769c840f346683c7740d72f83e630088370f8e1eb2c8a — the version the Gateway setup below is verified against
 #                        (k3d's own default may be older and ship a Traefik without Gateway API support)
+#   Every default of this script equals its row of the versions table (`cplat platform versions`). A variable that sets a
+#   different value prints `WARNING: <VAR>=<value> overrides the versions table (<row> <table version>); this cluster does not
+#   run what this platform release pins` before anything is created.
 #   GATEWAY_API_VERSION  only used if k3s' Traefik chart did not install the Gateway API CRDs (default v1.2.1)
 #   GH_TOKEN             default `gh auth token`; used for both credentials below unless they are set (ArgoCD mode only)
 #   REPO_TOKEN           least-privilege token for ArgoCD to read this repo: a fine-grained PAT with only
@@ -25,7 +28,7 @@
 #                        credential, before the namespaces and bootstrap/ (default 1)
 #   ESO_VERSION          External Secrets Operator chart version (default 2.12.0)
 #   WITH_ESO=0           skip External Secrets Operator (no `secrets:` support in that cluster)
-#   LGTM_VERSION         grafana/otel-lgtm image tag for `observability: {ui: lgtm}` (default 0.35.0)
+#   LGTM_VERSION         grafana/otel-lgtm image tag for `observability: {ui: lgtm}` (default 0.35.0, with its digest)
 #   WITH_LGTM            1 = install the dev Grafana stack, 0 = never; default: only if system.yaml says `ui: lgtm`
 #   KYVERNO_VERSION      Kyverno chart version (default 3.9.1)
 #   WITH_KYVERNO         1 = install Kyverno, 0 = never; default: only if an environment's policy in system.yaml is not off
@@ -41,7 +44,7 @@
 #   WITH_BARMAN_CLOUD    1 = Barman Cloud plugin (and cert-manager, which it needs), 0 = never; default: 1 exactly when
 #                        operators/apps/plugin-barman-cloud.yaml exists.
 #   VELERO_VERSION       Velero chart version (default: the targetRevision of operators/apps/velero.yaml, else 12.2.1)
-#   VELERO_AWS_PLUGIN_IMAGE  Velero AWS plugin image (default velero/velero-plugin-for-aws:v1.14.4)
+#   VELERO_AWS_PLUGIN_IMAGE  Velero AWS plugin image (default velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa)
 #   WITH_VELERO          1 = Velero, 0 = never; default: 1 exactly when operators/apps/velero.yaml exists.
 #                        All three are installed like CloudNativePG: from operators/root.yaml with Argo CD, k3s HelmCharts with WITH_ARGO=0.
 #   NACK_VERSION         NACK (NATS JetStream controller) chart version (default: the targetRevision of operators/apps/nack.yaml, else 0.35.0)
@@ -53,6 +56,8 @@
 #                        With 1, a new cluster is created without k3s' bundled metrics-server.
 #   REGISTRY_PORT        also create a local image registry reachable as localhost:<port> from the host and as
 #                        k3d-<cluster>-registry:<port> from the cluster
+# With Argo CD, External Secrets, Kyverno and the LGTM stack come from operators/apps/<name>.yaml (applied from operators/root.yaml) when
+# that file exists; otherwise (or with WITH_ARGO=0) this script installs them itself.
 # Re-running `up` is safe; it re-applies credentials and the root Application.
 set -euo pipefail
 
@@ -71,8 +76,10 @@ name="${LOCAL_CLUSTER:-$app-local}"
 ctx="k3d-$name"
 port="${LOCAL_HTTP_PORT:-default}"
 base_port="${LOCAL_HTTP_PORT_BASE:-8088}"   # the preferred port when LOCAL_HTTP_PORT is unset
-argocd_version="${ARGOCD_VERSION:-stable}"
-k3s_image="${K3S_IMAGE:-rancher/k3s:v1.32.5-k3s1}"
+argocd_version="${ARGOCD_VERSION:-v3.4.12}"
+k3s_requested="${K3S_IMAGE:-}"; unset K3S_IMAGE
+k3s_pinned="${K3S_IMAGE:-rancher/k3s:v1.32.5-k3s1@sha256:b75eac801bbc91b4584769c840f346683c7740d72f83e630088370f8e1eb2c8a}"
+k3s_image="${k3s_requested:-$k3s_pinned}"
 gateway_api_version="${GATEWAY_API_VERSION:-v1.2.1}"
 with_argo="${WITH_ARGO:-1}"
 registry_port="${REGISTRY_PORT:-}"
@@ -106,7 +113,10 @@ if [ "$with_kyverno" = auto ]; then
     inenv && /^    policy:[[:space:]]*["'"'"']?off["'"'"']?[[:space:]]*(#.*)?$/ {off++}
     END {print (envs > 0 && off >= envs) ? 0 : 1}' applications/*/system.yaml 2>/dev/null || echo 0)
 fi
-lgtm_version="${LGTM_VERSION:-0.35.0}"
+lgtm_pinned="grafana/otel-lgtm:0.35.0@sha256:2de1094c593c671cbfca878a28ffcd7e46ff5e32f2ce966c0cf33003f6cf4266"
+lgtm_default="${lgtm_pinned%%@*}"; lgtm_default="${lgtm_default##*:}"
+lgtm_version="${LGTM_VERSION:-$lgtm_default}"
+if [ "$lgtm_version" = "$lgtm_default" ]; then lgtm_image="$lgtm_pinned"; else lgtm_image="grafana/otel-lgtm:${lgtm_version}"; fi
 with_lgtm="${WITH_LGTM:-auto}"
 if [ "$with_lgtm" = auto ] && [ "$with_system" = 0 ]; then with_lgtm=0; fi
 if [ "$with_lgtm" = auto ]; then
@@ -131,7 +141,9 @@ velero_file=operators/apps/velero.yaml
 barman_version="${BARMAN_CLOUD_VERSION:-$(rev_of "$barman_file" 0.8.1)}"
 certmgr_version="${CERT_MANAGER_VERSION:-$(rev_of "$certmgr_file" v1.21.3)}"
 velero_version="${VELERO_VERSION:-$(rev_of "$velero_file" 12.2.1)}"
-velero_aws_plugin_image="${VELERO_AWS_PLUGIN_IMAGE:-velero/velero-plugin-for-aws:v1.14.4}"
+velero_plugin_requested="${VELERO_AWS_PLUGIN_IMAGE:-}"; unset VELERO_AWS_PLUGIN_IMAGE
+velero_plugin_pinned="${VELERO_AWS_PLUGIN_IMAGE:-velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa}"
+velero_aws_plugin_image="${velero_plugin_requested:-$velero_plugin_pinned}"
 nack_file=operators/apps/nack.yaml
 nack_version="${NACK_VERSION:-$(rev_of "$nack_file" 0.35.0)}"
 with_nack="${WITH_NACK:-auto}"
@@ -158,6 +170,18 @@ fi
 if [ "$with_metrics" = auto ]; then
   if [ -f "$metrics_file" ]; then with_metrics=1; else with_metrics=0; fi
 fi
+# With Argo CD the property operators come from operators/apps/<name>.yaml when it exists (spec 121); a cluster-up of an older
+# release left External Secrets or Kyverno as k3s HelmCharts, and those stay.
+eso_file=operators/apps/external-secrets.yaml
+kyverno_file=operators/apps/kyverno.yaml
+lgtm_file=operators/apps/lgtm.yaml
+argo_managed() {   # argo_managed <operator file>: 1 when Argo CD installs the operator from operators/root.yaml
+  if [ "$with_argo" = 1 ] && [ "$with_system" != 0 ] && [ -f operators/root.yaml ] && [ -f "$1" ]; then echo 1; else echo 0; fi
+}
+eso_argo=0; kyverno_argo=0; lgtm_argo=0
+[ "$with_eso" = 1 ] && eso_argo=$(argo_managed "$eso_file")
+[ "$with_kyverno" = 1 ] && kyverno_argo=$(argo_managed "$kyverno_file")
+[ "$with_lgtm" = 1 ] && lgtm_argo=$(argo_managed "$lgtm_file")
 registry="${name}-registry"
 org=$(sed -n 's/^github_org:[[:space:]]*//p' .copier-answers.yml | head -1)
 k() { kubectl --context "$ctx" "$@"; }
@@ -179,12 +203,68 @@ wait_resource_metrics() {   # cpu and memory scaling need metrics.k8s.io; warn, 
   echo "WARNING: the cluster serves no resource metrics yet (v1beta1.metrics.k8s.io is not Available); cpu and memory triggers cannot scale until it is"
 }
 
+overrides() {   # overrides <VAR> <requested value> <the table's default> <row> <table version>
+  if [ -n "$2" ] && [ "$2" != "$3" ]; then
+    echo "WARNING: $1=$2 overrides the versions table ($4 $5); this cluster does not run what this platform release pins"
+  fi
+}
+warn_overrides() {   # one line per variable that sets something other than the table's version; before anything is created
+  overrides ARGOCD_VERSION "${ARGOCD_VERSION:-}" v3.4.12 argo-cd v3.4.12
+  overrides K3S_IMAGE "$k3s_requested" "$k3s_pinned" k3s "$(v="${k3s_pinned#*:}"; echo "${v%%@*}")"
+  overrides GATEWAY_API_VERSION "${GATEWAY_API_VERSION:-}" v1.2.1 gateway-api v1.2.1
+  overrides LGTM_VERSION "${LGTM_VERSION:-}" "$lgtm_default" lgtm "$lgtm_default"
+  overrides VELERO_AWS_PLUGIN_IMAGE "$velero_plugin_requested" "$velero_plugin_pinned" velero-plugin-for-aws "$(v="${velero_plugin_pinned%%@*}"; echo "${v##*:}")"
+  overrides ESO_VERSION "${ESO_VERSION:-}" 2.12.0 "operator external-secrets" 2.12.0
+  overrides KYVERNO_VERSION "${KYVERNO_VERSION:-}" 3.9.1 "operator kyverno" 3.9.1
+  overrides CNPG_VERSION "${CNPG_VERSION:-}" 0.29.1 "operator cloudnative-pg" 0.29.1
+  overrides SEAWEEDFS_OPERATOR_VERSION "${SEAWEEDFS_OPERATOR_VERSION:-}" 0.1.45 "operator seaweedfs" 0.1.45
+  overrides BARMAN_CLOUD_VERSION "${BARMAN_CLOUD_VERSION:-}" 0.8.1 "operator plugin-barman-cloud" 0.8.1
+  overrides CERT_MANAGER_VERSION "${CERT_MANAGER_VERSION:-}" v1.21.3 "operator cert-manager" v1.21.3
+  overrides VELERO_VERSION "${VELERO_VERSION:-}" 12.2.1 "operator velero" 12.2.1
+  overrides NACK_VERSION "${NACK_VERSION:-}" 0.35.0 "operator nack" 0.35.0
+  overrides KEDA_VERSION "${KEDA_VERSION:-}" 2.19.0 "operator keda" 2.19.0
+  overrides METRICS_SERVER_VERSION "${METRICS_SERVER_VERSION:-}" 3.14.0 "operator metrics-server" 3.14.0
+}
+apply_eso_store() {   # the platform-secrets ClusterSecretStore (the cluster owner's, not an operator's) and its reader
+  k apply -f - >/dev/null <<'YAML'
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: eso-store, namespace: secrets-store}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: eso-store, namespace: secrets-store}
+rules:
+  - {apiGroups: [""], resources: [secrets], verbs: [get, list, watch]}
+  - {apiGroups: [authorization.k8s.io], resources: [selfsubjectrulesreviews], verbs: [create]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: eso-store, namespace: secrets-store}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: eso-store}
+subjects: [{kind: ServiceAccount, name: eso-store, namespace: secrets-store}]
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata: {name: platform-secrets}
+spec:
+  provider:
+    kubernetes:
+      remoteNamespace: secrets-store
+      server:
+        caProvider: {type: ConfigMap, name: kube-root-ca.crt, namespace: secrets-store, key: ca.crt}
+      auth:
+        serviceAccount: {name: eso-store, namespace: secrets-store}
+YAML
+}
+
 case "${1:-up}" in
   down)
     k3d cluster delete "$name"
     k3d registry delete "k3d-${registry}" >/dev/null 2>&1 || true
     ;;
   up)
+    warn_overrides
     if ! k3d cluster list "$name" >/dev/null 2>&1; then    # a new cluster binds the host ports: check them first
       if [ "$port" = default ]; then   # spec 056: no LOCAL_HTTP_PORT → the preferred port, or the next free one
         port=$(free_port "$base_port") || { echo "ERROR: no free host port between $base_port and $((base_port + 50))." >&2; exit 1; }
@@ -270,7 +350,16 @@ YAML
       exit 1
     fi
 
-    if [ "$with_eso" = 1 ]; then
+    if [ "$eso_argo" = 1 ] && k -n kube-system get helmchart external-secrets >/dev/null 2>&1; then
+      echo "External Secrets was installed by an older cluster-up (HelmChart kube-system/external-secrets); keeping it. Recreate the cluster to let Argo CD manage it"
+      eso_argo=0
+    fi
+    if [ "$kyverno_argo" = 1 ] && k -n kube-system get helmchart kyverno >/dev/null 2>&1; then
+      echo "Kyverno was installed by an older cluster-up (HelmChart kube-system/kyverno); keeping it. Recreate the cluster to let Argo CD manage it"
+      kyverno_argo=0
+    fi
+
+    if [ "$with_eso" = 1 ] && [ "$eso_argo" = 0 ]; then
       echo "Installing External Secrets Operator ($eso_version)"
       # k3s' Helm controller installs the chart, so no helm binary is needed. `generate` secrets need only the operator;
       # `remote` secrets read from the platform-secrets store: Secrets in the secrets-store namespace (set with `devbox run secret`).
@@ -296,39 +385,10 @@ YAML
         for _ in $(seq 1 100); do k -n external-secrets get "deploy/$d" >/dev/null 2>&1 && break; sleep 3; done
         k -n external-secrets rollout status "deploy/$d" --timeout=300s >/dev/null
       done
-      k apply -f - >/dev/null <<'YAML'
-apiVersion: v1
-kind: ServiceAccount
-metadata: {name: eso-store, namespace: secrets-store}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata: {name: eso-store, namespace: secrets-store}
-rules:
-  - {apiGroups: [""], resources: [secrets], verbs: [get, list, watch]}
-  - {apiGroups: [authorization.k8s.io], resources: [selfsubjectrulesreviews], verbs: [create]}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata: {name: eso-store, namespace: secrets-store}
-roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: eso-store}
-subjects: [{kind: ServiceAccount, name: eso-store, namespace: secrets-store}]
----
-apiVersion: external-secrets.io/v1
-kind: ClusterSecretStore
-metadata: {name: platform-secrets}
-spec:
-  provider:
-    kubernetes:
-      remoteNamespace: secrets-store
-      server:
-        caProvider: {type: ConfigMap, name: kube-root-ca.crt, namespace: secrets-store, key: ca.crt}
-      auth:
-        serviceAccount: {name: eso-store, namespace: secrets-store}
-YAML
+      apply_eso_store
     fi
 
-    if [ "$with_kyverno" = 1 ]; then
+    if [ "$with_kyverno" = 1 ] && [ "$kyverno_argo" = 0 ]; then
       echo "Installing Kyverno ($kyverno_version)"
       k apply -f - >/dev/null <<YAML
 apiVersion: helm.cattle.io/v1
@@ -546,8 +606,8 @@ spec:
 YAML
     fi
 
-    if [ "$with_lgtm" = 1 ]; then
-      echo "Installing the Grafana dev stack (otel-lgtm $lgtm_version): Grafana, Tempo, Loki, Prometheus in one pod (dev only)"
+    if [ "$with_lgtm" = 1 ] && [ "$lgtm_argo" = 0 ]; then
+      echo "Installing the Grafana dev stack (${lgtm_image%%@*}): Grafana, Tempo, Loki, Prometheus in one pod (dev only)"
       # One shared stack in its own namespace: the all-in-one image runs as root, so it stays outside the application namespaces.
       k create namespace observability --dry-run=client -o yaml | k apply -f - >/dev/null
       # Spec 101: the Claude Code usage dashboard. The image's own provider file lists three fixed files, so this adds a second
@@ -574,7 +634,7 @@ spec:
     spec:
       containers:
         - name: lgtm
-          image: grafana/otel-lgtm:${lgtm_version}
+          image: ${lgtm_image}
           ports: [{name: grafana, containerPort: 3000}, {name: otlp-grpc, containerPort: 4317}, {name: otlp-http, containerPort: 4318}, {name: prometheus, containerPort: 9090}]
           readinessProbe: {httpGet: {path: /api/health, port: grafana}, initialDelaySeconds: 20, periodSeconds: 5}
           resources: {requests: {cpu: 200m, memory: 512Mi}, limits: {memory: 2Gi}}
@@ -650,7 +710,7 @@ YAML
     if [ -n "$urls" ]; then urls="${urls}"$'\n'; fi   # command substitution strips the trailing newline
 
     if [ "$with_argo" = 1 ]; then
-      if { [ "$with_cnpg" = 1 ] || [ "$with_seaweedfs" = 1 ] || [ "$with_barman" = 1 ] || [ "$with_velero" = 1 ] || [ "$with_nack" = 1 ] || [ "$with_keda" = 1 ] || [ "$with_metrics" = 1 ]; } && [ -f operators/root.yaml ]; then
+      if { [ "$with_cnpg" = 1 ] || [ "$with_seaweedfs" = 1 ] || [ "$with_barman" = 1 ] || [ "$with_velero" = 1 ] || [ "$with_nack" = 1 ] || [ "$with_keda" = 1 ] || [ "$with_metrics" = 1 ] || [ "$eso_argo" = 1 ] || [ "$kyverno_argo" = 1 ] || [ "$lgtm_argo" = 1 ]; } && [ -f operators/root.yaml ]; then
         legacy=0
         if [ "$with_cnpg" = 1 ] && k -n kube-system get helmchart cnpg >/dev/null 2>&1; then
           echo "CloudNativePG was installed by an older cluster-up (HelmChart kube-system/cnpg); keeping it. Recreate the cluster to let Argo CD manage it"
@@ -662,6 +722,35 @@ YAML
         if [ "$legacy" = 0 ]; then
           echo "Applying the operators (operators/root.yaml)"
           k apply -n argocd -f operators/root.yaml
+          if [ "$eso_argo" = 1 ]; then
+            for _ in $(seq 1 200); do k get crd clustersecretstores.external-secrets.io >/dev/null 2>&1 && break; sleep 3; done
+            for d in external-secrets external-secrets-webhook external-secrets-cert-controller; do
+              for _ in $(seq 1 100); do k -n external-secrets get "deploy/$d" >/dev/null 2>&1 && break; sleep 3; done
+              k -n external-secrets rollout status "deploy/$d" --timeout=300s >/dev/null
+            done
+            k create namespace secrets-store --dry-run=client -o yaml | k apply -f - >/dev/null
+            apply_eso_store
+          fi
+          if [ "$kyverno_argo" = 1 ]; then
+            for _ in $(seq 1 200); do k get crd namespacedvalidatingpolicies.policies.kyverno.io >/dev/null 2>&1 && break; sleep 3; done
+            for d in kyverno-admission-controller kyverno-background-controller kyverno-reports-controller kyverno-cleanup-controller; do
+              for _ in $(seq 1 100); do k -n kyverno get "deploy/$d" >/dev/null 2>&1 && break; sleep 3; done
+              k -n kyverno rollout status "deploy/$d" --timeout=300s >/dev/null
+            done
+          fi
+          if [ "$lgtm_argo" = 1 ]; then
+            for _ in $(seq 1 100); do k -n observability get deploy/lgtm >/dev/null 2>&1 && break; sleep 3; done
+            k -n observability rollout status deploy/lgtm --timeout=300s >/dev/null
+            k apply -f - >/dev/null <<'YAML'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: grafana, namespace: observability}
+spec:
+  parentRefs: [{name: traefik-gateway, namespace: kube-system}]
+  hostnames: [grafana.localhost]
+  rules: [{backendRefs: [{name: lgtm, port: 3000}]}]
+YAML
+          fi
           if [ "$with_cnpg" = 1 ]; then
             for _ in $(seq 1 200); do k get crd clusters.postgresql.cnpg.io >/dev/null 2>&1 && break; sleep 3; done
             for _ in $(seq 1 100); do k -n cnpg-system get deploy/cnpg-cloudnative-pg >/dev/null 2>&1 && break; sleep 3; done

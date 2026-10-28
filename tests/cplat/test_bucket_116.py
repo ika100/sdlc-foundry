@@ -488,12 +488,13 @@ def test_removing_the_resource_removes_the_addon_directory_but_nothing_in_the_cl
 def test_the_store_image_is_pinned_to_an_exact_version_ac_116_15(tmp_path):  # AC-116.15
     img = image()
     assert re.match(r"^chrislusf/seaweedfs:\d+\.\d+(@sha256:[0-9a-f]{64})?$", img), img
-    assert img == "chrislusf/seaweedfs:4.51"
+    assert img == "chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8"  # spec 121: the designed digest
     assert bdoc(ok(tmp_path, bsys()), "dev", "seaweed.yaml")["spec"]["image"] == img
 
 
 def test_the_operator_is_pinned_in_the_versions_table_ac_116_15(tmp_path):  # AC-116.15
     op = getattr(platform_render_module("render_116_ops"), "OPERATORS", {}).get("seaweedfs")
+    op = {k: v for k, v in op.items() if k != "crds"}   # spec 121: the table gains a crds key
     assert op == {"repo_url": "https://seaweedfs.github.io/seaweedfs-operator", "chart": "seaweedfs-operator", "chart_version": "0.1.45",
                   "operator_version": "1.0.42", "namespace": "seaweedfs-operator", "release": "seaweedfs-operator",
                   "crd": "buckets.seaweed.seaweedfs.com"}

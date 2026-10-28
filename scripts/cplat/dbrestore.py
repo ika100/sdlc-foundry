@@ -102,6 +102,20 @@ def _retarget_secret(secret: dict, old: str, new: str) -> list[dict]:
     return ops
 
 
+def _major_before_upgrade(state: dict, server: str) -> tuple[int, int] | None:
+    """(major of the archive `server`, major of the next archive) when the restore source is an archive before a later upgrade."""
+    archives = state.get("archives") or []
+    if archives and server not in {a.get("server") for a in archives}:
+        # spec 121 (changed after review, AC-121.16): a server missing from the archives predates the first major step
+        if len(archives) > 1 and int(archives[1]["major"]) > int(archives[0]["major"]):
+            return int(archives[0]["major"]), int(archives[1]["major"])
+        return None
+    for i, a in enumerate(archives[:-1]):
+        if a.get("server") == server and int(archives[i + 1]["major"]) > int(a["major"]):
+            return int(a["major"]), int(archives[i + 1]["major"])
+    return None
+
+
 def _write(args: list[str], context: str | None, what: str, **kw) -> str:
     rc, out, err = backupstate.kubectl(args, context, **kw)
     if rc != 0:
@@ -264,6 +278,7 @@ def main(argv: list[str]) -> int:
         r.will_do += [f"add the restored instance {name} (from {server}, to {when}) to restore-state.yaml and regenerate manifests (render.py)",
                       f"commit '{title}' and bring it to {kns} (Argo CD pull request if addon-{db}-{env} exists, else kubectl apply -k)",
                       f"wait up to 30 minutes for {name} to be ready"]
+        old_major = _major_before_upgrade(base_state, server)
     elif ns.switch:
         if not roles["restored"]:
             raise PlatformError(f"{db}/{env} has no restored instance to switch to; restore one first: /resource:restore {db} --env {env} --to <time>")
@@ -276,6 +291,15 @@ def main(argv: list[str]) -> int:
                 c["role"] = "active"
             elif c["name"] == old:
                 c["role"], c["until"] = "previous", _now()
+        archives = new.get("archives")
+        if archives:      # spec 121 (changed after review): the switched generation archives to its own server, the old one keeps its archive
+            frm = next((c.get("from") or {} for c in new["clusters"] if c["name"] == name), {})
+            major = next((a["major"] for a in archives if a["server"] == frm.get("server")), archives[-1]["major"])
+            for c in new["clusters"]:
+                if c["name"] == old:      # the previous cluster keeps the archive it wrote to; the new active one gets the entry below
+                    c["archive"] = c.get("archive") or archives[-1]["server"]
+            if name not in {a["server"] for a in archives}:
+                archives.append({"server": name, "major": major})
         title = f"chore(restore): switch {db}/{env} to {name}"
         action = "switch"
         what = f"switch {db}/{env} from {old} to {name}"
@@ -321,6 +345,8 @@ def main(argv: list[str]) -> int:
         lines = [f"restored {db}/{env} to {when} as {name}; components still use {roles['active']}",
                  f"check it: kubectl -n {kns} exec -it {name}-1 -- psql {dbname}",
                  f"switch to it: /resource:restore {db} --env {env} --switch"]
+        if old_major:
+            lines.insert(1, f"the restored instance runs {db} {old_major[0]} (the data from before the upgrade to {old_major[1]})")
         r.data = {"result": "restored", "cluster": name, "to": when}
     elif ns.switch:
         if via_argo:

@@ -79,6 +79,12 @@ resource_metrics:
   choices: [provided, install]
   default: provided
 
+property_operators:
+  type: str
+  help: "Who installs External Secrets, Kyverno and the LGTM dev stack on the cluster? install: the platform, as Argo CD applications under operators/, only for what the system uses; owner: the cluster's owner (every repo created before this release keeps owner)."
+  choices: [install, owner]
+  default: owner
+
 docker_registry:
   type: str
   help: "Container registry namespace the services push to."

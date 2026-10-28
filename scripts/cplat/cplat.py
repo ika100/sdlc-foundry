@@ -18,6 +18,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat cluster new <name> [--org O] [--public] | add <owner>/<repo> [--name S] | remove <system>   the cluster repo and the systems it installs
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
   cplat resource add|remove postgres [--version N]   the system's database resource (system.yaml)
+  cplat resource upgrade <resource> --to MAJOR --env ENV [--context C] [--wait] [--json]   one environment's major upgrade, as a PR
   cplat resource backup <db> --env ENV [--context C] [--json]   one base backup of a database now
   cplat resource restore <db> --env ENV (--to TIME|latest | --switch | --discard) [--confirm prod] [--context C] [--dry-run] [--json]   restore a database
   cplat system restore <env> [--backup NAME or latest] [--replace] [--confirm prod] [--context C] [--json]   restore an environment from its Velero backup
@@ -26,6 +27,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat instance verify [ENV] [--base-url URL] [--spec SPEC] [--no-retry] [--json]   the repo's smoke tests against a deployment
   cplat issue triage list|show|setup-labels|apply ...   issue intake (labels and comments only after you confirm; never closes)
   cplat platform doctor [--json]
+  cplat platform versions [--json] [--diff REF] [--changelog]   the versions table of this release; what changed since REF
   cplat platform update [--migrate] [--data KEY=VALUE] [--dry-run]
   cplat platform fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release
   cplat platform runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost
@@ -69,10 +71,10 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "cluster": {"new": ("clusterrepo", ["new"]), "add": ("clusterrepo", ["add"]), "remove": ("clusterrepo", ["remove"])},
     "api": {"list": ("apilist", [])},
     "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"]),
-                 "backup": ("dbbackup", []), "restore": ("dbrestore", [])},
+                 "backup": ("dbbackup", []), "restore": ("dbrestore", []), "upgrade": ("upgrade", [])},
     "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
     "issue": {"triage": ("triage", [])},
-    "platform": {"doctor": ("doctor", []), "update": ("update", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", []),
+    "platform": {"doctor": ("doctor", []), "update": ("update", []), "versions": ("versions", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", []),
                  "ui": ("ui", [])},
 }
 

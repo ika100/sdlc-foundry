@@ -387,20 +387,37 @@ def restore_points(row: dict) -> dict:
     return {"earliest": row["backup"]["earliest"], "latest": row["backup"]["latest"]}
 
 
+def current_archive(state: dict | None, system: str, db: str) -> str:
+    """The Barman server the active cluster archives to: the newest of `archives` (a switch to a restored generation appends its own
+    server, spec 121), else its name."""
+    archives = (state or {}).get("archives") or []
+    return archives[-1]["server"] if archives else cluster_roles(system, db, state)["active"]
+
+
 def source_server(row: dict, state: dict | None, when: str, system: str, db: str) -> str | None:
     """The newest server name whose window [firstRecoverabilityPoint, until or latest] contains `when` (an RFC 3339 UTC time, or
-    `latest` for the active cluster's own server). None when no server covers it."""
-    roles = cluster_roles(system, db, state)
+    `latest` for the active cluster's current archive). After a major upgrade each archive's window also closes where the next archive
+    starts (spec 121, changed after review), so a time picks exactly one archive. None when no server covers it."""
     if when == "latest":
-        return roles["active"]
+        return current_archive(state, system, db)
     t = parse_time(when)
     latest = parse_time(row["backup"]["latest"])
-    untils = {c["name"]: parse_time(c.get("until")) for c in (state or {}).get("clusters") or [] if c["role"] == "previous"}
+    untils = {c.get("archive") or c["name"]: parse_time(c.get("until")) for c in (state or {}).get("clusters") or [] if c["role"] == "previous"}
+    order = [a["server"] for a in (state or {}).get("archives") or []]
     best = None
     for server, first in row["windows"].items():
         lo = parse_time(first)
         hi = untils.get(server) or latest
-        if t and lo and hi and lo <= t <= hi:
+        closed = False
+        if server in order:      # the window ends where the next archive starts (the time of the major step)
+            later = [parse_time(row["windows"][x]) for x in order[order.index(server) + 1:] if row["windows"].get(x)]
+            if later and later[0] and (not hi or later[0] <= hi):
+                hi, closed = later[0], True
+        elif order:              # a server missing from the list predates it: its window ends where the list's first archive starts
+            first_listed = next((parse_time(row["windows"][x]) for x in order if row["windows"].get(x)), None)
+            if first_listed and (not hi or first_listed <= hi):
+                hi, closed = first_listed, True
+        if t and lo and hi and lo <= t and (t < hi if closed else t <= hi):
             n = int(GEN.search(server).group(1)) if GEN.search(server) else 0
             if best is None or n > best[0]:
                 best = (n, server)

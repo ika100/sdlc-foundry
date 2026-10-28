@@ -13,11 +13,12 @@ COMPARE = "argocd.argoproj.io/compare-options"
 BKEYS = ["url", "user", "password"]
 BVARS = {"NATS_URL": "url", "NATS_USER": "user", "NATS_PASSWORD": "password"}
 ALLOWED_TOP = "type, external, remote, version, replicas, storage, resources, instances"
-ALLOWED_INST = "external, remote, replicas, storage, resources"
+ALLOWED_INST = "external, remote, replicas, storage, resources, version"  # spec 121: version is an instance key
 SIZING = ["version", "replicas", "storage", "resources"]
 DEFAULT_RESOURCES = {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
 CHART = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nats", "chart_version": "2.15.1"}
-NATS_IMAGES = {"2.14": "nats:2.14.9-alpine", "2.15": "nats:2.15.2-alpine"}
+NATS_IMAGES = {"2.14": "nats:2.14.9-alpine@sha256:127c5ccbc538a93f53ebb19461dc193130df386c2d6dab8199661a28a30d85bd",
+              "2.15": "nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5"}  # spec 121: the designed digests
 NACK = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nack", "chart_version": "0.35.0", "operator_version": "0.24.0",
         "namespace": "nack", "release": "nack", "crd": "streams.jetstream.nats.io",
         "selector": "app=nack"}  # spec 119 CI: the chart's legacy names label the Deployment app: nack
@@ -132,7 +133,7 @@ def publish_list(component, provides, consumes) -> list:
 def expected_server(users, name="bus", env="dev", replicas=1, storage="1Gi", resources=None, version="2.15", server="https://kubernetes.default.svc") -> dict:
     """`users`: [(component, provides, consumes)] in components: order."""
     n, ns = f"shop-{name}", f"shop-{env}"
-    repository, tag = NATS_IMAGES[version].rsplit(":", 1)
+    repository, tag = (lambda r, d: (r.rsplit(":", 1)[0], r.rsplit(":", 1)[1] + "@" + d))(*NATS_IMAGES[version].split("@"))  # spec 121: the digest rides on the tag
     cluster = {"enabled": True, "replicas": 3} if replicas == 3 else {"enabled": False}
     auth = [{"user": "_nack", "password": "<< $ADMIN_PASSWORD >>"}]
     cenv = {"ADMIN_PASSWORD": {"valueFrom": {"secretKeyRef": {"name": f"{n}-nack", "key": "password"}}}}

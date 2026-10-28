@@ -129,6 +129,9 @@ def pr_body(old: str | None, target: str, data: dict, next_steps: list[str]) -> 
     lines += [_lost_line(e) for e in data.get("lost") or []] or ["- none"]
     if data.get("baseline") is None:
         lines.append(f"No baseline for {was}: every difference counts as overwritten.")
+    if data.get("versions"):
+        v = data["versions"]
+        lines += [f"### Versions in this system (platform {v['from']} → {v['to']})", "```", *v["lines"], "```"]
     lines.append("### Follow-up steps")
     lines += [f"- {s}" for s in next_steps] or ["- none"]
     head = "\n".join(lines) + f"\n### Platform changes {was} → {target}\n"

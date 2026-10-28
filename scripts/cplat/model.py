@@ -216,6 +216,8 @@ class ResourceInstance:
     store_key: str | None = None
     backup: dict | None = None  # {"to", "schedule", "retention"} of an in-cluster database (spec 117)
     broker: dict | None = None  # brokers only: {"address", "monitoring", "users", "streams"} (spec 119)
+    version: int | str | None = None  # the effective major (database, cache, broker in the cluster); None for external and buckets (spec 121)
+    pinned: str | None = None  # the image the instance's rendered file pins; None when external or not rendered yet (spec 121)
 
 
 @dataclass
@@ -372,7 +374,7 @@ class Model:
             "resource_instances": [{"resource": r.resource, "environment": r.environment, "type": r.type,
                                     "external": r.external, "argo_application": r.argo_application, "secret": r.secret,
                                     "store_key": r.store_key, "sizing": dict(r.sizing),
-                                    "backup": r.backup,
+                                    "backup": r.backup, "version": r.version, "pinned": r.pinned,
                                     **({"broker": copy.deepcopy(r.broker)} if r.type == "broker" else {})}
                                    for r in self.resource_instances],
             "relations": self.relations(),
@@ -532,7 +534,7 @@ def _sizing(conf: dict, env: str) -> dict:
         replicas = int(inst.get("replicas", conf.get("replicas", 1)))
     except (TypeError, ValueError):
         replicas = 1
-    return {"replicas": replicas, "version": conf.get("version", 17), "storage": str(inst.get("storage", conf.get("storage", "1Gi")))}
+    return {"replicas": replicas, "version": inst.get("version", conf.get("version", 17)), "storage": str(inst.get("storage", conf.get("storage", "1Gi")))}
 
 
 def _bucket_sizing(conf: dict, env: str) -> dict:
@@ -543,7 +545,7 @@ def _bucket_sizing(conf: dict, env: str) -> dict:
 
 def _cache_sizing(conf: dict, env: str) -> dict:
     inst = _map(_map(conf.get("instances")).get(env))
-    version = conf.get("version", 9)
+    version = inst.get("version", conf.get("version", 9))
     if isinstance(version, str) and version.strip().isdigit():
         version = int(version)
     elif isinstance(version, bool) or not isinstance(version, int):
@@ -565,6 +567,14 @@ def _broker_sizing(conf: dict, env: str) -> dict:
         replicas = 1
     version = inst.get("version", conf.get("version", "2.15"))
     return {"version": str(version), "replicas": replicas, "storage": str(inst.get("storage", conf.get("storage", "1Gi")))}
+
+
+def _major_of(typ: str, sizing: dict) -> int | str | None:
+    """The effective major of an in-cluster database, cache or broker instance; None for any other type (spec 121)."""
+    if typ not in ("database", "cache", "broker"):
+        return None
+    v = sizing.get("version")
+    return int(v) if isinstance(v, str) and v.strip().isdigit() and typ != "broker" else v
 
 
 def _backup(value: object) -> dict | None:
@@ -701,7 +711,9 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
                     else _cache_sizing(conf, env) if r.type == "cache" else _broker_sizing(conf, env) if broker else {},
                     r.type, ext, store_key,
                     None if ext or r.type != "database" else _backup(idoc.get("backup")),
-                    _broker_instance(system, env, r.name, ext, store_key, api_broker, components) if broker else None))
+                    _broker_instance(system, env, r.name, ext, store_key, api_broker, components) if broker else None,
+                    None if ext else _major_of(r.type, _sizing(conf, env) if r.type == "database" else _cache_sizing(conf, env)
+                                               if r.type == "cache" else _broker_sizing(conf, env) if broker else {})))
 
     cs = [c for _, c in components]
     apis = []
@@ -744,6 +756,50 @@ def write_pin(app_dir: Path, env: str, component: str, tag: str) -> None:
     f.write_text(yaml.safe_dump(doc, sort_keys=False, default_flow_style=False))
 
 
+# ---------------- rendered pins (spec 121) ----------------
+
+def _rendered_image(path: Path, typ: str) -> str | None:
+    """The engine image a rendered instance file pins; None when it is absent or does not read as one."""
+    try:
+        doc = yaml.safe_load(path.read_text())
+        if typ == "database":
+            image = doc["spec"]["imageName"]
+        elif typ == "cache":
+            image = next(c["image"] for c in doc["spec"]["template"]["spec"]["containers"] if c["name"] == "valkey")
+        elif typ == "broker":
+            ref = doc["spec"]["source"]["helm"]["valuesObject"]["container"]["image"]
+            image = f"{ref['repository']}:{ref['tag']}"
+        else:
+            image = doc["spec"]["image"]
+    except (OSError, yaml.YAMLError, KeyError, IndexError, TypeError, StopIteration, AttributeError):
+        return None
+    return image if isinstance(image, str) and image else None
+
+
+def _database_file(app_dir: Path, system: str, env: str, name: str) -> str:
+    """`cluster.yaml`, or the generation file of the active cluster named by restore-state.yaml."""
+    import backupstate
+    try:
+        active = backupstate.cluster_roles(system, name, backupstate.restore_state(app_dir, env, name))["active"]
+    except Exception:  # noqa: BLE001  (an unreadable state: the model stays lenient)
+        return "cluster.yaml"
+    base = f"{system}-{name}"
+    return "cluster.yaml" if active == base else f"cluster-g{active[len(base) + 2:]}.yaml"
+
+
+def with_pins(m: Model, app_dir: Path) -> Model:
+    """The model with every in-cluster resource instance's `pinned` read from its rendered file under addons/<env>/<resource>/."""
+    out = []
+    for ri in m.resource_instances:
+        if ri.external or ri.type not in ("database", "cache", "broker", "bucket"):
+            out.append(ri)
+            continue
+        file = {"cache": "statefulset.yaml", "broker": "server.yaml", "bucket": "seaweed.yaml"}.get(ri.type) \
+            or _database_file(app_dir, m.system, ri.environment, ri.resource)
+        out.append(dataclasses.replace(ri, pinned=_rendered_image(app_dir / "addons" / ri.environment / ri.resource / file, ri.type)))
+    return dataclasses.replace(m, resource_instances=tuple(out))
+
+
 # ---------------- loaders ----------------
 
 def load_dir(app_dir: Path, *, shapes: list[dict] | None = None) -> Model:
@@ -762,7 +818,7 @@ def load_dir(app_dir: Path, *, shapes: list[dict] | None = None) -> Model:
         lines = [ln for ln in str(ex).splitlines() if ln.strip()]
         raise ModelError(f"cannot parse applications/{system}/system.yaml: {lines[0].strip() if lines else 'unreadable'}",
                          hint=f"fix the YAML in applications/{system}/system.yaml") from ex
-    return build(doc, system, pins=lambda env, c: read_pin(app_dir, env, c), shapes=shapes)
+    return with_pins(build(doc, system, pins=lambda env, c: read_pin(app_dir, env, c), shapes=shapes), app_dir)
 
 
 def load_remote(system: str, read: Callable[[str], dict | None], *, shapes: list[dict] | None = None) -> Model:

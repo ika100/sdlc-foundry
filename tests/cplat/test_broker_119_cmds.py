@@ -897,7 +897,7 @@ def plugin_versions(name):
 
 
 def test_the_resource_and_api_plugins_are_bumped_in_both_places_ac_119_4():  # AC-119.4
-    assert plugin_versions("resource") == ("1.5.0", "1.5.0")
+    assert plugin_versions("resource") == ("1.6.0", "1.6.0")   # spec 121: resource plugin 1.6.0
     assert plugin_versions("api") == ("1.1.0", "1.1.0")
     manifest = json.loads((ROOT / "plugins/resource/.claude-plugin/plugin.json").read_text())
     assert "brokers" in manifest["description"]

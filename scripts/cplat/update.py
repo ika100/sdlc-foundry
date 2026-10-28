@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import yaml
@@ -31,6 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-tasks", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--verify", action="store_true", help="after the update is merged and synced: operators, moved dev pins, every environment's smoke tests (spec 121)")
+    p.add_argument("--context", action="append", metavar="[ENV=]CTX", help="with --verify: kube context (of one environment, or of all); repeatable")
+    p.add_argument("--component-dir", action="append", metavar="C=DIR", help="with --verify: a checkout of a component for the smoke tests; repeatable")
+    p.add_argument("--app", help="with --verify: the application (when the repo has several)")
     return p
 
 
@@ -420,9 +425,32 @@ _CLUSTER_FILE = re.compile(r"^applications/[^/]+/addons/[^/]+/[^/]+/cluster\.yam
 _DB_IMAGE = re.compile(rb"(imageName: ghcr\.io/cloudnative-pg/postgresql:)(\d+)\S*")
 
 
-def _normalised(tree: dict[str, bytes]) -> dict[str, bytes]:
-    """The migration proof ignores the database image beyond its major (AC-115.6, AC-115.17)."""
-    return {p: _DB_IMAGE.sub(rb"\1\2", b) if _CLUSTER_FILE.match(p) else b for p, b in tree.items()}
+def _digested_refs(repo: Path) -> list[bytes]:
+    """The engine image references of the repo's renderer table that carry a digest (spec 121), except the database ones."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("render_repo_pins", repo / "scripts" / "render.py")
+    if spec is None or spec.loader is None:
+        return []
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:  # noqa: BLE001 - an unreadable renderer is reported by the render itself
+        return []
+    refs = [*mod.VALKEY_IMAGES.values(), *mod.NATS_IMAGES.values(), mod.SEAWEEDFS_IMAGE, mod.VELERO_AWS_PLUGIN_IMAGE, mod.COLLECTOR_IMAGE,
+            mod.LGTM_IMAGE]
+    return [r.encode() for r in refs if "@sha256:" in r]
+
+
+def _normalised(tree: dict[str, bytes], pins: list[bytes] = ()) -> dict[str, bytes]:
+    """The migration proof ignores the database image beyond its major (AC-115.6, AC-115.17) and the digest the versions
+    table (spec 121) adds to the other engine images: exactly those references, mapped back to tag only."""
+    out = {}
+    for p, b in tree.items():
+        b = _DB_IMAGE.sub(rb"\1\2", b) if _CLUSTER_FILE.match(p) else b
+        for ref in pins:
+            b = b.replace(ref, ref.split(b"@", 1)[0])
+        out[p] = b
+    return out
 
 
 def convert_systems(repo: Path) -> list[dict]:
@@ -469,8 +497,9 @@ def apply_systems(repo: Path, systems: list[dict], reference: dict[str, bytes]) 
         for rel in s["deleted"]:
             (repo / rel).unlink()
     gitops.render(repo)
+    pins = _digested_refs(repo)
     reference = _normalised(reference)
-    after = _normalised(_tree(repo))
+    after = _normalised(_tree(repo), pins)
     diff =[f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
     diff += [f"{p} (missing)" for p in sorted(reference) if p not in after]
     diff += [f"{p} (extra)" for p in sorted(after) if p not in reference]
@@ -493,6 +522,203 @@ def rollback(repo: Path, cur: str, branch: str, created: bool, ignored: set[str]
     if created:
         run(["git", "checkout", "-q", cur], cwd=repo, check=False)
         run(["git", "branch", "-D", branch], cwd=repo, check=False)
+
+
+# ---------------- versions: the change list of a gitops-app update (spec 121, AC-121.11, AC-121.20, AC-121.23) ----------------
+
+def _targets(mod, app_dir: Path, system: str, r: str, typ: str, env: str):
+    """The rendered file of an instance: (path, type)."""
+    folder = app_dir / "addons" / env / r
+    if typ == "database":
+        base = f"{system}-{r}"
+        try:
+            active = next(c["name"] for c in mod.read_restore_state(app_dir, env, r)[0] if c["role"] == "active")
+        except (mod.RenderError, StopIteration):
+            return None
+        return folder / ("cluster.yaml" if active == base else f"cluster-g{active[len(base) + 2:]}.yaml")
+    return folder / {"cache": "statefulset.yaml", "broker": "server.yaml", "bucket": "seaweed.yaml"}[typ]
+
+
+def _instances(mod, repo: Path) -> dict[tuple[str, str, str], dict]:
+    """{(system, resource, env): {type, major, pin (rendered now, or None), table}} of every in-cluster resource instance."""
+    out: dict[tuple[str, str, str], dict] = {}
+    for sysfile in sorted((repo / "applications").glob("*/system.yaml")):
+        app_dir = sysfile.parent
+        try:
+            doc = yaml.safe_load(sysfile.read_text()) or {}
+            cfgs = mod.validate_resources(doc, app_dir)
+        except Exception:  # noqa: BLE001 - an invalid system is reported by the render itself
+            continue
+        system = str(doc.get("system") or app_dir.name)
+        for r, rc in cfgs.items():
+            typ = rc["type"]
+            for env, e in rc["envs"].items():
+                if e.get("external"):
+                    continue
+                major = e.get("version")
+                path = _targets(mod, app_dir, system, r, typ, env)
+                held = mod.rendered_pin(path, typ) if path else None
+                try:
+                    table = mod.table_pin(typ, major if typ != "bucket" else None)["pin"]
+                except KeyError:
+                    table = None
+                out[(system, r, env)] = {"type": typ, "major": major, "pin": held["pin"] if held else None, "table": table}
+    return out
+
+
+_OPERATOR_REV = re.compile(r"^\s*targetRevision:\s*['\"]?([^\s'\"]+)", re.M)
+
+
+def _operator_revisions(repo: Path) -> dict[str, str]:
+    out = {}
+    for p in sorted((repo / "operators" / "apps").glob("*.yaml")):
+        m = _OPERATOR_REV.search(p.read_text())
+        if m:
+            out[p.stem] = m.group(1)
+    return out
+
+
+def _generated_snapshot(repo: Path) -> dict[str, bytes]:
+    out: dict[str, bytes] = {}
+    for top in ("applications", "operators"):
+        for p in sorted((repo / top).rglob("*")) if (repo / top).is_dir() else []:
+            if p.is_file():
+                out[p.relative_to(repo).as_posix()] = p.read_bytes()
+    return out
+
+
+def render_and_compare(req: dict, repo: Path, written: set[str] | None = None) -> dict | None:
+    """Re-render with the repo's new renderer (held pins follow from it) and list what moves, per environment; None when nothing does.
+    `written` (optional) receives every path under applications/ and operators/ the render created or changed: generated output."""
+    import upgrade
+    mod = upgrade.load_renderer(repo)
+    before = _instances(mod, repo)
+    ops_before = _operator_revisions(repo)
+    snap = _generated_snapshot(repo) if written is not None else {}
+    gitops.render(repo)
+    if written is not None:
+        now = _generated_snapshot(repo)
+        written |= {k for k, v in now.items() if snap.get(k) != v}
+    after = _instances(mod, repo)
+    ops_after = _operator_revisions(repo)
+    order = {e: i for i, e in enumerate(core_envs())}
+    rows: list[dict] = []
+    moved_now = {k[:2] for k in after if k in before and before[k]["pin"] and after[k]["pin"] and before[k]["pin"] != after[k]["pin"]}
+    for key in sorted(after, key=lambda k: (k[0], k[1], order.get(k[2], 9))):
+        system, r, env = key
+        a, b = after[key], before.get(key)
+        if b is None or b["pin"] is None or a["pin"] is None:
+            continue
+        label = f"{r} {a['major']}" if a["type"] != "bucket" else r
+        if a["pin"] != b["pin"]:
+            rows.append({"env": env, "resource": r, "kind": "pin", "from": b["pin"], "to": a["pin"], "moves": True,
+                         "text": f"{env:<8} {label}: {b['pin']} → {a['pin']} (moves now)"})
+        elif env != "dev" and (system, r) in moved_now and a["table"] and a["table"] != a["pin"]:
+            until = (f"/resource:upgrade {r} --to {a['major']} --env {env}" if a["type"] != "bucket"
+                     else "dev is verified and /platform:update runs again")
+            rows.append({"env": env, "resource": r, "kind": "pin", "from": a["pin"], "to": a["table"], "moves": False,
+                         "text": f"{env:<8} {label}: keeps {a['pin']} until {until}"})
+    envs = [e for e in core_envs() if any(k[2] == e for k in after)] or core_envs()
+    for name in sorted(ops_after):
+        if name in ops_before and ops_before[name] != ops_after[name]:
+            rows.append({"env": "cluster", "resource": name, "kind": "operator", "from": ops_before[name], "to": ops_after[name], "moves": True,
+                         "text": f"{'cluster':<8} operator {name} {ops_before[name]} → {ops_after[name]} "
+                                 f"(operators/apps; shared by {', '.join(envs)}: moves with {envs[0]}'s step)"})
+    if not rows:
+        return None
+    return {"from": req["old"] or "none", "to": req["new"], "rows": rows, "lines": [x["text"] for x in rows]}
+
+
+def core_envs() -> list[str]:
+    import model
+    return list(model.ENVIRONMENTS)
+
+
+def versions_block(versions: dict) -> str:
+    return "\n".join([f"versions in this system (platform {versions['from']} → {versions['to']}):", *[f"  {ln}" for ln in versions["lines"]]])
+
+
+# ---------------- --verify (spec 121, AC-121.20 .. AC-121.22) ----------------
+
+OPERATOR_WAIT_S = 900.0
+OPERATOR_POLL_S = 10.0
+
+
+def _wait_operators(repo: Path, contexts: dict[str, str]) -> bool:
+    """Wait for every operator row to read `ok` (installed = the table's version and its CRDs serve the table's versions)."""
+    import doctor
+    start = time.monotonic()
+    while True:
+        rows = [row for row in doctor.check_operators(repo, contexts) if row.get("operator")]
+        pending = [row for row in rows if row["operator"]["state"] != "ok"]
+        if not pending:
+            for row in rows:
+                print(f"  ok   {row['name']}: {row['detail']}")
+            return True
+        elapsed = time.monotonic() - start
+        if elapsed >= OPERATOR_WAIT_S:
+            for row in pending:
+                print(f"  FAIL {row['name']}: {row['detail']} (not ok after {int(OPERATOR_WAIT_S // 60)} minutes)")
+                if row.get("fix"):
+                    print(f"       fix: {row['fix']}")
+            return False
+        time.sleep(OPERATOR_POLL_S)
+
+
+def verify_update(ns: argparse.Namespace) -> int:
+    """After the update is merged and synced: operators once per cluster, the moved dev pins, then every environment's smoke tests; on
+    success the staging pin moves. (One cluster_server per gitops repo today, so all environments are one group; grouping by server would
+    run AC-121.20's order, dev's cluster first, when a later release gives an environment its own cluster.)"""
+    import model
+    import status
+    import upgradeverify as uv
+    repo = Path(ns.repo).resolve()
+    app_dir = gitops.find_app(repo, ns.app)
+    m = model.load_dir(app_dir)
+    contexts = status.parse_contexts(ns.context, list(model.ENVIRONMENTS))
+    dirs = uv.parse_dirs(ns.component_dir)
+    print("verify platform update: operators")
+    if not _wait_operators(repo, contexts):
+        print("NOT VERIFIED: an operator is not at the table's version; no environment is checked until it is")
+        return 1
+    moved = []
+    for res in m.resources:
+        ri = next((x for x in m.resource_instances if x.resource == res.name and x.environment == "dev"), None)
+        if res.type not in ("database", "cache", "broker") or ri is None or ri.external:
+            continue
+        moved.append(res.name)
+    results = []
+    for name in moved:
+        result = uv.verify(repo, ns.app, name, "dev", contexts, dirs)
+        for line in result.lines:
+            print(line)
+        if not result.ok:
+            return 1
+        results.append(result)
+    print("smoke tests of every component instance")
+    comps = {c.name: c for c in m.components}
+    for inst in m.instances:
+        comp = comps.get(inst.component)
+        if comp is None or comp.external:
+            continue
+        passed, text = uv.run_component_smoke(m, comp, inst.environment, dirs)
+        print(f"  {'ok  ' if passed else 'FAIL'} smoke {comp.name} ({inst.environment}): {text}")
+        if not passed:
+            print("NOT VERIFIED: no later step is started")
+            return 1
+    import upgrade
+    rc = 0
+    for result in results:
+        if result.auto_staging:
+            sub = argparse.Namespace(repo_dir=str(repo), app=ns.app, context=ns.context, component_dir=ns.component_dir, pr=False, wait=False)
+            try:
+                rc = upgrade.main(uv.staging_argv(sub, result.resource, result.major)) or rc
+            except PlatformError as e:
+                print(f"the staging step was not started: {e}")
+                rc = 1
+        elif result.next:
+            print(f"next: {result.next}")
+    return rc
 
 
 def _list(names: list[str]) -> str:
@@ -566,7 +792,7 @@ def _where_file(path: str) -> str:
 
 
 def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], dropped_gates: list[str], settings: dict,
-          base_root: Path | None, current_extra: str, notes: list[str | None] = ()) -> list[dict]:
+          base_root: Path | None, current_extra: str, notes: list[str | None] = (), generated: frozenset[str] | set[str] = frozenset()) -> list[dict]:
     """Everything the repo had added that the update overwrote (spec 086): empty exactly when nothing was lost."""
     lost: list[dict] = [{"kind": "recipe", "file": "devbox.json", "entry": k, "was": v, "where": WHERE_RECIPE} for k, v in replaced]
     lost += [{"kind": "gate", "file": "devbox.json", "entry": g, "was": None,
@@ -578,7 +804,7 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
             m = re.search(r"re-add.*", note)
             lost.append({"kind": "file", "file": path, "entry": None, "was": None, "where": m.group(0) if m else note})
     for path in modified:
-        if path in NOT_CUSTOMISATION:
+        if path in NOT_CUSTOMISATION or path in generated:   # generated: the update's own re-render wrote it (spec 121)
             continue
         if base_root is not None:
             mine = run(["git", "show", f"HEAD:{path}"], cwd=repo, check=False)
@@ -588,10 +814,11 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
                     continue   # the repo never touched it: a template change
             except (OSError, UnicodeDecodeError):
                 pass
-        if _CLUSTER_FILE.match(path):   # generated output: only the pinned database image moved (AC-115.6, AC-115.17)
+        if path.startswith("applications/"):   # generated output: only the pinned engine images moved (AC-115.6, AC-115.17, spec 121)
             was = run(["git", "show", f"HEAD:{path}"], cwd=repo, check=False)
             try:
-                if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}):
+                pins = _digested_refs(repo)
+                if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}, pins):
                     continue
             except OSError:
                 pass
@@ -613,7 +840,8 @@ def execute(req: dict) -> Report:
     cur = run(["git", "symbolic-ref", "--short", "HEAD"], cwd=repo).stdout.strip()
     branch = branch_name(repo)
     created = cur in ("main", "master")
-    ignored = _ignored(repo) if migrating else set()
+    rendering = req["shape"] == "gitops-app" and not migrating
+    ignored = _ignored(repo) if migrating or rendering else set()
     if created:
         run(["git", "checkout", "-q", "-b", branch], cwd=repo)
         r.did.append(f"created branch {branch}")
@@ -629,6 +857,7 @@ def execute(req: dict) -> Report:
     for kv in req["data"]:
         cmd += ["--data", kv]
     mig: dict = {"ran": False, "already_migrated": True}
+    generated: set[str] = set()
     try:
         run(cmd, cwd=repo)
         dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
@@ -655,21 +884,26 @@ def execute(req: dict) -> Report:
                 r.did.append(f"the 5.0 render is byte-identical to 4.7 ({mig['compared']} files compared)")
         elif req["migrate"]:
             r.did.append("already migrated to 5.0: nothing of the migration ran")
+        if rendering:
+            versions = render_and_compare(req, repo, generated)
+            if versions:
+                r.data["versions"] = versions
+                r.did.append(f"re-rendered with the new renderer; {len(versions['lines'])} version change(s) listed below")
     except BaseException:
-        if migrating:
+        if migrating or rendering:
             rollback(repo, cur, branch, created, ignored)
         tmp.cleanup()
         raise
     if req["migrate"]:
         r.data["migration"] = mig
     try:
-        return _finish(req, r, before, devbox_before, settings_before, had_pin_dev, cur, branch, Path(tmp.name))
+        return _finish(req, r, before, devbox_before, settings_before, had_pin_dev, cur, branch, Path(tmp.name), generated)
     finally:
         tmp.cleanup()
 
 
 def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settings_before: str | None, had_pin_dev: bool,
-            cur: str, branch: str, tmp: Path) -> Report:
+            cur: str, branch: str, tmp: Path, generated: set[str] = frozenset()) -> Report:
     repo: Path = req["repo"]
     answers = repo / ".copier-answers.yml"
     base_root: Path | None = None
@@ -709,7 +943,7 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
         r.did.append(f"already up to date with platform {req['new']} — nothing changed")
         return r
     current_extra = _current_ci_extra(devbox_before)
-    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra, [devbox_note, settings_note])
+    lost = _lost(repo, modified, replaced, dropped_gates, settings, base_root, current_extra, [devbox_note, settings_note], generated)
     lock_step = refresh_devbox_lock(repo, changed)
     if lock_step:
         r.next_steps.append(lock_step)
@@ -751,6 +985,9 @@ def _finish(req: dict, r: Report, before: str, devbox_before: str | None, settin
 
 
 def main(argv: list[str]) -> int:
+    ns = build_parser().parse_args(argv)
+    if ns.verify:
+        return verify_update(ns)
     req = resolve(argv)
     if req["dry_run"]:
         r = plan(req)
@@ -758,5 +995,8 @@ def main(argv: list[str]) -> int:
             plan_migration(req, r)
         r.emit(True, req["json"])
         return 0
-    execute(req).emit(False, req["json"])
+    report = execute(req)
+    report.emit(False, req["json"])
+    if report.data.get("versions") and not req["json"]:
+        print("\n" + versions_block(report.data["versions"]))
     return 0

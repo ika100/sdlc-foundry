@@ -51,7 +51,7 @@ def test_service_uses_postgres_gets_env_from_the_operator_secret_and_a_cluster_i
     cluster = yaml.safe_load((gitops_repo / APP / "addons/dev/postgres/cluster.yaml").read_text())
     assert cluster["kind"] == "Cluster" and cluster["metadata"]["name"] == "todo-postgres"
     assert cluster["spec"]["instances"] == 1 and cluster["spec"]["storage"]["size"] == "1Gi"
-    assert re.search(r"postgresql:17\.\d+$", cluster["spec"]["imageName"])  # spec 115 (AC-115.6): pinned
+    assert re.search(r"postgresql:17\.\d+-\d{12}-standard-trixie@sha256:[0-9a-f]{64}$", cluster["spec"]["imageName"])  # spec 115 (AC-115.6): pinned  # spec 121: pinned with a digest
     assert cluster["spec"]["enableSuperuserAccess"] is False
     assert cluster["spec"]["bootstrap"]["initdb"] == {"database": "todo", "owner": "todo"}
     sets = yaml.safe_load_all((gitops_repo / APP / "applicationset.yaml").read_text())

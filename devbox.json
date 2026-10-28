@@ -14,7 +14,7 @@
     ],
     "scripts": {
       "install-copier": "uv tool install copier",
-      "validate":      "jq -e . .claude-plugin/marketplace.json >/dev/null && for f in plugins/*/.claude-plugin/plugin.json; do jq -e . \"$f\" >/dev/null; done && for f in plugins/*/hooks/hooks.json; do [ -f \"$f\" ] && jq -e . \"$f\" >/dev/null; done; echo 'OK: marketplace, plugin manifests, and hook files all valid'",
+      "validate":      "jq -e . .claude-plugin/marketplace.json >/dev/null && for f in plugins/*/.claude-plugin/plugin.json; do jq -e . \"$f\" >/dev/null; done && for f in plugins/*/hooks/hooks.json; do [ -f \"$f\" ] && jq -e . \"$f\" >/dev/null; done; echo 'OK: marketplace, plugin manifests, and hook files all valid' && uv run scripts/check-pins.py",
       "smoke-service": "rm -rf /tmp/test-svc && uv tool run --from copier copier copy ./templates/service-python /tmp/test-svc --defaults --trust --data project_name=test-svc --data module_name=test_svc --data description=test && cd /tmp/test-svc && devbox install && devbox run lint && devbox run typecheck",
       "smoke-library": "rm -rf /tmp/test-lib && uv tool run --from copier copier copy ./templates/library-python /tmp/test-lib --defaults --trust --data project_name=test-lib --data module_name=test_lib --data description=test && cd /tmp/test-lib && devbox install && devbox run lint && devbox run typecheck",
       "ci-local":      "bash scripts/ci-local.sh",

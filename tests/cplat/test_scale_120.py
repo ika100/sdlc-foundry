@@ -16,7 +16,7 @@ from broker_fixtures import ext_comp, lib_comp, wide
 from scale_fixtures import (AUTOSCALER_FILES, ENV_KEYS, INSTANCE_KEYS, KEDA, METRICS, ON_FORMS, P, RES, RETRY, SCALE_EXAMPLE, SERVICE_KEYS, cache,
                             cache_system, cpu, db, events, expected_hpa, expected_operator, expected_scaledobject, expected_trigger_auth, files_of,
                             ignore_entry, labels, lag, length, nats_trigger, odir, queue_system, redis_trigger, sdoc, shape, tree_digest)
-from resources_fixtures import APP, ENVS, comp, fails, ok, platform_render_module, render5, sets, system, tree, y
+from resources_fixtures import APP, ENVS, comp, fails, ok, platform_render_module, render5, sets, system, tree, unpin, y  # spec 121: unpin
 from system_fixtures import ROOT, write_system
 from test_broker_119 import _before_docs
 from broker_fixtures import broker, bsys
@@ -841,9 +841,13 @@ def test_the_e2e_system_renders_the_scaled_consumer_and_its_ignore_rule_ac_120_2
 
 # ---------------- AC-120.25 / .27 / .17: operators ----------------
 
+def _no_crds(op):   # spec 121: the table gains a crds key
+    return {k: v for k, v in (op or {}).items() if k != "crds"}
+
+
 def test_keda_and_metrics_server_are_pinned_in_the_versions_table_ac_120_25(tmp_path):  # AC-120.25
     r = renderer("render_120_table")
-    assert r.OPERATORS.get("keda") == KEDA and r.OPERATORS.get("metrics-server") == METRICS
+    assert _no_crds(r.OPERATORS.get("keda")) == KEDA and _no_crds(r.OPERATORS.get("metrics-server")) == METRICS   # spec 121: the table gains a crds key
     assert list(r.OPERATORS)[-3:] == ["nack", "keda", "metrics-server"]
     assert r.OPERATOR_OF_TYPE == {"database": "cloudnative-pg", "bucket": "seaweedfs", "broker": "nack"}
 
@@ -861,7 +865,7 @@ def test_the_cluster_repo_copy_of_the_renderer_has_the_same_pins_ac_120_25(tmp_p
     spec = importlib.util.spec_from_file_location("system_render_120", path)
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
-    assert m.OPERATORS.get("keda") == KEDA and m.OPERATORS.get("metrics-server") == METRICS
+    assert _no_crds(m.OPERATORS.get("keda")) == KEDA and _no_crds(m.OPERATORS.get("metrics-server")) == METRICS   # spec 121: the table gains a crds key
     assert hasattr(m, "scaled_instances")
 
 
@@ -998,7 +1002,7 @@ def _before_120_docs() -> dict:
 def test_a_5x_system_without_scale_renders_byte_identically_to_before_ac_120_26(tmp_path, label):  # AC-120.26
     g = ok(tmp_path, _before_120_docs()[label])
     digest, count = BEFORE_120[label]
-    assert (len(g), tree_digest(g)) == (count, digest), f"{label}: the render changed although the system has no scale"
+    assert (len(g), tree_digest(unpin(g))) == (count, digest), f"{label}: the render changed although the system has no scale"  # spec 121: only the engine references changed
 
 
 def test_no_autoscaler_file_and_no_ignore_rule_appear_without_scale_ac_120_26(tmp_path):  # AC-120.26

@@ -1,0 +1,23 @@
+name: release-guard
+
+# A tag without a green upgrade e2e turns this red. It never creates, moves or deletes a tag or a release (spec 121, AC-121.24).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  gate:
+    name: release gate (upgrade e2e green)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - name: the tagged commit has a green upgrade e2e
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run scripts/release-check.py gate ${{ github.sha }}

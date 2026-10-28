@@ -176,6 +176,58 @@ def _replicas_of(system: str, component: str, env: str, context: str | None) -> 
         return None
 
 
+def _table_pins(repo: Path) -> object | None:
+    """The repo's own scripts/render.py (its versions table); None when it is absent or cannot be loaded."""
+    import importlib.util
+    import sys
+    path = repo / "scripts" / "render.py"
+    if not path.is_file():
+        return None
+    keep, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        spec = importlib.util.spec_from_file_location("render_repo_status", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod if hasattr(mod, "table_pin") else None
+    except Exception:  # noqa: BLE001  (status is best-effort)
+        return None
+    finally:
+        sys.dont_write_bytecode = keep
+
+
+def _is_held(renderer: object | None, typ: str, major: object, pinned: str | None) -> bool:
+    """The pin differs from the repo's own table pin of the major."""
+    if renderer is None or pinned is None:
+        return False
+    try:
+        return pinned != renderer.table_pin(typ, major if typ != "bucket" else None)["pin"]
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _version_cell(app_dir: Path, m: model.Model, ri: model.ResourceInstance, context: str | None, renderer: object | None) -> dict:
+    import upgradeverify
+    if ri.external:
+        return {"version": None, "pinned": None, "held": False, "health": "external", "upgrade": None}
+    health, upgrade = "unknown", None
+    if context:
+        active = None
+        if ri.type == "database":
+            try:
+                active = backupstate.cluster_roles(m.system, ri.resource, backupstate.restore_state(app_dir, ri.environment, ri.resource))["active"]
+            except backupstate.StateError:
+                active = None
+        health = upgradeverify.health_state(ri.type, m.system, ri.resource, ri.environment, context, active)
+        try:
+            data = upgradeverify.read_record(m.system, ri.resource, ri.environment, context)
+        except upgradeverify.RecordError:
+            data = None
+        if data:
+            upgrade = {k: data.get(k, "") for k in ("state", "major", "image", "at", "check")}
+    return {"version": ri.version, "pinned": ri.pinned, "held": _is_held(renderer, ri.type, ri.version, ri.pinned),
+            "health": health, "upgrade": upgrade}
+
+
 def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
                 loaded: tuple[Path, model.Model] | None = None) -> dict:
     """Everything `system status --json` reports except `backups`; `collect` is its 4-tuple view."""
@@ -245,10 +297,17 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
     obs = {e.name: e.observability.argo_application for e in m.environments if e.observability and m.instances_in(e.name)}
     if obs:
         resources.append({"resource": "observability", "cells": {env: (res_cell(env, obs[env]) if env in obs else None) for env in envs}})
+    versions = []
+    renderer = _table_pins(repo)
+    for r in m.resources:
+        by = {ri.environment: ri for ri in m.resource_instances_of(r.name)}
+        if by:
+            versions.append({"resource": r.name, "type": r.type, "cells": {
+                env: (_version_cell(app_dir, m, by[env], by_env.get(env), renderer) if env in by else None) for env in envs}})
     rules = [{"name": e.name, "promote": None if i == 0 else e.promotion, "policy": e.policy} for i, e in enumerate(m.environments)]
     libraries = [{"component": lb.name, "used_by": [c.name for c in m.components if lb.name in c.uses or lb.name in c.libraries]} for lb in libs]
     return {"system": app_dir.name, "environments": envs, "environment_rules": rules, "rows": rows, "libraries": libraries,
-            "resources": resources, "unavailable": unavailable}
+            "resources": resources, "resource_versions": versions, "unavailable": unavailable}
 
 
 def collect(repo: Path, app: str | None, context: list[str] | str | None) -> tuple[str, list[str], list[dict], list[dict]]:
@@ -364,8 +423,42 @@ def _grid(header: list[str], body: list[list[str]]) -> list[str]:
     return [fmt(header), fmt(["-" * x for x in w]), *map(fmt, body)]
 
 
+def _tag_version(ref: str | None) -> str | None:
+    m = re.search(r":(\d+(?:\.\d+)*)[^:/@]*(?:@|$)", ref or "")
+    return m.group(1) if m else None
+
+
+def _version_text(c: dict | None) -> str:
+    if c is None:
+        return "-"
+    if c["health"] == "external":
+        return "external"
+    shown = _tag_version(c["pinned"])
+    out = f"{c['version']} " if c["version"] is not None else ""
+    out += f"({shown}) " if shown else ""
+    out += c["health"]
+    up = c.get("upgrade")
+    if up and up.get("state") == "verified" and up.get("image") == c["pinned"]:
+        out += "  upgraded"
+    elif up and up.get("state") == "failed":
+        out += f"  upgrade failed ({up['check']})" if up.get("check") else "  upgrade failed"
+    return out + ("  held" if c["held"] else "")
+
+
+def version_lines(versions: list[dict], envs: list[str], context: object) -> list[str]:
+    """The `Resource versions (...)` text section; [] when no resource has an instance."""
+    if not versions:
+        return []
+    ctxs = [context] if isinstance(context, str) else list(context or [])
+    shown = ", ".join(sorted({c.partition("=")[2] or c for c in ctxs}))
+    head = f"Resource versions (read from the cluster {shown} now):" if shown else "Resource versions (no cluster context given, so health is unknown):"
+    body = [["resource", *envs], *([v["resource"], *(_version_text(v["cells"].get(e)) for e in envs)] for v in versions)]
+    w = [max(len(r[i]) for r in body) for i in range(len(envs) + 1)]
+    return ["", head, *("  " + "  ".join(x.ljust(w[i]) for i, x in enumerate(r)).rstrip() for r in body)]
+
+
 def render_table(app: str, envs: list[str], rows: list[dict], resources: list[dict], stamp: dict, context: object,
-                 backups: dict | None = None) -> str:
+                 backups: dict | None = None, versions: list[dict] | None = None) -> str:
     lines = [f"## {app} (system) — platform {core.platform_version()} available, repo stamped {stamp.get('platform', 'none')}", ""]
     if rows:
         lines += _grid(["component", *envs, "platform"], [[r["component"], *(_cell(r["cells"].get(e)) for e in envs), r["platform"]] for r in rows])
@@ -373,6 +466,7 @@ def render_table(app: str, envs: list[str], rows: list[dict], resources: list[di
         lines.append("  (no components yet — /component:add <component>)")
     if resources:
         lines += [""] + _grid(["resource", *envs], [[r["resource"], *(_cell(r["cells"].get(e)) for e in envs)] for r in resources])
+    lines += version_lines(versions or [], envs, context)
     if backups:
         lines += backup_lines(backups)
     if not context:
@@ -394,5 +488,5 @@ def main(argv: list[str]) -> int:
     if ns.json:
         print(json.dumps({**d, "backups": public_backups(backups)}, indent=2))
     else:
-        print(render_table(d["system"], d["environments"], d["rows"], d["resources"], core.read_stamp(repo), ns.context, backups))
+        print(render_table(d["system"], d["environments"], d["rows"], d["resources"], core.read_stamp(repo), ns.context, backups, d["resource_versions"]))
     return 0

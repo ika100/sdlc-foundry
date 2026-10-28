@@ -16,7 +16,7 @@ from cache_fixtures import (ALLOWED_INST, ALLOWED_TOP, CKEYS, CVARS, FILES, IMAG
                             expected_externalsecret, expected_generator, expected_kustomization, expected_service, expected_statefulset, labels,
                             tree_digest)
 from resources_fixtures import (APP, ENVS, LABELS, addon_names, comp, db, env_list, external_secret, external_secret_path, fails, ok,
-                                platform_render_module, render5, secret_vars, sets, system, var_order, y)
+                                platform_render_module, render5, secret_vars, sets, system, unpin, var_order, y)  # spec 121: unpin
 from system_fixtures import full5, rich5, write_system
 
 QUANTITY_MSG = "memory '{v}' must be a Kubernetes quantity of at least 64Mi, e.g. 256Mi"
@@ -60,14 +60,14 @@ def test_an_unknown_instance_key_fails_ac_118_2(tmp_path):  # AC-118.2
           P + f"resources.sessions.instances.dev: unknown key 'replicas' (allowed: {ALLOWED_INST})")
 
 
-def test_version_is_not_an_instance_key_ac_118_2(tmp_path):  # AC-118.2
-    fails(tmp_path, csys({"sessions": cache(instances={"dev": {"version": 8}})}),
-          P + f"resources.sessions.instances.dev: unknown key 'version' (allowed: {ALLOWED_INST})")
+def test_an_unsupported_instance_version_fails_ac_118_2(tmp_path):  # AC-118.2  # spec 121: the key is allowed now
+    fails(tmp_path, csys({"sessions": cache(instances={"dev": {"version": 7}})}),
+          P + "resources.sessions.instances.dev: version '7' is not a supported cache version (8, 9)")  # spec 121: spec 121 adds the key
 
 
 def test_instances_must_be_a_mapping_ac_118_2(tmp_path):  # AC-118.2
     fails(tmp_path, csys({"sessions": cache(instances=["dev"])}),
-          P + "resources.sessions.instances must be a mapping of environments to {external, remote, memory, maxmemoryPolicy, persistence, storage}")
+          P + "resources.sessions.instances must be a mapping of environments to {external, remote, memory, maxmemoryPolicy, persistence, storage, version}")   # spec 121: version per environment
 
 
 def test_an_unused_cache_is_validated_too_ac_118_2(tmp_path):  # AC-118.2
@@ -112,7 +112,7 @@ def test_the_effective_values_default_to_valkey_9_256mi_allkeys_lru_no_persisten
     for e in ENVS:
         assert envs[e] == {"external": False, "version": 9, "replicas": None, "storage": None, "resources": None, "memory": "256Mi",
                            "maxmemory": 214748364, "maxmemoryPolicy": "allkeys-lru", "persistence": False, "store_key": None,
-                           "refreshInterval": None}, e
+                           "refreshInterval": None, "pin": "valkey/valkey:9.1.3@sha256:3add1a336a920ea54770a001ab6feb3da5fceea96a40373a3a2cd469b815f0b7"}, e   # spec 121: pin
         assert isinstance(envs[e]["version"], int) and envs[e]["persistence"] is False
 
 
@@ -121,7 +121,8 @@ def test_the_effective_values_follow_instance_then_resource_then_default_ac_118_
                              instances={"dev": {"memory": "128Mi", "persistence": False}, "prod": {"storage": "5Gi", "maxmemoryPolicy": "noeviction"}})}
     envs = effective(tmp_path, csys(res))
     assert envs["dev"] | {} == {"external": False, "version": 8, "replicas": None, "storage": None, "resources": None, "memory": "128Mi",
-                               "maxmemory": 107374182, "maxmemoryPolicy": "volatile-lru", "persistence": False, "store_key": None, "refreshInterval": None}
+                               "maxmemory": 107374182, "maxmemoryPolicy": "volatile-lru", "persistence": False, "store_key": None, "refreshInterval": None,
+                               "pin": "valkey/valkey:8.1.11@sha256:8f836008e0986c36adf50da714c7060cf689dbb335f61fe077939d90fa650809"}   # spec 121: pin
     assert (envs["staging"]["memory"], envs["staging"]["persistence"], envs["staging"]["storage"], envs["staging"]["maxmemory"]) == ("512Mi", True, "1Gi", 429496729)
     assert (envs["prod"]["storage"], envs["prod"]["maxmemoryPolicy"], envs["prod"]["persistence"]) == ("5Gi", "noeviction", True)
 
@@ -129,7 +130,7 @@ def test_the_effective_values_follow_instance_then_resource_then_default_ac_118_
 def test_an_external_instance_has_no_sizing_in_the_renderer_api_ac_118_3(tmp_path):  # AC-118.3
     envs = effective(tmp_path, csys({"sessions": cache(instances={"prod": {"external": True}})}))
     assert envs["prod"] == {"external": True, "version": None, "replicas": None, "storage": None, "resources": None, "memory": None,
-                            "maxmemory": None, "maxmemoryPolicy": None, "persistence": None, "store_key": "shop-prod-sessions", "refreshInterval": "1h"}
+                            "maxmemory": None, "maxmemoryPolicy": None, "persistence": None, "store_key": "shop-prod-sessions", "refreshInterval": "1h", "pin": None}   # spec 121: pin
     assert envs["dev"]["external"] is False and envs["dev"]["version"] == 9
 
 
@@ -291,7 +292,7 @@ def test_the_statefulset_runs_the_pinned_release_of_its_major_ac_118_17(tmp_path
 def test_no_floating_tag_is_rendered_ac_118_17(tmp_path):  # AC-118.17
     blob = "\n".join(t for k, t in ok(tmp_path, csys()).items() if f"/addons/dev/sessions/" in k)
     images = re.findall(r"image:\s*(\S+)", blob)
-    assert images and all(re.fullmatch(r"valkey/valkey:\d+\.\d+\.\d+", i) for i in images)
+    assert images and all(re.fullmatch(r"valkey/valkey:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}", i) for i in images)   # spec 121: digest
     assert "latest" not in blob
 
 
@@ -731,7 +732,7 @@ def _before_docs():
 def test_a_5x_system_without_a_cache_renders_byte_identically_to_before_ac_118_22(tmp_path, label):  # AC-118.22
     g = ok(tmp_path, _before_docs()[label])
     digest, count = BEFORE_118[label]
-    assert (len(g), tree_digest(g)) == (count, digest), f"{label}: the render changed although the system has no cache"
+    assert (len(g), tree_digest(unpin(g))) == (count, digest), f"{label}: the render changed although the system has no cache"  # spec 121: only the engine references changed
 
 
 def test_an_unused_cache_changes_nothing_in_the_tree_ac_118_22(tmp_path):  # AC-118.22

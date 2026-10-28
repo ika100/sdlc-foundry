@@ -932,8 +932,8 @@ def plugin_versions(name):
 
 def test_the_component_system_and_platform_plugins_are_bumped_in_both_places_ac_120_5():  # AC-120.5
     assert plugin_versions("component") == ("1.3.0", "1.3.0")
-    assert plugin_versions("system") == ("1.4.0", "1.4.0")
-    assert plugin_versions("platform") == ("1.2.0", "1.2.0")
+    assert plugin_versions("system") == ("1.5.0", "1.5.0")   # spec 121: system plugin 1.5.0
+    assert plugin_versions("platform") == ("1.3.0", "1.3.0")   # spec 121: platform plugin 1.3.0
 
 
 def description(path) -> str:

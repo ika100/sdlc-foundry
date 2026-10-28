@@ -514,7 +514,7 @@ def test_the_changelog_lists_the_cache_in_a_minor_section_that_is_not_breaking_a
 def test_the_resource_plugin_is_1_4_0_in_both_places_ac_118_22():  # AC-118.22
     manifest = json.loads((ROOT / "plugins/resource/.claude-plugin/plugin.json").read_text())
     market = next(p["version"] for p in json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"] if p["name"] == "resource")
-    assert manifest["version"] == market == "1.5.0"  # spec 119: resource plugin 1.5.0
+    assert manifest["version"] == market == "1.6.0"  # spec 121: resource plugin 1.6.0
     assert "caches" in manifest["description"]
     desc = re.search(r'(?m)^description:\s*"(.*)"\s*$', (ROOT / "plugins/resource/commands/add.md").read_text()).group(1)
     assert len(desc) < 260 and "--type database|bucket|cache" in desc

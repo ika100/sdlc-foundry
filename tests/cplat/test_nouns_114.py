@@ -193,7 +193,8 @@ def test_system_status_is_a_component_by_environment_table_ac_114_32(status_repo
     assert "1.2.0 ci ok argo missing" in api
     web = next(ln for ln in lines if ln.strip().startswith("shop-web "))
     assert web.split()[-2] == "-"                                       # no prod instance
-    res = [ln for ln in lines if ln.strip().startswith(("postgres ", "observability "))]
+    grid = next((i for i, ln in enumerate(lines) if ln.startswith("Resource versions")), len(lines))  # spec 121: stop before the versions grid
+    res = [ln for ln in lines[:grid] if ln.strip().startswith(("postgres ", "observability "))]
     assert len(res) == 2 and any("argo Synced/Healthy" in ln for ln in res)
 
 

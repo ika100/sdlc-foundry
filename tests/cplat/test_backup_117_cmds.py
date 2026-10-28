@@ -258,9 +258,11 @@ def test_the_text_has_a_backups_section_with_the_designed_lines_ac_117_6(tmp_pat
 def test_status_without_any_backup_reads_no_cluster_and_prints_no_section_ac_117_6(tmp_path, kube, capsys, quiet):  # AC-117.6
     write_system(tmp_path, bdoc())
     rc, out = status(tmp_path, kube, capsys)
-    assert rc == 0 and "Backups" not in out and kube.calls == []
+    # spec 121: status reads each resource instance's health with the context; 117 meant no backup reads (no backups/objectstores/velero kinds)
+    no_backup_reads = lambda: not [c for c in kube.calls if any(k in c[0][1] for k in ("backup", "objectstore", "velero"))]  # noqa: E731
+    assert rc == 0 and "Backups" not in out and no_backup_reads()
     b = status_json(tmp_path, kube, capsys)
-    assert kube.calls == [] and {i["backup"]["state"] for i in b["resource_instances"]} == {"off"}
+    assert no_backup_reads() and {i["backup"]["state"] for i in b["resource_instances"]} == {"off"}
     assert {e["backup"]["state"] for e in b["environments"]} == {"off"}
 
 
@@ -800,7 +802,7 @@ def front(path):
 
 
 def test_the_resource_plugin_is_1_3_0_and_has_backup_and_restore_commands_ac_117_31():  # AC-117.31
-    assert plugin_version("resource") == ("1.5.0", "1.5.0")  # spec 119: resource plugin 1.5.0
+    assert plugin_version("resource") == ("1.6.0", "1.6.0")  # spec 121: resource plugin 1.6.0 (resource upgrade)
     meta, body = front("plugins/resource/commands/backup.md")
     assert len(meta["description"]) < 260 and "Usage: /resource:backup <db> --env <env>" in meta["description"]
     assert "cplat resource backup" in body and "$ARGUMENTS" in body

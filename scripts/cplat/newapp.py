@@ -135,7 +135,8 @@ def resolve(argv: list[str]) -> dict:
         base.append("--skip-tasks")
 
     entries = [{"name": app, "shape": "gitops-app", "description": f"GitOps repo for the {system} system",
-                "args": ["--shape", "gitops-app", "--data", f"owner={manifest['owner'].strip()}"]}]
+                "args": ["--shape", "gitops-app", "--data", f"owner={manifest['owner'].strip()}",
+                         "--data", "property_operators=install"]}]
     for c in order(manifest["components"]):
         args = ["--type", c["type"], "--lang", c["lang"], "--system", f"{org}/{app}"]
         for k, v in (c.get("data") or {}).items():

@@ -201,7 +201,7 @@ def normalize_5(d: dict) -> dict:
     # spec 115 (AC-115.15): the added fields (resource external; instance type, external, store_key; environment operators) are dropped
     out["resources"] = [{k: v for k, v in r.items() if k != "external"} for r in d["resources"]]
     out["instances"] = [{**{k: v for k, v in i.items() if k not in ("autonomy", "scale")}, "secrets": [{k: v for k, v in s.items() if k != "overridden"} for s in i["secrets"]]} for i in d["instances"]]  # spec 120: the instance key scale and the environment key autoscaling are dropped too
-    out["resource_instances"] = [{k: v for k, v in r.items() if k not in ("type", "external", "store_key", "backup")} for r in d["resource_instances"]]  # spec 117: backup dropped too
+    out["resource_instances"] = [{k: v for k, v in r.items() if k not in ("type", "external", "store_key", "backup", "version", "pinned")} for r in d["resource_instances"]]  # spec 117: backup dropped too  # spec 121: version and pinned dropped too
     out["relations"] = [r for r in d["relations"] if r["type"] not in ("provides", "consumes") and not r["to"].startswith(("api:",))
                         and not r["from"].startswith("api:")]
     return out
