@@ -2208,10 +2208,13 @@ def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | N
     db = app.replace("-", "_")
     base = f"{app}-{name}"
     image = conf["pin"]
-    # a physical backup only starts on the major of its archive; the active generation keeps that image only while the archive it
-    # writes to (archives[-1]) is still that older major (spec 121, changed after review: a later major step moves it to the pin, and
-    # it stays there when the generation later becomes previous)
-    if frm is not None and (role == "restored" or not stepped_since(archives or [], cluster or base, conf["version"])):
+    # a physical backup only starts on the major of its archive (spec 121, changed after review): a previous cluster runs the major of
+    # the archive it wrote to (its `archive`, recorded at the switch); a restored generation runs the major of its source archive; the
+    # active generation keeps its source archive's major only until a major step appended a later archive with the effective major
+    previous_major = next((a["major"] for a in archives or [] if a["server"] == archive), None) if role == "previous" and archive else None
+    if previous_major is not None:
+        image = conf["pin"] if previous_major == conf["version"] else POSTGRES_IMAGES[previous_major]
+    elif frm is not None and (role == "restored" or not stepped_since(archives or [], cluster or base, conf["version"])):
         image = next((POSTGRES_IMAGES[a["major"]] for a in archives or [] if a["server"] == frm["server"] and a["major"] != conf["version"]), image)
     spec: dict = {
         "instances": conf["replicas"],

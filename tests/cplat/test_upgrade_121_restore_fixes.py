@@ -186,3 +186,19 @@ def test_a_stepped_generation_that_becomes_previous_keeps_the_new_major_ac_121_1
     assert image("cluster-g1.yaml") == PG[17], "the previous generation keeps the major it took"
     assert image("cluster-g2.yaml") == PG[17], "a restore from the 17 archive runs 17"
     assert "restored from before the upgrade" not in p.stdout + p.stderr
+
+
+def test_a_previous_cluster_runs_the_major_of_the_archive_it_wrote_to_ac_121_16(tmp_path):  # AC-121.16
+    # spec 121 review: g1 (restored from before the upgrade, 16 data, never stepped) becomes previous when a second restore g2 (from the
+    # 17 archive) is switched to; g1 must stay on 16 — rendering 17 would make CloudNativePG pg_upgrade the rollback cluster unasked
+    repo = upgraded_repo(tmp_path)
+    g1, g2 = "shop-orders-db-g1", "shop-orders-db-g2"
+    state = {"next": 3, "archives": [*ARCH, {"server": g1, "major": 16}, {"server": g2, "major": 17}],
+             "clusters": [{"name": g1, "role": "previous", "until": "2026-10-28T11:00:00Z", "archive": g1, "from": {"server": OLD, "to": BEFORE}},
+                          {"name": g2, "role": "active", "from": {"server": NEW, "to": "2026-10-28T10:30:00Z"}}]}
+    write_state(repo, state)
+    p = subprocess.run([sys.executable, "scripts/render.py"], cwd=repo, capture_output=True, text=True)
+    assert p.returncode == 0, p.stderr
+    image = lambda f: yaml.safe_load((repo / APP / "addons/dev/orders-db" / f).read_text())["spec"]["imageName"]  # noqa: E731
+    assert image("cluster-g1.yaml") == PG[16], "the previous cluster keeps the major of the archive it wrote to"
+    assert image("cluster-g2.yaml") == PG[17]
