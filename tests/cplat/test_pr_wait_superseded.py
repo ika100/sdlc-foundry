@@ -138,3 +138,44 @@ def test_a_queued_run_that_never_starts_times_out_unmerged(queued, tmp_path):   
     with pytest.raises(ship.ChecksPending, match="queued"):
         prmod.wait(tmp_path, PR, True, 120, 10, 300)
     assert queued.merges == []
+
+
+
+class QueuedWfGh(QueuedGh, WfGh):
+    """The run list of the head commit plus the workflow of each run (#244, #282)."""
+
+
+@pytest.fixture()
+def qwf(fake, monkeypatch):  # noqa: F811
+    g = QueuedWfGh()
+    g.said, g.merges = fake.said, fake.merges
+    g.heads = ["abc123"]
+    monkeypatch.setattr(ship, "gh", g)
+    return g
+
+
+def test_older_failed_run_while_the_newer_run_is_queued_waits_and_merges(qwf, tmp_path):   # #244
+    """A label on `gh pr create` starts a second run; the first is cancelled and its ci-success fails. While the newer
+    run is queued it reports no checks, and the run list alone says it exists: the old failure does not count."""
+    old = [_run_check("CodeQL", "pass", 40), _run_check("ci-success", "fail", 41)]
+    qwf.checks = [old, old, [_run_check("CodeQL", "pass", 40), _run_check("ci-success", "fail", 41), _run_check("ci-success", "pass", 42)]]
+    qwf.runs = [[{"status": "completed", "databaseId": 41, "workflowDatabaseId": 7}, {"status": "queued", "databaseId": 42, "workflowDatabaseId": 7}]] * 2 + \
+                  [[{"status": "completed", "databaseId": 41, "workflowDatabaseId": 7}, {"status": "completed", "databaseId": 42, "workflowDatabaseId": 7}]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert ok and qwf.merges == [PR] and lines[0].startswith("GREEN"), lines
+
+
+def test_cancelled_jobs_of_a_replaced_run_while_the_newer_one_is_queued_are_not_red(qwf, tmp_path):   # #282
+    old = [_run_check("shape registry + detection", "cancel", 41), _run_check("smoke-test cluster-gitops template", "cancel", 41)]
+    qwf.checks = [old, [*old, _run_check("ci-success", "pass", 42)]]
+    qwf.runs = [[{"status": "completed", "databaseId": 41, "workflowDatabaseId": 7}, {"status": "queued", "databaseId": 42, "workflowDatabaseId": 7}],
+                   [{"status": "completed", "databaseId": 41, "workflowDatabaseId": 7}, {"status": "completed", "databaseId": 42, "workflowDatabaseId": 7}]]
+    ok, lines = prmod.wait(tmp_path, PR, False, 600, 10, 300)
+    assert ok and lines[0].startswith("GREEN"), lines
+
+
+def test_a_failed_run_with_no_newer_run_in_the_list_is_still_red(qwf, tmp_path):   # #244
+    qwf.checks = [[_run_check("ci-success", "fail", 42)]]
+    qwf.runs = [[{"status": "completed", "databaseId": 42, "workflowDatabaseId": 7}]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert not ok and qwf.merges == [] and lines[0].startswith("RED")

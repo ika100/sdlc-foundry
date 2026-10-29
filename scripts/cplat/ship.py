@@ -522,6 +522,7 @@ class CheckWatch:
         self.head: str | None = None                                  # the PR head commit being watched
         self.run_sha: dict[str, str | None] = {}                      # run id → the commit it ran on
         self.run_workflow: dict[str, str | None] = {}                 # run id → its workflow (database id)
+        self.head_runs: list[dict] = []                               # this poll's workflow runs of the head commit
         self.refused: str | None = None                               # spec 102: the budget refused a rerun
         self.refused_checks: list[dict] = []
 
@@ -560,19 +561,23 @@ class CheckWatch:
 
     def _newest_runs(self, cs: list[dict]) -> list[dict]:
         """Of several runs of one workflow on the same commit only the newest counts: an older one was superseded
-        (concurrency cancel-in-progress), and its cancelled or failed checks say nothing about the PR."""
-        newest: dict[tuple[str, str], int] = {}
+        (concurrency cancel-in-progress), and its cancelled or failed checks say nothing about the PR. The newest run
+        may still be queued and report no checks yet, so the head commit's run list counts too (#244, #282)."""
+        newest: dict[str, int] = {}   # workflow database id (unique across GitHub) → newest run id
+        runs_seen = [(str(r["workflowDatabaseId"]), int(r["databaseId"])) for r in self.head_runs
+                     if r.get("databaseId") and r.get("workflowDatabaseId")]
         for c in cs:
             r = run_of(c)
             wf = self.run_workflow.get(r[1]) if r else None
             if r and wf:
-                key = (r[0], wf)
-                newest[key] = max(newest.get(key, 0), int(r[1]))
+                runs_seen.append((wf, int(r[1])))
+        for wf, rid in runs_seen:
+            newest[wf] = max(newest.get(wf, 0), rid)
         out = []
         for c in cs:
             r = run_of(c)
             wf = self.run_workflow.get(r[1]) if r else None
-            if r and wf and int(r[1]) < newest[(r[0], wf)]:
+            if r and wf and int(r[1]) < newest[wf]:
                 continue
             out.append(c)
         return out
@@ -592,20 +597,30 @@ class CheckWatch:
         shas = [self._sha_of(c) for c in cs]
         if head:
             cs = [c for c, sha in zip(cs, shas) if sha in (None, head)]
+        self.head_runs = self._list_head_runs()
         return self._newest_runs(cs)
+
+    def _slug(self) -> str | None:
+        m = re.match(r"https://github\.com/([^/]+/[^/]+)/pull/", self.pr)
+        return m.group(1) if m else None
+
+    def _list_head_runs(self) -> list[dict]:
+        """The workflow runs of the head commit, queued ones included (one `gh run list` per poll)."""
+        if not self.head:
+            return []
+        slug = self._slug()
+        out = gh(["run", "list", "--commit", self.head, "--json", "status,databaseId,workflowDatabaseId", "-L", "50"]
+                 + (["-R", slug] if slug else []), cwd=self.repo, check=False)
+        try:
+            rows = json.loads(out or "[]")
+        except ValueError:
+            return []
+        return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
 
     def _runs_pending(self) -> bool:
         """A workflow run of the head commit that has not completed: a queued run reports no checks at all, so the
         checks of the other workflows (CodeQL) alone would look green (#269)."""
-        if not self.head:
-            return False
-        m = re.match(r"https://github\.com/([^/]+/[^/]+)/pull/", self.pr)
-        out = gh(["run", "list", "--commit", self.head, "--json", "status", "-L", "50"] + (["-R", m.group(1)] if m else []),
-                 cwd=self.repo, check=False)
-        try:
-            return any(r.get("status") != "completed" for r in json.loads(out or "[]"))
-        except (ValueError, AttributeError):
-            return False
+        return any(r.get("status") != "completed" for r in self.head_runs)
 
     def _own_cancel(self, c: dict) -> bool:
         """A check of a run this watch just reran (stuck queue cancelled, or a transient failure) is not red yet."""
