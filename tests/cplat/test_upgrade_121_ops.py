@@ -572,8 +572,21 @@ def test_a_dropped_resource_major_fails_on_a_minor_release_naming_the_row_ac_121
 
 
 def test_the_release_check_is_green_on_this_branch_ac_121_23():  # AC-121.23
-    rc, out = run_script(ROOT, "release-check.py", "rows", "--base", "v5.3.0")
+    rc, out = run_script(ROOT, "release-check.py", "rows")   # base: the latest tag, as the CI job runs it (#294)
     assert rc == 0, out
+
+
+def test_after_a_release_the_rows_check_reads_unreleased_against_the_new_tag(tmp_path):  # AC-121.23, #294
+    root = mini_platform(tmp_path)
+    (root / "docs" / "CHANGELOG.md").write_text(changelog_with("", {"5.4.0": "x"}))
+    git(root, "commit", "-qam", "release 5.4.0")
+    git(root, "tag", "v5.4.0")
+    patch_render(root, KEDA_PATCH)
+    (root / "docs" / "CHANGELOG.md").write_text(changelog_with(KEDA_LINE, {"5.4.0": "x"}))
+    git(root, "commit", "-qam", "keda after the release")
+    rc, out = run_script(root, "release-check.py", "rows")
+    assert rc == 0 and "[Unreleased]" in out, out
+    assert run_script(root, "release-check.py", "rows", "--base", "v5.3.0")[0] == 1   # the old fixed base checked [5.4.0]
 
 
 def needs_e2e(root) -> str:
