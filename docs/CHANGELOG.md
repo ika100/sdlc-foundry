@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**Deploy confirms an external Helm component.** `/component:ship` escalated in phase deploy for a component with an `external: {helm: …}` entry: Argo CD reports no `summary.images` for its app, so the deploy check saw "runs nothing" although the Deployment ran the merged build (#251). When an app reports no images, the check now reads the pod templates of the workloads it manages, through the managed `<svc>-<env>-chart` Application one level down, and smoke and promotion continue as for any other component.
+
 **`/system:set --operators owner|install`.** Handing a system's operators to a cluster repo (`environments.<env>.operators: owner`, what a cluster's check asks for) meant editing system.yaml by hand (#264). `/system:set --env <env> --operators owner` sets the key and renders; `--operators install` removes it, so the system installs its operators again.
 
 **Plugins:** `system` 1.6.0.

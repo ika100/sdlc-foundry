@@ -413,3 +413,48 @@ def test_architect_and_plan_command_plan_gitops_tasks_with_expand_contract():
     ref = yaml.safe_load((core.PLATFORM_ROOT / "plugins" / "svc" / "skills" / "spec-format" / "references" / "plan.md")
                          .read_text().split("```yaml", 1)[1].split("```", 1)[0].strip().strip("-")) or {}
     assert any("repo" in t for t in ref.get("tasks", [])), "the plan reference shows a gitops task"
+
+
+def test_argo_without_summary_images_reads_the_managed_workloads(monkeypatch):   # #251
+    """An external Helm entry: Argo's summary.images is empty, the Deployment it manages runs the merged build."""
+    status = {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}, "summary": {},
+              "resources": [{"group": "apps", "kind": "Deployment", "namespace": "ai-ops", "name": "ai-ops"},
+                            {"kind": "Service", "namespace": "ai-ops", "name": "ai-ops"}]}
+    running = {"image": "ghcr.io/a/ai-ops:sha-old0000"}
+    calls = []
+
+    def fake(cmd, **kw):
+        calls.append(cmd)
+        if "application" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, json.dumps({"status": status}), "")
+        return subprocess.CompletedProcess(cmd, 0, running["image"], "")
+    monkeypatch.setattr(ship, "run", fake)
+    assert ship.argo_health("lan", "ai-ops-dev", 0, 20, images={f"sha-{SHA}"}).startswith("waiting for")
+    running["image"] = f"ghcr.io/a/ai-ops:sha-{SHA}"
+    assert ship.argo_health("lan", "ai-ops-dev", 0, 20, images={f"sha-{SHA}"}) == "Synced/Healthy"
+    assert ["kubectl", "--context", "lan", "-n", "ai-ops", "get", "deployment", "ai-ops", "-o",
+            "jsonpath={.spec.template.spec.containers[*].image}"] in calls
+    assert not any("service" in c for c in calls)
+
+
+def test_argo_with_summary_images_does_not_ask_the_workloads(monkeypatch):   # #251
+    status = {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}, "summary": {"images": [f"ghcr.io/a/b:sha-{SHA}"]},
+              "resources": [{"group": "apps", "kind": "Deployment", "namespace": "b", "name": "b"}]}
+    calls = []
+    monkeypatch.setattr(ship, "run", lambda cmd, **kw: calls.append(cmd) or subprocess.CompletedProcess(cmd, 0, json.dumps({"status": status}), ""))
+    assert ship.argo_health("lan", "b-dev", 0, 20, images={f"sha-{SHA}"}) == "Synced/Healthy"
+    assert all("application" in c for c in calls)
+
+
+def test_argo_follows_the_chart_application_of_an_external_helm_entry(monkeypatch):   # #251
+    """`ai-ops-dev` manages the Application `ai-ops-dev-chart`, which manages the Deployment; neither reports summary.images."""
+    parent = {"sync": {"status": "Synced"}, "health": {"status": "Healthy"}, "summary": {},
+              "resources": [{"group": "argoproj.io", "kind": "Application", "namespace": "argocd", "name": "ai-ops-dev-chart"}]}
+    child = {"summary": {}, "resources": [{"group": "apps", "kind": "Deployment", "namespace": "ai-ops", "name": "ai-ops"}]}
+
+    def fake(cmd, **kw):
+        if "application" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, json.dumps({"status": child if "ai-ops-dev-chart" in cmd else parent}), "")
+        return subprocess.CompletedProcess(cmd, 0, f"ghcr.io/a/ai-ops:sha-{SHA}", "")
+    monkeypatch.setattr(ship, "run", fake)
+    assert ship.argo_health("lan", "ai-ops-dev", 0, 20, images={f"sha-{SHA}"}) == "Synced/Healthy"

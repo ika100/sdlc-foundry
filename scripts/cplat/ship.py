@@ -1398,7 +1398,7 @@ def argo_health(context: str, app: str, timeout: float, interval: float, images:
         p = run(["kubectl", "--context", context, "-n", "argocd", "get", "application", app, "-o", "json"], check=False)
         if p.returncode == 0:
             s = json.loads(p.stdout).get("status", {})
-            have = s.get("summary", {}).get("images") or []
+            have = s.get("summary", {}).get("images") or (workload_images(context, s) if images else [])
             rev = s.get("sync", {}).get("revision", "")
             if images and not any(img.rsplit(":", 1)[-1] in images for img in have):
                 state = f"waiting for {sorted(images)[0][:11]}… (runs {', '.join(have) or 'nothing'})"
@@ -1417,6 +1417,35 @@ def argo_health(context: str, app: str, timeout: float, interval: float, images:
         if now() - begin > max(timeout, 0):
             return state
         sleep(interval)
+
+
+WORKLOADS = ("Deployment", "StatefulSet", "DaemonSet")
+
+
+def workload_images(context: str, status: dict, depth: int = 1) -> list[str]:
+    """The container images an Argo CD app runs, read from the cluster: the pod templates of the workloads it manages, and through a
+    managed child Application (an external Helm entry's `<svc>-<env>-chart`, one level) that child's images. Argo leaves
+    `summary.images` empty for such an app (#251); the pod templates still say which build runs."""
+    out: list[str] = []
+    for res in status.get("resources") or []:
+        kind, name, ns = res.get("kind"), res.get("name"), res.get("namespace")
+        if not name:
+            continue
+        if kind == "Application" and res.get("group") == "argoproj.io" and depth > 0:
+            p = run(["kubectl", "--context", context, "-n", ns or "argocd", "get", "application", name, "-o", "json"], check=False)
+            try:
+                child = json.loads(p.stdout).get("status", {}) if p.returncode == 0 else {}
+            except ValueError:
+                child = {}
+            found = child.get("summary", {}).get("images") or workload_images(context, child, depth - 1)
+        elif kind in WORKLOADS and res.get("group", "apps") == "apps":
+            p = run(["kubectl", "--context", context, *(["-n", ns] if ns else []), "get", kind.lower(), name, "-o",
+                     "jsonpath={.spec.template.spec.containers[*].image}"], check=False)
+            found = p.stdout.split() if p.returncode == 0 else []
+        else:
+            continue
+        out += [i for i in found if i not in out]
+    return out
 
 
 def _ahead(slug: str, base: str, rev: str) -> bool:
