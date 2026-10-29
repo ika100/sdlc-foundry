@@ -1,4 +1,4 @@
-"""`system set --env ENV`: change one environment's promote rule, policy or host in system.yaml and render the manifests."""
+"""`system set --env ENV`: change one environment's promote rule, policy, host or operators in system.yaml and render the manifests."""
 from __future__ import annotations
 
 import argparse
@@ -12,6 +12,7 @@ from core import PlatformError, Report
 
 POLICIES = ("audit", "enforce", "off")
 STAGING_PROMOTE = ("after-dev-smoke", "manual")
+OPERATORS = ("owner", "install")   # owner: the cluster repo installs them (the key is set); install: the system does (no key)
 PLACEHOLDERS = ("component", "system", "env")
 TREES = ("applications", "bootstrap")
 
@@ -22,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--promote", metavar="RULE", help="staging: after-dev-smoke|manual; prod: manual")
     p.add_argument("--policy", metavar="POLICY", help="audit|enforce|off")
     p.add_argument("--host", metavar="HOST", help="host template with {component}, {system}, {env}")
+    p.add_argument("--operators", metavar="WHO", help="owner (a cluster repo installs the operators) | install (the system does)")
     p.add_argument("--system", help="system name when the repo has several")
     p.add_argument("--repo-dir", default=".", help="the gitops-app repo (default: current directory)")
     p.add_argument("--pr", action="store_true", help="create branch, commit, push and open a pull request")
@@ -43,6 +45,11 @@ def check_promote(env: str, value: str) -> None:
 def check_policy(env: str, value: str) -> None:
     if value not in POLICIES:
         raise PlatformError(f"environments.{env}.policy: '{value}' is not a policy", hint="allowed: " + ", ".join(POLICIES))
+
+
+def check_operators(env: str, value: str) -> None:
+    if value not in OPERATORS:
+        raise PlatformError(f"environments.{env}.operators: '{value}' is not allowed", hint="allowed: " + ", ".join(OPERATORS))
 
 
 def check_host(env: str, value: str) -> None:
@@ -81,21 +88,24 @@ def main(argv: list[str]) -> int:
     envs = data.get("environments") or {}
     if ns.env not in envs:
         raise PlatformError(f"no environment '{ns.env}' in {app_dir.name}", hint="environments: " + ", ".join(envs))
-    wanted = {k: v for k, v in (("promote", ns.promote), ("policy", ns.policy), ("host", ns.host)) if v is not None}
+    wanted = {k: v for k, v in (("promote", ns.promote), ("policy", ns.policy), ("host", ns.host), ("operators", ns.operators)) if v is not None}
     if not wanted:
-        raise PlatformError("nothing to change", hint="pass at least one of --promote, --policy, --host")
+        raise PlatformError("nothing to change", hint="pass at least one of --promote, --policy, --host, --operators")
     if "promote" in wanted:
         check_promote(ns.env, wanted["promote"])
     if "policy" in wanted:
         check_policy(ns.env, wanted["policy"])
     if "host" in wanted:
         check_host(ns.env, wanted["host"])
+    if "operators" in wanted:
+        check_operators(ns.env, wanted["operators"])
     if not ns.dry_run:
         gitops.require_clean(repo)
 
     r = Report(title=f"system set: {ns.env} ({app_dir.name})")
     for k, v in wanted.items():
-        r.will_do.append(f"set environments.{ns.env}.{k} to {v}")
+        r.will_do.append(f"remove environments.{ns.env}.operators (the system installs its operators)" if (k, v) == ("operators", "install")
+                         else f"set environments.{ns.env}.{k} to {v}")
     r.will_do.append("regenerate ApplicationSets and manifests (render.py)")
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch system/set-…)")
@@ -109,6 +119,9 @@ def main(argv: list[str]) -> int:
     if conf is None:
         envs[ns.env] = conf = {}
     for k, v in wanted.items():
+        if (k, v) == ("operators", "install"):
+            conf.pop("operators", None)
+            continue
         conf[k] = DoubleQuotedScalarString(v) if k == "policy" and v == "off" else v    # a bare off is false in YAML 1.1
     gitops.save(app_dir, y, data)
     try:

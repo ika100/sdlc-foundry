@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 import gitops
-from system_fixtures import ROOT, files
+from system_fixtures import ROOT, files, git
 from test_commands_114 import APP, gitops5, render_check, run, sysdoc  # noqa: F401  (gitops5 is a fixture)
 
 
@@ -104,6 +104,25 @@ def test_dry_run_json_lists_the_plan_and_writes_nothing_ac_122_51(gitops5, capsy
     assert rc == 0 and files(gitops5) == before
     plan = json.loads(out)
     assert plan["will_do"] and plan["pr"] is None and "promote" in json.dumps(plan["will_do"])
+
+
+def test_operators_owner_sets_the_key_and_install_removes_it(gitops5):  # #264
+    before = copy.deepcopy(sysdoc(gitops5))
+    assert run("system", "set", "--env", "dev", "--operators", "owner", "--repo-dir", gitops5) == 0
+    assert envs(gitops5)["dev"]["operators"] == "owner"
+    assert render_check(gitops5).returncode == 0
+    git(gitops5, "add", "-A")
+    git(gitops5, "commit", "-qm", "owner")   # system set needs a clean tree
+    assert run("system", "set", "--env", "dev", "--operators", "install", "--repo-dir", gitops5) == 0
+    assert "operators" not in envs(gitops5)["dev"] and sysdoc(gitops5) == before
+    assert render_check(gitops5).returncode == 0
+
+
+def test_an_invalid_operators_value_changes_nothing(gitops5, capsys):  # #264
+    before = files(gitops5)
+    rc, _, err = run("system", "set", "--env", "dev", "--operators", "cluster", "--repo-dir", gitops5, capsys=capsys)
+    assert rc == 1 and "environments.dev.operators: 'cluster' is not allowed" in err and "owner, install" in err
+    assert files(gitops5) == before
 
 
 def test_the_command_file_exists_with_its_usage_line_ac_122_51():  # AC-122.51

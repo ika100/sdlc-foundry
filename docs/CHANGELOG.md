@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**`/system:set --operators owner|install`.** Handing a system's operators to a cluster repo (`environments.<env>.operators: owner`, what a cluster's check asks for) meant editing system.yaml by hand (#264). `/system:set --env <env> --operators owner` sets the key and renders; `--operators install` removes it, so the system installs its operators again.
+
+**Plugins:** `system` 1.6.0.
+
 **`/cluster:new` takes the cluster's properties.** `cplat cluster new` wrote cluster.yaml with every default, so setting the API server, the operators or the secret store took a second edit, render and PR (#259). It now takes `--server <url>`, `--operators <a,b>` and `--secret-store <name>`, checks them as the cluster render does (an unknown or repeated operator, a server that is not an http(s) URL, a store without `external-secrets`) before anything is created, writes them into cluster.yaml, and with operators renders `cluster/operators/` before the first commit. Without the flags nothing changes.
 
 **Operator applications stay Synced.** `operator-kyverno` stayed OutOfSync / Healthy forever: the chart renders empty `annotations: {}` / `labels: {}` on its CRDs, the API server drops them, and Argo CD's default client-side diff kept reporting the difference (#261). Every operator Application (system repos' `operators/` and cluster repos' `cluster/operators/`) now carries `argocd.argoproj.io/compare-options: ServerSideDiff=true`, so Argo CD compares against what the server applied. **Action:** run `/platform:update` in system and cluster repos; the render adds the annotation.

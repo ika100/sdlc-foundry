@@ -100,7 +100,7 @@
     {
       "name": "system",
       "source": "./plugins/system",
-      "version": "1.5.1",
+      "version": "1.6.0",
       "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
       "category": "agents",
       "tags": [
