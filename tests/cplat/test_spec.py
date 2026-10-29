@@ -110,6 +110,38 @@ def test_approve_sets_status_and_logs_it(tmp_path):
     assert s.status == "approved" and "approved" in s.body.split("## Changelog")[1]
 
 
+def test_an_amended_spec_with_a_stale_plan_is_approved_and_the_plan_set_aside(tmp_path):   # #208
+    s = make(tmp_path)
+    (s.dir / "spec.md").write_text((s.dir / "spec.md").read_text().replace(
+        "- ~~**AC-007.3**~~", "- **AC-007.4** Given a rule, when it is paused, then nothing is sent.\n- ~~**AC-007.3**~~"))
+    s = spec.read(s.dir)
+    assert spec.check(s) == []   # the amend flow's check of the draft passes
+    assert spec.check_plan(s, *s.plan)   # although the plan no longer fits
+    assert spec.approve(s, None) == "plan.v1.md"
+    s = spec.read(s.dir)
+    assert s.status == "approved" and s.plan is None and (s.dir / "plan.v1.md").is_file()
+    assert "the old plan is plan.v1.md" in s.body.split("## Changelog")[1]
+    assert spec.check(s) == []
+
+
+def test_a_plan_that_still_fits_stays_on_approval(tmp_path):   # #208
+    s = make(tmp_path)
+    assert spec.approve(s, None) is None
+    assert (s.dir / "plan.md").is_file() and not (s.dir / "plan.v1.md").exists()
+
+
+def test_a_second_set_aside_takes_the_next_number(tmp_path):   # #208
+    s = make(tmp_path, hash_="000000000000")
+    (s.dir / "plan.v1.md").write_text("old")
+    assert spec.approve(s, None) == "plan.v2.md"
+
+
+def test_the_approve_command_says_to_re_plan(tmp_path, capsys):   # #208
+    make(tmp_path, hash_="000000000000")
+    assert spec.main(["--repo", str(tmp_path), "approve", "007"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["007-price-alerts: approved",
+                   "plan.md was written for the earlier criteria and is now plan.v1.md; re-plan with `/component:plan 007`"]
 def test_approve_needs_a_criterion(tmp_path):
     s = spec.new(tmp_path, "Empty thing", shape=None, priority="P1", tracks=[], parent=None)
     assert s.acs() == [] and s.open_questions() == []  # the skeleton's examples are HTML comments

@@ -41,8 +41,8 @@ Never edit specs from these modes. To change one, use `/component:spec --amend <
 
 ## A. approve <id>
 
-1. `cplat spec approve <id>`. If it refuses, show the reasons and the fix (usually `/component:spec --amend <id> …` for open questions).
-2. Switch to `feature/<spec_id>` if it exists. Commit `docs/specs/<spec_id>/spec.md`: `docs(spec): approve <spec_id>`.
+1. `cplat spec approve <id>`. If it refuses, show the reasons and the fix (usually `/component:spec --amend <id> …` for open questions). If it says the plan was set aside (an amended spec whose criteria changed), tell the user the spec needs a new plan.
+2. Switch to `feature/<spec_id>` if it exists. Commit `docs/specs/<spec_id>/` (spec.md, and a plan it set aside): `docs(spec): approve <spec_id>`.
 3. `cplat spec land <spec_id>`: approves the review, marks the draft PR ready and merges it once CI is green. Show its output; on a failure stop and show it.
 4. Print the next step: `/component:plan <NNN>`.
 
@@ -58,7 +58,7 @@ Never edit specs from these modes. To change one, use `/component:spec --amend <
 ## C. --amend <id> <change>
 
 1. `cplat spec list --all --json` to find the spec and its status. Switch to `feature/<spec_id>` (create it from `main` if the spec is already merged).
-2. If the status is not `draft`: `cplat spec set-status <id> draft --reason "amend: <one line>"`. Tell the user that it needs a new approval, and, if it has a plan and the criteria change, a new plan.
+2. If the status is not `draft`: `cplat spec set-status <id> draft --reason "amend: <one line>"`. Tell the user that it needs a new approval, and, if it has a plan and the criteria change, a new plan (approval moves the old plan aside to `plan.v<k>.md`).
 3. Before the product-manager runs, read the review comments: `cplat spec review <id> --comments --json`, and pass them along with the change. If the request carries a review comment from the console ("Request changes"), first write it to a temp file and post it: `cplat spec review <id> --request-changes --body-file <file>`. **product-manager**: `MODE: amend`, `SPEC_DIR`, the change verbatim, the review comments, plus any answers the user gave.
 4. `cplat spec check <id>`, then the questions loop (Q), then commit `docs(spec): amend <spec_id> — <one line>`, run `cplat spec publish <spec_id>` and do section F.
 

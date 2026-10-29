@@ -287,7 +287,8 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
             errs.append("an approved spec needs at least one acceptance criterion (AC-<NNN>.<n>)")
         if spec.open_questions():
             errs.append(f"{len(spec.open_questions())} open question(s) left; answer them before approving")
-    if spec.plan:
+    amended = spec.status == "draft" and spec.plan and spec.plan[0].get("spec_hash") != spec.ac_hash()
+    if spec.plan and not amended:   # an amended draft's plan predates its criteria; approve sets it aside (#208)
         errs += [f"plan.md: {e}" for e in check_plan(spec, *spec.plan)]
     return errs
 
@@ -704,16 +705,29 @@ def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | Non
     return read(spec.dir)
 
 
-def approve(spec: Spec, shape: str | None) -> None:
+def approve(spec: Spec, shape: str | None) -> str | None:
+    """Approve a draft. The spec is checked on its own: a plan written for earlier criteria (an amended spec) does not
+    block approval, as only an approved spec can be re-planned (#208); it is moved aside, and its new name returned."""
     if spec.status != "draft":
         raise PlatformError(f"{spec.id} is '{spec.status}', only a draft can be approved")
-    trial = Spec(spec.dir, {**spec.meta, "status": "approved"}, spec.body, spec.plan)
+    trial = Spec(spec.dir, {**spec.meta, "status": "approved"}, spec.body, None)
     errs = check(trial, shape=shape)
     if errs:
         raise PlatformError(f"{spec.id} cannot be approved: " + "; ".join(errs),
                             hint=f"fix the spec (`/component:spec --amend {spec.number}`), then approve again")
+    aside = _set_plan_aside(spec.dir) if spec.plan and check_plan(trial, *spec.plan) else None
     spec.meta["status"] = "approved"
-    save(spec.dir / "spec.md", spec.meta, add_changelog(spec.body, "approved"))
+    save(spec.dir / "spec.md", spec.meta, add_changelog(spec.body, "approved" + (f"; the old plan is {aside}" if aside else "")))
+    return aside
+
+
+def _set_plan_aside(sdir: Path) -> str:
+    """plan.md → plan.v<k>.md, the first free k."""
+    k = 1
+    while (sdir / f"plan.v{k}.md").exists():
+        k += 1
+    (sdir / "plan.md").rename(sdir / f"plan.v{k}.md")
+    return f"plan.v{k}.md"
 
 
 VERDICT = re.compile(r"^\*\*Result:\*\*\s*(pass|fail)\b", re.M)
@@ -1213,8 +1227,10 @@ def main(argv: list[str]) -> int:
         return _print_errors(results)
     if ns.cmd == "approve":
         spec = find(root, ns.id)
-        approve(spec, repo_shape(root))
+        aside = approve(spec, repo_shape(root))
         print(f"{spec.id}: approved")
+        if aside:
+            print(f"plan.md was written for the earlier criteria and is now {aside}; re-plan with `/component:plan {spec.number}`")
         return 0
     if ns.cmd == "set-status":
         spec = find(root, ns.id)
