@@ -228,6 +228,28 @@ def test_ac_125_17_update_archives_the_whole_templates_folder_so_links_resolve(t
     assert seen == ["templates"]
 
 
+def test_the_update_re_renders_a_cluster_repos_output_and_names_the_files(shared_renders, tmp_path):  # #264
+    from cluster_fixtures import render_ok
+    update = mod("update")
+    repo = cluster_repo(shared_renders, tmp_path / "c")
+    render_ok(repo, "cluster: home\nowner: acme\noperators: [kyverno]\nsystems: {}\n")
+    app = repo / "cluster" / "operators" / "kyverno.yaml"
+    fresh = app.read_text()
+    app.write_text(fresh.replace("operator-kyverno", "operator-kyverno-stale"))   # what an older renderer wrote
+    written: set[str] = set()
+    assert update.rerender_cluster(repo, written) == 1
+    assert app.read_text() == fresh and written == {"cluster/operators/kyverno.yaml"}
+    assert update.rerender_cluster(repo, written := set()) == 0 and written == set()
+
+
+def test_the_update_stops_when_the_cluster_render_fails(shared_renders, tmp_path):  # #264
+    update = mod("update")
+    repo = cluster_repo(shared_renders, tmp_path / "c")
+    (repo / "cluster.yaml").write_text("cluster: home\nowner: acme\noperators: [nope]\nsystems: {}\n")
+    with pytest.raises(Exception, match="the updated cluster render fails: .*nope"):
+        update.rerender_cluster(repo, set())
+
+
 def test_ac_125_17_the_fleet_treats_a_cluster_repo_like_any_platform_repo():  # AC-125.17
     import core
     import fleet
