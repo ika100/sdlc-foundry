@@ -313,7 +313,15 @@ def in_scope() -> list[Path]:
     out += [docs / "img" / "sdlc-map.svg", docs / "img" / "model-lifecycles.svg"]
     out += [ROOT / n for n in ("README.md", "CONTRIBUTING.md", "CLAUDE.md")]
     out += [p for p in (ROOT / "site" / "src" / "content" / "docs").rglob("*") if p.suffix in (".md", ".mdx") and "reference" not in p.relative_to(ROOT).parts]
-    return sorted({p for p in out if p.is_file()})
+    files = sorted({p for p in out if p.is_file()})
+    return [p for p in files if p not in ignored(files)]
+
+
+def ignored(paths: list[Path]) -> set[Path]:
+    """The paths git ignores, such as the pages a local site build generates (#284); none outside a git checkout."""
+    p = subprocess.run(["git", "check-ignore", "--stdin"], cwd=ROOT, input="\n".join(str(x.relative_to(ROOT)) for x in paths),
+                       capture_output=True, text=True)
+    return {ROOT / line for line in p.stdout.splitlines()} if p.returncode in (0, 1) else set()
 
 
 SYNCED = {f"site/src/content/docs/{slug}.md": src for src, slug in

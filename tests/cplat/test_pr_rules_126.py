@@ -118,6 +118,10 @@ SPEC_SAMPLES = [
     ("not-closing-code-no-spec", "Related to #5", [], ["scripts/x.py"], False),
     ("empty-body", "", [], ["scripts/x.py"], False),
     ("closing-docs-only", "Closes #5", [], ["docs/guide.md"], False),
+    ("mention-in-a-sentence", "Follow-up to #266 (which fixes #260).", [], ["scripts/x.py"], False),   # #283
+    ("closing-list-item", "- Fixes #5", [], ["scripts/x.py"], True),
+    ("closing-with-colon", "Closes: #5", [], ["scripts/x.py"], True),
+    ("closing-line-after-text", "Some context.\n\nResolves #5", [], ["scripts/x.py"], True),
 ]
 
 
@@ -145,7 +149,28 @@ def test_ac_126_14_the_spec_rule_message_is_the_one_ci_always_printed(pr_rules):
                    "but no spec under docs/specs/. Write one with /component:spec (CLAUDE.md: platform changes start with a spec), "
                    "or add the label `no-spec` for a one-line fix or docs.")
     assert pr_rules.CODE == ("scripts/", "plugins/", "templates/")
-    assert pr_rules.CLOSES.search("this Closes #5")
+    assert pr_rules.CLOSES.search("text\nCloses #5") and not pr_rules.CLOSES.search("this Closes #5")
+
+
+def test_githubs_closing_issues_win_over_the_body(pr_rules):  # #283
+    assert pr_rules.spec_error("Closes #5", [], ["scripts/x.py"], closing=[]) is None
+    assert pr_rules.spec_error("which fixes #260", [], ["scripts/x.py"], closing=[260]) is not None
+    assert pr_rules.spec_error("which fixes #260", ["no-spec"], ["scripts/x.py"], closing=[260]) is None
+
+
+@pytest.mark.parametrize("answer, error", [
+    ({"closingIssuesReferences": [{"number": 260}]}, True),
+    ({"closingIssuesReferences": []}, False),
+    (None, False),   # gh fails: the body decides, and this body only mentions an issue
+], ids=["closes", "closes-nothing", "gh-fails"])
+def test_ci_asks_github_which_issues_the_pr_closes(tmp_path, answer, error):  # #283
+    repo, base, head = make_repo(tmp_path, ["scripts/x.py"])
+    env = {"PR_BODY": "which fixes #260", "PR_LABELS": "", "BASE_SHA": base, "HEAD_SHA": head, "PR_NUMBER": "7",
+           "GITHUB_REPOSITORY": "o/r", "PATH": f"{fake_gh(tmp_path, answer)}{os.pathsep}{os.environ['PATH']}"}
+    rc, out = script("check-spec-required.py", repo, env)
+    assert (rc == 1) is error, out
+    calls = [json.loads(ln) for ln in (tmp_path / "gh.log").read_text().splitlines()]
+    assert calls == [["pr", "view", "7", "--repo", "o/r", "--json", "closingIssuesReferences"]]
 
 
 def test_ac_126_14_check_spec_required_keeps_verdict_as_an_alias(pr_rules):  # AC-126.14

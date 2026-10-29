@@ -25,7 +25,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts" / "cplat"))
-import versions  # noqa: E402  (scripts/cplat/versions.py)
+try:
+    import versions  # noqa: E402  (scripts/cplat/versions.py)
+except ModuleNotFoundError as e:   # a bare `python3` lacks pyyaml; uv reads the dependencies above (#295)
+    sys.exit(f"ERROR: {e}: run it as `uv run scripts/release-check.py {' '.join(sys.argv[1:])}`")
 
 CHANGELOG = "docs/CHANGELOG.md"
 E2E_NAME = "e2e upgrade (previous release → candidate)"

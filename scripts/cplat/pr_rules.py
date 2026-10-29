@@ -11,7 +11,9 @@ import subprocess
 TITLE_PATTERN = r"^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?: .{1,72}$"   # the pr-title job's pattern
 MAX_SUBJECT = 72
 NO_SPEC = "no-spec"
-CLOSES = re.compile(r"\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#\d+", re.I)
+# A closing reference starts a line (`Closes #5`, `- Fixes: #5`), as the platform writes them; a mention inside a sentence
+# ("which fixes #260") is not one (#283). CI asks GitHub which issues the PR closes and passes them as `closing`.
+CLOSES = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(close[sd]?|fix(e[sd])?|resolve[sd]?):?[ \t]+#\d+", re.I | re.M)
 CODE = ("scripts/", "plugins/", "templates/")
 
 _TYPES = "feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert"
@@ -48,9 +50,10 @@ def fit(title: str) -> str:
     return f"{kind}{f'({scope})' if scope else ''}{bang or ''}: {subject}"
 
 
-def spec_error(body: str, labels: list[str], files: list[str]) -> str | None:
-    """None when the PR is fine, else the error message."""
-    if NO_SPEC in labels or not CLOSES.search(body or ""):
+def spec_error(body: str, labels: list[str], files: list[str], closing: list[int] | None = None) -> str | None:
+    """None when the PR is fine, else the error message. `closing`: the issues GitHub says the PR closes, when known."""
+    closes = bool(closing) if closing is not None else bool(CLOSES.search(body or ""))
+    if NO_SPEC in labels or not closes:
         return None
     code = [f for f in files if f.startswith(CODE)]
     if not code or any(f.startswith("docs/specs/") for f in files):
