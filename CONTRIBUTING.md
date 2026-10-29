@@ -93,7 +93,7 @@ The sign-off e-mail must be the commit's author or committer e-mail (use your Gi
 
 Maintainers release: move `[Unreleased]` under a new `## [x.y.z] - date` heading in `docs/CHANGELOG.md` (the platform version is read from the first such heading), make sure plugin and marketplace versions match, merge, tag `vX.Y.Z` and publish a GitHub release with the changelog section as notes. `/component:release` refuses in this repo (it has no release role); this section is the procedure.
 
-CI runs `uv run scripts/release-check.py rows` on every PR: the `docs/CHANGELOG.md` section that will be released must list every changed row of the versions table, and an operator major move, a removed CRD version or a dropped resource major needs a major platform release. Before `git tag`, run `python3 scripts/release-check.py gate <merge sha>` and tag only when it passes: it needs a green upgrade e2e (`e2e upgrade (previous release → candidate)`) on that commit. The release gate workflow turns a tag push without one red; a maintainer then deletes that tag (no workflow creates, moves or deletes a tag).
+CI runs `uv run scripts/release-check.py rows` on every PR: the `docs/CHANGELOG.md` section that will be released must list every changed row of the versions table, and an operator major move, a removed CRD version or a dropped resource major needs a major platform release. Before `git tag`, run `uv run scripts/release-check.py gate <merge sha>` and tag only when it passes: it needs a green upgrade e2e (`e2e upgrade (previous release → candidate)`) on that commit. The release gate workflow turns a tag push without one red; a maintainer then deletes that tag (no workflow creates, moves or deletes a tag).
 
 ## CI cost
 
