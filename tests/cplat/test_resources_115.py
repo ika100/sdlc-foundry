@@ -447,7 +447,8 @@ def test_a_database_renders_the_operator_once_outside_the_system_tree_ac_115_18(
     assert y(g, "operators/apps/cloudnative-pg.yaml") == {
         "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
         "metadata": {"name": "operator-cloudnative-pg", "namespace": "argocd",
-                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"},
+                     "annotations": {"argocd.argoproj.io/compare-options": "ServerSideDiff=true"}},
         "spec": {"project": "default",
                  "source": {"repoURL": op["repo_url"], "chart": "cloudnative-pg", "targetRevision": op["chart_version"], "helm": {"releaseName": "cnpg"}},
                  "destination": {"server": server, "namespace": "cnpg-system"},

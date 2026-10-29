@@ -588,7 +588,8 @@ def test_an_in_cluster_bucket_renders_the_seaweedfs_operator_once_ac_116_19(tmp_
     assert y(g, "operators/apps/seaweedfs.yaml") == {
         "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
         "metadata": {"name": "operator-seaweedfs", "namespace": "argocd",
-                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"},
+                     "annotations": {"argocd.argoproj.io/compare-options": "ServerSideDiff=true"}},
         "spec": {"project": "default",
                  "source": {"repoURL": "https://seaweedfs.github.io/seaweedfs-operator", "chart": "seaweedfs-operator", "targetRevision": "0.1.45",
                             "helm": {"releaseName": "seaweedfs-operator"}},

@@ -669,7 +669,8 @@ def app_doc(g, name):
     server = sets(g)["shop-dev"]["spec"]["template"]["spec"]["destination"]["server"]
     helm = {"releaseName": p["release"]}
     sync = {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}
-    meta = {"name": f"operator-{name}", "namespace": "argocd", "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}}
+    meta = {"name": f"operator-{name}", "namespace": "argocd", "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"},
+            "annotations": {"argocd.argoproj.io/compare-options": "ServerSideDiff=true"}}
     if name == "cert-manager":
         helm["valuesObject"] = {"crds": {"enabled": True}}
     if name == "velero":

@@ -2793,7 +2793,10 @@ def operator_application(name: str, server: str) -> dict:
     """The Argo CD application of one operator of the versions table (ADR-058); system and cluster repos render the same one."""
     op = OPERATORS[name]
     meta = {"name": f"operator-{name}", "namespace": "argocd",
-            "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}}
+            "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"},
+            # the API server drops the empty annotations/labels maps some charts render on their CRDs (kyverno); the default
+            # client-side diff then reports them OutOfSync forever (#261). The server-side diff compares what was applied.
+            "annotations": {"argocd.argoproj.io/compare-options": "ServerSideDiff=true"}}
     if op.get("finalizer"):  # spec 117: velero leaves the cluster with its resources
         meta["finalizers"] = ["resources-finalizer.argocd.argoproj.io"]
     helm = {"releaseName": op["release"], **({"valuesObject": op["values"]} if "values" in op else {})}

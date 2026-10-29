@@ -135,7 +135,8 @@ def ignore_entry(name: str) -> dict:
 def expected_operator(op: dict, server="https://kubernetes.default.svc") -> dict:
     return {"apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
             "metadata": {"name": f"operator-{op['chart']}", "namespace": "argocd",
-                         "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+                         "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"},
+                         "annotations": {"argocd.argoproj.io/compare-options": "ServerSideDiff=true"}},
             "spec": {"project": "default",
                      "source": {"repoURL": op["repo_url"], "chart": op["chart"], "targetRevision": op["chart_version"], "helm": {"releaseName": op["release"]}},
                      "destination": {"server": server, "namespace": op["namespace"]},

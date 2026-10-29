@@ -196,7 +196,8 @@ def expected_kustomization(files) -> dict:
 def expected_nack_application(server="https://kubernetes.default.svc") -> dict:
     return {"apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
             "metadata": {"name": "operator-nack", "namespace": "argocd",
-                         "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+                         "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"},
+                         "annotations": {"argocd.argoproj.io/compare-options": "ServerSideDiff=true"}},
             "spec": {"project": "default",
                      "source": {"repoURL": NACK["repo_url"], "chart": "nack", "targetRevision": "0.35.0", "helm": {"releaseName": "nack"}},
                      "destination": {"server": server, "namespace": "nack"},
@@ -211,8 +212,13 @@ def expected_external_secret(component, store_key, name="bus", refresh="1h") -> 
                      "data": [{"secretKey": k, "remoteRef": {"key": store_key, "property": k}} for k in BKEYS]}}
 
 
+SERVER_SIDE_DIFF = "  annotations:\n    argocd.argoproj.io/compare-options: ServerSideDiff=true\n"   # #261, on every operator Application
+
+
 def tree_digest(g: dict) -> str:
+    """The digest of a rendered tree as the recorded "before" digests saw it: without the ServerSideDiff annotation that every
+    operator Application gained later (#261), so that the comparisons still catch every other change."""
     h = hashlib.sha256()
     for path in sorted(g):
-        h.update(path.encode() + b"\0" + g[path].encode() + b"\0")
+        h.update(path.encode() + b"\0" + g[path].replace(SERVER_SIDE_DIFF, "").encode() + b"\0")
     return h.hexdigest()

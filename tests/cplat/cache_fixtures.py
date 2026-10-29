@@ -2,7 +2,6 @@
 
 Contract: docs/specs/118-.../design.md. Builds systems with `cache` resources on top of resources_fixtures and spells out the
 designed documents of an in-cluster cache instance (key order as designed). Nothing here touches the network or a cluster."""
-import hashlib
 
 from resources_fixtures import APP, LABELS, comp, system
 
@@ -118,8 +117,6 @@ def expected_kustomization() -> dict:
 
 
 def tree_digest(g: dict) -> str:
-    h = hashlib.sha256()
-    for path in sorted(g):
-        h.update(path.encode() + b"\0" + g[path].encode() + b"\0")
-    return h.hexdigest()
+    from broker_fixtures import tree_digest as shared   # one digest for every "renders as before" check (#261)
+    return shared(g)
 
