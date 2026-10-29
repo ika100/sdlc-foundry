@@ -15,6 +15,7 @@ import core
 import gitops
 import newsvc
 import pr_rules
+import versions
 from core import PlatformError, Report, run
 
 NAME_RE = re.compile(r"^[a-z]([a-z0-9-]{0,38}[a-z0-9])?$")
@@ -37,6 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--no-github", action="store_true")
     n.add_argument("--ref", default="main")
     n.add_argument("--skip-tasks", action="store_true")
+    n.add_argument("--server", help="the API server Argo CD deploys to (default: the cluster Argo CD runs in)")
+    n.add_argument("--operators", default="", metavar="A,B", help="cluster-level operators, comma-separated (cluster.yaml operators)")
+    n.add_argument("--secret-store", metavar="NAME", help="the ClusterSecretStore systems read secrets from (needs external-secrets)")
     _common(n)
     a = sub.add_parser("add", help="register a system's gitops repo")
     a.add_argument("repo", metavar="OWNER/REPO")
@@ -52,25 +56,57 @@ def build_parser() -> argparse.ArgumentParser:
 
 # ---------------- new ----------------
 
-def _new_steps(org: str, name: str) -> list[str]:
+def _new_steps(org: str, name: str, operators: bool = False) -> list[str]:
     return [
         f"cd {name}",
-        "list the operators the cluster installs in cluster.yaml (operators: [...]) and run devbox run render",
+        *([] if operators else ["list the operators the cluster installs in cluster.yaml (operators: [...]) and run devbox run render"]),
         f"let CI read the systems: gh secret set SYSTEMS_TOKEN -R {org}/{name} (a fine-grained token with Contents: read on the system repos)",
         "/cluster:add <owner>/<system-gitops-repo> for each system",
         "once per cluster: KUBE_CONTEXT=<ctx> REPO_TOKEN=<read-only token> devbox run bootstrap (local: devbox run cluster-up)",
     ]
 
 
+URL_RE = re.compile(r"https?://\S+")
+STORE_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
+
+
+def _properties(ns: argparse.Namespace) -> list[str]:
+    """`--data` answers for cluster.yaml's server, operators and secretStore, checked as the cluster render checks them (#259)."""
+    data: list[str] = []
+    if ns.server:
+        if not URL_RE.fullmatch(ns.server):
+            raise PlatformError(f"--server '{ns.server}' must be an http(s) URL")
+        data.append(f"server={ns.server}")
+    ops = [o.strip() for o in (ns.operators or "").split(",") if o.strip()]
+    known = sorted(versions.current()[1])
+    for o in ops:
+        if o not in known:
+            raise PlatformError(f"--operators: '{o}' is not an operator", hint=f"allowed: {', '.join(known)}")
+    if len(set(ops)) != len(ops):
+        raise PlatformError("--operators lists an operator twice")
+    if ops:
+        data.append(f"operators={','.join(ops)}")
+    if ns.secret_store:
+        if not (len(ns.secret_store) <= 253 and STORE_RE.match(ns.secret_store)):
+            raise PlatformError(f"--secret-store '{ns.secret_store}' must be a lowercase DNS name")
+        if "external-secrets" not in ops:
+            raise PlatformError("--secret-store needs external-secrets in --operators")
+        data.append(f"secret_store={ns.secret_store}")
+    return data
+
+
 def cmd_new(ns: argparse.Namespace) -> Report:
     name = ns.name
     if not NAME_RE.match(name):
         raise PlatformError(f"invalid cluster name '{name}'", hint=NAME_HINT)
+    props = _properties(ns)
     org = ns.org or ("" if ns.no_github else core.gh_login()) or "ika100"
     if not ns.no_github and core.has_gh() and run(["gh", "repo", "view", f"{org}/{name}"], check=False).returncode == 0:
         raise PlatformError(f"GitHub repository {org}/{name} already exists", hint="choose another name")
     argv = [name, "--description", f"Cluster repo for {name}", "--shape", "cluster-gitops", "--org", org, "--data", f"owner={org}",
             "--dir", ns.dir, "--ref", ns.ref]
+    for d in props:
+        argv += ["--data", d]
     for flag, on in (("--public", ns.public), ("--no-github", ns.no_github), ("--skip-tasks", ns.skip_tasks)):
         if on:
             argv.append(flag)
@@ -83,7 +119,7 @@ def cmd_new(ns: argparse.Namespace) -> Report:
         r = newsvc.execute(req)
         extra = r.next_steps[len(newsvc._next_steps(req)):]
     r.title = title
-    r.next_steps = _new_steps(org, name) + extra
+    r.next_steps = _new_steps(org, name, bool(ns.operators.strip())) + extra
     return r
 
 

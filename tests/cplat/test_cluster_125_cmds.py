@@ -96,6 +96,43 @@ def test_ac_125_1_new_an_existing_repo_changes_nothing(tmp_path, monkeypatch, ca
     assert not any(c.startswith("repo create") for c in gh_calls({"gh_log": s["gh_log"]}))
 
 
+def test_new_writes_server_operators_and_secret_store_into_cluster_yaml(tmp_path, monkeypatch, capsys):  # #259
+    stubs(tmp_path, monkeypatch)
+    (tmp_path / "out").mkdir()
+    rc, out, err = run("new", "demo", "--org", ORG, "--dir", tmp_path / "out", "--skip-tasks", "--server", "https://k8s.example:6443",
+                       "--operators", "external-secrets, kyverno", "--secret-store", "vault-store", capsys=capsys)
+    assert rc == 0, out + err
+    import yaml
+    doc = yaml.safe_load((tmp_path / "out" / "demo" / "cluster.yaml").read_text())
+    assert doc["server"] == "https://k8s.example:6443" and doc["operators"] == ["external-secrets", "kyverno"]
+    assert doc["secretStore"] == {"name": "vault-store"}
+    assert "list the operators the cluster installs" not in out
+
+
+def test_new_without_properties_keeps_the_defaults(tmp_path, monkeypatch, capsys):  # #259
+    stubs(tmp_path, monkeypatch)
+    (tmp_path / "out").mkdir()
+    rc, out, err = run("new", "demo", "--org", ORG, "--dir", tmp_path / "out", "--skip-tasks", capsys=capsys)
+    assert rc == 0, out + err
+    text = (tmp_path / "out" / "demo" / "cluster.yaml").read_text()
+    assert "server: https://kubernetes.default.svc\n" in text and "operators: []\n" in text and "\nsecretStore:" not in text
+
+
+@pytest.mark.parametrize("args, message", [
+    (["--operators", "kyverno,nope"], "--operators: 'nope' is not an operator"),
+    (["--operators", "kyverno,kyverno"], "--operators lists an operator twice"),
+    (["--server", "k8s.example"], "--server 'k8s.example' must be an http(s) URL"),
+    (["--operators", "kyverno", "--secret-store", "vault"], "--secret-store needs external-secrets in --operators"),
+    (["--operators", "external-secrets", "--secret-store", "Vault_Store"], "--secret-store 'Vault_Store' must be a lowercase DNS name"),
+], ids=["unknown-operator", "twice", "server", "store-without-eso", "store-name"])
+def test_new_with_a_bad_property_changes_nothing(tmp_path, monkeypatch, capsys, args, message):  # #259
+    s = stubs(tmp_path, monkeypatch)
+    rc, out, err = run("new", "demo", "--org", ORG, "--dir", tmp_path / "out", "--skip-tasks", *args, capsys=capsys)
+    assert rc == 1 and message in err, out + err
+    assert not (tmp_path / "out").exists()
+    assert not any(c.startswith("repo create") for c in gh_calls({"gh_log": s["gh_log"]}))
+
+
 # ---------------- AC-125.7: cluster add ----------------
 
 def test_ac_125_7_add_reads_the_name_adds_the_entry_renders_and_opens_one_pr(world, tmp_path, monkeypatch, capsys):  # AC-125.7

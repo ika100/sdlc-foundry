@@ -6,11 +6,15 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**`/cluster:new` takes the cluster's properties.** `cplat cluster new` wrote cluster.yaml with every default, so setting the API server, the operators or the secret store took a second edit, render and PR (#259). It now takes `--server <url>`, `--operators <a,b>` and `--secret-store <name>`, checks them as the cluster render does (an unknown or repeated operator, a server that is not an http(s) URL, a store without `external-secrets`) before anything is created, writes them into cluster.yaml, and with operators renders `cluster/operators/` before the first commit. Without the flags nothing changes.
+
 **Operator applications stay Synced.** `operator-kyverno` stayed OutOfSync / Healthy forever: the chart renders empty `annotations: {}` / `labels: {}` on its CRDs, the API server drops them, and Argo CD's default client-side diff kept reporting the difference (#261). Every operator Application (system repos' `operators/` and cluster repos' `cluster/operators/`) now carries `argocd.argoproj.io/compare-options: ServerSideDiff=true`, so Argo CD compares against what the server applied. **Action:** run `/platform:update` in system and cluster repos; the render adds the annotation.
 
 **`cluster add` checks the system before it opens a PR.** `cplat cluster add` (and its `--dry-run`) opened a PR for a system that the cluster repo's own check rejects right away, for example one whose environments would install operators themselves (#263). It now runs the cluster repo's `scripts/check.py` with the system added and puts cluster.yaml back; when the check names a problem of that system (`set environments.<env>.operators: owner in <repo>`, an operator cluster.yaml does not list), it stops with those lines and changes nothing. Problems of other registered systems do not stop it.
 
-**Plugins:** `cluster` 1.0.1.
+**Plugins:** `cluster` 1.1.0.
+
+**`cluster add` checks the system before it opens a PR.** `cplat cluster add` (and its `--dry-run`) opened a PR for a system that the cluster repo's own check rejects right away, for example one whose environments would install operators themselves (#263). It now runs the cluster repo's `scripts/check.py` with the system added and puts cluster.yaml back; when the check names a problem of that system (`set environments.<env>.operators: owner in <repo>`, an operator cluster.yaml does not list), it stops with those lines and changes nothing. Problems of other registered systems do not stop it.
 
 **An amended spec with a plan can be approved again.** Amending a planned spec changes its criteria, so its plan no longer covered them; `cplat spec approve` refused because of the plan, and `/component:plan` only plans an approved spec, so the amend flow could not finish (#208). Approval now checks the spec on its own and moves a plan written for other criteria aside to `plan.v<k>.md` (it says so and names `/component:plan <NNN>` as the next step); `cplat spec check` no longer checks the old plan of an amended draft. `/component:spec approve` commits the set-aside plan with the spec.
 

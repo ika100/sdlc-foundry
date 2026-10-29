@@ -8,19 +8,25 @@ cluster: {{ project_name }}
 owner: {{ owner }}
 
 # The Kubernetes API server Argo CD deploys to (an http(s) URL). The default is the cluster Argo CD runs in.
-server: https://kubernetes.default.svc
+server: {{ server }}
 
 # The GitHub owner Argo CD reads this repo and every registered system repo from. It must be the owner of this repo.
 org: {{ github_org }}
 
 # Cluster-level operators to install, in this order. The allowed names are the operators of the platform's versions table
 # (cloudnative-pg, external-secrets, kyverno, seaweedfs). `devbox run check` tells you which ones the registered systems need.
-operators: []
+operators: [{{ operators | replace(',', ', ') }}]
 
 # Optional, only with external-secrets in operators: the ClusterSecretStore systems read their secrets from.
+{% if secret_store -%}
+secretStore:
+  name: {{ secret_store }}
+#   provider: {vault: {...}}          # one External Secrets provider block; default: the Kubernetes provider over the secrets-store namespace
+{%- else -%}
 #   secretStore:
 #     name: platform-secrets          # default platform-secrets
 #     provider: {vault: {...}}        # one External Secrets provider block; default: the Kubernetes provider over the secrets-store namespace
+{%- endif %}
 
 # The systems that run on this cluster: name -> {repo: <owner>/<name>} (the system's gitops repo, owned by `org`).
 # Do not edit by hand: use /cluster:add and /cluster:remove.

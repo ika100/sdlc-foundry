@@ -29,6 +29,7 @@ _exclude:
 _tasks:
   - "git init -q -b main"
   - "devbox install"
+  - "{% if operators %}devbox run render{% else %}true{% endif %}"   # cluster/operators/ matches cluster.yaml from the first commit (#259)
   - "git add -A && git -c user.email=bootstrap@ika100 -c user.name=bootstrap commit -q -m 'chore: bootstrap from cluster-gitops template'"
   - "echo 'Bootstrap complete. Run: cd {{ project_name }} && devbox run quality'"
 
@@ -54,6 +55,21 @@ owner:
   type: str
   help: "Who owns the cluster (a team or person; written to cluster.yaml)."
   default: "{{ github_org }}"
+
+server:
+  type: str
+  help: "The Kubernetes API server Argo CD deploys to (an http(s) URL; written to cluster.yaml)."
+  default: "https://kubernetes.default.svc"
+
+operators:
+  type: str
+  help: "Cluster-level operators to install, comma-separated (names of the platform's versions table; empty for none)."
+  default: ""
+
+secret_store:
+  type: str
+  help: "Name of the ClusterSecretStore systems read their secrets from (needs external-secrets in operators; empty: not set)."
+  default: ""
 
 platform_marketplace_ref:
   type: str

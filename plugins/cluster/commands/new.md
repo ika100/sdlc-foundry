@@ -1,10 +1,10 @@
 ---
-description: "Create a cluster repo that owns a cluster's shared operators and lists its systems. Usage: /cluster:new <name> [--org <owner>] [--public] [--no-github]"
+description: "Create a cluster repo that owns a cluster's shared operators and lists its systems. Usage: /cluster:new <name> [--org <owner>] [--public] [--no-github] [--server <url>] [--operators <a,b>] [--secret-store <name>]"
 ---
 
 Create a cluster repo with the platform script (all logic and tests live in `scripts/cplat`). **Request:** $ARGUMENTS
 
-`<name>` is lowercase DNS-style (at most 40 characters). The repo is private unless the user asked for `--public`, and starts with a `cluster.yaml` that lists no systems.
+`<name>` is lowercase DNS-style (at most 40 characters). The repo is private unless the user asked for `--public`, and starts with a `cluster.yaml` that lists no systems. Pass the cluster's properties when the user names them: `--server <url>` (the API server Argo CD deploys to), `--operators <a,b>` (the cluster-level operators; the first commit then holds their rendered applications) and `--secret-store <name>` (needs `external-secrets` in `--operators`). Without them `cluster.yaml` gets the defaults and is edited later.
 
 `cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation:
 
