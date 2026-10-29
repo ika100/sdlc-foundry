@@ -6,7 +6,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
-**`/platform:update` re-renders a cluster repo.** The update re-applied the cluster template but left `cluster/` (the render's output) as it was, so a renderer change made the review branch fail its own `render-check` (#264). For a cluster repo the update now runs the updated `scripts/render.py` and commits what changed in `cluster/` with the update; the report names the count. A cluster.yaml the new render rejects stops the update with the render's message. System repos were already re-rendered (spec 121).
+**`/platform:update` re-renders a cluster repo.** The update re-applied the cluster template but left `cluster/` (the render's output) as it was, so a renderer change made the review branch fail its own `render-check` (#264). For a cluster repo the update now runs the updated `scripts/render.py` and commits what changed in `cluster/` with the update; the report names the count. A cluster.yaml the new render rejects stops the update with the render's message. System repos are re-rendered by the update since 5.4.0.
 
 **`/cluster:new` takes the cluster's properties.** `cplat cluster new` wrote cluster.yaml with every default, so setting the API server, the operators or the secret store took a second edit, render and PR (#259). It now takes `--server <url>`, `--operators <a,b>` and `--secret-store <name>`, checks them as the cluster render does (an unknown or repeated operator, a server that is not an http(s) URL, a store without `external-secrets`) before anything is created, writes them into cluster.yaml, and with operators renders `cluster/operators/` before the first commit. Without the flags nothing changes.
 
