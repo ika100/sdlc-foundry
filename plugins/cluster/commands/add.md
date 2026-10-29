@@ -10,8 +10,8 @@ The system name comes from `applications/<system>/system.yaml` on `main` of the 
 cplat cluster add <ARGS>
 ```
 
-1. **Preview.** Run it with `--dry-run` and the user's arguments. Show the output verbatim. If it exits non-zero (not a cluster repo, dirty tree, repo without `system.yaml`, unreadable or already listed), show the error and its `fix:` line and stop; nothing changed.
+1. **Preview.** Run it with `--dry-run` and the user's arguments. Show the output verbatim. The preview already runs this cluster's check (`scripts/check.py`) against the system. If it exits non-zero (not a cluster repo, dirty tree, repo without `system.yaml`, unreadable, already listed, or the check names problems such as `set environments.<env>.operators: owner in <repo>` or a missing operator), show the error and its `fix:` line and stop; nothing changed.
 2. **Run.** The user's request is the confirmation. Run the same command without `--dry-run`.
-3. **Report.** Relay the PR URL and the next step; add nothing else. Merging the PR makes Argo CD sync the system; the CI check names any operator the system still needs.
+3. **Report.** Relay the PR URL and the next step; add nothing else. Merging the PR makes Argo CD sync the system.
 
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.

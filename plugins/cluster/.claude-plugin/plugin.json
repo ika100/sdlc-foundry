@@ -1,6 +1,6 @@
 {
   "name": "cluster",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "The cluster noun: /cluster:new creates a cluster repo, /cluster:add installs a system in it, /cluster:remove takes one out. The cluster repo owns the shared operators and the secret store.",
   "author": {
     "name": "Eike Hensler",

@@ -277,10 +277,10 @@ def test_ac_125_18_the_changelog_announces_a_non_breaking_minor():  # AC-125.18
 
 def test_ac_125_18_the_cluster_plugin_is_versioned_in_manifest_and_marketplace():  # AC-125.18
     manifest = json.loads(read(ROOT / "plugins" / "cluster" / ".claude-plugin" / "plugin.json"))
-    assert manifest["name"] == "cluster" and manifest["version"] == "1.0.0"
+    assert manifest["name"] == "cluster" and manifest["version"].startswith("1.")   # shipped as 1.0.0; later fixes bump it
     market = json.loads(read(ROOT / ".claude-plugin" / "marketplace.json"))
     entry = next(p for p in market["plugins"] if p["name"] == "cluster")
-    assert entry["version"] == "1.0.0" and entry["source"] == "./plugins/cluster" and entry["category"] == "agents"
+    assert entry["version"] == manifest["version"] and entry["source"] == "./plugins/cluster" and entry["category"] == "agents"
     for p in market["plugins"]:           # every plugin: marketplace version == manifest version
         m = json.loads((ROOT / p["source"] / ".claude-plugin" / "plugin.json").read_text())
         assert m["version"] == p["version"], p["name"]

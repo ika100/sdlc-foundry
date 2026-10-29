@@ -188,6 +188,22 @@ def _pr(repo: Path, branch: str, title: str, body: str) -> str:
     return out[-1] if out else ""
 
 
+def _preflight(repo: Path, system: str, slug: str) -> None:
+    """Run this cluster repo's own check (`scripts/check.py`, the CI job) with the system added, then put cluster.yaml back:
+    a system the check rejects is not registered, and no PR is opened for it (#263). Problems of other systems do not stop it."""
+    entry = lambda s: s.__setitem__(system, _block(CommentedMap([("repo", slug)])))   # noqa: E731
+    original = _edit(repo, entry)
+    try:
+        res = run(["uv", "run", "scripts/check.py"], cwd=repo, check=False)
+    finally:
+        (repo / "cluster.yaml").write_text(original)
+    mine = re.compile(rf"^ERROR: {re.escape(system)}[ :(]")
+    errs = [ln.removeprefix("ERROR: ") for ln in (res.stdout or "").splitlines() if mine.match(ln)]
+    if errs:
+        raise PlatformError(f"{system} ({slug}) fails this cluster's check, nothing was changed:\n  " + "\n  ".join(errs),
+                            hint=f"fix it in {slug} (or list the missing operators in cluster.yaml), then run cluster add again")
+
+
 def cmd_add(ns: argparse.Namespace) -> Report:
     repo = _repo(ns)
     gitops.require_clean(repo)
@@ -212,7 +228,9 @@ def cmd_add(ns: argparse.Namespace) -> Report:
         raise PlatformError(f"{slug} is outside org '{org}'", hint=f"Argo CD reads only https://github.com/{org}")
     title = f"feat(cluster): install {system} from {slug}"
     r = Report(title=f"Register system {system} ({slug})")
-    steps = [f"add systems.{system}: {{repo: {slug}}} to cluster.yaml", "run uv run scripts/render.py (cluster/systems/" + system + ".yaml)",
+    _preflight(repo, system, slug)
+    steps = [f"checked {system} against this cluster (scripts/check.py): no problems",
+             f"add systems.{system}: {{repo: {slug}}} to cluster.yaml", "run uv run scripts/render.py (cluster/systems/" + system + ".yaml)",
              f"[outward] branch cluster/add-{system}, commit '{title}' (signed off), push and open one PR"]
     r.next_steps = [f"merge it: Argo CD then syncs {slug}'s bootstrap/; the CI check names any operator the system still needs"]
     if ns.dry_run:
@@ -221,7 +239,7 @@ def cmd_add(ns: argparse.Namespace) -> Report:
     original = _edit(repo, lambda s: s.__setitem__(system, _block(CommentedMap([("repo", slug)]))))
     _render(repo, original)
     url = _pr(repo, f"cluster/add-{system}", title, f"Registers system `{system}` ({slug}) in cluster.yaml and renders its Argo CD application.")
-    r.did = [f"added systems.{system} to cluster.yaml and rendered cluster/", f"opened {url}"]
+    r.did = [steps[0], f"added systems.{system} to cluster.yaml and rendered cluster/", f"opened {url}"]
     r.data = {"system": system, "pr": url}
     return r
 

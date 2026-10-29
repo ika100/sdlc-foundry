@@ -118,6 +118,34 @@ def test_ac_125_7_add_reads_the_name_adds_the_entry_renders_and_opens_one_pr(wor
     assert sum(c.startswith("pr create") for c in gh_calls(world)) == 1
 
 
+@pytest.mark.parametrize("dry", [False, True], ids=["run", "dry-run"])
+def test_add_a_system_that_would_install_operators_itself_stops_before_any_change(world, tmp_path, capsys, dry):  # #263
+    system_repo(world["fixtures"], f"{ORG}/self-gitops", sys_doc("self", owner_envs=()))
+    repo = committed(world, tmp_path, base())
+    before = (repo / "cluster.yaml").read_text()
+    rc, out, err = run("add", f"{ORG}/self-gitops", "--repo-dir", repo, *(["--dry-run"] if dry else []), capsys=capsys)
+    assert rc == 1, out + err
+    assert "self (acme/self-gitops) fails this cluster's check, nothing was changed" in err
+    assert f"self (dev): would install operators itself: set environments.dev.operators: owner in {ORG}/self-gitops" in err
+    assert (repo / "cluster.yaml").read_text() == before and git(repo, "status", "--porcelain") == ""
+    assert "cluster/add-self" not in branches(repo) and not any(c.startswith("pr create") for c in gh_calls(world))
+
+
+def test_add_a_system_that_needs_an_operator_the_cluster_lacks_stops(world, tmp_path, capsys):  # #263
+    system_repo(world["fixtures"], f"{ORG}/db-gitops", sys_doc("db", db_resource=True))
+    repo = committed(world, tmp_path, base())
+    rc, out, err = run("add", f"{ORG}/db-gitops", "--repo-dir", repo, capsys=capsys)
+    assert rc == 1 and "needs cloudnative-pg, which cluster.yaml does not list in operators" in err, out + err
+    assert not any(c.startswith("pr create") for c in gh_calls(world))
+
+
+def test_add_dry_run_of_a_fitting_system_says_it_was_checked(world, tmp_path, capsys):  # #263
+    repo = committed(world, tmp_path, base())
+    rc, out, err = run("add", TODO, "--repo-dir", repo, "--dry-run", capsys=capsys)
+    assert rc == 0, out + err
+    assert "checked todo against this cluster (scripts/check.py): no problems" in out
+
+
 def test_ac_125_7_add_with_name_uses_it(world, tmp_path, monkeypatch, capsys):  # AC-125.7
     system_repo(world["fixtures"], f"{ORG}/multi-gitops", sys_doc("a"), extra_systems={"b": sys_doc("b")})
     repo = committed(world, tmp_path, base())
