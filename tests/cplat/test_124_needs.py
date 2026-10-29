@@ -17,6 +17,7 @@ from test_124_store import FACTS
 from test_needs import FakeGh, status_rows, world  # noqa: F401  (world is a fixture)
 
 WED_10 = dt.datetime(2026, 10, 28, 10, 0, tzinfo=dt.timezone.utc)
+WED_0930 = "2026-10-28T09:30:00Z"
 
 
 class PrGh(FakeGh):
@@ -65,7 +66,7 @@ def set_level(w, level, **block):
 def test_a_fix_outside_a_guardrail_at_act_is_a_review_item_ac_124_17(w, capsys, monkeypatch):  # AC-124.17
     """AC-124.17: a fix outside a guardrail at act is a review item."""
     monkeypatch.setattr(runs, "utcnow", lambda: WED_10)  # inside the default window: only maxLines is outside
-    w.store.add_run(run_record())
+    w.store.add_run(run_record(started=WED_0930))   # on the mocked day, not the real one
     [r] = kind(needs_doc(w, capsys), "review")
     assert r["id"] == "review:acme/shop-api#88" and r["stage"] == "Land"
     assert r["command"] == "/system:autonomy approve acme/shop-api#88" and r["cwd_repo"] == "acme/shop-gitops"
@@ -73,14 +74,14 @@ def test_a_fix_outside_a_guardrail_at_act_is_a_review_item_ac_124_17(w, capsys, 
     assert obj["type"] == "run" and obj["repo"] == "acme/shop-api" and obj["run_id"] == "20261026T091500Z-1a2b3c4d" and obj["issue"] == 57
     assert obj["component"] == "shop-api" and obj["pr"] == 88 and obj["url"] == "https://github.com/acme/shop-api/pull/88"
     assert obj["engine"] == "ai-ops" and obj["environment"] == "prod"
-    assert r["since"] == run_record()["phases"][1]["started_at"] or r["since"]
+    assert r["since"] == run_record(started=WED_0930)["phases"][1]["started_at"] or r["since"]
     assert r["reason"] == "outside riskGate.maxLines (412 lines, at most 200)"
 
 
 def test_the_review_consequence_shows_why_regression_ci_second_review_and_the_way_back_ac_124_17(w, capsys, monkeypatch):  # AC-124.17
     """AC-124.17: the review consequence shows why regression ci second review and the way back."""
     monkeypatch.setattr(runs, "utcnow", lambda: WED_10)  # inside the default window: only maxLines is outside
-    w.store.add_run(run_record())
+    w.store.add_run(run_record(started=WED_0930))   # on the mocked day, not the real one
     [r] = kind(needs_doc(w, capsys), "review")
     c = r["consequence"]
     assert c["why"] == [{"guardrail": "riskGate.maxLines", "text": "412 lines, at most 200"}]
