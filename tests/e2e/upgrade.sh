@@ -369,7 +369,8 @@ apply_bus() { # env broker: what Argo CD would do, as tests/e2e/run.sh does it: 
   # HelmChart (same repo, chart, version and values; one per environment), then the Account, the streams and the consumers once NACK serves them
   local e=$1 b=$2 d="$app_dir/addons/$1/$2" out="$work/bus-$1-$2"
   mkdir -p "$out"
-  kn "upg-$e" kustomize "$d" 2>/dev/null | yaml_py - "$out" "$e" <<'PY' || fail "could not turn addons/$e/$b into objects to apply"
+  local py
+  read -r -d '' py <<'PY' || true
 import sys
 import yaml
 out, env = sys.argv[1], sys.argv[2]
@@ -390,6 +391,7 @@ if not chart:
 for name, items in (("1.yaml", first), ("chart.yaml", chart), ("2.yaml", second)):
     open(f"{out}/{name}", "w").write(yaml.safe_dump_all(items))
 PY
+  kn "upg-$e" kustomize "$d" | yaml_py -c "$py" "$out" "$e" || fail "could not turn addons/$e/$b into objects to apply"
   kn "upg-$e" apply -f "$out/1.yaml" >/dev/null || fail "applying the Secrets of $b in $e failed"
   k apply -f "$out/chart.yaml" >/dev/null || fail "applying the HelmChart of $b in $e failed"
   wait_for 180 "the StatefulSet upg-$b of $e" kn "upg-$e" get statefulsets.apps "upg-$b"
