@@ -11,10 +11,10 @@ import re
 import pytest
 import yaml
 
-from broker_fixtures import (ALLOWED_INST, ALLOWED_TOP, BKEYS, BVARS, CHART, DEFAULT_RESOURCES, FILES, NACK, NATS_IMAGES, P, RETRY, SIZING, bdir, bdoc,
-                             broker, bsys, contract, events, expected_account, expected_consumer, expected_external_secret, expected_generator,
-                             expected_kustomization, expected_nack_application, expected_nack_secret, expected_server, expected_stream,
-                             expected_user_secret, ext_comp, lib_comp, shape, tree_digest, upper, wide)
+from broker_fixtures import (ALLOWED_INST, ALLOWED_TOP, BKEYS, BVARS, CHART, CRED_FILES, DEFAULT_RESOURCES, FILES, NACK, NATS_IMAGES, P, RETRY, SIZING, bdir, bdoc, cplan,
+                             broker, bsys, contract, events, expected_account, expected_consumer, expected_external_secret,
+                             expected_kustomization, expected_nack_application, expected_plan, expected_server, expected_stream,
+                             ext_comp, lib_comp, shape, tree_digest, upper, wide)
 from cache_fixtures import cache
 from resources_fixtures import (APP, ENVS, addon_names, comp, db, env_list, fails, ok, platform_render_module, render, render5, render_50,
                                 secret_vars, sets, system, tree, unpin, var_order, y)  # spec 121: unpin
@@ -552,8 +552,8 @@ def test_a_consuming_component_without_an_instance_has_no_consumer_there_ac_119_
     g = ok(tmp_path, bsys(comps=comps))
     assert f"{bdir('dev')}/consumer-orders.web.yaml" in g
     for env in ("staging", "prod"):
-        assert files_of(g, env) == ["account.yaml", "externalsecret-api.yaml", "kustomization.yaml", "nack-secret.yaml", "password-generator.yaml",
-                                    "server.yaml", "stream-orders.yaml"], env
+        assert files_of(g, env) == ["account.yaml", *CRED_FILES, "kustomization.yaml", "server.yaml", "stream-orders.yaml"], env   # spec 128: no ExternalSecret files
+        assert [x["name"] for x in cplan(g, env)["secrets"]] == ["shop-bus-nack", "shop-bus-api-app"], env
 
 
 def test_the_consumers_are_pull_consumers_that_start_at_the_first_message_ac_119_10(tmp_path):  # AC-119.10
@@ -565,7 +565,7 @@ def test_an_external_component_counts_as_a_consumer_ac_119_10(tmp_path):  # AC-1
     comps = {"api": comp("api", provides=["orders"]), "stock": ext_comp("stock", consumes=["orders"])}
     g = ok(tmp_path, bsys(comps=comps))
     assert bdoc(g, "dev", "consumer-orders.stock.yaml") == expected_consumer("orders", "stock")
-    assert bdoc(g, "dev", "externalsecret-stock.yaml") == expected_user_secret("stock")
+    assert "shop-bus-stock-app" in [x["name"] for x in cplan(g)["secrets"]]   # spec 128: the credentials Job writes it
 
 
 # ---------------- AC-119.11: the environment contract ----------------
@@ -651,28 +651,29 @@ def test_two_brokers_get_prefixed_variables_and_their_own_secrets_ac_119_11(tmp_
 def test_each_component_has_its_own_user_secret_per_environment_ac_119_11(tmp_path):  # AC-119.11
     g = ok(tmp_path, bsys())
     for env in ENVS:
-        for c in ("api", "web"):
-            assert bdoc(g, env, f"externalsecret-{c}.yaml") == expected_user_secret(c, env), (env, c)
-            assert shape(bdoc(g, env, f"externalsecret-{c}.yaml")) == shape(expected_user_secret(c, env))
-    assert bdoc(g, "staging", "externalsecret-web.yaml")["spec"]["target"]["template"]["data"]["url"] == "nats://shop-bus.shop-staging.svc:4222"
+        assert cplan(g, env) == expected_plan(["api", "web"], env), env   # spec 128: one Secret per user in the Job's plan, not an ExternalSecret
+        assert not [k for k in g if k.startswith(bdir(env)) and "externalsecret" in k]
+    assert cplan(g, "staging")["secrets"][2]["data"]["url"] == "nats://shop-bus.shop-staging.svc:4222"
 
 
-def test_the_password_generator_and_the_admin_secret_are_the_designed_documents_ac_119_11(tmp_path):  # AC-119.11
+def test_the_credentials_job_and_the_admin_secret_are_the_designed_documents_ac_119_11(tmp_path):  # AC-119.11
     g = ok(tmp_path, bsys())
     for env in ENVS:
-        assert bdoc(g, env, "password-generator.yaml") == expected_generator() and shape(bdoc(g, env, "password-generator.yaml")) == shape(expected_generator())
-        assert bdoc(g, env, "nack-secret.yaml") == expected_nack_secret() and shape(bdoc(g, env, "nack-secret.yaml")) == shape(expected_nack_secret())
-    es = bdoc(g, "dev", "externalsecret-api.yaml")["spec"]
-    assert es["refreshPolicy"] == "CreatedOnce" and list(es) == ["refreshPolicy", "target", "dataFrom"]
-    assert list(es["target"]["template"]["data"]) == ["url", "user", "password"]
+        plan = cplan(g, env)
+        assert plan == expected_plan(["api", "web"], env) and list(plan["secrets"][0]["data"]) == ["user"]   # spec 128: `_nack` and its generated password
+        assert plan["secrets"][0]["generate"] == {"password": 32} and plan["retire"]["generators"] == ["shop-bus-password"]
+        assert not [k for k in g if k.startswith(bdir(env)) and ("password-generator" in k or "nack-secret" in k)]
+        assert bdoc(g, env, "credentials-job.yaml")["kind"] == "Job"
+    assert [list(x["data"]) for x in cplan(g)["secrets"][1:]] == [["url", "user"]] * 2
 
 
 def test_the_secret_names_never_change_with_the_sizing_ac_119_11(tmp_path):  # AC-119.11
     a = ok(tmp_path / "a", bsys())
     b = ok(tmp_path / "b", bsys({"bus": broker(version="2.14", replicas=3, storage="5Gi")}))
     for env in ENVS:
-        for f in ("externalsecret-api.yaml", "externalsecret-web.yaml", "nack-secret.yaml", "password-generator.yaml", "account.yaml"):
-            assert a[f"{bdir(env)}/{f}"] == b[f"{bdir(env)}/{f}"], (env, f)
+        assert [x["name"] for x in cplan(a, env)["secrets"]] == [x["name"] for x in cplan(b, env)["secrets"]], env   # spec 128: the plan's Secrets
+        assert cplan(b, env)["verify"]["pods"] == ["shop-bus-0", "shop-bus-1", "shop-bus-2"]
+        assert a[f"{bdir(env)}/account.yaml"] == b[f"{bdir(env)}/account.yaml"], env
 
 
 def test_no_password_value_appears_in_the_rendered_tree_ac_119_11(tmp_path):  # AC-119.11
@@ -721,8 +722,8 @@ def test_a_library_and_an_external_component_get_no_variables_ac_119_11(tmp_path
     assert not [k for k in g if "/overlays/" in k and k.endswith("deployment.yaml") and "/lib/" in k]
     stock = [k for k in g if "/overlays/dev/stock/" in k]
     assert stock and not [k for k in stock if "NATS_" in g[k]]
-    assert files_of(g, "dev") == ["account.yaml", "consumer-orders.stock.yaml", "externalsecret-api.yaml", "externalsecret-stock.yaml", "kustomization.yaml",
-                                  "nack-secret.yaml", "password-generator.yaml", "server.yaml", "stream-orders.yaml"]
+    assert files_of(g, "dev") == ["account.yaml", "consumer-orders.stock.yaml", *CRED_FILES, "kustomization.yaml", "server.yaml", "stream-orders.yaml"]
+    assert [x["name"] for x in cplan(g)["secrets"]] == ["shop-bus-nack", "shop-bus-api-app", "shop-bus-stock-app"]
 
 
 # ---------------- AC-119.12: users and rights ----------------
@@ -764,7 +765,7 @@ def test_the_users_of_an_environment_are_the_components_running_there_ac_119_12(
     g = ok(tmp_path, bsys(comps=comps))
     assert bdoc(g, "dev", "server.yaml") == expected_server(USERS, env="dev")
     assert bdoc(g, "staging", "server.yaml") == expected_server([("api", ["orders"], [])], env="staging")
-    assert f"{bdir('staging')}/externalsecret-web.yaml" not in g
+    assert "shop-bus-web-app" not in [x["name"] for x in cplan(g, "staging")["secrets"]]
 
 
 def test_a_consumer_never_names_another_components_secret_ac_119_12(tmp_path):  # AC-119.12
@@ -816,7 +817,7 @@ def test_a_removed_consumer_loses_its_files_and_the_render_prints_it_ac_119_14(t
     assert p.returncode == 0, p.stderr
     g = tree(tmp_path)
     for env in ENVS:
-        assert f"{bdir(env)}/consumer-orders.web.yaml" not in g and f"{bdir(env)}/externalsecret-web.yaml" not in g
+        assert f"{bdir(env)}/consumer-orders.web.yaml" not in g and "shop-bus-web-app" not in [x["name"] for x in cplan(g, env)["secrets"]]
         assert f"{bdir(env)}/stream-orders.yaml" in g and f"{bdir(env)}/server.yaml" in g
     assert lines(p)[:-1] == [retired(e, "consumer", "orders", "web") for e in ("dev", "prod", "staging")]
     assert lines(p)[-1].startswith("rendered (")
@@ -1066,13 +1067,15 @@ def test_the_directory_declares_every_object_and_the_kustomization_lists_them_so
     for env in ENVS:
         assert bdoc(g, env, "kustomization.yaml") == expected_kustomization([f for f in FILES if f != "kustomization.yaml"])
         kinds = sorted(bdoc(g, env, f)["kind"] for f in FILES)
-        assert kinds == ["Account", "Application", "Consumer", "ExternalSecret", "ExternalSecret", "ExternalSecret", "Kustomization", "Password", "Stream"]
+        assert kinds == ["Account", "Application", "ConfigMap", "Consumer", "Job", "Kustomization", "Role", "RoleBinding", "ServiceAccount", "Stream"]   # spec 128
 
 
 def test_the_streams_and_consumers_are_ordered_by_sync_waves_after_the_account_ac_119_21(tmp_path):  # AC-119.21
     g = ok(tmp_path, bsys())
     wave = lambda f: bdoc(g, "dev", f)["metadata"]["annotations"]["argocd.argoproj.io/sync-wave"]  # noqa: E731
-    assert [wave(f) for f in ("password-generator.yaml", "nack-secret.yaml", "account.yaml", "stream-orders.yaml", "consumer-orders.web.yaml")] == ["-1", "-1", "1", "2", "3"]
+    assert [wave(f) for f in ("account.yaml", "stream-orders.yaml", "consumer-orders.web.yaml")] == ["1", "2", "3"]
+    assert [wave(f) for f in CRED_FILES] == ["0", "1", "0", "0", "0"]   # spec 128: the credentials hook objects (wave 0, the Job wave 1) replace the wave -1 objects
+    assert not [k for k in g if k.startswith(bdir("dev")) and ("password-generator" in k or "nack-secret" in k or "externalsecret" in k)]
 
 
 def test_every_broker_object_carries_the_name_label_ac_119_21(tmp_path):  # AC-119.21
@@ -1152,7 +1155,7 @@ def test_owner_managed_environments_render_the_same_broker_ac_119_23(tmp_path): 
 # digests of the trees the 5.x renderer wrote before spec 119 (full tree, sha256 of sorted path and content)
 BEFORE_119 = {"full5": ("bf4c5ffc245db1166768f726cdbf9b29618a050bfed682499ad3a4de22037cb4", 58),
               "rich5": ("54e93234734051c4df2494a3383b27954e5eeeaeaf58d76c10c545562b403cae", 58),
-              "db-bucket": ("db23d5c3c8f752510fee7396f719342b8706b13370c0ffa997fbd48f15cdc9ed", 50),
+              "db-bucket": ("ae098881e7b6a57b03e99b36924de150f513b06e1dad3c42b303e79400e930d8", 56),   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret
               "cache": ("c5e5809f484b7fddca7c2189f68c58b6e4a713331a035bca6aa2424dbad243df", 49),   # spec 128: the credentials Job replaces the generator files
               "events": ("9fe3842825e291f58f1e33aac03f53edf98df7c9053eefbeae7882d3ad3f57e4", 26),
               "events-multi": ("ebca4dedef644e88bafb98a92819385874af6b9771570478b38a2551b788e4ef", 70)}

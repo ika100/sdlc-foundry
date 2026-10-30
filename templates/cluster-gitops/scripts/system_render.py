@@ -2251,10 +2251,10 @@ def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | N
 
 
 def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False) -> dict[str, dict | str]:
-    """The in-cluster bucket instance (ADR-059): its own SeaweedFS, a Bucket, an identity limited to it and generated keys.
+    """The in-cluster bucket instance (ADR-059): its own SeaweedFS, a Bucket, an identity limited to it and a credentials Job.
 
-    Argo CD never deletes any of it (`Delete=false`, `reclaimPolicy: Retain`). No credential value is rendered: the keys come from
-    External Secrets `Password` generators and are written once to `<system>-<name>-app`."""
+    Argo CD never deletes any of it (`Delete=false`, `reclaimPolicy: Retain`). No credential value is rendered: the PreSync Job writes
+    the keys once to `<system>-<name>-app` (create if absent, otherwise keep); S3Credentials then reads that Secret (spec 128)."""
     n = f"{app}-{name}"
     labels = {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}
     keep = {"argocd.argoproj.io/sync-options": "Delete=false"}
@@ -2264,16 +2264,7 @@ def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False
         return {"name": obj, "labels": dict(labels), "annotations": ann}
 
     seaweed_api = "seaweed.seaweedfs.com/v1"
-    gen_api = "generators.external-secrets.io/v1alpha1"
     volume = lambda: {"enabled": True, "resources": {"requests": {"storage": "1Gi"}}}  # noqa: E731  (fresh dicts: no YAML anchors)
-
-    def generator(suffix: str, length: int, digits: int) -> dict:
-        return {"apiVersion": gen_api, "kind": "Password", "metadata": meta(f"{n}-{suffix}", "-1"),
-                "spec": {"length": length, "digits": digits, "symbols": 0, "noUpper": False, "allowRepeat": True}}
-
-    def source(suffix: str, key: str) -> dict:
-        return {"sourceRef": {"generatorRef": {"apiVersion": gen_api, "kind": "Password", "name": f"{n}-{suffix}"}},
-                "rewrite": [{"regexp": {"source": "^password$", "target": key}}]}
 
     files: dict[str, dict | str] = {
         "seaweed.yaml": {
@@ -2294,23 +2285,15 @@ def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False
             "spec": {"seaweedRef": {"name": n}, "identityRef": {"name": n},
                      "secretRef": {"name": f"{n}-app", "accessKeyField": "accessKeyId", "secretKeyField": "secretAccessKey"},  # pragma: allowlist secret
                      "reclaimPolicy": "Retain"}},
-        "access-key-generator.yaml": generator("access-key", 20, 5),
-        "secret-key-generator.yaml": generator("secret-key", 40, 10),
-        "externalsecret.yaml": {
-            "apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": meta(f"{n}-app", "-1"),
-            "spec": {"refreshInterval": "0",
-                     "target": {"name": f"{n}-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
-                                "template": {"engineVersion": "v2", "data": {
-                                    "endpoint": f"http://{n}-filer.{app}-{env}.svc:8333", "bucket": n, "region": "us-east-1",
-                                    "forcePathStyle": "true", "accessKeyId": "{{ .accessKeyId }}",
-                                    "secretAccessKey": "{{ .secretAccessKey }}"}}},  # pragma: allowlist secret
-                     "dataFrom": [source("access-key", "accessKeyId"), source("secret-key", "secretAccessKey")]}},  # pragma: allowlist secret
     }
-    if target:       # the environment's backup target: Velero's store finds the Secret by its labels (AC-117.17)
-        files["externalsecret.yaml"]["spec"]["target"]["template"]["metadata"] = {"labels": dict(labels)}
-    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
-                                   "resources": ["access-key-generator.yaml", "bucket.yaml", "credentials.yaml", "externalsecret.yaml",
-                                                 "identity.yaml", "seaweed.yaml", "secret-key-generator.yaml"]}
+    ns = f"{app}-{env}"
+    plan = {"namespace": ns,
+            "secrets": [{"name": f"{n}-app", "labels": backup_target_labels(app, name) if target else {},   # the environment's backup target: Velero's store finds the Secret by its labels (AC-117.17)
+                         "generate": {"accessKeyId": 20, "secretAccessKey": 40},  # pragma: allowlist secret
+                         "data": {"endpoint": f"http://{n}-filer.{ns}.svc:8333", "bucket": n, "region": "us-east-1", "forcePathStyle": "true"}}],
+            "retire": {"externalSecrets": [f"{n}-app"], "generators": [f"{n}-access-key", f"{n}-secret-key"]}}
+    files.update(credentials_files(app, env, n, labels, plan))
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
     return files
 
 
@@ -2939,37 +2922,27 @@ def observability_files(app: str, env: str, conf: dict, services: list[dict]) ->
 
 
 def broker_files(app: str, name: str, env: str, cfg: dict, services: list[dict], server: str) -> dict[str, dict | str]:
-    """The in-cluster broker instance (ADR-065): the NATS server as a nested Argo CD Application of the official chart, generated
-    passwords, and the NACK Account, Streams and Consumers. Nothing secret is rendered; streams and consumers are never deleted by a sync."""
+    """The in-cluster broker instance (ADR-065): the NATS server as a nested Argo CD Application of the official chart, a credentials
+    Job (spec 128) that writes the user passwords once, and the NACK Account, Streams and Consumers. Nothing secret is rendered; streams and consumers are never deleted by a sync."""
     conf = cfg["resources"][name]["envs"][env]
     n, ns = f"{app}-{name}", f"{app}-{env}"
     url = f"nats://{n}.{ns}.svc:4222"
-    gen_api = "generators.external-secrets.io/v1alpha1"
     labels = lambda: {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}  # noqa: E731
     wave = lambda w: {"argocd.argoproj.io/sync-wave": w}  # noqa: E731
     events = {a: e for a, e in cfg["events"].items() if e["broker"] == name}
     users = [s for s in services if env in envs_of(s) and any(a in events for a in [*s["provides"], *s["consumes"]])]
     secret_env = lambda c: c.upper().replace("-", "_")  # noqa: E731
 
-    def user_secret(secret: str, data: dict) -> dict:
-        return {"apiVersion": ESO_API, "kind": "ExternalSecret",
-                "metadata": {"name": secret, "labels": labels(), "annotations": wave("-1")},
-                "spec": {"refreshPolicy": "CreatedOnce",
-                         "target": {"name": secret, "creationPolicy": "Owner", "deletionPolicy": "Retain",
-                                    "template": {"engineVersion": "v2", "metadata": {"labels": labels()}, "data": data}},
-                         "dataFrom": [{"sourceRef": {"generatorRef": {"apiVersion": gen_api, "kind": "Password", "name": f"{n}-password"}}}]}}
-
-    files: dict[str, dict | str] = {
-        "password-generator.yaml": {"apiVersion": gen_api, "kind": "Password",
-                                    "metadata": {"name": f"{n}-password", "labels": labels(), "annotations": wave("-1")},
-                                    "spec": {"length": 32, "digits": 5, "symbols": 0, "noUpper": False, "allowRepeat": True}},
-        "nack-secret.yaml": user_secret(f"{n}-nack", {"user": "_nack", "password": "{{ .password }}"}),  # pragma: allowlist secret
-    }
+    files: dict[str, dict | str] = {}
+    secrets_plan = [{"name": f"{n}-nack", "labels": labels(), "generate": {"password": 32}, "data": {"user": "_nack"}}]  # pragma: allowlist secret
+    verify_users = [{"secret": f"{n}-nack", "key": "password", "user": "_nack", "env": "ADMIN_PASSWORD"}]  # pragma: allowlist secret
     auth = [{"user": "_nack", "password": "<< $ADMIN_PASSWORD >>"}]  # pragma: allowlist secret
     cenv: dict = {"ADMIN_PASSWORD": {"valueFrom": {"secretKeyRef": {"name": f"{n}-nack", "key": "password"}}}}  # pragma: allowlist secret
     for s in users:
         c = s["name"]
-        files[f"externalsecret-{c}.yaml"] = user_secret(f"{n}-{c}-app", {"url": url, "user": c, "password": "{{ .password }}"})  # pragma: allowlist secret
+        secrets_plan.append({"name": f"{n}-{c}-app", "labels": labels(), "generate": {"password": 32},  # pragma: allowlist secret
+                             "data": {"url": url, "user": c}})
+        verify_users.append({"secret": f"{n}-{c}-app", "key": "password", "user": c, "env": f"USER_{secret_env(c)}_PASSWORD"})  # pragma: allowlist secret
         publish = [f"{app}.{a}.>" for a in events if a in s["provides"]]
         for a in events:
             if a in s["consumes"]:
@@ -3029,6 +3002,9 @@ def broker_files(app: str, name: str, env: str, cfg: dict, services: list[dict],
                     "metadata": {"name": f"{st}.{c}", "labels": labels(), "annotations": {**wave("3"), **keep}},
                     "spec": {"streamName": st, "durableName": c, "deliverPolicy": "all", "ackPolicy": "explicit", "ackWait": "30s",
                              "maxDeliver": -1, "account": n, "preventDelete": True}}
+    plan = {"namespace": ns, "secrets": secrets_plan, "retire": {"externalSecrets": [x["name"] for x in secrets_plan], "generators": [f"{n}-password"]},
+            "verify": {"engine": "nats", "port": 4222, "pods": [f"{n}-{i}" for i in range(replicas)], "users": verify_users}}
+    files.update(credentials_files(app, env, n, labels(), plan))
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
     return files
 
@@ -3118,7 +3094,7 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             sync = {"automated": {"prune": prune, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]}
             if any(cfg["resources"].get(n, {}).get("envs", {}).get(env, {}).get("backup") for n in group):
                 sync["retry"] = RETRY       # an ObjectStore may sync before its CRD exists
-            elif any(cfg["resources"].get(n, {}).get("type") in ("cache", "broker") for n in group):
+            elif any(cfg["resources"].get(n, {}).get("type") in ("bucket", "cache", "broker") for n in group):
                 sync["retry"] = RETRY       # the Account, streams and consumers wait for NACK and the server; a PreSync credentials Job may fail once
             docs.append({
                 "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",

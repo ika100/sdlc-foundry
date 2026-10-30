@@ -720,7 +720,7 @@ def test_a_cache_name_clashing_with_its_password_object_fails_ac_118_22(tmp_path
 # byte-identical guarantee: digests of the trees the 5.x renderer wrote before spec 118 (full tree, sha256 of sorted path and content)
 BEFORE_118 = {"full5": ("bf4c5ffc245db1166768f726cdbf9b29618a050bfed682499ad3a4de22037cb4", 58),
               "rich5": ("54e93234734051c4df2494a3383b27954e5eeeaeaf58d76c10c545562b403cae", 58),
-              "db-bucket": ("db23d5c3c8f752510fee7396f719342b8706b13370c0ffa997fbd48f15cdc9ed", 50)}
+              "db-bucket": ("ae098881e7b6a57b03e99b36924de150f513b06e1dad3c42b303e79400e930d8", 56)}   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret
 
 
 def _before_docs():

@@ -25,8 +25,9 @@ NACK = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nack"
 RETRY = {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
 SEC_CTX = {"runAsNonRoot": True, "runAsUser": 1000, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
 # the files of the default system's broker directory (users api and web, stream orders, consumer web), sorted
-FILES = ["account.yaml", "consumer-orders.web.yaml", "externalsecret-api.yaml", "externalsecret-web.yaml", "kustomization.yaml", "nack-secret.yaml",
-         "password-generator.yaml", "server.yaml", "stream-orders.yaml"]
+CRED_FILES = ["credentials-configmap.yaml", "credentials-job.yaml", "credentials-role.yaml", "credentials-rolebinding.yaml",
+              "credentials-serviceaccount.yaml"]   # spec 128: the credentials Job replaces the generator, the admin Secret and the ExternalSecrets
+FILES = ["account.yaml", "consumer-orders.web.yaml", *CRED_FILES, "kustomization.yaml", "server.yaml", "stream-orders.yaml"]
 
 
 def broker(**kw) -> dict:
@@ -95,29 +96,22 @@ def upper(name: str) -> str:
     return name.upper().replace("-", "_")
 
 
-def expected_generator(name="bus") -> dict:
-    return {"apiVersion": "generators.external-secrets.io/v1alpha1", "kind": "Password",
-            "metadata": {"name": f"shop-{name}-password", "labels": L(name), "annotations": {WAVE: "-1"}},
-            "spec": {"length": 32, "digits": 5, "symbols": 0, "noUpper": False, "allowRepeat": True}}
+def expected_plan(users, env="dev", name="bus", replicas=1) -> dict:
+    """The `plan.json` of the credentials ConfigMap (spec 128): what the broker's Job writes (`users` in the order of the server's users)."""
+    n, ns = f"shop-{name}", f"shop-{env}"
+    url = f"nats://{n}.{ns}.svc:4222"
+    secrets = [{"name": f"{n}-nack", "labels": L(name), "generate": {"password": 32}, "data": {"user": "_nack"}}]
+    verify = [{"secret": f"{n}-nack", "key": "password", "user": "_nack", "env": "ADMIN_PASSWORD"}]
+    for c in users:
+        secrets.append({"name": f"{n}-{c}-app", "labels": L(name), "generate": {"password": 32}, "data": {"url": url, "user": c}})
+        verify.append({"secret": f"{n}-{c}-app", "key": "password", "user": c, "env": f"USER_{upper(c)}_PASSWORD"})
+    return {"namespace": ns, "secrets": secrets, "retire": {"externalSecrets": [x["name"] for x in secrets], "generators": [f"{n}-password"]},
+            "verify": {"engine": "nats", "port": 4222, "pods": [f"{n}-{i}" for i in range(replicas)], "users": verify}}
 
 
-def _es(name, secret, data, bus) -> dict:
-    return {"apiVersion": "external-secrets.io/v1", "kind": "ExternalSecret",
-            "metadata": {"name": secret, "labels": L(bus), "annotations": {WAVE: "-1"}},
-            "spec": {"refreshPolicy": "CreatedOnce",
-                     "target": {"name": secret, "creationPolicy": "Owner", "deletionPolicy": "Retain",
-                                "template": {"engineVersion": "v2", "metadata": {"labels": L(bus)}, "data": data}},
-                     "dataFrom": [{"sourceRef": {"generatorRef": {"apiVersion": "generators.external-secrets.io/v1alpha1", "kind": "Password",
-                                                                  "name": f"shop-{bus}-password"}}}]}}
-
-
-def expected_nack_secret(name="bus") -> dict:
-    return _es(f"shop-{name}-nack", f"shop-{name}-nack", {"user": "_nack", "password": "{{ .password }}"}, name)
-
-
-def expected_user_secret(component, env="dev", name="bus") -> dict:
-    url = f"nats://shop-{name}.shop-{env}.svc:4222"
-    return _es(f"shop-{name}-{component}-app", f"shop-{name}-{component}-app", {"url": url, "user": component, "password": "{{ .password }}"}, name)
+def cplan(g, env="dev", name="bus") -> dict:
+    import json
+    return json.loads(bdoc(g, env, "credentials-configmap.yaml", name)["data"]["plan.json"])
 
 
 def publish_list(component, provides, consumes) -> list:

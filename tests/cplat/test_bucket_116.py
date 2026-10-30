@@ -26,12 +26,18 @@ ALLOWED_INST = "external, remote, storage, versioning"
 S3_RULE = "3 to 63 characters, lowercase letters, digits and hyphens, starting and ending with a letter or digit"
 ANN_KEEP = "argocd.argoproj.io/sync-options"
 WAVE = "argocd.argoproj.io/sync-wave"
-FILES = ["access-key-generator.yaml", "bucket.yaml", "credentials.yaml", "externalsecret.yaml", "identity.yaml", "kustomization.yaml",
-         "seaweed.yaml", "secret-key-generator.yaml"]
+CRED_FILES = ["credentials-configmap.yaml", "credentials-job.yaml", "credentials-role.yaml", "credentials-rolebinding.yaml",
+              "credentials-serviceaccount.yaml"]   # spec 128: the credentials Job replaces the two generators and the ExternalSecret
+FILES = sorted(["bucket.yaml", *CRED_FILES, "credentials.yaml", "identity.yaml", "kustomization.yaml", "seaweed.yaml"])
 
 
 def bucket(**kw) -> dict:
     return {"type": "bucket", **kw}
+
+
+def bplan(g, env) -> dict:
+    import json
+    return json.loads(bdoc(g, env, "credentials-configmap.yaml")["data"]["plan.json"])
 
 
 def bsys(resources=None, comps=None, **top) -> dict:
@@ -258,19 +264,20 @@ def test_a_bucket_and_a_database_both_give_bare_variables_ac_116_16(tmp_path):  
 
 def test_the_secret_carries_the_six_keys_for_an_in_cluster_bucket_ac_116_16(tmp_path):  # AC-116.16
     g = ok(tmp_path, bsys())
-    es = bdoc(g, "dev", "externalsecret.yaml")
-    assert es["metadata"]["name"] == "shop-files-app" and es["spec"]["target"]["name"] == "shop-files-app"
-    data = es["spec"]["target"]["template"]["data"]
+    plan = bplan(g, "dev")   # spec 128: the credentials Job writes the Secret, one entry of its plan
+    assert [x["name"] for x in plan["secrets"]] == ["shop-files-app"]
+    data = {**plan["secrets"][0]["data"], **{k: "" for k in plan["secrets"][0]["generate"]}}
     assert sorted(data) == sorted(BKEYS)
+    assert plan["secrets"][0]["generate"] == {"accessKeyId": 20, "secretAccessKey": 40}
     assert data["endpoint"] == "http://shop-files-filer.shop-dev.svc:8333" and data["bucket"] == "shop-files"
     assert data["region"] == "us-east-1" and data["forcePathStyle"] == "true"
-    assert bdoc(g, "staging", "externalsecret.yaml")["spec"]["target"]["template"]["data"]["endpoint"] == "http://shop-files-filer.shop-staging.svc:8333"
+    assert bplan(g, "staging")["secrets"][0]["data"]["endpoint"] == "http://shop-files-filer.shop-staging.svc:8333"
 
 
 def test_the_names_are_the_same_in_every_environment_ac_116_16(tmp_path):  # AC-116.16
     g = ok(tmp_path, bsys())
     assert {bdoc(g, e, "bucket.yaml")["spec"]["name"] for e in ENVS} == {"shop-files"}
-    assert {bdoc(g, e, "externalsecret.yaml")["metadata"]["name"] for e in ENVS} == {"shop-files-app"}
+    assert {bplan(g, e)["secrets"][0]["name"] for e in ENVS} == {"shop-files-app"}
 
 
 # ---------------- AC-116.4: several buckets ----------------
@@ -344,14 +351,14 @@ def test_the_credential_variables_are_only_secret_references_ac_116_5(tmp_path):
             assert "value" not in e and set(e["valueFrom"]) == {"secretKeyRef"}
 
 
-def test_in_cluster_credentials_are_generated_by_two_password_generators_per_environment_ac_116_5(tmp_path):  # AC-116.5
+def test_in_cluster_credentials_are_written_once_by_a_credentials_job_per_environment_ac_116_5(tmp_path):  # AC-116.5
     g = ok(tmp_path, bsys())
     for env in ("dev", "staging"):
-        for fname, suffix, length, digits in (("access-key-generator.yaml", "access-key", 20, 5), ("secret-key-generator.yaml", "secret-key", 40, 10)):
-            gen = bdoc(g, env, fname)
-            assert gen == {"apiVersion": "generators.external-secrets.io/v1alpha1", "kind": "Password",
-                           "metadata": {"name": f"shop-files-{suffix}", "labels": labels(), "annotations": keep(**{WAVE: "-1"})},
-                           "spec": {"length": length, "digits": digits, "symbols": 0, "noUpper": False, "allowRepeat": True}}
+        plan = bplan(g, env)   # spec 128: a Job writes both keys (20 and 40 characters) and retires the two Password generators
+        assert plan["secrets"][0]["generate"] == {"accessKeyId": 20, "secretAccessKey": 40}
+        assert plan["retire"] == {"externalSecrets": ["shop-files-app"], "generators": ["shop-files-access-key", "shop-files-secret-key"]}
+        assert "verify" not in plan
+        assert not [k for k in g if k.startswith(bdir(env)) and ("generator" in k or "externalsecret" in k)]
 
 
 def test_each_environment_has_its_own_store_and_identity_so_keys_do_not_cross_ac_116_5(tmp_path):  # AC-116.5
@@ -364,7 +371,7 @@ def test_each_environment_has_its_own_store_and_identity_so_keys_do_not_cross_ac
         b = bdoc(g, env, "bucket.yaml")["spec"]
         assert b["clusterRef"] == {"name": "shop-files"} and b["access"] == [{"user": "shop-files", "actions": ["Read", "Write", "List", "Tagging"]}]
     # the endpoint (and so the store) differs per namespace
-    eps = {bdoc(g, e, "externalsecret.yaml")["spec"]["target"]["template"]["data"]["endpoint"] for e in ENVS}
+    eps = {bplan(g, e)["secrets"][0]["data"]["endpoint"] for e in ENVS}
     assert len(eps) == 3
 
 
@@ -376,6 +383,16 @@ def test_the_credentials_object_adopts_the_generated_secret_ac_116_5(tmp_path): 
         "spec": {"seaweedRef": {"name": "shop-files"}, "identityRef": {"name": "shop-files"},
                  "secretRef": {"name": "shop-files-app", "accessKeyField": "accessKeyId", "secretKeyField": "secretAccessKey"},
                  "reclaimPolicy": "Retain"}}
+
+
+def test_the_hook_objects_run_before_the_rest_and_the_credentials_object_reads_the_secret_ac_116_5(tmp_path):  # AC-116.5
+    g = ok(tmp_path, bsys())
+    hook = "argocd.argoproj.io/hook"
+    for f in CRED_FILES:   # spec 128: PreSync, so the Secret exists before the S3Credentials object (wave 1) and the store sync
+        assert bdoc(g, "dev", f)["metadata"]["annotations"][hook] == "PreSync", f
+    assert [bdoc(g, "dev", f)["metadata"]["annotations"][WAVE] for f in CRED_FILES] == ["0", "1", "0", "0", "0"]
+    assert hook not in bdoc(g, "dev", "credentials.yaml")["metadata"]["annotations"]
+    assert sets(g)["shop-addons-dev"]["spec"]["template"]["spec"]["syncPolicy"]["retry"]
 
 
 def test_the_e2e_script_proves_the_cross_environment_refusal_ac_116_5():  # AC-116.5 (needs a cluster: covered by tests/e2e/run.sh)
@@ -433,18 +450,10 @@ def test_the_seaweed_object_is_exactly_the_designed_document_ac_116_8(tmp_path):
     assert list(sw["spec"]) == ["image", "volumeServerDiskCount", "master", "volume", "filer"]
 
 
-def test_the_externalsecret_of_an_in_cluster_bucket_is_exactly_the_designed_document_ac_116_8(tmp_path):  # AC-116.8
-    es = bdoc(ok(tmp_path, bsys()), "dev", "externalsecret.yaml")
-    ref = lambda n: {"sourceRef": {"generatorRef": {"apiVersion": "generators.external-secrets.io/v1alpha1", "kind": "Password", "name": f"shop-files-{n}"}},
-                     "rewrite": [{"regexp": {"source": "^password$", "target": "accessKeyId" if n == "access-key" else "secretAccessKey"}}]}
-    assert es == {"apiVersion": "external-secrets.io/v1", "kind": "ExternalSecret",
-                  "metadata": {"name": "shop-files-app", "labels": labels(), "annotations": keep(**{WAVE: "-1"})},
-                  "spec": {"refreshInterval": "0",
-                           "target": {"name": "shop-files-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
-                                      "template": {"engineVersion": "v2", "data": {
-                                          "endpoint": "http://shop-files-filer.shop-dev.svc:8333", "bucket": "shop-files", "region": "us-east-1",
-                                          "forcePathStyle": "true", "accessKeyId": "{{ .accessKeyId }}", "secretAccessKey": "{{ .secretAccessKey }}"}}},
-                           "dataFrom": [ref("access-key"), ref("secret-key")]}}
+def test_the_secret_of_an_in_cluster_bucket_is_exactly_the_designed_plan_entry_ac_116_8(tmp_path):  # AC-116.8
+    assert bplan(ok(tmp_path, bsys()), "dev")["secrets"] == [   # spec 128: the credentials Job writes it, no ExternalSecret
+        {"name": "shop-files-app", "labels": {}, "generate": {"accessKeyId": 20, "secretAccessKey": 40},
+         "data": {"endpoint": "http://shop-files-filer.shop-dev.svc:8333", "bucket": "shop-files", "region": "us-east-1", "forcePathStyle": "true"}}]
 
 
 # ---------------- AC-116.12: Argo CD never deletes a bucket (render side) ----------------
@@ -452,7 +461,7 @@ def test_the_externalsecret_of_an_in_cluster_bucket_is_exactly_the_designed_docu
 def test_every_object_of_an_in_cluster_bucket_is_kept_when_argo_prunes_ac_116_12(tmp_path):  # AC-116.12
     g = ok(tmp_path, bsys())
     for f in FILES:
-        if f == "kustomization.yaml":
+        if f == "kustomization.yaml" or f in CRED_FILES:   # the credentials hook objects are removed by their hook policy, not kept
             continue
         doc = bdoc(g, "dev", f)
         assert doc["metadata"]["annotations"][ANN_KEEP] == "Delete=false", f
@@ -462,15 +471,13 @@ def test_buckets_and_credentials_are_retained_ac_116_12(tmp_path):  # AC-116.12
     g = ok(tmp_path, bsys())
     assert bdoc(g, "dev", "bucket.yaml")["spec"]["reclaimPolicy"] == "Retain"
     assert bdoc(g, "dev", "credentials.yaml")["spec"]["reclaimPolicy"] == "Retain"
-    assert bdoc(g, "dev", "externalsecret.yaml")["spec"]["target"]["deletionPolicy"] == "Retain"
 
 
 def test_the_addon_set_does_not_prune_and_the_directory_has_the_designed_kustomization_ac_116_12(tmp_path):  # AC-116.12
     g = ok(tmp_path, bsys())
     assert bdoc(g, "dev", "kustomization.yaml") == {
         "apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
-        "resources": ["access-key-generator.yaml", "bucket.yaml", "credentials.yaml", "externalsecret.yaml", "identity.yaml", "seaweed.yaml",
-                      "secret-key-generator.yaml"]}
+        "resources": [f for f in FILES if f != "kustomization.yaml"]}
     assert sets(g)["shop-addons-dev"]["spec"]["template"]["spec"]["syncPolicy"].get("automated", {}).get("prune") is False
 
 
@@ -503,8 +510,8 @@ def test_the_operator_is_pinned_in_the_versions_table_ac_116_15(tmp_path):  # AC
 
 def test_nothing_in_the_rendered_tree_floats_ac_116_15(tmp_path):  # AC-116.15
     g = ok(tmp_path, bsys())
-    store_files = [t for k, t in g.items() if "/addons/" in k and "/files/" in k or k == "operators/apps/seaweedfs.yaml"]
-    assert len(store_files) >= 8
+    store_files = [t for k, t in g.items() if ("/addons/" in k and "/files/" in k and "/credentials-" not in k) or k == "operators/apps/seaweedfs.yaml"]   # spec 128: not the Job's program
+    assert len(store_files) >= 5
     blob = "\n".join(store_files)
     assert "latest" not in blob and not re.search(r"(targetRevision|image):\s*[\"']?[~^*>]|\.x\b|\*", blob.replace("{{", "").replace("}}", ""))
     for m in re.finditer(r"image:\s*(\S+)", blob):

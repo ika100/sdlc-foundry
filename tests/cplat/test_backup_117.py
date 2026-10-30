@@ -5,6 +5,7 @@ Contract: design.md "Contract: system.yaml", "Render errors", "rendered objects 
 backups" and "versions table and operators/". The renderer runs as a script in a hand-built checkout; nothing touches the network or a
 cluster. Criteria that need a cluster are covered by the rendered contract here and by the text of tests/e2e/run.sh in
 test_backup_117_cmds.py. Missing symbols are guarded with getattr so each test fails on its own."""
+import json
 import re
 import subprocess
 import sys
@@ -273,7 +274,7 @@ def test_a_system_without_backup_has_no_backup_directory_set_or_operator_ac_117_
     g = ok(tmp_path, bdoc())
     assert not [k for k in g if "/backup/" in k]
     assert not any(f"{s}-backup-" in n for s in ("shop",) for n in sets(g))
-    assert "preservedFields" not in g[f"{APP}/applicationset.yaml"] and "retry" not in g[f"{APP}/applicationset.yaml"]
+    assert "preservedFields" not in g[f"{APP}/applicationset.yaml"]   # spec 128: the retry now comes from the bucket's Job
     assert op_names(g) == ["operators/apps/cloudnative-pg.yaml", "operators/apps/seaweedfs.yaml", "operators/root.yaml"]
 
 
@@ -602,7 +603,7 @@ def test_component_and_addon_sets_preserve_the_skip_reconcile_annotation_ac_117_
 def test_the_addon_application_set_retries_when_a_database_has_backup_ac_117_15(tmp_path):  # AC-117.15
     s = sets(ok(tmp_path, bdoc(dbb={"dev": DEV})))
     assert s["shop-addons-dev"]["spec"]["template"]["spec"]["syncPolicy"]["retry"] == {"limit": 10, "backoff": {"duration": "30s", "factor": 2, "maxDuration": "10m"}}
-    assert "retry" not in s["shop-addons-staging"]["spec"]["template"]["spec"]["syncPolicy"]
+    assert s["shop-addons-staging"]["spec"]["template"]["spec"]["syncPolicy"]["retry"] == s["shop-addons-dev"]["spec"]["template"]["spec"]["syncPolicy"]["retry"]   # spec 128: the bucket's PreSync Job may fail once
 
 
 def test_an_environment_without_backup_gets_nothing_ac_117_15(tmp_path):  # AC-117.15
@@ -628,10 +629,9 @@ def test_the_schedule_leaves_out_databases_caches_and_the_target_ac_117_17(tmp_p
 
 def test_the_target_buckets_secret_carries_the_target_labels_only_where_it_is_the_target_ac_117_17(tmp_path):  # AC-117.17
     g = ok(tmp_path, bdoc(envb={"dev": DEV}))
-    es = y(g, f"{dd('dev', 'backups')}/externalsecret.yaml")
-    assert es["spec"]["target"]["template"]["metadata"]["labels"] == L("backups")
-    other = y(g, f"{dd('staging', 'backups')}/externalsecret.yaml")
-    assert (other["spec"]["target"].get("template") or {}).get("metadata", {}).get("labels") is None
+    plan = lambda env: json.loads(y(g, f"{dd(env, 'backups')}/credentials-configmap.yaml")["data"]["plan.json"])   # spec 128: the Job writes the Secret
+    assert plan("dev")["secrets"][0]["name"] == "shop-backups-app" and plan("dev")["secrets"][0]["labels"] == L("backups")
+    assert plan("staging")["secrets"][0]["labels"] == {}
 
 
 def test_an_external_targets_secret_is_labelled_and_merged_ac_117_17(tmp_path):  # AC-117.17
