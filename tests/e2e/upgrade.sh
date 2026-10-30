@@ -413,6 +413,20 @@ PY
   kn "upg-$e" rollout status "statefulsets.apps/upg-$b" --timeout=240s >/dev/null || fail "the NATS server upg-$b of $e did not become ready"
   wait_for 180 "the objects of $b in $e (NACK)" kn "upg-$e" apply -f "$out/2.yaml"
 }
+settle_cache() { # env name: WORKAROUND for #316 (remove with its fix): ESO may rewrite a cache's generated password right after the
+  # server read it; wait until the Secret stays unchanged for 15 s, then restart the server once so it runs with the Secret's password
+  local e=$1 n=$2 last="" rv same=0
+  [ ! -f "$work/settled-$e-$n" ] || return 0   # once per cache: a Secret that exists is never rewritten again
+  for _ in $(seq 1 36); do   # up to 180 s
+    rv=$(kn "upg-$e" get "secret/upg-$n-app" -o jsonpath='{.metadata.resourceVersion}' 2>/dev/null || true)
+    if [ -n "$rv" ] && [ "$rv" = "$last" ]; then same=$((same + 1)); [ $same -ge 3 ] && break; else same=0; fi
+    last=$rv; sleep 5
+  done
+  [ $same -ge 3 ] || fail "the Secret upg-$n-app of $e did not settle within 180 s"
+  kn "upg-$e" rollout restart "statefulsets.apps/upg-$n" >/dev/null || fail "restarting the cache upg-$n of $e failed"
+  kn "upg-$e" rollout status "statefulsets.apps/upg-$n" --timeout=240s >/dev/null || fail "the cache upg-$n of $e did not come back"
+  touch "$work/settled-$e-$n"
+}
 apply_addons() { # env: every rendered addon of the environment
   local e=$1 d="$app_dir/addons/$1" a
   for a in $(ls "$d"); do
@@ -424,6 +438,7 @@ apply_addons() { # env: every rendered addon of the environment
         [ -f "$g" ] && { kn "upg-$e" apply -f "$g" >/dev/null || fail "applying $(basename "$g") of addons/$e/$a failed"; }
       done
       kn "upg-$e" apply -k "$d/$a" 2>&1 | tee /dev/stderr >/dev/null || fail "applying addons/$e/$a failed"
+      if grep -q 'kind: Password' "$d/$a/password-generator.yaml" 2>/dev/null && [ -f "$d/$a/statefulset.yaml" ]; then settle_cache "$e" "$a"; fi   # a cache (#316)
     fi
   done
 }
