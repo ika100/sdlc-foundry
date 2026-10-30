@@ -37,7 +37,7 @@ An in-cluster cache can run with a different password than its Secret `<system>-
 
 ### Bucket and component-generated secrets
 
-- **AC-128.7** Given an in-cluster bucket instance, when its credentials Secret `<system>-<name>-app` has existed for 60 seconds, then the bucket's S3 endpoint accepts `accessKeyId` and `secretAccessKey` from it, and a component that uses the bucket can put an object and read it back. The keys stay the same when whatever writes them runs again (the triggers of AC-128.3). This is a check: if the e2e shows that the bucket's operator applies a rewritten key, the bucket's render does not change.
+- **AC-128.7** Given an in-cluster bucket instance, when its credentials Secret `<system>-<name>-app` has existed for 60 seconds, then the bucket's S3 endpoint accepts `accessKeyId` and `secretAccessKey` from it, and a component that uses the bucket can put an object and read it back. The Secret is written exactly once, like the Secrets of the cache and the broker. Its keys stay the same when whatever writes it runs again (the triggers of AC-128.3, including a forced refresh).
 - **AC-128.8** Given a component with a `secrets:` entry using `generate:` and two or more running replicas, when the generated Secret has existed for 60 seconds, then every replica, including those started before that point, sees the same value for each generated key, and that value equals the one in the Secret. The value stays the same when whatever writes it runs again.
 
 ### Existing systems
@@ -47,8 +47,8 @@ An in-cluster cache can run with a different password than its Secret `<system>-
 
 ### Tests, records and release notes
 
-- **AC-128.11** Given `tests/e2e/upgrade.sh`, then the function `settle_cache` and its call are removed, and no e2e script restarts a cache or broker server or waits for a Secret to stop changing. The upgrade e2e and the e2e cluster test check AC-128.1, AC-128.2 and AC-128.4 in every environment they create. They also check AC-128.3 by forcing one more write of a cache's Secret after it was created. Both pass on CI in 3 runs in a row.
-- **AC-128.12** Given the cplat test suite, then for the cache, the broker and generated component secrets, and for the bucket if its render changes (see AC-128.7), there is a test that checks the rendered objects: each generated credential is written exactly once, by a path that cannot write it twice (create if absent, otherwise keep what exists), and no generator-backed templated ExternalSecret writes it. The test fails on the 5.4 form, where a server reads at start a password from a Secret that a generator-backed ExternalSecret may write again.
+- **AC-128.11** Given `tests/e2e/upgrade.sh`, then the function `settle_cache` and its call are removed, and no e2e script restarts a cache or broker server to make passwords match, or waits for a Secret to stop changing (a workaround like `settle_cache`). Restarts that other specs test on purpose (AC-118.7, AC-116.8, and spec 120's chart change) stay, and they run after the AC-128 checks. The upgrade e2e and the e2e cluster test check AC-128.1, AC-128.2 and AC-128.4 in every environment they create. They also check AC-128.3 by forcing one more write of a cache's Secret after it was created. Both pass on CI in 3 runs in a row.
+- **AC-128.12** Given the cplat test suite, then for the cache, the broker, the bucket and generated component secrets there is a test that checks the rendered objects: each generated credential is written exactly once, by a path that cannot write it twice (create if absent, otherwise keep what exists), and no generator-backed templated ExternalSecret writes it. The test fails on the 5.4 form, where a server reads at start a password from a Secret that a generator-backed ExternalSecret may write again.
 - **AC-128.13** Given the platform's decision records, then one ADR records the cause found for #316 (with the External Secrets version that was examined and any upstream issue or fixed version) and the chosen mechanism: a credential is written exactly once, by a path that cannot write it twice. The ADR records this as an exception to ADR-018 ("every Secret comes from External Secrets"), with the rights the creator needs in the namespace. It amends ADR-064 (point 3), ADR-065 and ADR-059 where they say a password is "written once".
 - **AC-128.14** Given `docs/CHANGELOG.md`, then the `[Unreleased]` section has a `Fixed` entry that names #316, the symptom (`WRONGPASS` or an authorization error until the server restarts), the affected resource types and releases, the fix, and what an existing system must do (nothing, per AC-128.9 and AC-128.10).
 
@@ -65,7 +65,7 @@ An in-cluster cache can run with a different password than its Secret `<system>-
 
 1. ~~What mechanism stops the server and the Secret from drifting apart?~~ Answered (user, 2026-10-30): B. Each credential is written exactly once, by a path that cannot write it twice (create if absent), not by a generator-backed templated ExternalSecret. This is recorded as an exception to ADR-018. See AC-128.12, AC-128.13 and Non-goals.
 2. ~~Confirm: the fix covers generated component secrets (`secrets: generate:`).~~ Answered (user, 2026-10-30): yes. See AC-128.8.
-3. ~~Confirm: the bucket is in scope even if its operator already follows Secret changes.~~ Answered (user, 2026-10-30): yes, as a check. The render does not change if the e2e shows the operator follows. See AC-128.7 and AC-128.12.
+3. ~~Confirm: the bucket is in scope even if its operator already follows Secret changes.~~ Answered (user, 2026-10-30): yes. First answered as "a check only"; during planning the user moved the bucket to the same write-once mechanism as the cache and the broker. See AC-128.7 and AC-128.12.
 4. ~~Should the update repair an instance already in the #316 state on its own?~~ Answered (user, 2026-10-30): yes, automatically, within 60 s and without a manual step. See AC-128.10.
 5. ~~Confirm: 60 seconds after ready, and 3 green CI runs in a row.~~ Answered (user, 2026-10-30): yes. See AC-128.1, AC-128.2, AC-128.4, AC-128.5, AC-128.7, AC-128.8, AC-128.10 and AC-128.11.
 
@@ -73,4 +73,7 @@ An in-cluster cache can run with a different password than its Secret `<system>-
 
 - 2026-10-30 created
 - 2026-10-30 open questions answered: the mechanism is a credential written exactly once by a create-if-absent path (exception to ADR-018, AC-128.12 and AC-128.13 clarified); component secrets and the bucket check stay in scope (AC-128.7 clarified); repair is automatic; thresholds confirmed
+- 2026-10-30 amended: the bucket's credentials Secret is written exactly once, like the cache's and the broker's (AC-128.7 and AC-128.12; the branch "render unchanged if the operator follows" is removed). AC-128.11 clarified: only restarts done to make passwords match are removed, and the deliberate restarts of AC-118.7, AC-116.8 and spec 120 stay and run after the AC-128 checks
+- 2026-10-30 approved
+- 2026-10-30 draft: amend: bucket moves to write-once (AC-128.7); AC-128.11 bans only workaround restarts
 - 2026-10-30 approved
