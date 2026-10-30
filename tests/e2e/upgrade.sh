@@ -78,8 +78,9 @@ diagnose() {
       kubectl --context "$ctx" -n "upg-$e" get events --sort-by=.lastTimestamp 2>&1 | tail -8
       if kubectl --context "$ctx" -n "upg-$e" get statefulsets.apps/upg-sessions >/dev/null 2>&1; then   # a cache: who holds which password (hashes only)
         echo "--- cache upg-$e ---"
-        kubectl --context "$ctx" -n "upg-$e" get externalsecrets.external-secrets.io/upg-sessions-app \
-          -o jsonpath='externalsecret: refreshPolicy={.spec.refreshPolicy} synced={.status.refreshTime} ready={.status.conditions[0].status} {.status.conditions[0].message}{"\n"}' 2>&1
+        for j in $(kubectl --context "$ctx" -n "upg-$e" get jobs.batch -o name 2>/dev/null | grep credentials); do   # the credentials Jobs (what they did, no values)
+          echo "--- $j ---"; kubectl --context "$ctx" -n "upg-$e" logs "$j" --tail=15 2>&1
+        done
         kubectl --context "$ctx" -n "upg-$e" get secret/upg-sessions-app \
           -o jsonpath='secret: created={.metadata.creationTimestamp} resourceVersion={.metadata.resourceVersion}{"\n"}' 2>&1
         kubectl --context "$ctx" -n "upg-$e" get pods/upg-sessions-0 \
@@ -247,7 +248,8 @@ for env in ("dev", "staging", "prod"):
 data["environments"]["staging"]["promote"] = "after-dev-smoke"
 shapes = {s["id"]: s for s in core.registry.load()}
 ns = compose.build_parser().parse_args(["add", "upg-api", "--expose"])    # real parser defaults
-ns.env, ns.generate, ns.secret, ns.secret_ref = [], [], [], []
+ns.env, ns.secret, ns.secret_ref = [], [], []
+ns.generate = ["upg-api-auth=JWT_KEY"]   # a generated component secret, so that the update covers it (AC-128.9)
 ns.uses = ["postgres"] + [name for typ, name in (("bucket", "files"), ("cache", "sessions"), ("broker", "bus")) if typ in types]
 if "broker" in types:
     data["apis"] = {"orders": {"type": "events"}}
@@ -337,9 +339,10 @@ write_data() { # env: a row, an object, a cache key and a message (only for the 
     podmust "bucket write in $1" "$1" "$S3_IMAGE" '^(FILES_)?(S3|AWS)_' "$s3pre"'printf %s '"$1-before"' > /tmp/in; $A s3api put-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt --body /tmp/in >/dev/null'
   fi
   if has_type cache; then
-    local img; img=$(kn "upg-$1" get statefulsets.apps/upg-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')
-    # one cache: the bare REDIS_* names (variable_names, AC-115.8); a url from before 5.4.0 names no user (spec 127)
-    podmust "cache write in $1" "$1" "$img" '^REDIS_' 'u=$(printf %s "$REDIS_URL" | sed "s#^redis://:#redis://default:#"); valkey-cli -u "$u" SET upg:'"$1 $1-before"' | grep -w OK'
+    # with the server's own password: an instance of the previous release that is already in the #316 state cannot fail the setup; the
+    # component's way in (REDIS_URL, REDIS_HOST/PORT/PASSWORD) is checked after the update
+    kn "upg-$1" exec upg-sessions-0 -- sh -c 'valkey-cli -a "$VALKEY_PASSWORD" --no-auth-warning SET upg:'"$1 $1-before" | grep -w OK >/dev/null \
+      || fail "cache write in $1 (with the server's own password) failed"
   fi
   if has_type broker; then
     podmust "stream message in $1" "$1" "$NATS_IMAGE" '^(NATS|EVENTS)_' "$natspre"'$N pub "$EVENTS_ORDERS_SUBJECT_PREFIX.created" '"$1-before"
@@ -360,12 +363,131 @@ read_data() { # env: the data of write_data reads back unchanged (the cache key 
 }
 
 # ---- apply what the renderer wrote (what Argo CD would sync) ----
+# What Argo CD does for a directory with credentials-job.yaml (spec 128): the five credentials-*.yaml (the PreSync hook objects) are
+# applied first and the Job runs to completion (it writes every password Secret once, create if absent), then the whole directory is
+# applied. A directory of the previous release's render has none of them and is applied as before. A forced write (rerun_credentials)
+# runs the Job again; the checks compare the Secret's resourceVersion and value hashes before and after. No server is restarted here.
+hash_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -d' ' -f1; }
+credentials_files() { local f; for f in serviceaccount role rolebinding configmap job; do echo "$1/credentials-$f.yaml"; done; }
+credentials_apply() { # namespace dir: applies the five credentials-*.yaml and waits for the Job (its logs on failure)
+  local ns_=$1 d=$2 args=() f out job
+  for f in $(credentials_files "$d"); do [ -f "$f" ] || fail "render did not write $f"; args+=(-f "$f"); done
+  out=$(kn "$ns_" apply "${args[@]}" -o name) || fail "applying the credentials-*.yaml of $d failed"
+  job=$(sed -n 's#^job.batch/##p' <<< "$out" | head -1)
+  [ -n "$job" ] || fail "$d/credentials-job.yaml did not apply a Job"
+  kn "$ns_" wait --for=condition=complete job/$job --timeout=180s >/dev/null || {
+    kn "$ns_" logs job/$job --tail=40 || true; kn "$ns_" describe job/$job | tail -20; fail "the credentials Job $job in $ns_ did not complete"; }
+  CRED_JOB=$job
+}
+rerun_credentials() { # namespace dir: a forced write (AC-128.3): delete the finished Job and apply its five files again
+  local job
+  credentials_apply "$1" "$2"; job=$CRED_JOB
+  kn "$1" delete job "$job" --ignore-not-found --wait=true >/dev/null || fail "could not delete the credentials Job $job"
+  credentials_apply "$1" "$2"
+}
+secret_rv() { kn "$1" get secret "$2" -o jsonpath='{.metadata.resourceVersion}'; }   # namespace secret
+secret_hash() { kn "$1" get secret "$2" -o jsonpath='{.data}' | hash_of; }              # the hash of all values; no value is printed
+
+# the Secrets the new render plans for an environment (plan.json of every credentials ConfigMap under addons or overlays), their hashes
+# recorded when the new render is applied there for the first time, and compared after it
+new_render() { ls "$app_dir/$2/$1"/*/credentials-job.yaml >/dev/null 2>&1; }   # env addons|overlays
+plan_secrets() {
+  yaml_py - "$app_dir/$2/$1" <<'PY'
+import glob, json, sys, yaml
+for path in sorted(glob.glob(sys.argv[1] + "/*/credentials-configmap.yaml")):
+    for s in json.loads(yaml.safe_load(open(path))["data"]["plan.json"])["secrets"]:
+        print(s["name"])
+PY
+}
+record_hashes() { # env addons|overlays: before the new render is applied (not right after forcing, and nothing waits for a Secret)
+  local s h
+  new_render "$1" "$2" && [ ! -f "$work/hashes-$1-$2" ] || return 0
+  : > "$work/hashes-$1-$2"
+  for s in $(plan_secrets "$1" "$2"); do
+    h=$(secret_hash "upg-$1" "$s" 2>/dev/null) || continue   # a Secret that does not exist yet has no hash to keep
+    echo "$s $h" >> "$work/hashes-$1-$2"
+  done
+}
+check_kept() { # env addons|overlays: every existing Secret has the value hashes it had before the new render (AC-128.9)
+  local s h
+  [ -f "$work/hashes-$1-$2" ] && [ ! -f "$work/kept-$1-$2" ] || return 0
+  while read -r s h; do
+    [ "$(secret_hash "upg-$1" "$s")" = "$h" ] || fail "AC-128.9: the Secret $s in upg-$1 changed its values when the new render was applied"
+  done < "$work/hashes-$1-$2"
+  echo "ok   $1 $2: $(wc -l < "$work/hashes-$1-$2" | tr -d ' ') Secrets keep their values (AC-128.9)"
+  touch "$work/kept-$1-$2"
+}
+within() { # seconds what command...: tries again until it works; an attempt may start up to that many seconds after the first
+  local secs=$1 what=$2 end; shift 2; end=$((SECONDS + secs))
+  until "$@"; do
+    [ $SECONDS -lt $end ] || fail "$what: not within ${secs}s ($(echo "$P_OUT" | tail -4 | tr '\n' ' ' | cut -c1-400))"
+    sleep 3
+  done
+}
+cache_probe='u=$(printf %s "$REDIS_URL" | sed "s#^redis://:#redis://default:#"); a=$(valkey-cli -u "$u" --no-auth-warning PING 2>&1); b=$(valkey-cli -h "$REDIS_HOST" -p "$REDIS_PORT" --user default -a "$REDIS_PASSWORD" --no-auth-warning PING 2>&1); w=$(valkey-cli -h "$REDIS_HOST" -p "$REDIS_PORT" --user default -a "wrong-$REDIS_PASSWORD" --no-auth-warning PING 2>&1); echo "URL=$a HOST=$b WRONG=$w"; [ "$a" = PONG ] && [ "$b" = PONG ] && case "$w" in *WRONGPASS*) ;; *) exit 1;; esac'
+nats_probe='nats --server "$NATS_URL" --user "$NATS_USER" --password "$NATS_PASSWORD" rtt || exit 1; w=$(nats --server "$NATS_URL" --user "$NATS_USER" --password "wrong-$NATS_PASSWORD" rtt 2>&1); echo "WRONG=$w"; case "$w" in *uthorization*|*uthentication*) ;; *) exit 1;; esac'
+cache_ok() { # env: fresh probe pod with the component's REDIS_* variables
+  local img; img=$(kn "upg-$1" get statefulsets.apps/upg-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')
+  podrun "$1" "$img" '^REDIS_' "$cache_probe"
+}
+nack_ready() { [ "$(kn "upg-$1" get accounts.jetstream.nats.io -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = True ]; }
+check_servers() { # env: once, after the new render of the addons is applied: the servers accept the Secrets' passwords (AC-128.10, AC-128.1/.2/.4)
+  local e=$1 dir rv h
+  [ ! -f "$work/servers-$e" ] || return 0
+  new_render "$e" addons || return 0
+  if has_type cache; then
+    # AC-128.1 and AC-128.2: the server accepts the Secret's password and refuses another; the component's REDIS_URL and its
+    # REDIS_HOST/PORT/PASSWORD get PONG (a WRONGPASS here fails); a server in the #316 state is repaired within 60 s (AC-128.10)
+    within 60 "AC-128.1/.2/.10: the cache of $e answers PONG to the component's variables" cache_ok "$e"
+    echo "ok   $e: the cache accepts the Secret's password and refuses another; REDIS_URL and REDIS_HOST/PORT/PASSWORD get PONG (AC-128.1, AC-128.2)"
+    if [ ! -f "$work/forced-write" ]; then   # AC-128.3: one more write of a cache's Secret, once
+      dir="$app_dir/addons/$e/sessions"; rv=$(secret_rv "upg-$e" upg-sessions-app); h=$(secret_hash "upg-$e" upg-sessions-app)
+      rerun_credentials "upg-$e" "$dir"
+      [ "$(secret_rv "upg-$e" upg-sessions-app)" = "$rv" ] && [ "$(secret_hash "upg-$e" upg-sessions-app)" = "$h" ] \
+        || fail "AC-128.3: the Secret upg-sessions-app of $e was written again by a second credentials Job run"
+      podmust "AC-128.3 cache after a forced write in $e" "$e" "$(kn "upg-$e" get statefulsets.apps/upg-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')" '^REDIS_' "$cache_probe"
+      echo "ok   $e: a forced write left resourceVersion and hash of upg-sessions-app unchanged and the server accepts the password (AC-128.3)"
+      touch "$work/forced-write"
+    fi
+  fi
+  if has_type broker; then
+    # AC-128.4: the component user authenticates with the password of its Secret and no other; _nack's Account is Ready
+    within 60 "AC-128.4/.10: upg-api's NATS_USER authenticates in $e" podrun "$e" "$NATS_IMAGE" '^(NATS|EVENTS)_' "$nats_probe"
+    within 60 "AC-128.4: the NACK Account of $e is Ready (_nack authenticates)" nack_ready "$e"
+    echo "ok   $e: the component user authenticates (a wrong password is refused) and _nack's Account is Ready (AC-128.4)"
+  fi
+  touch "$work/servers-$e"
+}
+force_password() { # env secret: the server keeps its password, the Secret gets a new one (password and url); no value is printed
+  kn "upg-$1" get "secret/$2" -o json | python3 -c '
+import base64, json, secrets, string, sys
+d = json.load(sys.stdin)["data"]
+old = base64.b64decode(d["password"]).decode()
+new = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+enc = lambda t: base64.b64encode(t.encode()).decode()
+out = {"password": enc(new)}
+if "url" in d:
+    out["url"] = enc(base64.b64decode(d["url"]).decode().replace(old, new))
+print(json.dumps({"data": out}))' > "$work/force.json" || fail "could not prepare the new password of $2 in $1"
+  kn "upg-$1" patch "secret/$2" --type merge --patch-file "$work/force.json" >/dev/null || fail "could not patch $2 in $1"
+  rm -f "$work/force.json"
+}
+restart_component() { # env: a new pod of upg-api (a component, not a server): in #316 the components start after the rewrite and hold the Secret's value
+  kn "upg-$1" patch deployments.apps/upg-api -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"e2e.upgrade/restarted-at\":\"$(date +%s)\"}}}}}" >/dev/null \
+    || fail "could not start new upg-api pods in $1"
+  kn "upg-$1" rollout status deployments.apps/upg-api --timeout=300s >/dev/null 2>&1 || echo "note: upg-api in $1 is not ready with the forced Secret (the update must repair it)"
+}
+
 apply_bucket() { # env bucket: the key generators and the ExternalSecret first, then the store, the bucket and the identity, then the credentials
   local e=$1 b=$2 d="$app_dir/addons/$1/$2" f kk
-  for f in access-key-generator.yaml secret-key-generator.yaml externalsecret.yaml seaweed.yaml bucket.yaml identity.yaml credentials.yaml kustomization.yaml; do
+  for f in seaweed.yaml bucket.yaml identity.yaml credentials.yaml kustomization.yaml; do
     [ -f "$d/$f" ] || fail "render did not write addons/$e/$b/$f"
   done
-  kn "upg-$e" apply -f "$d/access-key-generator.yaml" -f "$d/secret-key-generator.yaml" -f "$d/externalsecret.yaml" >/dev/null || fail "applying the key generators of $b in $e failed"
+  if [ -f "$d/credentials-job.yaml" ]; then credentials_apply "upg-$e" "$d"   # the keys, written once
+  else   # the previous release: the generators and the ExternalSecret
+    for f in access-key-generator.yaml secret-key-generator.yaml externalsecret.yaml; do [ -f "$d/$f" ] || fail "render did not write addons/$e/$b/$f"; done
+    kn "upg-$e" apply -f "$d/access-key-generator.yaml" -f "$d/secret-key-generator.yaml" -f "$d/externalsecret.yaml" >/dev/null || fail "applying the key generators of $b in $e failed"
+  fi
   for _ in $(seq 1 40); do   # up to 120 s
     [ -n "$(kn "upg-$e" get "secrets/upg-$b-app" -o jsonpath='{.data.secretAccessKey}' 2>/dev/null)" ] && break; sleep 3
   done
@@ -399,6 +521,8 @@ for d in (d for d in yaml.safe_load_all(sys.stdin) if d):
                                "targetNamespace": d["spec"]["destination"]["namespace"], "valuesContent": yaml.safe_dump(s["helm"]["valuesObject"])}})
     elif d["kind"] in ("Account", "Stream", "Consumer"):
         second.append(d)
+    elif ((d.get("metadata") or {}).get("annotations") or {}).get("argocd.argoproj.io/hook"):
+        continue   # the credentials objects: the script applies them from their files and waits for the Job
     else:
         first.append(d)
 first.sort(key=lambda d: d["kind"] != "Password")   # generators before the ExternalSecrets that use them
@@ -408,44 +532,37 @@ for name, items in (("1.yaml", first), ("chart.yaml", chart), ("2.yaml", second)
     open(f"{out}/{name}", "w").write(yaml.safe_dump_all(items))
 PY
   kn "upg-$e" kustomize "$d" | yaml_py -c "$py" "$out" "$e" || fail "could not turn addons/$e/$b into objects to apply"
-  kn "upg-$e" apply -f "$out/1.yaml" >/dev/null || fail "applying the Secrets of $b in $e failed"
+  if [ -f "$d/credentials-job.yaml" ]; then credentials_apply "upg-$e" "$d"; fi   # the Secrets of the broker, written once
+  [ ! -s "$out/1.yaml" ] || kn "upg-$e" apply -f "$out/1.yaml" >/dev/null || fail "applying the Secrets of $b in $e failed"
   k apply -f "$out/chart.yaml" >/dev/null || fail "applying the HelmChart of $b in $e failed"
   wait_for 180 "the StatefulSet upg-$b of $e" kn "upg-$e" get statefulsets.apps "upg-$b"
   kn "upg-$e" rollout status "statefulsets.apps/upg-$b" --timeout=240s >/dev/null || fail "the NATS server upg-$b of $e did not become ready"
   wait_for 180 "the objects of $b in $e (NACK)" kn "upg-$e" apply -f "$out/2.yaml"
 }
-settle_cache() { # env name: WORKAROUND for #316 (remove with its fix): ESO may rewrite a cache's generated password right after the
-  # server read it; wait until the Secret stays unchanged for 15 s, then restart the server once so it runs with the Secret's password
-  local e=$1 n=$2 last="" rv same=0
-  [ ! -f "$work/settled-$e-$n" ] || return 0   # once per cache: a Secret that exists is never rewritten again
-  for _ in $(seq 1 36); do   # up to 180 s
-    rv=$(kn "upg-$e" get "secret/upg-$n-app" -o jsonpath='{.metadata.resourceVersion}' 2>/dev/null || true)
-    if [ -n "$rv" ] && [ "$rv" = "$last" ]; then same=$((same + 1)); [ $same -ge 3 ] && break; else same=0; fi
-    last=$rv; sleep 5
-  done
-  [ $same -ge 3 ] || fail "the Secret upg-$n-app of $e did not settle within 180 s"
-  kn "upg-$e" rollout restart "statefulsets.apps/upg-$n" >/dev/null || fail "restarting the cache upg-$n of $e failed"
-  kn "upg-$e" rollout status "statefulsets.apps/upg-$n" --timeout=240s >/dev/null || fail "the cache upg-$n of $e did not come back"
-  touch "$work/settled-$e-$n"
-}
 apply_addons() { # env: every rendered addon of the environment
   local e=$1 d="$app_dir/addons/$1" a
+  record_hashes "$e" addons
   for a in $(ls "$d"); do
     [ -f "$d/$a/kustomization.yaml" ] || continue
     if [ -f "$d/$a/bucket.yaml" ]; then apply_bucket "$e" "$a"
     elif [ -f "$d/$a/server.yaml" ]; then apply_bus "$e" "$a"   # a broker: its server is an Argo CD Application (no Argo CD here)
     else
+      if [ -f "$d/$a/credentials-job.yaml" ]; then credentials_apply "upg-$e" "$d/$a"; fi
       for g in "$d/$a"/*generator*.yaml; do   # generators before the ExternalSecrets that use them: ESO generates exactly once
         [ -f "$g" ] && { kn "upg-$e" apply -f "$g" >/dev/null || fail "applying $(basename "$g") of addons/$e/$a failed"; }
       done
       kn "upg-$e" apply -k "$d/$a" 2>&1 | tee /dev/stderr >/dev/null || fail "applying addons/$e/$a failed"
-      if grep -q 'kind: Password' "$d/$a/password-generator.yaml" 2>/dev/null && [ -f "$d/$a/statefulset.yaml" ]; then settle_cache "$e" "$a"; fi   # a cache (#316)
     fi
   done
+  check_kept "$e" addons
+  check_servers "$e"
 }
 apply_api() { # env: the overlay, then wait for the rollout and the answer through the Gateway
   local e=$1 out=""
+  record_hashes "$e" overlays
+  if [ -f "$app_dir/overlays/$e/upg-api/credentials-job.yaml" ]; then credentials_apply "upg-$e" "$app_dir/overlays/$e/upg-api"; fi
   kn "upg-$e" apply -k "$app_dir/overlays/$e/upg-api" 2>&1 | tee /dev/stderr >/dev/null || fail "applying overlays/$e/upg-api failed"
+  check_kept "$e" overlays
   kn "upg-$e" rollout status deployments.apps/upg-api --timeout=300s 2>&1 | tee /dev/stderr >/dev/null || fail "upg-api did not become ready in $e (waited 300s)"
   for _ in $(seq 1 30); do   # up to 90 s
     out=$(curl -s -m 5 "http://upg-api.upg-$e.localhost:$port/health" || true)
@@ -503,6 +620,18 @@ cat "$work/resolved-$FROM.txt"
 grep -q '^resolved .* -> ' "$work/resolved-$FROM.txt" || fail "no resolved reference was recorded in $work/resolved-$FROM.txt"
 grep -q '^resolved helmchart ' "$work/resolved-$FROM.txt" || fail "no HelmChart was recorded in $work/resolved-$FROM.txt (helmcharts.helm.cattle.io)"
 echo "ok   $(wc -l < "$work/resolved-$FROM.txt" | tr -d ' ') floating references resolved and saved to $work/resolved-$FROM.txt (AC-121.24)"
+
+step "2 Setup on $FROM: force the state of #316 (the server runs with another password than its Secret holds) in staging's cache and prod's broker"
+if has_type cache; then
+  force_password staging upg-sessions-app
+  [ "$(kn upg-staging get secret/upg-sessions-app -o jsonpath='{.data.password}' | base64 -d | hash_of)" != "$(kn upg-staging exec upg-sessions-0 -- sh -c 'printf %s "$VALKEY_PASSWORD"' | hash_of)" ] \
+    || fail "staging's cache still runs with the password of its Secret after the forced change"
+  restart_component staging
+fi
+if has_type broker; then
+  force_password prod upg-bus-upg-api-app
+  restart_component prod
+fi
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 step "3 Update: this checkout's cplat platform update, merged"
