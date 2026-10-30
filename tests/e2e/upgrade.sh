@@ -327,13 +327,14 @@ dbq() { # env sql (single quotes only): psql through the component's DATABASE_UR
   podmust "psql in $1" "$1" "$img" '^(DATABASE_URL|PG)' "psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1 -tA -c \"$2\""
   Q=$(printf '%s\n' "$P_OUT" | grep -v '^$' | tail -1 || true)
 }
-s3pre='set -e; [ "$S3_FORCE_PATH_STYLE" = true ] && aws configure set default.s3.addressing_style path; A="aws --endpoint-url $S3_ENDPOINT"; '
+# the bucket files: bare S3_*/AWS_* while upg-api uses one bucket, FILES_S3_*/FILES_AWS_* once step 4 adds the bucket backups (AC-115.8)
+s3pre='for v in S3_ENDPOINT S3_BUCKET S3_REGION S3_FORCE_PATH_STYLE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION AWS_ENDPOINT_URL_S3; do eval "[ -z \"\${FILES_$v:-}\" ] || export $v=\"\$FILES_$v\""; done; set -e; [ "$S3_FORCE_PATH_STYLE" = true ] && aws configure set default.s3.addressing_style path; A="aws --endpoint-url $S3_ENDPOINT"; '
 natspre='N="nats --server $NATS_URL --user $NATS_USER --password $NATS_PASSWORD --inbox-prefix $NATS_INBOX_PREFIX"; '   # replies only in the component's own inbox
 
 write_data() { # env: a row, an object, a cache key and a message (only for the types that release supports)
   dbq "$1" "create table if not exists upg_check (id int primary key, tag text); insert into upg_check values (1, '$1-before') on conflict do nothing"
   if has_type bucket; then
-    podmust "bucket write in $1" "$1" "$S3_IMAGE" '^(S3|AWS)_' "$s3pre"'printf %s '"$1-before"' > /tmp/in; $A s3api put-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt --body /tmp/in >/dev/null'
+    podmust "bucket write in $1" "$1" "$S3_IMAGE" '^(FILES_)?(S3|AWS)_' "$s3pre"'printf %s '"$1-before"' > /tmp/in; $A s3api put-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt --body /tmp/in >/dev/null'
   fi
   if has_type cache; then
     local img; img=$(kn "upg-$1" get statefulsets.apps/upg-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')
@@ -348,7 +349,7 @@ read_data() { # env: the data of write_data reads back unchanged (the cache key 
   dbq "$1" "select tag from upg_check where id = 1"
   [ "$Q" = "$1-before" ] || fail "the row of $1 reads '$Q', expected '$1-before'"
   if has_type bucket; then
-    podmust "bucket read in $1" "$1" "$S3_IMAGE" '^(S3|AWS)_' "$s3pre"'$A s3api get-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt /tmp/out >/dev/null; echo "CONTENT=$(cat /tmp/out)"'
+    podmust "bucket read in $1" "$1" "$S3_IMAGE" '^(FILES_)?(S3|AWS)_' "$s3pre"'$A s3api get-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt /tmp/out >/dev/null; echo "CONTENT=$(cat /tmp/out)"'
     grep -w -F -q "CONTENT=$1-before" <<< "$P_OUT" || fail "the object upg/$1.txt of $1 does not read $1-before: $P_OUT"
   fi
   if has_type broker; then
