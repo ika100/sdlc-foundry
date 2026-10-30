@@ -59,6 +59,7 @@ tasks:
     covers: [AC-128.1, AC-128.2, AC-128.3, AC-128.4, AC-128.9, AC-128.10, AC-128.11]
     parallel_safe: true
     depends_on: [t3]
+    done: true
 human_steps:
   - "After the release, run /platform:update on one real system that Argo CD syncs (a cache, a broker or a bucket in dev) and confirm the addon application syncs with its PreSync credentials Job and keeps its Secrets: no CI run exercises Argo CD hooks (both e2e scripts run without Argo CD)."
 ---
