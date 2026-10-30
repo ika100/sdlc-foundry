@@ -324,7 +324,8 @@ write_data() { # env: a row, an object, a cache key and a message (only for the 
   fi
   if has_type cache; then
     local img; img=$(kn "upg-$1" get statefulsets.apps/upg-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')
-    podmust "cache write in $1" "$1" "$img" '^SESSIONS_' 'u=$(printf %s "$SESSIONS_REDIS_URL" | sed "s#^redis://:#redis://default:#"); valkey-cli -u "$u" SET upg:'"$1 $1-before"' | grep -w OK'
+    # one cache: the bare REDIS_* names (variable_names, AC-115.8); a url from before 5.4.0 names no user (spec 127)
+    podmust "cache write in $1" "$1" "$img" '^REDIS_' 'u=$(printf %s "$REDIS_URL" | sed "s#^redis://:#redis://default:#"); valkey-cli -u "$u" SET upg:'"$1 $1-before"' | grep -w OK'
   fi
   if has_type broker; then
     podmust "stream message in $1" "$1" "$NATS_IMAGE" '^(NATS|EVENTS)_' "$natspre"'$N pub "$EVENTS_ORDERS_SUBJECT_PREFIX.created" '"$1-before"
