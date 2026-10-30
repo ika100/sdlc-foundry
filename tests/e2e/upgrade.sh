@@ -365,14 +365,47 @@ apply_bucket() { # env bucket: the key generators and the ExternalSecret first, 
     kn "upg-$e" rollout status "statefulsets.apps/upg-$b-$s" --timeout=300s 2>&1 | tee /dev/stderr >/dev/null || fail "the SeaweedFS $s of upg-$b in upg-$e did not become ready (waited 300s)"
   done
 }
+apply_bus() { # env broker: what Argo CD would do, as tests/e2e/run.sh does it: the Secrets first, the NATS server's Application as a k3s
+  # HelmChart (same repo, chart, version and values; one per environment), then the Account, the streams and the consumers once NACK serves them
+  local e=$1 b=$2 d="$app_dir/addons/$1/$2" out="$work/bus-$1-$2"
+  mkdir -p "$out"
+  local py
+  read -r -d '' py <<'PY' || true
+import sys
+import yaml
+out, env = sys.argv[1], sys.argv[2]
+first, chart, second = [], [], []
+for d in (d for d in yaml.safe_load_all(sys.stdin) if d):
+    if d["kind"] == "Application":
+        s = d["spec"]["source"]
+        chart.append({"apiVersion": "helm.cattle.io/v1", "kind": "HelmChart",
+                      "metadata": {"name": f"{s['helm']['releaseName']}-{env}", "namespace": "kube-system"},
+                      "spec": {"repo": s["repoURL"], "chart": s["chart"], "version": s["targetRevision"],
+                               "targetNamespace": d["spec"]["destination"]["namespace"], "valuesContent": yaml.safe_dump(s["helm"]["valuesObject"])}})
+    elif d["kind"] in ("Account", "Stream", "Consumer"):
+        second.append(d)
+    else:
+        first.append(d)
+if not chart:
+    sys.exit("no Application (the NATS server) in the addon")
+for name, items in (("1.yaml", first), ("chart.yaml", chart), ("2.yaml", second)):
+    open(f"{out}/{name}", "w").write(yaml.safe_dump_all(items))
+PY
+  kn "upg-$e" kustomize "$d" | yaml_py -c "$py" "$out" "$e" || fail "could not turn addons/$e/$b into objects to apply"
+  kn "upg-$e" apply -f "$out/1.yaml" >/dev/null || fail "applying the Secrets of $b in $e failed"
+  k apply -f "$out/chart.yaml" >/dev/null || fail "applying the HelmChart of $b in $e failed"
+  wait_for 180 "the StatefulSet upg-$b of $e" kn "upg-$e" get statefulsets.apps "upg-$b"
+  kn "upg-$e" rollout status "statefulsets.apps/upg-$b" --timeout=240s >/dev/null || fail "the NATS server upg-$b of $e did not become ready"
+  wait_for 180 "the objects of $b in $e (NACK)" kn "upg-$e" apply -f "$out/2.yaml"
+}
 apply_addons() { # env: every rendered addon of the environment
   local e=$1 d="$app_dir/addons/$1" a
   for a in $(ls "$d"); do
     [ -f "$d/$a/kustomization.yaml" ] || continue
     if [ -f "$d/$a/bucket.yaml" ]; then apply_bucket "$e" "$a"
+    elif [ -f "$d/$a/server.yaml" ]; then apply_bus "$e" "$a"   # a broker: its server is an Argo CD Application (no Argo CD here)
     else
       kn "upg-$e" apply -k "$d/$a" 2>&1 | tee /dev/stderr >/dev/null || fail "applying addons/$e/$a failed"
-      [ "$a" != bus ] || { sleep 20; kn "upg-$e" apply -k "$d/$a" 2>&1 | tee /dev/stderr >/dev/null || fail "applying addons/$e/$a (second time) failed"; }
     fi
   done
 }
