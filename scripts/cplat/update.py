@@ -577,12 +577,19 @@ def _targets(mod, app_dir: Path, system: str, r: str, typ: str, env: str):
 
 
 def _cache_url(app_dir: Path, env: str, name: str) -> str | None:
-    """The rendered `spec.target.template.data.url` of a cache's ExternalSecret; None when the file or the key is missing (spec 127)."""
-    f = app_dir / "addons" / env / name / "externalsecret.yaml"
+    """The url template of a cache's Secret `<system>-<name>-app`: `data.url` of the credentials plan (5.5), else of the ExternalSecret (5.4);
+    None when neither has it (specs 127, 128)."""
+    folder = app_dir / "addons" / env / name
     try:
-        url = yaml.safe_load(f.read_text())["spec"]["target"]["template"]["data"]["url"]
-    except Exception:  # noqa: BLE001 - a missing file or key means no url to compare
-        return None
+        plan = json.loads(yaml.safe_load((folder / "credentials-configmap.yaml").read_text())["data"]["plan.json"])
+        url = next(s["data"]["url"] for s in plan["secrets"] if s["name"].endswith("-app"))
+    except Exception:  # noqa: BLE001 - a missing file or key: try the 5.4 form
+        url = None
+    if url is None:
+        try:
+            url = yaml.safe_load((folder / "externalsecret.yaml").read_text())["spec"]["target"]["template"]["data"]["url"]
+        except Exception:  # noqa: BLE001 - a missing file or key means no url to compare
+            return None
     return url if isinstance(url, str) else None
 
 
@@ -660,12 +667,59 @@ def _url_row(rows: list[dict], system: str, r: str, env: str, b: dict, a: dict) 
                          "which authenticates as the same user default: running pods need nothing, new Secrets get the new form"})
 
 
+_CRED_KINDS = {"cache": ("statefulset.yaml", "the password is", "an ExternalSecret with a Password generator", "passwords",
+                         "; a server whose password differs from its Secret restarts once"),
+               "broker": ("server.yaml", "the user passwords are", "ExternalSecrets with a Password generator", "passwords",
+                          "; a server that refuses a password of its Secrets restarts once"),
+               "bucket": ("seaweed.yaml", "the keys are", "an ExternalSecret with two Password generators", "keys", ""),
+               "component": (None, "generated secrets are", "ExternalSecrets with a Password generator", "values", "")}
+
+
+def _writers(repo: Path) -> dict[tuple[str, str, str, str], str]:
+    """{(type, system, name, env): "generator" | "job"} of every owner directory that has a credential writer (spec 128)."""
+    out: dict[tuple[str, str, str, str], str] = {}
+    for app_dir in sorted(p.parent for p in (repo / "applications").glob("*/system.yaml")):
+        for sub, depth in (("addons", True), ("overlays", False)):
+            for d in sorted((app_dir / sub).glob("*/*")):
+                if not d.is_dir():
+                    continue
+                if (d / "password-generator.yaml").is_file() or (d / "access-key-generator.yaml").is_file():
+                    form = "generator"
+                elif (d / "credentials-job.yaml").is_file():
+                    form = "job"
+                else:
+                    continue
+                typ = "component"
+                if depth:
+                    typ = next((t for t, v in _CRED_KINDS.items() if v[0] and (d / v[0]).is_file()), "")
+                    if not typ:
+                        continue
+                out[(typ, app_dir.name, d.name, d.parent.name)] = form
+    return out
+
+
+def _credential_rows(rows: list[dict], before: dict, after: dict) -> None:
+    """One `credentials` row per resource type whose owners moved from generators to a credentials Job (spec 128, AC-128.9)."""
+    order = {e: i for i, e in enumerate(core_envs())}
+    for typ, (_, what, old, kept, extra) in _CRED_KINDS.items():
+        moved = [k for k, form in after.items() if k[0] == typ and form == "job" and before.get(k) == "generator"]
+        if not moved:
+            continue
+        envs = ",".join(sorted({k[3] for k in moved}, key=lambda e: order.get(e, 9)))
+        names = ", ".join(sorted({k[2] for k in moved}))
+        rows.append({"env": envs, "resource": typ, "kind": "credentials", "from": "ExternalSecret + Password generator",
+                     "to": "credentials Job (create if absent)", "moves": False,
+                     "text": f"{envs:<8} {typ} {names}: {what} written once by a credentials Job (create if absent) instead of {old}; "
+                             f"existing Secrets keep their {kept}, nothing to do{extra} (#316)"})
+
+
 def render_and_compare(req: dict, repo: Path, written: set[str] | None = None) -> dict | None:
     """Re-render with the repo's new renderer (held pins follow from it) and list what moves, per environment; None when nothing does.
     `written` (optional) receives every path under applications/ and operators/ the render created or changed: generated output."""
     import upgrade
     mod = upgrade.load_renderer(repo)
     before = _instances(mod, repo)
+    writers_before = _writers(repo)
     ops_before = _operator_revisions(repo)
     snap = _generated_snapshot(repo) if written is not None else {}
     gitops.render(repo)
@@ -701,6 +755,7 @@ def render_and_compare(req: dict, repo: Path, written: set[str] | None = None) -
             rows.append({"env": "cluster", "resource": name, "kind": "operator", "from": ops_before[name], "to": ops_after[name], "moves": True,
                          "text": f"{'cluster':<8} operator {name} {ops_before[name]} → {ops_after[name]} "
                                  f"(operators/apps; shared by {', '.join(envs)}: moves with {envs[0]}'s step)"})
+    _credential_rows(rows, writers_before, _writers(repo))
     if not rows:
         return None
     return {"from": req["old"] or "none", "to": req["new"], "rows": rows, "lines": [x["text"] for x in rows]}

@@ -10,6 +10,7 @@ import stat
 import sys
 
 import cplat
+import yaml
 import fleet_pr
 import pytest
 
@@ -31,6 +32,29 @@ OLD = "redis://:{{ .password }}@"
 NEW = "redis://default:{{ .password }}@"
 
 
+GEN_API = "generators.external-secrets.io/v1alpha1"
+
+
+def write_54_form(repo, name, env, url):
+    """What 5.4 rendered for a cache: the generator-backed ExternalSecret and the Password generator (no credentials files)."""
+    d = repo / APP / "addons" / env / name
+    n, ns = f"shop-{name}", f"shop-{env}"
+    (d / "externalsecret.yaml").write_text(yaml.safe_dump({
+        "apiVersion": "external-secrets.io/v1", "kind": "ExternalSecret", "metadata": {"name": f"{n}-app"},
+        "spec": {"refreshPolicy": "CreatedOnce",
+                 "target": {"name": f"{n}-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
+                            "template": {"engineVersion": "v2", "data": {"url": url + f"{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc",
+                                                                         "port": "6379", "password": "{{ .password }}"}}},  # pragma: allowlist secret
+                 "dataFrom": [{"sourceRef": {"generatorRef": {"apiVersion": GEN_API, "kind": "Password", "name": f"{n}-password"}}}]}}))
+    (d / "password-generator.yaml").write_text(yaml.safe_dump({
+        "apiVersion": GEN_API, "kind": "Password", "metadata": {"name": f"{n}-password"}, "spec": {"length": 32}}))
+    for f in d.glob("credentials-*.yaml"):
+        f.unlink()
+    k = yaml.safe_load((d / "kustomization.yaml").read_text())
+    k["resources"] = sorted([r for r in k["resources"] if not r.startswith("credentials-")] + ["externalsecret.yaml", "password-generator.yaml"])
+    (d / "kustomization.yaml").write_text(yaml.safe_dump(k))
+
+
 def make_repo(tmp_path, monkeypatch, old_form=True, caches=("ratelimit", "sessions")):
     import update
     repo = tmp_path / "gitops"
@@ -44,12 +68,7 @@ def make_repo(tmp_path, monkeypatch, old_form=True, caches=("ratelimit", "sessio
     assert p.returncode == 0, p.stdout + p.stderr
     for n in caches:
         for env in ENVS:
-            f = repo / APP / "addons" / env / n / "externalsecret.yaml"
-            text = f.read_text()
-            if old_form:
-                text = text.replace(NEW, OLD)
-                assert OLD in text, f"{f}: no url template to put back to the 5.3 form"
-            f.write_text(text)
+            write_54_form(repo, n, env, OLD if old_form else NEW)
     init_git(repo)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -78,6 +97,11 @@ def url_rows(d):
     return [r for r in (d.get("versions") or {}).get("rows", []) if r.get("kind") == "url"]
 
 
+def plan_url(repo, env, name):
+    cm = yaml.safe_load((repo / APP / "addons" / env / name / "credentials-configmap.yaml").read_text())
+    return next(s for s in json.loads(cm["data"]["plan.json"])["secrets"] if s["name"].endswith("-app"))["data"]["url"]
+
+
 def test_the_update_lists_a_url_row_per_cache_and_environment_ac_127_2(tmp_path, monkeypatch, capsys):  # AC-127.2
     d = run_json(make_repo(tmp_path, monkeypatch), capsys)
     rows = url_rows(d)
@@ -98,7 +122,8 @@ def test_a_url_row_has_the_designed_from_to_and_text_ac_127_2(tmp_path, monkeypa
 
 def test_the_change_list_says_the_existing_secret_keeps_its_url_and_nothing_is_to_do_ac_127_2(tmp_path, monkeypatch, capsys):  # AC-127.2
     d = run_json(make_repo(tmp_path, monkeypatch), capsys)
-    for line in d["versions"]["lines"]:
+    for row in url_rows(d):
+        line = row["text"]
         assert "keeps its url" in line and "same user default" in line and "running pods need nothing" in line, line
         assert "written once" in line
 
@@ -108,7 +133,7 @@ def test_a_cache_with_only_url_rows_still_returns_versions_and_counts_them_ac_12
     rc = cplat.main(["platform", "update", "--repo", str(repo)])
     cap = capsys.readouterr()
     assert rc == 0, cap.out + cap.err
-    assert "re-rendered with the new renderer; 3 version change(s) listed below" in cap.out, cap.out
+    assert "re-rendered with the new renderer; 4 version change(s) listed below" in cap.out, cap.out
     assert "versions in this system" in cap.out and text_of("prod", "sessions") in cap.out
 
 
@@ -118,12 +143,12 @@ def test_the_fleet_pr_body_lists_the_url_rows_ac_127_2(tmp_path, monkeypatch, ca
     assert text_of("staging", "ratelimit") in body
 
 
-def test_the_re_render_writes_the_new_form_to_the_externalsecret_templates_ac_127_2(tmp_path, monkeypatch, capsys):  # AC-127.2
+def test_the_re_render_writes_the_new_form_to_the_credentials_plan_ac_127_2(tmp_path, monkeypatch, capsys):  # AC-127.2
     repo = make_repo(tmp_path, monkeypatch)
     run_json(repo, capsys)
     for env in ENVS:
-        text = (repo / APP / "addons" / env / "sessions" / "externalsecret.yaml").read_text()
-        assert NEW in text and OLD not in text, env
+        url = plan_url(repo, env, "sessions")
+        assert url.startswith(NEW) and not url.startswith(OLD), env
 
 
 def test_no_url_row_when_the_template_already_has_the_new_form_ac_127_2(tmp_path, monkeypatch, capsys):  # AC-127.2
