@@ -18,7 +18,7 @@ cplat component add <ARGS>
 
 Migrating a component that still has `k8s/base` (platform v1)? Add `--from-k8s` to seed port, probes, env, replicas and resources from it; afterwards `/platform:update --migrate` removes the component's `k8s/` directory.
 
-Secrets: `--generate NAME=KEY,KEY` makes External Secrets Operator create random values in the cluster (DB passwords, signing keys); `--secret NAME=KEY` declares values read from the secret store (set locally with `/instance:secret set <component>/<env> …`). Values never go to git.
+Secrets: `--generate NAME=KEY,KEY` makes the platform's credentials Job create random values in the cluster once per environment (DB passwords, signing keys; deleting the Secret makes a new value on the next sync); `--secret NAME=KEY` declares values read from the secret store (set locally with `/instance:secret set <component>/<env> …`). Values never go to git.
 
 Rules: only `applications/` and `bootstrap/` change; never `kubectl apply`; never add GitHub topics (report the missing one instead).
 

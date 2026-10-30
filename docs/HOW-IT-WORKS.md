@@ -114,7 +114,7 @@ flowchart LR
 
 ### Secrets
 
-Git holds only references. `system.yaml` `secrets:` becomes `ExternalSecret`s: `generate: [DB_PASSWORD]` makes External Secrets Operator create a random value in the cluster once per environment; `remote: {keys: [STRIPE_KEY]}` reads it from the secret store (locally the `secrets-store` namespace: `/instance:secret set <service> <secret> <KEY>`; on real clusters Vault/AWS/GCP via the store named in `system.yaml`). Pods see them as environment variables. Details: ADR-018.
+Git holds only references. `system.yaml` `secrets:` becomes Secrets: `generate: [DB_PASSWORD]` makes the platform's credentials Job create a random value in the cluster once per environment (an existing Secret is kept; deleting it makes a new value on the next sync); `remote:` secrets become `ExternalSecret`s; `remote: {keys: [STRIPE_KEY]}` reads it from the secret store (locally the `secrets-store` namespace: `/instance:secret set <service> <secret> <KEY>`; on real clusters Vault/AWS/GCP via the store named in `system.yaml`). Pods see them as environment variables. Details: ADR-018.
 
 ### Resources (Postgres)
 

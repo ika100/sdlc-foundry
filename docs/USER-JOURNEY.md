@@ -220,7 +220,7 @@ Everything here is a declaration in the GitOps repo; `render.py` turns it into m
 
 | You want | Run | You get |
 |---|---|---|
-| A random credential the system owns | `/component:add taskboard-api --generate taskboard-api-auth=JWT_KEY` | An `ExternalSecret`: External Secrets Operator creates the value in the cluster, once per environment. Nothing in git |
+| A random credential the system owns | `/component:add taskboard-api --generate taskboard-api-auth=JWT_KEY` | The platform's credentials Job creates the value in the cluster, once per environment; deleting the Secret makes a new value on the next sync. Nothing in git |
 | A credential someone else issues | `/component:add taskboard-api --secret taskboard-api-stripe=STRIPE_KEY`, then `/instance:secret set taskboard-api taskboard-api-stripe STRIPE_KEY` | The value is read from your secret store (locally the `secrets-store` namespace) |
 | A database | `/resource:add <name>` (a named resource of `type: database`, `--external` for one outside the cluster), then `uses: [<name>]` on the component (`/component:set <component> --uses <name>`) | A CloudNativePG cluster per environment, or an ExternalSecret for an external one; `DATABASE_URL` and `PG*` reach the component (prefixed with the resource name when it uses two databases) |
 | A bucket | `/resource:add <name> --type bucket [--storage <size>] [--versioning]` (`--external` for one outside the cluster), then `uses: [<name>]` on the component | A SeaweedFS store per bucket instance, or an ExternalSecret for an external one; `S3_*` and `AWS_*` variables reach the component (prefixed with the resource name when it uses two buckets, e.g. `UPLOADS_S3_BUCKET`); removing the resource keeps the data |

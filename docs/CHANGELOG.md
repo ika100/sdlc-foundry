@@ -28,9 +28,13 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **An amended spec with a plan can be approved again.** Amending a planned spec changes its criteria, so its plan no longer covered them; `cplat spec approve` refused because of the plan, and `/component:plan` only plans an approved spec, so the amend flow could not finish (#208). Approval now checks the spec on its own and moves a plan written for other criteria aside to `plan.v<k>.md` (it says so and names `/component:plan <NNN>` as the next step); `cplat spec check` no longer checks the old plan of an amended draft. `/component:spec approve` commits the set-aside plan with the spec.
 
-**Plugins:** `component` 1.5.1.
+**Plugins:** `component` 1.5.2.
 
 **`cplat pr wait` ignores a replaced run while the newer one is queued.** A second CI run on the same commit (a label on `gh pr create`, a PR body edit) cancels the first; its cancelled jobs and failed `ci-success` made the wait red although the newer run was only queued and later passed (#244, #282). The wait now also reads the head commit's workflow runs, queued ones included, and counts only the newest run of each workflow.
+
+### Fixed
+
+**A generated password no longer drifts from the running server (#316).** A cache or broker could answer `WRONGPASS` (cache) or an authorization error (broker) until the server restarted, because the password in its Secret was no longer the one the server had started with; a forced refresh also rewrote bucket keys and `generate:` values of components. This hit in-cluster caches (5.4.0, spec 118), brokers (5.4.0, spec 119), buckets (since spec 116) and the generated secrets of components (every release with ADR-018). Each credential is now written once: a credentials Job per owner creates each Secret if it is absent and keeps an existing one, and a server that refuses its Secret's password restarts once ([spec 128](specs/128-generated-passwords-match-the-running/spec.md), [ADR-072](adr/072-a-generated-credential-is-written-once-by-a-create-only-job.md)). An existing system has nothing to do: `/platform:update` and the next sync keep every existing password and key, and the change list says so per resource type.
 
 **Versions** (`cplat platform versions --diff v5.4.0 --changelog`):
 

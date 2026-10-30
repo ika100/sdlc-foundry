@@ -114,7 +114,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [
