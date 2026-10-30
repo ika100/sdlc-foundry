@@ -827,7 +827,7 @@ cache_probe_check() { # label
   crun "$cache_probe" || cfail "$1: the probe with e2e-web's variables failed: $(echo "$C_OUT" | tail -5 | tr '\n' ' ' | cut -c1-400)"
   local c
   for c in SESSIONS RATELIMIT; do
-    [ "$(c_field ${c}_URL)" = PONG ] || cfail "$1: PING through ${c}_REDIS_URL answered '$(c_field ${c}_URL)', not PONG"
+    [ "$(c_field ${c}_URL)" = PONG ] || cfail "$1: PING through ${c}_REDIS_URL answered '$(c_field ${c}_URL)', not PONG (probe: $(tr '\n' ' ' <<< "$C_OUT" | cut -c1-300); e2e-web's variables: $(kc get deploy e2e-web -o jsonpath='{.spec.template.spec.containers[0].env[*].name}' | tr ' ' '\n' | grep REDIS | tr '\n' ' '))"
     [ "$(c_field ${c}_HOST)" = PONG ] || cfail "$1: PING with ${c}_REDIS_HOST, _PORT and _PASSWORD answered '$(c_field ${c}_HOST)', not PONG"
     case "$(c_field ${c}_WRONG)" in *WRONGPASS*) ;; *) cfail "$1: a wrong password for $c was not refused with WRONGPASS (got: $(c_field ${c}_WRONG))";; esac
   done
