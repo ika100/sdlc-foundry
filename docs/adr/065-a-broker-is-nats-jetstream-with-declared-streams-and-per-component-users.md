@@ -1,6 +1,7 @@
 # ADR-065: A broker is NATS JetStream from the official chart, with declared streams and consumers and one user per component
 
 **Status:** Accepted (2026-10-27)
+**Amended by:** [ADR-072](072-a-generated-credential-is-written-once-by-a-create-only-job.md) (point 4, the user passwords are written by a credentials Job)
 **Builds on:** [ADR-017](017-gitops-owns-manifests.md) (the gitops repo owns every manifest), [ADR-018](018-secrets-with-external-secrets-operator.md) (secrets from External Secrets Operator), [ADR-022](022-kyverno-policies.md) (guard rails), [ADR-057](057-named-typed-resources-with-fixed-contracts.md) (named, typed resources, the `broker` slot), [ADR-058](058-pinned-versions-and-platform-installed-operators.md) and [ADR-060](060-a-cluster-repo-owns-shared-services.md) (pinned operators, shared with cluster repos), [ADR-062](062-environment-backups-with-velero.md) (environment backups), spec 119; used by spec 120 (scaling consumers on their backlog) and spec 121 (upgrades)
 
 ## Context
@@ -21,7 +22,7 @@ spec 120 the names and the monitoring endpoint to scale on.
    broker instance. The platform never calls the broker itself.
 3. **Names are derived, never configured**: stream `<system>-<api>` capturing `<system>.<api>.>`, kept 7 days; the durable (pull)
    consumer is named after the component, acknowledgement within 30 seconds. Retention and delivery settings are not per API.
-4. **Each component has its own user per environment**, generated once by External Secrets Operator into
+4. **Each component has its own user per environment**, created once by a credentials Job (amended by [ADR-072](072-a-generated-credential-is-written-once-by-a-create-only-job.md): ESO wrote it twice, #316) into
    `<system>-<name>-<component>-app` (`url`, `user`, `password`). Rights are subject permissions: the provider publishes under its API's
    prefix, a consumer only fetches from and acknowledges on its own durable consumer, and everybody subscribes only to its own inbox
    prefix `_INBOX.<component>` (handed over as `NATS_INBOX_PREFIX`). NACK has a separate admin user.

@@ -1,6 +1,7 @@
 # ADR-064: A cache is a platform-rendered single-node Valkey StatefulSet, without an operator; its password is generated once in the cluster
 
 **Status:** Accepted (2026-10-27)
+**Amended by:** [ADR-072](072-a-generated-credential-is-written-once-by-a-create-only-job.md) (point 3, the password is written by a credentials Job)
 **Builds on:** [ADR-018](018-secrets-with-external-secrets-operator.md) (secrets from External Secrets Operator), [ADR-022](022-kyverno-policies.md) (guard rails), [ADR-057](057-named-typed-resources-with-fixed-contracts.md) (named, typed resources, the `cache` contract slot), [ADR-058](058-pinned-versions-and-platform-installed-operators.md) (pinned versions, operators under `operators/`), [ADR-062](062-environment-backups-with-velero.md) (caches left out of environment backups), spec 118; used by spec 120 (scaling on a list length) and spec 121 (upgrades)
 
 ## Context
@@ -23,9 +24,9 @@ pin and upgrade.
    `operators: owner` changes nothing for it and doctor has no row for it.
 2. **Sizing is the server's memory, not the node's**: the container's memory limit is `memory`, and the server's `maxmemory` is 80 % of
    it with the declared eviction policy, so the server evicts or refuses writes before the kernel kills it.
-3. **The password is generated in the cluster once.** A `Password` generator (letters and digits only, so the `url` needs no escaping)
-   and an `ExternalSecret` with `refreshPolicy: CreatedOnce` write the four keys of `<system>-<name>-app`; the server reads the
-   password from the same Secret. Renders, syncs, restarts and image upgrades never change it. No secret value is in git.
+3. **The password is generated in the cluster once.** (Amended by [ADR-072](072-a-generated-credential-is-written-once-by-a-create-only-job.md): ESO `CreatedOnce` wrote it twice, #316.) A credentials Job
+   creates the four keys of `<system>-<name>-app` if the Secret is absent (letters and digits only, so the `url` needs no escaping); the
+   server reads the password from the same Secret. Renders, syncs, restarts and image upgrades never change it. No secret value is in git.
 4. **One connection Secret per cache instance is the contract** other specs build on (spec 120's scaler reads the same Secret). Every
    component that uses the cache shares database `0` and the password; the host is namespace-qualified (`<n>.<ns>.svc`).
 5. **Every object of a cache instance carries `app.kubernetes.io/name: <name>`**, which is how ADR-062's Velero schedule leaves cache
@@ -35,8 +36,7 @@ pin and upgrade.
 
 ## Consequences
 
-- A cache costs one pod (and one volume with persistence) per environment; it needs only External Secrets Operator, which every
-  in-cluster resource already needs.
+- A cache costs one pod (and one volume with persistence) per environment; it needs no operator and no External Secrets Operator.
 - `/platform:doctor` and `cluster-up` know nothing about caches; a local cluster runs one as soon as a component uses it.
 - A change of `persistence` or `storage` stops at the StatefulSet's immutable `volumeClaimTemplates`: delete it with
   `kubectl delete statefulsets.apps <system>-<name> -n <system>-<env> --cascade=orphan` and sync; the pod restarts and an existing
