@@ -512,6 +512,19 @@ upd_branch=$(git -C "$gitops_repo" symbolic-ref --short HEAD)
 git -C "$gitops_repo" checkout -q "$main_branch" && git -C "$gitops_repo" merge -q --ff-only "$upd_branch" || fail "merging $upd_branch into $main_branch failed"
 (cd "$gitops_repo" && uv run scripts/render.py >/dev/null) || fail "render.py of the updated repo failed"
 commit "render after the platform update"
+table16=$(table_pin 16)
+moves=1   # the pin-move steps need a release whose versions table moves postgres 16 (5.3.0 -> 5.4.0 did; 5.4.0 -> 5.5.0 does not)
+[ "$(sed -n 's/^dev=//p' "$work/pins-before.txt")" != "$table16" ] || moves=0
+if [ $moves = 0 ]; then
+  echo "postgres 16 is pinned to $table16 in $FROM and in this checkout: no pin moves; the pin-move checks are skipped"
+  ! grep -E -q '^[[:space:]]*(dev|staging|prod)[[:space:]]+postgres 16: .*moves now' "$work/update.out" \
+    || fail "the update report says postgres 16 moves, but $FROM and this checkout pin the same reference"
+  for e in dev staging prod; do
+    want=$(sed -n "s/^$e=//p" "$work/pins-before.txt")
+    [ "$(image_name_of $e)" = "$want" ] || fail "$e's imageName moved to '$(image_name_of $e)' although the versions table did not"
+  done
+  echo "ok   the report announces no pin move and every environment keeps $FROM's reference"
+else
 python3 - "$work/update.out" <<'PY' || fail "the update report does not list dev's moved pin and the held pins of staging and prod (see above)"
 import re, sys
 text = open(sys.argv[1]).read()
@@ -522,13 +535,13 @@ for env in ("staging", "prod"):
         sys.exit(f"no line '{env}  postgres 16: keeps ... until /resource:upgrade postgres --to 16 --env {env}'")
 PY
 echo "ok   the report lists dev's moved pin and the held pins of staging and prod"
-table16=$(table_pin 16)
 [ "$(image_name_of dev)" = "$table16" ] || fail "dev's imageName is '$(image_name_of dev)', the table's postgres 16 is '$table16'"
 for e in staging prod; do
   want=$(sed -n "s/^$e=//p" "$work/pins-before.txt")
   [ "$(image_name_of $e)" = "$want" ] || fail "$e's imageName moved to '$(image_name_of $e)'; it must keep '$want' (held pin) until /resource:upgrade postgres --to 16 --env $e"
 done
 echo "ok   dev's imageName is the table's 16 pin; staging and prod keep $FROM's reference (AC-121.11)"
+fi
 
 step "3 Update: this checkout's local-cluster.sh up on the same cluster (the operators move once, AC-121.21)"
 chart_versions() { # name version per HelmChart
@@ -558,10 +571,15 @@ apply_api dev
 verify_out="$work/update-verify.out"
 if tmo 2400 $cplat platform update --verify --repo "$gitops_repo" --context k3d-$cluster --component-dir upg-api="$work/upg-api" 2>&1 | tee "$verify_out" | tee /dev/stderr >/dev/null; then :
 else fail "cplat platform update --verify failed (see above; $verify_out)"; fi
-grep -w -q "verified" "$verify_out" || fail "platform update --verify did not print 'verified' for postgres in dev"
+[ $moves = 0 ] || grep -w -q "verified" "$verify_out" || fail "platform update --verify did not print 'verified' for postgres in dev"
 echo "ok   platform update --verify: operators at the table's versions, dev verified, smoke of every environment passed"
 
 step "3 Update: staging and prod move to this release's Postgres 16 pin, one at a time (AC-121.11)"
+if [ $moves = 0 ]; then
+  echo "no pin moves between $FROM and this checkout: nothing to move in staging and prod"
+  [ -z "$(gitops_dirty)" ] || fail "platform update --verify changed the gitops repo although no pin moves: $(gitops_dirty)"
+  for e in dev staging prod; do read_data "$e"; done
+else
 echo "pin moves, one environment at a time: /resource:upgrade postgres --to 16 --env staging, then --to 16 --env prod"
 [ -n "$(gitops_dirty)" ] || fail "platform update --verify did not write the staging pin move (promote: after-dev-smoke)"
 grep -F -q "$table16" "$app_dir/addons/staging/postgres/cluster.yaml" || fail "the staging pin move did not write the table's 16 pin"
@@ -578,6 +596,7 @@ for e in dev staging prod; do
   [ "$(image_name_of $e)" = "$table16" ] || fail "$e's imageName is '$(image_name_of $e)' after the pin moves, expected '$table16'"
   read_data "$e"
 done
+fi
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 step "4 Guard: backups declared and rendered but not applied; the major upgrade is refused and changes nothing (AC-121.25)"
