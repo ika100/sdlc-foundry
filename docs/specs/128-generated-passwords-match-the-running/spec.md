@@ -1,7 +1,7 @@
 ---
 spec_id: 128-generated-passwords-match-the-running
 title: Generated passwords match the running server
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [316]
@@ -77,3 +77,4 @@ An in-cluster cache can run with a different password than its Secret `<system>-
 - 2026-10-30 approved
 - 2026-10-30 draft: amend: bucket moves to write-once (AC-128.7); AC-128.11 bans only workaround restarts
 - 2026-10-30 approved
+- 2026-10-30 building
