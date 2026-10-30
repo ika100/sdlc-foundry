@@ -711,6 +711,8 @@ step "3 Update: staging and prod move to this release's Postgres 16 pin, one at 
 if [ $moves = 0 ]; then
   echo "no pin moves between $FROM and this checkout: nothing to move in staging and prod"
   [ -z "$(gitops_dirty)" ] || fail "platform update --verify changed the gitops repo although no pin moves: $(gitops_dirty)"
+  apply_addons staging   # this release's render: the credentials Jobs keep the Secrets and repair a forced server (AC-128.9, AC-128.10)
+  apply_addons prod
   for e in dev staging prod; do read_data "$e"; done
 else
 echo "pin moves, one environment at a time: /resource:upgrade postgres --to 16 --env staging, then --to 16 --env prod"
