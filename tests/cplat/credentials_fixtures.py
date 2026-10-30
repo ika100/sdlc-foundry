@@ -176,7 +176,7 @@ def written_twice(g: dict, prefix: str) -> list[str]:
     """Paths under `prefix` of every generator-backed ExternalSecret or Password generator: a generated credential that something may write again."""
     bad = []
     for path, d in all_docs(g):
-        if path.startswith(prefix) and (generator_backed(d) or (d.get("kind") == "Password" and "generators.external-secrets.io" in d.get("apiVersion", ""))):
+        if path.startswith(prefix) and (generator_backed(d) or (d.get("kind") == "Password" and d.get("apiVersion", "").split("/")[0] == "generators.external-secrets.io")):
             bad.append(f"{path}: {d['kind']} {d['metadata']['name']}")
     return bad
 
