@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**`cplat feedback` keeps the details readable.** The details file went into the issue inside one plain code fence, so a fence in the details closed it early and broke the rest of the issue; and a secret-like key whose value said it was unset (`# secretStore: (unset)`) had that value redacted, or, with no value at all, the first word of the next line (#262). The fence is now longer than any backtick run in the details; `unset`, `(unset)`, `null`, `none`, `n/a`, `~` and an empty string stay readable; only a value on the same line is redacted. Every real value under a secret-like key is still redacted.
+
 **Deploy confirms an external Helm component.** `/component:ship` escalated in phase deploy for a component with an `external: {helm: …}` entry: Argo CD reports no `summary.images` for its app, so the deploy check saw "runs nothing" although the Deployment ran the merged build (#251). When an app reports no images, the check now reads the pod templates of the workloads it manages, through the managed `<svc>-<env>-chart` Application one level down, and smoke and promotion continue as for any other component.
 
 **`/system:set --operators owner|install`.** Handing a system's operators to a cluster repo (`environments.<env>.operators: owner`, what a cluster's check asks for) meant editing system.yaml by hand (#264). `/system:set --env <env> --operators owner` sets the key and renders; `--operators install` removes it, so the system installs its operators again.

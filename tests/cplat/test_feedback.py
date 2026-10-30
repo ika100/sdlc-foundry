@@ -20,6 +20,36 @@ def test_secrets_and_personal_data_are_removed(raw, gone):
     assert gone not in feedback.redact(raw)
 
 
+@pytest.mark.parametrize("line", ["# secretStore: (unset)", "password: none", "API_TOKEN=null", "secret: ~", "token: ''", "client_secret: n/a  # later"])
+def test_a_key_whose_value_says_unset_stays_readable(line):   # #262
+    assert feedback.redact(line) == line
+
+
+@pytest.mark.parametrize("raw,gone", [
+    ("secretStore: vault-prod-store", "vault-prod-store"),    # a value under a secret-like key is redacted, whatever the key
+    ("password: nonexistent-but-real", "nonexistent-but-real"),
+    ("token: unset-me-not", "unset-me-not"),
+])
+def test_a_real_value_is_still_redacted(raw, gone):   # #262
+    assert gone not in feedback.redact(raw)
+
+
+def test_a_key_without_a_value_does_not_redact_the_next_line():   # #262
+    text = "secretStore:\n  name: platform-secrets"
+    assert feedback.redact(text) == text
+
+
+def test_details_with_code_fences_stay_inside_one_longer_fence(tmp_path, monkeypatch):   # #262
+    monkeypatch.setattr(feedback, "diagnostics", lambda repo: ["- env"])
+    tick3, tick4, tick5 = "`" * 3, "`" * 4, "`" * 5
+    details = f"## Observed\n\n{tick3}yaml\nkey: 1\n{tick3}\n\nand {tick4} inline"
+    body = feedback.build_body("bug", "what", None, details, tmp_path)
+    out = body.split("## Output\n", 1)[1]
+    assert out.startswith(tick5 + "\n## Observed") and f"{tick4} inline\n{tick5}\n" in out
+    assert body.index("## Environment") > body.index(f"\n{tick5}\n", body.index("inline"))
+    assert feedback.build_body("bug", "w", None, "plain log", tmp_path).count(tick3 + "\n") == 2
+
+
 def test_useful_context_survives_redaction():
     text = "commit 0123456789abcdef0123456789abcdef01234567 failed in scripts/render.py line 42: service 'todo-api' missing"
     assert feedback.redact(text) == text

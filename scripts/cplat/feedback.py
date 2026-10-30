@@ -28,7 +28,9 @@ _REDACTIONS = [
     (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"), "<github-token>"),
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "<aws-key>"),
     (re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"), "Bearer <redacted>"),
-    (re.compile(r"(?i)\b([A-Z0-9_]*(?:password|passwd|secret|token|api[_-]?key|authorization)[A-Z0-9_]*)(\s*[=:]\s*)(\"[^\"]*\"|'[^']*'|\S+)"), r"\1\2<redacted>"),
+    # a secret-like key with a value on the same line; a value that says it is unset stays readable (#262)
+    (re.compile(r"(?i)\b([A-Z0-9_]*(?:password|passwd|secret|token|api[_-]?key|authorization)[A-Z0-9_]*)([ \t]*[=:][ \t]*)"
+                r"(?!(?:\(unset\)|unset|null|none|n/a|~|\"\"|'')(?=[\s,;#]|$))(\"[^\"]*\"|'[^']*'|\S+)", re.M), r"\1\2<redacted>"),
     (re.compile(r"\b(?![0-9a-f]{40}\b)(?![0-9a-f]{64}\b)(?<!\bsha)(?!sha-[0-9a-f]{40}\b)[A-Za-z0-9_-]{40,}\b"), "<long-string>"),   # opaque keys; git/docker hashes, image tags (sha-<commit>, spec 091) and paths stay
     (re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), "<email>"),
     (re.compile(r"/(?:Users|home)/[^/\s]+"), "~"),
@@ -80,7 +82,9 @@ def build_body(kind: str, what: str, command: str | None, details: str, repo: Pa
     if command:
         parts += ["## Command / step", f"`{redact(command)}`", ""]
     if details.strip():
-        parts += ["## Output", "```", redact(tail(details)), "```", ""]
+        text = redact(tail(details))
+        fence = "`" * max(3, 1 + max((len(r) for r in re.findall(r"`+", text)), default=0))   # longer than any fence inside (#262)
+        parts += ["## Output", fence, text, fence, ""]
     parts += ["## Environment", *diagnostics(repo), "", "_Filed with `/issue:report`; secrets, e-mail addresses and home-directory names were removed automatically._"]
     return "\n".join(parts)
 
