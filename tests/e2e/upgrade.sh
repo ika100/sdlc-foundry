@@ -316,7 +316,7 @@ dbq() { # env sql (single quotes only): psql through the component's DATABASE_UR
   Q=$(printf '%s\n' "$P_OUT" | grep -v '^$' | tail -1 || true)
 }
 s3pre='set -e; [ "$S3_FORCE_PATH_STYLE" = true ] && aws configure set default.s3.addressing_style path; A="aws --endpoint-url $S3_ENDPOINT"; '
-natspre='N="nats --server $NATS_URL --user $NATS_USER --password $NATS_PASSWORD"; '
+natspre='N="nats --server $NATS_URL --user $NATS_USER --password $NATS_PASSWORD --inbox-prefix $NATS_INBOX_PREFIX"; '   # replies only in the component's own inbox
 
 write_data() { # env: a row, an object, a cache key and a message (only for the types that release supports)
   dbq "$1" "create table if not exists upg_check (id int primary key, tag text); insert into upg_check values (1, '$1-before') on conflict do nothing"
