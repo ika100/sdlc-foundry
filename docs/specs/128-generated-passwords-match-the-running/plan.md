@@ -45,6 +45,7 @@ tasks:
     covers: [AC-128.9]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t5
     title: e2e run.sh applies the credentials hooks first and checks AC-128.1-.8 (forced re-run instead of force-sync, broker user added, bucket, generated secret across replicas)
     files: [tests/e2e/run.sh, tests/cplat/test_cache_118_cmds.py, tests/cplat/test_bucket_116_cmds.py, tests/cplat/test_broker_119_cmds.py]
