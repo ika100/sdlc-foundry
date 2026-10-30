@@ -76,6 +76,18 @@ diagnose() {
     for e in dev staging prod; do
       echo "--- events upg-$e ---"
       kubectl --context "$ctx" -n "upg-$e" get events --sort-by=.lastTimestamp 2>&1 | tail -8
+      if kubectl --context "$ctx" -n "upg-$e" get statefulsets.apps/upg-sessions >/dev/null 2>&1; then   # a cache: who holds which password (hashes only)
+        echo "--- cache upg-$e ---"
+        kubectl --context "$ctx" -n "upg-$e" get externalsecrets.external-secrets.io/upg-sessions-app \
+          -o jsonpath='externalsecret: refreshPolicy={.spec.refreshPolicy} synced={.status.refreshTime} ready={.status.conditions[0].status} {.status.conditions[0].message}{"\n"}' 2>&1
+        kubectl --context "$ctx" -n "upg-$e" get secret/upg-sessions-app \
+          -o jsonpath='secret: created={.metadata.creationTimestamp} resourceVersion={.metadata.resourceVersion}{"\n"}' 2>&1
+        kubectl --context "$ctx" -n "upg-$e" get pods/upg-sessions-0 \
+          -o jsonpath='pod: started={.status.startTime} restarts={.status.containerStatuses[0].restartCount}{"\n"}' 2>&1
+        echo "password hash: secret=$(kubectl --context "$ctx" -n "upg-$e" get secret/upg-sessions-app -o jsonpath='{.data.password}' 2>/dev/null | base64 -d | sha256sum | cut -c1-12)" \
+             "url=$(kubectl --context "$ctx" -n "upg-$e" get secret/upg-sessions-app -o jsonpath='{.data.url}' 2>/dev/null | base64 -d | sed -E 's#^redis://[^:]*:([^@]*)@.*#\1#' | tr -d '\n' | sha256sum | cut -c1-12)" \
+             "server=$(kubectl --context "$ctx" -n "upg-$e" exec upg-sessions-0 -- sh -c 'printf %s "$VALKEY_PASSWORD"' 2>/dev/null | sha256sum | cut -c1-12)"
+      fi
     done
   ) >&2 || true
 }
