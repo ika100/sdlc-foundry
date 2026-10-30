@@ -7,7 +7,7 @@ import re
 
 import pytest
 
-from cache_fixtures import CKEYS, cache, cdoc, csys, expected_externalsecret
+from cache_fixtures import cache, cplan, csys, expected_plan
 from resources_fixtures import ENVS, comp, ok
 from system_fixtures import ROOT
 
@@ -21,7 +21,7 @@ def new_form(env="dev", name="sessions") -> str:
 def test_the_cache_secret_template_names_the_default_user_in_every_environment_ac_127_1(tmp_path):  # AC-127.1
     g = ok(tmp_path, csys())
     for env in ENVS:
-        data = cdoc(g, env, "externalsecret.yaml")["spec"]["target"]["template"]["data"]
+        data = cplan(g, env)["secrets"][0]["data"]
         assert data["url"] == new_form(env), env
 
 
@@ -30,19 +30,19 @@ def test_every_cache_of_a_system_gets_the_new_url_ac_127_1(tmp_path):  # AC-127.
                           {"api": comp("api", ["sessions", "ratelimit"])}))
     for env in ENVS:
         for name in ("sessions", "ratelimit"):
-            data = cdoc(g, env, "externalsecret.yaml", name)["spec"]["target"]["template"]["data"]
+            data = cplan(g, env, name)["secrets"][0]["data"]
             assert data["url"] == new_form(env, name), (env, name)
 
 
-def test_only_the_url_changes_keys_secret_name_policy_and_generator_stay_ac_127_1(tmp_path):  # AC-127.1
+def test_only_the_url_changes_keys_secret_name_and_generated_key_stay_ac_127_1(tmp_path):  # AC-127.1
     g = ok(tmp_path, csys())
     for env in ENVS:
-        es = cdoc(g, env, "externalsecret.yaml")
-        want = expected_externalsecret(env)
-        want["spec"]["target"]["template"]["data"]["url"] = new_form(env)
-        assert es == want, env
-        assert list(es["spec"]["target"]["template"]["data"]) == CKEYS
-        assert es["metadata"]["name"] == "shop-sessions-app" and es["spec"]["refreshPolicy"] == "CreatedOnce"
+        secret = cplan(g, env)["secrets"][0]
+        want = expected_plan(env)["secrets"][0]
+        want["data"]["url"] = new_form(env)
+        assert secret == want, env
+        assert sorted(secret["data"]) == ["host", "port", "url"] and secret["generate"] == {"password": 32}
+        assert secret["name"] == "shop-sessions-app"
 
 
 def test_the_old_empty_user_form_is_gone_from_the_rendered_cache_files_ac_127_1(tmp_path):  # AC-127.1

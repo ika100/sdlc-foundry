@@ -148,6 +148,7 @@ Usage:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -260,6 +261,7 @@ NATS_IMAGES = {           # no bare minor, no latest
     "2.15": "nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5",
 }
 VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa"   # matches the Velero chart's appVersion line (1.14 <-> 1.18)
+CREDENTIALS_IMAGE = "python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8"   # runs the credentials Job (spec 128): stdlib python only
 SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8"     # every in-cluster bucket runs its own SeaweedFS of this image
 COLLECTOR_IMAGE = "otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6"
 LGTM_IMAGE = "grafana/otel-lgtm:0.35.0@sha256:2de1094c593c671cbfca878a28ffcd7e46ff5e32f2ce966c0cf33003f6cf4266"
@@ -2312,16 +2314,457 @@ def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False
     return files
 
 
+CREDENTIALS_SCRIPT = r'''# The credentials Job (spec 128): writes each generated credential once (create if absent, otherwise keep what exists),
+# retires the 5.4 ExternalSecrets and Password generators, and restarts a server that refuses the password of its Secret.
+# Standard library only. No value is ever printed.
+import base64
+import json
+import os
+import re
+import secrets
+import socket
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.request
+
+ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+PLACEHOLDER = re.compile(r"\{\{ \.([A-Za-z0-9_]+) \}\}")
+SA_DIR = os.environ.get("CREDENTIALS_SA_DIR", "/var/run/secrets/kubernetes.io/serviceaccount")
+API = os.environ.get("CREDENTIALS_API_URL") or "https://%s:%s" % (
+    os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc"), os.environ.get("KUBERNETES_SERVICE_PORT", "443"))
+RETRY_SECONDS = 60
+
+
+class Fail(Exception):
+    def __init__(self, message, code=1):
+        Exception.__init__(self, message)
+        self.code = code
+
+
+def log(message):
+    print(message, flush=True)
+
+
+with open(os.path.join(SA_DIR, "token")) as handle:
+    TOKEN = handle.read().strip()
+CONTEXT = None
+if API.startswith("https://"):
+    CONTEXT = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+
+
+def call(method, path, body=None, content_type="application/json"):
+    """One API request; connection errors, 403, 429 and 5xx are retried with backoff for up to 60 s. Returns (status, object)."""
+    data = None if body is None else json.dumps(body).encode()
+    deadline = time.time() + RETRY_SECONDS
+    delay = 0.5
+    while True:
+        request = urllib.request.Request(API + path, data=data, method=method)
+        request.add_header("Authorization", "Bearer " + TOKEN)
+        request.add_header("Accept", "application/json")
+        if data is not None:
+            request.add_header("Content-Type", content_type)
+        status, raw = None, b""
+        try:
+            with urllib.request.urlopen(request, timeout=30, context=CONTEXT) as response:
+                status, raw = response.status, response.read()
+        except urllib.error.HTTPError as error:
+            status, raw = error.code, error.read()
+        except (urllib.error.URLError, OSError):
+            status = None
+        if status is not None and status != 403 and status != 429 and status < 500:
+            try:
+                return status, (json.loads(raw) if raw else None)
+            except ValueError:
+                return status, None
+        if time.time() + delay > deadline:
+            raise Fail("%s %s: %s" % (method, path, "no answer" if status is None else "status %d" % status))
+        time.sleep(delay)
+        delay = min(delay * 2, 5)
+
+
+def expect(status, wanted, method, path):
+    if status not in wanted:
+        raise Fail("%s %s: unexpected status %d" % (method, path, status))
+
+
+def retire(plan):
+    ns = plan["namespace"]
+    for name in plan.get("retire", {}).get("externalSecrets", []):
+        path = "/apis/external-secrets.io/v1/namespaces/%s/externalsecrets/%s" % (ns, name)
+        status, obj = call("GET", path)
+        if status == 404:
+            continue
+        expect(status, (200,), "GET", path)
+        sources = (obj.get("spec") or {}).get("dataFrom") or []
+        if not any((source.get("sourceRef") or {}).get("generatorRef") for source in sources):
+            raise Fail("ExternalSecret %s is not generator-backed; it writes this Secret, so the credentials Job does not" % name)
+        status, _ = call("DELETE", path, {"apiVersion": "v1", "kind": "DeleteOptions", "propagationPolicy": "Orphan"})
+        if status != 404:
+            expect(status, (200, 202), "DELETE", path)
+        deadline = time.time() + 60
+        while True:
+            status, _ = call("GET", path)
+            if status == 404:
+                break
+            if time.time() > deadline:
+                raise Fail("ExternalSecret %s is still there 60 s after its deletion" % name)
+            time.sleep(0.5)
+        log("retired ExternalSecret " + name)
+    for name in plan.get("retire", {}).get("generators", []):
+        path = "/apis/generators.external-secrets.io/v1alpha1/namespaces/%s/passwords/%s" % (ns, name)
+        status, _ = call("DELETE", path)
+        if status != 404:
+            expect(status, (200, 202), "DELETE", path)
+            log("retired Password generator " + name)
+
+
+def generate(length):
+    return "".join(secrets.choice(ALPHABET) for _ in range(length))
+
+
+def render(value, values):
+    return PLACEHOLDER.sub(lambda match: values[match.group(1)], value)
+
+
+def encode(value):
+    return base64.b64encode(value.encode()).decode()
+
+
+def pointer(key):
+    return key.replace("~", "~0").replace("/", "~1")
+
+
+def build_patch(entry, current):
+    """The JSON patch that keeps every existing value and fixes only metadata and missing keys; returns (ops, added, adopted)."""
+    meta = current["metadata"]
+    ops = [{"op": "test", "path": "/metadata/resourceVersion", "value": meta["resourceVersion"]}]
+    adopted = False
+    declared = entry.get("labels") or {}
+    labels = meta.get("labels")
+    if declared and labels is None:
+        ops.append({"op": "add", "path": "/metadata/labels", "value": dict(declared)})
+        adopted = True
+    else:
+        for key, value in sorted(declared.items()):
+            if (labels or {}).get(key) != value:
+                ops.append({"op": "add", "path": "/metadata/labels/" + pointer(key), "value": value})
+                adopted = True
+    if "app.kubernetes.io/instance" in (labels or {}):
+        ops.append({"op": "remove", "path": "/metadata/labels/app.kubernetes.io~1instance"})
+        adopted = True
+    if "argocd.argoproj.io/tracking-id" in (meta.get("annotations") or {}):
+        ops.append({"op": "remove", "path": "/metadata/annotations/argocd.argoproj.io~1tracking-id"})
+        adopted = True
+    refs = meta.get("ownerReferences") or []
+    kept = [ref for ref in refs if ref.get("kind") != "ExternalSecret"]
+    if len(kept) != len(refs):
+        if kept:
+            ops.append({"op": "replace", "path": "/metadata/ownerReferences", "value": kept})
+        else:
+            ops.append({"op": "remove", "path": "/metadata/ownerReferences"})
+        adopted = True
+    existing = current.get("data")
+    have = dict(existing or {})
+    values = {}
+    for key in entry.get("generate", {}):
+        if key in have:
+            values[key] = base64.b64decode(have[key]).decode()
+    added = []
+    for key, length in sorted(entry.get("generate", {}).items()):
+        if key not in have:
+            values[key] = generate(length)
+            added.append(key)
+    for key, literal in sorted(entry.get("data", {}).items()):
+        if key not in have:
+            added.append(key)
+    if added:
+        new = {}
+        for key in added:
+            if key in entry.get("generate", {}):
+                new[key] = encode(values[key])
+            else:
+                new[key] = encode(render(entry["data"][key], values))
+        if existing is None:
+            ops.append({"op": "add", "path": "/data", "value": new})
+        else:
+            for key in sorted(new):
+                ops.append({"op": "add", "path": "/data/" + pointer(key), "value": new[key]})
+    return ops, sorted(added), adopted
+
+
+def keep(ns, entry):
+    name = entry["name"]
+    path = "/api/v1/namespaces/%s/secrets/%s" % (ns, name)
+    for _ in range(5):
+        status, current = call("GET", path)
+        expect(status, (200,), "GET", path)
+        ops, added, adopted = build_patch(entry, current)
+        if len(ops) == 1:
+            log("kept " + name)
+            return
+        status, _ = call("PATCH", path, ops, "application/json-patch+json")
+        if status in (409, 422):
+            continue
+        expect(status, (200,), "PATCH", path)
+        note = "kept " + name
+        if added:
+            note += "; added keys " + ",".join(added)
+        if adopted:
+            note += "; adopted (metadata)"
+        log(note)
+        return
+    raise Fail("PATCH %s: still conflicting after 5 attempts" % path)
+
+
+def write_secrets(plan):
+    ns = plan["namespace"]
+    for entry in plan["secrets"]:
+        values = {key: generate(length) for key, length in entry.get("generate", {}).items()}
+        data = dict(values)
+        for key, literal in entry.get("data", {}).items():
+            data[key] = render(literal, values)
+        body = {"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
+                "metadata": {"name": entry["name"], "namespace": ns, "labels": entry.get("labels") or {}},
+                "data": {key: encode(value) for key, value in sorted(data.items())}}
+        path = "/api/v1/namespaces/%s/secrets" % ns
+        status, _ = call("POST", path, body)
+        if status == 201:
+            log("created " + entry["name"])
+        elif status == 409:
+            keep(ns, entry)
+        else:
+            expect(status, (201,), "POST", path)
+
+
+def read_line(sock):
+    buf = b""
+    while b"\n" not in buf:
+        chunk = sock.recv(4096)
+        if not chunk:
+            break
+        buf += chunk
+    return buf
+
+
+def probe_valkey(ip, port, user, password):
+    try:
+        with socket.create_connection((ip, port), timeout=5) as sock:
+            sock.settimeout(5)
+            parts = [b"AUTH", user.encode(), password.encode()]
+            sock.sendall(b"*3\r\n" + b"".join(b"$%d\r\n%s\r\n" % (len(part), part) for part in parts))
+            reply = read_line(sock)
+    except OSError:
+        return "unknown"
+    if reply.startswith(b"+OK"):
+        return "accepted"
+    if reply.startswith(b"-WRONGPASS"):
+        return "refused"
+    return "unknown"
+
+
+def probe_nats(ip, port, user, password):
+    try:
+        with socket.create_connection((ip, port), timeout=5) as sock:
+            sock.settimeout(5)
+            info = read_line(sock)
+            if b'"tls_required":true' in info.replace(b" ", b""):
+                return "unknown"
+            options = {"verbose": False, "pedantic": False, "user": user, "pass": password, "name": "credentials-check",
+                       "lang": "python", "version": "1", "protocol": 1}
+            sock.sendall(b"CONNECT " + json.dumps(options).encode() + b"\r\nPING\r\n")
+            buf = b""
+            while b"PONG" not in buf and b"-ERR" not in buf:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+    except OSError:
+        return "unknown"
+    if b"PONG" in buf:
+        return "accepted"
+    if b"Authorization Violation" in buf:
+        return "refused"
+    return "unknown"
+
+
+def ready(pod):
+    conditions = (pod.get("status") or {}).get("conditions") or []
+    return any(c.get("type") == "Ready" and c.get("status") == "True" for c in conditions)
+
+
+def get_pod(ns, name):
+    path = "/api/v1/namespaces/%s/pods/%s" % (ns, name)
+    status, pod = call("GET", path)
+    if status == 404:
+        return None
+    expect(status, (200,), "GET", path)
+    return pod
+
+
+def secret_value(ns, name, key):
+    path = "/api/v1/namespaces/%s/secrets/%s" % (ns, name)
+    status, obj = call("GET", path)
+    expect(status, (200,), "GET", path)
+    return base64.b64decode((obj.get("data") or {})[key]).decode()
+
+
+def declared_users(pod, users):
+    """The users whose password variable this pod declares from the planned Secret."""
+    found = []
+    for user in users:
+        for container in (pod.get("spec") or {}).get("containers") or []:
+            for var in container.get("env") or []:
+                ref = (var.get("valueFrom") or {}).get("secretKeyRef") or {}
+                if var.get("name") == user["env"] and ref.get("name") == user["secret"]:
+                    found.append(user)
+    return found
+
+
+def probe_pod(ns, verify, pod, users):
+    probe = probe_valkey if verify["engine"] == "valkey" else probe_nats
+    states = []
+    for user in users:
+        password = secret_value(ns, user["secret"], user["key"])
+        states.append((user, probe(pod["status"]["podIP"], verify["port"], user["user"], password)))
+    return states
+
+
+def verify_servers(plan):
+    verify = plan.get("verify")
+    if not verify:
+        return
+    ns = plan["namespace"]
+    checked = {}
+    refused = {}
+    for name in verify["pods"]:
+        pod = get_pod(ns, name)
+        if pod is None:
+            log("skipped %s: no such pod" % name)
+        elif not ready(pod):
+            log("skipped %s: not ready" % name)
+        elif not (pod.get("status") or {}).get("podIP"):
+            log("skipped %s: no pod IP" % name)
+        else:
+            users = declared_users(pod, verify["users"])
+            states = probe_pod(ns, verify, pod, users)
+            checked[name] = (pod, users)
+            bad = [user for user, state in states if state == "refused"]
+            if bad:
+                refused[name] = bad
+            elif states and all(state == "accepted" for _, state in states):
+                log("verified " + name)
+            elif states:
+                log("skipped %s: could not check every password" % name)
+    for name, bad in sorted(refused.items()):
+        path = "/api/v1/namespaces/%s/pods/%s" % (ns, name)
+        status, _ = call("DELETE", path)
+        expect(status, (200, 202, 404), "DELETE", path)
+        for user in bad:
+            log("restarted %s: it refused the password of %s" % (name, user["secret"]))
+    for name, bad in sorted(refused.items()):
+        old_uid = checked[name][0]["metadata"]["uid"]
+        deadline = time.time() + 120
+        fresh = None
+        while time.time() < deadline:
+            pod = get_pod(ns, name)
+            if pod and pod["metadata"]["uid"] != old_uid and ready(pod) and (pod.get("status") or {}).get("podIP"):
+                fresh = pod
+                break
+            time.sleep(2)
+        if fresh is None:
+            log("skipped %s: not ready 120 s after the restart" % name)
+            continue
+        states = probe_pod(ns, verify, fresh, checked[name][1])
+        again = [user for user, state in states if state == "refused"]
+        if again:
+            for user in again:
+                log("%s still refuses the password of %s after a restart" % (name, user["secret"]))
+            raise Fail("a server still refuses a password after its restart", 2)
+        log("verified " + name)
+
+
+def main():
+    with open(sys.argv[1]) as handle:
+        plan = json.load(handle)
+    retire(plan)
+    write_secrets(plan)
+    verify_servers(plan)
+
+
+try:
+    main()
+except Fail as failure:
+    log(str(failure))
+    sys.exit(failure.code)
+'''
+
+
+def credentials_files(app: str, env: str, owner: str, labels: dict, plan: dict) -> dict[str, dict]:
+    """The five objects of an owner's credentials Job (spec 128): they write each generated credential once, in the PreSync hook.
+
+    `owner` is `<system>-<name>` of a resource instance or a component's name. The Job's name carries a hash of the plan, the program and
+    the image, so a changed plan runs again and an unchanged one never does."""
+    ns = f"{app}-{env}"
+    plan_text = json.dumps(plan, indent=2, sort_keys=True)
+    digest = hashlib.sha256((plan_text + CREDENTIALS_SCRIPT + CREDENTIALS_IMAGE).encode()).hexdigest()[:8]
+    name = f"{owner}-credentials"
+    planned = sorted(s["name"] for s in plan["secrets"])
+    retire = plan.get("retire", {})
+    pods = sorted(plan.get("verify", {}).get("pods", []))
+    rules: list[dict] = [{"apiGroups": [""], "resources": ["secrets"], "verbs": ["create"]}]
+    for group, resource, names, verbs in (("", "secrets", planned, ["get", "patch"]),
+                                          ("external-secrets.io", "externalsecrets", sorted(retire.get("externalSecrets", [])), ["get", "delete"]),
+                                          ("generators.external-secrets.io", "passwords", sorted(retire.get("generators", [])), ["delete"]),
+                                          ("", "pods", pods, ["get", "delete"])):
+        if names:
+            rules.append({"apiGroups": [group], "resources": [resource], "resourceNames": names, "verbs": verbs})
+
+    def meta(object_name: str, wave: str, policy: str) -> dict:
+        return {"name": object_name, "labels": dict(labels),
+                "annotations": {"argocd.argoproj.io/hook": "PreSync", "argocd.argoproj.io/sync-wave": wave,
+                                "argocd.argoproj.io/hook-delete-policy": policy}}
+
+    job_security = {"runAsNonRoot": True, "runAsUser": 65534, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,
+                    "capabilities": {"drop": ["ALL"]}}
+    return {
+        "credentials-serviceaccount.yaml": {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": meta(name, "0", "BeforeHookCreation")},
+        "credentials-role.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role", "metadata": meta(name, "0", "BeforeHookCreation"),
+                                  "rules": rules},
+        "credentials-rolebinding.yaml": {
+            "apiVersion": "rbac.authorization.k8s.io/v1", "kind": "RoleBinding", "metadata": meta(name, "0", "BeforeHookCreation"),
+            "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": name},
+            "subjects": [{"kind": "ServiceAccount", "name": name, "namespace": ns}]},
+        "credentials-configmap.yaml": {"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta(name, "0", "BeforeHookCreation"),
+                                       "data": {"create.py": CREDENTIALS_SCRIPT, "plan.json": plan_text}},
+        "credentials-job.yaml": {
+            "apiVersion": "batch/v1", "kind": "Job",
+            "metadata": meta(f"{owner[:42].rstrip('-')}-credentials-{digest}", "1", "BeforeHookCreation,HookSucceeded"),
+            "spec": {"backoffLimit": 2, "activeDeadlineSeconds": 300, "ttlSecondsAfterFinished": 600,
+                     "template": {"metadata": {"labels": dict(labels)},
+                                  "spec": {"serviceAccountName": name, "automountServiceAccountToken": True, "restartPolicy": "Never",
+                                           "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "runAsGroup": 65534,
+                                                               "seccompProfile": {"type": "RuntimeDefault"}},
+                                           "containers": [{"name": "credentials", "image": CREDENTIALS_IMAGE,
+                                                           "command": ["python3", "/credentials/create.py", "/credentials/plan.json"],
+                                                           "env": [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}],
+                                                           "resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "64Mi"}},
+                                                           "securityContext": job_security,
+                                                           "volumeMounts": [{"name": "credentials", "mountPath": "/credentials", "readOnly": True}]}],
+                                           "volumes": [{"name": "credentials", "configMap": {"name": name}}]}}}},
+    }
+
+
 def cache_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | str]:
-    """The in-cluster cache instance (ADR-064): one Valkey StatefulSet, a ClusterIP Service and a password generated once.
+    """The in-cluster cache instance (ADR-064): one Valkey StatefulSet, a ClusterIP Service and a credentials Job (spec 128).
 
     Every object carries `app.kubernetes.io/name: <name>`, so spec 117's Velero Schedule leaves all of it out. No secret value is
-    rendered: the password comes from an External Secrets `Password` generator and is written once to `<system>-<name>-app`."""
+    rendered: the Job writes the password once to `<system>-<name>-app` (create if absent, otherwise keep) and restarts a server that
+    refuses it."""
     n, ns = f"{app}-{name}", f"{app}-{env}"
-    gen_api = "generators.external-secrets.io/v1alpha1"
     labels = lambda: {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app, "app.kubernetes.io/managed-by": "gitops-app"}  # noqa: E731
     selector = lambda: {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app}  # noqa: E731
-    wave = lambda: {"argocd.argoproj.io/sync-wave": "-1"}  # noqa: E731
     persistent = conf["persistence"]
     args = ["--port", "6379", "--requirepass", "$(VALKEY_PASSWORD)", "--maxmemory", str(conf["maxmemory"]),
             "--maxmemory-policy", conf["maxmemoryPolicy"], "--save", "", "--dir", "/data",
@@ -2354,17 +2797,6 @@ def cache_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | s
                                          "spec": {"accessModes": ["ReadWriteOnce"],
                                                   "resources": {"requests": {"storage": conf["storage"]}}}}]
     files: dict[str, dict | str] = {
-        "password-generator.yaml": {
-            "apiVersion": gen_api, "kind": "Password", "metadata": {"name": f"{n}-password", "labels": labels(), "annotations": wave()},
-            "spec": {"length": 32, "digits": 5, "symbols": 0, "noUpper": False, "allowRepeat": True}},
-        "externalsecret.yaml": {
-            "apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": {"name": f"{n}-app", "labels": labels(), "annotations": wave()},
-            "spec": {"refreshPolicy": "CreatedOnce",
-                     "target": {"name": f"{n}-app", "creationPolicy": "Owner", "deletionPolicy": "Retain",
-                                "template": {"engineVersion": "v2", "metadata": {"labels": labels()}, "data": {
-                                    "url": "redis://default:{{ .password }}@" + f"{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc",
-                                    "port": "6379", "password": "{{ .password }}"}}},  # pragma: allowlist secret
-                     "dataFrom": [{"sourceRef": {"generatorRef": {"apiVersion": gen_api, "kind": "Password", "name": f"{n}-password"}}}]}},
         "service.yaml": {
             "apiVersion": "v1", "kind": "Service", "metadata": {"name": n, "labels": labels()},
             "spec": {"type": "ClusterIP", "selector": selector(),
@@ -2374,8 +2806,14 @@ def cache_files(app: str, name: str, env: str, conf: dict) -> dict[str, dict | s
             "metadata": {"name": n, "labels": labels()},
             "spec": spec},
     }
-    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
-                                   "resources": ["externalsecret.yaml", "password-generator.yaml", "service.yaml", "statefulset.yaml"]}
+    plan = {"namespace": ns,
+            "secrets": [{"name": f"{n}-app", "labels": labels(), "generate": {"password": 32},
+                         "data": {"url": "redis://default:{{ .password }}@" + f"{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc", "port": "6379"}}],
+            "retire": {"externalSecrets": [f"{n}-app"], "generators": [f"{n}-password"]},
+            "verify": {"engine": "valkey", "port": 6379, "pods": [f"{n}-0"],
+                       "users": [{"secret": f"{n}-app", "key": "password", "user": "default", "env": "VALKEY_PASSWORD"}]}}
+    files.update(credentials_files(app, env, n, labels(), plan))
+    files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
     return files
 
 
@@ -2680,8 +3118,8 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             sync = {"automated": {"prune": prune, "selfHeal": True}, "syncOptions": ["CreateNamespace=true"]}
             if any(cfg["resources"].get(n, {}).get("envs", {}).get(env, {}).get("backup") for n in group):
                 sync["retry"] = RETRY       # an ObjectStore may sync before its CRD exists
-            elif any(cfg["resources"].get(n, {}).get("type") == "broker" for n in group):
-                sync["retry"] = RETRY       # the Account, streams and consumers wait for NACK and the server
+            elif any(cfg["resources"].get(n, {}).get("type") in ("cache", "broker") for n in group):
+                sync["retry"] = RETRY       # the Account, streams and consumers wait for NACK and the server; a PreSync credentials Job may fail once
             docs.append({
                 "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",
                 "metadata": {"name": f"{app}-{suffix}-{env}", "namespace": "argocd"},
@@ -2911,6 +3349,8 @@ def lgtm_manifests() -> dict[str, dict]:
 
 
 BROKER_STALE = re.compile(r"^(stream-.+|consumer-.+|externalsecret-.+)\.yaml$")     # broker files that are no longer rendered (spec 119)
+CREDENTIALS_STALE = re.compile(r"^(externalsecret|password-generator|access-key-generator|secret-key-generator|nack-secret)\.yaml$|^credentials-.+\.yaml$")   # spec 128: files of the 5.4 generators
+
 UNBOUND_NOTE = "note: applications/{app}: events API {api} is carried by no broker yet: add one with /resource:add <name> --type broker"
 
 
@@ -3027,7 +3467,7 @@ def stale_paths(app_dir: Path, wanted: set[Path]) -> list[Path]:
                     continue
                 # database files that are no longer rendered; restore-state.yaml is input and never touched
                 stale += [f for f in d.iterdir() if f not in wanted and (f.name in DATABASE_FILES or DATABASE_GENERATION.match(f.name)
-                                                                         or BROKER_STALE.match(f.name))]
+                                                                         or BROKER_STALE.match(f.name) or CREDENTIALS_STALE.match(f.name))]
     return stale
 
 
@@ -3057,7 +3497,8 @@ def versions_table() -> list[dict]:
     rows += [image_row("seaweedfs", "bucket", None, None, SEAWEEDFS_IMAGE),
              image_row("opentelemetry-collector", None, None, None, COLLECTOR_IMAGE),
              image_row("lgtm", None, None, None, LGTM_IMAGE),
-             image_row("velero-plugin-for-aws", None, None, None, VELERO_AWS_PLUGIN_IMAGE)]
+             image_row("velero-plugin-for-aws", None, None, None, VELERO_AWS_PLUGIN_IMAGE),
+             image_row("credentials-job", None, None, None, CREDENTIALS_IMAGE)]
 
     def manifest_row(name):
         pin = CLUSTER_PINS[name]

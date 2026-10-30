@@ -13,7 +13,7 @@ import yaml
 
 from backup_fixtures import bdoc
 from cache_fixtures import (ALLOWED_INST, ALLOWED_TOP, CKEYS, CVARS, FILES, IMAGES, P, POLICIES, SIZING, WAVE, cache, cdir, cdoc, contract, csys,
-                            expected_externalsecret, expected_generator, expected_kustomization, expected_service, expected_statefulset, labels,
+                            cplan, expected_kustomization, expected_plan, expected_service, expected_statefulset, labels,
                             tree_digest)
 from resources_fixtures import (APP, ENVS, LABELS, addon_names, comp, db, env_list, external_secret, external_secret_path, fails, ok,
                                 platform_render_module, render5, secret_vars, sets, system, unpin, var_order, y)  # spec 121: unpin
@@ -290,7 +290,7 @@ def test_the_statefulset_runs_the_pinned_release_of_its_major_ac_118_17(tmp_path
 
 
 def test_no_floating_tag_is_rendered_ac_118_17(tmp_path):  # AC-118.17
-    blob = "\n".join(t for k, t in ok(tmp_path, csys()).items() if f"/addons/dev/sessions/" in k)
+    blob = "\n".join(t for k, t in ok(tmp_path, csys()).items() if "/addons/dev/sessions/" in k and "/credentials-" not in k)   # the Job's python image is spec 128's
     images = re.findall(r"image:\s*(\S+)", blob)
     assert images and all(re.fullmatch(r"valkey/valkey:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}", i) for i in images)   # spec 121: digest
     assert "latest" not in blob
@@ -336,7 +336,7 @@ def test_memory_and_policy_are_set_per_environment_ac_118_6(tmp_path):  # AC-118
 
 def test_persistence_false_renders_no_volume_at_all_ac_118_7(tmp_path):  # AC-118.7
     g = ok(tmp_path, csys())
-    text = "\n".join(t for k, t in g.items() if k.startswith(cdir("dev")))
+    text = "\n".join(t for k, t in g.items() if k.startswith(cdir("dev")) and "/credentials-" not in k)   # the Job mounts its own ConfigMap
     for needle in ("volumeClaimTemplates", "volumeMounts", "emptyDir", "persistentVolumeClaim", "PersistentVolumeClaim", "volumes:"):
         assert needle not in text, needle
 
@@ -505,31 +505,32 @@ def test_an_env_name_that_clashes_with_a_cache_variable_fails_ac_118_18(tmp_path
 def test_the_url_names_database_zero_and_the_secret_is_the_same_in_every_environment_ac_118_18(tmp_path):  # AC-118.18
     g = ok(tmp_path, csys())
     for env in ENVS:
-        data = cdoc(g, env, "externalsecret.yaml")["spec"]["target"]["template"]["data"]
-        assert data["url"] == "redis://default:{{ .password }}@" + f"shop-sessions.shop-{env}.svc:6379/0"  # spec 127
-        assert cdoc(g, env, "externalsecret.yaml")["metadata"]["name"] == "shop-sessions-app"
+        secret = cplan(g, env)["secrets"][0]      # spec 128: the credentials Job writes the Secret from this plan
+        assert secret["data"]["url"] == "redis://default:{{ .password }}@" + f"shop-sessions.shop-{env}.svc:6379/0"  # spec 127
+        assert secret["name"] == "shop-sessions-app"
 
 
 # ---------------- AC-118.19: the generated password ----------------
 
-def test_the_password_generator_is_the_designed_document_ac_118_19(tmp_path):  # AC-118.19
+def test_the_credentials_plan_is_the_designed_document_ac_118_19(tmp_path):  # AC-118.19 (spec 128: a Job writes the Secret, no generator)
     g = ok(tmp_path, csys())
     for env in ENVS:
-        assert cdoc(g, env, "password-generator.yaml") == expected_generator(env), env
-    spec = cdoc(g, "dev", "password-generator.yaml")["spec"]
-    assert spec["length"] == 32 and spec["symbols"] == 0 and list(spec) == ["length", "digits", "symbols", "noUpper", "allowRepeat"]
+        assert cplan(g, env) == expected_plan(env), env
+    secret = cplan(g, "dev")["secrets"][0]
+    assert secret["generate"] == {"password": 32} and sorted(secret["data"]) == ["host", "port", "url"]
 
 
-def test_the_externalsecret_creates_the_secret_once_with_the_four_keys_ac_118_19(tmp_path):  # AC-118.19
+def test_the_secret_is_written_by_the_job_and_no_externalsecret_or_generator_is_rendered_ac_118_19(tmp_path):  # AC-118.19
     g = ok(tmp_path, csys())
     for env in ENVS:
-        es = cdoc(g, env, "externalsecret.yaml")
-        assert es == expected_externalsecret(env), env
-        assert es["spec"]["refreshPolicy"] == "CreatedOnce" and list(es["spec"]["target"]["template"]["data"]) == CKEYS
-        assert list(es["spec"]) == ["refreshPolicy", "target", "dataFrom"]
+        names = [k.rsplit("/", 1)[-1] for k in g if k.startswith(cdir(env) + "/")]
+        assert "externalsecret.yaml" not in names and "password-generator.yaml" not in names, env
+        job = cdoc(g, env, "credentials-job.yaml")
+        assert job["metadata"]["annotations"][WAVE] == "1" and job["metadata"]["annotations"]["argocd.argoproj.io/hook"] == "PreSync"
+        assert not [k for k in g if k.startswith(cdir(env) + "/") and "kind: Password" in g[k]]
 
 
-def test_the_kustomization_lists_the_four_files_sorted_ac_118_19(tmp_path):  # AC-118.19
+def test_the_kustomization_lists_the_files_sorted_ac_118_19(tmp_path):  # AC-118.19
     assert cdoc(ok(tmp_path, csys()), "dev", "kustomization.yaml") == expected_kustomization()
 
 
@@ -550,13 +551,13 @@ def test_renders_keep_the_same_secret_name_keys_and_documents_ac_118_19(tmp_path
     a = ok(tmp_path / "a", csys())
     b = ok(tmp_path / "b", csys({"sessions": cache(version=8, memory="512Mi", persistence=True)}))
     for env in ENVS:
-        for f in ("externalsecret.yaml", "password-generator.yaml", "service.yaml"):
+        for f in ("service.yaml", "credentials-configmap.yaml", "credentials-role.yaml", "credentials-job.yaml"):
             assert a[f"{cdir(env)}/{f}"] == b[f"{cdir(env)}/{f}"], (env, f)
 
 
-def test_an_environment_has_its_own_host_but_the_same_generator_ac_118_19(tmp_path):  # AC-118.19
+def test_an_environment_has_its_own_host_but_the_same_plan_ac_118_19(tmp_path):  # AC-118.19
     g = ok(tmp_path, csys())
-    hosts = {cdoc(g, e, "externalsecret.yaml")["spec"]["target"]["template"]["data"]["host"] for e in ENVS}
+    hosts = {cplan(g, e)["secrets"][0]["data"]["host"] for e in ENVS}
     assert hosts == {f"shop-sessions.shop-{e}.svc" for e in ENVS}
 
 
@@ -635,7 +636,7 @@ def test_every_cache_object_carries_the_name_label_ac_118_14(tmp_path):  # AC-11
     sts = cdoc(g, "dev", "statefulset.yaml")
     assert sts["spec"]["template"]["metadata"]["labels"] == labels()
     assert sts["spec"]["volumeClaimTemplates"][0]["metadata"]["labels"] == labels()
-    assert cdoc(g, "dev", "externalsecret.yaml")["spec"]["target"]["template"]["metadata"]["labels"] == labels()
+    assert cplan(g)["secrets"][0]["labels"] == labels()
     assert sts["spec"]["selector"]["matchLabels"] == {"app.kubernetes.io/name": "sessions", "app.kubernetes.io/part-of": "shop"}
 
 
@@ -654,8 +655,8 @@ def test_no_cache_object_pod_or_volume_is_selected_by_the_schedule_with_or_witho
             sts = cdoc(g, "dev", "statefulset.yaml", name)
             lbl = [sts["metadata"]["labels"], sts["spec"]["template"]["metadata"]["labels"]]
             lbl += [v["metadata"]["labels"] for v in sts["spec"].get("volumeClaimTemplates", [])]
-            lbl += [cdoc(g, "dev", f, name)["metadata"]["labels"] for f in ("service.yaml", "password-generator.yaml", "externalsecret.yaml")]
-            lbl += [cdoc(g, "dev", "externalsecret.yaml", name)["spec"]["target"]["template"]["metadata"]["labels"]]
+            lbl += [cdoc(g, "dev", f, name)["metadata"]["labels"] for f in ("service.yaml", "credentials-job.yaml", "credentials-configmap.yaml")]
+            lbl += [cplan(g, "dev", name)["secrets"][0]["labels"]]
             assert all(_excluded(l, exprs) for l in lbl), (name, persistence)
         assert cdoc(g, "dev", "statefulset.yaml", "sessions")["spec"]["template"]["metadata"]["labels"]["app.kubernetes.io/name"] == "sessions"
 
@@ -743,10 +744,10 @@ def test_an_unused_cache_changes_nothing_in_the_tree_ac_118_22(tmp_path):  # AC-
 
 # ---------------- AC-118.23: a platform-rendered StatefulSet, no operator ----------------
 
-def test_a_cache_renders_only_plain_kinds_and_external_secrets_objects_ac_118_23(tmp_path):  # AC-118.23
+def test_a_cache_renders_only_plain_kinds_ac_118_23(tmp_path):  # AC-118.23
     g = ok(tmp_path, csys({"sessions": cache(persistence=True)}))
     kinds = sorted(cdoc(g, "dev", f)["kind"] for f in FILES)
-    assert kinds == ["ExternalSecret", "Kustomization", "Password", "Service", "StatefulSet"]
+    assert kinds == ["ConfigMap", "Job", "Kustomization", "Role", "RoleBinding", "Service", "ServiceAccount", "StatefulSet"]
     assert cdoc(g, "dev", "statefulset.yaml")["spec"]["template"]["spec"]["containers"][0]["image"].startswith("valkey/valkey:")
 
 

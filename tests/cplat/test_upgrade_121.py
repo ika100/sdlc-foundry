@@ -20,7 +20,7 @@ from broker_fixtures import broker, bsys
 from cache_fixtures import cache, csys
 from resources_fixtures import APP, ENVS, comp, db, fails, ok, system, tree, y
 from system_fixtures import ROOT, render, write_system
-from upgrade_fixtures import (CLUSTER_PINS, COLLECTOR, DEPRECATED_MAJORS, DEV, IMAGE_ROWS, LGTM, NATS, NATS_CHART, OLD_PG, OPERATOR_NAMES, PG, ROW_KEYS,
+from upgrade_fixtures import (CLUSTER_PINS, COLLECTOR, CREDENTIALS, DEPRECATED_MAJORS, DEV, IMAGE_ROWS, LGTM, NATS, NATS_CHART, OLD_PG, OPERATOR_NAMES, PG, ROW_KEYS,
                               ROW_ORDER, SEAWEED, SUPPORTED_MAJORS, UPGRADE_PATHS, VELERO_PLUGIN, VK, digest_of, doc_with_everything, render_module, row,
                               table_rows, unpin)
 
@@ -113,6 +113,7 @@ def test_the_other_images_and_the_cluster_pins_are_rows_with_their_versions_ac_1
                                              ("opentelemetry-collector", "0.162.0", "otel/opentelemetry-collector-contrib:0.162.0", COLLECTOR, None),
                                              ("lgtm", "0.35.0", "grafana/otel-lgtm:0.35.0", LGTM, None),
                                              ("velero-plugin-for-aws", "v1.14.4", "velero/velero-plugin-for-aws:v1.14.4", VELERO_PLUGIN, None),
+                                             ("credentials-job", "3.13.18-alpine3.24", "python:3.13.18-alpine3.24", CREDENTIALS, None),
                                              ("k3s", "v1.32.5-k3s1", "rancher/k3s:v1.32.5-k3s1", CLUSTER_PINS["k3s"]["image"], None)):
         r = row(rows, name)
         assert (r["kind"], r["engine"], r["major"], r["status"], r["version"], r["ref"], r["digest"]) == ("image", engine, None, None, version, ref, digest_of(full)), name
@@ -166,7 +167,7 @@ def test_supported_deprecated_majors_and_upgrade_paths_are_the_designed_ones_ac_
 
 def test_every_image_row_is_a_repository_an_exact_tag_and_a_digest_ac_121_2():  # AC-121.2
     rows = [r for r in table_rows() if r["kind"] == "image"]
-    assert len(rows) == len(IMAGE_ROWS) + 5
+    assert len(rows) == len(IMAGE_ROWS) + 6
     for r in rows:
         assert re.fullmatch(r"sha256:[0-9a-f]{64}", r["digest"] or ""), r["name"]
         tag = r["ref"].rsplit(":", 1)[1]

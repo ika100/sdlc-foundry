@@ -32,6 +32,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **`cplat pr wait` ignores a replaced run while the newer one is queued.** A second CI run on the same commit (a label on `gh pr create`, a PR body edit) cancels the first; its cancelled jobs and failed `ci-success` made the wait red although the newer run was only queued and later passed (#244, #282). The wait now also reads the head commit's workflow runs, queued ones included, and counts only the newest run of each workflow.
 
+**Versions** (`cplat platform versions --diff v5.4.0 --changelog`):
+
+- `credentials-job` 3.13.18-alpine3.24 (new)
+
 ## [5.4.0] — 2026-10-28
 
 **Every requirement traces to its evidence.** Spec 109 ([spec 109](specs/109-every-requirement-traces-to-its-evidence/spec.md)). Not breaking; no plugin changes. `cplat spec trace <id> --chain [--json]` is a new read-only view that follows each criterion through the tracked issue, spec, tests, reviewer verdict, merged PR, release and the tags pinned in dev, staging and prod, each link `ok`, `missing`, `stale`, `unknown` or `n/a`. Without `--chain`, `trace` is unchanged. It never writes, exits 0 whatever the states, and offline makes at most one 10 s `gh` attempt and marks what it could not read `unknown`. `cplat spec ci` now prints a warning (no change to the exit code) for each test that names a withdrawn or unknown criterion.

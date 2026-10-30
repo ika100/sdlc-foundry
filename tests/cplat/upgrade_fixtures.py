@@ -39,6 +39,7 @@ NATS = {"2.14": "nats:2.14.9-alpine@sha256:127c5ccbc538a93f53ebb19461dc193130df3
 NATS_CHART = {"repo_url": "https://nats-io.github.io/k8s/helm/charts", "chart": "nats", "chart_version": "2.15.1"}
 SEAWEED = "chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8"
 VELERO_PLUGIN = "velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa"
+CREDENTIALS = "python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8"
 COLLECTOR = "otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6"
 LGTM = "grafana/otel-lgtm:0.35.0@sha256:2de1094c593c671cbfca878a28ffcd7e46ff5e32f2ce966c0cf33003f6cf4266"
 CLUSTER_PINS = {
@@ -54,7 +55,7 @@ ROW_KEYS = ["name", "kind", "engine", "major", "status", "version", "ref", "dige
 IMAGE_ROWS = ["postgres 15", "postgres 16", "postgres 17", "postgres 18", "valkey 8", "valkey 9", "nats 2.14", "nats 2.15"]
 OPERATOR_NAMES = ["cloudnative-pg", "seaweedfs", "external-secrets", "kyverno", "plugin-barman-cloud", "cert-manager", "velero", "nack", "keda",
                   "metrics-server"]
-ROW_ORDER = [*IMAGE_ROWS, "nats", "seaweedfs", "opentelemetry-collector", "lgtm", "velero-plugin-for-aws", "argo-cd", "k3s", "gateway-api",
+ROW_ORDER = [*IMAGE_ROWS, "nats", "seaweedfs", "opentelemetry-collector", "lgtm", "velero-plugin-for-aws", "credentials-job", "argo-cd", "k3s", "gateway-api",
              *[f"operator {n}" for n in OPERATOR_NAMES]]
 
 # the pre-121 reference of every new engine reference (the byte-identity tests compare after this mapping)

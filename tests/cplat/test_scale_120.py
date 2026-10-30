@@ -979,9 +979,9 @@ def test_an_environment_without_scale_changes_nothing_next_to_one_with_it_ac_120
 BEFORE_120 = {"full5": ("bf4c5ffc245db1166768f726cdbf9b29618a050bfed682499ad3a4de22037cb4", 58),
               "rich5": ("54e93234734051c4df2494a3383b27954e5eeeaeaf58d76c10c545562b403cae", 58),
               "db-bucket": ("db23d5c3c8f752510fee7396f719342b8706b13370c0ffa997fbd48f15cdc9ed", 50),
-              "cache": ("c5b6a29786bb58cb84e281c6a0fab65cce0862dfbc45bf61a0ca59e802587077", 40),
+              "cache": ("c5e5809f484b7fddca7c2189f68c58b6e4a713331a035bca6aa2424dbad243df", 49),   # spec 128: the credentials Job replaces the generator files
               "events": ("9fe3842825e291f58f1e33aac03f53edf98df7c9053eefbeae7882d3ad3f57e4", 26),
-              "events-multi": ("32cf57fc7f192b4e17858f16716f6a82553103c51173c9e45e1d5b28c2d779e7", 61),
+              "events-multi": ("ebca4dedef644e88bafb98a92819385874af6b9771570478b38a2551b788e4ef", 70),
               "broker": ("22a18e5cb8bd47fdfa8288a09efdef76feb5a73ae99acbba664bac9ae7e91fad", 55),
               "broker-wide": ("ebc671dd740f12dfcdf9b4ef9fb4f389d01f8d5148f00c441fd81b416d82a2f6", 76),
               "broker-ext": ("f552152670af57260faddf29750116121f184baa8d535c57b48330e234546ba2", 48),

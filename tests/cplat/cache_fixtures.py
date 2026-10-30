@@ -13,7 +13,9 @@ ALLOWED_TOP = "type, external, remote, version, memory, maxmemoryPolicy, persist
 ALLOWED_INST = "external, remote, memory, maxmemoryPolicy, persistence, storage, version"  # spec 121: version is an instance key
 SIZING = ["memory", "maxmemoryPolicy", "persistence", "storage"]
 WAVE = "argocd.argoproj.io/sync-wave"
-FILES = ["externalsecret.yaml", "kustomization.yaml", "password-generator.yaml", "service.yaml", "statefulset.yaml"]
+CRED_FILES = ["credentials-configmap.yaml", "credentials-job.yaml", "credentials-role.yaml", "credentials-rolebinding.yaml",
+              "credentials-serviceaccount.yaml"]   # spec 128: the credentials Job replaces the ExternalSecret and the generator
+FILES = [*CRED_FILES, "kustomization.yaml", "service.yaml", "statefulset.yaml"]
 IMAGES = {8: "valkey/valkey:8.1.11@sha256:8f836008e0986c36adf50da714c7060cf689dbb335f61fe077939d90fa650809",
           9: "valkey/valkey:9.1.3@sha256:3add1a336a920ea54770a001ab6feb3da5fceea96a40373a3a2cd469b815f0b7"}  # spec 121: the designed digests
 CONTAINER_KEYS = ["name", "image", "command", "args", "env", "ports", "resources", "readinessProbe", "livenessProbe", "securityContext", "volumeMounts"]
@@ -56,6 +58,23 @@ def quantity_maxmemory(nbytes: int) -> int:
     return nbytes * 4 // 5
 
 
+def expected_plan(env="dev", name="sessions") -> dict:
+    """The `plan.json` of the credentials ConfigMap (spec 128): what the cache's Job writes."""
+    n, ns = f"shop-{name}", f"shop-{env}"
+    return {"namespace": ns,
+            "secrets": [{"name": f"{n}-app", "labels": labels(name), "generate": {"password": 32},
+                         "data": {"url": "redis://default:{{ .password }}@" + f"{n}.{ns}.svc:6379/0", "host": f"{n}.{ns}.svc", "port": "6379"}}],
+            "retire": {"externalSecrets": [f"{n}-app"], "generators": [f"{n}-password"]},
+            "verify": {"engine": "valkey", "port": 6379, "pods": [f"{n}-0"],
+                       "users": [{"secret": f"{n}-app", "key": "password", "user": "default", "env": "VALKEY_PASSWORD"}]}}
+
+
+def cplan(g, env="dev", name="sessions") -> dict:
+    import json
+    return json.loads(cdoc(g, env, "credentials-configmap.yaml", name)["data"]["plan.json"])
+
+
+# the 5.4 form (a Password generator and a generator-backed ExternalSecret): kept for the AC-128.12 test that must flag it
 def expected_generator(env="dev", name="sessions") -> dict:
     return {"apiVersion": "generators.external-secrets.io/v1alpha1", "kind": "Password",
             "metadata": {"name": f"shop-{name}-password", "labels": labels(name), "annotations": {WAVE: "-1"}},
@@ -113,7 +132,7 @@ def expected_statefulset(name="sessions", version=9, memory="256Mi", maxmemory=2
 
 def expected_kustomization() -> dict:
     return {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
-            "resources": ["externalsecret.yaml", "password-generator.yaml", "service.yaml", "statefulset.yaml"]}
+            "resources": [*CRED_FILES, "service.yaml", "statefulset.yaml"]}
 
 
 def tree_digest(g: dict) -> str:

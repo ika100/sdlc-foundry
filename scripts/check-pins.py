@@ -99,7 +99,7 @@ def table_rows(render: Path) -> list[dict] | None:
     global checked
     mod = load_renderer(render)
     refs = [*mod.POSTGRES_IMAGES.values(), *mod.VALKEY_IMAGES.values(), *mod.NATS_IMAGES.values(), mod.SEAWEEDFS_IMAGE, mod.COLLECTOR_IMAGE,
-            mod.LGTM_IMAGE, mod.VELERO_AWS_PLUGIN_IMAGE, mod.CLUSTER_PINS["k3s"]["image"]]
+            mod.LGTM_IMAGE, mod.VELERO_AWS_PLUGIN_IMAGE, mod.CREDENTIALS_IMAGE, mod.CLUSTER_PINS["k3s"]["image"]]
     for ref in refs:       # the constants first: a bad one may keep `versions_table()` from building
         checked += 1
         repo, tag, digest = split_ref(ref)
