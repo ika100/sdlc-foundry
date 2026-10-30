@@ -38,6 +38,7 @@ tasks:
     covers: [AC-128.8, AC-128.12]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t4
     title: /platform:update lists one credentials row per resource type and reads the cache url from the plan
     files: [scripts/cplat/update.py, tests/cplat/test_update_127.py]
