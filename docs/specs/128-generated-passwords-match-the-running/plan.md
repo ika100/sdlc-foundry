@@ -31,6 +31,7 @@ tasks:
     covers: [AC-128.14]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: component generate secrets render the credentials Job; the 4.x migration proof ignores credential writers
     files: [templates/gitops-app/scripts/render.py, templates/cluster-gitops/scripts/system_render.py, scripts/cplat/update.py, tests/cplat/test_gitops.py, tests/cplat/resources_fixtures.py, tests/cplat/test_resources_115.py, tests/cplat/test_resources_115_cmds.py, tests/cplat/test_scale_120.py, tests/cplat/test_cache_118.py, tests/cplat/test_broker_119.py, tests/cplat/test_upgrade_121.py, tests/cplat/test_system_render_114.py]
