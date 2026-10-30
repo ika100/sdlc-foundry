@@ -480,7 +480,7 @@ def test_the_e2e_script_restarts_the_store_and_reads_again_ac_116_8():  # AC-116
 
 def test_the_e2e_script_applies_the_bucket_in_sync_wave_order_ac_116_14():  # AC-116.14 (needs a cluster)
     text = e2e()
-    assert "externalsecret.yaml" in text and "credentials.yaml" in text
+    assert "credentials-job.yaml" in text and "credentials.yaml" in text  # spec 128: the keys come from the credentials Job
 
 
 # ---------------- docs, changelog, plugin ----------------

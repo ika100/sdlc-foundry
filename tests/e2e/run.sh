@@ -17,7 +17,7 @@
 # are deleted, and `system restore --replace` brings both back unchanged while the database cluster keeps its UID.
 # Two caches (spec 118) follow the external bucket: sessions (persistence in dev) and ratelimit (64Mi), both used by e2e-web. The steps prove
 # NOAUTH/WRONGPASS/PONG, maxmemory and eviction, SET and GET through SESSIONS_REDIS_URL from a probe pod, persistence across a pod
-# delete, a password that survives restart and force-sync, only ClusterIP, no operator (operators/ unchanged), doctor without a cache row,
+# delete, a password that survives restart and a second credentials Job run, only ClusterIP, no operator (operators/ unchanged), doctor without a cache row,
 # and, in the backup steps, that neither the Schedule nor the Backup nor the restore knows a cache (AC-118.6 to .8, .11, .14, .15, .19, .23).
 # A message broker (spec 119) follows the caches, before the ship steps: NACK is installed by cluster-up (WITH_NACK=1), a probe image
 # e2e-natsprobe:1 (nats-py) is built with the service images, and the broker `bus` carries the events APIs orders (e2e-api provides, e2e-web
@@ -287,24 +287,59 @@ for _ in $(seq 1 80); do
 done
 [ "$(kubectl --context k3d-$cluster -n $ns get cluster e2e-postgres -o jsonpath='{.status.phase}')" = "Cluster in healthy state" ] || fail "the Postgres cluster did not become healthy"
 
-# The bucket addon in sync-wave order (what Argo CD does): the key generators and the ExternalSecret (wave -1) first, then, once
-# the Secret exists, the store, the bucket and the identity (wave 0), then the S3Credentials (wave 1), which adopt the key pair
+# What Argo CD does for a directory with credentials-job.yaml (spec 128): the five credentials-*.yaml (the PreSync hook objects) are
+# applied first and the Job runs to completion (it writes every password Secret once, create if absent), then the whole directory is
+# applied. No server is restarted to make passwords match: AC-128.1 (a cache server accepts the Secret's password and refuses any other),
+# AC-128.2 (a component gets PONG with its REDIS_* variables), AC-128.4 (the broker's users authenticate), AC-128.7 (the bucket's S3
+# accepts the keys) and AC-128.8 (every replica sees the generated value) are checked in the steps below; AC-128.3 and AC-128.6 force one
+# more write (rerun_credentials) and compare the Secret's resourceVersion and value hashes before and after.
 kn() { local n=$1; shift; kubectl --context k3d-$cluster -n "$n" "$@"; }
+hash_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -d' ' -f1; }
+credentials_files() { local f; for f in serviceaccount role rolebinding configmap job; do echo "$1/credentials-$f.yaml"; done; }
+credentials_apply() { # namespace dir: applies the five credentials-*.yaml and waits for the Job (its logs on failure)
+  local ns_=$1 d=$2 args=() f out job
+  for f in $(credentials_files "$d"); do [ -f "$f" ] || fail "render did not write $f"; args+=(-f "$f"); done
+  out=$(kn "$ns_" apply "${args[@]}" -o name) || fail "applying the credentials-*.yaml of $d failed"
+  job=$(sed -n 's#^job.batch/##p' <<< "$out" | head -1)
+  [ -n "$job" ] || fail "$d/credentials-job.yaml did not apply a Job"
+  kn "$ns_" wait --for=condition=complete job/$job --timeout=180s >/dev/null || {
+    kn "$ns_" logs job/$job --tail=40 || true; kn "$ns_" describe job/$job | tail -20; fail "the credentials Job $job in $ns_ did not complete"; }
+  CRED_JOB=$job
+}
+apply_with_credentials() { # namespace dir: the credentials first (when the directory has them), then the whole directory
+  if [ -f "$2/credentials-job.yaml" ]; then credentials_apply "$1" "$2"; fi
+  kn "$1" apply -k "$2" >/dev/null || fail "applying $2 failed"
+}
+rerun_credentials() { # namespace dir: a forced write (AC-128.3): delete the finished Job and apply its five files again
+  local job
+  credentials_apply "$1" "$2"; job=$CRED_JOB
+  kn "$1" delete job "$job" --ignore-not-found --wait=true >/dev/null || fail "could not delete the credentials Job $job"
+  credentials_apply "$1" "$2"
+}
+secret_rv() { kn "$1" get secret "$2" -o jsonpath='{.metadata.resourceVersion}'; }   # namespace secret
+secret_hash() { kn "$1" get secret "$2" -o jsonpath='{.data}' | hash_of; }              # the hash of all values; no value is printed
+secret_age() { # namespace secret: seconds since the Secret was created
+  kn "$1" get secret "$2" -o jsonpath='{.metadata.creationTimestamp}' | python3 -c 'import sys, datetime as d
+t = d.datetime.strptime(sys.stdin.read().strip(), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=d.timezone.utc)
+print(int((d.datetime.now(d.timezone.utc) - t).total_seconds()))'
+}
+wait_secret_age() { # namespace secret seconds: the checks of AC-128.1, .7 and .8 start this long after the Secret exists
+  local a; a=$(secret_age "$1" "$2")
+  while [ "$a" -lt "$3" ]; do sleep 2; a=$(secret_age "$1" "$2"); done
+}
 apply_bucket() { # environment namespace [bucket, default files]
   local b=${3:-files} d k
   d="$work/e2e-gitops/applications/e2e/addons/$1/$b"
-  for f in access-key-generator.yaml secret-key-generator.yaml externalsecret.yaml seaweed.yaml bucket.yaml identity.yaml credentials.yaml kustomization.yaml; do
+  for f in credentials-job.yaml seaweed.yaml bucket.yaml identity.yaml credentials.yaml kustomization.yaml; do
     [ -f "$d/$f" ] || fail "render did not write addons/$1/$b/$f"
   done
-  kn "$2" apply -f "$d/access-key-generator.yaml" -f "$d/secret-key-generator.yaml" -f "$d/externalsecret.yaml" >/dev/null
-  for _ in $(seq 1 40); do   # up to 120 s
-    [ -n "$(kn "$2" get secret e2e-$b-app -o jsonpath='{.data.secretAccessKey}' 2>/dev/null)" ] && break; sleep 3
-  done
+  [ ! -f "$d/externalsecret.yaml" ] && [ ! -f "$d/access-key-generator.yaml" ] || fail "render still writes an ExternalSecret or key generator for the bucket $b"
+  credentials_apply "$2" "$d"   # the keys first (wave 0 of the PreSync hook), written once
   for k in endpoint bucket region forcePathStyle accessKeyId secretAccessKey; do
-    [ -n "$(kn "$2" get secret e2e-$b-app -o jsonpath="{.data.$k}" 2>/dev/null)" ] || { kn "$2" get externalsecret e2e-$b-app -o yaml | tail -25; kn "$2" get events --field-selector "involvedObject.name=e2e-$b-app" | tail -10; fail "the Secret e2e-$b-app in $2 lacks the key $k"; }
+    [ -n "$(kn "$2" get secret e2e-$b-app -o jsonpath="{.data.$k}" 2>/dev/null)" ] || fail "the Secret e2e-$b-app in $2 lacks the key $k"
   done
   kn "$2" apply -f "$d/seaweed.yaml" -f "$d/bucket.yaml" -f "$d/identity.yaml" >/dev/null
-  kn "$2" apply -f "$d/credentials.yaml" >/dev/null
+  kn "$2" apply -f "$d/credentials.yaml" >/dev/null   # the S3Credentials adopt the key pair
   kn "$2" apply -k "$d" >/dev/null   # the whole kustomization is then a no-op
 }
 store_ready() { # namespace [bucket, default files]: the operator creates the master, volume and filer StatefulSets
@@ -327,7 +362,7 @@ kubectl --context k3d-$cluster -n $ns rollout status deploy/otel-collector --tim
 
 step "Apply the generated manifests (what ArgoCD would sync)"
 for svc in e2e-api e2e-web; do
-  kubectl --context k3d-$cluster apply -n $ns -k "$work/e2e-gitops/applications/e2e/overlays/dev/$svc"
+  apply_with_credentials $ns "$work/e2e-gitops/applications/e2e/overlays/dev/$svc"
 done
 for svc in e2e-api e2e-web; do
   kubectl --context k3d-$cluster -n $ns rollout status deploy/$svc --timeout=240s || {
@@ -350,7 +385,7 @@ probe "http://e2e-api.e2e-dev.localhost:$port/api/info" '"service":"e2e-api"'
 step "Pods run as the declared non-root user with a read-only filesystem"
 kubectl --context k3d-$cluster -n $ns get pods -o jsonpath='{range .items[*]}{.metadata.name}{" ro="}{.spec.containers[0].securityContext.readOnlyRootFilesystem}{" uid="}{.spec.containers[0].securityContext.runAsUser}{"\n"}{end}'
 
-step "External Secrets: generated values are random and stable, remote values arrive"
+step "Generated secrets: random, written once, the same in every replica; remote values arrive via External Secrets (AC-128.8, AC-128.3)"
 kc() { kubectl --context k3d-$cluster -n $ns "$@"; }
 secret_val() { kc get secret "$1" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d; }
 for _ in $(seq 1 40); do [ -n "$(secret_val e2e-api-auth DB_PASSWORD)" ] && [ -n "$(secret_val e2e-api-stripe STRIPE_KEY)" ] && break; sleep 3; done
@@ -358,10 +393,27 @@ db=$(secret_val e2e-api-auth DB_PASSWORD); jwt=$(secret_val e2e-api-auth JWT_KEY
 [ "${#db}" = 32 ] || fail "generated DB_PASSWORD has length ${#db}, expected 32"
 [ "$db" != "$jwt" ] || fail "generated keys must differ"
 [ "$(secret_val e2e-api-stripe STRIPE_KEY)" = sk_test_e2e ] || fail "remote secret did not arrive"
-kc annotate externalsecret e2e-api-auth force-sync="$(date +%s)" --overwrite >/dev/null; sleep 8
-[ "$(secret_val e2e-api-auth DB_PASSWORD)" = "$db" ] || fail "generated secret changed on re-sync (it must be created once)"
+# AC-128.8: two replicas (one of them started later), 60 s after the Secret exists every replica sees the Secret's value (hashes only)
+api_replicas=$(kc get deploy e2e-api -o jsonpath='{.spec.replicas}')
+kc scale deploy e2e-api --replicas=2 >/dev/null || fail "could not scale e2e-api to 2 replicas"
+kc rollout status deploy/e2e-api --timeout=240s || { kc describe pod -l app=e2e-api | tail -30; fail "e2e-api did not get two ready replicas"; }
+wait_secret_age $ns e2e-api-auth 60
+db_hash=$(printf %s "$db" | hash_of); jwt_hash=$(printf %s "$jwt" | hash_of)
+api_pods=$(kc get pods -l app=e2e-api --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
+[ "$(wc -w <<< "$api_pods" | tr -d ' ')" -ge 2 ] || fail "e2e-api has fewer than two running replicas ($api_pods)"
+for p in $api_pods; do
+  [ "$(kc exec "$p" -- printenv DB_PASSWORD | tr -d '\n' | hash_of)" = "$db_hash" ] || fail "the replica $p sees another DB_PASSWORD than the Secret e2e-api-auth"
+  [ "$(kc exec "$p" -- printenv JWT_KEY | tr -d '\n' | hash_of)" = "$jwt_hash" ] || fail "the replica $p sees another JWT_KEY than the Secret e2e-api-auth"
+done
+# AC-128.3: one more write of the Secret (the Job runs again): resourceVersion and values are unchanged
+rv_before=$(secret_rv $ns e2e-api-auth); hash_before=$(secret_hash $ns e2e-api-auth)
+rerun_credentials $ns "$work/e2e-gitops/applications/e2e/overlays/dev/e2e-api"
+[ "$(secret_rv $ns e2e-api-auth)" = "$rv_before" ] && [ "$(secret_hash $ns e2e-api-auth)" = "$hash_before" ] || fail "generated secret changed when its credentials Job ran again (it must be created once)"
+[ "$(secret_val e2e-api-auth DB_PASSWORD)" = "$db" ] || fail "generated secret changed when its credentials Job ran again (it must be created once)"
+kc scale deploy e2e-api --replicas="${api_replicas:-1}" >/dev/null || fail "could not scale e2e-api back"
+kc rollout status deploy/e2e-api --timeout=240s || fail "e2e-api did not settle back to $api_replicas replicas"
 kc get pod -l app=e2e-api -o jsonpath='{.items[0].spec.containers[0].envFrom[*].secretRef.name}' | grep -q e2e-api-auth || fail "pod does not consume the generated secret"
-echo "ok   generated + remote secrets synced and consumed"
+echo "ok   generated secret identical in both replicas and in the Secret, unchanged by a second Job run; remote secret synced and consumed"
 
 step "Postgres addon: the generated credentials work and the service is wired to them"
 uri=$(secret_val e2e-postgres-app uri)
@@ -434,7 +486,8 @@ s3_same() { # label want got
 }
 H=probe/hello.txt
 
-step "Bucket: e2e-api writes an object through its variables and reads back the same bytes (AC-116.14)"
+step "Bucket: e2e-api writes an object through its variables and reads back the same bytes (AC-116.14, AC-128.7)"
+wait_secret_age $ns e2e-files-app 60   # AC-128.7: the keys of the Secret work 60 s after it exists
 s3_retry 12 "bucket e2e-files is not reachable from e2e-api in dev" $ns e2e-api '$A s3api head-bucket --bucket "$S3_BUCKET"'
 payload="hello-$RANDOM-$RANDOM"
 s3must "e2e-api writes and reads in dev" $ns e2e-api 'printf %s '"$payload"' > /tmp/in
@@ -498,12 +551,15 @@ s3_same "old version after the restart" one "$(s3_field OLD)"
 echo "ok   the store's pods were replaced; the object and the old version are still there"
 
 step "Bucket: syncing its application again keeps the keys and the data (AC-116.8)"
-# without Argo CD, applying the rendered addon again is what a re-sync does; the generated keys are written once
+# without Argo CD, the credentials Job running again and applying the rendered addon again is what a re-sync does; the keys are written once
 key_before=$(secret_val e2e-files-app accessKeyId); secret_before=$(secret_val e2e-files-app secretAccessKey)
 [ -n "$key_before" ] && [ -n "$secret_before" ] || fail "the Secret e2e-files-app has no keys before the re-sync"
-kn $ns apply -k "$work/e2e-gitops/applications/e2e/addons/dev/files" >/dev/null || fail "applying addons/dev/files again failed"
-sleep 10   # give a wrongly regenerated key time to land
+files_dir="$work/e2e-gitops/applications/e2e/addons/dev/files"
+rv_before=$(secret_rv $ns e2e-files-app); hash_before=$(secret_hash $ns e2e-files-app)
+rerun_credentials $ns "$files_dir"   # AC-128.7: a forced write
+kn $ns apply -k "$files_dir" >/dev/null || fail "applying addons/dev/files again failed"
 [ "$(secret_val e2e-files-app accessKeyId)" = "$key_before" ] && [ "$(secret_val e2e-files-app secretAccessKey)" = "$secret_before" ] \
+  && [ "$(secret_rv $ns e2e-files-app)" = "$rv_before" ] && [ "$(secret_hash $ns e2e-files-app)" = "$hash_before" ] \
   || fail "syncing the bucket's application again changed the keys of e2e-files-app"
 store_ready $ns
 s3_retry 20 "e2e-web reads after the re-sync" $ns e2e-web '$A s3api get-object --bucket "$S3_BUCKET" --key keep/restart.txt /tmp/out >/dev/null
@@ -674,17 +730,12 @@ for s in e2e-sessions-app e2e-ratelimit-app; do
 done
 echo "ok   operators/ unchanged (no operator for a cache); e2e-web gets SESSIONS_REDIS_* from e2e-sessions-app and RATELIMIT_REDIS_* from e2e-ratelimit-app"
 
-cstep "Caches: apply both addons, wait for the Secrets (four keys) and the StatefulSets, then roll out e2e-web"
+cstep "Caches: apply both addons (credentials Job first), check the four keys, wait for the StatefulSets, then roll out e2e-web"
 for c in sessions ratelimit; do
-  kc apply -k "$gitops_repo/applications/e2e/addons/dev/$c" >/dev/null || cfail "applying addons/dev/$c failed"
-done
-for c in sessions ratelimit; do
-  for _ in $(seq 1 40); do [ -n "$(secret_val e2e-$c-app password)" ] && break; sleep 3; done   # up to 120 s
+  [ ! -f "$gitops_repo/applications/e2e/addons/dev/$c/externalsecret.yaml" ] || cfail "render still writes an ExternalSecret for $c"
+  apply_with_credentials $ns "$gitops_repo/applications/e2e/addons/dev/$c"
   for k in url host port password; do
-    [ -n "$(secret_val e2e-$c-app $k)" ] || {
-      kc get externalsecrets.external-secrets.io e2e-$c-app -o yaml | tail -25
-      kc get events --field-selector involvedObject.kind=ExternalSecret,involvedObject.name=e2e-$c-app | tail -10   # ESO names a problem only here
-      cfail "the Secret e2e-$c-app lacks the key $k"; }
+    [ -n "$(secret_val e2e-$c-app $k)" ] || { kc logs job/"$CRED_JOB" --tail=20 || true; cfail "the Secret e2e-$c-app lacks the key $k"; }
   done
 done
 for c in sessions ratelimit; do
@@ -764,6 +815,41 @@ crun() { # script: runs it in a pod that carries e2e-web's SESSIONS_REDIS_* and 
 }
 c_field() { sed -n "s/^$1=//p" <<< "$C_OUT" | head -1; }
 
+cstep "Caches: the server accepts the Secret's password and refuses any other; the component gets PONG with its own variables, after a forced write too (AC-128.1, AC-128.2, AC-128.3)"
+# AC-128.1 / AC-128.2: 60 s after the Secret exists, e2e-web's variables answer PONG (REDIS_URL, and -h/-p/-a from HOST/PORT/PASSWORD)
+cache_probe='for c in SESSIONS RATELIMIT; do
+  eval "u=\$${c}_REDIS_URL h=\$${c}_REDIS_HOST p=\$${c}_REDIS_PORT a=\$${c}_REDIS_PASSWORD"
+  echo "${c}_URL=$(valkey-cli --no-auth-warning -u "$u" PING 2>&1)"
+  echo "${c}_HOST=$(valkey-cli --no-auth-warning -h "$h" -p "$p" -a "$a" PING 2>&1)"
+  echo "${c}_WRONG=$(valkey-cli --no-auth-warning -h "$h" -p "$p" -a wrong-password-$$ PING 2>&1)"
+done'
+cache_probe_check() { # label
+  crun "$cache_probe" || cfail "$1: the probe with e2e-web's variables failed: $(echo "$C_OUT" | tail -5 | tr '\n' ' ' | cut -c1-400)"
+  local c
+  for c in SESSIONS RATELIMIT; do
+    [ "$(c_field ${c}_URL)" = PONG ] || cfail "$1: PING through ${c}_REDIS_URL answered '$(c_field ${c}_URL)', not PONG"
+    [ "$(c_field ${c}_HOST)" = PONG ] || cfail "$1: PING with ${c}_REDIS_HOST, _PORT and _PASSWORD answered '$(c_field ${c}_HOST)', not PONG"
+    case "$(c_field ${c}_WRONG)" in *WRONGPASS*) ;; *) cfail "$1: a wrong password for $c was not refused with WRONGPASS (got: $(c_field ${c}_WRONG))";; esac
+  done
+}
+wait_secret_age $ns e2e-sessions-app 60; wait_secret_age $ns e2e-ratelimit-app 60
+cache_probe_check "60 s after the Secrets exist"
+for c in sessions ratelimit; do
+  [ "$(cx $c 'printf %s "$VALKEY_PASSWORD"' | hash_of)" = "$(secret_val e2e-$c-app password | hash_of)" ] || cfail "the server of e2e-$c does not run with the password of e2e-$c-app"
+  [ "$(secret_val e2e-$c-app url | sed 's#^redis://default:\([^@]*\)@.*#\1#' | hash_of)" = "$(secret_val e2e-$c-app password | hash_of)" ] || cfail "the password inside the url of e2e-$c-app differs from its password"
+done
+# AC-128.3: one more write (the Job runs again, the addon is applied again): resourceVersion and values are unchanged, the probe still answers
+rv_s=$(secret_rv $ns e2e-sessions-app); rv_r=$(secret_rv $ns e2e-ratelimit-app)
+h_s=$(secret_hash $ns e2e-sessions-app); h_r=$(secret_hash $ns e2e-ratelimit-app)
+for c in sessions ratelimit; do
+  rerun_credentials $ns "$gitops_repo/applications/e2e/addons/dev/$c"
+  kc apply -k "$gitops_repo/applications/e2e/addons/dev/$c" >/dev/null || cfail "applying addons/dev/$c again failed"
+done
+[ "$(secret_rv $ns e2e-sessions-app)" = "$rv_s" ] && [ "$(secret_rv $ns e2e-ratelimit-app)" = "$rv_r" ] \
+  && [ "$(secret_hash $ns e2e-sessions-app)" = "$h_s" ] && [ "$(secret_hash $ns e2e-ratelimit-app)" = "$h_r" ] || cfail "a Secret of a cache was written again by a second credentials Job run"
+cache_probe_check "after a forced write"
+echo "ok   both servers accept the Secret's password (REDIS_URL and HOST/PORT/PASSWORD answer PONG) and refuse a wrong one; a second Job run kept resourceVersion and values"
+
 cstep "Caches: the component SETs a key and GETs the same value through SESSIONS_REDIS_URL (AC-118.15)"
 payload="cache-$RANDOM-$RANDOM"
 crun 'valkey-cli -u "$SESSIONS_REDIS_URL" SET probe:key '"$payload"' >/dev/null
@@ -816,10 +902,8 @@ got=$(cx sessions "$vcli -a \"\$VALKEY_PASSWORD\" GET persist:key" 2>&1) || true
 [ "$(cx ratelimit "$vcli -a \"\$VALKEY_PASSWORD\" DBSIZE" 2>&1)" = 0 ] || cfail "ratelimit is not empty after its pod came back (DBSIZE)"
 [ "$(secret_val e2e-sessions-app password)" = "$pw_sessions" ] && [ "$(secret_val e2e-ratelimit-app password)" = "$pw_ratelimit" ] || cfail "a password changed across the restart"
 kc apply -k "$gitops_repo/applications/e2e/addons/dev/sessions" >/dev/null && kc apply -k "$gitops_repo/applications/e2e/addons/dev/ratelimit" >/dev/null || cfail "re-applying the cache addons failed"
-for c in sessions ratelimit; do kc annotate externalsecrets.external-secrets.io e2e-$c-app force-sync="$(date +%s)" --overwrite >/dev/null || cfail "could not annotate the ExternalSecret e2e-$c-app"; done
-sleep 10   # ESO reconciles the annotated ExternalSecrets
-[ "$(secret_val e2e-sessions-app password)" = "$pw_sessions" ] && [ "$(secret_val e2e-ratelimit-app password)" = "$pw_ratelimit" ] || cfail "a password changed after re-applying the addons and a force-sync"
-echo "ok   sessions kept its key (PVC data-e2e-sessions-0), ratelimit is empty and has no volume; the passwords survived the restart, the re-apply and force-sync"
+[ "$(secret_val e2e-sessions-app password)" = "$pw_sessions" ] && [ "$(secret_val e2e-ratelimit-app password)" = "$pw_ratelimit" ] || cfail "a password changed after re-applying the addons"
+echo "ok   sessions kept its key (PVC data-e2e-sessions-0), ratelimit is empty and has no volume; the passwords survived the restart and the re-apply"
 
 cstep "Caches: platform doctor names no cache, valkey, sessions or ratelimit prerequisite (AC-118.15, AC-118.23)"
 doc_json="$work/doctor.json"
@@ -876,10 +960,11 @@ nack_image=$(kubectl --context k3d-$cluster -n nack get deploy -l app=nack -o js
 nack_image=${nack_image%%@*}   # the reference may carry a digest (spec 121)
 [ "${nack_image##*:}" = 0.24.0 ] || nfail "the NACK Deployment runs '$nack_image', expected the tag 0.24.0"
 kubectl --context k3d-$cluster get crd streams.jetstream.nats.io consumers.jetstream.nats.io accounts.jetstream.nats.io >/dev/null || nfail "the NACK CRDs are not installed"
-for f in password-generator.yaml nack-secret.yaml externalsecret-e2e-api.yaml externalsecret-e2e-web.yaml server.yaml account.yaml \
+for f in credentials-serviceaccount.yaml credentials-role.yaml credentials-rolebinding.yaml credentials-configmap.yaml credentials-job.yaml server.yaml account.yaml \
          stream-orders.yaml stream-audit.yaml consumer-orders.e2e-web.yaml kustomization.yaml; do
   [ -f "$bus_dir/$f" ] || nfail "render did not write addons/dev/bus/$f"
 done
+[ -z "$(ls "$bus_dir" | grep -E '^(password-generator|nack-secret|externalsecret)' || true)" ] || nfail "render still writes a generator, a nack-secret.yaml or an ExternalSecret for the broker"
 [ -z "$(ls "$bus_dir" | grep -E '^consumer-audit' || true)" ] || nfail "render wrote a consumer for audit, which nobody consumes"
 # the server pin (chart and image), and the variables of both components in the rendered overlays (kubectl kustomize overlays/dev/<component>)
 read -r -d '' decl_py <<'PY' || true
@@ -939,7 +1024,7 @@ PY
 (cd "$gitops_repo" && E2E_ROOT="$root" uv run -q --with pyyaml python -c "$decl_py" "$gitops_repo/applications/e2e" "$work") || nfail "the rendered broker files or component variables are not as designed (see above)"
 echo "ok   operators/apps/nack.yaml pins nack $nack_pin (installed), the NACK Deployment runs 0.24.0; server.yaml pins nats chart 2.15.1 and nats:2.15.2-alpine; e2e-web and e2e-api get NATS_* from e2e-bus-<component>-app, EVENTS_ORDERS_*/EVENTS_AUDIT_* and NATS_INBOX_PREFIX"
 
-nstep "Broker: apply the addon without Argo CD (Secrets first, then the NATS server as a k3s HelmChart, then Account, streams and consumer) and wait for them (AC-119.21)"
+nstep "Broker: apply the addon without Argo CD (the credentials Job first, then the NATS server as a k3s HelmChart, then Account, streams and consumer) and wait for them (AC-119.21)"
 # what Argo CD would do: the Application becomes a helmcharts.helm.cattle.io (same repo, chart, version, values); the rest is applied as rendered
 read -r -d '' apply_py <<'PY' || true
 import sys
@@ -952,8 +1037,8 @@ for d in docs:
         chart = {"apiVersion": "helm.cattle.io/v1", "kind": "HelmChart", "metadata": {"name": s["helm"]["releaseName"], "namespace": "kube-system"},
                  "spec": {"repo": s["repoURL"], "chart": s["chart"], "version": s["targetRevision"],
                           "targetNamespace": d["spec"]["destination"]["namespace"], "valuesContent": yaml.safe_dump(s["helm"]["valuesObject"])}}
-    elif d["kind"] in ("Password", "ExternalSecret"):
-        first.append(d)
+    elif d["kind"] in ("ServiceAccount", "Role", "RoleBinding", "ConfigMap", "Job"):
+        first.append(d)   # the credentials objects: the script applies them from their files and waits for the Job
     elif d["kind"] in ("Account", "Stream", "Consumer"):
         second.append(d)
     else:
@@ -964,16 +1049,10 @@ for path, items in zip(sys.argv[1:4], ([*first], [chart], [*second])):
     open(path, "w").write(yaml.safe_dump_all(items))
 PY
 kubectl kustomize "$bus_dir" | (cd "$gitops_repo" && uv run -q --with pyyaml python -c "$apply_py" "$work/bus-1.yaml" "$work/bus-chart.yaml" "$work/bus-2.yaml") || nfail "could not turn the rendered addon into objects to apply"
-kc apply -f "$work/bus-1.yaml" >/dev/null || nfail "applying the generator and the ExternalSecrets failed"
+credentials_apply $ns "$bus_dir"   # PreSync: the Secrets of the broker are written once, no server is running yet
 bus_secrets="e2e-bus-nack e2e-bus-e2e-api-app e2e-bus-e2e-web-app"
-for _ in $(seq 1 40); do   # up to 120 s
-  all=1; for s in $bus_secrets; do [ -n "$(secret_val $s password)" ] || all=0; done; [ $all = 1 ] && break; sleep 3
-done
 for s in $bus_secrets; do
-  [ -n "$(secret_val $s password)" ] || {
-    kc get externalsecrets.external-secrets.io $s -o yaml | tail -25
-    kc get events --field-selector involvedObject.kind=ExternalSecret,involvedObject.name=$s | tail -10   # ESO names a problem only here
-    nfail "the Secret $s has no password after 120 s"; }
+  [ -n "$(secret_val $s password)" ] || { kc logs job/"$CRED_JOB" --tail=20 || true; nfail "the Secret $s has no password after the credentials Job"; }
 done
 kubectl --context k3d-$cluster apply -f "$work/bus-chart.yaml" >/dev/null || nfail "applying the HelmChart e2e-bus failed"
 for _ in $(seq 1 40); do kc get statefulsets.apps e2e-bus >/dev/null 2>&1 && break; sleep 3; done   # up to 120 s
@@ -986,6 +1065,7 @@ if ! kc rollout status statefulsets.apps/e2e-bus --timeout=180s 2>&1 | tee /dev/
   kc get pods; kc describe pod e2e-bus-0 | tail -30; kc logs e2e-bus-0 -c nats --tail=20 || true
   nfail "the StatefulSet e2e-bus did not become ready"
 fi
+bus_server_ready_t=$SECONDS
 kc apply -f "$work/bus-2.yaml" >/dev/null || nfail "applying the Account, the streams and the consumer failed"
 bus_ready() { # kind name: the NACK object reports Ready
   [ "$(kc get "$1" "$2" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = True ]
@@ -1076,6 +1156,46 @@ nrun() { # component script: runs it in a pod that carries the component's NATS_
 }
 n_field() { sed -n "s/^$1=//p" <<< "$N_OUT" | head -1; }
 n_must() { nrun "$1" "$2" || nfail "the probe of $1 failed: $(echo "$N_OUT" | tail -8 | tr '\n' ' ' | cut -c1-600)"; }
+# AC-128.4 / AC-128.5: a component connects with its own NATS_URL, NATS_USER and NATS_PASSWORD (a wrong password is refused)
+read -r -d '' nats_auth_py <<'PY' || true
+import asyncio, os
+import nats
+
+async def main():
+    nc = await nats.connect(os.environ["NATS_URL"], user=os.environ["NATS_USER"], password=os.environ["NATS_PASSWORD"], connect_timeout=5)
+    await nc.flush()
+    print("AUTH=ok")
+    await nc.close()
+    try:
+        bad = await nats.connect(os.environ["NATS_URL"], user=os.environ["NATS_USER"], password="wrong-password", connect_timeout=5, allow_reconnect=False)
+        await bad.close()
+        print("WRONG=accepted")
+    except Exception as e:
+        print("WRONG=refused")
+asyncio.run(main())
+PY
+bus_auth() { # label component...: each component authenticates with the password of its Secret and no other
+  local label=$1 c; shift
+  for c in "$@"; do
+    n_must "$c" "$nats_auth_py"
+    [ "$(n_field AUTH)" = ok ] || nfail "$label: $c did not authenticate with its NATS_USER and NATS_PASSWORD: $N_OUT"
+    [ "$(n_field WRONG)" = refused ] || nfail "$label: the server accepted a wrong password for $c: $N_OUT"
+  done
+}
+
+nstep "Broker: _nack and every component user authenticate without a server restart, also after a forced write of the Secrets (AC-128.4, AC-128.6)"
+bus_ready accounts.jetstream.nats.io e2e-bus || { kc describe accounts.jetstream.nats.io e2e-bus | tail -25; kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=30 || true; nfail "the NACK Account e2e-bus is not Ready (the user _nack does not authenticate with the password of e2e-bus-nack)"; }
+[ "$(kc get pod e2e-bus-0 -o jsonpath='{.status.containerStatuses[?(@.name=="nats")].restartCount}')" = 0 ] || nfail "the server e2e-bus-0 was restarted"
+bus_auth "after the server is ready" e2e-api e2e-web
+bus_rv=""; bus_h=""
+for s in $bus_secrets; do bus_rv="$bus_rv $(secret_rv $ns $s)"; bus_h="$bus_h $(secret_hash $ns $s)"; done
+rerun_credentials $ns "$bus_dir"   # AC-128.6: the Job runs again
+bus_rv2=""; bus_h2=""
+for s in $bus_secrets; do bus_rv2="$bus_rv2 $(secret_rv $ns $s)"; bus_h2="$bus_h2 $(secret_hash $ns $s)"; done
+[ "$bus_rv2" = "$bus_rv" ] && [ "$bus_h2" = "$bus_h" ] || nfail "a Secret of the broker was written again by a second credentials Job run"
+[ "$(kc get pod e2e-bus-0 -o jsonpath='{.status.containerStatuses[?(@.name=="nats")].restartCount}')" = 0 ] || nfail "the credentials Job run again restarted the server"
+bus_auth "after a forced write" e2e-api e2e-web
+echo "ok   the NACK Account is Ready; e2e-api and e2e-web authenticate (a wrong password is refused); a second Job run kept every resourceVersion and password"
 # what every probe does first: connect the way the docs example does (NATS_URL, NATS_USER, NATS_PASSWORD, NATS_INBOX_PREFIX)
 read -r -d '' natspre <<'PY' || true
 import asyncio, os, time
@@ -1411,16 +1531,24 @@ sok "operators/apps/keda.yaml pins keda $keda_pin (installed, keda-operator $ked
 
 sstep "Scaling: apply the bus addon again (user e2e-worker, stream e2e-jobs, consumer e2e-worker), then the worker (Deployment, Service), then the ScaledObject (AC-120.14, AC-120.25)"
 bus_files || sfail "could not turn the rendered addon into objects to apply"
-kc apply -f "$work/bus-1.yaml" >/dev/null || sfail "applying the generator and the ExternalSecrets failed"
-for _ in $(seq 1 40); do [ -n "$(secret_val e2e-bus-e2e-worker-app password)" ] && break; sleep 3; done   # up to 120 s
-[ -n "$(secret_val e2e-bus-e2e-worker-app password)" ] || {
-  kc get externalsecrets.external-secrets.io e2e-bus-e2e-worker-app -o yaml | tail -25
-  kc get events --field-selector involvedObject.kind=ExternalSecret,involvedObject.name=e2e-bus-e2e-worker-app | tail -10
-  sfail "the Secret e2e-bus-e2e-worker-app has no password after 120 s"; }
+bus_secrets_before=$(secret_hash $ns e2e-bus-nack; secret_hash $ns e2e-bus-e2e-api-app; secret_hash $ns e2e-bus-e2e-web-app)
+credentials_apply $ns "$bus_dir"   # the new user: a new Secret; the existing Secrets keep their passwords (AC-128.5)
+[ -n "$(secret_val e2e-bus-e2e-worker-app password)" ] || { kc logs job/"$CRED_JOB" --tail=20 || true; sfail "the Secret e2e-bus-e2e-worker-app has no password after the credentials Job"; }
+[ "$(secret_hash $ns e2e-bus-nack; secret_hash $ns e2e-bus-e2e-api-app; secret_hash $ns e2e-bus-e2e-web-app)" = "$bus_secrets_before" ] || sfail "adding e2e-worker changed a password of the existing users"
 [ "$(secret_val e2e-bus-e2e-worker-app user)" = e2e-worker ] || sfail "the user of e2e-bus-e2e-worker-app is not e2e-worker"
 rev_before=$(kc get statefulsets.apps e2e-bus -o jsonpath='{.status.updateRevision}')
 kubectl --context k3d-$cluster apply -f "$work/bus-chart.yaml" >/dev/null || sfail "applying the HelmChart e2e-bus failed"
 bus_roll "$rev_before"
+bus_back_t=$SECONDS
+# AC-128.5: within 60 s of the server being ready again, e2e-worker and the users that were there connect with their own variables
+bus_ok=0
+for _ in $(seq 1 12); do
+  if nrun e2e-worker "$nats_auth_py" && [ "$(n_field AUTH)" = ok ]; then bus_ok=1; break; fi; sleep 3
+done
+[ $bus_ok = 1 ] && [ $((SECONDS - bus_back_t)) -le 60 ] || sfail "e2e-worker did not connect within 60 s of the server being ready again: $N_OUT"
+for c in e2e-api e2e-web; do
+  nrun $c "$nats_auth_py" && [ "$(n_field AUTH)" = ok ] || sfail "$c got no connection after e2e-worker was added: $N_OUT"
+done
 kc apply -f "$work/bus-2.yaml" >/dev/null || sfail "applying the Account, the streams and the consumers failed"
 for o in streams.jetstream.nats.io/e2e-jobs consumers.jetstream.nats.io/e2e-jobs.e2e-worker; do
   for _ in $(seq 1 40); do bus_ready "${o%%/*}" "${o#*/}" && break; sleep 3; done   # up to 120 s
@@ -1784,7 +1912,7 @@ kc delete deployments.apps/e2e-worker services/e2e-worker --ignore-not-found --t
 for o in consumers.jetstream.nats.io/e2e-jobs.e2e-worker streams.jetstream.nats.io/e2e-jobs; do
   kc delete "$o" --timeout=60s || { kc get "$o" -o yaml | tail -20; kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=20 || true; sfail "could not delete $o"; }
 done
-kc delete externalsecrets.external-secrets.io e2e-bus-e2e-worker-app --timeout=60s || sfail "could not delete the ExternalSecret e2e-bus-e2e-worker-app"
+[ -z "$(kc get externalsecrets.external-secrets.io,passwords.generators.external-secrets.io -o name 2>/dev/null | grep -E 'e2e-bus|e2e-worker' || true)" ] || sfail "an ExternalSecret or Password generator names the broker or the worker (the credentials Job writes their Secrets)"
 kc delete secrets e2e-bus-e2e-worker-app --ignore-not-found --timeout=60s >/dev/null || sfail "could not delete the Secret e2e-bus-e2e-worker-app"
 left=$(kc get deployments.apps,services,scaledobjects.keda.sh,triggerauthentications.keda.sh,horizontalpodautoscalers.autoscaling,secrets,externalsecrets.external-secrets.io,streams.jetstream.nats.io,consumers.jetstream.nats.io -o name 2>/dev/null | grep -E 'e2e-worker|e2e-jobs' || true)
 [ -z "$left" ] || sfail "objects of the scaling steps are still in e2e-dev: $left"
@@ -1850,9 +1978,11 @@ if kc get statefulsets.apps e2e-bus >/dev/null 2>&1; then
   nfail "the StatefulSet e2e-bus is still there 90 s after the HelmChart was deleted"
 fi
 kc delete persistentvolumeclaims e2e-bus-js-e2e-bus-0 --timeout=60s || nfail "could not delete the PVC e2e-bus-js-e2e-bus-0"
-for s in $bus_secrets; do kc delete externalsecrets.external-secrets.io $s --timeout=60s || nfail "could not delete the ExternalSecret $s"; done
-kc delete secrets $bus_secrets --ignore-not-found --timeout=60s >/dev/null || nfail "could not delete the Secrets of the broker"
-kc delete passwords.generators.external-secrets.io e2e-bus-password --timeout=60s || nfail "could not delete the generator e2e-bus-password"
+# no ExternalSecret and no Password generator names the broker; a person deletes the Secrets and the credentials hook objects
+[ -z "$(kc get externalsecrets.external-secrets.io,passwords.generators.external-secrets.io -o name 2>/dev/null | grep -E 'e2e-bus|e2e-orders|e2e-audit' || true)" ] || nfail "an ExternalSecret or Password generator names the broker"
+kc delete secrets $bus_secrets e2e-bus-e2e-worker-app --ignore-not-found --timeout=60s >/dev/null || nfail "could not delete the Secrets of the broker"
+kc delete serviceaccount/e2e-bus-credentials role/e2e-bus-credentials rolebinding/e2e-bus-credentials configmap/e2e-bus-credentials --ignore-not-found --timeout=60s >/dev/null || nfail "could not delete the credentials objects of the broker"
+for j in $(kc get jobs.batch -o name 2>/dev/null | grep -E 'e2e-bus-credentials' || true); do kc delete "$j" --ignore-not-found --timeout=60s >/dev/null || nfail "could not delete $j"; done
 left=$(kc get statefulsets.apps,persistentvolumeclaims,secrets,externalsecrets.external-secrets.io,streams.jetstream.nats.io,consumers.jetstream.nats.io,accounts.jetstream.nats.io -o name 2>/dev/null | grep -E 'e2e-bus|e2e-orders|e2e-audit' || true)
 [ -z "$left" ] || nfail "objects of the broker are still in e2e-dev: $left"
 echo "ok   bus is removed from system.yaml (nack.yaml and addons/dev/bus are gone) and deleted from the cluster; the broker steps took $((SECONDS - broker_t0)) s (budget 300 s)"

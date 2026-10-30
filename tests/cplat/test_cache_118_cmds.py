@@ -444,7 +444,7 @@ def test_the_e2e_script_proves_the_cache_is_not_exposed_ac_118_8():  # AC-118.8 
 
 
 def test_the_e2e_script_proves_the_secret_contract_and_that_the_password_survives_ac_118_19():  # AC-118.19 (needs a cluster)
-    need(e2e(), "redis://default:", "e2e-sessions.e2e-dev.svc:6379/0", "force-sync", "externalsecrets.external-secrets.io")  # spec 127
+    need(e2e(), "redis://default:", "e2e-sessions.e2e-dev.svc:6379/0", "rerun_credentials", "resourceVersion")  # spec 127, spec 128
 
 
 def test_the_e2e_script_proves_no_operator_is_added_for_a_cache_ac_118_23():  # AC-118.23 (needs a cluster)
