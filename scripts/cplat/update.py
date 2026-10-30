@@ -589,9 +589,24 @@ def _operator_revisions(repo: Path) -> dict[str, str]:
     return out
 
 
-def _generated_snapshot(repo: Path) -> dict[str, bytes]:
+def rerender_cluster(repo: Path, written: set[str]) -> int:
+    """A cluster repo: re-render cluster/ with the updated scripts/render.py, which the template update never touches (it is the
+    render's output), so the review branch passes its own render check (#264). Adds the changed paths to `written`; returns their count."""
+    before = _generated_snapshot(repo, ("cluster",))
+    res = run(["uv", "run", "scripts/render.py"], cwd=repo, check=False)
+    if res.returncode != 0:
+        lines = [ln for ln in (res.stderr or res.stdout or "").splitlines() if ln.strip()]
+        raise PlatformError("the updated cluster render fails: " + (lines[-1] if lines else f"exit {res.returncode}"),
+                            hint="fix cluster.yaml, then run the update again")
+    after = _generated_snapshot(repo, ("cluster",))
+    changed = {k for k in before.keys() | after.keys() if before.get(k) != after.get(k)}
+    written |= changed
+    return len(changed)
+
+
+def _generated_snapshot(repo: Path, tops: tuple[str, ...] = ("applications", "operators")) -> dict[str, bytes]:
     out: dict[str, bytes] = {}
-    for top in ("applications", "operators"):
+    for top in tops:
         for p in sorted((repo / top).rglob("*")) if (repo / top).is_dir() else []:
             if p.is_file():
                 out[p.relative_to(repo).as_posix()] = p.read_bytes()
@@ -779,6 +794,8 @@ def plan(req: dict) -> Report:
     r.will_do.append("MERGE devbox.json: the template's recipes and packages, plus the ones only this repo has")
     if req["migrate"] and req["unmigrated"]:
         r.will_do.append("DELETE k8s/ (v1 → v2 migration: manifests are generated in the system's gitops-app repo; recoverable from git history)")
+    if req["shape"] == "cluster-gitops":
+        r.will_do.append("re-render cluster/ with the updated scripts/render.py (its output; the template update leaves it alone)")
     r.will_do.append("restore the stable template source in .copier-answers.yml and stamp .platform-version")
     r.will_do.append("commit once (nothing is pushed)")
     return r
@@ -866,7 +883,8 @@ def execute(req: dict) -> Report:
     branch = branch_name(repo)
     created = cur in ("main", "master")
     rendering = req["shape"] == "gitops-app" and not migrating
-    ignored = _ignored(repo) if migrating or rendering else set()
+    rendering_cluster = req["shape"] == "cluster-gitops"
+    ignored = _ignored(repo) if migrating or rendering or rendering_cluster else set()
     if created:
         run(["git", "checkout", "-q", "-b", branch], cwd=repo)
         r.did.append(f"created branch {branch}")
@@ -914,8 +932,11 @@ def execute(req: dict) -> Report:
             if versions:
                 r.data["versions"] = versions
                 r.did.append(f"re-rendered with the new renderer; {len(versions['lines'])} version change(s) listed below")
+        if rendering_cluster:
+            n = rerender_cluster(repo, generated)
+            r.did.append(f"re-rendered cluster/ with the updated scripts/render.py ({n} file(s) changed)")
     except BaseException:
-        if migrating or rendering:
+        if migrating or rendering or rendering_cluster:
             rollback(repo, cur, branch, created, ignored)
         tmp.cleanup()
         raise
