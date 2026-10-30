@@ -2684,6 +2684,13 @@ except Fail as failure:
 '''
 
 
+def credentials_pod_labels(owner: str, labels: dict) -> dict:
+    """The labels of a credentials Job's pod: part-of and managed-by of the owner, and its own name and component. None of the owner's
+    selector labels (app, app.kubernetes.io/name), so no Service, Deployment or StatefulSet of the owner selects the Job's pod."""
+    kept = {k: v for k, v in labels.items() if k in ("app.kubernetes.io/part-of", "app.kubernetes.io/managed-by")}
+    return {"app.kubernetes.io/name": f"{owner}-credentials", **kept, "app.kubernetes.io/component": "credentials"}
+
+
 def credentials_files(app: str, env: str, owner: str, labels: dict, plan: dict) -> dict[str, dict]:
     """The five objects of an owner's credentials Job (spec 128): they write each generated credential once, in the PreSync hook.
 
@@ -2725,7 +2732,8 @@ def credentials_files(app: str, env: str, owner: str, labels: dict, plan: dict) 
             "apiVersion": "batch/v1", "kind": "Job",
             "metadata": meta(f"{owner[:42].rstrip('-')}-credentials-{digest}", "1", "BeforeHookCreation,HookSucceeded"),
             "spec": {"backoffLimit": 2, "activeDeadlineSeconds": 300, "ttlSecondsAfterFinished": 600,
-                     "template": {"metadata": {"labels": dict(labels)},
+                     # the pod must not match any workload's selector (a Service would send it traffic): only these labels
+                     "template": {"metadata": {"labels": credentials_pod_labels(owner, labels)},
                                   "spec": {"serviceAccountName": name, "automountServiceAccountToken": True, "restartPolicy": "Never",
                                            "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "runAsGroup": 65534,
                                                                "seccompProfile": {"type": "RuntimeDefault"}},

@@ -1153,12 +1153,12 @@ def test_owner_managed_environments_render_the_same_broker_ac_119_23(tmp_path): 
 # ---------------- AC-119.24: additive, nothing else changes ----------------
 
 # digests of the trees the 5.x renderer wrote before spec 119 (full tree, sha256 of sorted path and content)
-BEFORE_119 = {"full5": ("327d41a6f2cdc9c46124f7b088b13b2bcfe154dfb878ebfb87b3845bd048cf02", 67),   # spec 128: a generated component secret gets a credentials Job
-              "rich5": ("fe1543fc8b668272d474fb2a3c81de372ae673a2023c1dae8521a3143d7473be", 67),   # spec 128: a generated component secret gets a credentials Job
-              "db-bucket": ("ae098881e7b6a57b03e99b36924de150f513b06e1dad3c42b303e79400e930d8", 56),   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret
-              "cache": ("c5e5809f484b7fddca7c2189f68c58b6e4a713331a035bca6aa2424dbad243df", 49),   # spec 128: the credentials Job replaces the generator files
+BEFORE_119 = {"full5": ("0618d1c1a3abfe7a42141429f06e2c8035447cf7ed6f5942775487666f600c4b", 67),   # spec 128: a generated component secret gets a credentials Job
+              "rich5": ("fd5079e714fe1f27eba5cec619e3ec68b5ebfdd3c88692f3cbc8107db437f346", 67),   # spec 128: a generated component secret gets a credentials Job
+              "db-bucket": ("ba5ac404d9ebf9e6be5326e01026eae110001f347ceaa11c09885b5abc448a4c", 56),   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret
+              "cache": ("d836daf235897e83ea49cfb411dc2bef4d67b8becd03160a2d6ffb4d2c5b71ef", 49),   # spec 128: the credentials Job replaces the generator files
               "events": ("9fe3842825e291f58f1e33aac03f53edf98df7c9053eefbeae7882d3ad3f57e4", 26),
-              "events-multi": ("ebca4dedef644e88bafb98a92819385874af6b9771570478b38a2551b788e4ef", 70)}
+              "events-multi": ("429996ff095d3e776ea0274025dd93738167dbdebf2c6952cfd938def0cac0ea", 70)}
 
 
 def _before_docs():

@@ -98,9 +98,16 @@ def normalised_rules(rules: list[dict]) -> list[dict]:
     return out
 
 
+def pod_labels(owner: str, labels: dict) -> dict:
+    """The Job's pod labels (approved during the build): the owner's part-of and managed-by, its own name and component, and none of
+    the owner's selector labels, so no Service of the owner sends traffic to it."""
+    kept = {k: v for k, v in labels.items() if k in ("app.kubernetes.io/part-of", "app.kubernetes.io/managed-by")}
+    return {"app.kubernetes.io/name": f"{owner}-credentials", **kept, "app.kubernetes.io/component": "credentials"}
+
+
 def expected_job(owner: str, name: str, labels: dict) -> dict:
     return {"backoffLimit": 2, "activeDeadlineSeconds": 300, "ttlSecondsAfterFinished": 600,
-            "template": {"metadata": {"labels": labels},
+            "template": {"metadata": {"labels": pod_labels(owner, labels)},
                          "spec": {"serviceAccountName": f"{owner}-credentials", "automountServiceAccountToken": True, "restartPolicy": "Never",
                                   "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "runAsGroup": 65534, "seccompProfile": {"type": "RuntimeDefault"}},
                                   "containers": [{"name": "credentials", "image": image(),

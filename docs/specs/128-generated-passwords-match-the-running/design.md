@@ -120,7 +120,7 @@ spec:
   activeDeadlineSeconds: 300
   ttlSecondsAfterFinished: 600
   template:
-    metadata: {labels: <same labels>}
+    metadata: {labels: {app.kubernetes.io/name: <owner>-credentials, <part-of and managed-by of the owner>, app.kubernetes.io/component: credentials}}   # no selector label of the owner (amended during the build)
     spec:
       serviceAccountName: <owner>-credentials
       automountServiceAccountToken: true

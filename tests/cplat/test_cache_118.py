@@ -718,9 +718,9 @@ def test_a_cache_name_clashing_with_its_password_object_fails_ac_118_22(tmp_path
 
 
 # byte-identical guarantee: digests of the trees the 5.x renderer wrote before spec 118 (full tree, sha256 of sorted path and content)
-BEFORE_118 = {"full5": ("327d41a6f2cdc9c46124f7b088b13b2bcfe154dfb878ebfb87b3845bd048cf02", 67),   # spec 128: a generated component secret gets a credentials Job
-              "rich5": ("fe1543fc8b668272d474fb2a3c81de372ae673a2023c1dae8521a3143d7473be", 67),   # spec 128: a generated component secret gets a credentials Job
-              "db-bucket": ("ae098881e7b6a57b03e99b36924de150f513b06e1dad3c42b303e79400e930d8", 56)}   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret
+BEFORE_118 = {"full5": ("0618d1c1a3abfe7a42141429f06e2c8035447cf7ed6f5942775487666f600c4b", 67),   # spec 128: a generated component secret gets a credentials Job
+              "rich5": ("fd5079e714fe1f27eba5cec619e3ec68b5ebfdd3c88692f3cbc8107db437f346", 67),   # spec 128: a generated component secret gets a credentials Job
+              "db-bucket": ("ba5ac404d9ebf9e6be5326e01026eae110001f347ceaa11c09885b5abc448a4c", 56)}   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret
 
 
 def _before_docs():

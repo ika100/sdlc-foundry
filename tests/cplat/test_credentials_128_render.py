@@ -282,3 +282,20 @@ def test_every_generated_credential_has_one_writer_the_job_ac_128_12(tmp_path): 
             assert d["spec"]["target"]["name"] not in planned, path
         if d.get("kind") == "Secret":
             assert d["metadata"]["name"] not in planned, f"{path}: a rendered Secret manifest also writes a planned credential"
+
+
+def test_no_workload_selector_matches_a_credentials_pod_ac_128_12(tmp_path):  # AC-128.12
+    """A credentials Job's pod is never selected by a Service, Deployment or StatefulSet (it would get traffic or be counted as a
+    replica while it runs); added with the maintainer's approval during the build."""
+    comps = {"api": comp("api", ["sessions", "files"], provides=["orders"], secrets=[{"name": "api-auth", "generate": {"keys": ["K"]}}]),
+             "web": comp("web", consumes=["orders"])}
+    g = ok(tmp_path, bsys({"bus": broker(), "sessions": cache(), "files": {"type": "bucket"}}, comps))
+    docs = list(all_docs(g))
+    pods = [d["spec"]["template"]["metadata"].get("labels") or {} for _, d in docs if d.get("kind") == "Job" and "credentials" in d["metadata"]["name"]]
+    assert pods
+    for path, d in docs:
+        sel = (d.get("spec") or {}).get("selector") if d.get("kind") in ("Service", "Deployment", "StatefulSet") else None
+        if isinstance(sel, dict):
+            sel = sel.get("matchLabels", sel)
+            for labels in pods:
+                assert not all(labels.get(k) == v for k, v in sel.items()), f"{path} selects a credentials pod ({labels})"
