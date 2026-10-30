@@ -10,6 +10,7 @@ tasks:
     covers: [AC-128.1, AC-128.2, AC-128.3, AC-128.10, AC-128.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: ADR-072 (cause of #316, the create-only credentials Job, exception to ADR-018 with its rights) and the amendments of ADR-018, 059, 064, 065
     files: [docs/adr/072-a-generated-credential-is-written-once-by-a-create-only-job.md, docs/adr/018-secrets-with-external-secrets-operator.md, docs/adr/059-in-cluster-buckets-on-seaweedfs-per-instance.md, docs/adr/064-a-cache-is-a-platform-rendered-valkey-statefulset.md, docs/adr/065-a-broker-is-nats-jetstream-with-declared-streams-and-per-component-users.md, docs/adr/README.md]

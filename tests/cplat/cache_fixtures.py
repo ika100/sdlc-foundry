@@ -74,7 +74,7 @@ def cplan(g, env="dev", name="sessions") -> dict:
     return json.loads(cdoc(g, env, "credentials-configmap.yaml", name)["data"]["plan.json"])
 
 
-# the 5.4 form (a Password generator and a generator-backed ExternalSecret): kept for the AC-128.12 test that must flag it
+# the 5.4 form (a Password generator and a generator-backed ExternalSecret): kept for the spec 128 test that must flag it
 def expected_generator(env="dev", name="sessions") -> dict:
     return {"apiVersion": "generators.external-secrets.io/v1alpha1", "kind": "Password",
             "metadata": {"name": f"shop-{name}-password", "labels": labels(name), "annotations": {WAVE: "-1"}},
