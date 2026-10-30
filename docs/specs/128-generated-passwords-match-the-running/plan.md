@@ -24,6 +24,7 @@ tasks:
     covers: [AC-128.4, AC-128.5, AC-128.6, AC-128.7, AC-128.10, AC-128.12]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t8
     title: CHANGELOG Fixed entry (#316) with the Versions row, user docs and /component:add wording, component plugin 1.5.2
     files: [docs/CHANGELOG.md, docs/USER-JOURNEY.md, docs/HOW-IT-WORKS.md, docs/DOMAIN-MODEL.md, plugins/component/commands/add.md, plugins/component/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
