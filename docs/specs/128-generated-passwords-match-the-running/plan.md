@@ -52,6 +52,7 @@ tasks:
     covers: [AC-128.1, AC-128.2, AC-128.3, AC-128.4, AC-128.5, AC-128.6, AC-128.7, AC-128.8, AC-128.11]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t6
     title: e2e upgrade.sh without settle_cache — both render forms applied, a forced #316 state repaired after the update, Secrets kept, AC-128.1/.2/.3/.4 per environment
     files: [tests/e2e/upgrade.sh]
