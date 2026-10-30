@@ -776,6 +776,13 @@ for e in dev staging prod; do
   for sub in addons overlays; do
     for d in "$app_dir/$sub/$e"/*/; do
       [ -f "${d}kustomization.yaml" ] || continue
+      if [ -f "${d}server.yaml" ]; then   # a broker: its server is an Argo CD Application (no Argo CD here, apply_bus installs it as a HelmChart)
+        kubectl --context "$ctx" -n "upg-$e" kustomize "$d" \
+          | yaml_py -c 'import sys, yaml; print(yaml.safe_dump_all([d for d in yaml.safe_load_all(sys.stdin) if d and d["kind"] != "Application"]))' \
+          | kubectl --context "$ctx" -n "upg-$e" apply --dry-run=server -f - >/dev/null 2>"$work/dryrun.err" \
+          || fail "the API server refuses ${d#"$gitops_repo"/} (without its Application): $(tail -3 "$work/dryrun.err")"
+        continue
+      fi
       kubectl --context "$ctx" -n "upg-$e" apply --dry-run=server -k "$d" >/dev/null 2>"$work/dryrun.err" || fail "the API server refuses ${d#"$gitops_repo"/}: $(tail -3 "$work/dryrun.err")"
     done
   done
