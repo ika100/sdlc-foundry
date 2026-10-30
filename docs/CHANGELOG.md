@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**`cplat feedback` keeps the details readable.** The details file went into the issue inside one plain code fence, so a fence in the details closed it early and broke the rest of the issue; and a secret-like key whose value said it was unset (`# secretStore: (unset)`) had that value redacted, or, with no value at all, the first word of the next line (#262). The fence is now longer than any backtick run in the details; `unset`, `(unset)`, `null`, `none`, `n/a`, `~` and an empty string stay readable; only a value on the same line is redacted. Every real value under a secret-like key is still redacted.
+
 **`/platform:update` re-renders a cluster repo.** The update re-applied the cluster template but left `cluster/` (the render's output) as it was, so a renderer change made the review branch fail its own `render-check` (#264). For a cluster repo the update now runs the updated `scripts/render.py` and commits what changed in `cluster/` with the update; the report names the count. A cluster.yaml the new render rejects stops the update with the render's message. System repos are re-rendered by the update since 5.4.0.
 
 **Deploy confirms an external Helm component.** `/component:ship` escalated in phase deploy for a component with an `external: {helm: …}` entry: Argo CD reports no `summary.images` for its app, so the deploy check saw "runs nothing" although the Deployment ran the merged build (#251). When an app reports no images, the check now reads the pod templates of the workloads it manages, through the managed `<svc>-<env>-chart` Application one level down, and smoke and promotion continue as for any other component.

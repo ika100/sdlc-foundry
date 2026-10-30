@@ -76,6 +76,18 @@ diagnose() {
     for e in dev staging prod; do
       echo "--- events upg-$e ---"
       kubectl --context "$ctx" -n "upg-$e" get events --sort-by=.lastTimestamp 2>&1 | tail -8
+      if kubectl --context "$ctx" -n "upg-$e" get statefulsets.apps/upg-sessions >/dev/null 2>&1; then   # a cache: who holds which password (hashes only)
+        echo "--- cache upg-$e ---"
+        kubectl --context "$ctx" -n "upg-$e" get externalsecrets.external-secrets.io/upg-sessions-app \
+          -o jsonpath='externalsecret: refreshPolicy={.spec.refreshPolicy} synced={.status.refreshTime} ready={.status.conditions[0].status} {.status.conditions[0].message}{"\n"}' 2>&1
+        kubectl --context "$ctx" -n "upg-$e" get secret/upg-sessions-app \
+          -o jsonpath='secret: created={.metadata.creationTimestamp} resourceVersion={.metadata.resourceVersion}{"\n"}' 2>&1
+        kubectl --context "$ctx" -n "upg-$e" get pods/upg-sessions-0 \
+          -o jsonpath='pod: started={.status.startTime} restarts={.status.containerStatuses[0].restartCount}{"\n"}' 2>&1
+        echo "password hash: secret=$(kubectl --context "$ctx" -n "upg-$e" get secret/upg-sessions-app -o jsonpath='{.data.password}' 2>/dev/null | base64 -d | sha256sum | cut -c1-12)" \
+             "url=$(kubectl --context "$ctx" -n "upg-$e" get secret/upg-sessions-app -o jsonpath='{.data.url}' 2>/dev/null | base64 -d | sed -E 's#^redis://[^:]*:([^@]*)@.*#\1#' | tr -d '\n' | sha256sum | cut -c1-12)" \
+             "server=$(kubectl --context "$ctx" -n "upg-$e" exec upg-sessions-0 -- sh -c 'printf %s "$VALKEY_PASSWORD"' 2>/dev/null | sha256sum | cut -c1-12)"
+      fi
     done
   ) >&2 || true
 }
@@ -281,7 +293,8 @@ read -r -d '' pod_py <<'PY' || true
 import json, re, sys
 name, image, regex, script = sys.argv[1:5]
 dep = json.loads(sys.stdin.read())
-env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and re.match(regex, e["name"])]
+env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", [])   # Secret refs and plain values (EVENTS_<API>_*)
+       if ("valueFrom" in e or "value" in e) and re.match(regex, e["name"])]
 env += [{"name": k, "value": v} for k, v in (("HOME", "/tmp"), ("AWS_PAGER", ""), ("AWS_EC2_METADATA_DISABLED", "true"),
                                              ("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required"), ("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required"))]
 print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "upgprobe"}},
@@ -314,17 +327,19 @@ dbq() { # env sql (single quotes only): psql through the component's DATABASE_UR
   podmust "psql in $1" "$1" "$img" '^(DATABASE_URL|PG)' "psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1 -tA -c \"$2\""
   Q=$(printf '%s\n' "$P_OUT" | grep -v '^$' | tail -1 || true)
 }
-s3pre='set -e; [ "$S3_FORCE_PATH_STYLE" = true ] && aws configure set default.s3.addressing_style path; A="aws --endpoint-url $S3_ENDPOINT"; '
-natspre='N="nats --server $NATS_URL --user $NATS_USER --password $NATS_PASSWORD"; '
+# the bucket files: bare S3_*/AWS_* while upg-api uses one bucket, FILES_S3_*/FILES_AWS_* once step 4 adds the bucket backups (AC-115.8)
+s3pre='for v in S3_ENDPOINT S3_BUCKET S3_REGION S3_FORCE_PATH_STYLE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION AWS_ENDPOINT_URL_S3; do eval "[ -z \"\${FILES_$v:-}\" ] || export $v=\"\$FILES_$v\""; done; set -e; [ "$S3_FORCE_PATH_STYLE" = true ] && aws configure set default.s3.addressing_style path; A="aws --endpoint-url $S3_ENDPOINT"; '
+natspre='N="nats --server $NATS_URL --user $NATS_USER --password $NATS_PASSWORD --inbox-prefix $NATS_INBOX_PREFIX"; '   # replies only in the component's own inbox
 
 write_data() { # env: a row, an object, a cache key and a message (only for the types that release supports)
   dbq "$1" "create table if not exists upg_check (id int primary key, tag text); insert into upg_check values (1, '$1-before') on conflict do nothing"
   if has_type bucket; then
-    podmust "bucket write in $1" "$1" "$S3_IMAGE" '^(S3|AWS)_' "$s3pre"'printf %s '"$1-before"' > /tmp/in; $A s3api put-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt --body /tmp/in >/dev/null'
+    podmust "bucket write in $1" "$1" "$S3_IMAGE" '^(FILES_)?(S3|AWS)_' "$s3pre"'printf %s '"$1-before"' > /tmp/in; $A s3api put-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt --body /tmp/in >/dev/null'
   fi
   if has_type cache; then
     local img; img=$(kn "upg-$1" get statefulsets.apps/upg-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')
-    podmust "cache write in $1" "$1" "$img" '^SESSIONS_' 'u=$(printf %s "$SESSIONS_REDIS_URL" | sed "s#^redis://:#redis://default:#"); valkey-cli -u "$u" SET upg:'"$1 $1-before"' | grep -w OK'
+    # one cache: the bare REDIS_* names (variable_names, AC-115.8); a url from before 5.4.0 names no user (spec 127)
+    podmust "cache write in $1" "$1" "$img" '^REDIS_' 'u=$(printf %s "$REDIS_URL" | sed "s#^redis://:#redis://default:#"); valkey-cli -u "$u" SET upg:'"$1 $1-before"' | grep -w OK'
   fi
   if has_type broker; then
     podmust "stream message in $1" "$1" "$NATS_IMAGE" '^(NATS|EVENTS)_' "$natspre"'$N pub "$EVENTS_ORDERS_SUBJECT_PREFIX.created" '"$1-before"
@@ -334,7 +349,7 @@ read_data() { # env: the data of write_data reads back unchanged (the cache key 
   dbq "$1" "select tag from upg_check where id = 1"
   [ "$Q" = "$1-before" ] || fail "the row of $1 reads '$Q', expected '$1-before'"
   if has_type bucket; then
-    podmust "bucket read in $1" "$1" "$S3_IMAGE" '^(S3|AWS)_' "$s3pre"'$A s3api get-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt /tmp/out >/dev/null; echo "CONTENT=$(cat /tmp/out)"'
+    podmust "bucket read in $1" "$1" "$S3_IMAGE" '^(FILES_)?(S3|AWS)_' "$s3pre"'$A s3api get-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt /tmp/out >/dev/null; echo "CONTENT=$(cat /tmp/out)"'
     grep -w -F -q "CONTENT=$1-before" <<< "$P_OUT" || fail "the object upg/$1.txt of $1 does not read $1-before: $P_OUT"
   fi
   if has_type broker; then
@@ -365,14 +380,66 @@ apply_bucket() { # env bucket: the key generators and the ExternalSecret first, 
     kn "upg-$e" rollout status "statefulsets.apps/upg-$b-$s" --timeout=300s 2>&1 | tee /dev/stderr >/dev/null || fail "the SeaweedFS $s of upg-$b in upg-$e did not become ready (waited 300s)"
   done
 }
+apply_bus() { # env broker: what Argo CD would do, as tests/e2e/run.sh does it: the Secrets first, the NATS server's Application as a k3s
+  # HelmChart (same repo, chart, version and values; one per environment), then the Account, the streams and the consumers once NACK serves them
+  local e=$1 b=$2 d="$app_dir/addons/$1/$2" out="$work/bus-$1-$2"
+  mkdir -p "$out"
+  local py
+  read -r -d '' py <<'PY' || true
+import sys
+import yaml
+out, env = sys.argv[1], sys.argv[2]
+first, chart, second = [], [], []
+for d in (d for d in yaml.safe_load_all(sys.stdin) if d):
+    if d["kind"] == "Application":
+        s = d["spec"]["source"]
+        chart.append({"apiVersion": "helm.cattle.io/v1", "kind": "HelmChart",
+                      "metadata": {"name": f"{s['helm']['releaseName']}-{env}", "namespace": "kube-system"},
+                      "spec": {"repo": s["repoURL"], "chart": s["chart"], "version": s["targetRevision"],
+                               "targetNamespace": d["spec"]["destination"]["namespace"], "valuesContent": yaml.safe_dump(s["helm"]["valuesObject"])}})
+    elif d["kind"] in ("Account", "Stream", "Consumer"):
+        second.append(d)
+    else:
+        first.append(d)
+first.sort(key=lambda d: d["kind"] != "Password")   # generators before the ExternalSecrets that use them
+if not chart:
+    sys.exit("no Application (the NATS server) in the addon")
+for name, items in (("1.yaml", first), ("chart.yaml", chart), ("2.yaml", second)):
+    open(f"{out}/{name}", "w").write(yaml.safe_dump_all(items))
+PY
+  kn "upg-$e" kustomize "$d" | yaml_py -c "$py" "$out" "$e" || fail "could not turn addons/$e/$b into objects to apply"
+  kn "upg-$e" apply -f "$out/1.yaml" >/dev/null || fail "applying the Secrets of $b in $e failed"
+  k apply -f "$out/chart.yaml" >/dev/null || fail "applying the HelmChart of $b in $e failed"
+  wait_for 180 "the StatefulSet upg-$b of $e" kn "upg-$e" get statefulsets.apps "upg-$b"
+  kn "upg-$e" rollout status "statefulsets.apps/upg-$b" --timeout=240s >/dev/null || fail "the NATS server upg-$b of $e did not become ready"
+  wait_for 180 "the objects of $b in $e (NACK)" kn "upg-$e" apply -f "$out/2.yaml"
+}
+settle_cache() { # env name: WORKAROUND for #316 (remove with its fix): ESO may rewrite a cache's generated password right after the
+  # server read it; wait until the Secret stays unchanged for 15 s, then restart the server once so it runs with the Secret's password
+  local e=$1 n=$2 last="" rv same=0
+  [ ! -f "$work/settled-$e-$n" ] || return 0   # once per cache: a Secret that exists is never rewritten again
+  for _ in $(seq 1 36); do   # up to 180 s
+    rv=$(kn "upg-$e" get "secret/upg-$n-app" -o jsonpath='{.metadata.resourceVersion}' 2>/dev/null || true)
+    if [ -n "$rv" ] && [ "$rv" = "$last" ]; then same=$((same + 1)); [ $same -ge 3 ] && break; else same=0; fi
+    last=$rv; sleep 5
+  done
+  [ $same -ge 3 ] || fail "the Secret upg-$n-app of $e did not settle within 180 s"
+  kn "upg-$e" rollout restart "statefulsets.apps/upg-$n" >/dev/null || fail "restarting the cache upg-$n of $e failed"
+  kn "upg-$e" rollout status "statefulsets.apps/upg-$n" --timeout=240s >/dev/null || fail "the cache upg-$n of $e did not come back"
+  touch "$work/settled-$e-$n"
+}
 apply_addons() { # env: every rendered addon of the environment
   local e=$1 d="$app_dir/addons/$1" a
   for a in $(ls "$d"); do
     [ -f "$d/$a/kustomization.yaml" ] || continue
     if [ -f "$d/$a/bucket.yaml" ]; then apply_bucket "$e" "$a"
+    elif [ -f "$d/$a/server.yaml" ]; then apply_bus "$e" "$a"   # a broker: its server is an Argo CD Application (no Argo CD here)
     else
+      for g in "$d/$a"/*generator*.yaml; do   # generators before the ExternalSecrets that use them: ESO generates exactly once
+        [ -f "$g" ] && { kn "upg-$e" apply -f "$g" >/dev/null || fail "applying $(basename "$g") of addons/$e/$a failed"; }
+      done
       kn "upg-$e" apply -k "$d/$a" 2>&1 | tee /dev/stderr >/dev/null || fail "applying addons/$e/$a failed"
-      [ "$a" != bus ] || { sleep 20; kn "upg-$e" apply -k "$d/$a" 2>&1 | tee /dev/stderr >/dev/null || fail "applying addons/$e/$a (second time) failed"; }
+      if grep -q 'kind: Password' "$d/$a/password-generator.yaml" 2>/dev/null && [ -f "$d/$a/statefulset.yaml" ]; then settle_cache "$e" "$a"; fi   # a cache (#316)
     fi
   done
 }
@@ -446,6 +513,19 @@ upd_branch=$(git -C "$gitops_repo" symbolic-ref --short HEAD)
 git -C "$gitops_repo" checkout -q "$main_branch" && git -C "$gitops_repo" merge -q --ff-only "$upd_branch" || fail "merging $upd_branch into $main_branch failed"
 (cd "$gitops_repo" && uv run scripts/render.py >/dev/null) || fail "render.py of the updated repo failed"
 commit "render after the platform update"
+table16=$(table_pin 16)
+moves=1   # the pin-move steps need a release whose versions table moves postgres 16 (5.3.0 -> 5.4.0 did; 5.4.0 -> 5.5.0 does not)
+[ "$(sed -n 's/^dev=//p' "$work/pins-before.txt")" != "$table16" ] || moves=0
+if [ $moves = 0 ]; then
+  echo "postgres 16 is pinned to $table16 in $FROM and in this checkout: no pin moves; the pin-move checks are skipped"
+  ! grep -E -q '^[[:space:]]*(dev|staging|prod)[[:space:]]+postgres 16: .*moves now' "$work/update.out" \
+    || fail "the update report says postgres 16 moves, but $FROM and this checkout pin the same reference"
+  for e in dev staging prod; do
+    want=$(sed -n "s/^$e=//p" "$work/pins-before.txt")
+    [ "$(image_name_of $e)" = "$want" ] || fail "$e's imageName moved to '$(image_name_of $e)' although the versions table did not"
+  done
+  echo "ok   the report announces no pin move and every environment keeps $FROM's reference"
+else
 python3 - "$work/update.out" <<'PY' || fail "the update report does not list dev's moved pin and the held pins of staging and prod (see above)"
 import re, sys
 text = open(sys.argv[1]).read()
@@ -456,13 +536,13 @@ for env in ("staging", "prod"):
         sys.exit(f"no line '{env}  postgres 16: keeps ... until /resource:upgrade postgres --to 16 --env {env}'")
 PY
 echo "ok   the report lists dev's moved pin and the held pins of staging and prod"
-table16=$(table_pin 16)
 [ "$(image_name_of dev)" = "$table16" ] || fail "dev's imageName is '$(image_name_of dev)', the table's postgres 16 is '$table16'"
 for e in staging prod; do
   want=$(sed -n "s/^$e=//p" "$work/pins-before.txt")
   [ "$(image_name_of $e)" = "$want" ] || fail "$e's imageName moved to '$(image_name_of $e)'; it must keep '$want' (held pin) until /resource:upgrade postgres --to 16 --env $e"
 done
 echo "ok   dev's imageName is the table's 16 pin; staging and prod keep $FROM's reference (AC-121.11)"
+fi
 
 step "3 Update: this checkout's local-cluster.sh up on the same cluster (the operators move once, AC-121.21)"
 chart_versions() { # name version per HelmChart
@@ -492,10 +572,15 @@ apply_api dev
 verify_out="$work/update-verify.out"
 if tmo 2400 $cplat platform update --verify --repo "$gitops_repo" --context k3d-$cluster --component-dir upg-api="$work/upg-api" 2>&1 | tee "$verify_out" | tee /dev/stderr >/dev/null; then :
 else fail "cplat platform update --verify failed (see above; $verify_out)"; fi
-grep -w -q "verified" "$verify_out" || fail "platform update --verify did not print 'verified' for postgres in dev"
+[ $moves = 0 ] || grep -w -q "verified" "$verify_out" || fail "platform update --verify did not print 'verified' for postgres in dev"
 echo "ok   platform update --verify: operators at the table's versions, dev verified, smoke of every environment passed"
 
 step "3 Update: staging and prod move to this release's Postgres 16 pin, one at a time (AC-121.11)"
+if [ $moves = 0 ]; then
+  echo "no pin moves between $FROM and this checkout: nothing to move in staging and prod"
+  [ -z "$(gitops_dirty)" ] || fail "platform update --verify changed the gitops repo although no pin moves: $(gitops_dirty)"
+  for e in dev staging prod; do read_data "$e"; done
+else
 echo "pin moves, one environment at a time: /resource:upgrade postgres --to 16 --env staging, then --to 16 --env prod"
 [ -n "$(gitops_dirty)" ] || fail "platform update --verify did not write the staging pin move (promote: after-dev-smoke)"
 grep -F -q "$table16" "$app_dir/addons/staging/postgres/cluster.yaml" || fail "the staging pin move did not write the table's 16 pin"
@@ -512,6 +597,7 @@ for e in dev staging prod; do
   [ "$(image_name_of $e)" = "$table16" ] || fail "$e's imageName is '$(image_name_of $e)' after the pin moves, expected '$table16'"
   read_data "$e"
 done
+fi
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 step "4 Guard: backups declared and rendered but not applied; the major upgrade is refused and changes nothing (AC-121.25)"
@@ -690,6 +776,13 @@ for e in dev staging prod; do
   for sub in addons overlays; do
     for d in "$app_dir/$sub/$e"/*/; do
       [ -f "${d}kustomization.yaml" ] || continue
+      if [ -f "${d}server.yaml" ]; then   # a broker: its server is an Argo CD Application (no Argo CD here, apply_bus installs it as a HelmChart)
+        kubectl --context "$ctx" -n "upg-$e" kustomize "$d" \
+          | yaml_py -c 'import sys, yaml; print(yaml.safe_dump_all([d for d in yaml.safe_load_all(sys.stdin) if d and d["kind"] != "Application"]))' \
+          | kubectl --context "$ctx" -n "upg-$e" apply --dry-run=server -f - >/dev/null 2>"$work/dryrun.err" \
+          || fail "the API server refuses ${d#"$gitops_repo"/} (without its Application): $(tail -3 "$work/dryrun.err")"
+        continue
+      fi
       kubectl --context "$ctx" -n "upg-$e" apply --dry-run=server -k "$d" >/dev/null 2>"$work/dryrun.err" || fail "the API server refuses ${d#"$gitops_repo"/}: $(tail -3 "$work/dryrun.err")"
     done
   done
