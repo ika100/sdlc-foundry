@@ -976,8 +976,8 @@ def test_an_environment_without_scale_changes_nothing_next_to_one_with_it_ac_120
     assert {k: v for k, v in plain.items() if "/web/" in k} == {k: v for k, v in one.items() if "/web/" in k}
 
 
-BEFORE_120 = {"full5": ("bf4c5ffc245db1166768f726cdbf9b29618a050bfed682499ad3a4de22037cb4", 58),
-              "rich5": ("54e93234734051c4df2494a3383b27954e5eeeaeaf58d76c10c545562b403cae", 58),
+BEFORE_120 = {"full5": ("327d41a6f2cdc9c46124f7b088b13b2bcfe154dfb878ebfb87b3845bd048cf02", 67),   # spec 128: a generated component secret gets a credentials Job
+              "rich5": ("fe1543fc8b668272d474fb2a3c81de372ae673a2023c1dae8521a3143d7473be", 67),   # spec 128: a generated component secret gets a credentials Job
               "db-bucket": ("ae098881e7b6a57b03e99b36924de150f513b06e1dad3c42b303e79400e930d8", 56),   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret
               "cache": ("c5e5809f484b7fddca7c2189f68c58b6e4a713331a035bca6aa2424dbad243df", 49),   # spec 128: the credentials Job replaces the generator files
               "events": ("9fe3842825e291f58f1e33aac03f53edf98df7c9053eefbeae7882d3ad3f57e4", 26),

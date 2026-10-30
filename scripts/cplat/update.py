@@ -453,6 +453,43 @@ def _normalised(tree: dict[str, bytes], pins: list[bytes] = ()) -> dict[str, byt
     return out
 
 
+def _generator_backed(text: bytes | str) -> bool:
+    """True for an ExternalSecret whose `spec.dataFrom` has a `generatorRef`."""
+    try:
+        doc = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return False
+    return isinstance(doc, dict) and any(
+        isinstance(item, dict) and "generatorRef" in (item.get("sourceRef") or {}) for item in (doc.get("spec") or {}).get("dataFrom") or [])
+
+
+def _without_credential_writers(tree: dict) -> dict:
+    """The migration proof ignores what writes a generated credential (spec 128): `password-generator.yaml`, `credentials-*.yaml` and
+    generator-backed `externalsecret-*.yaml` (values are bytes or text), also in the `resources` of the same directory's `kustomization.yaml` (compared parsed)."""
+    def dropped(p: str) -> bool:
+        name = p.rsplit("/", 1)[-1]
+        return (name == "password-generator.yaml" or (name.startswith("credentials-") and name.endswith(".yaml"))
+                or (name.startswith("externalsecret-") and name.endswith(".yaml") and _generator_backed(tree[p])))
+    gone = {p for p in tree if dropped(p)}
+    out = {p: b for p, b in tree.items() if p not in gone}
+    for p in list(out):
+        if p.rsplit("/", 1)[-1] != "kustomization.yaml":
+            continue
+        folder = p.rpartition("/")[0]
+        names = {g.rsplit("/", 1)[-1] for g in gone if g.rpartition("/")[0] == folder}
+        if not names:
+            continue
+        try:
+            doc = yaml.safe_load(out[p])
+        except yaml.YAMLError:
+            continue
+        if isinstance(doc, dict) and isinstance(doc.get("resources"), list):
+            doc["resources"] = [r for r in doc["resources"] if r not in names]
+            dumped = yaml.safe_dump(doc, sort_keys=True)
+            out[p] = dumped.encode() if isinstance(out[p], bytes) else dumped
+    return out
+
+
 def convert_systems(repo: Path) -> list[dict]:
     """Convert every 4.x application directory; any problem stops the migration before anything changes."""
     owner = _owner(repo)
@@ -498,8 +535,8 @@ def apply_systems(repo: Path, systems: list[dict], reference: dict[str, bytes]) 
             (repo / rel).unlink()
     gitops.render(repo)
     pins = _digested_refs(repo)
-    reference = _normalised(reference)
-    after = _normalised(_tree(repo), pins)
+    reference = _without_credential_writers(_normalised(reference))
+    after = _without_credential_writers(_normalised(_tree(repo), pins))
     diff =[f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
     diff += [f"{p} (missing)" for p in sorted(reference) if p not in after]
     diff += [f"{p} (extra)" for p in sorted(after) if p not in reference]
@@ -862,6 +899,14 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
                 pins = _digested_refs(repo)
                 if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}, pins):
                     continue
+                if path.endswith("/kustomization.yaml") and was.returncode == 0:   # spec 128: it lists the credentials files instead of the generators
+                    folder = path.rpartition("/")[0]
+                    names = run(["git", "ls-tree", "--name-only", "HEAD", folder + "/"], cwd=repo, check=False).stdout.splitlines()
+                    old_dir = {n: run(["git", "show", f"HEAD:{n}"], cwd=repo, check=False).stdout.encode() for n in names}
+                    new_dir = {f.relative_to(repo).as_posix(): f.read_bytes() for f in (repo / folder).iterdir() if f.is_file()}
+                    old_dir, new_dir = (_without_credential_writers(_normalised(t, pins)) for t in (old_dir, new_dir))
+                    if old_dir.get(path) == new_dir.get(path):
+                        continue
             except OSError:
                 pass
         lost.append({"kind": "file", "file": path, "entry": None, "was": None, "where": _where_file(path)})

@@ -11,6 +11,7 @@ import sys
 
 import pytest
 import yaml
+from update import _without_credential_writers
 
 from system_fixtures import (ALLOWED_TOP, FULL4_APP, FULL4_SERVICES, FULL5, NOT_MIGRATED, PAIRS, PINS, PIN5, PROBES, RENDER4, SHA, ROOT,
                              component, docs, full5, generated, load, mod, render, render5, tiny, write_old, write_system)
@@ -53,6 +54,7 @@ def same_as_4x(tmp_path, doc5, app4=None, services4=None, pins=None):
     a, b = generated(r4), generated(r5)
     # spec 115 (AC-115.6): the database image is pinned to a patch release; only imageName is normalised, to its major version
     a, b = ({k: PINNED_IMAGE.sub(lambda m: m.group(3) or m.group(1) + m.group(2), v) for k, v in t.items()} for t in (a, b))  # spec 121: the collector digest is stripped too
+    a, b = _without_credential_writers(a), _without_credential_writers(b)   # spec 128: generated secrets are written by a credentials Job
     assert sorted(a) == sorted(b), f"files differ: only 4.7 {sorted(set(a) - set(b))}, only 5.0 {sorted(set(b) - set(a))}"
     first = next((k for k in sorted(a) if a[k] != b[k]), None)
     assert first is None, f"{first} differs between the 4.7 and the 5.0 render"

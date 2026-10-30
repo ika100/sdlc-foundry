@@ -322,18 +322,20 @@ def dev_dir(repo, svc="todo-api"):
 def test_generate_and_remote_secrets_render_externalsecrets_and_envfrom(gitops_repo, gh):
     run_compose(gitops_repo, "add", "todo-api", "--generate", "todo-api-auth=DB_PASSWORD,JWT_KEY", "--secret", "todo-api-stripe=STRIPE_KEY")
     d = dev_dir(gitops_repo)
-    gen = yaml.safe_load((d / "externalsecret-todo-api-auth.yaml").read_text())
-    assert gen["spec"]["refreshInterval"] == "0" and gen["spec"]["target"]["creationPolicy"] == "Owner"
-    assert [e["rewrite"][0]["regexp"]["target"] for e in gen["spec"]["dataFrom"]] == ["DB_PASSWORD", "JWT_KEY"]
-    assert "secretStoreRef" not in gen["spec"]
-    assert yaml.safe_load((d / "password-generator.yaml").read_text())["spec"]["length"] == 32
+    assert not (d / "externalsecret-todo-api-auth.yaml").exists() and not (d / "password-generator.yaml").exists()   # spec 128
+    files = ["credentials-configmap.yaml", "credentials-job.yaml", "credentials-role.yaml", "credentials-rolebinding.yaml", "credentials-serviceaccount.yaml"]
+    assert all((d / f).is_file() for f in files)
+    plan = json.loads(yaml.safe_load((d / "credentials-configmap.yaml").read_text())["data"]["plan.json"])
+    assert plan["secrets"] == [{"name": "todo-api-auth", "generate": {"DB_PASSWORD": 32, "JWT_KEY": 32}, "data": {},
+                                "labels": yaml.safe_load((d / "credentials-job.yaml").read_text())["metadata"]["labels"]}]
     rem = yaml.safe_load((d / "externalsecret-todo-api-stripe.yaml").read_text())
     assert rem["spec"]["secretStoreRef"] == {"name": "platform-secrets", "kind": "ClusterSecretStore"}
     assert rem["spec"]["data"] == [{"secretKey": "STRIPE_KEY", "remoteRef": {"key": "todo-dev-todo-api-stripe", "property": "STRIPE_KEY"}}]
     dep = yaml.safe_load((d / "deployment.yaml").read_text())
     assert [e["secretRef"]["name"] for e in dep["spec"]["template"]["spec"]["containers"][0]["envFrom"]] == ["todo-api-auth", "todo-api-stripe"]
     kust = yaml.safe_load((d / "kustomization.yaml").read_text())
-    assert "externalsecret-todo-api-auth.yaml" in kust["resources"] and "password-generator.yaml" in kust["resources"]
+    assert set(files) <= set(kust["resources"]) and "externalsecret-todo-api-stripe.yaml" in kust["resources"]
+    assert "externalsecret-todo-api-auth.yaml" not in kust["resources"] and "password-generator.yaml" not in kust["resources"]
     assert render_check(gitops_repo).returncode == 0
 
 
@@ -351,6 +353,7 @@ def test_removed_secret_files_are_pruned(gitops_repo, gh):
     f.write_text(yaml.safe_dump(data, sort_keys=False))
     subprocess.run(["uv", "run", "scripts/render.py"], cwd=gitops_repo, check=True, capture_output=True)
     assert not list(dev_dir(gitops_repo).glob("externalsecret-*")) and not (dev_dir(gitops_repo) / "password-generator.yaml").exists()
+    assert not list(dev_dir(gitops_repo).glob("credentials-*"))   # spec 128
 
 
 @pytest.mark.parametrize("secret,msg", [

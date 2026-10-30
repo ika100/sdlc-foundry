@@ -164,7 +164,7 @@ ENVS = ["dev", "staging", "prod"]
 NOT_MIGRATED = "not migrated to 5.0: run `cplat platform update --migrate`"
 MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomization.yaml", "password-generator.yaml", "application.yaml",
                  "hpa.yaml", "scaledobject.yaml", "triggerauthentication.yaml"}
-MANAGED_PREFIXES = ("externalsecret-",)
+MANAGED_PREFIXES = ("externalsecret-", "credentials-")
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries", "autonomy"]
 ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
@@ -2019,7 +2019,7 @@ def httproute(app: str, svc: dict, env: str, cfg: dict) -> dict | None:
 
 
 def secret_manifests(app: str, svc: dict, env: str, cfg: dict) -> dict[str, dict]:
-    """ExternalSecrets (+ one Password generator per component) for `secrets:`; values never appear in git."""
+    """ExternalSecrets of the `remote:` secrets and one credentials Job for all `generate:` secrets; values never appear in git."""
     out: dict[str, dict] = {}
     labels = labels_for(app, svc)
     store = cfg.get("secretStore") or DEFAULT_STORE
@@ -2028,14 +2028,7 @@ def secret_manifests(app: str, svc: dict, env: str, cfg: dict) -> dict[str, dict
         meta = {"name": name, "labels": labels}
         target = {"name": name, "creationPolicy": "Owner", "deletionPolicy": "Retain"}
         if sec.get("generate"):
-            gen_ref = {"apiVersion": GEN_API, "kind": "Password", "name": f"{svc['name']}-password"}
-            spec = {"refreshInterval": "0", "target": target, "dataFrom": [
-                {"sourceRef": {"generatorRef": dict(gen_ref)}, "rewrite": [{"regexp": {"source": "^password$", "target": k}}]}
-                for k in sec["generate"]]}
-            out[f"externalsecret-{name}.yaml"] = {"apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": meta, "spec": spec}
-            out["password-generator.yaml"] = {
-                "apiVersion": GEN_API, "kind": "Password", "metadata": {"name": f"{svc['name']}-password", "labels": labels},
-                "spec": {"length": int(sec.get("length", 32)), "digits": 5, "symbols": 0, "noUpper": False, "allowRepeat": True}}
+            continue        # written once by the component's credentials Job (spec 128)
         else:
             remote = sec["remote"]
             key = str(remote.get("path") or "{system}-{env}-{secret}").format(system=app, env=env, secret=name, component=svc["name"])
@@ -2044,6 +2037,13 @@ def secret_manifests(app: str, svc: dict, env: str, cfg: dict) -> dict[str, dict
                     "target": target,
                     "data": [{"secretKey": k, "remoteRef": {"key": key, "property": k}} for k in remote["keys"]]}
             out[f"externalsecret-{name}.yaml"] = {"apiVersion": ESO_API, "kind": "ExternalSecret", "metadata": meta, "spec": spec}
+    generated = [sec for sec in svc.get("secrets") or [] if sec.get("generate")]
+    if generated:
+        plan = {"namespace": f"{app}-{env}",
+                "secrets": [{"name": sec["name"], "labels": dict(labels),
+                             "generate": {k: int(sec.get("length", 32)) for k in sec["generate"]}, "data": {}} for sec in generated],
+                "retire": {"externalSecrets": sorted(sec["name"] for sec in generated), "generators": [f"{svc['name']}-password"]}}
+        out.update(credentials_files(app, env, svc["name"], labels, plan))
     return out
 
 
@@ -3063,6 +3063,8 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
             comp_sync["syncOptions"].append("RespectIgnoreDifferences=true")
             if cfg["autoscaling"][env] == "keda":
                 comp_sync["retry"] = RETRY      # a ScaledObject may sync before KEDA's CRD exists
+        if any(env in envs_of(s) and "external" not in s and any(x.get("generate") for x in s.get("secrets") or []) for s in services):
+            comp_sync["retry"] = RETRY      # a PreSync credentials Job may fail once
         docs.append({
             "apiVersion": "argoproj.io/v1alpha1", "kind": "ApplicationSet",
             "metadata": {"name": f"{app}-{env}", "namespace": "argocd"},

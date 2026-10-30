@@ -299,6 +299,7 @@ def test_the_rendered_tree_is_byte_identical_to_what_4_7_rendered_ac_114_40(migr
     pin = re.compile(r"(imageName: ghcr\.io/cloudnative-pg/postgresql:)(\d+)\S*|(otel/opentelemetry-collector-contrib:[^\s@\"]+)@sha256:[0-9a-f]{64}")  # spec 121: the collector digest is stripped too
     after = {k: pin.sub(lambda m: m.group(3) or m.group(1) + m.group(2), v) for k, v in generated(migrated.repo).items()}  # spec 121: the collector digest is stripped too
     before = {k: pin.sub(lambda m: m.group(3) or m.group(1) + m.group(2), v) for k, v in migrated.before.items()}  # spec 121: the collector digest is stripped too
+    after, before = update._without_credential_writers(after), update._without_credential_writers(before)   # spec 128: generated secrets are written by a credentials Job
     assert sorted(after) == sorted(before)
     assert next((k for k in sorted(after) if after[k] != before[k]), None) is None
     assert len(after) > 50
