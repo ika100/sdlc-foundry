@@ -289,10 +289,8 @@ done
 
 # What Argo CD does for a directory with credentials-job.yaml (spec 128): the five credentials-*.yaml (the PreSync hook objects) are
 # applied first and the Job runs to completion (it writes every password Secret once, create if absent), then the whole directory is
-# applied. No server is restarted to make passwords match: AC-128.1 (a cache server accepts the Secret's password and refuses any other),
-# AC-128.2 (a component gets PONG with its REDIS_* variables), AC-128.4 (the broker's users authenticate), AC-128.7 (the bucket's S3
-# accepts the keys) and AC-128.8 (every replica sees the generated value) are checked in the steps below; AC-128.3 and AC-128.6 force one
-# more write (rerun_credentials) and compare the Secret's resourceVersion and value hashes before and after.
+# applied. No server is restarted to make passwords match; a forced write (rerun_credentials) runs the Job again and compares the Secret's
+# resourceVersion and value hashes before and after.
 kn() { local n=$1; shift; kubectl --context k3d-$cluster -n "$n" "$@"; }
 hash_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | cut -d' ' -f1; }
 credentials_files() { local f; for f in serviceaccount role rolebinding configmap job; do echo "$1/credentials-$f.yaml"; done; }

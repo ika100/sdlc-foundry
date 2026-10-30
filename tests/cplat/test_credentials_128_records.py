@@ -63,12 +63,21 @@ def test_both_scripts_check_the_server_the_component_and_the_broker_in_every_env
 
 
 def test_the_checks_come_before_the_deliberate_restarts_of_other_specs_ac_128_11():  # AC-128.11
+    """Each resource's AC-128 checks run before that resource's deliberate restart (the bucket is set up before the caches and the
+    broker, so the order is per resource; approved during the build)."""
     text = run()
-    checks = [text.index(a) for a in ("AC-128.1", "AC-128.2", "AC-128.4") if a in text]
-    assert len(checks) == 3
-    for restart in ("delete pod e2e-sessions-0 e2e-ratelimit-0", 'delete pod $store_pods'):
-        assert max(checks) < text.index(restart), restart
-    assert text.index("AC-128.3") < text.index("delete pod e2e-sessions-0 e2e-ratelimit-0")
+    code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))   # checks, not comments
+    def first(needle, after=0):
+        i = code.find(needle, after)
+        assert i >= 0, needle
+        return i
+    bucket_restart = first("delete pod $store_pods")
+    assert first("AC-128.7") < bucket_restart                              # the bucket's keys (AC-116.8 restarts its pods)
+    cache_restart = first("delete pod e2e-sessions-0 e2e-ratelimit-0")
+    for a in ("AC-128.1", "AC-128.2", "AC-128.3"):                          # the caches (AC-118.7 restarts them)
+        assert bucket_restart < first(a, bucket_restart) < cache_restart, a
+    broker_roll = first('bus_roll "$rev_before"')
+    assert first("AC-128.4", cache_restart) < broker_roll                  # the broker (spec 120's chart change rolls it)
 
 
 def test_the_upgrade_script_checks_before_the_later_steps_ac_128_11():  # AC-128.11
