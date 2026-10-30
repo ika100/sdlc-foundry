@@ -281,7 +281,8 @@ read -r -d '' pod_py <<'PY' || true
 import json, re, sys
 name, image, regex, script = sys.argv[1:5]
 dep = json.loads(sys.stdin.read())
-env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and re.match(regex, e["name"])]
+env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", [])   # Secret refs and plain values (EVENTS_<API>_*)
+       if ("valueFrom" in e or "value" in e) and re.match(regex, e["name"])]
 env += [{"name": k, "value": v} for k, v in (("HOME", "/tmp"), ("AWS_PAGER", ""), ("AWS_EC2_METADATA_DISABLED", "true"),
                                              ("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required"), ("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required"))]
 print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "upgprobe"}},
