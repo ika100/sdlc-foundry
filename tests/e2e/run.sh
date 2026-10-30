@@ -817,12 +817,14 @@ c_field() { sed -n "s/^$1=//p" <<< "$C_OUT" | head -1; }
 
 cstep "Caches: the server accepts the Secret's password and refuses any other; the component gets PONG with its own variables, after a forced write too (AC-128.1, AC-128.2, AC-128.3)"
 # AC-128.1 / AC-128.2: 60 s after the Secret exists, e2e-web's variables answer PONG (REDIS_URL, and -h/-p/-a from HOST/PORT/PASSWORD)
-cache_probe='for c in SESSIONS RATELIMIT; do
-  eval "u=\$${c}_REDIS_URL h=\$${c}_REDIS_HOST p=\$${c}_REDIS_PORT a=\$${c}_REDIS_PASSWORD"
-  echo "${c}_URL=$(valkey-cli --no-auth-warning -u "$u" PING 2>&1)"
-  echo "${c}_HOST=$(valkey-cli --no-auth-warning -h "$h" -p "$p" -a "$a" PING 2>&1)"
-  echo "${c}_WRONG=$(valkey-cli --no-auth-warning -h "$h" -p "$p" -a wrong-password-$$ PING 2>&1)"
-done'
+# no "$$" in a pod's command: Kubernetes turns it into "$" before the shell runs (so no indirect expansion either)
+cache_probe='probe() { # name url host port password
+  echo "$1_URL=$(valkey-cli --no-auth-warning -u "$2" PING 2>&1)"
+  echo "$1_HOST=$(valkey-cli --no-auth-warning -h "$3" -p "$4" -a "$5" PING 2>&1)"
+  echo "$1_WRONG=$(valkey-cli --no-auth-warning -h "$3" -p "$4" -a wrong-password-x PING 2>&1)"
+}
+probe SESSIONS "$SESSIONS_REDIS_URL" "$SESSIONS_REDIS_HOST" "$SESSIONS_REDIS_PORT" "$SESSIONS_REDIS_PASSWORD"
+probe RATELIMIT "$RATELIMIT_REDIS_URL" "$RATELIMIT_REDIS_HOST" "$RATELIMIT_REDIS_PORT" "$RATELIMIT_REDIS_PASSWORD"'
 cache_probe_check() { # label
   crun "$cache_probe" || cfail "$1: the probe with e2e-web's variables failed: $(echo "$C_OUT" | tail -5 | tr '\n' ' ' | cut -c1-400)"
   local c
