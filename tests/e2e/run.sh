@@ -1186,7 +1186,10 @@ bus_auth() { # label component...: each component authenticates with the passwor
 }
 
 nstep "Broker: _nack and every component user authenticate without a server restart, also after a forced write of the Secrets (AC-128.4, AC-128.6)"
-bus_ready accounts.jetstream.nats.io e2e-bus || { kc describe accounts.jetstream.nats.io e2e-bus | tail -25; kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=30 || true; nfail "the NACK Account e2e-bus is not Ready (the user _nack does not authenticate with the password of e2e-bus-nack)"; }
+# NACK 0.24 sets no status on an Account; it can only make a stream Ready after it logged in as _nack with the password of e2e-bus-nack
+for st in e2e-orders e2e-audit; do
+  bus_ready streams.jetstream.nats.io $st || { kc describe streams.jetstream.nats.io $st | tail -25; kubectl --context k3d-$cluster -n nack logs deploy/nack --tail=30 || true; nfail "the stream $st is not Ready: NACK (user _nack, password of e2e-bus-nack) did not create it"; }
+done
 [ "$(kc get pod e2e-bus-0 -o jsonpath='{.status.containerStatuses[?(@.name=="nats")].restartCount}')" = 0 ] || nfail "the server e2e-bus-0 was restarted"
 bus_auth "after the server is ready" e2e-api e2e-web
 bus_rv=""; bus_h=""
@@ -1197,7 +1200,7 @@ for s in $bus_secrets; do bus_rv2="$bus_rv2 $(secret_rv $ns $s)"; bus_h2="$bus_h
 [ "$bus_rv2" = "$bus_rv" ] && [ "$bus_h2" = "$bus_h" ] || nfail "a Secret of the broker was written again by a second credentials Job run"
 [ "$(kc get pod e2e-bus-0 -o jsonpath='{.status.containerStatuses[?(@.name=="nats")].restartCount}')" = 0 ] || nfail "the credentials Job run again restarted the server"
 bus_auth "after a forced write" e2e-api e2e-web
-echo "ok   the NACK Account is Ready; e2e-api and e2e-web authenticate (a wrong password is refused); a second Job run kept every resourceVersion and password"
+echo "ok   NACK (as _nack) has the streams Ready; e2e-api and e2e-web authenticate (a wrong password is refused); a second Job run kept every resourceVersion and password"
 # what every probe does first: connect the way the docs example does (NATS_URL, NATS_USER, NATS_PASSWORD, NATS_INBOX_PREFIX)
 read -r -d '' natspre <<'PY' || true
 import asyncio, os, time

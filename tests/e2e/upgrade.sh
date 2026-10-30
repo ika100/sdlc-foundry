@@ -430,7 +430,10 @@ cache_ok() { # env: fresh probe pod with the component's REDIS_* variables
   local img; img=$(kn "upg-$1" get statefulsets.apps/upg-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')
   podrun "$1" "$img" '^REDIS_' "$cache_probe"
 }
-nack_ready() { [ "$(kn "upg-$1" get accounts.jetstream.nats.io -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = True ]; }
+nack_ready() { # env: NACK 0.24 sets no status on an Account; every stream is Ready only when NACK logged in as _nack with the Secret's password
+  local st; st=$(kn "upg-$1" get streams.jetstream.nats.io -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' 2>/dev/null)
+  [ -n "$st" ] && ! grep -qv '^True$' <<< "$st"
+}
 check_servers() { # env: once, after the new render of the addons is applied: the servers accept the Secrets' passwords (AC-128.10, AC-128.1/.2/.4)
   local e=$1 dir rv h
   [ ! -f "$work/servers-$e" ] || return 0
@@ -453,7 +456,7 @@ check_servers() { # env: once, after the new render of the addons is applied: th
   if has_type broker; then
     # AC-128.4: the component user authenticates with the password of its Secret and no other; _nack's Account is Ready
     within 60 "AC-128.4/.10: upg-api's NATS_USER authenticates in $e" podrun "$e" "$NATS_IMAGE" '^(NATS|EVENTS)_' "$nats_probe"
-    within 60 "AC-128.4: the NACK Account of $e is Ready (_nack authenticates)" nack_ready "$e"
+    within 60 "AC-128.4: NACK (_nack) has every stream of $e Ready" nack_ready "$e"
     echo "ok   $e: the component user authenticates (a wrong password is refused) and _nack's Account is Ready (AC-128.4)"
   fi
   touch "$work/servers-$e"
