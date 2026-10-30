@@ -400,6 +400,7 @@ for d in (d for d in yaml.safe_load_all(sys.stdin) if d):
         second.append(d)
     else:
         first.append(d)
+first.sort(key=lambda d: d["kind"] != "Password")   # generators before the ExternalSecrets that use them
 if not chart:
     sys.exit("no Application (the NATS server) in the addon")
 for name, items in (("1.yaml", first), ("chart.yaml", chart), ("2.yaml", second)):
@@ -419,6 +420,9 @@ apply_addons() { # env: every rendered addon of the environment
     if [ -f "$d/$a/bucket.yaml" ]; then apply_bucket "$e" "$a"
     elif [ -f "$d/$a/server.yaml" ]; then apply_bus "$e" "$a"   # a broker: its server is an Argo CD Application (no Argo CD here)
     else
+      for g in "$d/$a"/*generator*.yaml; do   # generators before the ExternalSecrets that use them: ESO generates exactly once
+        [ -f "$g" ] && { kn "upg-$e" apply -f "$g" >/dev/null || fail "applying $(basename "$g") of addons/$e/$a failed"; }
+      done
       kn "upg-$e" apply -k "$d/$a" 2>&1 | tee /dev/stderr >/dev/null || fail "applying addons/$e/$a failed"
     fi
   done
