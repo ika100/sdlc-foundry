@@ -17,6 +17,7 @@ tasks:
     covers: [AC-128.13]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: broker and bucket render the credentials Job (nack and component users with verify, bucket keys with backup labels); stale rules and sync retry for their addon directories
     files: [templates/gitops-app/scripts/render.py, templates/cluster-gitops/scripts/system_render.py, tests/cplat/broker_fixtures.py, tests/cplat/test_broker_119.py, tests/cplat/test_bucket_116.py, tests/cplat/test_backup_117.py, tests/cplat/test_scale_120.py, tests/cplat/test_cache_118.py, tests/cplat/test_upgrade_121.py]
