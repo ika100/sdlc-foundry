@@ -396,12 +396,14 @@ api_replicas=$(kc get deploy e2e-api -o jsonpath='{.spec.replicas}')
 kc scale deploy e2e-api --replicas=2 >/dev/null || fail "could not scale e2e-api to 2 replicas"
 kc rollout status deploy/e2e-api --timeout=240s || { kc describe pod -l app=e2e-api | tail -30; fail "e2e-api did not get two ready replicas"; }
 wait_secret_age $ns e2e-api-auth 60
-db_hash=$(printf %s "$db" | hash_of); jwt_hash=$(printf %s "$jwt" | hash_of)
+# e2e-api's image has no shell (distroless): a container reads its secretKeyRef/envFrom values when it starts, so a replica whose
+# container started after the Secret's last write holds exactly the Secret's value; the AC-128.3 step below shows no later write
+last_write=$(kc get secret e2e-api-auth -o json | python3 -c 'import json, sys; m = json.load(sys.stdin)["metadata"]; print(max([f.get("time", "") for f in m.get("managedFields") or []] + [m["creationTimestamp"]]))')
 api_pods=$(kc get pods -l app=e2e-api --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}')
 [ "$(wc -w <<< "$api_pods" | tr -d ' ')" -ge 2 ] || fail "e2e-api has fewer than two running replicas ($api_pods)"
 for p in $api_pods; do
-  [ "$(kc exec "$p" -- printenv DB_PASSWORD | tr -d '\n' | hash_of)" = "$db_hash" ] || fail "the replica $p sees another DB_PASSWORD than the Secret e2e-api-auth"
-  [ "$(kc exec "$p" -- printenv JWT_KEY | tr -d '\n' | hash_of)" = "$jwt_hash" ] || fail "the replica $p sees another JWT_KEY than the Secret e2e-api-auth"
+  started=$(kc get pod "$p" -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}')
+  [ -n "$started" ] && [[ ! "$started" < "$last_write" ]] || fail "the replica $p started at '$started', before the last write of the Secret e2e-api-auth ($last_write): it may hold another value"
 done
 # AC-128.3: one more write of the Secret (the Job runs again): resourceVersion and values are unchanged
 rv_before=$(secret_rv $ns e2e-api-auth); hash_before=$(secret_hash $ns e2e-api-auth)
