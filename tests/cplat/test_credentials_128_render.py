@@ -270,7 +270,8 @@ OLD_FORM = _old()
 
 def test_every_generated_credential_has_one_writer_the_job_ac_128_12(tmp_path):  # AC-128.12
     """A Secret named in a plan is not the target of any other rendered object, so only the Job writes it."""
-    g = ok(tmp_path, bsys({"bus": broker(), "sessions": cache(), "files": {"type": "bucket"}}))
+    comps = {"api": comp("api", ["sessions", "files"], provides=["orders"]), "web": comp("web", consumes=["orders"])}   # unused resources render nothing
+    g = ok(tmp_path, bsys({"bus": broker(), "sessions": cache(), "files": {"type": "bucket"}}, comps))
     planned = set()
     for env in ENVS:
         for name in ("bus", "sessions", "files"):
