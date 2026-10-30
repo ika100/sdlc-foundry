@@ -1,7 +1,7 @@
 ---
 spec_id: 128-generated-passwords-match-the-running
 title: Generated passwords match the running server
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [316]
@@ -73,3 +73,4 @@ An in-cluster cache can run with a different password than its Secret `<system>-
 
 - 2026-10-30 created
 - 2026-10-30 open questions answered: the mechanism is a credential written exactly once by a create-if-absent path (exception to ADR-018, AC-128.12 and AC-128.13 clarified); component secrets and the bucket check stay in scope (AC-128.7 clarified); repair is automatic; thresholds confirmed
+- 2026-10-30 approved
