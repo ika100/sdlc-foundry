@@ -1,7 +1,7 @@
 ---
 spec_id: 130-quality-gates-fail-when-they-checked
 title: Quality gates fail when they checked nothing
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [285]
@@ -59,3 +59,4 @@ As a platform maintainer, I want a platform test that runs every covered gate of
 - 2026-10-31 amended: the three confirmations (message format, skip-only runs fail, `test-fast` follows `test`) answered yes and struck; AC-130.8 clarified so the cluster-gitops recipe keeps its #278 behaviour and kubeconform summary and adds the AC-130.1 line
 - 2026-10-31 approved
 - 2026-10-31 building
+- 2026-10-31 done

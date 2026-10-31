@@ -123,6 +123,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [126-unattended-runs-stop-wasting-turns-and](specs/126-unattended-runs-stop-wasting-turns-and/spec.md) — Unattended runs stop wasting turns and CI rounds | P1 | done | 15 |  |
 | [128-generated-passwords-match-the-running](specs/128-generated-passwords-match-the-running/spec.md) — Generated passwords match the running server | P1 | done | 14 | #316 |
 | [129-a-platform-release-command](specs/129-a-platform-release-command/spec.md) — A platform release command | P1 | done | 21 | #296 |
+| [130-quality-gates-fail-when-they-checked](specs/130-quality-gates-fail-when-they-checked/spec.md) — Quality gates fail when they checked nothing | P1 | done | 16 | #285 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
