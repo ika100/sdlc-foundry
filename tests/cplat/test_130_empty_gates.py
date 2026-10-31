@@ -571,10 +571,11 @@ def test_the_files_that_change_are_platform_owned_so_an_update_applies_them_ac_1
 
 
 def _unreleased() -> str:
+    """The changelog section that holds the entry: [Unreleased] until the release, then its release section."""
     text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    m = re.search(r"^## \[Unreleased\]\s*\n(.*?)(?=^## \[)", text, re.S | re.M)
-    assert m, "docs/CHANGELOG.md has no [Unreleased] section"
-    return m.group(1)
+    sections = re.findall(r"^## \[[^\]]+\][^\n]*\n(.*?)(?=^## \[|\Z)", text, re.S | re.M)
+    assert sections, "docs/CHANGELOG.md has no sections"
+    return next((s for s in sections if "checked nothing" in s), sections[0])
 
 
 def test_the_changelog_lists_the_behaviour_change_with_symptom_and_fix_ac_130_16():  # AC-130.16
