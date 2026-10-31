@@ -3,6 +3,9 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+// scripts/gate.sh sets VITEST_GATE_REPORT to count the tests that ran (spec 130).
+const gateReport = process.env.VITEST_GATE_REPORT;
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -10,6 +13,7 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
   },
   test: {
+    ...(gateReport ? { reporters: ["default", "json"], outputFile: { json: gateReport } } : {}),
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
