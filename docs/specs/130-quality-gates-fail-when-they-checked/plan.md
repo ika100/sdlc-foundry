@@ -31,6 +31,7 @@ tasks:
     covers: [AC-130.1, AC-130.7, AC-130.8, AC-130.9, AC-130.10, AC-130.11, AC-130.12, AC-130.13, AC-130.14, AC-130.16]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: platform smoke jobs run each template's real test/test-fast recipe (must pass) and test-fast with the tests removed (must fail with the line)
     files: [.github/workflows/ci.yml]
