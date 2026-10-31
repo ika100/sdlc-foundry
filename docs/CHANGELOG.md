@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+**The console finds component clones beside the gitops clone.** Console actions prefer a configured workspace, then a sibling of the active gitops clone, and finally `~/src`. Configured-workspace clones keep the `.claude/settings.json` check; sibling and fallback clones must also have the expected GitHub origin. The active gitops clone is passed through actions, panels, the board, run handoff and the system switcher. (#272)
+
 ## [5.5.0] - 2026-10-31
 
 **A gate that checked nothing fails.** CI, `/component:build` and `/component:ship` read a green gate as "verified", but a test runner that ran 0 tests, kubeconform over an empty build, a render check that compared no files or a secrets scan over an empty file list passed (#285, [spec 130](specs/130-quality-gates-fail-when-they-checked/spec.md), [ADR-074](adr/074-a-gate-that-checked-nothing-fails.md)). **Behaviour change:** every covered gate (`test`, `test-fast`, `validate`, `render-check`, `secrets-scan`) in every template now counts what the tool reported and fails on 0 with `<gate>: checked nothing: <0 tests ran | 0 resources | 0 files compared | 0 files to scan> - <how to fix>`. A repo with 0 tests, only skipped tests, an empty build or no files to scan turns red after `/platform:update`; the fix is to add at least one test or make the build non-empty. There is no opt-out. Also: gitops-app `validate` now stops at its first failing step, Go tests run with `-v` (the count comes from the result lines), and a `package.json` test script with its own `--reporter` makes the web gate fail. Nothing breaks the CLI or the plugins: the release is a minor.
