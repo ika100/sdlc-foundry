@@ -38,6 +38,7 @@ tasks:
     covers: [AC-129.1, AC-129.3, AC-129.4, AC-129.5, AC-129.6, AC-129.7, AC-129.8, AC-129.9, AC-129.10, AC-129.11, AC-129.17, AC-129.18]
     parallel_safe: false
     depends_on: [t3]
+    done: true
   - id: t5
     title: platrelease_publish — upgrade e2e on the merge commit, gate, tag stop, tag, GitHub release, release guard
     files: [scripts/cplat/platrelease_publish.py, scripts/cplat/platrelease.py]
