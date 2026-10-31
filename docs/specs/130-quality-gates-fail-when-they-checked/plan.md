@@ -10,6 +10,7 @@ tasks:
     covers: [AC-130.1, AC-130.6, AC-130.13, AC-130.14]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: the rule in CONTRIBUTING.md and docs/templates.md with the pointer to the platform test, ADR-074 in the ADR index, CHANGELOG behaviour change under [Unreleased]
     files: [CONTRIBUTING.md, docs/templates.md, docs/CHANGELOG.md, docs/adr/README.md]
