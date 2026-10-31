@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep the copies in templates/cluster-gitops equal to their gitops-app sources (spec 125, design decision 13).
+"""Keep template script copies equal to their gitops-app sources (spec 125 design decision 13; spec 130 gate.sh).
 
   sync-template-copies.py --check   exit 1 naming each copy that differs and the fix
   sync-template-copies.py           rewrite the copies from their sources
@@ -10,12 +10,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC, DST = ROOT / "templates" / "gitops-app" / "scripts", ROOT / "templates" / "cluster-gitops" / "scripts"
-COPIES = {"render.py": "system_render.py", "local-cluster.sh": "local-cluster.sh", "ports.sh": "ports.sh"}
+TEMPLATES = ROOT / "templates"
+APP, CLUSTER = TEMPLATES / "gitops-app" / "scripts", TEMPLATES / "cluster-gitops" / "scripts"
+# (source, copy) pairs; a pair whose source does not exist is skipped.
+COPIES: list[tuple[Path, Path]] = [
+    (APP / "render.py", CLUSTER / "system_render.py"),
+    (APP / "local-cluster.sh", CLUSTER / "local-cluster.sh"),
+    (APP / "ports.sh", CLUSTER / "ports.sh"),
+] + [
+    (APP / "gate.sh", TEMPLATES / t / "scripts" / "gate.sh")
+    for t in ("cluster-gitops", "service-python", "library-python", "service-go", "service-java", "web-nextjs")
+]
 
 
 def differing() -> list[tuple[Path, Path]]:
-    return [(SRC / s, DST / d) for s, d in COPIES.items() if not (DST / d).is_file() or (DST / d).read_bytes() != (SRC / s).read_bytes()]
+    return [(s, d) for s, d in COPIES if s.is_file() and (not d.is_file() or d.read_bytes() != s.read_bytes())]
 
 
 def main(argv: list[str]) -> int:
@@ -25,6 +34,7 @@ def main(argv: list[str]) -> int:
             print(f"{dst.relative_to(ROOT)} differs from {src.relative_to(ROOT)}; fix: uv run scripts/sync-template-copies.py", file=sys.stderr)
         return 1 if bad else 0
     for src, dst in bad:
+        dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(src.read_bytes())
         print(f"rewrote {dst.relative_to(ROOT)}")
     return 0

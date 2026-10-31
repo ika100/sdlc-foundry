@@ -83,6 +83,20 @@ def test_rewrite_keeps_executable_bit_of_existing_copy(tmp_path: Path) -> None:
     assert dst.stat().st_mode & 0o111
 
 
+def test_check_names_a_drifted_gate_copy_and_rewrite_restores_it(tmp_path: Path) -> None:
+    root = _sandbox(tmp_path)
+    (root / "templates" / "gitops-app" / "scripts" / "gate.sh").write_bytes(b"# gate\n")
+    copy = root / "templates" / "service-go" / "scripts" / "gate.sh"
+    copy.parent.mkdir(parents=True)
+    copy.write_bytes(b"# drifted\n")
+    res = _run(root, "--check")
+    assert res.returncode == 1
+    assert "templates/service-go/scripts/gate.sh" in res.stderr
+    assert _run(root).returncode == 0
+    assert copy.read_bytes() == b"# gate\n"
+    assert _run(root, "--check").returncode == 0
+
+
 def test_real_repo_is_in_sync() -> None:
     res = _run(REPO, "--check")
     assert res.returncode == 0, res.stderr
