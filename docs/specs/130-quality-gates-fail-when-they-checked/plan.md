@@ -38,6 +38,7 @@ tasks:
     covers: [AC-130.2, AC-130.3, AC-130.4, AC-130.5, AC-130.12]
     parallel_safe: true
     depends_on: [t2, t3]
+    done: true
 ---
 
 # Plan — 130 Quality gates fail when they checked nothing
