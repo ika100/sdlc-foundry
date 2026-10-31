@@ -16,6 +16,7 @@ Usage: render.py [--check | --crds | --systems | --name]
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -271,6 +272,10 @@ def main() -> int:
         for s, repo in c["systems"].items():
             print(f"{s} {repo}")
     elif flag == "--check":
+        if len(files) == 0:
+            gate = os.environ.get("GATE_NAME") or "render-check"
+            print(f"{gate}: checked nothing: 0 files compared - run `devbox run render` and check cluster.yaml", file=sys.stderr)
+            return 1
         changed, stale = diff(files)
         if not changed and not stale:
             print("OK: up to date")

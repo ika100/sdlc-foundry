@@ -150,6 +150,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
@@ -3500,6 +3501,13 @@ def versions_table() -> list[dict]:
     return rows
 
 
+def nothing_compared() -> str:
+    """The line of a --check that compared no rendered file (spec 130); the gate name comes from the recipe that runs the check."""
+    gate = os.environ.get("GATE_NAME") or "render-check"
+    return (f"{gate}: checked nothing: 0 files compared - "
+            "run `devbox run render` and check that applications/<system>/system.yaml exists")
+
+
 def main() -> int:
     if "--versions" in sys.argv[1:]:
         print(json.dumps(versions_table(), indent=2))
@@ -3513,7 +3521,10 @@ def main() -> int:
     ans = answers()
     apps = sorted(p.parent for p in (ROOT / "applications").glob("*/system.yaml"))
     if not apps:
-        print("ERROR: no applications/*/system.yaml found", file=sys.stderr)
+        if check:
+            print(nothing_compared(), file=sys.stderr)
+        else:
+            print("ERROR: no applications/*/system.yaml found", file=sys.stderr)
         return 1
     drift: list[str] = []
     retired: list[str] = []
@@ -3564,6 +3575,9 @@ def main() -> int:
         print("ERROR: rendered files are out of date — run `devbox run render`:", file=sys.stderr)
         for d in drift:
             print(f"  {d}", file=sys.stderr)
+        return 1
+    if check and sum(len(rendered) for _, rendered in plans) + len(operators) == 0:
+        print(nothing_compared(), file=sys.stderr)
         return 1
     print("OK: up to date" if check else f"rendered ({len(drift)} file(s) changed)")
     return 0
