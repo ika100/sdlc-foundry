@@ -23,6 +23,7 @@ tasks:
     covers: [AC-129.20, AC-129.21]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: platrelease_state — detection of the phase, version proposal and checks, steps and the state block
     files: [scripts/cplat/platrelease_state.py]
