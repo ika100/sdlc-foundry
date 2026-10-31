@@ -17,6 +17,7 @@ tasks:
     covers: [AC-129.4, AC-129.5, AC-129.6, AC-129.15]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: /platform:release command, /component:release refusal, CONTRIBUTING Releases, READMEs, ADR index, plugin bumps, CHANGELOG
     files: [plugins/platform/commands/release.md, plugins/platform/README.md, plugins/platform/.claude-plugin/plugin.json, plugins/component/commands/release.md, plugins/component/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, CONTRIBUTING.md, README.md, docs/DOMAIN-MODEL.md, docs/adr/README.md, docs/CHANGELOG.md, tests/cplat/test_plugins_114.py]
