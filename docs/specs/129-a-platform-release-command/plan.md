@@ -45,6 +45,7 @@ tasks:
     covers: [AC-129.12, AC-129.13, AC-129.14, AC-129.15, AC-129.16, AC-129.17, AC-129.19]
     parallel_safe: false
     depends_on: [t4]
+    done: true
 ---
 
 # Plan — 129 A platform release command
