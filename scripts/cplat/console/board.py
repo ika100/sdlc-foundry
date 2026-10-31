@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -280,9 +281,9 @@ def _link(item: dict) -> str:
     return f'<a href="{esc(item["open"])}">{esc(item["id"])}</a>{engine_badge(item.get("engine"))}'
 
 
-def _cut_release(item: dict) -> str:
+def _cut_release(item: dict, repo_dir: str | Path | None = None) -> str:
     obj = {"type": "release", "repo": item["repo"], "component": item["component"], "version": item["version"]}
-    reasons = actions.prerequisites("cut-release", obj, dict(os.environ))
+    reasons = actions.prerequisites("cut-release", obj, dict(os.environ), repo_dir=repo_dir)
     reason = f"Needs {', '.join(reasons)}" if reasons else None
     if reason is None and actions.active_for(obj):
         reason = "Another action is running on this release"
@@ -290,18 +291,18 @@ def _cut_release(item: dict) -> str:
     return action_button("cut-release", "Cut release", None, reason, attrs={"data_object": json.dumps(obj), "data_open": item["open"]})
 
 
-def _card(item: dict) -> str:
+def _card(item: dict, repo_dir: str | Path | None = None) -> str:
     title = f"<span>{esc(item['title'])}</span>" if item.get("title") else ""
     why = f'<p class="why">{esc(item["why"])}</p>' if item.get("why") else ""
     budget = f'<p class="muted">{esc(item["budget"])}</p>' if item.get("budget") else ""
-    extra = _cut_release(item) if item["kind"] == "candidate" else ""
+    extra = _cut_release(item, repo_dir) if item["kind"] == "candidate" else ""
     return (f'<article class="card" data-card data-open="{esc(item["open"])}" tabindex="0">'
             f'<h3>{_link(item)}</h3>{title}'
             f'<p class="muted">{esc(item["repo"])}</p>'
             f'<p>{stage_badge(item["stage"])} {esc(item["state"])}</p>{budget}{why}{extra}</article>')
 
 
-def _column(stage: str, cards: list[dict]) -> str:
+def _column(stage: str, cards: list[dict], repo_dir: str | Path | None = None) -> str:
     info = stages.explain(stage)
     decision = " data-decision" if stage in stages.DECISION else ""
     hints = f'<p class="muted">{esc(info["what"])}</p>'
@@ -309,14 +310,14 @@ def _column(stage: str, cards: list[dict]) -> str:
         hints += f'<p class="muted">{esc(info["decision"])}</p>'
     href = esc(_panel("stage", stage))
     ordered = sorted(cards, key=lambda i: (not i["stopped"], i["id"]))
-    body = "".join(_card(i) for i in ordered)
+    body = "".join(_card(i, repo_dir) for i in ordered)
     return (f'<section class="column" data-column="{esc(stage)}"{decision} aria-label="{esc(stage)} column">'
             f'<h2><a href="{href}" data-open="{href}">{stage_badge(stage)}</a> <span class="count">{len(cards)}</span></h2>'
             f'{hints}{body}</section>')
 
 
-def _columns(items: list[dict]) -> str:
-    cols = "".join(_column(s, [i for i in items if i["stage"] == s]) for s in stages.STAGES)
+def _columns(items: list[dict], repo_dir: str | Path | None = None) -> str:
+    cols = "".join(_column(s, [i for i in items if i["stage"] == s], repo_dir) for s in stages.STAGES)
     return f'<div class="scroll-x"><div class="board">{cols}</div></div>'
 
 
@@ -396,7 +397,7 @@ def page(ctx: Any, query: dict[str, str]) -> str:
         if needle and finished:
             body += "<h2>Done</h2>" + _done(finished, "")
     else:
-        body = _columns(opened)
+        body = _columns(opened, ctx.repo_dir)
         if opened:
             body += f'<details class="as-table"><summary>Show the same items as a table</summary>{_list(opened)}</details>'
         if needle and finished:
