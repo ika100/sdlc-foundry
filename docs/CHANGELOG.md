@@ -32,8 +32,6 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **Plugins:** `cluster` 1.1.0.
 
-**`cluster add` checks the system before it opens a PR.** `cplat cluster add` (and its `--dry-run`) opened a PR for a system that the cluster repo's own check rejects right away, for example one whose environments would install operators themselves (#263). It now runs the cluster repo's `scripts/check.py` with the system added and puts cluster.yaml back; when the check names a problem of that system (`set environments.<env>.operators: owner in <repo>`, an operator cluster.yaml does not list), it stops with those lines and changes nothing. Problems of other registered systems do not stop it.
-
 **An amended spec with a plan can be approved again.** Amending a planned spec changes its criteria, so its plan no longer covered them; `cplat spec approve` refused because of the plan, and `/component:plan` only plans an approved spec, so the amend flow could not finish (#208). Approval now checks the spec on its own and moves a plan written for other criteria aside to `plan.v<k>.md` (it says so and names `/component:plan <NNN>` as the next step); `cplat spec check` no longer checks the old plan of an amended draft. `/component:spec approve` commits the set-aside plan with the spec.
 
 **Plugins:** `component` 1.5.2.
