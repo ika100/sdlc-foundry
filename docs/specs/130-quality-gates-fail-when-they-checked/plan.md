@@ -24,6 +24,7 @@ tasks:
     covers: [AC-130.1, AC-130.2, AC-130.3, AC-130.4, AC-130.5, AC-130.6, AC-130.10, AC-130.11, AC-130.12, AC-130.13, AC-130.14, AC-130.16]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: gitops-app and cluster-gitops - validate counts resources (gitops-app stops at the first failing step), render.py --check fails on 0 compared files with GATE_NAME, secrets-scan through gate.sh
     files: [templates/gitops-app/devbox.json, templates/gitops-app/scripts/render.py, templates/cluster-gitops/scripts/system_render.py, templates/cluster-gitops/scripts/render.py, templates/cluster-gitops/devbox.json]
