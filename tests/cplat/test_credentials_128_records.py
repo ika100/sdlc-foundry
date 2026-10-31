@@ -137,8 +137,10 @@ def test_the_adr_index_lists_adr_072_ac_128_13():  # AC-128.13
 # ---------------- AC-128.14: the changelog ----------------
 
 def unreleased() -> str:
+    """The changelog section that holds the #316 entry: [Unreleased] until the release, then its release section."""
     text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    return text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    sections = text.split("\n## [")[1:]
+    return next((s for s in sections if "#316" in s), sections[0])
 
 
 def entry() -> str:
