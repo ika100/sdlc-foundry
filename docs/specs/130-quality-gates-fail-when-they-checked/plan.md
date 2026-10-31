@@ -16,6 +16,7 @@ tasks:
     covers: [AC-130.15, AC-130.16]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: test, test-fast and secrets-scan recipes of service-python, library-python, service-go, service-java and web-nextjs through gate.sh; Vitest JSON reporter under VITEST_GATE_REPORT
     files: [templates/service-python/devbox.json, templates/library-python/devbox.json, templates/service-go/devbox.json.jinja, templates/service-java/devbox.json.jinja, templates/web-nextjs/devbox.json.jinja, templates/web-nextjs/vitest.config.mts]
