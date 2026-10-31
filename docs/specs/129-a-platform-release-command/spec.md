@@ -1,7 +1,7 @@
 ---
 spec_id: 129-a-platform-release-command
 title: A platform release command
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [296]
@@ -60,3 +60,4 @@ As a platform maintainer, I want the command to say what it detected and what it
 - 2026-10-31 created
 - 2026-10-31 filled from #296 with the user's decisions: `cplat platform release` plus `/platform:release`, confirmation stops before merge and before tag, version proposal with `--version` override, resume from git/GitHub state without a state file
 - 2026-10-31 approved
+- 2026-10-31 building
