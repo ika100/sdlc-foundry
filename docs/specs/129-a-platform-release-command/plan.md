@@ -31,6 +31,7 @@ tasks:
     covers: [AC-129.1, AC-129.2, AC-129.3, AC-129.17, AC-129.18, AC-129.19]
     parallel_safe: false
     depends_on: [t1, t2]
+    done: true
   - id: t4
     title: platrelease CLI — registration, preflight, dry run, prepare/commit/push/PR, CI wait and the merge stop
     files: [scripts/cplat/platrelease.py, scripts/cplat/cplat.py]
