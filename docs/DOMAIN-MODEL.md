@@ -274,7 +274,7 @@ Every command names the thing it acts on; the same verbs work for a system and f
 | `cluster` | `new` · `add` · `remove` (`/cluster:new`, `/cluster:add`, `/cluster:remove`) |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |
-| `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` · `ui` |
+| `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` · `ui` · `release` |
 
 The contract check of an API is not built yet: it comes with spec 110.
 

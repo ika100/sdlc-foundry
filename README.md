@@ -33,7 +33,7 @@ You describe what you want in Claude Code; the platform scaffolds the repos (Pyt
 │   ├── svc-go/                        Go agents
 │   ├── system/                        System specs across repos (/system:new, spec, plan, ship, status)
 │   ├── api/ resource/ instance/       /api:list, /resource:add|remove, /instance:promote|secret|verify
-│   ├── issue/ platform/               /issue:triage|report, /platform:doctor|update|fleet|runs|retro|ui
+│   ├── issue/ platform/               /issue:triage|report, /platform:doctor|update|fleet|runs|retro|ui|release
 │   └── shared/                        cplat on the PATH, hooks, quality and security agents
 ├── shapes.yml                         Shape registry (single source of truth)
 ├── templates/
@@ -124,7 +124,7 @@ See `docs/ADOPTING.md` for the full migration guide.
 | `/instance:verify [<env>]` | instance | Smoke tests against a deployed instance |
 | `/platform:doctor` | platform | Preflight: tools, `gh` scopes, Docker, kube context, plugin versions, repo platform version, with a fix per problem |
 | `/platform:update [--ref <tag>] [--migrate]` | platform | Pull the latest skeleton (CI, devbox, Dockerfile, CLAUDE.md…) into an existing repo on a review branch; `--migrate` converts a 4.x repo |
-| `/platform:fleet update` · `/platform:runs` · `/platform:retro` · `/platform:ui` | platform | Update every repo built from the platform · run records and cost · the weekly retro · the local console |
+| `/platform:fleet update` · `/platform:runs` · `/platform:retro` · `/platform:ui` · `/platform:release` | platform | Update every repo built from the platform · run records and cost · the weekly retro · the local console · release the platform |
 | `/issue:report [what]` | issue | Draft a platform issue with diagnostics (secrets removed) and file it after your OK |
 | `/issue:triage` | issue | Route GitHub issues to specs, fixes or replies |
 
