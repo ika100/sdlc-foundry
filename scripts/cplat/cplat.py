@@ -30,6 +30,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat platform versions [--json] [--diff REF] [--changelog]   the versions table of this release; what changed since REF
   cplat platform update [--migrate] [--data KEY=VALUE] [--dry-run]
   cplat platform fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release
+  cplat platform release [--version X.Y.Z] [--dry-run] [--confirm merge|tag]   prepare, merge, tag and publish a platform release
   cplat platform runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost
   cplat system set --env ENV [--promote RULE] [--policy POLICY] [--host HOST]   one environment's promote rule, policy or host
   cplat runs [--json] [--since DAYS] [--repo OWNER/NAME] [--spec ID]   the run list (active and recent runs)
@@ -75,7 +76,7 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
     "issue": {"triage": ("triage", [])},
     "platform": {"doctor": ("doctor", []), "update": ("update", []), "versions": ("versions", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", []),
-                 "ui": ("ui", [])},
+                 "release": ("platrelease", []), "ui": ("ui", [])},
 }
 
 PLUMBING = {
