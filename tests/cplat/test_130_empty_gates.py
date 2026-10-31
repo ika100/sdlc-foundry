@@ -197,7 +197,7 @@ def test_the_web_gate_asks_vitest_for_its_json_report_ac_130_5(world, gate):  # 
 def test_no_web_script_or_config_passes_with_no_tests_ac_130_5():  # AC-130.5
     pat = re.compile(r"pass[-_]?with[-_]?no[-_]?tests", re.I)
     pkg = (TEMPLATES / "web-nextjs" / "package.json.jinja").read_text()
-    scripts = json.loads(re.sub(r"\{\{.*?\}\}", "x", pkg))["scripts"]
+    scripts = json.loads(re.sub(r"\{%.*?%\}", "", re.sub(r"\{\{.*?\}\}", "x", pkg)))["scripts"]
     for name in ("test", "test:fast"):
         assert not pat.search(scripts[name]), f"{name}: {scripts[name]}"
     assert not pat.search((TEMPLATES / "web-nextjs" / "vitest.config.mts").read_text())
