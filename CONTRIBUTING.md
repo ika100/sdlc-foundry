@@ -82,6 +82,7 @@ The sign-off e-mail must be the commit's author or committer e-mail (use your Gi
 
 - **Conventional Commits** for the PR title (`feat(web): ...`, `fix(cplat): ...`, `docs: ...`); the title is checked and becomes the squash-commit message. Use branch names like `feat/...`, `fix/...`, `docs/...`.
 - **One logical change per PR**, with tests. Behaviour in `scripts/cplat` needs a test in `tests/cplat`; a template change needs the template's own tests to pass when rendered.
+- **A gate that checked nothing fails.** A covered gate (`test`, `test-fast`, `validate`, `render-check`, `secrets-scan`) that ran 0 tests, saw 0 resources, compared 0 files or scanned 0 files exits non-zero with `<gate>: checked nothing: ...`; there is no opt-out. A new template or gate recipe needs an entry in the coverage table of [`tests/cplat/test_130_empty_gates.py`](tests/cplat/test_130_empty_gates.py) ([ADR-074](docs/adr/074-a-gate-that-checked-nothing-fails.md)).
 - **Plugins**: when you change anything under `plugins/<name>/`, bump the version in both `plugins/<name>/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (semver: patch for fixes, minor for additions, major for breaking changes).
 - **Keep always-on text small.** Agent and command `description:` front matter is loaded into every session (max 260 characters, enforced). Put detail in the body.
 - **Changelog**: add a line under `## [Unreleased]` in `docs/CHANGELOG.md` for anything users can notice.
