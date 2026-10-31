@@ -5,7 +5,7 @@
 1. **Count from the tool's own report, decide in one helper.** Each covered gate counts what it checked from what the tool reports
    (JUnit XML, `go test -v` result lines, Vitest's JSON report, kubeconform's summary, the rendered file set, `git ls-files`) and fails
    on 0. Shell recipes go through one helper, `scripts/gate.sh`, so the message format and the "runner broke vs. ran nothing" rule exist
-   once. ADR: [073](../../adr/074-a-gate-that-checked-nothing-fails.md).
+   once. ADR: [074](../../adr/074-a-gate-that-checked-nothing-fails.md).
 2. **One byte-identical `scripts/gate.sh` in all 7 templates.** Source: `templates/gitops-app/scripts/gate.sh`; copies in the other six
    templates, kept equal by `scripts/sync-template-copies.py` (already run by CI with `--check`). One file to review, one file the
    platform test targets. It holds the counting for all four test runners even though each template uses one; that costs ~30 lines and

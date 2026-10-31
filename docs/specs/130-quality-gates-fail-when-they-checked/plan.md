@@ -38,7 +38,7 @@ tasks:
 
 # Plan — 130 Quality gates fail when they checked nothing
 
-Contract: [design.md](design.md). ADR: [073](../../adr/074-a-gate-that-checked-nothing-fails.md). The platform test of AC-130.14
+Contract: [design.md](design.md). ADR: [074](../../adr/074-a-gate-that-checked-nothing-fails.md). The platform test of AC-130.14
 (`tests/cplat/test_130_empty_gates.py`) and the other acceptance tests are written by the testers before t1 starts; no task edits them.
 
 Order: t1 and t5 first (independent), then t2 and t3 (both call `gate.sh`), then t4 (runs the recipes of t2 and t3 in CI). The build
