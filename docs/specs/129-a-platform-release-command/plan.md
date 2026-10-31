@@ -10,6 +10,7 @@ tasks:
     covers: [AC-129.2, AC-129.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: platrelease_changelog — move [Unreleased], section body, plugin/marketplace version mismatches
     files: [scripts/cplat/platrelease_changelog.py]
