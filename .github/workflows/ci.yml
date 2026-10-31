@@ -597,7 +597,7 @@ jobs:
         run: |
           cp -r . /tmp/empty-java
           cd /tmp/empty-java
-          rm -rf src/test
+          rm -rf src/test target   # compiled test classes in target/ would still run
           if sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)" 2>/tmp/neg.err; then
             echo "test-fast: the recipe passed with no tests"; exit 1
           fi
