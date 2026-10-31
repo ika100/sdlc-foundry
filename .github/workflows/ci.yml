@@ -254,6 +254,22 @@ jobs:
           else
             uv run pytest -q
           fi
+          # spec 130: the recipe itself (gate.sh around the real runner) passes on a fresh render
+          sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"
+      # Spec 130: a render without tests fails test-fast with the line, through the real pytest
+      - name: Recipe fails when no test ran
+        working-directory: /tmp/test-${{ matrix.template }}
+        run: |
+          cp -r . /tmp/empty-py
+          cd /tmp/empty-py
+          rm -rf .venv
+          uv sync --all-extras -q
+          find tests -name 'test_*.py' -delete
+          if sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)" 2>/tmp/neg.err; then
+            echo "test-fast: the recipe passed with no tests"; exit 1
+          fi
+          cat /tmp/neg.err
+          grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
       # Spec 104: the image build installs with --locked, so a pyproject.toml the lock does not satisfy must fail.
       - name: Strict install rejects a stale lock
         if: matrix.template == 'service-python'
@@ -321,6 +337,7 @@ jobs:
         run: |
           cd /tmp/test-gitops
           uv run scripts/render.py --check
+          sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)"   # spec 130: the recipe passes on a fresh render
           sed 's/^system: fx$/system: test/' "$GITHUB_WORKSPACE/tests/fixtures/gitops/system.yaml" > applications/test/system.yaml
           uv run scripts/render.py
           uv run scripts/render.py --check
@@ -360,6 +377,7 @@ jobs:
         run: |
           cd /tmp/test-cluster
           uv run scripts/render.py --check
+          sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)"   # spec 130: the recipe passes on a fresh render
           uv run scripts/check.py
       - name: scripts parse
         run: |
@@ -406,8 +424,21 @@ jobs:
           npx -y pnpm@11.22.0 install
           npx -y pnpm@11.22.0 lint
           npx -y pnpm@11.22.0 typecheck
-          npx -y pnpm@11.22.0 test
+          npm install -g pnpm@11.22.0 >/dev/null   # the test recipe calls pnpm, as devbox provides it in a repo
+          sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"
           npx -y pnpm@11.22.0 build
+      # Spec 130: a render without tests fails test-fast with the line, through the real Vitest
+      - name: Recipe fails when no test ran
+        working-directory: /tmp/test-web
+        run: |
+          cp -r . /tmp/empty-web
+          cd /tmp/empty-web
+          rm -rf tests
+          if sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)" 2>/tmp/neg.err; then
+            echo "test-fast: the recipe passed with no tests"; exit 1
+          fi
+          cat /tmp/neg.err
+          grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
       # Spec 104: the image build installs with --frozen-lockfile, so a package.json the lock does not satisfy must fail.
       - name: Strict install rejects a stale lock
         run: |
@@ -486,7 +517,19 @@ jobs:
           test -z "$(gofmt -l .)"
           go vet ./...
           go build ./...
-          go test -race -cover ./...
+          sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"   # spec 130: gate.sh around go test -v
+      # Spec 130: a render without tests fails test-fast with the line, through the real go test
+      - name: Recipe fails when no test ran
+        working-directory: /tmp/test-go
+        run: |
+          cp -r . /tmp/empty-go
+          cd /tmp/empty-go
+          find . -name '*_test.go' -delete
+          if sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)" 2>/tmp/neg.err; then
+            echo "test-fast: the recipe passed with no tests"; exit 1
+          fi
+          cat /tmp/neg.err
+          grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
@@ -546,7 +589,20 @@ jobs:
         run: mvn -B -q spotless:check checkstyle:check
       - name: verify (tests + JaCoCo 80% gate)
         working-directory: /tmp/test-java
-        run: mvn -B verify
+        run: sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"   # spec 130: gate.sh around mvn -B verify
+      # Spec 130: a render without tests fails test-fast with the line, through the real Maven (one variant is enough)
+      - name: Recipe fails when no test ran
+        if: ${{ matrix.observability && !matrix.database }}
+        working-directory: /tmp/test-java
+        run: |
+          cp -r . /tmp/empty-java
+          cd /tmp/empty-java
+          rm -rf src/test
+          if sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)" 2>/tmp/neg.err; then
+            echo "test-fast: the recipe passed with no tests"; exit 1
+          fi
+          cat /tmp/neg.err
+          grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
       - name: image builds and starts (non-root, read-only root filesystem)
         working-directory: /tmp/test-java
         run: |
