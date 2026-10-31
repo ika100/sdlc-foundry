@@ -934,7 +934,8 @@ def test_the_component_system_and_platform_plugins_are_bumped_in_both_places_ac_
     for name, least in (("component", (1, 3, 0)), ("system", (1, 5, 0))):   # spec 121: system 1.5.0; later specs bump again
         got = plugin_versions(name)
         assert got[0] == got[1] and tuple(map(int, got[0].split("."))) >= least, name
-    assert plugin_versions("platform") == ("1.3.0", "1.3.0")   # spec 121: platform plugin 1.3.0
+    got = plugin_versions("platform")   # spec 121: platform plugin 1.3.0; spec 129 bumps it again
+    assert got[0] == got[1] and tuple(map(int, got[0].split("."))) >= (1, 3, 0)
 
 
 def description(path) -> str:
