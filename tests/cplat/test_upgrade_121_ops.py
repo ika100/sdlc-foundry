@@ -840,7 +840,8 @@ def description(path) -> str:
 
 def test_the_resource_platform_and_system_plugins_are_bumped_in_both_places_ac_121_6():  # AC-121.6
     assert plugin_versions("resource") == ("1.6.1", "1.6.1")  # spec 127: 1.6.1
-    assert plugin_versions("platform") == ("1.3.0", "1.3.0")
+    got = plugin_versions("platform")   # spec 121: platform plugin 1.3.0; spec 129 bumps it again
+    assert got[0] == got[1] and tuple(map(int, got[0].split("."))) >= (1, 3, 0)
     system = plugin_versions("system")   # later specs bump system again; 1.5.0 is the bump of spec 121
     assert system[0] == system[1] and tuple(map(int, system[0].split("."))) >= (1, 5, 0)
 

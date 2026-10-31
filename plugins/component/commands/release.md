@@ -16,6 +16,8 @@ Resolve the shape: run `cplat shape`. It prints JSON: `shape`, `plugin`, `deploy
 ## Release refused: the platform is not released with /component:release
 
 The platform is released through its own procedure: version bumps in .claude-plugin/marketplace.json and each changed plugin's .claude-plugin/plugin.json, the CHANGELOG section, a release PR and a tag. It is described in CONTRIBUTING.md, section Releases.
+
+Release the platform with /platform:release (or cplat platform release).
 ```
 
 Roles missing from `agents` (e.g. deployment for a library) are skipped. The tester is `agents.tester`, the release agent in Phase 4 is `agents.release` ([ADR-012](../../../docs/adr/012-per-plugin-release-agent.md)). The gates below call only shape-neutral `devbox run` recipes; skip the image scan in Phase 3 when `deployable` is false.

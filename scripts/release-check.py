@@ -6,6 +6,7 @@
 
   release-check.py rows [--base REF]              the CHANGELOG section that will be released lists every changed versions row since REF
                                                   (`cplat platform versions --diff REF --changelog`), and a major move needs a major release
+  release-check.py needs-major [--base REF]       one line per change that needs a major release (the rule `rows` uses), nothing when none
   release-check.py needs-upgrade-e2e [--base REF] prints `run=true|false` (for $GITHUB_OUTPUT): the change touches the versions table, adds a
                                                   release heading or touches the upgrade e2e or its code
   release-check.py gate SHA                       exit 0 only when SHA has a green check run of the upgrade e2e (via `gh api`)
@@ -106,6 +107,19 @@ def changes_since(base: str) -> list[dict]:
     return versions.diff(old, new)
 
 
+def major_reasons(base: str, changes: list[dict]) -> list[str]:
+    """The changes since BASE that need a major platform release (the one rule `rows` and the release command share)."""
+    needing = [ln.removeprefix("- ") for c, ln in zip(changes, versions.diff_lines(changes, True))
+               if (c["kind"] == "changed" and c["major"]) or c["kind"] in ("crds", "removed")]
+    return needing + dropped_majors(base)
+
+
+def cmd_needs_major(base: str) -> int:
+    for reason in major_reasons(base, changes_since(base)):
+        print(reason)
+    return 0
+
+
 def cmd_rows(base: str) -> int:
     changes = changes_since(base)
     label, version, body = released_section(changelog_text(), base)
@@ -116,10 +130,7 @@ def cmd_rows(base: str) -> int:
     base_v = vtuple(base)
     major_release = bool(version and base_v and vtuple(version)[0] > base_v[0])
     if not major_release:
-        needing = [ln.removeprefix("- ") for c, ln in zip(changes, versions.diff_lines(changes, True))
-                   if (c["kind"] == "changed" and c["major"]) or c["kind"] in ("crds", "removed")]
-        needing += dropped_majors(base)
-        for change in needing:
+        for change in major_reasons(base, changes):
             errors.append(f"ERROR: {change} needs a major platform release ({base} → {version or 'Unreleased'})")
     for e in errors:
         print(e)
@@ -167,7 +178,7 @@ def cmd_gate(sha: str) -> int:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("rows", "needs-upgrade-e2e"):
+    for name in ("rows", "needs-major", "needs-upgrade-e2e"):
         sub.add_parser(name).add_argument("--base", metavar="REF")
     sub.add_parser("gate").add_argument("sha")
     ns = ap.parse_args(argv)
@@ -175,6 +186,8 @@ def main(argv: list[str]) -> int:
         if ns.cmd == "gate":
             return cmd_gate(ns.sha)
         base = ns.base or default_base()
+        if ns.cmd == "needs-major":
+            return cmd_needs_major(base)
         return cmd_rows(base) if ns.cmd == "rows" else cmd_needs(base)
     except Exception as e:  # noqa: BLE001  (a readable one-line failure, never a traceback)
         print(f"ERROR: {e}")
