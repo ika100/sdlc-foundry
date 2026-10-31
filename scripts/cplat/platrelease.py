@@ -149,11 +149,8 @@ def _ci_and_merge(repo: Path, url: str, version: str, o: Opts) -> tuple[bool, st
 
 def _publish(repo: Path, state: st.State, version: str, sha: str | None, o: Opts) -> int:
     """merged, tagged, guarding, guard-red: the post-merge part (platrelease_publish)."""
-    try:
-        import platrelease_publish as pub
-    except ImportError:
-        print(f"merged {sha or ''}: the post-merge steps are not available")
-        return 0
+    import platrelease_publish as pub
+
     return pub.continue_from(repo, state, version, sha, o)
 
 
@@ -219,6 +216,7 @@ def main(argv: list[str]) -> int:
     merged, sha = _ci_and_merge(repo, url, version, o)
     if not merged:
         return STOP_EXIT
+    state.phase = st.MERGED
     return _publish(repo, state, version, sha, o)
 
 
