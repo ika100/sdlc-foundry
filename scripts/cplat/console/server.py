@@ -285,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply_json(200, self.open_in_claude(body))
         elif path == "/api/open-system":
             try:
-                self.reply_json(200, switcher.open_system(str(body.get("repo") or "")))
+                self.reply_json(200, switcher.open_system(str(body.get("repo") or ""), repo_dir=self.ctx.repo_dir))
             except ValueError as e:
                 raise HttpError(412, "no local clone", str(e)) from e
             except RuntimeError as e:
@@ -318,7 +318,7 @@ class Handler(BaseHTTPRequestHandler):
     def start(self, body: dict) -> str:
         obj, args = body.get("object"), body.get("args")
         try:
-            return actions.start(str(body.get("kind") or ""), obj if isinstance(obj, dict) else {}, args if isinstance(args, dict) else {})
+            return actions.start(str(body.get("kind") or ""), obj if isinstance(obj, dict) else {}, args if isinstance(args, dict) else {}, repo_dir=self.ctx.repo_dir)
         except ValueError as e:
             raise HttpError(400, "invalid action", str(e)) from e
         except actions.Conflict as e:
@@ -328,7 +328,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def retry(self, action_id: str) -> str:
         try:
-            return actions.retry(action_id)
+            return actions.retry(action_id, repo_dir=self.ctx.repo_dir)
         except KeyError as e:
             raise HttpError(404, "no such action", action_id) from e
         except actions.Conflict as e:
@@ -354,7 +354,7 @@ class Handler(BaseHTTPRequestHandler):
             return str(recorded), ""
         repo = str(run.get("repo") or "")
         if "/" in repo:
-            clone = actions.clone_of(repo)
+            clone = actions.clone_of(repo, self.ctx.repo_dir)
             if clone.is_dir():
                 return str(clone), ""
             return str(self.ctx.repo_dir), f"No local clone of {repo} at {clone}; started in this system's clone instead."

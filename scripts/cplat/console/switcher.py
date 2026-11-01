@@ -35,7 +35,7 @@ def _lines(args: list[str]) -> list[str]:
     return [x.strip() for x in str(gh(args)).splitlines() if x.strip()]
 
 
-def list_systems() -> list[dict]:
+def list_systems(repo_dir: str | Path | None = None) -> list[dict]:
     """The repos with the topic `gitops-app` of the user and of their organisations, with the local clone if any."""
     owners = _lines(["api", "user", "-q", ".login"]) + _lines(["api", "user/orgs", "-q", ".[].login"])
     repos: list[str] = []
@@ -45,17 +45,19 @@ def list_systems() -> list[dict]:
                 repos.append(repo)
     out = []
     for repo in sorted(repos):
-        clone = actions.clone_of(repo)
+        clone = actions.system_clone_of(repo, repo_dir)
+        # System clones are validated by their GitHub origin, without requiring the component-only
+        # .claude/settings.json allowlist.
         have = clone.is_dir()
         out.append({"repo": repo, "clone": str(clone) if have else None, "action": "open" if have else "clone"})
     return out
 
 
-def open_system(repo: str) -> dict:
+def open_system(repo: str, repo_dir: str | Path | None = None) -> dict:
     """Start the console of the local clone of `repo` (detached, free port) and return `{"url", "command"}` (AC-122.29).
 
     Raises ValueError without a clone and RuntimeError when no address is printed in time."""
-    clone = actions.clone_of(repo)
+    clone = actions.system_clone_of(repo, repo_dir)
     if not clone.is_dir():
         raise ValueError(f"no local clone of {repo}: clone it first")
     argv = [sys.executable, str(CPLAT), "ui", "--repo-dir", str(clone), "--no-open", "--port", "0"]
@@ -81,7 +83,7 @@ def open_system(repo: str) -> dict:
     return {"url": found[0], "command": command}
 
 
-def _row(entry: dict) -> str:
+def _row(entry: dict, repo_dir: str | Path | None = None) -> str:
     repo = entry["repo"]
     if entry["action"] == "open":
         cmd = "cplat ui --repo-dir " + shlex.quote(entry["clone"])
@@ -89,7 +91,7 @@ def _row(entry: dict) -> str:
         act = (f'<button type="button" class="btn primary" data-action="open-system" data-args="{{}}" data-object="{esc(json.dumps({"repo": repo}))}">Open</button>'
                f'{command_block(cmd)}')
     else:
-        cmd = shlex.join(["gh", "repo", "clone", repo, str(actions.clone_of(repo))])
+        cmd = shlex.join(["gh", "repo", "clone", repo, str(actions.system_clone_of(repo, repo_dir))])
         what = "<span>No local clone yet</span>"
         obj = esc(json.dumps({"repo": repo}))
         act = f'<button type="button" class="btn" data-action="clone" data-object="{obj}" data-args="{{}}">Clone first</button>{command_block(cmd)}'
@@ -99,7 +101,7 @@ def _row(entry: dict) -> str:
 def page(ctx, query: dict[str, str]) -> str:
     """`/switch`: pick another system; a clone is offered first when there is none."""
     try:
-        entries, error = list_systems(), None
+        entries, error = list_systems(ctx.repo_dir), None
     except (OSError, RuntimeError, ValueError) as e:
         entries, error = [], str(e)
     if error:
@@ -107,7 +109,7 @@ def page(ctx, query: dict[str, str]) -> str:
     elif not entries:
         body = f'<p>No repository with the topic <code>{TOPIC}</code> found.</p>'
     else:
-        body = f'<ul class="list" data-systems>{"".join(_row(e) for e in entries)}</ul>'
+        body = f'<ul class="list" data-systems>{"".join(_row(e, ctx.repo_dir) for e in entries)}</ul>'
     stamp = freshness(ctx.state().get("read_at"))
     html = (f'<h1>Switch system</h1><p>Opening a system starts its own console on a new port; its address is shown next to it.</p>'
             f'{body}<p>{stamp}</p>')

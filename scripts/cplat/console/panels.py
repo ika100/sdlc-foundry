@@ -111,9 +111,9 @@ def _run_for(runs: list[dict], spec: str, repo: str | None = None) -> dict | Non
     return next((r for r in reversed(mine) if r.get("active")), mine[-1] if mine else None)
 
 
-def _disabled_reason(kind: str, obj: dict) -> str | None:
+def _disabled_reason(kind: str, obj: dict, repo_dir: str | Path | None = None) -> str | None:
     """Why an action cannot run now: a missing prerequisite or another action on the object (AC-122.41, AC-122.17)."""
-    missing = actions.prerequisites(kind, obj, dict(os.environ))
+    missing = actions.prerequisites(kind, obj, dict(os.environ), repo_dir=repo_dir)
     if kind in ("take-over", "open-in-claude"):
         missing = [m for m in missing if m == "claude"]
     if missing:
@@ -129,9 +129,9 @@ def _disabled_reason(kind: str, obj: dict) -> str | None:
 
 
 def _action(kind: str, label: str, key: str | None, obj: dict, command: str, *, args: dict | None = None,
-            primary: bool = False, confirm: str | None = None) -> str:
+            primary: bool = False, confirm: str | None = None, repo_dir: str | Path | None = None) -> str:
     attrs: dict[str, object] = {"data_object": json.dumps(obj), "data_args": json.dumps(args or {}), "data_confirm": confirm}
-    button = action_button(kind, label, key, _disabled_reason(kind, obj), attrs=attrs, primary=primary)
+    button = action_button(kind, label, key, _disabled_reason(kind, obj, repo_dir), attrs=attrs, primary=primary)
     return f'<div class="action-row">{button}{command_block(command)}</div>'
 
 
@@ -309,7 +309,7 @@ def _smoke_ways(run: dict) -> str:
                     "once you are satisfied.</p>")
 
 
-def _ways_forward(run: dict) -> str:
+def _ways_forward(run: dict, repo_dir: str | Path | None = None) -> str:
     obj = _object_of(run)
     spec_no = str(run.get("spec") or "").split("-", 1)[0]
     level = run.get("level") or "component"
@@ -319,16 +319,16 @@ def _ways_forward(run: dict) -> str:
     limit_form = (f'<form><select name="limit" aria-label="Budget limit">'
                   f'{"".join(f"<option>{x}</option>" for x in _BUDGET_LIMITS)}</select>'
                   f'<input type="text" name="value" aria-label="New value" placeholder="new value" required>'
-                  + _action("more-budget", "Give more budget", None, obj, ship + " --budget <limit>=<value>")
+                  + _action("more-budget", "Give more budget", None, obj, ship + " --budget <limit>=<value>", repo_dir=repo_dir)
                   + "</form>")
     amend_form = (f'<form><textarea name="text" aria-label="Spec change" placeholder="What should change in the spec?" required></textarea>'
-                  + _action("amend", "Amend the spec", None, obj, f"/{level}:spec --amend {spec_no} <text>") + "</form>")
+                  + _action("amend", "Amend the spec", None, obj, f"/{level}:spec --amend {spec_no} <text>", repo_dir=repo_dir) + "</form>")
     stays = (f"Stopping keeps the branch and the pull request #{(run.get('pr') or {}).get('number')}; nothing was deployed."
              if (run.get("pr") or {}).get("number") else "Stopping keeps the work done so far; nothing reaches prod without you.")
     return (_section("Ways forward",
-                     _action("take-over", "Take over", "t", obj, claude, primary=True)
+                     _action("take-over", "Take over", "t", obj, claude, primary=True, repo_dir=repo_dir)
                      + limit_form + amend_form
-                     + _action("open-in-claude", "Open in Claude Code", "o", obj, claude))
+                     + _action("open-in-claude", "Open in Claude Code", "o", obj, claude, repo_dir=repo_dir))
             + f"<p>{esc(stays)}</p>")
 
 
@@ -393,7 +393,7 @@ def panel_run(ctx: Any, ident: str) -> str:
                 ("Stage", _stage_or_done(stage) + (" stopped" if run.get("stopped") else "")),
                 ("Budget", esc(_budget_line(run))), ("Smoke", esc(_smoke_text(run)))])
     body = (head + _engine_html(run) + (_section("Why it stopped", failure or "<p>The run stopped without a recorded failure.</p>") if troubled else "")
-            + (_ways_forward(run) if troubled else "") + (_smoke_ways(run) if _not_run(run) else "") + _section("Where the evidence lives", link_html))
+            + (_ways_forward(run, ctx.repo_dir) if troubled else "") + (_smoke_ways(run) if _not_run(run) else "") + _section("Where the evidence lives", link_html))
     return _aside(f"Run {ident}", body, ctx, _read_at(ctx, "runs"))
 
 
@@ -420,7 +420,7 @@ def panel_issue(ctx: Any, ident: str) -> str:
     n, repo = obj["issue"], obj.get("repo")
     dismiss = (f'<form><textarea name="reason" aria-label="Reason" placeholder="Why is this not worth fixing?" required></textarea>'
                + _action("dismiss", "Dismiss", "d", obj, f"/issue:triage {n} dismiss as wontfix: <reason>",
-                         confirm="Dismiss this issue as wontfix?") + "</form>")
+                         confirm="Dismiss this issue as wontfix?", repo_dir=ctx.repo_dir) + "</form>")
     facts = [("Issue", _link(f"#{n}", f"https://github.com/{repo}/issues/{n}") if repo else esc(f"#{n}"))]
     facts += [("Title", esc(title))] if title else []
     facts += [("Stage", stage_badge(stage)), ("Why it is here", esc(why))]
@@ -428,8 +428,8 @@ def panel_issue(ctx: Any, ident: str) -> str:
     facts += [(label, esc(detail[key])) for label, key in (("Failing check", "check"), ("Failing test", "test"), ("Criterion", "criterion"),
                                                            ("Last error", "error"), ("Diagnosis", "diagnosis")) if detail.get(key)]
     body = (_kv(facts) + signal_facts(signal)
-            + _section("What do you want to do", _action("fix", "Fix it", None, obj, f"/component:fix #{n}", primary=True)
-                       + _action("make-spec", "Make a spec", None, obj, f"/component:spec #{n}") + dismiss))
+            + _section("What do you want to do", _action("fix", "Fix it", None, obj, f"/component:fix #{n}", primary=True, repo_dir=ctx.repo_dir)
+                       + _action("make-spec", "Make a spec", None, obj, f"/component:spec #{n}", repo_dir=ctx.repo_dir) + dismiss))
     return _aside(f"Issue #{n}", body, ctx, _read_at(ctx, "needs"))
 
 
@@ -493,7 +493,7 @@ def panel_release(ctx: Any, ident: str) -> str:
             f"v{esc(version)} is created and the image with the digest above is released.</p>"
             f"<p>{esc(_WAY_BACK_RELEASE)}</p>")
     cut = _action("cut-release", "Cut release", "r", obj, "/component:release", primary=True,
-                  confirm=f"Cut release {version} of {component}?")
+                  confirm=f"Cut release {version} of {component}?", repo_dir=ctx.repo_dir)
     return _aside(f"Release {component} {version}", _kv(facts) + _section("What happens", what + cut), ctx, _read_at(ctx, "status"))
 
 

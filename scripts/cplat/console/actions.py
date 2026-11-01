@@ -62,19 +62,97 @@ def state_dir() -> Path:
     return Path(base) / "sdlc-foundry" / "console"
 
 
-def workspace() -> Path:
-    """The folder with the local clones: `workspace` of the personal settings, default ~/src."""
+def configured_workspace() -> Path | None:
+    """The explicitly configured clone workspace, if one is set."""
     path = Path(os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")) / "sdlc-foundry" / "settings.yml"
     try:
         data = yaml.safe_load(path.read_text()) or {}
     except (OSError, yaml.YAMLError):
         data = {}
     value = data.get("workspace") if isinstance(data, dict) else None
-    return Path(str(value)).expanduser() if value else Path.home() / "src"
+    return Path(str(value)).expanduser() if value else None
 
 
-def clone_of(repo: str) -> Path:
-    return workspace() / repo.split("/")[-1]
+def workspace() -> Path:
+    """The folder with local clones: configured workspace or ~/src."""
+    return configured_workspace() or Path.home() / "src"
+
+
+def _normalise_remote(value: str) -> str:
+    value = value.strip().lower()
+    if value.startswith("git@github.com:"):
+        value = "https://github.com/" + value.removeprefix("git@github.com:")
+    elif value.startswith("ssh://git@github.com/"):
+        value = "https://github.com/" + value.removeprefix("ssh://git@github.com/")
+    return value.removesuffix(".git").rstrip("/")
+
+
+def _has_expected_origin(repo: str, path: Path) -> bool:
+    """Whether a local clone points to the expected GitHub repository."""
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"], cwd=path, capture_output=True,
+            text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    expected = _normalise_remote("https://github.com/" + repo)
+    return result.returncode == 0 and _normalise_remote(result.stdout) == expected
+
+
+def _valid_clone(repo: str, path: Path) -> bool:
+    """A discovered component clone must have the allowlist and the expected GitHub origin."""
+    return (path / ".claude" / "settings.json").is_file() and _has_expected_origin(repo, path)
+
+
+def system_clone_of(repo: str, repo_dir: str | Path | None = None) -> Path:
+    """Resolve a gitops-app clone by origin; system roots do not have component allowlists."""
+    name = repo.split("/")[-1]
+    explicit = configured_workspace()
+    candidates = ([explicit / name] if explicit is not None else [])
+    sibling = Path(repo_dir).expanduser().resolve().parent / name if repo_dir is not None else None
+    if sibling is not None:
+        candidates.append(sibling)
+    fallback = Path.home() / "src" / name
+    if fallback not in candidates:
+        candidates.append(fallback)
+    for candidate in candidates:
+        if candidate.is_dir() and _has_expected_origin(repo, candidate):
+            return candidate
+    return candidates[0] if explicit is not None else (sibling or fallback)
+
+
+def _valid_resolved_clone(repo: str, path: Path, repo_dir: str | Path | None) -> bool:
+    """Configured workspaces keep their historical allowlist check; discovered clones also need a matching origin."""
+    if repo_dir is None:
+        return (path / ".claude" / "settings.json").is_file()
+    explicit = configured_workspace()
+    if explicit is not None and path.resolve() == (explicit / repo.split("/")[-1]).resolve():
+        return (path / ".claude" / "settings.json").is_file()
+    return _valid_clone(repo, path)
+
+
+def clone_of(repo: str, repo_dir: str | Path | None = None) -> Path:
+    """Resolve a component clone: configured workspace, sibling, then ~/src."""
+    name = repo.split("/")[-1]
+    explicit = configured_workspace()
+    if explicit is not None:
+        configured = explicit / name
+        # Keep the historical configured-workspace contract, including fork origins.
+        if (configured / ".claude" / "settings.json").is_file():
+            return configured
+    else:
+        configured = Path.home() / "src" / name
+    if repo_dir is None:
+        return configured
+
+    sibling = Path(repo_dir).expanduser().resolve().parent / name
+    if _valid_clone(repo, sibling):
+        return sibling
+    fallback = Path.home() / "src" / name
+    if fallback != sibling and _valid_clone(repo, fallback):
+        return fallback
+    return configured if explicit is not None else sibling
 
 
 # ---------------- commands ----------------
@@ -167,13 +245,13 @@ def _slash(kind: str, obj: dict, args: dict) -> tuple[str, list[str]]:
     raise ValueError(f"unknown action kind {kind!r}")
 
 
-def command_for(kind: str, obj: dict, args: dict) -> tuple[list[str], str, str]:
+def command_for(kind: str, obj: dict, args: dict, repo_dir: str | Path | None = None) -> tuple[list[str], str, str]:
     """`(argv, display, repo)` of one action. Raises ValueError for an unknown kind or missing arguments."""
     repo = str(obj.get("repo") or "")
     if "/" not in repo:
         raise ValueError("the object names no repository")
     repo = _match(REPO, repo, "repository")
-    clone = clone_of(repo)
+    clone = system_clone_of(repo, repo_dir) if kind == "clone" else clone_of(repo, repo_dir)
     if kind == "clone":
         argv = ["gh", "repo", "clone", repo, str(clone)]
         return argv, shlex.join(argv), repo
@@ -187,7 +265,7 @@ def command_for(kind: str, obj: dict, args: dict) -> tuple[list[str], str, str]:
     return argv, display, repo
 
 
-def prerequisites(kind: str, obj: dict, env: dict, args: dict | None = None) -> list[str]:
+def prerequisites(kind: str, obj: dict, env: dict, args: dict | None = None, repo_dir: str | Path | None = None) -> list[str]:
     """What is missing for this action: `claude`, `gh`, `kube:<env>`, `clone:<repo>`."""
     path = env.get("PATH", "")
     missing: list[str] = []
@@ -202,8 +280,10 @@ def prerequisites(kind: str, obj: dict, env: dict, args: dict | None = None) -> 
         if not shutil.which(_KUBE, path=path):
             missing.append(f"kube:{target}")
     repo = str(obj.get("repo") or "")
-    if kind != "clone" and "/" in repo and not (clone_of(repo) / ".claude" / "settings.json").is_file():
-        missing.append(f"clone:{repo}")
+    if kind != "clone" and "/" in repo:
+        clone = clone_of(repo, repo_dir)
+        if not _valid_resolved_clone(repo, clone, repo_dir):
+            missing.append(f"clone:{repo}")
     return missing
 
 
@@ -320,18 +400,18 @@ def summary() -> dict:
 
 # ---------------- running ----------------
 
-def start(kind: str, obj: dict, args: dict, env: dict | None = None) -> str:
+def start(kind: str, obj: dict, args: dict, env: dict | None = None, repo_dir: str | Path | None = None) -> str:
     """Run one confirmed action in the background and return its id.
 
     Raises ValueError (400), Missing (412) or Conflict (409)."""
-    argv, display, repo = command_for(kind, obj, args)
-    missing = prerequisites(kind, obj, env if env is not None else dict(os.environ), args)
+    argv, display, repo = command_for(kind, obj, args, repo_dir)
+    missing = prerequisites(kind, obj, env if env is not None else dict(os.environ), args, repo_dir)
     if missing:
         raise Missing(missing[0])
     return _launch(kind, obj, args, argv, display, repo)
 
 
-def retry(action_id: str, env: dict | None = None) -> str:
+def retry(action_id: str, env: dict | None = None, repo_dir: str | Path | None = None) -> str:
     """Start the same command again as a new action."""
     with _lock:
         _ensure()
@@ -339,7 +419,7 @@ def retry(action_id: str, env: dict | None = None) -> str:
         if old is None:
             raise KeyError(action_id)
         old_copy = dict(old)
-    missing = prerequisites(old_copy["kind"], old_copy["object"], env if env is not None else dict(os.environ), old_copy.get("args"))
+    missing = prerequisites(old_copy["kind"], old_copy["object"], env if env is not None else dict(os.environ), old_copy.get("args"), repo_dir)
     if missing:
         raise Missing(missing[0])
     new_id = _launch(old_copy["kind"], old_copy["object"], old_copy.get("args") or {}, old_copy["_argv"], old_copy["command"], old_copy["repo"])
