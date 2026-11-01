@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Changed
+
+**The gitops template's CLAUDE.md says who creates `generate:` secrets.** It still named External Secrets Operator; since 5.5.0 a credentials Job (an Argo CD PreSync hook) creates them once (ADR-072). The text reaches gitops repos with `/platform:update`.
+
 ## [5.6.0] - 2026-11-01
 
 ### Fixed

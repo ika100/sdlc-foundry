@@ -38,7 +38,7 @@ Each consumer repo ships a `.claude/settings.json` (templated by Copier) with a 
 - Read-only `gh` (`pr view`, `issue list`, `run view`, …) and pre-approved `gh pr merge --merge release/*`
 
 **Always prompts (explicitly listed in `ask`):**
-- Anything that touches a remote: `git push origin main`, `git pull`, `gh pr create`, `gh release *`, `docker push`
+- Anything that touches a remote: `git push origin main`, `git pull`, `gh release *`, `docker push` (`gh pr create` is allowed: a pull request is how every change reaches `main`)
 - Anything destructive: `git reset`, `git clean`, `git rebase`, `git branch -D`, `git checkout --`, `git commit --amend`
 - Cluster writes: `kubectl delete`, `kubectl rollout restart/undo` (live `kubectl apply` also prompts — it's covered by default since only `--dry-run=*` is allowlisted)
 - Out-of-band installs: `pip install`, `uv add`, `uv remove` (Python) / `pnpm add`, `pnpm remove` (web)

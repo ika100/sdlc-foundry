@@ -84,7 +84,7 @@ Eight loops bring what happens in runs and in running systems back as data or as
 
 Every run is recorded as one JSON record in a private GitHub repo (spec 087, [ADR-032](adr/032-private-run-store.md)).
 
-- **Setup:** `cplat platform runs init <owner/name>` creates the repo private (or checks an existing one) and prints `export CPLAT_RUNS_REPO=<owner/name>`. Put that line in the shell profile your Claude sessions read.
+- **Setup:** `cplat platform runs init <owner/name>` creates the repo private (or checks an existing one) and prints `export CPLAT_RUNS_REPO=<owner/name>`. Put that line where non-interactive shells read it too, because the shells of Claude Code's Bash tool do not load an interactive profile: `~/.zshenv` for zsh (not `~/.zshrc`); for bash, a file named in `BASH_ENV`. Without it, the runs of an agent's `cplat` calls are only buffered locally. `cplat platform doctor` run from inside Claude Code shows whether the run store is configured there.
 - **A record holds** kind, repo, spec, phases with durations, CI rounds, reruns, the escalation reason and cause, and the outcome. **It never holds** secrets (redacted), file contents or logs.
 - **Offline:** without a store, or when it is unreachable, records wait in a local buffer (1000) and one warning line says so. The run itself is never affected. `cplat platform runs flush` writes the buffer; `cplat platform doctor` shows what is waiting.
 - **Read it:** `cplat platform runs report [--json] [--since DAYS]`.
