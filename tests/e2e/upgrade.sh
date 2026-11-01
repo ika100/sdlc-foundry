@@ -372,6 +372,11 @@ credentials_files() { local f; for f in serviceaccount role rolebinding configma
 credentials_apply() { # namespace dir: applies the five credentials-*.yaml and waits for the Job (its logs on failure)
   local ns_=$1 d=$2 args=() f out job
   for f in $(credentials_files "$d"); do [ -f "$f" ] || fail "render did not write $f"; args+=(-f "$f"); done
+  # like Argo CD's hook-delete-policy BeforeHookCreation: the Job runs on every sync, also when its name is unchanged (a previous
+  # release that already rendered it, 5.5.0 on); without this an existing Job stays "unchanged" and nothing repairs #316 (AC-128.10)
+  job=$(awk '/^metadata:/{m=1} m && /^  name: /{print $2; exit}' "$d/credentials-job.yaml")
+  [ -n "$job" ] || fail "$d/credentials-job.yaml names no Job"
+  kn "$ns_" delete job "$job" --ignore-not-found --wait=true >/dev/null || fail "could not delete the credentials Job $job before its run"
   out=$(kn "$ns_" apply "${args[@]}" -o name) || fail "applying the credentials-*.yaml of $d failed"
   job=$(sed -n 's#^job.batch/##p' <<< "$out" | head -1)
   [ -n "$job" ] || fail "$d/credentials-job.yaml did not apply a Job"
