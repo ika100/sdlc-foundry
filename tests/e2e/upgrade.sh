@@ -558,7 +558,9 @@ apply_addons() { # env: every rendered addon of the environment
     fi
   done
   check_kept "$e" addons
-  check_servers "$e"
+  # the probe pods copy the component's Deployment: before apply_api created it (the setup on a release that already
+  # renders credentials Jobs, 5.5.0 on), apply_api checks the servers after its rollout instead
+  if kn "upg-$e" get deployments.apps/upg-api >/dev/null 2>&1; then check_servers "$e"; fi
 }
 apply_api() { # env: the overlay, then wait for the rollout and the answer through the Gateway
   local e=$1 out=""
@@ -567,6 +569,7 @@ apply_api() { # env: the overlay, then wait for the rollout and the answer throu
   kn "upg-$e" apply -k "$app_dir/overlays/$e/upg-api" 2>&1 | tee /dev/stderr >/dev/null || fail "applying overlays/$e/upg-api failed"
   check_kept "$e" overlays
   kn "upg-$e" rollout status deployments.apps/upg-api --timeout=300s 2>&1 | tee /dev/stderr >/dev/null || fail "upg-api did not become ready in $e (waited 300s)"
+  check_servers "$e"   # once per environment; a no-op when apply_addons already checked
   for _ in $(seq 1 30); do   # up to 90 s
     out=$(curl -s -m 5 "http://upg-api.upg-$e.localhost:$port/health" || true)
     case "$out" in *'"status":"ok"'*) echo "ok   upg-api answers in $e"; return 0;; esac
