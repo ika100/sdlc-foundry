@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Fixed
+
+**The gitops `upgrade-check` no longer crashes on a system with an external kustomize component (#340).** It loaded the base from a copy of `system.yaml` alone, so the component's kustomize package was missing there and building the error message raised a `ValueError`: every pull request of such a system had a red `upgrade-check`. The base is now the app directory at the base ref, external packages included, and the message works for paths outside the repo. Run `/platform:update` in an affected gitops repo.
+
+**The gitops secrets scan no longer flags the credentials Job's script (#341).** detect-secrets reported the `create.py` embedded in every rendered `credentials-configmap.yaml` (a cache, broker, bucket or generated component secret) as a secret, so the repo's `security` check turned red. It was a false positive: no credential value is rendered. The renderer now writes `create.py` as a YAML literal block whose header line carries `# pragma: allowlist secret`; `plan.json` and every other value are still scanned. The script's hash changes, so each credentials Job runs once more on the next sync and keeps every Secret. A baseline entry added as a workaround can stay or be removed.
+
 ## [5.5.0] - 2026-10-31
 
 **A gate that checked nothing fails.** CI, `/component:build` and `/component:ship` read a green gate as "verified", but a test runner that ran 0 tests, kubeconform over an empty build, a render check that compared no files or a secrets scan over an empty file list passed (#285, [spec 130](specs/130-quality-gates-fail-when-they-checked/spec.md), [ADR-074](adr/074-a-gate-that-checked-nothing-fails.md)). **Behaviour change:** every covered gate (`test`, `test-fast`, `validate`, `render-check`, `secrets-scan`) in every template now counts what the tool reported and fails on 0 with `<gate>: checked nothing: <0 tests ran | 0 resources | 0 files compared | 0 files to scan> - <how to fix>`. A repo with 0 tests, only skipped tests, an empty build or no files to scan turns red after `/platform:update`; the fix is to add at least one test or make the build non-empty. There is no opt-out. Also: gitops-app `validate` now stops at its first failing step, Go tests run with `-v` (the count comes from the result lines), and a `package.json` test script with its own `--reporter` makes the web gate fail. Nothing breaks the CLI or the plugins: the release is a minor.
