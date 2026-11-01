@@ -6,6 +6,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-11-01
+
 ### Fixed
 
 **The console finds component clones beside the gitops clone.** Console actions prefer a configured workspace, then a sibling of the active gitops clone, and finally `~/src`. Configured-workspace clones keep the `.claude/settings.json` check; sibling and fallback clones must also have the expected GitHub origin. The active gitops clone is passed through actions, panels, the board, run handoff and the system switcher. (#272)
