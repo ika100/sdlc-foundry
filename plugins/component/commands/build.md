@@ -46,6 +46,7 @@ Then:
 - `cplat quiet test-fast`: the new tests fail, nothing else newly fails. A test that errors for another reason goes back to the tester.
 - Then record the tester's misses with one call, also when there were none: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...` (one `--untraced` for each criterion id sent back, one `--wrong-failure` for each test sent back).
 - `cplat spec trace <id> --json` → hold `TRACE` (criterion → test files) for Phase 2.
+- `cplat quiet lint-fix`; when it changed test files, commit only those as `test(<slug>): lint-fix acceptance tests for <id>` (no behaviour change, so RED measures the lint-clean tests and Phase 2's `lint-fix` does not trip `test-diff`), and drop any other change it made.
 - `RED=$(git log -1 --format=%H --grep 'acceptance tests for')` — the commit the acceptance tests are measured against from now on (spec 048).
 
 ## Phase 2 — Implement (parallel via git worktrees)

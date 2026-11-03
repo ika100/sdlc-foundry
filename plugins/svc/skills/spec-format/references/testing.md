@@ -20,7 +20,7 @@ One test may name several criteria; one criterion may need several tests (happy 
 - Write the tests against the **contract** (`design.md`) and the public surface the criteria describe, not against internals that do not exist yet.
 - Run `devbox run test-fast`. Every new acceptance test must **fail because the behaviour is missing**: an assertion failure, a 404 for the not-yet-existing route, or an import of the not-yet-existing module. A test that fails for another reason (syntax error, broken fixture) is a broken test; fix it.
 - A test that already passes proves nothing about the new feature: tighten it or report that the criterion is already met.
-- Commit them as one commit: `test(<slug>): acceptance tests for AC-007.1–AC-007.4`.
+- Run `devbox run lint-fix` first, then commit them as one commit: `test(<slug>): acceptance tests for AC-007.1–AC-007.4`. Tests a later `lint-fix` would rewrite fail `cplat spec test-diff`.
 
 ## Smoke tests for `(smoke)` criteria
 
