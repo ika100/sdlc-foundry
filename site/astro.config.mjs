@@ -42,7 +42,7 @@ export default defineConfig({
             { label: 'Usage scenarios', slug: 'scenarios' },
           ],
         },
-        { label: 'Get started', items: [{ label: 'Your first system', slug: 'get-started' }, { label: 'Run it on your laptop', slug: 'get-started/local-cluster' }] },
+        { label: 'Get started', items: [{ label: 'Watch a real run', slug: 'get-started/watch-a-run' }, { label: 'Your first system', slug: 'get-started' }, { label: 'Run it on your laptop', slug: 'get-started/local-cluster' }] },
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Guides', items: [{ autogenerate: { directory: 'guides' } }] },
         {

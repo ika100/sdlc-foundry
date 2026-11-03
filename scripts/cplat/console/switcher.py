@@ -48,18 +48,24 @@ def list_systems(repo_dir: str | Path | None = None) -> list[dict]:
         clone = actions.system_clone_of(repo, repo_dir)
         # System clones are validated by their GitHub origin, without requiring the component-only
         # .claude/settings.json allowlist.
-        have = clone.is_dir()
+        have = actions.valid_system_clone(repo, clone)
         out.append({"repo": repo, "clone": str(clone) if have else None, "action": "open" if have else "clone"})
     return out
+
+
+class InvalidRepo(ValueError):
+    """The request names no valid `owner/name` (#344)."""
 
 
 def open_system(repo: str, repo_dir: str | Path | None = None) -> dict:
     """Start the console of the local clone of `repo` (detached, free port) and return `{"url", "command"}` (AC-122.29).
 
-    Raises ValueError without a clone and RuntimeError when no address is printed in time."""
+    Raises InvalidRepo for a malformed name, ValueError without a clone and RuntimeError when no address is printed in time."""
+    if not actions.REPO.match(repo):
+        raise InvalidRepo(f"{repo!r} is not an owner/name repository")
     clone = actions.system_clone_of(repo, repo_dir)
-    if not clone.is_dir():
-        raise ValueError(f"no local clone of {repo}: clone it first")
+    if not actions.valid_system_clone(repo, clone):
+        raise ValueError(f"no local clone of {repo} (a folder with origin github.com/{repo}): clone it first")
     argv = [sys.executable, str(CPLAT), "ui", "--repo-dir", str(clone), "--no-open", "--port", "0"]
     command = "cplat ui --repo-dir " + shlex.quote(str(clone))
     proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,  # noqa: S603
