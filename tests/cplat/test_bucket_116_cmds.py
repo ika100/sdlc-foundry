@@ -17,6 +17,7 @@ import yaml
 
 import cplat
 import gitops
+import release_support
 from resources_fixtures import APP, comp, db, platform_render_module, system
 from system_fixtures import RENDER5, ROOT, files, git, init_git, mod, write_system
 
@@ -497,12 +498,9 @@ def test_the_domain_model_guide_documents_the_external_bucket_keys_ac_116_17(): 
 
 
 def test_the_changelog_lists_the_bucket_in_a_minor_section_that_is_not_breaking_ac_116_20():  # AC-116.20
-    text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    sections = re.split(r"(?m)^(?=## \[)", text)
-    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 116|ADR-059", s)]
-    assert hits, "the change is listed"
-    assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", hits[0].splitlines()[0])
-    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"spec 116|ADR-059", e))  # spec 117: the 116 entry itself, not the section
+    section = release_support.section("5.1.0")   # spec 132: the minor release that shipped spec 116, found by its heading
+    entry = next((e for e in re.split(r"\n\s*\n", section) if re.search(r"spec 116|ADR-059", e)), None)
+    assert entry, "the change is listed"
     assert "BREAKING" not in entry
 
 

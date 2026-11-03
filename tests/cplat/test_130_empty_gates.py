@@ -17,6 +17,7 @@ import pytest
 import yaml
 
 import core
+import release_support
 from gates130_support import (COVERED, EXCLUDED_FILE, FIX_TESTS, GATE_SOURCE, GITOPS_TEMPLATES, ROOT, SECRET_FLAGS,
                               SECRET_PATHSPEC, TEMPLATES, TEST_TEMPLATES, clean_env, make_stubs, nothing_lines, recipe_of,
                               recipes, render_line, rendered_repo, run_sh, secrets_line, no_tests_line, validate_line)
@@ -570,18 +571,9 @@ def test_the_files_that_change_are_platform_owned_so_an_update_applies_them_ac_1
     assert (TEMPLATES / template / "scripts" / "gate.sh").is_file(), f"{template} does not ship scripts/gate.sh"
 
 
-def _unreleased() -> str:
-    """The changelog section that holds the entry: [Unreleased] until the release, then its release section."""
-    text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    sections = re.findall(r"^## \[[^\]]+\][^\n]*\n(.*?)(?=^## \[|\Z)", text, re.S | re.M)
-    assert sections, "docs/CHANGELOG.md has no sections"
-    return next((s for s in sections if "checked nothing" in s), sections[0])
-
-
 def test_the_changelog_lists_the_behaviour_change_with_symptom_and_fix_ac_130_16():  # AC-130.16
-    body = _unreleased()
-    paras = [p for p in body.split("\n\n") if "checked nothing" in p]
-    assert paras, "no [Unreleased] entry names `checked nothing`"
+    paras = release_support.paragraphs(release_support.section("5.5.0"), "checked nothing")   # spec 132: by the release heading
+    assert paras, "no [5.5.0] entry names `checked nothing`"
     entry = paras[0]
     assert "add at least one test" in entry
     assert re.search(r"non-empty|not empty", entry), "name the fix for an empty build or file list"

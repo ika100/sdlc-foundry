@@ -19,6 +19,7 @@ import yaml
 import cplat
 import gitops
 import update
+import release_support
 from resources_fixtures import (APP, ENVS, KEYS, PIN_RE, comp, db, normalized, platform_render_module, system, tree, unpin)
 from system_fixtures import (FULL5, RENDER5, ROOT, build_old_gitops, files, generated, git, init_git, load, mod, write_system)
 
@@ -446,13 +447,9 @@ def test_the_domain_model_guide_documents_the_resources_ac_115_16():  # AC-115.1
 
 
 def test_the_changelog_lists_the_change_in_a_minor_section_that_is_not_breaking_ac_115_16():  # AC-115.16
-    text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    sections = re.split(r"(?m)^(?=## \[)", text)
-    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 115|ADR-057", s)]
-    assert hits, "the change is listed"
-    head = hits[0].splitlines()[0]
-    assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", head), head
-    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"spec 115|ADR-057", e))  # spec 116: the 115 entry itself, not the section
+    section = release_support.section("5.1.0")   # spec 132: the minor release that shipped spec 115, found by its heading
+    entry = next((e for e in re.split(r"\n\s*\n", section) if re.search(r"spec 115|ADR-057", e)), None)
+    assert entry, "the change is listed"
     assert "BREAKING" not in entry
 
 

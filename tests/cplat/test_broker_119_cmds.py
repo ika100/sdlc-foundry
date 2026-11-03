@@ -17,6 +17,7 @@ import yaml
 
 import cplat
 import gitops
+import release_support
 from broker_fixtures import bdir, broker, bsys, expected_nack_application
 from cluster_fixtures import base, cluster_repo, render_ok, script, stubs, sys_doc, system_repo, write_cluster
 from resources_fixtures import APP, comp, db, platform_render_module, system
@@ -879,26 +880,17 @@ def test_the_api_plugin_docs_describe_the_broker_column_ac_119_15():  # AC-119.1
 
 
 def test_the_changelog_lists_the_broker_in_a_minor_section_that_is_not_breaking_ac_119_15():  # AC-119.15
-    text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    sections = re.split(r"(?m)^(?=## \[)", text)
-    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 119|ADR-065", s)]
-    assert hits, "the change is listed"
-    assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", hits[0].splitlines()[0])
-    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"spec 119|ADR-065", e))
+    section = release_support.section("5.4.0")   # spec 132: the minor release that shipped spec 119, found by its heading
+    entry = next((e for e in re.split(r"\n\s*\n", section) if re.search(r"spec 119|ADR-065", e)), None)
+    assert entry, "the change is listed"
     assert "BREAKING" not in entry
     for needle in ("nats:2.14.9-alpine", "nats:2.15.2-alpine", "2.15.1", "0.35.0", "0.24.0", "1.5.0", "1.1.0"):
-        assert needle in hits[0], needle
-
-
-def plugin_versions(name):
-    manifest = json.loads((ROOT / f"plugins/{name}/.claude-plugin/plugin.json").read_text())["version"]
-    market = next(p["version"] for p in json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"] if p["name"] == name)
-    return manifest, market
+        assert needle in section, needle
 
 
 def test_the_resource_and_api_plugins_are_bumped_in_both_places_ac_119_4():  # AC-119.4
-    assert plugin_versions("resource") == ("1.6.1", "1.6.1")   # spec 121: resource plugin 1.6.0; spec 127: 1.6.1
-    assert plugin_versions("api") == ("1.1.0", "1.1.0")
+    release_support.assert_bumped("resource", "1.5.0")   # spec 119 shipped resource 1.5.0 and api 1.1.0 (spec 132: >=)
+    release_support.assert_bumped("api", "1.1.0")
     manifest = json.loads((ROOT / "plugins/resource/.claude-plugin/plugin.json").read_text())
     assert "brokers" in manifest["description"]
     desc = re.search(r'(?m)^description:\s*"(.*)"\s*$', (ROOT / "plugins/resource/commands/add.md").read_text()).group(1)

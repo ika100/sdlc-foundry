@@ -17,6 +17,7 @@ import yaml
 
 import cplat
 import gitops
+import release_support
 from cache_fixtures import cache
 from resources_fixtures import APP, comp, db, system
 from system_fixtures import RENDER5, ROOT, files, git, init_git, mod, write_system
@@ -500,21 +501,17 @@ def test_the_resource_docs_say_cache_data_is_not_backed_up_ac_118_14():  # AC-11
 
 
 def test_the_changelog_lists_the_cache_in_a_minor_section_that_is_not_breaking_ac_118_22():  # AC-118.22
-    text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    sections = re.split(r"(?m)^(?=## \[)", text)
-    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 118|ADR-064", s)]  # spec 118: ADR-063 went to spec 124 first
-    assert hits, "the change is listed"
-    assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", hits[0].splitlines()[0])
-    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"spec 118|ADR-064", e))
+    section = release_support.section("5.4.0")   # spec 132: the minor release that shipped spec 118, found by its heading
+    entry = next((e for e in re.split(r"\n\s*\n", section) if re.search(r"spec 118|ADR-064", e)), None)  # ADR-063 went to spec 124
+    assert entry, "the change is listed"
     assert "BREAKING" not in entry
-    assert "valkey/valkey:8.1.11" in hits[0] and "valkey/valkey:9.1.3" in hits[0] and "resource" in entry and "1.4.0" in hits[0]
-    assert "no operator" in hits[0].lower()
+    assert "valkey/valkey:8.1.11" in section and "valkey/valkey:9.1.3" in section and "resource" in entry and "1.4.0" in section
+    assert "no operator" in section.lower()
 
 
 def test_the_resource_plugin_is_1_4_0_in_both_places_ac_118_22():  # AC-118.22
+    release_support.assert_bumped("resource", "1.4.0")   # spec 118 shipped 1.4.0; later specs only raise it (spec 132: >=)
     manifest = json.loads((ROOT / "plugins/resource/.claude-plugin/plugin.json").read_text())
-    market = next(p["version"] for p in json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"] if p["name"] == "resource")
-    assert manifest["version"] == market == "1.6.1"  # spec 127: resource plugin 1.6.1
     assert "caches" in manifest["description"]
     desc = re.search(r'(?m)^description:\s*"(.*)"\s*$', (ROOT / "plugins/resource/commands/add.md").read_text()).group(1)
     assert len(desc) < 260 and "--type database|bucket|cache" in desc

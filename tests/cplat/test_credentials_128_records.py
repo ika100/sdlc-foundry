@@ -3,6 +3,7 @@ decision record (AC-128.13) and the changelog entry (AC-128.14).
 
 Contract: design.md "e2e harness (what Argo CD would do)". The e2e scripts are only read. The ADR is `docs/adr/072-*.md`."""
 import re
+import release_support
 
 from system_fixtures import ROOT
 
@@ -137,15 +138,13 @@ def test_the_adr_index_lists_adr_072_ac_128_13():  # AC-128.13
 # ---------------- AC-128.14: the changelog ----------------
 
 def unreleased() -> str:
-    """The changelog section that holds the #316 entry: [Unreleased] until the release, then its release section."""
-    text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    sections = text.split("\n## [")[1:]
-    return next((s for s in sections if "#316" in s), sections[0])
+    """The release section that holds the #316 entry: 5.5.0, found by its heading (spec 132)."""
+    return release_support.section("5.5.0")
 
 
 def entry() -> str:
-    hits = [p for p in re.split(r"\n\s*\n", unreleased()) if "#316" in p]
-    assert hits, "no entry in [Unreleased] names #316"
+    hits = release_support.paragraphs(unreleased(), "#316")
+    assert hits, "no entry in [5.5.0] names #316"
     return "\n\n".join(hits)
 
 

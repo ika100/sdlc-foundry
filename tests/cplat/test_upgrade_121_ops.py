@@ -21,6 +21,7 @@ import pytest
 import yaml
 
 import cplat
+import release_support
 from broker_fixtures import broker, bsys
 from resources_fixtures import comp, db, system
 from system_fixtures import ROOT, git, write_system
@@ -839,11 +840,9 @@ def description(path) -> str:
 
 
 def test_the_resource_platform_and_system_plugins_are_bumped_in_both_places_ac_121_6():  # AC-121.6
-    assert plugin_versions("resource") == ("1.6.1", "1.6.1")  # spec 127: 1.6.1
-    got = plugin_versions("platform")   # spec 121: platform plugin 1.3.0; spec 129 bumps it again
-    assert got[0] == got[1] and tuple(map(int, got[0].split("."))) >= (1, 3, 0)
-    system = plugin_versions("system")   # later specs bump system again; 1.5.0 is the bump of spec 121
-    assert system[0] == system[1] and tuple(map(int, system[0].split("."))) >= (1, 5, 0)
+    release_support.assert_bumped("resource", "1.6.0")   # spec 121: resource 1.6.0 (spec 127: 1.6.1; spec 132: >=)
+    release_support.assert_bumped("platform", "1.3.0")   # spec 121: platform plugin 1.3.0; spec 129 bumps it again
+    release_support.assert_bumped("system", "1.5.0")     # later specs bump system again; 1.5.0 is the bump of spec 121
 
 
 def test_the_upgrade_command_runs_cplat_with_pr_and_wait_ac_121_6():  # AC-121.6
@@ -909,15 +908,12 @@ def test_the_renderer_docstring_documents_the_version_the_archives_and_the_answe
 
 
 def test_the_changelog_lists_the_upgrade_entry_above_scaling_with_every_changed_row_ac_121_23():  # AC-121.23
-    text = read("docs/CHANGELOG.md")
-    sections = re.split(r"(?m)^(?=## \[)", text)
-    hits = [s for s in sections if s.startswith("## [") and re.search(r"(?i)spec 121|ADR-068", s)]
-    assert hits, "the change is listed"
-    assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", hits[0].splitlines()[0])
-    entry = next(e for e in re.split(r"\n\s*\n", hits[0]) if re.search(r"(?i)spec 121|ADR-068", e))
+    section = release_support.section("5.4.0")   # spec 132: the minor release that shipped spec 121, found by its heading
+    entry = next((e for e in re.split(r"\n\s*\n", section) if re.search(r"(?i)spec 121|ADR-068", e)), None)
+    assert entry, "the change is listed"
     assert "BREAKING" not in entry
     for needle in ("ADR-068", "ADR-069", "/resource:upgrade", "property_operators", "1.6.1", "1.3.0", "1.5.0", "Versions", "Action", "/platform:update"):  # spec 127: resource 1.6.1
-        assert needle in hits[0], needle
-    assert re.search(r"(?i)spec 121", hits[0]).start() < re.search(r"(?i)spec 120", hits[0]).start(), "the 121 entry sits above the 120 entry"
+        assert needle in section, needle
+    assert re.search(r"(?i)spec 121", section).start() < re.search(r"(?i)spec 120", section).start(), "the 121 entry sits above the 120 entry"
     for line in ("- `argo-cd` v3.4.12 (new)", "- `k3s` v1.32.5-k3s1 (new)"):
-        assert line in hits[0].splitlines(), line
+        assert line in section.splitlines(), line
