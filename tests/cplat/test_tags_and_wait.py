@@ -274,3 +274,20 @@ def test_no_checks_reported_is_still_no_checks_356(fake, tmp_path, monkeypatch):
     _failing_checks(fake, monkeypatch, 10_000, err="no checks reported on the 'x' branch")
     with pytest.raises(ship.NoChecks):
         prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 3600, 10, 300)
+
+
+# ---------------- #322: the cancelled duplicate run of a labeled PR ----------------
+
+def test_a_cancelled_run_whose_successor_is_not_listed_yet_is_not_red_322(fake, tmp_path):
+    """#322: `gh pr create --label` starts two runs; the cancelled first one is no RED while the second is not listed."""
+    fake.checks = [[_run_check("ci-success", "cancel", 1)]] * 3 + [[_run_check("ci-success", "pass", 2)]]
+    ok, _ = prmod.wait(tmp_path, PR, True, 3600, 10, 300)
+    assert ok and fake.merges == [PR]
+
+
+def test_a_cancelled_run_nothing_replaces_is_red_after_the_grace_322(fake, tmp_path):
+    """#322: a run cancelled for good (nothing supersedes it) is still RED once the grace period is over."""
+    fake.checks = [[_run_check("ci-success", "cancel", 1)]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 3600, 10, 300)
+    assert not ok and fake.merges == [] and any("RED" in ln for ln in lines)
+    assert ship.now() >= ship.CANCEL_GRACE

@@ -16,6 +16,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **The console never treats a folder with another origin as a system's clone (#344).** `POST /api/open-system` passed its `repo` on without the `owner/name` check the actions use; it now answers 400 for anything else. When no candidate had the expected GitHub origin, the switcher, "Open" and "Open in Claude Code" still used a same-named folder; such a folder is now reported as no local clone. A clone in the configured workspace keeps its exception for forks.
 
+**`cplat pr wait` no longer reports RED for the run a label cancelled (#322).** `gh pr create --label no-spec` (what `cplat pr open --no-spec` runs) fires `opened` and `labeled`, and the `ci` concurrency group cancels the first run. When the wait looked before `gh run list` showed the second run, the cancelled checks counted as red. A cancelled check now waits up to 90 s for the run that superseded it; once that run is listed, the cancelled one is ignored as before (#244). A run that nothing replaces is still red after those 90 s.
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

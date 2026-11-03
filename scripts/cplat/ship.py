@@ -56,6 +56,7 @@ FAILED = {"fail", "cancel"}           # `gh pr checks --json bucket` values that
 NO_CHECKS_GRACE = 300                 # seconds to wait for the first check to be reported
 QUEUE_TIMEOUT = 300                   # seconds a run may have only queued jobs before it is cancelled and rerun
 RERUN_GRACE = 120                     # seconds a check cancelled for a rerun is not counted as red
+CANCEL_GRACE = 90                     # #322: seconds a cancelled check waits for the run that superseded it to be listed
 QUEUED = {"QUEUED", "PENDING", "WAITING", "REQUESTED"}   # `gh pr checks` states of a job no runner took yet
 # spec 079: log lines of a red job that mean the network or a registry failed, not the change; such a job is rerun once
 TRANSIENT = re.compile(r"Failed to read artifact descriptor|Could not resolve (dependencies|host)|Could not transfer artifact|"
@@ -534,6 +535,7 @@ class CheckWatch:
         self.queued_since: dict[tuple[str, str], float] = {}
         self.stale_seen: dict[tuple[str, str], int] = {}
         self.healed: dict[tuple[str, str], tuple[str, float]] = {}   # run → (stale | queued, when)
+        self.cancel_seen: dict[tuple[str, str], float] = {}           # run → when its cancelled check was first seen
         self.head: str | None = None                                  # the PR head commit being watched
         self.run_sha: dict[str, str | None] = {}                      # run id → the commit it ran on
         self.run_workflow: dict[str, str | None] = {}                 # run id → its workflow (database id)
@@ -606,6 +608,7 @@ class CheckWatch:
             self.queued_since.clear()
             self.stale_seen.clear()
             self.healed.clear()
+            self.cancel_seen.clear()
         if head:
             self.head = head
         cs = checks(self.repo, self.pr)
@@ -638,8 +641,13 @@ class CheckWatch:
         return any(r.get("status") != "completed" for r in self.head_runs)
 
     def _own_cancel(self, c: dict) -> bool:
-        """A check of a run this watch just reran (stuck queue cancelled, or a transient failure) is not red yet."""
-        h = self.healed.get(run_of(c) or ("", ""))
+        """A check of a run this watch just reran (stuck queue cancelled, or a transient failure) is not red yet. Nor is
+        a freshly cancelled one: concurrency cancels a PR's first run when a label starts a second, which `gh run list`
+        may not show yet (#322); once that run is listed, `_newest_runs` drops the cancelled one."""
+        r = run_of(c)
+        if r and c.get("bucket") == "cancel" and now() - self.cancel_seen.setdefault(r, now()) < CANCEL_GRACE:
+            return True
+        h = self.healed.get(r or ("", ""))
         if not h or now() - h[1] >= RERUN_GRACE:
             return False
         return (h[0] == "queued" and c.get("bucket") == "cancel") or (h[0] == "transient" and c.get("bucket") in FAILED)
