@@ -473,8 +473,7 @@ def test_docs_name_the_report_the_execution_call_and_the_changelog_entry_ac_133_
     """AC-133.13: /platform:runs names `--pr`; /component:build names the call and the block; changelog has #338."""
     runs_md = (ROOT / "plugins/platform/commands/runs.md").read_text()
     build = (ROOT / "plugins/component/commands/build.md").read_text()
-    changelog = (ROOT / "docs/CHANGELOG.md").read_text()
     assert "cplat platform runs report --pr <run-id>" in runs_md
     assert "runs agent execution" in build and "How this was built" in build
-    unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
-    assert "(#338)" in unreleased
+    import release_support
+    release_support.entry(r"\(#338\)")                 # any section or fragment: the release moves it (#321)

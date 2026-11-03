@@ -20,6 +20,6 @@ def test_adr_080_is_written_and_indexed_ac_134_9():  # AC-134.9
 
 
 def test_the_changelog_lists_the_change_ac_134_9():  # AC-134.9
-    text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    unreleased = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
-    assert "(#281)" in unreleased and "e2e" in unreleased
+    import release_support
+    _, text = release_support.entry(r"\(#281\)")      # any section or fragment: the release moves it (#321)
+    assert "e2e" in text
