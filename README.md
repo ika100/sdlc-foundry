@@ -14,11 +14,39 @@ You describe what you want in Claude Code; the platform scaffolds the repos (Pyt
 - **Documentation site:** <https://ika100.github.io/sdlc-foundry/> has the vision, the problem statement, client value, usage scenarios and the full user documentation with search.
 - **Console:** `/platform:ui` opens a local console that shows the system, its process and what needs you ([docs/console.md](docs/console.md)).
 
-  ![The console's Inbox: a promotion with its consequence, command and way back](docs/img/console/inbox.jpg)
+  ![A tour of the console: describe a change, the Board, a run, the Inbox and the System view](docs/img/console/tour.gif)
 
 - **Start here:** [docs/USER-JOURNEY.md](docs/USER-JOURNEY.md) (end-to-end walk-through) and [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (diagrams).
 - **Needs:** [Claude Code](https://claude.com/claude-code), `git`, `gh`, `uv`, [devbox](https://www.jetify.com/devbox) and Docker for local clusters; run `/platform:doctor` to check.
 - **Status:** used end to end on a real test application; see the [changelog](docs/CHANGELOG.md) and [ADRs](docs/adr).
+
+## Quickstart
+
+From an empty folder to a feature running in a local cluster. Every step is a slash command in Claude Code except the cluster, which is one `devbox` recipe.
+
+1. **Install and check** (once per machine):
+
+   ```
+   /plugin marketplace add ika100/sdlc-foundry
+   /plugin install shared@sdlc-foundry
+   /platform:doctor
+   ```
+
+2. **Describe the system** in `taskboard.yaml`:
+
+   ```yaml
+   system: taskboard
+   owner: <your-github-user>
+   components:
+     - {name: taskboard-api, description: Task API, type: service, lang: python}
+     - {name: taskboard-web, description: Frontend, type: website, lang: typescript}
+   ```
+
+3. **Create it:** `/system:new taskboard.yaml` creates the GitOps repo `taskboard` and one private repo per component, and opens a pull request that adds the components to `system.yaml`. Merge it.
+4. **Run it locally:** in `taskboard`, `devbox run cluster-up` starts a k3d cluster with ArgoCD and prints the URLs (needs Docker; `devbox run cluster-down` removes it).
+5. **Ship a feature:** in `taskboard-api`, run `/component:spec "list tasks with due dates"`, answer its questions, `/component:spec approve 001`, then `/component:ship 001`. It plans, writes failing acceptance tests, builds until they pass, opens the pull request, merges it on green CI and waits until dev runs the new image.
+
+The [user journey](docs/USER-JOURNEY.md) walks through every step in detail, including staging, prod and system-wide specs.
 
 ## What's here
 
