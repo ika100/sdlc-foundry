@@ -760,15 +760,17 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
     """Poll until every check concluded or one is red. A PR without any check, or one that conflicts with its base, is
     never green."""
     begin = now()
+    seen = False
     while True:
         status, cs, failed = watch.poll()
+        seen = seen or bool(cs)
         if status == "green" and watch.conflicting():
             raise _conflicting(watch)
         if status != "pending":
             runs.ci_round(watch.run_id)
             return status, cs, failed
         waited = now() - begin
-        if not cs and waited > NO_CHECKS_GRACE:
+        if not cs and not seen and waited > NO_CHECKS_GRACE:     # once checks were seen, an empty answer is a gh hiccup (#370)
             if watch.conflicting():
                 raise _conflicting(watch)
             raise NoChecks(f"no CI checks were reported on {watch.pr} after {NO_CHECKS_GRACE}s",

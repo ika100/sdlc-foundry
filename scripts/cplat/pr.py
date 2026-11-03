@@ -72,6 +72,13 @@ def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queu
     return ok, lines
 
 
+def _state(repo: Path, url: str) -> str | None:
+    try:
+        return json.loads(ship.gh(["pr", "view", url, "--json", "state,url"], cwd=repo, check=False) or "{}").get("state")
+    except ValueError:
+        return None
+
+
 def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float,
           run_id: str | None) -> tuple[bool, list[str], dict]:
     view = json.loads(ship.gh(["pr", "view", pr, "--json", "state,url"], cwd=repo) or "{}")
@@ -100,8 +107,12 @@ def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, que
         res = run(["gh", "pr", "merge", url, "--squash", "--delete-branch"] + (["--match-head-commit", watch.head] if watch.head else []), cwd=repo, check=False)
         if res.returncode != 0:
             detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
-            raise MergeFailed(f"merging {url} failed: {detail[0]}", hint="a conflict with main is a human decision")
-        lines.append(f"merged {url} (squash)")
+            if _state(repo, url) != "MERGED":
+                raise MergeFailed(f"merging {url} failed: {detail[0]}", hint="a conflict with main is a human decision")
+            # gh merged on GitHub, then failed locally (in a worktree it cannot check out main, #371)
+            lines.append(f"merged {url} (squash); the local cleanup failed: {detail[0]}")
+        else:
+            lines.append(f"merged {url} (squash)")
     return True, lines, {"result": "merged" if merge else "green"}
 
 

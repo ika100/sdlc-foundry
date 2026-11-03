@@ -14,6 +14,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **Reading the run store no longer times out on a busy fortnight.** The store was read with one GraphQL query per 40 days, which returns the text of every record. With up to 83 records a day, the two weeks the retro reads took longer than the 10 s a single call may take on the runner, and the retro of 2026-W44 failed at its first run. The store is now read 3 days per query, and a query that times out is retried once.
 
+**`cplat pr wait` no longer reports false errors (#370, #371).** One empty answer from `gh pr checks` during a long CI run ended the wait with `no CI checks were reported after 300s`, although checks had been reported before. It now keeps waiting; only a PR that never reported a check stops after the grace period. With `--merge` in a git worktree, `gh pr merge` merged on GitHub and then failed to check out `main` locally, and cplat said `merging failed` and exited 1. cplat now asks GitHub whether the PR is merged; if it is, it reports the merge and names the local error.
+
 ### Changed
 
 **The gitops template's CLAUDE.md says who creates `generate:` secrets.** It still named External Secrets Operator; since 5.5.0 a credentials Job (an Argo CD PreSync hook) creates them once (ADR-072). The text reaches gitops repos with `/platform:update`.
