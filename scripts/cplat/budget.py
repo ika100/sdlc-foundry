@@ -26,6 +26,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -450,18 +451,87 @@ def used_of(data: dict, *, cost: bool = True) -> dict:
     return out
 
 
-def check(run_id: str | None, point: str) -> str | None:
-    """The first used-up limit (used >= limit) of the run's budget, else None. An unknown cost is not checked (AC-102.5)."""
+def _grace_add(limits: dict) -> dict:
+    """What the verification grace adds to each limit that is not off (AC-131.15)."""
+    add: dict = {}
+    for name, value in limits.items():
+        if value is None:
+            continue
+        if name == "minutes":
+            add[name] = _number(max(30, 0.2 * value))
+        elif name == "invocations":
+            add[name] = max(10, math.ceil(0.2 * value))
+        elif name == "cost":
+            add[name] = _number(max(3, round(0.2 * value, 2)))
+        elif name == "reruns":
+            add[name] = math.ceil(0.2 * value)
+    return add
+
+
+def _used_up(limits: dict, used: dict) -> str | None:
+    for name in LIMITS:
+        limit, value = limits.get(name), used.get(name)
+        if limit is not None and value is not None and value != UNKNOWN and value >= limit:
+            return name
+    return None
+
+
+def end_grace(run_id: str | None) -> None:
+    """The grace ends: only the base limits count from now on (AC-131.15). Never raises."""
+    try:
+        found = find(run_id)
+        if found is not None:
+            def end(data: dict) -> None:
+                if data.get("grace"):
+                    data["grace"]["state"] = "ended"
+            _modify(found[0], end)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def check(run_id: str | None, point: str, repo: Path | None = None) -> str | None:
+    """The first used-up limit (used >= limit) of the run's budget, else None. An unknown cost is not checked (AC-102.5).
+
+    With `repo`, a used-up limit while only verification is left grants the verification grace once (AC-131.15)."""
     try:
         found = find(run_id)
         if found is None:
             return None
-        limits = found[1]["limits"]
-        used = used_of(found[1], cost=limits.get("cost") is not None)
-        for name in LIMITS:
-            limit, value = limits.get(name), used.get(name)
-            if limit is not None and value is not None and value != UNKNOWN and value >= limit:
-                return name
+        data = found[1]
+        if repo is not None and data.get("repo_path") != str(repo):
+            _modify(found[0], lambda d: d.__setitem__("repo_path", str(repo)))
+        grace = data.get("grace")
+        if grace and grace.get("state") == "active" and repo is not None:
+            import units
+            if not units.only_verification_left(Path(repo)):
+                end_grace(run_id)
+                grace = {**grace, "state": "ended"}
+        limits = data["limits"]
+        used = used_of(data, cost=limits.get("cost") is not None)
+        if grace and grace.get("state") == "active":
+            wide = {k: (None if v is None else v + (grace.get("add") or {}).get(k, 0)) for k, v in limits.items()}
+            hit = _used_up(wide, used)
+            if hit is not None:
+                _modify(found[0], lambda d: d["grace"].__setitem__("state", "used") if d.get("grace") else None)
+            return hit
+        hit = _used_up(limits, used)
+        if hit is None or grace or repo is None:
+            return hit
+        import units
+        if not units.only_verification_left(Path(repo)):
+            return hit
+        granted = [False]
+
+        def grant(d: dict) -> None:
+            if d.get("grace") is None:
+                d["grace"] = {"for": "verification", "limit": hit, "granted_at": _iso(runs.utcnow()),
+                              "state": "active", "add": _grace_add(d["limits"])}
+                granted[0] = True
+        _modify(found[0], grant)
+        if granted[0]:
+            print("budget grace: verification")
+            return None
+        return hit
     except Exception:  # noqa: BLE001
         pass
     return None
@@ -537,12 +607,20 @@ def stop(run_id: str | None, limit: str, point: str, phase: str | None = None) -
         found = find(run_id)
         if found is None:
             return reason
+        if (found[1].get("grace") or {}).get("state") == "used":
+            reason += " (grace used)"
         if phase is None:
             open_ones = [p["name"] for p in (runs.active(run_id) or {}).get("phases") or [] if p.get("ended_at") is None]
             phase = open_ones[-1] if open_ones else point
         info = {"limit": limit, "point": point, "phase": phase, "at": _iso(runs.utcnow())}
         data = _modify(found[0], lambda d: d.update(stop=info, state="stopped")) or found[1]
         value = section(data, limit, phase, point)
+        try:
+            import units
+            repo = data.get("repo_path") or os.getcwd()
+            value["verification_left"] = bool(units.only_verification_left(Path(repo)))
+        except Exception:  # noqa: BLE001
+            value["verification_left"] = False
         for rid in dict.fromkeys([run_id, root_of(run_id)]):
             runs.set_section(rid, "budget", value)
     except Exception:  # noqa: BLE001
