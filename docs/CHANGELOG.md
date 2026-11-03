@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Added
+
+**Build PRs show how they were built (#338).** A build PR said what was built and verified, but not where the user decided, which task went back to which agent and why, which deviations the reviewer accepted, or how the run went; a reviewer had to piece that together from commits and `verification.md`. `cplat pr open` now appends a collapsed "How this was built" block to the PR body when the checkout has a build or ship run: how it ran (wall time, parallel or sequential and why, re-plans, CI rounds and reruns, gates, budget used against the limit, agents), user decisions (raised budget limits, stops for a decision, refused test diffs, answered open questions), hand-backs and fix rounds, and the deviations `verification.md` accepts. cplat generates it from the run's local records, so it works without a run store; values are redacted and nothing of the prompts or diffs is included. `cplat platform runs report --pr <run-id>` prints the same block, and `cplat platform runs agent execution parallel|sequential --reason <why>` records the sequential fallback. User-approved test changes show as "not recorded (#324)" until #324 records them (spec 133, ADR-079). Update the plugins (`/plugin marketplace update`).
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

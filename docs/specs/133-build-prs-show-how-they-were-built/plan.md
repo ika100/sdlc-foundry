@@ -31,6 +31,7 @@ tasks:
     covers: [AC-133.13]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 133 Build PRs show how they were built
