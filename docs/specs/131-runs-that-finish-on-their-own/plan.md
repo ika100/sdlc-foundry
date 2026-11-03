@@ -17,6 +17,7 @@ tasks:
     covers: [AC-131.8, AC-131.9, AC-131.10, AC-131.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: budget.py — plan formula, per-spec parts, rescale, limits line with T and C, $0 rule, incomplete cost is unknown
     files: [scripts/cplat/budget.py, tests/cplat/test_budget.py]
