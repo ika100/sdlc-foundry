@@ -247,8 +247,11 @@ def main(argv: list[str]) -> int:
     repo = Path(ns.repo).resolve()
     if not (repo / ".git").exists():
         raise PlatformError(f"{repo} is not a git repository")
-    telemetry.reset()
     prompt = " ".join(ns.prompt)
+    if command_of(prompt) not in COVERED_COMMANDS and not (repo / ".claude" / "settings.json").is_file():
+        raise PlatformError("no .claude/settings.json: an unattended run needs the repo's committed permission allowlist",
+                            hint="/platform:update (or cplat adopt) brings it")   # covered commands: the preflight (AC-131.11)
+    telemetry.reset()
     window = parse_window(ns.quiet)
     model, source = settings.coordinator_model(repo, prompt, ns.model)
     command = command_of(prompt)

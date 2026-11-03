@@ -52,8 +52,14 @@ def test_the_command_is_unattended_with_the_repo_allowlist(repo, capsys):
     assert out.startswith("claude -p '/svc:ship 7' --permission-mode acceptEdits")
 
 
-def test_a_repo_without_an_allowlist_is_refused(repo, capsys):
-    """AC-131.11: the check is the preflight of a covered command (no early PlatformError); no session starts."""
+def test_a_repo_without_an_allowlist_is_refused(repo):
+    (repo / ".claude" / "settings.json").unlink()
+    with pytest.raises(core.PlatformError, match="permission allowlist"):
+        headless.main(["/svc:ship 7", "--repo", str(repo)])
+
+
+def test_a_covered_command_without_an_allowlist_fails_the_preflight(repo, capsys):  # AC-131.11
+    """The check is the preflight of a covered command (no early PlatformError); no session starts."""
     (repo / ".claude" / "settings.json").unlink()
     assert headless.main(["/component:ship 7", "--repo", str(repo)]) == 1
     assert "preflight failed: no-repo-allowlist: " in capsys.readouterr().out
