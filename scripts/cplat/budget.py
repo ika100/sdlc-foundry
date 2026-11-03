@@ -602,6 +602,18 @@ def section(data: dict, limit: str | None, phase: str | None, point: str | None)
             "parts": parts, "grace": data.get("grace")}
 
 
+def _stop_section(data: dict, limit: str | None, phase: str | None, point: str | None) -> dict:
+    """The section of a stopped run: plus `verification_left` at the stop (design.md, Budget section)."""
+    value = section(data, limit, phase, point)
+    try:
+        import units
+        repo = data.get("repo_path") or os.getcwd()
+        value["verification_left"] = bool(units.only_verification_left(Path(repo)))
+    except Exception:  # noqa: BLE001
+        value["verification_left"] = False
+    return value
+
+
 def stop(run_id: str | None, limit: str, point: str, phase: str | None = None) -> str:
     """Write the `budget` section into the stopping run's record and the root's; returns `budget exhausted: <limit>`.
     The caller escalates the run (cause decision). Never raises."""
@@ -617,13 +629,7 @@ def stop(run_id: str | None, limit: str, point: str, phase: str | None = None) -
             phase = open_ones[-1] if open_ones else point
         info = {"limit": limit, "point": point, "phase": phase, "at": _iso(runs.utcnow())}
         data = _modify(found[0], lambda d: d.update(stop=info, state="stopped")) or found[1]
-        value = section(data, limit, phase, point)
-        try:
-            import units
-            repo = data.get("repo_path") or os.getcwd()
-            value["verification_left"] = bool(units.only_verification_left(Path(repo)))
-        except Exception:  # noqa: BLE001
-            value["verification_left"] = False
+        value = _stop_section(data, limit, phase, point)
         for rid in dict.fromkeys([run_id, root_of(run_id)]):
             runs.set_section(rid, "budget", value)
     except Exception:  # noqa: BLE001
@@ -642,7 +648,8 @@ def on_finish(run_id: str | None, usage: dict | None, outcome: str) -> None:
         root = root_of(run_id)
         stopped = data.get("stop") or {}
         if run_id == root or stopped:
-            runs.set_section(run_id, "budget", section(data, stopped.get("limit"), stopped.get("phase"), stopped.get("point")))
+            make = _stop_section if stopped else section
+            runs.set_section(run_id, "budget", make(data, stopped.get("limit"), stopped.get("phase"), stopped.get("point")))
         cost: float | str = UNKNOWN
         totals = (usage or {}).get("totals")
         if totals:
