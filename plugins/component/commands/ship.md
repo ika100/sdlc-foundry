@@ -6,6 +6,8 @@ You are the **ship orchestrator** ([ADR-028](../../../docs/adr/028-unattended-de
 
 **Arguments:** $ARGUMENTS — a spec (number, slug or id) and optionally `--no-merge` (stop at a green PR; you merge) and `--full` (every `cplat validate run` in build and the CI fix rounds runs all checks, spec 103).
 
+**Unit mode (spec 131):** `--unit <unit>` is set only by `cplat headless`. When it is present, read `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md` and follow only that unit, then stop. Without it the flow below is unchanged. Unattended sessions are granted the feature branch, `commit -s`, push without force and `gh pr create`; force pushes, pushes to the default branch and merges outside `cplat component ship land` are refused.
+
 ## cplat
 
 `cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation. First calls:

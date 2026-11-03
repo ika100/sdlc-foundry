@@ -6,6 +6,8 @@ You are the **build orchestrator** ([ADR-026](../../../docs/adr/026-feature-spec
 
 **Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → pass it to `cplat validate run`.
 
+**Unit mode (spec 131):** `--unit <unit>` is set only by `cplat headless`. When it is present, read `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md` and follow only that unit, then stop. Without it the flow below is unchanged. Unattended sessions are granted the feature branch, `commit -s`, push without force and `gh pr create`; force pushes, pushes to the default branch and merges outside `cplat component ship land` are refused.
+
 Work through the phases in order. After each, print `## Phase N complete — <one line>`. A re-run of `/component:build <id>` **resumes**: phases whose result already exists are skipped (each phase says how it detects that).
 
 ## cplat
