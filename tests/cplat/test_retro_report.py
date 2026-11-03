@@ -309,6 +309,23 @@ def test_leaks_finds_a_planted_name_case_insensitively():
     assert retro_report.leaks("2 runs, 1 repo per shape", r) == []
 
 
+def test_a_name_inside_a_longer_token_is_no_leak():
+    """AC-090.11: `leaks` matches like the scrub: a spec id inside a run id (2026-11-02 retro) or a longer repo name is not that name."""
+    r = build()
+    r["repos"]["specs"] = [*r["repos"]["specs"], "shop"]
+    assert retro_report.leaks("runs 20261027T112130Z-91a1d703 and acme/shop-api-v2, shopping", r) == []
+    assert retro_report.leaks("see the shop spec", r) == ["shop"]
+    assert retro_report.leaks(f"https://github.com/{SHOP}/pull/1", r) == [SHOP]
+
+
+def test_a_bare_numeric_spec_id_is_no_private_name():
+    """AC-090.8: `amends spec 130` and `see #130` stay readable; a number alone names no consumer."""
+    r = build(recs=[*records(), run("n1", "2026-10-20T11:00:00Z", repo=SHOP, spec="130")])
+    assert "130" in r["repos"]["specs"] and "130" not in retro_report.private_names(r)
+    body = retro_report.render_public(r, "## Proposed specs\n1. see #130, amends spec 130")
+    assert "see #130, amends spec 130" in body and retro_report.leaks(body, r) == []
+
+
 def test_private_names_map_to_placeholders():
     """AC-090.11: repo, spec and store become <repo>, <spec>, <run-store>."""
     names = retro_report.private_names(build())
