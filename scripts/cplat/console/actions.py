@@ -132,6 +132,14 @@ def _valid_resolved_clone(repo: str, path: Path, repo_dir: str | Path | None) ->
     return _valid_clone(repo, path)
 
 
+def valid_system_clone(repo: str, path: Path) -> bool:
+    """A clone is used only with the expected GitHub origin; the configured workspace keeps its fork exception (#344)."""
+    explicit = configured_workspace()
+    if explicit is not None and path.resolve() == (explicit / repo.split("/")[-1]).resolve():
+        return path.is_dir()
+    return path.is_dir() and _has_expected_origin(repo, path)
+
+
 def clone_of(repo: str, repo_dir: str | Path | None = None) -> Path:
     """Resolve a component clone: configured workspace, sibling, then ~/src."""
     name = repo.split("/")[-1]

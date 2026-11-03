@@ -41,4 +41,5 @@ else
   fi
 fi
 export CPLAT_SOURCE="$source $root"   # shown by `cplat doctor`
+export PYTHONUNBUFFERED=1              # #335: progress shows as it happens when output goes to a file or a pipe
 exec uv run "$root/scripts/cplat/cplat.py" "$@"

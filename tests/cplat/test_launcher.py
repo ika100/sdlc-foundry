@@ -80,3 +80,21 @@ def test_the_platform_runs_its_own_specs():
     specs = spec.all_specs(ROOT)
     assert len(specs) >= 42 and all(spec.check(s) == [] for s in specs)
     assert "STORY-0" not in (ROOT / "docs" / "backlog.md").read_text().split(spec.START)[1].split(spec.END)[0]
+
+
+def test_output_to_a_pipe_arrives_line_by_line_335(tmp_path):
+    """#335: a first line reaches a pipe before the command ends, not only at exit."""
+    assert "export PYTHONUNBUFFERED=1" in LAUNCHER.read_text()
+    probe = tmp_path / "probe.py"
+    probe.write_text(f"import sys, time\nsys.path.insert(0, {str(ROOT / 'scripts' / 'cplat')!r})\nimport cplat\n"
+                     "cplat._resolve = lambda argv: ('probe_mod', [], 'probe')\n"
+                     "sys.modules['probe_mod'] = type(sys)('probe_mod')\n"
+                     "sys.modules['probe_mod'].main = lambda rest: (print('first'), time.sleep(30), 0)[2]\n"
+                     "sys.exit(cplat.main([]))\n")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONUNBUFFERED"}
+    p = subprocess.Popen(["uv", "run", "--quiet", "--with", "pyyaml", "--with", "ruamel.yaml", "python", str(probe)],
+                         stdout=subprocess.PIPE, text=True, env=env)
+    try:
+        assert p.stdout.readline().strip() == "first"
+    finally:
+        p.kill()

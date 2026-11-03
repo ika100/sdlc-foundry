@@ -14,7 +14,7 @@ on:
 permissions:
   contents: write        # push the pin branch, merge the PR
   pull-requests: write   # open, close superseded, comment, merge
-  actions: write         # dispatch ci.yml on the pin branch (protected-branch fallback)
+  actions: write         # dispatch ci.yml on the pin branch and approve its held PR runs (protected-branch fallback, #368)
 
 concurrency:
   group: pin-staging-${{ github.event.client_payload.service }}
@@ -112,3 +112,19 @@ jobs:
           gh workflow run ci.yml --ref "$BRANCH"
           gh pr merge "$PR" --auto --squash --delete-branch
           echo "::notice::branch protection requires PR checks: auto-merge is on for $PR"
+          # Public repos (#368): GitHub holds the runs of a PR that github-actions[bot] opened until someone approves them,
+          # so auto-merge would wait forever. Approve only this pin branch's pull_request runs at the commit this workflow pushed.
+          if [ "$(gh api "repos/$GH_REPO" --jq .private)" = "false" ]; then
+            sha=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
+            ids=""
+            for _ in 1 2 3 4 5 6; do
+              ids=$(gh api "repos/$GH_REPO/actions/runs?event=pull_request&head_sha=$sha" \
+                --jq ".workflow_runs[] | select(.head_branch == \"$BRANCH\" and .conclusion == \"action_required\") | .id")
+              [ -n "$ids" ] && break
+              sleep 10
+            done
+            for id in $ids; do
+              if gh api -X POST "repos/$GH_REPO/actions/runs/$id/approve" >/dev/null; then echo "approved held run $id of $PR"
+              else echo "::warning::could not approve run $id: approve it on $PR (Checks tab) so auto-merge can finish"; fi
+            done
+          fi
