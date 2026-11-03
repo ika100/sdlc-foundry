@@ -1252,8 +1252,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("files", nargs="*")
     p.add_argument("--by", default="coder", help="the agent that changed the tests (coder or quality), for agent metrics")
     p.add_argument("--task", help="the task being built, for agent metrics")
-    p.add_argument("--approve", action="store_true",
-                   help="record that the user approved the current content of FILES (#324); a later change is flagged again")
+    p.add_argument("--approve", nargs="*", metavar="FILE",
+                   help="record that the user approved the current content of FILE (#324); a later change is flagged again")
     p.add_argument("--reason", help="with --approve: why the user approved the change")
     p = sub.add_parser("ci", help="check every spec and trace built ones; GitHub annotations (warnings unless --strict)")
     p.add_argument("--strict", action="store_true")
@@ -1350,11 +1350,11 @@ def main(argv: list[str]) -> int:
     if ns.cmd in ("publish", "land", "review"):
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
-    if ns.cmd == "test-diff" and ns.approve:
-        if not ns.files:
+    if ns.cmd == "test-diff" and ns.approve is not None:
+        if not ns.approve:
             print("ERROR: --approve needs the files the user approved", file=sys.stderr)
             return 2
-        for f, digest in approve_test_change(root, ns.base, ns.files, ns.reason).items():
+        for f, digest in approve_test_change(root, ns.base, ns.approve, ns.reason).items():
             print(f"{f}: approved by the user at sha256 {digest[:12]}")
         return 0
     if ns.cmd == "test-diff":
