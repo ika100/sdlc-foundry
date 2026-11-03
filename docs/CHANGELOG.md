@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Fixed
+
+**`cplat platform release` reruns an upgrade e2e that a newer push cancelled (#380).** On `main` only one upgrade e2e run waits behind the running one, so a merge right after the release commit cancelled the release commit's waiting run, and the release stopped with `red`. A cancelled run is now rerun once and waited for. Cancelled a second time, the release stops, says the run was cancelled and gives the rerun command.
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

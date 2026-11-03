@@ -88,6 +88,8 @@ class Gh:
                 seq = {"e2e-upgrade.yml": w.e2e_seq, "release-guard.yml": w.guard_seq}[a[a.index("--workflow") + 1]]
                 return json.dumps(seq.pop(0) if len(seq) > 1 else seq[0])
             return "[]"
+        if a[:2] == ["run", "rerun"]:
+            return ""
         if a[:2] == ["run", "view"]:
             rid = a[2]
             if "headSha" in a:

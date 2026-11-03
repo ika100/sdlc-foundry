@@ -43,6 +43,32 @@ def test_a_red_newest_run_stops_before_any_tag(w):  # AC-129.12
     assert TAG not in w.origin_tags() and w.check_cmd("gate") == [] and w.gh.writes() == []
 
 
+CANCELLED = {"status": "completed", "conclusion": "cancelled"}
+
+
+def test_a_cancelled_newest_run_is_rerun_once_and_then_counts(w):
+    """#380: a newer push to main took the run's place in its concurrency group; that is no red e2e."""
+    w.in_state("merged")
+    w.e2e_seq = [[run_entry(11, conclusion="cancelled")]]
+    w.views["11"] = [CANCELLED, CANCELLED, {"status": "completed", "conclusion": "success"}]
+    r = w.run()
+    assert r.rc == 3 and "CONFIRM: tag" in r.out, r.text
+    assert [c for c in w.gh.writes() if c[:2] == ["run", "rerun"]] == [["run", "rerun", "11", "-R", SLUG]]
+    assert "cancelled before it ran" in r.text
+
+
+def test_a_run_cancelled_again_after_the_rerun_stops_without_a_tag(w):
+    """#380: one rerun only; the error says it was cancelled, not red, and how to go on."""
+    w.in_state("merged")
+    w.e2e_seq = [[run_entry(11, conclusion="cancelled")]]
+    w.views["11"] = [CANCELLED]
+    r = w.run()
+    assert r.rc == 1 and "cancelled again after a rerun" in r.err and "red:" not in r.err
+    assert f"gh run rerun 11 -R {SLUG}" in r.err
+    assert len([c for c in w.gh.writes() if c[:2] == ["run", "rerun"]]) == 1
+    assert TAG not in w.origin_tags() and w.check_cmd("gate") == []
+
+
 def test_a_run_that_never_appears_fails_after_ten_minutes_without_a_tag(w):  # AC-129.12
     import platrelease_publish
     assert platrelease_publish.APPEAR_WINDOW == 600

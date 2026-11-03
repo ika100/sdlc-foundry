@@ -19,7 +19,7 @@ STOP_EXIT = 3
 def wait_for_run(repo: Path, slug: str, list_args: list[str], select: Callable[[list[dict]], list[dict]],
                  timeout: float, interval: float) -> tuple[str, str]:
     """Poll the run list until a selected run appears (at most APPEAR_WINDOW), then follow the newest one (highest
-    databaseId). (status, url) with status green | red | absent | timeout."""
+    databaseId). (status, url) with status green | red | cancelled | absent | timeout."""
     begin = ship.now()
     while True:
         runs = select(json.loads(ship.gh(list_args, cwd=repo) or "[]"))
@@ -34,6 +34,8 @@ def wait_for_run(repo: Path, slug: str, list_args: list[str], select: Callable[[
     begin = ship.now()
     while True:
         status = watch.poll()
+        if status == "red" and _conclusion(repo, slug, str(newest["databaseId"])) == "cancelled":
+            return "cancelled", url
         if status != "pending":
             return status, url
         if ship.now() - begin > timeout:
@@ -41,12 +43,28 @@ def wait_for_run(repo: Path, slug: str, list_args: list[str], select: Callable[[
         ship.sleep(interval)
 
 
+def _conclusion(repo: Path, slug: str, rid: str) -> str | None:
+    try:
+        return json.loads(ship.gh(["run", "view", rid, "-R", slug, "--json", "status,conclusion"], cwd=repo, check=False)
+                          or "{}").get("conclusion")
+    except ValueError:
+        return None
+
+
 def _upgrade_e2e(repo: Path, slug: str, sha: str, o) -> None:
     args = ["run", "list", "-R", slug, "--workflow", "e2e-upgrade.yml", "--commit", sha, "--event", "push",
             "--json", "databaseId,status,conclusion,url"]
     ship.say(f"waiting for the upgrade e2e on {sha[:7]}")
     status, url = wait_for_run(repo, slug, args, lambda rs: rs, o.timeout, o.interval)
+    if status == "cancelled":   # a later push to main took its place in the concurrency group (#380): rerun it once
+        rid = url.rstrip("/").rsplit("/", 1)[-1]
+        ship.say(f"  rerun    upgrade e2e run {rid}: cancelled before it ran (a newer push to main took its place)")
+        ship.gh(["run", "rerun", rid, "-R", slug], cwd=repo, check=False)
+        ship.sleep(o.interval)                               # the run list may still show the cancelled attempt
+        status, url = wait_for_run(repo, slug, args, lambda rs: rs, o.timeout, o.interval)
     why = {"absent": f"did not start within {APPEAR_WINDOW // 60} minutes", "red": f"red: {url}",
+           "cancelled": f"cancelled again after a rerun: {url}; rerun it when main is quiet "
+                        f"(gh run rerun {url.rstrip('/').rsplit('/', 1)[-1]} -R {slug}) and run the release again",
            "timeout": f"still running after {int(o.timeout)}s"}.get(status)
     if why:
         raise core.PlatformError(f"upgrade e2e on {sha}: {why}")
@@ -111,8 +129,8 @@ def _guard(repo: Path, slug: str, tag: str, o) -> None:
     ship.say(f"waiting for the release-guard run on {tag}")
     status, url = wait_for_run(repo, slug, args, lambda rs: [r for r in rs if r.get("headBranch") == tag],
                                o.timeout, o.interval)
-    if status == "red":
-        raise core.PlatformError(f"release-guard on {tag} is red: {url}; the tag and the release stay")
+    if status in ("red", "cancelled"):
+        raise core.PlatformError(f"release-guard on {tag} is {status}: {url}; the tag and the release stay")
     if status == "absent":
         raise core.PlatformError(f"release-guard on {tag}: no run started within {APPEAR_WINDOW // 60} minutes")
     if status == "timeout":
