@@ -6,6 +6,16 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Added
+
+**`cplat platform doctor` says why agent worktrees start at main (#319).** Claude Code reads the project's `.claude/settings.json` only from the directory a session starts in, so a session started outside the repo (for example in `~/Dev`) and changed into it later does not apply `worktree.baseRef: head`: the worktree probe of `/component:build` sees main's HEAD and every task runs one after another. Doctor now warns when the current directory is not the repo's root and when `.claude/settings.json` lacks `"worktree": {"baseRef": "head"}`, and the probe step of `/component:build` tells you to start the next session in the repo root. Update the plugins (`/plugin marketplace update`).
+
+### Changed
+
+**In the platform repo itself, `cplat` runs the checkout (#320).** The launcher ran the installed release there, so a cplat fix merged to `main` (for example to `pr wait`) did not apply to the work that followed until the next release was installed, and a new command such as `platform release` needed `CPLAT_PLATFORM=$PWD`. When the current directory is inside a git checkout that declares `shape: platform` in `.platform-settings.yml`, the launcher now runs that checkout's `scripts/cplat`; `CPLAT_PLATFORM` and `CPLAT_REF` still win, and `cplat platform doctor` shows `platform scripts: checkout: <path>`. Other repos are unchanged. Update the plugins (`/plugin marketplace update`).
+
+**CONTRIBUTING.md has rules for AI-assisted PRs, security paths, issue claims and fork CI (#326).** AI-assisted PRs are welcome with the local test output in the description; the redaction, secret handling and permissions are changed by maintainers only; an issue claim expires after 7 days without a draft PR; and CI of a fork PR is approved only after a maintainer has read the diff.
+
 ### Fixed
 
 **`cplat pr wait` no longer reads a GitHub API error as "no CI checks" (#356).** While GitHub's rate limit refused `gh pr checks`, the wait ended with `no CI checks were reported after 300s` and a hint about runners, although the PR had 36 green checks. A `gh` failure (rate limit, outage, auth) is now named as such and retried with a growing pause (up to 5 min); the time it lasts does not count towards the no-checks grace period, and a wait that times out on it reports `gh`'s own error. `cplat platform release` keeps polling through it.
@@ -19,6 +29,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 **`cplat pr wait` no longer reports RED for the run a label cancelled (#322).** `gh pr create --label no-spec` (what `cplat pr open --no-spec` runs) fires `opened` and `labeled`, and the `ci` concurrency group cancels the first run. When the wait looked before `gh run list` showed the second run, the cancelled checks counted as red. A cancelled check now waits up to 90 s for the run that superseded it; once that run is listed, the cancelled one is ignored as before (#244). A run that nothing replaces is still red after those 90 s.
 
 **Specs planned in parallel no longer pick the same ADR number (#337).** The architect numbered a new ADR from the highest file on its branch, so two specs planned while the first one's PR was open both wrote ADR-073, and `cplat spec check` passed. `/component:plan` now gets the number from the new `cplat spec adr-next`, which skips the numbers every pushed branch and open PR uses, and `cplat spec check` fails when two files share a number or when an ADR the branch adds has a number another pushed branch already uses. Update the plugins (`/plugin marketplace update`).
+
+### Changed
+
+**Runs that finish on their own.** Unattended ships rarely finished: 16 of 52 were done, and about half of the spend went to runs that ended escalated or failed (spec 131, [ADR-075](adr/075-an-unattended-ship-runs-one-session-per-unit-saved-at-checkpoints.md), [ADR-076](adr/076-an-unattended-run-gets-its-permissions-per-session-from-a-checked-run-allowlist.md), [ADR-077](adr/077-budgets-scale-with-the-plan-and-verification-gets-one-grace.md)). `cplat headless` now runs a ship or build as one short session per unit (`plan`, `red-tests`, one per task, `verification`, `land`), each stopping at a checkpoint commit; the Stop hook reaches unit sessions through `CPLAT_UNIT`, and two sessions without a commit on a unit escalate. A preflight before the first session checks the repo allowlist, the settings rules, the git identity, `gh` login and push access, and fails with `preflight failed: <category>: <detail>` (`no-repo-allowlist`, `blocked-by-settings`, `git-identity`, `gh-auth`, `no-push-access`) instead of stopping at the first refused command; the sessions get a run allowlist for the feature branch, `commit -s`, push without force and `gh pr create`. Default budgets scale with the plan: cost `max(15, 10 + 1.5·T + 0.5·C)`, minutes `max(180, 60 + 15·T + 5·C)`, invocations `max(60, 20 + 5·T + C)`, so spec 128 (8 tasks, 14 criteria) gets $29, 250 minutes and 74 invocations; verification gets one grace of 20 % when only it is left. A subagent's cost is no longer missing from the ledger. `cplat platform runs report` gains an "Unattended ships" section with the four targets. **Action: none**, runs in flight resume by themselves. Not breaking.
+
+**Plugins:** `component` 1.6.0, `shared` 1.2.0, `system` 1.6.1.
 
 **`cplat platform release` reruns an upgrade e2e that a newer push cancelled (#380).** On `main` only one upgrade e2e run waits behind the running one, so a merge right after the release commit cancelled the release commit's waiting run, and the release stopped with `red`. A cancelled run is now rerun once and waited for. Cancelled a second time, the release stops, says the run was cancelled and gives the rerun command.
 

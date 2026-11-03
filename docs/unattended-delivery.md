@@ -172,6 +172,24 @@ A replay of `cplat component ship deploy` skips the dev smoke only when the reco
 
 `--dry-run` prints `staging: <tag> <digest>`, `prod: <tag> <digest>` and `match` or `mismatch` per service (`data.digests` with `--json`); a mismatch exits 1. `--accept-digest-mismatch "<reason>"` (a sentence of 3 or more words ending in `.`, `!` or `?`) accepts a mismatch only, and is recorded in the output and the PR body. `--no-verify` skips the check and prints `image identity not verified (--no-verify)`.
 
+## Unit sessions and the run allowlist
+
+`cplat headless` runs a ship or build as a series of short sessions, one **unit** each, instead of one long session ([ADR-075](adr/075-an-unattended-ship-runs-one-session-per-unit-saved-at-checkpoints.md)). The units are `plan`, `red-tests`, `task:<id>` (one per plan task), `verification` and `land`. A session gets `--unit <unit>`, follows only that unit (`plugins/component/references/unit-mode.md`) and stops at its checkpoint, a commit recorded in the run's units file. The next session starts the next unit, so one hard task no longer uses up the context, the stops and the budget of everything after it.
+
+In a unit session the Stop hook also runs when `CPLAT_UNIT` is set, not only when `cplat-ship.json` exists. It holds the session until the unit has its checkpoint, once per `HEAD`: a stop without a new commit since the last hold is let through and the supervisor counts it as a stall. **Two sessions in a row on the same unit without a new commit escalate the run** as `no progress: unit <unit> after 2 sessions without a commit`. A session that moves `HEAD` resets the count.
+
+Before the first session, `cplat headless` and `cplat system ship repo start` run a preflight and print `preflight failed: <category>: <detail>` on a failure. The run is then escalated with cause `environment` and no session, branch, commit or PR is started. In a system ship only that repo is escalated.
+
+| Category | What to do |
+|---|---|
+| `no-repo-allowlist` | `.claude/settings.json` is missing: run `/platform:update` or `cplat adopt` |
+| `blocked-by-settings` | a `deny` or `ask` rule matches a git or gh command the run needs: remove or narrow the rule, or run the command attended |
+| `git-identity` | set `git config --global user.name` and `user.email` (needed for `commit -s`) |
+| `gh-auth` | `gh auth login --hostname <host>` |
+| `no-push-access` | ask for write access to the repository |
+
+The sessions get a **run allowlist** ([ADR-076](adr/076-an-unattended-run-gets-its-permissions-per-session-from-a-checked-run-allowlist.md)): the feature branch (switch, create), `commit -s`, `push` of that branch without force and `gh pr create`. It applies to this run's sessions only and no settings file is changed; `cplat headless` prints it at the start. Force pushes, pushes to the default branch and merges outside `cplat component ship land` stay refused.
+
 ## Budgets and repeated failures
 
 Every unattended run tree shares one budget (spec 102, [ADR-043](adr/043-one-budget-per-run-tree.md)): wall-clock minutes, agent invocations (sessions and subagents), CI reruns and estimated cost. The outermost run owns it (`cplat headless`, `/system:ship`, or a ship or build started by hand); every ship, build and CI wait below it counts against the same budget.
@@ -188,6 +206,13 @@ A root that covers several ships multiplies the defaults: `cplat headless "/comp
 Limits are checked at safe points (before a session, a subagent or a CI rerun, at the end of a phase, before a system ship starts a repo). A run that hits one starts nothing new, escalates with cause `decision` and reason `budget exhausted: <limit>`, and stays resumable: run it again with a higher limit, and the usage continues from where it stopped. Running work is never killed, and no gate is skipped or counted as passed (`not run`).
 
 A stage that fails twice in a row with the same error (timestamps, paths, ids, line numbers and durations removed) and no fewer failing checks stops with `no progress: <stage>`. Every escalation leaves a recovery snapshot in `<git dir>/cplat-recovery.json` (stage, a redacted excerpt, changed files, criteria, earlier attempts; never uploaded), and `cplat budget resume` shows which stages are still verified for the current HEAD, so a resumed run starts at the failing one. Run state (`cplat-ship.json`, the recovery snapshot) lives in the worktree's own git dir, so a run in one worktree never blocks or attaches to another checkout's session ([ADR-051](adr/051-run-state-is-per-worktree.md)).
+
+### Scaled budgets and the verification grace (spec 131)
+
+Once the plan exists, the default limits follow its size ([ADR-077](adr/077-budgets-scale-with-the-plan-and-verification-gets-one-grace.md)). For T tasks and C active criteria: cost `max(15, 10 + 1.5·T + 0.5·C)` USD, minutes `max(180, 60 + 15·T + 5·C)`, invocations `max(60, 20 + 5·T + C)`, reruns 6. Spec 128 (8 tasks, 14 criteria) gets $29, 250 minutes and 74 invocations. A `budget:` setting replaces the floor and an option replaces the limit. A run covering several specs gets the sum of each spec's defaults (a part per spec), raised at the plan checkpoint and never lowered. This replaces the multiplication in the table above for runs with a plan.
+
+When a limit is used up while every task is done and only verification is left, verification starts within a **grace** of 20 % of each limit (at least $3, 30 minutes and 10 invocations), once per run. If that is used up too, the run escalates with `budget exhausted: <limit> (grace used)`. The grace never skips a check. An incomplete transcript read counts as an `unknown` cost, not a partial sum, and subagent costs are read from cached transcripts.
+
 ## Change-aware validation in fix rounds
 
 Inside a build or ship, fix rounds run only what the change can affect (spec 103, [ADR-044](adr/044-change-aware-validation-in-the-inner-loop.md)): `cplat validate run` plans every check of `devbox run ci` as `run`, `reused` or `skipped` and names the rule that decided it. A change to dependencies, the Dockerfile, CI, secrets or auth, a spec or an acceptance test (and per shape: the API contract or migrations of a service, a gitops-app's manifests, a web repo's routes or build config) runs the full suite and the security scan. A change that touches only documentation runs lint and the secret scan. A mapped change runs the tests of its criteria and its component's unit tests. Anything the rules cannot place runs everything. A passed check is reused only when its inputs are byte-for-byte unchanged, and only on this machine.

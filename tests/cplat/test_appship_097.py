@@ -596,6 +596,7 @@ def test_a_dirty_clone_is_refused_with_its_path(w):  # AC-097.7
 
 
 def test_repo_start_marks_the_repo_running_and_prints_the_clone(w):  # AC-097.7
+    w.mp.setattr(importlib.import_module("preflight"), "check_repo", lambda *a, **k: None)   # the preflight is spec 131's (test_appship_131.py)
     w.started(states={"shop-gitops": "passed", "shop-lib": "passed"})
     r = w.app("repo", "start", "shop-api")
     assert r.rc == 0 and str(w.clone("shop-api")) in r.out
@@ -603,6 +604,7 @@ def test_repo_start_marks_the_repo_running_and_prints_the_clone(w):  # AC-097.7
 
 
 def test_a_missing_clone_is_cloned_next_to_the_gitops_app(w):  # AC-097.7
+    w.mp.setattr(importlib.import_module("preflight"), "check_repo", lambda *a, **k: None)   # the preflight is spec 131's (test_appship_131.py)
     shutil.move(str(w.clone("shop-api")), str(w.upstream / "shop-api"))
     w.started(states={"shop-gitops": "passed", "shop-lib": "passed"})
     assert w.app("repo", "start", "shop-api").rc == 0

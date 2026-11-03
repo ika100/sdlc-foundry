@@ -31,9 +31,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=\"$(git rev-parse --git-dir 2>/dev/null)/cplat-ship.json\"; [ -f \"$f\" ] || exit 0; exec \"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" component ship gate",
+            "command": "f=\"$(git rev-parse --git-dir 2>/dev/null)/cplat-ship.json\"; [ -f \"$f\" ] || [ -n \"$CPLAT_UNIT\" ] || exit 0; exec \"${CLAUDE_PLUGIN_ROOT}/bin/cplat\" component ship gate",
             "timeout": 960,
-            "statusMessage": "Checking the ship run (spec 066)"
+            "statusMessage": "Checking the ship run (spec 066, 131)"
           },
           {
             "type": "command",

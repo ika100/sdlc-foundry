@@ -5,15 +5,19 @@ Each `claude -p` session gets `CPLAT_SESSION_ID=<the --session-id>`. The progres
 new owner or the gate's bookkeeping alone is not progress. The cause is `ship.no_progress_cause(repo, st, message)`.
 """
 import json
+import os
+import stat
 import sys
 
 import pytest
 
 import core
 import headless
+import preflight
 import ship
 from test_headless import fake_claude, repo, runs, set_state  # noqa: F401  (fixtures, helpers)
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
+from units131_support import GH_STUB, git
 
 SCRIPTS = str(core.PLATFORM_ROOT / "scripts" / "cplat")
 
@@ -22,6 +26,33 @@ SCRIPTS = str(core.PLATFORM_ROOT / "scripts" / "cplat")
 def _no_session_env(monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
     monkeypatch.delenv("CPLAT_SESSION_ID", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_preflight(repo, tmp_path, monkeypatch):
+    """The preflight of `/component:ship` runs for real on a world of its own: the settings layers inside tmp_path, a `gh`
+    stub that is logged in and may push, a git identity in the environment. The spec and its plan are committed on `main`
+    (so a stall is in the unit the test means) and `origin` is a GitHub URL (the stub answers for it)."""
+    stub = tmp_path / "gh-bin"
+    stub.mkdir()
+    gh = stub / "gh"
+    gh.write_text(GH_STUB)
+    gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{stub}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("FAKE_GH_LOG", str(tmp_path / "gh.log"))
+    monkeypatch.delenv("FAKE_GH_AUTH", raising=False)
+    monkeypatch.delenv("FAKE_GH_PUSH", raising=False)
+    for k, v in (("NAME", "Tester"), ("EMAIL", "tester@example.test")):
+        monkeypatch.setenv(f"GIT_AUTHOR_{k}", v)
+        monkeypatch.setenv(f"GIT_COMMITTER_{k}", v)
+    user = tmp_path / "user-settings.json"
+    user.write_text("{}")
+    monkeypatch.setattr(preflight, "layers", lambda r=None: [
+        ("managed", tmp_path / "no-managed.json"), ("user", user),
+        ("project", repo / ".claude" / "settings.json"), ("local", repo / ".claude" / "settings.local.json")])
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "init")
+    git(repo, "remote", "add", "origin", "https://github.com/acme/shop-api.git")
 
 
 def claim_script(repo, say):
@@ -80,7 +111,8 @@ def test_ac_126_7_the_reason_keeps_its_wording_and_adds_the_last_message(repo, t
     set_state(repo, phase="pr")
     fake_claude(tmp_path, monkeypatch, "echo 'I could not find the failing test'")
     headless.main(["/component:ship 7", "--repo", str(repo)])
-    assert ship.load_state(repo)["escalated"] == ("no progress: two runs in a row ended in phase pr with nothing changed; "
+    # AC-131.5: unit mode words the stall by unit (phase pr: land); the excerpt of the last message stays
+    assert ship.load_state(repo)["escalated"] == ("no progress: unit land after 2 sessions without a commit; "
                                                   "last message: I could not find the failing test")
 
 
@@ -119,5 +151,5 @@ def test_ac_126_7_a_session_that_printed_nothing_has_no_excerpt_and_still_a_caus
     fake_claude(tmp_path, monkeypatch, "true")
     headless.main(["/component:ship 7", "--repo", str(repo)])
     st = ship.load_state(repo)
-    assert st["escalated"] == "no progress: two runs in a row ended in phase pr with nothing changed"
+    assert st["escalated"] == "no progress: unit land after 2 sessions without a commit"    # AC-131.5
     assert st["cause"] in {"code", "decision"}

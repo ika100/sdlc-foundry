@@ -58,6 +58,13 @@ def test_a_repo_without_an_allowlist_is_refused(repo):
         headless.main(["/svc:ship 7", "--repo", str(repo)])
 
 
+def test_a_covered_command_without_an_allowlist_fails_the_preflight(repo, capsys):  # AC-131.11
+    """The check is the preflight of a covered command (no early PlatformError); no session starts."""
+    (repo / ".claude" / "settings.json").unlink()
+    assert headless.main(["/component:ship 7", "--repo", str(repo)]) == 1
+    assert "preflight failed: no-repo-allowlist: " in capsys.readouterr().out
+
+
 def test_an_unfinished_ship_run_is_resumed_in_a_fresh_session(repo, tmp_path, monkeypatch, capsys):
     """AC-070.2: a session that ends with the run unfinished is followed by another until the run is done."""
     ship.start(repo, "7", True)

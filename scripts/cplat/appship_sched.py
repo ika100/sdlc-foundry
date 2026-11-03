@@ -147,6 +147,10 @@ def start_repo(gitops_dir: Path, repo_id: str) -> Path:
         if run(["git", "status", "--porcelain"], cwd=path).stdout.strip():
             raise PlatformError(f"{path} has uncommitted changes; commit or stash them, then resume",
                                 hint="commit or stash the work in that clone, then run the command again")
+        import preflight                          # spec 131: the repo's permissions, before its ship starts
+        if failure := preflight.check_repo(path, f"{_org(gitops_dir)}/{repo_id}"):
+            escalate_repo(gitops_dir, repo_id, failure.reason(), "environment")
+            raise PlatformError(failure.line())
     gate = gate_class(gitops_dir, repo)
 
     def change(s: dict) -> None:

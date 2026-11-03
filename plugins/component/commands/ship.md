@@ -6,6 +6,8 @@ You are the **ship orchestrator** ([ADR-028](../../../docs/adr/028-unattended-de
 
 **Arguments:** $ARGUMENTS — a spec (number, slug or id) and optionally `--no-merge` (stop at a green PR; you merge) and `--full` (every `cplat validate run` in build and the CI fix rounds runs all checks, spec 103).
 
+`--unit <unit>` (headless, spec 131): do only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
+
 ## cplat
 
 `cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation. First calls:
@@ -18,7 +20,7 @@ cplat shape
 cplat component ship start <spec> [--no-merge] [--take-over]
 ```
 
-`unsupported` or no shape → stop (gitops-app repos ship through `/system:ship`). `ship start` refuses an unapproved spec, an issue the spec tracks that another branch has claimed (spec 082: `--take-over` only when the user says so; it also ends another spec's unfinished run, recorded as `abandoned`), and a repo linked to a gitops-app without the secret `GITOPS_TOKEN` (spec 077). In each case, show its hint and stop. (the system-clone link option is passed by `/system:ship` only.) It prints the phase and the next step; a re-run **resumes** at that phase. Print both outputs verbatim. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape.
+`unsupported` or no shape → stop (gitops-app repos ship through `/system:ship`). `ship start` refuses an unapproved spec, an issue the spec tracks that another branch has claimed (spec 082: `--take-over` only when the user says so; it ends that spec's run as `abandoned`), and a repo linked to a gitops-app without the secret `GITOPS_TOKEN` (spec 077). In each case, show its hint and stop. It prints the phase and the next step; a re-run **resumes** at that phase. Print both outputs verbatim. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape.
 
 **While the run is not finished, the Stop hook holds the session that started or resumed it** with the next step. Two stops without a new commit or phase change escalate the run, so commit each task. Stop earlier only on `cplat component ship escalate '<reason>'` or when the run is done.
 
@@ -26,7 +28,7 @@ cplat component ship start <spec> [--no-merge] [--take-over]
 
 - Never ask the user. Where `/component:plan` or `/component:build` say "ask", take the unattended choice they name; where they name none, escalate.
 - Interrupted build: commit the leftovers as `wip(<task-id>): interrupted` without asking (build Phase 0).
-- `cplat component ship start` puts you on the feature branch (creates or switches to it); never create, reset or switch branches yourself.
+- `cplat component ship start` puts you on the feature branch; never create, reset or switch branches yourself.
 - `git push` and `gh pr create` are **not** run by you: `cplat component ship pr` does both (it pushes only the spec's feature branch).
 - Every shell command goes through `devbox run <script>`, except git, gh and cplat.
 

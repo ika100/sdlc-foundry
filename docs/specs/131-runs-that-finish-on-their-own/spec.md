@@ -1,7 +1,7 @@
 ---
 spec_id: 131-runs-that-finish-on-their-own
 title: Runs that finish on their own
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [324]
@@ -95,3 +95,5 @@ Success measure.
 - 2026-11-01 created
 - 2026-11-01 amended: folded in the user's answers (all suggested answers): budget formula and verification-only grace, subagent cost fixed in this spec, checkpoint definition, unattended-only and sequential task units, unit list, resume of 5.5 runs in flight (new AC-131.19), 2 sessions without a commit per unit, `--max-runs` uncapped by default, preflight scope including `/system:ship` (fleet out), no per-unit sessions for `/system:ship` (follow-up), preflight categories, success measure.
 - 2026-11-01 approved
+- 2026-11-03 building
+- 2026-11-03 done

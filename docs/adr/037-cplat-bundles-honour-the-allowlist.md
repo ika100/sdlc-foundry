@@ -1,6 +1,7 @@
 # ADR-037 — cplat commands that bundle steps never widen the session's permissions
 
 **Status:** accepted (2026-10-25, spec 100)
+**Amended by:** [ADR-076](076-an-unattended-run-gets-its-permissions-per-session-from-a-checked-run-allowlist.md) (a run allowlist per session)
 
 ## Context
 

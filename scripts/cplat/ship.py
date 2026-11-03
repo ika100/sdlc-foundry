@@ -7,6 +7,7 @@ It needs no branch protection or auto-merge, so it works for private repos on Gi
   cplat component ship start <spec> [--no-merge] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
                                          (--system-dir: /system:ship only, links the run to a system ship, spec 097)
   cplat component ship status [--json]             the state of the current run
+  cplat component ship unit [--json]               in a unit session ($CPLAT_UNIT): is the unit at its checkpoint (spec 131)
   cplat component ship phase <phase>               record progress (plan, build, pr, land, deploy, done)
   cplat component ship pr --title T --body-file F [--no-spec]   check the title and the spec rule, run `devbox run ci`, push and open (or reuse) its PR
   cplat component ship gitops prepare <task>       a checkout of a gitops task's repo on spec/<spec>-<task> (spec 076)
@@ -30,6 +31,7 @@ import io
 import json
 import re
 import sys
+import os
 import time
 from pathlib import Path
 
@@ -48,6 +50,7 @@ import smoke
 import spec as specmod
 import staging_deploy
 import stopgate
+import units
 from core import PlatformError, run
 
 PHASES = ["plan", "build", "pr", "land", "deploy", "done"]
@@ -169,7 +172,7 @@ def next_step(st: dict) -> str:
     }[phase]
 
 
-def describe(st: dict) -> str:
+def describe(st: dict, repo: Path | None = None) -> str:
     lines = [f"ship {st['spec']}: phase {st['phase']}" + (f" — ESCALATED: {st['escalated']}" if st.get("escalated") else "")]
     lines.append(f"  session: {st['owner']}" if st.get("owner")
                  else f"  session: none (resume with /component:ship {st['spec']} to own the run)")
@@ -185,6 +188,8 @@ def describe(st: dict) -> str:
         lines.append(row)
     if st.get("fix_rounds"):
         lines.append(f"  CI fix rounds: {st['fix_rounds']}")
+    if repo is not None:
+        lines += units.describe_lines(repo)
     lines.append(f"next: {next_step(st)}")
     return "\n".join(lines)
 
@@ -316,10 +321,14 @@ def set_phase(repo: Path, phase: str) -> dict:
     st = require_state(repo)
     st["phase"] = phase
     save_state(repo, st)
-    if phase != "done" and (limit := budget.check(st.get("run_id"), "phase end")):   # spec 102: a safe point
+    if phase == "build":
+        budget.rescale(st.get("run_id"), repo, [st["spec"]])      # spec 131: the limits follow the plan
+    if phase != "done" and (limit := budget.check(st.get("run_id"), "phase end", repo=repo)):   # spec 102: a safe point
         reason = budget_stop(repo, st, limit, "phase end")
         raise PlatformError(reason, hint=f"stop here; resume with /component:ship {st['spec']}, raising the limit if you want "
                                          f"(--budget {limit}=N)")
+    if phase == "pr":
+        budget.end_grace(st.get("run_id"))
     return st
 
 
@@ -395,6 +404,9 @@ def finish(repo: Path) -> Path:
         runs.finish(st.get("run_id"), "abandoned")
     done = f.with_name(f"cplat-ship-{st['spec']}-{dt.datetime.now():%Y%m%d%H%M%S}.json")
     f.rename(done)
+    uf = units._path(repo)
+    if uf.is_file():
+        uf.rename(uf.with_name(f"cplat-units-{st['spec']}-{dt.datetime.now():%Y%m%d%H%M%S}.json"))
     return done
 
 
@@ -1531,6 +1543,8 @@ def no_progress_cause(repo: Path, st: dict, message: str, run_tests: bool = True
 
 def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
     """None lets the session stop silently; a dict is the hook's JSON answer (spec 126: only the owner is held)."""
+    if unit := os.environ.get("CPLAT_UNIT"):      # spec 131: a unit session ends at its checkpoint
+        return units.gate(repo, unit, hook_input)
     try:
         st = load_state(repo)
     except PlatformError:
@@ -1592,6 +1606,37 @@ def build_status(repo: Path, spec_id: str) -> list[str]:
     return build_red(repo, spec_id)[0]
 
 
+def refresh_units(repo: Path) -> None:
+    """Record the checkpoints that are reached by now, so `status` shows the committed state (spec 131). Never raises."""
+    try:
+        data = units._read(repo)
+        if data is None:
+            return
+        found = {u["id"]: c for u in data["units"]
+                 if u.get("status") != "done" and (c := units.detect(repo, data.get("command", "ship"), data["spec"], u["id"]))}
+        if found:
+            units._update(repo, lambda d: [units._checkpoint(e, found[e["id"]]) for e in d["units"] if e["id"] in found])
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def unit_command(repo: Path, as_json: bool) -> int:
+    """`ship unit`: has the session's own unit ($CPLAT_UNIT) reached its checkpoint (spec 131)."""
+    unit = os.environ.get("CPLAT_UNIT")
+    if not unit:
+        print("not a unit session")
+        return 2
+    data = units._read(repo)
+    if data is None:
+        print(f"unit {unit}: open: no units file")
+        return 0
+    spec_id, command = data["spec"], data.get("command", "ship")
+    commit, why = units._evaluate(repo, command, spec_id, unit)
+    line = f"unit {unit}: done at {commit[:7]}" if commit else f"unit {unit}: open: {why}"
+    print(json.dumps({"unit": unit, "done": bool(commit), "commit": commit, "missing": why or None}) if as_json else line)
+    return 0
+
+
 # ---------------- CLI ----------------
 
 def main(argv: list[str]) -> int:
@@ -1637,6 +1682,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--evidence-file", default=None, help="failing output for the issue (cause platform); - reads stdin")
     sub.add_parser("finish")
     sub.add_parser("gate")
+    p = sub.add_parser("unit")
+    p.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv)
     repo = Path(ns.repo).resolve()
 
@@ -1659,12 +1706,24 @@ def main(argv: list[str]) -> int:
         if line := budget.limits_line(st.get("run_id")):
             print(line)
         return 0
+    if ns.cmd == "unit":
+        return unit_command(repo, ns.json)
     if ns.cmd == "status":
+        refresh_units(repo)
+        if load_state(repo) is None and (rs := units.rows(repo)):
+            data = units._read(repo)
+            print(json.dumps({"spec": data["spec"], "phase": "build", "units": rs}, indent=2) if ns.json
+                  else "\n".join([f"build {data['spec']}:", *units.describe_lines(repo)]))
+            return 0
         st = require_state(repo)
-        print(json.dumps({**st, "next": next_step(st)}, indent=2) if ns.json else describe(st))
+        if ns.json:
+            extra = {"units": rs} if (rs := units.rows(repo)) else {}
+            print(json.dumps({**st, "next": next_step(st), **extra}, indent=2))
+        else:
+            print(describe(st, repo))
         return 0
     if ns.cmd == "phase":
-        print(describe(set_phase(repo, ns.phase)))
+        print(describe(set_phase(repo, ns.phase), repo))
         return 0
     if ns.cmd == "pr":
         st = open_pr(repo, ns.title, core.stage_pr_body(repo, ns.body_file), ns.no_spec)

@@ -223,10 +223,72 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         "pr_wait": aggregate_pr_wait(kept),
         "unclassified": aggregate_unclassified(kept),
     }
+    out["unattended_ships"] = aggregate_unattended(kept)
     validation = aggregate_validation(kept)
     if validation["rules"]:   # spec 103: only when a run recorded a validation section
         out["validation"] = validation
     return out
+
+
+SHIP_COMMANDS = ("/component:ship", "/system:ship")
+DONE_TARGET = 70.0
+SPEND_BAD_TARGET = 20.0
+
+
+def _approval_reason(reason) -> bool:
+    rule = escalation_rules.classify(reason)
+    return (rule is not None and rule.name == "git-action-awaits-approval") or (
+        isinstance(reason, str) and reason.startswith("preflight failed: blocked-by-settings"))
+
+
+def aggregate_unattended(kept: list[dict]) -> dict:
+    """Spec 131 (AC-131.18): do unattended ships finish? Headless /component:ship and /system:ship runs."""
+    ships = [r for r in kept if r.get("kind") == "headless" and isinstance(r.get("command"), str)
+             and r["command"].split(None, 1)[:1] and r["command"].split(None, 1)[0] in SHIP_COMMANDS]
+    done = total = bad = unknown = approvals = verification = 0
+    spend_total = spend_bad = 0.0
+    for r in ships:
+        total += 1
+        outcome = r.get("outcome")
+        done += outcome == "done"
+        totals = (r.get("usage") or {}).get("totals") if isinstance(r.get("usage"), dict) else None
+        cost = totals.get("cost_usd") if isinstance(totals, dict) else None
+        if not isinstance(cost, (int, float)) or isinstance(cost, bool) or totals.get("cost_complete") is False:
+            unknown += 1
+        else:
+            spend_total += cost
+            if outcome in ("escalated", "failed"):
+                spend_bad += cost
+        esc = r.get("escalation")
+        if isinstance(esc, dict) and _approval_reason(esc.get("reason")):
+            approvals += 1
+        budget = r.get("budget")
+        if r.get("stop_reason") == "budget" and isinstance(budget, dict) and budget.get("verification_left") is True:
+            verification += 1
+    done_pct = 100 * done / total if total else None
+    bad_pct = 100 * spend_bad / spend_total if spend_total else None
+    return {"runs": total, "done": done, "done_pct": done_pct, "spend_total": spend_total, "spend_bad": spend_bad,
+            "spend_bad_pct": bad_pct, "unknown_cost": unknown, "approval_escalations": approvals,
+            "verification_budget_stops": verification,
+            "ok": {"done": done_pct is not None and done_pct >= DONE_TARGET,
+                   "spend": bad_pct is not None and bad_pct < SPEND_BAD_TARGET if spend_total else total > 0,
+                   "approvals": total > 0 and approvals == 0, "verification": total > 0 and verification == 0}}
+
+
+def _unattended_lines(u: dict) -> list[str]:
+    lines = ["Unattended ships (spec 131):",
+             f"  runs: {u['runs']} (/component:ship and /system:ship under cplat headless)"]
+    if not u["runs"]:
+        return lines
+    mark = lambda ok: "ok" if ok else "MISSED"  # noqa: E731
+    ok = u["ok"]
+    pct = u["spend_bad_pct"] or 0.0
+    lines += [f"  done: {u['done']}/{u['runs']} = {u['done_pct']:.1f}%   (target >= 70%)   {mark(ok['done'])}",
+              f"  spend in escalated or failed: ${u['spend_bad']:.2f} of ${u['spend_total']:.2f} = {pct:.1f}%   (target < 20%)   "
+              f"{mark(ok['spend'])}   [{u['unknown_cost']} runs with unknown cost]",
+              f"  escalations on a git/gh approval: {u['approval_escalations']}   (target 0)   {mark(ok['approvals'])}",
+              f"  budget stops with only verification left: {u['verification_budget_stops']}   (target 0)   {mark(ok['verification'])}"]
+    return lines
 
 
 def aggregate_validation(kept: list[dict]) -> dict:
@@ -289,6 +351,8 @@ def render_text(agg: dict) -> str:
     lines.append(f"Reruns by check: {_pairs(agg['reruns']['by_check'])}")
     lines.append("Filed issues: " + ", ".join(f"{k} {n}" for k, n in agg["filed"].items()))
     lines += runs_usage_report.render_usage_lines(agg["usage"])
+    if "unattended_ships" in agg:
+        lines += _unattended_lines(agg["unattended_ships"])
     validation = agg.get("validation") or {}
     if validation.get("rules"):
         lines.append("Validation checks per rule: " + "; ".join(

@@ -141,9 +141,12 @@ def _attribute(rec: dict, session: transcripts.Session, entries: list[dict], own
     return out
 
 
-def _wrap(items: list[tuple], sessions: list[str], reasons: list[str], with_phase: bool) -> dict:
+def _wrap(items: list[tuple], sessions: list[str], reasons: list[str], with_phase: bool,
+          incomplete_read: bool = False) -> dict:
     prices = usage_cost.load_prices()
     out = usage_cost.section(items, prices)
+    if incomplete_read:
+        out["totals"]["cost_complete"] = False
     if with_phase:
         out.setdefault("by_phase", {})
     return {"sessions": sessions, "price_table": prices.taken, "incomplete": "; ".join(reasons) or None, **out}
@@ -153,6 +156,7 @@ def for_run(rec: dict, *, ended_at: str, budget_s: float = 10.0, peek: bool = Fa
     items: list[tuple] = []
     sessions: list[str] = []
     reasons: list[str] = []
+    unread = False
     try:
         import runs
         run_id = rec.get("run_id")
@@ -185,16 +189,19 @@ def for_run(rec: dict, *, ended_at: str, budget_s: float = 10.0, peek: bool = Fa
                 reasons += s.problems
                 items += [(c, share, _phase_of(phases, c.at), role)
                           for c, share, role in _attribute(rec, s, entries, own, start, ended)]
+        unread = bool(reasons)
         if malformed:
             reasons.insert(0, f"{malformed} malformed lines")
         if out_of_time():
+            unread = True
             reasons.append("time budget of 10 s used up")
         if not peek:
             _mark_ended(run_id, ended_at)
     except Exception as exc:  # noqa: BLE001
+        unread = True
         reasons.append(f"error: {type(exc).__name__}")
     try:
-        return _wrap(items, sessions, reasons, True)
+        return _wrap(items, sessions, reasons, True, unread)
     except Exception as exc:  # noqa: BLE001
         return {"sessions": sessions, "price_table": None, "incomplete": f"error: {type(exc).__name__}"}
 

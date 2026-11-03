@@ -90,7 +90,7 @@ def test_no_escalation_in_the_window_reads_none():
 def test_the_json_report_has_the_unclassified_key():
     """AC-088.19: `unclassified` after `pr_wait` with count, escalations, share, by_rule and reasons, in that order."""
     agg = agg_of(mixed())
-    assert list(agg)[-1] == "unclassified" and list(agg).index("pr_wait") + 1 == list(agg).index("unclassified")
+    assert list(agg)[-2:] == ["unclassified", "unattended_ships"] and list(agg).index("pr_wait") + 1 == list(agg).index("unclassified")  # AC-131.18 appends unattended_ships
     u = agg["unclassified"]
     assert list(u) == ["count", "escalations", "share", "by_rule", "reasons"]
     assert (u["count"], u["escalations"], u["share"], u["by_rule"]) == (2, 6, 0.333, 3)

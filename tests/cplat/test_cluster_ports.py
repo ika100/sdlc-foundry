@@ -12,13 +12,34 @@ def sh(snippet: str) -> subprocess.CompletedProcess:
     return subprocess.run(["bash", "-c", f'. "{PORTS}"; {snippet}'], capture_output=True, text=True)
 
 
+def _free(port: int) -> bool:
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
 @pytest.fixture()
 def busy_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    s.listen(1)
-    yield s.getsockname()[1]
-    s.close()
+    """A listening port below the ephemeral range, with the next port free: the scripts pick port + 1, and an ephemeral
+    port's neighbour can be taken by any outgoing connection between their two checks under parallel test load."""
+    import random
+    for port in random.sample(range(20000, 30000), 200):
+        if not (_free(port) and _free(port + 1)):
+            continue
+        s = socket.socket()
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            s.close()
+            continue
+        s.listen(1)
+        yield port
+        s.close()
+        return
+    pytest.fail("no free port pair between 20000 and 30000")
 
 
 def free_port_number() -> int:

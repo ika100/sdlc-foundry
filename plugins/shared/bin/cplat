@@ -5,10 +5,12 @@
 # Resolution order:
 #   1. $CPLAT_PLATFORM          a local platform checkout (platform development, tests)
 #   2. $CPLAT_REF               that git ref, e.g. a release tag, fetched into a cache (`--ref` of update/new-service)
-#   3. the plugin's own repo    the plugin is loaded in place from a checkout (--plugin-dir, a local-path marketplace)
-#   4. the marketplace checkout ~/.claude/plugins/marketplaces/<marketplace>/: the version the plugins were installed from,
+#   3. the platform checkout    the current directory is inside a checkout of the platform repo itself (`shape: platform`
+#                               in its .platform-settings.yml), so fixes merged there apply without a release (#320)
+#   4. the plugin's own repo    the plugin is loaded in place from a checkout (--plugin-dir, a local-path marketplace)
+#   5. the marketplace checkout ~/.claude/plugins/marketplaces/<marketplace>/: the version the plugins were installed from,
 #                               no network
-#   5. main, fetched into ~/.cache/sdlc-foundry (the behaviour before this launcher)
+#   6. main, fetched into ~/.cache/sdlc-foundry (the behaviour before this launcher)
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 cache="${XDG_CACHE_HOME:-$HOME/.cache}"
@@ -28,6 +30,9 @@ if [ -n "${CPLAT_PLATFORM:-}" ]; then
 elif [ -n "${CPLAT_REF:-}" ]; then
   root="$cache/sdlc-foundry-ref/$CPLAT_REF"; source="ref $CPLAT_REF"
   fetch "$CPLAT_REF" "$root" >&2
+elif top=$(git rev-parse --show-toplevel 2>/dev/null) && [ -f "$top/scripts/cplat/cplat.py" ] \
+    && grep -qx 'shape: *platform' "$top/.platform-settings.yml" 2>/dev/null; then
+  root=$top; source=checkout
 elif [ -f "$plugin_dir/../../scripts/cplat/cplat.py" ]; then
   root="$plugin_dir/../.."; source=in-place
 else
