@@ -55,7 +55,9 @@ jobs:
           fetch-depth: 0   # the release tags and the base of the comparison
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - id: needs
-        run: uv run scripts/release-check.py needs-upgrade-e2e | tee -a "$GITHUB_OUTPUT"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}   # a pull request decides on its own diff (spec 134); empty elsewhere: the latest tag
+        run: uv run scripts/release-check.py needs-upgrade-e2e ${BASE:+--base "$BASE"} | tee -a "$GITHUB_OUTPUT"
 
   upgrade:
     name: e2e upgrade (previous release → candidate)

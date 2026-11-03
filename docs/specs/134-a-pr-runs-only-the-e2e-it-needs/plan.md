@@ -24,6 +24,7 @@ tasks:
     covers: [AC-134.1, AC-134.4, AC-134.6]
     parallel_safe: false
     depends_on: [t1, t2]
+    done: true
   - id: t4
     title: CONTRIBUTING CI section, ADR-080 and its index row, changelog entry
     files: [CONTRIBUTING.md, docs/adr/080-a-pull-request-runs-only-the-e2e-it-needs.md, docs/adr/README.md, docs/CHANGELOG.md, tests/cplat/test_e2e_docs_134.py]
