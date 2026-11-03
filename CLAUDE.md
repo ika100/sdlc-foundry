@@ -23,7 +23,8 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 | `tests/cplat/`, `tests/e2e/` | pytest suite for the CLI and renderer; the full-stack cluster test. |
 | `devbox.json` | Repo-root devbox env + smoke-test scripts (`validate`, `smoke-*`, `ci-local`). |
 | `docs/specs/` | The platform's own feature specs (ADR-026), indexed by the generated table in `docs/backlog.md`. |
-| `docs/` | Guides, `docs/adr/` (decisions, indexed in its README), `docs/CHANGELOG.md`, `docs/AGENTS.md` (orchestration model: read before changing agents or commands). |
+| `docs/changelog.d/` | Changelog fragments, one file per change (ADR-078); `cplat platform release` assembles them into `docs/CHANGELOG.md`. |
+| `docs/` | Guides, `docs/adr/` (decisions, indexed in its README), `docs/CHANGELOG.md` (released sections), `docs/AGENTS.md` (orchestration model: read before changing agents or commands). |
 
 ## Conventions
 
@@ -32,8 +33,9 @@ This repo is **the source of truth** for Claude Code agents, slash commands, and
 - **Template Jinja gotcha.** GitHub Actions uses `${{ var }}` syntax, which Copier (Jinja) would otherwise interpret. The escape pattern is `${{ '{{' }} var {{ '}}' }}` — already applied in the existing CI workflows. Don't unescape it.
 - **Don't put project-specific content in plugin agents.** Agents are shared across repos. Anything project-specific belongs in the Copier template (which gets parameterised per-repo) or in the consumer's own `CLAUDE.md`.
 - **Platform changes start with a spec.** Run `/component:spec <description>` here (the repo declares `shape: platform`, so spec, plan, build, verify and ship work as in a component repo; releases follow CONTRIBUTING.md, Releases), write an ADR for decisions that outlive the change, and keep `cplat spec check` green.
+- **Changelog entries are fragments.** Write a platform changelog entry as one file `docs/changelog.d/<id>-<slug>.<added|changed|fixed>.md` (`<id>`: the issue, or the spec number; format in its README), never in `docs/CHANGELOG.md`, so parallel PRs do not conflict. Tests find a released entry by its version heading or by content, and check plugin versions with `>=`.
 - **Wait for CI with `cplat pr wait <pr> [-R owner/repo] [--merge]`** (spec 079), never a hand-written polling loop: it reports each check, stops at the first red one and reruns stuck or transient runs once.
-- **No backwards-compat hacks for old marketplace ref.** When breaking, ship a new major version and document the migration in `docs/CHANGELOG.md`.
+- **No backwards-compat hacks for old marketplace ref.** When breaking, ship a new major version and document the migration in the changelog (a fragment in `docs/changelog.d/`).
 
 ## Common changes
 
