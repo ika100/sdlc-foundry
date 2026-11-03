@@ -1,0 +1,512 @@
+{
+ "note": "The files of the 40 pull requests merged before spec 134 (gh pr list --state merged -L 40, 2026-11-03); release = adds a release heading to docs/CHANGELOG.md.",
+ "old_rule_started": 23,
+ "prs": [
+  {
+   "pr": 378,
+   "release": true,
+   "files": [
+    "docs/CHANGELOG.md"
+   ]
+  },
+  {
+   "pr": 376,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "templates/gitops-app/.github/workflows/pin-dev.yml",
+    "templates/gitops-app/.github/workflows/pin-staging.yml",
+    "tests/cplat/test_gitops.py"
+   ]
+  },
+  {
+   "pr": 375,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/ship.py",
+    "scripts/cplat/smoke.py",
+    "scripts/cplat/telemetry.py",
+    "tests/cplat/test_model_callers.py",
+    "tests/cplat/test_nouns_114.py",
+    "tests/cplat/test_system_model_114.py"
+   ]
+  },
+  {
+   "pr": 374,
+   "release": false,
+   "files": [
+    "README.md",
+    "docs/BASELINES.md",
+    "docs/img/demo.gif",
+    "site/src/content/docs/index.mdx"
+   ]
+  },
+  {
+   "pr": 373,
+   "release": false,
+   "files": [
+    ".claude-plugin/marketplace.json",
+    "docs/CHANGELOG.md",
+    "plugins/component/.claude-plugin/plugin.json",
+    "plugins/component/commands/build.md",
+    "plugins/svc-go/.claude-plugin/plugin.json",
+    "plugins/svc-go/agents/tester.md",
+    "plugins/svc-java/.claude-plugin/plugin.json",
+    "plugins/svc-java/agents/tester.md",
+    "plugins/svc/.claude-plugin/plugin.json",
+    "plugins/svc/agents/tester.md",
+    "plugins/svc/skills/spec-format/references/testing.md",
+    "plugins/web/.claude-plugin/plugin.json",
+    "plugins/web/agents/tester.md"
+   ]
+  },
+  {
+   "pr": 372,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/pr.py",
+    "scripts/cplat/ship.py",
+    "tests/cplat/test_tags_and_wait.py"
+   ]
+  },
+  {
+   "pr": 366,
+   "release": false,
+   "files": [
+    "README.md",
+    "docs/img/demo.gif",
+    "site/src/content/docs/index.mdx"
+   ]
+  },
+  {
+   "pr": 365,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "docs/specs/087-every-run-is-recorded-in-a-private-run/design.md",
+    "scripts/cplat/runs_store.py",
+    "tests/cplat/test_runs_store.py"
+   ]
+  },
+  {
+   "pr": 363,
+   "release": false,
+   "files": [
+    "README.md",
+    "docs/img/console/tour.gif",
+    "docs/img/social-preview.png"
+   ]
+  },
+  {
+   "pr": 362,
+   "release": false,
+   "files": [
+    "README.md"
+   ]
+  },
+  {
+   "pr": 361,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/retro.py",
+    "scripts/cplat/retro_report.py",
+    "tests/cplat/test_retro_report.py"
+   ]
+  },
+  {
+   "pr": 360,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/doctor.py",
+    "scripts/cplat/retro_setup.py",
+    "tests/cplat/test_retro_setup.py"
+   ]
+  },
+  {
+   "pr": 359,
+   "release": false,
+   "files": [
+    "templates/web-nextjs/package.json.jinja"
+   ]
+  },
+  {
+   "pr": 358,
+   "release": false,
+   "files": [
+    ".github/workflows/bump-template-pins.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/e2e-upgrade.yml",
+    ".github/workflows/e2e.yml",
+    ".github/workflows/pages.yml",
+    ".github/workflows/release-guard.yml",
+    "templates/gitops-app/.github/workflows/pin-dev.yml",
+    "templates/gitops-app/.github/workflows/pin-staging.yml",
+    "templates/gitops-app/.github/workflows/specs.yml",
+    "templates/library-python/.github/workflows/specs.yml",
+    "templates/service-go/.github/workflows/specs.yml",
+    "templates/service-java/.github/workflows/specs.yml",
+    "templates/service-python/.github/workflows/specs.yml",
+    "templates/web-nextjs/.github/workflows/specs.yml"
+   ]
+  },
+  {
+   "pr": 357,
+   "release": false,
+   "files": [
+    "site/package-lock.json",
+    "site/package.json"
+   ]
+  },
+  {
+   "pr": 354,
+   "release": false,
+   "files": [
+    "CONTRIBUTING.md",
+    "docs/AGENTS.md",
+    "docs/CHANGELOG.md",
+    "docs/adr/072-a-generated-credential-is-written-once-by-a-create-only-job.md",
+    "docs/console.md",
+    "docs/unattended-delivery.md",
+    "templates/gitops-app/CLAUDE.md.jinja"
+   ]
+  },
+  {
+   "pr": 345,
+   "release": true,
+   "files": [
+    "docs/CHANGELOG.md"
+   ]
+  },
+  {
+   "pr": 343,
+   "release": false,
+   "files": [
+    "docs/specs/131-runs-that-finish-on-their-own/spec.md"
+   ]
+  },
+  {
+   "pr": 342,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "templates/cluster-gitops/scripts/system_render.py",
+    "templates/gitops-app/scripts/render.py",
+    "templates/gitops-app/scripts/upgrade-check.py",
+    "tests/cplat/test_broker_119.py",
+    "tests/cplat/test_cache_118.py",
+    "tests/cplat/test_credentials_scan.py",
+    "tests/cplat/test_scale_120.py",
+    "tests/cplat/test_upgrade_check_external.py",
+    "tests/e2e/upgrade.sh"
+   ]
+  },
+  {
+   "pr": 332,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md"
+   ]
+  },
+  {
+   "pr": 331,
+   "release": true,
+   "files": [
+    "docs/CHANGELOG.md",
+    "tests/cplat/test_130_empty_gates.py",
+    "tests/cplat/test_credentials_128_records.py"
+   ]
+  },
+  {
+   "pr": 330,
+   "release": false,
+   "files": [
+    ".github/workflows/ci.yml",
+    "CONTRIBUTING.md",
+    "docs/CHANGELOG.md",
+    "docs/adr/074-a-gate-that-checked-nothing-fails.md",
+    "docs/adr/README.md",
+    "docs/backlog.md",
+    "docs/specs/130-quality-gates-fail-when-they-checked/design.md",
+    "docs/specs/130-quality-gates-fail-when-they-checked/plan.md",
+    "docs/specs/130-quality-gates-fail-when-they-checked/spec.md",
+    "docs/specs/130-quality-gates-fail-when-they-checked/verification.md",
+    "docs/templates.md",
+    "scripts/sync-template-copies.py",
+    "templates/cluster-gitops/devbox.json",
+    "templates/cluster-gitops/scripts/gate.sh",
+    "templates/cluster-gitops/scripts/render.py",
+    "templates/cluster-gitops/scripts/system_render.py",
+    "templates/gitops-app/devbox.json",
+    "templates/gitops-app/scripts/gate.sh",
+    "templates/gitops-app/scripts/render.py",
+    "templates/library-python/devbox.json",
+    "templates/library-python/scripts/gate.sh",
+    "templates/service-go/devbox.json.jinja",
+    "templates/service-go/scripts/gate.sh",
+    "templates/service-java/devbox.json.jinja",
+    "templates/service-java/scripts/gate.sh",
+    "templates/service-python/devbox.json",
+    "templates/service-python/scripts/gate.sh",
+    "templates/web-nextjs/devbox.json.jinja",
+    "templates/web-nextjs/scripts/gate.sh",
+    "templates/web-nextjs/vitest.config.mts",
+    "tests/cplat/gates130_support.py",
+    "tests/cplat/test_130_empty_gates.py",
+    "tests/cplat/test_130_gate_sh.py",
+    "tests/cplat/test_sync_template_copies.py"
+   ]
+  },
+  {
+   "pr": 329,
+   "release": false,
+   "files": [
+    "docs/specs/130-quality-gates-fail-when-they-checked/spec.md"
+   ]
+  },
+  {
+   "pr": 328,
+   "release": false,
+   "files": [
+    ".claude-plugin/marketplace.json",
+    "CONTRIBUTING.md",
+    "README.md",
+    "docs/CHANGELOG.md",
+    "docs/DOMAIN-MODEL.md",
+    "docs/adr/073-the-platform-release-is-one-command-that-reads-its-progress-from-git-and-github.md",
+    "docs/adr/README.md",
+    "docs/backlog.md",
+    "docs/specs/129-a-platform-release-command/design.md",
+    "docs/specs/129-a-platform-release-command/plan.md",
+    "docs/specs/129-a-platform-release-command/spec.md",
+    "docs/specs/129-a-platform-release-command/verification.md",
+    "plugins/component/.claude-plugin/plugin.json",
+    "plugins/component/commands/release.md",
+    "plugins/platform/.claude-plugin/plugin.json",
+    "plugins/platform/README.md",
+    "plugins/platform/commands/release.md",
+    "scripts/cplat/cplat.py",
+    "scripts/cplat/platrelease.py",
+    "scripts/cplat/platrelease_changelog.py",
+    "scripts/cplat/platrelease_publish.py",
+    "scripts/cplat/platrelease_state.py",
+    "scripts/release-check.py",
+    "tests/cplat/platrelease_world.py",
+    "tests/cplat/test_platrelease_129_docs.py",
+    "tests/cplat/test_platrelease_129_prepare.py",
+    "tests/cplat/test_platrelease_129_publish.py",
+    "tests/cplat/test_platrelease_129_state.py",
+    "tests/cplat/test_plugins_114.py",
+    "tests/cplat/test_scale_120_cmds.py",
+    "tests/cplat/test_upgrade_121_ops.py"
+   ]
+  },
+  {
+   "pr": 327,
+   "release": false,
+   "files": [
+    "docs/specs/129-a-platform-release-command/spec.md"
+   ]
+  },
+  {
+   "pr": 318,
+   "release": false,
+   "files": [
+    ".claude-plugin/marketplace.json",
+    "docs/CHANGELOG.md",
+    "docs/DOMAIN-MODEL.md",
+    "docs/HOW-IT-WORKS.md",
+    "docs/USER-JOURNEY.md",
+    "docs/adr/018-secrets-with-external-secrets-operator.md",
+    "docs/adr/059-in-cluster-buckets-on-seaweedfs-per-instance.md",
+    "docs/adr/064-a-cache-is-a-platform-rendered-valkey-statefulset.md",
+    "docs/adr/065-a-broker-is-nats-jetstream-with-declared-streams-and-per-component-users.md",
+    "docs/adr/072-a-generated-credential-is-written-once-by-a-create-only-job.md",
+    "docs/adr/README.md",
+    "docs/backlog.md",
+    "docs/specs/128-generated-passwords-match-the-running/design.md",
+    "docs/specs/128-generated-passwords-match-the-running/plan.md",
+    "docs/specs/128-generated-passwords-match-the-running/spec.md",
+    "docs/specs/128-generated-passwords-match-the-running/verification.md",
+    "plugins/component/.claude-plugin/plugin.json",
+    "plugins/component/commands/add.md",
+    "scripts/check-pins.py",
+    "scripts/cplat/update.py",
+    "templates/cluster-gitops/scripts/system_render.py",
+    "templates/gitops-app/scripts/render.py",
+    "tests/cplat/broker_fixtures.py",
+    "tests/cplat/cache_fixtures.py",
+    "tests/cplat/credentials_fixtures.py",
+    "tests/cplat/test_backup_117.py",
+    "tests/cplat/test_broker_119.py",
+    "tests/cplat/test_bucket_116.py",
+    "tests/cplat/test_bucket_116_cmds.py",
+    "tests/cplat/test_cache_118.py",
+    "tests/cplat/test_cache_118_cmds.py",
+    "tests/cplat/test_cache_url_127.py",
+    "tests/cplat/test_credentials_128_records.py",
+    "tests/cplat/test_credentials_128_render.py",
+    "tests/cplat/test_credentials_128_script.py",
+    "tests/cplat/test_credentials_128_update.py",
+    "tests/cplat/test_gitops.py",
+    "tests/cplat/test_migrate_114.py",
+    "tests/cplat/test_resources_115.py",
+    "tests/cplat/test_resources_115_cmds.py",
+    "tests/cplat/test_scale_120.py",
+    "tests/cplat/test_system_render_114.py",
+    "tests/cplat/test_update_127.py",
+    "tests/cplat/test_upgrade_121.py",
+    "tests/cplat/upgrade_fixtures.py",
+    "tests/e2e/run.sh",
+    "tests/e2e/upgrade.sh"
+   ]
+  },
+  {
+   "pr": 317,
+   "release": false,
+   "files": [
+    "docs/specs/128-generated-passwords-match-the-running/spec.md"
+   ]
+  },
+  {
+   "pr": 315,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/update.py",
+    "tests/cplat/test_cluster_125_delivery.py"
+   ]
+  },
+  {
+   "pr": 314,
+   "release": false,
+   "files": [
+    "tests/e2e/upgrade.sh"
+   ]
+  },
+  {
+   "pr": 313,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/feedback.py",
+    "tests/cplat/test_feedback.py"
+   ]
+  },
+  {
+   "pr": 311,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/ship.py",
+    "tests/cplat/test_ship_checks.py"
+   ]
+  },
+  {
+   "pr": 310,
+   "release": false,
+   "files": [
+    ".claude-plugin/marketplace.json",
+    "docs/CHANGELOG.md",
+    "plugins/system/.claude-plugin/plugin.json",
+    "plugins/system/commands/set.md",
+    "scripts/cplat/systemset.py",
+    "tests/cplat/test_system_set.py"
+   ]
+  },
+  {
+   "pr": 308,
+   "release": false,
+   "files": [
+    ".claude-plugin/marketplace.json",
+    "docs/CHANGELOG.md",
+    "docs/CLUSTERS.md",
+    "plugins/cluster/.claude-plugin/plugin.json",
+    "plugins/cluster/commands/new.md",
+    "scripts/cplat/clusterrepo.py",
+    "templates/cluster-gitops/cluster.yaml.jinja",
+    "templates/cluster-gitops/copier.yml",
+    "tests/cplat/test_cluster_125_cmds.py"
+   ]
+  },
+  {
+   "pr": 307,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "templates/cluster-gitops/scripts/system_render.py",
+    "templates/gitops-app/scripts/render.py",
+    "tests/cplat/broker_fixtures.py",
+    "tests/cplat/cache_fixtures.py",
+    "tests/cplat/scale_fixtures.py",
+    "tests/cplat/test_backup_117.py",
+    "tests/cplat/test_bucket_116.py",
+    "tests/cplat/test_resources_115.py"
+   ]
+  },
+  {
+   "pr": 306,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/console/actions.py",
+    "scripts/cplat/console/board.py",
+    "scripts/cplat/console/panels.py",
+    "scripts/cplat/console/server.py",
+    "scripts/cplat/console/switcher.py",
+    "tests/cplat/test_console_actions.py"
+   ]
+  },
+  {
+   "pr": 304,
+   "release": false,
+   "files": [
+    ".claude-plugin/marketplace.json",
+    "docs/CHANGELOG.md",
+    "plugins/cluster/.claude-plugin/plugin.json",
+    "plugins/cluster/commands/add.md",
+    "scripts/cplat/clusterrepo.py",
+    "tests/cplat/test_cluster_125_cmds.py",
+    "tests/cplat/test_cluster_125_delivery.py"
+   ]
+  },
+  {
+   "pr": 303,
+   "release": false,
+   "files": [
+    ".claude-plugin/marketplace.json",
+    "docs/CHANGELOG.md",
+    "plugins/component/.claude-plugin/plugin.json",
+    "plugins/component/commands/spec.md",
+    "scripts/cplat/spec.py",
+    "tests/cplat/test_spec.py"
+   ]
+  },
+  {
+   "pr": 302,
+   "release": false,
+   "files": [
+    "docs/CHANGELOG.md",
+    "scripts/cplat/ship.py",
+    "tests/cplat/test_pr_wait_superseded.py"
+   ]
+  },
+  {
+   "pr": 301,
+   "release": false,
+   "files": [
+    "tests/cplat/test_plugins_114.py"
+   ]
+  },
+  {
+   "pr": 300,
+   "release": false,
+   "files": [
+    "tests/cplat/test_124_needs.py"
+   ]
+  }
+ ]
+}
