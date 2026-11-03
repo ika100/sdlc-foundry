@@ -27,6 +27,9 @@ def world(tmp_path, monkeypatch):
     repo = make_repo(tmp_path)
     git(repo, "config", "user.name", "Tester")
     git(repo, "config", "user.email", "tester@example.test")
+    (repo / ".gitignore").write_text(".claude/settings.local.json\n")      # as a generated repo ignores it
+    git(repo, "add", ".gitignore")
+    git(repo, "commit", "-qm", "ignore local settings")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"

@@ -60,6 +60,7 @@ def pre(w, tmp_path, monkeypatch):  # noqa: F811
         c = w.clone(rid)
         (c / ".claude").mkdir(exist_ok=True)
         (c / ".claude" / "settings.json").write_text('{"permissions": {"allow": ["Bash(devbox run *)"]}}\n')
+        (c / ".gitignore").write_text(".claude/settings.local.json\n")     # as a generated repo ignores it
         w_git(c, "add", "-A")
         w_git(c, "commit", "-qm", "allowlist")
     w.user = user
