@@ -140,7 +140,12 @@ if how == "branch-only":
     g("checkout", "-q", "-B", %(branch)r)
     sys.exit(0)
 
+import datetime, runs
+if cfg.get("now"):
+    runs.utcnow = lambda: datetime.datetime.fromisoformat(cfg["now"])
 import ship, spec
+if cfg.get("command") == "ship" and unit != "plan" and (repo / "docs" / "specs" / %(spec_id)r / "plan.md").is_file():
+    ship.start(repo, "7", True)              # like `cplat component ship start`, step 1 of every /component:ship session (it resumes)
 if unit == "plan":
     d = repo / "docs" / "specs" / %(spec_id)r
     if not (d / "plan.md").is_file():
@@ -277,6 +282,9 @@ class World:
     def run(self, *args, prompt=None):
         import headless
         self.patch_layers()                  # imports preflight: a missing module fails the test, not its fixture
+        import runs
+        self.cfg["now"] = runs.utcnow().isoformat()   # the fake sessions run on the test's clock, not the wall clock
+        self.write_cfg()
         return headless.main([prompt or f"/component:{self.command} 7", "--repo", str(self.repo), *args])
 
 

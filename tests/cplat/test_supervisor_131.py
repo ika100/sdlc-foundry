@@ -44,7 +44,7 @@ def test_each_prompt_names_its_unit(w):  # AC-131.1
 def test_the_prompt_keeps_the_other_arguments(tmp_path, monkeypatch):  # AC-131.1
     w = World(tmp_path, monkeypatch, plan=False)
     assert w.run(prompt="/component:ship 7 --no-merge") == 0
-    assert [s["argv"][1] for s in w.sessions()][2] == "/component:ship 7 --no-merge --unit red-tests"
+    assert [s["argv"][1] for s in w.sessions()][1] == "/component:ship 7 --no-merge --unit red-tests"
 
 
 def test_the_summary_log_has_one_line_per_session_naming_unit_and_ending(w):  # AC-131.1
@@ -163,7 +163,7 @@ def test_the_grace_lets_the_verification_start_and_never_land(planned, store, ca
     assert "budget grace: verification" in out
     assert planned.units_run() == ["red-tests", "task:t1", "task:t2", "task:t3", "verification"]
     assert "budget exhausted: invocations" in out
-    rec = stored(store)[-1]
+    rec = [r for r in stored(store) if r["kind"] == "headless"][-1]   # its ship record has the same frozen ended_at
     assert rec["stop_reason"] == "budget" and rec["budget"]["grace"]["for"] == "verification"
     assert rec["budget"]["verification_left"] in (True, False)
 
