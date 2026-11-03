@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Fixed
+
+**Release notes keep working links, and a duplicated changelog entry fails the PR (#336).** The GitHub release took the `## [X.Y.Z]` section as is, so links relative to `docs/` (`specs/…`, `adr/…`, `../README.md`) resolved against `/releases/tag/` and returned 404; the release notes now point them at `https://github.com/<owner>/<repo>/blob/vX.Y.Z/docs/…`. The 5.5.0 notes also repeated an entry left over from a merge conflict: `release-check.py rows`, which runs on every PR, now fails when a changelog section repeats a paragraph and names the section and the entry.
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

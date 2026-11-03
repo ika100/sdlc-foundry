@@ -104,6 +104,27 @@ def test_the_release_notes_are_taken_from_the_merge_commit(w):  # AC-129.15
     assert w.release_notes.strip() == w.git("show", f"{w.merge_sha}:docs/CHANGELOG.md").split("## [5.5.0] - 2026-06-15\n")[1].split("\n## [")[0].strip()
 
 
+LINKED = ("**Linked.** See [the spec](specs/200-x/spec.md), [ADR-090](adr/090-y.md \"t\"), [the guide](HOW-IT-WORKS.md#map),\n"
+          "[the readme](../README.md), [an anchor](#top), [a site](https://example.com/a.md) and [mail](mailto:a@b.c) (#336).")
+ABSOLUTE = ("**Linked.** See [the spec](https://github.com/acme/shop/blob/v5.5.0/docs/specs/200-x/spec.md), "
+            "[ADR-090](https://github.com/acme/shop/blob/v5.5.0/docs/adr/090-y.md \"t\"), "
+            "[the guide](https://github.com/acme/shop/blob/v5.5.0/docs/HOW-IT-WORKS.md#map),\n"
+            "[the readme](https://github.com/acme/shop/blob/v5.5.0/README.md), [an anchor](#top), "
+            "[a site](https://example.com/a.md) and [mail](mailto:a@b.c) (#336).")
+
+
+def test_relative_links_in_the_release_notes_point_at_the_tagged_docs_336(w, monkeypatch):  # AC-129.15
+    """#336: links relative to docs/ resolve against /releases/tag/ on GitHub; the notes carry absolute blob URLs."""
+    import platrelease_world
+    monkeypatch.setattr(platrelease_world, "NOTES", LINKED)
+    w.in_state("merged")
+    r = w.run()
+    assert r.rc == 3 and f"--- release notes ---\n{ABSOLUTE}\n--- end ---" in r.out, r.out
+    assert w.run("--confirm", "tag").rc == 0
+    assert w.release_notes.strip() == ABSOLUTE
+    assert LINKED in w.git("show", f"{w.merge_sha}:docs/CHANGELOG.md")     # the changelog itself keeps its relative links
+
+
 # ---------------- AC-129.16 ----------------
 
 def test_a_green_release_guard_finishes_the_release_with_both_urls(w):  # AC-129.16

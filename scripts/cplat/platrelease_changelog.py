@@ -3,10 +3,13 @@ plugin/marketplace version mismatches. Pure text and file reading: no git, no gh
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 from pathlib import Path
 
 HEADING = re.compile(r"^## \[", re.M)
+LINK = re.compile(r"(\]\(\s*)([^)\s]+)")
+ABSOLUTE = re.compile(r"^(?:[a-z][a-z0-9+.-]*:|#|/)", re.I)
 UNRELEASED = re.compile(r"^## \[Unreleased\][^\n]*(?:\n|$)", re.M)
 
 
@@ -42,6 +45,20 @@ def section_body(text: str, version: str) -> str | None:
     if not m:
         return None
     return _strip_blank(_body_after(text, m.end())[0])
+
+
+def absolute_links(body: str, slug: str, tag: str, base: str = "docs") -> str:
+    """Rewrite Markdown links relative to `base` (`specs/...`, `adr/...`, `../README.md`) to
+    https://github.com/<slug>/blob/<tag>/<path>, so they resolve on the GitHub release page (#336)."""
+    def fix(m: re.Match) -> str:
+        target = m[2]
+        if ABSOLUTE.match(target):
+            return m[0]
+        path = posixpath.normpath(posixpath.join(base, target))
+        if path.startswith(".."):
+            return m[0]
+        return f"{m[1]}https://github.com/{slug}/blob/{tag}/{path}"
+    return LINK.sub(fix, body)
 
 
 def _strip_blank(body: str) -> str:
