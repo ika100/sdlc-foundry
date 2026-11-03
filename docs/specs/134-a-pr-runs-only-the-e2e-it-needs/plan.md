@@ -17,6 +17,7 @@ tasks:
     covers: [AC-134.5, AC-134.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: e2e.yml decide job and the part matrix; e2e-upgrade.yml decides on the pull request's base; the workflow tests
     files: [.github/workflows/e2e.yml, .github/workflows/e2e-upgrade.yml, tests/cplat/test_e2e_workflows_134.py, tests/cplat/test_upgrade_121_ops.py]
