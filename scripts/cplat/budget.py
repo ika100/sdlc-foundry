@@ -173,8 +173,9 @@ def rescale(run_id: str | None, repo: Path, spec_ids: list[str]) -> list[dict]:
         return []
 
 
-def add_parts(run_id: str | None, parts: dict) -> list[dict]:
-    """Add (placeholder) parts `{key: limits}` and raise the limits to the new sum (never lowers). Never raises."""
+def add_parts(run_id: str | None, parts: dict, replace: str | None = None) -> list[dict]:
+    """Add (placeholder) parts `{key: limits}`, dropping the part `replace` they stand for, and raise the limits to the new
+    sum (never lowers). Never raises."""
     try:
         found = find(run_id)
         if found is None:
@@ -182,6 +183,8 @@ def add_parts(run_id: str | None, parts: dict) -> list[dict]:
         out: list[dict] = []
 
         def add(d: dict) -> None:
+            if replace:
+                d.setdefault("parts", {}).pop(replace, None)
             for k, limits in parts.items():
                 d.setdefault("parts", {})[k] = {"limits": dict(limits)}
             out.extend(_raise(d, _iso(runs.utcnow()), "parts added: " + ", ".join(parts)))
