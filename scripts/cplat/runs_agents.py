@@ -7,7 +7,7 @@ Contract: docs/specs/089-agent-quality-is-measured-per-agent-and/design.md.
 Every public function takes `run_id` first (None, unknown or finished: no-op), never raises and prints nothing.
 A malformed argument marks the run's agent metrics incomplete (runs.mark_incomplete) and records nothing else.
 
-  cplat platform runs agent spawned|merged|conflict|conflict-outcome|replan|fix-round|findings|tester ...   (always exit 0)
+  cplat platform runs agent spawned|merged|conflict|conflict-outcome|replan|fix-round|findings|tester|execution ...   (always exit 0)
 """
 from __future__ import annotations
 
@@ -523,6 +523,23 @@ def refused_test_diff(run_id: str | None, repo: Path, files: Sequence[tuple[str,
     _guard(run_id, go)
 
 
+EXECUTION_MODES = ("parallel", "sequential")
+
+
+def execution(run_id: str | None, repo: Path, mode: str, *, reason: str | None = None) -> None:
+    """Spec 133: how the build ran its tasks (`execution` = {"mode", "reason"}); the last call wins."""
+    if not _live(run_id):
+        return
+
+    def go() -> None:
+        if mode not in EXECUTION_MODES:
+            raise _Malformed(f"execution mode {mode!r}")
+        why = reason.strip() if isinstance(reason, str) and reason.strip() else None
+        if runs.mutate(run_id, lambda rec: rec.__setitem__("execution", {"mode": mode, "reason": why})) == "error":
+            raise _Malformed("the active record could not be updated")
+    _guard(run_id, go)
+
+
 # ---------------- CLI ----------------
 
 class _Usage(Exception):
@@ -578,6 +595,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("tester")
     s.add_argument("--untraced", action="append", default=[])
     s.add_argument("--wrong-failure", action="append", default=[])
+    s = add("execution")
+    s.add_argument("mode")
+    s.add_argument("--reason")
     return p
 
 
@@ -614,6 +634,8 @@ def _dispatch(ns: argparse.Namespace, rid: str | None) -> None:
         findings(rid, repo, cycle, deviations=ns.deviation, spec=ns.spec)
     elif c == "tester":
         tester(rid, repo, untraced=ns.untraced, wrong_failures=ns.wrong_failure)
+    elif c == "execution":
+        execution(rid, repo, ns.mode, reason=ns.reason)
 
 
 def main(argv: list[str]) -> int:

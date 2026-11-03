@@ -10,6 +10,7 @@ tasks:
     covers: [AC-133.1, AC-133.2, AC-133.3, AC-133.4, AC-133.5, AC-133.6, AC-133.7, AC-133.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "`cplat platform runs agent execution parallel|sequential [--reason]` and the calls in /component:build and the worktree fallback reference"
     files: [scripts/cplat/runs_agents.py, plugins/component/commands/build.md, plugins/component/references/build-worktree-fallback.md]
