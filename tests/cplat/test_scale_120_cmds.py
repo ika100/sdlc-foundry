@@ -851,7 +851,8 @@ def test_the_e2e_script_cleans_up_the_scaling_objects_before_the_remaining_steps
 
 def test_the_e2e_script_header_budgets_the_scaling_steps_and_the_job_gets_90_minutes_ac_120_23():  # AC-120.23 (needs a cluster)
     assert re.search(r"(?is)(scal|keda).{0,400}13 minutes", e2e()[:9000])
-    assert re.search(r"(?m)^\s*timeout-minutes:\s*90\b", (ROOT / ".github" / "workflows" / "e2e.yml").read_text())
+    assert re.search(r"(?m)^\s*timeout-minutes:\s*(90\b|\$\{\{ matrix\.part == 'all' && 90 \|\| 45 \}\})",   # spec 134: 90 for the whole run
+                     (ROOT / ".github" / "workflows" / "e2e.yml").read_text())
 
 
 # ---------------- docs, changelog, plugins ----------------

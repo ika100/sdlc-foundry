@@ -3,20 +3,14 @@ name: e2e
 # The whole chain without GitHub or a registry: render the repos from the real templates, build the images, start the
 # platform's own local cluster, apply the generated manifests, probe the services through the Gateway (tests/e2e/run.sh).
 # The second job renders a cluster repo with two systems and proves that one operator install serves both (tests/e2e/cluster.sh).
+# On a pull request the first runs as three parallel parts (E2E_PART core, scaling, backups); nightly and by hand as one job (all).
 on:
   workflow_dispatch:
   schedule:
     - cron: '17 3 * * *'
+  # No paths filter (spec 134, ADR-080): the decide job reads the pull request's diff with scripts/e2e-scope.py (the gitops and cluster
+  # templates, the Dockerfiles, the e2e files and the cplat modules the e2e calls or imports, or a release heading in the changelog).
   pull_request:
-    paths:
-      - 'templates/gitops-app/**'
-      - 'templates/cluster-gitops/**'
-      - 'templates/service-*/Dockerfile*'
-      - 'templates/web-nextjs/Dockerfile*'
-      - 'scripts/cplat/**'
-      - 'shapes.yml'
-      - 'tests/e2e/**'
-      - '.github/workflows/e2e.yml'
 
 # Least privilege by default; jobs that publish packages declare what they need.
 permissions:
@@ -28,10 +22,33 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  e2e:
-    name: e2e (render → build → k3d → Gateway)
+  decide:
+    name: does this change need the cluster e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 90   # about 60 minutes before spec 120 (backups, broker); its scaling steps and KEDA add about 15 (the 5-minute scale-down is the floor)
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.needs.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the base of the comparison
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - id: needs
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: uv run scripts/e2e-scope.py --base "$BASE" | tee -a "$GITHUB_OUTPUT"
+
+  e2e:
+    name: e2e ${{ matrix.part }} (render → build → k3d → Gateway)
+    needs: decide
+    if: needs.decide.outputs.run == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.part == 'all' && 90 || 45 }}   # all: about 41 minutes; the slowest part about 25 (spec 134)
+    strategy:
+      fail-fast: false   # one red part must not hide the others' result
+      matrix:
+        part: ${{ fromJSON(github.event_name == 'pull_request' && '["core","scaling","backups"]' || '["all"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -44,10 +61,14 @@ jobs:
           uv tool install copier
           curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash
       - name: Run the end-to-end test
+        env:
+          E2E_PART: ${{ matrix.part }}
         run: bash tests/e2e/run.sh
 
   e2e-cluster:
     name: e2e cluster (two systems, one operator)
+    needs: decide
+    if: needs.decide.outputs.run == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

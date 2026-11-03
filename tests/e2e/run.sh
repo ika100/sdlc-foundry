@@ -44,8 +44,27 @@
 # The system answers `property_operators: owner` (spec 121): this test installs External Secrets, Kyverno and LGTM itself, so the
 # renderer writes no operator Applications for them. Image pins carry tag and digest (spec 121); checks here compare via the versions table.
 #
-# Needs: docker (running), k3d, kubectl, uv, curl, copier (or uv). Env: E2E_KEEP=1 keeps the cluster, E2E_PORT, E2E_WORK.
+# Parts (spec 134, ADR-080): E2E_PART=all (the default, the nightly run) runs every step in this order. A pull request runs three parts in
+# parallel jobs, each on its own cluster: every part runs the shared setup (system, cluster up, images, addons, manifests, probes, secrets,
+# OTel, Kyverno, the external database and bucket, the caches), then `core` the bucket checks, the broker and the ship steps, `scaling` the
+# broker with the scaling steps inside it, `backups` the backup and restore steps. A block a part leaves out prints `==> skip [<part>] ...`.
+#
+# Needs: docker (running), k3d, kubectl, uv, curl, copier (or uv). Env: E2E_KEEP=1 keeps the cluster, E2E_PORT, E2E_WORK, E2E_PART.
 set -euo pipefail
+
+E2E_PART=${E2E_PART:-all}
+case "$E2E_PART" in
+  all|core|scaling|backups) ;;
+  *) echo "E2E FAIL: E2E_PART must be one of all core scaling backups (got $E2E_PART)" >&2; exit 1;;
+esac
+in_part() { # label part...: true when this run takes one of the parts (or all of them); otherwise prints the skip line
+  local label=$1 p
+  shift
+  [ "$E2E_PART" = all ] && return 0
+  for p in "$@"; do [ "$E2E_PART" = "$p" ] && return 0; done
+  echo; echo "==> skip [$E2E_PART] $label (parts: $*)"
+  return 1
+}
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck source=SCRIPTDIR/lib/probe.sh
@@ -180,6 +199,7 @@ for svc in e2e-api e2e-web; do
   docker build -q -t "localhost:$regport/$svc:latest" "$work/$svc" >/dev/null
   docker push -q "localhost:$regport/$svc:latest" >/dev/null
 done
+if in_part "the broker images (e2e-natsprobe, e2e-worker)" core scaling; then
 # the broker steps probe with what a component uses (nats-py, spec 119): python:3.13-slim + nats-py, built from a Dockerfile on stdin
 printf 'FROM python:3.13-slim\nRUN pip install --no-cache-dir nats-py==2.16.0\n' | docker build -q -t "localhost:$regport/e2e-natsprobe:1" - >/dev/null
 docker push -q "localhost:$regport/e2e-natsprobe:1" >/dev/null
@@ -235,6 +255,7 @@ PY
 printf 'FROM localhost:%s/e2e-natsprobe:1\nCOPY worker.py /worker.py\nUSER 1000\nCMD ["python", "-u", "/worker.py"]\n' "$regport" > "$work/e2e-worker-ctx/Dockerfile"
 docker build -q -t "localhost:$regport/e2e-worker:latest" "$work/e2e-worker-ctx" >/dev/null
 docker push -q "localhost:$regport/e2e-worker:latest" >/dev/null
+fi  # end part
 
 step "Describe the components like /component:add does (into components: of system.yaml) and render the manifests"
 (cd "$work/e2e-gitops" && uv run --with pyyaml --with ruamel.yaml python - "$root" "$registry:$regport" <<'PY'
@@ -472,6 +493,7 @@ s3_same() { # label want got
 }
 H=probe/hello.txt
 
+if in_part "bucket checks (read and write, versioning, the store's pods restarted, re-sync)" core; then
 step "Bucket: e2e-api writes an object through its variables and reads back the same bytes (AC-116.14, AC-128.7)"
 wait_secret_age $ns e2e-files-app 60   # AC-128.7: the keys of the Secret work 60 s after it exists
 s3_retry 12 "bucket e2e-files is not reachable from e2e-api in dev" $ns e2e-api '$A s3api head-bucket --bucket "$S3_BUCKET"'
@@ -555,6 +577,7 @@ echo "OLD=$(cat /tmp/old)"'
 s3_same "object after the re-sync" "$payload" "$(s3_field CONTENT)"
 s3_same "old version after the re-sync" one "$(s3_field OLD)"
 echo "ok   the re-synced bucket keeps its keys, the object and the old version"
+fi  # end part
 
 step "External database: a store entry without password creates no Secret and the ExternalSecret reports the key"
 # ext-db is external in every environment; the ExternalSecret <system>-ext-db-app lands in the overlay of the first
@@ -888,6 +911,7 @@ sys.exit(1 if bad else 0)
 PY
 echo "ok   platform doctor lists no row for a cache"
 
+if in_part "the broker (spec 119)" core scaling; then
 # ---- A message broker (spec 119): NATS JetStream in dev, two events APIs, probes with the components' own variables ----
 # The component overlays are not applied: the probe pods take their variables from the rendered Deployments (kubectl kustomize), so no live
 # workload depends on the broker. At the end the e2e unbinds and deletes the broker by hand, so the ship and backup steps run as before.
@@ -1296,6 +1320,7 @@ sys.exit(1 if bad else 0)
 PY
 echo "ok   platform doctor: operator nack (0.24.0) and broker bus (dev) (nats chart 2.15.1, nats:2.15.2-alpine) are ok"
 
+if in_part "scaling (spec 120)" scaling; then
 # ---- Scaling (spec 120): the queue-triggered consumer e2e-worker (KEDA) and a CPU autoscaler, against the running broker ----
 # Everything is applied without Argo CD, the way its sync would: the rendered files, the HelmChart for the broker, KEDA's objects by their full
 # kind names. Probes connect with the variables of the component they stand for. The time budget is in the header.
@@ -1856,6 +1881,9 @@ left=$(kc get deployments.apps,services,scaledobjects.keda.sh,triggerauthenticat
 jsz_wait 15 S.e2e-orders.messages=3 || { echo "$J"; sfail "after the clean-up /jsz should still show e2e-orders with its 3 messages"; }
 broker_t0=$((broker_t0 + SECONDS - scaling_t0))   # the broker steps' own budget does not count the scaling steps
 sok "jobs, e2e-worker and operators/apps/keda.yaml are removed; the render named the retired stream e2e-jobs and consumer e2e-worker; the scaling steps took $((SECONDS - scaling_t0)) s in total (budget 780 s)"
+fi  # end part
+# the scaling steps start and end on a clean tree; without them the broker steps may leave the rendered files uncommitted
+[ -z "$(git -C "$gitops_repo" status --porcelain)" ] || commit "before the broker removal"
 
 nstep "Broker: resource remove bus is refused while the events APIs orders and audit are bound (AC-119.4)"
 [ -z "$(git -C "$gitops_repo" status --porcelain)" ] || nfail "the tree is dirty before the removal"
@@ -1922,7 +1950,9 @@ for j in $(kc get jobs.batch -o name 2>/dev/null | grep -E 'e2e-bus-credentials'
 left=$(kc get statefulsets.apps,persistentvolumeclaims,secrets,externalsecrets.external-secrets.io,streams.jetstream.nats.io,consumers.jetstream.nats.io,accounts.jetstream.nats.io -o name 2>/dev/null | grep -E 'e2e-bus|e2e-orders|e2e-audit' || true)
 [ -z "$left" ] || nfail "objects of the broker are still in e2e-dev: $left"
 echo "ok   bus is removed from system.yaml (nack.yaml and addons/dev/bus are gone) and deleted from the cluster; the broker steps took $((SECONDS - broker_t0)) s (budget 300 s)"
+fi  # end part
 
+if in_part "the ship steps (verify dev, promote to staging, the staging bucket)" core; then
 # ---- Ship a spec: dev is verified, the build is promoted to staging, applied and verified, the run ends ----
 sns=e2e-staging
 dev_url="http://e2e-api.e2e-dev.localhost:$port"
@@ -1995,7 +2025,9 @@ esac
 
 step "End the ship run"
 (cd "$api_repo" && $cplat component ship finish)
+fi  # end part
 
+if in_part "backups and restores (spec 117)" backups; then
 # ---- Backups (AC-117.24): dev backs up postgres and the namespace into the bucket backups; a point-in-time restore and an environment restore ----
 # These steps come last on purpose: restoring changes dev's database cluster and replaces volumes, which the ship steps above must not see.
 bstep_name=""
@@ -2279,3 +2311,4 @@ bstep "Environment restore: the database cluster was not touched (same UID)"
 [ "$(kc get clusters.postgresql.cnpg.io e2e-postgres-g1 -o jsonpath='{.metadata.uid}')" = "$db_uid" ] || bfail "the UID of the cluster e2e-postgres-g1 changed: environment restores must leave databases alone"
 [ "$(kc get clusters.postgresql.cnpg.io e2e-postgres-g1 -o jsonpath='{.status.phase}')" = "Cluster in healthy state" ] || bfail "the Postgres cluster e2e-postgres-g1 is not healthy after the environment restore"
 echo "ok   e2e-postgres-g1 kept its UID $db_uid"
+fi  # end part

@@ -130,8 +130,9 @@ def test_ac_125_16_the_e2e_workflow_runs_the_cluster_script():  # AC-125.16
     job = wf["jobs"]["e2e-cluster"]
     assert job["name"] == "e2e cluster (two systems, one operator)" and job["timeout-minutes"] == 20
     assert any("bash tests/e2e/cluster.sh" in (step.get("run") or "") for step in job["steps"])
-    on = wf.get("on") or wf.get(True)
-    assert "templates/cluster-gitops/**" in on["pull_request"]["paths"]
+    # spec 134: no PR paths filter; scripts/e2e-scope.py decides, and a cluster-gitops change runs the e2e
+    rule = (ROOT / "scripts" / "e2e-scope.py").read_text()
+    assert 'TEMPLATES = ("templates/gitops-app/", "templates/cluster-gitops/")' in rule
     assert "e2e" in wf["jobs"], "the existing job stays"
 
 
