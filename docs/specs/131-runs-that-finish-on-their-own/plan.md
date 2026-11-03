@@ -38,6 +38,7 @@ tasks:
     covers: [AC-131.15, AC-131.16]
     parallel_safe: true
     depends_on: [t1, t3]
+    done: true
   - id: t6
     title: ship.py — unit gate, units in status, ship unit, rescale on phase build, grace-aware phase check, archive units
     files: [scripts/cplat/ship.py]
@@ -62,6 +63,7 @@ tasks:
     covers: [AC-131.8, AC-131.11, AC-131.13]
     parallel_safe: true
     depends_on: [t2, t3]
+    done: true
   - id: t10
     title: runs report — the Unattended ships (spec 131) section
     files: [scripts/cplat/runs_report.py]
