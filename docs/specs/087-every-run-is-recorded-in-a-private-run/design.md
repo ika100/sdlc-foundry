@@ -262,7 +262,7 @@ def record_path(record: dict) -> str: ...  # runs/YYYY/MM/DD/<run_id>.json, or t
 | `visibility` | `gh api repos/{slug}` → `.visibility` (fallback `.private`), and it caches `.default_branch`. 404 → `StoreMissing`. Any other failure → `StoreUnreachable`. |
 | `create_private` | `gh repo create {slug} --private --add-readme --description "sdlc-foundry run records (private)"` |
 | `put` | (1) `GET repos/{slug}/git/ref/heads/{branch}` → head sha. On 404/409 (empty repo): `PUT repos/{slug}/contents/README.md` once, then again. (2) `GET repos/{slug}/git/commits/{sha}` → tree sha. (3) `POST repos/{slug}/git/trees` `{"base_tree", "tree": [{"path", "mode": "100644", "type": "blob", "content"}]}`. (4) `POST repos/{slug}/git/commits` `{"message", "tree", "parents": [sha]}`. (5) `PATCH repos/{slug}/git/refs/heads/{branch}` `{"sha", "force": false}`. On 422/409 in (5): start again from (1), at most 3 attempts, then `StoreUnreachable("concurrent writes")`. JSON bodies go through `--input -`. |
-| `read` | `gh api graphql` with up to 40 aliases per query, `d<i>: object(expression: "HEAD:runs/YYYY/MM/DD") { ... on Tree { entries { name object { ... on Blob { text } } } } }`. A missing day dir is `null` and is skipped. Returns `(path, text)` pairs. |
+| `read` | `gh api graphql` with up to 3 day aliases per query (40 until a busy fortnight timed out the 2026-11-03 retro; a timed-out query is retried once), `d<i>: object(expression: "HEAD:runs/YYYY/MM/DD") { ... on Tree { entries { name object { ... on Blob { text } } } } }`. A missing day dir is `null` and is skipped. Returns `(path, text)` pairs. |
 
 ### CLI — `cplat runs`
 
