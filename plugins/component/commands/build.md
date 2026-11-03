@@ -60,8 +60,8 @@ From `plan.md`: **skip tasks with `done: true`**. Run `cplat component build sch
 
 Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and run a throwaway Agent with `isolation: "worktree"` whose one task is to report `git rev-parse HEAD` in its worktree.
 
-- It errors ("Cannot create agent worktree", "not in a git repository") or reports a HEAD other than `$FEATURE_HEAD` → read `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md` and follow it (every task runs sequentially; `worktree.baseRef: "head"`).
-- It reports `$FEATURE_HEAD` → parallel batches are safe (every task branch starts at the feature head, so merging brings only that task's commits): `cplat platform runs agent execution parallel`.
+- It errors ("Cannot create agent worktree", "not in a git repository") or reports a HEAD other than `$FEATURE_HEAD` → read `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md` and follow it (sequential; `worktree.baseRef: "head"`; start the session in the repo root).
+- It reports `$FEATURE_HEAD` → parallel batches are safe (each task branch starts at the feature head): `cplat platform runs agent execution parallel`.
 
 ### 2.3 Coder prompt (every task)
 

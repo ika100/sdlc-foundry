@@ -286,6 +286,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/open-system":
             try:
                 self.reply_json(200, switcher.open_system(str(body.get("repo") or ""), repo_dir=self.ctx.repo_dir))
+            except switcher.InvalidRepo as e:
+                raise HttpError(400, "invalid repository", str(e)) from e
             except ValueError as e:
                 raise HttpError(412, "no local clone", str(e)) from e
             except RuntimeError as e:
@@ -355,7 +357,7 @@ class Handler(BaseHTTPRequestHandler):
         repo = str(run.get("repo") or "")
         if "/" in repo:
             clone = actions.clone_of(repo, self.ctx.repo_dir)
-            if clone.is_dir():
+            if actions.valid_system_clone(repo, clone):   # #344: never a same-named folder with another origin
                 return str(clone), ""
             return str(self.ctx.repo_dir), f"No local clone of {repo} at {clone}; started in this system's clone instead."
         return str(self.ctx.repo_dir), "The run names no repository; started in this system's clone."

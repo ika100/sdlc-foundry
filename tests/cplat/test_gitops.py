@@ -600,6 +600,19 @@ def test_protected_repos_fall_back_to_auto_merge(gitops_repo):
     assert 'gh workflow run ci.yml --ref "$BRANCH"' in tail and 'gh pr merge "$PR" --auto --squash --delete-branch' in tail
 
 
+@pytest.mark.parametrize("name", ["pin-dev.yml", "pin-staging.yml"])
+def test_public_repos_approve_only_their_own_held_pin_runs_368(gitops_repo, name):
+    """#368: on a public repo GitHub holds the bot-opened PR's runs; the fallback approves those runs and no others."""
+    wf = _workflow(gitops_repo, name)
+    assert wf["permissions"]["actions"] == "write"
+    script = wf["jobs"]["merge"]["steps"][0]["run"]
+    tail = script[script.index('gh pr merge "$PR" --auto'):]
+    assert '--jq .private)" = "false"' in tail                                  # only public repos
+    assert "event=pull_request&head_sha=$sha" in tail                            # the commit this workflow pushed
+    assert 'head_branch == \\"$BRANCH\\"' in tail and 'conclusion == \\"action_required\\"' in tail
+    assert 'actions/runs/$id/approve' in tail and "::warning::" in tail         # a refused approval is reported, not fatal
+
+
 def test_a_failing_pin_never_reaches_main(gitops_repo):
     """AC-062.6: the pin only lands through the PR, merged after CI passed (spec 065), never pushed to main."""
     text = (gitops_repo / ".github" / "workflows" / "pin-dev.yml").read_text()
