@@ -1,0 +1,121 @@
+---
+// The recorded demo run (2026-11-03) as a terminal player with a clickable timeline: each step seeks the player to its
+// chapter marker and opens what was typed, what Claude asked and did, the result and links to the real artifacts.
+// The recording is shipped gzip-compressed (GitHub Pages does not compress it) and unpacked in the browser.
+import { steps } from './demo-steps';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const src = `${base}/demo/demo-run.cast.gz`;
+const marks = steps.map((s) => s.at);
+---
+
+<div class="walkthrough" data-walkthrough data-src={src} data-marks={JSON.stringify(marks)}>
+  <div class="walkthrough-player" data-player>
+    <noscript>The player needs JavaScript; the <a href={`${base}/img/demo.gif`}>animated GIF</a> shows the same run.</noscript>
+  </div>
+  <ol class="walkthrough-steps">
+    {steps.map((step, i) => (
+      <li data-step={i}>
+        <details name="walkthrough-step">
+          <summary><span class="walkthrough-row">
+            <span class="walkthrough-num">{i + 1}</span>
+            <span class="walkthrough-head">
+              <span class="walkthrough-title">{step.title}</span>
+              <code class="walkthrough-cmd">{step.command}</code>
+            </span>
+            <span class="walkthrough-time" title={`measured ${step.measured} · without the stalls ${step.ideal}`}>
+              {step.measured}<span class="walkthrough-ideal"> · ideal {step.ideal}</span>
+            </span>
+          </span></summary>
+          <div class="walkthrough-body">
+            {step.sections.map((sec) => (
+              <section>
+                <h4>{sec.heading}</h4>
+                {sec.text && <p set:html={sec.text} />}
+                {sec.items && <ul>{sec.items.map((item) => <li set:html={item} />)}</ul>}
+                {sec.code && <pre><code>{sec.code}</code></pre>}
+              </section>
+            ))}
+            {step.links.length > 0 && (
+              <section>
+                <h4>Evidence</h4>
+                <ul class="walkthrough-links">
+                  {step.links.map((l) => <li><a href={l.href} target="_blank" rel="noopener">{l.label}</a></li>)}
+                </ul>
+              </section>
+            )}
+          </div>
+        </details>
+      </li>
+    ))}
+  </ol>
+</div>
+
+<script>
+  import * as AsciinemaPlayer from 'asciinema-player';
+  import 'asciinema-player/dist/bundle/asciinema-player.css';
+
+  const root = document.querySelector<HTMLElement>('[data-walkthrough]');
+  if (root) {
+    const marks: number[] = JSON.parse(root.dataset.marks ?? '[]');
+    const items = Array.from(root.querySelectorAll<HTMLLIElement>('[data-step]'));
+    const load = async () => {
+      const res = await fetch(root.dataset.src!);
+      if (!res.ok) throw new Error(`recording: HTTP ${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return new TextDecoder().decode(bytes);   // a server already unpacked it
+      return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    };
+    const player = AsciinemaPlayer.create({ data: load }, root.querySelector<HTMLElement>('[data-player]')!, {
+      fit: 'width', theme: 'monokai', poster: 'npt:0:16', idleTimeLimit: 12, terminalLineHeight: 1.25,
+    });
+
+    // highlight the step the playback is in
+    const activeAt = (t: number) => marks.reduce((cur, m, i) => (t + 0.05 >= m ? i : cur), 0);
+    const highlight = (i: number) => items.forEach((li, j) => li.classList.toggle('is-active', i === j));
+    player.addEventListener('marker', (e) => highlight(e.index));
+    setInterval(() => highlight(activeAt(player.getCurrentTime() ?? 0)), 700);
+
+    // opening a step jumps the player to it
+    items.forEach((li, i) => {
+      li.querySelector('details')!.addEventListener('toggle', async (e) => {
+        if (!(e.target as HTMLDetailsElement).open) return;
+        highlight(i);
+        await player.seek({ marker: i });
+        await player.play();
+        root.querySelector('[data-player]')!.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    });
+  }
+</script>
+
+<style>
+  .walkthrough { display: grid; gap: 1.25rem; }
+  .walkthrough-player { border-radius: 0.5rem; overflow: hidden; min-height: 8rem; background: #272822; }
+  .walkthrough-steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; counter-reset: none; }
+  .walkthrough-steps > li { margin: 0; border: 1px solid var(--sl-color-gray-5); border-radius: 0.5rem; background: var(--sl-color-bg-nav); }
+  .walkthrough-steps > li.is-active { border-color: var(--sl-color-accent); box-shadow: 0 0 0 1px var(--sl-color-accent); }
+  .walkthrough summary { display: block; padding: 0.6rem 0.85rem; cursor: pointer; list-style: none; }
+  .walkthrough summary::before, .walkthrough summary::after { content: none !important; display: none !important; }
+  .walkthrough summary::-webkit-details-marker, .walkthrough summary::marker { display: none; content: ''; }
+  .walkthrough-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.75rem; }
+  .walkthrough-num { display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: 999px; background: var(--sl-color-accent-low); color: var(--sl-color-accent-high); font-weight: 600; font-size: var(--sl-text-sm); }
+  .is-active .walkthrough-num { background: var(--sl-color-accent); color: var(--sl-color-black); }
+  .walkthrough-head { display: grid; gap: 0.15rem; min-width: 0; }
+  .walkthrough-title { font-weight: 600; color: var(--sl-color-white); }
+  .walkthrough-cmd { font-size: var(--sl-text-xs); overflow-wrap: anywhere; justify-self: start; }
+  .walkthrough-time { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); white-space: nowrap; text-align: right; }
+  .walkthrough-ideal { color: var(--sl-color-gray-3); }
+  .walkthrough-body { padding: 0 0.85rem 0.85rem 3.35rem; display: grid; gap: 0.75rem; }
+  .walkthrough-body section { margin: 0; }
+  .walkthrough-body h4 { margin: 0 0 0.25rem; font-size: var(--sl-text-sm); text-transform: uppercase; letter-spacing: 0.04em; color: var(--sl-color-gray-3); }
+  .walkthrough-body p, .walkthrough-body ul { margin: 0; }
+  .walkthrough-body pre { margin: 0.25rem 0 0; padding: 0.6rem 0.75rem; border-radius: 0.375rem; background: var(--sl-color-gray-6); font-size: var(--sl-text-xs); overflow-x: auto; }
+  .walkthrough-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; padding: 0; list-style: none; }
+  .walkthrough-links li { margin: 0; }
+  @media (max-width: 40rem) {
+    .walkthrough-row { grid-template-columns: auto 1fr; }
+    .walkthrough-time { grid-column: 2; text-align: left; }
+    .walkthrough-body { padding-left: 0.85rem; }
+  }
+</style>
