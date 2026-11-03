@@ -23,11 +23,11 @@ Print its output verbatim.
 3. `cplat spec check <id> --require approved`. If it fails, show the errors and the fix (`/component:spec approve <NNN>` or `/component:spec --amend …`) and stop.
 4. Switch to `feature/<spec_id>` (create it from `main` if it does not exist).
 5. If `plan.md` exists and any task has `done: true`, the spec is partly built: ask before re-planning (task progress is lost; the build would redo those tasks).
-6. `SPEC_HASH=$(cplat spec hash <id>)`. Build `<project-map>` (`ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`).
+6. `SPEC_HASH=$(cplat spec hash <id>)`. `ADR_NEXT=$(cplat spec adr-next)`: the first free ADR number, past the ones other branches and open PRs hold (#337). Build `<project-map>` (`ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`).
 
 ## 2. Architect
 
-**architect** agent (`agents.architect`, or `svc:architect`), prompt: `SPEC_DIR: docs/specs/<spec_id>/`, `SHAPE`, `SPEC_HASH`, `<project-map>`, and "read the spec and the code, write design.md if warranted and plan.md, follow the spec-format references".
+**architect** agent (`agents.architect`, or `svc:architect`), prompt: `SPEC_DIR: docs/specs/<spec_id>/`, `SHAPE`, `SPEC_HASH`, `ADR_NEXT`, `<project-map>`, and "read the spec and the code, write design.md if warranted and plan.md, follow the spec-format references".
 
 - `BLOCKERS` other than `none` → stop. Show them and recommend `/component:spec --amend <NNN> <answers>`; the plan is not committed.
 - `cplat spec check <id>`. On errors, send them verbatim to the architect (at most 2 rounds); if they persist, stop and show them.

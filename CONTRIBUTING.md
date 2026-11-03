@@ -89,6 +89,10 @@ The sign-off e-mail must be the commit's author or committer e-mail (use your Gi
 - **Decisions**: a change that alters how the platform works gets an ADR in `docs/adr/` (next free number; context, decision, consequences, what is not included) and a row in `docs/adr/README.md`.
 - **GitHub Actions** must be pinned by commit SHA with a `# vX` comment (`python3 scripts/pin-actions.py` does it for you) and every workflow needs top-level `permissions:`.
 - **No secrets** in code, tests or fixtures; build token-shaped test strings at runtime so scanners stay quiet.
+- **AI-assisted PRs** are welcome when they show that the tests ran: paste the local output of the checks above (at least the `pytest tests/cplat` summary) into the PR description. A PR whose tests have not run is closed or sent back.
+- **Security paths are changed by maintainers.** The redaction that runs before an issue report goes public (`scripts/cplat/feedback.py`), secret handling (`scripts/cplat/secret.py`, the templates' secret and credentials files) and permissions (`plugins/*/settings.json`, `.claude/settings.json`, workflow `permissions:`) are not open for outside PRs; report a problem there in an issue (or through [SECURITY.md](SECURITY.md)) and a maintainer makes the change.
+- **Claiming an issue.** Say in the issue that you are working on it, then open a draft PR. A claim without a draft PR expires after 7 days and the issue is free again.
+- **Fork CI.** CI of a PR from a fork runs only after a maintainer has read the diff and approved the run.
 
 ## Releases
 
