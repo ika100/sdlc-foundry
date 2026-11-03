@@ -11,6 +11,7 @@ Exit 0: PR opened or ready; 1: a part failed; 2: refused before starting (nothin
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 from dataclasses import dataclass, field
@@ -103,6 +104,12 @@ def pr_allowed(repo: Path) -> bool:
             continue
         for key in rules:
             rules[key] |= {r for r in perms.get(key, []) if isinstance(r, str)}
+    try:   # spec 131: the per-run grant of `cplat headless` (an invalid value is ignored)
+        grant = json.loads(os.environ.get("CPLAT_RUN_ALLOWLIST", "[]"))
+    except ValueError:
+        grant = []
+    if isinstance(grant, list):
+        rules["allow"] |= {r for r in grant if isinstance(r, str)}
     listed = set(PR_RULES)
     return bool(rules["allow"] & listed) and not (rules["deny"] & listed) and not (rules["ask"] & listed)
 
