@@ -31,6 +31,7 @@ tasks:
     covers: [AC-131.17]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: budget.py — the verification grace (grant, extended limits, grace used, end), budget section fields
     files: [scripts/cplat/budget.py]
