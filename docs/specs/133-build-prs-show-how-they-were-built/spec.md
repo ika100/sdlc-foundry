@@ -1,7 +1,7 @@
 ---
 spec_id: 133-build-prs-show-how-they-were-built
 title: Build PRs show how they were built
-status: approved
+status: done
 priority: P2
 shape: platform
 tracks: [338]
@@ -101,3 +101,5 @@ As an operator without a run store (`CPLAT_RUNS_REPO` unset), I want the section
 
 - 2026-11-03 created
 - 2026-11-03 approved
+- 2026-11-03 building
+- 2026-11-03 done
