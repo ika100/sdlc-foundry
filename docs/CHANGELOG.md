@@ -18,6 +18,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **`cplat pr wait` no longer reports RED for the run a label cancelled (#322).** `gh pr create --label no-spec` (what `cplat pr open --no-spec` runs) fires `opened` and `labeled`, and the `ci` concurrency group cancels the first run. When the wait looked before `gh run list` showed the second run, the cancelled checks counted as red. A cancelled check now waits up to 90 s for the run that superseded it; once that run is listed, the cancelled one is ignored as before (#244). A run that nothing replaces is still red after those 90 s.
 
+**Specs planned in parallel no longer pick the same ADR number (#337).** The architect numbered a new ADR from the highest file on its branch, so two specs planned while the first one's PR was open both wrote ADR-073, and `cplat spec check` passed. `/component:plan` now gets the number from the new `cplat spec adr-next`, which skips the numbers every pushed branch and open PR uses, and `cplat spec check` fails when two files share a number or when an ADR the branch adds has a number another pushed branch already uses. Update the plugins (`/plugin marketplace update`).
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed
