@@ -138,6 +138,8 @@
   }
   .main-pane {
     width: calc(100% - 14rem) !important;
+    /* Starlight pins the text to the right edge of its narrower pane (auto 0); in this wider pane it is centred */
+    --sl-content-margin-inline: auto;
   }
   .right-sidebar-panel {
     padding-inline: 1rem 1.25rem;

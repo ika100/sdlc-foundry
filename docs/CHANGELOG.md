@@ -12,7 +12,20 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ### Fixed
 
+**`cplat pr wait` no longer reads a GitHub API error as "no CI checks" (#356).** While GitHub's rate limit refused `gh pr checks`, the wait ended with `no CI checks were reported after 300s` and a hint about runners, although the PR had 36 green checks. A `gh` failure (rate limit, outage, auth) is now named as such and retried with a growing pause (up to 5 min); the time it lasts does not count towards the no-checks grace period, and a wait that times out on it reports `gh`'s own error. `cplat platform release` keeps polling through it.
+
+**`cplat platform release` proposes a patch when `[Unreleased]` holds only fixes (#346).** It proposed only a major or a minor, so a release of three bug fixes was offered as 5.6.0. It now proposes `X.Y.Z+1` when `[Unreleased]` has a `### Fixed` section and nothing else; any other entry still makes a minor, a change that needs a major still makes a major, and `--version` still overrides.
+
+**cplat shows its progress when its output goes to a file or a pipe (#335).** Python buffers output that does not go to a terminal, so `cplat platform release`, `cplat pr wait` and `cplat spec land` run in the background (as `/platform:release` does) wrote nothing until they exited, sometimes 40 minutes later. The launcher sets `PYTHONUNBUFFERED=1` and cplat writes each line as it is printed. Update the plugins (`/plugin marketplace update`).
+
+**The console never treats a folder with another origin as a system's clone (#344).** `POST /api/open-system` passed its `repo` on without the `owner/name` check the actions use; it now answers 400 for anything else. When no candidate had the expected GitHub origin, the switcher, "Open" and "Open in Claude Code" still used a same-named folder; such a folder is now reported as no local clone. A clone in the configured workspace keeps its exception for forks.
+
+**`cplat pr wait` no longer reports RED for the run a label cancelled (#322).** `gh pr create --label no-spec` (what `cplat pr open --no-spec` runs) fires `opened` and `labeled`, and the `ci` concurrency group cancels the first run. When the wait looked before `gh run list` showed the second run, the cancelled checks counted as red. A cancelled check now waits up to 90 s for the run that superseded it; once that run is listed, the cancelled one is ignored as before (#244). A run that nothing replaces is still red after those 90 s.
+
+**Specs planned in parallel no longer pick the same ADR number (#337).** The architect numbered a new ADR from the highest file on its branch, so two specs planned while the first one's PR was open both wrote ADR-073, and `cplat spec check` passed. `/component:plan` now gets the number from the new `cplat spec adr-next`, which skips the numbers every pushed branch and open PR uses, and `cplat spec check` fails when two files share a number or when an ADR the branch adds has a number another pushed branch already uses. Update the plugins (`/plugin marketplace update`).
+
 **The notifier no longer posts old escalations as a batch, and identical escalations collapse (#355).** An escalation is a needs item of every escalated run of the last 30 days, and the notifier signed it by its run id. When the notifier started with no state for the system (the first `/platform:ui` after an update, or a new state file), it sent every one of them at once: 19 GitHub issues for specs merged five days before, each with its own signature although seven said the same thing. An escalation is now signed by repo, spec, stage and its message with run ids, times, counts, shas and durations normalised; before one is sent for the first time, it is dropped when it is older than 72 hours, when a run of its spec finished after it, or when the spec is `done` or `superseded` in its repo, and when another escalation with the same signature is open or sent in the same pass. An open `notify` issue with the same signature is reused instead of filing a new one. The notifier reports on stderr how many it dropped and why.
+
 
 ## [5.6.1] - 2026-11-03
 
