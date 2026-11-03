@@ -10,10 +10,11 @@ Only token counts, model, role, timestamp and cwd are kept; never message conten
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -75,19 +76,66 @@ def _when(text: object) -> datetime.datetime | None:
     return when if when.tzinfo else when.replace(tzinfo=datetime.timezone.utc)
 
 
+def _cache_file(path: Path, agent: str | None, role: str) -> Path:
+    import runs
+    name = hashlib.sha256(f"{path}\0{agent}\0{role}".encode()).hexdigest()
+    return runs.state_dir() / "usage" / "cache" / f"{name}.json"
+
+
+def _cache_load(path: Path, agent: str | None, role: str) -> tuple[list[Call], int] | None:
+    """Best effort: the cached parse of an unchanged file, or None (missing, stale or corrupt)."""
+    try:
+        st = path.stat()
+        data = json.loads(_cache_file(path, agent, role).read_text())
+        if data["path"] != str(path) or data["size"] != st.st_size or data["mtime_ns"] != st.st_mtime_ns:
+            return None
+        calls = [Call(**{**c, "at": datetime.datetime.fromisoformat(c["at"])}) for c in data["calls"]]
+        return calls, int(data["malformed"])
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cache_store(path: Path, agent: str | None, role: str, size: int, mtime_ns: int,
+                 calls: list[Call], malformed: int) -> None:
+    try:
+        import runs
+        target = _cache_file(path, agent, role)
+        data = {"path": str(path), "size": size, "mtime_ns": mtime_ns, "malformed": malformed,
+                "calls": [{**asdict(c), "at": c.at.isoformat()} for c in calls]}
+        runs._atomic_write(target, json.dumps(data))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _read_file(path: Path, agent: str | None, role: str, deadline: Callable[[], bool]) -> tuple[list[Call], int, bool]:
-    """(calls, malformed lines, stopped by deadline). Lines with isSidechain in a main file use role `unknown`."""
+    """(calls, malformed lines, stopped by deadline). Lines with isSidechain in a main file use role `unknown`.
+
+    A file whose size and mtime match a cache entry is not parsed again (and ignores the deadline).
+    """
+    cached = _cache_load(path, agent, role)
+    if cached is not None:
+        return cached[0], cached[1], False
+    before = path.stat()
+    calls, malformed, stopped, partial = _parse_file(path, agent, role, deadline)
+    if not stopped and not partial:
+        _cache_store(path, agent, role, before.st_size, before.st_mtime_ns, calls, malformed)
+    return calls, malformed, stopped
+
+
+def _parse_file(path: Path, agent: str | None, role: str,
+                deadline: Callable[[], bool]) -> tuple[list[Call], int, bool, bool]:
     first: dict[str, tuple[datetime.datetime, bool]] = {}
     last: dict[str, dict] = {}
     cwd: str | None = None
-    malformed, stopped = 0, False
+    malformed, stopped, partial = 0, False, False
     with open(path, "rb") as f:
         for n, raw in enumerate(f, 1):
             if n % _CHECK_EVERY == 0 and deadline():
                 stopped = True
                 break
             if not raw.endswith(b"\n"):
-                break                                               # still being written
+                partial = True                                      # still being written
+                break
             try:
                 obj = json.loads(raw)
             except ValueError:
@@ -118,7 +166,7 @@ def _read_file(path: Path, agent: str | None, role: str, deadline: Callable[[], 
             cache_write=_num(usage.get("cache_creation_input_tokens")),
             agent="agent-sidechain" if side else agent, role="unknown" if side else role,
             cwd=cwd if agent is not None else None))
-    return calls, malformed, stopped
+    return calls, malformed, stopped, partial
 
 
 def _read_main(main: Path, session_id: str, deadline: Callable[[], bool]) -> Session:
