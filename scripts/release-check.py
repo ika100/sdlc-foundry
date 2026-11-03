@@ -4,7 +4,8 @@
 # ///
 """Release check and gate (spec 121, AC-121.23, AC-121.24, AC-121.26).
 
-  release-check.py rows [--base REF]              the CHANGELOG section that will be released lists every changed versions row since REF
+  release-check.py rows [--base REF]              the CHANGELOG section that will be released (before the release: [Unreleased] plus the
+                                                  fragments in docs/changelog.d, spec 132) lists every changed versions row since REF
                                                   (`cplat platform versions --diff REF --changelog`), a major move needs a major release, and no
                                                   section repeats a paragraph (#336)
   release-check.py needs-major [--base REF]       one line per change that needs a major release (the rule `rows` uses), nothing when none
@@ -28,6 +29,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts" / "cplat"))
 try:
+    import platrelease_changelog as fragments  # noqa: E402  (spec 132: docs/changelog.d)
     import versions  # noqa: E402  (scripts/cplat/versions.py)
 except ModuleNotFoundError as e:   # a bare `python3` lacks pyyaml; uv reads the dependencies above (#295)
     sys.exit(f"ERROR: {e}: run it as `uv run scripts/release-check.py {' '.join(sys.argv[1:])}`")
@@ -143,6 +145,10 @@ def cmd_rows(base: str) -> int:
     changes = changes_since(base)
     text = changelog_text()
     label, version, body = released_section(text, base)
+    if version is None:     # before the release, the fragments are unreleased content too (spec 132); an invalid one fails here
+        found = fragments.read_fragments(REPO)
+        if found:
+            body, label = fragments.assemble(body, found), f"{label} and {fragments.FRAGMENTS}"
     errors = [f"ERROR: {CHANGELOG}: {where} repeats a paragraph" for where in repeated_paragraphs(text)]
     for c, line in zip(changes, versions.diff_lines(changes, True)):
         if c["kind"] != "crds" and line not in body:      # a removed CRD version is not a row: it only needs the major release

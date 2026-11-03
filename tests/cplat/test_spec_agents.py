@@ -301,7 +301,7 @@ def test_nothing_claims_dev_tracks_latest():
     for base in ("docs", "plugins", "templates", "site/src/content/docs"):
         for p in (ROOT / base).rglob("*"):
             if p.suffix in {".md", ".jinja", ".mdx"} and "e2e" not in p.parts and "specs" not in p.parts and p.name != "CHANGELOG.md" \
-                    and not p.name.startswith("e2e-"):   # field reports quote what happened
+                    and "changelog.d" not in p.parts and not p.name.startswith("e2e-"):   # field reports quote what happened
                 hits += [f"{p.relative_to(ROOT)}: {m.group(0)}" for m in STALE_DEV.finditer(p.read_text(errors="ignore"))]
     assert not hits, hits
     assert "pin PR" in (ROOT / "docs" / "HOW-IT-WORKS.md").read_text()

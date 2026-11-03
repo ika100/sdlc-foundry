@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 import cplat
+import release_support
 from alerts_fakes import GITOPS, NOW, FakeTracker, iso
 from backup_fixtures import kube  # noqa: F401  (fixture)
 from backup_fixtures import (APP, P, bdoc, bucket, cnpg_backup, cnpg_cluster, ext_prod_bucket, objectstore, restored_state, switched_state, velero_backup,
@@ -787,13 +788,6 @@ def test_the_user_journey_and_the_site_link_the_guide_ac_117_25():  # AC-117.25
 
 # ---------------- plugins, commands, changelog ----------------
 
-def plugin_version(name):
-    import json as j
-    manifest = j.loads((ROOT / f"plugins/{name}/.claude-plugin/plugin.json").read_text())["version"]
-    market = next(p["version"] for p in j.loads((ROOT / ".claude-plugin/marketplace.json").read_text())["plugins"] if p["name"] == name)
-    return manifest, market
-
-
 def front(path):
     text = (ROOT / path).read_text()
     m = re.match(r"---\n(.*?)\n---\n", text, re.S)
@@ -802,7 +796,7 @@ def front(path):
 
 
 def test_the_resource_plugin_is_1_3_0_and_has_backup_and_restore_commands_ac_117_31():  # AC-117.31
-    assert plugin_version("resource") == ("1.6.1", "1.6.1")  # spec 121: resource plugin 1.6.0 (resource upgrade); spec 127: 1.6.1
+    release_support.assert_bumped("resource", "1.3.0")   # spec 117 shipped 1.3.0; later specs only raise it (spec 132: >=)
     meta, body = front("plugins/resource/commands/backup.md")
     assert len(meta["description"]) < 260 and "Usage: /resource:backup <db> --env <env>" in meta["description"]
     assert "cplat resource backup" in body and "$ARGUMENTS" in body
@@ -816,8 +810,7 @@ def test_the_restore_command_describes_the_three_actions_ac_117_8():  # AC-117.8
 
 
 def test_the_system_plugin_is_1_1_0_and_has_the_restore_command_ac_117_19():  # AC-117.19
-    plugin, market = plugin_version("system")  # spec 117 brought 1.2.0; later specs (124: 1.3.0) only raise it
-    assert plugin == market and tuple(int(x) for x in plugin.split(".")) >= (1, 2, 0)
+    release_support.assert_bumped("system", "1.2.0")   # spec 117 brought 1.2.0; later specs (124: 1.3.0) only raise it
     meta, body = front("plugins/system/commands/restore.md")
     assert len(meta["description"]) < 260
     assert "Usage: /system:restore <env> [--backup <name|latest>] [--replace] [--confirm prod]" in meta["description"]
@@ -831,12 +824,9 @@ def test_the_plugin_readmes_list_the_new_commands_ac_117_31():  # AC-117.31
 
 
 def test_the_changelog_announces_spec_117_as_a_minor_change_with_the_pins_ac_117_26():  # AC-117.26
-    text = (ROOT / "docs" / "CHANGELOG.md").read_text()
-    sections = re.split(r"(?m)^(?=## \[)", text)
-    hits = [s for s in sections if s.startswith("## [") and re.search(r"spec 117|ADR-061|ADR-062", s)]  # spec 117: ADR-060 went to spec 125 first
-    assert hits, "the change is listed"
-    first = hits[0]
-    assert re.match(r"## \[(Unreleased|5\.[1-9]\d*\.0)\]", first.splitlines()[0]) and "BREAKING" not in first
+    first = release_support.section("5.2.0")   # spec 132: the minor release that shipped spec 117, found by its heading
+    assert re.search(r"spec 117|ADR-061|ADR-062", first), "the change is listed"   # spec 117: ADR-060 went to spec 125 first
+    assert "BREAKING" not in first
     for needle in ("plugin-barman-cloud 0.8.1", "cert-manager v1.21.3", "velero 12.2.1", "velero-plugin-for-aws v1.14.4", "operators: owner"):
         assert needle in first, needle
     assert first.index("spec 117") < first.index("spec 116") if "spec 116" in first else True

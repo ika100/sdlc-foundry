@@ -50,8 +50,23 @@ def _preflight(repo: Path) -> None:
     if local != remote:
         raise core.PlatformError(f"local main {local[:7] or 'missing'} differs from origin/main {remote[:7]}")
     text = _git(repo, "show", f"origin/main:{CHANGELOG}", check=False)
-    if not changelog.unreleased_body(text).strip():
+    fragments = _fragments_at(repo, "origin/main")
+    if not changelog.unreleased_body(text).strip() and not fragments:
         raise core.PlatformError(f"## [Unreleased] in {CHANGELOG} has no content")
+
+
+def _fragments_at(repo: Path, ref: str) -> list[tuple[str, str]]:
+    """The changelog fragments at REF (spec 132), validated: an invalid one stops the release before anything is created."""
+    out = []
+    for path in _git(repo, "ls-tree", "--name-only", f"{ref}:{changelog.FRAGMENTS}", check=False).split():
+        if path != "README.md":
+            text = _git(repo, "show", f"{ref}:{changelog.FRAGMENTS}/{path}")
+            try:
+                changelog.parse_fragment(path, text)
+            except changelog.FragmentError as e:
+                raise core.PlatformError(str(e)) from None
+            out.append((path, text))
+    return out
 
 
 # ---------------- prepare ----------------
@@ -76,11 +91,19 @@ def _prepare(repo: Path, state: st.State, version: str) -> str:
                 raise core.PlatformError("uncommitted changes: " + ", ".join(dirty))
             _git(repo, "switch", branch)
         else:
-            other = [p for p in dirty if p != CHANGELOG]
+            other = [p for p in dirty if p != CHANGELOG and not p.startswith(changelog.FRAGMENTS + "/")]
             if other:
                 raise core.PlatformError(f"{branch} has changes outside {CHANGELOG}: " + ", ".join(other))
     path = repo / CHANGELOG
-    path.write_text(changelog.move_unreleased(path.read_text(), version, st.today().isoformat()))
+    try:
+        fragments = changelog.read_fragments(repo)
+    except changelog.FragmentError as e:
+        raise core.PlatformError(str(e)) from None
+    text = path.read_text()
+    moved = changelog.move_unreleased(text, version, st.today().isoformat(), fragments)
+    path.write_text(moved)
+    if fragments:     # spec 132: the release commit deletes what it assembled (a resumed run assembled them already)
+        _git(repo, "rm", "-q", "--", *[f"{changelog.FRAGMENTS}/{name}" for name, _ in fragments])
     _check(repo, [sys.executable, "scripts/release-check.py", "rows", "--base", state.tag], "release-check rows")
     _check(repo, ["devbox", "run", "validate"], "devbox run validate")
     _check(repo, ["devbox", "run", "test-fast"], "devbox run test-fast")   # tests that read the moved changelog (#334)
@@ -88,7 +111,9 @@ def _prepare(repo: Path, state: st.State, version: str) -> str:
         _git(repo, "add", CHANGELOG)
         _git(repo, "commit", "-s", "-m", f"chore: release {version}")
     _git(repo, "push", "-u", "origin", branch)
-    body = (f"Release {version}: [Unreleased] of {CHANGELOG} moved under ## [{version}].\n"
+    gone = _git(repo, "diff", "--name-only", "--diff-filter=D", "origin/main...HEAD", "--", changelog.FRAGMENTS).split()
+    source = f"[Unreleased] of {CHANGELOG}" + (f" and {len(gone)} fragment(s) of {changelog.FRAGMENTS}" if gone else "")
+    body = (f"Release {version}: {source} moved under ## [{version}].\n"
             "Opened by cplat platform release.")
     out = ship.gh(["pr", "create", "--base", "main", "--head", branch, "--title", f"chore: release {version}",
                    "--body", body], cwd=repo)

@@ -7,8 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OLD = re.compile(r"claude-platform|ika100-claude")
 # historical records and the code/tests that deliberately mention the old names (legacy-install detection, rename notes)
-ALLOWED_FILES = ("docs/CHANGELOG.md", "docs/adr/*", "docs/requirements/*", "scripts/cplat/doctor.py", "tests/cplat/test_naming.py",
-                 "tests/cplat/test_update_doctor.py", "tests/cplat/test_rename_migration.py", "site/package-lock.json")
+ALLOWED_FILES = ("docs/CHANGELOG.md", "docs/changelog.d/*", "docs/adr/*", "docs/requirements/*", "scripts/cplat/doctor.py",
+                 "tests/cplat/test_naming.py", "tests/cplat/test_update_doctor.py", "tests/cplat/test_rename_migration.py", "site/package-lock.json")
 
 
 def tracked_text_files():
