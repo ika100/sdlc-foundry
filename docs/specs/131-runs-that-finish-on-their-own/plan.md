@@ -68,6 +68,7 @@ tasks:
     covers: [AC-131.18]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t11
     title: plugins — unit-mode reference, ship and build unit mode, system ship preflight note, Stop hook, version bumps
     files: [plugins/component/references/unit-mode.md, plugins/component/commands/ship.md, plugins/component/commands/build.md, plugins/system/commands/ship.md, plugins/shared/hooks/hooks.json, plugins/component/.claude-plugin/plugin.json, plugins/shared/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
