@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Fixed
+
+**The notifier no longer posts old escalations as a batch, and identical escalations collapse (#355).** An escalation is a needs item of every escalated run of the last 30 days, and the notifier signed it by its run id. When the notifier started with no state for the system (the first `/platform:ui` after an update, or a new state file), it sent every one of them at once: 19 GitHub issues for specs merged five days before, each with its own signature although seven said the same thing. An escalation is now signed by repo, spec, stage and its message with run ids, times, counts, shas and durations normalised; before one is sent for the first time, it is dropped when it is older than 72 hours, when a run of its spec finished after it, or when the spec is `done` or `superseded` in its repo, and when another escalation with the same signature is open or sent in the same pass. An open `notify` issue with the same signature is reused instead of filing a new one. The notifier reports on stderr how many it dropped and why.
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

@@ -31,6 +31,8 @@ REVIEW_REQUEST = ("approve", "answer")           # GitHub already asks for a rev
 ASSIGN = ("alert", "smoke", "retro", "signal")           # GitHub: assign the user to the existing issue
 ISSUE_LABELS = {"alert": "alert", "smoke-failure": "smoke", "signal": "signal"}
 HELD = "held"
+STALE_AFTER = dt.timedelta(hours=72)    # an escalation not sent by then is not news any more (#355)
+FINISHED = ("done", "superseded")       # spec statuses after which an escalation of the spec is stale (#355)
 
 
 # ---------------- replaceable seams ----------------
@@ -166,7 +168,8 @@ def events_of(doc: dict) -> dict[str, dict]:
             continue
         what = obj.get("spec") or obj.get("version") or obj.get("run_id") or ""
         out[it["id"]] = {"event": it["kind"], "title": f"{it['kind']}: {what}", "text": it.get("reason") or "",
-                         "repo": obj.get("repo") or it.get("cwd_repo"), "number": None, "prod": False, "spec": what}
+                         "repo": obj.get("repo") or it.get("cwd_repo"), "number": None, "prod": False, "spec": what,
+                         "stage": it.get("stage") or "", "since": it.get("since") or ""}
     for i in doc.get("issues") or []:
         names = _label_names(i)
         event = next((ev for label, ev in {**ISSUE_LABELS, "retro": "retro"}.items() if label in names), None)
@@ -245,11 +248,39 @@ def digest_due(cfg: notify_config.Config, state: dict, when: dt.datetime) -> boo
 
 # ---------------- channels ----------------
 
+def _signature_key(key: str, ev: dict) -> str:
+    """What an event is signed by: an escalation by repo, spec, stage and its message without the volatile parts (run ids,
+    times, counts, shas, durations), so identical escalations of different runs collapse (#355); other events by their key."""
+    if ev.get("event") != "escalation":
+        return key
+    import autoissue
+    return "\n".join(["escalation", str(ev.get("repo") or ""), str(ev.get("spec") or ""), str(ev.get("stage") or ""),
+                      autoissue.normalise(str(ev.get("text") or ""))])
+
+
 def _signature(key: str) -> str:
     return "Signature: notify:" + hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def _send_github(key: str, ev: dict) -> str | None:
+def _open_notify_issues(repo: str, cache: dict) -> dict[str, str]:
+    """Signature line -> url of the open `notify` issues of a repo, read once per pass; empty when `gh` fails (#355)."""
+    cache = cache.setdefault("issues", {})
+    if repo not in cache:
+        found: dict[str, str] = {}
+        try:
+            issues = json.loads(gh(["issue", "list", "-R", repo, "--state", "open", "--label", "notify", "--limit", "200",
+                                    "--json", "url,body"]) or "[]")
+        except Exception:  # noqa: BLE001
+            issues = []
+        for i in issues if isinstance(issues, list) else []:
+            m = re.search(r"^Signature: notify:[0-9a-f]{16}$", str(i.get("body") or ""), re.M)
+            if m and i.get("url"):
+                found.setdefault(m.group(0), i["url"])
+        cache[repo] = found
+    return cache[repo]
+
+
+def _send_github(key: str, ev: dict, cache: dict | None = None) -> str | None:
     """Returns the reference to resolve later, or None when there is nothing to send."""
     if ev["event"] in REVIEW_REQUEST:
         return "review-request"
@@ -269,9 +300,15 @@ def _send_github(key: str, ev: dict) -> str | None:
         gh(["api", f"repos/{ev['repo']}/labels", "-f", "name=notify"])
     except PlatformError:
         pass                                        # exists already
-    body = f"{ev['text']}\n\n{_signature(key)}\n"
-    return gh(["issue", "create", "-R", ev["repo"], "--title", ev["title"], "--body", body, "--label", "notify",
-               "--assignee", "@me"]).strip().splitlines()[-1]
+    sig = _signature(_signature_key(key, ev))
+    existing = _open_notify_issues(ev["repo"], cache if cache is not None else {})
+    if sig in existing:
+        return existing[sig]                        # the same escalation is open already (#355)
+    body = f"{ev['text']}\n\n{sig}\n"
+    url = gh(["issue", "create", "-R", ev["repo"], "--title", ev["title"], "--body", body, "--label", "notify",
+              "--assignee", "@me"]).strip().splitlines()[-1]
+    existing[sig] = url
+    return url
 
 
 def _slack(cfg: notify_config.Config, text: str) -> bool:
@@ -284,9 +321,9 @@ def _slack(cfg: notify_config.Config, text: str) -> bool:
     return sent
 
 
-def _deliver(cfg: notify_config.Config, channel: str, key: str, ev: dict) -> str | None:
+def _deliver(cfg: notify_config.Config, channel: str, key: str, ev: dict, cache: dict | None = None) -> str | None:
     if channel == "github":
-        return _send_github(key, ev)
+        return _send_github(key, ev, cache)
     if channel == "slack":
         return "slack" if _slack(cfg, f"*{ev['title']}*\n{ev['text']}") else None
     if channel == "email":
@@ -315,6 +352,43 @@ def _resolve(rec: dict, when: dt.datetime) -> None:
         except Exception as e:  # noqa: BLE001
             _log(f"could not resolve {channel} notification {ref}: {e}")
     rec["resolved_at"] = _iso(when)
+
+
+# ---------------- stale escalations (#355) ----------------
+
+def _spec_status(repo: str, spec: str, cache: dict) -> str | None:
+    """The status in `main`'s docs/specs/<spec>/spec.md, read once per pass; None when it cannot be read."""
+    cache = cache.setdefault("specs", {})
+    if (repo, spec) not in cache:
+        status = None
+        try:
+            text = gh(["api", f"repos/{repo}/contents/docs/specs/{spec}/spec.md", "-H", "Accept: application/vnd.github.raw"])
+            m = re.search(r"^status:\s*([\w-]+)", text.split("\n---", 1)[0], re.M) if text.lstrip().startswith("---") else None
+            status = m.group(1) if m else None
+        except Exception:  # noqa: BLE001
+            pass
+        cache[(repo, spec)] = status
+    return cache[(repo, spec)]
+
+
+def _why_dropped(ev: dict, doc: dict, when: dt.datetime, cache: dict) -> str | None:
+    """`stale`, `finished` or None: an escalation that was not sent yet is dropped when it is older than STALE_AFTER, when a
+    run of its spec finished after it, or when its spec is done in its repo. A notifier started late (the console's
+    first start, a new state file) would otherwise post every escalation of the last 30 days at once (#355)."""
+    if ev.get("event") != "escalation":
+        return None
+    since = _parse(ev.get("since"))
+    if since is not None and when - since > STALE_AFTER:
+        return "stale"
+    repo, spec = ev.get("repo"), ev.get("spec")
+    if not (repo and spec):
+        return None
+    for r in (doc.get("runs") or {}).get("runs") or []:
+        ended = _parse(r.get("ended_at") or r.get("started_at"))
+        if (r.get("phase") == "done" and r.get("repo") == repo and r.get("spec") == spec
+                and (since is None or ended is None or ended >= since)):
+            return "finished"
+    return "finished" if _spec_status(repo, spec, cache) in FINISHED else None
 
 
 # ---------------- digest ----------------
@@ -382,6 +456,10 @@ def run_once(repo_dir: Path) -> None:
     current = events_of(doc)
     hidden = {k for u in (doc.get("needs") or {}).get("unavailable") or [] for k in u.get("kinds") or []}
     quiet = in_quiet_hours(cfg, when)
+    cache: dict = {}
+    dropped = {"stale": 0, "finished": 0, "duplicate": 0}
+    signed = {rec["signature"]: k for k, rec in state["events"].items()
+              if rec.get("signature") and rec.get("sent") and not rec.get("resolved_at")}
     for key, ev in current.items():
         rec = state["events"].get(key)
         if rec is None:
@@ -389,10 +467,20 @@ def run_once(repo_dir: Path) -> None:
                                           "event": ev["event"], "title": ev["title"]}
             if fresh and ev["event"] == "run-done":
                 rec["resolved_at"] = _iso(when)     # baseline: runs finished before the notifier started are not news
+        if rec.get("dropped"):
+            continue                                # never sent, and it stays that way (#355)
         if rec.get("resolved_at") and key in current and ev["event"] != "run-done":
             rec["resolved_at"] = None               # came back
         if rec.get("resolved_at"):
             continue
+        if ev["event"] == "escalation" and not rec["sent"]:
+            sig = rec["signature"] = _signature(_signature_key(key, ev))
+            why = _why_dropped(ev, doc, when, cache) or ("duplicate" if signed.get(sig, key) != key else None)
+            if why:
+                rec["dropped"], rec["resolved_at"] = why, _iso(when)
+                dropped[why] += 1
+                continue
+            signed[sig] = key
         for channel, value in cfg.events[ev["event"]].items():
             if value != "instant" or channel in rec["sent"]:
                 continue
@@ -400,7 +488,7 @@ def run_once(repo_dir: Path) -> None:
                 rec["sent"][channel] = {"at": _iso(when), "ref": HELD}
                 continue
             try:
-                ref = _deliver(cfg, channel, key, ev)
+                ref = _deliver(cfg, channel, key, ev, cache)
             except Exception as e:  # noqa: BLE001
                 _log(f"{channel} notification for {key} failed: {e}")
                 continue
@@ -412,6 +500,11 @@ def run_once(repo_dir: Path) -> None:
         if rec.get("event") in ("alert", "smoke", "retro", "signal") and doc.get("issues_failed"):
             continue
         _resolve(rec, when)
+    if any(dropped.values()):
+        print(json.dumps({"level": "info", "component": "notify", "dropped": dropped,
+                          "message": f"dropped {sum(dropped.values())} escalations not sent yet: {dropped['stale']} older than "
+                                     f"{int(STALE_AFTER.total_seconds() // 3600)} h, {dropped['finished']} of finished specs, "
+                                     f"{dropped['duplicate']} duplicates"}), file=sys.stderr)
     if not quiet and digest_due(cfg, state, when):
         _send_digest(cfg, state, doc, when)
     save_state(path, state)
