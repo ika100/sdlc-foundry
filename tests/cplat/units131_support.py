@@ -148,7 +148,7 @@ if unit == "plan":
 elif unit == "red-tests":
     t = repo / "tests"
     t.mkdir(exist_ok=True)
-    (t / "alerts_test.go").write_text("// " + " ".join(cfg["acs"]) + "\n")
+    (t / "test_alerts.py").write_text("# " + " ".join(cfg["acs"]) + "\n")
     commit_all("test(007): acceptance tests for " + cfg["acs"][0])
 elif unit.startswith("task:"):
     spec.task_done(spec.find(repo, "7"), unit.split(":", 1)[1])

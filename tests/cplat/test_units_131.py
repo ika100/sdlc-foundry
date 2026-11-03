@@ -117,7 +117,7 @@ def test_the_red_tests_unit_needs_a_traced_acceptance_test_commit(repo):  # AC-1
     u = units()
     assert u.detect(repo, "ship", SPEC_ID, "red-tests") is None
     (repo / "tests").mkdir()
-    (repo / "tests" / "alerts_test.go").write_text("// AC-007.1 AC-007.2\n")
+    (repo / "tests" / "test_alerts.py").write_text("# AC-007.1 AC-007.2\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "wip tests")                             # traced, but not an acceptance tests commit
     assert u.detect(repo, "ship", SPEC_ID, "red-tests") is None
@@ -312,7 +312,7 @@ def test_only_verification_left_without_a_units_file_reads_the_ship_phase_and_th
         mark_done(repo, t)
     assert u.only_verification_left(repo) is False                       # the red-tests commit is missing
     (repo / "tests").mkdir()
-    (repo / "tests" / "alerts_test.go").write_text("// AC-007.1 AC-007.2\n")
+    (repo / "tests" / "test_alerts.py").write_text("# AC-007.1 AC-007.2\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "test(007): acceptance tests for AC-007.1-AC-007.2")
     assert u.only_verification_left(repo) is True
