@@ -188,7 +188,7 @@ def main(argv: list[str]) -> int:
         if o.version:
             version, reason = o.version, "--version"
         else:
-            version, reason = st.proposal(state.tag, changes)
+            version, reason = st.proposal(state.tag, changes, st._unreleased(repo))
     else:
         version, reason = state.version or "", "release in flight"
     sha = state.merged_sha if state.phase in (st.MERGED, st.TAGGED, st.GUARDING, st.GUARD_RED) else None
