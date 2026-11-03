@@ -259,6 +259,29 @@ def check_cluster(repo: Path) -> list[dict]:
     return out
 
 
+def check_session(cwd: Path) -> list[dict]:
+    """#319: Claude Code reads .claude/settings.json from the session's start directory, so agent worktrees only start
+    at the feature head (`worktree.baseRef: head`, spec 044) when the session starts at the repo root."""
+    top = run(["git", "-C", str(cwd), "rev-parse", "--show-toplevel"], check=False)
+    if top.returncode != 0 or not top.stdout.strip():
+        return []
+    root = Path(top.stdout.strip()).resolve()
+    if not ((root / ".copier-answers.yml").is_file() or (root / settings.PROJECT_FILE).is_file()):
+        return []   # not a repo made by the platform
+    out = []
+    if cwd.resolve() != root:
+        out.append(check(WARN, "session directory", f"{cwd} is not the repo root {root}: Claude Code reads the project "
+                         "settings from the directory the session starts in", f"start the session in the repo root: cd {root} && claude"))
+    try:
+        base = ((json.loads((root / ".claude" / "settings.json").read_text()) or {}).get("worktree") or {}).get("baseRef")
+    except (OSError, ValueError, AttributeError):
+        base = None
+    if base != "head":
+        out.append(check(WARN, "worktree base", ".claude/settings.json lacks \"worktree\": {\"baseRef\": \"head\"}: agent worktrees start "
+                         "at main and /component:build runs every task sequentially", 'add "worktree": {"baseRef": "head"} to .claude/settings.json (or run /platform:update)'))
+    return out
+
+
 def check_migration(repo: Path) -> list[dict]:
     """AC-114.39: the 4.x plugins or files are still in place; the fix is the migration."""
     fix = "cplat platform update --migrate"
@@ -763,7 +786,7 @@ def check_retro_schedule() -> list[dict]:
 def run_checks(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
     import gates
     import notify_config
-    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_kube_envs(repo), *check_plugins(), *check_platform_source(), *check_migration(repo), *(check_repo(repo, contexts) if contexts else check_repo(repo)),
+    return [*check_tools(), *check_gh(), *check_docker(), *check_kube(), *check_kube_envs(repo), *check_plugins(), *check_platform_source(), *check_session(Path.cwd()), *check_migration(repo), *(check_repo(repo, contexts) if contexts else check_repo(repo)),
             *gates.check_gates(repo), *check_gitops_token(repo),
             *check_service_repos_token(repo), *check_alerts_token(repo), check_run_store(), *check_retro_schedule(), *notify_config.doctor_checks()]
 

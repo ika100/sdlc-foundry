@@ -585,3 +585,45 @@ def test_configured_workspace_keeps_accepting_fork_origins(ready, monkeypatch):
     assert actions.prerequisites(
         "approve", APPROVE_OBJ, dict(os.environ), {"level": "component"}, repo_dir=ready.ws / "shop-gitops"
     ) == []
+
+
+def _home_without_workspace(tmp_path, monkeypatch):
+    home, config = tmp_path / "home", tmp_path / "config"
+    home.mkdir(exist_ok=True)
+    (config / "sdlc-foundry").mkdir(parents=True, exist_ok=True)
+    (config / "sdlc-foundry" / "settings.yml").write_text("{}")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
+    return home
+
+
+@pytest.mark.parametrize("repo", ["x/..", "../etc", "acme", "acme/shop gitops", "-x/y"])
+def test_open_system_refuses_a_malformed_repo_344(tmp_path, repo):
+    """#344: `/api/open-system` checks `repo` like the actions do (400), before resolving any path."""
+    from console import switcher
+    with pytest.raises(switcher.InvalidRepo):
+        switcher.open_system(repo, repo_dir=tmp_path)
+
+
+def test_a_folder_with_another_origin_is_not_the_system_clone_344(tmp_path, monkeypatch):
+    """#344: a same-named sibling with another origin is reported as missing, never opened or used as Claude's cwd."""
+    from console import actions, server, switcher
+    _home_without_workspace(tmp_path, monkeypatch)
+    gitops = tmp_path / "projects" / "project-gitops"
+    other = tmp_path / "projects" / "shop-gitops"
+    gitops.mkdir(parents=True)
+    other.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(other)], check=True)
+    subprocess.run(["git", "-C", str(other), "remote", "add", "origin", "https://github.com/evil/shop-gitops.git"], check=True)
+    with pytest.raises(ValueError, match="no local clone of acme/shop-gitops"):
+        switcher.open_system("acme/shop-gitops", repo_dir=gitops)
+    monkeypatch.setattr(switcher, "gh", Gh())
+    found = next(e for e in switcher.list_systems(repo_dir=gitops) if e["repo"] == "acme/shop-gitops")
+    assert found["action"] == "clone" and found["clone"] is None
+
+    class Fake:
+        ctx = type("C", (), {"repo_dir": gitops})()
+    cwd, note = server.Handler.claude_cwd(Fake, {"repo": "acme/shop-gitops"})
+    assert cwd == str(gitops) and "No local clone of acme/shop-gitops" in note
+    assert not actions.valid_system_clone("acme/shop-gitops", other)
