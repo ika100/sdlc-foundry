@@ -44,7 +44,7 @@ Do not wait for CI on `main`.
 Then:
 - `cplat spec trace <id>` must pass; otherwise send the missing ids back to the tester (once).
 - `cplat quiet test-fast`: the new tests fail, nothing else newly fails. A test that errors for another reason goes back to the tester.
-- Record the tester's misses in one call, also when there were none: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...` (one flag per criterion id or test sent back).
+- Record the tester's misses in one call, even when none: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...` (one flag per criterion id or test sent back).
 - `cplat spec trace <id> --json` → hold `TRACE` (criterion → test files) for Phase 2.
 - `cplat quiet lint-fix`; commit changed tests as `test(<slug>): lint-fix acceptance tests for <id>` (#367). Then `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`: the commit the tests are measured against (spec 048).
 
@@ -61,7 +61,7 @@ From `plan.md`: **skip tasks with `done: true`**. Run `cplat component build sch
 Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and run a throwaway Agent with `isolation: "worktree"` whose one task is to report `git rev-parse HEAD` in its worktree.
 
 - It errors ("Cannot create agent worktree", "not in a git repository") or reports a HEAD other than `$FEATURE_HEAD` → read `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md` and follow it (every task runs sequentially; `worktree.baseRef: "head"`).
-- It reports `$FEATURE_HEAD` → parallel batches are safe (every task branch starts at the feature head, so merging brings only its commits): `cplat platform runs agent execution parallel`.
+- It reports `$FEATURE_HEAD` → parallel batches are safe (every task branch starts at the feature head, so merging brings only that task's commits): `cplat platform runs agent execution parallel`.
 
 ### 2.3 Coder prompt (every task)
 

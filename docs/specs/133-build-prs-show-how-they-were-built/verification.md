@@ -36,7 +36,7 @@ user-approved test changes (#324); only the `approved_test_diffs` section is rea
 - t1's commit also carries `runs_agents.execution` (t2's file); t2's commit carries the build.md and reference changes. Acceptable:
   same branch, both tasks done.
 - `build.md` is capped by `test_lean_prompts` (under 19 912 bytes). To fit the two new sentences, three existing sentences of
-  Phase 0/1 were shortened without changing what they ask (`--model-id` wording, the tester-misses flags). The file is 19 893 bytes,
+  Phase 0/1 were shortened without changing what they ask (`--model-id` wording, the tester-misses flags). The file is 19 890 bytes,
   which leaves room for spec 131's +18 bytes. Acceptable.
 
 ## Contract
