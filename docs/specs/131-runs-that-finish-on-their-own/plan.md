@@ -75,12 +75,14 @@ tasks:
     covers: [AC-131.1, AC-131.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t12
     title: docs — AGENTS.md, unattended-delivery.md, ADR amendment lines, changelog, measurements.md for AC-131.18
     files: [docs/AGENTS.md, docs/unattended-delivery.md, docs/adr/028-unattended-delivery-without-branch-protection.md, docs/adr/037-cplat-bundles-honour-the-allowlist.md, docs/adr/043-one-budget-per-run-tree.md, docs/adr/070-the-stop-hook-holds-only-the-owning-session-until-it-stops-progressing.md, docs/CHANGELOG.md, docs/specs/131-runs-that-finish-on-their-own/measurements.md]
     covers: [AC-131.18]
     parallel_safe: true
     depends_on: []
+    done: true
 human_steps:
   - "AC-131.18, seven days after the release that ships spec 131: run the commands in docs/specs/131-runs-that-finish-on-their-own/measurements.md (cplat platform runs report --since 7, its Unattended ships section), fill its table, and open an issue for any line marked MISSED."
 ---
