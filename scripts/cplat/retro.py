@@ -213,6 +213,7 @@ def _post(ns: argparse.Namespace) -> int:
     private = autoissue.scrub(retro_report.render_private(report, private_md))
     found = retro_report.leaks(public, report)
     if found:
+        print("private names found (this log is in the private store): " + ", ".join(found), file=sys.stderr)
         raise PlatformError(f"the public retro would name {len(found)} private name(s); nothing was posted",
                             hint="fix the proposal text or report a platform bug with /issue:report")
     repo = autoissue.default_repo()

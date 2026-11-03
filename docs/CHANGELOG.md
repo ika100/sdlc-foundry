@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Fixed
+
+**The weekly retro posts again when a spec id is a bare number.** `cplat platform retro post` checked the public issue for private names by substring match, so a spec recorded as `112` or `130` matched inside run ids (`20261027T112130Z-…`) and the retro of 2026-W44 was refused. The check now matches whole names, the same way the redaction replaces them. A spec id that is only a number is no longer treated as a private name, so `see #130` stays readable. A refused post prints the names it found to the job log, which is in the private store.
+
 ### Changed
 
 **The gitops template's CLAUDE.md says who creates `generate:` secrets.** It still named External Secrets Operator; since 5.5.0 a credentials Job (an Argo CD PreSync hook) creates them once (ADR-072). The text reaches gitops repos with `/platform:update`.

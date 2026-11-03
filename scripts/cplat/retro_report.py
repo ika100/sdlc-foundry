@@ -422,15 +422,16 @@ def private_names(report: dict) -> dict[str, str]:
     for r in report.get("repos", {}).get("list", []):
         names[r["repo"]] = "<repo>"
     for s in report.get("repos", {}).get("specs", []):
-        names[s] = "<spec>"
+        if not s.isdigit():       # a bare number names nothing, and would turn `see #130` into `see #<spec>`
+            names[s] = "<spec>"
     if report.get("store"):
         names[report["store"]] = "<run-store>"
     return names
 
 
 def leaks(text: str, report: dict) -> list[str]:
-    low = text.lower()
-    return [n for n in private_names(report) if n and n.lower() in low]
+    """The private names still in `text`, matched as `autoissue.scrub` replaces them: not inside a longer name or run id."""
+    return [n for n in private_names(report) if n and re.search(rf"(?<![\w-]){re.escape(n)}(?![\w-])", text, flags=re.I)]
 
 
 # ---------------- rendering ----------------
