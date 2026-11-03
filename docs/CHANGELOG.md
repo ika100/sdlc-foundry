@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Changed
+
+**A pull request runs only the e2e it needs, and the cluster e2e runs in three parallel parts (#281).** The cluster e2e took a median 41 minutes and the upgrade e2e 36 (10 runs each), and most pull requests ran both: the cluster e2e started on any change under `scripts/cplat/**` or `templates/gitops-app/**`, and the upgrade e2e compared against the last release tag, so after one versions change every later pull request ran it. Now a `decide` job runs `scripts/e2e-scope.py`, which starts the cluster e2e only for the gitops-app and cluster-gitops templates (not their copied workflow files or Markdown), the templates' Dockerfiles, the e2e files, `shapes.yml`, the `scripts/cplat` modules the e2e scripts call or import (closed over every import, read from the code), and the release pull request. On a pull request the scenario runs as three parallel jobs (`E2E_PART` `core`, `scaling`, `backups`, about 25 minutes); the nightly run keeps one job with every step in order. The upgrade e2e decides on the pull request's own diff; push to main and the release gate are unchanged (spec 134, ADR-080).
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

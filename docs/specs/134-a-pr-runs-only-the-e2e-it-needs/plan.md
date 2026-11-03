@@ -30,6 +30,7 @@ tasks:
     covers: [AC-134.9]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 134 A pull request runs only the e2e it needs, and that e2e runs in parallel parts
