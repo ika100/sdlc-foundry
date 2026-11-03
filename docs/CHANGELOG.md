@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Changed
+
+**The e2e probes share one probe-pod helper, and a lint keeps `$$` out of pod commands (#323).** `tests/e2e/run.sh` and `tests/e2e/upgrade.sh` each built their probe pods with their own copy of the code, and the copies drifted: some copied only Secret-referenced variables, and only the upgrade e2e resolved prefixed names such as `FILES_S3_*`. Both now use `probe_run` from `tests/e2e/lib/probe.sh`, which copies Secret references and plain values, resolves a prefix (`-p FILES_`) and runs the script in a plain Pod; what the e2e checks is unchanged. `scripts/check-e2e-probes.py` (in `devbox run quality`, `ci-local` and CI) rejects a literal `$$` in a string the e2e scripts could send as a pod command, since Kubernetes turns it into `$` there. The upgrade e2e prints `skipped: <step> (previous release has no <type>)` for every step it leaves out because the previous release lacks a resource type, and lists them again at the end.
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

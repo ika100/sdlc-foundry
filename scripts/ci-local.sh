@@ -31,6 +31,9 @@ python3 scripts/pin-actions.py --check
 step "relative Markdown links"
 python3 scripts/check-links.py
 
+step "no \"\$\$\" in a pod command of the e2e scripts (#323)"
+python3 scripts/check-e2e-probes.py
+
 step "license and copyright metadata (REUSE)"
 uvx --quiet --from "reuse[charset-normalizer]" reuse lint | tail -3
 

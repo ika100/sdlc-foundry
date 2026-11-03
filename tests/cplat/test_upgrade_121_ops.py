@@ -606,7 +606,7 @@ def test_needs_upgrade_e2e_is_true_for_a_changed_row_a_release_heading_or_the_e2
     assert needs_e2e(root) == "run=true"
 
 
-@pytest.mark.parametrize("rel", ["tests/e2e/upgrade.sh", ".github/workflows/e2e-upgrade.yml", "scripts/cplat/upgrade.py", "scripts/cplat/upgradeverify.py", "scripts/cplat/update.py"])
+@pytest.mark.parametrize("rel", ["tests/e2e/upgrade.sh", "tests/e2e/lib/probe.sh", ".github/workflows/e2e-upgrade.yml", "scripts/cplat/upgrade.py", "scripts/cplat/upgradeverify.py", "scripts/cplat/update.py"])
 def test_needs_upgrade_e2e_is_true_when_an_e2e_file_changes_ac_121_24(tmp_path, rel):  # AC-121.24
     root = mini_platform(tmp_path)
     p = root / rel
@@ -682,7 +682,7 @@ def triggers(wf: dict) -> dict:
 
 
 E2E_PATHS = {"templates/gitops-app/scripts/render.py", "templates/gitops-app/scripts/local-cluster.sh", "scripts/cplat/upgrade*.py", "scripts/cplat/update.py",
-             "scripts/cplat/versions.py", "scripts/release-check.py", "tests/e2e/upgrade.sh", ".github/workflows/e2e-upgrade.yml", "docs/CHANGELOG.md"}
+             "scripts/cplat/versions.py", "scripts/release-check.py", "tests/e2e/upgrade.sh", "tests/e2e/lib/**", ".github/workflows/e2e-upgrade.yml", "docs/CHANGELOG.md"}
 
 
 def test_the_upgrade_e2e_workflow_has_the_designed_triggers_and_permissions_ac_121_24():  # AC-121.24
@@ -754,7 +754,7 @@ def need(text: str, *needles: str) -> None:
 def test_the_e2e_script_starts_from_the_previous_release_ac_121_24():  # AC-121.24 (needs a cluster)
     t = e2e()
     need(t, "E2E_UPGRADE_FROM", "v5.0.*", "scripts/cplat/versions.py", "git worktree add", 'fail "no previous release tag found (v5.0.*)"')
-    assert re.search(r"RESOURCE_TYPES", t) and re.search(r"PLANNED_TYPES", t) and re.search(r"\bast\b", t) and re.search(r"skip: \S+ is not in ", t)
+    assert re.search(r"RESOURCE_TYPES", t) and re.search(r"PLANNED_TYPES", t) and re.search(r"\bast\b", t) and re.search(r"skipped: \$why", t) and "(previous release has no $1)" in t   # #323
 
 
 def test_the_e2e_script_records_the_resolved_floating_references_ac_121_24():  # AC-121.24 (needs a cluster)

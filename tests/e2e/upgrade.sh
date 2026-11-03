@@ -27,6 +27,8 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+# shellcheck source=SCRIPTDIR/lib/probe.sh
+. "$root/tests/e2e/lib/probe.sh"   # probe_run: probe pods with a component's own variables (#323)
 work="${E2E_WORK:-$(mktemp -d)}"
 port="${E2E_PORT:-8098}"
 regport=5112
@@ -105,6 +107,9 @@ cleanup() {
     echo; echo "Time per step:"; printf '%s' "$durations"
     total=$((SECONDS - started))
     echo "Total: $((total / 60)) min $((total % 60)) s"
+    if [ -s "$work/skipped.txt" ]; then   # #323: what this run did not exercise because the previous release lacked a type
+      echo; echo "Skipped (the previous release lacks the resource type):"; sed 's/^/  skipped: /' "$work/skipped.txt"
+    fi
     [ "$total" -le 2700 ] || echo "WARNING: the run took more than 45 minutes in the log (budget: about 40)"
     echo; echo "UPGRADE E2E OK"
   else
@@ -208,6 +213,13 @@ PY
 )
 echo "$FROM supports: $FROM_TYPES"
 has_type() { grep -w -q "$1" <<< "$FROM_TYPES"; }
+: > "$work/skipped.txt"
+needs_type() { # type step: has_type; when the previous release lacks the type, prints "skipped: <step> (...)" once per step (#323)
+  has_type "$1" && return 0
+  local why="$2 (previous release has no $1)"
+  grep -qxF -- "$why" "$work/skipped.txt" || { echo "skipped: $why"; echo "$why" >> "$work/skipped.txt"; }
+  return 1
+}
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 step "2 Setup on $FROM: system upg, python service upg-api, postgres 16, its local cluster with the floating defaults"
@@ -223,11 +235,9 @@ $from_cplat resource add postgres --version 16 --repo-dir "$gitops_repo" >/dev/n
 commit "postgres 16"
 for pair in bucket:files cache:sessions broker:bus; do
   typ=${pair%%:*}; name=${pair##*:}
-  if has_type "$typ"; then
+  if needs_type "$typ" "resource add $name --type $typ, and every step that uses it"; then
     $from_cplat resource add "$name" --type "$typ" --repo-dir "$gitops_repo" >/dev/null || fail "resource add $name --type $typ failed"
     commit "$name"
-  else
-    echo "skip: $typ is not in $FROM"
   fi
 done
 
@@ -291,32 +301,15 @@ PY
 # ---- probes: plain Pods that carry upg-api's own variables, as the component sees them ----
 S3_IMAGE=amazon/aws-cli:2.22.35
 NATS_IMAGE=natsio/nats-box:0.14.5
-read -r -d '' pod_py <<'PY' || true
-import json, re, sys
-name, image, regex, script = sys.argv[1:5]
-dep = json.loads(sys.stdin.read())
-env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", [])   # Secret refs and plain values (EVENTS_<API>_*)
-       if ("valueFrom" in e or "value" in e) and re.match(regex, e["name"])]
-env += [{"name": k, "value": v} for k, v in (("HOME", "/tmp"), ("AWS_PAGER", ""), ("AWS_EC2_METADATA_DISABLED", "true"),
-                                             ("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required"), ("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required"))]
-print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "upgprobe"}},
-                  "spec": {"restartPolicy": "Never", "containers": [{"name": "probe", "image": image, "command": ["sh", "-c", script], "env": env}]}}))
-PY
-pn=0
+# every probe gets these too (the AWS CLI reads them; the other images ignore them)
+probe_env=(-e HOME=/tmp -e AWS_PAGER= -e AWS_EC2_METADATA_DISABLED=true -e AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+           -e AWS_RESPONSE_CHECKSUM_VALIDATION=when_required)
 P_OUT=""
 podrun() { # env image env-regex script: output in P_OUT, success when the pod Succeeded
-  local e=$1 name phase=""
-  pn=$((pn + 1)); name="upgprobe-$pn"
-  kn "upg-$e" get deployments.apps/upg-api -o json | python3 -c "$pod_py" "$name" "$2" "$3" "$4" | kn "upg-$e" apply -f - >/dev/null \
-    || fail "could not start the probe pod $name in $e"
-  for _ in $(seq 1 90); do   # up to 270 s (the first run pulls the image)
-    phase=$(kn "upg-$e" get "pods/$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-    case "$phase" in Succeeded|Failed) break;; esac; sleep 3
-  done
-  P_OUT=$(kn "upg-$e" logs "pods/$name" 2>&1 || true)
-  [ "$phase" = Succeeded ] || P_OUT="$P_OUT (pod phase: ${phase:-unknown}; $(kn "upg-$e" get "pods/$name" -o jsonpath='{.status.containerStatuses[*].state.waiting.reason}' 2>/dev/null))"
-  kn "upg-$e" delete "pods/$name" --wait=false >/dev/null 2>&1 || true
-  [ "$phase" = Succeeded ]
+  local rc=0   # up to 270 s (the first run pulls the image); FILES_S3_* and FILES_AWS_* reach the script as S3_* and AWS_*
+  probe_run -k "kn upg-$1" -d upg-api -i "$2" -m "$3" -p FILES_ -l upgprobe -w 90:3 -F fail "${probe_env[@]}" "$4" || rc=$?
+  P_OUT=$PROBE_OUT
+  return $rc
 }
 podmust() { # label env image env-regex script: up to 6 tries (a database or store may need a moment)
   local i
@@ -329,33 +322,34 @@ dbq() { # env sql (single quotes only): psql through the component's DATABASE_UR
   podmust "psql in $1" "$1" "$img" '^(DATABASE_URL|PG)' "psql \"\$DATABASE_URL\" -v ON_ERROR_STOP=1 -tA -c \"$2\""
   Q=$(printf '%s\n' "$P_OUT" | grep -v '^$' | tail -1 || true)
 }
-# the bucket files: bare S3_*/AWS_* while upg-api uses one bucket, FILES_S3_*/FILES_AWS_* once step 4 adds the bucket backups (AC-115.8)
-s3pre='for v in S3_ENDPOINT S3_BUCKET S3_REGION S3_FORCE_PATH_STYLE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION AWS_ENDPOINT_URL_S3; do eval "[ -z \"\${FILES_$v:-}\" ] || export $v=\"\$FILES_$v\""; done; set -e; [ "$S3_FORCE_PATH_STYLE" = true ] && aws configure set default.s3.addressing_style path; A="aws --endpoint-url $S3_ENDPOINT"; '
+# the bucket files: bare S3_*/AWS_* while upg-api uses one bucket, FILES_S3_*/FILES_AWS_* once step 4 adds the bucket backups (AC-115.8);
+# podrun gives the prefixed ones the bare names (probe_run -p FILES_)
+s3pre='set -e; [ "$S3_FORCE_PATH_STYLE" = true ] && aws configure set default.s3.addressing_style path; A="aws --endpoint-url $S3_ENDPOINT"; '
 natspre='N="nats --server $NATS_URL --user $NATS_USER --password $NATS_PASSWORD --inbox-prefix $NATS_INBOX_PREFIX"; '   # replies only in the component's own inbox
 
 write_data() { # env: a row, an object, a cache key and a message (only for the types that release supports)
   dbq "$1" "create table if not exists upg_check (id int primary key, tag text); insert into upg_check values (1, '$1-before') on conflict do nothing"
-  if has_type bucket; then
+  if needs_type bucket "bucket write in $1"; then
     podmust "bucket write in $1" "$1" "$S3_IMAGE" '^(FILES_)?(S3|AWS)_' "$s3pre"'printf %s '"$1-before"' > /tmp/in; $A s3api put-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt --body /tmp/in >/dev/null'
   fi
-  if has_type cache; then
+  if needs_type cache "cache write in $1"; then
     # with the server's own password: an instance of the previous release that is already in the #316 state cannot fail the setup; the
     # component's way in (REDIS_URL, REDIS_HOST/PORT/PASSWORD) is checked after the update
     kn "upg-$1" exec upg-sessions-0 -- sh -c 'valkey-cli -a "$VALKEY_PASSWORD" --no-auth-warning SET upg:'"$1 $1-before" | grep -w OK >/dev/null \
       || fail "cache write in $1 (with the server's own password) failed"
   fi
-  if has_type broker; then
+  if needs_type broker "stream message in $1"; then
     podmust "stream message in $1" "$1" "$NATS_IMAGE" '^(NATS|EVENTS)_' "$natspre"'$N pub "$EVENTS_ORDERS_SUBJECT_PREFIX.created" '"$1-before"
   fi
 }
 read_data() { # env: the data of write_data reads back unchanged (the cache key is not required)
   dbq "$1" "select tag from upg_check where id = 1"
   [ "$Q" = "$1-before" ] || fail "the row of $1 reads '$Q', expected '$1-before'"
-  if has_type bucket; then
+  if needs_type bucket "bucket read in $1"; then
     podmust "bucket read in $1" "$1" "$S3_IMAGE" '^(FILES_)?(S3|AWS)_' "$s3pre"'$A s3api get-object --bucket "$S3_BUCKET" --key upg/'"$1"'.txt /tmp/out >/dev/null; echo "CONTENT=$(cat /tmp/out)"'
     grep -w -F -q "CONTENT=$1-before" <<< "$P_OUT" || fail "the object upg/$1.txt of $1 does not read $1-before: $P_OUT"
   fi
-  if has_type broker; then
+  if needs_type broker "stream message read in $1"; then
     podmust "stream message read in $1" "$1" "$NATS_IMAGE" '^(NATS|EVENTS)_' "$natspre"'$N consumer next "$EVENTS_ORDERS_STREAM" "$EVENTS_ORDERS_CONSUMER" --count 1 --no-ack'
     grep -w -F -q "$1-before" <<< "$P_OUT" || fail "the message of $1 is gone from the stream: $P_OUT"
   fi
@@ -443,7 +437,7 @@ check_servers() { # env: once, after the new render of the addons is applied: th
   local e=$1 dir rv h
   [ ! -f "$work/servers-$e" ] || return 0
   new_render "$e" addons || return 0
-  if has_type cache; then
+  if needs_type cache "the cache's password checks in $e (AC-128.1, AC-128.2, AC-128.3, AC-128.10)"; then
     # AC-128.1 and AC-128.2: the server accepts the Secret's password and refuses another; the component's REDIS_URL and its
     # REDIS_HOST/PORT/PASSWORD get PONG (a WRONGPASS here fails); a server in the #316 state is repaired within 60 s (AC-128.10)
     within 60 "AC-128.1/.2/.10: the cache of $e answers PONG to the component's variables" cache_ok "$e"
@@ -458,7 +452,7 @@ check_servers() { # env: once, after the new render of the addons is applied: th
       touch "$work/forced-write"
     fi
   fi
-  if has_type broker; then
+  if needs_type broker "the broker's password checks in $e (AC-128.4, AC-128.10)"; then
     # AC-128.4: the component user authenticates with the password of its Secret and no other; _nack's Account is Ready
     within 60 "AC-128.4/.10: upg-api's NATS_USER authenticates in $e" podrun "$e" "$NATS_IMAGE" '^(NATS|EVENTS)_' "$nats_probe"
     within 60 "AC-128.4: NACK (_nack) has every stream of $e Ready" nack_ready "$e"
@@ -633,13 +627,13 @@ grep -q '^resolved helmchart ' "$work/resolved-$FROM.txt" || fail "no HelmChart 
 echo "ok   $(wc -l < "$work/resolved-$FROM.txt" | tr -d ' ') floating references resolved and saved to $work/resolved-$FROM.txt (AC-121.24)"
 
 step "2 Setup on $FROM: force the state of #316 (the server runs with another password than its Secret holds) in staging's cache and prod's broker"
-if has_type cache; then
+if needs_type cache "force the #316 state in staging's cache"; then
   force_password staging upg-sessions-app
   [ "$(kn upg-staging get secret/upg-sessions-app -o jsonpath='{.data.password}' | base64 -d | hash_of)" != "$(kn upg-staging exec upg-sessions-0 -- sh -c 'printf %s "$VALKEY_PASSWORD"' | hash_of)" ] \
     || fail "staging's cache still runs with the password of its Secret after the forced change"
   restart_component staging
 fi
-if has_type broker; then
+if needs_type broker "force the #316 state in prod's broker"; then
   force_password prod upg-bus-upg-api-app
   restart_component prod
 fi
