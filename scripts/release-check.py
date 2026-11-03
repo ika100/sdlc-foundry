@@ -34,7 +34,7 @@ except ModuleNotFoundError as e:   # a bare `python3` lacks pyyaml; uv reads the
 CHANGELOG = "docs/CHANGELOG.md"
 E2E_NAME = "e2e upgrade (previous release → candidate)"
 E2E_PATHS = ("tests/e2e/upgrade.sh", ".github/workflows/e2e-upgrade.yml", "scripts/cplat/update.py")
-E2E_GLOBS = (re.compile(r"^scripts/cplat/upgrade[^/]*\.py$"),)
+E2E_GLOBS = (re.compile(r"^scripts/cplat/upgrade[^/]*\.py$"), re.compile(r"^tests/e2e/lib/"))   # the probe helper (#323)
 HEADING = re.compile(r"^## \[(?P<name>[^\]]+)\]", re.M)
 
 

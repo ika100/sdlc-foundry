@@ -19,6 +19,7 @@ on:
       - 'scripts/cplat/versions.py'
       - 'scripts/release-check.py'
       - 'tests/e2e/upgrade.sh'
+      - 'tests/e2e/lib/**'
       - '.github/workflows/e2e-upgrade.yml'
       - 'docs/CHANGELOG.md'
   pull_request:
@@ -30,6 +31,7 @@ on:
       - 'scripts/cplat/versions.py'
       - 'scripts/release-check.py'
       - 'tests/e2e/upgrade.sh'
+      - 'tests/e2e/lib/**'
       - '.github/workflows/e2e-upgrade.yml'
       - 'docs/CHANGELOG.md'
 

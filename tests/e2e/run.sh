@@ -48,6 +48,8 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+# shellcheck source=SCRIPTDIR/lib/probe.sh
+. "$root/tests/e2e/lib/probe.sh"   # probe_run: probe pods with a component's own variables (#323)
 work="${E2E_WORK:-$(mktemp -d)}"
 port="${E2E_PORT:-8099}"
 regport=5111
@@ -442,31 +444,15 @@ case "$out" in *"platform-guardrails"*) echo "ok   denied: $(echo "$out" | tr '\
 
 # ---- The bucket: probes from inside the cluster with the components' own variables ----
 S3_IMAGE=amazon/aws-cli:2.22.35
-read -r -d '' s3_pod_py <<'PY' || true
-import json, re, sys
-name, image, script = sys.argv[1:4]
-dep = json.load(sys.stdin)
-env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and re.match(r"(S3|AWS)_", e["name"])]
-env += [{"name": k, "value": v} for k, v in (("AWS_PAGER", ""), ("AWS_EC2_METADATA_DISABLED", "true"), ("HOME", "/tmp"),
-                                             ("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required"), ("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required"))]
-print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "s3probe"}},
-                  "spec": {"restartPolicy": "Never", "containers": [{"name": "aws", "image": image, "command": ["sh", "-c", script], "env": env}]}}))
-PY
+s3env=(-e AWS_PAGER= -e AWS_EC2_METADATA_DISABLED=true -e HOME=/tmp -e AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+       -e AWS_RESPONSE_CHECKSUM_VALIDATION=when_required)
 # S3_FORCE_PATH_STYLE (from the Secret, as the component sees it) decides the addressing style
 s3pre='set -e; [ "$S3_FORCE_PATH_STYLE" = true ] && aws configure set default.s3.addressing_style path; A="aws --endpoint-url $S3_ENDPOINT"; '
-s3n=0
 s3run() { # namespace deployment script: runs it in a pod that carries the deployment's S3_* and AWS_* variables; output in S3_OUT
-  local ns_=$1 dep=$2 name phase=""
-  s3n=$((s3n + 1)); name="s3probe-$s3n"
-  kn "$ns_" get deploy "$dep" -o json | python3 -c "$s3_pod_py" "$name" "$S3_IMAGE" "$s3pre$3" | kn "$ns_" apply -f - >/dev/null || fail "could not start the probe pod $name"
-  for _ in $(seq 1 60); do   # up to 180 s (the first run pulls the image)
-    phase=$(kn "$ns_" get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-    case "$phase" in Succeeded|Failed) break;; esac; sleep 3
-  done
-  S3_OUT=$(kn "$ns_" logs "$name" 2>&1 || true)
-  [ "$phase" = Succeeded ] || S3_OUT="$S3_OUT (pod phase: ${phase:-unknown}; $(kn "$ns_" get pod "$name" -o jsonpath='{.status.containerStatuses[*].state.waiting.reason}' 2>/dev/null))"
-  kn "$ns_" delete pod "$name" --wait=false >/dev/null 2>&1 || true
-  [ "$phase" = Succeeded ]
+  local rc=0   # up to 180 s (the first run pulls the image)
+  probe_run -k "kn $1" -d "$2" -i "$S3_IMAGE" -m '(S3|AWS)_' -l s3probe -F fail "${s3env[@]}" "$s3pre$3" || rc=$?
+  S3_OUT=$PROBE_OUT
+  return $rc
 }
 s3_why() { case "$1" in
   *AccessDenied*|*InvalidAccessKeyId*|*SignatureDoesNotMatch*|*Forbidden*|*"(403)"*) echo "access denied";;
@@ -787,31 +773,12 @@ routes=$(kc get httproutes.gateway.networking.k8s.io -o name | grep -E 'sessions
 echo "ok   e2e-sessions and e2e-ratelimit are ClusterIP Services on 6379; no HTTPRoute names a cache"
 
 # probe pods (plain Pods, not Deployments: the guard rails do not cover them) with e2e-web's own cache variables, in the cache's Valkey image
-read -r -d '' cache_pod_py <<'PY' || true
-import json, re, sys
-name, image, script = sys.argv[1:4]
-dep = json.load(sys.stdin)
-env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and re.match(r"(SESSIONS|RATELIMIT)_REDIS_", e["name"])]
-ctx = {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
-print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "cacheprobe"}},
-                  "spec": {"restartPolicy": "Never",
-                           "securityContext": {"runAsNonRoot": True, "runAsUser": 999, "runAsGroup": 999, "seccompProfile": {"type": "RuntimeDefault"}},
-                           "containers": [{"name": "valkey", "image": image, "command": ["sh", "-c", script], "env": env, "securityContext": ctx}]}}))
-PY
 cache_image=$(kc get statefulsets.apps e2e-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')
-cn=0
 crun() { # script: runs it in a pod that carries e2e-web's SESSIONS_REDIS_* and RATELIMIT_REDIS_* variables; output in C_OUT
-  local name phase=""
-  cn=$((cn + 1)); name="cacheprobe-$cn"
-  kc get deploy e2e-web -o json | python3 -c "$cache_pod_py" "$name" "$cache_image" "set -e; $1" | kc apply -f - >/dev/null || cfail "could not start the probe pod $name"
-  for _ in $(seq 1 60); do   # up to 180 s
-    phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-    case "$phase" in Succeeded|Failed) break;; esac; sleep 3
-  done
-  C_OUT=$(kc logs "$name" 2>&1 || true)
-  [ "$phase" = Succeeded ] || { C_OUT="$C_OUT (pod phase: ${phase:-unknown}; $(kc get pod "$name" -o jsonpath='{.status.containerStatuses[*].state.waiting.reason}' 2>/dev/null))"; kc describe pod "$name" | tail -15; }
-  kc delete pod "$name" --wait=false >/dev/null 2>&1 || true
-  [ "$phase" = Succeeded ]
+  local rc=0   # up to 180 s
+  probe_run -k kc -d e2e-web -i "$cache_image" -m '(SESSIONS|RATELIMIT)_REDIS_' -u 999 -l cacheprobe -F cfail -v "set -e; $1" || rc=$?
+  C_OUT=$PROBE_OUT
+  return $rc
 }
 c_field() { sed -n "s/^$1=//p" <<< "$C_OUT" | head -1; }
 
@@ -1132,29 +1099,12 @@ echo "ok   Secrets with url nats://e2e-bus.e2e-dev.svc:4222, user and a 32-chara
 
 # probe pods (plain Pods, not Deployments: the guard rails do not cover them) with the rendered variables of a component, in the nats-py image
 nats_image="$registry:$regport/e2e-natsprobe:1"
-read -r -d '' nats_pod_py <<'PY' || true
-import json, sys
-name, image, script, envfile = sys.argv[1:5]
-env = json.load(open(envfile)) + [{"name": k, "value": v} for k, v in (("PYTHONDONTWRITEBYTECODE", "1"), ("PYTHONUNBUFFERED", "1"), ("HOME", "/tmp"))]
-ctx = {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
-print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "natsprobe"}},
-                  "spec": {"restartPolicy": "Never",
-                           "securityContext": {"runAsNonRoot": True, "runAsUser": 1000, "runAsGroup": 1000, "seccompProfile": {"type": "RuntimeDefault"}},
-                           "containers": [{"name": "probe", "image": image, "command": ["python", "-c", script], "env": env, "securityContext": ctx}]}}))
-PY
-nn=0
 nrun() { # component script: runs it in a pod that carries the component's NATS_* and EVENTS_* variables; output in N_OUT
-  local name phase=""
-  nn=$((nn + 1)); name="natsprobe-$nn"
-  python3 -c "$nats_pod_py" "$name" "$nats_image" "$2" "$work/natsenv-$1.json" | kc apply -f - >/dev/null || nfail "could not start the probe pod $name"
-  for _ in $(seq 1 90); do   # up to 180 s
-    phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-    case "$phase" in Succeeded|Failed) break;; esac; sleep 2
-  done
-  N_OUT=$(kc logs "$name" 2>&1 || true)
-  [ "$phase" = Succeeded ] || { N_OUT="$N_OUT (pod phase: ${phase:-unknown}; $(kc get pod "$name" -o jsonpath='{.status.containerStatuses[*].state.waiting.reason}' 2>/dev/null))"; kc describe pod "$name" | tail -15; }
-  kc delete pod "$name" --wait=false >/dev/null 2>&1 || true
-  [ "$phase" = Succeeded ]
+  local rc=0   # up to 180 s
+  probe_run -k kc -f "$work/natsenv-$1.json" -i "$nats_image" -c python -u 1000 -l natsprobe -w 90:2 -F nfail -v \
+    -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 -e HOME=/tmp "$2" || rc=$?
+  N_OUT=$PROBE_OUT
+  return $rc
 }
 n_field() { sed -n "s/^$1=//p" <<< "$N_OUT" | head -1; }
 n_must() { nrun "$1" "$2" || nfail "the probe of $1 failed: $(echo "$N_OUT" | tail -8 | tr '\n' ' ' | cut -c1-600)"; }
@@ -1820,30 +1770,11 @@ if grep -rqF -e "$pw_cache" -e "$pw_bus" "$(ovd e2e-worker)"; then sfail "a pass
 live_scalers=$(kc get scaledobjects.keda.sh,triggerauthentications.keda.sh -o yaml)
 if grep -qF -e "$pw_cache" -e "$pw_bus" <<< "$live_scalers"; then sfail "a password is in the live ScaledObject or TriggerAuthentication"; fi
 # the probe connects like the component: a Valkey client with the component's own REDIS_HOST, REDIS_PORT and REDIS_PASSWORD (e2e-worker's Deployment)
-read -r -d '' wcache_pod_py <<'PY' || true
-import json, sys
-name, image, script = sys.argv[1:4]
-dep = json.load(sys.stdin)
-env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and e["name"].startswith("REDIS_")]
-ctx = {"allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}
-print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "cacheprobe"}},
-                  "spec": {"restartPolicy": "Never",
-                           "securityContext": {"runAsNonRoot": True, "runAsUser": 999, "runAsGroup": 999, "seccompProfile": {"type": "RuntimeDefault"}},
-                           "containers": [{"name": "valkey", "image": image, "command": ["sh", "-c", script], "env": env, "securityContext": ctx}]}}))
-PY
-wn=0
 wcrun() { # script: runs it in a pod that carries e2e-worker's REDIS_* variables; output in C_OUT
-  local name phase=""
-  wn=$((wn + 1)); name="cacheprobe-w$wn"
-  kc get deployments.apps e2e-worker -o json | python3 -c "$wcache_pod_py" "$name" "$cache_image" "set -e; $1" | kc apply -f - >/dev/null || sfail "could not start the probe pod $name"
-  for _ in $(seq 1 60); do   # up to 180 s
-    phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-    case "$phase" in Succeeded|Failed) break;; esac; sleep 3
-  done
-  C_OUT=$(kc logs "$name" 2>&1 || true)
-  [ "$phase" = Succeeded ] || { C_OUT="$C_OUT (pod phase: ${phase:-unknown})"; kc describe pod "$name" | tail -15; }
-  kc delete pod "$name" --wait=false >/dev/null 2>&1 || true
-  [ "$phase" = Succeeded ]
+  local rc=0   # up to 180 s
+  probe_run -k kc -d e2e-worker -i "$cache_image" -m 'REDIS_' -u 999 -l cacheprobe -F sfail -v "set -e; $1" || rc=$?
+  C_OUT=$PROBE_OUT
+  return $rc
 }
 rcli='valkey-cli --no-auth-warning -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD"'
 wcrun "$rcli RPUSH jobs \$(seq 1 30) >/dev/null; echo LEN=\$($rcli LLEN jobs)" || sfail "the cache probe could not push 30 entries to the list jobs: $C_OUT"   # 30 entries, length 10 each: 3 replicas
@@ -2253,28 +2184,13 @@ case "$out" in *"restored postgres/dev to $T as e2e-postgres-g1"*) ;; *) bfail "
 echo "ok   point-in-time restore to $T: $(echo "$out" | head -1)"
 
 # a probe pod (not a Deployment: the guard rails do not cover it) with e2e-api's own database variables
-read -r -d '' db_pod_py <<'PY' || true
-import json, sys
-name, image, script = sys.argv[1:4]
-dep = json.load(sys.stdin)
-names = ("DATABASE_URL", "PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD")
-env = [e for e in dep["spec"]["template"]["spec"]["containers"][0].get("env", []) if "valueFrom" in e and e["name"] in names]
-print(json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"name": name, "labels": {"app": "dbprobe"}},
-                  "spec": {"restartPolicy": "Never", "containers": [{"name": "psql", "image": image, "command": ["sh", "-c", script], "env": env}]}}))
-PY
-dbn=0
 db_rows() { # reads the table e2e_rows with e2e-api's database variables; the rows in DB_OUT, one line
-  local name phase="" image
-  dbn=$((dbn + 1)); name="dbprobe-$dbn"
+  local image rc=0   # up to 180 s (the first run pulls the image)
   image=$(kc get clusters.postgresql.cnpg.io e2e-postgres-g1 -o jsonpath='{.spec.imageName}')
-  kc get deploy e2e-api -o json | python3 -c "$db_pod_py" "$name" "$image" 'psql "$DATABASE_URL" -tAc "select v from e2e_rows order by v"' | kc apply -f - >/dev/null || bfail "could not start the probe pod $name"
-  for _ in $(seq 1 60); do   # up to 180 s (the first run pulls the image)
-    phase=$(kc get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-    case "$phase" in Succeeded|Failed) break;; esac; sleep 3
-  done
-  DB_OUT=$(kc logs "$name" 2>&1 | tr '\n' ' ' | sed 's/ *$//' || true)
-  kc delete pod "$name" --wait=false >/dev/null 2>&1 || true
-  [ "$phase" = Succeeded ]
+  probe_run -k kc -d e2e-api -i "$image" -m '(DATABASE_URL|PGHOST|PGPORT|PGDATABASE|PGUSER|PGPASSWORD)$' -l dbprobe -F bfail \
+    'psql "$DATABASE_URL" -tAc "select v from e2e_rows order by v"' || rc=$?
+  DB_OUT=$(printf '%s\n' "$PROBE_OUT" | tr '\n' ' ' | sed 's/ *$//')
+  return $rc
 }
 
 bstep "Database switch: a component reads the restored row A and not B (AC-117.9)"
