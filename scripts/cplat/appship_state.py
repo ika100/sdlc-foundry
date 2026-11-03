@@ -191,6 +191,8 @@ def resolve_context(repo: Path, context: str | None) -> str:
 def _open_budget(repo: Path, st: dict, options: dict) -> None:
     """Spec 102: the product run owns the budget of its repo ships: the ship defaults times the plan's repos."""
     budget.open_root(st.get("run_id"), budget.work_key(repo, st["spec"], st["spec"]), ships=len(plan_repos(repo, st['spec'])), options=options, repo=repo)
+    org = slug(repo).split("/")[0]                 # spec 131: one placeholder part per repo; the repo ship's `phase build` rescales it
+    budget.add_parts(st.get("run_id"), {f"{org}/{r['id']}:*": dict(budget.defaults(repo)) for r in plan_repos(repo, st["spec"])})
 
 
 def start(repo: Path, ref: str, max_: int | None = None, context: str | None = None,
