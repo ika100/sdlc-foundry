@@ -17,6 +17,7 @@ tasks:
     covers: [AC-133.9, AC-133.13]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: "`cplat pr open` appends or replaces the block, ignores a run for another spec, never fails because of it"
     files: [scripts/cplat/pr_open.py]

@@ -23,7 +23,7 @@ It prints JSON: `shape`, `plugin`, `deployable`, `library`, `agents` (the subage
 ## Phase 0 — Pre-flight
 
 0. `cplat platform runs begin build --spec <id>` (spec 087). Inside `/component:ship` it attaches to the ship run. Every stop below that needs the user, or fails, first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`--outcome failed` for a hard failure); the Final Report ends with `cplat platform runs end --outcome done`. Recording never fails a build; a warning is not an error.
-   **Agent metrics (spec 089):** after every subagent you spawn, in any phase, run `cplat platform runs agent spawned <role> [--model-id <id>]` (`<role>` is the role name, e.g. `coder`; `--model-id` only when you know the model id). The calls below record what only you can judge; none fails the build.
+   **Agent metrics (spec 089):** after every subagent you spawn, in any phase, run `cplat platform runs agent spawned <role> [--model-id <id>]` (`<role>` e.g. `coder`; `--model-id` only when known). The calls below record what only you can judge.
 1. `git status --porcelain`. A dirty tree on a spec whose status is not `building` stops the build: commit or stash first (the clean-tree rule). On a `building` spec it is an **interrupted build** (spec 047): read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (stale staged files: `git restore --staged`; WIP commit: `wip(<task-id>): interrupted`).
 2. `cplat spec check <id> --require approved` must pass, and `docs/specs/<spec_id>/plan.md` must exist. Otherwise stop with the fix: `/component:spec approve <NNN>`, `/component:plan <NNN>`, or for `spec_hash` drift `/component:plan <NNN>` again.
 3. Switch to `feature/<spec_id>` (create it from `main` if missing). `$FEATURE_BRANCH` = it.
@@ -44,7 +44,7 @@ Do not wait for CI on `main`.
 Then:
 - `cplat spec trace <id>` must pass; otherwise send the missing ids back to the tester (once).
 - `cplat quiet test-fast`: the new tests fail, nothing else newly fails. A test that errors for another reason goes back to the tester.
-- Then record the tester's misses with one call, also when there were none: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...` (one `--untraced` for each criterion id sent back, one `--wrong-failure` for each test sent back).
+- Record the tester's misses in one call, also when there were none: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...` (one flag per criterion id or test sent back).
 - `cplat spec trace <id> --json` → hold `TRACE` (criterion → test files) for Phase 2.
 - `cplat quiet lint-fix`; commit changed tests as `test(<slug>): lint-fix acceptance tests for <id>` (#367). Then `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`: the commit the tests are measured against (spec 048).
 
@@ -61,7 +61,7 @@ From `plan.md`: **skip tasks with `done: true`**. Run `cplat component build sch
 Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and run a throwaway Agent with `isolation: "worktree"` whose one task is to report `git rev-parse HEAD` in its worktree.
 
 - It errors ("Cannot create agent worktree", "not in a git repository") or reports a HEAD other than `$FEATURE_HEAD` → read `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md` and follow it (every task runs sequentially; `worktree.baseRef: "head"`).
-- It reports `$FEATURE_HEAD` → parallel batches are safe: every task branch starts at the feature head, so merging it brings only that task's commits.
+- It reports `$FEATURE_HEAD` → parallel batches are safe (every task branch starts at the feature head, so merging brings only its commits): `cplat platform runs agent execution parallel`.
 
 ### 2.3 Coder prompt (every task)
 
@@ -176,7 +176,7 @@ Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` i
    - [x] No secrets, credentials, or API keys committed
    ```
 
-2. Make **one** Bash call; it commits what is left with `-s`, pushes the feature branch, opens the PR and adds "Contains WIP commits from an interrupted build: squash-merge." to the body when the branch has `wip(` commits (spec 047):
+2. Make **one** Bash call; it commits what is left with `-s`, pushes the feature branch, opens the PR and adds "Contains WIP commits from an interrupted build: squash-merge." to the body when the branch has `wip(` commits (spec 047), plus the run's generated "How this was built" block (spec 133; never edit it):
 
    ```bash
    cplat pr open --spec <spec_id> --title "feat(<scope>): <spec title, ≤72 chars>" [--no-spec]
