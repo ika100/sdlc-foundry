@@ -10,6 +10,7 @@ tasks:
     covers: [AC-134.2, AC-134.3, AC-134.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: E2E_PART guards in tests/e2e/run.sh (core, scaling, backups, all) with skip lines and the early refusal of an unknown part
     files: [tests/e2e/run.sh, tests/cplat/test_e2e_parts_134.py]

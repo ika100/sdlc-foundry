@@ -1,7 +1,7 @@
 ---
 spec_id: 134-a-pr-runs-only-the-e2e-it-needs
 title: A pull request runs only the e2e it needs, and that e2e runs in parallel parts
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [281]
@@ -151,3 +151,4 @@ pull request runs never lets a release go out untested.
 
 - 2026-11-03 created
 - 2026-11-03 approved
+- 2026-11-03 building
