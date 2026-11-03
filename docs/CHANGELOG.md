@@ -6,6 +6,16 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Added
+
+**`cplat platform doctor` says why agent worktrees start at main (#319).** Claude Code reads the project's `.claude/settings.json` only from the directory a session starts in, so a session started outside the repo (for example in `~/Dev`) and changed into it later does not apply `worktree.baseRef: head`: the worktree probe of `/component:build` sees main's HEAD and every task runs one after another. Doctor now warns when the current directory is not the repo's root and when `.claude/settings.json` lacks `"worktree": {"baseRef": "head"}`, and the probe step of `/component:build` tells you to start the next session in the repo root. Update the plugins (`/plugin marketplace update`).
+
+### Changed
+
+**In the platform repo itself, `cplat` runs the checkout (#320).** The launcher ran the installed release there, so a cplat fix merged to `main` (for example to `pr wait`) did not apply to the work that followed until the next release was installed, and a new command such as `platform release` needed `CPLAT_PLATFORM=$PWD`. When the current directory is inside a git checkout that declares `shape: platform` in `.platform-settings.yml`, the launcher now runs that checkout's `scripts/cplat`; `CPLAT_PLATFORM` and `CPLAT_REF` still win, and `cplat platform doctor` shows `platform scripts: checkout: <path>`. Other repos are unchanged. Update the plugins (`/plugin marketplace update`).
+
+**CONTRIBUTING.md has rules for AI-assisted PRs, security paths, issue claims and fork CI (#326).** AI-assisted PRs are welcome with the local test output in the description; the redaction, secret handling and permissions are changed by maintainers only; an issue claim expires after 7 days without a draft PR; and CI of a fork PR is approved only after a maintainer has read the diff.
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed
