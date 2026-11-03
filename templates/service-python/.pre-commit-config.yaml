@@ -19,3 +19,4 @@ repos:
     hooks:
       - id: detect-secrets
         args: [--baseline, .secrets.baseline.json]
+        exclude: '\.copier-answers\.yml$'   # template answers only; the platform commit there looks random (#389)

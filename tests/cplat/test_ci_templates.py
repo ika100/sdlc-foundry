@@ -110,6 +110,28 @@ def test_a_fresh_render_passes_its_own_secrets_scan(template, tmp_path):
     assert out.returncode == 0, out.stdout[-3000:]
 
 
+@pytest.mark.slow
+@pytest.mark.skipif(not shutil.which("uvx"), reason="needs uvx")
+@pytest.mark.parametrize("template", BASELINE_TEMPLATES)
+def test_the_answers_file_never_fails_the_scan_389(template, tmp_path):
+    """#389: .copier-answers.yml records where the template came from; a local path like this one looked like a secret."""
+    repo = _render(template, tmp_path / "todo", "todo")
+    answers = repo / ".copier-answers.yml"
+    tripping = "_src_path: /home/ci/Dev/sdlc-foundry-fix389/templates/library-python"   # a worktree path that detect-secrets flags
+    answers.write_text(re.sub(r"(?m)^_src_path:.*$", tripping, answers.read_text()))
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    files = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True).stdout.split()
+    scan = _json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]["secrets-scan"]
+    flags = scan.split("detect-secrets-hook", 1)[1].split()
+    hook = ["uvx", "--from", "detect-secrets==1.5.0", "detect-secrets-hook"]
+    unexcluded = " ".join(flags).replace("--exclude-files copier-answers", "").split()     # the recipe as it was before #389
+    bare = subprocess.run([*hook, *unexcluded, ".copier-answers.yml"], cwd=repo, capture_output=True, text=True)
+    assert bare.returncode == 1, "the path no longer trips detect-secrets: pick another one for this test"
+    out = subprocess.run([*hook, *flags, *files], cwd=repo, capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout[-3000:]
+
+
 # ---------------- spec 064: self-hosted CI runners through repository variables ----------------
 
 ALL_TEMPLATES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs", "gitops-app"]

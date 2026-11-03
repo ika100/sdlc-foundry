@@ -42,7 +42,8 @@ FIX_RENDER_APP = "run `devbox run render` and check that applications/<system>/s
 FIX_RENDER_CLUSTER = "run `devbox run render` and check cluster.yaml"
 FIX_SECRETS = "commit at least one file that the scan does not exclude (`git add`)"
 
-SECRET_FLAGS = "--baseline .secrets.baseline.json --disable-filter detect_secrets.filters.gibberish.should_exclude_secret"
+SECRET_FLAGS = ("--baseline .secrets.baseline.json --exclude-files copier-answers "   # #389: the answers file is never scanned
+                "--disable-filter detect_secrets.filters.gibberish.should_exclude_secret")
 # the pathspec of each template's secrets-scan and a file that pathspec excludes
 SECRET_PATHSPEC = {"service-python": "':!*.lock'", "library-python": "':!*.lock'", "service-go": "':!go.sum'",
                    "web-nextjs": "':!pnpm-lock.yaml'"}
