@@ -7,6 +7,10 @@
 
 **An agentic SDLC platform: Claude Code agents, slash commands and Copier templates that take a system from idea to "running in Kubernetes via GitOps".**
 
+![A real run, sped up: /system:new creates the repos, cluster-up starts a local cluster, /component:spec asks its questions, /component:ship plans, tests, builds and merges, and curl reaches the new endpoint in dev](docs/img/demo.gif)
+
+*A real run on public demo repos ([demo-taskboard-api](https://github.com/ika100/demo-taskboard-api), [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops)), with waiting time cut: about 85 minutes shown in 2. The ship run stops once to ask about a formatter change to the acceptance tests; that is part of the run, not edited out.*
+
 > Formerly *claude-platform*. Renamed in v3.0.0 to stay clear of a third-party trademark; GitHub redirects the old repository URL. Installed plugins must be reinstalled from the new marketplace: see the [changelog](docs/CHANGELOG.md) and run `/platform:doctor`.
 
 You describe what you want in Claude Code; the platform scaffolds the repos (Python, Java, Go and Next.js services, plus a GitOps repo), builds and publishes multi-arch images, and renders every Kubernetes manifest from one declarative file in the GitOps repo. Secrets, a Postgres resource, OpenTelemetry observability and Kyverno guard rails are one declaration each; promotion between environments is a reviewed pull request. Everything that can be code is a tested script (`cplat`), and agents only orchestrate it.
