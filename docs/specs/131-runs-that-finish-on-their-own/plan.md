@@ -24,6 +24,7 @@ tasks:
     covers: [AC-131.12, AC-131.13, AC-131.14, AC-131.17]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: runs_usage and transcripts — an incomplete read is cost_complete false; parse cache for unchanged transcripts
     files: [scripts/cplat/runs_usage.py, scripts/cplat/transcripts.py]
