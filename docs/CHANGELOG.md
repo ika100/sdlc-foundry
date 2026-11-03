@@ -14,6 +14,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **cplat shows its progress when its output goes to a file or a pipe (#335).** Python buffers output that does not go to a terminal, so `cplat platform release`, `cplat pr wait` and `cplat spec land` run in the background (as `/platform:release` does) wrote nothing until they exited, sometimes 40 minutes later. The launcher sets `PYTHONUNBUFFERED=1` and cplat writes each line as it is printed. Update the plugins (`/plugin marketplace update`).
 
+**The console never treats a folder with another origin as a system's clone (#344).** `POST /api/open-system` passed its `repo` on without the `owner/name` check the actions use; it now answers 400 for anything else. When no candidate had the expected GitHub origin, the switcher, "Open" and "Open in Claude Code" still used a same-named folder; such a folder is now reported as no local clone. A clone in the configured workspace keeps its exception for forks.
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed
