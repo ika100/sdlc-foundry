@@ -2,6 +2,8 @@
 
 `cplat headless` runs a long ship or build as a series of short sessions, one **unit** each, and passes `--unit <unit>` to `/component:ship` or `/component:build`. This file is the only place the per-unit rules are written. Follow the rules of your unit and nothing else; the rest of the command stays unread.
 
+**Permissions:** the session is granted the run allowlist: the feature branch, `commit -s`, push without force and the PR; force pushes, pushes to the default branch and merges outside `cplat component ship land` are refused (ADR-076).
+
 ## Units
 
 | Unit | What you do |

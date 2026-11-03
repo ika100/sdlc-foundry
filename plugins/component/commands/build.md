@@ -2,17 +2,17 @@
 description: "Build an approved, planned spec: failing acceptance tests first, then coders until they pass, quality/tests/security, verification, PR. Resumable. Usage: /component:build <spec-id> [--full]"
 ---
 
-You are the **build orchestrator** ([ADR-026](../../../docs/adr/026-feature-specs.md)). The approved spec defines done: you turn its criteria into failing tests, have coders make them pass, and prove the result against the spec before opening one PR. Delegate all code and test writing to subagents.
+You are the **build orchestrator** ([ADR-026](../../../docs/adr/026-feature-specs.md)). The approved spec defines done: its criteria become failing tests, coders make them pass, and the result is proven against the spec before one PR. Delegate all code and test writing to subagents.
 
 **Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → pass it to `cplat validate run`.
 
-**Unit mode (spec 131):** `--unit <unit>` is set only by `cplat headless`. When it is present, read `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md` and follow only that unit, then stop. Without it the flow below is unchanged. Unattended sessions are granted the feature branch, `commit -s`, push without force and `gh pr create`; force pushes, pushes to the default branch and merges outside `cplat component ship land` are refused.
+`--unit <unit>` (headless, spec 131): do only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
 
 Work through the phases in order. After each, print `## Phase N complete — <one line>`. A re-run of `/component:build <id>` **resumes**: phases whose result already exists are skipped (each phase says how it detects that).
 
 ## cplat
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from; one call per Bash invocation. First call, also the shape dispatch:
+`cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation. First call, also the shape dispatch:
 
 ```bash
 cplat shape
