@@ -78,6 +78,118 @@ def parse_options(items: list[str] | dict | None) -> dict:
     return out
 
 
+def plan_limits(T: int, C: int, floors: dict) -> dict:
+    """The default limits of one spec with a plan of T tasks and C active criteria (spec 131, AC-131.13). A floor of
+    `None` (off) stays off."""
+    def at_least(name: str, value: float):
+        floor = floors.get(name)
+        return None if floor is None else _number(max(floor, value))
+
+    return {"minutes": at_least("minutes", 60 + 15 * T + 5 * C), "invocations": at_least("invocations", 20 + 5 * T + C),
+            "reruns": floors.get("reruns"), "cost": at_least("cost", 10 + 1.5 * T + 0.5 * C)}
+
+
+def plan_size(repo: Path, spec_id: str) -> tuple[int, int] | None:
+    """(tasks in plan.md, active criteria) of a spec whose plan passes `spec.check_plan`; None without such a plan."""
+    import spec as specmod
+    try:
+        sp = specmod.find(Path(repo), spec_id)
+        if not sp.plan or specmod.check_plan(sp, *sp.plan):
+            return None
+        tasks = sp.plan[0].get("tasks")
+        return len(tasks), len(sp.active_acs())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _spec_ids(repo: Path | None, key: str) -> list[str]:
+    """The full ids of the specs in a ledger key `<repo key>:<id>[+<id>]` that exist in `repo`."""
+    import spec as specmod
+    if repo is None:
+        return []
+    out = []
+    for ref in key.rpartition(":")[2].split("+"):
+        try:
+            out.append(specmod.find(Path(repo), ref).id)
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def _spec_part(repo: Path, spec_id: str, floors: dict) -> dict:
+    size = plan_size(repo, spec_id)
+    if size is None:
+        return {"limits": dict(floors)}
+    return {"limits": plan_limits(*size, floors), "T": size[0], "C": size[1]}
+
+
+def _sum_parts(parts: dict) -> dict:
+    out: dict = {}
+    for name in LIMITS:
+        values = [(p.get("limits") or {}).get(name) for p in parts.values()]
+        out[name] = None if not values or any(v is None for v in values) else _number(sum(values))
+    return out
+
+
+def _raise(data: dict, now: str, reason: str) -> list[dict]:
+    """Each limit not in `fixed` becomes max(current, sum of parts); every raise is noted in `changes`."""
+    total, changes = _sum_parts(data.get("parts") or {}), []
+    for name in LIMITS:
+        cur, new = data["limits"].get(name), total[name]
+        if name in (data.get("fixed") or []) or cur is None or new is None or new <= cur:
+            continue
+        change = {"at": now, "limit": name, "from": cur, "to": new, "reason": reason}
+        data["limits"][name] = new
+        data.setdefault("changes", []).append(change)
+        changes.append(change)
+    return changes
+
+
+def _rescale(data: dict, repo: Path, spec_ids: list[str], now: str) -> list[dict]:
+    parts, floors, rk, notes = data.setdefault("parts", {}), defaults(repo), repo_key(repo), []
+    for sid in spec_ids:
+        size = plan_size(repo, sid)
+        if size is None:
+            continue
+        part = _spec_part(repo, sid, floors)
+        if f"{rk}:{sid}" not in parts:
+            parts.pop(f"{rk}:*", None)
+        parts[f"{rk}:{sid}"] = part
+        notes.append(f"plan of {sid}: T={size[0]}, C={size[1]}")
+    return _raise(data, now, "; ".join(notes)) if notes else []
+
+
+def rescale(run_id: str | None, repo: Path, spec_ids: list[str]) -> list[dict]:
+    """Raise the limits to the plans of `spec_ids` (never lowers). Returns the changes; never raises."""
+    try:
+        found = find(run_id)
+        if found is None:
+            return []
+        out: list[dict] = []
+        _modify(found[0], lambda d: out.extend(_rescale(d, Path(repo), list(spec_ids), _iso(runs.utcnow()))))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def add_parts(run_id: str | None, parts: dict) -> list[dict]:
+    """Add (placeholder) parts `{key: limits}` and raise the limits to the new sum (never lowers). Never raises."""
+    try:
+        found = find(run_id)
+        if found is None:
+            return []
+        out: list[dict] = []
+
+        def add(d: dict) -> None:
+            for k, limits in parts.items():
+                d.setdefault("parts", {})[k] = {"limits": dict(limits)}
+            out.extend(_raise(d, _iso(runs.utcnow()), "parts added: " + ", ".join(parts)))
+        _modify(found[0], add)
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def defaults(repo: Path | None = None) -> dict:
     """The per-ship limits: the platform defaults, overridden by `budget:` in the settings files (settings.py)."""
     return {**DEFAULTS, **(settings.budget_defaults(repo) if repo else {})}
@@ -244,13 +356,22 @@ def open_root(run_id: str | None, key: str, *, ships: int = 1, options: list[str
             elif data is not None and data.get("state") != "done":
                 _fold_previous(data, now)
                 data["roots"].append(run_id)
+                data.setdefault("parts", {})
+                data.setdefault("fixed", [])
+                data.setdefault("grace", None)
                 data["state"], data["stop"] = "open", None
                 data["current"] = {"run_id": run_id, "started_at": now}
                 data["used"]["invocations"] = data["used"].get("invocations", 0) + started_in_session
             else:
-                limits = {k: (None if v is None else _number(v * max(1, ships))) for k, v in base.items()}
+                ids = _spec_ids(repo, key)
+                parts = {f"{repo_key(repo)}:{sid}": _spec_part(repo, sid, base) for sid in ids}
+                spare = max(1, ships) - len(ids)       # ships of specs this repo cannot resolve (a product ship's repos)
+                if spare > 0:
+                    parts[f"{repo_key(repo) if repo else key}:*"] = {"limits": {
+                        k: (None if v is None else _number(v * spare)) for k, v in base.items()}}
+                limits = _sum_parts(parts)
                 limits.update({k: v for k, v in opts.items()})
-                data = {"key": key, "limits": limits, "carried": {"minutes": 0, "invocations": 0, "reruns": 0, "cost": 0},
+                data = {"key": key, "limits": limits, "parts": parts, "fixed": list(opts), "grace": None, "carried": {"minutes": 0, "invocations": 0, "reruns": 0, "cost": 0},
                         "used": {"invocations": started_in_session, "reruns": 0}, "roots": [run_id],
                         "current": {"run_id": run_id, "started_at": now}, "started_at": now,
                         "changes": [], "state": "open", "stop": None, "attempts": {}, "stages": {}}
@@ -259,6 +380,10 @@ def open_root(run_id: str | None, key: str, *, ships: int = 1, options: list[str
                 if data["limits"].get(limit) != value:
                     data["changes"].append({"at": now, "limit": limit, "from": data["limits"].get(limit), "to": value})
                     data["limits"][limit] = value
+                if limit not in data.setdefault("fixed", []):
+                    data["fixed"].append(limit)
+            if repo is not None:
+                _rescale(data, Path(repo), _spec_ids(repo, key), now)
             _write(path, data)
     except Exception:  # noqa: BLE001
         pass
@@ -275,7 +400,7 @@ def _cost_of(rec: dict) -> float | str:
     totals = (sec or {}).get("totals")
     if not totals:                       # unreadable usage is unknown, never 0 (AC-102.5)
         return UNKNOWN
-    if not totals.get("cost_complete", False) and totals.get("calls"):
+    if not totals.get("cost_complete", False):
         return UNKNOWN
     return float(totals.get("cost_usd") or 0.0)
 
@@ -297,10 +422,12 @@ def _tree(root: str) -> list[dict]:
     return recs
 
 
-def _live_cost(root: str):
+def _live_cost(root: str, started_session: bool = True):
     recs = _tree(root)
     top = next((r for r in recs if r["run_id"] == root), None)
     if top is not None and top.get("kind") == "headless":
+        if not started_session:   # the $0 rule (AC-131.12): no session started, so no cost to read
+            return 0.0
         recs = [top]              # the headless session's transcripts already hold every child
     total: float | str = 0.0
     for rec in recs:
@@ -317,7 +444,7 @@ def used_of(data: dict, *, cost: bool = True) -> dict:
     out = {"minutes": round(minutes, 1), "invocations": carried.get("invocations", 0) + used.get("invocations", 0),
            "reruns": carried.get("reruns", 0) + used.get("reruns", 0), "cost": None}
     if cost:
-        out["cost"] = _sum_cost(carried.get("cost", 0), _live_cost(cur["run_id"]) if cur.get("run_id") else 0.0)
+        out["cost"] = _sum_cost(carried.get("cost", 0), _live_cost(cur["run_id"], bool(used.get("invocations", 0))) if cur.get("run_id") else 0.0)
         if out["cost"] != UNKNOWN:
             out["cost"] = round(out["cost"], 4)
     return out
@@ -381,8 +508,15 @@ def limits_line(run_id: str | None) -> str | None:
             return None
         lim = found[1]["limits"]
         cost = "off" if lim.get("cost") is None else f"${lim['cost']}"
+        planned = [(k, p) for k, p in (found[1].get("parts") or {}).items() if "T" in p]
+        if len(planned) == 1:
+            plan = f" (plan: T={planned[0][1]['T']}, C={planned[0][1]['C']})"
+        elif planned:
+            plan = " (plan: " + "; ".join(f"{k.rpartition(':')[2].split('-')[0]} T={p['T']} C={p['C']}" for k, p in planned) + ")"
+        else:
+            plan = ""
         return (f"budget: minutes {_fmt(lim.get('minutes'))}, invocations {_fmt(lim.get('invocations'))}, "
-                f"reruns {_fmt(lim.get('reruns'))}, cost {cost}  (cplat budget show)")
+                f"reruns {_fmt(lim.get('reruns'))}, cost {cost}{plan}  (cplat budget show)")
     except Exception:  # noqa: BLE001
         return None
 
@@ -390,7 +524,9 @@ def limits_line(run_id: str | None) -> str | None:
 # ---------------- the stop ----------------
 
 def section(data: dict, limit: str | None, phase: str | None, point: str | None) -> dict:
-    return {"limits": dict(data["limits"]), "used": used_of(data), "limit": limit, "phase": phase, "point": point}
+    parts = {k: {"T": p["T"], "C": p["C"]} for k, p in (data.get("parts") or {}).items() if "T" in p}
+    return {"limits": dict(data["limits"]), "used": used_of(data), "limit": limit, "phase": phase, "point": point,
+            "parts": parts, "grace": data.get("grace")}
 
 
 def stop(run_id: str | None, limit: str, point: str, phase: str | None = None) -> str:
@@ -430,6 +566,8 @@ def on_finish(run_id: str | None, usage: dict | None, outcome: str) -> None:
         totals = (usage or {}).get("totals")
         if totals:
             cost = float(totals.get("cost_usd") or 0.0) if totals.get("cost_complete", True) else UNKNOWN
+        if run_id == root and (runs.active(root) or {}).get("kind") == "headless" and not data["used"].get("invocations", 0):
+            cost = 0.0                       # the $0 rule (AC-131.12): no session started
         is_root = run_id == root
         headless_root = (runs.active(root) or {}).get("kind") == "headless"
         used = used_of(data, cost=False)

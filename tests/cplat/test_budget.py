@@ -36,6 +36,7 @@ from test_ship_checks import gh as checks_gh, running  # noqa: F401  (fixture)
 ROOT = core.PLATFORM_ROOT
 CPLAT = ROOT / "scripts" / "cplat" / "cplat.py"
 DEFAULTS = {"minutes": 180, "invocations": 60, "reruns": 6, "cost": 15}
+PLANNED = {**DEFAULTS, "cost": 15.5}   # spec 131: the fixture spec has a plan of 3 tasks and 2 criteria: 10 + 4.5 + 1
 TOKEN = "ghp_" + "a1B2c3D4e5F6" * 3
 
 
@@ -103,7 +104,7 @@ def test_a_ship_starts_with_the_default_limits_and_shows_all_four(here, gh, budg
     out = capsys.readouterr().out.lower()
     for word, value in (("minutes", "180"), ("invocations", "60"), ("reruns", "6"), ("cost", "15")):
         assert word in out and value in out
-    assert show(budget, capsys)["limits"] == DEFAULTS
+    assert show(budget, capsys)["limits"] == PLANNED
 
 
 def test_budget_options_replace_limits_and_off_is_shown_as_off(here, gh, budget, capsys):
@@ -156,7 +157,7 @@ def test_a_ship_under_headless_uses_the_headless_ledger(hl_repo, tmp_path, monke
     (h,) = [r for r in buffered_lines() if r["kind"] == "headless"]
     shown = json.loads((hl_repo / "shown.json").read_text())
     assert shown["root"] == h["run_id"]
-    assert shown["limits"] == DEFAULTS                     # one spec in the prompt: not fresh limits, the root's
+    assert shown["limits"] == PLANNED                     # one spec in the prompt: not fresh limits, the root's
     assert len(ledgers()) == 1
 
 
@@ -295,7 +296,7 @@ def test_max_runs_still_stops_headless_under_a_budget(hl_repo, tmp_path, monkeyp
     assert headless.main(["/svc:ship 7", "--repo", str(hl_repo), "--max-runs", "2"]) == 1
     assert "stopped after 2 runs" in capsys.readouterr().out
     (h,) = [r for r in buffered_lines() if r["kind"] == "headless"]
-    assert h["stop_reason"] == "out of runs" and h["budget"]["limits"] == DEFAULTS
+    assert h["stop_reason"] == "out of runs" and h["budget"]["limits"] == PLANNED
 
 
 def test_a_budget_result_line_maps_to_the_budget_stop_reason():
@@ -331,7 +332,7 @@ def test_the_record_holds_the_budget_section(here, gh, budget, clock, usage, sto
         pass
     (r,) = stored(store)
     b = r["budget"]
-    assert b["limits"] == {"minutes": 10, "invocations": 60, "reruns": 6, "cost": 15}
+    assert b["limits"] == {"minutes": 10, "invocations": 60, "reruns": 6, "cost": 15.5}
     assert set(b["used"]) == {"minutes", "invocations", "reruns", "cost"} and b["used"]["minutes"] >= 10 and b["used"]["cost"] == 2.5
     assert b["limit"] == "minutes" and b["phase"]
     assert r["outcome"] != "done"
@@ -385,13 +386,13 @@ def test_a_resumed_run_continues_usage_and_notes_a_changed_limit(here, gh, budge
     ship.escalate(here, "needs a decision", cause="decision")
     start_ship(here)
     after = show(budget, capsys)
-    assert after["limits"] == DEFAULTS
+    assert after["limits"] == PLANNED
     assert after["used"]["minutes"] >= before["minutes"] and after["used"]["invocations"] >= before["invocations"]
     assert len(ledgers()) == 1 and ledger()["changes"] == []
     start_ship(here, "--budget", "cost=40")
     assert show(budget, capsys)["limits"]["cost"] == 40 and len(ledgers()) == 1
     (change,) = ledger()["changes"]
-    assert (change["limit"], change["from"], change["to"]) == ("cost", 15, 40) and change["at"]
+    assert (change["limit"], change["from"], change["to"]) == ("cost", 15.5, 40) and change["at"]
 
 
 # ---------------- AC-102.9 no progress ----------------
