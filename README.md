@@ -9,7 +9,7 @@
 
 ![A real run, sped up: /system:new creates the repos, cluster-up starts a local cluster, /component:spec asks its questions, /component:ship plans, tests, builds and merges, and curl reaches the new endpoint in dev](docs/img/demo.gif)
 
-*A real run on public demo repos ([demo-taskboard-api](https://github.com/ika100/demo-taskboard-api), [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops)), with waiting time cut: about 85 minutes shown in 2. The ship run stops once to ask about a formatter change to the acceptance tests; that is part of the run, not edited out.*
+*A real run on public demo repos ([demo-taskboard-api](https://github.com/ika100/demo-taskboard-api), [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops)), with waiting time cut: about 85 minutes shown in 4; most of the real time is CI on each pull request. The ship run stops once to ask about a formatter change to the acceptance tests; that is part of the run, not edited out.*
 
 > Formerly *claude-platform*. Renamed in v3.0.0 to stay clear of a third-party trademark; GitHub redirects the old repository URL. Installed plugins must be reinstalled from the new marketplace: see the [changelog](docs/CHANGELOG.md) and run `/platform:doctor`.
 
