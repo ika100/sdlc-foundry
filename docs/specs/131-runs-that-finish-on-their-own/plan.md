@@ -59,6 +59,7 @@ tasks:
     covers: [AC-131.4, AC-131.6, AC-131.8, AC-131.9, AC-131.10, AC-131.11, AC-131.12]
     parallel_safe: false
     depends_on: [t2, t7]
+    done: true
   - id: t9
     title: system ship — placeholder budget parts per plan repo, preflight at repo start
     files: [scripts/cplat/appship_state.py, scripts/cplat/appship_sched.py]
