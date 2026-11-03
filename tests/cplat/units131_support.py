@@ -50,7 +50,10 @@ def spec_text(acs: int) -> str:
 
 
 def plan_for(tasks: int, acs: int, hash_: str) -> str:
-    rows = "".join(f"  - {{id: t{i}, title: task {i}, files: [f{i}.py], covers: [AC-007.{(i - 1) % acs + 1}], "
+    def covers(i: int) -> str:   # every criterion is covered by some task, so the plan passes check_plan
+        ids = sorted({(i - 1) % acs + 1} | {j for j in range(1, acs + 1) if (j - 1) % tasks == i - 1})
+        return ", ".join(f"AC-007.{j}" for j in ids)
+    rows = "".join(f"  - {{id: t{i}, title: task {i}, files: [f{i}.py], covers: [{covers(i)}], "
                    f"parallel_safe: true, depends_on: []}}\n" for i in range(1, tasks + 1))
     return f"---\nspec_id: {SPEC_ID}\nshape: service-python\nspec_hash: {hash_}\ntasks:\n{rows}---\n\n## t1 — task\n"
 
