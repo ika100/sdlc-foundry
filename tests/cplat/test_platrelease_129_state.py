@@ -31,7 +31,7 @@ def test_dry_run_prints_state_version_and_steps_and_creates_nothing(w):  # AC-12
     texts = [t for _, t in steps]
     assert texts[0] == "check the working tree, main and docs/CHANGELOG.md"
     assert texts[1] == f"create release/5.5.0 from main and move [Unreleased] under ## [5.5.0] - {DAY.isoformat()}"
-    assert texts[2] == "run release-check rows and devbox run validate"
+    assert texts[2] == "run release-check rows, devbox run validate and devbox run test-fast"
     assert texts[3] == 'commit "chore: release 5.5.0" (signed off), push release/5.5.0 and open the PR'
     assert texts[7] == "run release-check gate the merge commit"
     assert texts[11] == "wait for the release-guard run on v5.5.0"

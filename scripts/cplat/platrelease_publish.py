@@ -60,12 +60,12 @@ def _gate(repo: Path, sha: str) -> None:
         raise core.PlatformError("release-check gate failed")
 
 
-def _notes(repo: Path, sha: str, version: str) -> str:
+def _notes(repo: Path, sha: str, version: str, slug: str) -> str:
     text = core.run(["git", "show", f"{sha}:docs/CHANGELOG.md"], cwd=repo).stdout
     body = changelog.section_body(text, version)
     if not body:
         raise core.PlatformError(f"docs/CHANGELOG.md at {sha[:7]} has no ## [{version}] section to publish")
-    return body
+    return changelog.absolute_links(body, slug, f"v{version}")
 
 
 def _tag_stop(tag: str, sha: str, notes: str) -> int:
@@ -100,7 +100,7 @@ def _release(repo: Path, slug: str, tag: str, version: str, sha: str) -> str:
         return url
     gitdir = Path(core.run(["git", "rev-parse", "--absolute-git-dir"], cwd=repo).stdout.strip())
     path = gitdir / "RELEASE_NOTES.md"
-    path.write_text(_notes(repo, sha, version) + "\n")
+    path.write_text(_notes(repo, sha, version, slug) + "\n")
     out = ship.gh(["release", "create", tag, "-R", slug, "--title", tag, "--notes-file", str(path), "--verify-tag"], cwd=repo)
     return [ln for ln in out.splitlines() if ln.strip()][-1].strip()
 
@@ -132,7 +132,7 @@ def continue_from(repo: Path, state: st.State, version: str, sha: str | None, o)
         _upgrade_e2e(repo, slug, sha, o)
         _gate(repo, sha)
         if o.confirm != "tag":
-            return _tag_stop(tag, sha, _notes(repo, sha, version))
+            return _tag_stop(tag, sha, _notes(repo, sha, version, slug))
         _tag(repo, tag, sha)
     if phase in (st.MERGED, st.TAGGED):
         assert sha

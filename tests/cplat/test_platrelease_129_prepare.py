@@ -60,6 +60,30 @@ def test_a_failing_check_prints_its_output_and_commits_and_pushes_nothing(w, key
     assert w.created == [] and w.merges == []
 
 
+def test_the_test_suite_runs_on_the_moved_changelog_and_a_failure_commits_nothing_334(w, monkeypatch):  # AC-129.7
+    """#334: `devbox run test-fast` runs after rows and validate, on the moved changelog; red stops before the commit."""
+    seen = []
+    real = w.run_check
+
+    def check(repo, cmd):
+        if "test-fast" in cmd:
+            seen.append((repo / "docs/CHANGELOG.md").read_text())
+        return real(repo, cmd)
+
+    import platrelease_state
+    monkeypatch.setattr(platrelease_state, "run_check", check)
+    output = "FAILED tests/cplat/test_x.py::test_y - AssertionError: no entry in [Unreleased] names #316"
+    w.results["test-fast"] = (1, output)
+    r = w.run()
+    assert r.rc == 1 and output in r.text and "devbox run test-fast failed" in r.err
+    assert [c for _, c in w.check_calls][-3:] == [w.check_cmd("rows")[0], ["devbox", "run", "validate"],
+                                                  ["devbox", "run", "test-fast"]]
+    assert seen == [moved_changelog("5.5.0")]
+    assert w.git("rev-list", "--count", f"main..{BRANCH}").strip() == "0"
+    assert BRANCH not in w.git("ls-remote", "--heads", "origin")
+    assert w.created == [] and w.merges == []
+
+
 # ---------------- AC-129.8 ----------------
 
 def test_one_signed_commit_is_pushed_and_the_pr_is_opened(w, stopped):  # AC-129.8

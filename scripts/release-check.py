@@ -5,7 +5,8 @@
 """Release check and gate (spec 121, AC-121.23, AC-121.24, AC-121.26).
 
   release-check.py rows [--base REF]              the CHANGELOG section that will be released lists every changed versions row since REF
-                                                  (`cplat platform versions --diff REF --changelog`), and a major move needs a major release
+                                                  (`cplat platform versions --diff REF --changelog`), a major move needs a major release, and no
+                                                  section repeats a paragraph (#336)
   release-check.py needs-major [--base REF]       one line per change that needs a major release (the rule `rows` uses), nothing when none
   release-check.py needs-upgrade-e2e [--base REF] prints `run=true|false` (for $GITHUB_OUTPUT): the change touches the versions table, adds a
                                                   release heading or touches the upgrade e2e or its code
@@ -101,6 +102,24 @@ def dropped_majors(base: str) -> list[str]:
     return out
 
 
+def repeated_paragraphs(text: str) -> list[str]:
+    """`[section]: paragraph…` for every paragraph a section of the changelog repeats (a duplicated entry, e.g. from a merge
+    conflict, #336). Headings are not paragraphs."""
+    heads = list(HEADING.finditer(text))
+    out = []
+    for h, nxt in zip(heads, heads[1:] + [None]):
+        seen: set[str] = set()
+        for para in re.split(r"\n[ \t]*\n", text[h.end(): nxt.start() if nxt else len(text)]):
+            p = para.strip()
+            if not p or p.startswith("#"):
+                continue
+            if p in seen:
+                first = p.splitlines()[0]
+                out.append(f"[{h['name']}]: {first[:100]}{'…' if len(first) > 100 else ''}")
+            seen.add(p)
+    return out
+
+
 def changes_since(base: str) -> list[dict]:
     old = versions.at_ref(base)
     new, _ = versions.current()
@@ -122,8 +141,9 @@ def cmd_needs_major(base: str) -> int:
 
 def cmd_rows(base: str) -> int:
     changes = changes_since(base)
-    label, version, body = released_section(changelog_text(), base)
-    errors = []
+    text = changelog_text()
+    label, version, body = released_section(text, base)
+    errors = [f"ERROR: {CHANGELOG}: {where} repeats a paragraph" for where in repeated_paragraphs(text)]
     for c, line in zip(changes, versions.diff_lines(changes, True)):
         if c["kind"] != "crds" and line not in body:      # a removed CRD version is not a row: it only needs the major release
             errors.append(f"ERROR: {CHANGELOG}: {label} does not list {line}")

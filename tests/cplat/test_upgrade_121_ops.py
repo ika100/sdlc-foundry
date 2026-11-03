@@ -571,6 +571,26 @@ def test_a_dropped_resource_major_fails_on_a_minor_release_naming_the_row_ac_121
     assert rows_check(root)[0] == 0
 
 
+DUP = "**`cluster add` checks the system before it opens a PR.** It reads system.yaml first (#263)."
+
+
+def test_a_section_that_repeats_a_paragraph_fails_naming_the_section_336(tmp_path):  # AC-121.23
+    """#336: a duplicated changelog entry (e.g. from a merge conflict) fails the rows check, in any section."""
+    root = release_world(tmp_path / "unreleased", "pass", changelog_with(f"{DUP}\n\nother\n\n{DUP}"))
+    rc, out = rows_check(root)
+    assert rc == 1 and re.search(r"(?m)^ERROR: docs/CHANGELOG\.md: \[Unreleased\]: \*\*`cluster add` .* repeats a paragraph$", out), out
+    root = release_world(tmp_path / "old", "pass", changelog_with("", {"5.4.0": f"{DUP}\n\n### Fixed\n\n{DUP}"}))
+    rc, out = rows_check(root)
+    assert rc == 1 and "[5.4.0]: **`cluster add`" in out, out
+
+
+def test_the_same_paragraph_in_two_sections_or_a_repeated_heading_passes_336(tmp_path):  # AC-121.23
+    """#336: only a repeat inside one section is a duplicate; `### Fixed` in two places is not."""
+    root = release_world(tmp_path, "pass", changelog_with(f"### Fixed\n\n{DUP}", {"5.4.0": f"### Fixed\n\n{DUP}"}))
+    rc, out = rows_check(root)
+    assert rc == 0, out
+
+
 def test_the_release_check_is_green_on_this_branch_ac_121_23():  # AC-121.23
     rc, out = run_script(ROOT, "release-check.py", "rows")   # base: the latest tag, as the CI job runs it (#294)
     assert rc == 0, out

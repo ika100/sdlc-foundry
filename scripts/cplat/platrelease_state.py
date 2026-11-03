@@ -29,7 +29,7 @@ FIRST_STEP = {IDLE: 1, BRANCH: 2, PR_OPEN: 5, MERGED: 7, TAGGED: 11, GUARDING: 1
 
 
 def run_check(repo: Path, cmd: list[str]) -> tuple[int, str]:
-    """Run a repo script (release-check, devbox run validate) in `repo`; (returncode, stdout+stderr). Tests replace this."""
+    """Run a repo script (release-check, devbox run validate/test-fast) in `repo`; (returncode, stdout+stderr). Tests replace this."""
     try:
         p = subprocess.run(cmd, cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except FileNotFoundError:
@@ -259,7 +259,7 @@ def steps(phase: str, version: str, sha: str | None, date: datetime.date | str) 
     allsteps = [
         "check the working tree, main and docs/CHANGELOG.md",
         f"create release/{x} from main and move [Unreleased] under ## [{x}] - {d}",
-        "run release-check rows and devbox run validate",
+        "run release-check rows, devbox run validate and devbox run test-fast",
         f'commit "chore: release {x}" (signed off), push release/{x} and open the PR',
         "wait for CI on the PR (the newest run of each workflow, the upgrade e2e included)",
         "stop for confirmation: squash-merge the PR (cplat platform release --confirm merge)",

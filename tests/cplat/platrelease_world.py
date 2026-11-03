@@ -263,7 +263,7 @@ class World:
     # ---- the seams ----
     def run_check(self, repo, cmd):
         self.check_calls.append((Path(repo), list(cmd)))
-        for key in ("needs-major", "rows", "gate", "validate"):
+        for key in ("needs-major", "rows", "gate", "validate", "test-fast"):
             if key in cmd:
                 return self.results.get(key, (0, "OK" if key != "needs-major" else ""))
         raise AssertionError(f"unscripted check: {cmd}")
