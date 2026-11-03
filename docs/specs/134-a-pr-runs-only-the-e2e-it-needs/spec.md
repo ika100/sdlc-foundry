@@ -111,8 +111,9 @@ pull request runs never lets a release go out untested.
   `E2E_PART=<part>`; when the event is `schedule` or `workflow_dispatch`, then it is one job with `part: all` and the 90-minute
   timeout; the `e2e-cluster` job is unchanged apart from needing `decide`.
 - **AC-134.7** Given the pull request that ships this spec (it changes `tests/e2e/run.sh`, so its e2e runs), when its e2e workflow
-  runs green, then the time from the first job's start to the last job's end is at most 1620 s (27 minutes; the measured median of the
-  single job is 2458 s), and the before/after timings (per part and in total) are reported in the pull request and in
+  runs green, then the decide job plus the longest part job (each from its start to its end, without the time a job waits for a free
+  runner) take at most 1620 s (27 minutes; the measured median of the single job is 2458 s), and the before/after timings (per part,
+  the queue time of each job and the time from the first job's start to the last job's end) are reported in the pull request and in
   `verification.md`.
 - **AC-134.8** Given the last 40 merged pull requests before this spec (the files each changed), when the rule of AC-134.2 is applied
   to them, then fewer of them start the cluster e2e than the old path filter started (23), and the count is recorded in
@@ -151,5 +152,10 @@ pull request runs never lets a release go out untested.
 
 - 2026-11-03 created
 - 2026-11-03 approved
+- 2026-11-03 building
+- 2026-11-03 done
+- 2026-11-03 amended: AC-134.7 measures the jobs without the time they wait for a free runner (the first run waited 253 s for one while other pull requests held the account's runners); the first-start-to-last-end time is still reported
+- 2026-11-03 draft
+- 2026-11-03 approved (the plan is unchanged; its spec_hash is refreshed)
 - 2026-11-03 building
 - 2026-11-03 done

@@ -1,7 +1,7 @@
 ---
 spec_id: 134-a-pr-runs-only-the-e2e-it-needs
 shape: platform
-spec_hash: 232cbd6f9389
+spec_hash: 9898c0b51c6d
 summary: "scripts/e2e-scope.py decides whether a pull request needs the cluster e2e (template, Dockerfile, e2e files, the cplat modules the e2e scripts call and import, closed over every import, or a release heading); e2e.yml gets a decide job and runs the e2e as three parallel parts on a pull request (E2E_PART guards in run.sh) and as one job nightly; e2e-upgrade decides on the pull request's base; CONTRIBUTING, ADR-080, changelog"
 tasks:
   - id: t1
