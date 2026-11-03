@@ -12,6 +12,8 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **`cplat platform release` proposes a patch when `[Unreleased]` holds only fixes (#346).** It proposed only a major or a minor, so a release of three bug fixes was offered as 5.6.0. It now proposes `X.Y.Z+1` when `[Unreleased]` has a `### Fixed` section and nothing else; any other entry still makes a minor, a change that needs a major still makes a major, and `--version` still overrides.
 
+**cplat shows its progress when its output goes to a file or a pipe (#335).** Python buffers output that does not go to a terminal, so `cplat platform release`, `cplat pr wait` and `cplat spec land` run in the background (as `/platform:release` does) wrote nothing until they exited, sometimes 40 minutes later. The launcher sets `PYTHONUNBUFFERED=1` and cplat writes each line as it is printed. Update the plugins (`/plugin marketplace update`).
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

@@ -54,6 +54,7 @@ Plumbing keeps its name:
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 from pathlib import Path
@@ -146,6 +147,9 @@ def _resolve(argv: list[str]) -> tuple[str, list[str], str] | int:
 
 
 def main(argv: list[str]) -> int:
+    for stream in (sys.stdout, sys.stderr):      # #335: a file or a pipe gets each line at once, not all of it at exit
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(line_buffering=True)
     resolved = _resolve(argv)
     if isinstance(resolved, int):
         return resolved
