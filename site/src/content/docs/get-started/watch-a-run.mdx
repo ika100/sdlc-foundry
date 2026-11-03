@@ -1,0 +1,17 @@
+---
+title: Watch a real run
+description: "A recorded end-to-end run of sdlc-foundry: from an empty folder to a new endpoint answering in dev, step by step, with what Claude asked, what it did and links to the real pull requests."
+tableOfContents: false
+---
+
+import DemoWalkthrough from '../../../components/DemoWalkthrough.astro';
+
+One system with one Python service, from an empty folder to a new endpoint answering in dev on a local cluster. Every step is a slash command in Claude Code. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real artifacts in the public demo repos [demo-taskboard-api](https://github.com/ika100/demo-taskboard-api) and [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops), so you can check every claim.
+
+<DemoWalkthrough />
+
+## About the timing
+
+The run took **about 85 minutes**. The recording cuts the waiting and shows it in about 4. Without the stalls this run hit, it takes **about 28–30 minutes**: three platform bugs (fixed since), answers that came late, and one extra demo step. Most of that time is agent work; CI is about 7 minutes in total. The [measured baselines](/sdlc-foundry/reference/baselines/#the-2026-11-03-demo-run) list each step.
+
+**What was edited:** waiting time is compressed, a fumbled folder-trust dialog and a mistyped first `curl` are cut, and the host name in the status bar is blanked. Nothing else is changed; the escalation in step 7 is part of the run. Recorded with [asciinema](https://asciinema.org) on 2026-11-03 with sdlc-foundry 5.6.0.

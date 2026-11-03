@@ -22,7 +22,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## Watch a real run
 
-One system from an empty folder to a new endpoint answering in dev: `/system:new` creates the repos, `cluster-up` starts a local cluster, `/component:spec` asks its questions, and `/component:ship` plans, writes failing tests, builds, merges on green CI and deploys.
+One system from an empty folder to a new endpoint answering in dev: `/system:new` creates the repos, `cluster-up` starts a local cluster, `/component:spec` asks its questions, and `/component:ship` plans, writes failing tests, builds, merges on green CI and deploys. [Watch it step by step](/sdlc-foundry/get-started/watch-a-run/), with what Claude asked and links to every pull request.
 
 <figure class="map">
   <img src="/sdlc-foundry/img/demo.gif" width="1028" height="686" loading="lazy" alt="A terminal recording of Claude Code: /system:new creates a GitOps repo and a Python service repo; the system pull request is merged and a local k3d cluster with ArgoCD starts; /component:spec asks eight questions about a tasks endpoint and the spec is approved; /component:ship 001 runs the architect, tester, two coders and reviewer, merges the pull request on green CI and pins dev; curl creates and lists tasks on the dev URL." />
