@@ -225,8 +225,12 @@ def propose(repo: Path, tag: str) -> tuple[str, str]:
 
 
 def _unreleased(repo: Path) -> str:
-    f = repo / "docs" / "CHANGELOG.md"
-    return changelog.unreleased_body(f.read_text()) if f.is_file() else ""
+    """[Unreleased] with the changelog fragments (spec 132), so a release of fix fragments alone is a patch (#346)."""
+    try:
+        return changelog.unreleased_text(repo)
+    except changelog.FragmentError:          # the preflight names the bad fragment; the proposal just ignores them
+        f = repo / "docs" / "CHANGELOG.md"
+        return changelog.unreleased_body(f.read_text()) if f.is_file() else ""
 
 
 def check_syntax(requested: str) -> None:

@@ -364,3 +364,14 @@ def test_the_git_tree_has_no_stray_fragment_ac_132_7():  # AC-132.7
         name = n.split("/")[-1]
         if name != "README.md":
             cl.parse_fragment(name, (ROOT / n).read_text())
+
+
+def test_fix_fragments_alone_propose_a_patch_346(tmp_path):
+    """#346 with spec 132: the version proposal reads the fragments too; fix fragments alone make a patch."""
+    import platrelease_state as st
+    (tmp_path / "docs" / "changelog.d").mkdir(parents=True)
+    (tmp_path / "docs" / "CHANGELOG.md").write_text("# CHANGELOG\n\n## [Unreleased]\n\n## [5.6.1] - 2026-11-03\n\nOld.\n")
+    (tmp_path / "docs" / "changelog.d" / "1-a-fix.fixed.md").write_text("**A fix (#1).** Text.\n")
+    assert st.proposal("v5.6.1", [], st._unreleased(tmp_path))[0] == "5.6.2"
+    (tmp_path / "docs" / "changelog.d" / "2-a-feature.added.md").write_text("**A feature (#2).** Text.\n")
+    assert st.proposal("v5.6.1", [], st._unreleased(tmp_path))[0] == "5.7.0"
