@@ -26,7 +26,7 @@ One system from an empty folder to a new endpoint answering in dev: `/system:new
 
 <figure class="map">
   <img src="/sdlc-foundry/img/demo.gif" width="1028" height="686" loading="lazy" alt="A terminal recording of Claude Code: /system:new creates a GitOps repo and a Python service repo; the system pull request is merged and a local k3d cluster with ArgoCD starts; /component:spec asks eight questions about a tasks endpoint and the spec is approved; /component:ship 001 runs the architect, tester, two coders and reviewer, merges the pull request on green CI and pins dev; curl creates and lists tasks on the dev URL." />
-  <figcaption>A real run on the public demo repos [demo-taskboard-api](https://github.com/ika100/demo-taskboard-api) and [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops), with waiting time cut: about 85 minutes shown in 4; most of the real time is CI on each pull request · [open it full size](/sdlc-foundry/img/demo.gif)</figcaption>
+  <figcaption>A real run on the public demo repos [demo-taskboard-api](https://github.com/ika100/demo-taskboard-api) and [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops), with waiting time cut: about 85 minutes shown in 4. Without the stalls this run hit, it takes <a href="/sdlc-foundry/reference/baselines/#the-2026-11-03-demo-run" title="system:new 3 min · system PR + cluster-up 2 min · spec with questions 4 min · ship agents 13 min · PR and main CI with image 4 min · pin to dev 1 min · Argo sync and smoke 2 min">about 28–30 minutes</a> · [open it full size](/sdlc-foundry/img/demo.gif)</figcaption>
 </figure>
 
 ## Platform glue should not cost a small team months

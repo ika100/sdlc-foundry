@@ -39,7 +39,26 @@ Re-measure with `cplat platform runs benchmark quick-task|build` after changes t
 | Platform e2e (`tests/e2e/run.sh`, local) | — | ≈ 6 min (2 image builds + k3d + rollout + probes) |
 | Platform CI (PR) | 3–4 min | ≤ 4 min incl. unit + e2e smoke |
 | Spec-driven system, empty folder → verified on a local cluster (3 repos, 1 system spec, 6 PRs) | — | **60.5 min measured** 2026-10-08, 10 agent sessions, $17.48 ([run log](e2e/2026-10-08-todo-spec-driven.md); summed per step, slightly high — resumed sessions report cumulative cost) |
+| Demo run, one Python service and one spec (empty folder → new endpoint answering in dev on a local cluster) | — | **≈ 85 min measured** 2026-11-03 with v5.6.0; **≈ 28–30 min estimated** without the stalls ([breakdown](#the-2026-11-03-demo-run)) |
 | Second feature on an existing system with v4.0.0 (upgrade 3 repos, system spec, 2 repo builds, deploy) | — | **~68 min active** 2026-10-09 (16.5 h wall clock incl. waiting for the user and an overnight usage-limit pause), 10 agent sessions, $12.10 counted per session ([run log](e2e/2026-10-09-todo-second-feature.md)) |
+
+### The 2026-11-03 demo run
+
+The recording in the README and on the docs homepage. One system with one Python service: `/system:new`, `cluster-up`, `/component:spec` with 8 questions, `/component:ship`. Public repos and GitHub-hosted runners. Times come from the recording's clock and the repos' CI runs. The ideal column removes the stalls, so it is an estimate, not a second measured run.
+
+| Step | Measured | Ideal | What made the difference |
+|---|---|---|---|
+| `/system:new` (2 repos) | 3 min | 3 min | — |
+| System PR + `cluster-up` | 6 min | 2 min | waited for the first image build, which can run while the spec is written |
+| Expose the API | 2 min | 0 | an extra demo step; not needed when the component is exposed from the start |
+| Spec: write, 8 questions, approve, merge | 24 min | 4 min | the questions waited about 20 min for an answer |
+| Ship: plan, acceptance tests, 3 coders, review | 16 min | 13 min | a formatter escalation ([#367](https://github.com/ika100/sdlc-foundry/issues/367)) and a merge conflict on the spec status |
+| Feature PR CI + `main` CI with the image | 4 min | 4 min | — (each CI run took 1–2.5 min) |
+| Pin to dev | 23 min | 1 min | the pin PR waited for a manual approval ([#368](https://github.com/ika100/sdlc-foundry/issues/368)) |
+| Argo sync and dev smoke | 4 min | 2 min | smoke was skipped ([#369](https://github.com/ika100/sdlc-foundry/issues/369)) |
+| **Total** | **≈ 85 min** | **≈ 28–30 min** | |
+
+Most of the ideal time is agent work (spec and ship, about 17 min). CI is about 7 min in total.
 
 ## Defect history
 
