@@ -49,8 +49,11 @@ def missing(store, slug: str) -> list[str] | None:
     if names is None:
         return None
     out = []
-    if store.read_file(WORKFLOW_PATH) is None:
+    text = store.read_file(WORKFLOW_PATH)
+    if text is None:
         out.append(f"no retro schedule ({WORKFLOW_PATH})")
+    elif text.strip() != workflow_text(autoissue.default_repo()).strip():
+        out.append(f"retro schedule out of date ({WORKFLOW_PATH} differs from this platform version's)")
     if not names & set(CLAUDE_SECRETS):
         out.append("no Claude credential secret (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY)")
     if GH_SECRET not in names:

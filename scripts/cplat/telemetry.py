@@ -165,7 +165,7 @@ def has_addon(repo: Path) -> bool:
     import ship
     import smoke
     for slug in ship.gitops_apps(repo):
-        for name in smoke._app_dirs(slug, repo) or []:
+        for name in smoke._app_dirs(slug, repo)[0] or []:
             if _has_lgtm(smoke._read(slug, f"applications/{name}/system.yaml", repo)):
                 return True
     return False

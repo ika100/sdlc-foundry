@@ -12,6 +12,21 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 **Plugins:** `component` 1.6.0, `shared` 1.2.0, `system` 1.6.1.
 
+## [5.6.1] - 2026-11-03
+
+### Fixed
+
+**A build no longer stops because `lint-fix` rewrote the acceptance tests (#367).** The tester committed the acceptance tests without running `lint-fix`, so the first `lint-fix` in Phase 2 applied ruff's autofixes to them (for example `timezone.utc` → `UTC`), `cplat spec test-diff` saw a changed statement and the build escalated. The tester agents of every shape now run `cplat quiet lint-fix` before they commit, and `/component:build` runs it once more before it records the RED commit, committing any change to the tests as `test(<slug>): lint-fix acceptance tests for <id>`. Update the plugins (`/plugin marketplace update`).
+**Ship's dev smoke no longer gives up on one failed read of the gitops-app, and says why when it does (#369).** `cplat component ship deploy` listed the gitops-app's `applications/` with `gh api` and treated any failure as an unreadable repo. The smoke tests and the promotion to staging were skipped with "could not read the gitops-app", even though the component was exposed and answering. The error text was dropped, so the cause could not be found afterwards. The listing is now retried once after 5 s, and when it still fails, the reason carries `gh`'s own error, for example `HTTP 401: Bad credentials`.
+
+**`cplat platform doctor` warns when the run store's retro workflow is out of date.** `cplat platform runs init` installs `.github/workflows/cplat-retro.yml` in the store once and never changes it, so a store set up before 5.0 still called `cplat retro`, which 5.0 removed, and the 2026-11-02 retro failed. Doctor now compares the file with this platform version's asset and says how to fix it. **Action:** if doctor warns, replace that file in the store with `scripts/cplat/assets/workflows/cplat-retro.yml`.
+
+**The weekly retro posts again when a spec id is a bare number.** `cplat platform retro post` checked the public issue for private names by substring match, so a spec recorded as `112` or `130` matched inside run ids (`20261027T112130Z-…`) and the retro of 2026-W44 was refused. The check now matches whole names, the same way the redaction replaces them. A spec id that is only a number is no longer treated as a private name, so `see #130` stays readable. A refused post prints the names it found to the job log, which is in the private store.
+
+**Reading the run store no longer times out on a busy fortnight.** The store was read with one GraphQL query per 40 days, which returns the text of every record. With up to 83 records a day, the two weeks the retro reads took longer than the 10 s a single call may take on the runner, and the retro of 2026-W44 failed at its first run. The store is now read 3 days per query, and a query that times out is retried once.
+
+**`cplat pr wait` no longer reports false errors (#370, #371).** One empty answer from `gh pr checks` during a long CI run ended the wait with `no CI checks were reported after 300s`, although checks had been reported before. It now keeps waiting; only a PR that never reported a check stops after the grace period. With `--merge` in a git worktree, `gh pr merge` merged on GitHub and then failed to check out `main` locally, and cplat said `merging failed` and exited 1. cplat now asks GitHub whether the PR is merged; if it is, it reports the merge and names the local error.
+
 ### Changed
 
 **The gitops template's CLAUDE.md says who creates `generate:` secrets.** It still named External Secrets Operator; since 5.5.0 a credentials Job (an Argo CD PreSync hook) creates them once (ADR-072). The text reaches gitops repos with `/platform:update`.

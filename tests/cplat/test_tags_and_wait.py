@@ -119,6 +119,32 @@ def test_pr_wait_merges_on_green_and_resolves_numbers(fake, tmp_path):
     assert ok and fake.merges == ["https://github.com/acme/other/pull/5"] and lines[-1].startswith("merged")
 
 
+def test_an_empty_answer_after_checks_were_seen_keeps_waiting(fake, tmp_path):
+    """#370: one empty `gh pr checks` answer past the grace period, after checks were reported, is no `no CI checks`."""
+    fake.checks = [[check("e2e", "pending")], *[[]] * 40, [check("e2e", "pass")]]
+    ok, lines = prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 3600, 10, 300)
+    assert ok and fake.merges == ["https://github.com/acme/other/pull/5"]
+
+
+def test_a_pr_that_never_reported_a_check_still_stops(fake, tmp_path):
+    """#370: the grace period still ends a wait on a PR whose CI never reported anything."""
+    fake.checks = [[]]
+    with pytest.raises(ship.NoChecks):
+        prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 3600, 10, 300)
+    assert fake.merges == []
+
+
+def test_a_merge_that_landed_but_failed_locally_counts_as_merged(fake, tmp_path, monkeypatch):
+    """#371: in a worktree `gh pr merge` merges on GitHub, then cannot check out main; the PR is merged, so it is reported so."""
+    def merged_then_local_error(cmd, **kw):
+        fake.state = "MERGED"
+        return subprocess.CompletedProcess(cmd, 1, "", "failed to run git: fatal: 'main' is already used by worktree at '/x'")
+    monkeypatch.setattr(prmod, "run", merged_then_local_error)
+    fake.checks = [[check("quality", "pass")]]
+    ok, lines = prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 600, 10, 300)
+    assert ok and lines[-1].startswith("merged https://github.com/acme/other/pull/5 (squash); the local cleanup failed: ")
+
+
 def test_pr_wait_is_red_without_merging(fake, tmp_path):
     """AC-079.1: a red check → exit 1 with the log tail, no merge."""
     fake.checks = [[check("test", "fail")]]

@@ -220,7 +220,7 @@ def test_doctor_warns_naming_everything_that_is_missing(store, monkeypatch):
 
 def test_doctor_names_only_the_missing_secret(store, monkeypatch):
     """AC-090.14: the schedule is there; the Claude credential is not."""
-    store.files[WORKFLOW] = "name: cplat retro\n"
+    store.files[WORKFLOW] = retro_setup.workflow_text(core_platform_repo())
     secrets(monkeypatch, ["RETRO_GH_TOKEN"])
     c = schedule_check()
     assert c["status"] == doctor.WARN and "no Claude credential secret" in c["detail"] and "no retro schedule" not in c["detail"]
@@ -230,15 +230,25 @@ def test_doctor_names_only_the_missing_secret(store, monkeypatch):
 @pytest.mark.parametrize("claude", ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"])
 def test_doctor_is_ok_when_schedule_and_secrets_are_there(store, monkeypatch, claude):
     """AC-090.14: either Claude secret will do."""
-    store.files[WORKFLOW] = "name: cplat retro\n"
+    store.files[WORKFLOW] = retro_setup.workflow_text(core_platform_repo())
     secrets(monkeypatch, [claude, "RETRO_GH_TOKEN"])
     c = schedule_check()
     assert c["status"] == doctor.OK and c["detail"] == "acme/runs: weekly retro scheduled (Mondays 06:00 UTC)"
 
 
+def test_doctor_warns_when_the_schedule_is_out_of_date(store, monkeypatch):
+    """A store workflow from an older release (here: 4.x `cplat retro`, removed in 5.0) is a warning with the fix."""
+    store.files[WORKFLOW] = retro_setup.workflow_text(core_platform_repo()).replace("cplat.py\" platform retro", "cplat.py\" retro")
+    secrets(monkeypatch, ["CLAUDE_CODE_OAUTH_TOKEN", "RETRO_GH_TOKEN"])
+    c = schedule_check()
+    assert c["status"] == doctor.WARN
+    assert c["detail"] == "acme/runs: retro schedule out of date (.github/workflows/cplat-retro.yml differs from this platform version's)"
+    assert "replace .github/workflows/cplat-retro.yml in acme/runs" in c["fix"] and "cplat runs init" in c["fix"]
+
+
 def test_doctor_warns_when_the_secrets_cannot_be_read(store, monkeypatch):
     """AC-090.14: an unreadable secret list is a warning, not a pass and not a failure."""
-    store.files[WORKFLOW] = "name: cplat retro\n"
+    store.files[WORKFLOW] = retro_setup.workflow_text(core_platform_repo())
     secrets(monkeypatch, [], code=1)
     c = schedule_check()
     assert c["status"] == doctor.WARN and "secrets of acme/runs could not be read with this gh login" in c["detail"]

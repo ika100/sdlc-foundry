@@ -13,7 +13,7 @@ import time
 from typing import Protocol
 
 MAX_ATTEMPTS = 3
-DAYS_PER_QUERY = 40
+DAYS_PER_QUERY = 3        # a query returns every record text of its days: keep it well inside one call's 10s
 
 
 class StoreError(Exception):
@@ -185,8 +185,10 @@ class GitHubStore:
                 f'{alias}: object(expression: "HEAD:{path}") {{ ... on Tree {{ entries {{ name object {{ ... on Blob {{ text }} }} }} }} }}'
                 for alias, path in dirs.items())
             query = f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {fields} }} }}"
-            code, text, err = self._call(["api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}"],
-                                         deadline=deadline)
+            args = ["api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}"]
+            code, text, err = self._call(args, deadline=deadline)
+            if code == 124:                                         # a slow answer is retried once, not the whole read
+                code, text, err = self._call(args, deadline=deadline)
             if code != 0:
                 raise StoreUnreachable(_last_line(err or text))
             try:

@@ -284,7 +284,7 @@ def test_dev_url_of_the_smoke_run_follows_system_yaml_ac_114_6(tmp_path, monkeyp
     import smoke
     app = write_system(tmp_path, FULL5)
     monkeypatch.setattr(smoke, "_slug", lambda repo: "acme/shop-api")
-    monkeypatch.setattr(smoke, "_app_dirs", lambda slug, repo: ["shop"])
+    monkeypatch.setattr(smoke, "_app_dirs", lambda slug, repo: (["shop"], ""))
     monkeypatch.setattr(smoke, "_read", lambda slug, path, repo: __import__("yaml").safe_load((tmp_path / path).read_text()) if (tmp_path / path).is_file() else None)
     assert smoke.dev_url(tmp_path, ["acme/shop-gitops"], "shop-api") == ("http://api.shop-dev.localhost:8088", None)
     assert smoke.dev_url(tmp_path, ["acme/shop-gitops"], "shop-api", env="staging") == ("https://api.shop.example.com", None)

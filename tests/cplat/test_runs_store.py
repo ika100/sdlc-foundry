@@ -241,7 +241,20 @@ def test_read_returns_path_and_text_of_every_file_of_the_days_asked(hub):
     hub.calls.clear()
     many = [dt.date(2026, 10, 24) - dt.timedelta(days=i) for i in range(45)]
     runs_store.GitHubStore("acme/runs").read(many)
-    assert len([c for c in hub.calls if "graphql" in c]) == 2                      # at most 40 days per query
+    assert len([c for c in hub.calls if "graphql" in c]) == 15                     # at most 3 days per query
+
+
+def test_a_timed_out_query_is_retried_once(hub, monkeypatch):
+    """A slow GitHub answer (the 2026-11-03 retro) costs one retry of that query; a second timeout is StoreUnreachable."""
+    hub.dirs["runs/2026/10/23"] = {"a.json": "A\n"}
+    answers = [(124, "", "timeout")]
+    real = hub.graphql
+    monkeypatch.setattr(hub, "graphql", lambda args: answers.pop(0) if answers else real(args))
+    assert runs_store.GitHubStore("acme/runs").read([dt.date(2026, 10, 23)]) == [("runs/2026/10/23/a.json", "A\n")]
+    assert len([c for c in hub.calls if "graphql" in c]) == 2
+    answers[:] = [(124, "", "timeout")] * 2
+    with pytest.raises(runs_store.StoreUnreachable, match="timeout"):
+        runs_store.GitHubStore("acme/runs").read([dt.date(2026, 10, 23)])
 
 
 def test_gh_never_raises(monkeypatch):

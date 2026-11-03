@@ -7,6 +7,10 @@
 
 **An agentic SDLC platform: Claude Code agents, slash commands and Copier templates that take a system from idea to "running in Kubernetes via GitOps".**
 
+![A real run, sped up: /system:new creates the repos, cluster-up starts a local cluster, /component:spec asks its questions, /component:ship plans, tests, builds and merges, and curl reaches the new endpoint in dev](docs/img/demo.gif)
+
+*A real run on public demo repos ([demo-taskboard-api](https://github.com/ika100/demo-taskboard-api), [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops)), with waiting time cut: about 85 minutes shown in 4. Without the stalls this run hit, it takes [about 28–30 minutes](docs/BASELINES.md#the-2026-11-03-demo-run "system:new 3 min · system PR + cluster-up 2 min · spec with questions 4 min · ship agents 13 min · PR and main CI with image 4 min · pin to dev 1 min · Argo sync and smoke 2 min"). The ship run stops once to ask about a formatter change to the acceptance tests; that is part of the run, not edited out.*
+
 > Formerly *claude-platform*. Renamed in v3.0.0 to stay clear of a third-party trademark; GitHub redirects the old repository URL. Installed plugins must be reinstalled from the new marketplace: see the [changelog](docs/CHANGELOG.md) and run `/platform:doctor`.
 
 You describe what you want in Claude Code; the platform scaffolds the repos (Python, Java, Go and Next.js services, plus a GitOps repo), builds and publishes multi-arch images, and renders every Kubernetes manifest from one declarative file in the GitOps repo. Secrets, a Postgres resource, OpenTelemetry observability and Kyverno guard rails are one declaration each; promotion between environments is a reviewed pull request. Everything that can be code is a tested script (`cplat`), and agents only orchestrate it.
@@ -14,11 +18,39 @@ You describe what you want in Claude Code; the platform scaffolds the repos (Pyt
 - **Documentation site:** <https://ika100.github.io/sdlc-foundry/> has the vision, the problem statement, client value, usage scenarios and the full user documentation with search.
 - **Console:** `/platform:ui` opens a local console that shows the system, its process and what needs you ([docs/console.md](docs/console.md)).
 
-  ![The console's Inbox: a promotion with its consequence, command and way back](docs/img/console/inbox.jpg)
+  ![A tour of the console: describe a change, the Board, a run, the Inbox and the System view](docs/img/console/tour.gif)
 
 - **Start here:** [docs/USER-JOURNEY.md](docs/USER-JOURNEY.md) (end-to-end walk-through) and [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (diagrams).
 - **Needs:** [Claude Code](https://claude.com/claude-code), `git`, `gh`, `uv`, [devbox](https://www.jetify.com/devbox) and Docker for local clusters; run `/platform:doctor` to check.
 - **Status:** used end to end on a real test application; see the [changelog](docs/CHANGELOG.md) and [ADRs](docs/adr).
+
+## Quickstart
+
+From an empty folder to a feature running in a local cluster. Every step is a slash command in Claude Code except the cluster, which is one `devbox` recipe.
+
+1. **Install and check** (once per machine):
+
+   ```
+   /plugin marketplace add ika100/sdlc-foundry
+   /plugin install shared@sdlc-foundry
+   /platform:doctor
+   ```
+
+2. **Describe the system** in `taskboard.yaml`:
+
+   ```yaml
+   system: taskboard
+   owner: <your-github-user>
+   components:
+     - {name: taskboard-api, description: Task API, type: service, lang: python}
+     - {name: taskboard-web, description: Frontend, type: website, lang: typescript}
+   ```
+
+3. **Create it:** `/system:new taskboard.yaml` creates the GitOps repo `taskboard` and one private repo per component, and opens a pull request that adds the components to `system.yaml`. Merge it.
+4. **Run it locally:** in `taskboard`, `devbox run cluster-up` starts a k3d cluster with ArgoCD and prints the URLs (needs Docker; `devbox run cluster-down` removes it).
+5. **Ship a feature:** in `taskboard-api`, run `/component:spec "list tasks with due dates"`, answer its questions, `/component:spec approve 001`, then `/component:ship 001`. It plans, writes failing acceptance tests, builds until they pass, opens the pull request, merges it on green CI and waits until dev runs the new image.
+
+The [user journey](docs/USER-JOURNEY.md) walks through every step in detail, including staging, prod and system-wide specs.
 
 ## What's here
 
@@ -144,6 +176,7 @@ The marketplace is published as `ika100/sdlc-foundry` and installs as `sdlc-foun
 ## Disclaimer, privacy, AI-assisted development
 
 - **Not affiliated.** sdlc-foundry is an independent open-source project, not affiliated with, sponsored by or endorsed by Anthropic or the owners of the other names it mentions (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). *Claude* and *Claude Code* are trademarks of Anthropic, PBC.
+- **Non-commercial.** sdlc-foundry is a private, non-commercial hobby project: no paid services, sponsorship, advertising or business stands behind it or its name.
 - **No warranty.** The software is provided "as is" under the [Apache License 2.0](LICENSE) (sections 7 and 8). Review what it generates (manifests, workflows, policies) before it touches a production cluster; the platform never runs `kubectl apply` on its own, and humans bootstrap real clusters.
 - **No telemetry.** The plugins and the `cplat` CLI send nothing anywhere on their own. Network access is what you would expect: `git`/`gh` against GitHub, package registries, GHCR. Generated applications export telemetry only to the endpoint you configure. `/issue:report` shows you the full text first and files it only after your OK; **issues on this repository are public**, and the draft already has tokens, e-mail addresses and home-directory names removed.
 - **AI-assisted.** Much of this repository was written with Claude Code and reviewed, tested and committed by the maintainer (commits carry a `Co-Authored-By` trailer). Licensing is the maintainer's: AI-generated parts may be subject to limited copyright protection depending on jurisdiction.

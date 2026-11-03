@@ -296,7 +296,7 @@ def test_the_url_of_any_environment_comes_from_the_linked_system_ac_114_6(tmp_pa
     import smoke
     write_system(tmp_path, FULL5)
     monkeypatch.setattr(smoke, "_slug", lambda repo: "acme/shop-api")
-    monkeypatch.setattr(smoke, "_app_dirs", lambda slug, repo: ["shop"])
+    monkeypatch.setattr(smoke, "_app_dirs", lambda slug, repo: (["shop"], ""))
     monkeypatch.setattr(smoke, "_read", lambda slug, path, repo: yaml.safe_load((tmp_path / path).read_text()) if (tmp_path / path).is_file() else None)
     assert smoke.dev_url(tmp_path, ["acme/shop-gitops"], "shop-api", env="staging") == ("https://api.shop.example.com", None)
     assert smoke.dev_url(tmp_path, ["acme/shop-gitops"], "shop-api", env="dev") == ("http://api.shop-dev.localhost:8088", None)
@@ -306,7 +306,7 @@ def test_the_dev_url_in_an_unmigrated_gitops_app_fails_with_the_message_ac_114_2
     import smoke
     write_old(tmp_path)
     monkeypatch.setattr(smoke, "_slug", lambda repo: "acme/shop-api")
-    monkeypatch.setattr(smoke, "_app_dirs", lambda slug, repo: ["shop"])
+    monkeypatch.setattr(smoke, "_app_dirs", lambda slug, repo: (["shop"], ""))
     monkeypatch.setattr(smoke, "_read", lambda slug, path, repo: yaml.safe_load((tmp_path / path).read_text()) if (tmp_path / path).is_file() else None)
     with pytest.raises(core.PlatformError, match="not migrated to 5.0"):
         smoke.dev_url(tmp_path, ["acme/shop-gitops"], "shop-api")

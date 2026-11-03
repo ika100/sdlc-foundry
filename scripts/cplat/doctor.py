@@ -749,6 +749,9 @@ def check_retro_schedule() -> list[dict]:
     fixes = []
     if any(m.startswith("no retro schedule") for m in miss):
         fixes.append(f"cplat runs init {slug}")
+    if any(m.startswith("retro schedule out of date") for m in miss):
+        fixes.append(f"replace {retro_setup.WORKFLOW_PATH} in {slug} with the platform's scripts/cplat/assets/workflows/"
+                     "cplat-retro.yml (cplat runs init leaves an existing file alone)")
     if any("Claude" in m for m in miss):
         fixes.append(f"claude setup-token, then gh secret set CLAUDE_CODE_OAUTH_TOKEN -R {slug}")
     if any(retro_setup.GH_SECRET in m for m in miss):

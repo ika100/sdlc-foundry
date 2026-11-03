@@ -41,14 +41,14 @@ Do not wait for CI on `main`.
 
 **Skip** (resume) when `cplat spec trace <id>` already passes.
 
-**tester** agent (`agents.tester`), prompt: "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion with its full text, and the non-goals), `Contract` (the `design.md` contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests against the spec and `design.md`'s contract (for a criterion ending in `(smoke)` also its smoke test, using only the base URL, so `cplat spec trace` does not print `smoke: no smoke-tagged test`), confirms they fail because the behaviour is missing, and commits only test files.
+**tester** agent (`agents.tester`), prompt: "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion with its full text, and the non-goals), `Contract` (the `design.md` contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests against the spec and `design.md`'s contract (for a `(smoke)` criterion also its smoke test, using only the base URL), confirms they fail because the behaviour is missing, and commits only test files.
 
 Then:
 - `cplat spec trace <id>` must pass; otherwise send the missing ids back to the tester (once).
 - `cplat quiet test-fast`: the new tests fail, nothing else newly fails. A test that errors for another reason goes back to the tester.
 - Then record the tester's misses with one call, also when there were none: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...` (one `--untraced` for each criterion id sent back, one `--wrong-failure` for each test sent back).
 - `cplat spec trace <id> --json` → hold `TRACE` (criterion → test files) for Phase 2.
-- `RED=$(git log -1 --format=%H --grep 'acceptance tests for')` — the commit the acceptance tests are measured against from now on (spec 048).
+- `cplat quiet lint-fix`; commit changed tests as `test(<slug>): lint-fix acceptance tests for <id>` (#367). Then `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`: the commit the tests are measured against (spec 048).
 
 ## Phase 2 — Implement (parallel via git worktrees)
 
