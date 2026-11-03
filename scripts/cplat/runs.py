@@ -1053,6 +1053,12 @@ def _recording_command(ns: argparse.Namespace) -> None:
             _mutate(current.get("run_id"), lambda rec: rec.setdefault("gates", {}).__setitem__(ns.gate, ns.result))
             _record_stage(repo_dir, ns.gate, ns.result)
     elif ns.cmd == "end":
+        if ns.outcome == "escalated" and os.environ.get("CPLAT_UNIT"):
+            try:
+                import units
+                units.escalate(repo_dir, ns.reason, ns.cause or "unknown")
+            except Exception:  # noqa: BLE001
+                pass
         if not current:
             return
         if not current.get("attached"):
