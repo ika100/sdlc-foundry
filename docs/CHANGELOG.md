@@ -8,6 +8,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ### Changed
 
+**Runs that finish on their own.** Unattended ships rarely finished: 16 of 52 were done, and about half of the spend went to runs that ended escalated or failed (spec 131, [ADR-075](adr/075-an-unattended-ship-runs-one-session-per-unit-saved-at-checkpoints.md), [ADR-076](adr/076-an-unattended-run-gets-its-permissions-per-session-from-a-checked-run-allowlist.md), [ADR-077](adr/077-budgets-scale-with-the-plan-and-verification-gets-one-grace.md)). `cplat headless` now runs a ship or build as one short session per unit (`plan`, `red-tests`, one per task, `verification`, `land`), each stopping at a checkpoint commit; the Stop hook reaches unit sessions through `CPLAT_UNIT`, and two sessions without a commit on a unit escalate. A preflight before the first session checks the repo allowlist, the settings rules, the git identity, `gh` login and push access, and fails with `preflight failed: <category>: <detail>` (`no-repo-allowlist`, `blocked-by-settings`, `git-identity`, `gh-auth`, `no-push-access`) instead of stopping at the first refused command; the sessions get a run allowlist for the feature branch, `commit -s`, push without force and `gh pr create`. Default budgets scale with the plan: cost `max(15, 10 + 1.5·T + 0.5·C)`, minutes `max(180, 60 + 15·T + 5·C)`, invocations `max(60, 20 + 5·T + C)`, so spec 128 (8 tasks, 14 criteria) gets $29, 250 minutes and 74 invocations; verification gets one grace of 20 % when only it is left. A subagent's cost is no longer missing from the ledger. `cplat platform runs report` gains an "Unattended ships" section with the four targets. **Action: none**, runs in flight resume by themselves. Not breaking.
+
+**Plugins:** `component` 1.6.0, `shared` 1.2.0, `system` 1.6.1.
+
+### Changed
+
 **The gitops template's CLAUDE.md says who creates `generate:` secrets.** It still named External Secrets Operator; since 5.5.0 a credentials Job (an Argo CD PreSync hook) creates them once (ADR-072). The text reaches gitops repos with `/platform:update`.
 
 ## [5.6.0] - 2026-11-01

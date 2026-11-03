@@ -1,6 +1,7 @@
 # ADR-043 — One budget per run tree, kept in a local ledger and checked at safe points
 
 **Status:** accepted (2026-10-25, spec 102)
+**Amended by:** [ADR-077](077-budgets-scale-with-the-plan-and-verification-gets-one-grace.md) (limits follow the plan, one grace)
 
 ## Context
 

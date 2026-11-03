@@ -2,6 +2,7 @@
 
 **Status:** Accepted (2026-10-28)
 **Amends:** [ADR-028](028-unattended-delivery-without-branch-protection.md) (decision 3: "or after 8 blocked stops"), spec 088 (AC-088.18: the `environment` cause of a stuck-run escalation); spec 126
+**Amended by:** [ADR-075](075-an-unattended-ship-runs-one-session-per-unit-saved-at-checkpoints.md) (unit sessions)
 
 ## Context
 
