@@ -1,7 +1,7 @@
 ---
 spec_id: 132-changelog-fragments-that-the-release
 title: Changelog fragments that the release assembles
-status: approved
+status: building
 priority: P2
 shape: platform
 tracks: [321]
@@ -90,3 +90,4 @@ versions with `>=`, so that a later entry, a release or a later bump does not tu
 
 - 2026-11-03 created
 - 2026-11-03 approved
+- 2026-11-03 building

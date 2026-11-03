@@ -10,30 +10,35 @@ tasks:
     covers: [AC-132.1, AC-132.2, AC-132.4, AC-132.5, AC-132.7, AC-132.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cplat platform release - preflight counts and validates fragments on origin/main, prepare assembles and git-rms them, resume allows docs/changelog.d, PR body names them
     files: [scripts/cplat/platrelease.py]
     covers: [AC-132.2, AC-132.3, AC-132.5, AC-132.6, AC-132.7]
     parallel_safe: false
     depends_on: [t1]
+    done: true
   - id: t3
     title: release-check.py rows adds the fragments to the [Unreleased] body and fails on an invalid fragment
     files: [scripts/release-check.py]
     covers: [AC-132.7, AC-132.8]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: guidance and dogfood - docs/changelog.d/README.md, CONTRIBUTING.md, CLAUDE.md, PR template, the fragment of this change; naming and dev-latest scans treat fragments like the changelog
     files: [docs/changelog.d/README.md, docs/changelog.d/321-changelog-fragments.added.md, CONTRIBUTING.md, CLAUDE.md, .github/PULL_REQUEST_TEMPLATE.md, tests/cplat/test_naming.py, tests/cplat/test_spec_agents.py]
     covers: [AC-132.1, AC-132.10, AC-132.13]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: durable tests - tests/cplat/changelog_support.py; the changelog tests of 115-121, 125, 128, 130 read their section by version heading; plugin version tests of 117, 118, 119, 121 assert >=
     files: [tests/cplat/changelog_support.py, tests/cplat/test_resources_115_cmds.py, tests/cplat/test_bucket_116_cmds.py, tests/cplat/test_backup_117_cmds.py, tests/cplat/test_cache_118_cmds.py, tests/cplat/test_broker_119_cmds.py, tests/cplat/test_scale_120_cmds.py, tests/cplat/test_upgrade_121_ops.py, tests/cplat/test_cluster_125_delivery.py, tests/cplat/test_credentials_128_records.py, tests/cplat/test_130_empty_gates.py]
     covers: [AC-132.11, AC-132.12]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 132 Changelog fragments that the release assembles
