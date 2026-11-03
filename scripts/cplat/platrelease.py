@@ -83,6 +83,7 @@ def _prepare(repo: Path, state: st.State, version: str) -> str:
     path.write_text(changelog.move_unreleased(path.read_text(), version, st.today().isoformat()))
     _check(repo, [sys.executable, "scripts/release-check.py", "rows", "--base", state.tag], "release-check rows")
     _check(repo, ["devbox", "run", "validate"], "devbox run validate")
+    _check(repo, ["devbox", "run", "test-fast"], "devbox run test-fast")   # tests that read the moved changelog (#334)
     if int(_git(repo, "rev-list", "--count", "origin/main..HEAD").strip()) == 0:
         _git(repo, "add", CHANGELOG)
         _git(repo, "commit", "-s", "-m", f"chore: release {version}")

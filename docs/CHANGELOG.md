@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Changed
+
+**`cplat platform release` runs the test suite before it opens the release PR (#334).** It checked only `release-check rows` and `devbox run validate` after moving `[Unreleased]` under the new version heading, so tests that read the changelog failed first in the release PR's CI (5.5.0, #331) and cost a CI round. It now also runs `devbox run test-fast` on the moved changelog; on failure it prints the output and stops with nothing committed or pushed, like the other two checks.
+
 ### Fixed
 
 **Release notes keep working links, and a duplicated changelog entry fails the PR (#336).** The GitHub release took the `## [X.Y.Z]` section as is, so links relative to `docs/` (`specs/…`, `adr/…`, `../README.md`) resolved against `/releases/tag/` and returned 404; the release notes now point them at `https://github.com/<owner>/<repo>/blob/vX.Y.Z/docs/…`. The 5.5.0 notes also repeated an entry left over from a merge conflict: `release-check.py rows`, which runs on every PR, now fails when a changelog section repeats a paragraph and names the section and the entry.
