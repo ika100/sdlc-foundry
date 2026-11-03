@@ -12,6 +12,7 @@ import datetime as dt
 import hashlib
 import json
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
@@ -528,6 +529,63 @@ def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, 
         old = subprocess.run(["git", "-C", str(root), "show", f"{base}:{f}"], capture_output=True, text=True)
         new = (root / f).read_text() if (root / f).is_file() else ""
         out[f] = (False, "new or deleted file") if old.returncode != 0 or not new else formatting_only(old.stdout, new, f)
+    approved = _approvals(root, base)
+    for f, (ok, _) in out.items():
+        rec = approved.get(f)
+        if not ok and rec and rec.get("sha256") == _content_hash(root / f):
+            out[f] = (True, f"approved by the user{': ' + rec['reason'] if rec.get('reason') else ''}")
+    return out
+
+
+APPROVALS_FILE = "cplat-test-approvals.json"
+
+
+def _content_hash(path: Path) -> str | None:
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+
+def _approvals_path(root: Path) -> Path | None:
+    d = core.git_dir(root)
+    return d / APPROVALS_FILE if d else None
+
+
+def _red_sha(root: Path, base: str) -> str:
+    import subprocess
+    out = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", f"{base}^{{commit}}"], capture_output=True, text=True)
+    return out.stdout.strip() or base
+
+
+def _approvals(root: Path, base: str) -> dict:
+    """{path: {"sha256", "reason", "at"}} the user approved against the red commit `base` (#324)."""
+    path = _approvals_path(root)
+    try:
+        data = json.loads(path.read_text()) if path else {}
+    except (OSError, ValueError):
+        return {}
+    found = data.get(_red_sha(root, base)) if isinstance(data, dict) else None
+    return found if isinstance(found, dict) else {}
+
+
+def approve_test_change(root: Path, base: str, files: list[str], reason: str | None) -> dict[str, str]:
+    """Record that the user approved the current content of `files` against the red commit `base` (#324): `test_diff`
+    accepts exactly that content; any later change is flagged again. Kept in the checkout's git dir, per red commit."""
+    path = _approvals_path(root)
+    if path is None:
+        raise PlatformError(f"{root} is not a git checkout")
+    missing = [f for f in files if not (root / f).is_file()]
+    if missing:
+        raise PlatformError(f"no such file: {', '.join(missing)}")
+    try:
+        data = json.loads(path.read_text())
+        data = data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        data = {}
+    mine = data.setdefault(_red_sha(root, base), {})
+    out = {}
+    for f in files:
+        digest = out[f] = _content_hash(root / f) or ""
+        mine[f] = {"sha256": digest, "reason": reason or "", "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+    path.write_text(json.dumps(data, indent=2) + "\n")
     return out
 
 
@@ -1196,6 +1254,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("files", nargs="*")
     p.add_argument("--by", default="coder", help="the agent that changed the tests (coder or quality), for agent metrics")
     p.add_argument("--task", help="the task being built, for agent metrics")
+    p.add_argument("--approve", nargs="*", metavar="FILE",
+                   help="record that the user approved the current content of FILE (#324); a later change is flagged again")
+    p.add_argument("--reason", help="with --approve: why the user approved the change")
     p = sub.add_parser("ci", help="check every spec and trace built ones; GitHub annotations (warnings unless --strict)")
     p.add_argument("--strict", action="store_true")
     p = sub.add_parser("migrate", help="convert STORY-NNN stories in docs/backlog.md into spec folders")
@@ -1298,10 +1359,24 @@ def main(argv: list[str]) -> int:
     if ns.cmd in ("publish", "land", "review"):
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
+    if ns.cmd == "test-diff" and ns.approve is not None:
+        if not ns.approve:
+            print("ERROR: --approve needs the files the user approved", file=sys.stderr)
+            return 2
+        for f, digest in approve_test_change(root, ns.base, ns.approve, ns.reason).items():
+            print(f"{f}: approved by the user at sha256 {digest[:12]}")
+        try:  # the run record's `approved_test_diffs` (spec 133's PR block reads it); never changes the result
+            import runs
+            rid = runs.current_run(root)
+            for f in ns.approve:
+                runs.add_to(rid, "approved_test_diffs", {"file": f, "task": ns.task, "reason": ns.reason})
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
     if ns.cmd == "test-diff":
         result = test_diff(root, ns.base, ns.files)
         for f, (ok, why) in result.items():
-            print(f"{f}: formatting only" if ok else f"{f}: changed — {why}")
+            print((f"{f}: {why}" if why else f"{f}: formatting only") if ok else f"{f}: changed — {why}")
         if not result:
             print("no acceptance test changed")
         try:  # agent metrics (spec 089): never changes the result
