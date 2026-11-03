@@ -80,7 +80,8 @@ def test_ac_126_7_the_reason_keeps_its_wording_and_adds_the_last_message(repo, t
     set_state(repo, phase="pr")
     fake_claude(tmp_path, monkeypatch, "echo 'I could not find the failing test'")
     headless.main(["/component:ship 7", "--repo", str(repo)])
-    assert ship.load_state(repo)["escalated"] == ("no progress: two runs in a row ended in phase pr with nothing changed; "
+    # AC-131.5: unit mode words the stall by unit; the excerpt of the last message stays
+    assert ship.load_state(repo)["escalated"] == ("no progress: unit plan after 2 sessions without a commit; "
                                                   "last message: I could not find the failing test")
 
 
@@ -119,5 +120,5 @@ def test_ac_126_7_a_session_that_printed_nothing_has_no_excerpt_and_still_a_caus
     fake_claude(tmp_path, monkeypatch, "true")
     headless.main(["/component:ship 7", "--repo", str(repo)])
     st = ship.load_state(repo)
-    assert st["escalated"] == "no progress: two runs in a row ended in phase pr with nothing changed"
+    assert st["escalated"] == "no progress: unit plan after 2 sessions without a commit"    # AC-131.5
     assert st["cause"] in {"code", "decision"}
