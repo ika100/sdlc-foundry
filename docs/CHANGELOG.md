@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Fixed
+
+**`cplat pr wait` no longer reads a GitHub API error as "no CI checks" (#356).** While GitHub's rate limit refused `gh pr checks`, the wait ended with `no CI checks were reported after 300s` and a hint about runners, although the PR had 36 green checks. A `gh` failure (rate limit, outage, auth) is now named as such and retried with a growing pause (up to 5 min); the time it lasts does not count towards the no-checks grace period, and a wait that times out on it reports `gh`'s own error. `cplat platform release` keeps polling through it.
+
 ## [5.6.1] - 2026-11-03
 
 ### Fixed

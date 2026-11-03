@@ -64,9 +64,14 @@ TRANSIENT = re.compile(r"Failed to read artifact descriptor|Could not resolve (d
                        re.I)
 
 
+GH_ERRORS: dict[str, str] = {}       # #356: stderr of the last failed `gh <cmd>` call made with check=False
+
+
 def gh(args: list[str], *, cwd: Path, check: bool = True) -> str:
     """`gh` wrapper (tests replace this)."""
-    return run(["gh", *args], cwd=cwd, check=check).stdout
+    proc = run(["gh", *args], cwd=cwd, check=check)
+    GH_ERRORS[" ".join(args[:2])] = (proc.stderr or "").strip() if proc.returncode not in (0, 8) else ""
+    return proc.stdout
 
 
 def sleep(seconds: float) -> None:   # tests replace this
@@ -480,12 +485,22 @@ def check_title(title: str) -> None:
         raise PlatformError(err)
 
 
+class GhError(PlatformError):
+    """`gh` itself failed (rate limit, 5xx, auth), so it said nothing about the checks (#356)."""
+
+
 def checks(repo: Path, pr: str) -> list[dict]:
+    """The PR's checks; [] when it has none. A `gh` failure is a GhError, never "no checks" (#356)."""
+    GH_ERRORS.pop("pr checks", None)
     out = gh(["pr", "checks", pr, "--json", "name,state,bucket,link"], cwd=repo, check=False)
-    try:
-        return json.loads(out or "[]")
-    except ValueError:
-        return []
+    with contextlib.suppress(ValueError):
+        if out.strip():
+            return json.loads(out)
+    err = GH_ERRORS.get("pr checks", "")
+    if err and "no checks reported" not in err:
+        raise GhError(f"`gh pr checks` failed: {err.splitlines()[-1]}",
+                      hint="a GitHub API error (rate limit, outage or auth), not a statement about CI; run the command again")
+    return []
 
 
 def run_of(check: dict) -> tuple[str, str] | None:
@@ -761,8 +776,20 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
     never green."""
     begin = now()
     seen = False
+    blind = 0.0                           # #356: seconds gh could not be asked; they do not count towards NO_CHECKS_GRACE
+    backoff = interval
     while True:
-        status, cs, failed = watch.poll()
+        try:
+            status, cs, failed = watch.poll()
+        except GhError as e:
+            if now() - begin > timeout:
+                raise
+            say(f"  gh error {e}; retrying in {int(backoff)}s")
+            sleep(backoff)
+            blind += backoff
+            backoff = min(backoff * 2, NO_CHECKS_GRACE)
+            continue
+        backoff = interval
         seen = seen or bool(cs)
         if status == "green" and watch.conflicting():
             raise _conflicting(watch)
@@ -770,7 +797,7 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
             runs.ci_round(watch.run_id)
             return status, cs, failed
         waited = now() - begin
-        if not cs and not seen and waited > NO_CHECKS_GRACE:     # once checks were seen, an empty answer is a gh hiccup (#370)
+        if not cs and not seen and waited - blind > NO_CHECKS_GRACE:     # once checks were seen, an empty answer is a gh hiccup (#370)
             if watch.conflicting():
                 raise _conflicting(watch)
             raise NoChecks(f"no CI checks were reported on {watch.pr} after {NO_CHECKS_GRACE}s",

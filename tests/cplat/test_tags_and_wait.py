@@ -232,3 +232,45 @@ def test_merge_never_acts_on_the_old_heads_green(fake, tmp_path):
     fake.checks = [[_run_check("test", "pass", 41)], [_run_check("test", "pass", 41), _run_check("test", "fail", 42)]]
     ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
     assert not ok and fake.merges == [] and lines[0].startswith("RED")
+
+
+# ---------------- #356: a gh failure is no verdict on the checks ----------------
+
+RATE_LIMIT = "GraphQL: API rate limit already exceeded for user ID 1."
+
+
+def _failing_checks(fake, monkeypatch, failures: int, err: str = RATE_LIMIT):
+    """`gh pr checks` fails `failures` times (stdout empty, stderr `err`) before the fake answers."""
+    left = {"n": failures}
+
+    def gh(args, *, cwd, check=True):
+        if args[:2] == ["pr", "checks"] and left["n"]:
+            left["n"] -= 1
+            ship.GH_ERRORS["pr checks"] = err
+            return ""
+        return fake(args, cwd=cwd, check=check)
+    monkeypatch.setattr(ship, "gh", gh)
+
+
+def test_a_rate_limited_checks_call_is_retried_not_no_checks_356(fake, tmp_path, monkeypatch):
+    """#356: 40 rate-limited answers past the grace period are waited out with backoff and named, never `no CI checks`."""
+    _failing_checks(fake, monkeypatch, 40)
+    fake.checks = [[check("e2e", "pass")]]
+    ok, _ = prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 36000, 10, 300)
+    assert ok and fake.merges == ["https://github.com/acme/other/pull/5"]
+    assert any("rate limit" in s and "retrying" in s for s in fake.said)
+
+
+def test_a_gh_error_past_the_timeout_names_the_error_356(fake, tmp_path, monkeypatch):
+    """#356: when gh keeps failing until the timeout, the error says so; nothing is merged."""
+    _failing_checks(fake, monkeypatch, 10_000)
+    with pytest.raises(ship.GhError, match="rate limit"):
+        prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 900, 10, 300)
+    assert fake.merges == []
+
+
+def test_no_checks_reported_is_still_no_checks_356(fake, tmp_path, monkeypatch):
+    """#356: gh's own `no checks reported` answer is an empty list, so the grace period still applies."""
+    _failing_checks(fake, monkeypatch, 10_000, err="no checks reported on the 'x' branch")
+    with pytest.raises(ship.NoChecks):
+        prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 3600, 10, 300)
