@@ -62,6 +62,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
           extra_env: dict[str, str], rid: str | None, ns: argparse.Namespace, log: Path, state: dict) -> int:
     import headless as h
     command = command.strip()
+    kind = command.rsplit(":", 1)[-1]   # units.py knows `ship` and `build`
     max_runs = getattr(ns, "max_runs", None)
     max_minutes = getattr(ns, "max_minutes", None)
     window = h.parse_window(getattr(ns, "quiet", None))
@@ -76,7 +77,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
         return h.finish(repo, log, result, code)
 
     for spec in specs:
-        units.prepare(repo, command, spec)
+        units.prepare(repo, kind, spec)
         while True:
             data = units._read(repo) or {"units": []}
             unit = units.next_open(data)
@@ -127,7 +128,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
             start = log.stat().st_size if log.exists() else 0
             cmd = make_cmd(f"{prompt} --unit {unit}") + ["--session-id", sid]
             code = _run_session(h, cmd, repo, log, left, rid, sid, {**extra_env, "CPLAT_UNIT": unit})
-            ending = units.end_session(repo, command, spec, unit, before)
+            ending = units.end_session(repo, kind, spec, unit, before)
             commit = ending.get("checkpoint")
             reason = _escalated(repo)
             if commit:
@@ -143,6 +144,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
                 return end(f"needs you: {reason}", h.EXIT_STOPPED)
             if commit and unit == "plan":
                 budget.rescale(rid, repo, [spec])
+                units.prepare(repo, kind, spec)   # the plan is committed: the task units appear now
             elif commit and unit == "verification":
                 budget.end_grace(rid)
             if not commit and int(ending.get("stalls", 0)) >= units.STALL_LIMIT:
