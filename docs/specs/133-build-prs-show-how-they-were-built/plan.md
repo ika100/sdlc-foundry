@@ -23,6 +23,7 @@ tasks:
     covers: [AC-133.10, AC-133.11, AC-133.12]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: /platform:runs names `--pr`, CHANGELOG entry for #338
     files: [plugins/platform/commands/runs.md, docs/CHANGELOG.md]
