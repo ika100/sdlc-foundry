@@ -272,3 +272,18 @@ def test_the_same_version_as_the_release_in_flight_is_accepted(w):  # AC-129.18
 def chk_(name, bucket, run=42):
     from platrelease_world import chk
     return chk(name, bucket, run)
+
+
+# ---------------- #346: a patch when [Unreleased] holds only fixes ----------------
+
+@pytest.mark.parametrize("body, version", [
+    ("### Fixed\n\n**A fix (#1).** Text.\n", "5.4.1"),
+    ("### Fixed\n\n**A fix.**\n\n### Changed\n\n**A change.**\n", "5.5.0"),
+    ("**A headline.**\n\n### Fixed\n\n**A fix.**\n", "5.5.0"),
+    ("### Added\n\n**New.**\n", "5.5.0"),
+    ("", "5.5.0"),
+])
+def test_the_proposal_is_a_patch_only_for_fixes_346(body, version):
+    import platrelease_state as st
+    assert st.proposal("v5.4.0", [], body)[0] == version
+    assert st.proposal("v5.4.0", ["operator cnpg 1 → 2"], body)[0] == "6.0.0"

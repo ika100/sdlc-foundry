@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import core
+import platrelease_changelog as changelog
 import ship
 
 SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -201,15 +202,31 @@ def needs_major(repo: Path, tag: str) -> list[str]:
     return [ln.strip() for ln in out.splitlines() if ln.strip()]
 
 
-def proposal(tag: str, changes: list[str]) -> tuple[str, str]:
-    major, minor, _ = vkey(tag)
+def only_fixes(unreleased: str) -> bool:
+    """[Unreleased] holds a `### Fixed` section and nothing else (#346)."""
+    parts = re.split(r"^### +(.+?)\s*$", unreleased, flags=re.M)
+    if parts[0].strip():
+        return False
+    sections = {name.strip(): body.strip() for name, body in zip(parts[1::2], parts[2::2])}
+    return bool(sections.get("Fixed")) and all(not b for n, b in sections.items() if n != "Fixed")
+
+
+def proposal(tag: str, changes: list[str], unreleased: str = "") -> tuple[str, str]:
+    major, minor, patch = vkey(tag)
     if changes:
         return f"{major + 1}.0.0", f"major after {tag}: " + "; ".join(changes)
+    if only_fixes(unreleased):
+        return f"{major}.{minor}.{patch + 1}", f"patch after {tag}: [Unreleased] holds only fixes"
     return f"{major}.{minor + 1}.0", f"minor after {tag}, no change needs a major release"
 
 
 def propose(repo: Path, tag: str) -> tuple[str, str]:
-    return proposal(tag, needs_major(repo, tag))
+    return proposal(tag, needs_major(repo, tag), _unreleased(repo))
+
+
+def _unreleased(repo: Path) -> str:
+    f = repo / "docs" / "CHANGELOG.md"
+    return changelog.unreleased_body(f.read_text()) if f.is_file() else ""
 
 
 def check_syntax(requested: str) -> None:
