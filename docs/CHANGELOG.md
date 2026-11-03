@@ -6,6 +6,10 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+### Fixed
+
+**`cplat platform doctor` warns when the run store's retro workflow is out of date.** `cplat platform runs init` installs `.github/workflows/cplat-retro.yml` in the store once and never changes it, so a store set up before 5.0 still called `cplat retro`, which 5.0 removed, and the 2026-11-02 retro failed. Doctor now compares the file with this platform version's asset and says how to fix it. **Action:** if doctor warns, replace that file in the store with `scripts/cplat/assets/workflows/cplat-retro.yml`.
+
 ### Changed
 
 **The gitops template's CLAUDE.md says who creates `generate:` secrets.** It still named External Secrets Operator; since 5.5.0 a credentials Job (an Argo CD PreSync hook) creates them once (ADR-072). The text reaches gitops repos with `/platform:update`.
