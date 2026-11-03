@@ -45,12 +45,14 @@ tasks:
     covers: [AC-131.2, AC-131.7, AC-131.14, AC-131.15, AC-131.19]
     parallel_safe: true
     depends_on: [t1, t3, t5]
+    done: true
   - id: t7
     title: supervisor.py — the unit loop, summary lines, stall escalation, rescale and grace at unit boundaries
     files: [scripts/cplat/supervisor.py]
     covers: [AC-131.1, AC-131.3, AC-131.4, AC-131.5, AC-131.6, AC-131.14, AC-131.15, AC-131.19]
     parallel_safe: true
     depends_on: [t1, t3, t5]
+    done: true
   - id: t8
     title: headless.py — unit mode dispatch, preflight before the first session, per-session grants, defaults, preflight record
     files: [scripts/cplat/headless.py, tests/cplat/test_headless.py, tests/cplat/test_headless_126.py, tests/cplat/test_headless_model.py]
