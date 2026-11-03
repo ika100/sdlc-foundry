@@ -84,8 +84,8 @@ def test_the_status_lists_every_unit_with_state_sessions_and_checkpoint(repo, ca
     git(repo, "checkout", "-qb", BRANCH)
     u = units()
     u.prepare(repo, "ship", SPEC_ID)
+    plan_sha = head(repo)                                 # the head prepare() derived the plan checkpoint at
     mark_done(repo, "t1")
-    plan_sha = head(repo)
     u.start_session(repo, "task:t2", "s1")
     out = status(repo, capsys)
     assert f"ship {SPEC_ID}: phase build" in out
