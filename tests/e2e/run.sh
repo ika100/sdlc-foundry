@@ -409,6 +409,19 @@ kubectl --context k3d-$cluster -n $ns get pods -o jsonpath='{range .items[*]}{.m
 step "Generated secrets: random, written once, the same in every replica; remote values arrive via External Secrets (AC-128.8, AC-128.3)"
 kc() { kubectl --context k3d-$cluster -n $ns "$@"; }
 secret_val() { kc get secret "$1" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d; }
+pods_ready() { # seconds pod...: polls until every pod reports Ready. `kubectl wait` right after a StatefulSet recreated a pod
+  # sometimes misses its Ready transition and times out on a pod that is Ready (3 e2e runs on 2026-11-03)
+  local end=$((SECONDS + $1)) p ok; shift
+  while :; do
+    ok=1
+    for p in "$@"; do
+      [ "$(kc get pod "$p" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = True ] || ok=
+    done
+    [ -n "$ok" ] && return 0
+    [ $SECONDS -ge $end ] && return 1
+    sleep 3
+  done
+}
 for _ in $(seq 1 40); do [ -n "$(secret_val e2e-api-auth DB_PASSWORD)" ] && [ -n "$(secret_val e2e-api-stripe STRIPE_KEY)" ] && break; sleep 3; done
 db=$(secret_val e2e-api-auth DB_PASSWORD); jwt=$(secret_val e2e-api-auth JWT_KEY)
 [ "${#db}" = 32 ] || fail "generated DB_PASSWORD has length ${#db}, expected 32"
@@ -888,7 +901,7 @@ for _ in $(seq 1 60); do   # up to 180 s for the StatefulSet controller to creat
   [ -n "$n_s" ] && [ "$n_s" != "$uid_s" ] && [ -n "$n_r" ] && [ "$n_r" != "$uid_r" ] && break; sleep 3
 done
 [ -n "$n_s" ] && [ "$n_s" != "$uid_s" ] && [ -n "$n_r" ] && [ "$n_r" != "$uid_r" ] || cfail "the cache pods were not recreated with new UIDs"
-kc wait --for=condition=Ready pod/e2e-sessions-0 pod/e2e-ratelimit-0 --timeout=150s || { kc get pods -l app.kubernetes.io/part-of=e2e; kc describe pod e2e-sessions-0 e2e-ratelimit-0 | tail -40; cfail "the cache pods did not become Ready again"; }
+pods_ready 180 e2e-sessions-0 e2e-ratelimit-0 || { kc get pods -l app.kubernetes.io/part-of=e2e; kc describe pod e2e-sessions-0 e2e-ratelimit-0 | tail -40; cfail "the cache pods did not become Ready again"; }
 got=$(cx sessions "$vcli -a \"\$VALKEY_PASSWORD\" GET persist:key" 2>&1) || true
 [ "$got" = kept ] || { kc logs e2e-sessions-0 -c valkey --tail=20 || true; cfail "sessions lost its key across the restart of its pod (GET: '$got')"; }
 [ "$(cx ratelimit "$vcli -a \"\$VALKEY_PASSWORD\" DBSIZE" 2>&1)" = 0 ] || cfail "ratelimit is not empty after its pod came back (DBSIZE)"
