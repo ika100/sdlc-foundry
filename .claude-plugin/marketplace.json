@@ -179,7 +179,7 @@
     {
       "name": "platform",
       "source": "./plugins/platform",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "description": "The platform noun: /platform:doctor, update, fleet, runs, retro and release look after the platform itself.",
       "category": "agents",
       "tags": [
