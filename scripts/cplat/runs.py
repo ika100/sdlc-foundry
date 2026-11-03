@@ -19,7 +19,7 @@ A run is only ever written once, at `finish`; the store is `$CPLAT_RUNS_REPO` (o
                                                                      hooks for agent metrics (spec 089, runs_agents)
 
   cplat platform runs init <owner/name> | flush | report [--json] [--since DAYS] [--repo R]
-              [--agents [--by-version] [--agent NAME] [--shape SHAPE] | --benchmarks]
+              [--agents [--by-version] [--agent NAME] [--shape SHAPE] | --benchmarks] | report --pr <run-id> [--dir D]
   cplat platform runs begin <kind> [--spec S] [--budget KEY=VALUE] | phase <name> | gate <acceptance|security> <passed|failed> | end --outcome O
   cplat platform runs agent <event> ...                                       agent metrics of the current run (spec 089)
   cplat platform runs usage <run_id> | --session <id> [--json]                tokens and estimated cost per run (spec 099)
@@ -868,6 +868,15 @@ def _read_pointer(path: Path | None) -> dict | None:
 
 
 def _report(ns: argparse.Namespace) -> int:
+    if ns.pr:   # spec 133: one run's "How this was built" block from this machine's records; no store needed
+        if ns.agents or ns.benchmarks or ns.json or ns.since is not None or ns.repo:
+            raise PlatformError("--pr cannot be combined with --agents, --benchmarks, --json, --since or --repo",
+                                hint="cplat platform runs report --pr <run-id> [--dir <repo>]")
+        import runs_built
+        print(runs_built.block(ns.pr, Path(ns.dir)), end="")
+        return 0
+    if ns.since is None:
+        ns.since = 30
     if ns.benchmarks and ns.agents:
         raise PlatformError("--benchmarks and --agents cannot be combined", hint="run them as two reports")
     if not ns.agents and (ns.by_version or ns.agent or ns.shape):
@@ -917,13 +926,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("flush", help="write the local buffer to the store")
     r = sub.add_parser("report", help="aggregate the stored runs")
     r.add_argument("--json", action="store_true")
-    r.add_argument("--since", type=_positive, default=30, metavar="DAYS")
+    r.add_argument("--since", type=_positive, default=None, metavar="DAYS", help="default 30")
     r.add_argument("--repo", metavar="OWNER/NAME")
     r.add_argument("--agents", action="store_true", help="per agent, shape and model (spec 089)")
     r.add_argument("--by-version", action="store_true", help="with --agents: one row per platform version")
     r.add_argument("--agent", metavar="NAME", help="with --agents: only this agent (or role)")
     r.add_argument("--shape", metavar="SHAPE", help="with --agents: only this shape")
     r.add_argument("--benchmarks", action="store_true", help="benchmark runs per workflow and platform version (spec 099)")
+    r.add_argument("--pr", metavar="RUN_ID", help="the run's \"How this was built\" block for a PR body (spec 133)")
+    r.add_argument("--dir", default=".", help="with --pr: the repo whose spec files are read")
     b = sub.add_parser("begin", help="start a run record (for markdown commands)")
     b.add_argument("kind")
     b.add_argument("--spec")

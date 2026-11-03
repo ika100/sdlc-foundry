@@ -5,7 +5,8 @@
 
 Fixed operations only: `git add -A`, `git commit -s`, `git push -u origin <branch>` (never forced, never amended) and
 `gh pr create` when the repo's `.claude/settings*.json` allows it, else a ready PR (spec 051). Safe to run again after
-a failure: a clean tree is not committed twice and an open PR is not opened twice.
+a failure: a clean tree is not committed twice and an open PR is not opened twice. With a run in the checkout, the body gets
+the generated "How this was built" block (spec 133).
 Exit 0: PR opened or ready; 1: a part failed; 2: refused before starting (nothing changed).
 """
 from __future__ import annotations
@@ -141,6 +142,17 @@ def _uncommitted(repo: Path) -> list[str]:
     return paths
 
 
+def _how_built(repo: Path, o: Opts, body_path: Path, res: Result) -> None:
+    """Spec 133: append (or replace) the "How this was built" block of the checkout's run; never fails the PR."""
+    try:
+        import runs_built
+        section = runs_built.pr_section(repo, o.spec)
+        if section:
+            body_path.write_text(runs_built.apply(body_path.read_text(), section))
+    except Exception as e:  # noqa: BLE001
+        res.notes.append(f"note: how-this-was-built skipped: {type(e).__name__}: {e}"[:200])
+
+
 def open_pr(repo: Path, o: Opts) -> Result:
     if not _ok(["git", "rev-parse", "--is-inside-work-tree"], repo):
         raise Refused("not a git repository")
@@ -176,6 +188,7 @@ def open_pr(repo: Path, o: Opts) -> Result:
     text = body_path.read_text()
     if any(s.startswith("wip(") for s in subjects) and WIP_NOTE not in text:
         body_path.write_text(text.rstrip("\n") + f"\n\n{WIP_NOTE}\n")
+    _how_built(repo, o, body_path, res)
 
     if _out(["git", "status", "--porcelain"], repo):
         add = run(["git", "add", "-A"], cwd=repo, check=False)
