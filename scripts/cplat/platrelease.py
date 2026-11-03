@@ -110,7 +110,11 @@ def _wait_e2e(repo: Path, url: str, o: Opts) -> None:
     pr.wait then judges every check."""
     begin = ship.now()
     while True:
-        cs = ship.checks(repo, url)
+        try:
+            cs = ship.checks(repo, url)
+        except ship.GhError as e:          # #356: an API hiccup is no verdict; ask again on the next poll
+            print(f"  gh error {e}; retrying", flush=True)
+            cs = [{"name": E2E_NAME, "bucket": "pending"}]
         if any(c.get("bucket") == "fail" for c in cs):
             return
         if not any(c.get("name") == E2E_NAME and c.get("bucket") == "pending" for c in cs):
@@ -184,7 +188,7 @@ def main(argv: list[str]) -> int:
         if o.version:
             version, reason = o.version, "--version"
         else:
-            version, reason = st.proposal(state.tag, changes)
+            version, reason = st.proposal(state.tag, changes, st._unreleased(repo))
     else:
         version, reason = state.version or "", "release in flight"
     sha = state.merged_sha if state.phase in (st.MERGED, st.TAGGED, st.GUARDING, st.GUARD_RED) else None

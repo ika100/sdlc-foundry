@@ -1157,6 +1157,8 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("check", help="validate specs and plans (all if none given)")
     p.add_argument("ids", nargs="*")
     p.add_argument("--require", choices=list(RANK))
+    p = sub.add_parser("adr-next", help="the next ADR number no pushed branch or open PR uses (#337)")
+    p.add_argument("--offline", action="store_true", help="do not ask GitHub for open PRs")
     p = sub.add_parser("approve", help="check a draft and set it approved")
     p.add_argument("id")
     p = sub.add_parser("set-status")
@@ -1224,7 +1226,14 @@ def main(argv: list[str]) -> int:
         shape = repo_shape(root)
         results = {s.id: check(s, require=ns.require, shape=shape) for s in specs}
         results.update({b.id: [b.one_line()] for b in bad})
+        import adr
+        if clash := adr.clashes(root):          # #337: an ADR number taken twice, here or on another branch
+            results[adr.ADR_DIR] = clash
         return _print_errors(results)
+    if ns.cmd == "adr-next":
+        import adr
+        print(f"{adr.next_number(root, with_prs=not ns.offline):03d}")
+        return 0
     if ns.cmd == "approve":
         spec = find(root, ns.id)
         aside = approve(spec, repo_shape(root))
