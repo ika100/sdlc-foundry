@@ -1165,7 +1165,7 @@ def dev_namespace(repo: Path, apps: list[str], svc: str) -> str:
     try:
         me = service_slug(repo)
         for slug in apps:
-            for a in smoke._app_dirs(slug, repo) or []:
+            for a in smoke._app_dirs(slug, repo)[0] or []:
                 doc = smoke._read(slug, f"applications/{a}/system.yaml", repo)
                 comps = model.build(doc, a).components if isinstance(doc, dict) else ()
                 if any(c.repo == me or c.name == svc for c in comps):

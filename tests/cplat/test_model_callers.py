@@ -307,10 +307,40 @@ def test_a_gitops_app_that_cannot_be_read_gives_the_same_reasons_ac_113_10(svc, 
     def broken(args, *, cwd=None, check=True):
         raise core.PlatformError("gh: HTTP 404")
     monkeypatch.setattr(smoke, "gh", broken)
-    assert smoke.dev_url(svc, [GITOPS], "shop-api") == (None, f"shop-api has no dev URL (could not read the gitops-app {GITOPS})")
+    monkeypatch.setattr(smoke, "sleep", lambda s: None)
+    assert smoke.dev_url(svc, [GITOPS], "shop-api") == (None, f"shop-api has no dev URL (could not read the gitops-app {GITOPS}: gh: HTTP 404)")
     other = {"other": {"type": "service", "lang": "python", "repo": "acme/other", "port": 8080}}
     monkeypatch.setattr(smoke, "gh", GitopsApi(other, SMOKE_APP))
     assert smoke.dev_url(svc, [GITOPS], "shop-api") == (None, "shop-api has no dev URL (not in the linked gitops-app)")
+
+
+def test_a_failed_read_of_the_gitops_app_is_retried_once_369(svc, monkeypatch):  # #369
+    api, calls, waits = GitopsApi(EXPOSED, SMOKE_APP), [], []
+
+    def flaky(args, *, cwd=None, check=True):
+        calls.append(args)
+        if len(calls) == 1:
+            raise core.PlatformError("`gh api repos/acme/shop-gitops/contents/applications` failed (exit 1): HTTP 502")
+        return api(args, cwd=cwd, check=check)
+    monkeypatch.setattr(smoke, "gh", flaky)
+    monkeypatch.setattr(smoke, "sleep", waits.append)
+    monkeypatch.delenv("LOCAL_HTTP_PORT", raising=False)
+    assert smoke.dev_url(svc, [GITOPS], "shop-api") == ("http://shop-api.shop-dev.localhost:8088", None)
+    assert waits == [smoke.READ_RETRY_S]
+
+
+def test_a_gitops_app_that_stays_unreadable_names_the_error_369(svc, monkeypatch):  # #369
+    tries = []
+
+    def down(args, *, cwd=None, check=True):
+        tries.append(args)
+        raise core.PlatformError("`gh api repos/acme/shop-gitops/contents/applications` failed (exit 4): HTTP 401: Bad credentials\nmore")
+    monkeypatch.setattr(smoke, "gh", down)
+    monkeypatch.setattr(smoke, "sleep", lambda s: None)
+    url, why = smoke.dev_url(svc, [GITOPS], "shop-api")
+    assert url is None and len(tries) == 2
+    assert why == (f"shop-api has no dev URL (could not read the gitops-app {GITOPS}: "
+                   "`gh api repos/acme/shop-gitops/contents/applications` failed (exit 4): HTTP 401: Bad credentials)")
 
 
 def test_the_service_is_found_by_its_repo_first_ac_113_10(svc, monkeypatch):  # AC-113.10

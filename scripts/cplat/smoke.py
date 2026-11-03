@@ -320,14 +320,26 @@ def _read(slug: str, path: str, repo: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _app_dirs(slug: str, repo: Path) -> list[str] | None:
-    try:
-        data = json.loads(gh(["api", f"repos/{slug}/contents/applications"], cwd=repo, check=False) or "null")
-    except (PlatformError, ValueError):
-        return None
-    if not isinstance(data, list):
-        return None
-    return [e["name"] for e in data if isinstance(e, dict) and e.get("type") == "dir" and e.get("name")]
+READ_RETRY_S = 5   # one retry of the gitops-app listing: a failed `gh` call is often transient (#369)
+
+
+def _app_dirs(slug: str, repo: Path) -> tuple[list[str] | None, str]:
+    """(app dirs, "") or (None, why): the gitops-app's applications/ folders; a failed call is retried once."""
+    why = ""
+    for attempt in range(2):
+        if attempt:
+            sleep(READ_RETRY_S)
+        try:
+            data = json.loads(gh(["api", f"repos/{slug}/contents/applications"], cwd=repo) or "null")
+        except PlatformError as e:
+            why = str(e).splitlines()[0][-200:]
+            continue
+        except ValueError:
+            return None, "the GitHub API answered no JSON"
+        if not isinstance(data, list):
+            return None, "it has no applications/ folder"
+        return [e["name"] for e in data if isinstance(e, dict) and e.get("type") == "dir" and e.get("name")], ""
+    return None, why
 
 
 def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> tuple[str | None, str | None]:
@@ -335,9 +347,9 @@ def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> t
     me = _slug(repo)
     unread: list[str] = []
     for slug in apps:
-        dirs = _app_dirs(slug, repo)
+        dirs, why = _app_dirs(slug, repo)
         if dirs is None:
-            unread.append(slug)
+            unread.append(f"{slug}: {why}" if why else slug)
             continue
         for a in dirs:
             m = model.load_remote(a, lambda p, slug=slug: _read(slug, p, repo))
@@ -347,7 +359,7 @@ def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> t
             url, why = m.url(c.name, env) if m.instance(c.name, env) else (None, f"not exposed in {env}")
             return (url, None) if url else (None, f"{service} has no {env} URL ({why})")
     if unread and len(unread) == len(apps):
-        return None, f"{service} has no {env} URL (could not read the gitops-app {', '.join(unread)})"
+        return None, f"{service} has no {env} URL (could not read the gitops-app {'; '.join(unread)})"
     return None, f"{service} has no {env} URL (not in the linked gitops-app)"
 
 
