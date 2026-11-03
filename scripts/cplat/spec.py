@@ -1365,6 +1365,13 @@ def main(argv: list[str]) -> int:
             return 2
         for f, digest in approve_test_change(root, ns.base, ns.approve, ns.reason).items():
             print(f"{f}: approved by the user at sha256 {digest[:12]}")
+        try:  # the run record's `approved_test_diffs` (spec 133's PR block reads it); never changes the result
+            import runs
+            rid = runs.current_run(root)
+            for f in ns.approve:
+                runs.add_to(rid, "approved_test_diffs", {"file": f, "task": ns.task, "reason": ns.reason})
+        except Exception:  # noqa: BLE001
+            pass
         return 0
     if ns.cmd == "test-diff":
         result = test_diff(root, ns.base, ns.files)

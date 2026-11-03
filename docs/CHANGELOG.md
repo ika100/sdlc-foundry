@@ -8,7 +8,7 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ### Added
 
-**`cplat spec test-diff --approve` records an acceptance-test change the user approved (#324).** A build stopped on every later task for the same change to an acceptance test, even after the user had approved it, because nothing remembered the approval. `cplat spec test-diff <red> --approve <file>... [--reason '...']` records the file's current content hash for that red commit (in the checkout's git dir); later runs report the file as `approved by the user` and pass, and any further change to it is flagged again. `/component:build` records the approval when the user gives it and never approves on its own. Update the plugins (`/plugin marketplace update`).
+**`cplat spec test-diff --approve` records an acceptance-test change the user approved (#324).** A build stopped on every later task for the same change to an acceptance test, even after the user had approved it, because nothing remembered the approval. `cplat spec test-diff <red> --approve <file>... [--task <task>] [--reason '...']` records the file's current content hash for that red commit (in the checkout's git dir) and adds an `approved_test_diffs` entry to the active run record; later runs report the file as `approved by the user` and pass, and any further change to it is flagged again. `/component:build` records the approval when the user gives it (`references/build-test-approval.md`) and never approves on its own. Update the plugins (`/plugin marketplace update`).
 
 ### Fixed
 

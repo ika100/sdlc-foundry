@@ -15,6 +15,7 @@ MOVED = {
         "build-worktree-fallback.md": ["Cannot create agent worktree", "worktree.baseRef"],
         "build-replan.md": ["**Re-plan mode.**", "replan-abort", "Your earlier attempt is a reference only"],
         "build-security-red.md": ["cplat deps patch", "Exit 4", "agents.security"],
+        "build-test-approval.md": ["--approve", "approved_test_diffs"],   # #324
     },
     "ship": {
         "ship-gitops.md": ["cplat component ship gitops prepare", "cplat component ship gitops pr"],

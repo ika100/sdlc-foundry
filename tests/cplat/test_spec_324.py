@@ -39,3 +39,16 @@ def test_approve_needs_files_324(tmp_path, capsys):
     _committed_repo(tmp_path)
     assert spec.main(["--repo", str(tmp_path), "test-diff", "HEAD", "--approve"]) == 2
     assert "--approve needs" in capsys.readouterr().err
+
+
+def test_an_approval_is_added_to_the_run_record_324(tmp_path, monkeypatch):
+    """#324: the active run gets an `approved_test_diffs` entry (the shape spec 133's PR block reads)."""
+    import runs
+    _committed_repo(tmp_path)
+    (tmp_path / "tests" / "test_x.py").write_text(PY_BEFORE.replace("200.01", "1"))
+    added = []
+    monkeypatch.setattr(runs, "current_run", lambda root: "r1")
+    monkeypatch.setattr(runs, "add_to", lambda rid, name, item, **kw: added.append((rid, name, item)))
+    assert spec.main(["--repo", str(tmp_path), "test-diff", "HEAD", "--approve", "tests/test_x.py", "--task", "t3",
+                      "--reason", "typo in the fixture"]) == 0
+    assert added == [("r1", "approved_test_diffs", {"file": "tests/test_x.py", "task": "t3", "reason": "typo in the fixture"})]
