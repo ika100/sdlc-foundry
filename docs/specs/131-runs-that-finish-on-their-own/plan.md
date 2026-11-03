@@ -10,6 +10,7 @@ tasks:
     covers: [AC-131.1, AC-131.2, AC-131.3, AC-131.5, AC-131.7, AC-131.19]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: preflight.py — run allowlist, refused rules, settings-layer matcher, five checks; pr_open honours CPLAT_RUN_ALLOWLIST
     files: [scripts/cplat/preflight.py, scripts/cplat/pr_open.py]
