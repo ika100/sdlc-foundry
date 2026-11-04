@@ -348,7 +348,7 @@ def database_state(system: str, db: str, env: str, context: str | None, *, backu
         firsts = [d for d in map(parse_time, row["windows"].values()) if d]
         if firsts:
             b["earliest"] = fmt_time(min(firsts))
-            b["latest"] = _latest(active, ns, context)
+            b["latest"] = ordered_latest(b["earliest"], _latest(active, ns, context))
         b["state"] = "failing" if b["archiving"] == "failing" or failing_backup else "pending" if pending else "ok"
         if roles["restored"]:
             r = get_json(["clusters.postgresql.cnpg.io", roles["restored"], "-n", ns], context)
@@ -370,6 +370,14 @@ def _windows(system: str, db: str, ns: str, context: str | None) -> dict:
         if first:
             out[server] = first
     return out
+
+
+def ordered_latest(earliest: str | None, latest: str | None) -> str | None:
+    """The newest restore point, never before the earliest (#429): right after the first base backup the newest archived WAL
+    can be older than that backup's end, which is then the newest point a restore reaches."""
+    if earliest and latest and parse_time(latest) and parse_time(earliest) and parse_time(latest) < parse_time(earliest):
+        return earliest
+    return latest
 
 
 def _latest(active: dict, ns: str, context: str | None) -> str | None:
