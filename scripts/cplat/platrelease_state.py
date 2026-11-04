@@ -21,6 +21,7 @@ TAG = re.compile(r"^v(\d+\.\d+\.\d+)$")
 RELEASE_SUBJECT = re.compile(r"^chore: release (\d+\.\d+\.\d+)(?: \(#\d+\))?$")
 GUARD_YOUNG = 600     # seconds a tag may lack a release-guard run before that counts as "not checked"
 LOG_WINDOW = 200
+E2E_NAME = "e2e upgrade (previous release → candidate)"   # the check name release-check.py uses (E2E_NAME)
 
 IDLE, BRANCH, PR_OPEN, MERGED, TAGGED, GUARDING, GUARD_RED = (
     "idle", "branch", "pr-open", "merged", "tagged", "guarding", "guard-red")

@@ -103,6 +103,14 @@ class Gh:
             return w.view(rid).get("status", "") + "\n"
         if a[0] == "api" and a[1].endswith("/logs"):   # a failed job's own log (#399)
             return ""
+        if a[0] == "api":   # the release PR's head with the merge commit's tree (#400)
+            path = a[1].split("?")[0]
+            commit = path.split("/commits/")[1].split("/")[0]
+            if path.endswith("/pulls"):
+                return "\n".join(w.pull_heads.get(commit, [])) + "\n"
+            if path.endswith("/check-runs"):
+                return "\n".join(w.head_e2e.get(commit, [])) + "\n"
+            return w.trees.get(commit, "") + "\n"
         if a[:2] == ["release", "view"]:
             return w.release_url or ""
         if a[:2] == ["release", "create"]:
@@ -123,6 +131,7 @@ class World:
         self.e2e_seq = [[run_entry(100)]]
         self.guard_seq = [[run_entry(200, branch="v5.5.0")]]
         self.views, self.workflow = {}, {}
+        self.pull_heads, self.trees, self.head_e2e = {}, {}, {}
         self.release_url, self.release_notes = None, None
         self.results = {}
         self.check_calls = []

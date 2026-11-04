@@ -17,7 +17,7 @@ import platrelease_state as st
 import pr as prmod
 import ship
 
-E2E_NAME = "e2e upgrade (previous release → candidate)"   # the check name release-check.py uses (E2E_NAME)
+E2E_NAME = st.E2E_NAME
 CHANGELOG = "docs/CHANGELOG.md"
 STOP_EXIT = 3
 

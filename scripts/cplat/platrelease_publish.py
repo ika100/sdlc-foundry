@@ -1,5 +1,5 @@
-"""The post-merge part of `cplat platform release` (spec 129): the upgrade e2e on the merge commit, the gate, the tag stop,
-the tag, the GitHub release and the release guard. Every step is entered from the state detected by platrelease_state."""
+"""The post-merge part of `cplat platform release` (spec 129): the upgrade e2e on the merge commit (or on the release PR's head
+when it has the merge commit's tree, #400), the gate, the tag stop, the tag, the GitHub release and the release guard. Every step is entered from the state detected by platrelease_state."""
 from __future__ import annotations
 
 import json
@@ -51,7 +51,24 @@ def _conclusion(repo: Path, slug: str, rid: str) -> str | None:
         return None
 
 
+def _green_same_tree_head(repo: Path, slug: str, sha: str) -> str | None:
+    """The head of the merge commit's pull request when it has the merge commit's tree and a green upgrade e2e (#400): a squash
+    merge of an up-to-date branch, so the run on the merge commit would test the same files again. None when unsure."""
+    def api(path: str, jq: str) -> list[str]:
+        return ship.gh(["api", f"repos/{slug}/{path}", "--jq", jq], cwd=repo, check=False).split()
+    tree = core.run(["git", "rev-parse", f"{sha}^{{tree}}"], cwd=repo, check=False).stdout.strip()
+    for head in api(f"commits/{sha}/pulls", ".[].head.sha"):
+        if tree and api(f"commits/{head}", ".commit.tree.sha") == [tree] and "success" in api(
+                f"commits/{head}/check-runs?per_page=100", f'.check_runs[] | select(.name == "{st.E2E_NAME}") | .conclusion'):
+            return head
+    return None
+
+
 def _upgrade_e2e(repo: Path, slug: str, sha: str, o) -> None:
+    head = _green_same_tree_head(repo, slug, sha)
+    if head:
+        ship.say(f"upgrade e2e green on {head[:7]}, the release PR's head with the same tree as {sha[:7]}: not waiting for its rerun")
+        return
     args = ["run", "list", "-R", slug, "--workflow", "e2e-upgrade.yml", "--commit", sha, "--event", "push",
             "--json", "databaseId,status,conclusion,url"]
     ship.say(f"waiting for the upgrade e2e on {sha[:7]}")

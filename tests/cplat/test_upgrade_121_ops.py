@@ -647,9 +647,13 @@ def test_a_docs_only_change_does_not_need_the_upgrade_e2e_ac_121_24(tmp_path):  
 
 
 GH_CHECKS = """#!{python}
-import os, subprocess, sys
-data = open(os.environ["GH_CHECKRUNS"]).read()
+import json, os, subprocess, sys
 args = sys.argv[1:]
+data = json.load(open(os.environ["GH_CHECKRUNS"]))   # {"<api path>": answer}; the merge commit's check runs under "runs"
+if args[:1] == ["api"]:
+    path = args[1].split("?")[0]
+    data = data.get(path, data["runs"] if path.endswith("/check-runs") else [])
+data = json.dumps(data)
 if args[:2] == ["repo", "view"]:
     print('{"nameWithOwner": "acme/platform"}' if "--json" in args else "acme/platform")
 elif "--jq" in args:
@@ -660,7 +664,7 @@ else:
 E2E_NAME = "e2e upgrade (previous release → candidate)"
 
 
-def gate(tmp_path, runs, sha="abc1234"):
+def gate(tmp_path, runs, sha="abc1234", api=None):
     root = mini_platform(tmp_path)
     bin_dir = tmp_path / "ghbin"
     bin_dir.mkdir()
@@ -668,7 +672,7 @@ def gate(tmp_path, runs, sha="abc1234"):
     gh.write_text(GH_CHECKS.replace("{python}", sys.executable))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     data = tmp_path / "checkruns.json"
-    data.write_text(json.dumps({"total_count": len(runs), "check_runs": runs}))
+    data.write_text(json.dumps({"runs": {"total_count": len(runs), "check_runs": runs}, **(api or {})}))
     env = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "GH_CHECKRUNS": str(data), "GITHUB_REPOSITORY": "acme/platform", "GH_TOKEN": "x"}
     return run_script(root, "release-check.py", "gate", sha, env=env)
 
@@ -688,6 +692,25 @@ def test_the_gate_refuses_a_tag_without_a_green_upgrade_e2e_ac_121_24(tmp_path, 
     rc, out = gate(tmp_path, runs, sha="abc1234")
     assert rc == 1
     assert f"ERROR: abc1234 has no green upgrade e2e ({shown}): do not tag it" in out.splitlines(), out
+
+
+def head_api(head_tree="t1", head_e2e="success") -> dict:
+    """#400: abc1234 is the squash merge of pull request head def5678."""
+    p = "repos/acme/platform/commits/"
+    return {p + "abc1234/pulls": [{"number": 7, "head": {"sha": "def5678"}}],
+            p + "abc1234": {"commit": {"tree": {"sha": "t1"}}}, p + "def5678": {"commit": {"tree": {"sha": head_tree}}},
+            p + "def5678/check-runs": {"check_runs": [{"name": E2E_NAME, "conclusion": head_e2e}]}}
+
+
+def test_the_gate_takes_a_green_upgrade_e2e_on_the_pull_requests_head_with_the_same_tree_400(tmp_path):
+    rc, out = gate(tmp_path, [{"name": E2E_NAME, "conclusion": None, "status": "in_progress"}], api=head_api())
+    assert rc == 0 and "OK: abc1234 has a green upgrade e2e on def5678, the head of its pull request with the same tree" in out, out
+
+
+@pytest.mark.parametrize("kw", [{"head_tree": "t2"}, {"head_e2e": "failure"}], ids=["other-tree", "red-head"])
+def test_the_gate_refuses_the_pull_requests_head_with_another_tree_or_no_green_e2e_400(tmp_path, kw):
+    rc, out = gate(tmp_path, [], api=head_api(**kw))
+    assert rc == 1 and "ERROR: abc1234 has no green upgrade e2e (none): do not tag it" in out.splitlines(), out
 
 
 # ---------------- the workflows (AC-121.24, AC-121.25, AC-121.26) ----------------

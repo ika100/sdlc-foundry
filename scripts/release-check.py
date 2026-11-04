@@ -11,7 +11,9 @@
   release-check.py needs-major [--base REF]       one line per change that needs a major release (the rule `rows` uses), nothing when none
   release-check.py needs-upgrade-e2e [--base REF] prints `run=true|false` (for $GITHUB_OUTPUT): the change touches the versions table, adds a
                                                   release heading or touches the upgrade e2e or its code
-  release-check.py gate SHA                       exit 0 only when SHA has a green check run of the upgrade e2e (via `gh api`)
+  release-check.py gate SHA                       exit 0 only when SHA has a green check run of the upgrade e2e (via `gh api`), or the
+                                                  head of SHA's pull request has one and the same tree as SHA (#400: a squash merge of an
+                                                  up-to-date branch, so the run on the merge commit tests nothing new)
 
 REF defaults to the newest tag `v*` reachable from HEAD. This script never creates, moves or deletes a tag or a release.
 """
@@ -185,14 +187,32 @@ def gh(*args: str) -> str:
     return p.stdout
 
 
+def e2e_conclusion(repo: str, sha: str) -> str:
+    runs = json.loads(gh("api", f"repos/{repo}/commits/{sha}/check-runs?per_page=100")).get("check_runs", [])
+    found = [r.get("conclusion") or "none" for r in runs if r.get("name") == E2E_NAME]
+    return "success" if "success" in found else (found[-1] if found else "none")
+
+
+def same_tree_heads(repo: str, sha: str) -> list[str]:
+    """The heads of SHA's pull requests whose tree is SHA's tree (#400)."""
+    def tree(commit: str) -> str:
+        return json.loads(gh("api", f"repos/{repo}/commits/{commit}"))["commit"]["tree"]["sha"]
+    heads = [p["head"]["sha"] for p in json.loads(gh("api", f"repos/{repo}/commits/{sha}/pulls"))]
+    want = tree(sha) if heads else ""
+    return [h for h in heads if h != sha and tree(h) == want]
+
+
 def cmd_gate(sha: str) -> int:
     conclusion = "none"
     try:
         repo = os.environ.get("GITHUB_REPOSITORY") or json.loads(gh("repo", "view", "--json", "nameWithOwner"))["nameWithOwner"]
-        runs = json.loads(gh("api", f"repos/{repo}/commits/{sha}/check-runs?per_page=100")).get("check_runs", [])
-        found = [r.get("conclusion") or "none" for r in runs if r.get("name") == E2E_NAME]
-        conclusion = "success" if "success" in found else (found[-1] if found else "none")
-    except (RuntimeError, ValueError, KeyError) as e:
+        conclusion = e2e_conclusion(repo, sha)
+        if conclusion != "success":
+            for head in same_tree_heads(repo, sha):
+                if e2e_conclusion(repo, head) == "success":
+                    print(f"OK: {sha} has a green upgrade e2e on {head}, the head of its pull request with the same tree")
+                    return 0
+    except (RuntimeError, ValueError, KeyError, TypeError) as e:
         print(f"WARNING: cannot read the check runs of {sha}: {e}", file=sys.stderr)
     if conclusion == "success":
         print(f"OK: {sha} has a green upgrade e2e")

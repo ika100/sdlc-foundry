@@ -80,6 +80,36 @@ def test_a_run_that_never_appears_fails_after_ten_minutes_without_a_tag(w):  # A
     assert TAG not in w.origin_tags() and w.check_cmd("gate") == [] and w.gh.writes() == []
 
 
+def same_tree_head(w, tree=None, e2e=("success",)) -> str:
+    """#400: the release PR's head, green on the upgrade e2e; the merge commit's tree unless `tree` says otherwise."""
+    head = "b" * 40
+    w.pull_heads[w.merge_sha] = [head]
+    w.trees[head] = tree or w.git("rev-parse", f"{w.merge_sha}^{{tree}}").strip()
+    w.head_e2e[head] = list(e2e)
+    return head
+
+
+def test_a_green_e2e_on_the_release_heads_same_tree_is_not_waited_for_again_400(w):
+    w.in_state("merged")
+    head = same_tree_head(w)
+    w.e2e_seq = [[]]                          # the merge commit's run would never appear
+    r = w.run()
+    assert r.rc == 3 and "CONFIRM: tag" in r.out, r.text
+    assert e2e_lists(w) == [] and w.clock["t"] < 600
+    assert f"upgrade e2e green on {head[:7]}" in r.text and w.check_cmd("gate")
+
+
+@pytest.mark.parametrize("tree, e2e", [("f" * 40, ("success",)), (None, ("failure",)), (None, ())],
+                         ids=["other-tree", "red-head", "no-run-on-head"])
+def test_the_merge_commits_run_is_waited_for_unless_the_head_is_green_with_the_same_tree_400(w, tree, e2e):
+    w.in_state("merged")
+    same_tree_head(w, tree, e2e)
+    w.e2e_seq = [[run_entry(11, conclusion="failure")]]
+    r = w.run()
+    assert r.rc == 1 and "red: https://github.com/acme/shop/actions/runs/11" in r.err, r.text
+    assert len(e2e_lists(w)) >= 1 and TAG not in w.origin_tags()
+
+
 # ---------------- AC-129.13 ----------------
 
 def test_a_failing_gate_prints_its_output_and_tags_and_releases_nothing(w):  # AC-129.13
