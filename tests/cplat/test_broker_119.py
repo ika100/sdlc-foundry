@@ -1155,7 +1155,7 @@ def test_owner_managed_environments_render_the_same_broker_ac_119_23(tmp_path): 
 # digests of the trees the 5.x renderer wrote before spec 119 (full tree, sha256 of sorted path and content)
 BEFORE_119 = {"full5": ("42982079dcb98f909628c25289dacc529da7a4d3272bbfb27fa769f52733f68d", 67),   # spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
               "rich5": ("b1e219872bc6af25b45074d6b173f5b4d8a480938ae4b04283ca31e679aa3aae", 67),   # spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
-              "db-bucket": ("42f7e6493d6e68a5dcb430d0e5a19adb961892ce021f3e8650c831f191f4b1cd", 56),   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret; #341: create.py is a literal block with the allowlist pragma
+              "db-bucket": ("8f7dfe6d6e378ae4e30e2b0c8e444e2a4174f06bd3ea9d9cc2dbc3b356bc9519", 56),   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret; #341: create.py is a literal block with the allowlist pragma; the bucket adopts an existing bucket (adoptExisting)
               "cache": ("a174740ad9418f44d90a1aa449b862da5d0fb3270cfa9ce348ac207761e7f216", 49),   # spec 128: the credentials Job replaces the generator files; #341: create.py is a literal block with the allowlist pragma
               "events": ("9fe3842825e291f58f1e33aac03f53edf98df7c9053eefbeae7882d3ad3f57e4", 26),
               "events-multi": ("934efb1718956bd540171c8c58ea7af2cb4e3bb83d5634e7d06f224297ffb7c6", 70)}   # #341: create.py is a literal block with the allowlist pragma

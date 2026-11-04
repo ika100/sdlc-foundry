@@ -2297,7 +2297,10 @@ def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False
             "apiVersion": seaweed_api, "kind": "Bucket", "metadata": meta(n),
             "spec": {"name": n, "clusterRef": {"name": n}, "reclaimPolicy": "Retain",
                      "versioning": "Enabled" if conf["versioning"] else "Suspended", "owner": n,
-                     "access": [{"user": n, "actions": ["Read", "Write", "List", "Tagging"]}]}},
+                     "access": [{"user": n, "actions": ["Read", "Write", "List", "Tagging"]}],
+                     # the bucket is this system's own: a database's WAL archiving may create it before the operator
+                     # reconciles this object, which would then refuse it as "already exists" and never grant the access
+                     "adoptExisting": True}},
         "identity.yaml": {"apiVersion": seaweed_api, "kind": "S3Identity", "metadata": meta(n), "spec": {"seaweedRef": {"name": n}}},
         "credentials.yaml": {
             "apiVersion": seaweed_api, "kind": "S3Credentials", "metadata": meta(n, "1"),

@@ -416,8 +416,16 @@ def test_the_identity_has_read_write_list_and_tagging_on_its_bucket_only_ac_116_
     assert b == {"apiVersion": "seaweed.seaweedfs.com/v1", "kind": "Bucket",
                  "metadata": {"name": "shop-files", "labels": labels(), "annotations": keep()},
                  "spec": {"name": "shop-files", "clusterRef": {"name": "shop-files"}, "reclaimPolicy": "Retain", "versioning": "Suspended",
-                          "owner": "shop-files", "access": [{"user": "shop-files", "actions": ["Read", "Write", "List", "Tagging"]}]}}
-    assert list(b["spec"]) == ["name", "clusterRef", "reclaimPolicy", "versioning", "owner", "access"]
+                          "owner": "shop-files", "access": [{"user": "shop-files", "actions": ["Read", "Write", "List", "Tagging"]}],
+                          "adoptExisting": True}}
+    assert list(b["spec"]) == ["name", "clusterRef", "reclaimPolicy", "versioning", "owner", "access", "adoptExisting"]
+
+
+def test_a_bucket_created_before_its_bucket_object_is_adopted_in_every_environment(tmp_path):
+    """A database's WAL archiving can create the bucket in SeaweedFS before the operator reconciles the Bucket object; without
+    adoptExisting the object fails with BucketAlreadyExists and its access is never granted (AccessDenied on every backup)."""
+    g = ok(tmp_path, bsys())
+    assert [bdoc(g, e, "bucket.yaml")["spec"]["adoptExisting"] for e in ENVS] == [True, True, True]
 
 
 def test_versioning_true_renders_enabled_and_false_suspended_ac_116_7(tmp_path):  # AC-116.7
