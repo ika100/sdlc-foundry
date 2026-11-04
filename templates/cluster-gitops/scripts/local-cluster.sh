@@ -297,6 +297,9 @@ case "${1:-up}" in
     fi
     if k3d cluster list "$name" >/dev/null 2>&1; then
       echo "Cluster $name exists - reusing it"
+      case "$port" in default | auto)   # the host port the cluster was created with, for every URL below (#419)
+        port=$(docker port "k3d-${name}-serverlb" 80/tcp 2>/dev/null | head -1 | sed 's/.*://' || true); port="${port:-$base_port}" ;;
+      esac
       if [ "$with_metrics" = 1 ]; then echo "Note: a reused cluster keeps its resource-metrics source; recreate it (cluster-down, cluster-up) to switch to the pinned metrics-server"; fi
       k3d cluster start "$name" >/dev/null 2>&1 || true
     else
