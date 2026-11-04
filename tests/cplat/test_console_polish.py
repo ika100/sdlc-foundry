@@ -112,3 +112,44 @@ def test_each_page_explains_its_terms_where_they_appear(console, path, keys):
 def test_the_menu_links_how_it_works(console):
     root, _ = console().page("/inbox")
     assert any(a.attrs.get("href") == "/help" for a in q(root, "a"))
+
+
+# ---------------- the model forms pick existing things from lists ----------------
+
+def _options(select):
+    return [o.attrs.get("value") for o in q(select, "option")]
+
+
+def test_existing_components_resources_and_apis_are_chosen_from_a_list(console):
+    root, _ = console().page("/system")
+    [form] = q(root, "form", data_form="component")
+    [remove] = [s for s in q(form, "select", name="component")]
+    assert remove.attrs.get("disabled") is not None and _options(remove)[0] == "" and len(_options(remove)) > 1
+    [box] = [p for p in q(form, None, data_show_when="action=remove")]
+    assert "hidden" in box.attrs
+    [api] = q(root, "form", data_form="api")
+    assert q(api, "select", name="component") and q(api, "select", name="consumes")
+    assert _options(q(api, "select", name="provides_type")[0]) == ["", "openapi", "grpc", "graphql", "events"]
+    [res] = q(root, "form", data_form="resource")
+    assert _options(q(res, "select", name="type")[0]) == ["", "database", "bucket", "cache", "broker"]
+
+
+def test_each_environment_offers_only_the_promote_rules_it_allows(console):
+    root, _ = console().page("/system")
+    [form] = q(root, "form", data_form="environment")
+    for box in q(form, None, data_show_when=True):
+        env = box.attrs["data-show-when"].split("=")[1]
+        for select in q(box, "select", name="promote"):
+            values = _options(select)[1:]
+            assert set(values) <= {"dev": set(), "prod": {"manual"}}.get(env, {"after-dev-smoke", "manual"}), (env, values)
+
+
+def test_a_provided_api_gets_its_type_from_the_list():
+    from console import preview
+    words = preview.command_of("api", {"action": "set", "component": "shop-api", "provides": "orders", "provides_type": "grpc"})
+    assert words == ["/component:set", "shop-api", "--provides", "orders:grpc"]
+
+
+def test_a_refresh_keeps_a_form_that_is_being_filled_in():
+    js = (CONSOLE / "static" / "console.js").read_text()
+    assert "form[data-form][data-dirty]" in js and "applyConditions" in js

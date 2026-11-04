@@ -273,17 +273,39 @@ def _parts(status: Mapping, model: Mapping) -> str:
 
 # ---------------- Add to the model ----------------
 
-def _field(label: str, name: str, *, kind: str = "text", options: list[str] | None = None, hint: str = "",
-           required: bool = False) -> str:
-    fid = f"f-{name}-{label.lower().replace(' ', '-')}"
+API_TYPES = ("openapi", "grpc", "graphql", "events")
+RESOURCE_TYPES = ("database", "bucket", "cache", "broker")
+RESOURCE_VERSIONS = "database 15-18 (default 17), cache 8 or 9, broker 2.14 or 2.15"
+COMPONENT_TYPES = ("service", "website", "library")
+LANGUAGES = ("python", "java", "go", "typescript")
+PROMOTE_RULES = {"dev": (), "staging": ("after-dev-smoke", "manual"), "prod": ("manual",)}
+POLICIES = ("audit", "enforce", "off")
+
+
+def _field(label: str, name: str, *, kind: str = "text", options: list | tuple | None = None, hint: str = "",
+           required: bool = False, when: str | None = None, active: bool = True, key: str = "") -> str:
+    """One labelled control. `options` makes it a select: a value, or (value, label); "" reads "keep as is".
+
+    `when="action=remove"` (or `env=dev|staging`) shows the field only while that other field has that value: `console.js`
+    switches it, and a hidden field is disabled so it is not sent. `active` is its state before the script runs; `key` keeps
+    the ids of two fields with the same name apart."""
+    fid = f"f-{name}-{(key or label).lower().replace(' ', '-')}"
+    off = "" if active else " disabled"
     if options is not None:
-        opts = "".join(f'<option value="{esc(o)}">{esc(o or "keep as is")}</option>' for o in options)
-        control = f'<select id="{fid}" name="{esc(name)}">{opts}</select>'
+        pairs = [o if isinstance(o, tuple) else (o, o or "keep as is") for o in options]
+        opts = "".join(f'<option value="{esc(v)}">{esc(lab)}</option>' for v, lab in pairs)
+        control = f'<select id="{fid}" name="{esc(name)}"{off}>{opts}</select>'
     else:
         req = " required" if required else ""
-        control = f'<input id="{fid}" name="{esc(name)}" type="{kind}" autocomplete="off"{req}>'
+        control = f'<input id="{fid}" name="{esc(name)}" type="{kind}" autocomplete="off"{req}{off}>'
     note = f' <span class="muted">{esc(hint)}</span>' if hint else ""
-    return f'<p><label for="{fid}">{esc(label)}</label> {control}{note}</p>'
+    cond = f' data-show-when="{esc(when)}"' + ("" if active else " hidden") if when else ""
+    return f'<p class="field"{cond}><label for="{fid}">{esc(label)}</label> {control}{note}</p>'
+
+
+def _pick(names: list[str], what: str) -> list:
+    """The options of a select of existing things; a placeholder first so nothing is chosen by accident."""
+    return [("", f"choose {what}")] + names if names else [("", f"no {what} yet")]
 
 
 def _form(kind: str, title: str, fields: str, repo: str) -> str:
@@ -311,23 +333,44 @@ def model_forms(ctx: Any) -> str:
     repo = _own_slug(ctx) or (f"{system['owner']}/{system['name']}-gitops" if system.get("owner") and system.get("name") else "")
     rules = _rules(ctx.data("status") or {}, model)
     envs = [str(r["name"]) for r in rules]
+    comps = [str(c["name"]) for c in model.get("components") or [] if isinstance(c, Mapping) and c.get("name")]
+    apis = [str(a["name"]) for a in model.get("apis") or [] if isinstance(a, Mapping) and a.get("name")]
+    resources = [str(r["name"]) for r in model.get("resources") or [] if isinstance(r, Mapping) and r.get("name")]
+
+    def env_fields(rule: Mapping, first: bool) -> str:
+        env = str(rule.get("name"))
+        now_promote, now_policy = rule.get("promote") or "none", rule.get("policy") or "none"
+        allowed = PROMOTE_RULES.get(env, ("after-dev-smoke", "manual"))
+        promote = [("", f"keep as is ({now_promote})")] + [r for r in allowed if r != now_promote]
+        why = {"dev": "dev always follows main", "prod": "prod is always manual"}.get(env, "")
+        return (_field("Promote", "promote", options=promote, hint=why if len(promote) == 1 else "", when=f"env={env}",
+                       active=first, key=env)
+                + _field("Policy", "policy", options=[("", f"keep as is ({now_policy})")] + [x for x in POLICIES if x != now_policy],
+                         when=f"env={env}", active=first, key=env))
+
     forms = [
-        _form("component", "Component", _field("Action", "action", options=["add", "set", "remove"])
-              + _field("Component", "component", required=True, hint="for example todo-api"), repo),
-        _form("api", "API", _field("Action", "action", options=["set", "add"])
-              + _field("Component", "component", required=True)
-              + _field("Provides", "provides", hint="NAME or NAME:TYPE, for example orders:grpc")
-              + _field("Consumes", "consumes", hint="the name of an API another component provides"), repo),
-        _form("resource", "Resource", _field("Action", "action", options=["add", "remove"])
-              + _field("Resource", "resource", required=True, hint="for example postgres")
-              + _field("Type", "type") + _field("Version", "version"), repo),
+        _form("component", "Component", _field("Action", "action", options=[("add", "add a new component"), ("remove", "remove one")])
+              + _field("Component", "component", required=True, hint="the name of its repo, for example todo-api",
+                       when="action=add", key="new")
+              + _field("Component", "component", options=_pick(comps, "a component"), when="action=remove", active=False,
+                       key="existing"), repo),
+        _form("api", "API", _field("Component", "component", options=_pick(comps, "a component"), key="existing")
+              + _field("Provides", "provides", hint="the name of a new API, for example orders")
+              + _field("Type", "provides_type", options=[("", "type")] + list(API_TYPES))
+              + _field("Consumes", "consumes", options=[("", "nothing")] + apis if apis else [("", "no API yet")])
+              + '<input type="hidden" name="action" value="set">', repo),
+        _form("resource", "Resource", _field("Action", "action", options=[("add", "add a new resource"), ("remove", "remove one")])
+              + _field("Resource", "resource", required=True, hint="for example postgres", when="action=add", key="new")
+              + _field("Type", "type", options=[("", "choose a type")] + list(RESOURCE_TYPES), when="action=add")
+              + _field("Version", "version", hint=RESOURCE_VERSIONS, when="action=add")
+              + _field("Resource", "resource", options=_pick(resources, "a resource"), when="action=remove", active=False,
+                       key="existing"), repo),
         _form("environment", "Environment rules", _field("Environment", "env", options=envs or [""])
-              + _field("Promote", "promote", options=["", "after-dev-smoke", "manual"])
-              + _field("Policy", "policy", options=["", "audit", "enforce", "off"])
+              + "".join(env_fields(r, i == 0) for i, r in enumerate(rules))
               + _field("Host", "host", hint="with {component}, {system} and {env}"), repo),
         _form("system", "New system", _field("Name", "name", required=True, hint="kebab-case, 2-40 characters, starts with a letter")
               + _field("Owner", "owner", required=True) + _field("First component", "component", required=True)
-              + _field("Type", "type", hint="service, website or library") + _field("Language", "lang", hint="python, java, go or typescript")
+              + _field("Type", "type", options=list(COMPONENT_TYPES)) + _field("Language", "lang", options=list(LANGUAGES))
               + _field("Description", "description"), repo),
     ]
     return (f'<section id="add-to-the-model"><h2>Add to the model{glossary.tip("model")}</h2>'

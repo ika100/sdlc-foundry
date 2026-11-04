@@ -259,6 +259,8 @@
     var kind = button.getAttribute("data-action");
     var confirmText = button.getAttribute("data-confirm");
     if (confirmText && !window.confirm(confirmText)) { return; }
+    var owner = button.closest("form[data-form]");
+    if (owner) { owner.removeAttribute("data-dirty"); }   // confirmed: the next refresh may show the result
     if (kind === "open-in-claude" || kind === "take-over") {
       var object = parseValue(button.getAttribute("data-object"));
       var runId = object && typeof object === "object" ? object.run_id : object;
@@ -501,8 +503,11 @@
       var fresh = doc.getElementById("content");
       var current = $("#content");
       if (!fresh || !current) { return; }
+      // A form someone is filling in is not thrown away by a refresh; the page catches up on the next change after it
+      if ($("form[data-form][data-dirty]", current)) { return; }
       var hadFocus = current.contains(document.activeElement);
       current.innerHTML = fresh.innerHTML;
+      $all("form[data-form]", current).forEach(applyConditions);
       if (key) {
         var again = items().filter(function (n) { return (n.getAttribute("data-need") || n.getAttribute("data-card")) === key; })[0];
         if (again) {
@@ -642,9 +647,23 @@
     });
   }
 
+  // A field with data-show-when="action=remove" (or "env=dev|staging") shows only while that field has that value; a
+  // hidden field is disabled, so FormData leaves it out and the preview sees only what is on screen
+  function applyConditions(form) {
+    $all("[data-show-when]", form).forEach(function (box) {
+      var rule = box.getAttribute("data-show-when").split("=");
+      var source = $all("[name='" + rule[0] + "']", form).filter(function (n) { return !n.disabled; })[0];
+      var show = !!source && rule[1].split("|").indexOf(source.value) >= 0;
+      box.hidden = !show;
+      $all("input, select, textarea", box).forEach(function (n) { n.disabled = !show; });
+    });
+  }
+
   function onFormChange(event) {
     var form = event.target.closest ? event.target.closest("form[data-form]") : null;
     if (!form) { return; }
+    form.setAttribute("data-dirty", "");
+    applyConditions(form);
     window.clearTimeout(previewTimers.get(form));
     previewTimers.set(form, window.setTimeout(function () { requestPreview(form); }, 200));
   }
@@ -657,6 +676,7 @@
     document.addEventListener("submit", onSubmit);
     document.addEventListener("input", onFormChange);
     document.addEventListener("change", onFormChange);
+    $all("form[data-form]").forEach(applyConditions);
     $("#activity-panel").addEventListener("click", onActivityClick);
     $("#palette-q").addEventListener("input", function () {
       window.clearTimeout(paletteTimer);

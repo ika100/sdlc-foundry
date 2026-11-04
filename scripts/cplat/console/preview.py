@@ -66,8 +66,9 @@ def command_of(form: str, fields: dict) -> list[str]:
     if form == "api":
         action = _action(fields, ("add", "set"), "set")
         words = [f"/component:{action}", _need(fields, "component")]
+        kind = _text(fields, "provides_type")
         for item in _list(fields, "provides"):
-            words += ["--provides", item]
+            words += ["--provides", f"{item}:{kind}" if kind and ":" not in item else item]
         for item in _list(fields, "consumes"):
             words += ["--consumes", item]
         return words
