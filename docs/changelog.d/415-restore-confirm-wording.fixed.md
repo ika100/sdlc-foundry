@@ -1,0 +1,1 @@
+**`/resource:restore` says which actions need `--confirm prod` (#415).** Only `--switch` and `--discard` change prod, so only they need `--confirm prod`; `--to` adds a copy next to the running database, which keeps serving. The command and its `--confirm` help said that prod as a whole needed the confirmation.

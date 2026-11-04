@@ -101,4 +101,4 @@ If there are no open questions, ask with AskUserQuestion whether to approve now 
 - Never answer an open question on the user's behalf; never approve without the user's word (the only exception is D.3, where the user approved the system plan).
 - The only push here is `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced, only `docs/specs/<id>/`); `/component:build` opens the code PR.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

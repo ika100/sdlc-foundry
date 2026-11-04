@@ -24,4 +24,4 @@ A resource has a name (lower-case letters, digits and `-`) and a type. The four 
 
 Observability is not a resource: it is set per environment under `environments.<env>.observability` in `system.yaml`; `resource add observability` exits 1 and says so. Removing a resource never deletes the database, bucket or broker data. No backups, PITR or pooling are provided (ADR-020).
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

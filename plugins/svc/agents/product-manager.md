@@ -48,4 +48,4 @@ NOTES: <conflicts with other specs, a proposed follow-up spec, or "none">
 
 `OPEN QUESTIONS:` lists exactly the unstruck questions in the file, or `none`.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

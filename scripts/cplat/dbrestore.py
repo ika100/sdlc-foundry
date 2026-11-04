@@ -41,7 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--to", metavar="TIME", help="restore to this RFC 3339 time (with an offset), or latest")
     p.add_argument("--switch", action="store_true", help="make the restored instance the active one")
     p.add_argument("--discard", action="store_true", help="remove the restored (else the previous) instance and its volumes")
-    p.add_argument("--confirm", help=f"--switch and --discard in {PROD} need --confirm {PROD}")
+    p.add_argument("--confirm", help=f"--switch and --discard in {PROD} need --confirm {PROD}; --to needs none: it only adds a copy "
+                   "next to the running database (#415)")
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--context", help="kube context (default: the current one)")

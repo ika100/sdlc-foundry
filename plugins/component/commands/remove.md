@@ -16,4 +16,4 @@ cplat component remove <ARGS>
 
 Rules: only `applications/` and `bootstrap/` change; never `kubectl apply`. Removal deletes the component's manifests, so the cluster prunes it after merge: if the user did not name the component, ask once before running.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

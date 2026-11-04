@@ -69,4 +69,4 @@ Print the spec id, title, status, each criterion on one line, the repos named in
 - Never answer an open question for the user; never approve without their word.
 - Never touch `system.yaml`, overlays or component repos. The only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, only `docs/specs/<id>/`, never forced); anything else needs the user's confirmation.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

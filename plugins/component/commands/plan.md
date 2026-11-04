@@ -56,4 +56,4 @@ Next: review the plan, then /component:build <NNN>
 - Plan only an approved spec; never change the spec. If the architect needs a decision, it goes back to the user through `/component:spec --amend`.
 - Commits stay local; `/component:build` pushes.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

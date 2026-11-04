@@ -27,4 +27,4 @@ The template already ships: `Dockerfile` (Maven builder on the native platform â
 - The CI's `pin-dev` job runs after `docker-publish` on `main` and asks the system's gitops-app to pin `dev` to `sha-<40>` (ADR-027, ADR-030). Keep it there; it needs the `GITOPS_TOKEN` secret and passes with a notice without it.
 - Never `kubectl apply`.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

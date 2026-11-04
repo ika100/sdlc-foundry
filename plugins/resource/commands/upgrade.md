@@ -16,4 +16,4 @@ Relay the output verbatim; errors carry a `fix:` line.
 4. **After the merge** the platform waits for the resource to be healthy at the new version, then runs the smoke tests of every instance that uses it, and records the result. `cplat resource upgrade <name> --verify --env <env>` repeats the check.
 5. **On a failure** the command exits 1 and no later environment moves. The output names the failed check and the last backup time; for a database it names `/resource:restore <db> --env <env> --to <time|latest>`, which a person starts.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).
