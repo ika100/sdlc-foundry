@@ -91,7 +91,9 @@ def topo_levels(repos: list[dict]) -> list[list[str]]:
 
 
 GITOPS_OPS = {"addon", "resource", "uses", "expose", "env"}     # `resource` is the 5.0 word for `addon`
-KNOWN_RESOURCES = {"postgres"}
+KNOWN_RESOURCES = {"postgres"}                                  # `resource add postgres` needs no --type
+RESOURCE_TYPES = {"database", "bucket", "cache", "broker"}
+RESOURCE_NAME = re.compile(r"[a-z][a-z0-9-]{0,40}")
 
 
 def known_components() -> set[str]:
@@ -102,19 +104,35 @@ def known_components() -> set[str]:
     return names
 
 
+def known_resources() -> set[str]:
+    """The resources system.yaml already declares, plus postgres (#414)."""
+    names = set(KNOWN_RESOURCES)
+    for f in (ROOT / "applications").glob("*/system.yaml"):
+        res = (yaml.safe_load(f.read_text()) or {}).get("resources")
+        names |= set(res) if isinstance(res, dict) else set()
+    return names
+
+
 def check_gitops(rid: str, ops, components: set[str]) -> list[str]:
     """Spec 045: the gitops-app entry lists operations /app:build runs with cplat resource / cplat component set."""
     if not isinstance(ops, list) or not ops:
         return [f"repo {rid}: a gitops-app entry needs a `gitops:` list of operations (resource, uses, expose, env)"]
-    errs, resources = [], KNOWN_RESOURCES
+    errs, resources = [], known_resources()
     for op in ops:
         kind = next((k for k in (op or {}) if k in GITOPS_OPS), None) if isinstance(op, dict) else None
         if kind is None:
             errs.append(f"repo {rid}: unknown gitops operation {op!r} (allowed: {', '.join(sorted(GITOPS_OPS))})")
             continue
-        if kind in {"addon", "resource"}:
-            if op[kind] not in resources:
-                errs.append(f"repo {rid}: unknown resource '{op[kind]}' (known: {', '.join(sorted(resources))})")
+        if kind in {"addon", "resource"}:         # any named resource; one that is new to the system carries its type (#414)
+            name, typ = op[kind], op.get("type")
+            if not isinstance(name, str) or not RESOURCE_NAME.fullmatch(name):
+                errs.append(f"repo {rid}: resource name {name!r} must be lowercase letters, digits and dashes")
+            elif typ is not None and typ not in RESOURCE_TYPES:
+                errs.append(f"repo {rid}: resource '{name}' has unknown type {typ!r} (allowed: {', '.join(sorted(RESOURCE_TYPES))})")
+            elif typ is None and name not in resources:
+                errs.append(f"repo {rid}: new resource '{name}' needs a type: {{resource: {name}, type: database|bucket|cache|broker}}")
+            else:
+                resources = resources | {name}
             continue
         target = (op.get("component") or op.get("service")) if kind in {"uses", "env"} else op.get("expose")
         if not target:
@@ -122,7 +140,8 @@ def check_gitops(rid: str, ops, components: set[str]) -> list[str]:
         elif target not in components:
             errs.append(f"repo {rid}: unknown component '{target}' in gitops operation {kind!r}")
         if kind == "uses" and op["uses"] not in resources:
-            errs.append(f"repo {rid}: unknown resource '{op['uses']}'")
+            errs.append(f"repo {rid}: unknown resource '{op['uses']}' (declare it first: {{resource: {op['uses']}, type: …}}, "
+                        f"or it must be in system.yaml)")
         if kind == "env" and not isinstance(op.get("env"), dict):
             errs.append(f"repo {rid}: gitops operation 'env' needs a mapping of variables")
     return errs

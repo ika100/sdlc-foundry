@@ -29,11 +29,12 @@ All repo-local commands go through `devbox run <script>`. Reading other repos go
    ```yaml
    gitops:
      - {resource: postgres}                                 # declare the resource
+     - {resource: files, type: bucket}                      # any other new resource names its type: database, bucket, cache, broker
      - {uses: postgres, component: todo-api}                # the component gets DATABASE_URL, PG*
      - {expose: todo-web, host: todo-web}                   # publish through the Gateway
      - {env: {TODO_API_URL: 'http://todo-api'}, component: todo-web}
    ```
-   Only `resource`, `uses`, `expose` and `env` exist; every component must be in `system.yaml` or be a repo of the plan. Quote values that contain `:`. `/system:ship` runs these with `cplat resource add` and `cplat component set`.
+   Only `resource`, `uses`, `expose` and `env` exist; a `uses` names postgres, a resource of `system.yaml` or one an earlier `resource` operation declares; every component must be in `system.yaml` or be a repo of the plan. Quote values that contain `:`. `/system:ship` runs these with `cplat resource add` and `cplat component set`.
 5. **Write the contract** between the repos in the plan body's `## Contract` section: endpoints, request/response fields, status codes, events. With two or more repos it must also have `### Errors` (the error format, and how a caller treats a response the contract does not list) and `### Timeouts` (the timeout of every call and the behaviour when the other side is down or slow); `plan-check` refuses a contract without them (spec 053). Every question a repo would otherwise ask belongs here. It is copied into every repo's spec and their acceptance tests are written against it, so it must be complete. For a large contract, write `docs/specs/<PLAN_ID>/design.md` with a `## Contract` section instead (it takes precedence).
 6. **Order by real dependencies.** `depends_on` captures "library before its consumers" and "service before a service that needs its code". A backend and the UI that calls it need no `depends_on` when the contract is written: they build in parallel. No cosmetic ordering.
 7. **Plan the pins.** `gitops_pin` lists which components get pinned in which environment and when: in `staging` after their own PR merges (`apply_after: <repo-id>`) or after everything merges (`apply_after: merge_of_all`). Libraries are never pinned (they are consumed through the service's lockfile bump, ADR-016).
