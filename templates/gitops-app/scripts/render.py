@@ -2131,6 +2131,7 @@ def broker_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dict[
 
 
 BARMAN_PLUGIN = "barman-cloud.cloudnative-pg.io"
+ARCHIVE_TIMEOUT = "5min"     # backed-up databases: the longest time a committed change waits to reach the archive (#417)
 VELERO_EXCLUDED = ["clusters.postgresql.cnpg.io", "backups.postgresql.cnpg.io", "scheduledbackups.postgresql.cnpg.io", "objectstores.barmancloud.cnpg.io"]
 PRESERVED_FIELDS = {"annotations": ["argocd.argoproj.io/skip-reconcile"]}
 SERVER_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
@@ -2261,6 +2262,9 @@ def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | N
         server = archive or (archives[-1]["server"] if archives else None)      # one Barman server per major (change it with imageName)
         if server and server != (cluster or base):      # spec 121 (changed after review): a switched generation has its own `archive`
             params["serverName"] = server
+        # the restore point objective, in git: a WAL segment is archived at least every ARCHIVE_TIMEOUT, so every change older
+        # than that can be restored (CloudNativePG's default, made explicit; #417)
+        spec["postgresql"] = {"parameters": {"archive_timeout": ARCHIVE_TIMEOUT}}
         spec["plugins"] = [{"name": BARMAN_PLUGIN, "isWALArchiver": True, "parameters": params}]
     return {
         "apiVersion": "postgresql.cnpg.io/v1", "kind": "Cluster",
