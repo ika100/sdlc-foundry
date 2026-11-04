@@ -155,7 +155,8 @@ def _entry(sec: dict, path: str, store: str, fallback: str | None) -> dict:
 
 
 def _records(svc_repo: str, shas: set[str], days: int) -> tuple[dict | None, dict | None, str | None]:
-    """(newest dev entry, newest staging entry, why not) from the last 30 days of the run store."""
+    """(newest dev entry, newest staging entry, why not) from the last 30 days of the run store: the smoke sections of
+    ship records and of `instance verify` records (#422)."""
     store = runs.configured_repo()
     if not store:
         return None, None, "no run store configured: set CPLAT_RUNS_REPO"
@@ -169,9 +170,13 @@ def _records(svc_repo: str, shas: set[str], days: int) -> tuple[dict | None, dic
         try:
             rec = json.loads(text)
             sec = rec["smoke"]
-            if rec.get("kind") != "ship" or rec.get("repo") != svc_repo or not isinstance(sec, dict):
+            if rec.get("kind") not in ("ship", "verify") or rec.get("repo") != svc_repo or not isinstance(sec, dict):
                 continue
-            for env, s in (("dev", sec), ("staging", sec.get("staging"))):
+            if rec["kind"] == "verify":       # #422: `cplat instance verify <env>` records one environment
+                pairs = [(sec.get("env"), sec)] if sec.get("env") in ("dev", "staging") else []
+            else:
+                pairs = [("dev", sec), ("staging", sec.get("staging"))]
+            for env, s in pairs:
                 if isinstance(s, dict) and s.get("image") in shas:
                     e = _entry(s, path, store, rec.get("ended_at"))
                     e["rank"] = str(sec.get("at") or rec.get("ended_at") or "")   # the record's time, dev's `at` first

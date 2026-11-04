@@ -11,6 +11,7 @@ Exit codes: 0 passed or passed on retry, 1 red or timed out, 3 not run. It files
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -29,6 +30,7 @@ import autoissue
 import core
 import feedback
 import model
+import runs
 import spec as specmod
 from core import PlatformError, run
 
@@ -342,6 +344,32 @@ def _app_dirs(slug: str, repo: Path) -> tuple[list[str] | None, str]:
     return None, why
 
 
+def pinned_image(repo: Path, apps: list[str], service: str, env: str) -> str | None:
+    """The image tag the linked gitops-app pins the service to in `env` (for example sha-<40>), or None."""
+    me = _slug(repo)
+    for slug in apps:
+        dirs, _ = _app_dirs(slug, repo)
+        for a in dirs or []:
+            m = model.load_remote(a, lambda p, slug=slug: _read(slug, p, repo))
+            c = m.find_component(me, service)
+            inst = m.instance(c.name, env) if c else None
+            if inst is not None:
+                return inst.tag
+    return None
+
+
+def record(repo: Path, res: SmokeResult, image: str | None, spec_id: str | None) -> None:
+    """Write the outcome to the run store as a `verify` record, so the prod evidence finds a smoke run by hand (#422).
+    Never raises: recording never changes the verify's result."""
+    try:
+        rid = runs.start("verify", repo=runs.repo_slug(repo), spec=spec_id)
+        at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        runs.set_section(rid, "smoke", {**res.section(), "image": image, "at": at})
+        runs.finish(rid, "done" if res.ok else "failed")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> tuple[str | None, str | None]:
     """(url, None) or (None, reason): the URL the linked gitops-app publishes for the service (same values as the HTTPRoute)."""
     me = _slug(repo)
@@ -427,6 +455,14 @@ def main(argv: list[str]) -> int:
         res = run_smoke(repo, url, env=ns.env, spec=sp, timeout=ns.timeout, retry=not ns.no_retry, probe=liveness_probe(repo))
     else:
         res = not_run(ns.env, why or "no URL", acs)
+    if res.outcome != "not-run" and not ns.base_url:   # a URL the user named may be any build: not evidence for the pin
+        import ship
+        apps = ship.gitops_apps(repo)
+        try:
+            image = pinned_image(repo, apps, ship.service_name(repo), ns.env) if apps else None
+        except Exception:  # noqa: BLE001  (an unreadable pin only leaves the record without an image)
+            image = None
+        record(repo, res, image, sp.id if sp else None)
     if ns.json:
         print(json.dumps({"smoke": res.section(), "tests": res.tests}, indent=2))
     else:
