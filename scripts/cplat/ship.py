@@ -233,6 +233,9 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         import claim
         for note in claim.claim(repo, sp.meta["tracks"], f"feature/{sp.id}", take_over=take_over, what=f"ship {sp.id}"):
             say(note)
+    if st is None and (revived := revive_escalated(repo, sp.id)):
+        st = revived                           # #408: its state was archived by `ship finish`; resume it, PR and merge kept
+        say(f"resuming the escalated run of {sp.id} (phase {st['phase']}) from its archived state")
     if st and st["spec"] == sp.id:
         if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
             old = st.get("run_id")
@@ -394,6 +397,30 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
     if tracks:                                 # spec 082: a stopped run does not keep the issue
         import claim
         claim.release(repo, tracks, f"ship {st['spec']} escalated: {reason}")
+    return st
+
+
+def revive_escalated(repo: Path, spec_id: str) -> dict | None:
+    """The newest archived state of `spec_id` when that run ended escalated (not done): `ship finish` archives an escalated
+    run too, and a new start without it would begin again at `pr`, without the PR or merge commit it already has (#408).
+    Moves the archive (and its units file) back in place."""
+    f = state_path(repo)
+    archives = sorted(f.parent.glob(f"cplat-ship-{spec_id}-[0-9]*.json"))
+    if not archives:
+        return None
+    newest = archives[-1]
+    try:
+        st = json.loads(newest.read_text())
+    except ValueError:
+        return None
+    if st.get("spec") != spec_id or not st.get("escalated") or st.get("phase") == "done":
+        return None
+    stamp = newest.stem.rsplit("-", 1)[-1]
+    newest.rename(f)
+    uf = units._path(repo)
+    old_units = uf.with_name(f"cplat-units-{spec_id}-{stamp}.json")
+    if old_units.is_file() and not uf.is_file():
+        old_units.rename(uf)
     return st
 
 
