@@ -13,12 +13,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 
-from console import help as help_text
+from console import glossary, help as help_text
 from console.html import esc, freshness
 
 PLACES = (("inbox", "Inbox", "/inbox"), ("board", "Board", "/board"), ("system", "System", "/system"))
 
-MENU = (("Guide", "/guide"), ("Settings", "/settings"), ("Notifications", "/settings#notifications"), ("Switch system", "/switch"))
+MENU = (("How it works", "/help"), ("Guide", "/guide"), ("Settings", "/settings"), ("Notifications", "/settings#notifications"), ("Switch system", "/switch"))
 
 
 # 20px line icons of the places (decorative: the link text names the place)
@@ -73,7 +73,7 @@ def _banner(items: list) -> str:
         return '<div id="banner" class="banner" role="status" hidden></div>'
     rows = "".join(f'<li><strong>{esc(i.get("piece"))}</strong> is missing. {_fix(i.get("fix"))}</li>' for i in items)
     return (f'<div id="banner" class="banner" role="status"><p>Some actions are off until this is fixed '
-            f'(<code>/platform:doctor</code> checks it):</p><ul>{rows}</ul></div>')
+            f'(<code>/platform:doctor</code> checks it){glossary.tip("missing_piece")}:</p><ul>{rows}</ul></div>')
 
 
 def page(title: str, place: str, body: str, *, panel: str | None = None, state: Mapping[str, object] | None = None) -> str:
@@ -87,6 +87,9 @@ def page(title: str, place: str, body: str, *, panel: str | None = None, state: 
     badge = int(state.get("badge") or 0)
     actions = state.get("actions") if isinstance(state.get("actions"), Mapping) else {}
     banner = state.get("banner") if isinstance(state.get("banner"), list) else []
+    system = state.get("system")
+    system_name = (f'<a class="system-name" href="/switch" title="Switch system">{esc(system)}</a>'
+                   if isinstance(system, str) and system else "")
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -101,7 +104,7 @@ def page(title: str, place: str, body: str, *, panel: str | None = None, state: 
 <a class="skip" href="#content">Skip to content</a>
 <div class="shell">
 <header class="side">
-<span class="brand"><span class="logo" aria-hidden="true"></span>Console</span>
+<span class="brand"><span class="logo" aria-hidden="true"></span><span>Console{system_name}</span></span>
 {_nav(place, badge)}
 <button type="button" class="btn primary new" data-action="palette" aria-keyshortcuts="Meta+K Control+K">New or ask <kbd>&#8984;K</kbd></button>
 <div class="tools">{_activity(actions)}{_menu()}</div>
@@ -110,7 +113,7 @@ def page(title: str, place: str, body: str, *, panel: str | None = None, state: 
 {_banner(banner)}
 <div class="work">
 <main id="content" tabindex="-1">
-<div class="title"><h1>{esc(title)}</h1><span class="stamp">{stamp}</span><a class="btn help" href="/panel/help/{esc(place)}" aria-keyshortcuts="?">Help <kbd>?</kbd></a></div>
+<div class="title"><h1>{esc(title)}</h1><span class="stamp">{stamp}{glossary.tip("read_at")}</span><a class="btn help" href="/panel/help/{esc(place)}" aria-keyshortcuts="?">Help <kbd>?</kbd></a></div>
 {help_text.intro(place) if title == dict((k, v) for k, v, _ in PLACES).get(place) else ""}
 {body}
 </main>

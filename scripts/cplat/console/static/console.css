@@ -565,3 +565,83 @@ aside[data-panel] h3 { margin-top: var(--s4); font-size: 0.8rem; text-transform:
 td .card-title { font-weight: 600; margin-top: 2px; }
 td a + .card-title { color: var(--text); }
 td .why { display: block; margin-top: var(--s1); font-size: 0.82rem; color: var(--danger); }
+
+/* Glossary tips (console/glossary.py): a small ? next to a term; its text on hover, tap or keyboard focus, no JavaScript */
+.tip { position: relative; display: inline-flex; vertical-align: middle; margin-left: 5px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.tip-btn {
+  display: grid; place-items: center; width: 17px; height: 17px; padding: 0; border-radius: 50%; cursor: help;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: 700 0.68rem/1 inherit;
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.tip-btn:hover, .tip:focus-within .tip-btn { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.tip-body {
+  position: absolute; z-index: 25; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: max-content; max-width: 19rem;
+  padding: 10px 12px; border-radius: var(--radius); background: var(--bg); color: var(--text); border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg); font-size: 0.82rem; font-weight: 400; line-height: 1.45; text-align: left; white-space: normal;
+  visibility: hidden; opacity: 0; transition: opacity 0.15s var(--ease), visibility 0.15s;
+}
+.tip-body strong { display: block; margin-bottom: 2px; font-weight: 650; }
+.tip-body::before { content: ""; position: absolute; left: 0; right: 0; top: -10px; height: 10px; }
+.tip:hover .tip-body, .tip:focus-within .tip-body { visibility: visible; opacity: 1; }
+.tip.left .tip-body { left: auto; right: -8px; transform: none; }
+.tip.right .tip-body { left: -8px; transform: none; }
+.tip.demo { pointer-events: none; }
+/* Inside a box that scrolls sideways an absolute tip would be cut off: it opens at the bottom of the screen instead */
+.scroll-x .tip-body, .pipeline .tip-body { position: fixed; top: auto; bottom: var(--s4); left: 50%; right: auto; transform: translateX(-50%); }
+
+/* Legends: the colours of the Board cards, the states of an instance */
+.board-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); margin: calc(-1 * var(--s2)) 0 var(--s4); font-size: 0.82rem; color: var(--muted); }
+.where .board-legend { margin: var(--s3) 0 0; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); list-style: none; margin: 0; padding: 0; }
+.legend li { display: inline-flex; align-items: center; margin: 0; }
+.legend-more { display: inline-flex; align-items: center; font-weight: 550; }
+
+/* How it works (/help): the process as numbered steps, then the glossary grouped by topic */
+.toc { display: flex; flex-wrap: wrap; gap: var(--s2); margin: 0 0 var(--s4); }
+.toc a {
+  padding: 4px 12px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+  text-decoration: none; font-size: 0.85rem; font-weight: 550;
+}
+.toc a:hover { border-color: var(--accent); color: var(--accent); }
+.sheet {
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  padding: var(--s4); margin-bottom: var(--s3); scroll-margin-top: var(--s3);
+}
+.sheet h2 { margin-top: 0; }
+.steps { list-style: none; counter-reset: step; margin: var(--s3) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 10px; }
+.steps li {
+  counter-increment: step; position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 12px 14px 12px 46px; margin: 0; border-radius: var(--radius); border: 1px solid var(--line); background: var(--canvas); font-size: 0.88rem;
+}
+.steps li::before {
+  content: counter(step); position: absolute; left: 12px; top: 12px; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--surface); color: var(--muted); font-weight: 700; font-size: 0.8rem;
+}
+.steps li[data-decision] { background: var(--select); border-color: var(--accent); }
+.steps li[data-decision]::before { background: var(--accent); color: var(--on-accent); }
+.step-who { font-size: 0.78rem; }
+.step-decide { color: var(--accent); font-size: 0.85rem; }
+.glossary { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: var(--s1) var(--s4); margin: var(--s3) 0 0; }
+.glossary div { padding: 10px 0; border-top: 1px solid var(--line); scroll-margin-top: var(--s5); }
+.glossary div:target { background: var(--select); border-radius: var(--radius); padding: 10px 12px; border-top-color: transparent; }
+.glossary dt { font-weight: 650; color: var(--text); font-size: 0.93rem; }
+.glossary dd { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; }
+
+/* The system this console shows, under the brand */
+.brand > span:last-child { display: flex; flex-direction: column; line-height: 1.2; }
+.system-name { font-size: 0.78rem; font-weight: 500; color: var(--muted); text-decoration: none; }
+.system-name:hover { color: var(--accent); }
+
+/* A one-line empty note inside a page part (the big empty state is section.empty) */
+p.empty { all: unset; display: block; color: var(--muted); font-size: 0.9rem; margin: var(--s2) 0; }
+
+/* System: the parts and relations as tiles */
+.parts ul { list-style: none; padding: 0; margin: 0 0 var(--s3); display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 10px; }
+.parts ul > li { margin: 0;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); box-shadow: var(--shadow-sm);
+}
+.parts ul > li strong { display: block; font-size: 0.95rem; }
+
+@media (max-width: 600px) {
+  .tip-body, .tip.left .tip-body, .tip.right .tip-body { position: fixed; top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3); transform: none; max-width: none; width: auto; }
+}

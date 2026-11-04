@@ -72,7 +72,7 @@ Autonomy is optional and off by default: every environment is at `observe` until
 
 ## Help in the console
 
-Every page has a one-line answer under its title and a **Help** button (or `?`). The help explains how to work on that page, the eight stages and where you decide, the keys, and where the data comes from. The whole guide is in the console too (**Menu → Guide** or `g`): this text with its screenshots, the process with every stage, and a reference of every command with its usage and a copy button.
+Every page has a one-line answer under its title and a **Help** button (or `?`). Next to a term on any page (a decision kind, a card colour, an instance state, a promote rule or policy, an autonomy level) a small **?** shows what it means on hover, tap or keyboard focus; its **More** link opens **How it works** (**Menu → How it works**, `/help`): the eight stages as numbered steps with the three where you decide, and every term grouped by topic, each with its own link. The tips and that page share one text per term (`console/glossary.py`). The Board and System pages also show a legend of the card colours and instance states. The help explains how to work on that page, the eight stages and where you decide, the keys, and where the data comes from. The whole guide is in the console too (**Menu → Guide** or `g`): this text with its screenshots, the process with every stage, and a reference of every command with its usage and a copy button.
 
 ![Help on the System page](img/console/help.jpg)
 

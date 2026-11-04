@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
 
-from console import actions
+from console import actions, glossary
 from console.html import _parse, action_button, command_block, esc, freshness, short_version, unavailable
 
 UNKNOWN = "unknown"
@@ -76,8 +76,8 @@ def _rules(status: Mapping, model: Mapping) -> list[dict]:
 
 def _head(rule: Mapping) -> str:
     return (f'<th scope="col" data-env="{esc(rule.get("name"))}"><span class="env-name">{esc(rule.get("name"))}</span> '
-            f'<span class="muted env-rules"><span class="chip">promote {esc(rule.get("promote") or "none")}</span> '
-            f'<span class="chip">policy {esc(rule.get("policy") or "none")}</span></span> '
+            f'<span class="muted env-rules"><span class="chip">promote {esc(rule.get("promote") or "none")}{glossary.tip("promote_rule")}</span> '
+            f'<span class="chip">policy {esc(rule.get("policy") or "none")}{glossary.tip("policy")}</span></span> '
             f'<a href="#form-environment" class="edit-env" data-edit-env="{esc(rule.get("name"))}">edit rules</a></th>')
 
 
@@ -330,7 +330,7 @@ def model_forms(ctx: Any) -> str:
               + _field("Type", "type", hint="service, website or library") + _field("Language", "lang", hint="python, java, go or typescript")
               + _field("Description", "description"), repo),
     ]
-    return ('<section id="add-to-the-model"><h2>Add to the model</h2>'
+    return (f'<section id="add-to-the-model"><h2>Add to the model{glossary.tip("model")}</h2>'
             '<p class="muted">Each change shows its command, diff and checks before anything runs.</p>' + "".join(forms) + "</section>")
 
 
@@ -359,8 +359,11 @@ def page(ctx: Any, query: dict[str, str]) -> str:
     model = ctx.data("model") or {}
     gaps = _list([f'<strong>{esc(u.get("source"))}</strong> cannot be read: {esc(u.get("error"))}. Its cells show unknown.'
                   for u in status.get("unavailable") or [] if isinstance(u, Mapping)])
-    where = _part(ctx, "status", f"<h2>Where it runs</h2>{_grid(ctx, status, model)}{gaps}")
+    states = glossary.legend(("pinned", "healthy", "verified", "not_verified", "alert", "unknown", "not_deployed"),
+                             "Instance states", swatch="state")
+    where = _part(ctx, "status", f'<h2>Where it runs{glossary.tip("version")}</h2>{_grid(ctx, status, model)}'
+                                 f'<div class="board-legend">{states}</div>{gaps}')
     parts = _part(ctx, "model", f"<h2>Parts and relations</h2>{_parts(status, model)}") if ctx.source("model") else \
         f"<h2>Parts and relations</h2>{_parts(status, model)}"
-    body = _tabs(tab) + f"<section>{where}</section><section>{parts}</section>{model_forms(ctx)}"
+    body = _tabs(tab) + f'<section class="where">{where}</section><section class="parts">{parts}</section>{model_forms(ctx)}'
     return layout.page("System", "system", body, state=ctx.state())

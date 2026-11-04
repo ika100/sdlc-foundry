@@ -136,11 +136,13 @@ def unavailable(source: str, since: str | datetime | None, error: str | None) ->
 
 
 def table(rows: Sequence[Sequence[object]], cols: Sequence[str], *, caption: str | None = None,
-          row_attrs: Sequence[str] | None = None) -> str:
+          row_attrs: Sequence[str] | None = None, after_head: Mapping[str, str] | None = None) -> str:
     """A table in a box that scrolls sideways (AC-122.28). `cols` are plain-text headings (escaped);
     each cell of `rows` is HTML, so the caller escapes with `esc` or builds it with the fragments above.
-    `row_attrs[i]` is ready-made, already escaped attribute text for the i-th `<tr>`."""
-    head = "".join(f'<th scope="col">{esc(c)}</th>' for c in cols)
+    `row_attrs[i]` is ready-made, already escaped attribute text for the i-th `<tr>`; `after_head[col]` is HTML put after
+    that heading (a glossary tip)."""
+    extra = after_head or {}
+    head = "".join(f'<th scope="col">{esc(c)}{extra.get(c, "")}</th>' for c in cols)
     body = "".join(f"<tr{' ' + row_attrs[i] if row_attrs else ''}>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
                    for i, row in enumerate(rows))
     cap = f"<caption>{esc(caption)}</caption>" if caption else ""

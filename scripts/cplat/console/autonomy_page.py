@@ -12,7 +12,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from console import system_page
+from console import glossary, system_page
 from console.html import (action_button, command_block, engine_badge, esc, guardrails, level_name, level_sentence, short_version, table,
                           unavailable)
 
@@ -109,10 +109,11 @@ def _env(e: Mapping, repo: str) -> str:
     for c in e.get("caps") or []:
         c = _map(c)
         notes.append(f'<span class="muted" data-cap="{esc(c.get("component"))}">{esc(c.get("component"))}: max {esc(c.get("max"))}</span>')
-    head = f'<h3>{esc(name)} <span class="muted">declared {esc(level_name(declared))}</span> {" ".join(notes)}</h3>'
+    head = (f'<h3>{esc(name)} <span class="muted">declared {esc(level_name(declared))}</span>{glossary.tip("autonomy_level", "right")} '
+            f'{" ".join(notes)}</h3>')
     return (f'<section data-env="{esc(name)}" data-level="{esc(effective)}" data-supervised="{supervised}" data-confirmed="{confirmed}">'
             f'{head}{_form(name, declared, str(e.get("cap") or "improve"), repo)}'
-            f'<h4>Guardrails now</h4>{guardrails({"guardrails": e.get("guardrails"), "undoWindow": e.get("undoWindow")})}'
+            f'<h4>Guardrails now{glossary.tip("guardrails", "right")}</h4>{guardrails({"guardrails": e.get("guardrails"), "undoWindow": e.get("undoWindow")})}'
             f'{_engine(name, _map(e.get("engine")))}</section>')
 
 

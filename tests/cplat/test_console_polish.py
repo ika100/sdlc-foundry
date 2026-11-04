@@ -56,3 +56,59 @@ def test_the_inbox_says_nothing_waits_once_it_read_an_empty_list():
     ctx = _ctx(src)
     ctx.data = lambda name: {"items": []} if name == "needs" else None
     assert "Nothing waits for you" in inbox.page(ctx, {})
+
+
+# ---------------- the glossary: one text per term, for the ? tips and the How it works page ----------------
+
+import re
+from pathlib import Path
+
+from console import glossary
+from console_support import q
+
+CONSOLE = Path(__file__).resolve().parents[2] / "scripts" / "cplat" / "console"
+
+
+def test_every_tip_and_legend_names_a_term_of_the_glossary():
+    used = set()
+    for path in CONSOLE.glob("*.py"):
+        text = path.read_text()
+        used |= set(re.findall(r"""glossary\.tip\(["'](\w+)["']""", text))
+        for keys in re.findall(r"glossary\.legend\(\(([^)]*)\)", text):
+            used |= set(re.findall(r"""["'](\w+)["']""", keys))
+    assert used and used <= set(glossary.TERMS), used - set(glossary.TERMS)
+
+
+def test_every_term_is_on_the_how_it_works_page_once():
+    listed = [k for _, _, _, keys in glossary.SECTIONS for k in keys]
+    assert sorted(listed) == sorted(glossary.TERMS) and len(listed) == len(set(listed))
+
+
+def test_a_tip_is_a_labelled_button_with_its_text_and_a_link_to_the_term():
+    html = glossary.tip("verified")
+    assert 'aria-label="What is verified?"' in html and 'role="tooltip"' in html and 'href="/help#t-verified"' in html
+    with pytest.raises(KeyError):
+        glossary.tip("no-such-term")
+
+
+def test_how_it_works_lists_the_eight_stages_and_anchors_every_term(console):
+    root, text = console().page("/help")
+    assert [n.attrs["data-stage"] for n in q(root, None, data_stage=True) if any(a.tag == "ol" for a in n.ancestors())] == \
+        ["Issue", "Spec", "Plan", "Build", "Land", "Dev", "Staging", "Prod"]
+    for key in glossary.TERMS:
+        assert q(root, None, id=f"t-{key}"), key
+
+
+@pytest.mark.parametrize("path, keys", [
+    ("/inbox", {"decision", "waiting", "read_at"}),
+    ("/board", {"running", "stopped", "waits", "not_started", "decision_stage", "budget"}),
+    ("/system", {"promote_rule", "policy", "verified", "not_verified", "model"}),
+])
+def test_each_page_explains_its_terms_where_they_appear(console, path, keys):
+    root, _ = console().page(path)
+    assert keys <= {n.attrs["data-tip"] for n in q(root, None, data_tip=True)}
+
+
+def test_the_menu_links_how_it_works(console):
+    root, _ = console().page("/inbox")
+    assert any(a.attrs.get("href") == "/help" for a in q(root, "a"))

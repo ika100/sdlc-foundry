@@ -17,7 +17,7 @@ from typing import Any
 
 import yaml
 
-from console import actions, handoff, layout, sources as sources_mod
+from console import actions, glossary, handoff, layout, sources as sources_mod
 from console.html import action_button, command_block, definition_list, engine_badge, esc, freshness, signal_facts, stage_badge, table, unavailable
 
 DEFAULT_BUDGET = "15"
@@ -109,7 +109,9 @@ class Decide:
 
 
 def _head(item: dict, now: datetime) -> str:
-    return (f'<p>{stage_badge(str(item.get("stage")))} <strong>{esc(item.get("kind"))}</strong> '
+    kind = str(item.get("kind"))
+    tip = glossary.tip(kind, "right") if kind in glossary.TERMS else ""
+    return (f'<p>{stage_badge(str(item.get("stage")))} <strong class="kind" data-kind="{esc(kind)}">{esc(kind)}</strong>{tip} '
             f'<time datetime="{esc(item.get("since"))}">waiting {esc(age(item.get("since"), now))}</time></p>'
             f'<p>{esc(item.get("reason"))}</p>')
 
@@ -178,7 +180,9 @@ def page(ctx: Any, query: dict[str, str]) -> str:
         now = _now(ctx)
         rows = [_row(i, now) for i in items]
         parts.append(table([c for _, c in rows], ["Decision", "Stage", "Waiting", "Why"], caption="Decisions, oldest first",
-                           row_attrs=[a for a, _ in rows]))
+                           row_attrs=[a for a, _ in rows],
+                           after_head={"Decision": glossary.tip("decision", "right"), "Stage": glossary.tip("stage"),
+                                       "Waiting": glossary.tip("waiting")}))
     elif source is not None and not source.error and not source.read_at:   # not read yet: "nothing waits" would be a guess
         parts.append('<section class="empty loading" aria-busy="true"><span class="empty-mark" aria-hidden="true"></span>'
                      '<h2>Reading the open decisions</h2><p class="muted">This page fills in by itself in a moment.</p></section>')

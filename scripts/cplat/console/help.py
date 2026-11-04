@@ -32,12 +32,12 @@ STEPS = {
     "board": [
         "The strip on top shows the eight stages with their counts; below, each stage is a row with its cards. Select a stage name to see what happens there and who does it.",
         "A card is a spec, a run, an issue or a release. Open it (Enter) for its criteria, its evidence chain and its activity.",
-        "Spec, Build and Prod are decision columns: items there may wait for you and also appear in the Inbox.",
+        "Spec, Build and Prod are decision stages, marked you decide on the strip: items there may wait for you and also appear in the Inbox. A card's colour is its state: running, stopped, waits for you or not started.",
         "Switch to List for a table, or Done for what finished in the last 30 or 90 days; search finds ids, titles, components and #issues.",
     ],
     "system": [
         "Where it runs: one row per component and resource, one column per environment with its promotion rule and policy.",
-        "A cell shows the running version and its state (pinned, healthy, verified, NOT VERIFIED, alert or unknown).",
+        "A cell shows the running version and its state (pinned, healthy, verified, NOT VERIFIED, alert or unknown); the legend under the table explains each one.",
         "Promote and Cut release open the decision with its consequence first; the promotion itself is a pull request.",
         "Add to the model: each form previews the exact command, the system.yaml diff and the renderer's checks before anything runs.",
         "Autonomy tab: the level per environment, its guardrails, the engine state, Pause all, and what was done on its own with Undo.",
@@ -49,7 +49,7 @@ KEYS = (
     ("?", "this help"),
     ("g", "the full guide: the console, the process and every command"),
     ("j / k", "next / previous item in the Inbox"),
-    ("← → ↑ ↓", "move across Board columns and cards"),
+    ("← → / ↑ ↓", "Board: next card in a stage / next stage with cards"),
     ("Enter", "open the selected item"),
     ("Esc", "close the side panel or the palette"),
     ("a / p / t / o", "approve / promote / take over / open in Claude Code, on the selected decision"),
@@ -109,7 +109,8 @@ def panel_help(ctx: Any, place: str) -> str:
         "<h3>When something is missing</h3>"
         f"<p>A banner names a missing piece (Claude Code, a GitHub login, a cluster context) and its fix. "
         f"Run the full check in a terminal:</p><p>{command_block('/platform:doctor')}</p>"
-        f'<h3>More</h3><ul class="plain"><li><a href="/guide{guide.anchor(place)}">Full guide in the console</a> (<kbd>g</kbd>)</li>'
+        f'<h3>More</h3><ul class="plain"><li><a href="/help">How it works</a>: the process and every term, as behind each ?</li>'
+        f'<li><a href="/guide{guide.anchor(place)}">Full guide in the console</a> (<kbd>g</kbd>)</li>'
         f'<li><a href="/guide#command-reference">Every command</a></li>'
         f'<li><a href="{GUIDE}" target="_blank" rel="noopener">The guide on GitHub</a></li>'
         f'<li><a href="{PROCESS}" target="_blank" rel="noopener">How the agents work together</a></li></ul>'

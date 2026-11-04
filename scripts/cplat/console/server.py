@@ -40,6 +40,7 @@ PAGES = {
     "/settings": ("Settings", "system", "console.settings_page:page"),
     "/switch": ("Switch system", "system", "console.switcher:page"),
     "/guide": ("Guide", "system", "console.guide:page"),
+    "/help": ("How it works", "system", "console.glossary:page"),
 }
 PANELS = {
     "need": "console.inbox:panel_need",
@@ -82,12 +83,16 @@ class Context:
         doc = sources_mod.state(self.sources, actions.summary())
         doc["token"] = self.token
         doc["now"] = sources_mod.utcnow()
+        model = self.data("model")
+        system = model.get("system") if isinstance(model, dict) else None
+        doc["system"] = system.get("name") if isinstance(system, dict) else None
         return doc
 
     def api_state(self) -> dict:
         doc = self.state()
         doc.pop("token")
         doc.pop("now")
+        doc.pop("system")
         return doc
 
 

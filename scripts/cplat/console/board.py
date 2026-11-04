@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 import stages
-from console import actions, handoff, layout, sources as sources_mod
+from console import actions, glossary, handoff, layout, sources as sources_mod
 from console.html import action_button, engine_badge, esc, freshness, money, short_version, stage_badge, table, unavailable
 
 PERIODS = {"30": 30, "90": 90, "all": None}
@@ -357,7 +357,10 @@ def _strip(items: list[dict]) -> str:
 
 def _columns(items: list[dict], repo_dir: str | Path | None = None) -> str:
     rows = "".join(_column(s, [i for i in items if i["stage"] == s], repo_dir) for s in stages.STAGES)
-    return f'{_strip(items)}<div class="board lanes">{rows}</div>'
+    legend = (f'<div class="board-legend">{glossary.legend(("running", "stopped", "waits", "not_started"), "Card colours")}'
+              f'<span class="legend-more">You decide{glossary.tip("decision_stage")}</span>'
+              f'<span class="legend-more">Budget{glossary.tip("budget", "left")}</span></div>')
+    return f'{_strip(items)}{legend}<div class="board lanes">{rows}</div>'
 
 
 def _list(items: list[dict]) -> str:
