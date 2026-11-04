@@ -300,8 +300,45 @@ def database_backups(system: str, db: str, ns: str, names: list[str], context: s
     return [b for b in get_items(["backups.postgresql.cnpg.io", "-n", ns], context) if ((b.get("spec") or {}).get("cluster") or {}).get("name") in keep]
 
 
+DEFAULT_SCHEDULE = "0 3 * * *"                 # render's default backup schedule
+OVERDUE_GRACE = datetime.timedelta(hours=2)
+now = lambda: datetime.datetime.now(datetime.UTC)  # noqa: E731  (tests replace it)
+
+
+def schedule_period(schedule: str | None) -> datetime.timedelta:
+    """The longest gap between two runs of a five-field cron schedule (a six-field one starts with seconds), rounded up to
+    an hour, a day, a week or a month."""
+    fields = (schedule or DEFAULT_SCHEDULE).split()
+    if len(fields) == 6:
+        fields = fields[1:]
+    if len(fields) != 5:
+        return datetime.timedelta(days=1)
+    _, hour, dom, _, dow = fields
+    if dow != "*":
+        return datetime.timedelta(days=7)
+    if dom != "*":
+        return datetime.timedelta(days=31)
+    if hour == "*":
+        return datetime.timedelta(hours=1)
+    if hour.startswith("*/") and hour[2:].isdigit():
+        return datetime.timedelta(hours=int(hour[2:]))
+    return datetime.timedelta(days=1)
+
+
+def overdue(last_success: str | None, since: str | None, schedule: str | None) -> str | None:
+    """Why a scheduled backup is overdue (#416): no base backup completed within one schedule period plus OVERDUE_GRACE, counted
+    from the last success or else from when the cluster was created. None when it is not overdue."""
+    limit = schedule_period(schedule) + OVERDUE_GRACE
+    ref = parse_time(last_success) or parse_time(since)
+    if ref is None or now() - ref <= limit:
+        return None
+    hours = int(limit.total_seconds() // 3600)
+    what = f"the last base backup completed at {last_success}" if parse_time(last_success) else "no base backup has completed"
+    return f"{what}, more than {hours} h ago (schedule {schedule or DEFAULT_SCHEDULE}): is the ScheduledBackup running?"
+
+
 def database_state(system: str, db: str, env: str, context: str | None, *, backup: bool, external: bool = False,
-                   state: dict | None = None) -> dict:
+                   state: dict | None = None, schedule: str | None = None) -> dict:
     """The status row of a database resource instance (AC-117.6/.27). `state` is the parsed restore-state.yaml (or None).
 
     Returns {"resource", "environment", "cluster", "backup": {last_success, state, archiving, error, earliest, latest},
@@ -344,6 +381,9 @@ def database_state(system: str, db: str, env: str, context: str | None, *, backu
             failing_backup = True
         else:
             failing_backup = False
+        if not failing_backup and not pending and (late := overdue(b["last_success"], (active.get("metadata") or {}).get("creationTimestamp"), schedule)):
+            b["error"] = b["error"] or late
+            failing_backup = True
         row["windows"] = _windows(system, db, ns, context)
         firsts = [d for d in map(parse_time, row["windows"].values()) if d]
         if firsts:

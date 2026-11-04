@@ -305,6 +305,8 @@ def kube(monkeypatch):
     except ModuleNotFoundError:
         return fake
     monkeypatch.setattr(bs, "kubectl", fake, raising=False)
+    # the fixtures' backups are from 2026-10-27: read them a few hours later, so none is overdue (#416)
+    monkeypatch.setattr(bs, "now", lambda: __import__("datetime").datetime(2026, 10, 27, 6, 0, tzinfo=__import__("datetime").UTC), raising=False)
     return fake
 
 
