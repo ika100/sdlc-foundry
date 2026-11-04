@@ -75,6 +75,15 @@ def test_web_dockerfile_installs_strictly(web):  # AC-104.2
     assert "pnpm-lock.yaml" in copy and "pnpm-lock.yaml*" not in copy
 
 
+def test_web_runtime_image_ships_no_npm(web):
+    """#421: npm (with its bundled undici) is removed from the runtime stage, so the release image scan does not stop on it;
+    the server needs only `node`."""
+    text = (web / "Dockerfile").read_text()
+    runtime = text[text.index("AS runtime"):]
+    assert "rm -rf /usr/local/lib/node_modules/npm" in runtime and "/usr/local/bin/npx" in runtime and "corepack" in runtime
+    assert runtime.index("rm -rf /usr/local/lib/node_modules/npm") < runtime.index('CMD ["node", "server.js"]')
+
+
 @pytest.mark.parametrize("template", ["service-python", "web-nextjs"])
 def test_dockerfile_is_template_owned(template):  # AC-104.3
     """AC-104.3: /shared:update-service must bring the strict install, so the Dockerfile is not in _skip_if_exists."""

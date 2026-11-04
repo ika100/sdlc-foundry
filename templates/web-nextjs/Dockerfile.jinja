@@ -22,6 +22,11 @@ LABEL org.opencontainers.image.source="https://github.com/{{ github_org }}/{{ pr
       org.opencontainers.image.description="{{ description | replace('"', '') | replace('\\', '') }}"
 WORKDIR /app
 
+# The server runs with plain `node`; npm, npx and corepack are not needed at runtime. Removing them drops npm's bundled
+# undici (6.28.0 in node:24-slim, fixable HIGH/CRITICAL CVEs that block the release image scan, #421).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT={{ port }} \
