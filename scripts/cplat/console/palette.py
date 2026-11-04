@@ -138,8 +138,19 @@ def _matching_issues(ctx: Any, sentence: str) -> str:
     return f'<p>Open issues that look related. You can link one in the sentence:</p><ul class="plain" data-matching-issues>{items}</ul>'
 
 
-def _describe_button(label: str, repo: str, level: str) -> str:
-    return action_button("describe", label, None, None, attrs={
+EMPTY = "Type what should change in the box above first."
+
+
+def _quote(sentence: str, empty: str) -> str:
+    """The text of the palette's search box as this section will use it; the box itself is the only field (it sends the
+    box's current text through the hidden `data-from-palette` input)."""
+    if not sentence:
+        return f'<p class="muted palette-quote">{esc(empty)}</p>'
+    return f'<p class="palette-quote">\u201c{esc(sentence)}\u201d</p>'
+
+
+def _describe_button(label: str, repo: str, level: str, empty: bool = False) -> str:
+    return action_button("describe", label, None, EMPTY if empty else None, attrs={
         "data_object": json.dumps({"repo": repo}), "data_args": json.dumps({"level": level}),
         "data_confirm": f"Start Claude Code in {repo}?"})
 
@@ -147,20 +158,21 @@ def _describe_button(label: str, repo: str, level: str) -> str:
 def _describe(ctx: Any, q: str) -> str:
     gitops = _gitops_repo(ctx)
     sentence = q.strip()
+    empty = not sentence
     buttons = []
     if gitops:
-        buttons.append(f'<li>{_describe_button("System", gitops, "system")} <span class="muted">the whole system, in {esc(gitops)}</span></li>')
+        buttons.append(f'<li>{_describe_button("System", gitops, "system", empty)} <span class="muted">the whole system, in {esc(gitops)}</span></li>')
     repos = sorted({str(c.get("repo")) for c in _components(ctx) if c.get("repo") and not c.get("external")})
     for repo in repos:
-        buttons.append(f'<li>{_describe_button("Component", repo, "component")} <span class="muted">{esc(repo)}</span></li>')
+        buttons.append(f'<li>{_describe_button("Component", repo, "component", empty)} <span class="muted">{esc(repo)}</span></li>')
     if gitops:
-        buttons.append(f'<li>{_describe_button("Let Claude decide", gitops, "decide")} <span class="muted">Claude picks the level</span></li>')
+        buttons.append(f'<li>{_describe_button("Let Claude decide", gitops, "decide", empty)} <span class="muted">Claude picks the level</span></li>')
     if not buttons:
         buttons.append('<li class="muted">The model is not available, so there is no repository to start in.</li>')
     return (f'<section data-palette="describe"><h3>Describe a change</h3>'
-            f'<form data-describe onsubmit="return false"><label>What should change? '
-            f'<input type="text" class="wide" name="text" value="{esc(sentence)}" placeholder="add a wishlist to the shop"></label>'
-            f'{_matching_issues(ctx, sentence)}<ul class="plain">{"".join(buttons)}</ul></form></section>')
+            f'<form data-describe onsubmit="return false">{_quote(sentence, "Describe a change in the box above, for example: add a wishlist to the shop.")}'
+            f'<input type="hidden" name="text" value="{esc(sentence)}" data-from-palette>'
+            f'{_matching_issues(ctx, sentence)}<p class="muted">Start its spec in:</p><ul class="plain">{"".join(buttons)}</ul></form></section>')
 
 
 # ---------------- add to the model ----------------
@@ -179,8 +191,9 @@ def _add(ctx: Any) -> str:
 
 def _ask_form(q: str) -> str:
     return (f'<section data-palette="ask"><h3>Ask</h3><form data-form="ask" data-post="/api/ask" onsubmit="return false">'
-            f'<label>Question <input type="text" name="question" value="{esc(q.strip())}" placeholder="why is shop-api slow?"></label> '
-            f'<button type="submit" class="btn">Ask</button> '
+            f'{_quote(q.strip(), "Ask a question in the box above, for example: why is shop-api slow?")}'
+            f'<input type="hidden" name="question" value="{esc(q.strip())}" data-from-palette>'
+            f'<button type="submit" class="btn"{" disabled" if not q.strip() else ""}>Ask</button> '
             f'<span class="muted">Claude only reads; it proposes commands and you confirm them.</span>'
             f'<pre data-result></pre></form></section>')
 

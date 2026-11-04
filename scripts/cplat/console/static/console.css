@@ -693,3 +693,7 @@ p.empty { all: unset; display: block; color: var(--muted); font-size: 0.9rem; ma
 @media (max-width: 600px) {
   .tip-body, .tip.left .tip-body, .tip.right .tip-body { position: fixed; top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3); transform: none; max-width: none; width: auto; }
 }
+
+/* The palette: the search box is the only text field; a section quotes the text it will use */
+.palette-quote { margin: var(--s1) 0 var(--s2); padding: var(--s2) var(--s3); border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 6px 6px 0; }
+p.muted.palette-quote { border-left-color: var(--line); font-style: italic; }

@@ -232,9 +232,17 @@
 
   /* ---------- actions ---------- */
 
+  // The palette's search box is its only text field: a hidden data-from-palette input takes its text when the form is sent
+  function fromPalette(form) {
+    var box = $("#palette-q");
+    if (!form || !box) { return; }
+    $all("[data-from-palette]", form).forEach(function (n) { n.value = box.value.trim(); });
+  }
+
   function actionBody(button) {
     var args = parseValue(button.getAttribute("data-args")) || {};
     var form = button.closest("form");
+    fromPalette(form);
     if (form && typeof args === "object") {
       new FormData(form).forEach(function (value, name) { args[name] = value; });
     }
@@ -303,6 +311,7 @@
   }
 
   function submitForm(form) {
+    fromPalette(form);
     var fields = {};
     new FormData(form).forEach(function (value, name) { fields[name] = value; });
     var body = form.hasAttribute("data-wrap") ? { form: form.getAttribute("data-form"), fields: fields } : fields;

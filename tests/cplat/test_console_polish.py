@@ -64,7 +64,7 @@ import re
 from pathlib import Path
 
 from console import glossary
-from console_support import q
+from console_support import parse, q
 
 CONSOLE = Path(__file__).resolve().parents[2] / "scripts" / "cplat" / "console"
 
@@ -201,3 +201,32 @@ def test_the_palette_keeps_the_forms_as_disclosures(tmp_path):
 def test_a_budget_line_keeps_usd_in_capitals():
     info = board._run_info({"budget": {"used": {"cost": 3.1, "minutes": 42}, "limit": {"cost": 15, "minutes": 180}}})
     assert info["budget"] == "Cost 3.1 of 15 USD, 42 min of 180 min"
+
+
+# ---------------- the palette: its search box is the only text field ----------------
+
+def test_the_palette_asks_for_the_sentence_once(console):
+    _, text = console().get("/palette?q=add%20a%20wishlist")
+    root = parse(text)
+    for section in ("describe", "ask"):
+        [sec] = q(root, "section", data_palette=section)
+        assert not [i for i in q(sec, "input") if i.attrs.get("type") in (None, "text")], section
+        [hidden] = q(sec, "input", data_from_palette=True)
+        assert hidden.attrs["type"] == "hidden" and hidden.attrs["value"] == "add a wishlist"
+        assert "“add a wishlist”" in sec.text()
+
+
+def test_with_an_empty_box_describe_and_ask_say_what_to_do(console):
+    _, text = console().get("/palette?q=")
+    root = parse(text)
+    [sec] = q(root, "section", data_palette="describe")
+    buttons = q(sec, "button", data_action="describe")
+    assert buttons and all("disabled" in b.attrs for b in buttons)
+    assert "Type what should change in the box above first." in sec.text()
+    [ask] = q(root, "section", data_palette="ask")
+    assert "disabled" in q(ask, "button")[0].attrs
+
+
+def test_the_script_sends_the_search_boxs_current_text():
+    js = (CONSOLE / "static" / "console.js").read_text()
+    assert "data-from-palette" in js and "fromPalette(form)" in js
