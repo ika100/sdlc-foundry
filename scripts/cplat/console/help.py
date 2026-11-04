@@ -30,7 +30,7 @@ STEPS = {
         "An empty Inbox means nothing waits for you. Start a change with New or ask (⌘K).",
     ],
     "board": [
-        "Columns are the eight stages in order; select a column header to see what happens there and who does it.",
+        "The strip on top shows the eight stages with their counts; below, each stage is a row with its cards. Select a stage name to see what happens there and who does it.",
         "A card is a spec, a run, an issue or a release. Open it (Enter) for its criteria, its evidence chain and its activity.",
         "Spec, Build and Prod are decision columns: items there may wait for you and also appear in the Inbox.",
         "Switch to List for a table, or Done for what finished in the last 30 or 90 days; search finds ids, titles, components and #issues.",

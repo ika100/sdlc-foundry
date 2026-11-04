@@ -46,7 +46,7 @@ Nothing runs before you click the button (or press its key: `a` approve, `p` pro
 
 ![The Board: one column per stage, a stopped run with its reason](img/console/board.jpg)
 
-One column per stage, from **Issue** to **Prod**; every open item sits in exactly one. **Spec**, **Build** and **Prod** are decision columns. Select a column header to see what happens in that stage, which agents work there, the commands, and what you decide. A run card shows its budget used of its limit, and a stopped run says why in one line.
+A strip on top shows the eight stages from **Issue** to **Prod** with the number of items in each (a stage with a stopped run is red); select one to jump to it. Below, each stage is a row and every open item sits in exactly one; the cards of a stage wrap, so nothing scrolls sideways, and an empty stage is one slim line. **Spec**, **Build** and **Prod** are decision stages ("you decide"). Select a stage name to see what happens in that stage, which agents work there, the commands, and what you decide. Arrow keys move between cards: left and right inside a stage, up and down to the next stage with cards. A run card shows its budget used of its limit, and a stopped run says why in one line.
 
 Open a card for its detail: the stage strip, one line per repo slice, every acceptance criterion with its test and verdict, the evidence chain from issue to running instance (pull request, CI, image, instance), and the latest activity. A stopped run explains itself: why it stopped, the failing test and its criterion, the last error and the diagnosis, and the ways forward (take over in Claude Code, more budget, amend the spec).
 

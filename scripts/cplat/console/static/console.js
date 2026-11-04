@@ -101,12 +101,16 @@
     if (!column) { moveInList(key === "ArrowUp" ? -1 : 1); return; }
     var inColumn = $all("[data-card]", column);
     var index = inColumn.indexOf(current);
-    if (key === "ArrowUp" || key === "ArrowDown") {
-      select(inColumn[Math.max(0, Math.min(inColumn.length - 1, index + (key === "ArrowUp" ? -1 : 1)))]);
+    // Stages are rows on the board: Left/Right move inside a stage, Up/Down to the next stage that has cards
+    var lanes = column.classList.contains("lane");
+    var within = lanes ? (key === "ArrowLeft" || key === "ArrowRight") : (key === "ArrowUp" || key === "ArrowDown");
+    var back = key === "ArrowUp" || key === "ArrowLeft";
+    if (within) {
+      select(inColumn[Math.max(0, Math.min(inColumn.length - 1, index + (back ? -1 : 1)))]);
       return;
     }
     var columns = $all("[data-column]");
-    var step = key === "ArrowLeft" ? -1 : 1;
+    var step = back ? -1 : 1;
     for (var i = columns.indexOf(column) + step; i >= 0 && i < columns.length; i += step) {
       var target = $all("[data-card]", columns[i]);
       if (target.length) { select(target[Math.min(index, target.length - 1)]); return; }

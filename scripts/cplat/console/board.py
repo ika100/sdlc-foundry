@@ -22,7 +22,7 @@ from console.html import action_button, engine_badge, esc, freshness, money, sho
 
 PERIODS = {"30": 30, "90": 90, "all": None}
 DEFAULT_PERIOD = "30"
-VIEWS = (("board", "Columns"), ("list", "List"), ("done", "Done"))
+VIEWS = (("board", "Stages"), ("list", "List"), ("done", "Done"))
 
 
 # ---------------- items ----------------
@@ -327,6 +327,7 @@ def _card(item: dict, repo_dir: str | Path | None = None) -> str:
 
 
 def _column(stage: str, cards: list[dict], repo_dir: str | Path | None = None) -> str:
+    """One stage as a row of the board: its header and hints on the left, its cards in a grid that wraps on the right."""
     info = stages.explain(stage)
     decision = " data-decision" if stage in stages.DECISION else ""
     hints = f'<p class="muted hint">{esc(info["what"])}</p>'
@@ -335,14 +336,28 @@ def _column(stage: str, cards: list[dict], repo_dir: str | Path | None = None) -
     href = esc(_panel("stage", stage))
     ordered = sorted(cards, key=lambda i: (not i["stopped"], i["id"]))
     body = "".join(_card(i, repo_dir) for i in ordered)
-    return (f'<section class="column" data-column="{esc(stage)}"{decision} aria-label="{esc(stage)} column">'
-            f'<h2><a href="{href}" data-open="{href}">{stage_badge(stage)}</a> <span class="count">{len(cards)}</span></h2>'
-            f'{hints}{body}</section>')
+    cls = "column lane" + ("" if cards else " empty-lane")
+    return (f'<section class="{cls}" id="stage-{esc(stage.lower())}" data-column="{esc(stage)}"{decision} aria-label="{esc(stage)} column">'
+            f'<div class="lane-head"><h2><a href="{href}" data-open="{href}">{stage_badge(stage)}</a> <span class="count">{len(cards)}</span></h2>'
+            f'{hints}</div><div class="lane-cards">{body}</div></section>')
+
+
+def _strip(items: list[dict]) -> str:
+    """The whole process in one line: every stage with its count; a stage with a stopped item is marked. Links jump to its row."""
+    steps = []
+    for stage in stages.STAGES:
+        mine = [i for i in items if i["stage"] == stage]
+        state = "stopped" if any(i["stopped"] for i in mine) else "busy" if mine else "idle"
+        decision = ' data-decision' if stage in stages.DECISION else ""
+        steps.append(f'<li data-step="{esc(state)}"{decision}><a href="#stage-{esc(stage.lower())}">'
+                     f'<span class="step-name">{esc(stage)}</span><span class="step-count">{len(mine)}</span>'
+                     + ('<span class="step-you">you decide</span>' if decision else "") + '</a></li>')
+    return f'<nav class="pipeline" aria-label="Stages at a glance"><ol>{"".join(steps)}</ol></nav>'
 
 
 def _columns(items: list[dict], repo_dir: str | Path | None = None) -> str:
-    cols = "".join(_column(s, [i for i in items if i["stage"] == s], repo_dir) for s in stages.STAGES)
-    return f'<div class="scroll-x"><div class="board">{cols}</div></div>'
+    rows = "".join(_column(s, [i for i in items if i["stage"] == s], repo_dir) for s in stages.STAGES)
+    return f'{_strip(items)}<div class="board lanes">{rows}</div>'
 
 
 def _list(items: list[dict]) -> str:
