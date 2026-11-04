@@ -75,6 +75,22 @@ Part 2 of the same recording: the system gets a Postgres database and a Next.js 
 
 The web UI took 16 min of agent work from its repo spec to done; dev smoke passed 4 of 4 (API) and 1 of 1 (web).
 
+### The 2026-11-04 demo run (part 3)
+
+Part 3 of the same recording: guard rails, observability, staging, releases, backups and prod (sdlc-foundry 5.7.0). Measured is the recording's clock; the working time is the sum of the turns Claude reported in that chapter, which includes CI waits inside a turn but not the time a decision waited for a person.
+
+| Step | Measured | Working time | What made the difference |
+|---|---|---|---|
+| Staging and prod hosts, `enforce` in prod | 4 min | 2 min | — |
+| Observability (`ui: lgtm`), Grafana | 7 min | 4 min | one `cluster-up` by a person for the Grafana route |
+| Promote to staging, smoke | 8 min | 6 min | the secrets scan flagged a config hash in a generated file |
+| Releases | 4 min | 4 min | — |
+| The release gate, web fix, v0.1.1 | 54 min | ≈ 30 min | fixable HIGH/CRITICAL in `undici` blocked the web release; GitHub's GraphQL limit |
+| Backup spec 002, plan, prod PR | 77 min | ≈ 23 min | the prod gate waited for a person; plan-check knows no bucket |
+| Prod, backup failure, platform fix, drill | 97 min | ≈ 40 min | a bucket race in the platform ([#412](https://github.com/ika100/sdlc-foundry/pull/412)), fixed outside the recording |
+| Use it in prod, restore with data | 16 min | 2 min | Argo keeps restored copies (no automatic prune) |
+| **Total** | **≈ 4 h 28 min** | **≈ 1 h 50 min** | |
+
 ## Defect history
 
 12 defects were found only by running the real chain (see `CHANGELOG.md` [1.1.1]); v2 adds a regression test or contract check for each.
