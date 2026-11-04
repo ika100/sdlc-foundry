@@ -133,6 +133,7 @@ class CiCheck:
     link: str
     log: Path | None
     text: str | None
+    no_log: str | None = None   # why an Actions check has no log lines (#399)
 
 
 @dataclass(frozen=True)
@@ -225,7 +226,7 @@ def build_check(name: str, command: str, exit_code: str, log: str, lines: list[s
 
 
 def ci_check(c: CiCheck, ctx: Context, parsers) -> Check:
-    log = str(c.log) if c.log is not None else f"none (not a GitHub Actions run: {c.link})"
+    log = str(c.log) if c.log is not None else f"none ({c.no_log or f'not a GitHub Actions run: {c.link}'})"
     lines, step, code = [], None, "?"
     for ln in clean_lines(c.text or ""):
         m = _CI_PREFIX.match(ln)

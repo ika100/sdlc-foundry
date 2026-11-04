@@ -215,3 +215,57 @@ def test_the_pre_push_ci_failure_with_summaries_off_says_so_ac_108_10(repo, chec
     assert msg.startswith("`devbox run ci` is red; nothing was pushed:\n" + OFF + "\n")
     assert "Potential secret" in msg and "== check:" not in msg
     assert not list(cache.rglob("*.summary.json"))
+
+
+# ---------------- #399: a failed job of a run still in progress ----------------
+
+@pytest.fixture()
+def running(gh, monkeypatch, tmp_path):  # noqa: F811
+    """The scripted gh for a run still in progress: `--log-failed` has nothing yet, the failed job's own log may be there."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    state = SimpleNamespace(job_log="", calls=[], cache=tmp_path / "cache" / "sdlc-foundry" / "logs")
+
+    def wrapper(args, *, cwd, check=True):
+        if args[:2] == ["run", "view"] and "--log-failed" in args:
+            ship.GH_ERRORS["run view"] = "run 42 is still in progress; logs will be available when it is complete"
+            return ""
+        if args[:1] == ["api"] and args[1].endswith("/logs"):
+            state.calls.append(args)
+            ship.GH_ERRORS[f"api {args[1]}"] = "" if state.job_log else "HTTP 404: Not Found"
+            return state.job_log
+        return gh(args, cwd=cwd, check=check)
+    monkeypatch.setattr(ship, "gh", wrapper)
+    state.gh = gh
+    return state
+
+
+def job_check(name):
+    return {"name": name, "state": "FAILURE", "bucket": "fail", "link": "https://github.com/acme/shop-api/actions/runs/42/job/777"}
+
+
+def test_a_failed_job_of_a_run_in_progress_is_summarised_from_its_own_log_399(repo, running):
+    running.job_log = "".join(ln.split("\t", 2)[2] + "\n" for ln in ci_log(1).splitlines() if ln.startswith("test\t"))
+    to_land(repo, running.gh)
+    running.gh.checks = [[job_check("e2e"), check("quality", "pass")]]
+    ok, lines = ship.land(repo, timeout=600, interval=10)
+    text = "\n".join(lines)
+    (log,) = saved(running, "ci-e2e")
+    assert not ok and running.calls == [["api", "repos/acme/shop-api/actions/jobs/777/logs"]]
+    assert f"| exit: 1 | log: {log} | entries: 1" in text and "not a GitHub Actions run" not in text
+    assert has(text, r"^- tests/test_shop\.py::test_delete at src/shop/router\.py:58 \| AssertionError")
+
+
+def test_a_failed_job_without_any_log_says_why_not_that_it_is_no_actions_run_399(repo, running):
+    to_land(repo, running.gh)
+    running.gh.checks = [[job_check("e2e"), check("quality", "pass")]]
+    ok, lines = ship.land(repo, timeout=600, interval=10)
+    text = "\n".join(lines)
+    assert not ok and "not a GitHub Actions run" not in text
+    assert "log: none (gh error: HTTP 404: Not Found: https://github.com/acme/shop-api/actions/runs/42/job/777)" in text
+
+
+def test_no_log_names_a_run_in_progress_399():
+    link = "https://github.com/acme/shop-api/actions/runs/42/job/777"
+    assert ship._no_log("run 42 is still in progress; logs will be available when it is complete", link) == \
+        f"run still in progress, no log for this job yet: {link}"
+    assert ship._no_log("", link) == f"GitHub returned no log lines: {link}"

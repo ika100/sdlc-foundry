@@ -101,6 +101,8 @@ class Gh:
             if "--log-failed" in a:
                 return ""
             return w.view(rid).get("status", "") + "\n"
+        if a[0] == "api" and a[1].endswith("/logs"):   # a failed job's own log (#399)
+            return ""
         if a[:2] == ["release", "view"]:
             return w.release_url or ""
         if a[:2] == ["release", "create"]:

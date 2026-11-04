@@ -838,6 +838,7 @@ def _conflicting(watch: CheckWatch) -> Conflicting:
 def _ci_checks(repo: Path, failed: list[dict]) -> list[failsum.CiCheck]:
     """Spec 108: one `gh run view --log-failed` per run; each failed check's own lines are saved under the quiet log directory."""
     fetched: dict[tuple[str, str], str] = {}
+    errors: dict[tuple[str, str], str] = {}
     out: list[failsum.CiCheck] = []
     for c in failed:
         r = run_of(c)
@@ -849,15 +850,38 @@ def _ci_checks(repo: Path, failed: list[dict]) -> list[failsum.CiCheck]:
             fetched[r] = c["_log_failed"]
         if r not in fetched:
             fetched[r] = gh(["run", "view", r[1], "-R", r[0], "--log-failed"], cwd=repo, check=False)
+            errors[r] = GH_ERRORS.get("run view", "")
         rows = fetched[r].splitlines(keepends=True)
         own = [ln for ln in rows if ln.split("\t", 1)[0] == c["name"]] or rows
-        text = "".join(own)
+        text, why = "".join(own), errors.get(r, "")
+        if not text.strip():
+            text, why = _job_log(repo, r[0], c, why)
         log = None
         if text.strip():
             log = quiet._log_path(repo, "ci-" + (re.sub(r"[^A-Za-z0-9._-]+", "-", c["name"]).strip("-") or "check"))
             log.write_text(text)
-        out.append(failsum.CiCheck(c["name"], link, log, text if log else None))
+        out.append(failsum.CiCheck(c["name"], link, log, text if log else None, None if log else _no_log(why, link)))
     return out
+
+
+def _job_log(repo: Path, slug: str, c: dict, why: str) -> tuple[str, str]:
+    """#399: GitHub serves `--log-failed` only once the whole run is complete; a finished job's own log is there before that.
+    Its lines get the `--log-failed` job/step columns (step unknown), so the summary reads them alike."""
+    m = re.search(r"/job/(\d+)", c.get("link") or "")
+    if not m:
+        return "", why
+    path = f"repos/{slug}/actions/jobs/{m.group(1)}/logs"
+    raw = gh(["api", path], cwd=repo, check=False)
+    text = "".join(f"{c['name']}\t\t{ln}" for ln in raw.splitlines(keepends=True) if ln.strip())
+    return text, GH_ERRORS.get(f"api {path}", "") or why
+
+
+def _no_log(why: str, link: str) -> str:
+    """Why a failed Actions check has no log lines (#399), for the summary's `log: none (...)`."""
+    first = next((ln.strip() for ln in why.splitlines() if ln.strip()), "")
+    if "in progress" in first:
+        return f"run still in progress, no log for this job yet: {link}"
+    return f"gh error: {first}: {link}" if first else f"GitHub returned no log lines: {link}"
 
 
 def red_summary(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> tuple[list[str], failsum.Summary | None]:
