@@ -155,8 +155,8 @@ def _publish(repo: Path, app_dir: Path, ns: argparse.Namespace, title: str, acti
                 st = (backupstate.get_json(["applications.argoproj.io", app, "-n", "argocd"], ctx).get("status") or {}).get("sync") or {}
             except backupstate.ReadError:
                 st = {}
-            if st.get("revision") == head and st.get("status") == "Synced":
-                break
+            if st.get("revision") == head and (st.get("status") == "Synced" or (action == "discard" and _only_prune_left(app, ctx))):
+                break                          # a discard: the addon app never prunes (#424); the cluster is deleted below
             if time.monotonic() >= deadline:
                 raise PlatformError(f"Argo CD application {app} did not sync {head[:7]} within 10 minutes")
             time.sleep(POLL_S)
@@ -170,6 +170,30 @@ def _publish(repo: Path, app_dir: Path, ns: argparse.Namespace, title: str, acti
     _write(["apply", "-n", kns, "-k", str(app_dir / "addons" / env / db)], ctx, "cannot apply the database objects")
     r.did.append(f"applied applications/{app_dir.name}/addons/{env}/{db}")
     return False
+
+
+def _only_prune_left(app: str, ctx: str | None) -> bool:
+    """True when every OutOfSync resource of the Argo CD application only waits to be pruned. The database addon's
+    application has `prune: false` (automation never removes data), so after a discard the removed cluster stays OutOfSync
+    with `requiresPruning` and the application never reports Synced (#424)."""
+    try:
+        res = (backupstate.get_json(["applications.argoproj.io", app, "-n", "argocd"], ctx).get("status") or {}).get("resources") or []
+    except backupstate.ReadError:
+        return False
+    out = [x for x in res if isinstance(x, dict) and x.get("status") == "OutOfSync"]
+    return bool(out) and all(x.get("requiresPruning") for x in out)
+
+
+def leftover_clusters(system: str, db: str, kns: str, state: dict | None, ctx: str | None) -> list[str]:
+    """Clusters of `db` in the namespace that restore-state.yaml no longer lists: a discard whose state change merged, but
+    whose cluster was not deleted (it stopped on the way, #424)."""
+    listed = {c["name"] for c in (state or {}).get("clusters") or []} | {f"{system}-{db}"}
+    try:
+        items = backupstate.get_items([CLUSTER_KIND, "-n", kns], ctx)
+    except backupstate.ReadError:
+        return []
+    names = [str((i.get("metadata") or {}).get("name") or "") for i in items]
+    return sorted(n for n in names if n.startswith(f"{system}-{db}-g") and n[len(f"{system}-{db}-g"):].isdigit() and n not in listed)
 
 
 def _delete_scheduled_backup(name: str, kns: str, ctx: str | None) -> None:
@@ -238,6 +262,21 @@ def _wait_volumes_gone(name: str, kns: str, ctx: str | None) -> None:
         if time.monotonic() >= deadline:
             raise PlatformError(f"the volumes of {name} are still there after 30 minutes: {', '.join(p['metadata']['name'] for p in left)}")
         time.sleep(POLL_S)
+
+
+def _finish_leftover(ns: argparse.Namespace, name: str, kns: str, ctx: str | None, r: Report) -> int:
+    """Finish a discard that stopped after its state change merged: delete the cluster and wait for its volumes (#424)."""
+    what = f"delete the cluster {name}, which restore-state.yaml no longer lists (an unfinished discard), and wait until its volumes are gone"
+    r.will_do.append(what)
+    if ns.env == PROD and ns.confirm != PROD and not ns.dry_run:
+        raise PlatformError(f"would {what}; nothing was changed: add --confirm {PROD} to do it")
+    if ns.dry_run:
+        print("\n".join([f"## {r.title}  (dry run - nothing was changed)", f"will_do: {what}"]))
+        return 0
+    _write(["delete", CLUSTER_KIND, name, "-n", kns, "--ignore-not-found"], ctx, f"cannot delete the cluster {name}")
+    _wait_volumes_gone(name, kns, ctx)
+    print(f"discarded {name} (left by an unfinished discard) and its volumes; the backups in the bucket are unchanged")
+    return 0
 
 
 def main(argv: list[str]) -> int:
@@ -311,7 +350,10 @@ def main(argv: list[str]) -> int:
     else:
         name = roles["restored"] or (roles["previous"] or {}).get("name")
         if not name:
-            raise PlatformError(f"{db}/{env} has no restored or previous instance to discard")
+            left = leftover_clusters(system, db, kns, state, ctx)
+            if not left:
+                raise PlatformError(f"{db}/{env} has no restored or previous instance to discard")
+            return _finish_leftover(ns, left[0], kns, ctx, r)
         role = "restored" if roles["restored"] else "previous"
         new["clusters"] = [c for c in new["clusters"] if c["name"] != name]
         title = f"chore(restore): discard {name} of {db}/{env}"
