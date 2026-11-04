@@ -8,6 +8,8 @@ const SPEC = `${API}/blob/main/docs/specs/001-create-and-list-tasks`;
 const ISSUES = 'https://github.com/ika100/sdlc-foundry/issues';
 const WEB = 'https://github.com/ika100/demo-taskboard-web';
 const SYS_SPEC = `${GITOPS}/blob/main/docs/specs/001-persistent-tasks-and-web-task-list`;
+const BACKUP_SPEC = `${GITOPS}/blob/main/docs/specs/002-nightly-prod-database-backups-to-an-in`;
+const PLATFORM = 'https://github.com/ika100/sdlc-foundry';
 
 export interface Section { heading: string; text?: string; items?: string[]; code?: string }
 export interface Step {
@@ -243,19 +245,143 @@ export const steps: Step[] = [
       { label: 'the Postgres store', href: `${API}/blob/main/src/demo_taskboard_api/task_store.py` },
     ],
   },
+  // ---- part 3 (recorded 2026-11-04 with sdlc-foundry 5.7.0): staging, observability, releases, backups and prod ----
+  {
+    title: 'Staging and prod, with guard rails', short: 'Envs', say: 'Give staging and prod local hosts I can open in the browser, like dev, and enforce the guard rails in prod',
+    run: '/system:set --env staging --host … · --env prod --host … --policy enforce', command: 'Give staging and prod local hosts I can open in the browser, like dev, and enforce the guard rails in prod',
+    at: 420.977, time: '2 min',
+    sections: [
+      { heading: 'Claude does', text: 'Two <code>/system:set</code> PRs, one per environment: local hosts for staging and prod, and the Kyverno guard rails switched to <code>enforce</code> in prod, so a prod workload that breaks one fails its PR. Merged on green CI; the second one rebased onto the first.' },
+    ],
+    links: [
+      { label: 'PR: prod host and enforce', href: `${GITOPS}/pull/16` },
+      { label: 'PR: staging host', href: `${GITOPS}/pull/17` },
+    ],
+  },
+  {
+    title: 'Observability with one setting', short: 'Grafana', say: 'Turn on the Grafana observability stack for dev and staging, merge it once CI is green, then show me where to open Grafana',
+    run: 'observability: {ui: lgtm} in system.yaml', command: 'Turn on the Grafana observability stack for dev and staging, merge it once CI is green, then show me where to open Grafana',
+    at: 433.956, time: '4 min',
+    sections: [
+      { heading: 'Claude does', items: [
+        'Sets <code>observability: {ui: lgtm}</code> for dev and staging in <code>system.yaml</code> (no command for it yet), renders: an OpenTelemetry collector per environment, <code>OTEL_*</code> variables for both components, and Grafana with traces, logs and metrics for the cluster.',
+        'Leaves the one cluster change to you: <code>devbox run cluster-up</code> again adds the route to Grafana.',
+      ] },
+      { heading: 'Result', text: 'A minute of traffic later, Grafana shows the API\'s traces in dev: span rate, durations of 1–8 ms.<img class="walkthrough-shot" src="/sdlc-foundry/img/demo/part3-grafana-traces.jpg" width="1296" height="924" loading="lazy" alt="Grafana Traces Drilldown for the last 30 minutes: span rate up to 0.4 per second, span durations between 1 and 8 ms, no errors, 45 traces, all from the service demo-taskboard-api." />' },
+    ],
+    links: [{ label: 'PR: observability for dev and staging', href: `${GITOPS}/pull/18` }],
+  },
+  {
+    title: 'Promote to staging', short: 'Staging', say: 'Promote the API and the web UI to staging and run their smoke tests there', run: '/instance:promote demo-taskboard-api demo-taskboard-web --to staging',
+    command: 'Grafana shows the API\'s traces in dev. Now promote the API and the web UI to staging and run their smoke tests there.', at: 443.305, time: '6 min',
+    sections: [
+      { heading: 'Claude does', items: [
+        'One PR pins the exact builds dev runs; staging gets its own Postgres and its own collector.',
+        'The secrets scan flagged a configuration hash in a generated file; Claude checked it is not a secret and recorded it in the baseline.',
+        'Runs the smoke tests against staging.',
+      ] },
+      { heading: 'Result', text: 'Staging runs both components on its own database: smoke API 4 of 4, web 1 of 1.' },
+    ],
+    links: [{ label: 'PR: promote to staging', href: `${GITOPS}/pull/19` }],
+  },
+  {
+    title: 'Release what staging tested', short: 'Release', say: 'Release the API and the web UI from the builds staging tested, so they can go to prod', run: '/component:release (in both repos)',
+    command: 'Release the API and the web UI from the builds staging tested, so they can go to prod', at: 455.529, time: '4 min',
+    sections: [
+      { heading: 'Claude does', items: [
+        'Runs the quality, test and security gates in both repos (API 68 tests, 96 % coverage; web 63 tests, 99 %).',
+        'Tags exactly the commits staging tested (<code>v0.1.0</code>), so the release image is the tested image.',
+      ] },
+      { heading: 'Result', text: 'The API is released as <code>0.1.0</code>. The web UI is not: see the next step.' },
+    ],
+    links: [{ label: 'API v0.1.0', href: `${API}/tree/v0.1.0` }],
+  },
+  {
+    title: 'The release gate stops a vulnerable build', short: 'Gate', say: 'Fix the web UI first so the release scan passes, take the fix through dev and staging, then release it as v0.1.1',
+    run: '/component:fix → dev → staging → v0.1.1', command: 'Fix the web UI first: update its base image so the release scan passes, take the fix through dev and staging, then release it as v0.1.1',
+    at: 463.209, time: '≈ 30 min',
+    sections: [
+      { heading: 'Why it stopped', text: 'The web release scan found four fixable HIGH/CRITICAL vulnerabilities in <code>undici</code> 6.28.0 inside the image (a certificate check bypass and three denial-of-service bugs). On <code>main</code> such findings are reported; a release stops on them.' },
+      { heading: 'Claude does', items: [
+        'Finds that a newer Node base image still ships the vulnerable <code>undici</code>, and removes <code>npm</code>, <code>npx</code> and <code>corepack</code>, which the app never uses, from the runtime image: 0 fixable findings, down from 5.',
+        'Takes the fix through dev and staging like any change, then releases it as <code>0.1.1</code>.',
+      ] },
+      { heading: 'Result', text: 'API <code>0.1.0</code> and web <code>0.1.1</code>, each with the same image digest as staging.' },
+    ],
+    links: [
+      { label: 'PR: the web fix', href: `${WEB}/pull/4` },
+      { label: 'PR: pin dev', href: `${GITOPS}/pull/20` },
+      { label: 'PR: fix to staging', href: `${GITOPS}/pull/21` },
+      { label: 'web v0.1.1', href: `${WEB}/tree/v0.1.1` },
+    ],
+  },
+  {
+    title: 'Backups first, as the spec said', short: 'Backups', say: 'Before prod, as the spec decided: back up the prod database every night to a bucket in the cluster. Then promote both to prod.',
+    run: '/system:spec → /system:plan 002 → /instance:promote … --to prod', command: 'Before prod, as the spec decided: back up the prod database every night to a bucket in the cluster. Then promote both to prod.',
+    at: 504.567, time: '≈ 23 min',
+    sections: [
+      { heading: 'Claude does', text: 'Part 2\'s spec made backups a condition for the first prod release, so Claude writes spec 002 first and asks four questions.' },
+      { heading: 'Claude asks, you answer', items: [
+        'Backup time → 03:00 every night',
+        'Retention → 30 days',
+        'Other environments → prod only',
+        'A restore drill before prod is used → yes',
+      ] },
+      { heading: 'The prod gate', text: 'The promotion check compares image digests (both match staging) and shows the evidence. It warned "no staging smoke record": the smoke tests had passed, but only <code>/component:ship</code> records them. The prod PR waited for a person\'s decision.' },
+      { heading: 'What went wrong', items: [
+        'Planning hit two platform limits: the plan check knows no bucket resource, and a bucket exists in prod only if a component uses it. The spec and the plan were adjusted and the gaps written down.',
+      ] },
+    ],
+    links: [
+      { label: 'spec 002', href: `${BACKUP_SPEC}/spec.md` },
+      { label: 'PR: spec and plan', href: `${GITOPS}/pull/23` },
+      { label: 'PR: prod with backups', href: `${GITOPS}/pull/24` },
+    ],
+  },
+  {
+    title: 'Prod, and a platform fix', short: 'Prod', say: 'I accept the warnings. Merge the prod PR, then run the restore drill.',
+    run: 'merge #24 → /resource:backup → /resource:restore --to latest', command: 'I accept the two \'no staging smoke record\' warnings: staging smoke passed at 18:52 UTC on these exact builds. Before merging #24, fix the double External Secrets install: keep the one cluster-up installed, don\'t add a second. Then merge #24 once CI is green, run the restore drill and record its times.',
+    at: 548.084, time: '≈ 40 min',
+    sections: [
+      { heading: 'Claude does', items: [
+        'Removes a second External Secrets install from the prod PR, merges it on green CI: prod runs both components and a three-instance Postgres.',
+        'Runs the restore drill: the first backup fails with <code>AccessDenied</code>.',
+      ] },
+      { heading: 'Why it failed', text: 'The database\'s WAL archiving created the bucket before the operator processed the platform\'s Bucket object, which then refused it ("already exists") and never granted access. A race in the platform.' },
+      { heading: 'The fix', text: `The platform's renderer now adopts a bucket its database created first (<code>adoptExisting</code>), with a regression test; merged after 31 green checks, including the cluster e2e of backups. This fix was made in the platform repo by Claude Code outside the recorded terminal. <code>/platform:update</code> brought it into the system.` },
+      { heading: 'Result', text: 'The prod bucket accepts backups; the drill backs up, restores into a separate copy and leaves prod unchanged.' },
+    ],
+    links: [
+      { label: 'PR: platform fix', href: `${PLATFORM}/pull/412` },
+      { label: 'PR: platform update', href: `${GITOPS}/pull/25` },
+      { label: 'PR: restore drill', href: `${GITOPS}/pull/26` },
+    ],
+  },
+  {
+    title: 'Use it in prod, and restore it', short: 'Use prod', say: 'I just added the first task in prod. Back it up, restore it into a copy and show the task there.',
+    run: 'browser · /resource:backup · /resource:restore --to latest · psql', command: 'I just added the first task in prod through the web UI. Prove that backups keep real data: show the task in prod, take a backup, restore it into a separate copy, show the same task in the copy, then discard the copy. Leave deleting the copies to me.',
+    at: 611.068, time: '2 min',
+    sections: [
+      { heading: 'In the browser', text: 'The first task in prod, through the web UI at <code>http://demo-taskboard-web.demo-taskboard-prod.localhost:8088</code>.<img class="walkthrough-shot" src="/sdlc-foundry/img/demo/part3-prod-web-ui.jpg" width="1232" height="979" loading="lazy" alt="The web UI in prod: the heading Tasks, one task First task in prod due 2026-11-30, and the form with Title, Due date and Add task." />' },
+      { heading: 'Claude does', text: 'Backs up, restores into a separate copy, and reads the copy: it holds the same task with the same title, due date and creation time. Deleting the copies stays with a person, because a discard deletes data.' },
+      { heading: 'Result', text: 'Prod runs the exact images staging tested, behind enforced guard rails, with nightly backups that restore with their data.' },
+    ],
+    links: [{ label: 'PR: restore into a copy', href: `${GITOPS}/pull/28` }],
+  },
 ];
 
 /** The two recorded parts: the index of their first step and a heading. */
 export const parts: { from: number; title: string; text: string }[] = [
   { from: 0, title: 'Part 1: from an empty folder to an endpoint in dev', text: 'One Python service, one spec, a local cluster.' },
   { from: 9, title: 'Part 2: a database and a web UI', text: 'One system spec across three repos: Postgres instead of memory, and a Next.js web UI.' },
+  { from: 15, title: 'Part 3: operations', text: 'Guard rails, observability, staging, releases, backups and prod, with a restore drill.' },
 ];
 
 /** The run at a glance (from the recording, the demo repos and docs/BASELINES.md). */
 export const glance: { value: string; label: string }[] = [
-  { value: '≈ 85 min', label: 'of work for both parts, every wait cut' },
-  { value: '8 + 10', label: 'questions Claude asked before writing the two specs' },
-  { value: '3 repos', label: 'API, web UI and gitops, changed by one system spec' },
-  { value: '1 resource', label: 'Postgres, declared once in system.yaml; tasks survive a restart' },
-  { value: '13', label: 'real pull requests in the public demo repos' },
+  { value: '≈ 3 h 15', label: 'of work for all three parts, every wait cut' },
+  { value: '3 envs', label: 'dev, staging and prod, each with its own Postgres' },
+  { value: '1 build', label: 'stopped by the release scan before prod, then fixed' },
+  { value: '1 drill', label: 'a prod backup restored into a copy, with its data' },
+  { value: '31', label: 'real pull requests in the public demo repos' },
 ];
