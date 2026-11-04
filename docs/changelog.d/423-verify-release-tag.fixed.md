@@ -1,0 +1,1 @@
+**`platform update --verify` smoke-tests prod at its release tag (#423).** For a prod pin `X.Y.Z` the verify step cloned the branch `X.Y.Z`, which does not exist (`fatal: Remote branch 0.1.0 not found`), so every update of a system with prod ended `NOT VERIFIED`. It now clones the git tag `vX.Y.Z`, the commit the release image was built from.

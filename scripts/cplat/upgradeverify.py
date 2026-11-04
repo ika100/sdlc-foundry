@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import datetime
+import re
 import sys
 import tempfile
 import time
@@ -168,6 +169,8 @@ def component_dir(comp: model.Component, inst: model.Instance, dirs: dict[str, s
     sha = None
     if tag and tag.startswith("sha-"):
         sha = tag[4:]
+    elif tag and re.fullmatch(r"\d+\.\d+\.\d+", tag):
+        extra = ["--branch", f"v{tag}"]      # a prod pin X.Y.Z is the image of the git tag vX.Y.Z (#423)
     elif tag and tag != "latest":
         extra = ["--branch", tag]
     try:
