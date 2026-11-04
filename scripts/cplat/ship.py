@@ -279,11 +279,35 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     return st
 
 
+def landed_on_main(repo: Path, branch: str) -> bool:
+    """True when the local `branch` has commits main does not, but every file they change already reads the same on
+    origin/main, and origin has no such branch any more: `cplat spec land` squash-merged its spec PR and deleted it. Building
+    on those commits makes the feature PR conflict with main's squash commit (#410)."""
+    def git(*args: str):
+        return run(["git", *args], cwd=repo, check=False)
+    if git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").returncode != 0:
+        return False
+    git("fetch", "-q", "--prune", "origin", "main")
+    if git("ls-remote", "--exit-code", "--heads", "origin", branch).returncode == 0:
+        return False                           # a pushed branch with its own history: leave it alone
+    if git("rev-list", "--count", f"origin/main..{branch}").stdout.strip() in ("", "0"):
+        return False
+    base = git("merge-base", "origin/main", branch).stdout.strip()
+    files = [f for f in git("diff", "--name-only", base, branch).stdout.splitlines() if f] if base else []
+    if not files or git("status", "--porcelain").stdout.strip():
+        return False
+    return git("diff", "--quiet", "origin/main", branch, "--", *files).returncode == 0
+
+
 def on_branch(repo: Path, branch: str) -> str:
     """Switch to the run's feature branch before the merge: the existing local one, else the remote one, else a new one
     from the current HEAD. Code, so a coordinator never improvises it (a refused `git checkout -B` stopped a headless ship)."""
     def git(*args: str):
         return run(["git", *args], cwd=repo, check=False)
+    if landed_on_main(repo, branch):           # #410: the spec PR was squash-merged; build on main, not on its old commits
+        p = git("switch", "-C", branch, "origin/main")
+        if p.returncode == 0:
+            return f"branch: {branch} restarted from origin/main (its spec commits are already on main)"
     if git("branch", "--show-current").stdout.strip() == branch:
         return f"branch: {branch}"
     if git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").returncode == 0:
