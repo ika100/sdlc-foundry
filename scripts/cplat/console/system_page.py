@@ -75,16 +75,17 @@ def _rules(status: Mapping, model: Mapping) -> list[dict]:
 
 
 def _head(rule: Mapping) -> str:
-    return (f'<th scope="col" data-env="{esc(rule.get("name"))}"><strong>{esc(rule.get("name"))}</strong> '
-            f'<span class="muted">promote {esc(rule.get("promote") or "none")} policy {esc(rule.get("policy") or "none")}</span> '
-            f'<a href="#form-environment" data-edit-env="{esc(rule.get("name"))}">edit rules</a></th>')
+    return (f'<th scope="col" data-env="{esc(rule.get("name"))}"><span class="env-name">{esc(rule.get("name"))}</span> '
+            f'<span class="muted env-rules"><span class="chip">promote {esc(rule.get("promote") or "none")}</span> '
+            f'<span class="chip">policy {esc(rule.get("policy") or "none")}</span></span> '
+            f'<a href="#form-environment" class="edit-env" data-edit-env="{esc(rule.get("name"))}">edit rules</a></th>')
 
 
 # ---------------- cells ----------------
 
 def _state_html(state: str) -> str:
     cls = "ok" if state in GOOD else "failed" if state in BAD else "muted"
-    return f'<span class="{cls}" data-state="{esc(state)}">{esc(state)}</span>'
+    return f'<span class="pill {cls}" data-state="{esc(state)}">{esc(state)}</span>'
 
 
 def _obj(repo: str, component: str, version: str) -> str:
@@ -138,7 +139,7 @@ def _cell(ctx: Any, row: Mapping, env: str, index: int, rules: list[dict], down:
     cell = cells.get(env)
     comp = str(row["component"])
     if not cell:
-        return f'<td data-env="{esc(env)}"><span class="muted">not deployed</span></td>'
+        return f'<td data-env="{esc(env)}"><span class="muted absent">not deployed</span></td>'
     raw = str(cell.get("state") or UNKNOWN)
     shown = UNKNOWN if down else raw
     version = str(cell.get("version") or "")
@@ -182,7 +183,7 @@ def _resource_state(cell: Mapping) -> str:
 
 def _resource_cell(env: str, cell: Mapping | None, down: bool) -> str:
     if not cell:
-        return f'<td data-env="{esc(env)}"><span class="muted">not deployed</span></td>'
+        return f'<td data-env="{esc(env)}"><span class="muted absent">not deployed</span></td>'
     state = UNKNOWN if down else _resource_state(cell)
     return f'<td data-env="{esc(env)}" data-state="{esc(state)}">{_state_html(state)}</td>'
 

@@ -25,7 +25,7 @@ import yaml
 
 import stages
 from console import actions, handoff
-from console.html import action_button, command_block, engine_badge, esc, freshness, short_version, signal_facts, stage_badge
+from console.html import action_button, command_block, engine_badge, esc, freshness, money, short_version, signal_facts, stage_badge
 
 _SPLIT = re.compile(r"[:@/]")
 _BUDGET_LIMITS = ("minutes", "invocations", "reruns", "cost")
@@ -42,7 +42,7 @@ _WAY_BACK_RELEASE = ("Cut release opens a release pull request and, when it merg
 def _aside(label: str, body: str, ctx: Any = None, read_at: str | None = None) -> str:
     stamp = f'<p class="stamp">{freshness(read_at)}</p>' if read_at else ""
     return (f'<aside data-panel role="dialog" aria-modal="false" aria-label="{esc(label)}" tabindex="-1">'
-            f'<header><h2>{esc(label)}</h2> <button type="button" class="link" data-action="close-panel">Close</button></header>'
+            f'<header><h2>{esc(label)}</h2> <button type="button" class="ghost" data-action="close-panel" aria-label="Close panel">Close <kbd>Esc</kbd></button></header>'
             f'{stamp}{body}</aside>')
 
 
@@ -99,9 +99,9 @@ def _budget_line(run: dict | None) -> str:
     used, limit = budget.get("used") or {}, budget.get("limit") or {}
     if not used or not limit:
         return "no budget recorded"
-    cost = "cost unknown" if used.get("cost") is None else f"${used['cost']}"
-    minutes = "minutes unknown" if used.get("minutes") is None else f"{used['minutes']} min"
-    return f"{cost} of ${limit.get('cost')}, {minutes} of {limit.get('minutes')} min"
+    cost = "cost unknown" if used.get("cost") is None else f"${money(used['cost'])}"
+    minutes = "minutes unknown" if used.get("minutes") is None else f"{money(used['minutes'])} min"
+    return f"{cost} of ${money(limit.get('cost'))}, {minutes} of {money(limit.get('minutes'))} min"
 
 
 def _run_for(runs: list[dict], spec: str, repo: str | None = None) -> dict | None:

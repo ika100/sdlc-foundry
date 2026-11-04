@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ from urllib.parse import quote, urlencode
 
 import stages
 from console import actions, handoff, layout, sources as sources_mod
-from console.html import action_button, engine_badge, esc, freshness, short_version, stage_badge, table, unavailable
+from console.html import action_button, engine_badge, esc, freshness, money, short_version, stage_badge, table, unavailable
 
 PERIODS = {"30": 30, "90": 90, "all": None}
 DEFAULT_PERIOD = "30"
@@ -65,8 +66,8 @@ def _run_info(run: dict | None) -> dict:
     used, limit = budget.get("used") or {}, budget.get("limit") or {}
     parts = []
     if limit.get("cost") is not None:
-        spent = "cost unknown" if used.get("cost") is None else f"cost {_num(used['cost'])}"
-        parts.append(f"{spent} of {_num(limit['cost'])} USD")
+        spent = "cost unknown" if used.get("cost") is None else f"cost {money(used['cost'])}"
+        parts.append(f"{spent} of {money(limit['cost'])} USD")
     if limit.get("minutes") is not None:
         parts.append(("minutes unknown" if used.get("minutes") is None else f"{_num(used['minutes'])} min") + f" of {_num(limit['minutes'])} min")
     escalation = run.get("escalation") or {}
@@ -291,23 +292,46 @@ def _cut_release(item: dict, repo_dir: str | Path | None = None) -> str:
     return action_button("cut-release", "Cut release", None, reason, attrs={"data_object": json.dumps(obj), "data_open": item["open"]})
 
 
+def readable(slug: Any) -> str:
+    """A spec slug such as `013-ai-ops-serves-as-the-platform-s-autonomy` as words: `Ai ops serves as the platform's autonomy`."""
+    found = re.fullmatch(r"\d+-([a-z0-9-]+)", str(slug or ""))
+    if not found:
+        return ""
+    words = re.sub(r"-s(?=-|$)", "'s", found.group(1)).replace("-", " ")
+    return words[:1].upper() + words[1:]
+
+
+def tone(item: dict) -> str:
+    """The colour of a card's state: stopped, running, decide (it waits for a person) or idle."""
+    if item.get("stopped"):
+        return "stopped"
+    state = str(item.get("state") or "")
+    if state == "Running":
+        return "running"
+    if any(word in state.lower() for word in ("wait", "question", "ready")):
+        return "decide"
+    return "idle"
+
+
 def _card(item: dict, repo_dir: str | Path | None = None) -> str:
-    title = f"<span>{esc(item['title'])}</span>" if item.get("title") else ""
+    words = item.get("title") or (readable(item["id"]) if item["kind"] in {"spec", "run"} else "")
+    title = f'<p class="card-title">{esc(words)}</p>' if words else ""
     why = f'<p class="why">{esc(item["why"])}</p>' if item.get("why") else ""
-    budget = f'<p class="muted">{esc(item["budget"])}</p>' if item.get("budget") else ""
+    budget = f'<p class="muted budget">{esc(item["budget"])}</p>' if item.get("budget") else ""
     extra = _cut_release(item, repo_dir) if item["kind"] == "candidate" else ""
-    return (f'<article class="card" data-card data-open="{esc(item["open"])}" tabindex="0">'
+    return (f'<article class="card" data-card data-open="{esc(item["open"])}" data-tone="{tone(item)}" tabindex="0">'
             f'<h3>{_link(item)}</h3>{title}'
-            f'<p class="muted">{esc(item["repo"])}</p>'
-            f'<p>{stage_badge(item["stage"])} {esc(item["state"])}</p>{budget}{why}{extra}</article>')
+            f'<p class="muted repo">{esc(item["repo"])}</p>'
+            f'<p class="state-line">{stage_badge(item["stage"])} <span class="pill" data-tone="{tone(item)}">{esc(item["state"])}</span></p>'
+            f'{budget}{why}{extra}</article>')
 
 
 def _column(stage: str, cards: list[dict], repo_dir: str | Path | None = None) -> str:
     info = stages.explain(stage)
     decision = " data-decision" if stage in stages.DECISION else ""
-    hints = f'<p class="muted">{esc(info["what"])}</p>'
+    hints = f'<p class="muted hint">{esc(info["what"])}</p>'
     if info["decision"]:
-        hints += f'<p class="muted">{esc(info["decision"])}</p>'
+        hints += f'<p class="muted hint decide">{esc(info["decision"])}</p>'
     href = esc(_panel("stage", stage))
     ordered = sorted(cards, key=lambda i: (not i["stopped"], i["id"]))
     body = "".join(_card(i, repo_dir) for i in ordered)
@@ -324,7 +348,11 @@ def _columns(items: list[dict], repo_dir: str | Path | None = None) -> str:
 def _list(items: list[dict]) -> str:
     if not items:
         return "<p>Nothing is open.</p>"
-    rows = [[_link(i) + (f" {esc(i['title'])}" if i.get("title") else ""), esc(i["repo"]), stage_badge(i["stage"]), esc(i["state"] + (f". {i['why']}" if i.get("why") else ""))]
+    def words(i: dict) -> str:
+        return i.get("title") or (readable(i["id"]) if i["kind"] in {"spec", "run"} else "")
+
+    rows = [[_link(i) + (f'<div class="card-title">{esc(words(i))}</div>' if words(i) else ""), esc(i["repo"]), stage_badge(i["stage"]),
+             f'<span class="pill" data-tone="{tone(i)}">{esc(i["state"])}</span>' + (f' <span class="why">{esc(i["why"])}</span>' if i.get("why") else "")]
             for i in sorted(items, key=lambda i: (stages.STAGES.index(i["stage"]), i["id"]))]
     return table(rows, ["Item", "Repo", "Stage", "State"])
 
@@ -363,11 +391,12 @@ def _nav(view: str, period: str, needle: str) -> str:
         periods = " ".join(
             f'<a href="{esc("/board?" + urlencode({"view": "done", "period": p, **({"q": needle} if needle else {})}))}"'
             f'{" aria-current=\"true\"" if p == period else ""}>{"All" if p == "all" else f"Last {p} days"}</a>' for p in PERIODS)
-    return (f'<nav aria-label="Board views" class="views">{tabs}{periods}</nav>'
-            f'<form method="get" action="/board" role="search"><input type="hidden" name="view" value="{esc(view)}">'
+    periods = f'<span class="segmented periods">{periods}</span>' if periods else ""
+    return (f'<div class="toolbar"><nav aria-label="Board views" class="views"><span class="segmented">{tabs}</span>{periods}</nav>'
+            f'<form method="get" action="/board" role="search" class="search"><input type="hidden" name="view" value="{esc(view)}">'
             + (f'<input type="hidden" name="period" value="{esc(period)}">' if view == "done" else "")
             + f'<input type="search" name="q" value="{esc(needle)}" aria-label="Search the board" placeholder="Id, title, component or #n">'
-            ' <button type="submit" class="btn">Search</button></form>')
+            ' <button type="submit" class="btn">Search</button></form></div>')
 
 
 def _unavailable(ctx: Any) -> str:
