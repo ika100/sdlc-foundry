@@ -106,7 +106,12 @@ def q(root: Node, tag=None, **attrs) -> list[Node]:
 
 
 def row_of(root: Node, needle: str) -> Node | None:
-    """The innermost <tr> whose text contains `needle`."""
+    """The row of the component, resource, library or API `needle` (its data- attribute); else the innermost <tr> whose
+    text contains `needle`. The System tree names other items in a row's relations, so the attribute comes first."""
+    for attr in ("data-component", "data-resource", "data-library", "data-api"):
+        named = [tr for tr in q(root, "tr") if tr.attrs.get(attr) == needle]
+        if named:
+            return named[0]
     best = None
     for tr in q(root, "tr"):
         if needle in tr.text():

@@ -635,12 +635,60 @@ td .why { display: block; margin-top: var(--s1); font-size: 0.82rem; color: var(
 /* A one-line empty note inside a page part (the big empty state is section.empty) */
 p.empty { all: unset; display: block; color: var(--muted); font-size: 0.9rem; margin: var(--s2) 0; }
 
-/* System: the parts and relations as tiles */
-.parts ul { list-style: none; padding: 0; margin: 0 0 var(--s3); display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 10px; }
-.parts ul > li { margin: 0;
-  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); box-shadow: var(--shadow-sm);
+/* System: the system as a tree. Group rows (Components, Resources, APIs) with their add button, item rows with a toggle,
+   and a detail row under an item with its relations and its changes */
+.tree-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin: var(--s3) 0 var(--s3); }
+.tree-head h2 { margin: 0; font-size: 1.25rem; }
+.tree tr.group > th {
+  background: var(--canvas); padding-top: 14px; padding-bottom: 8px; color: var(--text); font-size: 0.8rem;
+  text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--line);
 }
-.parts ul > li strong { display: block; font-size: 0.95rem; }
+.tree tr.group .count { margin-left: var(--s1); text-transform: none; }
+.tree tr.group button { float: right; text-transform: none; letter-spacing: 0; font-size: 0.8rem; padding: 2px 10px; }
+.tree tr.node > th { padding-left: var(--s3); }
+.tree .node-name { font-weight: 650; color: var(--text); }
+.tree tr.leaf > th { padding-left: calc(var(--s3) + 26px); }
+.twisty {
+  width: 20px; height: 20px; margin: 0 6px 0 0; padding: 0; border: 0; border-radius: 5px; background: transparent; cursor: pointer;
+  vertical-align: -4px; position: relative; transition: background-color 0.15s var(--ease);
+}
+.twisty::before {
+  content: ""; position: absolute; left: 7px; top: 5px; width: 6px; height: 6px;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s var(--ease);
+}
+.twisty:hover { background: var(--surface); }
+.twisty[aria-expanded="true"]::before { transform: rotate(45deg); top: 4px; }
+.tree tr.node-detail > td { background: var(--canvas); padding: 12px var(--s3) 14px calc(var(--s3) + 26px); }
+.tree tr.node:has(+ tr.node-detail:not([hidden])) > * { border-bottom-color: transparent; background: var(--canvas); }
+.facts { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin: 0 0 var(--s3); }
+.facts div { display: flex; flex-direction: column; }
+.facts dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.facts dd { font-size: 0.9rem; }
+.node-actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.node-actions .btn { padding: 5px 12px; font-size: 0.85rem; }
+.empty-row td { font-style: italic; }
+
+/* The drawer: the model forms at the right edge, one at a time, filled in from the row they were opened from */
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); z-index: 18; overflow-y: auto;
+  background: var(--bg); border-left: 1px solid var(--line); box-shadow: var(--shadow-lg); padding: 0 var(--s4) var(--s4);
+  animation: slide-in 0.22s var(--ease);
+}
+.drawer[hidden], .drawer-form[hidden] { display: none; }
+.drawer > header {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between;
+  margin: 0 calc(-1 * var(--s4)) var(--s3); padding: var(--s3) var(--s4); background: var(--bg); border-bottom: 1px solid var(--line);
+  font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.drawer h2 { margin: 0 0 var(--s3); }
+.drawer .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: var(--s3); }
+.drawer .field[hidden] { display: none; }
+.drawer .field select, .drawer .field input { width: 100%; }
+.drawer .field .muted { font-size: 0.8rem; }
+.drawer [data-preview] { margin-top: var(--s3); padding: var(--s3); border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.drawer [data-preview] pre { overflow-x: auto; font-size: 0.8rem; }
+.drawer [data-checks] { padding-left: var(--s3); font-size: 0.85rem; }
+.drawer [data-checks] [data-ok="false"] { color: var(--danger); }
 
 @media (max-width: 600px) {
   .tip-body, .tip.left .tip-body, .tip.right .tip-body { position: fixed; top: auto; bottom: var(--s3); left: var(--s3); right: var(--s3); transform: none; max-width: none; width: auto; }

@@ -1,13 +1,15 @@
 """System place of the console (spec 122, AC-122.7, AC-122.8, AC-122.20, AC-122.40, AC-122.47, AC-122.50, AC-122.51).
 
   page(ctx, query) -> str        the full HTML of `/system`
-  model_forms(ctx) -> str        the five "Add to the model" forms (component, API, resource, environment rules, new system);
-                                 the palette shows the same forms
+  model_forms(ctx) -> str        the five model forms as disclosures, for the palette
+  drawer(ctx) -> str             the same forms in the System page's drawer
 
-"Where it runs" is one row per component with instances and one per resource, one column per environment in promotion order.
-A cell shows the version and the state exactly as `system status` reports them; while the status cannot be read every state is
-`unknown` and the actions that depend on health are disabled (AC-122.42). The parts, libraries and relations come from the model
-and are lists, never empty tables (AC-122.40). The forms post to `/api/preview`; `console.js` fills the preview and enables the confirm."""
+The page shows the system as one tree: groups of components, libraries, resources and APIs, each item a row. A component or
+resource row has one column per environment in promotion order; a cell shows the version and the state exactly as
+`system status` reports them; while the status cannot be read every state is `unknown` and the actions that depend on health
+are disabled (AC-122.42). A row's toggle opens its detail row: its relations and the changes it offers. Every change opens its
+form in the drawer, filled in from the row (`data-form-open`, `data-prefill`); the forms post to `/api/preview` and
+`console.js` fills the preview and enables the confirm."""
 from __future__ import annotations
 
 import json
@@ -78,7 +80,7 @@ def _head(rule: Mapping) -> str:
     return (f'<th scope="col" data-env="{esc(rule.get("name"))}"><span class="env-name">{esc(rule.get("name"))}</span> '
             f'<span class="muted env-rules"><span class="chip">promote {esc(rule.get("promote") or "none")}{glossary.tip("promote_rule")}</span> '
             f'<span class="chip">policy {esc(rule.get("policy") or "none")}{glossary.tip("policy")}</span></span> '
-            f'<a href="#form-environment" class="edit-env" data-edit-env="{esc(rule.get("name"))}">edit rules</a></th>')
+            f'<a href="#form-environment" class="edit-env" data-edit-env="{esc(rule.get("name"))}">Change rules</a></th>')
 
 
 # ---------------- cells ----------------
@@ -204,29 +206,98 @@ def _rows_from_model(model: Mapping, envs: list[str]) -> tuple[list[dict], list[
     return comps, res
 
 
+def _opener(form: str, label: str, name: str = "", cls: str = "btn", **fields: str) -> str:
+    """A button that opens `form` in the drawer with `fields` filled in; `name` goes into its accessible name."""
+    aria = f' aria-label="{esc(label)} {esc(name)}"' if name else ""
+    return (f'<button type="button" class="{cls}" data-form-open="{esc(form)}" data-prefill="{esc(json.dumps(fields))}"{aria}>'
+            f'{esc(label)}</button>')
+
+
+def _node(kind: str, name: str, label: str) -> str:
+    """The name cell of a row with the toggle that shows its children."""
+    return (f'<button type="button" class="twisty" data-toggle="{esc(kind)}:{esc(name)}" aria-expanded="false" '
+            f'aria-label="Show the details of {esc(name)}"></button><span class="node-name">{esc(name)}</span>'
+            f' <span class="muted">{esc(label)}</span>')
+
+
+def _detail(kind: str, name: str, width: int, facts: list[tuple[str, str]], buttons: str) -> str:
+    dl = "".join(f"<div><dt>{esc(k)}</dt><dd>{v}</dd></div>" for k, v in facts)
+    return (f'<tr class="node-detail" data-detail-of="{esc(kind)}:{esc(name)}" hidden><td colspan="{width}">'
+            f'<dl class="facts">{dl}</dl><div class="node-actions">{buttons}</div></td></tr>')
+
+
+def _group(title: str, count: int, width: int, add: str) -> str:
+    return (f'<tr class="group"><th scope="rowgroup" colspan="{width}"><span class="group-title">{esc(title)}</span>'
+            f' <span class="count">{count}</span>{add}</th></tr>')
+
+
+def _repo_link(repo: str) -> str:
+    return f'<a href="https://github.com/{esc(repo)}" target="_blank" rel="noopener noreferrer">{esc(repo)}</a>' if repo else "\u2013"
+
+
 def _grid(ctx: Any, status: Mapping, model: Mapping) -> str:
+    """The system as a tree: components, libraries, resources and APIs, each a row; a component or resource row has a cell
+    per environment, and its detail row (opened by its toggle) holds its relations and the changes it offers."""
     rules = _rules(status, model)
     envs = [str(r["name"]) for r in rules]
     down = _down(ctx, "status")
     comps, res = status.get("rows"), status.get("resources")
     if not status:
         comps, res = _rows_from_model(model, envs)
-    if not envs or not (comps or res):
-        return '<p class="empty">Nothing runs yet. Add a component below, then promote it to its first environment.</p>'
+    width = len(envs) + 1
     pieces = _banner_names(ctx)
     repos = _repos(model)
+    by_name = {str(c.get("name")): c for c in model.get("components") or [] if isinstance(c, Mapping)}
+    by_res = {str(r.get("name")): r for r in model.get("resources") or [] if isinstance(r, Mapping)}
     head = '<th scope="col">Name</th>' + "".join(_head(r) for r in rules)
-    body = []
+
+    rows = [_group("Components", len(comps or []), width, _opener("component", "+ Add component", cls="ghost", action="add"))]
     for row in comps or []:
         name = str(row["component"])
+        c = by_name.get(name, {})
         cut_env = _cut_env(row, envs)
         tds = "".join(_cell(ctx, row, e, i, rules, down, repos.get(name) or name, pieces, cut_env) for i, e in enumerate(envs))
-        body.append(f'<tr data-component="{esc(name)}"><th scope="row">{esc(name)} <span class="muted">{esc(row.get("type"))}</span></th>{tds}</tr>')
+        rows.append(f'<tr class="node" data-component="{esc(name)}"><th scope="row">{_node("component", name, str(row.get("type") or c.get("type") or ""))}</th>{tds}</tr>')
+        facts = [("Repo", _repo_link(repos.get(name, ""))), ("Provides", _names(c.get("provides")) or "nothing"),
+                 ("Consumes", _names(c.get("consumes")) or "nothing"), ("Uses", _names(c.get("uses")) or "nothing")]
+        buttons = (_opener("api", "Change APIs", name, component=name)
+                   + _opener("component", "Remove", name, action="remove", component=name))
+        rows.append(_detail("component", name, width, facts, buttons))
+    if not comps:
+        rows.append(f'<tr class="empty-row"><td colspan="{width}" class="muted">No component runs yet. Add one, then promote it '
+                    'to its first environment.</td></tr>')
+
+    libraries = [(lb.get("component"), lb.get("used_by")) for lb in status.get("libraries") or [] if isinstance(lb, Mapping)]
+    if not libraries:
+        libraries = [(c.get("name"), c.get("used_by")) for c in by_name.values() if c.get("type") == "library"]
+    if libraries:
+        rows.append(_group("Libraries", len(libraries), width, ""))
+        for lib, used in libraries:
+            rows.append(f'<tr class="node leaf" data-library="{esc(lib)}"><th scope="row"><span class="node-name">{esc(lib)}</span>'
+                        f' <span class="muted">library</span></th><td colspan="{len(envs)}" class="muted">no instances; used by '
+                        f'{_names(used) or "nothing yet"}</td></tr>')
+
+    rows.append(_group("Resources", len(res or []), width, _opener("resource", "+ Add resource", cls="ghost", action="add")))
     for row in res or []:
         name = str(row["resource"])
+        r = by_res.get(name, {})
         tds = "".join(_resource_cell(e, (row.get("cells") or {}).get(e), down) for e in envs)
-        body.append(f'<tr data-resource="{esc(name)}"><th scope="row">{esc(name)} <span class="muted">resource</span></th>{tds}</tr>')
-    return f'<div class="scroll-x"><table><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table></div>'
+        rows.append(f'<tr class="node" data-resource="{esc(name)}"><th scope="row">{_node("resource", name, str(r.get("type") or "resource"))}</th>{tds}</tr>')
+        rows.append(_detail("resource", name, width, [("Type", esc(r.get("type") or "\u2013")),
+                                                      ("Used by", _names(r.get("used_by")) or "nothing yet")],
+                            _opener("resource", "Remove", name, action="remove", resource=name)))
+
+    apis = [a for a in model.get("apis") or [] if isinstance(a, Mapping)]
+    rows.append(_group("APIs", len(apis), width, _opener("api", "+ Add API", cls="ghost")))
+    for a in apis:
+        name, provider = str(a.get("name")), str(a.get("provider") or "")
+        rows.append(f'<tr class="node leaf" data-api="{esc(name)}"><th scope="row"><span class="node-name">{esc(name)}</span>'
+                    f' <span class="muted">{esc(a.get("type"))}</span></th><td colspan="{len(envs)}">provided by {esc(provider)}; '
+                    f'consumed by {_names(a.get("consumers")) or "nobody yet"} '
+                    f'{_opener("api", "Change", name, cls="ghost", component=provider) if provider else ""}</td></tr>')
+    if not envs:
+        return '<p class="empty">The system has no environments yet.</p>'
+    return f'<div class="scroll-x tree"><table><thead><tr>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
 # ---------------- parts and relations ----------------
@@ -237,38 +308,6 @@ def _list(items: list[str]) -> str:
 
 def _names(values: Any) -> str:
     return ", ".join(esc(v) for v in values or [])
-
-
-def _parts(status: Mapping, model: Mapping) -> str:
-    out = []
-    comps = [c for c in model.get("components") or [] if isinstance(c, Mapping)]
-    libs = [c for c in comps if c.get("type") == "library"]
-    others = [c for c in comps if c.get("type") != "library"]
-    if others:
-        lines = []
-        for c in others:
-            rel = [f"{label} {_names(c.get(key))}" for label, key in
-                   (("provides", "provides"), ("consumes", "consumes"), ("uses", "uses")) if c.get(key)]
-            lines.append(f'<strong>{esc(c.get("name"))}</strong> <span class="muted">{esc(c.get("type"))}</span>'
-                         + (" - " + "; ".join(rel) if rel else ""))
-        out.append("<h3>Components</h3>" + _list(lines))
-    libraries = [(lb.get("component"), lb.get("used_by")) for lb in status.get("libraries") or [] if isinstance(lb, Mapping)]
-    if not libraries:
-        libraries = [(c.get("name"), c.get("used_by")) for c in libs]
-    if libraries:
-        out.append("<h3>Libraries</h3>" + _list(
-            [f'<strong>{esc(n)}</strong> <span class="muted">used by</span> {_names(u) or "nothing yet"}' for n, u in libraries]))
-    apis = [a for a in model.get("apis") or [] if isinstance(a, Mapping)]
-    if apis:
-        out.append("<h3>APIs</h3>" + _list(
-            [f'<strong>{esc(a.get("name"))}</strong> <span class="muted">{esc(a.get("type"))}</span> provided by '
-             f'{esc(a.get("provider"))}; consumed by {_names(a.get("consumers")) or "nobody yet"}' for a in apis]))
-    resources = [r for r in model.get("resources") or [] if isinstance(r, Mapping)]
-    if resources:
-        out.append("<h3>Resources</h3>" + _list(
-            [f'<strong>{esc(r.get("name"))}</strong> <span class="muted">{esc(r.get("type"))}</span> used by '
-             f'{_names(r.get("used_by")) or "nothing yet"}' for r in resources]))
-    return "".join(out) or '<p class="empty">The model lists no components, APIs or resources yet.</p>'
 
 
 # ---------------- Add to the model ----------------
@@ -308,15 +347,15 @@ def _pick(names: list[str], what: str) -> list:
     return [("", f"choose {what}")] + names if names else [("", f"no {what} yet")]
 
 
-def _form(kind: str, title: str, fields: str, repo: str) -> str:
+def _form(kind: str, title: str, fields: str, repo: str) -> tuple[str, str, str]:
+    """(kind, title, the form): every model form posts to /api/preview and keeps its confirm off until the preview is valid."""
     obj = json.dumps({"type": "system", "repo": repo})
     confirm = (f'<button type="button" class="btn primary" data-action="model" data-object="{esc(obj)}" data-args="{{}}" '
                f'disabled aria-disabled="true">Confirm</button>')
-    return (f'<details id="form-{kind}"><summary>{esc(title)}</summary>'
-            f'<form data-form="{kind}" data-post="/api/preview" data-wrap>{fields}'
+    return (kind, title, f'<form data-form="{kind}" data-post="/api/preview" data-wrap>{fields}'
             '<div data-preview><p class="muted">Fill in the form to see the command, the diff and the checks.</p>'
             '<code data-command></code></div>'
-            f'<div data-result></div><p>{confirm}</p></form></details>')
+            f'<div data-result></div><p>{confirm}</p></form>')
 
 
 def _own_slug(ctx: Any) -> str:
@@ -327,7 +366,25 @@ def _own_slug(ctx: Any) -> str:
 
 
 def model_forms(ctx: Any) -> str:
-    """The five "Add to the model" forms; each posts to /api/preview and keeps its confirm disabled until the preview is valid."""
+    """The five model forms as disclosures, for the palette (the System page opens the same forms in its drawer)."""
+    forms = "".join(f'<details id="palette-form-{kind}"><summary>{esc(title)}</summary>{form}</details>'
+                    for kind, title, form in _forms(ctx))
+    return ('<section id="add-to-the-model"><h2>Add to the model</h2>'
+            '<p class="muted">Each change shows its command, diff and checks before anything runs.</p>' + forms + "</section>")
+
+
+def drawer(ctx: Any) -> str:
+    """The model forms of the System page in a drawer at the right edge; the buttons of the tree open one, filled in."""
+    boxes = "".join(f'<section class="drawer-form" id="form-{kind}" data-form-box="{kind}" hidden><h2>{esc(title)}</h2>{form}</section>'
+                    for kind, title, form in _forms(ctx))
+    return (f'<aside id="model-drawer" class="drawer" aria-label="Change the model" hidden>'
+            f'<header><span class="muted">Change the model{glossary.tip("model", "left")}</span>'
+            '<button type="button" class="ghost" data-action="close-drawer" aria-label="Close the form">Close <kbd>Esc</kbd></button>'
+            f'</header>{boxes}</aside>')
+
+
+def _forms(ctx: Any) -> list[tuple[str, str, str]]:
+    """The five model forms (component, API, resource, environment rules, new system) as (kind, title, form)."""
     model = ctx.data("model") or {}
     system = model.get("system") if isinstance(model.get("system"), Mapping) else {}
     repo = _own_slug(ctx) or (f"{system['owner']}/{system['name']}-gitops" if system.get("owner") and system.get("name") else "")
@@ -349,17 +406,17 @@ def model_forms(ctx: Any) -> str:
                          when=f"env={env}", active=first, key=env))
 
     forms = [
-        _form("component", "Component", _field("Action", "action", options=[("add", "add a new component"), ("remove", "remove one")])
+        _form("component", "Add or remove a component", _field("Action", "action", options=[("add", "add a new component"), ("remove", "remove one")])
               + _field("Component", "component", required=True, hint="the name of its repo, for example todo-api",
                        when="action=add", key="new")
               + _field("Component", "component", options=_pick(comps, "a component"), when="action=remove", active=False,
                        key="existing"), repo),
-        _form("api", "API", _field("Component", "component", options=_pick(comps, "a component"), key="existing")
+        _form("api", "APIs of a component", _field("Component", "component", options=_pick(comps, "a component"), key="existing")
               + _field("Provides", "provides", hint="the name of a new API, for example orders")
               + _field("Type", "provides_type", options=[("", "type")] + list(API_TYPES))
               + _field("Consumes", "consumes", options=[("", "nothing")] + apis if apis else [("", "no API yet")])
               + '<input type="hidden" name="action" value="set">', repo),
-        _form("resource", "Resource", _field("Action", "action", options=[("add", "add a new resource"), ("remove", "remove one")])
+        _form("resource", "Add or remove a resource", _field("Action", "action", options=[("add", "add a new resource"), ("remove", "remove one")])
               + _field("Resource", "resource", required=True, hint="for example postgres", when="action=add", key="new")
               + _field("Type", "type", options=[("", "choose a type")] + list(RESOURCE_TYPES), when="action=add")
               + _field("Version", "version", hint=RESOURCE_VERSIONS, when="action=add")
@@ -373,8 +430,7 @@ def model_forms(ctx: Any) -> str:
               + _field("Type", "type", options=list(COMPONENT_TYPES)) + _field("Language", "lang", options=list(LANGUAGES))
               + _field("Description", "description"), repo),
     ]
-    return (f'<section id="add-to-the-model"><h2>Add to the model{glossary.tip("model")}</h2>'
-            '<p class="muted">Each change shows its command, diff and checks before anything runs.</p>' + "".join(forms) + "</section>")
+    return forms
 
 
 # ---------------- the page ----------------
@@ -404,9 +460,11 @@ def page(ctx: Any, query: dict[str, str]) -> str:
                   for u in status.get("unavailable") or [] if isinstance(u, Mapping)])
     states = glossary.legend(("pinned", "healthy", "verified", "not_verified", "alert", "unknown", "not_deployed"),
                              "Instance states", swatch="state")
-    where = _part(ctx, "status", f'<h2>Where it runs{glossary.tip("version")}</h2>{_grid(ctx, status, model)}'
+    name = (model.get("system") or {}).get("name") if isinstance(model.get("system"), Mapping) else None
+    where = _part(ctx, "status", f'<div class="tree-head"><h2>{esc(name or "The system")}{glossary.tip("version")}</h2>'
+                                 f'{_opener("system", "New system", cls="ghost")}</div>{_grid(ctx, status, model)}'
                                  f'<div class="board-legend">{states}</div>{gaps}')
-    parts = _part(ctx, "model", f"<h2>Parts and relations</h2>{_parts(status, model)}") if ctx.source("model") else \
-        f"<h2>Parts and relations</h2>{_parts(status, model)}"
-    body = _tabs(tab) + f'<section class="where">{where}</section><section class="parts">{parts}</section>{model_forms(ctx)}'
+    if ctx.source("model") and _down(ctx, "model"):
+        where = _part(ctx, "model", "") + where
+    body = _tabs(tab) + f'<section class="where">{where}</section>{drawer(ctx)}'
     return layout.page("System", "system", body, state=ctx.state())

@@ -125,9 +125,10 @@ TERMS: dict[str, tuple[str, str]] = {
         "pull request and tag. The tag is what prod can be promoted to.",
     ),
     "model": (
-        "Add to the model",
-        "Each form changes system.yaml through a slash command. It first shows the exact command, the diff and the renderer's "
-        "checks on a scratch copy; nothing runs before you confirm, and the change is a pull request.",
+        "Change the model",
+        "Every change to system.yaml starts from the item it is about: + Add on a group, Remove or Change APIs in a row's "
+        "details, Change rules on an environment. Its form opens at the right, filled in, and first shows the exact command, "
+        "the diff and the renderer's checks on a scratch copy; nothing runs before you confirm, and the change is a pull request.",
     ),
     # ---- actions and the data
     "command": (
@@ -185,7 +186,8 @@ SECTIONS = (
      ("decision", "answer", "approve", "escalation", "promote", "triage", "review", "waiting")),
     ("board", "Items and their state", "The Board shows every open item in its stage; the colour of a card is its state.",
      ("stage", "decision_stage", "spec", "run", "slice", "running", "stopped", "waits", "not_started", "budget", "done_view")),
-    ("where", "Where it runs", "System shows each component per environment; a cell is the running version and its state.",
+    ("where", "The system and where it runs", "System shows the system as a tree: its components, libraries, resources and "
+     "APIs, each a row; a component or resource has a cell per environment with the running version and its state.",
      ("version", "pinned", "healthy", "verified", "not_verified", "alert", "unknown", "not_deployed", "promote_rule", "policy",
       "release_candidate", "model")),
     ("actions", "Actions and the data", "The console only reads; every change is a slash command that ends in a pull request.",

@@ -18,7 +18,7 @@
   var opener = null;
   var activityTimer = null;
   var STALE_MS = 120000;
-  var LOCAL_ACTIONS = ["open-system", "palette", "retry-source", "close-panel", "stop-console", "close-palette"];
+  var LOCAL_ACTIONS = ["open-system", "palette", "retry-source", "close-panel", "close-drawer", "stop-console", "close-palette"];
   var DECISION_KEYS = {
     "a": ["approve", "approve-ship"],
     "p": ["promote"],
@@ -152,6 +152,8 @@
     }
     if (key === "Escape") {
       if (!$("#palette").hidden) { closePalette(); event.preventDefault(); return; }
+      var open = $("#model-drawer:not([hidden])");
+      if (open) { closeDrawer(); event.preventDefault(); return; }
       if ($("aside[data-panel]")) { closePanel(); event.preventDefault(); return; }
       if (!$("#activity-panel").hidden) { toggleActivity(false); }
       return;
@@ -367,18 +369,60 @@
   }
 
   /* "edit rules" in an environment column: open the form and preselect that environment. */
-  function editRules(link) {
-    var details = document.getElementById("form-environment");
-    if (!details) { return false; }
-    details.open = true;
-    var field = $("[name='env']", details);
-    if (field) {
-      field.value = link.getAttribute("data-edit-env");
-      field.dispatchEvent(new Event("change", { bubbles: true }));
-      field.focus();
-    }
-    details.scrollIntoView({ block: "nearest" });
+  /* ---------- the System tree: rows that open, forms in the drawer ---------- */
+
+  var expanded = {};   // the rows a person opened, kept across refreshes of the content
+  var drawerOpener = null;
+
+  function toggleRow(button, show) {
+    var key = button.getAttribute("data-toggle");
+    var detail = $all("[data-detail-of]").filter(function (n) { return n.getAttribute("data-detail-of") === key; })[0];
+    if (!detail) { return; }
+    show = show === undefined ? detail.hidden : show;
+    detail.hidden = !show;
+    button.setAttribute("aria-expanded", String(show));
+    if (show) { expanded[key] = true; } else { delete expanded[key]; }
+  }
+
+  function restoreRows() {
+    $all("button[data-toggle]").forEach(function (b) { if (expanded[b.getAttribute("data-toggle")]) { toggleRow(b, true); } });
+  }
+
+  function setField(form, name, value) {
+    var field = $all("[name='" + name + "']", form).filter(function (n) { return !n.disabled; })[0];
+    if (field) { field.value = value; }
+    return field;
+  }
+
+  // Open form `kind` in the drawer with `prefill` filled in: the fields that switch others (action, env) first
+  function openForm(kind, prefill, opener) {
+    var drawer = document.getElementById("model-drawer");
+    var box = document.getElementById("form-" + kind);
+    if (!drawer || !box) { window.location.href = "/system"; return false; }
+    $all("[data-form-box]", drawer).forEach(function (b) { b.hidden = b !== box; });
+    var form = $("form[data-form]", box);
+    form.reset();
+    form.removeAttribute("data-dirty");
+    prefill = prefill || {};
+    ["action", "env"].forEach(function (k) { if (k in prefill) { setField(form, k, prefill[k]); } });
+    applyConditions(form);
+    Object.keys(prefill).forEach(function (k) { if (k !== "action" && k !== "env") { setField(form, k, prefill[k]); } });
+    drawer.hidden = false;
+    drawerOpener = opener || null;
+    var empty = $all("input:not([type='hidden']), select", form).filter(function (n) { return !n.disabled && !n.value; })[0];
+    (empty || $("input:not([type='hidden']), select", form) || form).focus();
+    // A preview needs a change: opened with only an action or an environment, the form waits for the first choice
+    if (Object.keys(prefill).some(function (k) { return k !== "action" && k !== "env"; })) { requestPreview(form); }
     return true;
+  }
+
+  function closeDrawer() {
+    var drawer = document.getElementById("model-drawer");
+    if (!drawer) { return; }
+    drawer.hidden = true;
+    $all("form[data-form][data-dirty]", drawer).forEach(function (f) { f.removeAttribute("data-dirty"); });
+    if (drawerOpener && document.body.contains(drawerOpener)) { drawerOpener.focus(); }
+    drawerOpener = null;
   }
 
   /* ---------- copy ---------- */
@@ -413,7 +457,16 @@
     var copy = target.closest("[data-copy]");
     if (copy) { copyCommand(copy); return; }
     var edit = target.closest("a[data-edit-env]");
-    if (edit && editRules(edit)) { event.preventDefault(); return; }
+    if (edit && openForm("environment", { env: edit.getAttribute("data-edit-env") }, edit)) { event.preventDefault(); return; }
+    var opener = target.closest("button[data-form-open]");
+    if (opener) {
+      var fields = {};
+      try { fields = JSON.parse(opener.getAttribute("data-prefill") || "{}"); } catch (e) { fields = {}; }
+      openForm(opener.getAttribute("data-form-open"), fields, opener);
+      return;
+    }
+    var twisty = target.closest("button[data-toggle]");
+    if (twisty) { toggleRow(twisty); return; }
     var link = target.closest("a[href^='/panel/']");
     if (link) { event.preventDefault(); openPanel(link.getAttribute("href"), link); return; }
     var button = target.closest("button[data-action], [data-activity]");
@@ -425,6 +478,7 @@
       else if (kind === "palette") { openPalette(); }
       else if (kind === "close-palette") { closePalette(); }
       else if (kind === "close-panel") { closePanel(); }
+      else if (kind === "close-drawer") { closeDrawer(); }
       else if (kind === "retry-source") { retrySource(button); }
       else if (kind === "stop-console") { stopConsole(); }
       else if (kind === "open-system") { openSystem(button); }
@@ -504,10 +558,11 @@
       var current = $("#content");
       if (!fresh || !current) { return; }
       // A form someone is filling in is not thrown away by a refresh; the page catches up on the next change after it
-      if ($("form[data-form][data-dirty]", current)) { return; }
+      if ($("form[data-form][data-dirty]", current) || $("#model-drawer:not([hidden])", current)) { return; }
       var hadFocus = current.contains(document.activeElement);
       current.innerHTML = fresh.innerHTML;
       $all("form[data-form]", current).forEach(applyConditions);
+      restoreRows();
       if (key) {
         var again = items().filter(function (n) { return (n.getAttribute("data-need") || n.getAttribute("data-card")) === key; })[0];
         if (again) {
@@ -617,6 +672,8 @@
     var area = $("[data-preview]", form) || form;
     var cmd = $("[data-command]", area) || $("[data-command]", form);
     if (cmd) { cmd.textContent = doc.command || ""; }
+    var hint = $("p.muted", area);
+    if (hint) { hint.hidden = !!doc.command; }
     var diff = $("[data-diff]", area);
     if (!diff) { diff = el("pre", { "data-diff": "" }); area.appendChild(diff); }
     diff.textContent = doc.diff || "";

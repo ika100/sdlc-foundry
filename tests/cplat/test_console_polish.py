@@ -153,3 +153,46 @@ def test_a_provided_api_gets_its_type_from_the_list():
 def test_a_refresh_keeps_a_form_that_is_being_filled_in():
     js = (CONSOLE / "static" / "console.js").read_text()
     assert "form[data-form][data-dirty]" in js and "applyConditions" in js
+
+
+# ---------------- System as a tree: each item a row, changes start from the item, forms in the drawer ----------------
+
+import json as _json
+
+
+def test_the_system_is_a_tree_of_groups_with_an_add_button_each(console):
+    root, _ = console().page("/system")
+    groups = [n.text() for n in q(root, "tr") if "group" in n.attrs.get("class", "").split()]
+    assert [g.split()[0] for g in groups][:1] == ["Components"] and any(g.startswith("Resources") for g in groups)
+    adds = {b.attrs["data-form-open"]: _json.loads(b.attrs["data-prefill"]) for b in q(root, "button", data_form_open=True)
+            if b.text().startswith("+ Add")}
+    assert adds == {"component": {"action": "add"}, "resource": {"action": "add"}, "api": {}}
+
+
+def test_a_component_row_opens_its_details_with_remove_and_change_apis_filled_in(console):
+    root, _ = console().page("/system")
+    [toggle] = [b for b in q(root, "button", data_toggle="component:shop-api")]
+    assert toggle.attrs["aria-expanded"] == "false" and toggle.attrs.get("aria-label")
+    [detail] = [tr for tr in q(root, "tr") if tr.attrs.get("data-detail-of") == "component:shop-api"]
+    assert "hidden" in detail.attrs and "Repo" in detail.text()
+    opens = {(b.attrs["data-form-open"], b.text()): _json.loads(b.attrs["data-prefill"]) for b in q(detail, "button", data_form_open=True)}
+    assert opens == {("api", "Change APIs"): {"component": "shop-api"},
+                     ("component", "Remove"): {"action": "remove", "component": "shop-api"}}
+
+
+def test_the_forms_wait_in_the_drawer_one_box_each(console):
+    root, _ = console().page("/system")
+    [drawer] = q(root, "aside", id="model-drawer")
+    assert "hidden" in drawer.attrs
+    boxes = {s.attrs["data-form-box"] for s in q(drawer, "section", data_form_box=True)}
+    assert boxes == {"component", "api", "resource", "environment", "system"}
+    assert q(drawer, "button", data_action="close-drawer")
+
+
+def test_the_palette_keeps_the_forms_as_disclosures(tmp_path):
+    from console import system_page
+    model = {"system": {"name": "shop", "owner": "acme"}, "components": [{"name": "shop-api"}],
+             "environments": [{"name": "dev"}, {"name": "prod", "promotion": "manual"}]}
+    ctx = SimpleNamespace(data=lambda name: model if name == "model" else None, repo_dir=tmp_path)
+    html = system_page.model_forms(ctx)
+    assert html.count("<details") == 5 and html.count('data-form="') == 5 and 'id="form-' not in html

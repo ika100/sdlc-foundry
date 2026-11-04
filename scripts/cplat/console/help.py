@@ -36,10 +36,10 @@ STEPS = {
         "Switch to List for a table, or Done for what finished in the last 30 or 90 days; search finds ids, titles, components and #issues.",
     ],
     "system": [
-        "Where it runs: one row per component and resource, one column per environment with its promotion rule and policy.",
-        "A cell shows the running version and its state (pinned, healthy, verified, NOT VERIFIED, alert or unknown); the legend under the table explains each one.",
+        "The system is one tree: Components, Libraries, Resources and APIs, each item a row; open a row (its arrow) for its repo, its APIs, what it uses and what you can change.",
+        "A component or resource has one column per environment, headed by its promote rule and policy. A cell shows the running version and its state; the legend under the table explains each state.",
         "Promote and Cut release open the decision with its consequence first; the promotion itself is a pull request.",
-        "Add to the model: each form previews the exact command, the system.yaml diff and the renderer's checks before anything runs.",
+        "Changes start where the item is: + Add on a group, Remove or Change APIs in a row, Change rules on an environment. The form opens at the right, filled in, and previews the command, the system.yaml diff and the renderer's checks before anything runs.",
         "Autonomy tab: the level per environment, its guardrails, the engine state, Pause all, and what was done on its own with Undo.",
     ],
 }
