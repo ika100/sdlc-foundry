@@ -13,9 +13,17 @@ export default defineConfig({
     starlight({
       title: 'sdlc-foundry',
       description,
+      logo: { src: './src/assets/logo.svg' },
       favicon: '/favicon.svg',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/ika100/sdlc-foundry' }],
-      customCss: ['./src/styles/custom.css'],
+      // fonts are bundled with the site (no font CDN), like mermaid
+      customCss: ['@fontsource-variable/inter', '@fontsource-variable/jetbrains-mono', './src/styles/custom.css'],
+      expressiveCode: {
+        themes: ['github-dark-default', 'github-light'],
+        styleOverrides: { borderRadius: '0.75rem', codeFontFamily: 'var(--sl-font-mono)', uiFontFamily: 'var(--sl-font)' },
+      },
+      // pages written for the site link to their source; pages copied from docs/ set editUrl: false
+      editLink: { baseUrl: 'https://github.com/ika100/sdlc-foundry/edit/main/site/' },
       components: { Footer: './src/components/Footer.astro' },
       lastUpdated: false,
       pagination: true,
@@ -40,6 +48,7 @@ export default defineConfig({
             { label: 'The problem', slug: 'problem' },
             { label: 'Client value', slug: 'value' },
             { label: 'Usage scenarios', slug: 'scenarios' },
+            { label: 'Compared with others', slug: 'compare' },
           ],
         },
         { label: 'Get started', items: [{ label: 'Watch a real run', slug: 'get-started/watch-a-run' }, { label: 'Your first system', slug: 'get-started' }, { label: 'Run it on your laptop', slug: 'get-started/local-cluster' }] },

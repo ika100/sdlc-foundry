@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
-import { mdTableCell, splitDescription, withFrontMatter } from './lib.mjs';
+import { codeCommands, mdTableCell, splitDescription, usageCell, withFrontMatter } from './lib.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = path.join(ROOT, 'site', 'src', 'content', 'docs', 'reference');
@@ -31,10 +31,10 @@ for (const plugin of ordered) {
     if (front['moved-to']) continue;
     const { summary, usage } = splitDescription(front.description);
     count += 1;
-    rows.push(`| \`/${plugin}:${f.replace(/\.md$/, '')}\` | ${mdTableCell(summary)} | ${usage ? `\`${mdTableCell(usage)}\`` : ''} |`);
+    rows.push(`| \`/${plugin}:${f.replace(/\.md$/, '')}\` | ${mdTableCell(summary)} | ${usage ? usageCell(usage) : ''} |`);
   }
   if (!rows.length) continue;
-  commands += `\n## ${plugin} (version ${pluginMeta[plugin].version})\n\n${mdTableCell(pluginMeta[plugin].description).replace(/\\\|/g, '|')}\n\n| Command | What it does | Usage |\n|---|---|---|\n${rows.join('\n')}\n`;
+  commands += `\n## ${plugin}\n\n<span class="version-badge">plugin ${plugin}@${pluginMeta[plugin].version}</span>\n\n${codeCommands(mdTableCell(pluginMeta[plugin].description).replace(/\\\|/g, '|'))}\n\n| Command | What it does | Usage |\n|---|---|---|\n${rows.join('\n')}\n`;
 }
 write('commands.md', 'Slash commands', `All ${count} slash commands of the sdlc-foundry plugins, grouped by noun and generated from the plugin sources.`,
   `These pages are generated from \`plugins/*/commands/*.md\`, one section per noun of the domain model. Install the plugins with \`/plugin marketplace add ika100/sdlc-foundry\` and \`/plugin install <name>@sdlc-foundry\`.\n${commands}`, 1);

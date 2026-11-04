@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 650" role="img" aria-labelledby="title desc">
-  <title id="title">SDLC Foundry map (4.6.0): delivery flow and feedback loops</title>
-  <desc id="desc">Swimlanes for you, agents, cplat, GitHub with gitops and Argo, and the feedback loops. You route an issue and approve the spec. Agents write the spec, plan, red tests, code and verification; the platform script runs the gates, opens the PR, merges on green, waits for dev, runs the smoke tests and promotes to staging on green. Red CI goes back to the coder, a merge conflict goes back to the architect. Prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts all come back as deduplicated GitHub issues that you route in triage.</desc>
+  <title id="title">SDLC Foundry map (5.7): delivery flow and feedback loops</title>
+  <desc id="desc">Swimlanes for you, agents, cplat, GitHub with gitops and Argo, and the feedback loops. You route an issue and approve the spec, which merges its draft pull request. Agents write the spec, plan, red tests, code and verification; the platform script runs the gates, opens the PR, merges on green, waits for dev, runs the smoke tests and promotes to staging on green. In the build, a red gate goes back to the coder and a criterion the reviewer finds not met goes back to the coder that covers it, each at most twice before it escalates. Red CI on the pull request goes back to the coder, a merge conflict goes back to the architect. Escalations reach you in the console Inbox and as notifications. Prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts all come back as deduplicated GitHub issues that you route in triage. An optional autonomy engine per environment can open fix pull requests and roll dev back; it never promotes forward.</desc>
   <style>
     svg { --bg: #FFFFFF; --ink: #17201D; --muted: #5A6561; --rule: #D6DBD5; --human: #A95A07; --human-tint: #FBEBD6;
       --agent: #5847C2; --code: #0E6E66; --ext: #6A717B; --band: #E3EFEC; --hot: #C2352B; --loop: #8A4FB8; --loop-tint: #F3EAFA; }
@@ -49,7 +49,7 @@
   <!-- unattended band: /component:ship now runs through dev smoke and staging -->
   <rect class="band" x="318" y="58" width="1008" height="404" rx="8"/>
   <text class="band-l" x="332" y="80">/component:ship runs this band without asking you</text>
-  <text class="band-s" x="332" y="96">through dev smoke and, with promotion: {staging: auto}, staging · /system:ship does it per repo in plan order</text>
+  <text class="band-s" x="332" y="96">through dev smoke and, with staging: {promote: after-dev-smoke}, staging · /system:ship does it per repo in plan order</text>
 
   <!-- stage headers -->
   <text class="stage" x="150" y="22">Intake</text><text class="cmd" x="150" y="38">/issue:triage</text>
@@ -58,7 +58,7 @@
   <text class="stage" x="654" y="22">Build</text><text class="cmd" x="654" y="38">/component:build</text>
   <text class="stage" x="990" y="22">PR &amp; land</text><text class="cmd" x="990" y="38">cplat component ship pr · land</text>
   <text class="stage" x="1158" y="22">Dev</text><text class="cmd" x="1158" y="38">ship deploy</text>
-  <text class="stage" x="1270" y="22">Staging</text><text class="cmd" x="1270" y="38">auto on green</text>
+  <text class="stage" x="1270" y="22">Staging</text><text class="cmd" x="1270" y="38">after dev smoke</text>
   <text class="stage" x="1382" y="22">Prod</text><text class="cmd" x="1382" y="38">/instance:promote</text>
 
   <!-- lanes -->
@@ -77,6 +77,8 @@
   <line class="edge" x1="175" y1="124" x2="236" y2="179" marker-end="url(#ar)"/>
   <line class="edge" x1="262" y1="181" x2="262" y2="126" marker-end="url(#ar)"/>
   <text class="elab" x="268" y="150">asks</text>
+  <line class="edge" x1="262" y1="231" x2="262" y2="389" marker-end="url(#ar)"/>
+  <text class="elab" x="268" y="262">publish</text>
   <line class="edge" x1="287" y1="124" x2="348" y2="179" marker-end="url(#ar)"/>
   <line class="edge" x1="374" y1="229" x2="374" y2="284" marker-end="url(#ar)"/>
   <line class="edge" x1="399" y1="286" x2="460" y2="231" marker-end="url(#ar)"/>
@@ -113,11 +115,17 @@
   <text class="elab red" x="1052" y="156">after 3 rounds</text>
   <path class="edge red" d="M556,292 Q470,282 410,231" marker-end="url(#arr)"/>
   <text class="elab red" x="468" y="250">conflict: re-plan</text>
+  <path class="edge red" d="M800,179 Q712,146 626,179" marker-end="url(#arr)"/>
+  <text class="elab red" x="712" y="152" text-anchor="middle">not met · ≤ 2 cycles</text>
+  <line class="edge red" x1="690" y1="284" x2="636" y2="231" marker-end="url(#arr)"/>
+  <text class="elab red" x="668" y="250">red · ≤ 2</text>
+  <path class="edge red" d="M866,190 Q950,170 1000,118" marker-end="url(#arr)"/>
+  <text class="elab red" x="912" y="168">then escalate</text>
 
   <!-- nodes: You -->
   <g class="n h"><rect x="106" y="76" width="88" height="48" rx="6"/><text class="t" x="150" y="96">Route issue</text><text class="s" x="150" y="111">you + triage</text></g>
-  <g class="n h gate"><rect x="218" y="76" width="88" height="48" rx="6"/><text class="t" x="262" y="96">Approve spec</text><text class="s" x="262" y="111">the one gate</text></g>
-  <g class="n h dash"><rect x="1002" y="76" width="88" height="48" rx="6"/><text class="t" x="1046" y="96">Escalation</text><text class="s" x="1046" y="111">you decide</text></g>
+  <g class="n h gate"><rect x="218" y="76" width="88" height="48" rx="6"/><text class="t" x="262" y="96">Approve spec</text><text class="s" x="262" y="111">lands spec PR</text></g>
+  <g class="n h dash"><rect x="1002" y="76" width="88" height="48" rx="6"/><text class="t" x="1046" y="96">Escalation</text><text class="s" x="1046" y="111">Inbox · notify</text></g>
   <g class="n h gate"><rect x="1338" y="76" width="88" height="48" rx="6"/><text class="t" x="1382" y="96">Promote prod</text><text class="s" x="1382" y="111">risk: yours</text></g>
   <!-- Agents -->
   <g class="n a"><rect x="218" y="181" width="88" height="48" rx="6"/><text class="t" x="262" y="201">PM agent</text><text class="s" x="262" y="216">spec.md · ACs</text></g>
@@ -137,6 +145,7 @@
   <g class="n c"><rect x="1338" y="286" width="88" height="48" rx="6"/><text class="t" x="1382" y="306">cplat instance promote</text><text class="s" x="1382" y="321">pin tag PR</text></g>
   <!-- GitHub, gitops, Argo -->
   <g class="n e"><rect x="106" y="391" width="88" height="48" rx="6"/><text class="t" x="150" y="411">GitHub issue</text><text class="s" x="150" y="426">any repo</text></g>
+  <g class="n e"><rect x="218" y="391" width="88" height="48" rx="6"/><text class="t" x="262" y="411">Spec PR</text><text class="s" x="262" y="426">draft → merged</text></g>
   <g class="n e"><rect x="890" y="391" width="88" height="48" rx="6"/><text class="t" x="934" y="411">Pull request</text><text class="s" x="934" y="426">feature branch</text></g>
   <g class="n e"><rect x="1002" y="391" width="88" height="48" rx="6"/><text class="t" x="1046" y="411">CI checks</text><text class="s" x="1046" y="426">rerun stuck 1×</text></g>
   <g class="n e"><rect x="1114" y="391" width="88" height="48" rx="6"/><text class="t" x="1158" y="411">pin-dev→Argo</text><text class="s" x="1158" y="426">dev runs sha</text></g>
@@ -153,14 +162,19 @@
   <text class="elab fb" x="1052" y="476">platform cause</text>
   <line class="edge fb" x1="598" y1="336" x2="598" y2="496" marker-end="url(#arf)"/>
   <text class="elab fb" x="604" y="476">every run</text>
+  <line class="edge fb" x1="934" y1="498" x2="934" y2="443" marker-end="url(#arf)"/>
+  <text class="elab fb" x="928" y="476" text-anchor="end">fix PR</text>
+  <path class="edge fb" d="M966,498 V456 H1134 V443" marker-end="url(#arf)"/>
+  <text class="elab fb" x="990" y="452">dev rollback</text>
   <line class="edge fb" x1="642" y1="524" x2="774" y2="524" marker-end="url(#arf)"/>
   <text class="elab fb" x="708" y="516" text-anchor="middle">weekly</text>
-  <path class="edge fb" d="M374,550 V574 M822,550 V574 M1046,550 V574 M1158,550 V574 M1270,550 V574 H150 V443" marker-end="url(#arf)"/>
+  <path class="edge fb" d="M374,550 V574 M822,550 V574 M934,550 V574 M1046,550 V574 M1158,550 V574 M1270,550 V574 H150 V443" marker-end="url(#arf)"/>
   <text class="elab fb" x="710" y="592" text-anchor="middle">every loop ends as one deduplicated issue, routed by you in /issue:triage</text>
 
-  <g class="n l"><rect x="330" y="500" width="88" height="48" rx="6"/><text class="t" x="374" y="520">report-issue</text><text class="s" x="374" y="535">after your OK</text></g>
+  <g class="n l"><rect x="330" y="500" width="88" height="48" rx="6"/><text class="t" x="374" y="520">/issue:report</text><text class="s" x="374" y="535">after your OK</text></g>
   <g class="n l"><rect x="554" y="500" width="88" height="48" rx="6"/><text class="t" x="598" y="520">Run store</text><text class="s" x="598" y="535">runs·cost·agents</text></g>
   <g class="n l"><rect x="778" y="500" width="88" height="48" rx="6"/><text class="t" x="822" y="520">Weekly retro</text><text class="s" x="822" y="535">spec proposals</text></g>
+  <g class="n l dash"><rect x="890" y="500" width="88" height="48" rx="6"/><text class="t" x="934" y="520">Autonomy</text><text class="s" x="934" y="535">optional engine</text></g>
   <g class="n l"><rect x="1002" y="500" width="88" height="48" rx="6"/><text class="t" x="1046" y="520">Platform issue</text><text class="s" x="1046" y="535">one per signature</text></g>
   <g class="n l"><rect x="1114" y="500" width="88" height="48" rx="6"/><text class="t" x="1158" y="520">Smoke failure</text><text class="s" x="1158" y="535">issue in repo</text></g>
   <g class="n l"><rect x="1226" y="500" width="88" height="48" rx="6"/><text class="t" x="1270" y="520">Alert issue</text><text class="s" x="1270" y="535">poll every 15m</text></g>
@@ -174,5 +188,6 @@
     <rect x="690" width="14" height="14" rx="3" fill="var(--loop-tint)" stroke="var(--loop)" stroke-width="2"/><text class="key" x="710" y="11">Feedback loop</text>
     <rect x="830" width="14" height="14" rx="3" fill="var(--band)"/><text class="key" x="850" y="11">Runs unattended</text>
     <line x1="980" y1="7" x2="1010" y2="7" class="edge red"/><text class="key" x="1018" y="11">Repair loop inside a run</text>
+    <rect x="1170" width="14" height="14" rx="3" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="4 3"/><text class="key" x="1190" y="11">Dashed: on demand</text>
   </g>
 </svg>

@@ -1,11 +1,29 @@
-# sdlc-foundry
+<p align="center">
+  <img src="docs/img/logo.svg" width="72" height="72" alt="">
+</p>
 
-[![CI](https://github.com/ika100/sdlc-foundry/actions/workflows/ci.yml/badge.svg)](https://github.com/ika100/sdlc-foundry/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-ika100.github.io-4f46e5)](https://ika100.github.io/sdlc-foundry/)
-[![Release](https://img.shields.io/github/v/release/ika100/sdlc-foundry)](https://github.com/ika100/sdlc-foundry/releases)
+<h1 align="center">sdlc-foundry</h1>
 
-**An agentic SDLC platform: Claude Code agents, slash commands and Copier templates that take a system from idea to "running in Kubernetes via GitOps".**
+<p align="center">
+  <strong>From a new repo to Kubernetes, declared once.</strong><br>
+  Claude Code agents, slash commands and Copier templates that take a system from idea to "running in Kubernetes via GitOps".
+</p>
+
+<p align="center">
+  <a href="https://github.com/ika100/sdlc-foundry/actions/workflows/ci.yml"><img src="https://github.com/ika100/sdlc-foundry/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://ika100.github.io/sdlc-foundry/"><img src="https://img.shields.io/badge/docs-ika100.github.io-4f46e5" alt="Docs"></a>
+  <a href="https://github.com/ika100/sdlc-foundry/releases"><img src="https://img.shields.io/github/v/release/ika100/sdlc-foundry" alt="Release"></a>
+</p>
+
+<p align="center">
+  <a href="https://ika100.github.io/sdlc-foundry/"><b>Documentation</b></a> ·
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="docs/USER-JOURNEY.md">User journey</a> ·
+  <a href="docs/HOW-IT-WORKS.md">How it works</a> ·
+  <a href="#slash-commands">Commands</a> ·
+  <a href="docs/CHANGELOG.md">Changelog</a>
+</p>
 
 ![A real run, sped up: /system:new creates the repos, cluster-up starts a local cluster, /component:spec asks its questions, /component:ship plans, tests, builds and merges, and curl reaches the new endpoint in dev](docs/img/demo.gif)
 

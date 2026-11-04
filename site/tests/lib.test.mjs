@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { convertWikiLinks, firstHeading, rewriteLinks, splitDescription, stripFirstHeading, withFrontMatter } from '../scripts/lib.mjs';
+import { codeCommands, usageCell, convertWikiLinks, firstHeading, rewriteLinks, splitDescription, stripFirstHeading, withFrontMatter } from '../scripts/lib.mjs';
 
 const BASE = '/sdlc-foundry';
 const ctx = (pages = {}, files = {}) => ({ pageFor: (p) => pages[p], exists: (p) => files[p] ?? null, base: BASE });
@@ -56,4 +56,29 @@ test('front matter quotes titles safely and the first heading is stripped', () =
 test('command descriptions split into summary and usage', () => {
   assert.deepEqual(splitDescription('Does a thing. Usage: /x:y <a>'), { summary: 'Does a thing.', usage: '/x:y <a>' });
   assert.deepEqual(splitDescription('No usage here'), { summary: 'No usage here', usage: '' });
+});
+
+test('a link whose text is only a file name reads as the page title', () => {
+  const opts = { ...ctx({ 'docs/UPGRADES.md': 'guides/upgrades' }), titleFor: (p) => (p === 'docs/UPGRADES.md' ? 'Upgrades' : null) };
+  const { text } = rewriteLinks('See [UPGRADES.md](UPGRADES.md#x) and [the upgrade guide](UPGRADES.md).', 'docs/USER-JOURNEY.md', opts);
+  assert.equal(text, 'See [Upgrades](/sdlc-foundry/guides/upgrades/#x) and [the upgrade guide](/sdlc-foundry/guides/upgrades/).');
+});
+
+test('wiki links read as the page title when one is known', () => {
+  const out = convertWikiLinks('See [[ARCHITECTURE]].', () => '/sdlc-foundry/guides/architecture/', () => 'Architecture');
+  assert.equal(out, 'See [Architecture](/sdlc-foundry/guides/architecture/).');
+});
+
+test('front matter carries a short sidebar label', () => {
+  assert.match(withFrontMatter('B', { title: 'Long title', label: 'Short', order: 2 }), /sidebar:\n {2}label: "Short"\n {2}order: 2\n/);
+});
+
+test('slash commands in prose are set as code, code and URLs are left alone', () => {
+  assert.equal(codeCommands('/system:new creates it (see /system:ship). `/x:y` stays'), '`/system:new` creates it (see `/system:ship`). `/x:y` stays');
+  assert.equal(codeCommands('https://a.b/c:d'), 'https://a.b/c:d');
+});
+
+test('usage cells keep option groups together and escape HTML and pipes', () => {
+  assert.equal(usageCell('/x:y <id> [--a|--b] [--env <e>]'),
+    '<code>/x:y <span class="nw">&lt;id&gt;</span> <span class="nw">[&#45;&#45;a&#124;&#45;&#45;b]</span> <span class="nw">[&#45;&#45;env &lt;e&gt;]</span></code>');
 });

@@ -7,6 +7,7 @@ sdlc-foundry is licensed under the [Apache License 2.0](LICENSE). The following 
 | Apache License 2.0 text | `LICENSE` | Apache-2.0 | <https://www.apache.org/licenses/LICENSE-2.0> |
 | Contributor Covenant 2.1 | `CODE_OF_CONDUCT.md` | CC-BY-4.0 (attribution kept in the file) | <https://www.contributor-covenant.org> |
 | Icon paths adapted from Lucide (heart-pulse, activity, flask-conical, box, rocket, sparkles) | `templates/web-nextjs/app/_components/icons.tsx`, therefore also in every generated web app | ISC, Copyright (c) 2026 Lucide Icons and Contributors (the notice is kept in the file's header) | <https://lucide.dev> |
+| Inter and JetBrains Mono typefaces | served by the documentation site (`site/`, installed from npm as `@fontsource-variable/*`, not stored in this repository) | OFL-1.1, Copyright the Inter and the JetBrains Mono project authors | <https://rsms.me/inter>, <https://www.jetbrains.com/lp/mono/> |
 
 ## Software that is installed, not bundled
 

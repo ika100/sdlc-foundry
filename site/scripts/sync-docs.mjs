@@ -11,19 +11,19 @@ const BASE = '/sdlc-foundry';
 
 /** repo file -> site page. `slug` is relative to the docs collection. */
 const PAGES = [
-  { src: 'docs/USER-JOURNEY.md', slug: 'guides/user-journey', title: 'User journey: from empty folder to a running system', order: 1 },
+  { src: 'docs/USER-JOURNEY.md', slug: 'guides/user-journey', title: 'User journey: from empty folder to a running system', label: 'User journey', order: 1 },
   { src: 'docs/HOW-IT-WORKS.md', slug: 'guides/how-it-works', title: 'How it works', order: 2 },
-  { src: 'docs/console.md', slug: 'guides/console', title: 'The local console', order: 2 },
-  { src: 'docs/autonomy.md', slug: 'guides/autonomy', title: 'Autonomy per environment', order: 2 },
-  { src: 'docs/DOMAIN-MODEL.md', slug: 'guides/domain-model', title: 'Domain model', order: 3 },
-  { src: 'docs/BACKUP-AND-RESTORE.md', slug: 'guides/backup-and-restore', title: 'Backup and restore', order: 4 },
-  { src: 'docs/UPGRADES.md', slug: 'guides/upgrades', title: 'Upgrades', order: 4 },
-  { src: 'docs/CLUSTERS.md', slug: 'guides/clusters', title: 'Clusters shared by several systems', order: 4 },
-  { src: 'docs/ADOPTING.md', slug: 'guides/adopting', title: 'Adopting the platform and troubleshooting', order: 3 },
-  { src: 'docs/AGENTS.md', slug: 'guides/agents', title: 'The agent orchestration model', order: 4 },
-  { src: 'docs/ARCHITECTURE.md', slug: 'guides/architecture', title: 'Architecture', order: 5 },
-  { src: 'docs/templates.md', slug: 'guides/add-a-shape', title: 'Adding a new shape', order: 6 },
-  { src: 'docs/unattended-delivery.md', slug: 'guides/unattended-delivery', title: 'Unattended delivery, run records and cost', order: 7 },
+  { src: 'docs/console.md', slug: 'guides/console', title: 'The local console', order: 3 },
+  { src: 'docs/autonomy.md', slug: 'guides/autonomy', title: 'Autonomy per environment', order: 4 },
+  { src: 'docs/unattended-delivery.md', slug: 'guides/unattended-delivery', title: 'Unattended delivery, run records and cost', label: 'Unattended delivery', order: 5 },
+  { src: 'docs/ADOPTING.md', slug: 'guides/adopting', title: 'Adopting the platform and troubleshooting', label: 'Adopting and troubleshooting', order: 6 },
+  { src: 'docs/UPGRADES.md', slug: 'guides/upgrades', title: 'Upgrades', order: 7 },
+  { src: 'docs/BACKUP-AND-RESTORE.md', slug: 'guides/backup-and-restore', title: 'Backup and restore', order: 8 },
+  { src: 'docs/CLUSTERS.md', slug: 'guides/clusters', title: 'Clusters shared by several systems', label: 'Shared clusters', order: 9 },
+  { src: 'docs/AGENTS.md', slug: 'guides/agents', title: 'The agent orchestration model', label: 'Agent orchestration', order: 10 },
+  { src: 'docs/ARCHITECTURE.md', slug: 'guides/architecture', title: 'Architecture', order: 11 },
+  { src: 'docs/DOMAIN-MODEL.md', slug: 'guides/domain-model', title: 'Domain model', label: 'Domain model in depth', order: 12 },
+  { src: 'docs/templates.md', slug: 'guides/add-a-shape', title: 'Adding a new shape', order: 13 },
   { src: 'docs/requirements/platform-vision.md', slug: 'vision/design-history', title: 'Design history: the original vision PRD', order: 9 },
   { src: 'docs/requirements/end-to-end-scenario.md', slug: 'vision/end-to-end-scenario', title: 'Design history: the end-to-end scenario', order: 10 },
   { src: 'docs/BASELINES.md', slug: 'reference/baselines', title: 'Measured baselines', order: 20 },
@@ -50,7 +50,9 @@ const exists = (repoPath) => {
   const full = path.join(ROOT, repoPath);
   return fs.existsSync(full) ? (fs.statSync(full).isDirectory() ? 'dir' : 'file') : null;
 };
+const titles = new Map(PAGES.map((p) => [p.src, p.label ?? p.title]));
 const names = new Map(PAGES.map((p) => [path.basename(p.src, '.md').toLowerCase(), `${BASE}/${p.slug}/`]));
+const nameTitles = new Map(PAGES.map((p) => [path.basename(p.src, '.md').toLowerCase(), p.label ?? p.title]));
 
 function description(markdown) {
   const para = markdown.replace(/^#.*\n+/, '').split(/\n\s*\n/).find((p) => p.trim() && !/^(\||```|>|-|\*|\d+\.|\*\*Status)/.test(p.trim()));
@@ -67,12 +69,12 @@ const assetFor = (repoPath) => (repoPath.startsWith('docs/img/') && exists(repoP
 let problems = [];
 for (const page of PAGES) {
   const src = fs.readFileSync(path.join(ROOT, page.src), 'utf8');
-  let body = convertWikiLinks(stripFirstHeading(src), (n) => names.get(n.toLowerCase()));
-  const { text, unresolved } = rewriteLinks(body, page.src, { pageFor: (p) => bySrc.get(p), exists, base: BASE, assetFor });
+  let body = convertWikiLinks(stripFirstHeading(src), (n) => names.get(n.toLowerCase()), (n) => nameTitles.get(n.toLowerCase()));
+  const { text, unresolved } = rewriteLinks(body, page.src, { pageFor: (p) => bySrc.get(p), exists, base: BASE, assetFor, titleFor: (p) => titles.get(p) });
   problems = problems.concat(unresolved);
   const out = path.join(OUT, `${page.slug}.md`);
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, withFrontMatter(text, { title: page.title, description: description(src), order: page.order, editUrl: false }));
+  fs.writeFileSync(out, withFrontMatter(text, { title: page.title, label: page.label, description: description(src), order: page.order, editUrl: false }));
 }
 // the ADR index is the landing page of its folder
 fs.mkdirSync(path.join(OUT, 'reference', 'adr'), { recursive: true });

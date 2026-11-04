@@ -1,3 +1,4 @@
+// `ideal` is the step without the run's stalls; '–' when the step is only part of this demo.
 // The steps of the recorded demo run (2026-11-03, sdlc-foundry 5.6.0) for DemoWalkthrough.astro.
 // `at` is the chapter marker's time in site/public/demo/demo-run.cast.gz; times and facts come from the recording,
 // the demo repos and docs/BASELINES.md ("The 2026-11-03 demo run").
@@ -9,13 +10,19 @@ const ISSUES = 'https://github.com/ika100/sdlc-foundry/issues';
 
 export interface Section { heading: string; text?: string; items?: string[]; code?: string }
 export interface Step {
-  title: string; command: string; at: number; measured: string; ideal: string;
+  title: string; short: string;
+  /** what you would say in Claude Code; empty when the step needs no input */
+  say: string;
+  /** the command that runs (the plugin command Claude picks for `say`, or the shell command) */
+  run: string;
+  /** what was typed in the recording */
+  command: string; at: number; measured: string; ideal: string;
   sections: Section[]; links: { label: string; href: string }[];
 }
 
 export const steps: Step[] = [
   {
-    title: 'Create the system', command: '/system:new taskboard.yaml --public', at: 0, measured: '3 min', ideal: '3 min',
+    title: 'Create the system', short: 'System', say: 'Create a taskboard system with one Python service for a task API, in public repos', run: '/system:new taskboard.yaml --public', command: '/system:new taskboard.yaml --public', at: 0, measured: '3 min', ideal: '3 min',
     sections: [
       { heading: 'You type', text: 'A four-line manifest and one command in Claude Code.', code: 'system: demo-taskboard\nowner: ika100\nvisibility: public\ncomponents:\n  - {name: demo-taskboard-api, description: Task API, type: service, lang: python}' },
       { heading: 'Claude does', items: [
@@ -32,7 +39,7 @@ export const steps: Step[] = [
     ],
   },
   {
-    title: 'Merge and start a local cluster', command: 'Merge PR #2 once its CI is green, then run cluster-up', at: 20.542, measured: '6 min', ideal: '2 min',
+    title: 'Merge and start a local cluster', short: 'Cluster', say: 'Merge the PR once its CI is green, then start a local cluster', run: 'devbox run cluster-up', command: 'Merge PR #2 once its CI is green, then run cluster-up', at: 20.542, measured: '6 min', ideal: '2 min',
     sections: [
       { heading: 'Claude does', items: [
         'Waits for the PR\'s CI and merges it.',
@@ -44,7 +51,7 @@ export const steps: Step[] = [
     links: [{ label: 'API repo CI runs', href: `${API}/actions` }],
   },
   {
-    title: 'Expose the API', command: 'yes, expose it and merge the PR once CI is green', at: 33.552, measured: '2 min', ideal: '–',
+    title: 'Expose the API', short: 'Expose', say: 'Make the API reachable from my browser', run: '/component:set demo-taskboard-api --expose', command: 'yes, expose it and merge the PR once CI is green', at: 33.552, measured: '2 min', ideal: '–',
     sections: [
       { heading: 'Claude does', text: 'Runs <code>/component:set demo-taskboard-api --expose</code>: one PR that adds the route and the expose flag to <code>system.yaml</code>. Merges it after CI; Argo syncs about 20 s later.' },
       { heading: 'Result', text: 'A URL on the local Gateway: <code>http://demo-taskboard-api.demo-taskboard-dev.localhost:8088</code>. Only needed for this demo; a component declared with <code>expose</code> from the start skips it.' },
@@ -52,7 +59,7 @@ export const steps: Step[] = [
     links: [{ label: 'PR: expose the API', href: `${GITOPS}/pull/3` }],
   },
   {
-    title: 'Write the spec', command: '/component:spec "tasks: create and list tasks with a title and an optional due date, kept in memory"', at: 43.8, measured: '24 min', ideal: '4 min',
+    title: 'Write the spec', short: 'Spec', say: 'I want to create and list tasks, each with a title and an optional due date, kept in memory', run: '/component:spec "tasks: create and list tasks …"', command: '/component:spec "tasks: create and list tasks with a title and an optional due date, kept in memory"', at: 43.8, measured: '24 min', ideal: '4 min',
     sections: [
       { heading: 'Claude does', text: 'The product-manager agent drafts <code>spec.md</code> with acceptance criteria. It never guesses a decision that is yours: it asks, with a suggested answer for each question.' },
       { heading: 'Claude asks, you answer', items: [
@@ -70,14 +77,14 @@ export const steps: Step[] = [
     links: [{ label: 'spec.md', href: `${SPEC}/spec.md` }],
   },
   {
-    title: 'Approve the spec', command: 'Approve spec 001 now? → Approve', at: 115.0509, measured: 'in the 24 min', ideal: '–',
+    title: 'Approve the spec', short: 'Approve', say: 'Approve the spec', run: '/component:spec approve 001', command: 'Approve spec 001 now? → Approve', at: 115.0509, measured: 'in the 24 min', ideal: '–',
     sections: [
       { heading: 'Claude does', text: 'Marks the spec approved, opens the spec PR and merges it once CI is green. Approval is the one decision the build waits for.' },
     ],
     links: [{ label: 'PR: the approved spec', href: `${API}/pull/2` }],
   },
   {
-    title: 'Ship the spec', command: '/component:ship 001', at: 126.412, measured: '20 min', ideal: '17 min',
+    title: 'Ship the spec', short: 'Ship', say: 'Build it and get it running in dev', run: '/component:ship 001', command: '/component:ship 001', at: 126.412, measured: '20 min', ideal: '17 min',
     sections: [
       { heading: 'Claude does', items: [
         '<b>architect</b>: <code>design.md</code> and a plan of three tasks (schemas, in-memory store, endpoints), each covering named criteria.',
@@ -97,7 +104,7 @@ export const steps: Step[] = [
     ],
   },
   {
-    title: 'An escalation, as it happened', command: '/component:ship 001 accept the lint-fix change, it is formatting only', at: 158.82, measured: 'in the ship time', ideal: '0',
+    title: 'An escalation, as it happened', short: 'Escalation', say: 'Accept the formatter\'s change to the tests, it is formatting only', run: '/component:ship 001', command: '/component:ship 001 accept the lint-fix change, it is formatting only', at: 158.82, measured: 'in the ship time', ideal: 'no longer happens',
     sections: [
       { heading: 'Why it stopped', text: 'The formatter rewrote the committed acceptance tests (<code>timezone.utc</code> → <code>UTC</code>). The build may not decide on its own that a changed test is harmless, so it stopped and asked. Accepting it resumed the run.' },
       { heading: 'Since then', text: 'Fixed: the tester formats the tests before committing them, so this stop no longer happens.' },
@@ -105,7 +112,7 @@ export const steps: Step[] = [
     links: [{ label: 'issue #367', href: `${ISSUES}/367` }],
   },
   {
-    title: 'Deploy to dev', command: '/component:ship 001 (deploy)', at: 185.972, measured: '27 min', ideal: '3 min',
+    title: 'Deploy to dev', short: 'Deploy', say: '', run: '/component:ship 001 (continues)', command: '/component:ship 001 (deploy)', at: 185.972, measured: '27 min', ideal: '3 min',
     sections: [
       { heading: 'Claude does', items: [
         'The service\'s CI asks the gitops repo to pin dev to the new image; a pin PR opens and merges after its checks.',
@@ -120,10 +127,19 @@ export const steps: Step[] = [
     links: [{ label: 'PR: pin dev', href: `${GITOPS}/pull/4` }],
   },
   {
-    title: 'Use it', command: 'curl -X POST $U/tasks … ; curl $U/tasks', at: 216.079, measured: '< 1 min', ideal: '< 1 min',
+    title: 'Use it', short: 'Use it', say: 'Create a task with a due date in dev and list all tasks', run: 'curl -X POST $U/tasks … ; curl $U/tasks', command: 'curl -X POST $U/tasks … ; curl $U/tasks', at: 216.079, measured: '< 1 min', ideal: '< 1 min',
     sections: [
       { heading: 'Result', text: 'The new endpoint answers in dev: a task with a due date is created and listed next to one without.', code: '$ curl -s -X POST $U/tasks -H \'content-type: application/json\' \\\n    -d \'{"title": "Ship the demo", "due_date": "2026-11-10"}\'\n{"id":"3d6f8784-…","title":"Ship the demo","due_date":"2026-11-10",…}' },
     ],
     links: [{ label: 'the tasks endpoint', href: `${API}/blob/main/src/demo_taskboard_api/tasks_api.py` }],
   },
+];
+
+/** The run at a glance (from the recording, the demo repos and docs/BASELINES.md). */
+export const glance: { value: string; label: string }[] = [
+  { value: '28–30 min', label: 'from an empty folder to the endpoint in dev, without the stalls' },
+  { value: '8', label: 'questions Claude asked you before writing the spec' },
+  { value: '11 / 11', label: 'acceptance criteria met, each traced to a test' },
+  { value: '96 %', label: 'test coverage after the build' },
+  { value: '5', label: 'real pull requests in the public demo repos' },
 ];

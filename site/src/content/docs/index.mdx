@@ -5,6 +5,18 @@ template: splash
 hero:
   title: From a new repo to Kubernetes, declared once.
   tagline: An agentic SDLC platform. Claude Code agents, slash commands and templates that scaffold your services, render every Kubernetes manifest from one file, and promote releases through reviewed pull requests, with secure defaults you do not have to remember.
+  image:
+    html: |
+      <div class="hero-term" role="img" aria-label="Three commands in Claude Code: /system:new creates the repositories, /component:spec writes the spec with your answers, /component:ship takes it to dev.">
+        <div class="hero-term-bar"><i></i><i></i><i></i><span>claude · taskboard</span></div>
+        <pre><span class="hp">›</span> /system:new taskboard.yaml
+      <span class="hok">✓</span> <span class="hd">gitops repo · taskboard-api · system PR</span>
+      <span class="hp">›</span> /component:spec "tasks with due dates"
+      <span class="hok">✓</span> <span class="hd">8 questions answered · spec 001 approved</span>
+      <span class="hp">›</span> /component:ship 001
+      <span class="hd">  plan → red tests → code → review</span>
+      <span class="hok">✓</span> <span class="hd">merged on green CI · </span><span class="hhi">running in dev</span></pre>
+      </div>
   actions:
     - text: Get started
       link: /sdlc-foundry/get-started/
@@ -19,15 +31,15 @@ hero:
 ---
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import DemoWalkthrough from '../../components/DemoWalkthrough.astro';
 
 ## Watch a real run
 
-One system from an empty folder to a new endpoint answering in dev: `/system:new` creates the repos, `cluster-up` starts a local cluster, `/component:spec` asks its questions, and `/component:ship` plans, writes failing tests, builds, merges on green CI and deploys. [Watch it step by step](/sdlc-foundry/get-started/watch-a-run/), with what Claude asked and links to every pull request.
+One system from an empty folder to a new endpoint answering in dev, recorded as it happened. Click a chapter to jump: `/system:new` creates the repos, `cluster-up` starts a local cluster, `/component:spec` asks its questions, and `/component:ship` plans, writes failing tests, builds, merges on green CI and deploys.
 
-<figure class="map">
-  <img src="/sdlc-foundry/img/demo.gif" width="1028" height="686" loading="lazy" alt="A terminal recording of Claude Code: /system:new creates a GitOps repo and a Python service repo; the system pull request is merged and a local k3d cluster with ArgoCD starts; /component:spec asks eight questions about a tasks endpoint and the spec is approved; /component:ship 001 runs the architect, tester, two coders and reviewer, merges the pull request on green CI and pins dev; curl creates and lists tasks on the dev URL." />
-  <figcaption>A real run on the public demo repos [demo-taskboard-api](https://github.com/ika100/demo-taskboard-api) and [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops), with waiting time cut: about 85 minutes shown in 4. Without the stalls this run hit, it takes <a href="/sdlc-foundry/reference/baselines/#the-2026-11-03-demo-run" title="system:new 3 min · system PR + cluster-up 2 min · spec with questions 4 min · ship agents 13 min · PR and main CI with image 4 min · pin to dev 1 min · Argo sync and smoke 2 min">about 28–30 minutes</a> · [open it full size](/sdlc-foundry/img/demo.gif)</figcaption>
-</figure>
+<DemoWalkthrough compact />
+
+<p class="demo-caption">A real run on the public demo repos <a href="https://github.com/ika100/demo-taskboard-api">demo-taskboard-api</a> and <a href="https://github.com/ika100/demo-taskboard-gitops">demo-taskboard-gitops</a>, with waiting time cut: about 85 minutes shown in 4 (<a href="/sdlc-foundry/reference/baselines/#the-2026-11-03-demo-run">where the time went</a>). <a href="/sdlc-foundry/get-started/watch-a-run/"><strong>Walk through it step by step →</strong></a> what Claude asked, what it did and a link to every pull request.</p>
 
 ## Platform glue should not cost a small team months
 
@@ -42,6 +54,27 @@ One system from an empty folder to a new endpoint answering in dev: `/system:new
     One slash command creates a repo that already builds, scans and publishes images. Adding Postgres, secrets or observability is one declaration. Promotion is a pull request you can review. [See the client value](/sdlc-foundry/value/).
   </Card>
 </CardGrid>
+
+## What makes it different
+
+<p class="lead">A platform team for a small team: agents build the feature, the platform runs it, and you decide only what matters.</p>
+
+The tools we compared do one half. Spec-driven frameworks and coding agents stop at the code or the pull request; developer platforms and DevOps agents do not build features. sdlc-foundry is both, and that shows in ten things none of them does, ranked by value:
+
+<ol class="rank">
+  <li><strong>An approved spec ends as a feature running in dev, unattended.</strong><span>Plan, failing tests, code, review, PR, merge on green CI, GitOps deploy and smoke tests; your one decision is the spec.</span></li>
+  <li><strong>Acceptance tests are written first and locked.</strong><span>Agents cannot weaken them to get a green build; only you can approve a change.</span></li>
+  <li><strong>Every criterion traces to production.</strong><span>From the issue through tests, review and PR to the version running in each environment.</span></li>
+  <li><strong>Every step that can be code is tested code.</strong><span>Gates, merges, pins and promotions are a CLI with more than 7,500 tests; agents only judge.</span></li>
+  <li><strong>Running systems file their own issues.</strong><span>Red smoke tests, firing alerts, platform failures and a weekly retro end as deduplicated issues.</span></li>
+  <li><strong>Prod runs the exact image staging tested.</strong><span>Promotion compares image digests and is a reviewed pull request with its evidence.</span></li>
+  <li><strong>One spec ships across several repos.</strong><span>A validated, dependency-ordered plan with the contract between them.</span></li>
+  <li><strong>Every generated repo stays current.</strong><span>One command updates every repo built from the templates, one reviewed PR each.</span></li>
+  <li><strong>Runs have a budget and stop on repeated failure.</strong><span>Time, agent calls, CI reruns and money per run, and the cost of every feature.</span></li>
+  <li><strong>Autonomy is declared per environment, in git.</strong><span>How far an engine may fix a running system, its limits, an undo and a pause; it never promotes forward.</span></li>
+</ol>
+
+[How we compared, the sources, and where others are ahead](/sdlc-foundry/compare/)
 
 ## A model you can hold in your head
 
@@ -60,7 +93,7 @@ You decide at three points: route an issue, approve its spec, promote to prod. `
 
 <figure class="map">
   <div class="map-scroll">
-    <img src="/sdlc-foundry/img/sdlc-map.svg" width="1440" height="650" alt="Swimlane map of the delivery flow and its feedback loops: you route an issue and approve the spec; agents write spec, plan, red tests, code and verification; the `cplat` CLI runs the gates, opens the PR, merges on green, runs the smoke tests in dev and promotes to staging; prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts come back as deduplicated issues that you route in triage." />
+    <img src="/sdlc-foundry/img/sdlc-map.svg" width="1440" height="650" alt="Swimlane map of the delivery flow and its feedback loops: you route an issue and approve the spec, which merges its draft pull request; agents write spec, plan, red tests, code and verification; the `cplat` CLI runs the gates, opens the PR, merges on green, runs the smoke tests in dev and promotes to staging; escalations reach you in the console Inbox; prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts come back as deduplicated issues that you route in triage; an optional autonomy engine can open fix pull requests." />
   </div>
   <figcaption>[How it works](/sdlc-foundry/guides/how-it-works/#the-map) explains the map and lists the feedback loops · [open it full size](/sdlc-foundry/img/sdlc-map.svg)</figcaption>
 </figure>
