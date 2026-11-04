@@ -59,11 +59,18 @@ Before: 185–246 s on pull requests (the 12 runs before 2026-10-26).
 | Pull request | ci run | wall time |
 |---|---|---|
 | this PR (not counted: it changes `ci.yml`, so every template smoke job runs and the java smoke, ~140 s, bounds it) | 40319270163 | — |
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+| 1 #217 | 40327838187 | 191 s |
+| 2 #219 | 40332004952 | 92 s |
+| 3 #220 | 40332773112 | 186 s |
+| 4 #228 | 40382014825 | 203 s |
+| 5 #229 | 40382902090 | 206 s |
 
 AC-112.9 holds when the median of rows 1–5 (code PRs that touch no smoke-tested template) is at most 120 s. Those
 rows are filled after the merge (plan `human_steps`).
+
+**Result (measured 2026-11-04): not met.** Median 191 s (limit 120 s). The rows are the first five pull requests merged after
+this one that change code but no template and no `ci.yml` (releases left out); each row is the successful `ci` run of the
+pull request's last head (#219 and #229 also have a cancelled duplicate run, #322, not counted). The cplat shards are fast
+(longest 71 s in #219, the one row without template smoke jobs), but `detect what changed` counts every change under
+`scripts/` as shared, so a `scripts/cplat`-only pull request still runs every template smoke job, and the service-java
+smoke (113–191 s) bounds the wall time. Follow-up: an issue on narrowing that rule.
