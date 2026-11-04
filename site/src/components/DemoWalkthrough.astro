@@ -4,18 +4,14 @@
 // you would say, the command it runs, what was typed in the recording, what Claude asked and did, the result and links to the real artifacts; the compact form (the landing
 // page) plays while it is in view, unless the reader asks for reduced motion.
 // The recording is shipped gzip-compressed (GitHub Pages does not compress it) and unpacked in the browser.
-import { glance, steps } from './demo-steps';
+import { glance, parts, steps } from './demo-steps';
 
 interface Props { compact?: boolean }
 const { compact = false } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const src = `${base}/demo/demo-run.cast.gz`;
 const marks = steps.map((s) => s.at);
-const showIdeal = (s: { measured: string; ideal: string }) => s.ideal !== '–' && s.ideal !== s.measured;
-// "took 6 min" / "without stalls 2 min" for durations; other values ("in the 24 min", "no longer happens") read as they are
-const isTime = (v: string) => /^[<\d]/.test(v);
-const tookText = (v: string) => (isTime(v) ? `took ${v}` : v);
-const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
+const partAt = (i: number) => parts.find((p) => p.from === i);
 ---
 
 <div class:list={['walkthrough', { 'is-compact': compact }]} data-walkthrough data-src={src} data-marks={JSON.stringify(marks)} data-compact={compact ? '' : undefined}>
@@ -31,7 +27,11 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
       <div class="chapters-track" aria-hidden="true"><div class="chapters-fill" data-fill></div></div>
       <ol class="chapters-list" aria-label="Chapters of the recording">
         {steps.map((step, i) => (
-          <li><button type="button" data-chapter={i} title={step.title}><span>{i + 1}</span>{step.short}</button></li>
+          <>
+            {partAt(i) && i > 0 && <li class="chapters-break" aria-hidden="true"></li>}
+            {partAt(i) && <li class="chapters-part" aria-hidden="true">Part {parts.indexOf(partAt(i)!) + 1}</li>}
+            <li><button type="button" data-chapter={i} title={step.title}><span>{i + 1}</span>{step.short}</button></li>
+          </>
         ))}
       </ol>
     </div>
@@ -40,6 +40,13 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
   {!compact && (
     <ol class="walkthrough-steps">
       {steps.map((step, i) => (
+        <>
+        {partAt(i) && (
+          <li class="walkthrough-part">
+            <h3>{partAt(i)!.title}</h3>
+            <p>{partAt(i)!.text}</p>
+          </li>
+        )}
         <li data-step={i}>
           <details name="walkthrough-step">
             <summary><span class="walkthrough-row">
@@ -51,10 +58,9 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
                   : <span class="walkthrough-say is-none">Nothing to type: the run goes on by itself</span>}
                 <span class="walkthrough-run"><span aria-hidden="true">→</span><code>{step.run}</code></span>
               </span>
-              <span class="walkthrough-time" title={`took ${step.measured} · without the stalls ${step.ideal}`}>
-                {tookText(step.measured)}
-                {showIdeal(step) && <span class="walkthrough-ideal">{idealText(step.ideal)}</span>}
-              </span>
+              {step.time
+                ? <span class="walkthrough-time" title="working time, every wait cut">{step.time}</span>
+                : <span class="walkthrough-time" aria-hidden="true"></span>}
             </span></summary>
             <div class="walkthrough-body">
               <section>
@@ -80,6 +86,7 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
             </div>
           </details>
         </li>
+        </>
       ))}
     </ol>
   )}
@@ -94,7 +101,7 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
     const compact = root.dataset.compact !== undefined;
     const marks: number[] = JSON.parse(root.dataset.marks ?? '[]');
     const chapters = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-chapter]'));
-    const items = Array.from(root.querySelectorAll<HTMLLIElement>('[data-step]'));
+    const items = Array.from(root.querySelectorAll<HTMLLIElement>('li[data-step]'));
     const fill = root.querySelector<HTMLElement>('[data-fill]')!;
     const stage = root.querySelector<HTMLElement>('.walkthrough-stage')!;
     const load = async () => {
@@ -115,6 +122,11 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
       if (i === current) return;
       current = i;
       chapters.forEach((b, j) => b.toggleAttribute('aria-current', i === j));
+      const active = chapters[i];
+      const list = active?.closest('ol');
+      if (active && list && list.scrollWidth > list.clientWidth) {
+        list.scrollTo({ left: active.offsetLeft - list.clientWidth / 2 + active.offsetWidth / 2, behavior: 'smooth' });
+      }
       items.forEach((li, j) => li.classList.toggle('is-active', i === j));
     };
     player.addEventListener('marker', (e) => highlight(e.index));
@@ -158,7 +170,7 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
   .walkthrough { display: grid; gap: 1.25rem; margin-block: 1.5rem; }
 
   /* the run at a glance */
-  .glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); gap: 0.6rem; padding: 0; margin: 0; list-style: none; }
+  .glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.25rem), 1fr)); gap: 0.5rem; padding: 0; margin: 0; list-style: none; }
   .glance li { margin: 0; padding: 0.7rem 0.85rem; border: 1px solid var(--sl-color-hairline); border-radius: 0.75rem; background: var(--surface, var(--sl-color-bg-nav)); }
   .glance strong { display: block; font-size: var(--sl-text-xl); line-height: 1.2; letter-spacing: -0.02em; background: var(--brand-gradient, var(--sl-color-text-accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
   .glance span { display: block; margin-top: 0.2rem; font-size: var(--sl-text-xs); line-height: 1.45; color: var(--sl-color-gray-2); }
@@ -183,6 +195,7 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
   .walkthrough-steps > li { margin: 0; border: 1px solid var(--sl-color-hairline); border-radius: 0.75rem; background: var(--surface, var(--sl-color-bg-nav)); transition: border-color 0.2s, box-shadow 0.2s; }
   .walkthrough-steps > li:hover { border-color: color-mix(in srgb, var(--sl-color-accent) 45%, var(--sl-color-hairline)); }
   .walkthrough-steps > li.is-active { border-color: var(--sl-color-accent); box-shadow: 0 0 0 1px var(--sl-color-accent); }
+  .walkthrough details { margin: 0; padding: 0; border: 0; background: none; }
   .walkthrough summary { display: block; padding: 0.7rem 0.9rem; cursor: pointer; list-style: none; }
   .walkthrough summary::before, .walkthrough summary::after { content: none !important; display: none !important; }
   .walkthrough summary::-webkit-details-marker, .walkthrough summary::marker { display: none; content: ''; }
@@ -196,16 +209,31 @@ const idealText = (v: string) => (isTime(v) ? `without stalls ${v}` : v);
   .walkthrough-say.is-none { color: var(--sl-color-gray-3); font-style: normal; }
   .walkthrough-run { display: flex; align-items: baseline; gap: 0.4rem; min-width: 0; color: var(--sl-color-text-accent); font-weight: 700; }
   .walkthrough-run code { font-size: var(--sl-text-xs); font-weight: 500; overflow-wrap: anywhere; }
-  .walkthrough-time { display: grid; justify-items: end; font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); white-space: nowrap; }
-  .walkthrough-ideal { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); }
+  .walkthrough-time { display: grid; justify-items: end; font-variant-numeric: tabular-nums; font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); white-space: nowrap; }
+  .walkthrough-part { margin: 1rem 0 0.25rem; padding: 0 0.25rem; border: 0 !important; background: none !important; }
+  .walkthrough-part:first-child { margin-top: 0; }
+  .walkthrough-part h3 { margin: 0; font-size: var(--sl-text-lg); }
+  .walkthrough-part p { margin: 0.15rem 0 0; color: var(--sl-color-gray-3); font-size: var(--sl-text-sm); }
+  .chapters-part { display: inline-flex; align-items: center; margin: 0 0.15rem 0 0.35rem; color: #8b8fb8; font: 700 0.65rem/1 var(--sl-font); text-transform: uppercase; letter-spacing: 0.08em; }
+  .chapters-part { margin-left: 0; min-width: 3.4rem; }
+  .chapters-break { flex-basis: 100%; height: 0; margin: 0; }
   .walkthrough-body { padding: 0 0.9rem 0.9rem 3.5rem; display: grid; gap: 0.75rem; }
   .walkthrough-body section { margin: 0; }
   .walkthrough-body h4 { margin: 0 0 0.25rem; font-size: var(--sl-text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--sl-color-gray-3); }
   .walkthrough-body p, .walkthrough-body ul { margin: 0; }
   .walkthrough-body pre { margin: 0.25rem 0 0; padding: 0.6rem 0.75rem; border-radius: 0.5rem; background: var(--sl-color-gray-6); font-size: var(--sl-text-xs); overflow-x: auto; }
+  .walkthrough-body :global(.walkthrough-shot) { display: block; width: 100%; max-width: 36rem; height: auto; margin-top: 0.6rem; border: 1px solid var(--sl-color-hairline); border-radius: 0.6rem; }
   .walkthrough-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; padding: 0; list-style: none; }
   .walkthrough-links li { margin: 0; }
   @media (max-width: 40rem) {
+    /* the chapters become one row to swipe through, so the bar stays shorter than the player */
+    .chapters-list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 0.1rem; scroll-snap-type: x proximity; }
+    .chapters-list::-webkit-scrollbar { display: none; }
+    .chapters-list li { flex: none; scroll-snap-align: start; }
+    .chapters-break { display: none; }
+    .chapters-part { min-width: 0; margin-left: 0.4rem; }
+    .chapters-part:first-child { margin-left: 0; }
+    .glance li:last-child:nth-child(odd) { grid-column: 1 / -1; }
     .walkthrough-row { grid-template-columns: auto 1fr; }
     .walkthrough-time { grid-column: 2; justify-items: start; }
     .walkthrough-body { padding-left: 0.9rem; }

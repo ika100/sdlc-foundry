@@ -60,6 +60,21 @@ The recording in the README and on the docs homepage. One system with one Python
 
 Most of the ideal time is agent work (spec and ship, about 17 min). CI is about 7 min in total.
 
+### The 2026-11-04 demo run (part 2)
+
+Part 2 of the same recording: the system gets a Postgres database and a Next.js web UI through one system spec shipped across three repos (sdlc-foundry 5.7.0). The sentences were typed by Claude Code on the user's behalf in the same recorded terminal; the user created the token and decided where asked. Times come from the recording's clock and the repos' PRs; the ideal column is an estimate.
+
+| Step | Measured | Ideal | What made the difference |
+|---|---|---|---|
+| Add the web UI (`/component:new`, `/component:add`, merge) | 7 min | 7 min | — |
+| System spec: write, 10 questions, publish, approve | 52 min | 9 min | publishing waited 43 min for GitHub's GraphQL limit, used up by two local consoles polling every 30 s |
+| System plan, merged | 4 min | 4 min | — |
+| System ship: gitops, then API and web in parallel, PRs, CI, pins, dev smoke | 2 h 18 min | ≈ 30 min | about 40 min more GraphQL wait before the PRs; 55 min for a token that could write to the gitops repo; 12 min for the one-time operator bootstrap of the older local cluster; the resume bug [#408](https://github.com/ika100/sdlc-foundry/issues/408) |
+| Use it: web UI, restart, tasks survive | 2 min | 2 min | — |
+| **Total** | **≈ 3 h 20 min** | **≈ 55 min** | |
+
+The web UI took 16 min of agent work from its repo spec to done; dev smoke passed 4 of 4 (API) and 1 of 1 (web).
+
 ## Defect history
 
 12 defects were found only by running the real chain (see `CHANGELOG.md` [1.1.1]); v2 adds a regression test or contract check for each.

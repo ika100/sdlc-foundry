@@ -35,11 +35,11 @@ import DemoWalkthrough from '../../components/DemoWalkthrough.astro';
 
 ## Watch a real run
 
-One system from an empty folder to a new endpoint answering in dev, recorded as it happened. Click a chapter to jump: `/system:new` creates the repos, `cluster-up` starts a local cluster, `/component:spec` asks its questions, and `/component:ship` plans, writes failing tests, builds, merges on green CI and deploys.
+One system, recorded as it happened, in two parts. Part 1 goes from an empty folder to a new endpoint in dev: `/system:new` creates the repos, `/component:spec` asks its questions, and `/component:ship` plans, writes failing tests, builds, merges on green CI and deploys. Part 2 adds a Postgres database and a web UI with one system spec shipped across three repos. Click a chapter to jump.
 
 <DemoWalkthrough compact />
 
-<p class="demo-caption">A real run on the public demo repos <a href="https://github.com/ika100/demo-taskboard-api">demo-taskboard-api</a> and <a href="https://github.com/ika100/demo-taskboard-gitops">demo-taskboard-gitops</a>, with waiting time cut: about 85 minutes shown in 4 (<a href="/sdlc-foundry/reference/baselines/#the-2026-11-03-demo-run">where the time went</a>). <a href="/sdlc-foundry/get-started/watch-a-run/"><strong>Walk through it step by step →</strong></a> what Claude asked, what it did and a link to every pull request.</p>
+<p class="demo-caption">Real runs on the public demo repos <a href="https://github.com/ika100/demo-taskboard-api">demo-taskboard-api</a>, <a href="https://github.com/ika100/demo-taskboard-web">demo-taskboard-web</a> and <a href="https://github.com/ika100/demo-taskboard-gitops">demo-taskboard-gitops</a>, with every wait cut: about 85 minutes of work shown in 7 (<a href="/sdlc-foundry/get-started/watch-a-run/#about-the-timing">where the time went</a>). <a href="/sdlc-foundry/get-started/watch-a-run/"><strong>Walk through it step by step →</strong></a> what Claude asked, what it did and a link to every pull request.</p>
 
 ## Platform glue should not cost a small team months
 

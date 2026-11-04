@@ -6,12 +6,14 @@ tableOfContents: false
 
 import DemoWalkthrough from '../../../components/DemoWalkthrough.astro';
 
-One system with one Python service, from an empty folder to a new endpoint answering in dev on a local cluster. Every step is one sentence in Claude Code: say what you want in your own words and Claude runs the matching slash command, or type the command yourself. Each step shows both. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real artifacts in the public demo repos [demo-taskboard-api](https://github.com/ika100/demo-taskboard-api) and [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops), so you can check every claim.
+Two recorded runs of one system, one after the other. **Part 1** (steps 1–9) goes from an empty folder to a new endpoint answering in dev on a local cluster. **Part 2** (steps 10–15) adds a Postgres database and a Next.js web UI with one system spec shipped across three repos. Every step is one sentence in Claude Code: say what you want in your own words and Claude runs the matching slash command, or type the command yourself. Each step shows both. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real artifacts in the public demo repos [demo-taskboard-api](https://github.com/ika100/demo-taskboard-api), [demo-taskboard-web](https://github.com/ika100/demo-taskboard-web) and [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops), so you can check every claim.
 
 <DemoWalkthrough />
 
 ## About the timing
 
-The run took **about 85 minutes**. The recording cuts the waiting and shows it in about 4. Without the stalls this run hit, it takes **about 28–30 minutes**: three platform bugs (fixed since), answers that came late, and one extra demo step. Most of that time is agent work; CI is about 7 minutes in total. The [measured baselines](/sdlc-foundry/reference/baselines/#the-2026-11-03-demo-run) list each step.
+Every time on this page is working time: the waiting is cut. **Part 1 takes about 30 minutes of work** (agents about 17, CI about 7), **part 2 about 55** (the web UI's build alone took 16). The recording shows both in 7 minutes.
 
-**What was edited:** waiting time is compressed, a fumbled folder-trust dialog and a mistyped first `curl` are cut, and the host name in the status bar is blanked. Nothing else is changed; the escalation in step 7 is part of the run. Recorded with [asciinema](https://asciinema.org) on 2026-11-03 with sdlc-foundry 5.6.0.
+The runs themselves waited on things outside the platform's work: GitHub's API limit (used up by two local consoles), a token that could not write, a one-time operator bootstrap, CI queues and answers that came late. Each is named in its step. The [measured baselines](/sdlc-foundry/reference/baselines/#the-2026-11-03-demo-run) keep the full measured times, waits included.
+
+**What was edited:** waiting is cut, the folder-trust dialogs, a fumbled dialog and a mistyped first `curl` are removed, and the host name in the status bar is blanked. Nothing else is changed; the questions in steps 7 and 14 are part of the runs. Part 1 was recorded with [asciinema](https://asciinema.org) on 2026-11-03 with sdlc-foundry 5.6.0, part 2 on 2026-11-04 with 5.7.0; in part 2, Claude Code typed the sentences on the user's behalf in the same recorded terminal.
