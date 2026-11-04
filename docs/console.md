@@ -44,7 +44,7 @@ Nothing runs before you click the button (or press its key: `a` approve, `p` pro
 
 ### Board: where every change is
 
-![The Board: one column per stage, a stopped run with its reason](img/console/board.jpg)
+![The Board: the stage strip with its counts (red: a run stopped there), the card colours, and each stage as a row](img/console/board.jpg)
 
 A strip on top shows the eight stages from **Issue** to **Prod** with the number of items in each (a stage with a stopped run is red); select one to jump to it. Below, each stage is a row and every open item sits in exactly one; the cards of a stage wrap, so nothing scrolls sideways, and an empty stage is one slim line. **Spec**, **Build** and **Prod** are decision stages ("you decide"). Select a stage name to see what happens in that stage, which agents work there, the commands, and what you decide. Arrow keys move between cards: left and right inside a stage, up and down to the next stage with cards. A run card shows its budget used of its limit, and a stopped run says why in one line.
 
@@ -56,11 +56,13 @@ Open a card for its detail: the stage strip, one line per repo slice, every acce
 
 ### System: what it is made of and where it runs
 
-![System: versions and states per environment, promote in place, parts and relations](img/console/system.jpg)
+![System as a tree: a component opened for its repo and relations, versions and states per environment, promote in place](img/console/system.jpg)
 
 The page shows the system as one tree: **Components**, **Libraries**, **Resources** and **APIs**, each item a row. A component or resource row has one column per environment, headed by its promotion rule and policy. A cell shows the running version and its state: `pinned`, `healthy`, `verified` (smoke passed), `NOT VERIFIED`, `alert`, or `unknown` when the cluster cannot be read; a legend under the table explains each one. A verified cell before a manual environment offers **Promote**, and a verified version newer than the last release offers **Cut release**; both open the decision with its consequence first.
 
 Open a row with its arrow for its repo, the APIs it provides and consumes, the resources it uses and the changes it offers. Every change starts where its item is: **+ Add component**, **+ Add resource** and **+ Add API** on their group, **Remove** and **Change APIs** in a row, **Change rules** on an environment, **New system** next to the system name. The form opens at the right edge, filled in, with selection lists for what already exists (`/component:add|remove`, `/component:set --provides|--consumes`, `/resource:add|remove`, `/system:set --env`, `/system:new`). Each change previews the exact command, the `system.yaml` diff and the renderer's checks on a scratch copy before anything runs; an invalid value names the key and the rule. The same forms are in the palette (`⌘K`).
+
+![Change APIs on shop-api: the form opens at the right, filled in, with the command and the system.yaml diff](img/console/system-change.jpg)
 
 ### Autonomy: the System tab for what runs on its own
 
@@ -77,6 +79,8 @@ Every page has a one-line answer under its title and a **Help** button (or `?`).
 ![Help on the System page](img/console/help.jpg)
 
 ![The guide inside the console: contents, this text with its screenshots, the process and every command](img/console/guide.jpg)
+
+![How it works: the eight stages, the three where you decide, and every term by topic](img/console/how-it-works.jpg)
 
 ## Stages
 

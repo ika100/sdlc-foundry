@@ -72,7 +72,8 @@ def _run_info(run: dict | None) -> dict:
         parts.append(("minutes unknown" if used.get("minutes") is None else f"{_num(used['minutes'])} min") + f" of {_num(limit['minutes'])} min")
     escalation = run.get("escalation") or {}
     why = (escalation.get("summary") or escalation.get("reason") or "") if run.get("stopped") else ""
-    return {"budget": ", ".join(parts).capitalize(), "why": one_line(why)}
+    line = ", ".join(parts)
+    return {"budget": line[:1].upper() + line[1:], "why": one_line(why)}   # not capitalize(): it would lowercase USD
 
 
 def _spec_stage(row: dict, runs: list[dict]) -> tuple[str | None, bool, dict | None]:

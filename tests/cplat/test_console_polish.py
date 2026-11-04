@@ -196,3 +196,8 @@ def test_the_palette_keeps_the_forms_as_disclosures(tmp_path):
     ctx = SimpleNamespace(data=lambda name: model if name == "model" else None, repo_dir=tmp_path)
     html = system_page.model_forms(ctx)
     assert html.count("<details") == 5 and html.count('data-form="') == 5 and 'id="form-' not in html
+
+
+def test_a_budget_line_keeps_usd_in_capitals():
+    info = board._run_info({"budget": {"used": {"cost": 3.1, "minutes": 42}, "limit": {"cost": 15, "minutes": 180}}})
+    assert info["budget"] == "Cost 3.1 of 15 USD, 42 min of 180 min"

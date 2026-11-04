@@ -411,8 +411,8 @@
     drawerOpener = opener || null;
     var empty = $all("input:not([type='hidden']), select", form).filter(function (n) { return !n.disabled && !n.value; })[0];
     (empty || $("input:not([type='hidden']), select", form) || form).focus();
-    // A preview needs a change: opened with only an action or an environment, the form waits for the first choice
-    if (Object.keys(prefill).some(function (k) { return k !== "action" && k !== "env"; })) { requestPreview(form); }
+    // Only a removal is a whole change when the form opens; any other form waits for the first choice before it previews
+    if (prefill.action === "remove") { requestPreview(form); }
     return true;
   }
 

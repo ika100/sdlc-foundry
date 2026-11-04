@@ -536,7 +536,7 @@ label { font-weight: 550; font-size: 0.88rem; }
 .guide-body pre { overflow-x: auto; max-width: 100%; background: var(--surface); padding: var(--s3); border-radius: var(--radius); border: 1px solid var(--line); }
 .guide-commands .guide-cmd { padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
 .guide-commands .guide-cmd p { margin-bottom: var(--s1); }
-.guide-body figure img { aspect-ratio: 1439 / 840; object-fit: contain; width: 100%; }
+.guide-body figure img { aspect-ratio: 1200 / 819; object-fit: contain; width: 100%; }
 .guide-stages .guide-stage { padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
 .guide-stages .guide-stage p { margin-bottom: var(--s1); }
 
