@@ -153,5 +153,6 @@ def test_a_reused_cluster_prints_its_real_port_not_default(tmp_path):
     out = run.stdout + run.stderr
     assert "exists - reusing it" in out, out[-2000:]
     grafana = [ln for ln in out.splitlines() if ln.startswith("Grafana:")]
-    assert grafana and "http://grafana.localhost:8123/" in grafana[0], out[-2000:]
+    urls = [w for w in grafana[0].split() if w.startswith("http")] if grafana else []
+    assert urls[:1] == ["http://grafana.localhost:8123/"], out[-2000:]
     assert ":default" not in out, out[-2000:]
