@@ -1,7 +1,7 @@
 ---
 spec_id: 140-one-repo-feature-takes-the-component-route
 title: A one-repo feature takes the component route
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -28,8 +28,8 @@ and `/component:ship` took 17 minutes on 2026-11-03; through the system route it
 
 - **AC-140.1** Given `/system:spec <description>` in a gitops-app repo, when the description names exactly one component
   of `system.yaml` and asks for no resource, exposure or environment change, then the command says that one repo is
-  enough, recommends `/component:spec` in that repo with the same description, and asks the user (recommended: the
-  component route) before writing a system spec.
+  enough, recommends `/component:spec` in that repo with the same description, and asks the user once, with the component
+  route as the recommended answer, before writing a system spec (also when the match is unambiguous).
 - **AC-140.2** Given the user picks the component route in AC-140.1, when the command continues, then it runs the component
   spec flow in that component's clone (the path `system.yaml` and the local checkout give) and the next step it prints is
   `/component:ship <id>` there; no system spec, plan or plan PR is created.
@@ -46,9 +46,11 @@ and `/component:ship` took 17 minutes on 2026-11-03; through the system route it
 
 ## Open questions
 
-1. Should the component route be taken without asking when the match is unambiguous (one component named, nothing else)?
-   (Recommended: ask once, with the component route as the recommended answer.)
+1. ~~Should the component route be taken without asking when the match is unambiguous (one component named, nothing else)?
+      (Recommended: ask once, with the component route as the recommended answer.)~~ Answered: ask once, component route recommended (AC-140.1).
 
 ## Changelog
 
 - 2026-11-05 created (found in the journey runs of 2026-11-05)
+- 2026-11-05 open question answered by the user (recommended answer)
+- 2026-11-05 approved
