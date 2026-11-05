@@ -1,7 +1,7 @@
 ---
 spec_id: 143-the-coordinator-waits-with-cplat
 title: The coordinator waits with cplat, not hand-written loops
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -107,20 +107,18 @@ default timeout is 540 s, so one wait fits in one tool call.
 
 ## Open questions
 
-- Name of the environment wait: `cplat system wait --env <env>` (it runs in the gitops-app repo, like `system status`) or
-  `cplat instance wait <env>`? (Recommended: `cplat system wait --env`; it also waits for the resources' apps, which are
-  not instances.)
-- Should the wait hard-refresh an app by itself when it is still behind on the revision after Argo CD's polling interval
-  (3 minutes), without `--refresh`? (Recommended: no; the command that merged passes `--refresh`, and the timeout message
-  prints the command with it, so a refresh is always visible in the output.)
-- Confirm: a default timeout of 540 s for every wait, so one wait fits in one tool call; exit 2 means "run it again"; the
-  commands escalate after the third timeout in a row (≈ 27 minutes). (Recommended: yes.)
-- Confirm: `cplat cluster wait` (AC-143.7) belongs in this spec, since #264 item 3 was seen on the cluster repo's root
-  app. (Recommended: yes; it is the same wait on one app.)
-- Confirm: `cplat system ship next --wait` (AC-143.9) belongs in this spec, although a system ship with foreground
-  subagents seldom sees `action: wait` (a resumed run does). (Recommended: yes; it replaces the `ship status` loop seen on
-  2026-11-05.)
+- ~~Name of the environment wait: `cplat system wait --env <env>` or `cplat instance wait <env>`?~~ Answered:
+  `cplat system wait --env`, since it also waits for the resources' apps, which are not instances; see the environment
+  wait and AC-143.1.
+- ~~Should the wait hard-refresh an app by itself when it is still behind after Argo CD's polling interval, without
+  `--refresh`?~~ Answered: no; the command that merged passes `--refresh`, and the timeout message prints the command with
+  it; see AC-143.4, AC-143.5, AC-143.11.
+- ~~Confirm: a default timeout of 540 s for every wait; exit 2 means "run it again"; the commands escalate after the third
+  timeout in a row.~~ Answered: yes; see the environment wait, AC-143.4, AC-143.8, AC-143.9, AC-143.11.
+- ~~Confirm: `cplat cluster wait` belongs in this spec.~~ Answered: yes; see AC-143.7.
+- ~~Confirm: `cplat system ship next --wait` belongs in this spec.~~ Answered: yes; see AC-143.9.
 
 ## Changelog
 
 - 2026-11-05 created
+- 2026-11-05 approved by the user
