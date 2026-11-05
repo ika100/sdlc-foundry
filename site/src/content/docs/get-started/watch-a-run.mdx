@@ -12,7 +12,7 @@ One system, recorded in one run from an empty folder to prod. **Part 1** (steps 
 
 ## About the timing
 
-Every time on this page is working time: the waits for a person are cut, the CI rounds are not. **Part 1 takes about 70 minutes of work, part 2 about 85 and part 3 about 60**; the recording shows all three in under 10 minutes. Most of it is the two ships (45 and 72 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and 34 pull requests, each with its own CI round. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/430)); this run is the measured starting point.
+Every time on this page is working time: the waits for a person are cut, the CI rounds are not. **Part 1 takes about 70 minutes of work, part 2 about 85 and part 3 about 60**; the recording shows all three in under 4 minutes. Most of it is the two ships (45 and 72 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and 34 pull requests, each with its own CI round. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/430)); this run is the measured starting point.
 
 Two things went wrong in the platform and are fixed: a pin PR stayed blocked when GitHub never started its CI run ([#464](https://github.com/ika100/sdlc-foundry/pull/464)), and a release missed a lock-file line ([#468](https://github.com/ika100/sdlc-foundry/pull/468)). Each is named in its step.
 
