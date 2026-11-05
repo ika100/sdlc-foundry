@@ -29,6 +29,7 @@ if git rev-parse --git-dir >/dev/null 2>&1 && git fetch -q origin main 2>/dev/nu
 fi
 
 if [ -f operators/root.yaml ]; then
+  bash scripts/operator-handover.sh   # #425: External Secrets or Kyverno HelmCharts of an older cluster-up go to Argo CD first
   echo "Applying operators/root.yaml to context $KUBE_CONTEXT"
   k apply -n argocd -f operators/root.yaml
   for f in operators/apps/*.yaml; do

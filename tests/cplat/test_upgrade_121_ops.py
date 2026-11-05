@@ -364,8 +364,9 @@ def test_under_argo_cd_the_property_operators_come_from_operators_apps_ac_121_17
     text = local()
     for name in ("external-secrets", "kyverno", "lgtm"):
         assert re.search(rf"operators/apps/{name}\.yaml", text), name
-    assert "External Secrets was installed by an older cluster-up (HelmChart kube-system/external-secrets); keeping it. Recreate the cluster to let Argo CD manage it" in text
-    assert "Kyverno was installed by an older cluster-up (HelmChart kube-system/kyverno); keeping it. Recreate the cluster to let Argo CD manage it" in text
+    for label in ("External Secrets", "Kyverno"):   # #425: their HelmCharts are handed over to Argo CD, not kept
+        assert f"{label} was installed by an older cluster-up" not in text, label
+    assert re.search(r'KUBE_CONTEXT="\$ctx" bash scripts/operator-handover\.sh.*\n.*\n\s*k apply -n argocd -f operators/root\.yaml', text)
     assert re.search(r"deploy/lgtm\b.*300s", text) and re.search(r"clustersecretstores\.external-secrets\.io", text)
     assert re.search(r"namespacedvalidatingpolicies\.policies\.kyverno\.io", text)
 
