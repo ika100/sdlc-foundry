@@ -31,7 +31,7 @@ tasks:
     covers: [AC-136.1, AC-136.8]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t6
     title: one gitops PR per environment per spec (deferred, see design § AC-136.11)
     files: [scripts/cplat/appship_sched.py, scripts/cplat/appship.py, scripts/cplat/ship.py, scripts/cplat/staging_deploy.py, scripts/cplat/systemset.py, templates/gitops-app/.github/workflows/pin-dev.yml, plugins/system/commands/ship.md]
