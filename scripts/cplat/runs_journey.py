@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 from pathlib import Path
 
 import runs
@@ -201,7 +202,12 @@ def begin(ns: argparse.Namespace) -> list[str]:
     if ns.task_version < 1:
         raise PlatformError("--task-version must be at least 1")
     started = _iso(_when(ns))
-    rid = runs.start("journey", repo=ns.repo, started_at=started)
+    session = os.environ.pop("CLAUDE_CODE_SESSION_ID", None) if ns.at else None   # a reconstructed journey claims no session
+    try:
+        rid = runs.start("journey", repo=ns.repo, started_at=started)
+    finally:
+        if session is not None:
+            os.environ["CLAUDE_CODE_SESSION_ID"] = session
     if not rid:
         raise PlatformError("the journey record could not be started", hint=f"is {runs.state_dir()} writable?")
     runs.set_section(rid, RAW, {"task_version": ns.task_version, "coordinator_model": ns.model or "unknown", "stages": {},
@@ -321,6 +327,8 @@ def table(section: dict) -> list[str]:
 def show(ns: argparse.Namespace) -> list[str]:
     rid, raw = _require()
     section = compute(raw, runs.utcnow())
+    for s in section["stages"]:   # still running, not stopped: the journey has not ended
+        s["status"] = "open" if s["status"] == "stopped" else s["status"]
     if ns.json:
         return [json.dumps(section, indent=2)]
     return [f"journey {rid} (so far)", *table(section)]

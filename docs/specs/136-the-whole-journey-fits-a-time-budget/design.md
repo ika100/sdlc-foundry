@@ -74,7 +74,8 @@ cplat platform runs journey end --outcome done|failed|escalated|abandoned [--rea
 ```
 
 - `begin` refuses while a journey is open (hint: `journey end --outcome abandoned`). It prints `journey <run_id>`.
-  `--task-version` defaults to 1, `--model` to `unknown`.
+  `--task-version` defaults to 1, `--model` to `unknown`. A `begin --at` (a journey reconstructed afterwards) claims no Claude Code session for the
+  record's usage (spec 099); a live `begin` does.
 - Every other verb refuses without an open journey (hint: `journey begin`). An unknown stage id, a `stage end` of a
   stage that never started, a second open wait of the same kind, or a `wait end` without an open wait is refused with the
   reason; nothing is changed.
@@ -82,7 +83,8 @@ cplat platform runs journey end --outcome done|failed|escalated|abandoned [--rea
 - `round` kinds: `fix-round`, `ci-rerun`, `escalation`, `resumed-session`, `reworked-spec`, `reworked-plan`. Causes: the
   run-record causes `platform`, `code`, `decision`, `environment`, `unknown`.
 - `pr` and `round` without `--stage` go to the open stage that started last; with no open stage they are refused.
-- `show` prints the stage table computed now (open stages and waits end at now); `--json` prints the `journey` section.
+- `show` prints the stage table computed now (open stages, shown as `open`, and waits end at now); `--json` prints the
+  `journey` section.
 - `end` closes open waits and stages at its time (`--at`, else now), computes the section, writes it to the record with
   `runs.finish` and removes the pointer. Its outcome is the record's outcome; the record's own `ended_at` is the time the
   command ran.
