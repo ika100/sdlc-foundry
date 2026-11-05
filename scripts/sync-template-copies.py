@@ -17,6 +17,7 @@ COPIES: list[tuple[Path, Path]] = [
     (APP / "render.py", CLUSTER / "system_render.py"),
     (APP / "local-cluster.sh", CLUSTER / "local-cluster.sh"),
     (APP / "ports.sh", CLUSTER / "ports.sh"),
+    (APP / "operator-handover.sh", CLUSTER / "operator-handover.sh"),   # local-cluster.sh calls it (#425)
 ] + [
     (APP / "gate.sh", TEMPLATES / t / "scripts" / "gate.sh")
     for t in ("cluster-gitops", "service-python", "library-python", "service-go", "service-java", "web-nextjs")

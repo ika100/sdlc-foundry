@@ -8,6 +8,7 @@ import datetime
 import statistics
 from collections import Counter
 
+import runs_journey_report
 import runs_report
 
 GROUPS = ("delivered", "failed", "escalated", "abandoned", "gate_failed")
@@ -141,6 +142,7 @@ def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | No
                    "days": since_days, "repo": repo, "store": store, "records": len(kept), "malformed": malformed},
         "price_tables": sorted(tables),
         "benchmarks": out,
+        "journey": runs_journey_report.aggregate(kept),   # spec 136
     }
 
 
@@ -162,6 +164,7 @@ def render_benchmarks_text(agg: dict) -> str:
                             f"{_money(nd['cost_usd_median'])} (est.)" if nd else ""))
     if not agg["benchmarks"]:
         lines.append("  none")
+    lines += runs_journey_report.render_lines(agg.get("journey") or {})   # spec 136
     return "\n".join(lines)
 
 

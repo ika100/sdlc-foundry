@@ -25,6 +25,7 @@ def behind(tmp_path):
             git(d, "config", k, v)
     (repo / "scripts").mkdir()
     shutil.copy(ROOT / "templates/gitops-app/scripts/bootstrap.sh", repo / "scripts/bootstrap.sh")
+    shutil.copy(ROOT / "templates/gitops-app/scripts/operator-handover.sh", repo / "scripts/operator-handover.sh")
     (repo / "bootstrap").mkdir()
     (repo / "bootstrap/root.yaml").write_text("kind: Application\n")
     git(repo, "add", "-A"); git(repo, "commit", "-qm", "init"); git(repo, "push", "-q", "origin", "main")

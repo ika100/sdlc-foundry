@@ -1,9 +1,12 @@
 """pytest plugin of `devbox run smoke` (platform-owned: /shared:update-service refreshes it).
 
-Loaded with `-p scripts.smoke_pytest`. It registers the `smoke` marker, provides the
+Loaded with `-p scripts.smoke_pytest`. It registers the `smoke` and `writes` markers, provides the
 `smoke_base_url` fixture, skips smoke tests when SMOKE_BASE_URL is empty (so `devbox run test`
 and `ci` never reach a deployment) and, with `--smoke-report`, prints one
 `PASS|FAIL|SKIP  <nodeid>` line per smoke test and a summary line (spec 091).
+
+With SMOKE_READ_ONLY=1 (the platform sets it outside dev, with SMOKE_ENV naming the environment)
+every test marked `@pytest.mark.writes` is skipped, so staging and prod get no smoke data (#474).
 """
 
 from __future__ import annotations
@@ -20,6 +23,10 @@ def _base_url() -> str:
     return os.environ.get("SMOKE_BASE_URL", "").strip().rstrip("/")
 
 
+def _read_only() -> bool:
+    return os.environ.get("SMOKE_READ_ONLY", "").strip() == "1"
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--smoke-report",
@@ -31,6 +38,9 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "smoke: runs against a deployment (SMOKE_BASE_URL)")
+    config.addinivalue_line(
+        "markers", "writes: a smoke test that creates or changes data; runs only in dev"
+    )
 
 
 @pytest.fixture()
@@ -43,12 +53,19 @@ def smoke_base_url() -> str:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    if _base_url():
+    if not _base_url():
+        skip = pytest.mark.skip(reason="SMOKE_BASE_URL is not set")
+        for item in items:
+            if item.get_closest_marker("smoke") is not None:
+                item.add_marker(skip)
         return
-    skip = pytest.mark.skip(reason="SMOKE_BASE_URL is not set")
-    for item in items:
-        if item.get_closest_marker("smoke") is not None:
-            item.add_marker(skip)
+    if _read_only():
+        env = os.environ.get("SMOKE_ENV", "").strip() or "this environment"
+        reason = f"writes data: read-only smoke in {env} (SMOKE_READ_ONLY=1)"
+        writes = pytest.mark.skip(reason=reason)
+        for item in items:
+            if item.get_closest_marker("writes") is not None:
+                item.add_marker(writes)
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:

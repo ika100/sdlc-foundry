@@ -50,6 +50,15 @@ def _rate_limit_wait(kind: str) -> float | None:
     return wait if wait > 30 else None
 
 
+def _journey_wait(seconds: float, kind: str) -> None:
+    """Spec 136 (AC-136.3): a rate-limit wait is an external wait of the open journey, if any. Never raises, never prints."""
+    try:
+        import runs_journey
+        runs_journey.note_external_wait(seconds, kind)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, capture: bool = True,
         env: dict[str, str] | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
     """Run a command; raise PlatformError with the command's stderr when it fails and `check` is set. A `gh` call that GitHub
@@ -79,6 +88,7 @@ def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, ca
         print(f"GitHub rate limit ({kind}): waiting until {until} UTC", file=sys.stderr, flush=True)
         sleep(wait)
         waited += wait
+        _journey_wait(wait, kind)
     if check and proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()[-6:]
         raise PlatformError(f"`{' '.join(cmd[:4])}` failed (exit {proc.returncode}): " + " | ".join(detail))

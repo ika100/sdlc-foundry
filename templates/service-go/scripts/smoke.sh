@@ -2,6 +2,8 @@
 # devbox run smoke: run the smoke-tagged tests against a running deployment (platform-owned, spec 091).
 # Prints `PASS|FAIL|SKIP  <path>::<name>` per test, then `smoke: <p> passed, <f> failed, <s> skipped`
 # (or `0 smoke tests`). Exit 2 without SMOKE_BASE_URL, 1 when a test or the runner fails.
+# SMOKE_READ_ONLY=1 (set by the platform outside dev, SMOKE_ENV names the environment) leaves out the tests
+# named TestSmokeWrites<Name>, so only dev gets smoke data (#474).
 set -uo pipefail
 
 base="${SMOKE_BASE_URL:-}"
@@ -11,12 +13,17 @@ if [ -z "$base" ]; then
 fi
 while [ "${base%/}" != "$base" ]; do base="${base%/}"; done
 export SMOKE_BASE_URL="$base"
+skip=()
+if [ "${SMOKE_READ_ONLY:-}" = "1" ]; then
+  echo "read-only smoke${SMOKE_ENV:+ in $SMOKE_ENV}: TestSmokeWrites* tests are not run" >&2
+  skip=(-skip '^TestSmokeWrites')
+fi
 
 raw="$(mktemp)"
 summary="$(mktemp)"
 trap 'rm -f "$raw" "$summary"' EXIT
 
-go test -count=1 -json -run '^TestSmoke' ./... >"$raw"
+go test -count=1 -json -run '^TestSmoke' ${skip[@]+"${skip[@]}"} ./... >"$raw"
 rc=$?
 go run scripts/smoke-summary.go <"$raw" >"$summary"
 src=$?

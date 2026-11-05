@@ -233,7 +233,7 @@ def test_a_run_that_hits_the_limit_is_red_without_a_retry_ac_091_8(world, capsys
     smoke = smoke_mod()
     limits = []
 
-    def endless(repo, base_url, timeout):
+    def endless(repo, base_url, timeout, *_):
         limits.append(timeout)
         kw = {}
         for f in dataclasses.fields(smoke.Attempt):
