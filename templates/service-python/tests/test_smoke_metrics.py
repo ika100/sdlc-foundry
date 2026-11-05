@@ -1,6 +1,7 @@
 """Smoke test (spec 104, AC-104.4): requests to a running service show up in /metrics.
 
-It reaches the service only through its URL. Without SMOKE_BASE_URL it is skipped.
+It reaches the service only through its URL. Without SMOKE_BASE_URL it is skipped. It only reads,
+so it runs in every environment (no `@pytest.mark.writes`, #474).
 """
 
 from __future__ import annotations

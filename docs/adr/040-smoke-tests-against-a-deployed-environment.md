@@ -43,3 +43,7 @@ works in a running environment. That evidence must come out of four shapes with 
 - The first web smoke run on a machine downloads Chromium. `ci` stays browser-free.
 - Smoke tests run against shared environments, so they must create their own uniquely named data and never touch data
   they did not create. This is a rule for the tester agents, not something the platform can check.
+- Amended by #474 (2026-11-05): smoke that writes runs only in dev. cplat passes `SMOKE_ENV=<env>` and, outside dev,
+  `SMOKE_READ_ONLY=1`; the harness then leaves out the tests marked as writing (`@pytest.mark.writes`, `@Tag("writes")`,
+  `TestSmokeWrites<Name>`, `@writes`), so staging and prod get read-only checks only. Outside dev, a run in which no test
+  passed is `not-run` (`no read-only smoke test ran in <env>`), never passed. There is no cleanup of smoke data.

@@ -1,7 +1,8 @@
 """Smoke test (spec 091): `SMOKE_BASE_URL=https://<host> devbox run smoke` runs it.
 
 It reaches the service only through its URL, never in-process. Without SMOKE_BASE_URL it is
-skipped.
+skipped. It only reads, so it runs in every environment; a smoke test that creates or changes
+data carries `@pytest.mark.writes` as well and then runs only in dev (#474).
 """
 
 from __future__ import annotations

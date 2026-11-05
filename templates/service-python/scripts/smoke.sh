@@ -2,6 +2,8 @@
 # devbox run smoke: run the smoke-tagged tests against a running deployment (platform-owned, spec 091).
 # Prints `PASS|FAIL|SKIP  <path>::<name>` per test, then `smoke: <p> passed, <f> failed, <s> skipped`
 # (or `0 smoke tests`). Exit 2 without SMOKE_BASE_URL, 1 when a test or the runner fails.
+# SMOKE_READ_ONLY=1 (set by the platform outside dev, SMOKE_ENV names the environment) skips the tests
+# marked `@pytest.mark.writes`, so only dev gets smoke data (#474).
 set -uo pipefail
 
 base="${SMOKE_BASE_URL:-}"
@@ -11,6 +13,9 @@ if [ -z "$base" ]; then
 fi
 while [ "${base%/}" != "$base" ]; do base="${base%/}"; done
 export SMOKE_BASE_URL="$base"
+if [ "${SMOKE_READ_ONLY:-}" = "1" ]; then
+  echo "read-only smoke${SMOKE_ENV:+ in $SMOKE_ENV}: tests marked @pytest.mark.writes are skipped" >&2
+fi
 
 out="$(mktemp)"
 trap 'rm -f "$out"' EXIT

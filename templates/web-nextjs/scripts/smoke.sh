@@ -2,6 +2,8 @@
 # devbox run smoke: run the @smoke Playwright tests against a running deployment (platform-owned, spec 091).
 # Prints `PASS|FAIL|SKIP  <path>::<name>` per test, then `smoke: <p> passed, <f> failed, <s> skipped`
 # (or `0 smoke tests`). Exit 2 without SMOKE_BASE_URL, 1 when a test or the runner fails.
+# SMOKE_READ_ONLY=1 (set by the platform outside dev, SMOKE_ENV names the environment) leaves out the tests
+# tagged @writes, so only dev gets smoke data (#474).
 set -uo pipefail
 
 base="${SMOKE_BASE_URL:-}"
@@ -11,6 +13,11 @@ if [ -z "$base" ]; then
 fi
 while [ "${base%/}" != "$base" ]; do base="${base%/}"; done
 export SMOKE_BASE_URL="$base"
+invert=()
+if [ "${SMOKE_READ_ONLY:-}" = "1" ]; then
+  echo "read-only smoke${SMOKE_ENV:+ in $SMOKE_ENV}: @writes tests are not run" >&2
+  invert=(--grep-invert @writes)
+fi
 
 json="$(mktemp)"
 summary="$(mktemp)"
@@ -20,7 +27,7 @@ if ! pnpm exec playwright install chromium >&2; then
   echo "FAIL  (smoke recipe)"
   exit 1
 fi
-PLAYWRIGHT_JSON_OUTPUT_NAME="$json" pnpm exec playwright test --grep @smoke --pass-with-no-tests --reporter=list,json >&2
+PLAYWRIGHT_JSON_OUTPUT_NAME="$json" pnpm exec playwright test --grep @smoke ${invert[@]+"${invert[@]}"} --pass-with-no-tests --reporter=list,json >&2
 rc=$?
 node scripts/smoke-summary.mjs "$json" >"$summary"
 src=$?
