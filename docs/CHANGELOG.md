@@ -6,6 +6,18 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.9.1] - 2026-11-05
+
+### Fixed
+
+**A Python release refreshes `uv.lock` with the version (found in journey 2 of 2026-11-05).** The release agent bumped `pyproject.toml` but not the project's own line in `uv.lock`, so the release PR's image build (`uv sync --locked`) failed until the lock was refreshed by hand. The release now runs `uv lock` and commits the lock file with the version bump.
+
+**`/component:release` tags only after `main` built the image, and build agents add nothing beside their task (found in the journeys of 2026-11-05).** The release pushed its tags before `main`'s CI had built the release commit's image, so the tag jobs failed and had to be rerun; it now waits for that `ci` run and stops without tagging when none starts or it is red. And a build agent added an `image-smoke` recipe and script nobody asked for in both journeys; the coder and deployment agents of every language now build only what their task lists and name a useful extra in their report.
+
+**Opening a gitops PR survives a temporary GitHub error (found in journey 1 of 2026-11-05).** `component set --pr`, `system set --pr`, promotions and the other gitops commands stopped when GitHub answered `gh pr create` with a 5xx or a timeout, and the PR had to be opened by hand. They now try again twice (after 5 s and 15 s); any other error stops at once, and the clone is left clean as before.
+
+**Grafana answers at `grafana.localhost` when the gitops repo installs the observability stack (found in journey 2 of 2026-11-05).** `cluster-up` created the route only for a stack that existed when it ran, so `observability: {ui: lgtm}` turned on later had no address and needed a port-forward. The rendered `operators/lgtm/` now carries the same HTTPRoute (`grafana` in `observability`, on the default Gateway), so both converge.
+
 ## [5.9.0] - 2026-11-05
 
 ### Added
