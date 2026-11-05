@@ -84,6 +84,14 @@ def test_web_runtime_image_ships_no_npm(web):
     assert runtime.index("rm -rf /usr/local/lib/node_modules/npm") < runtime.index('CMD ["node", "server.js"]')
 
 
+def test_slim_runtime_images_take_the_debian_security_updates(web):
+    """Found in the 2026-11-05 journey: node:24-slim shipped apt 2.6.1 with a fixable HIGH CVE, so the web release image
+    scan failed and a rebuild did not help. Both Debian-slim runtime stages upgrade their packages at build time."""
+    for text in ((web / "Dockerfile").read_text(), (TEMPLATES / "service-python" / "Dockerfile").read_text()):
+        runtime = text[text.index("AS runtime"):]
+        assert "apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*" in runtime
+
+
 @pytest.mark.parametrize("template", ["service-python", "web-nextjs"])
 def test_dockerfile_is_template_owned(template):  # AC-104.3
     """AC-104.3: /shared:update-service must bring the strict install, so the Dockerfile is not in _skip_if_exists."""

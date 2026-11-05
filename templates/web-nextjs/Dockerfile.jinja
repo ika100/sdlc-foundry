@@ -22,6 +22,10 @@ LABEL org.opencontainers.image.source="https://github.com/{{ github_org }}/{{ pr
       org.opencontainers.image.description="{{ description | replace('"', '') | replace('\\', '') }}"
 WORKDIR /app
 
+# Debian security updates published after the base image was built (e.g. apt 2.6.1 → 2.6.2, CVE-2026-109518): the release
+# image scan blocks fixable HIGH/CRITICAL findings, and a rebuild of the same base tag would not pick them up.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
 # The server runs with plain `node`; npm, npx and corepack are not needed at runtime. Removing them drops npm's bundled
 # undici (6.28.0 in node:24-slim, fixable HIGH/CRITICAL CVEs that block the release image scan, #421).
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
