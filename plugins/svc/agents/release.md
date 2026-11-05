@@ -68,6 +68,13 @@ Read `pyproject.toml` and update the `version` field under `[project]`:
 version = "X.Y.Z"
 ```
 
+The lock file records the project's own version too, so refresh it (only the project's line changes); a release PR
+without it fails the image build, which installs with a frozen lock:
+
+```bash
+devbox run -- uv lock
+```
+
 ### 4. Create the release branch and commit
 
 **Important:** Always start from the latest main. If HEAD is not on main, switch first:
@@ -82,7 +89,7 @@ Then create the release branch and commit the changelog + version bump:
 
 ```bash
 git checkout -b release/vX.Y.Z
-git add CHANGELOG.md pyproject.toml
+git add CHANGELOG.md pyproject.toml uv.lock
 git commit -m "chore: release vX.Y.Z"
 ```
 
@@ -127,6 +134,7 @@ If `gh` is not available or not authenticated, print the PR body to stdout so it
 | Version bump | vA.B.C → vX.Y.Z (patch/minor/major) |
 | CHANGELOG.md | Updated |
 | pyproject.toml | version = "X.Y.Z" |
+| uv.lock | the project's version (`uv lock`) |
 | Release branch | release/vX.Y.Z pushed |
 | GitHub PR | <URL> |
 

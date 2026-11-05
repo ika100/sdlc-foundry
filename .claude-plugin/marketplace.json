@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "4.1.0",
+      "version": "4.1.1",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": [

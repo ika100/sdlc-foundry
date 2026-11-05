@@ -138,3 +138,10 @@ def test_ci_checks_the_lockfile_mismatch_for_web():  # AC-104.10
     """AC-104.10: the web smoke job fails if pnpm install --frozen-lockfile no longer rejects a stale lock."""
     job = CI.read_text().split("  smoke-test-web-nextjs:", 1)[1].split("\n  smoke-test-", 1)[0]
     assert "pnpm@11.22.0 install --frozen-lockfile" in job or "pnpm install --frozen-lockfile" in job
+
+
+def test_the_python_release_refreshes_the_lock_with_the_version():
+    """Found in journey 2 (2026-11-05): the release PR bumped pyproject.toml but not uv.lock, so the image build (frozen
+    lock) failed until the lock was refreshed by hand."""
+    text = (ROOT / "plugins" / "svc" / "agents" / "release.md").read_text()
+    assert "devbox run -- uv lock" in text and "git add CHANGELOG.md pyproject.toml uv.lock" in text
