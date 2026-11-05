@@ -1,13 +1,12 @@
-// The steps of the recorded demo run (2026-11-03, sdlc-foundry 5.6.0) for DemoWalkthrough.astro.
-// `at` is the chapter marker's time in site/public/demo/demo-run.cast.gz; times and facts come from the recording,
-// the demo repos and docs/BASELINES.md ("The 2026-11-03 demo run").
+// The steps of the recorded journey (2026-11-05, sdlc-foundry 5.8.3 → 5.9.0, organisation ika100-demo) for
+// DemoWalkthrough.astro. `at` is the chapter marker's time in site/public/demo/demo-run.cast.gz; times and facts come from
+// the recording, the demo repos and spec 136 ("Measured on 2026-11-05").
 
-const API = 'https://github.com/ika100/demo-taskboard-api';
-const GITOPS = 'https://github.com/ika100/demo-taskboard-gitops';
-const SPEC = `${API}/blob/main/docs/specs/001-create-and-list-tasks`;
-const ISSUES = 'https://github.com/ika100/sdlc-foundry/issues';
-const WEB = 'https://github.com/ika100/demo-taskboard-web';
-const SYS_SPEC = `${GITOPS}/blob/main/docs/specs/001-persistent-tasks-and-web-task-list`;
+const ORG = 'https://github.com/ika100-demo';
+const GITOPS = `${ORG}/taskboard2-gitops`;
+const API = `${ORG}/taskboard2-api`;
+const WEB = `${ORG}/taskboard2-web`;
+const ISSUES = 'https://github.com/ika100/sdlc-foundry';
 
 export interface Section { heading: string; text?: string; items?: string[]; code?: string }
 export interface Step {
@@ -18,244 +17,217 @@ export interface Step {
   run: string;
   /** what was typed in the recording */
   command: string; at: number;
-  /** working time of the step with every wait cut (GitHub limits, people, CI queues); empty when it is part of another step */
+  /** working time of the step with the waits for people cut; CI rounds count */
   time: string;
   sections: Section[]; links: { label: string; href: string }[];
 }
 
 export const steps: Step[] = [
   {
-    title: 'Create the system', short: 'System', say: 'Create a taskboard system with one Python service for a task API, in public repos', run: '/system:new taskboard.yaml --public', command: '/system:new taskboard.yaml --public', at: 0, time: '3 min',
+    title: 'Create the system', short: 'System',
+    say: 'Create a system named taskboard2 with one Python service, taskboard2-api, for a task API, in public repos in the ika100-demo organization',
+    run: '/system:new taskboard2.yaml --public', command: 'Create a system named taskboard2 with one Python service, taskboard2-api, …', at: 0, time: '1 min',
     sections: [
-      { heading: 'You type', text: 'A four-line manifest and one command in Claude Code.', code: 'system: demo-taskboard\nowner: ika100\nvisibility: public\ncomponents:\n  - {name: demo-taskboard-api, description: Task API, type: service, lang: python}' },
       { heading: 'Claude does', items: [
-        'Previews the run with <code>--dry-run</code>, then runs <code>cplat system new</code>.',
-        'Renders the gitops-app and the Python service from their templates, creates both GitHub repos and pushes them.',
-        'Protects <code>main</code> on both, links the service to the gitops repo (<code>.platform-app.yml</code>), and opens one PR that adds the service to <code>system.yaml</code>.',
+        'Writes a four-line manifest, previews the run with <code>--dry-run</code>, then runs <code>cplat system new</code>.',
+        'Renders the gitops repo and the Python service from their templates, creates both public repos and pushes them.',
+        'Protects <code>main</code> on both, links the service to the gitops repo, and opens one PR that adds it to <code>system.yaml</code>.',
       ] },
-      { heading: 'Result', text: 'Two repos that already build, test, scan and publish an image, and a list of next steps (including the <code>GITOPS_TOKEN</code> secret that lets dev follow <code>main</code>).' },
+      { heading: 'Result', text: 'Two repos that already build, test, scan and publish an image. The organisation\'s <code>GITOPS_TOKEN</code> secret covers the service, so no token step is left for you.' },
     ],
     links: [
-      { label: 'demo-taskboard-gitops', href: GITOPS },
-      { label: 'demo-taskboard-api', href: API },
-      { label: 'PR: add the service to system.yaml', href: `${GITOPS}/pull/2` },
+      { label: 'taskboard2-gitops', href: GITOPS },
+      { label: 'taskboard2-api', href: API },
+      { label: 'PR: add the service', href: `${GITOPS}/pull/1` },
     ],
   },
   {
-    title: 'Merge and start a local cluster', short: 'Cluster', say: 'Merge the PR once its CI is green, then start a local cluster', run: 'devbox run cluster-up', command: 'Merge PR #2 once its CI is green, then run cluster-up', at: 20.542, time: '2 min',
+    title: 'Merge, cluster and expose', short: 'Cluster',
+    say: 'Merge the PR once its CI is green, start a local cluster, and make the API reachable from my browser (merge that PR too)',
+    run: 'devbox run cluster-up · /component:set taskboard2-api --expose', command: 'Merge the PR once its CI is green, start a local cluster, and make the API reachable …', at: 8.359, time: '15 min',
     sections: [
       { heading: 'Claude does', items: [
-        'Waits for the PR\'s CI and merges it.',
-        'Runs <code>devbox run cluster-up</code> in the gitops repo: a k3d cluster with ArgoCD and the Gateway API, then the root Application.',
-        'Waits for the API repo\'s first <code>main</code> build to publish its image, then checks that Argo reports the app Synced and Healthy.',
+        'Merges the PR on green CI and runs <code>devbox run cluster-up</code>: a k3d cluster with Argo CD, External Secrets and the Gateway.',
+        'Runs <code>/component:set taskboard2-api --expose</code>: one PR with the route, merged on green CI.',
+        'Checks that Argo reports the app Synced and Healthy.',
       ] },
-      { heading: 'Result', text: '<code>/health</code>, <code>/ready</code> and <code>/docs</code> answer 200.' },
+      { heading: 'Result', text: '<code>http://taskboard2-api.taskboard2-dev.localhost:8088/health</code> answers 200. Most of the 15 minutes are two CI rounds and creating the cluster.' },
     ],
-    links: [{ label: 'API repo CI runs', href: `${API}/actions` }],
+    links: [{ label: 'PR: expose the API', href: `${GITOPS}/pull/2` }],
   },
   {
-    title: 'Expose the API', short: 'Expose', say: 'Make the API reachable from my browser', run: '/component:set demo-taskboard-api --expose', command: 'yes, expose it and merge the PR once CI is green', at: 33.552, time: '2 min',
+    title: 'Write the spec', short: 'Spec',
+    say: 'For taskboard2-api: I want to create and list tasks, each with a title and an optional due date, kept in memory',
+    run: '/system:spec "create and list tasks …"', command: 'For taskboard2-api: I want to create and list tasks, each with a title and an optional due date, kept in memory', at: 45.757, time: '4 min',
     sections: [
-      { heading: 'Claude does', text: 'Runs <code>/component:set demo-taskboard-api --expose</code>: one PR that adds the route and the expose flag to <code>system.yaml</code>. Merges it after CI; Argo syncs about 20 s later.' },
-      { heading: 'Result', text: 'A URL on the local Gateway: <code>http://demo-taskboard-api.demo-taskboard-dev.localhost:8088</code>. Only needed for this demo; a component declared with <code>expose</code> from the start skips it.' },
-    ],
-    links: [{ label: 'PR: expose the API', href: `${GITOPS}/pull/3` }],
-  },
-  {
-    title: 'Write the spec', short: 'Spec', say: 'I want to create and list tasks, each with a title and an optional due date, kept in memory', run: '/component:spec "tasks: create and list tasks …"', command: '/component:spec "tasks: create and list tasks with a title and an optional due date, kept in memory"', at: 43.8, time: '4 min',
-    sections: [
-      { heading: 'Claude does', text: 'The product-manager agent drafts <code>spec.md</code> with acceptance criteria. It never guesses a decision that is yours: it asks, with a suggested answer for each question.' },
+      { heading: 'Claude does', text: 'The product-manager agent drafts the spec with acceptance criteria and asks every decision that is yours, each with a suggested answer.' },
       { heading: 'Claude asks, you answer', items: [
-        'Resource path → <code>POST /tasks</code> and <code>GET /tasks</code>',
-        'Maximum title length → 200 characters',
-        'Surrounding whitespace → trimmed, a blank title is rejected',
-        'Due date format → date only, <code>YYYY-MM-DD</code>',
-        'Due dates in the past → accepted',
+        'Title rules → required, trimmed, 1 to 200 characters',
+        'Due date → optional, <code>YYYY-MM-DD</code>',
         'List order → oldest first',
-        'Cap on tasks kept in memory → none',
-        'Invalid requests → <code>422</code> in the standard validation format',
+        'Storage → in memory, one replica',
       ] },
-      { heading: 'Result', text: '11 acceptance criteria (<code>AC-001.1</code> … <code>AC-001.11</code>), two of them smoke-tagged for the running service.' },
+      { heading: 'Result', text: '12 acceptance criteria. Since 5.9.0 a feature of one component is offered the shorter component route (<code>/component:spec</code> in its repo); this run still took the system route.' },
     ],
-    links: [{ label: 'spec.md', href: `${SPEC}/spec.md` }],
+    links: [{ label: 'the system spec', href: `${GITOPS}/blob/main/docs/specs/001-create-and-list-tasks/spec.md` }],
   },
   {
-    title: 'Approve the spec', short: 'Approve', say: 'Approve the spec', run: '/component:spec approve 001', command: 'Approve spec 001 now? → Approve', at: 115.0509, time: '',
+    title: 'Approve the spec', short: 'Approve', say: 'Approve the spec', run: '/system:spec approve 001', command: '(Approve, the recommended answer)', at: 58.231, time: '2 min',
     sections: [
-      { heading: 'Claude does', text: 'Marks the spec approved, opens the spec PR and merges it once CI is green. Approval is the one decision the build waits for.' },
+      { heading: 'Claude does', text: 'Marks the spec approved and merges its PR on green CI. Nothing is built from a draft.' },
     ],
-    links: [{ label: 'PR: the approved spec', href: `${API}/pull/2` }],
+    links: [{ label: 'PR: the spec', href: `${GITOPS}/pull/4` }],
   },
   {
-    title: 'Ship the spec', short: 'Ship', say: 'Build it and get it running in dev', run: '/component:ship 001', command: '/component:ship 001', at: 126.412, time: '17 min',
+    title: 'Ship the spec', short: 'Ship', say: 'Build it and get it running in dev. I\'m away: if a repo spec has questions, take the suggested answers.',
+    run: '/system:plan 001 · /system:ship 001', command: 'Build it and get it running in dev. I\'m away: …', at: 65.54, time: '45 min',
     sections: [
       { heading: 'Claude does', items: [
-        '<b>architect</b>: <code>design.md</code> and a plan of three tasks (schemas, in-memory store, endpoints), each covering named criteria.',
-        '<b>tester</b>: acceptance tests for all 11 criteria, committed first and confirmed failing.',
-        '<b>coders</b>: tasks 1 and 2 in parallel worktrees, then task 3, until the tests pass.',
-        '<b>reviewer</b>: checks every criterion against tests and code and writes <code>verification.md</code>.',
-        'Quality, tests and security gates, then the PR, merged after one green CI round.',
-      ] },
-      { heading: 'Result', text: '11 of 11 criteria met, 96 % coverage, PR merged; <code>main</code>\'s CI builds and publishes the image. The time includes PR and <code>main</code> CI (about 4 minutes).' },
-    ],
-    links: [
-      { label: 'design.md', href: `${SPEC}/design.md` },
-      { label: 'plan.md', href: `${SPEC}/plan.md` },
-      { label: 'acceptance tests', href: `${API}/blob/main/tests/test_tasks.py` },
-      { label: 'verification.md', href: `${SPEC}/verification.md` },
-      { label: 'PR: the feature', href: `${API}/pull/3` },
-    ],
-  },
-  {
-    title: 'An escalation, as it happened', short: 'Escalation', say: 'Accept the formatter\'s change to the tests, it is formatting only', run: '/component:ship 001', command: '/component:ship 001 accept the lint-fix change, it is formatting only', at: 158.82, time: '',
-    sections: [
-      { heading: 'Why it stopped', text: 'The formatter rewrote the committed acceptance tests (<code>timezone.utc</code> → <code>UTC</code>). The build may not decide on its own that a changed test is harmless, so it stopped and asked. Accepting it resumed the run.' },
-      { heading: 'Since then', text: 'Fixed: the tester formats the tests before committing them, so this stop no longer happens.' },
-    ],
-    links: [{ label: 'issue #367', href: `${ISSUES}/367` }],
-  },
-  {
-    title: 'Deploy to dev', short: 'Deploy', say: '', run: '/component:ship 001 (continues)', command: '/component:ship 001 (deploy)', at: 185.972, time: '3 min',
-    sections: [
-      { heading: 'Claude does', items: [
-        'The service\'s CI asks the gitops repo to pin dev to the new image; a pin PR opens and merges after its checks.',
-        'Waits until Argo runs the new image, then runs the dev smoke tests for the smoke-tagged criteria.',
+        'Plans the spec across the repos (one repo here) and merges the plan.',
+        'Writes the service\'s own spec from the plan (24 criteria), plans it, writes failing acceptance tests first, then code until they pass; review, PR, merge on green CI.',
+        'Waits until dev runs the merged build and runs the smoke tests against it.',
       ] },
       { heading: 'What went wrong', items: [
-        `The pin PR waited for a manual approval of its checks, a GitHub rule for bot-opened PRs on public repos (<a href="${ISSUES}/368">#368</a>, fixed).`,
-        `The dev smoke was skipped with "could not read the gitops-app" (<a href="${ISSUES}/369">#369</a>, fixed: retried and the error is named).`,
+        `The pin PR that moves dev to the new build stayed blocked: GitHub had held its <code>ci</code> run for approval and the run then never started. Fixed in the platform as <a href="${ISSUES}/pull/464">#464</a>: the pin workflow now approves every held run and retries a CI run that never started.`,
       ] },
-      { heading: 'Result', text: 'Dev runs the new image, Argo Synced and Healthy.' },
+      { heading: 'Result', text: 'Dev runs the task API; <code>POST /tasks</code> and <code>GET /tasks</code> answer, smoke green. The ship asked no question: since 5.9.0 the platform takes suggested answers in an unattended ship by itself (spec 141).' },
     ],
-    links: [{ label: 'PR: pin dev', href: `${GITOPS}/pull/4` }],
+    links: [
+      { label: 'PR: the plan', href: `${GITOPS}/pull/5` },
+      { label: 'PR: the task API', href: `${API}/pull/4` },
+      { label: 'PR: pin dev', href: `${GITOPS}/pull/6` },
+    ],
   },
   {
-    title: 'Use it', short: 'Use it', say: 'Create a task with a due date in dev and list all tasks', run: 'curl -X POST $U/tasks … ; curl $U/tasks', command: 'curl -X POST $U/tasks … ; curl $U/tasks', at: 216.079, time: '< 1 min',
+    title: 'Add a web UI', short: 'Web UI',
+    say: 'Add a web UI to the system: a Next.js website taskboard2-web in a public repo, added to system.yaml and exposed (merge its PR once CI is green)',
+    run: '/component:new taskboard2-web … · /component:add taskboard2-web --expose', command: 'Add a web UI to the system: a Next.js website taskboard2-web …', at: 209.271, time: '6 min',
     sections: [
-      { heading: 'Result', text: 'The new endpoint answers in dev: a task with a due date is created and listed next to one without.', code: '$ curl -s -X POST $U/tasks -H \'content-type: application/json\' \\\n    -d \'{"title": "Ship the demo", "due_date": "2026-11-10"}\'\n{"id":"3d6f8784-…","title":"Ship the demo","due_date":"2026-11-10",…}' },
+      { heading: 'Claude does', text: 'Creates the Next.js repo from its template, adds it to <code>system.yaml</code> with its own host in dev, and merges that PR on green CI.' },
+      { heading: 'Result', text: 'The template page runs at <code>http://taskboard2-web.taskboard2-dev.localhost:8088</code>.' },
     ],
-    links: [{ label: 'the tasks endpoint', href: `${API}/blob/main/src/demo_taskboard_api/tasks_api.py` }],
+    links: [
+      { label: 'taskboard2-web', href: WEB },
+      { label: 'PR: add the web UI', href: `${GITOPS}/pull/8` },
+    ],
   },
-  // ---- part 2 (recorded 2026-11-04 with sdlc-foundry 5.7.0): a Postgres database and a web UI, one system spec ----
   {
-    title: 'Add a web UI', short: 'Web UI', say: 'Add a web UI to the taskboard: a Next.js website in a public repo, part of this system',
-    run: '/component:new demo-taskboard-web --type website · /component:add', command: 'Add a web UI to the taskboard: a Next.js website in a public repo, part of this system',
-    at: 227.588, time: '7 min',
+    title: 'One spec for the whole system', short: 'System spec',
+    say: 'Keep tasks in a Postgres database instead of memory, and let people see and create tasks in the web UI',
+    run: '/system:spec "…" · /system:spec approve 002', command: 'Keep tasks in a Postgres database instead of memory, and let people see and create tasks in the web UI', at: 228.326, time: '5 min',
+    sections: [
+      { heading: 'Claude does', text: 'One system spec for three repos: the API moves to Postgres, the web UI lists tasks and creates them with a form. Four questions, answered with the suggestions, then approved.' },
+      { heading: 'Result', text: '12 criteria; every story names the repos that take part.' },
+    ],
+    links: [{ label: 'the system spec', href: `${GITOPS}/blob/main/docs/specs/002-persist-tasks-in-postgres-and-manage/spec.md` }],
+  },
+  {
+    title: 'Plan and ship it to dev', short: 'Ship',
+    say: 'Plan it across the repos, merge the plan once its CI is green, and ship it to dev. I\'m away: take the suggested answers for repo-spec questions, and install operators the local cluster needs yourself.',
+    run: '/system:plan 002 · /system:ship 002', command: 'Plan it across the repos, merge the plan …, and ship it to dev. …', at: 245.096, time: '72 min',
     sections: [
       { heading: 'Claude does', items: [
-        'Picks <code>/component:new</code> from the sentence: a public Next.js repo from the <code>web-nextjs</code> template, <code>main</code> protected by its CI checks, linked to the gitops repo.',
-        'Picks <code>/component:add</code> next: one PR that adds the web UI to <code>system.yaml</code>, exposed on the local Gateway, with <code>API_URL=http://demo-taskboard-api</code>.',
-        'Merges that PR after its six checks pass.',
+        '<b>gitops</b>: Postgres declared in <code>system.yaml</code>, the API connected to it, the web UI pointed at the API; one PR.',
+        '<b>API</b> and <b>web</b>, each through its own ship in parallel: a repo spec, a plan, failing acceptance tests first, code, review, PR, merge on green CI, pin to dev, smoke.',
+        'The API answers <code>503</code> while the database is down and recovers by itself.',
       ] },
-      { heading: 'Your one manual step', text: 'A fine-grained token for the new repo (<code>GITOPS_TOKEN</code>, Contents read and write on the gitops repo), so dev follows its <code>main</code>. Claude prints the exact command; creating a token stays with you.' },
+      { heading: 'Result', text: 'Dev runs both builds against Postgres; API smoke 7 of 7, web smoke 8 of 8. A task added in the web UI survives a restart of the API. No question and no manual step stopped the ship.' },
     ],
     links: [
-      { label: 'demo-taskboard-web', href: WEB },
-      { label: 'PR: add the web UI to system.yaml', href: `${GITOPS}/pull/7` },
-    ],
-  },
-  {
-    title: 'One spec for the whole system', short: 'System spec', say: 'Keep tasks in a Postgres database instead of memory, and let people see and create tasks in the web UI',
-    run: '/system:spec "…" → /system:spec approve 001', command: 'Keep tasks in a Postgres database instead of memory, and let people see and create tasks in the web UI',
-    at: 254.529, time: '9 min',
-    sections: [
-      { heading: 'Claude does', text: 'In the gitops repo, the product-manager agent writes one system spec for all three repos. It asks before it decides anything that is yours, with a suggested answer each time.' },
-      { heading: 'Claude asks, you answer', items: [
-        'Replace the API\'s "a restart empties the list" criterion → yes',
-        'Database unreachable → the API answers <code>503</code> and reports not ready',
-        'One database per environment → yes',
-        'The task list replaces the starter page → yes',
-        'Texts, date format, no sign-in for now → as suggested',
-        'Tasks kept in memory at the switch → dropped',
-        'Backups → a separate spec, before the first prod release',
-        'A cap on the list → none',
-      ] },
-      { heading: 'Result', text: '15 acceptance criteria across the API, the web UI and the gitops repo, published as a draft PR, approved and merged.' },
-      { heading: 'What went wrong', text: 'Publishing had to wait for GitHub\'s API limit (5,000 points an hour per account), used up by two local consoles polling every 30 s. Stopping them fixed it.' },
-    ],
-    links: [
-      { label: 'spec.md', href: `${SYS_SPEC}/spec.md` },
-      { label: 'PR: the approved system spec', href: `${GITOPS}/pull/8` },
-    ],
-  },
-  {
-    title: 'Plan it across the repos', short: 'System plan', say: 'Plan it across the repos', run: '/system:plan 001', command: 'Plan it across the repos',
-    at: 304.495, time: '4 min',
-    sections: [
-      { heading: 'Claude does', items: [
-        'The planner assigns every criterion to a repo and orders them: the gitops repo first (declare Postgres, give the API its <code>DATABASE_URL</code>), then the API; the web UI in parallel.',
-        'Writes the contract between them: the API keeps its fields and answers <code>503</code> with a fixed message when the database is down; the web UI calls it only from the server, with a 5 s timeout.',
-        'Checks the plan (every criterion covered, no cycles) and merges it, so every agent builds from the reviewed version.',
-      ] },
-    ],
-    links: [
-      { label: 'the system plan', href: `${GITOPS}/blob/main/docs/plan/001-persistent-tasks-and-web-task-list.md` },
-      { label: 'PR: spec and plan', href: `${GITOPS}/pull/9` },
-    ],
-  },
-  {
-    title: 'Ship it to dev', short: 'System ship', say: 'Merge the plan PR once its CI is green, then ship it to dev', run: '/system:ship 001',
-    command: 'Merge the plan PR once its CI is green, then ship it to dev', at: 321.386, time: '≈ 30 min',
-    sections: [
-      { heading: 'Claude does', items: [
-        '<b>gitops</b>: <code>/resource:add postgres</code> and <code>uses: [postgres]</code> on the API, one PR, merged on green CI.',
-        '<b>web</b> and <b>API</b>, each through its own ship in parallel: a repo spec, a plan, failing acceptance tests first, code until they pass, review, PR, merge on green CI, pin to dev.',
-        'The API replaces its in-memory store with Postgres (schema created under a lock), answers <code>503</code> and not-ready while the database is down, and recovers by itself.',
-        'Finally <code>/instance:verify dev</code>: the smoke tests of both components pass against dev.',
-      ] },
-      { heading: 'What went wrong', items: [
-        'Both PRs waited for GitHub\'s API limit once more before they could open.',
-        'The web repo\'s first token could not write to the gitops repo, so its pin to dev failed with 403; a new token fixed it.',
-        'The local cluster predated the new Postgres operator: one <code>devbox run bootstrap</code> by a person. The platform never applies to a cluster by itself.',
-        `Resuming the web ship after the question in the next step lost the record of its merged PR, so its deploy check refused. The platform filed that as <a href="${ISSUES}/408">#408</a> by itself; dev was verified directly instead.`,
-      ] },
-      { heading: 'Result', text: 'Dev runs both new builds against a healthy Postgres; API smoke 4 of 4, web smoke 1 of 1. The web build itself took 16 minutes from its spec to done.' },
-    ],
-    links: [
-      { label: 'PR: Postgres in system.yaml', href: `${GITOPS}/pull/10` },
+      { label: 'PR: the plan', href: `${GITOPS}/pull/11` },
+      { label: 'PR: Postgres and wiring', href: `${GITOPS}/pull/12` },
       { label: 'PR: API on Postgres', href: `${API}/pull/6` },
-      { label: 'PR: web task list', href: `${WEB}/pull/3` },
-      { label: 'PR: pin API to dev', href: `${GITOPS}/pull/13` },
-      { label: 'PR: pin web to dev', href: `${GITOPS}/pull/14` },
-      { label: 'issue #408', href: `${ISSUES}/408` },
+      { label: 'PR: the web task list', href: `${WEB}/pull/4` },
     ],
   },
   {
-    title: 'A question only you can answer', short: 'Escalation', say: 'Yes, remove the starter content and keep the header and footer. Then continue the ship.',
-    run: '/system:ship 001 (resumes)', command: 'Yes, remove the starter content and keep the header and footer. Then continue the ship.',
-    at: 341.196, time: '',
+    title: 'Hosts, observability and staging', short: 'Staging',
+    say: 'Give staging and prod local hosts I can open in the browser, turn on the Grafana observability stack for dev and staging, and promote both components to staging. Merge the PRs once their CI is green.',
+    run: '/system:set --host · observability · /instance:promote --to staging', command: 'Give staging and prod local hosts …, turn on the Grafana observability stack …, and promote both components to staging. …', at: 415.717, time: '9 min',
     sections: [
-      { heading: 'Why it stopped', text: 'The web repo\'s own spec had an open question: remove the template\'s starter content (hero, cards, "Get started") entirely and keep header and footer? The ship does not guess a decision that is yours, so it stopped and asked; the answer resumed it.' },
-    ],
-    links: [{ label: 'the web repo\'s spec', href: `${WEB}/blob/main/docs/specs/001-replace-the-starter-page-with-the-task/spec.md` }],
-  },
-  {
-    title: 'Use it, and restart it', short: 'Use it', say: 'I just added a task in the web UI. Restart the API in dev and show that the task is still there.',
-    run: 'browser · kubectl rollout restart · GET /tasks', command: 'I just added the task \'Ship part 2 of the demo\' in the web UI. Restart the API in dev and show that the task is still there.',
-    at: 406.305, time: '2 min',
-    sections: [
-      { heading: 'In the browser', text: 'The task list replaces the starter page at <code>http://demo-taskboard-web.demo-taskboard-dev.localhost:8088</code>; a task added with the form appears at once.<img class="walkthrough-shot" src="/sdlc-foundry/img/demo/part2-web-ui.jpg" width="1200" height="784" loading="lazy" alt="The web UI in dev: the heading Tasks, two tasks (one from the smoke test, and Ship part 2 of the demo due 2026-11-10), and the form with Title, Due date and Add task." />' },
-      { heading: 'Claude does', text: 'Leaves the restart to you: the demo repo\'s rules keep agents away from <code>kubectl</code>, so it prints the exact command. After the restart a new API pod returns the same task with the same <code>id</code> and <code>created_at</code>.' },
-      { heading: 'Result', text: 'Tasks survive a restart. In part 1 the same restart emptied the list.' },
+      { heading: 'Claude does', text: 'Sets a host for staging and prod, turns on the Grafana stack (logs, metrics, traces) for dev and staging, and promotes the builds dev tested to staging. Four PRs, each merged on green CI.' },
+      { heading: 'Result', text: 'Staging runs both components with its own Postgres; a task created through the staging API shows on the staging web page, and Prometheus has metrics from both environments.' },
     ],
     links: [
-      { label: 'the web UI\'s page', href: `${WEB}/blob/main/app/page.tsx` },
-      { label: 'the Postgres store', href: `${API}/blob/main/src/demo_taskboard_api/task_store.py` },
+      { label: 'PR: observability', href: `${GITOPS}/pull/18` },
+      { label: 'PR: promote to staging', href: `${GITOPS}/pull/19` },
+    ],
+  },
+  {
+    title: 'Release', short: 'Release', say: 'Release the API and the web UI from the builds staging tested',
+    run: '/component:release (in each repo) · /instance:promote --to staging', command: 'Release the API and the web UI from the builds staging tested', at: 439.283, time: '25 min',
+    sections: [
+      { heading: 'Claude does', items: [
+        'Runs the quality, test and security gates in both repos, then a release PR with the changelog and the version 0.2.0, merged on green CI, and tags <code>v0.2.0</code>.',
+        'The tag never rebuilds: it gives the image staging-to-be already has its version. The release builds go to dev, their smoke passes, and they are promoted to staging.',
+      ] },
+      { heading: 'What went wrong', items: [
+        `The API's release PR bumped the version but not its line in <code>uv.lock</code>, so the image build failed until the lock was refreshed. Fixed in the platform as <a href="${ISSUES}/pull/468">#468</a>.`,
+        'The tags were pushed before main had built the release images, so the tag jobs ran again once the images existed.',
+      ] },
+      { heading: 'Result', text: 'Staging runs exactly the v0.2.0 builds; the prod check sees the same image digest in staging and in the release.' },
+    ],
+    links: [
+      { label: 'PR: API release', href: `${API}/pull/7` },
+      { label: 'PR: web release', href: `${WEB}/pull/5` },
+      { label: 'PR: release builds to staging', href: `${GITOPS}/pull/22` },
+    ],
+  },
+  {
+    title: 'Backups and the prod PR', short: 'Prod PR',
+    say: 'Before prod, back up the prod database daily to a bucket. Then open the prod PR for both components, but don\'t merge it.',
+    run: '/resource:add backups --type bucket · /instance:promote --to prod --pr', command: 'Before prod, back up the prod database daily to a bucket. Then open the prod PR …, but don\'t merge it.', at: 498.156, time: '9 min',
+    sections: [
+      { heading: 'Claude does', items: [
+        'Declares a bucket for backups and lets the API use it (the platform still needs a component that uses the bucket; spec 139 would remove that).',
+        'Opens the one prod PR: both components at 0.2.0, Postgres with three instances, a daily backup at 03:00 UTC kept 30 days.',
+      ] },
+      { heading: 'The prod check', text: 'Before anything reaches prod the promotion shows its evidence: the release image has the digest staging tested, smoke passed in dev and staging, no open smoke-failure or alert issue. Here it was clean on the first try.' },
+    ],
+    links: [
+      { label: 'PR: backups bucket', href: `${GITOPS}/pull/23` },
+      { label: 'PR: prod', href: `${GITOPS}/pull/24` },
+    ],
+  },
+  {
+    title: 'Prod', short: 'Prod', say: 'The prod check is clean. Merge the prod PR and verify prod.', run: 'merge the prod PR · /instance:verify prod',
+    command: 'The prod check is clean. Merge the prod PR and verify prod.', at: 517.321, time: '6 min',
+    sections: [
+      { heading: 'Claude does', text: 'Merges the prod PR, waits for Argo, runs the smoke tests against prod, checks the database and the first backup, and restarts the API to show the data stays.' },
+      { heading: 'Result', text: 'Prod runs both components; smoke 7 of 7 and 8 of 8, Postgres 3 of 3 ready, the first backup completed right after the deploy.' },
+    ],
+    links: [{ label: 'the prod PR', href: `${GITOPS}/pull/24` }],
+  },
+  {
+    title: 'Restore drill', short: 'Restore', say: 'Restore prod to a copy, prove the Prod check task is in it, then discard the copy. I confirm prod for the discard.',
+    run: '/resource:restore postgres --env prod --to latest · --discard --confirm prod', command: 'Restore prod to a copy, prove the Prod check task is in it, then discard the copy. …', at: 534.392, time: '10 min',
+    sections: [
+      { heading: 'Claude does', items: [
+        'Restores the prod database from its backups to a separate copy next to the running one; prod keeps serving.',
+        'Queries the copy read-only: the task created in prod is there, with the same id.',
+        'Discards the copy and its volumes with <code>--confirm prod</code>; the backups in the bucket stay.',
+      ] },
+      { heading: 'Result', text: 'A checked restore, without touching prod. <code>--switch</code> would make the copy the active database in a real recovery.' },
+    ],
+    links: [
+      { label: 'PR: restore', href: `${GITOPS}/pull/25` },
+      { label: 'PR: discard', href: `${GITOPS}/pull/26` },
     ],
   },
 ];
 
-/** The two recorded parts: the index of their first step and a heading. */
+/** The three recorded parts: the index of their first step and a heading. */
 export const parts: { from: number; title: string; text: string }[] = [
   { from: 0, title: 'Part 1: from an empty folder to an endpoint in dev', text: 'One Python service, one spec, a local cluster.' },
-  { from: 9, title: 'Part 2: a database and a web UI', text: 'One system spec across three repos: Postgres instead of memory, and a Next.js web UI.' },
+  { from: 5, title: 'Part 2: a database and a web UI', text: 'One system spec across three repos: Postgres instead of memory, and a Next.js web UI.' },
+  { from: 8, title: 'Part 3: staging, a release, prod and a restore', text: 'Hosts, observability, a release from the tested builds, prod with daily backups, and a restore drill.' },
 ];
 
-/** The run at a glance (from the recording, the demo repos and docs/BASELINES.md). */
+/** The run at a glance (from the recording and the demo repos). */
 export const glance: { value: string; label: string }[] = [
-  { value: '≈ 85 min', label: 'of work for both parts, every wait cut' },
-  { value: '8 + 10', label: 'questions Claude asked before writing the two specs' },
-  { value: '3 repos', label: 'API, web UI and gitops, changed by one system spec' },
-  { value: '1 resource', label: 'Postgres, declared once in system.yaml; tasks survive a restart' },
-  { value: '13', label: 'real pull requests in the public demo repos' },
+  { value: '≈ 3 h 50', label: 'of work for the whole journey, CI rounds included' },
+  { value: '0', label: 'questions during the ships; 8 asked before the two specs' },
+  { value: '3 repos', label: 'API, web UI and gitops, from an empty folder to prod' },
+  { value: '34', label: 'real pull requests in the public demo repos' },
+  { value: '1 restore', label: 'checked: a copy of prod held the task created there' },
 ];

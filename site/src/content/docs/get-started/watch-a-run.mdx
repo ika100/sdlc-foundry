@@ -1,19 +1,19 @@
 ---
 title: Watch a real run
-description: "A recorded end-to-end run of sdlc-foundry: from an empty folder to a new endpoint answering in dev, step by step, with what Claude asked, what it did and links to the real pull requests."
+description: "A recorded end-to-end run of sdlc-foundry: from an empty folder to prod with a checked restore, step by step, with what Claude asked, what it did and links to the real pull requests."
 tableOfContents: false
 ---
 
 import DemoWalkthrough from '../../../components/DemoWalkthrough.astro';
 
-Two recorded runs of one system, one after the other. **Part 1** (steps 1–9) goes from an empty folder to a new endpoint answering in dev on a local cluster. **Part 2** (steps 10–15) adds a Postgres database and a Next.js web UI with one system spec shipped across three repos. Every step is one sentence in Claude Code: say what you want in your own words and Claude runs the matching slash command, or type the command yourself. Each step shows both. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real artifacts in the public demo repos [demo-taskboard-api](https://github.com/ika100/demo-taskboard-api), [demo-taskboard-web](https://github.com/ika100/demo-taskboard-web) and [demo-taskboard-gitops](https://github.com/ika100/demo-taskboard-gitops), so you can check every claim.
+One system, recorded in one run from an empty folder to prod. **Part 1** (steps 1–5) creates the repos and a local cluster and ships a first endpoint to dev. **Part 2** (steps 6–8) adds a Postgres database and a Next.js web UI with one system spec shipped across three repos. **Part 3** (steps 9–13) adds staging, observability, a release from the tested builds, prod with daily backups, and a restore drill. Every step is one sentence in Claude Code: say what you want in your own words and Claude runs the matching slash command, or type the command yourself. Each step shows both. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real pull requests in the public demo repos [taskboard2-api](https://github.com/ika100-demo/taskboard2-api), [taskboard2-web](https://github.com/ika100-demo/taskboard2-web) and [taskboard2-gitops](https://github.com/ika100-demo/taskboard2-gitops), so you can check every claim.
 
 <DemoWalkthrough />
 
 ## About the timing
 
-Every time on this page is working time: the waiting is cut. **Part 1 takes about 30 minutes of work** (agents about 17, CI about 7), **part 2 about 55** (the web UI's build alone took 16). The recording shows both in 7 minutes.
+Every time on this page is working time: the waits for a person are cut, the CI rounds are not. **Part 1 takes about 75 minutes of work, part 2 about 85 and part 3 about 60**; the recording shows all three in under 10 minutes. Most of it is the two ships (45 and 72 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and about 25 CI rounds of a few minutes each. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/430)); this run is the measured starting point.
 
-The runs themselves waited on things outside the platform's work: GitHub's API limit (used up by two local consoles), a token that could not write, a one-time operator bootstrap, CI queues and answers that came late. Each is named in its step. The [measured baselines](/sdlc-foundry/reference/baselines/#the-2026-11-03-demo-run) keep the full measured times, waits included.
+Two things went wrong in the platform and are fixed: a pin PR stayed blocked when GitHub never started its CI run ([#464](https://github.com/ika100/sdlc-foundry/pull/464)), and a release missed a lock-file line ([#468](https://github.com/ika100/sdlc-foundry/pull/468)). Each is named in its step.
 
-**What was edited:** waiting is cut, the folder-trust dialogs, a fumbled dialog and a mistyped first `curl` are removed, and the host name in the status bar is blanked. Nothing else is changed; the questions in steps 7 and 14 are part of the runs. Part 1 was recorded with [asciinema](https://asciinema.org) on 2026-11-03 with sdlc-foundry 5.6.0, part 2 on 2026-11-04 with 5.7.0; in part 2, Claude Code typed the sentences on the user's behalf in the same recorded terminal.
+**What was edited:** waiting is cut and the host name in the status bar is blanked. Nothing else is changed. The journey was recorded with [asciinema](https://asciinema.org) on 2026-11-05 with sdlc-foundry 5.8.3 (parts 1 and 2) and 5.9.0 (part 3), in the public demo organisation [ika100-demo](https://github.com/ika100-demo); Claude Code typed the sentences on the user's behalf in the same recorded terminal.
