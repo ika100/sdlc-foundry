@@ -71,7 +71,7 @@ while IFS='|' read -r op label ns resources <&3; do
     exit 1
   fi
   k -n "$ns" delete secret -l "owner=helm,name=$op" --ignore-not-found >/dev/null
-  # the controller's own install objects carry no ownerReferences, so they outlive the HelmChart (helm-controller v0.16 chart.go)
+  # the controller's install objects: the ClusterRoleBinding has no ownerReference and would outlive the HelmChart
   k -n kube-system delete "job/helm-install-$op" "serviceaccount/helm-$op" "secret/chart-values-$op" "configmap/chart-content-$op" \
     --ignore-not-found >/dev/null
   k delete "clusterrolebinding/helm-kube-system-$op" --ignore-not-found >/dev/null

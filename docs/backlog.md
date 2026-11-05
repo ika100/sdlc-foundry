@@ -15,6 +15,10 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
+| [137-cplat-waits-out-github-s-rate-limit](specs/137-cplat-waits-out-github-s-rate-limit/spec.md) — cplat waits out GitHub's rate limit | P1 | approved | 7 |  |
+| [140-one-repo-feature-takes-the-component-route](specs/140-one-repo-feature-takes-the-component-route/spec.md) — A one-repo feature takes the component route | P1 | approved | 4 |  |
+| [141-an-approved-plan-asks-no-new-questions](specs/141-an-approved-plan-asks-no-new-questions/spec.md) — An approved system plan asks no new questions | P1 | approved | 5 |  |
+| [142-no-avoidable-stops-in-the-journey](specs/142-no-avoidable-stops-in-the-journey/spec.md) — No avoidable stops in the journey | P1 | approved | 5 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
@@ -126,6 +130,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [130-quality-gates-fail-when-they-checked](specs/130-quality-gates-fail-when-they-checked/spec.md) — Quality gates fail when they checked nothing | P1 | done | 16 | #285 |
 | [131-runs-that-finish-on-their-own](specs/131-runs-that-finish-on-their-own/spec.md) — Runs that finish on their own | P1 | done | 19 | #324 |
 | [134-a-pr-runs-only-the-e2e-it-needs](specs/134-a-pr-runs-only-the-e2e-it-needs/spec.md) — A pull request runs only the e2e it needs, and that e2e runs in parallel parts | P1 | done | 9 | #281 |
+| [146-one-owner-per-operator-on-the-local-cluster](specs/146-one-owner-per-operator-on-the-local-cluster/spec.md) — One owner per operator on the local cluster | P1 | done | 5 | #425 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

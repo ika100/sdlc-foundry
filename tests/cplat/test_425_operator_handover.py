@@ -1,4 +1,4 @@
-"""#425: one owner per operator. External Secrets or Kyverno left as k3s HelmCharts by an older cluster-up are handed over
+"""Spec 146 (#425): one owner per operator. External Secrets or Kyverno left as k3s HelmCharts by an older cluster-up are handed over
 to Argo CD (operators/apps/<op>.yaml) by scripts/operator-handover.sh, which cluster-up and bootstrap run before they apply
 operators/root.yaml. A fake kubectl keeps the cluster state in files and logs every call."""
 import os
@@ -65,14 +65,14 @@ def cluster(tmp_path):
     return repo, state, run
 
 
-def test_without_a_helmchart_nothing_changes(cluster):
+def test_without_a_helmchart_nothing_changes(cluster):  # AC-146.4
     _, _, run = cluster
     p, log = run()
     assert p.returncode == 0 and p.stdout == "" and p.stderr == "", p.stdout + p.stderr
     assert not re.search(r"(?m)\b(annotate|patch|delete|apply)\b", log), log
 
 
-def test_a_cluster_without_the_k3s_helm_controller_is_left_alone(cluster):
+def test_a_cluster_without_the_k3s_helm_controller_is_left_alone(cluster):  # AC-146.4
     _, state, run = cluster
     (state / "helmcrd").unlink()
     (state / "hc-external-secrets").write_text("")
@@ -81,7 +81,7 @@ def test_a_cluster_without_the_k3s_helm_controller_is_left_alone(cluster):
     assert log.strip().splitlines() == ["--context k3d-x-local get crd helmcharts.helm.cattle.io"]
 
 
-def test_a_helmchart_of_a_rendered_operator_is_handed_over_in_order(cluster):
+def test_a_helmchart_of_a_rendered_operator_is_handed_over_in_order(cluster):  # AC-146.1, AC-146.2, AC-146.4 (second run)
     _, state, run = cluster
     (state / "hc-external-secrets").write_text("")
     p, log = run()
@@ -117,7 +117,7 @@ def test_a_helmchart_of_a_rendered_operator_is_handed_over_in_order(cluster):
     assert "apply" not in log2[len(log):]
 
 
-def test_a_helmchart_of_an_operator_the_repo_does_not_render_is_kept(cluster):
+def test_a_helmchart_of_an_operator_the_repo_does_not_render_is_kept(cluster):  # AC-146.1
     _, state, run = cluster
     (state / "hc-kyverno").write_text("")
     p, log = run()
@@ -127,7 +127,7 @@ def test_a_helmchart_of_an_operator_the_repo_does_not_render_is_kept(cluster):
     assert (state / "hc-kyverno").exists()
 
 
-def test_a_lost_resource_fails_loudly_naming_it(cluster):
+def test_a_lost_resource_fails_loudly_naming_it(cluster):  # AC-146.3
     _, state, run = cluster
     (state / "hc-external-secrets").write_text("")
     (state / "lose").write_text("externalsecrets.external-secrets.io")
@@ -138,7 +138,7 @@ def test_a_lost_resource_fails_loudly_naming_it(cluster):
     assert "clustersecretstores" not in p.stderr and "5/5" not in p.stdout
 
 
-def test_cluster_up_and_bootstrap_hand_over_before_applying_operators_root():
+def test_cluster_up_and_bootstrap_hand_over_before_applying_operators_root():  # AC-146.5
     for f, call in (("local-cluster.sh", 'KUBE_CONTEXT="$ctx" bash scripts/operator-handover.sh'),
                     ("bootstrap.sh", "bash scripts/operator-handover.sh")):
         text = (T / f).read_text()
@@ -148,5 +148,5 @@ def test_cluster_up_and_bootstrap_hand_over_before_applying_operators_root():
     assert cluster_copy.read_bytes() == (T / "operator-handover.sh").read_bytes()
 
 
-def test_the_handover_script_parses():
+def test_the_handover_script_parses():  # AC-146.2
     assert subprocess.run(["bash", "-n", str(T / "operator-handover.sh")]).returncode == 0
