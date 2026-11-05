@@ -17,6 +17,9 @@ from core import PlatformError, run
 IMAGE_ID = re.compile(r"@(sha256:[0-9a-f]{64})$")
 
 
+APP_CONTAINER = "app"   # the container name render.py gives every component
+
+
 def running_digest(context: str, namespace: str, service: str) -> str | None:
     try:
         p = run(["kubectl", "--context", context, "-n", namespace, "get", "pods", "-l", f"app.kubernetes.io/name={service}",
@@ -29,7 +32,8 @@ def running_digest(context: str, namespace: str, service: str) -> str | None:
             if not any(c.get("type") == "Ready" and c.get("status") == "True" for c in status.get("conditions") or []):
                 continue
             for cs in status.get("containerStatuses") or []:
-                if cs.get("name") == service and (m := IMAGE_ID.search(str(cs.get("imageID") or ""))):
+                # render names the component's container `app` (the service name is accepted for older manifests)
+                if cs.get("name") in (APP_CONTAINER, service) and (m := IMAGE_ID.search(str(cs.get("imageID") or ""))):
                     found.add(m.group(1))
         return next(iter(found)) if len(found) == 1 else None
     except (PlatformError, ValueError, AttributeError, TypeError):

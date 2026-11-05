@@ -108,6 +108,8 @@ def pod(digest, ready=True, name="shop-api"):
 
 @pytest.mark.parametrize("pods, want", [
     ([pod(D1)], D1),
+    ([pod(D1, name="app")], D1),             # the container name render.py gives every component (journey 2026-11-05)
+    ([pod(D1, name="sidecar")], None),
     ([pod(D1), pod(D1)], D1),
     ([pod(D1), pod(D2, ready=False)], D1),
     ([pod(D1), pod(D2)], None),
@@ -439,3 +441,11 @@ def test_a_replay_without_a_recorded_digest_smokes_dev_again_ac_105_7(sw, capsys
     ship.save_state(sw.repo, st)
     assert sw.deploy() == 0
     assert [c[1] for c in sw.fake.calls] == ["http://shop-api.shop-dev.localhost:8088"] * 2 + [STAGING_URL]
+
+
+def test_the_digest_lookup_uses_the_container_name_render_writes():
+    """The journey of 2026-11-05: render names the container `app`, the lookup searched for the service name, so every
+    deploy reported "image digest unknown" and smoke never ran. Keep both names tied."""
+    from pathlib import Path
+    render = (Path(__file__).resolve().parents[2] / "templates" / "gitops-app" / "scripts" / "render.py").read_text()
+    assert f'"name": "{mod("cluster").APP_CONTAINER}",' in render
