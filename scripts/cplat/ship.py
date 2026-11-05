@@ -546,6 +546,16 @@ def merged_run(repo: Path, spec_id: str) -> dict | None:
     return None
 
 
+def _ready_if_draft(repo: Path, pr: str) -> None:
+    """A green PR the ship is about to merge cannot stay a draft: GitHub refuses to merge drafts."""
+    try:
+        if json.loads(gh(["pr", "view", pr, "--json", "isDraft"], cwd=repo, check=False) or "{}").get("isDraft"):
+            gh(["pr", "ready", pr], cwd=repo)
+            say(f"marked {pr} ready for review before the merge")
+    except (ValueError, PlatformError, AssertionError):
+        pass
+
+
 def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> dict:
     st = require_state(repo)
     branch = st["branch"]
@@ -555,7 +565,7 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
     check_title(title)
-    existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url,title,labels"], cwd=repo) or "[]")
+    existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url,title,labels,isDraft"], cwd=repo) or "[]")
     open_pr_ = existing[0] if existing else None
     labels = [lb["name"] for lb in (open_pr_ or {}).get("labels", [])]
     body = body_file.read_text()
@@ -580,6 +590,9 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
     if open_pr_:
         st["pr"] = open_pr_["url"]
+        if open_pr_.get("isDraft"):            # the spec's draft PR on the same branch becomes the code PR: it must be ready
+            gh(["pr", "ready", st["pr"]], cwd=repo)
+            say(f"marked {st['pr']} ready for review (it was the spec's draft PR)")
         if open_pr_.get("title") != title:
             gh(["pr", "edit", st["pr"], "--title", title], cwd=repo)
         if no_spec and pr_rules.NO_SPEC not in [lb["name"] for lb in open_pr_.get("labels", [])]:
@@ -1058,9 +1071,12 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     lines += more
     if not ok:
         return False, lines
+    _ready_if_draft(repo, pr)
     res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"], cwd=repo, check=False)
     if res.returncode != 0:
         detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
+        if "draft" in detail[0].lower():
+            raise PlatformError(f"merging {pr} failed: {detail[0]}", hint=f"the PR is a draft: gh pr ready {pr}, then run land again")
         raise PlatformError(f"merging {pr} failed: {detail[0]}", hint="merge conflicts with main: rebase is a human decision; "
                                                                        "`cplat component ship escalate 'merge failed'`")
     merged = json.loads(gh(["pr", "view", pr, "--json", "mergeCommit"], cwd=repo) or "{}")
