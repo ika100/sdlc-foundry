@@ -680,8 +680,14 @@ step "3 Update: this checkout's cplat platform update, merged"
 [ -z "$(gitops_dirty)" ] || fail "the gitops repo is not clean before the update"
 $cplat platform update --repo "$gitops_repo" --skip-tasks 2>&1 | tee "$work/update.out" | tee /dev/stderr >/dev/null || fail "cplat platform update failed"
 upd_branch=$(git -C "$gitops_repo" symbolic-ref --short HEAD)
-[ "$upd_branch" != "$main_branch" ] || fail "platform update left the repo on $main_branch (it should have made a branch)"
-git -C "$gitops_repo" checkout -q "$main_branch" && git -C "$gitops_repo" merge -q --ff-only "$upd_branch" || fail "merging $upd_branch into $main_branch failed"
+if [ "$upd_branch" = "$main_branch" ] && grep -q 'already up to date with platform .* nothing changed' "$work/update.out"; then
+  # A candidate whose templates equal the previous release (a PR that changes only tests or docs, right after a
+  # release) leaves nothing to update: no branch is made, and the rest of the run checks the same render.
+  echo "ok   the candidate's templates equal $FROM: nothing to update, the repo stays on $main_branch"
+else
+  [ "$upd_branch" != "$main_branch" ] || fail "platform update left the repo on $main_branch (it should have made a branch)"
+  git -C "$gitops_repo" checkout -q "$main_branch" && git -C "$gitops_repo" merge -q --ff-only "$upd_branch" || fail "merging $upd_branch into $main_branch failed"
+fi
 (cd "$gitops_repo" && uv run scripts/render.py >/dev/null) || fail "render.py of the updated repo failed"
 commit "render after the platform update"
 table16=$(table_pin 16)
