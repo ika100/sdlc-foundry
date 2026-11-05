@@ -7,7 +7,18 @@ The e2e proof (AC-139.4) is checked in the text of tests/e2e/run.sh, which runs 
 import re
 
 from backup_fixtures import S3, bdoc, ext_prod_bucket
-from resources_fixtures import APP, LABELS, addon_names, sets, comp, external_secret, ok, platform_render_module, tree, y
+from resources_fixtures import (
+    APP,
+    LABELS,
+    addon_names,
+    comp,
+    external_secret,
+    ok,
+    platform_render_module,
+    sets,
+    tree,
+    y,
+)
 from system_fixtures import ROOT, mod, write_system
 
 DEV = {"to": "backups"}
@@ -173,7 +184,7 @@ def test_the_rendered_backup_only_system_is_stable_ac_139_4(tmp_path):  # AC-139
 def test_the_e2e_backs_up_into_a_bucket_no_component_uses_ac_139_4():  # AC-139.4 (needs a cluster)
     text = (ROOT / "tests" / "e2e" / "run.sh").read_text()
     block = text[text.index('if in_part "backups and restores (spec 117)" backups; then'):]
-    assert '"backups"]' not in block and "must be used by a component" not in block
+    assert not re.search(r'\["uses"\][^\n]*"backups"', block) and "must be used by a component" not in block
     assert re.search(r"e2e-web.*(S3_|AWS_)|(S3_|AWS_).*e2e-web", block), "the e2e checks e2e-web has none of the bucket's variables"
 
 
