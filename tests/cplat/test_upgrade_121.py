@@ -647,10 +647,27 @@ def test_lgtm_is_an_application_over_plain_manifests_ac_121_17(tmp_path):  # AC-
     assert app["spec"]["source"] == {"repoURL": "https://github.com/acme/shop-gitops", "targetRevision": "main", "path": "operators/lgtm"}
     assert app["spec"]["destination"]["namespace"] == "observability"
     assert app["spec"]["syncPolicy"]["syncOptions"] == ["CreateNamespace=true", "ServerSideApply=true"]
-    assert sorted(k.rsplit("/", 1)[-1] for k in g if k.startswith("operators/lgtm/")) == ["deployment.yaml", "kustomization.yaml", "service.yaml"]
+    assert sorted(k.rsplit("/", 1)[-1] for k in g if k.startswith("operators/lgtm/")) == ["deployment.yaml", "kustomization.yaml",
+                                                                                         "route.yaml", "service.yaml"]
     dep = y(g, "operators/lgtm/deployment.yaml")
     assert dep["spec"]["template"]["spec"]["containers"][0]["image"] == LGTM
-    assert y(g, "operators/lgtm/kustomization.yaml")["resources"] == ["deployment.yaml", "service.yaml"]
+    assert y(g, "operators/lgtm/kustomization.yaml")["resources"] == ["deployment.yaml", "route.yaml", "service.yaml"]
+
+
+def test_the_rendered_stack_routes_grafana_localhost_like_cluster_up(tmp_path):
+    """Journey of 2026-11-05: observability turned on after cluster-up had no grafana.localhost (cluster-up adds its route only
+    for a stack that exists when it runs). The rendered stack carries the same route object, so both converge."""
+    doc = plain()
+    doc["environments"]["dev"]["observability"] = {"ui": "lgtm"}
+    g = with_answers(tmp_path, doc, property_operators="install", github_org="acme", project_name="shop-gitops")
+    route = y(g, "operators/lgtm/route.yaml")
+    assert route["kind"] == "HTTPRoute" and route["metadata"] == {"name": "grafana", "namespace": "observability"}
+    assert route["spec"] == {"parentRefs": [{"name": "traefik-gateway", "namespace": "kube-system"}], "hostnames": ["grafana.localhost"],
+                             "rules": [{"backendRefs": [{"name": "lgtm", "port": 3000}]}]}
+    script = (ROOT / "templates/gitops-app/scripts/local-cluster.sh").read_text()
+    assert script.count("metadata: {name: grafana, namespace: observability}") == 2       # cluster-up applies the very same object
+    assert script.count("parentRefs: [{name: traefik-gateway, namespace: kube-system}]") >= 2
+    assert not [k for k in with_answers(tmp_path / "none", plain(), property_operators="install") if k.endswith("lgtm/route.yaml")]
 
 
 def test_lgtm_needs_a_ui_and_a_running_instance_and_is_listed_after_the_chart_operators_ac_121_17(tmp_path):  # AC-121.17
