@@ -6,6 +6,20 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.9.0] - 2026-11-05
+
+### Added
+
+**A feature of one component takes the component route (spec 140).** `/system:spec` recognises a description that names exactly one component and needs no resource, exposure or environment change, and asks once whether to specify and ship it in that component's repo with `/component:spec` and `/component:ship` (recommended): one spec, one PR, one ship, no plan. Features that span repos or need a resource keep the system route. `/system:new` and a new gitops repo now recommend the route by scope for the first feature.
+
+**An approved system plan asks no new questions (spec 141).** When `/system:ship` writes a repo's spec from the approved plan, open questions that have a suggested answer no longer stop the unattended ship: the answers are taken, folded into the repo spec's criteria and listed under `## Decisions taken during the ship`. The system ship's final report lists them per repo ("Decisions taken for you"), the run record counts them, and the repo's PR gets one comment with them. A question without a suggested answer, or one that would change the system spec or the plan's contract, still stops the ship. The product manager now prefers the system spec's answers over a new question.
+
+**No avoidable stops in the journey (spec 142).** `/component:set --expose` merges its PR on green CI without another question (say so to leave it open). After `/system:ship` merges a gitops change under `operators/`, it applies the operators itself on the local cluster of `devbox run cluster-up` (`k3d-<system>-local`); other clusters keep the human step. `devbox run bootstrap` fast-forwards a stale `main` first, or stops before applying anything. A green `instance verify dev` promotes staging when it is set to `after-dev-smoke`, as a ship does, so fix and release builds follow too. A gitops command whose PR step fails leaves the clone clean (back on `main`, nothing changed, its local branch deleted), and a stale local branch of a merged PR no longer blocks the next one.
+
+### Fixed
+
+**A dev or staging pin PR in a public gitops repo no longer stays blocked (found in journey 2 of 2026-11-05).** GitHub holds the runs of a PR that `github-actions[bot]` opened; `pin-dev` and `pin-staging` approved only the first held run they saw (the `specs` run), and when the PR's `ci` run then failed at startup without a job, branch protection blocked the merge forever. Both workflows now approve every held run until the PR's `ci` run is running with jobs; if it is missing or never started, they close and reopen the PR once (GitHub then runs its checks again) and turn auto-merge back on. Existing gitops repos get the new workflows with `/platform:update`.
+
 ## [5.8.3] - 2026-11-05
 
 ### Fixed
