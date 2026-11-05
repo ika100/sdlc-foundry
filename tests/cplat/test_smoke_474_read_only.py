@@ -1,4 +1,4 @@
-"""#474: smoke tests that write data run only in dev; staging and prod run read-only smoke checks.
+"""Spec 145 (#474): smoke tests that write data run only in dev; staging and prod run read-only smoke checks.
 
 cplat side: `smoke.run_recipe` passes `SMOKE_ENV` and `SMOKE_READ_ONLY` (1 outside dev) to `devbox run smoke`, a read-only run in
 which no test passed is `not-run` with a reason (never a pass), the record section says `read_only`, and `instance verify prod`
@@ -71,18 +71,18 @@ def devbox(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("env, read_only", [("dev", "0"), ("staging", "1"), ("prod", "1")])
-def test_the_recipe_learns_the_environment_and_whether_it_may_write(repo, devbox, env, read_only):
+def test_the_recipe_learns_the_environment_and_whether_it_may_write(repo, devbox, env, read_only):  # AC-145.1, AC-145.2
     devbox.prints(("PASS", READ_ID))
     res = smoke.run_smoke(repo, BASE, env=env)
     assert devbox.calls == [[env, read_only, BASE]]
     assert res.ok and res.section()["read_only"] is (read_only == "1")
 
 
-def test_read_only_mode_is_everything_but_dev():
+def test_read_only_mode_is_everything_but_dev():  # AC-145.1
     assert not smoke.read_only("dev") and smoke.read_only("staging") and smoke.read_only("prod") and smoke.read_only("qa")
 
 
-def test_a_read_only_run_with_a_passing_check_passes_and_says_read_only(repo, devbox):
+def test_a_read_only_run_with_a_passing_check_passes_and_says_read_only(repo, devbox):  # AC-145.2
     devbox.prints(("PASS", READ_ID), ("SKIP", WRITE_ID))
     res = smoke.run_smoke(repo, BASE, env="staging")
     assert res.outcome == "passed" and (res.passed, res.skipped) == (1, 1)
@@ -92,7 +92,7 @@ def test_a_read_only_run_with_a_passing_check_passes_and_says_read_only(repo, de
 
 
 @pytest.mark.parametrize("items", [(("SKIP", WRITE_ID),), ()], ids=["only-writing-tests", "no-smoke-test"])
-def test_outside_dev_a_run_that_checked_nothing_is_not_run_never_passed(repo, devbox, items):
+def test_outside_dev_a_run_that_checked_nothing_is_not_run_never_passed(repo, devbox, items):  # AC-145.3
     devbox.prints(*items)
     res = smoke.run_smoke(repo, BASE, env="prod")
     assert res.outcome == "not-run" and not res.ok and res.base_url == BASE
@@ -104,14 +104,14 @@ def test_outside_dev_a_run_that_checked_nothing_is_not_run_never_passed(repo, de
     assert sec["outcome"] == "not-run" and sec["read_only"] is True and sec["skipped"] == len(items)
 
 
-def test_in_dev_a_run_without_passing_tests_still_passes_as_before(repo, devbox):
+def test_in_dev_a_run_without_passing_tests_still_passes_as_before(repo, devbox):  # AC-145.3
     devbox.prints(("SKIP", WRITE_ID))
     res = smoke.run_smoke(repo, BASE, env="dev")
     assert res.outcome == "passed" and res.section()["read_only"] is False
     assert not any(ln.startswith("read-only") for ln in res.lines())
 
 
-def test_instance_verify_prod_records_a_run_without_read_only_test_and_exits_3(repo, devbox, monkeypatch, capsys):
+def test_instance_verify_prod_records_a_run_without_read_only_test_and_exits_3(repo, devbox, monkeypatch, capsys):  # AC-145.3, AC-145.4
     import ship
     recorded = []
     monkeypatch.setattr(ship, "gitops_apps", lambda r: ["acme/shop-gitops"])
@@ -132,7 +132,7 @@ def test_instance_verify_prod_records_a_run_without_read_only_test_and_exits_3(r
 # ---------------- templates: the harness, the docs and the samples ----------------
 
 @pytest.mark.parametrize("shape", SHAPES)
-def test_each_smoke_script_leaves_out_writing_tests_when_read_only(shape):
+def test_each_smoke_script_leaves_out_writing_tests_when_read_only(shape):  # AC-145.5
     text = (TEMPLATES / shape / "scripts" / "smoke.sh").read_text()
     assert '"${SMOKE_READ_ONLY:-}" = "1"' in text and "SMOKE_ENV" in text
     helper = (TEMPLATES / shape / "scripts" / "smoke_pytest.py").read_text() if shape == "service-python" else ""
@@ -140,7 +140,7 @@ def test_each_smoke_script_leaves_out_writing_tests_when_read_only(shape):
 
 
 @pytest.mark.parametrize("shape", SHAPES)
-def test_each_claude_md_documents_the_writing_mark_and_the_read_only_rule(shape):
+def test_each_claude_md_documents_the_writing_mark_and_the_read_only_rule(shape):  # AC-145.6
     text = (TEMPLATES / shape / CLAUDE[shape]).read_text()
     sec = text.split("## Smoke tests", 1)[1].split("\n## ", 1)[0]
     assert MARK[shape] in sec and "SMOKE_READ_ONLY=1" in sec and "SMOKE_ENV" in sec
@@ -148,7 +148,7 @@ def test_each_claude_md_documents_the_writing_mark_and_the_read_only_rule(shape)
 
 
 @pytest.mark.parametrize("shape", SHAPES)
-def test_the_sample_smoke_test_is_read_only_so_it_runs_everywhere(shape):
+def test_the_sample_smoke_test_is_read_only_so_it_runs_everywhere(shape):  # AC-145.6
     text = example_smoke_test(shape).read_text()
     assert "#474" in text and MARK[shape] in text           # it names the mark ...
     code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
@@ -191,7 +191,7 @@ def run_template_smoke(tmp_path, url, **env_extra):
     return subprocess.run(["bash", "scripts/smoke.sh"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=120)
 
 
-def test_python_harness_skips_writing_tests_when_read_only(tmp_path, health_server):  # noqa: F811
+def test_python_harness_skips_writing_tests_when_read_only(tmp_path, health_server):  # noqa: F811  AC-145.5
     res = run_template_smoke(tmp_path, health_server, SMOKE_ENV="prod", SMOKE_READ_ONLY="1")
     lines = res.stdout.splitlines()
     assert f"PASS  {READ_ID}" in lines and f"SKIP  {WRITE_ID}" in lines, res.stdout + res.stderr
@@ -200,14 +200,14 @@ def test_python_harness_skips_writing_tests_when_read_only(tmp_path, health_serv
 
 
 @pytest.mark.parametrize("extra", [{"SMOKE_ENV": "dev", "SMOKE_READ_ONLY": "0"}, {}], ids=["dev", "by-hand"])
-def test_python_harness_runs_writing_tests_in_dev(tmp_path, health_server, extra):  # noqa: F811
+def test_python_harness_runs_writing_tests_in_dev(tmp_path, health_server, extra):  # noqa: F811  AC-145.5
     res = run_template_smoke(tmp_path, health_server, **extra)
     lines = res.stdout.splitlines()
     assert f"PASS  {READ_ID}" in lines and f"PASS  {WRITE_ID}" in lines, res.stdout + res.stderr
     assert "smoke: 2 passed, 0 failed, 0 skipped" in lines and res.returncode == 0
 
 
-def test_the_writes_marker_is_registered_for_test_and_ci(tmp_path):
+def test_the_writes_marker_is_registered_for_test_and_ci(tmp_path):  # AC-145.5
     """`devbox run test` loads the plugin too: a strict-markers run knows `writes`."""
     shutil.copytree(TEMPLATES / "service-python" / "scripts", tmp_path / "scripts")
     (tmp_path / "tests").mkdir()
@@ -218,3 +218,20 @@ def test_the_writes_marker_is_registered_for_test_and_ci(tmp_path):
     res = subprocess.run([sys.executable, "-m", "pytest", "tests/", "-p", "scripts.smoke_pytest", "-p", "no:cacheprovider", "-q",
                           "--strict-markers"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=120)
     assert res.returncode == 0 and "1 skipped" in res.stdout, res.stdout + res.stderr
+
+
+TESTERS = {"svc": "@pytest.mark.writes", "svc-java": '@Tag("writes")', "svc-go": "TestSmokeWrites", "web": "@writes"}
+
+
+@pytest.mark.parametrize("plugin", sorted(TESTERS))
+def test_the_tester_agents_mark_writing_smoke_tests_and_keep_read_only_checks(plugin):  # AC-145.7
+    text = (TEMPLATES.parent / "plugins" / plugin / "agents" / "tester.md").read_text()
+    sec = text.split("## Smoke criteria", 1)[1].split("\n## ", 1)[0]
+    assert TESTERS[plugin] in sec and "SMOKE_READ_ONLY=1" in sec and "SMOKE_ENV" in sec
+    assert "creates, changes or deletes data" in sec and "read-only check" in sec and "not run" in sec
+
+
+def test_the_testing_reference_names_every_mark():  # AC-145.7
+    text = (TEMPLATES.parent / "plugins/svc/skills/spec-format/references/testing.md").read_text()
+    assert "SMOKE_READ_ONLY=1" in text and all(mark in text for mark in TESTERS.values())
+    assert "read-only smoke checks" in text.lower() or "keep read-only" in text.lower()
