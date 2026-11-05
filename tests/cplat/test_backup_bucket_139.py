@@ -7,18 +7,23 @@ The e2e proof (AC-139.4) is checked in the text of tests/e2e/run.sh, which runs 
 import re
 
 from backup_fixtures import S3, bdoc, ext_prod_bucket
-from resources_fixtures import APP, LABELS, addon_names, comp, external_secret, ok, platform_render_module, tree, y
+from resources_fixtures import APP, LABELS, addon_names, sets, comp, external_secret, ok, platform_render_module, tree, y
 from system_fixtures import ROOT, mod, write_system
 
 DEV = {"to": "backups"}
 BUCKET_VARS = re.compile(r"^(S3_|AWS_)")
 BUCKET_KEYS = ["endpoint", "bucket", "region", "forcePathStyle", "accessKeyId", "secretAccessKey"]
-SEAWEED = ["bucket.yaml", "credentials.yaml", "identity.yaml", "kustomization.yaml", "seaweed.yaml"]
+SEAWEED_CORE = {"bucket.yaml", "credentials.yaml", "identity.yaml", "kustomization.yaml", "seaweed.yaml"}
 
 
 def no_user(dbb=None, envb=None, bucket_kw=None, envs=("dev", "staging", "prod")) -> dict:
     """orders-db used by `api`; the bucket `backups` is used by no component."""
     return bdoc(dbb=dbb, envb=envb, bucket_kw=bucket_kw, comps={"api": comp("api", ["orders-db"], envs=envs)})
+
+
+def used_files(tmp_path, env="prod") -> list[str]:
+    """The addon files a bucket that `api` uses gets in `env`: what a backup-only in-cluster bucket must get too."""
+    return files_of(ok(tmp_path / "used", bdoc(dbb={env: DEV})), env)
 
 
 def files_of(g, env, name="backups") -> list[str]:
@@ -48,7 +53,7 @@ def ext_secret_doc(env="prod", labels=False) -> dict:
 
 def test_a_database_backup_to_a_bucket_no_component_uses_renders_ac_139_1(tmp_path):  # AC-139.1
     g = ok(tmp_path, no_user(dbb={"prod": DEV}))
-    assert files_of(g, "prod") == SEAWEED
+    assert SEAWEED_CORE <= set(files_of(g, "prod")) and files_of(g, "prod") == used_files(tmp_path)
     assert "backups" in addon_names(g, "prod")
     store = y(g, f"{APP}/addons/prod/orders-db/objectstore.yaml")["spec"]["configuration"]
     assert store["s3Credentials"]["accessKeyId"] == {"name": "shop-backups-app", "key": "accessKeyId"}
@@ -58,13 +63,13 @@ def test_a_database_backup_to_a_bucket_no_component_uses_renders_ac_139_1(tmp_pa
 def test_the_backup_only_bucket_is_the_same_addon_a_using_component_gets_ac_139_1(tmp_path):  # AC-139.1
     g = ok(tmp_path / "a", no_user(dbb={"prod": DEV}))
     used = ok(tmp_path / "b", bdoc(dbb={"prod": DEV}))
-    for f in SEAWEED:
+    for f in used_files(tmp_path):
         assert g[f"{APP}/addons/prod/backups/{f}"] == used[f"{APP}/addons/prod/backups/{f}"], f
 
 
 def test_an_environment_backup_to_a_bucket_no_component_uses_renders_ac_139_1(tmp_path):  # AC-139.1
     g = ok(tmp_path, no_user(envb={"prod": DEV}))
-    assert files_of(g, "prod") == SEAWEED
+    assert SEAWEED_CORE <= set(files_of(g, "prod"))
     assert y(g, f"{APP}/addons/prod/backups/credentials.yaml")["metadata"]["labels"] == {"app.kubernetes.io/name": "backups", **LABELS}
     assert f"{APP}/backup/prod/schedule.yaml" in g
     ext = y(g, f"{APP}/backup/prod/externalsecret.yaml")
@@ -125,13 +130,14 @@ def test_a_component_that_uses_the_bucket_still_gets_its_variables_ac_139_2(tmp_
 
 # ---------------- AC-139.3: removing the uses keeps render and backups working ----------------
 
-def test_removing_the_uses_changes_only_the_component_overlay_ac_139_3(tmp_path):  # AC-139.3
+def test_removing_the_uses_changes_only_the_component_overlay_where_the_backups_are_ac_139_3(tmp_path):  # AC-139.3
     before = ok(tmp_path / "a", bdoc(dbb={"prod": DEV}, envb={"prod": DEV}))
     after = ok(tmp_path / "b", no_user(dbb={"prod": DEV}, envb={"prod": DEV}))
-    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k) and not k.endswith("system.yaml"))
-    assert changed and all(k.startswith(f"{APP}/overlays/") for k in changed), changed
-    for k in changed:
-        assert "/api/" in k
+    prod = [k for k in set(before) | set(after) if "/prod/" in k or k.startswith("operators/")]
+    changed = sorted(k for k in prod if before.get(k) != after.get(k))
+    assert changed == [f"{APP}/overlays/prod/api/deployment.yaml"], changed
+    assert sets(after)["shop-addons-prod"] == sets(before)["shop-addons-prod"]
+    assert sets(after)["shop-backup-prod"] == sets(before)["shop-backup-prod"]
 
 
 def test_the_restore_and_status_model_still_has_the_database_and_bucket_ac_139_3(tmp_path):  # AC-139.3, AC-139.5
@@ -161,7 +167,7 @@ def test_the_rendered_backup_only_system_is_stable_ac_139_4(tmp_path):  # AC-139
     doc = no_user(dbb={"prod": DEV}, envb={"prod": DEV})
     first = ok(tmp_path / "a", doc)
     assert ok(tmp_path / "b", doc) == first
-    assert y(first, f"{APP}/addons/prod/backups/kustomization.yaml")["resources"] == [f for f in SEAWEED if f != "kustomization.yaml"]
+    assert y(first, f"{APP}/addons/prod/backups/kustomization.yaml")["resources"] == [f for f in files_of(first, "prod") if f != "kustomization.yaml"]
 
 
 def test_the_e2e_backs_up_into_a_bucket_no_component_uses_ac_139_4():  # AC-139.4 (needs a cluster)
