@@ -10,13 +10,15 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat system new <manifest.yml> [--resume] [--no-github] [--dry-run]   create a gitops-app repo + all component repos, one component PR
   cplat system status [--context KUBE_CONTEXT] [--json]   one table: components by environment, CI, Argo sync/health
   cplat system ship start|status|phase|publish|next|repo|entry|complete|escalate|finish|gate ...   /system:ship: a product spec → every repo → dev
+  cplat system wait --env ENV [<component>…] [--revision SHA] [--refresh] [--timeout S] [--context C]   until Argo CD runs main's head (spec 143)
   cplat system autonomy show|set|pause|resume|undo|approve ...   /system:autonomy: autonomy per environment, pause, undo, approve
   cplat component new <name> <description…> [--type service|website|library] [--lang python|java|go|typescript] [--system OWNER/REPO] [--dry-run]
   cplat component add|set|remove <component…> [--type T] [--lang L] [--expose] [--env K=V] [--instance ENV --replicas N] [--from-k8s] [--pr]
-  cplat component ship start|status|phase|pr|land|deploy|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
+  cplat component ship start|status|phase|pr|land|deploy|wait|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
   cplat component build schedule|merge|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
-  cplat component release target [--json]   /component:release: the commit to tag (staging's, or main's head) and the version
+  cplat component release target [--json] | wait --commit SHA   /component:release: the commit to tag and the version; main's ci run on it
   cplat cluster new <name> [--org O] [--public] | add <owner>/<repo> [--name S] | remove <system>   the cluster repo and the systems it installs
+  cplat cluster wait [--refresh] [--timeout S] [--context C]   until the cluster's root applications run main's head (spec 143)
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
   cplat resource add|remove postgres [--version N]   the system's database resource (system.yaml)
   cplat resource upgrade <resource> --to MAJOR --env ENV [--context C] [--wait] [--json]   one environment's major upgrade, as a PR
@@ -68,10 +70,11 @@ import core  # noqa: E402
 NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", []),
                "restore": ("envrestore", []),
-               "set": ("systemset", []), "autonomy": ("autonomycmd", [])},
+               "set": ("systemset", []), "autonomy": ("autonomycmd", []), "wait": ("envwait", ["system"])},
     "component": {"new": ("newsvc", []), "add": ("compose", ["add"]), "set": ("compose", ["set"]), "remove": ("compose", ["remove"]),
                   "ship": ("ship", []), "build": ("buildcmd", []), "release": ("comprelease", [])},
-    "cluster": {"new": ("clusterrepo", ["new"]), "add": ("clusterrepo", ["add"]), "remove": ("clusterrepo", ["remove"])},
+    "cluster": {"new": ("clusterrepo", ["new"]), "add": ("clusterrepo", ["add"]), "remove": ("clusterrepo", ["remove"]),
+                "wait": ("envwait", ["cluster"])},
     "api": {"list": ("apilist", [])},
     "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"]),
                  "backup": ("dbbackup", []), "restore": ("dbrestore", []), "upgrade": ("upgrade", [])},

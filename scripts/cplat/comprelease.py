@@ -1,4 +1,5 @@
-"""`cplat component release target`: the commit a component release tags (spec 138, #426).
+"""`cplat component release target|wait`: the commit a component release tags (spec 138, #426), and the wait for `main`'s
+`ci` run on it before the tag (spec 143).
 
 A release tag never rebuilds: CI gives the `sha-<40>` image of the tagged commit its `X.Y.Z` tags, and prod is refused unless
 that digest is the one staging runs (spec 106). So the release tags the commit staging runs; a component without staging (a
@@ -160,13 +161,69 @@ def lines(d: dict) -> list[str]:
     return out
 
 
+# ---------------- wait: main's ci run on the commit to tag (spec 143) ----------------
+
+NO_RUN_GRACE = 120.0
+RED_CONCLUSIONS = {"failure", "cancelled", "timed_out", "startup_failure"}
+
+
+def ci_wait(repo: Path, sha: str, timeout: float, interval: float = 10.0, grace: float = NO_RUN_GRACE) -> tuple[int, list[str]]:
+    """Wait for `main`'s `ci` push run on `sha`: GREEN 0, RED 1 (with the failed log), NO RUN 1 after `grace`, TIMEOUT 2."""
+    import ship
+    import waits
+    slug, s7 = ship.service_slug(repo), sha[:7]
+    begin, last = waits.now(), None
+    while True:
+        out = ship.gh(["run", "list", "-R", slug, "--workflow", "ci", "--branch", "main", "--commit", sha, "--event", "push",
+                       "--json", "databaseId,status,conclusion"], cwd=repo, check=False)
+        try:
+            rs = json.loads(out or "[]")
+        except ValueError:
+            rs = []
+        elapsed = waits.now() - begin
+        if rs:
+            seen = ", ".join(f"run {r.get('databaseId')}: {r.get('conclusion') or r.get('status')}" for r in rs)
+            if seen != last:
+                print(f"{waits.clock()} {seen}", file=sys.stderr, flush=True)
+                last = seen
+            failed = [r for r in rs if r.get("conclusion") in RED_CONCLUSIONS]
+            if failed:
+                rid = str(failed[0].get("databaseId"))
+                return waits.RED, [f"RED: main's ci run {rid} on {s7} {failed[0]['conclusion']}; do not tag",
+                                   *ship.run_logs(repo, [(slug, rid)])]
+            if all(r.get("status") == "completed" for r in rs):
+                return waits.REACHED, [f"GREEN: main's ci run on {s7} passed; its image can be tagged"]
+        elif elapsed >= grace:
+            return waits.RED, [f"NO RUN: no ci run on main for {s7} after {int(grace)}s (a commit that changes only Markdown "
+                               "builds no image); do not tag"]
+        left = timeout - elapsed
+        if left <= 0:
+            return waits.TIMEOUT, [f"TIMEOUT: main's ci run on {s7} is still running after {int(timeout)}s",
+                                   "run the same wait again"]
+        waits.sleep(min(interval, left))
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat component release", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("target", help="the commit to tag (staging's, or main's head without staging) and the version")
     p.add_argument("--repo", default=".")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("wait", help="wait for main's ci run on the commit to tag (spec 143)")
+    p.add_argument("--commit", required=True)
+    p.add_argument("--timeout", type=float, default=540.0)
+    p.add_argument("--interval", type=float, default=10.0, help=argparse.SUPPRESS)
+    p.add_argument("--repo", default=".")
     ns = ap.parse_args(argv)
+    if ns.cmd == "wait":
+        import waits
+        repo = Path(ns.repo).resolve()
+
+        def body() -> tuple[int, str]:
+            code, out = ci_wait(repo, ns.commit, ns.timeout, ns.interval)
+            print("\n".join(out), flush=True)
+            return code, waits.RESULTS[code]
+        return waits.record(repo, "component release wait", body)
     d = target(Path(ns.repo).resolve())
     print(json.dumps(d, indent=2) if ns.json else "\n".join(lines(d)))
     return 0 if d["ok"] else 1

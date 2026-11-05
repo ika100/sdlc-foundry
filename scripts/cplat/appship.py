@@ -234,6 +234,31 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
 
 # ---------------- CLI ----------------
 
+def show_next(action: dict, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(action, indent=2))
+        return
+    say([f"action: {action['action']}"] + [f"start {s['id']} ({s['shape']}) in {s['clone']}" for s in action["start"]]
+        + [f"running {i}" for i in action["running"]] + [f"blocked {b['id']} (waits for {', '.join(b['waits_for'])})"
+                                                           for b in action["blocked"]]
+        + [f"escalated {i}" for i in action["escalated"]])
+
+
+def _next_wait(repo: Path, ns: argparse.Namespace) -> int:
+    """`next --wait` (spec 143): counts toward the system ship run."""
+    import shipwait
+    import waits
+
+    def body() -> tuple[int, str]:
+        code, action, lines = shipwait.next_wait(repo, ns.timeout, ns.json, ns.interval)
+        if action is not None:
+            show_next(action, ns.json)
+        else:
+            say(lines)
+        return code, waits.RESULTS[code]
+    return waits.record(repo, "system ship next --wait", body)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat system ship", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".")
@@ -252,6 +277,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     p = sub.add_parser("next")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--wait", action="store_true", help="block while the action is `wait` (spec 143)")
+    p.add_argument("--timeout", type=float, default=540.0)
+    p.add_argument("--interval", type=float, default=10.0, help=argparse.SUPPRESS)
     r = sub.add_parser("repo").add_subparsers(dest="rcmd", required=True)
     p = r.add_parser("start")
     p.add_argument("id")
@@ -309,15 +337,10 @@ def main(argv: list[str]) -> int:
         ok, lines = publish(repo, ns.timeout)
         say(lines)
         return 0 if ok else 1
+    if ns.cmd == "next" and ns.wait:
+        return _next_wait(repo, ns)
     if ns.cmd == "next":
-        action = appship_sched.next_action(repo, state.require_state(repo))
-        if ns.json:
-            print(json.dumps(action, indent=2))
-        else:
-            say([f"action: {action['action']}"] + [f"start {s['id']} ({s['shape']}) in {s['clone']}" for s in action["start"]]
-                + [f"running {i}" for i in action["running"]] + [f"blocked {b['id']} (waits for {', '.join(b['waits_for'])})"
-                                                                   for b in action["blocked"]]
-                + [f"escalated {i}" for i in action["escalated"]])
+        show_next(appship_sched.next_action(repo, state.require_state(repo)), ns.json)
         return 0
     if ns.cmd == "repo":
         if ns.rcmd == "start":

@@ -10,28 +10,28 @@ tasks:
     covers: [AC-143.10]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: "envwait.py: `system wait` and `cluster wait` (apps of an environment or the cluster roots, wanted revision from one fetch, pins at that revision, state per app, READY/RED/TIMEOUT, --refresh, context check); routes in cplat.py"
     files: [scripts/cplat/envwait.py, scripts/cplat/cplat.py]
     covers: [AC-143.1, AC-143.2, AC-143.3, AC-143.4, AC-143.5, AC-143.6, AC-143.7, AC-143.10]
     parallel_safe: false
     depends_on: [t1]
-    done: false
+    done: true
   - id: t3
     title: "shipwait.py: `component ship wait` and `system ship next --wait`; routes in ship.py and appship.py"
     files: [scripts/cplat/shipwait.py, scripts/cplat/ship.py, scripts/cplat/appship.py]
     covers: [AC-143.8, AC-143.9, AC-143.10]
     parallel_safe: false
     depends_on: [t1]
-    done: false
+    done: true
   - id: t4
     title: "`component release wait --commit` (main's ci run on a commit) in comprelease.py"
     files: [scripts/cplat/comprelease.py]
     covers: [AC-143.11]
     parallel_safe: true
     depends_on: [t1]
-    done: false
+    done: true
   - id: t5
     title: "Command texts name the waits (component set/add, instance promote, system set, resource add, cluster add, system ship, component release); AGENTS.md, ADR-081, cplat usage"
     files: [plugins/component/commands/set.md, plugins/component/commands/add.md, plugins/instance/commands/promote.md, plugins/system/commands/set.md, plugins/resource/commands/add.md, plugins/cluster/commands/add.md, plugins/system/commands/ship.md, plugins/component/commands/release.md, plugins/component/commands/ship.md, docs/AGENTS.md, docs/adr/081-a-coordinator-waits-with-a-cplat-wait-never-a-polling-loop.md, docs/adr/README.md]

@@ -1799,6 +1799,18 @@ def unit_command(repo: Path, as_json: bool) -> int:
 
 # ---------------- CLI ----------------
 
+def _wait_command(target: Path, ns: argparse.Namespace) -> int:
+    """`ship wait` (spec 143): the wait counts toward the run this session runs in (its working directory)."""
+    import shipwait
+    import waits
+
+    def body() -> tuple[int, str]:
+        code, lines = shipwait.ship_wait(target, ns.phase, ns.timeout, ns.interval)
+        print("\n".join(lines), flush=True)
+        return code, {waits.REACHED: "reached", waits.RED: "escalated", waits.TIMEOUT: "timeout"}[code]
+    return waits.record(Path.cwd(), "component ship wait", body, about=target)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat component ship", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".")
@@ -1835,6 +1847,11 @@ def main(argv: list[str]) -> int:
     p.add_argument("--queue-timeout", type=float, default=QUEUE_TIMEOUT)
     p.add_argument("--context", help="kube context: also wait for Argo CD to report <service>-dev Synced/Healthy")
     p.add_argument("--base-url", default=None, help="run the smoke tests against this URL instead of the gitops-app's dev URL")
+    p = sub.add_parser("wait", help="block until the ship run of a clone reaches a phase or ends (spec 143)")
+    p.add_argument("--repo", dest="wait_repo", default=None, help="the clone whose ship run to wait for (default: this one)")
+    p.add_argument("--phase", choices=PHASES, default=None, help="this phase or a later one (default: done)")
+    p.add_argument("--timeout", type=float, default=540.0)
+    p.add_argument("--interval", type=float, default=5.0, help=argparse.SUPPRESS)
     p = sub.add_parser("escalate")
     p.add_argument("reason", nargs="+")
     p.add_argument("--cause", default=None, help=f"who must act: {_ALLOWED} (run record; `platform` is filed as an issue, spec 088)")
@@ -1868,6 +1885,8 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.cmd == "unit":
         return unit_command(repo, ns.json)
+    if ns.cmd == "wait":
+        return _wait_command(Path(ns.wait_repo).resolve() if ns.wait_repo else repo, ns)
     if ns.cmd == "status":
         refresh_units(repo)
         if load_state(repo) is None and (rs := units.rows(repo)):
