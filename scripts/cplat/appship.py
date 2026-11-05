@@ -12,6 +12,8 @@ Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-a
   cplat system ship repo escalate <id> <reason> --cause C  a repo that escalated before its ship existed (open questions)
   cplat system ship entry pr <id> --title T --body-file F  push the entry's branch and open (or reuse) its PR
   cplat system ship entry land <id> [--timeout S]          wait for all checks, merge through the merge slot
+  cplat system ship land [--timeout S] [--wait-timeout S]  spec 144: merge the one dev PR, Argo CD once, every dev smoke,
+                                                           staging in one PR (exit 2: Argo CD timeout, run it again)
   cplat system ship complete [--timeout S]                 spec done + plan completed through a PR merged on green; prints the report
   cplat system ship escalate <reason> --cause C            end the run escalated
   cplat system ship finish                                 archive the state (an unrecorded run is recorded abandoned)
@@ -153,6 +155,8 @@ def entry_land(repo: Path, repo_id: str, timeout: float) -> tuple[bool, list[str
     pr = cur.get("pr")
     if not pr:
         raise PlatformError(f"{repo_id} has no PR", hint=f"cplat system ship entry pr {repo_id} --title T --body-file F")
+    if st.get("joint"):
+        return _entry_green(repo, st, repo_id, pr, timeout)
     ok, lines = appship_merge.land(repo, pr, repo_id, timeout, INTERVAL)
     if not ok:
         appship_sched.escalate_repo(repo, repo_id, red_reason("gitops entry PR", pr, lines), "code")
@@ -167,6 +171,25 @@ def entry_land(repo: Path, repo_id: str, timeout: float) -> tuple[bool, list[str
         s["repos"][repo_id].update(state="passed", gate="entry", fix_rounds=0, human_steps=steps)
     state.update(repo, change)
     return True, lines
+
+
+def _entry_green(repo: Path, st: dict, repo_id: str, pr: str, timeout: float) -> tuple[bool, list[str]]:
+    """Spec 144 (decision 4): in a joint run the entry PR is the dev PR: green checks pass the entry, nothing is merged."""
+    view = json.loads(ship.gh(["pr", "view", pr, "--json", "state,isDraft"], cwd=repo) or "{}")
+    if view.get("isDraft"):
+        ship.gh(["pr", "ready", pr], cwd=repo, check=False)
+    status, cs, failed = ship.wait_checks(ship.CheckWatch(repo, pr, ship.QUEUE_TIMEOUT, st.get("run_id")), timeout, INTERVAL)
+    if status == "red":
+        lines = ship.red(repo, pr, cs, failed)
+        appship_sched.escalate_repo(repo, repo_id, red_reason("gitops entry PR", pr, lines), "code")
+        return False, lines
+
+    def change(s: dict) -> None:
+        s["repos"][repo_id].update(state="passed", gate="entry", fix_rounds=0)
+        s["joint_pr"] = pr
+    state.update(repo, change)
+    return True, [f"gitops entry PR {pr} is green; it stays open and lands dev with the builds of the components "
+                  "(`cplat system ship land`, spec 144)"]
 
 
 LOCAL_CONTEXT = re.compile(r"k3d-[a-z0-9-]+-local")   # the cluster `devbox run cluster-up` makes
@@ -198,6 +221,9 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     open_ = [i for i, r in st["repos"].items() if r.get("state") not in state.PASSED]
     if open_:
         raise PlatformError("repos not past their gate: " + ", ".join(open_), hint="cplat system ship next --json")
+    import appship_joint
+    if appship_joint.needs_land(st):
+        raise PlatformError(f"the dev PR {st['joint_pr']} has not landed yet", hint="cplat system ship land")
     _guard_clean(repo, [])
     branch = f"docs/done-{sid}"
     _switch(repo, branch)
@@ -297,6 +323,10 @@ def main(argv: list[str]) -> int:
     p = e.add_parser("land")
     p.add_argument("id")
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
+    p = sub.add_parser("land", help="merge the one dev PR, wait for Argo CD, smoke dev, promote staging (spec 144)")
+    p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
+    p.add_argument("--wait-timeout", type=float, default=540.0, help="the Argo CD wait (exit 2 when it runs out)")
+    p.add_argument("--interval", type=float, default=INTERVAL, help=argparse.SUPPRESS)
     p = sub.add_parser("complete")
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     p = sub.add_parser("escalate")
@@ -320,6 +350,9 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "start":
         st = state.start(repo, ns.spec, ns.max, ns.context, ns.budget)
         show(st)
+        if st.get("joint") is False:
+            import appship_joint
+            print(appship_joint.LEGACY_LINE)
         if line := budget.limits_line(st.get("run_id")):
             print(line)
         return 0
@@ -361,6 +394,11 @@ def main(argv: list[str]) -> int:
         ok, lines = entry_land(repo, ns.id, ns.timeout)
         say(lines)
         return 0 if ok else 1
+    if ns.cmd == "land":
+        import appship_joint
+        code, lines = appship_joint.land(repo, ns.timeout, ns.wait_timeout, ns.interval, min(ns.interval, 10.0))
+        say(lines)
+        return code
     if ns.cmd == "complete":
         ok, lines = complete(repo, ns.timeout)
         say(lines)

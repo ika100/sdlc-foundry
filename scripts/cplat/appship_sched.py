@@ -57,7 +57,8 @@ def next_action(gitops_dir: Path, st: dict) -> dict:
     elif start:
         action = "start"
     elif plan and all(_state_of(st, r["id"]) in PASSED for r in plan) and not st.get("escalated"):
-        action = "complete"
+        import appship_joint
+        action = "land" if appship_joint.needs_land(st) else "complete"     # spec 144: the one dev PR first
     elif stopped:
         action = "escalate"
     else:
@@ -191,6 +192,9 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
                             hint=f"create the repo spec with `cplat spec new --from-plan docs/plan/{st['spec']}.md {repo_id}` (it sets parent)")
     gate = cur.get("gate") or gate_class(gitops_dir, repo)
     smoke = sh.get("smoke") or {}
+    if (st.get("joint") and smoke.get("outcome") == "deferred" and not sh.get("escalated") and sh["phase"] == "done"
+            and gate != "library"):
+        return _pin_result(gitops_dir, st, repo_id, clone, sh, repo_spec, gate)
     sha, svc = sh.get("merge_sha") or "", repo_id
     argo = "-"
     outcome: tuple[str, str | None] = ("passed", None)
@@ -235,3 +239,26 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
     if outcome[0] == "passed":
         return True, [f"{repo_id}: passed ({gate})"]
     return False, [f"{repo_id}: escalated ({sh.get('escalated') or outcome[1]})"]
+
+
+def _pin_result(gitops_dir: Path, st: dict, repo_id: str, clone: Path, sh: dict, repo_spec: specmod.Spec,
+                gate: str) -> tuple[bool, list[str]]:
+    """Spec 144 (AC-144.1, AC-144.3): a component ship of a joint run ended at its image: pin it in the dev PR."""
+    import appship_joint
+    tag = (sh.get("joint") or {}).get("tag") or f"sha-{sh.get('merge_sha')}"
+    comp, lines = appship_joint.pin(gitops_dir, st, repo_id, tag)
+    steps = ship.plan_meta(clone, sh).get("human_steps") or []
+
+    def change(s: dict) -> None:
+        e = s["repos"].setdefault(repo_id, {})
+        e.update(state="pinned", gate=gate, spec=sh["spec"], pr=sh.get("pr"), fix_rounds=sh.get("fix_rounds", 0), pinned=tag,
+                 component=comp, deployed=None, argo="-", smoke_row=None, human_steps=list(steps), run_id=sh.get("run_id"),
+                 decisions=specmod.decisions(repo_spec.body))
+        for k in ("smoke", "staging_row", "staging_smoke"):
+            e.pop(k, None)
+        if sh.get("run_id") and sh["run_id"] not in s.setdefault("ships", []):
+            s["ships"].append(sh["run_id"])
+    state.update(gitops_dir, change)
+    ship.finish(clone)
+    pr = state.require_state(gitops_dir).get("joint_pr")
+    return True, [f"{repo_id}: pinned {tag} in the system ship's dev PR ({pr})", *lines]

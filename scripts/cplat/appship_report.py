@@ -1,7 +1,7 @@
 """`cplat system ship` rendering (spec 097): the repo state table and the final report. Pure functions of the state."""
 from __future__ import annotations
 
-PASSED = ("passed", "done-before")
+PASSED = ("passed", "pinned", "done-before")
 
 
 def is_entry(repo: dict) -> bool:
@@ -64,8 +64,12 @@ def final_report(st: dict, title: str, product_steps: list[str] | None = None) -
         dev = f"{rid}:{repo['deployed']}" if repo.get("deployed") else "-"
         out.append(f"| {rid} | {repo.get('spec') or '-'} | {repo.get('pr') or '-'} | {rounds} | {dev} | "
                    f"{repo.get('argo') or '-'} | {_smoke(rid, repo)} |")
-        if repo.get("gate") in ("exposed", "internal"):
+        if repo.get("gate") in ("exposed", "internal") and not str(repo.get("staging_row") or "").startswith("sha-"):
             promote.append(f"/instance:promote {rid} --to staging")
+    staged = [(rid, repo) for rid, repo in ordered(st) if repo.get("staging_row")]
+    if st.get("joint") and staged:             # spec 144 (AC-144.7): staging in one PR for the spec
+        out += ["", "| Repo | Promotion (staging) | Smoke (staging) |", "|---|---|---|"]
+        out += [f"| {rid} | {repo['staging_row']} | {(repo.get('staging_smoke') or {}).get('row') or '-'} |" for rid, repo in staged]
     steps += [s for s in product_steps or [] if s not in steps]
     taken = [(rid, repo.get("spec"), d) for rid, repo in ordered(st) for d in repo.get("decisions") or []]
     if taken:                                  # spec 141 (AC-141.3): what the run decided for the user, to correct later
@@ -73,6 +77,10 @@ def final_report(st: dict, title: str, product_steps: list[str] | None = None) -
                 *(f"- {rid} ({sid}): {d}" for rid, sid, d in taken)]
     if steps:
         out += ["", "Human steps (the run cannot do these):", *(f"- [ ] {s}" for s in steps)]
-    out += ["", "Next (staging is not promoted by this run):", *(promote or ["(no deployable service)"]),
-            "", "This run promotes nothing beyond dev."]
+    if st.get("staging_pr"):
+        out += ["", "Next (staging promoted in " + st["staging_pr"] + "; the rest by hand):", *(promote or ["(nothing left)"]),
+                "", "This run promotes nothing beyond staging."]
+    else:
+        out += ["", "Next (staging is not promoted by this run):", *(promote or ["(no deployable service)"]),
+                "", "This run promotes nothing beyond dev."]
     return out

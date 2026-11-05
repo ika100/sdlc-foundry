@@ -6,6 +6,8 @@ name: pin-dev
 # another) and merges the PR only when every check passed. That needs no branch protection or auto-merge, which
 # private repos on GitHub Free do not have. A red CI leaves the PR open, comments the failed run, and dev keeps the
 # old image. Where branch protection does require checks, the merge falls back to auto-merge after a CI run on the PR.
+# Spec 144: a build that a system ship pins in its one dev PR (compose/<spec>) has a marker branch
+# ship/<spec>/<service>-<sha7>; that build gets no PR here. Every other build is pinned as above.
 run-name: pin-dev ${{ github.event.client_payload.service }} ${{ github.event.client_payload.tag }}   # spec 077: ship deploy finds this run by name
 on:
   repository_dispatch:
@@ -40,10 +42,15 @@ jobs:
           set -euo pipefail
           [[ "$SERVICE" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "::error::invalid service '$SERVICE'"; exit 1; }
           [[ "$TAG" =~ ^sha-([0-9a-f]{40}|[0-9a-f]{7})$ ]] || { echo "::error::invalid tag '$TAG' (expected sha-<40 hex>)"; exit 1; }
+          sha="${TAG#sha-}"
+          if git ls-remote --heads origin | grep -q "refs/heads/ship/[^/]*/$SERVICE-${sha::7}$"; then   # spec 144
+            echo "::notice::$SERVICE:$TAG is pinned by the system ship in its dev PR (marker ship/*/$SERVICE-${sha::7}): no pin PR of its own"
+            exit 0
+          fi
           uv run scripts/pin.py dev "$SERVICE" "$TAG"
           uv run scripts/render.py --check
           if git diff --quiet; then echo "::notice::dev already runs $SERVICE:$TAG"; exit 0; fi
-          sha="${TAG#sha-}"; branch="pin/dev-$SERVICE-${sha::7}"   # the branch keeps the short sha
+          branch="pin/dev-$SERVICE-${sha::7}"   # the branch keeps the short sha
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"

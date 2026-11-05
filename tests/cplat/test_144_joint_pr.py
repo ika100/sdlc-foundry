@@ -124,8 +124,12 @@ class JointWorld(World):
         git(g, "fetch", "-q", "origin")
 
     # ---- Argo CD: every app at origin's head, running what that revision pins
-    def origin_head(self):
-        return subprocess.run(["git", "--git-dir", str(self.origin), "rev-parse", "main"], capture_output=True, text=True).stdout.strip()
+    def origin_head(self, back=0):
+        return subprocess.run(["git", "--git-dir", str(self.origin), "rev-parse", f"main~{back}"], capture_output=True,
+                              text=True).stdout.strip()
+
+    def dev_merges(self):
+        return [c for c in self.made("pr", "merge") if c[2] == self.state()["joint_pr"]]
 
     def pin(self, env, comp, ref="main"):
         text = subprocess.run(["git", "--git-dir", str(self.origin), "show", f"{ref}:applications/shop/overlays/{env}/{comp}/kustomization.yaml"],
@@ -134,7 +138,7 @@ class JointWorld(World):
 
     def kubectl(self, args, context=None, check=False):
         if args[:3] == ["-n", "argocd", "get"]:
-            rev = "0" * 40 if self.argo["stale"] else self.origin_head()
+            rev = self.origin_head(1) if self.argo["stale"] else self.origin_head()
             items = []
             for env in ("dev", "staging"):
                 for comp in ("shop-api", "shop-web"):
@@ -334,15 +338,16 @@ def test_land_merges_the_one_pr_once_and_dev_syncs_once_ac_144_2(j):  # AC-144.2
     assert j.app("next", "--json").json["action"] == "land"
     r = j.app("land")
     assert r.rc == 0, r.out
-    assert len(j.made("pr", "merge")) == 1
+    assert len(j.dev_merges()) == 1
     assert j.pin("dev", "shop-api") == f"sha-{SHA}" and j.pin("dev", "shop-web") == f"sha-{WEB_SHA}"
     assert "READY:" in r.out
     assert f"refs/heads/ship/{SPEC}/" not in j.heads()      # the markers are deleted after the merge
     st = j.state()
     assert st["dev_landed"] and all(st["repos"][i]["state"] == "passed" for i in ("shop-api", "shop-web"))
     assert j.app("next", "--json").json["action"] == "complete"
+    merges = len(j.made("pr", "merge"))
     r = j.app("land")                                        # landing again changes nothing
-    assert r.rc == 0 and len(j.made("pr", "merge")) == 1
+    assert r.rc == 0 and len(j.made("pr", "merge")) == merges
 
 
 def test_an_argo_timeout_exits_2_and_land_resumes_after_the_merge_ac_144_2(j):  # AC-144.2
@@ -351,11 +356,11 @@ def test_an_argo_timeout_exits_2_and_land_resumes_after_the_merge_ac_144_2(j):  
     r = j.app("land", "--wait-timeout", "0")
     assert r.rc == 2, r.out
     assert "TIMEOUT:" in r.out and not j.state().get("escalated")
-    assert len(j.made("pr", "merge")) == 1
+    assert len(j.dev_merges()) == 1
     j.argo["stale"] = False
     r = j.app("land")
     assert r.rc == 0, r.out
-    assert len(j.made("pr", "merge")) == 1
+    assert len(j.dev_merges()) == 1
 
 
 def test_a_red_dev_app_escalates_with_cause_environment_ac_144_2(j):  # AC-144.2

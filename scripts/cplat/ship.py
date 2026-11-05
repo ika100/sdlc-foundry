@@ -202,7 +202,10 @@ def product_link(product: Path) -> dict:
     pst = appship_state.load_state(product)
     if not pst:
         raise PlatformError(f"no product ship run in {product}", hint="start it in the gitops-app repo: /system:ship <spec>")
-    return {"dir": str(product), "run_id": pst.get("run_id"), "context": pst.get("context")}
+    link = {"dir": str(product), "run_id": pst.get("run_id"), "context": pst.get("context")}
+    if pst.get("joint"):                       # spec 144: the system ship lands dev in one PR
+        link.update(joint=True, spec=pst.get("spec"))
+    return link
 
 
 def _open_budget(repo: Path, st: dict, options: dict) -> None:
@@ -1104,6 +1107,10 @@ def _merged(repo: Path, st: dict, sha: str, lines: list[str]) -> tuple[bool, lis
     st["merge_sha"] = sha
     st["phase"] = "deploy"
     save_state(repo, st)
+    prod = st.get("product") or {}
+    if prod.get("joint") and re.fullmatch(r"[0-9a-f]{40}", sha or ""):   # spec 144: pin-dev skips this build
+        import appship_joint
+        lines = [*lines, appship_joint.push_marker(Path(prod["dir"]), prod["spec"], service_name(repo), sha)]
     run(["git", "switch", "-q", "main"], cwd=repo, check=False)
     run(["git", "pull", "-q", "--ff-only"], cwd=repo, check=False)
     return True, lines
@@ -1412,6 +1419,9 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
         return _smoke_not_run(repo, st, "the repo is not linked to a gitops-app",
                               ["no .platform-app.yml: this repo is not linked to a gitops-app, so dev is not pinned "
                                "automatically; compose it with /component:add and link it (spec 062)"])
+    if (st.get("product") or {}).get("joint"):  # spec 144: the system ship pins, lands and smokes dev
+        import appship_joint
+        return appship_joint.component_deploy(repo, st, service_name(repo), timeout, interval)
     if st.get("deployed") and (st.get("smoke") or {}).get("outcome") in {"red", "timed-out"}:
         return _smoke_step(repo, st, apps, service_name(repo), ["resuming: smoke only, against what dev runs now"], base_url,
                            context, interval)

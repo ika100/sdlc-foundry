@@ -25,7 +25,7 @@ PHASES = ["plan", "publish", "repos", "complete", "done"]
 STATE_FILE = "cplat-app-ship.json"
 STATE_LOCK = "cplat-app-ship.state.lock"
 DEFAULT_MAX = 3
-PASSED = ("passed", "done-before")
+PASSED = ("passed", "pinned", "done-before")   # pinned: in the joint dev PR (spec 144)
 
 
 def slug(repo: Path) -> str | None:
@@ -233,14 +233,19 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
                 r.pop("reason", None)
                 r.pop("cause", None)
         refresh_repos(repo, st)
+        if "joint" not in st:
+            import appship_joint
+            st["joint"] = appship_joint.supported(repo)
         with _locked(repo):
             save_state(repo, st)
         _open_budget(repo, st, options)
         return st
+    import appship_joint
+    joint = appship_joint.supported(repo)        # spec 144: one dev PR per system spec, kept for the whole run
     phase = "publish" if plan_path(repo, sp.id).is_file() else "plan"
     st = {"spec": sp.id, "phase": phase, "max": max_ or DEFAULT_MAX, "context": ctx, "recorded": False,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "escalated": None, "cause": None,
-          "repos": {}, "ships": [], "waiting": [], "gitops_merged": []}
+          "repos": {}, "ships": [], "waiting": [], "gitops_merged": [], "joint": joint}
     stopgate.claim(st, stopgate.session_of_env())
     if st["phase"] != "plan":
         refresh_repos(repo, st)
@@ -301,7 +306,7 @@ def next_step(st: dict) -> str:
         "plan": f"plan the product unattended (/system:plan {sid}), then `cplat system ship phase publish`",
         "publish": "publish the spec and plan: `cplat system ship publish`",
         "repos": "`cplat system ship next --json`, then start the repos it lists (`cplat system ship repo start <id>`) "
-                 "and read each result (`cplat system ship repo result <id>`)",
+                 "and read each result (`cplat system ship repo result <id>`); when it answers `land`: `cplat system ship land`",
         "complete": "`cplat system ship complete`, print its report, then `cplat system ship finish`",
         "done": "nothing: the run is finished (`cplat system ship finish`)",
     }[st["phase"]]
