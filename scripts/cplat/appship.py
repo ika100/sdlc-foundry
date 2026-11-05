@@ -160,11 +160,34 @@ def entry_land(repo: Path, repo_id: str, timeout: float) -> tuple[bool, list[str
     wt = Path(cur.get("clone") or "")
     if wt.is_dir():
         run(["git", "worktree", "remove", "--force", str(wt)], cwd=repo, check=False)
+    more, steps = install_operators(repo, st.get("context"))
+    lines += more
 
     def change(s: dict) -> None:
-        s["repos"][repo_id].update(state="passed", gate="entry", fix_rounds=0, human_steps=[])
+        s["repos"][repo_id].update(state="passed", gate="entry", fix_rounds=0, human_steps=steps)
     state.update(repo, change)
     return True, lines
+
+
+LOCAL_CONTEXT = re.compile(r"k3d-[a-z0-9-]+-local")   # the cluster `devbox run cluster-up` makes
+
+
+def install_operators(repo: Path, context: str | None) -> tuple[list[str], list[str]]:
+    """Spec 142 (AC-142.2): after the gitops entry merged a change under operators/, apply the operators. On the local
+    cluster of `devbox run cluster-up` the run does it itself (`devbox run bootstrap`); on any other cluster it is a human
+    step. Returns (lines, human steps). `main` is pulled first, so bootstrap never applies a stale checkout."""
+    _land_main(repo)
+    changed = git(repo, "diff", "--name-only", "HEAD~1", "HEAD", check=False).splitlines()
+    if not any(f.startswith("operators/") for f in changed) or not (repo / "operators" / "root.yaml").is_file():
+        return [], []
+    cmd = f"KUBE_CONTEXT={context or '<context>'} devbox run bootstrap"
+    if not (context and LOCAL_CONTEXT.fullmatch(context)):
+        return [f"operators changed: apply them once on the cluster: {cmd}"], [f"apply the new operators: {cmd} (in {repo.name})"]
+    res = run(["devbox", "run", "bootstrap"], cwd=repo, check=False, env={"KUBE_CONTEXT": context}, timeout=1800)
+    if res.returncode == 0:
+        return [f"operators changed: applied them on the local cluster {context} ({cmd})"], []
+    tail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["no output"]
+    return [f"operators changed, but applying them on {context} failed: {tail[0]}"], [f"apply the new operators: {cmd} (in {repo.name})"]
 
 
 # ---------------- complete ----------------

@@ -276,11 +276,15 @@ def main(argv: list[str]) -> int:
             entry["instances"] = {"dev": {}}
         if to not in entry["instances"]:
             entry["instances"][to] = {}
-    gitops.save(app_dir, y, data)
-    gitops.render(repo)
-    for n, tag in plan:  # render created the overlay at `latest`; pin the tag (render preserves it from now on)
-        model.write_pin(app_dir, to, n, tag)
-    gitops.render(repo)  # idempotent: proves the pin survives a re-render
+    try:
+        gitops.save(app_dir, y, data)
+        gitops.render(repo)
+        for n, tag in plan:  # render created the overlay at `latest`; pin the tag (render preserves it from now on)
+            model.write_pin(app_dir, to, n, tag)
+        gitops.render(repo)  # idempotent: proves the pin survives a re-render
+    except PlatformError:
+        gitops.discard_changes(repo)            # spec 142 (AC-142.5): a failed promotion leaves no edit behind
+        raise
     if accepted:
         r.did.append(accepted)
     r.did.append("pinned " + ", ".join(f"{n}={t}" for n, t in plan))
