@@ -41,7 +41,39 @@ The issues found in the 2026-11-04 recording, ranked by the working time each on
 | — | #415, #416, #417, #429 | Correctness, safety or display | no time saving |
 | wall clock | #409 | The console and the CI waits use up the account's GraphQL limit, and cplat stops instead of waiting | the largest wall-clock sink (≈ 83 min in part 2 alone) |
 
-Already fixed: #412 (the bucket race, ≈ 40 min in part 3).
+Already fixed: #412 (the bucket race, ≈ 40 min in part 3). State on 2026-11-05: fixed and released in 5.8.0–5.9.0:
+#408, #409, #410, #414, #415, #416, #417, #419, #420, #421, #422, #423, #424, #428, #429. Open: #418 (spec 139, draft),
+#425, #426 (spec 138, draft), #427 (a new command, out of scope).
+
+## Measured on 2026-11-05
+
+Two full journeys were recorded in the `ika100-demo` organisation on platform 5.8.x (journey 1) and 5.8.3 → 5.9.0 (journey
+2), with the same three parts and scripted answers. Working time includes CI waits and excludes the pauses for platform
+fixes.
+
+| Part | Budget | Journey 1 | Journey 2 |
+|---|---|---|---|
+| 1 — system, cluster, spec, ship | 20 | ≈ 100 min | ≈ 91 min (20 of them a blocked pin PR) |
+| 2 — web UI, system spec, ship | 30 | ≈ 62 min | ≈ 84 min |
+| 3 — hosts, release, prod, restore | 10 | ≈ 80 min | ≈ 59 min |
+| Journey | 60 (interim 90) | ≈ 240 min | ≈ 234 min |
+
+Journey 1 stopped for six platform defects (all fixed the same day: #448, #450, #453, #454, #455, #457); journey 2 for one
+(#464) and one template defect (#468), and asked no question during its ships. Fewer stops did not shorten the journey: the
+remaining time is in the ships themselves. The cost drivers, ranked by measured minutes in journey 2:
+
+| Rank | Driver | Measured | What it is made of |
+|---|---|---|---|
+| 1 | The system route for a feature of one repo | part 1 ship ≈ 65 min (component route on 2026-11-03: 17) | system spec, plan PR, a second spec for the repo, a sub-agent, more CI rounds; spec 140 (5.9.0) routes such a feature to `/component:ship` |
+| 2 | A two-repo system ship | 72 min | per repo: architect, acceptance tests, coder rounds, quality, review, PR CI, dev pin, smoke; the two repos ran in parallel but the longer one sets the time |
+| 3 | The release of two components | 25 min | release PRs (a lock-file fix round), tag before the image existed (rerun), a staging round for the release builds; spec 138 decides the order |
+| 4 | CI rounds per PR | 3–6 min each, about 25 PRs per journey | gitops CI, component CI, pin PRs; AC-136.12 caps the PRs at 15, AC-136.13 the gitops CI at 2 min |
+| 5 | Coordinator waits written by the agent | about 10 min per journey | hand-written polling loops on `ship status` and Argo, one that never polled |
+| 6 | Cluster creation and the first operator installs | ≈ 8 min | `cluster-up`, CloudNativePG, SeaweedFS, the backup plugin |
+
+The measured gains of the fixes so far: hosts, observability and the staging promotion in one round (9 min against ≈ 16);
+the web repo created and added to the system in one round (6 min); restore and discard without a hang (10 min against a
+timeout); the prod gate clean on the first try.
 
 ## Acceptance criteria
 
@@ -123,3 +155,4 @@ The floor, without dropping any step of the method: agent work for two features 
 - 2026-11-04 created
 - 2026-11-04 amended: the user's budgets folded in (stage budgets with today's values, parts 20 / 30 / 10, journey 60, interim 90, stretch 50, the floor); working time and wall clock reported separately (AC-136.1, AC-136.3, AC-136.6, AC-136.8, AC-136.9); environment settings in 1 PR (AC-136.11).
 - 2026-11-04 amended: all open questions answered as suggested; part targets binding and stage budgets guiding, part 3 at 10 min, external waits counted, plan approval as person-wait, the benchmark's owner, runners, cluster and `--runs` (AC-136.4), 3 runs per minor release candidate and the BASELINES table written without waiting (AC-136.9); new AC-136.16 prepares staging and prod gitops changes in one run.
+- 2026-11-05 amended: the state of the 2026-11-04 time sinks, and a section with the times and cost drivers measured in two full journeys (no change to the criteria)
