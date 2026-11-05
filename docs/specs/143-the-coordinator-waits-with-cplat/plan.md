@@ -45,7 +45,7 @@ tasks:
     covers: [AC-143.11]
     parallel_safe: false
     depends_on: [t5]
-    done: false
+    done: true
 ---
 
 # Plan — 143 The coordinator waits with cplat, not hand-written loops
