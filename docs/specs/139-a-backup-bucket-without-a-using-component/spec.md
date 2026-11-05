@@ -1,7 +1,7 @@
 ---
 spec_id: 139-a-backup-bucket-without-a-using-component
 title: A backup bucket without a using component
-status: approved
+status: building
 priority: P1
 tracks: [418]
 shape: platform
@@ -61,3 +61,4 @@ Tracks #418.
 - 2026-11-05 created (tracks #418); draft, waiting for the answer to the open question
 - 2026-11-05 amended: open question answered by the user: (a)
 - 2026-11-05 approved
+- 2026-11-05 building
