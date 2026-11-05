@@ -32,7 +32,7 @@ Canonical `devbox run` scripts (configured in `devbox.json`):
 | `lint-fix` | `eslint . --fix` |
 | `typecheck` | `tsc --noEmit` |
 | `quality` | `lint` then `typecheck` — the gate CI runs |
-| `e2e` | Playwright tests in `e2e/` (installs Chromium; starts the app unless `SMOKE_BASE_URL` is set) |
+| `e2e` | Playwright tests in `e2e/` (installs Chromium; starts the app on `E2E_PORT`, else `PORT`, else a free port, unless `SMOKE_BASE_URL` is set) |
 | `smoke` | the `@smoke` Playwright tests against a running deployment: `SMOKE_BASE_URL=https://<host> devbox run smoke` (`test` and `ci` never run them) |
 | `audit` | `pnpm audit --prod --audit-level high` |
 | `secrets-scan` | detect-secrets against `.secrets.baseline.json` |
