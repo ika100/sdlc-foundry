@@ -15,3 +15,5 @@ cplat feedback --kind bug|idea --title "<one line>" --what "<what happened>" --c
 4. **Only after an explicit yes**, run the same command again with `--submit` and give the user the issue URL. Without `gh`, the command prints a prefilled browser link instead; hand that over.
 
 Rules: never submit without the user's yes; never paste secrets, tokens or private code; one issue per problem; if `cplat` itself crashed, include its error text.
+
+Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.

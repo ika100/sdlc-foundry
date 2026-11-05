@@ -4,7 +4,7 @@ description: "Pull the latest platform skeleton (CI, Dockerfile, devbox, CLAUDE.
 
 Update the current repo with the platform script. **Request:** $ARGUMENTS
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation:
+`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered):
 
 ```bash
 cplat platform update <ARGS>

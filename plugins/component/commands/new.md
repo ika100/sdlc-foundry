@@ -4,7 +4,7 @@ description: "Create a component repo from its template plus a private GitHub re
 
 Create a repo with the platform script (all logic and tests live in `scripts/cplat`). **Request:** $ARGUMENTS
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation:
+`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered):
 
 ```bash
 cplat component new <ARGS>

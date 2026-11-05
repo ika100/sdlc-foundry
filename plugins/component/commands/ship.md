@@ -10,7 +10,7 @@ You are the **ship orchestrator** ([ADR-028](../../../docs/adr/028-unattended-de
 
 ## cplat
 
-`cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation. First calls:
+`cplat` is on the Bash PATH; one call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First:
 
 ```bash
 cplat shape

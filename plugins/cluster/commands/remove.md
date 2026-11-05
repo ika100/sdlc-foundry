@@ -12,4 +12,6 @@ cplat cluster remove <ARGS>
 2. **Run.** The user's request is the confirmation. Run the same command without `--dry-run`.
 3. **Report.** Relay the PR URL and the "kept in the cluster" line verbatim. Say it plainly: nothing is deleted in the cluster. The system's namespaces, resources and data stay until a human deletes them; merging the PR removes only the Argo CD application that syncs the system.
 
+Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.
+
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

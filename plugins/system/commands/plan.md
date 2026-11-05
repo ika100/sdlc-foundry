@@ -8,7 +8,7 @@ You are the **system planning orchestrator** ([ADR-011](../../../docs/adr/011-mu
 
 ## cplat
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation. First call:
+`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered). First call:
 
 ```bash
 cplat shape

@@ -69,4 +69,6 @@ When the orchestrator tells you the task id (e.g. `t1`), include it in the body 
 
 You do not run the test suite for verification — hand off to the tester agent. `test-fast` is only for tight inner-loop sanity checks while implementing.
 
+Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.
+
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

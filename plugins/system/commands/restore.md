@@ -12,4 +12,6 @@ cplat system restore <ARGS>
 2. **Run** it. In `prod` the command needs `--confirm prod`; ask the user first.
 3. **Say** what it did: `--backup` picks the backup (default `latest`); `--replace` restores over existing objects. Relay the next steps `cplat` prints and check the result with `/system:status`.
 
+Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.
+
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

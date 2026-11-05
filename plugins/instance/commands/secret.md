@@ -12,4 +12,6 @@ cplat instance secret <ARGS>
 - `cplat instance secret set <component>/<env> <secret> <KEY>` prompts for the value without echo, which only works in a terminal: never ask the user to paste a secret into this chat and never pass it as an argument. Tell them to run it themselves with `! <the command>` (use `--value-stdin` only for piped input).
 - Real clusters have their own store (Vault, AWS, GCP): values are managed there, not with this command.
 
+Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.
+
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

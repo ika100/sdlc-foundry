@@ -12,7 +12,7 @@ Work through the phases in order. After each, print `## Phase N complete — <on
 
 ## cplat
 
-`cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation. First call, also the shape dispatch:
+`cplat` is on the Bash PATH; one call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First call, also the shape dispatch:
 
 ```bash
 cplat shape

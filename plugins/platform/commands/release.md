@@ -4,7 +4,7 @@ description: "Release the platform: checks, release PR, CI, merge, tag and GitHu
 
 Release the platform. **Request:** $ARGUMENTS
 
-`cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation:
+`cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered):
 
 ```bash
 cplat platform release <ARGS>

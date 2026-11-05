@@ -6,7 +6,7 @@ Create a system with the platform script (all logic and tests live in `scripts/c
 
 The manifest is a YAML file: `system` (name of the gitops-app repo), `owner`, optional `org` and `visibility`, and `components` (each with `name`, `description`, `type`, `lang`, optional `data` of template options). A component with `shape` is refused: use `type` and `lang`. If the user has no manifest yet, write one from what they describe (valid pairs: service/python, service/java, service/go, website/typescript, library/python; the gitops-app repo is implicit) and show it before using it.
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation:
+`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered):
 
 ```bash
 cplat system new <ARGS>

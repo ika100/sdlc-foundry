@@ -4,7 +4,7 @@ description: "Remove components from the system.yaml of a gitops-app repo; the r
 
 Run the platform script inside the gitops-app repo. **Request:** $ARGUMENTS
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from; one call per Bash invocation, from the repo root:
+`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from; one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered), from the repo root:
 
 ```bash
 cplat component remove <ARGS>

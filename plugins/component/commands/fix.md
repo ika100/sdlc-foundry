@@ -6,7 +6,7 @@ You are the **orchestrator** of the quick-task pipeline (coder → quality → t
 
 **Task:** $ARGUMENTS
 
-If the task is large or cross-cutting (multiple modules, new public APIs, schema changes, anything that needs acceptance criteria or an ADR), **stop and recommend `/component:spec` instead** rather than continuing.
+If the task is large or cross-cutting (multiple modules, new public APIs, schema changes, anything that needs acceptance criteria or an ADR), **stop and recommend `/component:spec` instead**.
 
 **Specs still apply.** If `docs/specs/` exists, read the titles (`ls docs/specs`) and open the spec(s) whose feature this task touches. If the task would change behaviour an active criterion (`AC-<NNN>.<n>`) states, stop: that is a spec change — recommend `/component:spec --amend <NNN> <change>`. A task that stays within the spec's criteria (refactor, internal fix, docs) continues.
 
@@ -20,11 +20,11 @@ Run the prelude:
 2. `git symbolic-ref --short HEAD` → record `$WORK_BRANCH`.
 3. If on `main`: derive a slug (lowercase, hyphens, ≤40 chars). Pick a prefix from task type: `feature/` (default), `fix/`, `chore/`, `docs/`. Then `git checkout -b <prefix>/<slug>` and update `$WORK_BRANCH`.
 4. `BASE_REF=$(git rev-parse HEAD)`.
-5. Build `<project-map>` (output of `ls -d */` excluding `.devbox`, `.venv`, `.git`, `node_modules`). Hold as `$PROJECT_MAP`. Prepend to each subagent prompt below.
+5. Build `<project-map>` (`ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`). Hold as `$PROJECT_MAP`; prepend it to each subagent prompt.
 
 Print `## Phase 0 — on $WORK_BRANCH, BASE_REF=<short-sha>`.
 
-**Shape dispatch.** After the prelude, run `cplat shape`. It prints JSON: `shape`, `plugin`, `deployable`, `library` and `agents` (the subagent type for every role — spawn each role with exactly that type, e.g. `agents.coder`). If `unsupported` is present, stop and show it. Roles missing from `agents` (e.g. deployment for a library) are skipped. Print `Shape: <shape>`.
+**Shape dispatch.** After the prelude, run `cplat shape`. Read cplat output whole (no `grep`, `head` or `tail`). It prints JSON: `shape`, `plugin`, `deployable`, `library` and `agents` (the subagent type per role; spawn each with exactly that type, e.g. `agents.coder`). `unsupported` → stop and show it. Roles missing from `agents` (e.g. deployment for a library) are skipped. Print `Shape: <shape>`.
 
 ---
 
