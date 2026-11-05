@@ -6,6 +6,20 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.8.3] - 2026-11-05
+
+### Fixed
+
+**The generated-lines exclusion of the gitops secrets scan works on real files (#420, found again in the 2026-11-05 journey).** In a whole YAML document detect-secrets reads `checksum/config: c746…` with the value quoted, so the 5.8.0 pattern, written for the bare line, did not match: enabling observability or promoting to a new environment still failed the scan, and the agent added baseline entries by hand. The pattern now accepts the quoted form. Existing gitops repos keep their baseline (`_skip_if_exists`): copy the `should_exclude_line` entry of `templates/gitops-app/.secrets.baseline.json` into yours.
+
+**Resuming a merged ship never opens a second, empty PR (#452).** A ship run whose dev smoke could not run ended `done` and was archived; a new `/component:ship` of the done spec started at phase `pr` and opened a PR from a branch identical to main. Its squash commit changed nothing, so CI built no image and deploy waited for a dev pin that never came. A new start of a done spec whose code is merged now resumes at deploy with the earlier PR and merge commit, and `ship pr` refuses a pull request that changes nothing on main.
+
+**A system ship merges a repo's PR that started as the spec's draft (found in the 2026-11-05 journey).** In the system flow a repo's spec is published as a draft PR on `feature/<spec>`, and the ship reuses that PR for the code. It stayed a draft, so GitHub refused the merge, and the error blamed merge conflicts. `ship pr` now marks a reused draft ready for review, `land` does so before it merges, and a refused merge of a draft says so.
+
+**Web and Python images take the Debian security updates of their slim base (found in the 2026-11-05 journey).** `node:24-slim` shipped apt 2.6.1 with a fixable HIGH CVE, so the release image scan of a web UI failed, and rebuilding on the same base tag did not help. The runtime stages of the `web-nextjs` and `service-python` templates now run `apt-get update && apt-get upgrade -y` (lists removed afterwards). Existing repos get it with `/platform:update` (the Dockerfile is template-owned).
+
+**No false prod WARNING when staging runs the release commit itself (found in the 2026-11-05 journey).** For a release PR that changes only the release files (CHANGELOG, version file), the prod evidence looked at the commit before it, assuming the release commit had no image of its own. When CI did build it and staging ran exactly that commit, the evidence warned `staging runs cbc36a0, not a550472` although the digests matched and the staging smoke was green. When staging runs the tagged commit, that commit is now the evidence.
+
 ## [5.8.2] - 2026-11-05
 
 ### Fixed
