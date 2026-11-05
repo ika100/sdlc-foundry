@@ -33,7 +33,7 @@ resources:
       s3: {endpoint: "https://s3.eu-central-1.amazonaws.com", bucket: acme-backups, region: eu-central-1, forcePathStyle: false}
 ```
 
-- `to` names a bucket resource of the system that has an instance in that environment (a component that runs there uses it).
+- `to` names a bucket resource of the system; no component needs to use it. The target gets its instance in that environment from the backup itself (for a database backup, once a component that uses the database runs there), and its credentials go only to the backup machinery (the database's ObjectStore, Velero), so an app cannot read or delete its own backups. A component that lists the bucket in `uses` gets its S3_*/AWS_* variables as usual; for an external target with no such component, the ExternalSecret of its credentials is rendered in `addons/<env>/<bucket>/`.
 - `schedule` is a five-field cron in UTC with numbers only (default `0 3 * * *`); `retention` is `<n>d` or `<n>w` (default `30d`).
 - `backup` sits on an environment and on `instances.<env>` of a database, never on the resource itself. An external database takes none.
 - `remote.s3` (`endpoint`, `bucket`, `region`, `forcePathStyle`, all four) is required when the target bucket is `external: true`: the backup objects take these as literal values, so they live in git (they are not secret). The keys stay in the secret store.
