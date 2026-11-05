@@ -83,8 +83,9 @@ cplat platform runs journey end --outcome done|failed|escalated|abandoned [--rea
   run-record causes `platform`, `code`, `decision`, `environment`, `unknown`.
 - `pr` and `round` without `--stage` go to the open stage that started last; with no open stage they are refused.
 - `show` prints the stage table computed now (open stages and waits end at now); `--json` prints the `journey` section.
-- `end` closes open waits at its time, computes the section, writes it to the record with `runs.finish` and removes the
-  pointer. Its outcome is the record's outcome.
+- `end` closes open waits and stages at its time (`--at`, else now), computes the section, writes it to the record with
+  `runs.finish` and removes the pointer. Its outcome is the record's outcome; the record's own `ended_at` is the time the
+  command ran.
 - Times are UTC; `--at` takes `YYYY-MM-DDTHH:MM[:SS]Z` (or with an offset).
 
 ### The record
@@ -151,8 +152,8 @@ Records: kind `journey`, inside the report window (`runs_report.select`). Groups
 
 ### The rate-limit hook
 
-`core.run`, after each rate-limit sleep, calls `runs_journey.note_external_wait(started, seconds, kind)` (imported lazily,
-any exception swallowed). It appends an external wait `{kind: "external", reason: "GitHub rate limit (<kind>)"}` to the
+`core.run`, after each rate-limit sleep, calls `runs_journey.note_external_wait(seconds, kind)` (imported lazily, any
+exception swallowed). It appends an external wait from now − `seconds` to now, reason `GitHub rate limit (<kind>)`, to the
 open journey, if any. It never prints and never changes the result of `run`.
 
 ## AC-136.11 — measured, not built
