@@ -1,7 +1,7 @@
 ---
 spec_id: 136-the-whole-journey-fits-a-time-budget
 title: The whole journey fits a time budget
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -194,3 +194,4 @@ Cut on 2026-11-05 for the stabilization phase. These criteria go into a follow-u
 - 2026-11-05 amended: where the wall clock of journey 2 went (person, waiting, agent work) and GitHub's CI numbers (no change to the criteria)
 - 2026-11-05 amended: cut to measurement and fewer rounds (stabilization); the benchmark command moves to a later spec
 - 2026-11-05 approved by the user
+- 2026-11-05 building
