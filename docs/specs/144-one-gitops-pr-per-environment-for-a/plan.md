@@ -10,35 +10,35 @@ tasks:
     covers: [AC-144.1, AC-144.6]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: "appship_joint.py: mode, markers, pin on compose/<spec>, the component ship's joint deploy; ship.py product link, marker push in land, deploy hand-off"
     files: [scripts/cplat/appship_joint.py, scripts/cplat/ship.py]
     covers: [AC-144.1, AC-144.3, AC-144.6]
     parallel_safe: false
     depends_on: []
-    done: false
+    done: true
   - id: t3
     title: "System ship: joint mode at start, the legacy line, entry land without merge, result pins, action `land`, `pinned` as delivered, complete refuses before landing"
     files: [scripts/cplat/appship.py, scripts/cplat/appship_sched.py, scripts/cplat/appship_state.py]
     covers: [AC-144.1, AC-144.2, AC-144.3, AC-144.5]
     parallel_safe: false
     depends_on: [t2]
-    done: false
+    done: true
   - id: t4
     title: "`cplat system ship land`: merge the joint PR, operators, markers, one Argo CD wait, every dev smoke, staging in one PR; the report"
     files: [scripts/cplat/appship_joint.py, scripts/cplat/appship.py, scripts/cplat/appship_report.py]
     covers: [AC-144.2, AC-144.4, AC-144.5, AC-144.7, AC-144.8]
     parallel_safe: false
     depends_on: [t3]
-    done: false
+    done: true
   - id: t5
     title: "Command texts (system ship, component ship), AGENTS.md, ADR-083, plugin versions, changelog fragment"
     files: [plugins/system/commands/ship.md, plugins/component/commands/ship.md, docs/AGENTS.md, docs/adr/083-a-system-ship-lands-each-environment-in-one-gitops-pr.md, docs/adr/README.md, .claude-plugin/marketplace.json, plugins/system/.claude-plugin/plugin.json, plugins/component/.claude-plugin/plugin.json, docs/changelog.d/144-one-gitops-pr-per-environment.changed.md]
     covers: [AC-144.1, AC-144.8]
     parallel_safe: false
     depends_on: [t4]
-    done: false
+    done: true
 ---
 
 # Plan — 144 One gitops PR per environment for a system ship
