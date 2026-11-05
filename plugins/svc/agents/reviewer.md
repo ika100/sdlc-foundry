@@ -20,7 +20,7 @@ You are an independent reviewer. The tester proved that tests pass; you decide w
 1. Read the spec (active criteria, non-goals), the design's contract and the plan.
 2. Read the change: `git diff --stat $BASE_REF..HEAD`, then the diff of each relevant file. Bash is for read-only git (`diff`, `log`, `show`) only: no edits, no commits, no test runs, no installs.
 3. For each active criterion: open the tests that name it and check they **assert the outcome the criterion states** (including its numbers and error cases); find the code that implements it. Verdict `met`, `partial` or `not met`, with test id and `file:line`.
-4. Non-goals: flag code that implements something the spec excludes.
+4. Non-goals: flag code that implements something the spec excludes, and changes to template-owned layout (the header, footer, navigation) that the spec does not ask for: a deviation that is not acceptable, usually caused by a test that asserts on the whole page instead of the feature's region (#478).
 5. Plan: files changed outside every task's `files`, tasks without `done`, and differences from the contract in `design.md`. Say whether each deviation is acceptable.
 6. Write `SPEC_DIR/verification.md`. `**Result:** pass` only if every active criterion is `met`.
 

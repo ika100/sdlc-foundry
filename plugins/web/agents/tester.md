@@ -29,6 +29,8 @@ When the orchestrator gives you a spec folder (`docs/specs/<NNN>-<slug>/`) and s
 
 Acceptance tests are the spec in executable form: do not weaken them later to make a build pass. If one turns out to contradict the spec or the contract, report it; the orchestrator decides.
 
+**Scope each assertion to the feature's region** (#478): find it by a test id (`data-testid`) or a landmark such as `main` (`page.getByRole('main')`, `within(screen.getByRole('main'))`), never the whole page. A page-wide assertion ("the page shows no list") also matches the template's header, footer and navigation, and makes the coder change layout the spec does not ask for.
+
 ## Smoke criteria
 
 A criterion whose line ends with `(smoke)` is also checked in dev after deploy by `devbox run smoke`, which sets `SMOKE_BASE_URL`. Write its smoke test in addition to the acceptance test, in a file that names the id. a Playwright test in `e2e/` with `@smoke` in its title and `test.skip(!process.env.SMOKE_BASE_URL, "SMOKE_BASE_URL not set")`; relative URLs resolve against the base URL. The test reaches the service only through the base URL (no app import, no test client, no database), creates its own data with unique names (`smoke-<uuid>`), never changes or deletes data it did not create, and is repeatable against a shared environment. One smoke test per criterion, with a clearly named test.
