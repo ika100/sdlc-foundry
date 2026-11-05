@@ -39,3 +39,12 @@ def test_contributing_names_the_command_as_the_release_procedure():  # AC-129.21
     section = text.split("\n## Releases", 1)[1].split("\n## ", 1)[0]
     assert "/platform:release" in section and "cplat platform release" in section
     assert "/component:release" in section             # still says that one refuses in this repo
+
+
+def test_the_component_release_tags_only_after_mains_ci_built_the_image():
+    """Journey of 2026-11-05: the tags were pushed before main's CI had built the release commit's image, so the tag jobs
+    failed and had to be rerun. The release waits for that run (and stops when none starts) before it tags."""
+    text = COMPONENT.read_text()
+    phase = text[text.index("## Phase 6"):text.index("## Phase 7")]
+    assert phase.index('gh run watch "$run" --exit-status') < phase.index('git tag -a vX.Y.Z')
+    assert "do not tag" in phase and '--commit "$sha"' in phase

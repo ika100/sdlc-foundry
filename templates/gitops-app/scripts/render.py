@@ -3343,7 +3343,9 @@ def lgtm_application(repo: str, server: str) -> dict:
 
 
 def lgtm_manifests() -> dict[str, dict]:
-    """deployment.yaml, service.yaml and kustomization.yaml of operators/lgtm/, as local-cluster.sh applies them (no dashboards, no route)."""
+    """deployment.yaml, service.yaml, route.yaml and kustomization.yaml of operators/lgtm/, as local-cluster.sh applies them (no
+    dashboards). The route is the same object cluster-up applies (name, namespace, Gateway), so both converge; without it a stack
+    turned on after cluster-up had no `grafana.localhost` (journey 2026-11-05)."""
     ports = [("grafana", 3000), ("otlp-grpc", 4317), ("otlp-http", 4318), ("prometheus", 9090)]
     return {
         "deployment.yaml": {
@@ -3356,7 +3358,12 @@ def lgtm_manifests() -> dict[str, dict]:
         "service.yaml": {
             "apiVersion": "v1", "kind": "Service", "metadata": {"name": "lgtm", "namespace": "observability"},
             "spec": {"selector": {"app": "lgtm"}, "ports": [{"name": n, "port": p, "targetPort": n} for n, p in ports]}},
-        "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["deployment.yaml", "service.yaml"]},
+        "route.yaml": {
+            "apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute", "metadata": {"name": "grafana", "namespace": "observability"},
+            "spec": {"parentRefs": [{"name": DEFAULT_GATEWAY["name"], "namespace": DEFAULT_GATEWAY["namespace"]}],
+                     "hostnames": ["grafana.localhost"], "rules": [{"backendRefs": [{"name": "lgtm", "port": 3000}]}]}},
+        "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
+                               "resources": ["deployment.yaml", "route.yaml", "service.yaml"]},
     }
 
 

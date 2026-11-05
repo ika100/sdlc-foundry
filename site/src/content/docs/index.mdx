@@ -35,11 +35,11 @@ import DemoWalkthrough from '../../components/DemoWalkthrough.astro';
 
 ## Watch a real run
 
-One system, recorded as it happened, in two parts. Part 1 goes from an empty folder to a new endpoint in dev: `/system:new` creates the repos, `/component:spec` asks its questions, and `/component:ship` plans, writes failing tests, builds, merges on green CI and deploys. Part 2 adds a Postgres database and a web UI with one system spec shipped across three repos. Click a chapter to jump.
+One system, recorded in one run from an empty folder to prod, in three parts. Part 1 creates the repos and a local cluster and ships a first endpoint to dev. Part 2 adds a Postgres database and a web UI with one system spec shipped across three repos. Part 3 adds staging, observability, a release from the tested builds, prod with daily backups, and a restore drill. Click a chapter to jump.
 
 <DemoWalkthrough compact />
 
-<p class="demo-caption">Real runs on the public demo repos <a href="https://github.com/ika100/demo-taskboard-api">demo-taskboard-api</a>, <a href="https://github.com/ika100/demo-taskboard-web">demo-taskboard-web</a> and <a href="https://github.com/ika100/demo-taskboard-gitops">demo-taskboard-gitops</a>, with every wait cut: about 85 minutes of work shown in 7 (<a href="/sdlc-foundry/get-started/watch-a-run/#about-the-timing">where the time went</a>). <a href="/sdlc-foundry/get-started/watch-a-run/"><strong>Walk through it step by step →</strong></a> what Claude asked, what it did and a link to every pull request.</p>
+<p class="demo-caption">A real run on the public demo repos <a href="https://github.com/ika100-demo/taskboard2-api">taskboard2-api</a>, <a href="https://github.com/ika100-demo/taskboard2-web">taskboard2-web</a> and <a href="https://github.com/ika100-demo/taskboard2-gitops">taskboard2-gitops</a>, with the waits for a person cut: about 3 h 50 of work, CI rounds included, shown in under 10 minutes (<a href="/sdlc-foundry/get-started/watch-a-run/#about-the-timing">where the time went</a>). <a href="/sdlc-foundry/get-started/watch-a-run/"><strong>Walk through it step by step →</strong></a> what Claude asked, what it did and a link to every pull request.</p>
 
 ## Platform glue should not cost a small team months
 

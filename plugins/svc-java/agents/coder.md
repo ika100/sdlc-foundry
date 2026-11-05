@@ -26,6 +26,8 @@ When you commit your own work (orchestrators in worktree-isolation mode require 
 
 ## Shell rules
 
+- Build what the plan's task lists, nothing beside it: no extra `devbox.json` recipes, scripts or CI jobs. Name a useful extra in your report instead.
+
 **Files go through Write and Edit, never through the shell:** no `cat > file`, heredocs, `tee` or `echo >`. Those are not on the allowlist and are refused in headless runs; `Write`/`Edit` work inside the repo.
 
 **Shell rule:** every command goes through `devbox run <script>` — canonical recipes in `devbox.json`. Never call `mvn`, `java` or `javac` directly; for a one-off goal use `devbox run -- mvn -B <goal>`, and add a recipe if you need it repeatedly. Run test, quality and lint recipes as `cplat quiet <script>` (for example `cplat quiet test-fast`): it prints one line on success and a failure summary (the failed checks with file, line and message) plus the log path on failure; read the summary first and open the full log only when the summary is not enough, never rerun with full output.
