@@ -1,7 +1,7 @@
 ---
 spec_id: 144-one-gitops-pr-per-environment-for-a
 title: One gitops PR per environment for a system ship
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -86,3 +86,4 @@ Where the extra PRs come from today:
 - 2026-11-05 created from spec 136's AC-136.11 (moved here by the user's decision) and its measurement of journey 2
 - 2026-11-05 open questions answered by the user as recommended; AC-144.7 (staging) kept
 - 2026-11-05 approved
+- 2026-11-05 building
