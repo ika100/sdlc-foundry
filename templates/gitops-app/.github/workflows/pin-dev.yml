@@ -99,15 +99,29 @@ jobs:
           # so auto-merge would wait forever. Approve only this pin branch's pull_request runs at the commit this workflow pushed.
           if [ "$(gh api "repos/$GH_REPO" --jq .private)" = "false" ]; then
             sha=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
-            ids=""
-            for _ in 1 2 3 4 5 6; do
-              ids=$(gh api "repos/$GH_REPO/actions/runs?event=pull_request&head_sha=$sha" \
-                --jq ".workflow_runs[] | select(.head_branch == \"$BRANCH\" and .conclusion == \"action_required\") | .id")
-              [ -n "$ids" ] && break
-              sleep 10
-            done
-            for id in $ids; do
-              if gh api -X POST "repos/$GH_REPO/actions/runs/$id/approve" >/dev/null; then echo "approved held run $id of $PR"
-              else echo "::warning::could not approve run $id: approve it on $PR (Checks tab) so auto-merge can finish"; fi
-            done
+            runs() { gh api "repos/$GH_REPO/actions/runs?event=pull_request&head_sha=$sha" --jq ".workflow_runs[] | select(.head_branch == \"$BRANCH\") | $1"; }
+            # Approve every held run as it appears (GitHub creates the runs of one PR seconds apart), until the PR's `ci` run
+            # exists and runs; a `ci` run that failed at startup without a job blocks the merge forever (journey 2026-11-05).
+            ci_ok() {
+              id=$(runs 'select(.name == "ci" and .conclusion != "action_required") | .id' | head -1)
+              [ -n "$id" ] && [ "$(gh api "repos/$GH_REPO/actions/runs/$id/jobs" --jq .total_count)" != "0" ]
+            }
+            approve_held() {
+              for _ in $(seq 1 12); do
+                for id in $(runs 'select(.conclusion == "action_required") | .id'); do
+                  if gh api -X POST "repos/$GH_REPO/actions/runs/$id/approve" >/dev/null; then echo "approved held run $id of $PR"
+                  else echo "::warning::could not approve run $id: approve it on $PR (Checks tab) so auto-merge can finish"; fi
+                done
+                ci_ok && return 0
+                sleep 10
+              done
+              return 1
+            }
+            if ! approve_held; then
+              # No `ci` run of the PR, or one that never started: close and reopen the PR so GitHub runs its checks again.
+              echo "::notice::the ci run of $PR is missing or never started: reopening $PR to run its checks again"
+              gh pr close "$PR" && gh pr reopen "$PR"
+              gh pr merge "$PR" --auto --squash --delete-branch
+              approve_held || echo "::warning::the ci run of $PR still did not run: close and reopen $PR by hand so auto-merge can finish"
+            fi
           fi

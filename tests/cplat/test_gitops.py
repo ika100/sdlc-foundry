@@ -609,8 +609,23 @@ def test_public_repos_approve_only_their_own_held_pin_runs_368(gitops_repo, name
     tail = script[script.index('gh pr merge "$PR" --auto'):]
     assert '--jq .private)" = "false"' in tail                                  # only public repos
     assert "event=pull_request&head_sha=$sha" in tail                            # the commit this workflow pushed
-    assert 'head_branch == \\"$BRANCH\\"' in tail and 'conclusion == \\"action_required\\"' in tail
+    assert 'head_branch == \\"$BRANCH\\"' in tail and '.conclusion == "action_required"' in tail
     assert 'actions/runs/$id/approve' in tail and "::warning::" in tail         # a refused approval is reported, not fatal
+
+
+@pytest.mark.parametrize("name", ["pin-dev.yml", "pin-staging.yml"])
+def test_every_held_run_is_approved_and_a_ci_run_that_never_started_is_retried(gitops_repo, name):
+    """Journey of 2026-11-05: GitHub held the pin PR's `specs` run first, the loop stopped there, and the PR's `ci` run failed
+    at startup without a job, so the merge stayed blocked. Approval now goes on until the PR's ci run runs (has jobs);
+    otherwise the PR is closed and reopened once and auto-merge set again."""
+    script = _workflow(gitops_repo, name)["jobs"]["merge"]["steps"][0]["run"]
+    tail = script[script.index('gh pr merge "$PR" --auto'):]
+    assert "[ -n \"$ids\" ] && break" not in tail                               # no stop at the first held run
+    assert 'select(.name == "ci" and .conclusion != "action_required")' in tail and "/jobs\" --jq .total_count" in tail
+    reopen = tail[tail.index("if ! approve_held; then"):]
+    assert 'gh pr close "$PR" && gh pr reopen "$PR"' in reopen
+    assert reopen.index("gh pr reopen") < reopen.index('gh pr merge "$PR" --auto --squash --delete-branch')
+    assert "close and reopen $PR by hand" in reopen
 
 
 def test_a_failing_pin_never_reaches_main(gitops_repo):
