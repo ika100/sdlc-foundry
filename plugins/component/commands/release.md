@@ -124,7 +124,15 @@ git fetch origin
 git merge --ff-only origin/main
 ```
 
-Create the annotated tag on the merge commit:
+Wait for `main`'s CI on the merge commit first: the tag never rebuilds, its job gives the `sha-<commit>` image that this run publishes the version tags, so a tag pushed earlier fails (journey 2026-11-05). Start the watch only when the run exists:
+
+```bash
+sha=$(git rev-parse HEAD)
+for _ in $(seq 1 12); do run=$(gh run list --workflow ci --branch main --commit "$sha" --json databaseId --jq '.[0].databaseId'); [ -n "$run" ] && break; sleep 10; done
+[ -n "$run" ] && gh run watch "$run" --exit-status
+```
+
+No run after 2 minutes (a merge that changes only Markdown builds no image), or a red run: stop and report it; do not tag. Otherwise create the annotated tag on the merge commit:
 
 ```bash
 git tag -a vX.Y.Z -m "Release vX.Y.Z"
