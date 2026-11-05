@@ -223,7 +223,9 @@ def execute(req: dict) -> Report:
             url = re.search(r"https://\S+/pull/\d+", buf.getvalue())
             r.did.append("composed " + ", ".join(names) + (f"; opened {url.group(0)}" if url else ""))
             r.next_steps.append(f"review and merge the pull request in {req['org']}/{req['app']}; then `cd {req['app']} && devbox run cluster-up`")
-        r.next_steps.append(newsvc.token_step(f"{req['org']}/{req['app']}", [f"{req['org']}/{n}" for n in names]))
+        need = [f"{req['org']}/{n}" for n in names if not newsvc.has_org_secret(f"{req['org']}/{n}")]   # an org secret covers a repo
+        if need:
+            r.next_steps.append(newsvc.token_step(f"{req['org']}/{req['app']}", need))
     r.next_steps.append(f'spec first: cd {req["app"]} and run /system:spec "<first feature of the system>" (answer, approve), then /system:plan <NNN> (review the plan) and /system:ship <NNN>')
     r.next_steps.append("more components later: /component:new, then /component:add <name> in the gitops repo")
     r.next_steps.append("env wiring and exposure per component: /component:set (see its --env and --expose)")

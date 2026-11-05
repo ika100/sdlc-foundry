@@ -203,6 +203,15 @@ def pin_settings_cmds(slug: str) -> list[list[str]]:
              "-f", "default_workflow_permissions=read", "-F", "can_approve_pull_request_reviews=true"]]
 
 
+def has_org_secret(slug: str, name: str = "GITOPS_TOKEN") -> bool:
+    """True when the repo's organization gives it the Actions secret `name`, so no per-repo token is needed."""
+    try:
+        p = run(["gh", "api", f"repos/{slug}/actions/organization-secrets", "--jq", "[.secrets[].name]"], check=False)
+        return p.returncode == 0 and name in (p.stdout or "")
+    except PlatformError:
+        return False
+
+
 def token_step(app: str, services: list[str]) -> str:
     """Spec 062: the one manual step — a token the services' CI uses to ask the gitops-app to pin dev."""
     sets = (f"gh secret set GITOPS_TOKEN -R {services[0]}" if len(services) == 1 else
@@ -283,7 +292,7 @@ def execute(req: dict) -> Report:
         r.did.append("skipped GitHub (gh missing)")
         r.next_steps.append("install and log in to gh, then run: " + " && ".join(cmds_if_manual))
     r.undo.append(f"rm -rf {target}")
-    if req["app"] and req["entry"]["deployable"] and req["shape"] != "gitops-app":
+    if req["app"] and req["entry"]["deployable"] and req["shape"] != "gitops-app" and not (req["github"] and has_org_secret(slug)):
         r.next_steps.append(token_step(req["app"], [slug]))
     r.next_steps = _next_steps(req) + r.next_steps
     r.data = {"path": str(target), "shape": req["shape"], "repo": slug if req["github"] else None}

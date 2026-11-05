@@ -330,16 +330,29 @@ GITOPS_TOKEN_FIX = ("create a fine-grained token with Contents read and write on
                     "gh secret set GITOPS_TOKEN -R {slug}")
 
 
-def missing_gitops_token(repo: Path) -> bool:
-    """True only when the repo is linked and `gh secret list` worked and has no GITOPS_TOKEN (unknown → False)."""
-    if not gitops_apps(repo):
-        return False
+def secret_names(repo: Path) -> set[str] | None:
+    """The Actions secrets a workflow of the repo gets: its own plus the organization secrets visible to it (a secret set
+    once for the whole organization counts too). None when the repo's own list cannot be read."""
     out = gh(["secret", "list", "--json", "name"], cwd=repo, check=False)
     try:
         names = {x["name"] for x in json.loads(out)}
     except (ValueError, TypeError, KeyError):
+        return None
+    try:
+        org = gh(["api", f"repos/{service_slug(repo)}/actions/organization-secrets", "--jq", "[.secrets[].name]"], cwd=repo, check=False)
+        names |= {str(x) for x in json.loads(org or "[]")}
+    except Exception:  # noqa: BLE001  (a personal repo, or no access to the list: its own secrets only)
+        pass
+    return names
+
+
+def missing_gitops_token(repo: Path) -> bool:
+    """True only when the repo is linked, its secrets could be read, and neither the repo nor its organization has a
+    GITOPS_TOKEN for it (unknown → False)."""
+    if not gitops_apps(repo):
         return False
-    return "GITOPS_TOKEN" not in names
+    names = secret_names(repo)
+    return names is not None and "GITOPS_TOKEN" not in names
 
 
 def set_phase(repo: Path, phase: str) -> dict:
