@@ -8,7 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = ROOT / "templates" / "gitops-app" / ".secrets.baseline.json"
-GENERATED = ["        checksum/config: 8a7db2e42c4c84e6", "      accessKeyField: accessKeyId", "      secretKeyField: secretAccessKey"]
+GENERATED = ["        checksum/config: 8a7db2e42c4c84e6", "      accessKeyField: accessKeyId", "      secretKeyField: secretAccessKey",
+             '        checksum/config: "8a7db2e42c4c84e6"', '      accessKeyField: "accessKeyId"']
 REAL = ["        checksum/config: 8a7db2e42c4c84e6aa", "      secretAccessKey: wJalrXUtnFEMIK7MDENGbPxRfiCYzzQ9",
         "      password: hunter2-hunter2-hunter2", "        checksum/config: not-a-checksum"]
 HOOK = ["uvx", "--from", "detect-secrets==1.5.0", "detect-secrets-hook"]
@@ -26,6 +27,37 @@ def test_the_baseline_skips_the_generated_lines_and_nothing_else():
         assert any(re.search(rx, line) for rx in rules), f"not skipped: {line!r}"
     for line in REAL:
         assert not any(re.search(rx, line) for rx in rules), f"the pattern would also hide {line!r}"
+
+
+COLLECTOR = """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+      annotations:
+        checksum/config: c74603420bbec748
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.120.0
+"""
+
+
+def test_a_full_yaml_document_passes_too(tmp_path):
+    """The journey of 2026-11-05: in a whole YAML file detect-secrets reads the value quoted (`checksum/config: "…"`), so a
+    pattern for the bare line missed it and every collector change still failed the scan."""
+    (tmp_path / ".secrets.baseline.json").write_text(BASELINE.read_text())
+    (tmp_path / "collector.yaml").write_text(COLLECTOR)
+    flags = ["--baseline", ".secrets.baseline.json", "--disable-filter", "detect_secrets.filters.gibberish.should_exclude_secret"]
+    ok = subprocess.run([*HOOK, *flags, "collector.yaml"], cwd=tmp_path, capture_output=True, text=True)
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    (tmp_path / "secret.yaml").write_text(COLLECTOR.replace("checksum/config: c74603420bbec748", "token: wJalrXUtnFEMIK7MDENGbPxRfiCYzzQ9"))
+    caught = subprocess.run([*HOOK, *flags, "secret.yaml"], cwd=tmp_path, capture_output=True, text=True)
+    assert caught.returncode == 1, "a real secret in a YAML document must still fail the scan"
 
 
 def test_detect_secrets_passes_the_generated_lines_with_the_template_baseline(tmp_path):
