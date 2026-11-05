@@ -12,8 +12,50 @@ One system, recorded in one run from an empty folder to prod. **Part 1** (steps 
 
 ## About the timing
 
-Every time on this page is working time: the waits for a person are cut, the CI rounds are not. **Part 1 takes about 75 minutes of work, part 2 about 85 and part 3 about 60**; the recording shows all three in under 10 minutes. Most of it is the two ships (45 and 72 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and about 25 CI rounds of a few minutes each. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/430)); this run is the measured starting point.
+Every time on this page is working time: the waits for a person are cut, the CI rounds are not. **Part 1 takes about 70 minutes of work, part 2 about 85 and part 3 about 60**; the recording shows all three in under 10 minutes. Most of it is the two ships (45 and 72 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and 34 pull requests, each with its own CI round. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/430)); this run is the measured starting point.
 
 Two things went wrong in the platform and are fixed: a pin PR stayed blocked when GitHub never started its CI run ([#464](https://github.com/ika100/sdlc-foundry/pull/464)), and a release missed a lock-file line ([#468](https://github.com/ika100/sdlc-foundry/pull/468)). Each is named in its step.
 
 **What was edited:** waiting is cut and the host name in the status bar is blanked. Nothing else is changed. The journey was recorded with [asciinema](https://asciinema.org) on 2026-11-05 with sdlc-foundry 5.8.3 (parts 1 and 2) and 5.9.0 (part 3), in the public demo organisation [ika100-demo](https://github.com/ika100-demo); Claude Code typed the sentences on the user's behalf in the same recorded terminal.
+
+## Timing in detail
+
+For comparison and discussion. All times are minutes, measured from the recording, the session transcript and the GitHub Actions runs of the demo repos.
+
+**Per step** (journey 2 of 2026-11-05, working time):
+
+| # | Step | Minutes | What takes the time |
+|---|---|---|---|
+| 1 | Create the system | 1 | rendering two repos, creating them on GitHub |
+| 2 | Merge, cluster and expose | 15 | two CI rounds, creating the local cluster |
+| 3 | Write the spec | 4 | the product-manager agent, 4 questions |
+| 4 | Approve the spec | 2 | one CI round |
+| 5 | Ship the spec | 45 | plan, repo spec, tests first, code, review, CI, deploy (plus 20 on a blocked pin PR, fixed in #464) |
+| 6 | Add a web UI | 6 | a new repo from its template, one CI round |
+| 7 | One spec for the whole system | 5 | 4 questions, one CI round |
+| 8 | Plan and ship it to dev | 72 | two repos built in parallel, each a full ship |
+| 9 | Hosts, observability and staging | 9 | four PRs |
+| 10 | Release | 25 | gates, two release PRs, a lock-file fix, tag jobs rerun, a staging round |
+| 11 | Backups and the prod PR | 9 | two PRs, the prod check |
+| 12 | Prod | 6 | merge, Argo, smoke, the first backup |
+| 13 | Restore drill | 10 | a restored copy, the check, the discard |
+
+**Per part**, against the budgets of spec 136 and the first full run (journey 1, same day, on 5.8.x):
+
+| Part | Budget | Journey 1 | Journey 2 |
+|---|---|---|---|
+| 1 — system, cluster, spec, ship | 20 | ≈ 100 | ≈ 70 (+ 20 blocked) |
+| 2 — web UI, system spec, ship | 30 | ≈ 62 | ≈ 85 |
+| 3 — staging, release, prod, restore | 10 | ≈ 80 | ≈ 60 |
+| Journey | 60 (interim 90) | ≈ 240 | ≈ 215 (+ 20 blocked) |
+| Stops for a platform defect | 0 | 6 | 1 |
+
+**Where the wall clock went** (journey 2, 08:30–12:57 UTC, 267 minutes; each minute counted once, from the session transcript with its 38 subagents):
+
+| Share | Minutes | What |
+|---|---|---|
+| Waiting for a person | 46 (17 %) | an upgrade and restart of the session 26, a platform fix 12, answers 8 |
+| Waiting, no agent working | ≈ 100 (37 %) | CI checks and merges 47, smoke tests 15, Argo sync and cluster 14, promotions and restores 13, dev deploys 11 |
+| Agents working | ≈ 121 (45 %) | model work 76, local commands and tests 45 |
+
+**CI, as GitHub measured it** (same window): 187 Actions runs, 167 minutes of run time summed, 16 minutes in queues. A gitops run takes about 1 minute, a component run 2.3 to 2.5. CI was running during only 93 of the 267 minutes: the waits come from the number of rounds one after another, not from slow runs.
