@@ -1,7 +1,7 @@
 ---
 spec_id: 141-an-approved-plan-asks-no-new-questions
 title: An approved system plan asks no new questions
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -36,6 +36,8 @@ had approved the system spec and its plan; the stop cost a round and up to 15 mi
 - **AC-141.4** Given the product-manager writing a repo spec from a plan, when it drafts open questions, then its
   instructions say to prefer the system spec's answers and conventions (lengths, formats, error codes) over a new question,
   so that a question is raised only for a decision the system spec does not cover.
+- **AC-141.5** Given a repo PR opened by a ship that took decisions under AC-141.1, when the PR is opened, then one comment
+  on it lists those decisions, so a reviewer sees them where the code is.
 
 ## Non-goals
 
@@ -44,9 +46,11 @@ had approved the system spec and its plan; the stop cost a round and up to 15 mi
 
 ## Open questions
 
-1. Should decisions taken for the user also be posted as a comment on the repo's PR? (Recommended: yes, one comment listing
-   them, so a reviewer sees them where the code is.)
+1. ~~Should decisions taken for the user also be posted as a comment on the repo's PR? (Recommended: yes, one comment listing
+      them, so a reviewer sees them where the code is.)~~ Answered: yes, one PR comment listing them (AC-141.5).
 
 ## Changelog
 
 - 2026-11-05 created (found in the journey runs of 2026-11-05)
+- 2026-11-05 open question answered by the user (recommended answer)
+- 2026-11-05 approved
