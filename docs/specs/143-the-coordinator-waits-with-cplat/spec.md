@@ -1,7 +1,7 @@
 ---
 spec_id: 143-the-coordinator-waits-with-cplat
 title: The coordinator waits with cplat, not hand-written loops
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [475]
@@ -123,3 +123,4 @@ default timeout is 540 s, so one wait fits in one tool call.
 
 - 2026-11-05 created
 - 2026-11-05 approved by the user
+- 2026-11-05 building
