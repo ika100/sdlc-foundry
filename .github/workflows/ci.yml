@@ -50,12 +50,15 @@ jobs:
           # anything but images and repository metadata can break the tested code: the cplat tests read the
           # Markdown too (changelog, specs, ADRs, guides), so a release or docs-only PR still runs them
           code=$(grep -Evq '^(docs/img/|LICENSE$|NOTICE$|\.github/(ISSUE_TEMPLATE/|CODEOWNERS|PULL_REQUEST_TEMPLATE|dependabot))' <<< "$files" && echo true || echo false)
-          shared=$(has '^(scripts/|shapes\.yml$|\.github/workflows/ci\.yml$|tests/fixtures/)')
+          # the smokes depend on only these repository scripts: detect-shape.sh (run by them), sync-template-copies.py
+          # (the template copies they render) and test-plan.sh (gitops only); cplat and the other checks under scripts/
+          # are covered by the cplat tests and the e2e (#407)
+          shared=$(has '^(scripts/(detect-shape\.sh|sync-template-copies\.py)$|shapes\.yml$|\.github/workflows/ci\.yml$|tests/fixtures/)')
           t() { if [ "$shared" = true ] || [ "$(has "$1")" = true ]; then echo true; else echo false; fi; }
           {
             echo "code=$code"
             echo "python=$(t '^templates/(service-python|library-python)/')"
-            echo "gitops=$(t '^templates/gitops-app/')"
+            echo "gitops=$(t '^templates/gitops-app/|^scripts/test-plan\.sh$')"
             echo "cluster=$(t '^templates/cluster-gitops/|^templates/gitops-app/scripts/(render\.py|local-cluster\.sh|ports\.sh)$')"
             echo "web=$(t '^templates/web-nextjs/')"
             echo "go=$(t '^templates/service-go/')"

@@ -694,19 +694,33 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
             by_env[e.name] = dataclasses.replace(e, autoscaling="keda")
     envs = [by_env[e.name] for e in envs]
 
+    def used(name: str, env: str) -> bool:
+        return any(name in c.uses and env in c.environments for _, c in components)
+
+    # spec 139: a bucket that is a backup target in an environment has its instance there without a using component, as in render:
+    # the `to` of the environment's backup and of the backup of each database instance that exists there
+    targets: dict[str, set[str]] = {}
+    for env in ENVIRONMENTS:
+        tos = [by_env[env].backup if env in by_env else None]
+        tos += [_backup(_map(_map(res_docs.get(r.name, {}).get("instances")).get(env)).get("backup"))
+                for r in resources if r.type == "database" and used(r.name, env)]
+        targets[env] = {b["to"] for b in tos if b}
     ris = []
     for r in resources:
         conf = res_docs.get(r.name, {})
         for env in ENVIRONMENTS:
-            if any(r.name in c.uses and env in c.environments for _, c in components):
+            if used(r.name, env) or (r.type == "bucket" and r.name in targets[env]):
                 idoc = _map(_map(conf.get("instances")).get(env))
                 ext = idoc["external"] is True if "external" in idoc else r.external
+                # an external backup target without a running, non-external user: render puts its ExternalSecret in its addon
+                backup_only = (r.type == "bucket" and r.name in targets[env]
+                               and not any(r.name in c.uses and env in c.environments and not c.external for _, c in components))
                 path = _map(idoc.get("remote")).get("path") or _map(conf.get("remote")).get("path")
                 broker = r.type == "broker"
                 store_key = (_store_key(str(path or ("{system}-{env}-{resource}-{component}" if broker
                                                       else "{system}-{env}-{resource}")), system, env, r.name) if ext else None)
                 ris.append(ResourceInstance(
-                    r.name, env, None if ext else f"addon-{r.name}-{env}", None if broker else f"{system}-{r.name}-app",
+                    r.name, env, None if ext and not backup_only else f"addon-{r.name}-{env}", None if broker else f"{system}-{r.name}-app",
                     {} if ext else _sizing(conf, env) if r.type == "database" else _bucket_sizing(conf, env) if r.type == "bucket"
                     else _cache_sizing(conf, env) if r.type == "cache" else _broker_sizing(conf, env) if broker else {},
                     r.type, ext, store_key,

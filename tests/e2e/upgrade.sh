@@ -19,11 +19,13 @@
 #   6. Checks    major 17 and server_version 17.11 everywhere, the data of step 2 unchanged, `cplat instance verify`, doctor (every operator
 #                `ok`), system status (upgrade.state verified), every rendered manifest accepted by the API server. Prints UPGRADE E2E OK.
 #
-# Time budget: about 40 minutes in the log (setup on the previous release 10, update and pin moves 9, backups 5, the three major steps with
-# the forced failure 12, checks 4); the workflow gives it 75. Each step prints how long it took.
+# Time budget: about 40 minutes in the log with the environments one after another (setup on the previous release 10, update and pin moves
+# 9, backups 5, the three major steps with the forced failure 12, checks 4); the workflow gives it 75. The two passes that apply every
+# environment and wait (setup, backups) run dev, staging and prod in parallel (for_envs, #400), about 13 minutes less. The major-upgrade
+# steps stay ordered. Each step prints how long it took.
 #
 # Needs: docker (running), k3d, kubectl, uv, curl, copier (or uv), git with the release tags. Env: E2E_UPGRADE_FROM=<tag>, E2E_KEEP=1 keeps the
-# cluster, E2E_PORT, E2E_WORK.
+# cluster, E2E_PORT, E2E_WORK, E2E_UPGRADE_SEQUENTIAL=1 applies the environments one after another (a runner short of CPU or memory).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -94,7 +96,7 @@ diagnose() {
     done
   ) >&2 || true
 }
-fail() { echo "UPGRADE E2E FAIL [$step_name]: $*" >&2; diagnose; exit 1; }
+fail() { echo "UPGRADE E2E FAIL [$step_name]: $*" >&2; [ -n "${in_env:-}" ] || diagnose; exit 1; }   # in_env: inside for_envs, which diagnoses once
 
 cleanup() {
   rc=$?
@@ -442,14 +444,13 @@ check_servers() { # env: once, after the new render of the addons is applied: th
     # REDIS_HOST/PORT/PASSWORD get PONG (a WRONGPASS here fails); a server in the #316 state is repaired within 60 s (AC-128.10)
     within 60 "AC-128.1/.2/.10: the cache of $e answers PONG to the component's variables" cache_ok "$e"
     echo "ok   $e: the cache accepts the Secret's password and refuses another; REDIS_URL and REDIS_HOST/PORT/PASSWORD get PONG (AC-128.1, AC-128.2)"
-    if [ ! -f "$work/forced-write" ]; then   # AC-128.3: one more write of a cache's Secret, once
+    if mkdir "$work/forced-write" 2>/dev/null; then   # AC-128.3: one more write of a cache's Secret, once (mkdir: atomic under for_envs)
       dir="$app_dir/addons/$e/sessions"; rv=$(secret_rv "upg-$e" upg-sessions-app); h=$(secret_hash "upg-$e" upg-sessions-app)
       rerun_credentials "upg-$e" "$dir"
       [ "$(secret_rv "upg-$e" upg-sessions-app)" = "$rv" ] && [ "$(secret_hash "upg-$e" upg-sessions-app)" = "$h" ] \
         || fail "AC-128.3: the Secret upg-sessions-app of $e was written again by a second credentials Job run"
       podmust "AC-128.3 cache after a forced write in $e" "$e" "$(kn "upg-$e" get statefulsets.apps/upg-sessions -o jsonpath='{.spec.template.spec.containers[0].image}')" '^REDIS_' "$cache_probe"
       echo "ok   $e: a forced write left resourceVersion and hash of upg-sessions-app unchanged and the server accepts the password (AC-128.3)"
-      touch "$work/forced-write"
     fi
   fi
   if needs_type broker "the broker's password checks in $e (AC-128.4, AC-128.10)"; then
@@ -581,11 +582,47 @@ apply_env() { # env: addons, then the database, then the service
   wait_healthy "$1" 900
   apply_api "$1"
 }
+# for_envs FUNCTION: runs FUNCTION dev, staging and prod at once (#400: about 13 of the 35 minutes were these passes one after another),
+# each in a background subshell whose lines carry "[env] " and are kept in $work/<FUNCTION>-<env>.log; waits for all three (on their
+# PIDs) and fails naming every environment that failed, with its failure lines and the end of its log, then the diagnostics once.
+# E2E_UPGRADE_SEQUENTIAL=1 runs them one after another as before (a runner short of CPU or memory). The environments share nothing but
+# the cluster: their state files in $work are per environment, the one shared marker (forced-write) is taken with mkdir, and the probe
+# pods of each call get their own number range so a later probe never reuses the name of one still terminating.
+for_envs_n=0
+for_envs() {
+  local fn=$1 e i rc failed="" pids=() envs=(dev staging prod) t0=$SECONDS
+  if [ "${E2E_UPGRADE_SEQUENTIAL:-0}" = 1 ]; then
+    echo "E2E_UPGRADE_SEQUENTIAL=1: $fn for dev, staging and prod one after another"
+    for e in "${envs[@]}"; do "$fn" "$e"; done
+    return 0
+  fi
+  for_envs_n=$((for_envs_n + 1))
+  echo "$fn: dev, staging and prod in parallel (E2E_UPGRADE_SEQUENTIAL=1 runs them one after another); lines start with [env]"
+  for e in "${envs[@]}"; do
+    (
+      # a pipeline: with pipefail its status is the function's; the log keeps the lines without the prefix
+      { in_env=$e; step_name="$step_name [$e]"; probe_n=$((1000000 + for_envs_n * 10000)); "$fn" "$e"; } 2>&1 \
+        | tee "$work/$fn-$e.log" | awk -v p="[$e] " '{ print p $0; fflush() }'
+    ) &
+    pids+=($!)
+  done
+  for i in 0 1 2; do
+    rc=0; wait "${pids[$i]}" || rc=$?
+    if [ $rc -eq 0 ]; then echo "ok   ${envs[$i]}: $fn done ($((SECONDS - t0)) s since the start of the three)"
+    else echo "FAIL ${envs[$i]}: $fn exited $rc after $((SECONDS - t0)) s" >&2; failed="$failed ${envs[$i]}"; fi
+  done
+  [ -n "$failed" ] || return 0
+  for e in $failed; do
+    {
+      echo "--- $e: what failed ---"; grep -F "UPGRADE E2E FAIL" "$work/$fn-$e.log" || echo "(no failure line; exit status only)"
+      echo "--- $e: the last 60 lines of $work/$fn-$e.log ---"; tail -60 "$work/$fn-$e.log"
+    } >&2
+  done
+  fail "$fn failed in:$failed (logs: $work/$fn-<env>.log)"
+}
 
-step "2 Setup on $FROM: apply the three environments and wait until each is healthy"
-for e in dev staging prod; do
-  apply_env "$e"
-done
+step "2 Setup on $FROM: apply dev, staging and prod in parallel and wait until each is healthy"
+for_envs apply_env
 
 step "2 Setup on $FROM: the data (a row, an object, a cache key, a message per environment) and the resolved floating references"
 for e in dev staging prod; do write_data "$e"; read_data "$e"; done
@@ -643,8 +680,14 @@ step "3 Update: this checkout's cplat platform update, merged"
 [ -z "$(gitops_dirty)" ] || fail "the gitops repo is not clean before the update"
 $cplat platform update --repo "$gitops_repo" --skip-tasks 2>&1 | tee "$work/update.out" | tee /dev/stderr >/dev/null || fail "cplat platform update failed"
 upd_branch=$(git -C "$gitops_repo" symbolic-ref --short HEAD)
-[ "$upd_branch" != "$main_branch" ] || fail "platform update left the repo on $main_branch (it should have made a branch)"
-git -C "$gitops_repo" checkout -q "$main_branch" && git -C "$gitops_repo" merge -q --ff-only "$upd_branch" || fail "merging $upd_branch into $main_branch failed"
+if [ "$upd_branch" = "$main_branch" ] && grep -q 'already up to date with platform .* nothing changed' "$work/update.out"; then
+  # A candidate whose templates equal the previous release (a PR that changes only tests or docs, right after a
+  # release) leaves nothing to update: no branch is made, and the rest of the run checks the same render.
+  echo "ok   the candidate's templates equal $FROM: nothing to update, the repo stays on $main_branch"
+else
+  [ "$upd_branch" != "$main_branch" ] || fail "platform update left the repo on $main_branch (it should have made a branch)"
+  git -C "$gitops_repo" checkout -q "$main_branch" && git -C "$gitops_repo" merge -q --ff-only "$upd_branch" || fail "merging $upd_branch into $main_branch failed"
+fi
 (cd "$gitops_repo" && uv run scripts/render.py >/dev/null) || fail "render.py of the updated repo failed"
 commit "render after the platform update"
 table16=$(table_pin 16)
@@ -787,12 +830,8 @@ grep -F -q "/resource:backup postgres --env dev" <<< "$out" || fail "the refusal
   || fail "the refused upgrade changed the dev Cluster (imageName or .metadata.generation)"
 echo "ok   refused without a backup (last successful backup never); HEAD, tree and the dev Cluster are unchanged"
 
-step "4 Guard: apply the backups, take the first backup of every environment, wait for last_success"
-for e in dev staging prod; do
-  apply_addons "$e"
-  wait_healthy "$e" 900
-  apply_api "$e"
-done
+step "4 Guard: apply the backups in dev, staging and prod in parallel, take the first backup of every environment, wait for last_success"
+for_envs apply_env
 last_success() { # env: last_success of postgres in the environment, from `cplat system status --json`
   $cplat system status --json --repo-dir "$gitops_repo" --context "$ctx" 2>/dev/null | python3 -c '
 import json, sys

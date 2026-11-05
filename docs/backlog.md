@@ -16,10 +16,11 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
 | [137-cplat-waits-out-github-s-rate-limit](specs/137-cplat-waits-out-github-s-rate-limit/spec.md) — cplat waits out GitHub's rate limit | P1 | approved | 7 |  |
+| [138-release-tags-the-staging-build](specs/138-release-tags-the-staging-build/spec.md) — A component release tags the build staging tested | P1 | approved | 7 | #426 |
 | [140-one-repo-feature-takes-the-component-route](specs/140-one-repo-feature-takes-the-component-route/spec.md) — A one-repo feature takes the component route | P1 | approved | 4 |  |
 | [141-an-approved-plan-asks-no-new-questions](specs/141-an-approved-plan-asks-no-new-questions/spec.md) — An approved system plan asks no new questions | P1 | approved | 5 |  |
 | [142-no-avoidable-stops-in-the-journey](specs/142-no-avoidable-stops-in-the-journey/spec.md) — No avoidable stops in the journey | P1 | approved | 5 |  |
-| [143-the-coordinator-waits-with-cplat](specs/143-the-coordinator-waits-with-cplat/spec.md) — The coordinator waits with cplat, not hand-written loops | P1 | approved | 11 |  |
+| [143-the-coordinator-waits-with-cplat](specs/143-the-coordinator-waits-with-cplat/spec.md) — The coordinator waits with cplat, not hand-written loops | P1 | approved | 11 | #475 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
@@ -131,6 +132,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [130-quality-gates-fail-when-they-checked](specs/130-quality-gates-fail-when-they-checked/spec.md) — Quality gates fail when they checked nothing | P1 | done | 16 | #285 |
 | [131-runs-that-finish-on-their-own](specs/131-runs-that-finish-on-their-own/spec.md) — Runs that finish on their own | P1 | done | 19 | #324 |
 | [134-a-pr-runs-only-the-e2e-it-needs](specs/134-a-pr-runs-only-the-e2e-it-needs/spec.md) — A pull request runs only the e2e it needs, and that e2e runs in parallel parts | P1 | done | 9 | #281 |
+| [139-a-backup-bucket-without-a-using-component](specs/139-a-backup-bucket-without-a-using-component/spec.md) — A backup bucket without a using component | P1 | done | 5 | #418 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

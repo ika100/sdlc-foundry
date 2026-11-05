@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version
+
 import {{ module_name }}
 
 
 def test_package_has_version() -> None:
-    assert {{ module_name }}.__version__ == "0.1.0"
+    assert {{ module_name }}.__version__ == version("{{ project_name }}")

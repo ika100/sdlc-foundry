@@ -21,7 +21,7 @@ If the staging smoke is red, the platform files a `smoke-failure` issue and leav
 
 ```text
 /instance:promote shop-api --to staging
-/component:release              # in shop-api: quality, tests, security, version bump, changelog, release PR, tag
+/component:release              # in shop-api: tags the commit staging runs after its gates; changelog follows in a PR
 /instance:promote shop-api --to prod
 ```
 
