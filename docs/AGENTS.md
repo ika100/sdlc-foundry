@@ -150,10 +150,8 @@ The `/component:release` pipeline adds a second safety net: **Phase 7** scans al
 
 /component:check ──►  quality + security (parallel, read-only)
 
-/component:release       ──►  quality gate ──►  tester gate ──►  security gate ──►  release agent
-                                                                                  │
-                                                                                  ▼
-                                                                          changelog + tag + PR
+/component:release  ──►  release target (the commit staging runs) ──►  quality ──►  tester ──►  security gate
+                         ──►  tag that commit ──►  release agent: CHANGELOG + next development version (follow-up PR)
 
 /instance:promote <component...> --to <env>   ──►  cplat instance promote  ──►  PR (Argo reconciles on merge)
 /component:add|set|remove <component...>    ──►  cplat component add|set|remove  ──►  PR (system.yaml + generated ApplicationSets)

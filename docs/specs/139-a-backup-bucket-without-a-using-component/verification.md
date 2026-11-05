@@ -1,0 +1,22 @@
+# Verification — 139 A backup bucket without a using component
+
+**Result:** pass (AC-139.4's e2e part runs in the e2e workflow on the pull request; locally its script text is checked)
+**Trace:** 5/5 criteria named by tests
+
+Tests: `T` = `tests/cplat/test_backup_bucket_139.py`; `S` = `tests/cplat/test_backup_117.py` (the two spec 117 tests of the removed
+failure now check the instance is created). Implementation: `R` = `templates/gitops-app/scripts/render.py` (copied byte for byte to
+`templates/cluster-gitops/scripts/system_render.py` by `scripts/sync-template-copies.py`), `M` = `scripts/cplat/model.py`.
+
+| Criterion | Verdict | Tests | Implementation | Notes |
+|---|---|---|---|---|
+| AC-139.1 | met | `T::test_a_database_backup_to_a_bucket_no_component_uses_renders_ac_139_1`, `T::test_the_backup_only_bucket_is_the_same_addon_a_using_component_gets_ac_139_1`, `T::test_an_environment_backup_to_a_bucket_no_component_uses_renders_ac_139_1`, `T::test_the_bucket_has_no_instance_where_it_is_neither_used_nor_a_target_ac_139_1`, `T::test_a_database_backup_where_no_component_runs_creates_no_bucket_ac_139_1`, `T::test_an_external_backup_only_bucket_gets_its_external_secret_in_the_addon_directory_ac_139_1`, `T::test_an_external_environment_target_carries_the_velero_labels_ac_139_1`, `T::test_an_external_bucket_a_component_uses_keeps_its_external_secret_in_the_overlay_ac_139_1`, `T::test_the_backup_only_bucket_needs_its_operator_ac_139_1`, `T::test_nothing_is_written_outside_the_tree_ac_139_1`; `S::test_a_target_bucket_no_component_uses_in_the_environment_gets_its_instance_there_ac_117_2`, `S::test_an_environment_target_bucket_gets_its_instance_there_too_ac_117_16` | `R` `check_backup` (the "must use it" failure removed, `:1673`), `uses_in`/`backup_buckets` `:1813-1827`, `addons_in` `:1830`, `resource_instances` `:1840`, `secret_owners`/`external_secret_doc` `:2114-2135`, `addon_files` external bucket branch `:3083` | The ObjectStore and Velero read `<system>-<bucket>-app`; an in-cluster backup-only addon is byte-identical to a used one |
+| AC-139.2 | met | `T::test_a_component_that_does_not_use_the_backup_bucket_gets_none_of_its_variables_ac_139_2`, `T::test_a_component_that_uses_the_bucket_still_gets_its_variables_ac_139_2` | unchanged: a Deployment's variables come only from its `uses` (`effective_uses`); nothing adds a backup target to them | Checked in every environment, for database and environment backups |
+| AC-139.3 | met | `T::test_removing_the_uses_changes_only_the_component_overlay_where_the_backups_are_ac_139_3`, `T::test_the_restore_and_status_model_still_has_the_database_and_bucket_ac_139_3`, `T::test_the_changelog_fragment_says_how_to_migrate_ac_139_3`, `T::test_the_backup_guide_no_longer_asks_for_a_using_component_ac_139_3` | `docs/changelog.d/139-backup-bucket-without-user.fixed.md`, `docs/BACKUP-AND-RESTORE.md:36` | In prod only `overlays/prod/api/deployment.yaml` changes; the addon and backup ApplicationSets stay equal. `/resource:restore` reads only the database instance and its `backup` from the model, which are unchanged |
+| AC-139.4 | met | `T::test_the_rendered_backup_only_system_is_stable_ac_139_4`, `T::test_the_e2e_backs_up_into_a_bucket_no_component_uses_ac_139_4`, the exact-document tests of AC-139.1 (ExternalSecret, kustomization) | `tests/e2e/run.sh:2103` (no `uses` of backups), `:2156-2160` (e2e-web reads no `e2e-backups-app`) | The cluster run happens in the e2e workflow (`backups` part); not run locally |
+| AC-139.5 | met | `T::test_the_model_lists_the_backup_only_bucket_instance_where_render_creates_it_ac_139_5`, `T::test_the_model_names_the_addon_application_of_an_external_backup_only_bucket_ac_139_5`, `T::test_the_restore_and_status_model_still_has_the_database_and_bucket_ac_139_3` | `M:700-720` (targets per environment, `backup_only`) | Model and render agree on the set of resource instances |
+
+Non-goals respected: schedule, retention and the restore commands are unchanged; no new resource type; a database backup in an
+environment where no component uses the database renders nothing there (`T::test_a_database_backup_where_no_component_runs_creates_no_bucket_ac_139_1`).
+
+Migration: none required. A system whose component keeps the backup bucket in `uses` renders byte-identically (the existing spec 117
+render tests pass unchanged); removing that `uses` is optional and described in the changelog fragment.

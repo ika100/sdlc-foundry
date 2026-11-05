@@ -1657,7 +1657,7 @@ def check_cron(where: str, value) -> None:
         fail(f"{where}.schedule '{value}' is not a five-field cron expression (minute hour day-of-month month day-of-week, in UTC)")
 
 
-def check_backup(where: str, env: str, backup, resources: dict, comps: list[dict]) -> dict:
+def check_backup(where: str, env: str, backup, resources: dict) -> dict:
     """One `backup` (design.md, Render errors): returns {to, schedule, retention} with the defaults filled."""
     if not isinstance(backup, dict):
         fail(f"{where} must be a mapping with to, schedule and retention")
@@ -1670,8 +1670,7 @@ def check_backup(where: str, env: str, backup, resources: dict, comps: list[dict
     buckets = [n for n, rc in resources.items() if rc["type"] == "bucket"]
     if not isinstance(to, str) or to not in buckets:
         fail(f"{where}.to: '{to}' is not a bucket resource of the system (buckets: {names_list(buckets)})")
-    if not any(env in s.get("environments", []) and to in (s.get("uses") or []) for s in comps):
-        fail(f"{where}.to: the bucket {to} has no resource instance in {env} (a component that runs in {env} must use it)")
+    # spec 139: a backup target has its instance in {env} without a using component (backup_buckets)
     target = resources[to]["envs"][env]
     if target["external"] and not target.get("s3"):
         fail(f"{where}.to: the external bucket {to} needs remote.s3 (endpoint, bucket, region, forcePathStyle) in {env}: "
@@ -1684,20 +1683,20 @@ def check_backup(where: str, env: str, backup, resources: dict, comps: list[dict
     return {"to": to, "schedule": schedule, "retention": retention}
 
 
-def validate_backups(doc: dict, env_conf: dict, resources: dict, comps: list[dict]) -> dict:
+def validate_backups(doc: dict, env_conf: dict, resources: dict) -> dict:
     """Checks every backup, environments first, then each database with its instances in ENVS order; returns {env: backup} of the
     environments and sets `backup` in the database instances' effective values."""
     out = {}
     for e in ENVS:
         if e in env_conf["backup"]:
-            out[e] = check_backup(f"environments.{e}.backup", e, env_conf["backup"][e], resources, comps)
+            out[e] = check_backup(f"environments.{e}.backup", e, env_conf["backup"][e], resources)
     for r, rc in resources.items():
         if rc["type"] != "database":
             continue
         inst = ((doc.get("resources") or {}).get(r) or {}).get("instances") or {}
         for e in ENVS:
             if "backup" in (inst.get(e) or {}):
-                rc["envs"][e]["backup"] = check_backup(f"resources.{r}.instances.{e}.backup", e, inst[e]["backup"], resources, comps)
+                rc["envs"][e]["backup"] = check_backup(f"resources.{r}.instances.{e}.backup", e, inst[e]["backup"], resources)
     return out
 
 
@@ -1741,7 +1740,7 @@ def _load_system(app_dir: Path) -> dict:
     check_resource_clashes(d, resources, comps_doc, comps, events)
     validate_uses(comps, resources, events)
     validate_scaling(comps, comps_doc, doc.get("apis") or {}, resources, events)
-    backups = validate_backups(doc, env_conf, resources, comps)
+    backups = validate_backups(doc, env_conf, resources)
     registries = doc.get("registries") or []
     if not isinstance(registries, list):
         fail("registries must be a list of image prefixes, e.g. [ghcr.io/acme/]")
@@ -1811,18 +1810,39 @@ def per_env(value, env: str, default):
     return value.get(env, default) if isinstance(value, dict) else (default if value is None else value)
 
 
+def uses_in(services: list[dict], env: str, name: str) -> bool:
+    """True when a component that runs in `env` uses resource `name`."""
+    return any(env in envs_of(s) and name in (s.get("uses") or []) for s in services)
+
+
+def backup_buckets(services: list[dict], cfg: dict, env: str) -> set[str]:
+    """The buckets that are a backup target in `env` (spec 139): the `to` of the environment's backup, and of the backup of each database
+    instance that exists in `env` (a running component uses the database). Such a bucket has its instance in `env` without a using
+    component; its credentials go only to the backup machinery."""
+    out = {cfg["backup"][env]["to"]} if env in (cfg.get("backup") or {}) else set()
+    for r, rc in cfg["resources"].items():
+        backup = rc["envs"][env].get("backup") if rc["type"] == "database" else None
+        if backup and uses_in(services, env, r):
+            out.add(backup["to"])
+    return out
+
+
 def addons_in(services: list[dict], env: str, cfg: dict) -> list[str]:
     names = {a for s in services if env in envs_of(s) for a in s.get("uses") or [] if not cfg["resources"][a]["envs"][env]["external"]}
+    for b in backup_buckets(services, cfg, env):     # spec 139: a backup target without a using component
+        if not cfg["resources"][b]["envs"][env]["external"] or not secret_owners(services, env, b):
+            names.add(b)                             # an external one holds only its ExternalSecret there
     if env in cfg["observability"] and any(env in envs_of(s) for s in services):
         names.add("observability")
     return sorted(names)
 
 
 def resource_instances(system: dict) -> list[tuple[str, str, str, bool]]:
-    """(name, env, type, external) for each used resource instance, in resource order then ENVS order."""
-    services, resources = system["services"], system["cfg"]["resources"]
-    return [(r, e, rc["type"], rc["envs"][e]["external"]) for r, rc in resources.items() for e in ENVS
-            if any(e in envs_of(s) and r in (s.get("uses") or []) for s in services)]
+    """(name, env, type, external) for each resource instance (used, or a backup target: spec 139), in resource order then ENVS order."""
+    services, cfg = system["services"], system["cfg"]
+    targets = {e: backup_buckets(services, cfg, e) for e in ENVS}
+    return [(r, e, rc["type"], rc["envs"][e]["external"]) for r, rc in cfg["resources"].items() for e in ENVS
+            if uses_in(services, e, r) or r in targets[e]]
 
 
 def allowed_registries(services: list[dict], cfg: dict, env: str) -> list[str]:
@@ -2079,29 +2099,41 @@ def external_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dic
     """{component: {file name: ExternalSecret}} for the external resource instances of `env`.
 
     One ExternalSecret `<system>-<name>-app` per instance, in the overlay of the alphabetically first running component that uses it."""
-    store = cfg.get("secretStore") or DEFAULT_STORE
     out: dict[str, dict[str, dict]] = {}
     for name, rc in cfg["resources"].items():
         conf = rc["envs"][env]
         if not conf["external"] or rc["type"] == "broker":      # a broker's ExternalSecrets are per component (spec 119)
             continue
-        users = sorted(s["name"] for s in services if env in envs_of(s) and "external" not in s and name in (s.get("uses") or []))
+        users = secret_owners(services, env, name)
         if not users:
-            continue
-        secret = f"{app}-{name}-app"
-        doc = {"apiVersion": ESO_API, "kind": "ExternalSecret",
-               "metadata": {"name": secret, "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app,
-                                                       "app.kubernetes.io/managed-by": "gitops-app"}},
-               "spec": {"refreshInterval": conf["refreshInterval"],
-                        "secretStoreRef": {"name": store["name"], "kind": store.get("kind", "ClusterSecretStore")},
-                        "target": {"name": secret, "creationPolicy": "Orphan", "deletionPolicy": "Retain"},
-                        "data": [{"secretKey": k, "remoteRef": {"key": conf["store_key"], "property": k}}
-                                 for k in TYPES[rc["type"]]["keys"]]}}
-        if is_backup_target(cfg, env, name):       # Velero's store reads the Secret by these labels (AC-117.17)
-            doc["spec"]["target"]["template"] = {"engineVersion": "v2", "mergePolicy": "Merge",
-                                                 "metadata": {"labels": backup_target_labels(app, name)}}
-        out.setdefault(users[0], {})[f"externalsecret-{secret}.yaml"] = doc
+            continue                # a backup-only bucket's ExternalSecret is in its addon directory (spec 139)
+        out.setdefault(users[0], {})[f"externalsecret-{app}-{name}-app.yaml"] = external_secret_doc(app, env, name, cfg)
     return out
+
+
+def secret_owners(services: list[dict], env: str, name: str) -> list[str]:
+    """The running, non-external components that use resource `name` in `env`, sorted: the first holds its ExternalSecret."""
+    return sorted(s["name"] for s in services if env in envs_of(s) and "external" not in s and name in (s.get("uses") or []))
+
+
+def external_secret_doc(app: str, env: str, name: str, cfg: dict) -> dict:
+    """The ExternalSecret `<system>-<name>-app` of the external resource instance `name` in `env`."""
+    store = cfg.get("secretStore") or DEFAULT_STORE
+    rc = cfg["resources"][name]
+    conf = rc["envs"][env]
+    secret = f"{app}-{name}-app"
+    doc = {"apiVersion": ESO_API, "kind": "ExternalSecret",
+           "metadata": {"name": secret, "labels": {"app.kubernetes.io/name": name, "app.kubernetes.io/part-of": app,
+                                                   "app.kubernetes.io/managed-by": "gitops-app"}},
+           "spec": {"refreshInterval": conf["refreshInterval"],
+                    "secretStoreRef": {"name": store["name"], "kind": store.get("kind", "ClusterSecretStore")},
+                    "target": {"name": secret, "creationPolicy": "Orphan", "deletionPolicy": "Retain"},
+                    "data": [{"secretKey": k, "remoteRef": {"key": conf["store_key"], "property": k}}
+                             for k in TYPES[rc["type"]]["keys"]]}}
+    if is_backup_target(cfg, env, name):       # Velero's store reads the Secret by these labels (AC-117.17)
+        doc["spec"]["target"]["template"] = {"engineVersion": "v2", "mergePolicy": "Merge",
+                                             "metadata": {"labels": backup_target_labels(app, name)}}
+    return doc
 
 
 def broker_secrets(app: str, env: str, services: list[dict], cfg: dict) -> dict[str, dict[str, dict]]:
@@ -3048,6 +3080,10 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], 
     if name == "observability":
         return observability_files(app, env, cfg["observability"][env], services)
     res = cfg["resources"][name]
+    if res["type"] == "bucket" and res["envs"][env]["external"]:     # a backup-only external bucket (spec 139): its credentials only
+        fname = f"externalsecret-{app}-{name}-app.yaml"
+        return {fname: external_secret_doc(app, env, name, cfg),
+                "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": [fname]}}
     if res["type"] == "bucket":
         return bucket_files(app, name, env, res["envs"][env], is_backup_target(cfg, env, name))
     if res["type"] == "cache":
