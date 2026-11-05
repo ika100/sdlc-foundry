@@ -33,8 +33,8 @@ tasks:
     depends_on: [t1]
     done: true
   - id: t5
-    title: "Command texts name the waits (component set/add, instance promote, system set, resource add, cluster add, system ship, component release); AGENTS.md, ADR-081, cplat usage"
-    files: [plugins/component/commands/set.md, plugins/component/commands/add.md, plugins/instance/commands/promote.md, plugins/system/commands/set.md, plugins/resource/commands/add.md, plugins/cluster/commands/add.md, plugins/system/commands/ship.md, plugins/component/commands/release.md, plugins/component/commands/ship.md, docs/AGENTS.md, docs/adr/081-a-coordinator-waits-with-a-cplat-wait-never-a-polling-loop.md, docs/adr/README.md]
+    title: "Command texts name the waits (component set/add, instance promote, system set, resource add, cluster add, system ship, component release); AGENTS.md, ADR-082, cplat usage"
+    files: [plugins/component/commands/set.md, plugins/component/commands/add.md, plugins/instance/commands/promote.md, plugins/system/commands/set.md, plugins/resource/commands/add.md, plugins/cluster/commands/add.md, plugins/system/commands/ship.md, plugins/component/commands/release.md, plugins/component/commands/ship.md, docs/AGENTS.md, docs/adr/082-a-coordinator-waits-with-a-cplat-wait-never-a-polling-loop.md, docs/adr/README.md]
     covers: [AC-143.11]
     parallel_safe: false
     depends_on: [t2, t3, t4]
@@ -59,5 +59,5 @@ Contract: [design.md](design.md). The acceptance tests (`tests/cplat/test_143_en
 | 1 | t2 environment and cluster wait | AC-143.1–7, 10 | no | `envwait.py`, `cplat.py` |
 | 1 | t3 ship wait, next --wait | AC-143.8–10 | no | `shipwait.py`, `ship.py`, `appship.py` |
 | 1 | t4 release CI wait | AC-143.11 | yes | `comprelease.py` |
-| 2 | t5 command texts, ADR | AC-143.11 | no | eight command files, `docs/AGENTS.md`, ADR-081 |
+| 2 | t5 command texts, ADR | AC-143.11 | no | eight command files, `docs/AGENTS.md`, ADR-082 |
 | 3 | t6 versions, fragment | AC-143.11 | no | manifests, `docs/changelog.d/` |

@@ -63,7 +63,7 @@ behaviour (non-goal).
 14. **Command texts and the guard.** Each command named in AC-143.11 says which wait to run, passes `--refresh` right after a
     merge it made, says to run the same wait again on exit 2 at most twice and then to escalate with cause `environment`, and
     says never to write a polling loop. `tests/cplat/test_143_waits_docs.py` fails on a shell loop with `sleep` that polls
-    `kubectl`, `gh` or `cplat` in any `plugins/**/commands/*.md` or `plugins/**/agents/*.md`. ADR-081 records the rule.
+    `kubectl`, `gh` or `cplat` in any `plugins/**/commands/*.md` or `plugins/**/agents/*.md`. ADR-082 records the rule.
 
 ## Contract
 

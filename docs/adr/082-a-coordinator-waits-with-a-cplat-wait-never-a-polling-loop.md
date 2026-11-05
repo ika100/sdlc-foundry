@@ -1,4 +1,4 @@
-# ADR-081: A coordinator waits with a cplat wait, never a polling loop
+# ADR-082: A coordinator waits with a cplat wait, never a polling loop
 
 **Status:** Accepted (2026-11-05, spec 143)
 
