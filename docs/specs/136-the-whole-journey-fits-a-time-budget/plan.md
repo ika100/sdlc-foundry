@@ -10,21 +10,21 @@ tasks:
     covers: [AC-136.1, AC-136.2, AC-136.3]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: core.run — a rate-limit wait is an external wait of the open journey
     files: [scripts/cplat/core.py]
     covers: [AC-136.3]
     parallel_safe: true
     depends_on: [t1]
-    done: false
+    done: true
   - id: t3
     title: runs_journey_report.py — journey medians, previous version, ranking, text; `journey` key in report --benchmarks
     files: [scripts/cplat/runs_journey_report.py, scripts/cplat/runs_usage_report.py]
     covers: [AC-136.8]
     parallel_safe: true
     depends_on: [t1]
-    done: false
+    done: true
   - id: t4
     title: docs — runs command, ADR-081 and its index row, changelog fragment, platform plugin bump
     files: [plugins/platform/commands/runs.md, docs/adr/081-a-journey-is-measured-in-stages-of-working-time.md, docs/adr/README.md, docs/changelog.d/136-journey-measurement.added.md, plugins/platform/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]

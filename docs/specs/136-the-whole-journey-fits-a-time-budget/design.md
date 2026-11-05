@@ -145,7 +145,7 @@ Records: kind `journey`, inside the report window (`runs_report.select`). Groups
 - `previous_version` is the highest platform version below this one (numeric compare of the dotted parts) that has done
   journey runs with the same coordinator model; `previous` holds its medians for the same stage, part or total (`null`
   when there is none).
-- Text: one block per group after the benchmark lines, header `Journey <version> (<model>): <runs> run(s), <done> done`,
+- Text: one block per group after the benchmark lines, newest platform version first, header `Journey <version> (<model>): <runs> run(s), <done> done`,
   then a table with columns stage, working, wall, budget, over, person, external, PRs, `prev <version>` (working / wall),
   the stages in ranking order, then parts 1–3 and `journey`. A group without done runs says `no done run`. No journey
   records: `Journey: none`.
