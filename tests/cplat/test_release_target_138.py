@@ -323,5 +323,6 @@ def test_the_target_output_explains_the_version_file_ac_138_7(comp):  # AC-138.7
 
 
 def test_the_changelog_fragment_exists_ac_138_7():  # AC-138.7
-    frag = ROOT / "docs/changelog.d/138-release-tags-the-staging-build.changed.md"
-    assert frag.is_file() and "/component:release" in frag.read_text()
+    import release_support
+    _, text = release_support.entry(r"\(#426\)")      # a fragment until the release moves it into its section (#321)
+    assert "/component:release" in text

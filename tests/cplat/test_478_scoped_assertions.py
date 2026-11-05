@@ -29,5 +29,6 @@ def test_the_reviewer_flags_template_owned_layout_the_spec_does_not_ask_for():
 
 
 def test_the_changelog_fragment_exists():
-    frags = list((core.PLATFORM_ROOT / "docs/changelog.d").glob("478-*.fixed.md"))
-    assert frags and "(#478)" in frags[0].read_text()
+    import release_support
+    _, text = release_support.entry(r"\(#478\)")      # a fragment until the release moves it into its section (#321)
+    assert "region" in text

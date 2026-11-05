@@ -160,9 +160,8 @@ def test_the_restore_and_status_model_still_has_the_database_and_bucket_ac_139_3
 
 
 def test_the_changelog_fragment_says_how_to_migrate_ac_139_3():  # AC-139.3
-    frags = list((ROOT / "docs" / "changelog.d").glob("139-*.fixed.md"))
-    assert len(frags) == 1, frags
-    text = frags[0].read_text()
+    import release_support
+    _, text = release_support.entry(r"\(#418\)")      # a fragment until the release moves it into its section (#321)
     assert "(#418)" in text and "`uses`" in text and "**Action:**" in text
 
 

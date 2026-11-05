@@ -81,5 +81,6 @@ def test_the_waits_are_in_the_cplat_usage_and_agents_md_ac_143_11():  # AC-143.1
 
 
 def test_the_changelog_fragment_exists_ac_143_11():  # AC-143.11
-    frag = ROOT / "docs/changelog.d/143-the-coordinator-waits-with-cplat.added.md"
-    assert frag.is_file() and "(#475)" in frag.read_text()
+    import release_support
+    _, text = release_support.entry(r"\(#475\)")      # a fragment until the release moves it into its section (#321)
+    assert "`cplat`" in text

@@ -57,5 +57,6 @@ def test_the_system_ships_subagent_prompt_carries_the_rule():
 
 
 def test_the_changelog_fragment_exists():
-    frags = list((ROOT / "docs/changelog.d").glob("476-*.fixed.md"))
-    assert frags and "(#476)" in frags[0].read_text()
+    import release_support
+    _, text = release_support.entry(r"\(#476\)")      # a fragment until the release moves it into its section (#321)
+    assert "`cplat`" in text
