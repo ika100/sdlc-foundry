@@ -1,13 +1,11 @@
 # Verification — 136 The whole journey fits a time budget
 
-**Result:** fail (AC-136.11 not built; the other four criteria are met)
-**Commit:** e0feb810 · **Base:** d83a9d43 · **Trace:** 4/5 criteria named by tests (AC-136.11 has none) · **Tests:**
-`pytest tests/cplat -q -n auto` 7739 passed, 12 skipped; `devbox run validate` and `devbox run quality` green · **Cycle:** 1
+**Result:** pass
+**Commit:** e0feb810 · **Base:** d83a9d43 · **Trace:** 4/4 active criteria named by tests · **Tests:**
+`pytest tests/cplat -q -n auto` 7739 passed, 12 skipped; `devbox run validate` and `devbox run quality` green · **Cycle:** 2 (cycle 1 failed on AC-136.11, since withdrawn)
 
-AC-136.1, AC-136.2, AC-136.3 and AC-136.8 are met. AC-136.11 was measured and left open on purpose (design § AC-136.11,
-plan task t6): it changes the order of the system ship, the component ship's deploy phase, `pin-dev.yml` of every rendered
-gitops-app and the dev smoke, which spec 143 and #474 change at the same time, and its environment-settings part needs the
-command of #427, which the spec keeps out of scope. The spec therefore stays `building`.
+All four active criteria (AC-136.1, AC-136.2, AC-136.3, AC-136.8) are met. AC-136.11 was withdrawn on 2026-11-05 by the
+user's decision and moved to spec 144; cycle 1 had judged it not met (not built), see History.
 
 | Criterion | Verdict | Tests | Implementation | Notes |
 |---|---|---|---|---|
@@ -15,7 +13,6 @@ command of #427, which the spec keeps out of scope. The spec therefore stays `bu
 | AC-136.2 | met | `test_136_journey_record.py::test_a_part_is_the_span_of_overlapping_stages_and_less_than_their_sum_by_the_overlap_ac_136_2`, `::test_a_part_subtracts_the_person_waits_inside_its_span_once_ac_136_2` | `scripts/cplat/runs_journey.py:140-151` (`group`: span from the first start to the last end, person waits inside the span once, `stages_sum_minutes`, `overlap_minutes`), `:60-95` (interval union, difference, overlap) | Three stages of 3, 2 and 4 min that overlap give a part of 6 = 9 − 3. A person wait inside two stages is counted in both stages and once in the part. |
 | AC-136.3 | met | `test_136_journey_record.py::test_a_person_wait_is_left_out_of_working_time_and_an_external_wait_is_kept_ac_136_3` (the spec's 10 + 5 case), `::test_a_wait_measured_afterwards_is_added_with_its_minutes_ac_136_3`, `::test_a_minute_that_is_both_waits_counts_as_person_wait_only_ac_136_3`, `::test_a_github_rate_limit_wait_of_cplat_is_an_external_wait_of_the_open_journey_ac_136_3`, `::test_a_rate_limit_wait_without_a_journey_changes_nothing_ac_136_3` | `scripts/cplat/runs_journey.py:102-107` (`_times`: wall includes both waits, working excludes person only, external minus person), `:244-271` (`wait start\|end\|add`), `:348-361` (`note_external_wait`), `scripts/cplat/core.py:53-58,91` (the rate-limit hook) | The hook never raises or prints; without an open journey it does nothing. |
 | AC-136.8 | met | `tests/cplat/test_136_journey_report.py::test_per_stage_the_median_working_and_wall_of_done_runs_with_budget_overrun_and_waits_ac_136_8`, `::test_parts_and_the_whole_journey_get_the_same_columns_ac_136_8`, `::test_stages_are_ranked_by_median_overrun_largest_first_ac_136_8`, `::test_the_previous_platform_versions_median_stands_next_to_it_ac_136_8`, `::test_each_coordinator_model_is_its_own_group_ac_136_8`, `::test_a_stage_that_did_not_run_is_left_out_of_its_median_ac_136_8`, `::test_the_existing_keys_are_unchanged_and_journey_is_added_ac_136_8`, `::test_the_text_report_has_the_journey_table_with_working_and_wall_columns_ac_136_8`, `::test_no_journey_record_says_so_ac_136_8`, `::test_a_recorded_journey_shows_up_in_the_report_ac_136_8` | `scripts/cplat/runs_journey_report.py:50-108` (medians over done runs, overrun, previous version by numeric compare per model, ranking), `:115-133` (text), `scripts/cplat/runs_usage_report.py:145,167` (key `journey` after the existing keys; text after the benchmark lines) | The existing benchmark tests (`test_runs_usage_bench.py`, `test_bench_arms.py`) pass unchanged. Text groups are newest version first (design). |
-| AC-136.11 | not met (not built) | none | none; design § AC-136.11, plan t6 (`done: false`) | Measured on journey 2: part 2 dev got 3 gitops PRs (#12 compose entry, #13 and #14 pin-dev) where the criterion allows 1; part 3 environment settings took 4 (#16, #17, #18, #23). |
 
 ## Non-goals
 
@@ -33,5 +30,11 @@ command of #427, which the spec keeps out of scope. The spec therefore stays `bu
   in design.md.
 - **D2: acceptable.** The design change "newest platform version first" in the text report was made while t3 was built, so
   the first block is the latest version's.
-- **D3: not met.** t6 (AC-136.11) is open; see above.
+- **D3: resolved.** t6 (AC-136.11) was removed from the plan when the criterion moved to spec 144.
 - No acceptance test changed after the red commit 7118b9c6.
+
+## History
+
+- Cycle 1 (d0e8a1e2): fail. AC-136.11 not met: not built, measured in design § AC-136.11 (journey 2: three dev PRs for
+  system spec 002 where one is allowed, four for the part 3 environment settings).
+- Cycle 2: pass. The user withdrew AC-136.11 on 2026-11-05 and moved it to spec 144; no code changed between the cycles.

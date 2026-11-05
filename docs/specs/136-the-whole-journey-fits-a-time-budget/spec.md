@@ -1,7 +1,7 @@
 ---
 spec_id: 136-the-whole-journey-fits-a-time-budget
 title: The whole journey fits a time budget
-status: building
+status: done
 priority: P1
 shape: platform
 ---
@@ -95,7 +95,7 @@ timeout); the prod gate clean on the first try.
 
 **The journey.** The journey is the three parts of the demo, done with a fixed script: part 1 creates a system with one Python service and ships one spec, the tasks endpoint, to dev; part 2 adds a Postgres database and a Next.js web UI through one system spec shipped across three repos to dev; part 3 promotes to staging, releases, and deploys to prod with backups turned on and one restore checked. The scripted answers, specs and feature size stay the same between runs; changing them makes a new task version.
 
-**Scope after the 2026-11-05 cut.** This spec measures the journey (AC-136.1–AC-136.3, AC-136.8) and cuts its rounds (AC-136.11). A journey is run by hand or by the coordinator with the fixed script; the command that runs it headless, cleanup, interventions, the release and retro hooks, the PR and CI limits and the method checks move to a later spec (see Later).
+**Scope after the 2026-11-05 cut.** This spec measures the journey (AC-136.1–AC-136.3, AC-136.8); cutting its rounds (was AC-136.11) moves to spec 144. A journey is run by hand or by the coordinator with the fixed script; the command that runs it headless, cleanup, interventions, the release and retro hooks, the PR and CI limits and the method checks move to a later spec (see Later).
 
 **Stages and budgets.** Each stage starts when its first command starts and ends when its last result is in. Stages that run at the same time (the cluster while the spec is written, repos built in parallel) overlap. A part's time is its critical path: from its first stage start to its last stage end, not the sum of its stages. Budgets are in working time (see Time below). The part and journey budgets are the binding targets; the stage budgets guide where the time goes. In part 1 the stage budgets add up to 22 min, so scaffold's first CI runs while the spec is written, which brings the critical path to 20. "Today" is the 2026-11-04 recording without its defects (BASELINES.md, parts 1 and 2; BASELINES.md (part 3, PR #413)).
 
@@ -132,7 +132,7 @@ The floor, without dropping any step of the method: agent work for two features 
 - **AC-136.8** Given journey run records (AC-136.1), when `cplat runs report --benchmarks` runs, then for each platform version and coordinator model it shows per stage, per part and for the journey the median working time and the median wall clock of the done runs as two separate columns, the budget, the overrun in working minutes, the median person-wait, the median external wait and the median PR count, with the previous platform version's median next to it. The stages are ranked by median overrun in minutes, largest first. `--json` holds the same under the key `journey`, and the existing keys are unchanged.
 - ~~**AC-136.9**~~ withdrawn 2026-11-05: moves to a later spec (stabilization cut); the text is kept under Later.
 - ~~**AC-136.10**~~ withdrawn 2026-11-05: moves to a later spec (stabilization cut); the text is kept under Later.
-- **AC-136.11** Given a journey run, when the gitops changes of one spec are promoted to one environment (pins, configuration and resource changes together), then they land in one gitops PR for that environment, not one per repo or per kind of change. Given a part 2 journey, then the gitops repo gets at most one PR per environment for the system spec, besides the spec and plan PRs. An environment's settings (hosts, policy, observability, backups) land in 1 PR, not 4 as on 2026-11-04 (#427).
+- ~~**AC-136.11**~~ withdrawn 2026-11-05: moves to spec 144 (one gitops PR per environment); the text is kept under Later.
 - ~~**AC-136.12**~~ withdrawn 2026-11-05: moves to a later spec (stabilization cut); the text is kept under Later.
 - ~~**AC-136.13**~~ withdrawn 2026-11-05: moves to a later spec (stabilization cut); the text is kept under Later.
 - ~~**AC-136.14**~~ withdrawn 2026-11-05: moves to a later spec (stabilization cut); the text is kept under Later.
@@ -162,6 +162,7 @@ Cut on 2026-11-05 for the stabilization phase. These criteria go into a follow-u
 - (was AC-136.7) Given a journey benchmark in which any stage needed a person beyond the scripted answers (an unscripted question, a gate warning that has to be decided, such as #422, or a manual fix, such as resuming after #408), then the record lists each intervention with its stage, and the run counts as `needed a person` in the report, not as a within-budget run.
 - (was AC-136.9) Given `cplat runs report --benchmarks --markdown`, then it prints the journey table in the format of `docs/BASELINES.md` (stage, working time, wall clock, budget, what made the difference) for the latest platform version, from the median of its done runs. Given a minor release candidate, the release procedure runs the full journey benchmark 3 times (more runs can be started on demand). When the release is made and journey benchmark records for its version exist, it writes this table into `docs/BASELINES.md`; when none exist, it says so in one line and goes on without waiting for one.
 - (was AC-136.10) Given ordinary ship and product-ship runs (not benchmarks) in the covered week, when their records are written, then their stages carry the same time fields as AC-136.1. When the weekly retro (spec 090) is built, then its report has a "Journey time" section with the latest benchmark's overruns and the ordinary runs' median stage times against the budgets, and a stage over budget counts as evidence for a retro proposal (AC-090.7).
+- (was AC-136.11, moves to spec 144) Given a journey run, when the gitops changes of one spec are promoted to one environment (pins, configuration and resource changes together), then they land in one gitops PR for that environment, not one per repo or per kind of change. Given a part 2 journey, then the gitops repo gets at most one PR per environment for the system spec, besides the spec and plan PRs. An environment's settings (hosts, policy, observability, backups) land in 1 PR, not 4 as on 2026-11-04 (#427).
 - (was AC-136.12) Given the whole journey benchmark, then it opens at most 15 PRs across all demo repos (2026-11-04: 31), and the record and the report show the count per part.
 - (was AC-136.13) Given a gitops PR in the benchmark, when its CI runs, then all its checks are green within a median of 2 minutes from the push over the benchmark's gitops PRs, and the checks share their setup instead of each preparing its own.
 - (was AC-136.14) Given the benchmark's PRs for a spec (its spec PR, then its feature PR), then the feature PR merges without a conflict on the spec's files (#410) and without a fix round caused by the platform's own generated content (#420); such a round, when it happens, is listed as an extra round with the cause `platform`.
@@ -195,3 +196,5 @@ Cut on 2026-11-05 for the stabilization phase. These criteria go into a follow-u
 - 2026-11-05 amended: cut to measurement and fewer rounds (stabilization); the benchmark command moves to a later spec
 - 2026-11-05 approved by the user
 - 2026-11-05 building
+- 2026-11-05 amended: AC-136.11 withdrawn by the user's decision; one gitops PR per environment moves to its own spec 144 (measurement in design.md § AC-136.11)
+- 2026-11-05 done

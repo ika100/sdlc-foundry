@@ -1,8 +1,8 @@
 ---
 spec_id: 136-the-whole-journey-fits-a-time-budget
 shape: platform
-spec_hash: bb6c73369c48
-summary: "A journey is one run record of kind journey, fed by `cplat platform runs journey begin|stage|wait|pr|round|show|end` (runs_journey.py): 15 stages with budgets, waits as intervals of the journey, working = wall − person-wait, parts and the journey as spans with their overlap; core.run notes GitHub rate-limit waits as external waits; `cplat platform runs report --benchmarks` gets the journey medians per platform version and coordinator model, the previous version and the overrun ranking (runs_journey_report.py, key `journey`); ADR-081; AC-136.11 measured and planned as t6, not built"
+spec_hash: 49217098fed8
+summary: "A journey is one run record of kind journey, fed by `cplat platform runs journey begin|stage|wait|pr|round|show|end` (runs_journey.py): 15 stages with budgets, waits as intervals of the journey, working = wall − person-wait, parts and the journey as spans with their overlap; core.run notes GitHub rate-limit waits as external waits; `cplat platform runs report --benchmarks` gets the journey medians per platform version and coordinator model, the previous version and the overrun ranking (runs_journey_report.py, key `journey`); ADR-081; AC-136.11 withdrawn and moved to spec 144"
 tasks:
   - id: t1
     title: runs_journey.py — stage table, time model, pointer, recording API and the `runs journey` CLI; runs.py dispatch
@@ -32,13 +32,6 @@ tasks:
     parallel_safe: true
     depends_on: []
     done: true
-  - id: t6
-    title: one gitops PR per environment per spec (deferred, see design § AC-136.11)
-    files: [scripts/cplat/appship_sched.py, scripts/cplat/appship.py, scripts/cplat/ship.py, scripts/cplat/staging_deploy.py, scripts/cplat/systemset.py, templates/gitops-app/.github/workflows/pin-dev.yml, plugins/system/commands/ship.md]
-    covers: [AC-136.11]
-    parallel_safe: false
-    depends_on: []
-    done: false
 ---
 
 # Plan — 136 The whole journey fits a time budget
@@ -52,7 +45,6 @@ the time model.
 |---|---|
 | 1 | t1, t4 |
 | 2 | t2, t3 |
-| — | t6 (open, not built in this build) |
 
 ## t1 — the journey record
 
@@ -76,15 +68,13 @@ lazy and inside `try`, so `core` keeps working without a journey and `runs_journ
 `/platform:runs` names the journey commands; ADR-081 with its README row; the changelog fragment; platform plugin
 1.5.1 → 1.6.0 in `plugin.json` and `marketplace.json` (a command text changed and gained a feature).
 
-## t6 — one gitops PR per environment (open)
+## AC-136.11 (moved)
 
-Not built in this build; design § AC-136.11 has the measurement and what it needs: the entry PR held until the last
-component merged, `pin-dev` pushing onto `compose/<spec>` during a system ship, the component ship's deploy phase ending
-at the pin, the system ship landing the entry and running every dev smoke; for part 3 the command of #427 and `system set`
-with several settings of one environment. It needs its own design pass with spec 143 and #474, which change the same files.
+Withdrawn on 2026-11-05 by the user's decision and moved to spec 144 (one gitops PR per environment for a system
+ship); design § AC-136.11 keeps the measurement it starts from.
 
 ## Acceptance tests
 
 Written first, one criterion id per test name, in `tests/cplat/test_136_journey_record.py` (AC-136.1–3, through the CLI
 with a fake clock and `--at`) and `tests/cplat/test_136_journey_report.py` (AC-136.8, through `runs.main(["report",
-"--benchmarks", ...])` on an in-memory store, as `test_runs_usage_bench.py` does). AC-136.11 gets no test in this build.
+"--benchmarks", ...])` on an in-memory store, as `test_runs_usage_bench.py` does).

@@ -24,11 +24,9 @@
   started last); `journey round <kind> --cause <cause>` records an extra round. No GitHub call is made.
 - **The report lives with the benchmarks.** `cplat platform runs report --benchmarks` adds a journey section and the JSON
   key `journey`; the existing keys and their values are unchanged.
-- **AC-136.11 is not built here.** Measured on journey 2 (see § AC-136.11): the extra dev PRs come from the per-component
-  `pin-dev` dispatch and the gitops entry landing first. Joining them changes the order of the system ship, the component
-  ship's deploy phase, the `pin-dev` workflow of every rendered gitops-app and the dev smoke, which is the area of spec 143
-  and #474. The environment-settings part needs the command of #427, which the spec keeps out of scope. Plan task t6 holds
-  what it needs.
+- **AC-136.11 moved to spec 144.** The user withdrew it from this spec on 2026-11-05. The measurement below (journey 2)
+  is where spec 144 starts: the extra dev PRs come from the per-component `pin-dev` dispatch and the gitops entry landing
+  first.
 
 ## Modules
 
@@ -158,7 +156,7 @@ Records: kind `journey`, inside the report window (`runs_report.select`). Groups
 exception swallowed). It appends an external wait from now − `seconds` to now, reason `GitHub rate limit (<kind>)`, to the
 open journey, if any. It never prints and never changes the result of `run`.
 
-## AC-136.11 — measured, not built
+## AC-136.11 — measured, moved to spec 144
 
 Journey 2 (`ika100-demo/taskboard2-gitops`, 2026-11-05), gitops PRs for the part 2 system spec 002: #10 spec, #11 spec and
 plan, **#12 the compose entry (postgres, web wiring), #13 pin-dev api, #14 pin-dev web**, #15 done. Dev got three PRs
@@ -179,4 +177,4 @@ the component ship under a system ship ends its deploy phase at "pinned on compo
 entry after the last pin and runs every dev smoke; a red component holds the dev deploy of the others. For part 3, the
 command of #427 plus `system set` taking several settings of one environment. That touches the system ship's order, the
 component ship's deploy phase, `pin-dev.yml` in every rendered gitops-app and the dev smoke: the files of spec 143 and
-#474. It is planned as task t6 and left open.
+#474, so it is its own spec (144).
