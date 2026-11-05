@@ -103,6 +103,24 @@ def discard_changes(repo: Path) -> None:
     run(["git", "clean", "-fdq", "--", "applications", "bootstrap"], cwd=repo, check=False)
 
 
+TRANSIENT = re.compile(r"HTTP 5\d\d|\b50[0-4]\b|Bad Gateway|Service Unavailable|Gateway Time-?out|something went wrong|"
+                       r"timed out|timeout|connection reset", re.I)
+PR_RETRY_WAITS = (5, 15)   # seconds before the second and the third try
+
+
+def _create_pr(repo: Path, title: str, body: str) -> str:
+    """`gh pr create`, tried again after a transient GitHub error (5xx, timeout); any other error is raised at once."""
+    cmd = ["gh", "pr", "create", "--base", "main", "--title", title, "--body", body]
+    for wait in (*PR_RETRY_WAITS, None):
+        try:
+            return run(cmd, cwd=repo).stdout.strip().splitlines()[-1]
+        except PlatformError as e:
+            if wait is None or not TRANSIENT.search(str(e)):
+                raise
+            core.sleep(wait)
+    raise AssertionError("unreachable")
+
+
 def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
     """Create the branch, commit everything under applications/ and bootstrap/, push, and open a PR. Returns the URL.
 
@@ -122,7 +140,7 @@ def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
         run(["git", *core.git_identity(repo), "commit", "-q", "-m", title], cwd=repo)
         run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
         pushed = True
-        return run(["gh", "pr", "create", "--base", "main", "--title", title, "--body", body], cwd=repo).stdout.strip().splitlines()[-1]
+        return _create_pr(repo, title, body)
     except PlatformError as e:
         if created:
             run(["git", "checkout", "-q", "-f", start], cwd=repo, check=False)

@@ -158,16 +158,17 @@ def test_a_list_of_buckets_names_none_when_there_is_no_bucket_ac_117_2(tmp_path)
     fails(tmp_path, doc, P + f"{W}.to: 'x' is not a bucket resource of the system (buckets: none)")
 
 
-def test_the_bucket_must_have_an_instance_in_the_environment_ac_117_2(tmp_path):  # AC-117.2
+def test_a_target_bucket_no_component_uses_in_the_environment_gets_its_instance_there_ac_117_2(tmp_path):  # AC-117.2, AC-139.1
+    # spec 139 replaced the failure "the bucket backups has no resource instance in prod": a backup target always has one
     comps = {"api": comp("api", ["orders-db"]), "files": comp("files", ["backups"], envs=("dev",))}
-    fails(tmp_path, bdoc(dbb={"prod": DEV}, comps=comps),
-          P + f"{W}.to: the bucket backups has no resource instance in prod (a component that runs in prod must use it)")
+    g = ok(tmp_path, bdoc(dbb={"prod": DEV}, comps=comps))
+    assert f"{APP}/addons/prod/backups/bucket.yaml" in g
 
 
-def test_the_environment_bucket_must_have_an_instance_there_too_ac_117_16(tmp_path):  # AC-117.16
+def test_an_environment_target_bucket_gets_its_instance_there_too_ac_117_16(tmp_path):  # AC-117.16, AC-139.1
     comps = {"api": comp("api", ["orders-db"]), "files": comp("files", ["backups"], envs=("dev",))}
-    fails(tmp_path, bdoc(envb={"prod": DEV}, comps=comps),
-          P + f"{WE}.to: the bucket backups has no resource instance in prod (a component that runs in prod must use it)")
+    g = ok(tmp_path, bdoc(envb={"prod": DEV}, comps=comps))
+    assert f"{APP}/addons/prod/backups/bucket.yaml" in g
 
 
 def test_an_external_target_needs_remote_s3_ac_117_2(tmp_path):  # AC-117.2
