@@ -1,8 +1,9 @@
 ---
 spec_id: 139-a-backup-bucket-without-a-using-component
 title: A backup bucket without a using component
-status: draft
+status: approved
 priority: P1
+tracks: [418]
 shape: platform
 ---
 
@@ -28,29 +29,35 @@ Tracks #418.
 
 ## Acceptance criteria
 
-- **AC-139.1** Given a bucket that is the `backup.to` of a database instance in `<env>` and that no component in `<env>`
-  uses, when render runs, then it creates that bucket's instance in `<env>` and its credentials only for the backup machinery
-  (the database's ObjectStore), and render succeeds.
+- **AC-139.1** Given a bucket that is the `backup.to` of `environments.<env>.backup` or of a database instance in `<env>`, and
+  that no component in `<env>` uses, when render runs, then it succeeds and creates that bucket's instance in `<env>` with its
+  credentials only for the backup machinery (the database's ObjectStore, Velero's storage location): an in-cluster bucket gets
+  its addon, an external bucket the ExternalSecret of its credentials in the addon directory instead of a component's overlay.
+  This replaces, for backup targets, the AC-117.2 and AC-117.16 failure "the bucket has no resource instance in `<env>`".
 - **AC-139.2** Given such a bucket, when a component runs in `<env>` without `uses` of it, then the component's pods receive
   none of the bucket's S3_*/AWS_* variables.
 - **AC-139.3** Given an existing system where a component uses the backup bucket only to make render pass, when its owner
   removes that `uses`, then render, the backups and `/resource:restore` still work, and the changelog says how to migrate.
 - **AC-139.4** Given the platform's tests, when they run, then the rendered manifests of a system with a backup-only bucket
   are frozen like the existing render tests, and the e2e backups test covers a bucket no component uses.
+- **AC-139.5** Given a backup-only bucket instance, when `cplat` reads the system (`/system:status`, `/resource:restore`), then
+  the model lists that bucket instance in `<env>` exactly as render creates it.
 
 ## Non-goals
 
 - No change to the backup schedule, retention or restore commands.
 - No new resource types.
+- No resource instances declared per environment before any component runs there (the second half of #418): a database
+  instance still exists in `<env>` only once a component that uses it runs there, so its backups start with that component.
+  A later spec may add `resources.<r>.instances.<env>` without a component.
 
 ## Open questions
 
-1. **Should a database instance exist in an environment before any component runs there (the second half of #418)?**
-   - (a) *Not in this spec (recommended):* backups of an environment start with its first component; this spec only removes
-     the `uses` the backup bucket needed. Declaring instances per environment ahead of time is a feature for a later spec.
-   - (b) *In this spec:* allow `resources.<r>.instances.<env>` to create the instance (database and bucket) without a
-     component, so prod backups and a restore drill can be set up before the first promotion.
+1. ~~Should a database instance exist in an environment before any component runs there (the second half of #418)?~~
+   Answered by the user: (a), not in this spec; only the `uses` the backup bucket needed is removed (Non-goals).
 
 ## Changelog
 
 - 2026-11-05 created (tracks #418); draft, waiting for the answer to the open question
+- 2026-11-05 amended: open question answered by the user: (a)
+- 2026-11-05 approved
