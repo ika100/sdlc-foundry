@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.8.1] - 2026-11-05
+
+### Fixed
+
+**An organization-level `GITOPS_TOKEN` counts (found in the 2026-11-05 journey).** `component ship start` refused with `the secret GITOPS_TOKEN is not set` when the token was set once for the whole organization, because only the repo's own secrets were read; `/platform:doctor` warned the same way for `SERVICE_REPOS_READ_TOKEN` and `ALERTS_TOKEN`. They now count the organization secrets that GitHub makes visible to the repo, and `/system:new` and `/component:new` no longer ask you to create a per-repo token that the organization already provides.
+
 ## [5.8.0] - 2026-11-05
 
 ### Changed
