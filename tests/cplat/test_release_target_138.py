@@ -22,7 +22,7 @@ def git(cwd, *args):
 
 
 def commit(repo: Path, subject: str) -> str:
-    (repo / "log.txt").write_text((repo / "log.txt").read_text() + subject + "\n" if (repo / "log.txt").exists() else subject + "\n")
+    (repo / (re.sub(r"\W+", "-", subject) + ".txt")).write_text(subject + "\n")   # one file per commit: merges never conflict
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", subject)
     return git(repo, "rev-parse", "HEAD")

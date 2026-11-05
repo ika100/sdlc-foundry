@@ -10,35 +10,35 @@ tasks:
     covers: [AC-138.1, AC-138.2, AC-138.3, AC-138.4]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t2
     title: "/component:release: target phase, gates on the tagged commit, tag after main's ci run, follow-up PR, summary naming the tagged commit; console glossary"
-    files: [plugins/component/commands/release.md, scripts/cplat/console/glossary.py]
+    files: [plugins/component/commands/release.md, scripts/cplat/console/glossary.py, plugins/component/README.md, docs/AGENTS.md, docs/USER-JOURNEY.md, site/src/content/docs/scenarios/promote-safely.md, tests/cplat/test_platrelease_129_docs.py]
     covers: [AC-138.1, AC-138.2, AC-138.3, AC-138.4, AC-138.7]
     parallel_safe: true
     depends_on: [t1]
-    done: false
+    done: true
   - id: t3
     title: "Release agents (svc, svc-java, svc-go, web) write the follow-up PR from main: CHANGELOG and next development version, never tag"
     files: [plugins/svc/agents/release.md, plugins/svc-java/agents/release.md, plugins/svc-go/agents/release.md, plugins/web/agents/release.md]
     covers: [AC-138.4]
     parallel_safe: true
     depends_on: [t1]
-    done: false
+    done: true
   - id: t4
     title: "Templates: library-python reads its version from the git tag (hatch-vcs); service-python reads it from the package metadata"
     files: [templates/library-python/pyproject.toml, "templates/library-python/src/{{ module_name }}/__init__.py", templates/library-python/tests/test_smoke.py, "templates/service-python/src/{{ module_name }}/__init__.py", "templates/service-python/src/{{ module_name }}/main.py"]
     covers: [AC-138.5, AC-138.6]
     parallel_safe: true
     depends_on: []
-    done: false
+    done: true
   - id: t5
     title: "Plugin versions (component, svc, svc-java, svc-go, web) in plugin.json and marketplace.json; changelog fragment"
     files: [.claude-plugin/marketplace.json, plugins/component/.claude-plugin/plugin.json, plugins/svc/.claude-plugin/plugin.json, plugins/svc-java/.claude-plugin/plugin.json, plugins/svc-go/.claude-plugin/plugin.json, plugins/web/.claude-plugin/plugin.json, docs/changelog.d/138-release-tags-the-staging-build.changed.md]
     covers: [AC-138.7]
     parallel_safe: false
     depends_on: [t2, t3, t4]
-    done: false
+    done: true
 ---
 
 # Plan — 138 A component release tags the build staging tested
