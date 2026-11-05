@@ -44,7 +44,7 @@ export const steps: Step[] = [
   {
     title: 'Merge, cluster and expose', short: 'Cluster',
     say: 'Merge the PR once its CI is green, start a local cluster, and make the API reachable from my browser (merge that PR too)',
-    run: 'devbox run cluster-up · /component:set taskboard2-api --expose', command: 'Merge the PR once its CI is green, start a local cluster, and make the API reachable …', at: 8.359, time: '15 min',
+    run: 'devbox run cluster-up · /component:set taskboard2-api --expose', command: 'Merge the PR once its CI is green, start a local cluster, and make the API reachable …', at: 7.555, time: '15 min',
     sections: [
       { heading: 'Claude does', items: [
         'Merges the PR on green CI and runs <code>devbox run cluster-up</code>: a k3d cluster with Argo CD, External Secrets and the Gateway.',
@@ -58,7 +58,7 @@ export const steps: Step[] = [
   {
     title: 'Write the spec', short: 'Spec',
     say: 'For taskboard2-api: I want to create and list tasks, each with a title and an optional due date, kept in memory',
-    run: '/system:spec "create and list tasks …"', command: 'For taskboard2-api: I want to create and list tasks, each with a title and an optional due date, kept in memory', at: 45.757, time: '4 min',
+    run: '/system:spec "create and list tasks …"', command: 'For taskboard2-api: I want to create and list tasks, each with a title and an optional due date, kept in memory', at: 24.17, time: '4 min',
     sections: [
       { heading: 'Claude does', text: 'The product-manager agent drafts the spec with acceptance criteria and asks every decision that is yours, each with a suggested answer.' },
       { heading: 'Claude asks, you answer', items: [
@@ -72,7 +72,7 @@ export const steps: Step[] = [
     links: [{ label: 'the system spec', href: `${GITOPS}/blob/main/docs/specs/001-create-and-list-tasks/spec.md` }],
   },
   {
-    title: 'Approve the spec', short: 'Approve', say: 'Approve the spec', run: '/system:spec approve 001', command: '(Approve, the recommended answer)', at: 58.231, time: '2 min',
+    title: 'Approve the spec', short: 'Approve', say: 'Approve the spec', run: '/system:spec approve 001', command: '(Approve, the recommended answer)', at: 34.588, time: '2 min',
     sections: [
       { heading: 'Claude does', text: 'Marks the spec approved and merges its PR on green CI. Nothing is built from a draft.' },
     ],
@@ -80,7 +80,7 @@ export const steps: Step[] = [
   },
   {
     title: 'Ship the spec', short: 'Ship', say: 'Build it and get it running in dev. I\'m away: if a repo spec has questions, take the suggested answers.',
-    run: '/system:plan 001 · /system:ship 001', command: 'Build it and get it running in dev. I\'m away: …', at: 65.54, time: '45 min',
+    run: '/system:plan 001 · /system:ship 001', command: 'Build it and get it running in dev. I\'m away: …', at: 40.396, time: '45 min',
     sections: [
       { heading: 'Claude does', items: [
         'Plans the spec across the repos (one repo here) and merges the plan.',
@@ -101,7 +101,7 @@ export const steps: Step[] = [
   {
     title: 'Add a web UI', short: 'Web UI',
     say: 'Add a web UI to the system: a Next.js website taskboard2-web in a public repo, added to system.yaml and exposed (merge its PR once CI is green)',
-    run: '/component:new taskboard2-web … · /component:add taskboard2-web --expose', command: 'Add a web UI to the system: a Next.js website taskboard2-web …', at: 209.271, time: '6 min',
+    run: '/component:new taskboard2-web … · /component:add taskboard2-web --expose', command: 'Add a web UI to the system: a Next.js website taskboard2-web …', at: 86.58, time: '6 min',
     sections: [
       { heading: 'Claude does', text: 'Creates the Next.js repo from its template, adds it to <code>system.yaml</code> with its own host in dev, and merges that PR on green CI.' },
       { heading: 'Result', text: 'The template page runs at <code>http://taskboard2-web.taskboard2-dev.localhost:8088</code>.' },
@@ -114,7 +114,7 @@ export const steps: Step[] = [
   {
     title: 'One spec for the whole system', short: 'System spec',
     say: 'Keep tasks in a Postgres database instead of memory, and let people see and create tasks in the web UI',
-    run: '/system:spec "…" · /system:spec approve 002', command: 'Keep tasks in a Postgres database instead of memory, and let people see and create tasks in the web UI', at: 228.326, time: '5 min',
+    run: '/system:spec "…" · /system:spec approve 002', command: 'Keep tasks in a Postgres database instead of memory, and let people see and create tasks in the web UI', at: 97.283, time: '5 min',
     sections: [
       { heading: 'Claude does', text: 'One system spec for three repos: the API moves to Postgres, the web UI lists tasks and creates them with a form. Four questions, answered with the suggestions, then approved.' },
       { heading: 'Result', text: '12 criteria; every story names the repos that take part.' },
@@ -124,7 +124,7 @@ export const steps: Step[] = [
   {
     title: 'Plan and ship it to dev', short: 'Ship',
     say: 'Plan it across the repos, merge the plan once its CI is green, and ship it to dev. I\'m away: take the suggested answers for repo-spec questions, and install operators the local cluster needs yourself.',
-    run: '/system:plan 002 · /system:ship 002', command: 'Plan it across the repos, merge the plan …, and ship it to dev. …', at: 245.096, time: '72 min',
+    run: '/system:plan 002 · /system:ship 002', command: 'Plan it across the repos, merge the plan …, and ship it to dev. …', at: 111.344, time: '72 min',
     sections: [
       { heading: 'Claude does', items: [
         '<b>gitops</b>: Postgres declared in <code>system.yaml</code>, the API connected to it, the web UI pointed at the API; one PR.',
@@ -143,7 +143,7 @@ export const steps: Step[] = [
   {
     title: 'Hosts, observability and staging', short: 'Staging',
     say: 'Give staging and prod local hosts I can open in the browser, turn on the Grafana observability stack for dev and staging, and promote both components to staging. Merge the PRs once their CI is green.',
-    run: '/system:set --host · observability · /instance:promote --to staging', command: 'Give staging and prod local hosts …, turn on the Grafana observability stack …, and promote both components to staging. …', at: 415.717, time: '9 min',
+    run: '/system:set --host · observability · /instance:promote --to staging', command: 'Give staging and prod local hosts …, turn on the Grafana observability stack …, and promote both components to staging. …', at: 157.714, time: '9 min',
     sections: [
       { heading: 'Claude does', text: 'Sets a host for staging and prod, turns on the Grafana stack (logs, metrics, traces) for dev and staging, and promotes the builds dev tested to staging. Four PRs, each merged on green CI.' },
       { heading: 'Result', text: 'Staging runs both components with its own Postgres; a task created through the staging API shows on the staging web page, and Prometheus has metrics from both environments.' },
@@ -155,7 +155,7 @@ export const steps: Step[] = [
   },
   {
     title: 'Release', short: 'Release', say: 'Release the API and the web UI from the builds staging tested',
-    run: '/component:release (in each repo) · /instance:promote --to staging', command: 'Release the API and the web UI from the builds staging tested', at: 439.283, time: '25 min',
+    run: '/component:release (in each repo) · /instance:promote --to staging', command: 'Release the API and the web UI from the builds staging tested', at: 169.762, time: '25 min',
     sections: [
       { heading: 'Claude does', items: [
         'Runs the quality, test and security gates in both repos, then a release PR with the changelog and the version 0.2.0, merged on green CI, and tags <code>v0.2.0</code>.',
@@ -176,7 +176,7 @@ export const steps: Step[] = [
   {
     title: 'Backups and the prod PR', short: 'Prod PR',
     say: 'Before prod, back up the prod database daily to a bucket. Then open the prod PR for both components, but don\'t merge it.',
-    run: '/resource:add backups --type bucket · /instance:promote --to prod --pr', command: 'Before prod, back up the prod database daily to a bucket. Then open the prod PR …, but don\'t merge it.', at: 498.156, time: '9 min',
+    run: '/resource:add backups --type bucket · /instance:promote --to prod --pr', command: 'Before prod, back up the prod database daily to a bucket. Then open the prod PR …, but don\'t merge it.', at: 193.011, time: '9 min',
     sections: [
       { heading: 'Claude does', items: [
         'Declares a bucket for backups and lets the API use it (the platform still needs a component that uses the bucket; spec 139 would remove that).',
@@ -191,7 +191,7 @@ export const steps: Step[] = [
   },
   {
     title: 'Prod', short: 'Prod', say: 'The prod check is clean. Merge the prod PR and verify prod.', run: 'merge the prod PR · /instance:verify prod',
-    command: 'The prod check is clean. Merge the prod PR and verify prod.', at: 517.321, time: '6 min',
+    command: 'The prod check is clean. Merge the prod PR and verify prod.', at: 205.192, time: '6 min',
     sections: [
       { heading: 'Claude does', text: 'Merges the prod PR, waits for Argo, runs the smoke tests against prod, checks the database and the first backup, and restarts the API to show the data stays.' },
       { heading: 'Result', text: 'Prod runs both components; smoke 7 of 7 and 8 of 8, Postgres 3 of 3 ready, the first backup completed right after the deploy.' },
@@ -200,7 +200,7 @@ export const steps: Step[] = [
   },
   {
     title: 'Restore drill', short: 'Restore', say: 'Restore prod to a copy, prove the Prod check task is in it, then discard the copy. I confirm prod for the discard.',
-    run: '/resource:restore postgres --env prod --to latest · --discard --confirm prod', command: 'Restore prod to a copy, prove the Prod check task is in it, then discard the copy. …', at: 534.392, time: '10 min',
+    run: '/resource:restore postgres --env prod --to latest · --discard --confirm prod', command: 'Restore prod to a copy, prove the Prod check task is in it, then discard the copy. …', at: 215.458, time: '10 min',
     sections: [
       { heading: 'Claude does', items: [
         'Restores the prod database from its backups to a separate copy next to the running one; prod keeps serving.',
