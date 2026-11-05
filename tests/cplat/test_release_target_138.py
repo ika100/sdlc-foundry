@@ -136,9 +136,9 @@ def test_a_service_not_linked_to_a_gitops_app_releases_mains_head_ac_138_2(comp)
 def test_the_command_waits_for_mains_ci_run_on_the_tagged_commit_ac_138_2():  # AC-138.2
     text = COMMAND.read_text()
     tag = text[text.index("## Phase 5"):text.index("## Phase 6")]
-    assert '--commit "$sha"' in tag and 'gh run watch "$run" --exit-status' in tag and "do not tag" in tag
-    assert tag.index('gh run watch "$run" --exit-status') < tag.index("git tag -a vX.Y.Z")
-    assert 'git tag -a vX.Y.Z "$sha"' in tag or "git tag -a vX.Y.Z <commit>" in tag
+    assert "cplat component release wait --commit <TAG_COMMIT>" in tag and "do not tag" in tag       # spec 143: a cplat wait
+    assert tag.index("cplat component release wait --commit") < tag.index("git tag -a vX.Y.Z")
+    assert "git tag -a vX.Y.Z <TAG_COMMIT>" in tag
 
 
 # ---------------- AC-138.3: refusals ----------------

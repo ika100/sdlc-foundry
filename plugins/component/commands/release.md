@@ -109,18 +109,16 @@ If security passes, print `## Phase 4 complete — security gate passed` and con
 
 ## Phase 5 — Tag the release commit
 
-No release PR merges before the tag: the tagged commit is `TAG_COMMIT`, the one the gates just checked. Wait for `main`'s `ci` run on that commit first: the tag never rebuilds, its job gives the `sha-<commit>` image that run published the version tags, so a tag pushed before the image exists fails (journey 2026-11-05). For the commit staging runs the run has normally long finished. Start the watch only when the run exists:
+No release PR merges before the tag: the tagged commit is `TAG_COMMIT`, the one the gates just checked. Wait for `main`'s `ci` run on that commit first: the tag never rebuilds, its job gives the `sha-<commit>` image that run published the version tags, so a tag pushed before the image exists fails (journey 2026-11-05). For the commit staging runs the run has normally long finished. The wait is a cplat command (spec 143):
 
 ```bash
-sha=<TAG_COMMIT>
-for _ in $(seq 1 12); do run=$(gh run list --workflow ci --branch main --commit "$sha" --json databaseId --jq '.[0].databaseId'); [ -n "$run" ] && break; sleep 10; done
-[ -n "$run" ] && gh run watch "$run" --exit-status
+cplat component release wait --commit <TAG_COMMIT>
 ```
 
-No run after 2 minutes (a commit that changes only Markdown builds no image), or a red run: stop and report it; do not tag. Otherwise create the annotated tag on that commit and push it:
+`GREEN:` (exit 0) → tag. `RED:` (a red run, with its failed log) or `NO RUN:` (no run after 2 minutes: a commit that changes only Markdown builds no image), both exit 1: stop and report it; do not tag. `TIMEOUT:` (exit 2, the run is still going): run the same wait again, at most twice; after the third timeout stop, report it as an environment problem (cause `environment`) and do not tag. Never write a polling loop on `gh` or `cplat`. Then create the annotated tag on that commit and push it:
 
 ```bash
-git tag -a vX.Y.Z "$sha" -m "Release vX.Y.Z"
+git tag -a vX.Y.Z <TAG_COMMIT> -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 git switch main && git merge --ff-only origin/main
 ```
@@ -134,7 +132,7 @@ Print `## Phase 5 complete — tag vX.Y.Z pushed on <TAG_COMMIT> (<the commit st
 After the tag, use the **release agent** with instruction:
 > Write the follow-up of the tagged release. VERSION=<VERSION>, PREVIOUS=<PREVIOUS>, TAG_COMMIT=<TAG_COMMIT>, VERSION_FILE=<VERSION_FILE>, NEXT_DEV=<NEXT_DEV>. Start from `origin/main`, add the CHANGELOG.md entry for VERSION (the commits `PREVIOUS..VERSION`), set NEXT_DEV in VERSION_FILE (nothing when it is `none`), commit on `release/VERSION`, push it and open the PR. Never tag.
 
-Extract the PR URL from the agent's output, then merge it after green CI:
+Extract the PR URL from the agent's output, then merge it after green CI (the wait is `cplat pr wait`, never a polling loop):
 
 ```bash
 cplat pr wait <PR URL> --merge

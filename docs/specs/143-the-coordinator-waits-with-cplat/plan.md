@@ -38,7 +38,7 @@ tasks:
     covers: [AC-143.11]
     parallel_safe: false
     depends_on: [t2, t3, t4]
-    done: false
+    done: true
   - id: t6
     title: "Plugin versions (component, system, cluster, instance, resource) in plugin.json and marketplace.json; changelog fragment"
     files: [.claude-plugin/marketplace.json, plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, plugins/cluster/.claude-plugin/plugin.json, plugins/instance/.claude-plugin/plugin.json, plugins/resource/.claude-plugin/plugin.json, docs/changelog.d/143-the-coordinator-waits-with-cplat.added.md]
@@ -50,7 +50,7 @@ tasks:
 
 # Plan — 143 The coordinator waits with cplat, not hand-written loops
 
-Contract: [design.md](design.md). The acceptance tests (`tests/cplat/test_143_envwait.py`, `tests/cplat/test_143_shipwait.py`,
+Contract: [design.md](design.md). The acceptance tests (`tests/cplat/test_143_envwait.py`, `tests/cplat/test_143_shipwait.py`, `tests/cplat/test_143_release_wait.py`,
 `tests/cplat/test_143_waits_docs.py`) are written before t1 starts and fail first; no task edits them.
 
 | Level | Task | Covers | Parallel | Files |
