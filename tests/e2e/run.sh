@@ -2100,7 +2100,7 @@ from pathlib import Path
 app_dir = gitops.find_app(Path("."))
 y, data = gitops.load(app_dir)
 components = gitops.components_of(data)
-components["e2e-web"]["uses"] = [*(components["e2e-web"].get("uses") or []), "backups"]      # the target must be used by a component in dev
+# spec 139: no component uses backups; the bucket exists in dev as the backup target, its credentials only for the ObjectStore and Velero
 pg = data["resources"]["postgres"]
 instances = pg.get("instances") or {}
 instances["dev"] = {**(instances.get("dev") or {}), "backup": {"to": "backups"}}              # instances.dev.backup
@@ -2152,7 +2152,12 @@ for _ in $(seq 1 60); do [ "$(vn get backupstoragelocation e2e-dev -o jsonpath='
 [ "$(vn get backupstoragelocation e2e-dev -o jsonpath='{.status.phase}' 2>/dev/null)" = Available ] || {
   vn get backupstoragelocation e2e-dev -o yaml | tail -25; bfail "the BackupStorageLocation e2e-dev is not Available"; }
 kc rollout status statefulset/e2e-files --timeout=240s || { kc describe pod -l app=e2e-files | tail -30; bfail "e2e-files did not become ready"; }
-kc rollout status deploy/e2e-web --timeout=240s || { kc describe pod -l app=e2e-web | tail -30; bfail "e2e-web did not become ready with the bucket backups"; }
+kc rollout status deploy/e2e-web --timeout=240s || { kc describe pod -l app=e2e-web | tail -30; bfail "e2e-web did not become ready"; }
+# AC-139.2: e2e-web does not use backups, so it gets none of that bucket's S3_*/AWS_* variables (no reference to its Secret e2e-backups-app)
+if kc get deploy/e2e-web -o jsonpath='{.spec.template.spec.containers[*].env[*].valueFrom.secretKeyRef.name} {.spec.template.spec.containers[*].envFrom[*].secretRef.name}' | tr ' ' '\n' | grep -qx e2e-backups-app; then
+  bfail "e2e-web reads the Secret e2e-backups-app: an app that does not use the backup bucket must not get its S3_*/AWS_* variables"
+fi
+echo "ok   e2e-web gets none of the S3_*/AWS_* variables of the backup bucket backups, which no component uses"
 status_state() { # backup.state of the postgres/dev row of `system status --json`
   $cplat system status --json "${rargs[@]}" 2>/dev/null | python3 -c '
 import json, sys

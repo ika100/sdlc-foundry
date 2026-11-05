@@ -121,8 +121,9 @@ TERMS: dict[str, tuple[str, str]] = {
     ),
     "release_candidate": (
         "Cut release",
-        "A verified version newer than the last release. Cut release runs /component:release: version, changelog, release "
-        "pull request and tag. The tag is what prod can be promoted to.",
+        "A verified version newer than the last release. Cut release runs /component:release: it tags the commit staging "
+        "runs, then writes the changelog and the next development version in a follow-up pull request. The tag is what "
+        "prod can be promoted to.",
     ),
     "model": (
         "Change the model",
