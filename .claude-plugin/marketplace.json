@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "4.0.4",
+      "version": "4.1.0",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": [
@@ -100,7 +100,7 @@
     {
       "name": "system",
       "source": "./plugins/system",
-      "version": "1.6.2",
+      "version": "1.7.0",
       "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
       "category": "agents",
       "tags": [
@@ -114,7 +114,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.6.1",
+      "version": "1.7.0",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [

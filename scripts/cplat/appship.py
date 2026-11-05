@@ -32,6 +32,7 @@ import appship_state as state
 import budget
 import core
 import pr_rules
+import runs
 import ship
 import spec as specmod
 from core import PlatformError, run
@@ -204,6 +205,7 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     steps = state.plan_meta(repo, sid).get("human_steps") or []
     state.set_phase(repo, "done")
     st = state.require_state(repo)
+    runs.set_section(st.get("run_id"), "decisions", appship_report.decision_count(st))   # spec 141 (AC-141.3)
     return True, appship_report.final_report(st, str(sp.meta.get("title") or sid), steps)
 
 

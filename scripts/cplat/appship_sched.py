@@ -184,7 +184,8 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
         raise PlatformError(f"no ship run in {clone}", hint=f"start it: cplat component ship start <spec> --system-dir {gitops_dir}")
     slug = state.slug(gitops_dir)
     want = f"{slug}:{st['spec']}"
-    parent = specmod.find(clone, sh["spec"]).meta.get("parent")
+    repo_spec = specmod.find(clone, sh["spec"])
+    parent = repo_spec.meta.get("parent")
     if parent != want:
         raise PlatformError(f"the spec {sh['spec']} of {repo_id} has parent '{parent}', not '{want}'",
                             hint=f"create the repo spec with `cplat spec new --from-plan docs/plan/{st['spec']}.md {repo_id}` (it sets parent)")
@@ -219,7 +220,8 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
     def change(s: dict) -> None:
         e = s["repos"].setdefault(repo_id, {})
         e.update(gate=gate, spec=sh["spec"], pr=sh.get("pr"), fix_rounds=sh.get("fix_rounds", 0), deployed=sh.get("deployed"),
-                 argo=argo, smoke_row=smoke.get("row"), human_steps=list(steps), run_id=sh.get("run_id"))
+                 argo=argo, smoke_row=smoke.get("row"), human_steps=list(steps), run_id=sh.get("run_id"),
+                 decisions=specmod.decisions(repo_spec.body))          # spec 141: answers taken for the user
         if outcome[0] == "passed":
             e["state"] = "passed"
         elif sh.get("escalated"):

@@ -603,9 +603,26 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
             cmd += ["--label", pr_rules.NO_SPEC]
         out = gh(cmd, cwd=repo)
         st["pr"] = out.strip().splitlines()[-1]
+    if not st.get("decisions_posted"):
+        _post_decisions(repo, st)
     st["phase"] = "land"
     save_state(repo, st)
     return st
+
+
+def _post_decisions(repo: Path, st: dict) -> None:
+    """Spec 141 (AC-141.5): one PR comment listing the answers the system ship took for the user in this repo's spec."""
+    try:
+        taken = specmod.decisions(specmod.find(repo, st["spec"]).body)
+    except PlatformError:
+        return
+    if not taken:
+        return
+    body = ("Decisions taken during the ship (the suggested answers of this repo spec's open questions, taken because the "
+            "system spec and its plan were approved; change one with `/component:spec --amend`):\n\n"
+            + "\n".join(f"- {d}" for d in taken))
+    gh(["pr", "comment", st["pr"], "--body", body], cwd=repo, check=False)
+    st["decisions_posted"] = True
 
 
 def check_title(title: str) -> None:
