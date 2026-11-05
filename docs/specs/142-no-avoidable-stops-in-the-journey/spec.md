@@ -1,7 +1,7 @@
 ---
 spec_id: 142-no-avoidable-stops-in-the-journey
 title: No avoidable stops in the journey
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -40,7 +40,9 @@ platform could have acted itself:
 - **AC-142.3** Given `bootstrap` run on a clone whose `main` is behind `origin/main`, when it starts, then it fast-forwards
   `main` first (or stops naming the commit it is behind), never reporting success with nothing applied.
 - **AC-142.4** Given staging set to `promote: after-dev-smoke`, when any build of a component's `main` passes its dev smoke
-  (a ship, a fix or a release commit), then staging is promoted to that build as after a ship, and the promotion is printed.
+  (a ship, a fix or a release commit), then staging is promoted to that build as after a ship, and the promotion is printed;
+  a release commit that changes only the changelog and version file counts when CI built an image for it (spec 138 decides
+  whether such a commit is built).
 - **AC-142.5** Given `/instance:promote` failing after it created its branch or edited a pin, when it stops, then it
   restores the clone: the edit is reverted and the local branch deleted (the remote branch, if pushed, is named in the
   error), so that the next run starts clean.
@@ -52,9 +54,11 @@ platform could have acted itself:
 
 ## Open questions
 
-1. AC-142.4: should staging follow a release commit that changes only `CHANGELOG.md` and the version file? (Recommended:
-   yes, when CI built an image for it; spec 138 decides whether such a commit is built.)
+1. ~~AC-142.4: should staging follow a release commit that changes only `CHANGELOG.md` and the version file? (Recommended:
+      yes, when CI built an image for it; spec 138 decides whether such a commit is built.)~~ Answered: yes, when CI built an image for it (AC-142.4).
 
 ## Changelog
 
 - 2026-11-05 created (found in the journey runs of 2026-11-05)
+- 2026-11-05 open question answered by the user (recommended answer)
+- 2026-11-05 approved
