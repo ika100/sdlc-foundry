@@ -208,6 +208,8 @@ def summary(svc: dict, version: str, staging_tag: str | None, *, days: int = 30)
         repo = str(svc.get("repo"))
         ev.commit, ev.evidence_commit, ev.note = _release_commit(repo, version)
         ev.staging_commit = _staging_commit(repo, staging_tag)
+        if ev.commit and ev.staging_commit == ev.commit:     # staging runs the tagged commit itself: that build is the evidence,
+            ev.evidence_commit, ev.note = ev.commit, None    # even when it only changes the release files (journey 2026-11-05)
         shas = {s for e in (ev.evidence_commit,) if e for s in (f"sha-{e}", f"sha-{e[:7]}")}
         dev, stg, why = _records(repo, shas, days)
         absent = f"no record ({why})" if why else "no record"
