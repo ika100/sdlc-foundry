@@ -45,6 +45,6 @@ def test_the_component_release_tags_only_after_mains_ci_built_the_image():
     """Journey of 2026-11-05: the tags were pushed before main's CI had built the release commit's image, so the tag jobs
     failed and had to be rerun. The release waits for that run (and stops when none starts) before it tags."""
     text = COMPONENT.read_text()
-    phase = text[text.index("## Phase 6"):text.index("## Phase 7")]
+    phase = text[text.index("## Phase 5"):text.index("## Phase 6")]          # spec 138: tagging is Phase 5
     assert phase.index('gh run watch "$run" --exit-status') < phase.index('git tag -a vX.Y.Z')
     assert "do not tag" in phase and '--commit "$sha"' in phase

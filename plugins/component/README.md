@@ -13,6 +13,6 @@ The commands that work on one component (a service, a website or a library) and 
 | `/component:ship <spec-id> [--no-merge]` | Plan, build, PR, merge after green CI, wait for dev, unattended |
 | `/component:fix <description>` | Bug or small change: coder, quality, tester, PR |
 | `/component:check` | Read-only quality and security audit |
-| `/component:release` | Gates, version bump, changelog, release PR, tag |
+| `/component:release` | Gates on the commit staging runs, tag it, then changelog and next development version in a follow-up PR |
 
 `references/` holds the long procedures the build, ship and fix commands read on demand (`${CLAUDE_PLUGIN_ROOT}/references/…`). The agents stay in `svc`, `svc-java`, `svc-go`, `web` and `shared`; the `cplat` launcher comes from `shared`, so keep it enabled.

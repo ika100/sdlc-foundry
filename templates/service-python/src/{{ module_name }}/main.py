@@ -10,8 +10,9 @@ from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 {%- endif %}
 from pydantic import BaseModel
-{%- if needs_observability %}
 
+from . import __version__
+{%- if needs_observability %}
 from .logging_config import configure_logging
 from .metrics import MetricsMiddleware
 from .tracing import configure_tracing, tracing_enabled
@@ -21,7 +22,7 @@ if tracing_enabled():
     configure_tracing()
 {%- endif %}
 
-app = FastAPI(title="{{ project_name }}", version="0.1.0")
+app = FastAPI(title="{{ project_name }}", version=__version__)
 {%- if needs_observability %}
 app.add_middleware(MetricsMiddleware)
 {%- endif %}

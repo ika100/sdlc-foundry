@@ -11,6 +11,8 @@ import (
 
 // TestSmokeHealth is a smoke test (spec 091): `SMOKE_BASE_URL=https://<host> devbox run smoke` runs it
 // against a deployment. It reaches the service only through its URL and is skipped without SMOKE_BASE_URL.
+// It only reads, so it runs in every environment; a smoke test that creates or changes data is named
+// TestSmokeWrites<Name> and then runs only in dev (#474).
 func TestSmokeHealth(t *testing.T) {
 	if os.Getenv("SMOKE_BASE_URL") == "" {
 		t.Skip("SMOKE_BASE_URL is not set")

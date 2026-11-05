@@ -323,7 +323,7 @@ def test_an_environment_retry_gets_only_the_time_left_ac_105_5(svc, fake, seams,
     monkeypatch.setattr(smoke, "monotonic", lambda: clock[0])
     budgets = []
     real = smoke.run_recipe
-    monkeypatch.setattr(smoke, "run_recipe", lambda repo, url, timeout: (budgets.append(timeout), real(repo, url, timeout))[1])
+    monkeypatch.setattr(smoke, "run_recipe", lambda repo, url, timeout, *a: (budgets.append(timeout), real(repo, url, timeout, *a))[1])
     probe(monkeypatch, "Connection refused")
     fake.script([FAIL_ALL])
     smoke.run_smoke(svc, BASE, spec=sp(svc), timeout=100)

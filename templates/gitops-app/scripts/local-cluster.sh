@@ -170,8 +170,8 @@ fi
 if [ "$with_metrics" = auto ]; then
   if [ -f "$metrics_file" ]; then with_metrics=1; else with_metrics=0; fi
 fi
-# With Argo CD the property operators come from operators/apps/<name>.yaml when it exists (spec 121); a cluster-up of an older
-# release left External Secrets or Kyverno as k3s HelmCharts, and those stay.
+# With Argo CD the property operators come from operators/apps/<name>.yaml when it exists (spec 121); External Secrets or
+# Kyverno left as k3s HelmCharts by an older cluster-up are handed over to Argo CD (scripts/operator-handover.sh, #425).
 eso_file=operators/apps/external-secrets.yaml
 kyverno_file=operators/apps/kyverno.yaml
 lgtm_file=operators/apps/lgtm.yaml
@@ -353,14 +353,8 @@ YAML
       exit 1
     fi
 
-    if [ "$eso_argo" = 1 ] && k -n kube-system get helmchart external-secrets >/dev/null 2>&1; then
-      echo "External Secrets was installed by an older cluster-up (HelmChart kube-system/external-secrets); keeping it. Recreate the cluster to let Argo CD manage it"
-      eso_argo=0
-    fi
-    if [ "$kyverno_argo" = 1 ] && k -n kube-system get helmchart kyverno >/dev/null 2>&1; then
-      echo "Kyverno was installed by an older cluster-up (HelmChart kube-system/kyverno); keeping it. Recreate the cluster to let Argo CD manage it"
-      kyverno_argo=0
-    fi
+    # An External Secrets or Kyverno HelmChart of an older cluster-up is handed over to Argo CD before operators/root.yaml is
+    # applied below (scripts/operator-handover.sh, #425), so each operator has one owner.
 
     if [ "$with_eso" = 1 ] && [ "$eso_argo" = 0 ]; then
       echo "Installing External Secrets Operator ($eso_version)"
@@ -723,6 +717,7 @@ YAML
           echo "SeaweedFS (operators/apps/seaweedfs.yaml) is not installed either; recreate the cluster"
         fi
         if [ "$legacy" = 0 ]; then
+          KUBE_CONTEXT="$ctx" bash scripts/operator-handover.sh   # #425: HelmCharts of an older cluster-up first
           echo "Applying the operators (operators/root.yaml)"
           k apply -n argocd -f operators/root.yaml
           if [ "$eso_argo" = 1 ]; then

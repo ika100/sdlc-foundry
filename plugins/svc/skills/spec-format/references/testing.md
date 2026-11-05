@@ -35,6 +35,8 @@ A criterion that ends with `(smoke)` gets a second test, a smoke test, which `de
 
 Rules: reach the service only through the base URL; create your own data with unique names (`smoke-<uuid>`); never change or delete data you did not create, so the test is repeatable against a shared environment; one smoke test per criterion, clearly named.
 
+Writing data (#474): smoke runs in dev, staging and prod (`SMOKE_ENV`); outside dev the platform sets `SMOKE_READ_ONLY=1` and the harness leaves out every smoke test marked as writing, so only dev gets smoke data. Mark a smoke test that creates, changes or deletes data: `@pytest.mark.writes` (python), `@Tag("writes")` (java), the name `TestSmokeWrites<Name>` (go), `@writes` in the title (web). Keep read-only smoke checks too: outside dev a run where no smoke test passed is reported as not run, never as passed.
+
 ## After that
 
 - Coders make these tests pass and never edit, skip or weaken them. Formatting through `devbox run lint-fix` is fine: the build checks every change with `cplat spec test-diff <red commit>` (same parsed code for Python, same text without whitespace for other languages, same criterion ids) and stops on anything else. If a test contradicts the spec or the contract, the coder stops and reports it; the orchestrator decides (and records the change in the spec's Changelog if the spec was wrong).

@@ -1,6 +1,6 @@
 [project]
 name = "{{ project_name }}"
-version = "0.1.0"
+dynamic = ["version"]   # read from the git tag at build time (hatch-vcs, spec 138)
 description = "{{ description }}"
 readme = "README.md"
 requires-python = ">={{ python_version }}"
@@ -21,8 +21,18 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+# A release tag vX.Y.Z is the library's version: installed from the tag it reads X.Y.Z, a build of main a development
+# version after the last tag, a checkout without git history 0.0.0.
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0"
+
+[tool.uv]
+# rebuild the project when a commit or tag changes its version
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/{{ module_name }}"]

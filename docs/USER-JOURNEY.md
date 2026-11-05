@@ -185,7 +185,7 @@ One PR that adds a **staging** instance to both components and pins each to the 
 
 After the first promotion, staging follows dev by itself: when a build passes its smoke tests in dev, `/component:ship` has the gitops-app's `pin-staging` workflow open a PR that merges itself once CI passes (spec 093, ADR-041), then smokes staging. Turn it off with `promote: manual` on the `staging` environment in `system.yaml`, or on one component's `staging` instance.
 
-For **prod** you pin a release: in each service repo run `/component:release` (quality gate → test gate → security gate → version bump → changelog PR → tag `vX.Y.Z` → CI pushes semver images). Then:
+For **prod** you pin a release: in each service repo run `/component:release` (the commit staging runs → quality gate → test gate → security gate → tag `vX.Y.Z` on that commit → CI re-tags its image with the semver tags → follow-up PR with the changelog and the next development version). Then:
 
 ```
 /instance:promote taskboard-api --to prod            # newest release that has a published image
