@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.8.2] - 2026-11-05
+
+### Fixed
+
+**The dev smoke tests run again after a deploy (found in the 2026-11-05 journey).** `component ship deploy` reads the image digest dev runs from the pods, but it looked for a container named after the service, while render names every component's container `app`. So every deploy with `--context` reported `image digest unknown`, skipped the smoke tests and escalated, and nothing was promoted to staging. The lookup now reads the `app` container.
+
 ## [5.8.1] - 2026-11-05
 
 ### Fixed
