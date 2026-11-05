@@ -63,7 +63,7 @@ def test_bootstrap_leads_with_the_plan_not_a_bare_build(shape):
 
 def test_gitops_bootstrap_points_to_the_product_plan():
     steps = newsvc._next_steps({"name": "shop", "shape": "gitops-app", "description": "Shop"})
-    assert any(s.startswith('/system:spec "') for s in steps)
+    assert any(s.startswith('/component:spec "') and '/system:spec "' in s for s in steps)   # spec 140: the route by scope
 
 
 def test_new_app_ends_with_the_product_plan(tmp_path, monkeypatch, capsys):
@@ -72,7 +72,8 @@ def test_new_app_ends_with_the_product_plan(tmp_path, monkeypatch, capsys):
     manifest.write_text(yaml.safe_dump({"system": "shop", "owner": "acme", "components": [{"name": "shop-api", "description": "API", "type": "service", "lang": "python"}]}))
     assert newapp.main([str(manifest), "--no-github", "--org", "acme", "--dir", str(tmp_path / "out")]) == 0
     out = capsys.readouterr().out
-    assert 'and run /system:spec "<first feature of the system>"' in out and "/system:ship <NNN>" in out
+    assert "/system:spec" in out and "/system:ship <NNN>" in out
+    assert '/component:spec "<feature>"' in out and "/component:ship <NNN>" in out     # spec 140: one component, its repo
 
 
 PLUGIN = ROOT / "plugins" / "svc"

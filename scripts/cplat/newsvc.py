@@ -181,7 +181,8 @@ def _next_steps(req: dict) -> list[str]:
     desc = (req.get("description") or "<your first feature>").replace('"', "'")
     if shape == "gitops-app":
         return [f"cd {n} && devbox shell", "devbox run quality", "/component:add <component>  (after the components exist)",
-                '/system:spec "<first feature of the system>"   # spec first: the system spec (answer, approve), then /system:plan <NNN> and /system:ship <NNN>',
+                '/component:spec "<feature>" in the component repo for a feature of one component; /system:spec "<feature>" here for one '
+                'that spans repos or needs a resource (then /system:plan <NNN> and /system:ship <NNN>)   # spec first (spec 140)',
                 "devbox run cluster-up   # local k3d + ArgoCD (needs Docker)"]
     return [f"cd {n} && devbox shell", "devbox run quality && devbox run test",
             f'/component:spec "{desc}"   # spec first: docs/specs/<NNN>-<slug>/spec.md, it asks you its open questions; approve it',

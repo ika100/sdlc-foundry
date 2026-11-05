@@ -47,6 +47,7 @@ Print every output verbatim. After a state change run `devbox run plan-check` an
 
 ## B. New system spec
 
+0. **One repo is enough?** (spec 140) When the description names exactly one component of `system.yaml` and asks for no resource, exposure or environment change, ask once with AskUserQuestion: "This changes only `<component>`: specify and ship it there with `/component:spec` and `/component:ship`?", options "Component route (Recommended)" and "System spec". On the component route, find the component's clone (a sibling directory named after its repo; else `gh repo clone <repo>` next to this repo), run `/component:spec <the description>` (Skill tool) with every Bash call in that clone (`cd <clone> && …`), and finish with its next step `/component:ship <id>` there: no system spec, plan or plan PR. Two or more components, or any resource, exposure or environment change: continue below without asking.
 1. `cplat spec new "<short title>"` (the shape `gitops-app` is recorded), then `git checkout -b docs/spec-<spec_id>`.
 2. **product-manager** (`svc:product-manager`): `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the component list, and "this is a system spec: criteria describe what users of the system observe; each story names the repos that take part (`**Repos:** …`)".
 3. `cplat spec check <spec_id>`; errors go back once.
