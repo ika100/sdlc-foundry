@@ -260,7 +260,10 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     if shape != "platform" and missing_gitops_token(repo):
         raise PlatformError("this repo is linked to a gitops-app, but the secret GITOPS_TOKEN is not set: dev would never "
                             "be pinned (spec 077)", hint=GITOPS_TOKEN_FIX.format(slug=service_slug(repo)))
-    if sp.status == "done":
+    merged = merged_run(repo, sp.id) if sp.status == "done" else None
+    if merged:
+        phase = "deploy"                       # #452: the code is merged; deploy and smoke it again, no new PR
+    elif sp.status == "done":
         phase = "pr"
     elif sp.plan and not specmod.check_plan(sp, *sp.plan):
         phase = "build"
@@ -270,6 +273,9 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         runs.finish(st.get("run_id"), "abandoned")   # take-over: only after every check that can still refuse
     st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "fix_rounds": 0,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "recorded": False}
+    if merged:
+        st.update({k: merged[k] for k in ("pr", "merge_sha", "deployed") if merged.get(k)})
+        say(f"{sp.id} is merged ({merged['pr']}, {str(merged['merge_sha'])[:7]}): resuming at deploy")
     stopgate.claim(st, stopgate.session_of_env())
     if link:
         st["product"] = link
@@ -510,6 +516,28 @@ def _is_platform(repo: Path, st: dict) -> bool:
     return st.get("shape") == "platform" or settings.declared_shape(repo) == "platform"
 
 
+def nothing_to_merge(repo: Path) -> bool:
+    """True when HEAD's tree equals origin/main's: the branch's work is already merged (fetches origin/main first)."""
+    run(["git", "fetch", "-q", "origin", "main"], cwd=repo, check=False)
+    if run(["git", "rev-parse", "--verify", "--quiet", "origin/main"], cwd=repo, check=False).returncode != 0:
+        return False
+    return run(["git", "diff", "--quiet", "origin/main", "HEAD"], cwd=repo, check=False).returncode == 0
+
+
+def merged_run(repo: Path, spec_id: str) -> dict | None:
+    """The newest archived run of `spec_id` that merged its PR, when the branch has nothing new for main: a new start of the
+    done spec then resumes at deploy with that PR and merge commit, never opening a second, empty PR (#452)."""
+    archives = sorted(state_path(repo).parent.glob(f"cplat-ship-{spec_id}-[0-9]*.json"))
+    for f in reversed(archives):
+        try:
+            old = json.loads(f.read_text())
+        except ValueError:
+            continue
+        if old.get("spec") == spec_id and old.get("merge_sha") and old.get("pr"):
+            return old if nothing_to_merge(repo) else None
+    return None
+
+
 def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> dict:
     st = require_state(repo)
     branch = st["branch"]
@@ -537,6 +565,9 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     if missing:
         raise PlatformError(f"gitops task(s) without a PR: {', '.join(missing)}",
                             hint="cplat component ship gitops prepare <task>, change and commit there, then cplat component ship gitops pr <task> ...")
+    if not open_pr_ and nothing_to_merge(repo):
+        raise PlatformError(f"{branch} changes nothing on origin/main: a pull request would merge an empty commit (#452)",
+                            hint=f"the spec's code is already on main; resume at deploy: cplat component ship start {st['spec']}")
     run_ci(repo, {"PR_TITLE": title, "PR_BODY": body, "PR_LABELS": ",".join(labels)})
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
     if open_pr_:
