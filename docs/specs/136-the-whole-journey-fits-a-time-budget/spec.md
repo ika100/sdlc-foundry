@@ -71,6 +71,22 @@ remaining time is in the ships themselves. The cost drivers, ranked by measured 
 | 5 | Coordinator waits written by the agent | about 10 min per journey | hand-written polling loops on `ship status` and Argo, one that never polled |
 | 6 | Cluster creation and the first operator installs | ≈ 8 min | `cluster-up`, CloudNativePG, SeaweedFS, the backup plugin |
 
+Where the wall clock of journey 2 went (08:30–12:57 UTC, 267 min). Each minute is counted once, from the session
+transcript (main thread and 38 subagents, every tool call classified by its command) and from the GitHub Actions runs of
+the three repos:
+
+| Share | Minutes | What |
+|---|---|---|
+| Waiting for a person | 46 (17 %) | 26 min an upgrade and restart of the session, 12 min a platform fix (the blocked pin PR), 8 min answers; near 0 in a normal run |
+| Waiting, no agent working | ≈ 100 (37 %) | CI checks and merges 47, smoke tests 15, Argo sync and cluster 14, promotion and restore commands 13, dev deploy 11 |
+| Agents working | ≈ 121 (45 %) | model work 76, local commands and tests 45 (parallel subagents not summed) |
+
+GitHub's own numbers for the same window: 187 Actions runs, 167 min of run time summed, 16 min in queues; a gitops run
+takes ≈ 1 min, a component run 2.3–2.5 min. CI was running during only 93 of the 267 minutes. The CI waits are not slow
+runs but many rounds one after another (34 PRs, each push → checks → merge, often a pin PR and an Argo sync after it) and
+the polling intervals of the waits. So the two levers are of a similar size: fewer rounds (AC-136.11, AC-136.12,
+AC-136.16) and less agent work per feature (the component route of spec 140 for one repo).
+
 The measured gains of the fixes so far: hosts, observability and the staging promotion in one round (9 min against ≈ 16);
 the web repo created and added to the system in one round (6 min); restore and discard without a hang (10 min against a
 timeout); the prod gate clean on the first try.
@@ -156,3 +172,4 @@ The floor, without dropping any step of the method: agent work for two features 
 - 2026-11-04 amended: the user's budgets folded in (stage budgets with today's values, parts 20 / 30 / 10, journey 60, interim 90, stretch 50, the floor); working time and wall clock reported separately (AC-136.1, AC-136.3, AC-136.6, AC-136.8, AC-136.9); environment settings in 1 PR (AC-136.11).
 - 2026-11-04 amended: all open questions answered as suggested; part targets binding and stage budgets guiding, part 3 at 10 min, external waits counted, plan approval as person-wait, the benchmark's owner, runners, cluster and `--runs` (AC-136.4), 3 runs per minor release candidate and the BASELINES table written without waiting (AC-136.9); new AC-136.16 prepares staging and prod gitops changes in one run.
 - 2026-11-05 amended: the state of the 2026-11-04 time sinks, and a section with the times and cost drivers measured in two full journeys (no change to the criteria)
+- 2026-11-05 amended: where the wall clock of journey 2 went (person, waiting, agent work) and GitHub's CI numbers (no change to the criteria)
