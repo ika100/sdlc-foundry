@@ -8,7 +8,7 @@ Run the smoke tests of the current component repo. **Request:** $ARGUMENTS
 cplat instance verify <ARGS>
 ```
 
-The environment defaults to `dev`. Without `--base-url` the URL comes from the linked system's model for any environment the component has an instance in. Show the output verbatim; the exit code is the result (0 passed). On a failure report the failing check and do not fix it unless the user asks; it is retried once unless `--no-retry` is given. A green run in `dev` whose system sets staging to `after-dev-smoke` also promotes staging to that build, as after a ship (spec 142): relay its `Promotion (staging)` line.
+The environment defaults to `dev`. Without `--base-url` the URL comes from the linked system's model for any environment the component has an instance in. Show the output verbatim; the exit code is the result (0 passed). On a failure report the failing check and do not fix it unless the user asks; it is retried once unless `--no-retry` is given. Outside `dev` the smoke is read-only (#474): tests marked as writing data are left out, and a run in which no read-only test passed is `not run` (exit 3) with the reason `no read-only smoke test ran in <env>`; relay it and suggest adding a read-only smoke check, never rerun it against dev's data. A green run in `dev` whose system sets staging to `after-dev-smoke` also promotes staging to that build, as after a ship (spec 142): relay its `Promotion (staging)` line.
 
 Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.
 

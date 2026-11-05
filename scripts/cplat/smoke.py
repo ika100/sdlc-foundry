@@ -7,6 +7,10 @@ and `smoke: <p> passed, <f> failed, <s> skipped`). This module reads only those 
   cplat instance verify [ENV] [--base-url URL] [--spec SPEC] [--timeout 600] [--no-retry] [--json]
 
 Exit codes: 0 passed or passed on retry, 1 red or timed out, 3 not run. It files no issue and touches no ship state.
+
+#474: the recipe gets `SMOKE_ENV=<env>` and `SMOKE_READ_ONLY` (`1` outside dev, else `0`). With `SMOKE_READ_ONLY=1` the template's
+harness leaves out the smoke tests marked as writing data, so only dev gets smoke data. Outside dev, a run in which no test passed
+(every smoke test writes, or there is none) is `not-run` with a reason that says so: it never counts as a pass.
 """
 from __future__ import annotations
 
@@ -45,6 +49,18 @@ RESULT = re.compile(r"^(PASS|FAIL|SKIP)  (\S.*?)\s*$")
 SUMMARY = re.compile(r"^smoke: (\d+) passed, (\d+) failed, (\d+) skipped\s*$")
 WORDS = {"PASS": "passed", "FAIL": "failed", "SKIP": "skipped"}
 KINDS = {v: k for k, v in WORDS.items()}
+WRITE_ENVS = ("dev",)               # #474: the only environment whose smoke tests may create or change data
+
+
+def read_only(env: str) -> bool:
+    """True outside dev: smoke there runs only the tests that do not write (#474)."""
+    return env not in WRITE_ENVS
+
+
+def no_read_only_test(env: str, skipped: int) -> str:
+    return (f"no read-only smoke test ran in {env}: smoke tests that write data run only in dev"
+            + (f" ({skipped} skipped)" if skipped else "")
+            + "; add a read-only smoke check (the repo's CLAUDE.md, Smoke tests)")
 
 
 def gh(args: list[str], *, cwd: Path | None = None, check: bool = True) -> str:
@@ -92,6 +108,10 @@ class SmokeResult:
     attempts: int = 1
 
     @property
+    def read_only(self) -> bool:
+        return read_only(self.env)
+
+    @property
     def ok(self) -> bool:
         return self.outcome in {"passed", "passed-on-retry"}
 
@@ -110,8 +130,12 @@ class SmokeResult:
 
     def lines(self) -> list[str]:
         if self.outcome == "not-run":
-            return [f"smoke not run: {self.reason}", f"unchecked (smoke) criteria: {', '.join(self.criteria) or 'none'}"]
+            out = [f"smoke not run: {self.reason}"]
+            out += [f"{KINDS[t['result']]}  {t['id']}" for t in self.tests]
+            return [*out, f"unchecked (smoke) criteria: {', '.join(self.criteria) or 'none'}"]
         out = [f"smoke ({self.env}) against {self.base_url}:"]
+        if self.read_only:
+            out.append(f"read-only ({self.env}): smoke tests marked as writing data are not run outside dev")
         out += [f"{KINDS[t['result']]}  {t['id']}" for t in self.tests]
         if self.outcome == "timed-out":
             out.append(self.reason or f"timed out after {LIMIT_S}s")
@@ -133,7 +157,7 @@ class SmokeResult:
                 "failed": self.failed, "skipped": self.skipped, "total": self.passed + self.failed + self.skipped,
                 "duration_s": round(self.duration_s, 1), "retried": self.retried, "flaky": list(self.flaky),
                 "reason": self.reason, "criteria": dict(self.criteria), "failing": list(self.failing), "filed": filed,
-                "digest": self.digest, "class": self.failure_class, "attempts": self.attempts}
+                "digest": self.digest, "class": self.failure_class, "attempts": self.attempts, "read_only": self.read_only}
 
 
 # ---------------- the recipe ----------------
@@ -163,10 +187,12 @@ def parse(output: str, exit_code: int | None) -> tuple[list[tuple[str, str]], in
     return tests, p, f, s
 
 
-def run_recipe(repo: Path, base_url: str, timeout: float) -> Attempt:
-    """`devbox run smoke` against `base_url` in its own process group; at `timeout` the whole group is killed."""
+def run_recipe(repo: Path, base_url: str, timeout: float, env_name: str = "dev") -> Attempt:
+    """`devbox run smoke` against `base_url` in its own process group; at `timeout` the whole group is killed. The recipe
+    learns the environment (`SMOKE_ENV`) and whether it may write (`SMOKE_READ_ONLY`, #474)."""
     t0 = monotonic()
-    env = {**os.environ, "SMOKE_BASE_URL": base_url}
+    env = {**os.environ, "SMOKE_BASE_URL": base_url, "SMOKE_ENV": env_name,
+           "SMOKE_READ_ONLY": "1" if read_only(env_name) else "0"}
     try:
         proc = subprocess.Popen(["devbox", "run", "smoke"], cwd=repo, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, errors="replace", start_new_session=True)
@@ -262,6 +288,14 @@ def _criteria(repo: Path, spec: specmod.Spec | None, tests: list[tuple[str, str]
 
 def _result(repo: Path, spec: specmod.Spec | None, env: str, url: str, a: Attempt, outcome: str, **kw) -> SmokeResult:
     failing = [TIMED_OUT] if outcome == "timed-out" else _failing(a)
+    if outcome.startswith("passed") and read_only(env) and not a.passed:
+        # #474: outside dev the writing tests are left out; a run that checked nothing is not a pass
+        kw.pop("flaky", None)
+        res = SmokeResult(env=env, outcome="not-run", base_url=url, passed=0, failed=0, skipped=a.skipped,
+                          tests=[{"id": i, "result": WORDS[k]} for k, i in a.tests], reason=no_read_only_test(env, a.skipped),
+                          **kw)
+        res.criteria = {ac: "unchecked" for ac in (spec.smoke_acs() if spec else [])}
+        return res
     return SmokeResult(
         env=env, outcome=outcome, base_url=url, passed=a.passed, failed=a.failed, skipped=a.skipped,
         tests=[{"id": i, "result": WORDS[k]} for k, i in a.tests], failing=[] if outcome.startswith("passed") else failing,
@@ -278,7 +312,7 @@ def run_smoke(repo: Path, base_url: str, *, env: str = "dev", spec: specmod.Spec
     if probe and (err := reachable(base_url + probe)):
         return not_run(env, f"dev URL {base_url} is not reachable: {err}" if env == "dev" else f"{env} URL {base_url} is not reachable: {err}", acs)
     t0 = monotonic()
-    first = run_recipe(repo, base_url, timeout)
+    first = run_recipe(repo, base_url, timeout, env)
     if first.exit_code is None:
         return _result(repo, spec, env, base_url, first, "timed-out", duration_s=monotonic() - t0, reason=f"timed out after {int(timeout)}s")
     if first.exit_code == 0 and not first.failed:
@@ -291,7 +325,7 @@ def run_smoke(repo: Path, base_url: str, *, env: str = "dev", spec: specmod.Spec
         if attempts >= 2 and monotonic() - t0 + retry_delay > timeout:
             break                                  # no attempt starts past the limit (AC-091.8)
         sleep(retry_delay)
-        last = run_recipe(repo, base_url, max(timeout - (monotonic() - t0), 1))   # only the time left of the limit
+        last = run_recipe(repo, base_url, max(timeout - (monotonic() - t0), 1), env)   # only the time left of the limit
         attempts += 1
         took = monotonic() - t0
         if last.exit_code is None:
@@ -482,7 +516,9 @@ def main(argv: list[str]) -> int:
     else:
         res = not_run(ns.env, why or "no URL", acs)
     follow: list[str] = []
-    if res.outcome != "not-run" and not ns.base_url:   # a URL the user named may be any build: not evidence for the pin
+    # a URL the user named may be any build: not evidence for the pin. A run that reached the recipe is recorded, also when it
+    # found no read-only test outside dev (#474), so the prod evidence says why staging checked nothing.
+    if (res.outcome != "not-run" or res.base_url) and not ns.base_url:
         import ship
         apps = ship.gitops_apps(repo)
         try:

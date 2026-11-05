@@ -101,6 +101,15 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 - **Tests:** pytest, in `tests/`, fixtures in `conftest.py`
 - **Docs:** feature specs in `docs/specs/` (index in `docs/backlog.md`), ADRs in `docs/adr/`
 
+## Smoke tests
+
+`devbox run smoke` runs the smoke tests against a deployed instance (`SMOKE_BASE_URL`); the platform runs it after every deploy to dev and staging and on `/instance:verify <env>`. It also sets `SMOKE_ENV` (`dev`, `staging`, `prod`) and, outside dev, `SMOKE_READ_ONLY=1`: then tests marked `@pytest.mark.writes` are skipped, so staging and prod never get smoke data.
+
+- A smoke test is `@pytest.mark.smoke` and the `smoke_base_url` fixture (`tests/test_smoke_health.py`).
+- A smoke test reaches the service only through the base URL, creates its own uniquely named data (`smoke-<uuid>`) and never changes or deletes data it did not create.
+- Mark every smoke test that creates, changes or deletes data as writing: `@pytest.mark.smoke` plus `@pytest.mark.writes`. It runs only in dev.
+- Keep at least one read-only smoke check (reads, health, lists, a page that loads) for every behaviour you want checked in staging and prod. Outside dev, a run in which no smoke test passed is reported as **not run** (no read-only smoke test), never as passed.
+
 ## Docker image pipeline
 
 Whenever a `Dockerfile` exists, the CI workflow includes a `docker (build + push)` job that:

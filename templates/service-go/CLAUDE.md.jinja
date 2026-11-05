@@ -91,6 +91,15 @@ internal/server/                 chi router, handlers, middleware{% if needs_obs
 - **Version:** never hardcode; it comes from the git tag via `-ldflags "-X main.Version=…"` (ADR-012).
 - **Docs:** feature specs in `docs/specs/` (index in `docs/backlog.md`), ADRs in `docs/adr/`.
 
+## Smoke tests
+
+`devbox run smoke` runs the smoke tests against a deployed instance (`SMOKE_BASE_URL`); the platform runs it after every deploy to dev and staging and on `/instance:verify <env>`. It also sets `SMOKE_ENV` (`dev`, `staging`, `prod`) and, outside dev, `SMOKE_READ_ONLY=1`: then tests named `TestSmokeWrites<Name>` are not run, so staging and prod never get smoke data.
+
+- A smoke test is a top-level `func TestSmoke<Name>(t *testing.T)` that skips without `SMOKE_BASE_URL` (`internal/server/smoke_test.go`).
+- A smoke test reaches the service only through the base URL, creates its own uniquely named data (`smoke-<uuid>`) and never changes or deletes data it did not create.
+- Mark every smoke test that creates, changes or deletes data as writing: name it `TestSmokeWrites<Name>` instead of `TestSmoke<Name>`. It runs only in dev.
+- Keep at least one read-only smoke check (reads, health, lists, a page that loads) for every behaviour you want checked in staging and prod. Outside dev, a run in which no smoke test passed is reported as **not run** (no read-only smoke test), never as passed.
+
 ## Docker image pipeline
 
 CI's `docker` job builds the static binary into `gcr.io/distroless/static-debian12:nonroot` (no shell; probes are Kubernetes-side) and pushes on `main` (`latest`, `sha-<short>`) and on `v*.*.*` tags (semver tags; the tag is passed as `VERSION` build arg). Registry: `{{ docker_registry }}/{{ project_name }}`.

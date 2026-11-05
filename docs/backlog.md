@@ -131,9 +131,12 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [130-quality-gates-fail-when-they-checked](specs/130-quality-gates-fail-when-they-checked/spec.md) — Quality gates fail when they checked nothing | P1 | done | 16 | #285 |
 | [131-runs-that-finish-on-their-own](specs/131-runs-that-finish-on-their-own/spec.md) — Runs that finish on their own | P1 | done | 19 | #324 |
 | [134-a-pr-runs-only-the-e2e-it-needs](specs/134-a-pr-runs-only-the-e2e-it-needs/spec.md) — A pull request runs only the e2e it needs, and that e2e runs in parallel parts | P1 | done | 9 | #281 |
+| [136-the-whole-journey-fits-a-time-budget](specs/136-the-whole-journey-fits-a-time-budget/spec.md) — The whole journey fits a time budget | P1 | done | 4 |  |
 | [139-a-backup-bucket-without-a-using-component](specs/139-a-backup-bucket-without-a-using-component/spec.md) — A backup bucket without a using component | P1 | done | 5 | #418 |
 | [143-the-coordinator-waits-with-cplat](specs/143-the-coordinator-waits-with-cplat/spec.md) — The coordinator waits with cplat, not hand-written loops | P1 | done | 11 | #475 |
 | [144-one-gitops-pr-per-environment-for-a](specs/144-one-gitops-pr-per-environment-for-a/spec.md) — One gitops PR per environment for a system ship | P1 | done | 8 |  |
+| [145-smoke-tests-that-write-run-only-in-dev](specs/145-smoke-tests-that-write-run-only-in-dev/spec.md) — Smoke tests that write run only in dev | P1 | done | 7 | #474 |
+| [146-one-owner-per-operator-on-the-local-cluster](specs/146-one-owner-per-operator-on-the-local-cluster/spec.md) — One owner per operator on the local cluster | P1 | done | 5 | #425 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
