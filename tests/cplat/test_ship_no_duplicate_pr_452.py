@@ -3,6 +3,7 @@ phase `pr`, and `ship pr` opened a second PR from a branch identical to main; it
 image and deploy never got a dev pin. A start now resumes at deploy with the merged PR, and `ship pr` refuses an empty PR."""
 import json
 import subprocess
+import time
 
 import core
 import pytest
@@ -61,3 +62,25 @@ def test_ship_pr_refuses_a_pull_request_that_changes_nothing(merged, monkeypatch
     body.write_text("## Summary\n")
     with pytest.raises(core.PlatformError, match="changes nothing on origin/main"):
         ship.open_pr(merged, "feat(alerts): price alerts", body)
+
+
+def test_the_duplicate_runs_empty_merge_is_skipped_for_the_real_one(merged, monkeypatch):
+    """The journey of 2026-11-05: the newest archive was the escalated duplicate (empty squash f560cac); the resume must take
+    the earlier merge that built the image, not revive the duplicate."""
+    monkeypatch.setattr(ship, "missing_gitops_token", lambda _repo: False)
+    _archive_done_run(merged)                              # the real merge: SHA
+    time.sleep(1.1)                                        # archives are named by the second
+    git(merged, "switch", "-q", "main")
+    git(merged, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "duplicate (#4)")
+    empty = git(merged, "rev-parse", "HEAD")
+    git(merged, "push", "-q", "origin", "main")
+    git(merged, "switch", "-q", "feature/007-price-alerts")
+    git(merged, "merge", "-q", "--ff-only", "main")
+    ship.start(merged, "7", True)
+    st = ship.load_state(merged)
+    st.update({"phase": "deploy", "pr": "https://github.com/acme/shop-api/pull/4", "merge_sha": empty})
+    ship.save_state(merged, st)
+    ship.escalate(merged, "no dev pin for the empty merge", cause="platform")
+    ship.finish(merged)
+    st = ship.start(merged, "7", True)
+    assert st["phase"] == "deploy" and st["merge_sha"] == SHA and st["pr"].endswith("/pull/3")

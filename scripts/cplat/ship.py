@@ -233,7 +233,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         import claim
         for note in claim.claim(repo, sp.meta["tracks"], f"feature/{sp.id}", take_over=take_over, what=f"ship {sp.id}"):
             say(note)
-    if st is None and (revived := revive_escalated(repo, sp.id)):
+    if st is None and sp.status != "done" and (revived := revive_escalated(repo, sp.id)):
         st = revived                           # #408: its state was archived by `ship finish`; resume it, PR and merge kept
         say(f"resuming the escalated run of {sp.id} (phase {st['phase']}) from its archived state")
     if st and st["spec"] == sp.id:
@@ -524,6 +524,12 @@ def nothing_to_merge(repo: Path) -> bool:
     return run(["git", "diff", "--quiet", "origin/main", "HEAD"], cwd=repo, check=False).returncode == 0
 
 
+def _empty_commit(repo: Path, sha: str) -> bool:
+    """True when `sha` changes no file against its first parent (unknown → False)."""
+    p = run(["git", "diff", "--quiet", f"{sha}^", sha], cwd=repo, check=False)
+    return p.returncode == 0
+
+
 def merged_run(repo: Path, spec_id: str) -> dict | None:
     """The newest archived run of `spec_id` that merged its PR, when the branch has nothing new for main: a new start of the
     done spec then resumes at deploy with that PR and merge commit, never opening a second, empty PR (#452)."""
@@ -534,6 +540,8 @@ def merged_run(repo: Path, spec_id: str) -> dict | None:
         except ValueError:
             continue
         if old.get("spec") == spec_id and old.get("merge_sha") and old.get("pr"):
+            if _empty_commit(repo, str(old["merge_sha"])):
+                continue                       # an empty squash (the duplicate PR of #452): it built no image
             return old if nothing_to_merge(repo) else None
     return None
 
