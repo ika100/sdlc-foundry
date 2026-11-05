@@ -178,12 +178,30 @@ def test_a_gitops_entry_with_valid_operations_passes(spec_repo):
     (["{scale: shop-api}"], "unknown gitops operation"),
     (["{env: {A: b}, service: shop-x}"], "unknown component 'shop-x'"),
     (["{uses: postgres}"], "needs a component"),
-    (["{addon: redis}"], "unknown resource 'redis'"),
+    (["{addon: redis}"], "new resource 'redis' needs a type"),
+    (["{resource: files, type: blob}"], "unknown type 'blob'"),
+    (["{uses: files, service: shop-api}"], "unknown resource 'files'"),
 ])
 def test_invalid_gitops_operations_are_rejected(spec_repo, ops, msg):
     """AC-045.2"""
     out = check(spec_repo, _with_gitops(ops))
     assert out.returncode == 1 and msg in out.stderr, out.stderr
+
+
+def test_a_new_typed_resource_can_be_declared_and_used_414(spec_repo):
+    """#414: a bucket, cache or broker resource passes plan-check when it carries its type."""
+    ops = ["{resource: files, type: bucket}", "{uses: files, service: shop-api}", "{resource: jobs, type: broker}",
+           "{uses: jobs, service: shop-api}"]
+    out = check(spec_repo, _with_gitops(ops))
+    assert out.returncode == 0, out.stderr
+
+
+def test_a_resource_system_yaml_declares_needs_no_type_414(spec_repo):
+    """#414: `uses` of a resource already in system.yaml passes without declaring it again."""
+    (spec_repo / "applications" / "shop").mkdir(parents=True, exist_ok=True)
+    (spec_repo / "applications" / "shop" / "system.yaml").write_text("resources:\n  backups:\n    type: bucket\n")
+    out = check(spec_repo, _with_gitops(["{uses: backups, service: shop-api}"]))
+    assert out.returncode == 0, out.stderr
 
 
 def test_a_gitops_entry_needs_operations(spec_repo):

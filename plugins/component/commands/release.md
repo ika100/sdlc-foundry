@@ -220,4 +220,4 @@ The release is live. vX.Y.Z is now tagged on main.
 - Do not attempt to auto-fix quality, test, or security failures — report them and stop.
 - Do not force-merge — if the merge fails, escalate to the user.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

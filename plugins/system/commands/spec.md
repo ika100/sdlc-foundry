@@ -47,6 +47,7 @@ Print every output verbatim. After a state change run `devbox run plan-check` an
 
 ## B. New system spec
 
+0. **One repo is enough?** (spec 140) When the description names exactly one component of `system.yaml` and asks for no resource, exposure or environment change, ask once with AskUserQuestion: "This changes only `<component>`: specify and ship it there with `/component:spec` and `/component:ship`?", options "Component route (Recommended)" and "System spec". On the component route, find the component's clone (a sibling directory named after its repo; else `gh repo clone <repo>` next to this repo), run `/component:spec <the description>` (Skill tool) with every Bash call in that clone (`cd <clone> && …`), and finish with its next step `/component:ship <id>` there: no system spec, plan or plan PR. Two or more components, or any resource, exposure or environment change: continue below without asking.
 1. `cplat spec new "<short title>"` (the shape `gitops-app` is recorded), then `git checkout -b docs/spec-<spec_id>`.
 2. **product-manager** (`svc:product-manager`): `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the component list, and "this is a system spec: criteria describe what users of the system observe; each story names the repos that take part (`**Repos:** …`)".
 3. `cplat spec check <spec_id>`; errors go back once.
@@ -69,4 +70,4 @@ Print the spec id, title, status, each criterion on one line, the repos named in
 - Never answer an open question for the user; never approve without their word.
 - Never touch `system.yaml`, overlays or component repos. The only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, only `docs/specs/<id>/`, never forced); anything else needs the user's confirmation.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

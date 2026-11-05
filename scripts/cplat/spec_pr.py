@@ -27,12 +27,23 @@ def git(args: list[str], *, cwd: Path) -> tuple[int, str]:   # tests replace thi
     return p.returncode, p.stdout
 
 
+_last_error = ""   # gh's own output of the last failed call, for the error message (spec 137)
+
+
 def gh(args: list[str], *, cwd: Path) -> tuple[int, str]:   # tests replace this
+    global _last_error
     try:
         p = run(["gh", *args], cwd=cwd, check=False)
-    except PlatformError:
+    except PlatformError as e:
+        _last_error = str(e)
         return 127, ""
+    _last_error = " | ".join((p.stderr or p.stdout or "").strip().splitlines()[-6:]) if p.returncode else ""
     return p.returncode, p.stdout
+
+
+def _gh_failed(what: str, rc: int) -> PlatformError:
+    detail = f": {_last_error}" if _last_error else ""
+    return PlatformError(f"{what} failed (gh exit {rc}){detail}")
 
 
 def marker(spec_id: str) -> str:
@@ -143,7 +154,7 @@ def publish(root: Path, spec: specmod.Spec) -> dict:
         url = out.strip().splitlines()[-1] if out.strip() else ""
         m = re.search(r"/pull/(\d+)", url)
         if rc != 0 or not m:
-            raise PlatformError(f"opening the draft pull request failed (gh exit {rc})")
+            raise _gh_failed("opening the draft pull request", rc)
         row = {"number": int(m.group(1)), "url": url}
     number = int(row["number"])
     reviewer, note = _ask_review(root, number, owner_of(root), login(root))
@@ -173,7 +184,7 @@ def request_changes(root: Path, spec: specmod.Spec, body_file: Path) -> str:
         raise PlatformError(f"{spec.id} has no open draft pull request: run `cplat spec publish {spec.id}`")
     rc, _ = gh(["pr", "review", str(row["number"]), "--request-changes", "--body-file", str(body_file)], cwd=root)
     if rc != 0:
-        raise PlatformError(f"posting the review failed (gh exit {rc})")
+        raise _gh_failed("posting the review", rc)
     return str(row["url"])
 
 

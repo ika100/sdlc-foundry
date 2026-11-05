@@ -42,6 +42,11 @@ def _smoke(rid: str, repo: dict) -> str:
     return "not run: no smoke result recorded"
 
 
+def decision_count(st: dict) -> int:
+    """How many answers the run took for the user across its repo specs (spec 141, for the run record)."""
+    return sum(len(r.get("decisions") or []) for r in (st.get("repos") or {}).values())
+
+
 def final_report(st: dict, title: str, product_steps: list[str] | None = None) -> list[str]:
     out = [f"## Shipped: {st['spec']} — {title}", "",
            "| Repo | Repo spec | PR | CI rounds | dev | Argo | Smoke (dev) |", "|---|---|---|---|---|---|---|"]
@@ -62,6 +67,10 @@ def final_report(st: dict, title: str, product_steps: list[str] | None = None) -
         if repo.get("gate") in ("exposed", "internal"):
             promote.append(f"/instance:promote {rid} --to staging")
     steps += [s for s in product_steps or [] if s not in steps]
+    taken = [(rid, repo.get("spec"), d) for rid, repo in ordered(st) for d in repo.get("decisions") or []]
+    if taken:                                  # spec 141 (AC-141.3): what the run decided for the user, to correct later
+        out += ["", "Decisions taken for you (suggested answers of the repo specs; change one with `/component:spec --amend`):",
+                *(f"- {rid} ({sid}): {d}" for rid, sid, d in taken)]
     if steps:
         out += ["", "Human steps (the run cannot do these):", *(f"- [ ] {s}" for s in steps)]
     out += ["", "Next (staging is not promoted by this run):", *(promote or ["(no deployable service)"]),

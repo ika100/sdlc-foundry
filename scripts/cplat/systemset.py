@@ -65,6 +65,20 @@ def check_host(env: str, value: str) -> None:
         raise PlatformError(f"{key}: unknown placeholder {', '.join('{' + b + '}' for b in bad)}", hint="allowed: " + ", ".join("{" + n + "}" for n in PLACEHOLDERS))
 
 
+def add_key(conf, key: str, value) -> None:
+    """Set `key` in an environment's mapping. A new key goes inside the block, before the comment lines that follow the block's
+    last key (ruamel keeps those on that key, so a plain append landed below them, under the next section's comment; #429)."""
+    if key in conf or not conf:
+        conf[key] = value
+        return
+    last = list(conf)[-1]
+    tail = conf.ca.items.get(last) if hasattr(conf, "ca") else None
+    conf[key] = value
+    if tail and len(tail) > 2 and tail[2] is not None:
+        conf.ca.items[key] = [None, None, tail[2], None]
+        tail[2] = None
+
+
 def snapshot(repo: Path) -> dict[Path, bytes]:
     return {p: p.read_bytes() for t in TREES for p in sorted((repo / t).rglob("*")) if p.is_file()}
 
@@ -122,7 +136,7 @@ def main(argv: list[str]) -> int:
         if (k, v) == ("operators", "install"):
             conf.pop("operators", None)
             continue
-        conf[k] = DoubleQuotedScalarString(v) if k == "policy" and v == "off" else v    # a bare off is false in YAML 1.1
+        add_key(conf, k, DoubleQuotedScalarString(v) if k == "policy" and v == "off" else v)    # a bare off is false in YAML 1.1
     gitops.save(app_dir, y, data)
     try:
         gitops.render(repo)

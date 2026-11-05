@@ -334,3 +334,14 @@ def test_promoting_to_staging_shows_no_evidence_ac_093_11(gitops_repo, gh, ev, c
     composed(gitops_repo, "todo-api")
     promote.main(["todo-api", "--to", "staging", "--dry-run", "--repo-dir", str(gitops_repo)])
     assert "evidence for" not in capsys.readouterr().out
+
+
+def test_a_release_merge_that_staging_runs_itself_is_its_own_evidence(ev):
+    """The journey of 2026-11-05: the release PR of taskboard-web changed only CHANGELOG.md and package.json, but its merge
+    commit was built and staging ran it (smoke 3/3); the evidence used the parent and warned "staging runs cbc36a0, not
+    a550472" although the digests matched."""
+    release_commit(ev, ["CHANGELOG.md", "package.json"])
+    ev.records["runs/2026/10/24/r1.json"] = dev_rec("r1", f"sha-{RELEASE}", staging=stg("passed", f"sha-{RELEASE}"))
+    s = summary(staging_tag=f"sha-{RELEASE}")
+    assert s.evidence_commit == RELEASE and s.warning is None, s.lines()
+    assert not any(ln.startswith("- evidence commit:") for ln in s.lines())

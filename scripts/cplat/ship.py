@@ -233,6 +233,9 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         import claim
         for note in claim.claim(repo, sp.meta["tracks"], f"feature/{sp.id}", take_over=take_over, what=f"ship {sp.id}"):
             say(note)
+    if st is None and sp.status != "done" and (revived := revive_escalated(repo, sp.id)):
+        st = revived                           # #408: its state was archived by `ship finish`; resume it, PR and merge kept
+        say(f"resuming the escalated run of {sp.id} (phase {st['phase']}) from its archived state")
     if st and st["spec"] == sp.id:
         if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
             old = st.get("run_id")
@@ -257,7 +260,10 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     if shape != "platform" and missing_gitops_token(repo):
         raise PlatformError("this repo is linked to a gitops-app, but the secret GITOPS_TOKEN is not set: dev would never "
                             "be pinned (spec 077)", hint=GITOPS_TOKEN_FIX.format(slug=service_slug(repo)))
-    if sp.status == "done":
+    merged = merged_run(repo, sp.id) if sp.status == "done" else None
+    if merged:
+        phase = "deploy"                       # #452: the code is merged; deploy and smoke it again, no new PR
+    elif sp.status == "done":
         phase = "pr"
     elif sp.plan and not specmod.check_plan(sp, *sp.plan):
         phase = "build"
@@ -267,6 +273,9 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         runs.finish(st.get("run_id"), "abandoned")   # take-over: only after every check that can still refuse
     st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "fix_rounds": 0,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "recorded": False}
+    if merged:
+        st.update({k: merged[k] for k in ("pr", "merge_sha", "deployed") if merged.get(k)})
+        say(f"{sp.id} is merged ({merged['pr']}, {str(merged['merge_sha'])[:7]}): resuming at deploy")
     stopgate.claim(st, stopgate.session_of_env())
     if link:
         st["product"] = link
@@ -279,11 +288,35 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     return st
 
 
+def landed_on_main(repo: Path, branch: str) -> bool:
+    """True when the local `branch` has commits main does not, but every file they change already reads the same on
+    origin/main, and origin has no such branch any more: `cplat spec land` squash-merged its spec PR and deleted it. Building
+    on those commits makes the feature PR conflict with main's squash commit (#410)."""
+    def git(*args: str):
+        return run(["git", *args], cwd=repo, check=False)
+    if git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").returncode != 0:
+        return False
+    git("fetch", "-q", "--prune", "origin", "main")
+    if git("ls-remote", "--exit-code", "--heads", "origin", branch).returncode == 0:
+        return False                           # a pushed branch with its own history: leave it alone
+    if git("rev-list", "--count", f"origin/main..{branch}").stdout.strip() in ("", "0"):
+        return False
+    base = git("merge-base", "origin/main", branch).stdout.strip()
+    files = [f for f in git("diff", "--name-only", base, branch).stdout.splitlines() if f] if base else []
+    if not files or git("status", "--porcelain").stdout.strip():
+        return False
+    return git("diff", "--quiet", "origin/main", branch, "--", *files).returncode == 0
+
+
 def on_branch(repo: Path, branch: str) -> str:
     """Switch to the run's feature branch before the merge: the existing local one, else the remote one, else a new one
     from the current HEAD. Code, so a coordinator never improvises it (a refused `git checkout -B` stopped a headless ship)."""
     def git(*args: str):
         return run(["git", *args], cwd=repo, check=False)
+    if landed_on_main(repo, branch):           # #410: the spec PR was squash-merged; build on main, not on its old commits
+        p = git("switch", "-C", branch, "origin/main")
+        if p.returncode == 0:
+            return f"branch: {branch} restarted from origin/main (its spec commits are already on main)"
     if git("branch", "--show-current").stdout.strip() == branch:
         return f"branch: {branch}"
     if git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").returncode == 0:
@@ -303,16 +336,29 @@ GITOPS_TOKEN_FIX = ("create a fine-grained token with Contents read and write on
                     "gh secret set GITOPS_TOKEN -R {slug}")
 
 
-def missing_gitops_token(repo: Path) -> bool:
-    """True only when the repo is linked and `gh secret list` worked and has no GITOPS_TOKEN (unknown → False)."""
-    if not gitops_apps(repo):
-        return False
+def secret_names(repo: Path) -> set[str] | None:
+    """The Actions secrets a workflow of the repo gets: its own plus the organization secrets visible to it (a secret set
+    once for the whole organization counts too). None when the repo's own list cannot be read."""
     out = gh(["secret", "list", "--json", "name"], cwd=repo, check=False)
     try:
         names = {x["name"] for x in json.loads(out)}
     except (ValueError, TypeError, KeyError):
+        return None
+    try:
+        org = gh(["api", f"repos/{service_slug(repo)}/actions/organization-secrets", "--jq", "[.secrets[].name]"], cwd=repo, check=False)
+        names |= {str(x) for x in json.loads(org or "[]")}
+    except Exception:  # noqa: BLE001  (a personal repo, or no access to the list: its own secrets only)
+        pass
+    return names
+
+
+def missing_gitops_token(repo: Path) -> bool:
+    """True only when the repo is linked, its secrets could be read, and neither the repo nor its organization has a
+    GITOPS_TOKEN for it (unknown → False)."""
+    if not gitops_apps(repo):
         return False
-    return "GITOPS_TOKEN" not in names
+    names = secret_names(repo)
+    return names is not None and "GITOPS_TOKEN" not in names
 
 
 def set_phase(repo: Path, phase: str) -> dict:
@@ -397,6 +443,30 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
     return st
 
 
+def revive_escalated(repo: Path, spec_id: str) -> dict | None:
+    """The newest archived state of `spec_id` when that run ended escalated (not done): `ship finish` archives an escalated
+    run too, and a new start without it would begin again at `pr`, without the PR or merge commit it already has (#408).
+    Moves the archive (and its units file) back in place."""
+    f = state_path(repo)
+    archives = sorted(f.parent.glob(f"cplat-ship-{spec_id}-[0-9]*.json"))
+    if not archives:
+        return None
+    newest = archives[-1]
+    try:
+        st = json.loads(newest.read_text())
+    except ValueError:
+        return None
+    if st.get("spec") != spec_id or not st.get("escalated") or st.get("phase") == "done":
+        return None
+    stamp = newest.stem.rsplit("-", 1)[-1]
+    newest.rename(f)
+    uf = units._path(repo)
+    old_units = uf.with_name(f"cplat-units-{spec_id}-{stamp}.json")
+    if old_units.is_file() and not uf.is_file():
+        old_units.rename(uf)
+    return st
+
+
 def finish(repo: Path) -> Path:
     f = state_path(repo)
     st = require_state(repo)
@@ -446,6 +516,46 @@ def _is_platform(repo: Path, st: dict) -> bool:
     return st.get("shape") == "platform" or settings.declared_shape(repo) == "platform"
 
 
+def nothing_to_merge(repo: Path) -> bool:
+    """True when HEAD's tree equals origin/main's: the branch's work is already merged (fetches origin/main first)."""
+    run(["git", "fetch", "-q", "origin", "main"], cwd=repo, check=False)
+    if run(["git", "rev-parse", "--verify", "--quiet", "origin/main"], cwd=repo, check=False).returncode != 0:
+        return False
+    return run(["git", "diff", "--quiet", "origin/main", "HEAD"], cwd=repo, check=False).returncode == 0
+
+
+def _empty_commit(repo: Path, sha: str) -> bool:
+    """True when `sha` changes no file against its first parent (unknown → False)."""
+    p = run(["git", "diff", "--quiet", f"{sha}^", sha], cwd=repo, check=False)
+    return p.returncode == 0
+
+
+def merged_run(repo: Path, spec_id: str) -> dict | None:
+    """The newest archived run of `spec_id` that merged its PR, when the branch has nothing new for main: a new start of the
+    done spec then resumes at deploy with that PR and merge commit, never opening a second, empty PR (#452)."""
+    archives = sorted(state_path(repo).parent.glob(f"cplat-ship-{spec_id}-[0-9]*.json"))
+    for f in reversed(archives):
+        try:
+            old = json.loads(f.read_text())
+        except ValueError:
+            continue
+        if old.get("spec") == spec_id and old.get("merge_sha") and old.get("pr"):
+            if _empty_commit(repo, str(old["merge_sha"])):
+                continue                       # an empty squash (the duplicate PR of #452): it built no image
+            return old if nothing_to_merge(repo) else None
+    return None
+
+
+def _ready_if_draft(repo: Path, pr: str) -> None:
+    """A green PR the ship is about to merge cannot stay a draft: GitHub refuses to merge drafts."""
+    try:
+        if json.loads(gh(["pr", "view", pr, "--json", "isDraft"], cwd=repo, check=False) or "{}").get("isDraft"):
+            gh(["pr", "ready", pr], cwd=repo)
+            say(f"marked {pr} ready for review before the merge")
+    except (ValueError, PlatformError, AssertionError):
+        pass
+
+
 def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> dict:
     st = require_state(repo)
     branch = st["branch"]
@@ -455,7 +565,7 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
     check_title(title)
-    existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url,title,labels"], cwd=repo) or "[]")
+    existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url,title,labels,isDraft"], cwd=repo) or "[]")
     open_pr_ = existing[0] if existing else None
     labels = [lb["name"] for lb in (open_pr_ or {}).get("labels", [])]
     body = body_file.read_text()
@@ -473,10 +583,16 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     if missing:
         raise PlatformError(f"gitops task(s) without a PR: {', '.join(missing)}",
                             hint="cplat component ship gitops prepare <task>, change and commit there, then cplat component ship gitops pr <task> ...")
+    if not open_pr_ and nothing_to_merge(repo):
+        raise PlatformError(f"{branch} changes nothing on origin/main: a pull request would merge an empty commit (#452)",
+                            hint=f"the spec's code is already on main; resume at deploy: cplat component ship start {st['spec']}")
     run_ci(repo, {"PR_TITLE": title, "PR_BODY": body, "PR_LABELS": ",".join(labels)})
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
     if open_pr_:
         st["pr"] = open_pr_["url"]
+        if open_pr_.get("isDraft"):            # the spec's draft PR on the same branch becomes the code PR: it must be ready
+            gh(["pr", "ready", st["pr"]], cwd=repo)
+            say(f"marked {st['pr']} ready for review (it was the spec's draft PR)")
         if open_pr_.get("title") != title:
             gh(["pr", "edit", st["pr"], "--title", title], cwd=repo)
         if no_spec and pr_rules.NO_SPEC not in [lb["name"] for lb in open_pr_.get("labels", [])]:
@@ -487,9 +603,26 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
             cmd += ["--label", pr_rules.NO_SPEC]
         out = gh(cmd, cwd=repo)
         st["pr"] = out.strip().splitlines()[-1]
+    if not st.get("decisions_posted"):
+        _post_decisions(repo, st)
     st["phase"] = "land"
     save_state(repo, st)
     return st
+
+
+def _post_decisions(repo: Path, st: dict) -> None:
+    """Spec 141 (AC-141.5): one PR comment listing the answers the system ship took for the user in this repo's spec."""
+    try:
+        taken = specmod.decisions(specmod.find(repo, st["spec"]).body)
+    except PlatformError:
+        return
+    if not taken:
+        return
+    body = ("Decisions taken during the ship (the suggested answers of this repo spec's open questions, taken because the "
+            "system spec and its plan were approved; change one with `/component:spec --amend`):\n\n"
+            + "\n".join(f"- {d}" for d in taken))
+    gh(["pr", "comment", st["pr"], "--body", body], cwd=repo, check=False)
+    st["decisions_posted"] = True
 
 
 def check_title(title: str) -> None:
@@ -955,9 +1088,12 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
     lines += more
     if not ok:
         return False, lines
+    _ready_if_draft(repo, pr)
     res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"], cwd=repo, check=False)
     if res.returncode != 0:
         detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
+        if "draft" in detail[0].lower():
+            raise PlatformError(f"merging {pr} failed: {detail[0]}", hint=f"the PR is a draft: gh pr ready {pr}, then run land again")
         raise PlatformError(f"merging {pr} failed: {detail[0]}", hint="merge conflicts with main: rebase is a human decision; "
                                                                        "`cplat component ship escalate 'merge failed'`")
     merged = json.loads(gh(["pr", "view", pr, "--json", "mergeCommit"], cwd=repo) or "{}")

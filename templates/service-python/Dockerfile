@@ -19,6 +19,10 @@ FROM python:{{ python_version }}-slim AS runtime
 LABEL org.opencontainers.image.source="https://github.com/{{ github_org }}/{{ project_name }}" \
       org.opencontainers.image.description="{{ description | replace('"', '') | replace('\\', '') }}"
 
+# Debian security updates published after the base image was built (e.g. apt 2.6.1 → 2.6.2, CVE-2026-109518): the release
+# image scan blocks fixable HIGH/CRITICAL findings, and a rebuild of the same base tag would not pick them up.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
 # Fixed numeric IDs: Kubernetes cannot verify runAsNonRoot for a named user.
 RUN groupadd -r -g 10001 app && useradd -r -u 10001 -g app -d /app -s /usr/sbin/nologin app
 

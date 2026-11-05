@@ -686,7 +686,7 @@ def check_service_repos_token(repo: Path) -> list[dict]:
     if shape != "gitops-app":
         return []
     try:
-        names = {s.get("name") for s in json.loads(ship.gh(["secret", "list", "--json", "name"], cwd=repo, check=False) or "")}
+        names = ship.secret_names(repo)
     except Exception:  # noqa: BLE001 - any unreadable list is a warning, never a failure
         names = None
     fix = SERVICE_REPOS_TOKEN_FIX.format(slug=ship.service_slug(repo))
@@ -714,7 +714,7 @@ def check_alerts_token(repo: Path) -> list[dict]:
     if not (polled and has_repo):
         return []
     try:
-        names = {s.get("name") for s in json.loads(ship.gh(["secret", "list", "--json", "name"], cwd=repo, check=False) or "")}
+        names = ship.secret_names(repo)
     except Exception:  # noqa: BLE001 - any unreadable list is a warning, never a failure
         names = None
     slug = ship.service_slug(repo)

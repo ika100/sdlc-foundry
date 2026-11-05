@@ -11,6 +11,7 @@ Exit codes: 0 passed or passed on retry, 1 red or timed out, 3 not run. It files
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -29,6 +30,7 @@ import autoissue
 import core
 import feedback
 import model
+import runs
 import spec as specmod
 from core import PlatformError, run
 
@@ -342,6 +344,58 @@ def _app_dirs(slug: str, repo: Path) -> tuple[list[str] | None, str]:
     return None, why
 
 
+def pinned_image(repo: Path, apps: list[str], service: str, env: str) -> str | None:
+    """The image tag the linked gitops-app pins the service to in `env` (for example sha-<40>), or None."""
+    me = _slug(repo)
+    for slug in apps:
+        dirs, _ = _app_dirs(slug, repo)
+        for a in dirs or []:
+            m = model.load_remote(a, lambda p, slug=slug: _read(slug, p, repo))
+            c = m.find_component(me, service)
+            inst = m.instance(c.name, env) if c else None
+            if inst is not None:
+                return inst.tag
+    return None
+
+
+def record(repo: Path, res: SmokeResult, image: str | None, spec_id: str | None) -> str | None:
+    """Write the outcome to the run store as a `verify` record, so the prod evidence finds a smoke run by hand (#422).
+    Never raises: recording never changes the verify's result."""
+    try:
+        rid = runs.start("verify", repo=runs.repo_slug(repo), spec=spec_id)
+        at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        runs.set_section(rid, "smoke", {**res.section(), "image": image, "at": at})
+        runs.finish(rid, "done" if res.ok else "failed")
+        return rid
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def follow_staging(repo: Path, apps: list[str], service: str, res: SmokeResult, image: str | None,
+                   rid: str | None) -> list[str]:
+    """Spec 142 (AC-142.4): staging set to `after-dev-smoke` follows every build that passes its dev smoke, not only a ship's.
+    After a green `instance verify dev`, the same decision as a ship's (staging.decide), the digest of the smoked build
+    checked against the registry, then the gitops-app's pin-staging workflow is dispatched. Never raises."""
+    import registry
+    import ship
+    import staging
+    try:
+        d = staging.decide(repo, {"deployed": image or ""}, apps, service, res)
+        if d.action != "promote":
+            return [f"Promotion (staging): not promoted: {d.reason}"]
+        found = staging._find(repo, apps, service)
+        current = registry.digest(registry.image_name({"image": found[2].image} if found else None, ship.service_slug(repo)), d.tag)
+        if not res.digest or current != res.digest:
+            return [f"Promotion (staging): not promoted: the digest of {d.tag} is not the one dev smoked ({res.digest} vs {current})"]
+        staging.gh(["api", f"repos/{d.app}/dispatches", "-f", "event_type=pin-staging",
+                    "-f", f"client_payload[service]={d.service}", "-f", f"client_payload[tag]={d.tag}",
+                    "-f", "client_payload[spec]=instance-verify", "-f", f"client_payload[smoke]={res.row()}",
+                    "-f", f"client_payload[record]={staging.record_url(rid) or ''}"], cwd=repo, check=True)
+        return [f"Promotion (staging): dispatched pin-staging {d.service} {d.tag} to {d.app} (staging follows a green dev smoke)"]
+    except Exception as e:  # noqa: BLE001  (a promotion that cannot start never changes the verify result)
+        return [f"Promotion (staging): not promoted: {e}"]
+
+
 def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> tuple[str | None, str | None]:
     """(url, None) or (None, reason): the URL the linked gitops-app publishes for the service (same values as the HTTPRoute)."""
     me = _slug(repo)
@@ -427,10 +481,21 @@ def main(argv: list[str]) -> int:
         res = run_smoke(repo, url, env=ns.env, spec=sp, timeout=ns.timeout, retry=not ns.no_retry, probe=liveness_probe(repo))
     else:
         res = not_run(ns.env, why or "no URL", acs)
+    follow: list[str] = []
+    if res.outcome != "not-run" and not ns.base_url:   # a URL the user named may be any build: not evidence for the pin
+        import ship
+        apps = ship.gitops_apps(repo)
+        try:
+            image = pinned_image(repo, apps, ship.service_name(repo), ns.env) if apps else None
+        except Exception:  # noqa: BLE001  (an unreadable pin only leaves the record without an image)
+            image = None
+        rid = record(repo, res, image, sp.id if sp else None)
+        if ns.env == "dev" and res.ok and apps:
+            follow = follow_staging(repo, apps, ship.service_name(repo), res, image, rid)
     if ns.json:
-        print(json.dumps({"smoke": res.section(), "tests": res.tests}, indent=2))
+        print(json.dumps({"smoke": res.section(), "tests": res.tests, "staging": follow}, indent=2))
     else:
-        print("\n".join(res.lines()))
+        print("\n".join([*res.lines(), *follow]))
     return {"passed": 0, "passed-on-retry": 0, "red": 1, "timed-out": 1}.get(res.outcome, 3)
 
 

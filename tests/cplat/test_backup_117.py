@@ -75,6 +75,12 @@ def test_the_cluster_archives_its_wal_through_the_plugin_ac_117_1(tmp_path):  # 
     spec = y(g, f"{dd()}/cluster.yaml")["spec"]
     assert spec["plugins"] == [{"name": PLUGIN, "isWALArchiver": True, "parameters": {"barmanObjectName": "shop-orders-db"}}]
     assert list(spec)[-1] == "plugins"
+    assert spec["postgresql"] == {"parameters": {"archive_timeout": "5min"}}       # #417: the RPO is explicit, in git
+
+
+def test_a_database_without_backup_sets_no_archive_timeout_417(tmp_path):
+    g = ok(tmp_path, bdoc())
+    assert "postgresql" not in y(g, f"{dd()}/cluster.yaml")["spec"]
 
 
 def test_the_kustomization_lists_the_backup_files_sorted_ac_117_1(tmp_path):  # AC-117.1

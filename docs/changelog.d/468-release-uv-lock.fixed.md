@@ -1,0 +1,1 @@
+**A Python release refreshes `uv.lock` with the version (found in journey 2 of 2026-11-05).** The release agent bumped `pyproject.toml` but not the project's own line in `uv.lock`, so the release PR's image build (`uv sync --locked`) failed until the lock was refreshed by hand. The release now runs `uv lock` and commits the lock file with the version bump.

@@ -335,7 +335,8 @@ def collect_backups(repo: Path, app: str | None, contexts: list[str] | str | Non
     for ri in dbs:
         if wanted:
             row = backupstate.database_state(m.system, ri.resource, ri.environment, by_env.get(ri.environment), backup=bool(ri.backup),
-                                             external=ri.external, state=states[(ri.resource, ri.environment)])
+                                             external=ri.external, state=states[(ri.resource, ri.environment)],
+                                             schedule=(ri.backup or {}).get("schedule"))
         else:
             row = backupstate.database_state(m.system, ri.resource, ri.environment, None, backup=False, external=ri.external)
         out["resource_instances"].append(row)

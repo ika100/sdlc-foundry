@@ -13,6 +13,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -189,13 +190,30 @@ def state(sources: Mapping[str, Source], actions: Mapping[str, int], now: dateti
     }
 
 
-class Refresher(threading.Thread):
-    """Read every source at once and again every 30 s; `refresh(names)` re-reads some at once (AC-122.3, AC-122.42)."""
+IDLE_AFTER = 600.0   # no browser request for this long: the background refresh pauses (spec 137, #409)
 
-    def __init__(self, sources: dict[str, Source], snapshot: Callable[[str | None], Path], every: float = REFRESH_EVERY):
+
+class Refresher(threading.Thread):
+    """Read every source at once and again every 30 s; `refresh(names)` re-reads some at once (AC-122.3, AC-122.42). With no
+    browser request for IDLE_AFTER seconds it reads nothing until the next request (`touch`), which refreshes at once (AC-137.6)."""
+
+    def __init__(self, sources: dict[str, Source], snapshot: Callable[[str | None], Path], every: float = REFRESH_EVERY,
+                 idle_after: float = IDLE_AFTER, clock: Callable[[], float] = time.monotonic):
         super().__init__(name="refresher", daemon=True)
         self.sources, self.snapshot, self.every = sources, snapshot, every
+        self.idle_after, self.clock = idle_after, clock
+        self.last_request = clock()
         self.stop_event = threading.Event()
+
+    def idle(self) -> bool:
+        return self.clock() - self.last_request > self.idle_after
+
+    def touch(self) -> None:
+        """A browser asked for something: note it, and refresh at once when the refresh was paused."""
+        was_idle = self.idle()
+        self.last_request = self.clock()
+        if was_idle:
+            threading.Thread(target=self.refresh, daemon=True).start()
 
     def refresh(self, names: list[str] | None = None) -> None:
         threads = []
@@ -209,7 +227,8 @@ class Refresher(threading.Thread):
 
     def run(self) -> None:
         while not self.stop_event.is_set():
-            self.refresh()
+            if not self.idle():
+                self.refresh()
             self.stop_event.wait(self.every)
 
     def stop(self) -> None:

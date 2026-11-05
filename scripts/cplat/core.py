@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,16 +26,59 @@ class PlatformError(Exception):
         self.hint = hint
 
 
+RATE_LIMITED = re.compile(r"API rate limit (?:already )?exceeded|secondary rate limit", re.I)
+RATE_LIMIT_MAX_WAIT = 65 * 60   # seconds a single call may wait for GitHub's limits in total (spec 137)
+sleep = time.sleep              # tests replace these two
+now = time.time
+
+
+def _rate_limit_kind(text: str) -> str:
+    low = text.lower()
+    return "secondary" if "secondary rate limit" in low else "graphql" if "graphql" in low else "core"
+
+
+def _rate_limit_wait(kind: str) -> float | None:
+    """Seconds until GitHub resets the named limit, plus 30 s; None when unknown or already past (spec 137)."""
+    if kind == "secondary":
+        return None
+    try:
+        out = subprocess.run(["gh", "api", "rate_limit", "--jq", f".resources.{kind}.reset"], text=True, capture_output=True,
+                             timeout=30).stdout.strip()
+        wait = int(out) - now() + 30
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    return wait if wait > 30 else None
+
+
 def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, capture: bool = True,
         env: dict[str, str] | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
-    """Run a command; raise PlatformError with the command's stderr when it fails and `check` is set."""
+    """Run a command; raise PlatformError with the command's stderr when it fails and `check` is set. A `gh` call that GitHub
+    refuses for its rate limit waits for the reset and runs again (spec 137, #409)."""
     full_env = {**os.environ, **(env or {})}
-    try:
-        proc = subprocess.run(cmd, cwd=cwd, env=full_env, text=True, capture_output=capture, timeout=timeout)
-    except FileNotFoundError:
-        raise PlatformError(f"`{cmd[0]}` is not installed or not on PATH", hint=install_hint(cmd[0])) from None
-    except subprocess.TimeoutExpired:
-        raise PlatformError(f"`{' '.join(cmd[:3])}` timed out after {timeout}s") from None
+    waited, backoff = 0.0, 60.0
+    while True:
+        try:
+            proc = subprocess.run(cmd, cwd=cwd, env=full_env, text=True, capture_output=capture, timeout=timeout)
+        except FileNotFoundError:
+            raise PlatformError(f"`{cmd[0]}` is not installed or not on PATH", hint=install_hint(cmd[0])) from None
+        except subprocess.TimeoutExpired:
+            raise PlatformError(f"`{' '.join(cmd[:3])}` timed out after {timeout}s") from None
+        said = f"{proc.stderr or ''}\n{proc.stdout or ''}"
+        if not (cmd and cmd[0] == "gh" and proc.returncode != 0 and RATE_LIMITED.search(said)):
+            break
+        kind = _rate_limit_kind(said)
+        wait = _rate_limit_wait(kind)
+        if wait is None:
+            wait, backoff = backoff, min(backoff * 2, 600.0)
+        if waited + wait > RATE_LIMIT_MAX_WAIT:
+            raise PlatformError(f"GitHub's {kind} rate limit is still exhausted after waiting {int(waited // 60)} min for "
+                                f"`{' '.join(cmd[:3])}`",
+                                hint="another tool is using this account's GitHub budget (for example a second `cplat platform ui` "
+                                     "console or another session's CI waits): stop it, then run the command again")
+        until = time.strftime("%H:%M", time.gmtime(now() + wait))
+        print(f"GitHub rate limit ({kind}): waiting until {until} UTC", file=sys.stderr, flush=True)
+        sleep(wait)
+        waited += wait
     if check and proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()[-6:]
         raise PlatformError(f"`{' '.join(cmd[:4])}` failed (exit {proc.returncode}): " + " | ".join(detail))

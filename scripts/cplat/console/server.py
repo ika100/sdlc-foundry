@@ -21,6 +21,7 @@ import re
 import secrets
 import shlex
 import threading
+from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import import_module
@@ -52,6 +53,8 @@ PANELS = {
 PALETTE = "console.palette:fragment"
 ASK = "console.palette:ask"
 MAX_BODY = 1_000_000
+
+ON_REQUEST: Callable[[], None] | None = None   # set by `cplat platform ui`: every browser request calls it (spec 137)
 
 
 class HttpError(Exception):
@@ -149,6 +152,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- dispatch ----
     def handle_one(self, method: str) -> None:
+        if ON_REQUEST:
+            ON_REQUEST()   # the refresher pauses while nobody looks (spec 137)
         try:
             expected = f"127.0.0.1:{self.server.server_address[1]}"
             if self.headers.get("Host") != expected:

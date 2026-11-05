@@ -13,6 +13,21 @@ if [ -z "${KUBE_CONTEXT:-}" ]; then
 fi
 k() { kubectl --context "$KUBE_CONTEXT" "$@"; }
 
+# Spec 142 (AC-142.3): apply what main holds on GitHub, never a stale checkout. A clone of main that is behind origin/main
+# fast-forwards first; one that cannot (local commits, another branch) stops and names the commit it is missing.
+if git rev-parse --git-dir >/dev/null 2>&1 && git fetch -q origin main 2>/dev/null; then
+  behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
+  if [ "$behind" != 0 ]; then
+    if [ "$(git branch --show-current)" = main ] && git merge -q --ff-only origin/main 2>/dev/null; then
+      echo "fast-forwarded main to $(git rev-parse --short HEAD) (it was $behind commit(s) behind origin/main)"
+    else
+      echo "ERROR: this checkout is $behind commit(s) behind origin/main ($(git rev-parse --short origin/main)), so bootstrap would apply stale files." >&2
+      echo "  fix: git switch main && git pull --ff-only, then run it again" >&2
+      exit 1
+    fi
+  fi
+fi
+
 if [ -f operators/root.yaml ]; then
   echo "Applying operators/root.yaml to context $KUBE_CONTEXT"
   k apply -n argocd -f operators/root.yaml

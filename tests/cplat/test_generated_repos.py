@@ -75,6 +75,23 @@ def test_web_dockerfile_installs_strictly(web):  # AC-104.2
     assert "pnpm-lock.yaml" in copy and "pnpm-lock.yaml*" not in copy
 
 
+def test_web_runtime_image_ships_no_npm(web):
+    """#421: npm (with its bundled undici) is removed from the runtime stage, so the release image scan does not stop on it;
+    the server needs only `node`."""
+    text = (web / "Dockerfile").read_text()
+    runtime = text[text.index("AS runtime"):]
+    assert "rm -rf /usr/local/lib/node_modules/npm" in runtime and "/usr/local/bin/npx" in runtime and "corepack" in runtime
+    assert runtime.index("rm -rf /usr/local/lib/node_modules/npm") < runtime.index('CMD ["node", "server.js"]')
+
+
+def test_slim_runtime_images_take_the_debian_security_updates(web):
+    """Found in the 2026-11-05 journey: node:24-slim shipped apt 2.6.1 with a fixable HIGH CVE, so the web release image
+    scan failed and a rebuild did not help. Both Debian-slim runtime stages upgrade their packages at build time."""
+    for text in ((web / "Dockerfile").read_text(), (TEMPLATES / "service-python" / "Dockerfile").read_text()):
+        runtime = text[text.index("AS runtime"):]
+        assert "apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*" in runtime
+
+
 @pytest.mark.parametrize("template", ["service-python", "web-nextjs"])
 def test_dockerfile_is_template_owned(template):  # AC-104.3
     """AC-104.3: /shared:update-service must bring the strict install, so the Dockerfile is not in _skip_if_exists."""
@@ -121,3 +138,10 @@ def test_ci_checks_the_lockfile_mismatch_for_web():  # AC-104.10
     """AC-104.10: the web smoke job fails if pnpm install --frozen-lockfile no longer rejects a stale lock."""
     job = CI.read_text().split("  smoke-test-web-nextjs:", 1)[1].split("\n  smoke-test-", 1)[0]
     assert "pnpm@11.22.0 install --frozen-lockfile" in job or "pnpm install --frozen-lockfile" in job
+
+
+def test_the_python_release_refreshes_the_lock_with_the_version():
+    """Found in journey 2 (2026-11-05): the release PR bumped pyproject.toml but not uv.lock, so the image build (frozen
+    lock) failed until the lock was refreshed by hand."""
+    text = (ROOT / "plugins" / "svc" / "agents" / "release.md").read_text()
+    assert "devbox run -- uv lock" in text and "git add CHANGELOG.md pyproject.toml uv.lock" in text

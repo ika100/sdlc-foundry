@@ -6,6 +6,102 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.9.0] - 2026-11-05
+
+### Added
+
+**A feature of one component takes the component route (spec 140).** `/system:spec` recognises a description that names exactly one component and needs no resource, exposure or environment change, and asks once whether to specify and ship it in that component's repo with `/component:spec` and `/component:ship` (recommended): one spec, one PR, one ship, no plan. Features that span repos or need a resource keep the system route. `/system:new` and a new gitops repo now recommend the route by scope for the first feature.
+
+**An approved system plan asks no new questions (spec 141).** When `/system:ship` writes a repo's spec from the approved plan, open questions that have a suggested answer no longer stop the unattended ship: the answers are taken, folded into the repo spec's criteria and listed under `## Decisions taken during the ship`. The system ship's final report lists them per repo ("Decisions taken for you"), the run record counts them, and the repo's PR gets one comment with them. A question without a suggested answer, or one that would change the system spec or the plan's contract, still stops the ship. The product manager now prefers the system spec's answers over a new question.
+
+**No avoidable stops in the journey (spec 142).** `/component:set --expose` merges its PR on green CI without another question (say so to leave it open). After `/system:ship` merges a gitops change under `operators/`, it applies the operators itself on the local cluster of `devbox run cluster-up` (`k3d-<system>-local`); other clusters keep the human step. `devbox run bootstrap` fast-forwards a stale `main` first, or stops before applying anything. A green `instance verify dev` promotes staging when it is set to `after-dev-smoke`, as a ship does, so fix and release builds follow too. A gitops command whose PR step fails leaves the clone clean (back on `main`, nothing changed, its local branch deleted), and a stale local branch of a merged PR no longer blocks the next one.
+
+### Fixed
+
+**A dev or staging pin PR in a public gitops repo no longer stays blocked (found in journey 2 of 2026-11-05).** GitHub holds the runs of a PR that `github-actions[bot]` opened; `pin-dev` and `pin-staging` approved only the first held run they saw (the `specs` run), and when the PR's `ci` run then failed at startup without a job, branch protection blocked the merge forever. Both workflows now approve every held run until the PR's `ci` run is running with jobs; if it is missing or never started, they close and reopen the PR once (GitHub then runs its checks again) and turn auto-merge back on. Existing gitops repos get the new workflows with `/platform:update`.
+
+## [5.8.3] - 2026-11-05
+
+### Fixed
+
+**The generated-lines exclusion of the gitops secrets scan works on real files (#420, found again in the 2026-11-05 journey).** In a whole YAML document detect-secrets reads `checksum/config: c746…` with the value quoted, so the 5.8.0 pattern, written for the bare line, did not match: enabling observability or promoting to a new environment still failed the scan, and the agent added baseline entries by hand. The pattern now accepts the quoted form. Existing gitops repos keep their baseline (`_skip_if_exists`): copy the `should_exclude_line` entry of `templates/gitops-app/.secrets.baseline.json` into yours.
+
+**Resuming a merged ship never opens a second, empty PR (#452).** A ship run whose dev smoke could not run ended `done` and was archived; a new `/component:ship` of the done spec started at phase `pr` and opened a PR from a branch identical to main. Its squash commit changed nothing, so CI built no image and deploy waited for a dev pin that never came. A new start of a done spec whose code is merged now resumes at deploy with the earlier PR and merge commit, and `ship pr` refuses a pull request that changes nothing on main.
+
+**A system ship merges a repo's PR that started as the spec's draft (found in the 2026-11-05 journey).** In the system flow a repo's spec is published as a draft PR on `feature/<spec>`, and the ship reuses that PR for the code. It stayed a draft, so GitHub refused the merge, and the error blamed merge conflicts. `ship pr` now marks a reused draft ready for review, `land` does so before it merges, and a refused merge of a draft says so.
+
+**Web and Python images take the Debian security updates of their slim base (found in the 2026-11-05 journey).** `node:24-slim` shipped apt 2.6.1 with a fixable HIGH CVE, so the release image scan of a web UI failed, and rebuilding on the same base tag did not help. The runtime stages of the `web-nextjs` and `service-python` templates now run `apt-get update && apt-get upgrade -y` (lists removed afterwards). Existing repos get it with `/platform:update` (the Dockerfile is template-owned).
+
+**No false prod WARNING when staging runs the release commit itself (found in the 2026-11-05 journey).** For a release PR that changes only the release files (CHANGELOG, version file), the prod evidence looked at the commit before it, assuming the release commit had no image of its own. When CI did build it and staging ran exactly that commit, the evidence warned `staging runs cbc36a0, not a550472` although the digests matched and the staging smoke was green. When staging runs the tagged commit, that commit is now the evidence.
+
+## [5.8.2] - 2026-11-05
+
+### Fixed
+
+**The dev smoke tests run again after a deploy (found in the 2026-11-05 journey).** `component ship deploy` reads the image digest dev runs from the pods, but it looked for a container named after the service, while render names every component's container `app`. So every deploy with `--context` reported `image digest unknown`, skipped the smoke tests and escalated, and nothing was promoted to staging. The lookup now reads the `app` container.
+
+## [5.8.1] - 2026-11-05
+
+### Fixed
+
+**An organization-level `GITOPS_TOKEN` counts (found in the 2026-11-05 journey).** `component ship start` refused with `the secret GITOPS_TOKEN is not set` when the token was set once for the whole organization, because only the repo's own secrets were read; `/platform:doctor` warned the same way for `SERVICE_REPOS_READ_TOKEN` and `ALERTS_TOKEN`. They now count the organization secrets that GitHub makes visible to the repo, and `/system:new` and `/component:new` no longer ask you to create a per-repo token that the organization already provides.
+
+## [5.8.0] - 2026-11-05
+
+### Changed
+
+**The console has a new look and is easier to scan (spec 122).** The Inbox, Board and System pages have a new design: an indigo accent,
+raised cards, coloured pills for states and decisions, icons in the sidebar, a segmented view switch and a sticky panel header with
+`Esc`. All pairs still pass WCAG AA in light and dark. Usability fixes: the Inbox no longer says "Nothing waits for you" before it has
+read the decisions; a source that cannot be read is named in words ("The list of open decisions is not available") with a pointer to
+`/platform:doctor`; Board cards show the spec title instead of only its slug and are coloured by state (stopped, running, waits for
+you) rather than by column; the Board no longer scrolls sideways: a strip shows all eight stages with their counts, and each stage is a row whose cards wrap (an empty stage is one slim line; the Columns view is now called Stages);
+costs are rounded to cents; System shows the system as one tree (Components, Libraries, Resources, APIs; a row opens for its repo and relations) and every change starts from its item (+ Add on a group, Remove and Change APIs on a row, Change rules on an environment), with its form opening at the right, filled in and with selection lists for what already exists; the separate Add to the model section is gone (the palette keeps the forms). A background refresh no longer throws away a form that is being filled in. Help: a **?** next to every term (decision kinds, card colours, instance states, promote rule, policy, autonomy level, guardrails, freshness) explains it in place, and **How it works** (`/help`, in the menu) shows the eight stages and every term by topic from the same texts; the Board and System pages have a legend, and the sidebar names the system it shows. The palette asks for the sentence once: its search box is the only text field, Describe a change and Ask quote it, and with an empty box their buttons say what to type first.
+
+**A release waits for the upgrade e2e once, not twice (#400).** `cplat platform release` waited about 37 minutes for the upgrade e2e on the release pull request and then again on its merge commit, although a squash merge of an up-to-date branch has exactly the tree that was tested. The release, and the gate `scripts/release-check.py gate` (also in the release-guard workflow), now take a green upgrade e2e on the head of the merge commit's pull request when that head has the same tree; otherwise they wait for and require the run on the merge commit as before. Splitting the upgrade e2e itself is still open in #400.
+
+### Fixed
+
+**cplat waits out GitHub's rate limit (spec 137, #409).** A `gh` call that GitHub refuses for its rate limit no longer ends the step: cplat prints `GitHub rate limit (<kind>): waiting until HH:MM UTC`, waits until the reset (or backs off up to 10 min when the reset is unknown) and runs the call again, for at most 65 minutes. `cplat spec publish` and `spec review` now show gh's own error, not only `gh exit 1`. The local console stops reading its sources after 10 minutes without a browser request and refreshes at once on the next one, so an open but unwatched console no longer uses up the account's GitHub budget.
+
+**The secrets scan no longer flags `.copier-answers.yml` (#389).** The answers file records where the template came from (`_src_path`). For a render from a local checkout, some paths (for example `/home/ci/Dev/sdlc-foundry-fix389/templates/library-python`) look like a high-entropy secret to detect-secrets, so the repo's `security` check failed, and the template test failed depending on the folder it ran in. Repos created with `/component:new` were rarely affected, because their `_src_path` is rewritten to `gh:ika100/sdlc-foundry/…`. Every template's `secrets-scan` recipe and the Python templates' pre-commit hook now skip the file; it holds template answers only. **Action:** run `/platform:update`.
+
+**The CI failure summary shows the log of a failed job whose run is still in progress (#399).** `gh run view --log-failed` serves
+nothing until the whole run is complete, so a check that failed while its sibling jobs still ran (the three parallel e2e parts of
+spec 134) was summarised without a log line and called "not a GitHub Actions run". `cplat pr wait` and ship now fetch the failed job's
+own log when the run's log is empty, and a check that still has no log says why (`run still in progress`, `gh error: …`, or no log
+lines); "not a GitHub Actions run" is left for checks without an Actions run link.
+
+**Resuming an escalated component ship keeps its PR and merge commit (#408).** The finish step of `/component:ship` archives the run's state even when it escalated, so a later `/component:ship <spec>` started a new run at phase `pr` without the PR or merge commit: deploy refused (`the run has no merge commit`) and `ship pr` would have opened a duplicate PR for merged code. `ship start` now resumes the newest archived run of the same spec when that run ended escalated, at the phase where it stopped.
+
+**A component ship's PR no longer conflicts with `main` on its own spec (#410).** `cplat spec land` squash-merges the spec PR, but the local `feature/<spec>` branch kept the original spec commits, so the feature PR conflicted with main's squash commit and needed a merge of `main` and a second CI round (about 4 minutes in the demo). When the ship starts and everything on the branch is already on `origin/main` (and the remote branch was deleted by the merge), it restarts the branch from `origin/main`. A branch with work of its own, or one still on origin, is left as it is.
+
+**A platform bucket adopts the bucket its database created first, so backups to it no longer fail with AccessDenied (#412).** A database that backs up to an in-cluster bucket starts WAL archiving at once, and `barman-cloud` creates the bucket in SeaweedFS when it is missing. If that happened before the operator reconciled the rendered `Bucket`, the object failed with `BucketAlreadyExists`, its access grant was never applied, and every backup ended in `AccessDenied`. The rendered `Bucket` now sets `adoptExisting: true`. Run `/platform:update` in each gitops-app repo with an in-cluster bucket; a bucket stuck in `Failed` is adopted on the next sync.
+
+**A system plan can declare and use any resource, not only postgres (#414).** `plan-check` rejected every resource but postgres (`unknown resource 'backups'`), so a plan with a bucket, cache or broker kept CI red. It now accepts a resource that `system.yaml` declares, and a new one that names its type: `{resource: files, type: bucket}`. `/system:ship` passes that type on as `cplat resource add files --type bucket`. Existing gitops-app repos get the new check with `/platform:update`.
+
+**`/resource:restore` says which actions need `--confirm prod` (#415).** Only `--switch` and `--discard` change prod, so only they need `--confirm prod`; `--to` adds a copy next to the running database, which keeps serving. The command and its `--confirm` help said that prod as a whole needed the confirmation.
+
+**`/system:status` marks a database failing when its scheduled backup stopped running (#416).** A database was failing only when continuous archiving failed or the newest base backup failed; a ScheduledBackup that silently never ran (missing, suspended, operator down) showed `ok` with an ever older last success. Now no completed base backup within one schedule period plus 2 hours (26 h for the default daily schedule; counted from the cluster's creation before the first backup) makes it `failing`, with the reason.
+
+**A backed-up database states its restore point objective in git (#417).** render now sets `postgresql.parameters.archive_timeout: 5min` on every database cluster with a backup, so a committed change reaches the archive within 5 minutes and can be restored. Before, this relied on CloudNativePG's default, which was neither visible in git nor checked. The value is the same, so running databases behave as before; the next render changes their `cluster.yaml`.
+
+**`cluster-up` on an existing cluster prints the real port, not `:default` (#419).** Without `LOCAL_HTTP_PORT`, the port was only resolved when the cluster was created, so a second `devbox run cluster-up` printed every URL as `http://<host>:default/` (Grafana and every exposed component). A reused cluster now reads the host port it was created with from its load balancer. **Action:** run `/platform:update` in each gitops-app repo.
+
+**A gitops-app's secrets scan no longer fails on lines the render writes itself (#420).** A collector's `checksum/config: <16 hex>` annotation and an `S3Credentials`' field names (`accessKeyField: accessKeyId`, `secretKeyField: secretAccessKey`) looked like secrets to detect-secrets, so a new collector config or bucket failed the repo's `security` check and needed a hand-made baseline entry each time. The template's `.secrets.baseline.json` now carries one narrow exclude-lines pattern for exactly these lines; a real value on such a line is still reported. **Action:** new repos get it; an existing gitops-app repo adds it once with `detect-secrets scan --baseline .secrets.baseline.json --exclude-lines '^\s*(checksum/config: [0-9a-f]{16}|accessKeyField: accessKeyId|secretKeyField: secretAccessKey)\s*$'` (the baseline is repo-owned, so `/platform:update` does not replace it).
+
+**A web component's release is no longer blocked by npm's bundled undici (#421).** The `web-nextjs` runtime image kept npm, npx and corepack from the Node base image; npm bundles `undici` 6.28.0 with fixable HIGH/CRITICAL CVEs, so the release image scan refused every web release, while `main` builds only reported them. The newest `node:24-slim` and `node:26-slim` still ship that version, so a base-image bump does not help. The runtime stage now removes npm, npx and corepack (the server runs with plain `node`). **Action:** run `/platform:update` in each web repo.
+
+**A smoke run by hand counts as evidence for prod (#422).** `cplat instance verify <env>` now writes its outcome to the run store (a `verify` record with the environment, the pinned image and the result), and the prod promotion's evidence reads those records next to ship records. A build that reached staging through `/instance:promote` and passed `instance verify staging` no longer shows `WARNING: … no green staging smoke: no staging smoke record`. A run against a `--base-url` you name is not recorded, because that URL may serve another build.
+
+**`platform update --verify` smoke-tests prod at its release tag (#423).** For a prod pin `X.Y.Z` the verify step cloned the branch `X.Y.Z`, which does not exist (`fatal: Remote branch 0.1.0 not found`), so every update of a system with prod ended `NOT VERIFIED`. It now clones the git tag `vX.Y.Z`, the commit the release image was built from.
+
+**`/resource:restore --discard` finishes in an Argo CD cluster, and an unfinished discard can be completed (#424).** The database addon's Argo application never prunes (data is never removed by automation), so after a discard the removed cluster stayed OutOfSync and the command timed out after 10 minutes waiting for Synced, before it deleted the cluster. It now continues once the application has the commit and only that resource waits for pruning, then deletes the cluster itself and waits for its volumes. A discard that stopped half way (its state change merged, the cluster still there) is finished by running `--discard` again: it finds the cluster that `restore-state.yaml` no longer lists and deletes it (in prod with `--confirm prod`).
+
+**Agents know that the platform files `platform` escalations itself (#428).** The closing note of the commands said "Never file anything without their OK", so a coordinating agent reported the platform's own deduplicated escalation issue (spec 088, ADR-033) as a broken rule. The note now says that a `platform` escalation is the one thing the platform files itself. `/component:build` and `/component:fix` keep the short note to stay within their size budgets.
+
+**`/system:status` shows a database's restore window in order, and `/system:set` writes a new key inside its environment (#429).** Right after the first base backup, the window read backwards (`20:37:56Z … 20:30:06Z`), because the newest archived WAL was older than the end of that backup; the newest point is now never before the earliest. And a new key such as `host:` for prod was appended below the comment lines that follow the environment's block, so it looked like part of the next section; it now goes inside the block, before those comments.
+
 ## [5.7.0] - 2026-11-03
 
 ### Added

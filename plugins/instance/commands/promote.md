@@ -21,4 +21,4 @@ Rules (enforced by the script; do not work around them): the source is the envir
 
 Running from a component repo? If `.platform-app.yml` exists, clone the listed gitops-app repo (`gh repo clone <org>/<repo>`) and run the command there.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

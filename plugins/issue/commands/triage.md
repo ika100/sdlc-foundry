@@ -51,4 +51,4 @@ Show one table for the run: issue, class, planned action (labels, comment, story
 
 End with a table: issue, decision, action taken, link (PR, story id or comment). Mention issues left in `needs-info`. Say that regular triage can be scheduled with `/loop` or `/schedule`; the command only proposes until the user confirms, so an unattended run is safe.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

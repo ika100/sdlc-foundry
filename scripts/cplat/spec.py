@@ -103,6 +103,15 @@ def sections(body: str) -> dict[str, str]:
             for i, m in enumerate(marks)}
 
 
+DECISIONS = "decisions taken during the ship"   # spec 141: suggested answers an unattended system ship took for the user
+
+
+def decisions(body: str) -> list[str]:
+    """The bullets of a repo spec's `## Decisions taken during the ship` section (spec 141), in order; [] without one."""
+    text = sections(body).get(DECISIONS) or ""
+    return [ln[2:].strip() for ln in text.splitlines() if ln.startswith("- ") and ln[2:].strip()]
+
+
 @dataclass
 class AC:
     id: str

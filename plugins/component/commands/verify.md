@@ -29,4 +29,4 @@ A repo without a shape works too (the reviewer is `svc:reviewer`). A `cplat shap
 
 Print the reviewer's `RESULT`, the `NOT MET` list and the path to `verification.md`. For `fail`, suggest the fitting next step: `/component:build <NNN>` (resumes a spec still `building`), `/component:fix "<criterion and reason>"` for a single defect, or `/component:spec --amend <NNN>` when the spec itself is wrong.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK.
+> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

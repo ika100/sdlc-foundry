@@ -119,6 +119,7 @@ def main(argv: list[str]) -> int:
     except OSError as e:
         print(f"ERROR: cannot listen on 127.0.0.1:{ns.port}: {e}", file=sys.stderr)
         return 1
+    server.ON_REQUEST = refresher.touch
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     print(f"console: {url}", flush=True)
 

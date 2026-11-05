@@ -142,7 +142,8 @@ def test_app_plan_and_build_need_an_approved_product_spec():
 
 def test_app_build_runs_each_repo_through_its_own_spec_and_never_answers_questions():
     text = (APP / "commands" / "ship.md").read_text()
-    assert "/component:spec --from-plan <absolute plan path> <repo-id>" in text and "never answer them" in text
+    # spec 141: suggested answers are taken and recorded; a question without one is still reported, never invented
+    assert "/component:spec --from-plan <absolute plan path> <repo-id>" in text and "only a question without a suggestion" in text
     assert "never merge" in text.lower()
 
 

@@ -122,3 +122,37 @@ def test_cluster_up_moves_to_a_free_port_when_the_default_is_taken(tmp_path, bus
     m = __import__("re").search(r"port (\d+) is busy .*using (\d+)", out)
     assert m and int(m.group(1)) == busy_port and int(m.group(2)) > busy_port, out
     assert f"{m.group(2)}:80" in log.read_text()             # the cluster binds the chosen port
+
+
+def test_a_reused_cluster_prints_its_real_port_not_default(tmp_path):
+    """#419: with no LOCAL_HTTP_PORT, a cluster that already exists keeps the host port it was created with; every URL the
+    script prints carries that port, never the placeholder `default`."""
+    import os
+    import shutil
+    skeleton = tmp_path / "gitops"
+    (skeleton / "applications" / "demo").mkdir(parents=True)
+    (skeleton / "scripts").mkdir()
+    for f in ("local-cluster.sh", "ports.sh"):
+        shutil.copy(PORTS.parent / f, skeleton / "scripts" / f)
+    (skeleton / ".copier-answers.yml").write_text("github_org: acme\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for tool in ("k3d", "kubectl", "gh", "helm"):
+        script = bin_dir / tool
+        script.write_text("#!/bin/sh\nexit 0\n")             # the cluster exists; every call succeeds
+        script.chmod(0o755)
+    # the metrics API reports Available at once, as on a running cluster (no 120 s wait)
+    (bin_dir / "kubectl").write_text('#!/bin/sh\ncase "$*" in *metrics.k8s.io*) echo True ;; esac\nexit 0\n')
+    docker = bin_dir / "docker"
+    docker.write_text('#!/bin/sh\n[ "$1" = port ] && echo "0.0.0.0:8123" && exit 0\nexit 0\n')
+    docker.chmod(0o755)
+    env = {k: v for k, v in os.environ.items() if k != "LOCAL_HTTP_PORT"}
+    env |= {"PATH": f"{bin_dir}:{os.environ['PATH']}", "GH_TOKEN": "x", "WITH_ESO": "0", "WITH_CNPG": "0", "WITH_LGTM": "1"}
+    (skeleton / "bootstrap").mkdir()
+    run = subprocess.run(["bash", str(skeleton / "scripts" / "local-cluster.sh"), "up"], capture_output=True, text=True, env=env, cwd=skeleton)
+    out = run.stdout + run.stderr
+    assert "exists - reusing it" in out, out[-2000:]
+    grafana = [ln for ln in out.splitlines() if ln.startswith("Grafana:")]
+    urls = [w for w in grafana[0].split() if w.startswith("http")] if grafana else []
+    assert urls[:1] == ["http://grafana.localhost:8123/"], out[-2000:]
+    assert ":default" not in out, out[-2000:]
