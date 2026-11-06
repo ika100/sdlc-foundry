@@ -59,7 +59,8 @@ def test_a_database_backup_renders_the_object_store_ac_117_1(tmp_path):  # AC-11
 def test_a_database_backup_renders_the_scheduled_backup_with_the_defaults_ac_117_1(tmp_path):  # AC-117.1
     g = ok(tmp_path, bdoc(dbb={"dev": DEV}))
     assert y(g, f"{dd()}/scheduledbackup.yaml") == {
-        "apiVersion": "postgresql.cnpg.io/v1", "kind": "ScheduledBackup", "metadata": {"name": "shop-orders-db", "labels": L()},
+        "apiVersion": "postgresql.cnpg.io/v1", "kind": "ScheduledBackup",
+        "metadata": {"name": "shop-orders-db", "labels": L(), "annotations": {"argocd.argoproj.io/sync-wave": "2"}},
         "spec": {"schedule": "0 0 3 * * *", "immediate": True, "backupOwnerReference": "none", "cluster": {"name": "shop-orders-db"},
                  "method": "plugin", "pluginConfiguration": {"name": PLUGIN}}}
 
@@ -85,8 +86,8 @@ def test_a_database_without_backup_sets_no_archive_timeout_417(tmp_path):
 
 def test_the_kustomization_lists_the_backup_files_sorted_ac_117_1(tmp_path):  # AC-117.1
     g = ok(tmp_path, bdoc(dbb={"dev": DEV}))
-    assert y(g, f"{dd()}/kustomization.yaml")["resources"] == ["cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
-    assert dfiles(g) == ["cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
+    assert y(g, f"{dd()}/kustomization.yaml")["resources"] == ["bucket-wait-job.yaml", "cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
+    assert dfiles(g) == ["bucket-wait-job.yaml", "cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
 
 
 def test_the_backup_is_per_environment_ac_117_1(tmp_path):  # AC-117.1
@@ -305,7 +306,7 @@ def test_the_external_refusal_comes_before_the_unknown_key_check_ac_117_5(tmp_pa
 
 def test_an_external_database_in_one_environment_may_sit_next_to_a_backed_up_one_ac_117_5(tmp_path):  # AC-117.5
     g = ok(tmp_path, bdoc(db_kw={"instances": {"prod": {"external": True}}}, dbb={"dev": DEV}))
-    assert dfiles(g, "dev") == ["cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
+    assert dfiles(g, "dev") == ["bucket-wait-job.yaml", "cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
     assert not [k for k in g if k.startswith(dd("prod"))]
 
 
@@ -322,7 +323,7 @@ def gen_ok(tmp_path, state, dbb=None):
 
 def test_a_restored_generation_is_rendered_next_to_the_active_cluster_ac_117_8(tmp_path):  # AC-117.8
     g = gen_ok(tmp_path, restored_state())
-    assert dfiles(g) == ["cluster-g1.yaml", "cluster.yaml", "kustomization.yaml", "objectstore.yaml", "restore-state.yaml", "scheduledbackup.yaml"]
+    assert dfiles(g) == ["bucket-wait-job.yaml", "cluster-g1.yaml", "cluster.yaml", "kustomization.yaml", "objectstore.yaml", "restore-state.yaml", "scheduledbackup.yaml"]
     c = y(g, f"{dd()}/cluster-g1.yaml")
     assert c["metadata"]["name"] == "shop-orders-db-g1" and c["kind"] == "Cluster"
     spec = c["spec"]
@@ -356,7 +357,7 @@ def test_a_restore_to_latest_has_no_recovery_target_ac_117_8(tmp_path):  # AC-11
 
 def test_the_kustomization_lists_every_cluster_but_not_the_state_ac_117_8(tmp_path):  # AC-117.8
     g = gen_ok(tmp_path, restored_state())
-    assert y(g, f"{dd()}/kustomization.yaml")["resources"] == ["cluster-g1.yaml", "cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
+    assert y(g, f"{dd()}/kustomization.yaml")["resources"] == ["bucket-wait-job.yaml", "cluster-g1.yaml", "cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
 
 
 def test_the_render_keeps_the_state_file_byte_for_byte_ac_117_8(tmp_path):  # AC-117.8
@@ -401,7 +402,7 @@ def test_a_discarded_generation_disappears_and_the_active_cluster_stays_ac_117_1
     assert render(tmp_path).returncode == 0
     g = tree(tmp_path)
     assert not (objs(tmp_path) / "cluster-g1.yaml").exists()
-    assert y(g, f"{dd()}/kustomization.yaml")["resources"] == ["cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
+    assert y(g, f"{dd()}/kustomization.yaml")["resources"] == ["bucket-wait-job.yaml", "cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
     assert y(g, f"{dd()}/scheduledbackup.yaml")["spec"]["cluster"] == {"name": "shop-orders-db"}
 
 
@@ -413,7 +414,7 @@ def test_a_discarded_previous_cluster_disappears_and_the_new_one_stays_ac_117_10
     assert render(tmp_path).returncode == 0
     g = tree(tmp_path)
     assert not (objs(tmp_path) / "cluster.yaml").exists() and (objs(tmp_path) / "cluster-g1.yaml").is_file()
-    assert y(g, f"{dd()}/kustomization.yaml")["resources"] == ["cluster-g1.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
+    assert y(g, f"{dd()}/kustomization.yaml")["resources"] == ["bucket-wait-job.yaml", "cluster-g1.yaml", "objectstore.yaml", "scheduledbackup.yaml"]
 
 
 @pytest.mark.parametrize("label, state, reason", [

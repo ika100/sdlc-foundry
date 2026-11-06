@@ -659,9 +659,9 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata: {name: grafana, namespace: observability}
 spec:
-  parentRefs: [{name: traefik-gateway, namespace: kube-system}]
+  parentRefs: [{group: gateway.networking.k8s.io, kind: Gateway, name: traefik-gateway, namespace: kube-system}]
   hostnames: [grafana.localhost]
-  rules: [{backendRefs: [{name: lgtm, port: 3000}]}]
+  rules: [{matches: [{path: {type: PathPrefix, value: /}}], backendRefs: [{group: "", kind: Service, name: lgtm, port: 3000, weight: 1}]}]
 YAML
       k -n observability rollout status deploy/lgtm --timeout=300s >/dev/null
     fi
@@ -744,9 +744,9 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata: {name: grafana, namespace: observability}
 spec:
-  parentRefs: [{name: traefik-gateway, namespace: kube-system}]
+  parentRefs: [{group: gateway.networking.k8s.io, kind: Gateway, name: traefik-gateway, namespace: kube-system}]
   hostnames: [grafana.localhost]
-  rules: [{backendRefs: [{name: lgtm, port: 3000}]}]
+  rules: [{matches: [{path: {type: PathPrefix, value: /}}], backendRefs: [{group: "", kind: Service, name: lgtm, port: 3000, weight: 1}]}]
 YAML
           fi
           if [ "$with_cnpg" = 1 ]; then

@@ -662,11 +662,39 @@ def test_the_rendered_stack_routes_grafana_localhost_like_cluster_up(tmp_path):
     g = with_answers(tmp_path, doc, property_operators="install", github_org="acme", project_name="shop-gitops")
     route = y(g, "operators/lgtm/route.yaml")
     assert route["kind"] == "HTTPRoute" and route["metadata"] == {"name": "grafana", "namespace": "observability"}
-    assert route["spec"] == {"parentRefs": [{"name": "traefik-gateway", "namespace": "kube-system"}], "hostnames": ["grafana.localhost"],
-                             "rules": [{"backendRefs": [{"name": "lgtm", "port": 3000}]}]}
+    assert route["spec"] == {
+        "parentRefs": [{"group": "gateway.networking.k8s.io", "kind": "Gateway", "name": "traefik-gateway", "namespace": "kube-system"}],
+        "hostnames": ["grafana.localhost"],
+        "rules": [{"matches": [{"path": {"type": "PathPrefix", "value": "/"}}],
+                   "backendRefs": [{"group": "", "kind": "Service", "name": "lgtm", "port": 3000, "weight": 1}]}]}
     script = (ROOT / "templates/gitops-app/scripts/local-cluster.sh").read_text()
     assert script.count("metadata: {name: grafana, namespace: observability}") == 2       # cluster-up applies the very same object
-    assert script.count("parentRefs: [{name: traefik-gateway, namespace: kube-system}]") >= 2
+    spec = yaml.safe_load("parentRefs: [{group: gateway.networking.k8s.io, kind: Gateway, name: traefik-gateway, namespace: kube-system}]\n"
+                          "hostnames: [grafana.localhost]\n"
+                          'rules: [{matches: [{path: {type: PathPrefix, value: /}}], backendRefs: [{group: "", kind: Service, name: lgtm, port: 3000, weight: 1}]}]\n')
+    assert spec == route["spec"]
+    assert script.count("  parentRefs: [{group: gateway.networking.k8s.io, kind: Gateway, name: traefik-gateway, namespace: kube-system}]\n"
+                        "  hostnames: [grafana.localhost]\n"
+                        '  rules: [{matches: [{path: {type: PathPrefix, value: /}}], backendRefs: [{group: "", kind: Service, name: lgtm, port: 3000, weight: 1}]}]\n') == 2
+
+
+def test_the_lgtm_route_writes_out_every_gateway_api_default_508(tmp_path):
+    """#508: operator-lgtm stayed OutOfSync while Healthy. The API server fills in the Gateway API CRD's defaults on the HTTPRoute
+    (parentRefs group/kind, a PathPrefix `/` match, backendRefs group/kind/weight); Argo CD's client-side diff compares the CRD's
+    lists as a whole and so saw them differ forever. The route now carries every default, and the application uses the server-side
+    diff like every operator application (#307)."""
+    doc = plain()
+    doc["environments"]["dev"]["observability"] = {"ui": "lgtm"}
+    g = with_answers(tmp_path, doc, property_operators="install", github_org="acme", project_name="shop-gitops")
+    app = y(g, "operators/apps/lgtm.yaml")
+    assert app["metadata"]["annotations"] == {"argocd.argoproj.io/compare-options": "ServerSideDiff=true"}
+    spec = y(g, "operators/lgtm/route.yaml")["spec"]
+    for ref in spec["parentRefs"]:
+        assert ref["group"] == "gateway.networking.k8s.io" and ref["kind"] == "Gateway"
+    for rule in spec["rules"]:
+        assert rule["matches"] == [{"path": {"type": "PathPrefix", "value": "/"}}]
+        for ref in rule["backendRefs"]:
+            assert ref["group"] == "" and ref["kind"] == "Service" and ref["weight"] == 1
     assert not [k for k in with_answers(tmp_path / "none", plain(), property_operators="install") if k.endswith("lgtm/route.yaml")]
 
 

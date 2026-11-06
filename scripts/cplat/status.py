@@ -374,7 +374,9 @@ def backup_lines(b: dict) -> list[str]:
             arch = {"ok": "archiving ok", "failing": f"archiving failing ({x['error']})" if x["error"] else "archiving failing"}.get(
                 x["archiving"] or "", "archiving unknown")
             pts = f"{x['earliest']} … {x['latest'] or x['earliest']}" if x["earliest"] else "none"
-            rows.append((label, f"last base backup {x['last_success'] or 'never'}  {arch}  restore points {pts}"))
+            # #507: a failed (or overdue) base backup while archiving works was shown as a plain line; say it fails, and why
+            failing = f"  backup failing ({x['error'] or 'the last base backup failed'})" if st == "failing" and x["archiving"] != "failing" else ""
+            rows.append((label, f"last base backup {x['last_success'] or 'never'}  {arch}  restore points {pts}{failing}"))
         if r["restored"]:
             why = "" if r["restored"]["ready"] else f" (not ready: {r['restored_phase']})" if r.get("restored_phase") else " (not ready)"
             rows.append((label, f"restored {r['restored']['name']}{why}"))

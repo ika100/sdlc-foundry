@@ -480,8 +480,8 @@ HHMM = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 POLICY_API = "policies.kyverno.io/v1"
 POLICY_MODES = {"Audit": "Audit", "Enforce": "Deny"}     # mode -> Kyverno validationActions
 LGTM_ENDPOINT = "http://lgtm.observability.svc:4318"    # the shared all-in-one UI stack `cluster-up` installs for `ui: lgtm`
-ADDON_FILES = {"cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"}
-DATABASE_FILES = {"cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"}
+ADDON_FILES = {"bucket-wait-job.yaml", "cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"}
+DATABASE_FILES = {"bucket-wait-job.yaml", "cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"}     # bucket-wait-job.yaml: #507
 DATABASE_GENERATION = re.compile(r"^cluster-g[1-9][0-9]*\.yaml$")
 ESO_API = "external-secrets.io/v1"
 GEN_API = "generators.external-secrets.io/v1alpha1"
@@ -2305,6 +2305,112 @@ def database_cluster(app: str, name: str, env: str, conf: dict, cluster: str | N
     }
 
 
+BUCKET_WAIT_SECONDS = 600     # #507: the longest time the bucket wait holds the ScheduledBackup back; then it is created anyway
+BUCKET_WAIT_SCRIPT = r'''# The bucket wait (#507): exits 0 once the backup bucket answers a signed HeadBucket with 200, so the ScheduledBackup (next
+# sync wave) takes its immediate base backup only when it can succeed. After BUCKET_WAIT_SECONDS it exits 0 anyway: the backup then
+# runs as before, and `/system:status` reports it when it fails. Standard library only; no credential is ever printed.
+import datetime
+import hashlib
+import hmac
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+EMPTY = hashlib.sha256(b"").hexdigest()
+
+
+def _hmac(key, text):
+    return hmac.new(key, text.encode(), hashlib.sha256).digest()
+
+
+def authorization(method, url, headers, region, service, key_id, secret):
+    """AWS Signature Version 4 of a request without a body; `headers` (lowercase names) holds host and x-amz-date."""
+    u = urllib.parse.urlsplit(url)
+    names = sorted(headers)
+    signed = ";".join(names)
+    canonical = "\n".join([method, urllib.parse.quote(u.path or "/", safe="/~"), u.query,
+                           *("%s:%s" % (n, headers[n].strip()) for n in names), "", signed, EMPTY])
+    amz_date = headers["x-amz-date"]
+    scope = "%s/%s/%s/aws4_request" % (amz_date[:8], region, service)
+    to_sign = "\n".join(["AWS4-HMAC-SHA256", amz_date, scope, hashlib.sha256(canonical.encode()).hexdigest()])
+    key = _hmac(_hmac(_hmac(_hmac(("AWS4" + secret).encode(), amz_date[:8]), region), service), "aws4_request")
+    signature = hmac.new(key, to_sign.encode(), hashlib.sha256).hexdigest()
+    return "AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s" % (key_id, scope, signed, signature)
+
+
+def head_bucket(endpoint, bucket, region, key_id, secret):
+    """None when the bucket answers 200, else why not."""
+    url = endpoint.rstrip("/") + "/" + bucket
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    headers = {"host": urllib.parse.urlsplit(url).netloc, "x-amz-content-sha256": EMPTY, "x-amz-date": now}
+    request = urllib.request.Request(url, method="HEAD")
+    for name in ("x-amz-content-sha256", "x-amz-date"):
+        request.add_header(name, headers[name])
+    request.add_header("Authorization", authorization("HEAD", url, headers, region, "s3", key_id, secret))
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return None if response.status == 200 else "HTTP %d" % response.status
+    except urllib.error.HTTPError as error:
+        return "HTTP %d" % error.code
+    except (urllib.error.URLError, OSError) as error:
+        return str(getattr(error, "reason", error))
+
+
+def main():
+    env = os.environ
+    bucket = env["BUCKET_NAME"]
+    deadline = time.time() + float(env.get("BUCKET_WAIT_SECONDS", "600"))
+    last = None
+    while True:
+        why = head_bucket(env["BUCKET_ENDPOINT"], bucket, env["BUCKET_REGION"], env["AWS_ACCESS_KEY_ID"], env["AWS_SECRET_ACCESS_KEY"])
+        if why is None:
+            print("bucket %s answers" % bucket, flush=True)
+            return 0
+        if why != last:
+            print("waiting for bucket %s: %s" % (bucket, why), flush=True)
+            last = why
+        if time.time() >= deadline:
+            print("bucket %s still does not answer (%s); going on without it" % (bucket, why), flush=True)
+            return 0
+        time.sleep(float(env.get("BUCKET_WAIT_INTERVAL", "5")))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+def bucket_wait_job(base: str, bucket: str, endpoint: str, secret: str, labels: dict) -> dict:
+    """The Sync hook (wave 1) of a database backed up to an in-cluster bucket (#507): it waits until the bucket answers with the
+    ObjectStore's endpoint and credentials, so the ScheduledBackup (wave 2) and its immediate Backup come only then. Its pod starts
+    once the bucket's credentials Secret exists. No credential value is rendered."""
+    keys = [("BUCKET_REGION", "region"), ("AWS_ACCESS_KEY_ID", "accessKeyId"), ("AWS_SECRET_ACCESS_KEY", "secretAccessKey")]  # pragma: allowlist secret
+    env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "BUCKET_ENDPOINT", "value": endpoint},
+           {"name": "BUCKET_NAME", "value": bucket}, {"name": "BUCKET_WAIT_SECONDS", "value": str(BUCKET_WAIT_SECONDS)},
+           *({"name": n, "valueFrom": {"secretKeyRef": {"name": secret, "key": k}}} for n, k in keys)]
+    kept = {k: v for k, v in labels.items() if k in ("app.kubernetes.io/part-of", "app.kubernetes.io/managed-by")}
+    return {
+        "apiVersion": "batch/v1", "kind": "Job",
+        "metadata": {"name": f"{base[:50].rstrip('-')}-bucket-wait", "labels": dict(labels),
+                     "annotations": {"argocd.argoproj.io/hook": "Sync", "argocd.argoproj.io/sync-wave": "1",
+                                     "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded"}},
+        "spec": {"backoffLimit": 1, "activeDeadlineSeconds": 900,
+                 # the pod must not match the database's selectors (app.kubernetes.io/name): its own name, part-of and managed-by
+                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": f"{base}-bucket-wait", **kept,
+                                                      "app.kubernetes.io/component": "bucket-wait"}},
+                              "spec": {"automountServiceAccountToken": False, "restartPolicy": "Never",
+                                       "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "runAsGroup": 65534,
+                                                           "seccompProfile": {"type": "RuntimeDefault"}},
+                                       "containers": [{"name": "bucket-wait", "image": CREDENTIALS_IMAGE,
+                                                       "command": ["python3", "-c", Literal(BUCKET_WAIT_SCRIPT)], "env": env,
+                                                       "resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "64Mi"}},
+                                                       "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "allowPrivilegeEscalation": False,
+                                                                           "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}}]}}}}
+
+
 def bucket_files(app: str, name: str, env: str, conf: dict, target: bool = False) -> dict[str, dict | str]:
     """The in-cluster bucket instance (ADR-059): its own SeaweedFS, a Bucket, an identity limited to it and a credentials Job.
 
@@ -3108,8 +3214,14 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], 
                      "configuration": {"destinationPath": f"s3://{bucket}/databases", "endpointURL": endpoint,
                                        "s3Credentials": {k: {"name": secret, "key": k} for k in ("accessKeyId", "secretAccessKey", "region")},  # pragma: allowlist secret
                                        "wal": {"compression": "gzip"}, "data": {"compression": "gzip"}}}}
+        sched_meta: dict = {"name": base, "labels": dict(labels)}
+        if not cfg["resources"][backup["to"]]["envs"][env]["external"]:
+            # #507: CloudNativePG never retries the immediate Backup, so it must not run before the in-cluster bucket answers: a
+            # Sync hook waits for the bucket in wave 1, and the ScheduledBackup is created in wave 2, after it
+            files["bucket-wait-job.yaml"] = bucket_wait_job(base, bucket, endpoint, secret, labels)
+            sched_meta["annotations"] = {"argocd.argoproj.io/sync-wave": "2"}
         files["scheduledbackup.yaml"] = {
-            "apiVersion": "postgresql.cnpg.io/v1", "kind": "ScheduledBackup", "metadata": {"name": base, "labels": dict(labels)},
+            "apiVersion": "postgresql.cnpg.io/v1", "kind": "ScheduledBackup", "metadata": sched_meta,
             "spec": {"schedule": f"0 {backup['schedule']}", "immediate": True, "backupOwnerReference": "none", "cluster": {"name": active},
                      "method": "plugin", "pluginConfiguration": {"name": BARMAN_PLUGIN}}}
     files["kustomization.yaml"] = {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": sorted(files)}
@@ -3372,7 +3484,9 @@ def lgtm_application(repo: str, server: str) -> dict:
     return {
         "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
         "metadata": {"name": "operator-lgtm", "namespace": "argocd",
-                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"}},
+                     "labels": {"app.kubernetes.io/managed-by": "gitops-app", "app.kubernetes.io/component": "operator"},
+                     # #508: like every operator application (#307), the diff compares what the server-side apply would write
+                     "annotations": {"argocd.argoproj.io/compare-options": "ServerSideDiff=true"}},
         "spec": {"project": "default", "source": {"repoURL": repo, "targetRevision": "main", "path": "operators/lgtm"},
                  "destination": {"server": server, "namespace": "observability"},
                  "syncPolicy": {"automated": {"prune": True, "selfHeal": True}, "syncOptions": ["CreateNamespace=true", "ServerSideApply=true"]}}}
@@ -3396,8 +3510,14 @@ def lgtm_manifests() -> dict[str, dict]:
             "spec": {"selector": {"app": "lgtm"}, "ports": [{"name": n, "port": p, "targetPort": n} for n, p in ports]}},
         "route.yaml": {
             "apiVersion": "gateway.networking.k8s.io/v1", "kind": "HTTPRoute", "metadata": {"name": "grafana", "namespace": "observability"},
-            "spec": {"parentRefs": [{"name": DEFAULT_GATEWAY["name"], "namespace": DEFAULT_GATEWAY["namespace"]}],
-                     "hostnames": ["grafana.localhost"], "rules": [{"backendRefs": [{"name": "lgtm", "port": 3000}]}]}},
+            # #508: every field the Gateway API CRD defaults is written out (parentRefs group/kind, the rule's PathPrefix `/` match,
+            # backendRefs group/kind/weight): the API server adds them, and Argo CD's client-side diff then saw the CRD's lists
+            # differ and kept the application OutOfSync
+            "spec": {"parentRefs": [{"group": "gateway.networking.k8s.io", "kind": "Gateway",
+                                     "name": DEFAULT_GATEWAY["name"], "namespace": DEFAULT_GATEWAY["namespace"]}],
+                     "hostnames": ["grafana.localhost"],
+                     "rules": [{"matches": [{"path": {"type": "PathPrefix", "value": "/"}}],
+                                "backendRefs": [{"group": "", "kind": "Service", "name": "lgtm", "port": 3000, "weight": 1}]}]}},
         "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
                                "resources": ["deployment.yaml", "route.yaml", "service.yaml"]},
     }
