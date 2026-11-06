@@ -1,7 +1,7 @@
 ---
 spec_id: 147-the-system-plan-writes-the-repo-specs
 title: The system plan writes the repo specs
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -46,3 +46,5 @@ As someone reading a repo spec, I want a small set of criteria that each name th
 - 2026-11-06 created after the journey 4 analysis (strategy item 3); open questions answered with the recommended options, as the user asked for this round.
 - 2026-11-06 approved
 - 2026-11-06 AC-147.2 clarified: the check applies to a plan that lists repo criteria (older plans keep AC-147.5); the check is the gitops repo's plan check.
+- 2026-11-06 building
+- 2026-11-06 done
