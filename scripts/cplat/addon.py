@@ -212,13 +212,13 @@ def main(argv: list[str]) -> int:
             if typ == "broker":
                 r.next_steps.append("create on the external broker the streams and durable consumers that devbox run render prints (the platform creates none there)")
         elif typ == "broker":
-            r.next_steps.append("the platform installs the NACK controller through operators/ (apply operators/root.yaml once per cluster: KUBE_CONTEXT=<ctx> devbox run bootstrap); environments with operators: owner need it installed by their owner")
+            r.next_steps.append("the platform installs the NACK controller through operators/ (a cluster without the Argo CD application platform-operators needs operators/root.yaml applied once, by a person: KUBE_CONTEXT=<ctx> devbox run bootstrap; after that new operators arrive through git, and /system:ship applies it itself on the local cluster); environments with operators: owner need it installed by their owner")
         elif typ == "cache":
             r.next_steps.append("no operator is needed: each environment where a component uses it runs one Valkey StatefulSet (defaults: Valkey 9, memory 256Mi, allkeys-lru, persistence false; set them in system.yaml)")
         elif typ == "bucket":
-            r.next_steps.append("the platform installs the SeaweedFS operator through operators/ (apply operators/root.yaml once per cluster: KUBE_CONTEXT=<ctx> devbox run bootstrap); environments with operators: owner need it installed by their owner")
+            r.next_steps.append("the platform installs the SeaweedFS operator through operators/ (a cluster without the Argo CD application platform-operators needs operators/root.yaml applied once, by a person: KUBE_CONTEXT=<ctx> devbox run bootstrap; after that new operators arrive through git, and /system:ship applies it itself on the local cluster); environments with operators: owner need it installed by their owner")
         else:
-            r.next_steps.append("the platform installs CloudNativePG through operators/ (apply operators/root.yaml once per cluster: KUBE_CONTEXT=<ctx> devbox run bootstrap); environments with operators: owner need it installed by their owner")
+            r.next_steps.append("the platform installs CloudNativePG through operators/ (a cluster without the Argo CD application platform-operators needs operators/root.yaml applied once, by a person: KUBE_CONTEXT=<ctx> devbox run bootstrap; after that new operators arrive through git, and /system:ship applies it itself on the local cluster); environments with operators: owner need it installed by their owner")
     r.undo.append("git checkout -- . && git clean -fd applications")
     r.emit(False, ns.json)
     return 0

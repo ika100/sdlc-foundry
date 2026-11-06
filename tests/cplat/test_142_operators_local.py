@@ -6,6 +6,7 @@ import subprocess
 import appship
 import pytest
 
+ROOT_APPLIED: list[bool] = []
 
 def git(cwd, *args):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
@@ -26,9 +27,12 @@ def gitops(tmp_path, monkeypatch):
     git(repo, "add", "-A"); git(repo, "commit", "-qm", "feat(compose): postgres (#11)")
     monkeypatch.setattr(appship, "_land_main", lambda r: None)
     calls = []
+    ROOT_APPLIED.clear()
     real = appship.run
 
     def run(cmd, **kw):
+        if cmd[:1] == ["kubectl"]:
+            return subprocess.CompletedProcess(cmd, 0 if ROOT_APPLIED else 1, "", "")
         if cmd[:2] == ["devbox", "run"]:
             calls.append((cmd, kw.get("env")))
             return subprocess.CompletedProcess(cmd, 0, "", "")
@@ -42,6 +46,15 @@ def test_the_local_cluster_gets_the_new_operators_without_asking_ac_142_2(gitops
     lines, steps = appship.install_operators(repo, "k3d-shop-local")
     assert calls == [(["devbox", "run", "bootstrap"], {"KUBE_CONTEXT": "k3d-shop-local"})]
     assert steps == [] and "applied them on the local cluster k3d-shop-local" in lines[0]
+
+
+def test_a_cluster_with_platform_operators_gets_new_operators_from_git_522(gitops):
+    """#522: once operators/root.yaml is applied, a new operator file arrives through git; nobody runs bootstrap."""
+    repo, calls = gitops
+    ROOT_APPLIED.append(True)              # kubectl finds the application platform-operators
+    for ctx in ("k3d-shop-local", "prod-eu"):
+        lines, steps = appship.install_operators(repo, ctx)
+        assert calls == [] and steps == [] and "platform-operators" in lines[0]
 
 
 def test_another_cluster_keeps_the_human_step_ac_142_2(gitops):  # AC-142.2

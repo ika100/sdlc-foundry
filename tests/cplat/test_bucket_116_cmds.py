@@ -115,8 +115,9 @@ def test_add_prints_the_next_steps_of_a_bucket_ac_116_12(repo, capsys):  # AC-11
     rc, out, err = run("resource", "add", "files", "--type", "bucket", "--repo-dir", repo, capsys=capsys)
     assert rc == 0, err
     assert "let components use it: /component:set <component> --uses files (or uses: [files] in system.yaml)" in out
-    assert ("the platform installs the SeaweedFS operator through operators/ (apply operators/root.yaml once per cluster: "
-            "KUBE_CONTEXT=<ctx> devbox run bootstrap); environments with operators: owner need it installed by their owner") in out
+    assert ("the platform installs the SeaweedFS operator through operators/ (a cluster without the Argo CD application platform-operators needs operators/root.yaml applied once, by a person: "
+            "KUBE_CONTEXT=<ctx> devbox run bootstrap; after that new operators arrive through git, and /system:ship applies it "
+            "itself on the local cluster); environments with operators: owner need it installed by their owner") in out
     assert "CloudNativePG" not in out
     commit(repo)
     rc, out, _ = run("resource", "add", "ext", "--type", "bucket", "--external", "--repo-dir", repo, capsys=capsys)

@@ -28,7 +28,7 @@ T = ROOT / "templates" / "gitops-app"
 BKEYS = "url, user, password"
 BIND = ("bind events APIs to it: an events API uses the system's only broker, or set apis.<api>.broker: <name>; its provider and consumers then get "
         "NATS_URL, NATS_USER, NATS_PASSWORD and EVENTS_<API>_* (no uses: needed)")
-NACK_STEP = ("the platform installs the NACK controller through operators/ (apply operators/root.yaml once per cluster: KUBE_CONTEXT=<ctx> devbox run bootstrap); "
+NACK_STEP = ("the platform installs the NACK controller through operators/ (a cluster without the Argo CD application platform-operators needs operators/root.yaml applied once, by a person: KUBE_CONTEXT=<ctx> devbox run bootstrap; after that new operators arrive through git, and /system:ship applies it itself on the local cluster); "
              "environments with operators: owner need it installed by their owner")
 CREATE_STEP = "create on the external broker the streams and durable consumers that devbox run render prints (the platform creates none there)"
 
