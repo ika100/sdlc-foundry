@@ -187,7 +187,8 @@ def pin(gitops: Path, st: dict, repo_id: str, tag: str) -> tuple[str, list[str]]
     lines: list[str] = []
     with _locked(gitops):
         wt = sched.entry_path(gitops, spec_id)
-        if st.get("dev_merged"):
+        landed = st.get("dev_merged") and {k: st.get(k) for k in ("joint_pr", "dev_merged")}
+        if landed:
             _reset_after_merge(gitops, st, wt)
         wt = sched._start_entry(gitops, spec_id)
         run(["git", "fetch", "-q", "origin"], cwd=wt, check=False)
@@ -202,6 +203,14 @@ def pin(gitops: Path, st: dict, repo_id: str, tag: str) -> tuple[str, list[str]]
             lines.append(f"{comp}: dev pinned to {tag} on {branch(spec_id)}")
         else:
             lines.append(f"{comp}: {branch(spec_id)} already pins {tag}")
+        if landed and int(git(wt, "rev-list", "--count", "origin/main..HEAD")) == 0:
+            # #521: the new build has the image dev already runs (a test-only fix): no empty dev PR; `land` reruns
+            # the dev smoke on the revision that already landed
+            run(["git", "worktree", "remove", "--force", str(wt)], cwd=gitops, check=False)
+            run(["git", "branch", "-D", branch(spec_id)], cwd=gitops, check=False)
+            state.update(gitops, lambda s: s.update(landed))
+            st.update(state.require_state(gitops))
+            return comp, [f"{comp}: dev already runs {tag} ({landed['joint_pr']}): no new dev PR; land reruns the dev smoke"]
         git(wt, "push", "-q", "-u", "origin", branch(spec_id))
         pr = state.require_state(gitops).get("joint_pr")
         if not pr:

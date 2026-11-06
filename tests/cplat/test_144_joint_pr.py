@@ -499,3 +499,27 @@ def test_a_system_spec_across_the_gitops_repo_and_two_components_gives_one_dev_p
     assert [b for b in created if b.startswith(("compose/", "pin/dev-"))] == [f"compose/{SPEC}"]
     assert f"docs/done-{SPEC}" in created
     assert f"| shop-api | {REPO_SPEC} |" in r.out and f"shop-api:sha-{SHA}" in r.out
+
+
+def test_a_test_only_fix_after_a_red_dev_smoke_reruns_the_smoke_without_a_new_pr_521(j):
+    """#521: the fix changed only a test, so the image is the one dev already runs; the resumed ship pins nothing,
+    opens no empty compose PR and reruns the dev smoke on the landed revision."""
+    j.to_land()
+    j.red.add(("shop-api", "dev"))
+    assert j.app("land").rc == 1
+    prs = len(j.made("pr", "create"))
+    j.red.clear()
+    assert j.app("start", SPEC, "--context", "kind-shop").rc == 0
+    git(j.clone("shop-api"), "add", "-A")
+    git(j.clone("shop-api"), "commit", "-qm", "the first ship's spec")
+    r = j.app("repo", "start", "shop-api")
+    assert r.rc == 0, r.out
+    j.joint_ship("shop-api", "f" * 40, joint={"tag": f"sha-{SHA}"})      # a new merge, the same image
+    r = j.app("repo", "result", "shop-api")
+    assert r.rc == 0, r.out
+    assert "dev already runs" in r.out
+    assert len(j.made("pr", "create")) == prs
+    r = j.app("land")
+    assert r.rc == 0, r.out
+    assert [n for n, env, _ in j.smoked if env == "dev"].count("shop-api") == 2
+    assert j.state()["repos"]["shop-api"]["state"] == "passed"
