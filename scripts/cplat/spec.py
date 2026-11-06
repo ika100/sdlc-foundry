@@ -467,17 +467,38 @@ AC_ANY = re.compile(r"AC-\d{3,}\.\d+(?!\d)")
 
 
 def _py_shape(src: str) -> list[str]:
-    """Top-level statements as AST dumps: formatting, comments and line numbers do not count; runs of top-level
-    imports are sorted (formatters reorder them); string constants are compared with whitespace collapsed."""
+    """Top-level statements as AST dumps: formatting, comments and line numbers do not count; runs of imports are
+    sorted at every level, also inside a fixture (formatters reorder them, #519); string constants are compared with
+    whitespace collapsed."""
     import ast
 
-    class _Strings(ast.NodeTransformer):
+    def sorted_imports(stmts):
+        out, run = [], []
+        for node in stmts:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                run.append(node)
+                continue
+            out += sorted(run, key=ast.dump)
+            run = []
+            out.append(node)
+        return out + sorted(run, key=ast.dump)
+
+    class _Normalise(ast.NodeTransformer):
         def visit_Constant(self, node):
             if isinstance(node.value, str):
                 return ast.copy_location(ast.Constant(" ".join(node.value.split())), node)
             return node
 
-    tree = _Strings().visit(ast.parse(src))
+        def generic_visit(self, node):
+            super().generic_visit(node)
+            if not isinstance(node, ast.Module):
+                for field in ("body", "orelse", "finalbody"):
+                    stmts = getattr(node, field, None)
+                    if isinstance(stmts, list) and stmts and isinstance(stmts[0], ast.stmt):
+                        setattr(node, field, sorted_imports(stmts))
+            return node
+
+    tree = _Normalise().visit(ast.parse(src))
     out, run = [], []
     for node in tree.body:
         if isinstance(node, (ast.Import, ast.ImportFrom)):

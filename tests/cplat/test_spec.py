@@ -603,6 +603,19 @@ def test_python_test_diff(after, same):
     assert ok is same
 
 
+def test_imports_reordered_inside_a_fixture_are_formatting_only():
+    """#519: lint-fix moves an import inside a fixture once the imported package exists; no assertion changes."""
+    before = (
+        "import pytest\n\n\n@pytest.fixture\ndef store():\n"
+        "    from app.tasks.store import TaskStore\n\n    from app.main import app\n    return TaskStore(app)\n\n\n"
+        "def test_create(store):  # AC-001.1\n    assert store.create('a') == 1\n")
+    after = before.replace("    from app.tasks.store import TaskStore\n\n    from app.main import app\n",
+                           "    from app.main import app\n    from app.tasks.store import TaskStore\n")
+    assert spec.formatting_only(before, after, "test_tasks.py") == (True, "")
+    moved = after.replace("    return TaskStore(app)\n", "    return TaskStore(app)\n    import os\n")
+    assert spec.formatting_only(before, moved, "test_tasks.py")[0] is False
+
+
 @pytest.mark.parametrize("after, same", [
     ('it("AC-007.1 sends",()=>{\n  expect(send(200.01)).toBe(1)\n})\n', True),
     ('it("AC-007.1 sends", () => { expect(send(199)).toBe(1) })\n', False),
