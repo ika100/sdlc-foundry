@@ -153,7 +153,8 @@ def test_planner_assigns_criteria_instead_of_writing_prompts():
 
 
 def test_repo_specs_come_from_the_deterministic_slice():
-    text = (COMMANDS / "spec.md").read_text()
+    assert "references/spec-from-plan.md" in (COMMANDS / "spec.md").read_text()
+    text = (PLUGINS / "component" / "references" / "spec-from-plan.md").read_text()   # #496: section D moved there
     assert "cplat spec new --from-plan <abs plan path> <repo-id>" in text and "**System context**" in text
     assert "System context" in (PLUGINS / "svc" / "agents" / "product-manager.md").read_text()
 
@@ -169,7 +170,9 @@ def test_build_checks_the_worktree_base_before_fanning_out():
 def test_app_build_runs_the_gitops_entry_itself():
     """AC-045.1 AC-045.3 AC-045.4: cplat operations in the gitops repo, merge first, no leftover worktree."""
     text = (APP / "commands" / "ship.md").read_text()
-    assert "cplat component set" in text and "cplat resource add" in text and "starts before it is merged" in text
+    entry = (APP / "references" / "ship-entry.md").read_text()        # #496: the entry's operations moved there
+    assert "references/ship-entry.md" in text
+    assert "cplat component set" in entry and "cplat resource add" in entry and "starts before it is merged" in text
     # the worktree is removed by cplat system ship, not by the command file
     assert '"worktree", "remove"' in (ROOT / "scripts" / "cplat" / "appship.py").read_text()
     assert "is built by you in the printed worktree" in text
@@ -228,7 +231,8 @@ def test_build_resumes_an_interrupted_task():
     pre = text.split("## Phase 0", 1)[1].split("## Phase 1", 1)[0]
     assert "wip(<task-id>): interrupted" in pre and "git restore --staged" in pre
     assert "not `building`" in pre and "clean" in pre
-    assert "squash-merge" in text.split("## Phase 7", 1)[1]
+    assert "references/build-pr.md" in text.split("## Phase 7", 1)[1]
+    assert "squash-merge" in (PLUGINS / "component" / "references" / "build-pr.md").read_text()   # #496
 
 
 def test_planner_writes_errors_and_timeouts_into_the_contract():
@@ -274,6 +278,9 @@ PR_COMMANDS = [COMMANDS / "build.md", COMMANDS / "fix.md"]
 def test_pipelines_end_with_a_ready_pr_command(path):
     """AC-051.1 AC-051.2: no error when gh pr create is denied; the exact command is the last line."""
     text = path.read_text()
+    ref = {"build": "build-pr.md", "fix": "fix-pr.md"}[path.stem]     # #496: the PR step moved to a reference file
+    assert f"references/{ref}" in text
+    text = (PLUGINS / "component" / "references" / ref).read_text()
     assert "gh pr create" in text and "PR_BODY.md" in text and "last line" in text and "not an error" in text
 
 

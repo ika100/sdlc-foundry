@@ -79,7 +79,8 @@ def test_a_repo_spec_without_decisions_posts_no_comment_ac_141_5(repo, gh, monke
 
 
 def test_the_unattended_rules_take_suggested_answers_and_stop_only_without_one_ac_141_1_ac_141_2():  # AC-141.1, AC-141.2
-    d3 = (ROOT / "plugins/component/commands/spec.md").read_text()
+    assert "references/spec-from-plan.md" in (ROOT / "plugins/component/commands/spec.md").read_text()
+    d3 = (ROOT / "plugins/component/references/spec-from-plan.md").read_text()      # #496: section D moved there
     assert "## Decisions taken during the ship" in d3 and "a question without a suggestion" in d3
     assert "changes the system spec or the contract" in d3 and "stop and report the questions verbatim" in d3
     sys_ship = (ROOT / "plugins/system/commands/ship.md").read_text()

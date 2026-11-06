@@ -405,9 +405,11 @@ def test_resolved_refuses_a_replanned_task_that_is_not_done(world, capsys):
 def test_the_rerun_prompt_gives_the_old_diff_as_reference():
     """AC-094.5: build.md hands the set-aside branch's diff to the coder as reference only."""
     text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
-    assert "git diff HEAD...<branch>" in text
-    assert "Your earlier attempt is a reference only" in text
-    assert "already contains every merged task" in text
+    ref = (core.PLATFORM_ROOT / "plugins" / "component" / "references" / "build-replan.md").read_text()   # #496
+    assert "references/build-replan.md" in text and "add its text to the prompt" in text
+    assert "git diff HEAD...<branch>" in ref
+    assert "Your earlier attempt is a reference only" in ref
+    assert "already contains every merged task" in ref
     assert "cplat component build resolved" in text
 
 
@@ -494,7 +496,7 @@ def test_state_without_replans_prints_one_line(world, capsys):
 
 def test_the_final_report_row_states_the_amended_plan():
     """AC-094.8 AC-094.14: build.md's Implementation row names the re-plans, the files and the clean re-run."""
-    text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
+    text = (core.PLATFORM_ROOT / "plugins" / "component" / "references" / "build-pr.md").read_text()   # #496: the report
     assert "plan amended" in text and "after merge conflicts" in text and "re-run merged cleanly" in text
     assert "cplat component build state" in text
 
@@ -666,6 +668,6 @@ def test_an_attended_build_replans_without_asking():
     """AC-094.14: build.md re-plans without asking, also interactively, and the Final Report says so."""
     text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
     assert "without asking" in text and "attended" in text
-    assert "plan amended" in text
+    assert "plan amended" in (core.PLATFORM_ROOT / "plugins" / "component" / "references" / "build-pr.md").read_text()   # #496
     ship = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "ship.md").read_text()
     assert "re-plan" in ship.lower()

@@ -305,7 +305,8 @@ def test_build_never_hands_a_red_gate_after_a_bump_to_a_coder_and_keeps_acceptan
 
 
 def test_build_puts_the_patch_table_in_the_pr_body_and_the_final_report():  # AC-095.4 AC-095.17
-    text = plugin("component/commands/build.md")
+    assert "references/build-pr.md" in plugin("component/commands/build.md")
+    text = plugin("component/references/build-pr.md")                # #496: PR body and final report moved there
     assert "cplat deps report" in text
     assert "Dependency patches" in text and "(no CRITICAL findings)" not in text
 
@@ -331,7 +332,9 @@ def test_ship_land_patches_a_red_security_check_and_counts_it_as_a_fix_round(): 
 
 def test_ship_finish_lists_the_bumps_and_marks_major_bumps():  # AC-095.17
     text = plugin("component/commands/ship.md")
-    assert "major bump" in text and "cplat deps report" in text.split("Finish", 1)[-1]
+    assert "references/ship-finish.md" in text and "cplat deps report" in text.split("Finish", 1)[-1]
+    finish = plugin("component/references/ship-finish.md")            # #496: the report template moved there
+    assert "major bump" in finish and "cplat deps report" in finish
 
 
 def test_security_agent_never_bumps_and_leaves_patching_to_the_run():  # AC-095.12

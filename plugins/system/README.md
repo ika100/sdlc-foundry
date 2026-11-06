@@ -2,6 +2,8 @@
 
 Spec-driven features across a system's components, run in its **`gitops-app`** repo ([ADR-026](../../docs/adr/026-feature-specs.md)): `/system:new` creates the system; `/system:spec` writes the system spec (criteria `AC-<NNN>.<n>`, your answers, your approval); `/system:plan` assigns every criterion to a component repo, in dependency order, with the contract between them ([ADR-011](../../docs/adr/011-multi-repo-plan-format.md)); `/system:ship` ships every repo unattended through its own `/component:ship`, in plan order ([ADR-042](../../docs/adr/042-product-ship-coordinates-repo-ships.md)).
 
+`references/` holds the parts of `/system:ship` and `/system:spec` that only one path needs (the gitops entry, listing and tracking specs); the command reads them on demand (`${CLAUDE_PLUGIN_ROOT}/references/…`).
+
 ## Agents
 
 | Agent | Model | Purpose |

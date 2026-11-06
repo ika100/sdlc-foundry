@@ -15,4 +15,4 @@ The commands that work on one component (a service, a website or a library) and 
 | `/component:check` | Read-only quality and security audit |
 | `/component:release` | Gates on the commit staging runs, tag it, then changelog and next development version in a follow-up PR |
 
-`references/` holds the long procedures the build, ship and fix commands read on demand (`${CLAUDE_PLUGIN_ROOT}/references/…`). The agents stay in `svc`, `svc-java`, `svc-go`, `web` and `shared`; the `cplat` launcher comes from `shared`, so keep it enabled.
+`references/` holds the rare branches and late-phase templates the build, ship, spec, fix and release commands read only when that path happens (`${CLAUDE_PLUGIN_ROOT}/references/…`), so the command files stay small in the coordinator's context. The agents stay in `svc`, `svc-java`, `svc-go`, `web` and `shared`; the `cplat` launcher comes from `shared`, so keep it enabled.

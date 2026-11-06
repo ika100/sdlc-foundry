@@ -579,9 +579,11 @@ def test_ac_123_22_the_finished_run_reports_not_deployable_and_names_the_shape(p
 
 def test_ac_123_22_ship_md_prints_not_deployable_rows_and_no_promote_step():  # AC-123.22
     md = text(CMDS / "ship.md")
-    assert "not deployable (<shape>): nothing to deploy" in md
-    assert "`Promotion (staging)`, `Smoke (staging)` and `Smoke (dev)` rows read `not deployable`" in md
-    assert "every `Next:` line that names `/instance:promote`" in md
+    finish = text(CMDS.parent / "references" / "ship-finish.md")     # #496: the report template moved there
+    assert "references/ship-finish.md" in md
+    assert "not deployable (<shape>): nothing to deploy" in finish
+    assert "`Promotion (staging)`, `Smoke (staging)` and `Smoke (dev)` rows read `not deployable`" in finish
+    assert "every `Next:` line that names `/instance:promote`" in finish
     assert "no `devbox run smoke` (which here smoke-tests the templates)" in md
 
 

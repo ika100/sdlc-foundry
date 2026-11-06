@@ -16,20 +16,27 @@ MOVED = {
         "build-replan.md": ["**Re-plan mode.**", "replan-abort", "Your earlier attempt is a reference only"],
         "build-security-red.md": ["cplat deps patch", "Exit 4", "agents.security"],
         "build-test-approval.md": ["--approve", "approved_test_diffs"],   # #324
+        "build-pr.md": ["{{CLOSES}}", "## Build complete:"],              # #496
     },
     "ship": {
         "ship-gitops.md": ["cplat component ship gitops prepare", "cplat component ship gitops pr"],
         "ship-land-red.md": ["RED, the security check", "fix_rounds"],
+        "ship-finish.md": ["## Shipped:", "rows read `not deployable`"],  # #496
     },
     "fix": {
         "fix-on-main.md": ["Skipping PR creation"],
+        "fix-pr.md": ["Not run by fix: `devbox run security`"],            # #496
+    },
+    "spec": {                                                              # #496
+        "spec-list.md": ["docs(spec): migrate backlog stories to docs/specs"],
+        "spec-from-plan.md": ["## Decisions taken during the ship", "cplat spec new --from-plan"],
     },
 }
 
 
 # Sizes on main (2026-10-25, after specs 091–097, before spec 100 moved the rare branches): a fixed baseline, because
 # `origin/main` is missing in CI checkouts and equals the file itself once this change is merged.
-BEFORE = {"build": 19912, "ship": 12106, "fix": 7961}
+BEFORE = {"build": 19912, "ship": 12106, "fix": 7961, "spec": 10976}
 
 
 @pytest.mark.parametrize("name", sorted(MOVED))

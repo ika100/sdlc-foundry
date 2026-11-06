@@ -372,6 +372,7 @@ def test_a_resumed_red_result_files_again_as_a_plus_one_ac_091_12(world, capsys)
 
 def test_the_ship_command_reports_the_smoke_row_ac_091_15():  # AC-091.15
     text = (core.PLATFORM_ROOT / "plugins/component/commands/ship.md").read_text()
+    text += (core.PLATFORM_ROOT / "plugins/component/references/ship-finish.md").read_text()   # #496: the report template
     assert "Smoke (dev)" in text and "passed on retry" in text and "not run" in text
     assert "(smoke)" in text and "unchecked" in text
 
