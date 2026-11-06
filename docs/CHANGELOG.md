@@ -6,6 +6,14 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.12.1] - 2026-11-06
+
+### Fixed
+
+**A plan whose spec hash has only digits is no longer stale (#536).** `cplat spec check` compared the plan's `spec_hash` as YAML parsed it; a hash like `756184979554` (about 1 in 280) is a YAML integer, so a current plan was refused as "the acceptance criteria changed" and `/component:ship` stopped in its plan phase. The hash is now read from the text of `plan.md`, which also keeps a leading zero.
+
+**A gitops PR for a public component no longer needs `SERVICE_REPOS_READ_TOKEN` (journey 5).** The `service CRDs` step of the gitops CI refused every PR with a `Service-ref` marker when the secret was not set, although the component repos of the journey are public; `/component:ship` stopped for a token nobody needs. The step now falls back to the workflow's own token, which reads public repos; a private repo it cannot read fails naming the secret. Existing gitops repos get the change with `/platform:update`.
+
 ## [5.12.0] - 2026-11-06
 
 ### Changed
