@@ -799,3 +799,13 @@ def test_more_than_twelve_criteria_warn_but_pass_ac_147_6(tmp_path, capsys):  # 
     assert spec.main(["--repo", str(tmp_path), "check"]) == 0
     assert f"WARNING: {big.id}: 13 active criteria" in capsys.readouterr().out
     assert spec.size_warning(s) is None                  # the empty skeleton
+
+
+@pytest.mark.parametrize("digits", ["756184979554", "012345670123"])
+def test_an_all_digit_spec_hash_is_not_stale_536(tmp_path, monkeypatch, digits):
+    """#536: YAML reads an all-digit hash as an integer (a leading 0 as octal); the plan was wrongly stale."""
+    s = make(tmp_path, status="approved")
+    monkeypatch.setattr(spec.Spec, "ac_hash", lambda self: digits)
+    s = edit_plan(tmp_path, f"spec_hash: {s.plan[0]['spec_hash']}", f"spec_hash: {digits}")
+    assert not isinstance(s.plan[0]["spec_hash"], str)          # what YAML makes of it
+    assert spec.check(s) == []

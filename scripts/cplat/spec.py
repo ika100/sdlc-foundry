@@ -297,10 +297,18 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
             errs.append("an approved spec needs at least one acceptance criterion (AC-<NNN>.<n>)")
         if spec.open_questions():
             errs.append(f"{len(spec.open_questions())} open question(s) left; answer them before approving")
-    amended = spec.status == "draft" and spec.plan and spec.plan[0].get("spec_hash") != spec.ac_hash()
+    amended = spec.status == "draft" and spec.plan and plan_hash(spec, spec.plan[0]) != spec.ac_hash()
     if spec.plan and not amended:   # an amended draft's plan predates its criteria; approve sets it aside (#208)
         errs += [f"plan.md: {e}" for e in check_plan(spec, *spec.plan)]
     return errs
+
+
+def plan_hash(spec: Spec, meta: dict) -> str:
+    """The plan's `spec_hash` as written (#536): YAML reads an all-digit hash as an integer, a leading 0 even as octal,
+    so it is taken from the text of plan.md, not from the parsed value."""
+    path = spec.dir / "plan.md"
+    m = re.search(r"^spec_hash:\s*[\"']?([0-9a-fA-F]+)", path.read_text(), re.M) if path.is_file() else None
+    return m.group(1) if m else str(meta.get("spec_hash"))
 
 
 def check_plan(spec: Spec, meta: dict, _body: str) -> list[str]:
@@ -314,7 +322,7 @@ def check_plan(spec: Spec, meta: dict, _body: str) -> list[str]:
         errs.append(f"spec_id '{meta['spec_id']}' must be '{spec.id}'")
     if spec.meta.get("shape") and meta.get("shape") != spec.meta["shape"]:
         errs.append(f"shape '{meta.get('shape')}' must equal the spec's shape '{spec.meta['shape']}'")
-    if meta["spec_hash"] != spec.ac_hash():
+    if plan_hash(spec, meta) != spec.ac_hash():
         errs.append("the acceptance criteria changed after this plan was written; re-plan with `/component:plan "
                     f"{spec.number}` (or set spec_hash: {spec.ac_hash()} if the change does not affect the tasks)")
     tasks = meta["tasks"]
