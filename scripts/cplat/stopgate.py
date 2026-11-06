@@ -7,13 +7,16 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import escalation_rules
 import feedback
 
 NO_PROGRESS_LIMIT = 2
 EXCERPT = 200
+AGENT_STALE = 1800
 
 
 def session_of_env() -> str | None:
@@ -34,11 +37,33 @@ def claim(st: dict, session: str | None) -> None:
 
 @dataclass(frozen=True)
 class Verdict:
-    action: str  # "silent" | "notice" | "block" | "escalate"
+    action: str  # "silent" | "notice" | "wait" | "block" | "escalate"
     no_progress: int
 
 
-def check(st: dict, session: str | None, mark: dict) -> Verdict:
+def running_agents(hook_input: dict, now: float | None = None) -> int:
+    """#496: the session's background subagents still at work. Claude Code keeps `<session>/subagents/agent-*.meta.json`
+    next to the transcript, `finished: true` once one returned; a transcript untouched for AGENT_STALE seconds is dead."""
+    path = hook_input.get("transcript_path")
+    if not path:
+        return 0
+    folder = Path(path).with_suffix("") / "subagents"
+    now = time.time() if now is None else now
+    n = 0
+    for meta in folder.glob("agent-*.meta.json"):
+        try:
+            if json.loads(meta.read_text()).get("finished") is True:
+                continue
+            log = meta.with_name(meta.name.removesuffix(".meta.json") + ".jsonl")
+            if now - (log if log.is_file() else meta).stat().st_mtime < AGENT_STALE:
+                n += 1
+        except (OSError, ValueError, AttributeError):
+            continue
+    return n
+
+
+def check(st: dict, session: str | None, mark: dict, running: int = 0) -> Verdict:
+    """`running` background agents of the session count as progress: the session waits for their notification (#496)."""
     owner = st.get("owner")
     if not owner:
         return Verdict("notice", 0)
@@ -46,6 +71,9 @@ def check(st: dict, session: str | None, mark: dict) -> Verdict:
         return Verdict("silent", 0)
     prev = st.get("stop_gate") or {}
     head, phase = mark.get("head"), mark.get("phase")
+    if running:
+        st["stop_gate"] = {"head": head, "phase": phase, "no_progress": 0}
+        return Verdict("wait", 0)
     progress = not prev or prev.get("head") != head or prev.get("phase") != phase
     n = 0 if progress else int(prev.get("no_progress", 0)) + 1
     st["stop_gate"] = {"head": head, "phase": phase, "no_progress": n}

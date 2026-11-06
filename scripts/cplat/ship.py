@@ -322,12 +322,19 @@ def on_branch(repo: Path, branch: str) -> str:
             return f"branch: {branch} restarted from origin/main (its spec commits are already on main)"
     if git("branch", "--show-current").stdout.strip() == branch:
         return f"branch: {branch}"
-    if git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").returncode == 0:
+    local = git("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").returncode == 0
+    if not local and git("rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}").returncode == 0 \
+            and git("ls-remote", "--exit-code", "--heads", "origin", branch).returncode == 2:
+        git("update-ref", "-d", f"refs/remotes/origin/{branch}")   # #494: `gh pr merge --delete-branch` leaves this stale ref
+    if local:
         args, how = ["switch", branch], "switched to"
     elif git("rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}").returncode == 0:
         args, how = ["switch", "-c", branch, "--track", f"origin/{branch}"], "switched to (tracking origin)"
     else:
-        args, how = ["switch", "-c", branch], "created"
+        git("fetch", "-q", "origin", "main")
+        behind = git("merge-base", "--is-ancestor", "HEAD", "origin/main").returncode == 0
+        args, how = ((["switch", "--no-track", "-c", branch, "origin/main"], "created from origin/main") if behind
+                     else (["switch", "-c", branch], "created"))
     p = git(*args)
     if p.returncode != 0:
         raise PlatformError(f"cannot switch to {branch}: {(p.stderr or p.stdout).strip()}",
@@ -1723,13 +1730,16 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
         return None
     session = hook_input.get("session_id") or None
     mark = {"head": _head(repo, st["branch"]), "phase": st["phase"]}
-    verdict = stopgate.check(st, session, mark)
+    running = stopgate.running_agents(hook_input)
+    verdict = stopgate.check(st, session, mark, running)
     command = f"/component:ship {st['spec']}"
     if verdict.action == "silent":
         return None
     if verdict.action == "notice":
         return {"systemMessage": f"ship {st['spec']}: unfinished in phase {st['phase']}, no session owns it; resume it with {command}"}
     save_state(repo, st)
+    if verdict.action == "wait":                   # #496: a background agent at work is progress; its notification resumes us
+        return {"systemMessage": f"ship {st['spec']}: waiting for {running} background agent(s) in phase {st['phase']}"}
     if verdict.action == "escalate":
         message = stopgate.last_message(hook_input)
         cause = no_progress_cause(repo, st, message, run_tests)

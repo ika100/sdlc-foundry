@@ -47,7 +47,7 @@ TOUCHED_FILES=$(git diff --name-only $BASE_REF -- .)
 
 ## Step 2 — Parallel QA fan-out (quality + tester)
 
-Fan out **quality** and **tester** in a single message. Wall-clock is the longer leg, not the sum. Each prompt prelude:
+Fan out **quality** and **tester** in a single message, in the foreground (`run_in_background: false`). Each prompt prelude:
 ```
 <project-map>
 $PROJECT_MAP

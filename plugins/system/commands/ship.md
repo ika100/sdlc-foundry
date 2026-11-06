@@ -27,6 +27,7 @@ The shape must be `gitops-app`; `system ship start` refuses a component repo (us
 - Never ask the user. Never merge by hand, never push to a default branch, never force-push, never promote beyond dev (`cplat system ship` and `cplat component ship` merge, on green checks only).
 - Every shell command goes through `devbox run <script>`, except git, gh and cplat.
 - Questions of a repo spec are never answered by you.
+- Subagents run in the foreground (`run_in_background: false`; parallel ones as several Agent calls in one message, which returns when all are done). Never wait for one with a shell loop on its output file, git HEAD or a docker image (#496).
 
 ## Phase `plan`
 

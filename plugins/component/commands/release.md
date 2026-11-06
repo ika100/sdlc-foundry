@@ -22,7 +22,7 @@ The platform is released through its own procedure: version bumps in .claude-plu
 Release the platform with /platform:release (or cplat platform release).
 ```
 
-Roles missing from `agents` (e.g. deployment for a library) are skipped. The tester is `agents.tester`, the release agent in Phase 6 is `agents.release` ([ADR-012](../../../docs/adr/012-per-plugin-release-agent.md)). The gates below call only shape-neutral `devbox run` recipes; skip the image scan in Phase 4 when `deployable` is false.
+Roles missing from `agents` (e.g. deployment for a library) are skipped. Every agent runs in the foreground (`run_in_background: false`; never polled, #496). The tester is `agents.tester`, the release agent in Phase 6 is `agents.release` ([ADR-012](../../../docs/adr/012-per-plugin-release-agent.md)). The gates below call only shape-neutral `devbox run` recipes; skip the image scan in Phase 4 when `deployable` is false.
 
 ---
 

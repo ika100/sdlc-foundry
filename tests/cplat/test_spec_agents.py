@@ -159,7 +159,7 @@ def test_repo_specs_come_from_the_deterministic_slice():
 
 
 def test_build_checks_the_worktree_base_before_fanning_out():
-    """AC-044.3 AC-044.4: a probe worktree off the feature head means sequential, with the reason."""
+    """AC-044.3 AC-044.4: the probe checks the worktree base; since #501 coders reset a worktree off the feature head."""
     text = (COMMANDS / "build.md").read_text()
     probe = text.split("### 2.2 Worktree probe", 1)[1].split("### 2.3", 1)[0]
     assert "git rev-parse HEAD" in probe and "FEATURE_HEAD" in probe and 'worktree.baseRef: "head"' in probe

@@ -60,10 +60,7 @@ From `plan.md`: **skip tasks with `done: true`**. Run `cplat component build sch
 
 ### 2.2 Worktree probe
 
-Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and run a throwaway Agent with `isolation: "worktree"` whose one task is to report `git rev-parse HEAD` in its worktree.
-
-- It errors ("Cannot create agent worktree", "not in a git repository") or reports a HEAD other than `$FEATURE_HEAD` → read `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md` and follow it (sequential; `worktree.baseRef: "head"`; start the session in the repo root).
-- It reports `$FEATURE_HEAD` → parallel batches are safe (merging a task branch brings only that task's commits): `cplat platform runs agent execution parallel`.
+Before the first parallel batch, run a probe Agent with `isolation: "worktree"` that reports `git rev-parse HEAD`. It errors ("Cannot create agent worktree", "not in a git repository") → read `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md` (sequential). Otherwise `cplat platform runs agent execution parallel`; a HEAD other than `$FEATURE_HEAD` (no `worktree.baseRef: "head"`) is fine (#501): coders reset to it, so a merge brings only that task's commits.
 
 ### 2.3 Coder prompt (every task)
 
@@ -71,7 +68,7 @@ Before the first parallel batch, record `FEATURE_HEAD=$(git rev-parse HEAD)` and
 - **Done when:** the acceptance tests naming the task's `covers` criteria pass (`cplat quiet test-fast`); list those test files from `TRACE`. A criterion that also depends on a not-yet-done task may still fail: the coder says which and why.
 - "Never edit, skip or weaken the acceptance tests."
 - A task that was re-planned after a merge conflict (a `replans[].tasks[]` entry in `cplat component build state <id> --json` that is not merged) → read `${CLAUDE_PLUGIN_ROOT}/references/build-replan.md` and add its text to the coder prompt ("Your earlier attempt is a reference only", the `git diff HEAD...<branch>`; the feature branch already contains every merged task).
-- Parallel batch only: "You are in an isolated worktree. Commit locally (`git add` + `git commit -s -m '<type>(<scope>): <title>'`, task id in the body; the sign-off `-s` is required) before returning. Do not push. Do not switch branches."
+- Parallel batch only (`FEATURE_HEAD` = HEAD before the batch): "You are in an isolated worktree. First `git reset --hard <FEATURE_HEAD>`. Commit locally (`git add` + `git commit -s -m '<type>(<scope>): <title>'`, task id in the body; `-s` is required) before returning. Do not push or switch branches."
 
 ### 2.4 Run batches
 
@@ -128,7 +125,7 @@ When every acceptance test passes, run `cplat platform runs gate acceptance pass
 
 `cplat platform runs phase build:image`
 
-Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` is false. Otherwise **deployment** (`agents.deployment`) with `<project-map>` + `<touched-files>`: verify or update the image only — Dockerfile (numeric `USER`, read-only-filesystem friendly), the CI docker job, needed `devbox run` recipes; **never Kubernetes manifests** (the system's gitops-app repo owns them, ADR-017). Run `devbox run image-build` and smoke-start the image. If the port, probe paths or user changed, say that the component entry in `system.yaml` must change (`/component:set`). Ask for gitops changes **only for** wiring the spec's *Provided by the system* list (in the System context of a repo spec sliced from a system plan) does not already contain: env variables, resources and exposure listed there exist (spec 052).
+Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` is false. Otherwise **deployment** (`agents.deployment`) with `<project-map>` + `<touched-files>`: verify or update the image only — Dockerfile (numeric `USER`, read-only-filesystem friendly), the CI docker job, needed `devbox run` recipes; **never Kubernetes manifests** (the system's gitops-app repo owns them, ADR-017). Run `devbox run image-build` and smoke-start the image. If the port, probe paths or user changed, say that the component entry in `system.yaml` must change (`/component:set`). Ask for gitops changes **only for** wiring the spec's *Provided by the system* list (System context) does not already contain: env variables, resources and exposure listed there exist (spec 052).
 
 ## Phase 6 — Close the spec
 
@@ -217,6 +214,7 @@ Add the bracketed part of the Implementation row only when `cplat component buil
 - **Acceptance tests are fixed** once Phase 1 committed them. If one is wrong, stop and take it to the user; a changed test is a changed spec.
 - **Push only in Phase 7**; `cplat pr open` pushes the feature branch and opens the PR (or ends at a ready PR).
 - **A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** `cplat component build merge` aborts the merge and sets the task aside; the architect amends only the plan and the task runs again on top of the merged work, without asking. Never edit conflicting hunks.
+- **Subagents run in the foreground** (`run_in_background: false`; a batch is several Agent calls in one message); never poll for one in a shell loop (#496).
 - **Every shell command goes through `devbox run <script>`** (see `CLAUDE.md`), except git, gh and `cplat`.
 - **No `--no-verify`, no `--no-gpg-sign`.**
 

@@ -125,6 +125,10 @@ def merge(repo: Path, ref: str, task: str, branch: str, helpers: list[str]) -> i
         raise PlatformError("a merge is in progress", hint="run `git merge --abort`")
     if _out(repo, "status", "--porcelain", "--untracked-files=no"):
         raise PlatformError("the working tree has uncommitted changes", hint="commit the previous task first")
+    red = _out(repo, "log", "-1", "--format=%H", "--grep", "acceptance tests for", "HEAD")
+    if red and _git(repo, "merge-base", "--is-ancestor", red, branch).returncode != 0:     # #501
+        raise PlatformError(f"branch '{branch}' does not contain the acceptance tests ({red[:7]}): its worktree did not start "
+                            "at the feature head", hint="run the task again, its coder first doing `git reset --hard <FEATURE_HEAD>`")
     pre = _out(repo, "rev-parse", "HEAD")
     proc = _git(repo, *core.git_identity(repo), "merge", "--no-ff", "--signoff", "-m", f"merge({task}): {branch}", branch)
     merging = _git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0

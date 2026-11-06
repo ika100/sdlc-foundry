@@ -27,7 +27,7 @@ Print its output verbatim.
 
 ## 2. Architect
 
-**architect** agent (`agents.architect`, or `svc:architect`), prompt: `SPEC_DIR: docs/specs/<spec_id>/`, `SHAPE`, `SPEC_HASH`, `ADR_NEXT`, `<project-map>`, and "read the spec and the code, write design.md if warranted and plan.md, follow the spec-format references".
+**architect** agent (`agents.architect`, or `svc:architect`; in the foreground, `run_in_background: false`, never polled for plan.md, #496), prompt: `SPEC_DIR: docs/specs/<spec_id>/`, `SHAPE`, `SPEC_HASH`, `ADR_NEXT`, `<project-map>`, and "read the spec and the code, write design.md if warranted and plan.md, follow the spec-format references".
 
 - `BLOCKERS` other than `none` → stop. Show them and recommend `/component:spec --amend <NNN> <answers>`; the plan is not committed.
 - `cplat spec check <id>`. On errors, send them verbatim to the architect (at most 2 rounds); if they persist, stop and show them.

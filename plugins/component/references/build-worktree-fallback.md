@@ -1,6 +1,6 @@
-# Build: worktree probe fallbacks
+# Build: worktree probe fallback
 
-Read from `/component:build` 2.2 when the probe errors or reports another HEAD.
+Read from `/component:build` 2.2 when the probe errors.
 
 - It errors ("Cannot create agent worktree", "not in a git repository") → run every task sequentially on `$FEATURE_BRANCH` and note it in the Final Report (restart the session for parallelism). Record it: `cplat platform runs agent execution sequential --reason 'the worktree probe failed: <error>'`.
-- It reports a HEAD other than `$FEATURE_HEAD` → coders would not see the spec, the plan or the acceptance tests. Run every task sequentially and say in the Final Report: `worktree base is <sha>, not the feature head; set worktree.baseRef: "head" in .claude/settings.json (/platform:update)`. Claude Code reads `.claude/settings.json` only from the directory the session started in (#319): when it started elsewhere (for example the parent directory) and changed into the repo later, the setting is not applied. Tell the user to start the next session in the repo root (`cd $(git rev-parse --show-toplevel) && claude`); `cplat platform doctor` warns about both causes. Record it: `cplat platform runs agent execution sequential --reason 'worktree base is <sha>, not the feature head'`.
+- A probe HEAD other than `$FEATURE_HEAD` is no fallback (#501): the coders reset their worktrees to the feature head. To have worktrees start there by themselves, set `worktree.baseRef: "head"` in `.claude/settings.json` (/platform:update) and start the session in the repo root: Claude Code reads `.claude/settings.json` only from the directory the session started in (#319); `cplat platform doctor` warns about both causes.

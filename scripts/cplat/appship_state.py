@@ -366,13 +366,16 @@ def gate(repo: Path, hook_input: dict) -> dict | None:
     if session != st["owner"]:
         return None
     mark = _mark(repo, st)
+    running = stopgate.running_agents(hook_input)
     box: dict = {}
 
     def change(s: dict) -> None:
-        box["verdict"] = stopgate.check(s, session, mark)
+        box["verdict"] = stopgate.check(s, session, mark, running)
 
     st = update(repo, change)
     verdict = box["verdict"]
+    if verdict.action == "wait":                   # #496: a background agent at work is progress
+        return {"systemMessage": f"product ship {spec_id}: waiting for {running} background agent(s) in phase {phase}"}
     if verdict.action == "escalate":
         message = stopgate.last_message(hook_input)
         reason = stopgate.no_progress_reason(phase, message)
