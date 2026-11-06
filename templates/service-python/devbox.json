@@ -14,8 +14,8 @@
   "shell": {
     "init_hook": ["uv sync --all-extras 2>/dev/null || true"],
     "scripts": {
-      "test":           "SMOKE_BASE_URL= bash scripts/gate.sh tests test pytest -- uv run python -m pytest tests/ -p scripts.smoke_pytest --cov={{ module_name }} --cov-report=term-missing",
-      "test-fast":      "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast pytest -- uv run python -m pytest tests/ -p scripts.smoke_pytest -q --tb=line",
+      "test":           "SMOKE_BASE_URL= bash scripts/gate.sh tests test pytest -- uv run python -m pytest -p scripts.smoke_pytest --cov={{ module_name }} --cov-report=term-missing \"$@\"",
+      "test-fast":      "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast pytest -- uv run python -m pytest -p scripts.smoke_pytest -q --tb=line \"$@\"",
       "smoke":          "bash scripts/smoke.sh",
       "spec-check":     "bash scripts/spec-check.sh",
       "lint":           "uv run ruff check --no-cache . && uv run ruff format --no-cache --check .",

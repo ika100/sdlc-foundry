@@ -13,8 +13,8 @@
   "shell": {
     "scripts": {
       "dev":          "go run ./cmd/{{ project_name }}",
-      "test":         "SMOKE_BASE_URL= bash scripts/gate.sh tests test go -- go test -v -race -cover ./...",
-      "test-fast":    "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast go -- go test -v ./...",
+      "test":         "SMOKE_BASE_URL= bash scripts/gate.sh tests test go -- go test -v -race -cover ./... \"$@\"",
+      "test-fast":    "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast go -- go test -v ./... \"$@\"",
       "smoke":        "bash scripts/smoke.sh",
       "spec-check":   "bash scripts/spec-check.sh",
       "lint":         "golangci-lint run",

@@ -13,8 +13,8 @@
   "shell": {
     "init_hook": ["uv sync --all-extras 2>/dev/null || true"],
     "scripts": {
-      "test":           "bash scripts/gate.sh tests test pytest -- uv run pytest tests/ --cov={{ module_name }} --cov-report=term-missing",
-      "test-fast":      "bash scripts/gate.sh tests test-fast pytest -- uv run pytest tests/ -q --tb=line",
+      "test":           "bash scripts/gate.sh tests test pytest -- uv run pytest --cov={{ module_name }} --cov-report=term-missing \"$@\"",
+      "test-fast":      "bash scripts/gate.sh tests test-fast pytest -- uv run pytest -q --tb=line \"$@\"",
       "spec-check":     "bash scripts/spec-check.sh",
       "lint":           "uv run ruff check --no-cache . && uv run ruff format --no-cache --check .",
       "lint-fix":       "uv run ruff check --fix . && uv run ruff format .",
