@@ -11,6 +11,7 @@ Add a row to every table below for each new journey (see [Recording a journey](#
 | 1 | 2026-11-05 | 5.8.0 → 5.8.2 (fixed during the run) | [taskboard-*](https://github.com/ika100-demo/taskboard-gitops) | a person, with pauses to fix the platform | parts 1–3 |
 | 2 | 2026-11-05 | 5.8.3 → 5.9.0 (part 3 on 5.9.0) | [taskboard2-*](https://github.com/ika100-demo/taskboard2-gitops) | a person; Claude Code typed the sentences | one cast |
 | 3 | 2026-11-05/06 | 5.10.0 | [taskboard3-*](https://github.com/ika100-demo/taskboard3-gitops) | unattended: Claude Code typed the sentences and took every suggested answer | one cast, shown on Watch a real run |
+| 4 | 2026-11-06 | 5.11.0 | [taskboard4-*](https://github.com/ika100-demo/taskboard4-gitops) | unattended, like journey 3; Claude Code answered three stops with the agent's recommended option | one cast |
 
 ## Time
 
@@ -21,6 +22,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 1 | ≈ 100 | ≈ 62 | ≈ 80 | ≈ 240 | 405 |
 | 2 | ≈ 70 (+ 20 blocked) | ≈ 85 | ≈ 60 | ≈ 215 (+ 20 blocked) | 267 |
 | 3 | 70 | 102 | 81 | 256 | 256 |
+| 4 | 31 | 77 | 56 (+ 88 blocked) | 164 (+ 88 blocked) | 254 |
 
 **Where the wall clock went**, each minute counted once, agent work first (`scripts/journey/measure.py`):
 
@@ -29,6 +31,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 1 | 192 (47 %), most of it platform fixes between the parts | 71 (17 %) | 143 (35 %) | 43 |
 | 2 | 46 (17 %): an upgrade and restart 26, a platform fix 12, answers 8 | 100 (37 %): CI 47, smoke 15, cluster 14, promotions 13, deploys 11 | 121 (45 %): model 76, commands and tests 45 | 38 |
 | 3 | 17 (7 %): answers, and the gap until the next sentence | 94 (37 %): CI 40, deploys and Argo 34, promotions 15, cluster 3, smoke 2 | 145 (56 %): model 98, commands and tests 47 | 44 |
+| 4 | 96 (38 %): 88 waiting for the go-ahead to merge prod (the driver's command was blocked by a permission check), answers and gaps 8 | 71 (28 %): CI 26, promotions 18, deploys and Argo 17, cluster 9, smoke 1 | 87 (34 %): model 80, commands and tests 7 | 41 |
 
 **CI on GitHub** (the demo repos' Actions runs within the journey):
 
@@ -37,6 +40,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 1 | 35 | 187 | 5 | 161 | 8 | 75 of 405 min |
 | 2 | 34 | 187 | 3 | 167 | 16 | 93 of 267 min |
 | 3 | 27 | 154 | 2 | 119 | 6 | 62 of 256 min |
+| 4 | 29 | 155 | 0 | 117 | 9 | 65 of 254 min |
 
 ## Tokens
 
@@ -47,8 +51,11 @@ Summed over every API message of the recorded session, main thread and subagents
 | 1 | 88.2 M | 85.1 M | 2.57 M | 434 k | 338 k / 96 k / 0.3 k | 816 |
 | 2 | 84.2 M | 82.1 M | 1.67 M | 402 k | 313 k / 89 k / 0.4 k | 743 |
 | 3 | 90.5 M | 88.3 M | 1.77 M | 414 k | 314 k / 100 k / 0.3 k | 793 |
+| 4 | 76.8 M | 74.6 M | 1.75 M | 377 k | 276 k / 102 k / – | 694 |
 
 About 97 % of the tokens are cache reads: the context the agents read again on every turn. The number of turns, not the size of the answers, drives the usage.
+
+Where the tokens went (main session / slice coordinators of `/system:ship` / specialist agents): journey 3 61.8 M in 302 calls / 21.8 M / 7.0 M; journey 4 54.8 M in 299 calls / 15.2 M / 6.7 M.
 
 ## A person's involvement
 
@@ -57,6 +64,7 @@ About 97 % of the tokens are cache reads: the context the agents read again on e
 | 1 | 24 | – | 6 | – |
 | 2 | 13 | 8, all before the ships | 1 | 8 |
 | 3 | 13 | 17, all with the suggested answer | 3 | 5 |
+| 4 | 15 (12 sentences, 3 replies) | 7 rounds of questions, all with the suggested answer | 3, plus one permission block before prod | 2 |
 
 ## Quality
 
@@ -65,6 +73,7 @@ About 97 % of the tokens are cache reads: the context the agents read again on e
 | 1 | 7 (all fixed in 5.8.1–5.8.3) | 99 in 5 specs | green in dev, staging, prod | a false WARNING ([#457](https://github.com/ika100/sdlc-foundry/pull/457)) | passed |
 | 2 | 2 (fixed in 5.9.0, 5.9.1) | 84 in 5 specs | green in dev, staging, prod | clean on the first try | passed |
 | 3 | 15, filed as [#494](https://github.com/ika100/sdlc-foundry/issues/494)–[#508](https://github.com/ika100/sdlc-foundry/issues/508) | 68 in 4 specs (component route for part 1) | green in dev, staging, prod (API 5/5, web 2/2) | a warning (no staging smoke record, [#503](https://github.com/ika100/sdlc-foundry/issues/503)), cleared by a staging smoke | passed, after a manual backup ([#507](https://github.com/ika100/sdlc-foundry/issues/507)) |
+| 4 | 5, filed as [#519](https://github.com/ika100/sdlc-foundry/issues/519)–[#523](https://github.com/ika100/sdlc-foundry/issues/523) | 65 in 4 specs | green in dev (API 5/5, web 4/4), staging (3/3, 3/3) and prod (the "Prod check" task created) | clean, no warning; no dev smoke record for the API's release commit ([#523](https://github.com/ika100/sdlc-foundry/issues/523)) | passed on the first try; the first backup ran by itself |
 
 ## What changed between the journeys
 
@@ -79,6 +88,12 @@ About 97 % of the tokens are cache reads: the context the agents read again on e
 Effect on journey 3: the cluster step went from 15 to 6 minutes and the release from 25 to 11, there were 7 fewer PRs and a third less CI time, and a person was needed for 5 minutes instead of 46. The wall clock barely moved (267 → 256): agent work grew by 24 minutes in three stops and in the coordinator polling its own background agents, and a flaky network cost about 15 minutes.
 
 **Open after journey 3** (the input for the next version): [#494](https://github.com/ika100/sdlc-foundry/issues/494) a ship reuses the squash-merged spec branch (a regression of [#437](https://github.com/ika100/sdlc-foundry/pull/437)), [#495](https://github.com/ika100/sdlc-foundry/issues/495) a stale ruff cache, [#496](https://github.com/ika100/sdlc-foundry/issues/496) the coordinator polls background agents, [#497](https://github.com/ika100/sdlc-foundry/issues/497) the repo owner of `/component:new`, [#498](https://github.com/ika100/sdlc-foundry/issues/498) smoke criteria in a gitops spec, [#499](https://github.com/ika100/sdlc-foundry/issues/499) a leaking lock fixture, [#500](https://github.com/ika100/sdlc-foundry/issues/500) a transient push rejection escalates, [#501](https://github.com/ika100/sdlc-foundry/issues/501) parallel tasks run serially, [#502](https://github.com/ika100/sdlc-foundry/issues/502) `cplat deps patch` in a fresh repo, [#503](https://github.com/ika100/sdlc-foundry/issues/503) no staging smoke record, [#504](https://github.com/ika100/sdlc-foundry/issues/504) uncommitted operator files, [#505](https://github.com/ika100/sdlc-foundry/issues/505) two conflicting prod PRs, [#506](https://github.com/ika100/sdlc-foundry/issues/506) a red wait on a passing DNS error, [#507](https://github.com/ika100/sdlc-foundry/issues/507) the first backup fails, [#508](https://github.com/ika100/sdlc-foundry/issues/508) an OutOfSync operator; and [#510](https://github.com/ika100/sdlc-foundry/issues/510) `cplat pr wait` on a cancelled duplicate run.
+
+**Journey 3 → journey 4 — 5.11.0**, the fixes for every journey 3 issue plus the cheap performance wins from its token analysis: a transient push rejection or DNS error is retried, and `cplat pr wait` ignores a cancelled duplicate run ([#512](https://github.com/ika100/sdlc-foundry/pull/512), #500 #506 #510); a ship starts from `main` after a squashed spec, the coordinator runs agents in the foreground instead of polling them, and parallel plan tasks really run in parallel ([#513](https://github.com/ika100/sdlc-foundry/pull/513), #494 #496 #501); the first backup waits for its bucket and the lgtm operator stays in sync ([#514](https://github.com/ika100/sdlc-foundry/pull/514), #507 #508); a staging promotion runs its smoke, operator files are committed, one prod PR carries several components, and `--system` sets the repo owner ([#515](https://github.com/ika100/sdlc-foundry/pull/515), #497 #503 #504 #505); ruff without a cache, scoped test runs that run only their targets, no smoke criteria in system specs and no leaking lock fixtures ([#516](https://github.com/ika100/sdlc-foundry/pull/516), #495 #498 #499 #502); command files a third smaller, with the details in `references/` read only when needed ([#517](https://github.com/ika100/sdlc-foundry/pull/517)).
+
+Effect on journey 4: 164 working minutes instead of 256, and part 1 in 31 minutes instead of 70. Tokens fell by 15 % (90.5 → 76.8 M), most of it in the slice coordinators (21.8 → 15.2 M) and the main session (61.8 → 54.8 M). No Actions run failed, the prod check was clean on the first try, and the restore drill needed no manual backup. Three stops remained, each a new platform defect (below), and the go-ahead for the prod merge cost 88 minutes of wall clock because the driver's command was blocked by a permission check; with it the wall clock (254) equals journey 3's.
+
+**Open after journey 4:** [#519](https://github.com/ika100/sdlc-foundry/issues/519) an import re-sort in the acceptance tests stops the ship, [#520](https://github.com/ika100/sdlc-foundry/issues/520) the template's metrics smoke test fails with two instances, [#521](https://github.com/ika100/sdlc-foundry/issues/521) a system ship cannot finish after a test-only smoke fix, [#522](https://github.com/ika100/sdlc-foundry/issues/522) agents run `bootstrap` for operators added after `cluster-up`, [#523](https://github.com/ika100/sdlc-foundry/issues/523) no dev smoke record for the release commit in the prod evidence.
 
 ## Recording a journey
 
