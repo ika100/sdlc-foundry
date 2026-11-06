@@ -10,8 +10,8 @@ Add a row to every table below for each new journey (see [Recording a journey](#
 |---|---|---|---|---|---|
 | 1 | 2026-11-05 | 5.8.0 → 5.8.2 (fixed during the run) | [taskboard-*](https://github.com/ika100-demo/taskboard-gitops) | a person, with pauses to fix the platform | parts 1–3 |
 | 2 | 2026-11-05 | 5.8.3 → 5.9.0 (part 3 on 5.9.0) | [taskboard2-*](https://github.com/ika100-demo/taskboard2-gitops) | a person; Claude Code typed the sentences | one cast |
-| 3 | 2026-11-05/06 | 5.10.0 | [taskboard3-*](https://github.com/ika100-demo/taskboard3-gitops) | unattended: Claude Code typed the sentences and took every suggested answer | one cast, shown on Watch a real run |
-| 4 | 2026-11-06 | 5.11.0 | [taskboard4-*](https://github.com/ika100-demo/taskboard4-gitops) | unattended, like journey 3; Claude Code answered three stops with the agent's recommended option | one cast |
+| 3 | 2026-11-05/06 | 5.10.0 | [taskboard3-*](https://github.com/ika100-demo/taskboard3-gitops) | unattended: Claude Code typed the sentences and took every suggested answer | one cast, shown on Watch a real run until journey 4 |
+| 4 | 2026-11-06 | 5.11.0 | [taskboard4-*](https://github.com/ika100-demo/taskboard4-gitops) | unattended, like journey 3; Claude Code answered three stops with the agent's recommended option | one cast, shown on Watch a real run |
 
 ## Time
 
@@ -64,7 +64,7 @@ Where the tokens went (main session / slice coordinators of `/system:ship` / spe
 | 1 | 24 | – | 6 | – |
 | 2 | 13 | 8, all before the ships | 1 | 8 |
 | 3 | 13 | 17, all with the suggested answer | 3 | 5 |
-| 4 | 15 (12 sentences, 3 replies) | 7 rounds of questions, all with the suggested answer | 3, plus one permission block before prod | 2 |
+| 4 | 15 (12 sentences, 3 replies) | 19 in 7 rounds, all with the suggested answer | 3, plus one permission block before prod | 2 |
 
 ## Quality
 

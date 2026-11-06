@@ -6,58 +6,57 @@ tableOfContents: false
 
 import DemoWalkthrough from '../../../components/DemoWalkthrough.astro';
 
-One system, recorded in one run from an empty folder to prod. **Part 1** (steps 1–5) creates the repos and a local cluster and ships a first endpoint to dev. **Part 2** (steps 6–8) adds a Postgres database and a Next.js web UI with one system spec shipped across three repos. **Part 3** (steps 9–13) adds staging, observability, a release from the tested builds, prod with daily backups, and a restore drill. Every step is one sentence in Claude Code: say what you want in your own words and Claude runs the matching slash command, or type the command yourself. Each step shows both. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real pull requests in the public demo repos [taskboard3-api](https://github.com/ika100-demo/taskboard3-api), [taskboard3-web](https://github.com/ika100-demo/taskboard3-web) and [taskboard3-gitops](https://github.com/ika100-demo/taskboard3-gitops), so you can check every claim.
+One system, recorded in one run from an empty folder to prod. **Part 1** (steps 1–4) creates the repos and a local cluster and ships a first endpoint to dev. **Part 2** (steps 5–7) adds a Postgres database and a Next.js web UI with one system spec shipped across three repos. **Part 3** (steps 8–12) adds staging, observability, a release from the tested builds, prod with daily backups, and a restore drill. Every step is one sentence in Claude Code: say what you want in your own words and Claude runs the matching slash command, or type the command yourself. Each step shows both. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real pull requests in the public demo repos [taskboard4-api](https://github.com/ika100-demo/taskboard4-api), [taskboard4-web](https://github.com/ika100-demo/taskboard4-web) and [taskboard4-gitops](https://github.com/ika100-demo/taskboard4-gitops), so you can check every claim.
 
 <DemoWalkthrough />
 
 ## About the timing
 
-Every time on this page is wall-clock time with CI rounds included. Nobody watched this run: Claude Code typed the sentences and took the suggested answer to every question, so a person's time is only the 5 minutes those answers took. **Part 1 took about 70 minutes, part 2 about 102 and part 3 about 81**; the recording shows all three in under 9 minutes. Most of it is the two ships (55 and 89 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and 27 pull requests, each with its own CI round. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/489)); this is the third measured run. Every journey, with its time, tokens, a person's share, its quality and what changed in the platform since the one before, is tracked in [Performance measurements](/sdlc-foundry/reference/performance/).
+Every time on this page is wall-clock time with CI rounds included. Nobody watched this run: Claude Code typed the sentences and took the suggested answer to every question, so a person's time is only the 2 minutes those answers took. **Part 1 took about 31 minutes, part 2 about 77 and part 3 about 56**, 164 in all; the recording shows them in under 6 minutes. Most of it is the two ships (21 and 65 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and 29 pull requests, each with its own CI round. Not counted: 88 minutes before step 11, when the command that typed the prod sentence was held by a permission check until a person allowed it. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/489)); this is the fourth measured run and the first clearly faster one (256 minutes in journey 3). Every journey, with its time, tokens, a person's share, its quality and what changed in the platform since the one before, is tracked in [Performance measurements](/sdlc-foundry/reference/performance/).
 
-Fifteen things went wrong in the platform; each is named in its step and filed as an issue ([#494](https://github.com/ika100/sdlc-foundry/issues/494) to [#508](https://github.com/ika100/sdlc-foundry/issues/508)). Three of them stopped the run until a person answered: a test fix that needs an OK together with a rejected push (step 8), a missing staging smoke record before prod (step 11) and a red wait on a passing DNS error (step 12).
+Five things went wrong in the platform; each is named in its step and filed as an issue ([#519](https://github.com/ika100/sdlc-foundry/issues/519) to [#523](https://github.com/ika100/sdlc-foundry/issues/523)). Three of them stopped the run until an answer came, each taken from the agent's recommended option: an import re-sorted in an acceptance test (step 4), a smoke test that assumes one instance, and a ship that could not record the fixed smoke (both step 7).
 
-**What was edited:** waiting is cut and the host name in the status bar is blanked. Nothing else is changed. The journey was recorded with [asciinema](https://asciinema.org) on 2026-11-05/06 with sdlc-foundry 5.10.0, in the public demo organisation [ika100-demo](https://github.com/ika100-demo); Claude Code typed the sentences on the user's behalf in the same recorded terminal.
+**What was edited:** waiting is cut and the host name in the status bar is blanked. Nothing else is changed. The journey was recorded with [asciinema](https://asciinema.org) on 2026-11-06 with sdlc-foundry 5.11.0, in the public demo organisation [ika100-demo](https://github.com/ika100-demo); Claude Code typed the sentences on the user's behalf in the same recorded terminal.
 
 ## Timing in detail
 
 For comparison and discussion; all journeys side by side are in [Performance measurements](/sdlc-foundry/reference/performance/). All times are minutes, measured from the recording, the journey record (`cplat platform runs journey`), the session transcript and the GitHub Actions runs of the demo repos.
 
-**Per step** (journey 3, 5.10.0, against journey 2, 5.8.3 → 5.9.0):
+**Per step** (journey 4, 5.11.0, against journey 3, 5.10.0):
 
-| # | Step | Journey 3 | Journey 2 | What takes the time in journey 3 |
+| # | Step | Journey 4 | Journey 3 | What takes the time in journey 4 |
 |---|---|---|---|---|
-| 1 | Create the system | 2 | 1 | rendering two repos, creating them on GitHub |
-| 2 | Merge, cluster and expose | 6 | 15 | two CI rounds, creating the local cluster |
-| 3 | Write the spec | 5 | 4 | the product-manager agent, 6 questions (component route) |
-| 4 | Approve the spec | 2 | 2 | one CI round |
-| 5 | Ship the spec | 55 | 45 (+ 20 blocked) | plan 2, build 28 (10 paused, #496), PR and CI 15 (a conflict and a lint round), deploy 9 |
-| 6 | Add a web UI | 7 | 6 | a new repo from its template, one CI round, dev deploy |
-| 7 | One spec for the whole system | 6 | 5 | 7 questions, one spec-check round, one CI round |
-| 8 | Plan and ship it to dev | 89 | 72 | plan 4, two builds in parallel 57 (a stop for a test fix and a rejected push), PRs and CI 20, deploy 8 |
-| 9 | Hosts, observability and staging | 32 | 9 | four PRs; 15 minutes of slow image pulls and failed merges on a flaky network |
-| 10 | Release | 11 | 25 | gates, tag on the staging commit, two follow-up PRs |
-| 11 | Backups and the prod PR | 11 | 9 | three PRs, a staging smoke the prod check asked for |
-| 12 | Prod | 14 | 6 | two prod PRs, one CI fix, one re-render, a second wait |
-| 13 | Restore drill | 13 | 10 | a task in prod, a new backup, a restored copy, the check, the discard |
+| 1 | Create the system | 2 | 2 | rendering two repos, creating them on GitHub |
+| 2 | Merge, cluster and expose | 2 | 6 | two CI rounds; the cluster starts in the background |
+| 3 | Write and approve the spec | 7 | 7 | the product-manager agent, 7 questions and the approval, one CI round |
+| 4 | Ship the spec | 21 | 55 | plan, acceptance tests, two coders, one CI round, deploy and smoke; a 20-second stop for a re-sorted import |
+| 5 | Add a web UI | 7 | 7 | a new repo from its template, one CI round, dev deploy |
+| 6 | One spec for the whole system | 6 | 6 | 8 questions and the approval, one CI round |
+| 7 | Plan and ship it to dev | 65 | 89 | plan, two builds in parallel, PRs and CI, deploy; a red smoke, its fix (7) and closing the spec by hand (2) |
+| 8 | Hosts, observability and staging | 13 | 32 | four PRs, the Grafana stack, staging smoke |
+| 9 | Release | 13 | 11 | gates and image scans in two repos, tags on the staging commit, two follow-up PRs |
+| 10 | Backups and the prod PR | 9 | 11 | the backups bucket, one prod PR for both components |
+| 11 | Prod | 8 | 14 | one merge, Argo, the operators, smoke, the "Prod check" task |
+| 12 | Restore drill | 13 | 13 | a restored copy, the check, the discard |
 
-**Per part**, against the budgets of spec 136 and the earlier runs (journey 1 on 5.8.x, journey 2 on 5.8.3 → 5.9.0, both 2026-11-05):
+**Per part**, against the budgets of spec 136 and the earlier runs (journeys 1 and 2 on 5.8.x–5.9.0, journey 3 on 5.10.0):
 
-| Part | Budget | Journey 1 | Journey 2 | Journey 3 |
-|---|---|---|---|---|
-| 1 — system, cluster, spec, ship | 20 | ≈ 100 | ≈ 70 (+ 20 blocked) | 70 |
-| 2 — web UI, system spec, ship | 30 | ≈ 62 | ≈ 85 | 102 |
-| 3 — staging, release, prod, restore | 10 | ≈ 80 | ≈ 60 | 81 |
-| Journey | 60 (interim 90) | ≈ 240 | ≈ 215 (+ 20 blocked) | 256 |
-| A person's time | – | – | 46 | 5 |
-| Stops for a platform defect | 0 | 6 | 1 | 3 |
-| Pull requests | – | – | 34 | 27 |
+| Part | Budget | Journey 1 | Journey 2 | Journey 3 | Journey 4 |
+|---|---|---|---|---|---|
+| 1 — system, cluster, spec, ship | 20 | ≈ 100 | ≈ 70 (+ 20 blocked) | 70 | 31 |
+| 2 — web UI, system spec, ship | 30 | ≈ 62 | ≈ 85 | 102 | 77 |
+| 3 — staging, release, prod, restore | 10 | ≈ 80 | ≈ 60 | 81 | 56 (+ 88 blocked) |
+| Journey | 60 (interim 90) | ≈ 240 | ≈ 215 (+ 20 blocked) | 256 | 164 (+ 88 blocked) |
+| A person's time | – | – | 46 | 5 | 2 |
+| Stops for a platform defect | 0 | 6 | 1 | 3 | 3 |
+| Pull requests | – | – | 34 | 27 | 29 |
 
 **Where the wall clock went** (each minute counted once, from the session transcripts; agent work counts first):
 
-| Share | Journey 3 (256 min, 44 subagents) | Journey 2 (267 min, 38 subagents) |
+| Share | Journey 4 (254 min, 41 subagents) | Journey 3 (256 min, 44 subagents) |
 |---|---|---|
-| Waiting for a person | 17 (7 %): the answers, and the gap until the next sentence was typed | 46 (17 %): an upgrade and restart of the session 26, a platform fix 12, answers 8 |
-| Waiting, no agent working | 94 (37 %): CI checks and merges 40, deploy and Argo waits 34, promotions and restores 15, cluster 3, smoke 2 | ≈ 100 (37 %): CI checks and merges 47, smoke tests 15, Argo sync and cluster 14, promotions and restores 13, dev deploys 11 |
-| Agents working | 145 (56 %): model work 98, local commands and tests 47 | ≈ 121 (45 %): model work 76, local commands and tests 45 |
+| Waiting for a person | 96 (38 %): 88 held by the permission check before prod, 8 for the answers and the gap until the next sentence | 17 (7 %): the answers, and the gap until the next sentence was typed |
+| Waiting, no agent working | 71 (28 %): CI checks and merges 26, promotions and restores 18, deploy and Argo waits 17, cluster 9, smoke 1 | 94 (37 %): CI checks and merges 40, deploy and Argo waits 34, promotions and restores 15, cluster 3, smoke 2 |
+| Agents working | 87 (34 %): model work 80, local commands and tests 7 | 145 (56 %): model work 98, local commands and tests 47 |
 
-**CI, as GitHub measured it:** journey 3 had 154 Actions runs, 119 minutes of run time summed and 6 minutes in queues; CI was running during 62 of the 256 minutes. Journey 2 had 187 runs, 167 minutes and 16 in queues, running during 93 of 267 minutes. Fewer PRs (27 instead of 34) and the release tagging the staging commit cut the CI time by a third. The wall clock did not shrink with it: agent work grew by 24 minutes, mostly in the two stops and in the coordinator waiting for its own background agents ([#496](https://github.com/ika100/sdlc-foundry/issues/496)), and a flaky network cost about 15 minutes in step 9.
+**CI, as GitHub measured it:** journey 4 had 155 Actions runs and none failed, 117 minutes of run time summed and 9 minutes in queues; CI was running during 65 of the 254 minutes. Journey 3 had 154 runs, 119 minutes and 6 in queues. CI cost about the same; the time went out of the agents' own work. Local commands and tests fell from 47 to 7 minutes, because a scoped test run now runs only its targets ([#516](https://github.com/ika100/sdlc-foundry/pull/516)); model work fell from 98 to 80 minutes, with the coordinator no longer polling its own agents ([#513](https://github.com/ika100/sdlc-foundry/pull/513)) and command files a third smaller ([#517](https://github.com/ika100/sdlc-foundry/pull/517)); and the waits for deploys and Argo halved without the flaky network and the second prod PR of journey 3.
