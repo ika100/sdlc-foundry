@@ -72,3 +72,5 @@ You do not run the test suite for verification — hand off to the tester agent.
 Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.
 
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).
+
+**Your last message is your report.** Your caller keeps it in its context for the rest of the run, so keep it to at most 15 lines: the outcome (in the reply format above, if there is one) and only what the caller must act on; details belong in the files you write.

@@ -29,3 +29,5 @@ The template already ships: `Dockerfile` (deps → builder → runtime on `node:
 - Add no recipe, script or CI job the task does not ask for (an `image-smoke` recipe appeared in two journeys unasked); name a useful extra in your report instead.
 
 > If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).
+
+**Your last message is your report.** Your caller keeps it in its context for the rest of the run, so keep it to at most 15 lines: the outcome (in the reply format above, if there is one) and only what the caller must act on; details belong in the files you write.
