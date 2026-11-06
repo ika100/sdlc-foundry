@@ -1,10 +1,12 @@
 """Measure one recorded journey for docs/PERFORMANCE.md: wall clock split, tokens, a person's share and GitHub CI.
 
-  python3 scripts/journey/measure.py <session> <start> <end> <owner/repo>... [--json]
+  python3 scripts/journey/measure.py <session>[,<session>...] <start> <end> <owner/repo>... [--steps FILE] [--json]
 
 <session> is the Claude Code transcript of the recorded session without `.jsonl`
-(~/.claude/projects/<dir>/<id>); its subagents are read from <session>/subagents/. <start> and <end> are ISO times (UTC)
-of the journey. The repos are the journey's demo repos.
+(~/.claude/projects/<dir>/<id>); its subagents are read from <session>/subagents/. A journey with a fresh session per
+part names every session, comma-separated. <start> and <end> are ISO times (UTC) of the journey. The repos are the
+journey's demo repos. `--steps FILE` adds one row per step: FILE has a line `<ISO time (UTC)>\t<label>` where each step
+starts (the driver's steps file); a step ends where the next one starts, the last at <end>.
 
 Each minute of the wall clock is counted once, agent work first: a person (a question open, or the gap until the next
 input), agents working (model turns and local commands), or waiting with no agent working (CI and merges, deploys and
@@ -75,12 +77,14 @@ def thread(path, main):
     return ivs, prompts, (ts(events[0]["timestamp"]), ts(events[-1]["timestamp"]))
 
 
-def wall_split(session, start, end):
-    main_ivs, prompts, (w0, w1) = thread(session + ".jsonl", True)
-    w0, w1 = max(w0, start), min(w1, end)
-    subs = [thread(p, False) for p in glob.glob(session + "/subagents/*.jsonl")]
+def wall_split(sessions, start, end):
+    mains = [thread(s + ".jsonl", True) for s in sessions]
+    main_ivs = [iv for m in mains for iv in m[0]]
+    prompts = [p for m in mains for p in m[1]]
+    w0, w1 = max(min(m[2][0] for m in mains), start), min(max(m[2][1] for m in mains), end)
+    subs = [thread(p, False) for s in sessions for p in glob.glob(s + "/subagents/*.jsonl")]
     person = [(a, b) for a, b in prompts if b > a] + [(a, b) for a, b, c in main_ivs if c == "person"]
-    threads = [(main_ivs, (w0, w1))] + [(iv, span) for iv, _, span in subs]
+    threads = [(m[0], (max(m[2][0], w0), min(m[2][1], w1))) for m in mains] + [(iv, span) for iv, _, span in subs]
     minutes, t = collections.Counter(), w0
     while t < w1:
         active = set()
@@ -105,9 +109,9 @@ def wall_split(session, start, end):
             "agents_min": round(sum(minutes[c] for c in PRIO if c not in WAITING and c != "person"), 1)}
 
 
-def tokens(session, start, end):
+def tokens(sessions, start, end):
     seen, tot, out_by_model = set(), collections.Counter(), collections.Counter()
-    for path in [session + ".jsonl"] + glob.glob(session + "/subagents/*.jsonl"):
+    for path in [p for s in sessions for p in [s + ".jsonl"] + glob.glob(s + "/subagents/*.jsonl")]:
         for line in open(path):
             e = json.loads(line)
             if e.get("type") != "assistant" or not e.get("timestamp") or not start <= ts(e["timestamp"]) <= end:
@@ -124,6 +128,33 @@ def tokens(session, start, end):
     return {"api_calls": len(seen), "input": tot["input_tokens"], "cache_write": tot["cache_creation_input_tokens"],
             "cache_read": tot["cache_read_input_tokens"], "output": tot["output_tokens"], "total": total,
             "output_by_model": dict(out_by_model)}
+
+
+def questions(sessions, start, end):
+    """Questions the main threads asked (each question of an AskUserQuestion call counts), and the calls."""
+    calls = asked = 0
+    for s in sessions:
+        for line in open(s + ".jsonl"):
+            e = json.loads(line)
+            content = (e.get("message") or {}).get("content")
+            if e.get("type") != "assistant" or not isinstance(content, list) or not start <= ts(e.get("timestamp") or "1970-01-01T00:00:00Z") <= end:
+                continue
+            for c in content:
+                if c.get("type") == "tool_use" and c.get("name") == "AskUserQuestion":
+                    calls += 1
+                    asked += len((c.get("input") or {}).get("questions") or [None])
+    return {"questions": asked, "rounds": calls}
+
+
+def steps(path, sessions, end):
+    rows = [line.rstrip("\n").split("\t", 1) for line in open(path) if line.strip()]
+    out = []
+    for i, (at, label) in enumerate(rows):
+        a, b = ts(at), ts(rows[i + 1][0]) if i + 1 < len(rows) else end
+        w, t = wall_split(sessions, a, b), tokens(sessions, a, b)
+        out.append({"step": label, "wall_min": round((b - a) / 60, 1), "person_min": w["person_min"],
+                    "waiting_min": w["waiting_min"], "agents_min": w["agents_min"], "tokens": t["total"], "api_calls": t["api_calls"]})
+    return out
 
 
 def github(repos, start, end):
@@ -151,19 +182,32 @@ def github(repos, start, end):
 
 def main(argv):
     as_json = "--json" in argv
-    session, start, end, *repos = [a for a in argv if a != "--json"]
-    start, end = ts(start), ts(end)
-    result = {"wall": wall_split(session, start, end), "tokens": tokens(session, start, end), "github": github(repos, start, end)}
+    argv = [a for a in argv if a != "--json"]
+    steps_file = None
+    if "--steps" in argv:
+        i = argv.index("--steps")
+        steps_file = argv[i + 1]
+        del argv[i:i + 2]
+    session, start, end, *repos = argv
+    sessions, start, end = session.split(","), ts(start), ts(end)
+    result = {"wall": wall_split(sessions, start, end), "tokens": tokens(sessions, start, end),
+              "questions": questions(sessions, start, end), "github": github(repos, start, end)}
+    if steps_file:
+        result["steps"] = steps(steps_file, sessions, end)
     if as_json:
         print(json.dumps(result, indent=2))
         return
-    w, t, g = result["wall"], result["tokens"], result["github"]
+    w, t, g, q = result["wall"], result["tokens"], result["github"], result["questions"]
     print(f"wall clock {w['wall_min']:.0f} min, {w['subagents']} subagents, {w['inputs']} inputs")
     print(f"  person {w['person_min']}, waiting {w['waiting_min']}, agents {w['agents_min']}  ({w['by_category']})")
     print(f"tokens {t['total'] / 1e6:.1f} M in {t['api_calls']} calls: input {t['input']}, cache write {t['cache_write']},"
           f" cache read {t['cache_read']}, output {t['output']}; output by model {t['output_by_model']}")
     print(f"github {g['merged_prs']} merged PRs, {g['runs']} runs ({g['failed_runs']} failed), {g['run_min']} min run,"
           f" {g['queue_min']} min queued, CI active {g['ci_active_min']} min")
+    print(f"questions {q['questions']} in {q['rounds']} rounds")
+    for r in result.get("steps", []):
+        print(f"  {r['step'][:34]:34} {r['wall_min']:6.1f} min  person {r['person_min']:5.1f}  waiting {r['waiting_min']:5.1f}"
+              f"  agents {r['agents_min']:5.1f}  {r['tokens'] / 1e6:5.1f} M in {r['api_calls']} calls")
 
 
 if __name__ == "__main__":
