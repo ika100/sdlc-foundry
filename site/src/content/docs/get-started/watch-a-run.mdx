@@ -12,7 +12,7 @@ One system, recorded in one run from an empty folder to prod. **Part 1** (steps 
 
 ## About the timing
 
-Every time on this page is wall-clock time with CI rounds included. Nobody watched this run: Claude Code typed the sentences and took the suggested answer to every question, so a person's time is only the 5 minutes those answers took. **Part 1 took about 70 minutes, part 2 about 102 and part 3 about 81**; the recording shows all three in under 9 minutes. Most of it is the two ships (55 and 89 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and 27 pull requests, each with its own CI round. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/489)); this is the third measured run.
+Every time on this page is wall-clock time with CI rounds included. Nobody watched this run: Claude Code typed the sentences and took the suggested answer to every question, so a person's time is only the 5 minutes those answers took. **Part 1 took about 70 minutes, part 2 about 102 and part 3 about 81**; the recording shows all three in under 9 minutes. Most of it is the two ships (55 and 89 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and 27 pull requests, each with its own CI round. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/489)); this is the third measured run. Every journey, with its time, tokens, a person's share, its quality and what changed in the platform since the one before, is tracked in [Performance measurements](/sdlc-foundry/reference/performance/).
 
 Fifteen things went wrong in the platform; each is named in its step and filed as an issue ([#494](https://github.com/ika100/sdlc-foundry/issues/494) to [#508](https://github.com/ika100/sdlc-foundry/issues/508)). Three of them stopped the run until a person answered: a test fix that needs an OK together with a rejected push (step 8), a missing staging smoke record before prod (step 11) and a red wait on a passing DNS error (step 12).
 
@@ -20,7 +20,7 @@ Fifteen things went wrong in the platform; each is named in its step and filed a
 
 ## Timing in detail
 
-For comparison and discussion. All times are minutes, measured from the recording, the journey record (`cplat platform runs journey`), the session transcript and the GitHub Actions runs of the demo repos.
+For comparison and discussion; all journeys side by side are in [Performance measurements](/sdlc-foundry/reference/performance/). All times are minutes, measured from the recording, the journey record (`cplat platform runs journey`), the session transcript and the GitHub Actions runs of the demo repos.
 
 **Per step** (journey 3, 5.10.0, against journey 2, 5.8.3 → 5.9.0):
 

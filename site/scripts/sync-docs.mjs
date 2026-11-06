@@ -27,6 +27,7 @@ const PAGES = [
   { src: 'docs/requirements/platform-vision.md', slug: 'vision/design-history', title: 'Design history: the original vision PRD', order: 9 },
   { src: 'docs/requirements/end-to-end-scenario.md', slug: 'vision/end-to-end-scenario', title: 'Design history: the end-to-end scenario', order: 10 },
   { src: 'docs/BASELINES.md', slug: 'reference/baselines', title: 'Measured baselines', order: 20 },
+  { src: 'docs/PERFORMANCE.md', slug: 'reference/performance', title: 'Performance measurements', order: 19 },
   { src: 'docs/e2e/2026-10-08-todo-spec-driven.md', slug: 'reference/e2e-todo-2026-10-08', title: 'Field report: a todo product end to end (2026-10-08)', order: 21 },
   { src: 'docs/e2e/2026-10-09-todo-second-feature.md', slug: 'reference/e2e-todo-2026-10-09', title: 'Field report: a second feature with v4.0.0 (2026-10-09)', order: 22 },
   { src: 'docs/CHANGELOG.md', slug: 'reference/changelog', title: 'Changelog', order: 30 },
