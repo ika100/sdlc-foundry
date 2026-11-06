@@ -1,9 +1,9 @@
 """Smoke test (spec 104, AC-104.4): requests to a running service show up in /metrics.
 
 It reaches the service only through its URL. Without SMOKE_BASE_URL it is skipped. It only reads,
-so it runs in every environment (no `@pytest.mark.writes`, #474). Several instances may sit behind the
-URL, each counting only its own requests, so it repeats the requests and the scrape until one instance has
-counted both (#520).
+so it runs in every environment (no `@pytest.mark.writes`, #474). Several instances may sit
+behind the URL, each counting only its own requests, so it repeats the requests and the scrape
+until one instance has counted both (#520).
 """
 
 from __future__ import annotations
