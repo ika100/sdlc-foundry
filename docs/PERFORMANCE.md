@@ -104,8 +104,8 @@ Do this for every full journey, and add its rows here in the same PR that update
 3. **After:** `cplat platform runs journey end --outcome done`, then measure:
 
    ```bash
-   python3 scripts/journey/measure.py ~/.claude/projects/<dir>/<session-id> <start> <end> \
-     ika100-demo/<system>-gitops ika100-demo/<system>-api ika100-demo/<system>-web
+   python3 scripts/journey/measure.py ~/.claude/projects/<dir>/<session-id>[,<session-id>...] <start> <end> \
+     ika100-demo/<system>-gitops ika100-demo/<system>-api ika100-demo/<system>-web --steps <steps.tsv>
    ```
 
    Then, while the cluster still runs, take the screenshots of what the run built (web UI, API docs, Argo CD, Grafana,
@@ -115,5 +115,5 @@ Do this for every full journey, and add its rows here in the same PR that update
    uv run --with playwright python3 scripts/journey/shots.py <system>   # needs Chrome, tmux and k9s (--k9s PATH)
    ```
 
-   `measure.py` prints the wall-clock split (a person / waiting / agents), the tokens and the GitHub numbers used in the tables above. Take the per-part times from `cplat platform runs journey show`, count criteria in the demo repos' specs, and file every defect as an issue.
+   `measure.py` prints the wall-clock split (a person / waiting / agents), the tokens, the questions asked and the GitHub numbers used in the tables above; with `--steps` (one line `<ISO time UTC>\t<label>` per step start, written by the driver) also the split, tokens and calls per step. A journey with a fresh session per part names each session, comma-separated. Take the per-part times from `cplat platform runs journey show`, count criteria in the demo repos' specs, and file every defect as an issue.
 4. **Publish:** check the new screenshots (no secrets, no empty panels; captions in Watch a real run still true), cut the cast with `scripts/journey/cut_cast.py <cast> <markers> <inputs> <out> <host> 0.016 2.5 2.0` (waits capped, host name blanked; check the output for tokens), update Watch a real run, and add a row to each table here plus a paragraph under [What changed between the journeys](#what-changed-between-the-journeys) with the PRs and issues of the versions in between.
