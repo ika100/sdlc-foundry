@@ -87,6 +87,13 @@ def test_secrets_baseline_recipe_refreshes_with_fixed_flags(shape):
     assert "devbox run secrets-baseline" in (ROOT / "plugins" / "shared" / "agents" / "security.md").read_text()
 
 
+@pytest.mark.parametrize("shape", ["service-python", "library-python"])
+def test_python_lint_gate_ignores_a_stale_ruff_cache(shape):
+    """#495: a stale .ruff_cache hid an import-order error locally that CI then found."""
+    lint = recipe(shape, "lint")
+    assert "ruff check --no-cache ." in lint and "ruff format --no-cache --check ." in lint
+
+
 # ---------------- spec 074 ----------------
 
 @pytest.mark.parametrize("shape", IDS)

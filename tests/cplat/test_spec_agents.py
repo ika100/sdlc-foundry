@@ -188,6 +188,18 @@ def test_criteria_stay_environment_neutral():
     assert "host ports" in (PLUGINS / "svc" / "agents" / "product-manager.md").read_text()
 
 
+def test_system_specs_carry_no_smoke_criteria():
+    """#498: a gitops-app repo has no smoke tests; `cplat spec check` rejects (smoke) there."""
+    assert "Never mark a system criterion `(smoke)`" in (PLUGINS / "svc" / "agents" / "product-manager.md").read_text()
+    assert "no criterion is marked `(smoke)`" in (PLUGINS / "system" / "commands" / "spec.md").read_text()
+
+
+def test_python_tester_releases_database_locks_on_teardown():
+    """#499: a psql pg_sleep fixture killed only the client and leaked its session and lock."""
+    text = (PLUGINS / "svc" / "agents" / "tester.md").read_text()
+    assert "pg_terminate_backend" in text and "closes in a `finally`" in text
+
+
 def test_spec_format_is_hidden_from_the_command_list():
     """AC-058.1: reference material, not a command."""
     assert front(SKILL / "SKILL.md").get("user-invocable") is False

@@ -16,8 +16,8 @@ import core
 ROOT = core.PLATFORM_ROOT
 TEMPLATES = ROOT / "templates"
 SHAPES = ["service-python", "library-python", "service-java", "service-go", "web-nextjs"]
-FINDINGS = r'"deps-findings":\s*"bash scripts/deps\.sh findings"'
-BUMP = r'"deps-bump":\s*"bash scripts/deps\.sh bump"'
+FINDINGS = r'"deps-findings":\s*"bash scripts/deps\.sh findings \\"\$@\\""'
+BUMP = r'"deps-bump":\s*"bash scripts/deps\.sh bump \\"\$@\\""'
 
 
 def devbox_file(template):
@@ -123,6 +123,29 @@ def test_bumping_a_package_the_repo_does_not_depend_on_fails_and_changes_nothing
     assert f"deps-bump: {package} is not a dependency of this repo" in proc.stderr
     assert snapshot(work) == before
     assert not marker.exists(), "the membership check must run before any tool"
+
+
+def recipe(template, name):
+    """The recipe's command line, decoded from the JSON string literal (the template may be a .jinja file)."""
+    m = re.search(rf'"{name}":\s*("(?:[^"\\]|\\.)*")', devbox_file(template).read_text())
+    assert m, f"{template}: no {name} recipe"
+    return json.loads(m.group(1))
+
+
+@pytest.mark.parametrize("case", ["python", "web", "go", "java"])
+def test_the_recipes_forward_their_arguments_as_devbox_runs_them(tmp_path, case):  # AC-095.3, #502
+    # devbox 0.19 writes the recipe into a script file and runs it with the arguments as $1..$n: a recipe without "$@" drops them
+    work = setup_repo(tmp_path, case)
+    bindir, _ = stub_tools(tmp_path)
+    env = {**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"}
+    script = tmp_path / "deps-bump.sh"
+    script.write_text(recipe(REPOS[case][0], "deps-bump") + "\n")
+    proc = subprocess.run(["sh", str(script), "left-pad-x", "1.2.3"], cwd=work, env=env, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 2 and "deps-bump: left-pad-x is not a" in proc.stderr and "usage:" not in proc.stderr, proc.stderr
+    script = tmp_path / "deps-findings.sh"
+    script.write_text(recipe(REPOS[case][0], "deps-findings") + "\n")
+    proc = subprocess.run(["sh", str(script), str(tmp_path / "report.json")], cwd=work, env=env, capture_output=True, text=True, timeout=120)
+    assert "usage: devbox run deps-findings" not in proc.stderr, proc.stderr
 
 
 @pytest.mark.parametrize("case", ["python", "web", "go", "java"])
