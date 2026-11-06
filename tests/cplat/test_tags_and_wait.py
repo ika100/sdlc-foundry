@@ -290,4 +290,5 @@ def test_a_cancelled_run_nothing_replaces_is_red_after_the_grace_322(fake, tmp_p
     fake.checks = [[_run_check("ci-success", "cancel", 1)]]
     ok, lines = prmod.wait(tmp_path, PR, True, 3600, 10, 300)
     assert not ok and fake.merges == [] and any("RED" in ln for ln in lines)
-    assert ship.now() >= ship.CANCEL_GRACE
+    assert ship.now() >= ship.CANCEL_GRACE + ship.RERUN_GRACE           # #510: rerun once first, red when cancelled again
+    assert [c[:3] for c in fake.calls if c[:2] == ["run", "rerun"]] == [["run", "rerun", "1"]]

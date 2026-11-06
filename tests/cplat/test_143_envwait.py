@@ -385,3 +385,38 @@ def test_outside_a_run_the_wait_records_its_own_run_ac_143_10(w, store, polls, r
     (r,) = stored(store)
     assert r["kind"] == "wait" and r["outcome"] == outcome
     assert r["wait"]["command"] == "system wait" and r["wait"]["result"] == result
+
+
+# ---------------- #506: a ComparisonError with a network cause is pending until the timeout ----------------
+
+DNS = "Failed to load target state: rpc error: dial tcp: lookup github.com on 10.43.0.10:53: read udp 10.42.0.9:41234: i/o timeout"
+
+
+@pytest.mark.parametrize("message", [DNS, "rpc error: code = Unknown desc = read tcp 10.42.0.9:443: connection reset by peer",
+                                     "Get \"https://github.com/acme/shop-gitops/info/refs\": net/http: TLS handshake timeout",
+                                     "dial tcp 140.82.121.4:443: connect: connection refused"])
+def test_a_network_comparison_error_waits_for_argo_to_retry_506(w, message):  # #506
+    flaky = {"todo-api-dev": app(w.head, images=[w.image], conditions=[{"type": "ComparisonError", "message": message}]),
+             "addon-postgres-dev": app(w.head)}
+    w.argo.polls = [flaky, flaky, w.ready()]
+    rc, out, _, _ = w.wait("--env", "dev", "--timeout", "300")
+    assert rc == 0 and w.t["slept"] > 0 and not any(ln.startswith("RED:") for ln in out)
+    assert block(out, "READY:")
+
+
+def test_a_network_comparison_error_still_there_at_the_timeout_is_red_with_its_message_506(w):  # #506
+    w.argo.polls = [{"todo-api-dev": app(w.head, images=[w.image], conditions=[{"type": "ComparisonError", "message": DNS}]),
+                     "addon-postgres-dev": app(w.head)}]
+    rc, out, _, _ = w.wait("--env", "dev", "--timeout", "60")
+    assert rc == 1 and w.t["slept"] >= 60
+    red = block(out, "RED:")[0]
+    assert "todo-api-dev" in red and w.head[:7] in red and "ComparisonError" in red and "i/o timeout" in red
+    assert "still failing after 60s" in red
+
+
+def test_another_comparison_error_is_still_red_at_once_506(w):  # #506
+    bad = "Unable to generate manifests: kustomize build failed: accumulating resources: missing.yaml: no such file or directory"
+    w.argo.polls = [{"todo-api-dev": app(w.head, images=[w.image], conditions=[{"type": "ComparisonError", "message": bad}]),
+                     "addon-postgres-dev": app(w.head)}]
+    rc, out, _, _ = w.wait("--env", "dev")
+    assert rc == 1 and w.t["slept"] == 0 and "kustomize build failed" in block(out, "RED:")[0]

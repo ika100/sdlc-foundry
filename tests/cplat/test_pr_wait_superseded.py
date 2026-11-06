@@ -41,8 +41,34 @@ def test_older_cancelled_run_and_newer_running_run_waits(wf, tmp_path):
     assert not any("cancel" in s for s in wf.said)
 
 
-def test_newest_run_cancelled_alone_is_still_red(wf, tmp_path):
+def test_newest_run_cancelled_alone_is_rerun_once_then_red(wf, tmp_path):   # #510
     wf.checks = [[_run_check("ci-success", "cancel", 42)]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert not ok and wf.merges == [] and lines[0].startswith("RED")
+    assert [c[:3] for c in wf.calls if c[:2] == ["run", "rerun"]] == [["run", "rerun", "42"]]
+
+
+def test_a_cancelled_run_nothing_replaces_is_rerun_once_and_its_green_merges_510(wf, tmp_path):   # #510
+    cancelled = [_run_check("build", "cancel", 42), _run_check("test", "cancel", 42)]
+    wf.checks = [cancelled] * 12 + [[_run_check("build", "pending", 42), _run_check("test", "pending", 42)],
+                                    [_run_check("build", "pass", 42), _run_check("test", "pass", 42)]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 900, 10, 300)
+    assert ok and wf.merges == [PR], lines
+    assert [c[:3] for c in wf.calls if c[:2] == ["run", "rerun"]] == [["run", "rerun", "42"]]   # once per run, not per job
+    assert any("rerun    run 42: cancelled" in s for s in wf.said)
+
+
+def test_a_newer_cancelled_run_beside_an_older_green_run_is_green_and_merges_510(wf, tmp_path):   # #510
+    """#509: `opened` and `labeled` started two `ci` runs of one commit; concurrency cancelled the newer one (higher id)."""
+    wf.checks = [[_run_check("ci-success", "pass", 42145419165), _run_check("ci-success", "cancel", 42145419328),
+                  _run_check("test", "cancel", 42145419328)]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert ok and wf.merges == [PR] and lines[0].startswith("GREEN"), lines
+    assert not any(c[:2] == ["run", "rerun"] for c in wf.calls)
+
+
+def test_a_newer_cancelled_run_beside_an_older_failed_run_is_red_510(wf, tmp_path):   # #510
+    wf.checks = [[_run_check("ci-success", "fail", 41), _run_check("ci-success", "cancel", 42)]]
     ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
     assert not ok and wf.merges == [] and lines[0].startswith("RED")
 
@@ -172,6 +198,16 @@ def test_cancelled_jobs_of_a_replaced_run_while_the_newer_one_is_queued_are_not_
                    [{"status": "completed", "databaseId": 41, "workflowDatabaseId": 7}, {"status": "completed", "databaseId": 42, "workflowDatabaseId": 7}]]
     ok, lines = prmod.wait(tmp_path, PR, False, 600, 10, 300)
     assert ok and lines[0].startswith("GREEN"), lines
+
+
+def test_the_run_list_conclusion_marks_the_newer_run_cancelled_510(qwf, tmp_path):   # #510
+    """The cancelled run's `ci-success` (if: always()) fails rather than cancels: the run list says the run was cancelled."""
+    qwf.checks = [[_run_check("ci-success", "pass", 41), _run_check("ci-success", "fail", 42), _run_check("test", "cancel", 42)]]
+    qwf.runs = [[{"status": "completed", "conclusion": "success", "databaseId": 41, "workflowDatabaseId": 7},
+                 {"status": "completed", "conclusion": "cancelled", "databaseId": 42, "workflowDatabaseId": 7}]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert ok and qwf.merges == [PR] and lines[0].startswith("GREEN"), lines
+    assert any("conclusion" in " ".join(c) for c in qwf.calls if c[:2] == ["run", "list"])
 
 
 def test_a_failed_run_with_no_newer_run_in_the_list_is_still_red(qwf, tmp_path):   # #244

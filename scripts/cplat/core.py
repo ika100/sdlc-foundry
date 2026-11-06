@@ -30,6 +30,24 @@ RATE_LIMITED = re.compile(r"API rate limit (?:already )?exceeded|secondary rate 
 RATE_LIMIT_MAX_WAIT = 65 * 60   # seconds a single call may wait for GitHub's limits in total (spec 137)
 sleep = time.sleep              # tests replace these two
 now = time.time
+# A `git push` that GitHub refuses on its own side (#500): `fatal error in commit_refs_rules`, a 5xx, a dropped connection. The
+# push changed nothing, so cplat backs off and pushes again for up to PUSH_RETRY_MAX_WAIT before it fails.
+PUSH_TRANSIENT = re.compile(
+    r"fatal error in commit_refs_rules|internal server error|bad gateway|service unavailable|gateway time-?out"
+    r"|returned error: 5\d\d|HTTP 5\d\d|RPC failed|remote end hung up unexpectedly|early EOF|unexpected disconnect"
+    r"|could not resolve host|connection (?:reset|refused|timed out)|operation timed out|failed to connect"
+    r"|TLS handshake timeout|SSL_ERROR_SYSCALL|gnutls_handshake|kex_exchange_identification", re.I)
+PUSH_RETRY_MAX_WAIT = 8 * 60    # seconds a push may wait in total for GitHub to accept it again
+
+
+def _is_push(cmd: list[str]) -> bool:
+    """`git push …`, also with global options before the subcommand (`git -C dir push`)."""
+    if not cmd or Path(str(cmd[0])).name != "git":
+        return False
+    rest, i = cmd[1:], 0
+    while i < len(rest) and str(rest[i]).startswith("-"):
+        i += 2 if rest[i] in ("-C", "-c") else 1
+    return i < len(rest) and rest[i] == "push"
 
 
 def _rate_limit_kind(text: str) -> str:
@@ -62,9 +80,11 @@ def _journey_wait(seconds: float, kind: str) -> None:
 def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, capture: bool = True,
         env: dict[str, str] | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
     """Run a command; raise PlatformError with the command's stderr when it fails and `check` is set. A `gh` call that GitHub
-    refuses for its rate limit waits for the reset and runs again (spec 137, #409)."""
+    refuses for its rate limit waits for the reset and runs again (spec 137, #409); a `git push` the remote refuses for a
+    transient reason backs off and pushes again for up to PUSH_RETRY_MAX_WAIT (#500)."""
     full_env = {**os.environ, **(env or {})}
     waited, backoff = 0.0, 60.0
+    pushed, push_backoff = 0.0, 15.0
     while True:
         try:
             proc = subprocess.run(cmd, cwd=cwd, env=full_env, text=True, capture_output=capture, timeout=timeout)
@@ -73,6 +93,14 @@ def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, ca
         except subprocess.TimeoutExpired:
             raise PlatformError(f"`{' '.join(cmd[:3])}` timed out after {timeout}s") from None
         said = f"{proc.stderr or ''}\n{proc.stdout or ''}"
+        transient = PUSH_TRANSIENT.search(said) if proc.returncode != 0 and _is_push(cmd) else None
+        if transient and pushed + push_backoff <= PUSH_RETRY_MAX_WAIT:
+            print(f"git push refused by the remote ({transient.group(0)}): pushing again in {int(push_backoff)} s",
+                  file=sys.stderr, flush=True)
+            sleep(push_backoff)
+            pushed += push_backoff
+            push_backoff = min(push_backoff * 2, 120.0)
+            continue
         if not (cmd and cmd[0] == "gh" and proc.returncode != 0 and RATE_LIMITED.search(said)):
             break
         kind = _rate_limit_kind(said)

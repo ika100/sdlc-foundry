@@ -7,7 +7,7 @@ An app is in its wanted state when Argo CD synced it to the wanted revision (def
 wait starts, read with one `git fetch`; a later commit that contains it also counts), it is Synced and Healthy, and a
 component's app runs the image tag that revision pins for it (the image rule of `cplat component ship deploy`, spec 077).
 One line each time an app's state changes; exit 0 READY, 1 RED (a sync error, a failed sync or Degraded at the wanted
-revision), 2 TIMEOUT (one line per app behind; the command with `--refresh` when Argo CD has not picked up the revision).
+revision; a ComparisonError with a network cause only when it lasts until the timeout, #506), 2 TIMEOUT (one line per app behind; the command with `--refresh` when Argo CD has not picked up the revision).
 `--refresh` asks Argo CD once for a hard refresh of each app not yet at the revision. A context that is not the system's
 cluster, a cluster that does not answer, or no Argo CD exits 1 at once.
 """
@@ -34,6 +34,11 @@ ROOTS = ("platform-operators", "platform-systems")     # the cluster repo's own 
 REFRESH = "argocd.argoproj.io/refresh=hard"
 NO_ARGO = re.compile(r"doesn't have a resource type|the server could not find the requested resource|namespaces? \"?argocd\"? not found",
                      re.I)
+# A ComparisonError whose cause is the network (#506): Argo CD could not reach the repo and retries by itself, so the wait keeps
+# waiting; one still there at the timeout is RED with its message.
+NETWORK = re.compile(r"i/o timeout|connection (?:reset|refused|timed out)|TLS handshake timeout|context deadline exceeded"
+                     r"|temporary failure in name resolution|server misbehaving|lookup \S+ on \S+: no such host|network is unreachable"
+                     r"|no route to host", re.I)
 
 
 def kubectl(args: list[str], context: str | None = None, check: bool = False) -> subprocess.CompletedProcess:  # tests replace this
@@ -208,7 +213,8 @@ class Pins:
 
 
 def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None) -> tuple[str, str, str]:
-    """(kind: reached | behind | red, the progress line, what it waits for or why it is red)."""
+    """(kind: reached | behind | retrying | red, the progress line, what it waits for or why it is red). `retrying` is a
+    ComparisonError with a network cause (#506): it waits like `behind` and turns RED at the timeout."""
     if st is None:
         return "behind", f"{t.app}: missing", "missing"
     sync = (st.get("sync") or {}).get("status") or "?"
@@ -224,7 +230,10 @@ def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None) -> t
         return "behind", line, f"waiting for revision {waits.short(wanted)}, Argo CD is at {waits.short(rev)}"
     errors = [c for c in st.get("conditions") or [] if str(c.get("type", "")).endswith("Error")]
     if errors:
-        return "red", line, f"{errors[0]['type']}: {errors[0].get('message', '')}".strip()
+        why = f"{errors[0]['type']}: {errors[0].get('message', '')}".strip()
+        if errors[0]["type"] == "ComparisonError" and NETWORK.search(str(errors[0].get("message", ""))):
+            return "retrying", line, why
+        return "red", line, why
     op = st.get("operationState") or {}
     op_rev = (op.get("syncResult") or {}).get("revision") or ((op.get("operation") or {}).get("sync") or {}).get("revision")
     if op.get("phase") in ("Failed", "Error") and (not op_rev or at(op_rev)):
@@ -262,11 +271,15 @@ def watch(repo: Path, targets: list[Target], wanted: str, ctx: str, items: dict[
         if red:
             rev = ((items.get(red[0].app) or {}).get("sync") or {}).get("revision")
             return waits.RED, [f"RED: {red[0].app} at {waits.short(rev)}: {red[1]}"]
-        behind = [(t, why) for t, kind, _, why in states if kind == "behind"]
+        behind = [(t, why) for t, kind, _, why in states if kind in ("behind", "retrying")]
         if not behind:
             return waits.REACHED, [f"READY: {len(targets)} app(s) {label} run {w7}"]
         left = timeout - (waits.now() - begin)
         if left <= 0:
+            flaky = next(((t, why) for t, kind, _, why in states if kind == "retrying"), None)
+            if flaky:
+                rev = ((items.get(flaky[0].app) or {}).get("sync") or {}).get("revision")
+                return waits.RED, [f"RED: {flaky[0].app} at {waits.short(rev)}: {flaky[1]} (still failing after {int(timeout)}s)"]
             lines = [f"TIMEOUT: {len(behind)} of {len(targets)} app(s) {label} not ready after {int(timeout)}s (wanted revision {w7})"]
             lines += [f"  {t.app}: {why}" for t, why in behind]
             if not refresh and any(why.startswith("waiting for revision") for _, why in behind):

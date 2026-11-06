@@ -688,6 +688,7 @@ class CheckWatch:
         self.run_sha: dict[str, str | None] = {}                      # run id → the commit it ran on
         self.run_workflow: dict[str, str | None] = {}                 # run id → its workflow (database id)
         self.head_runs: list[dict] = []                               # this poll's workflow runs of the head commit
+        self.lone_cancelled: set[tuple[str, str]] = set()            # cancelled runs no other run of their workflow replaces
         self.refused: str | None = None                               # spec 102: the budget refused a rerun
         self.refused_checks: list[dict] = []
 
@@ -725,25 +726,41 @@ class CheckWatch:
         return self.run_sha[r[1]]
 
     def _newest_runs(self, cs: list[dict]) -> list[dict]:
-        """Of several runs of one workflow on the same commit only the newest counts: an older one was superseded
-        (concurrency cancel-in-progress), and its cancelled or failed checks say nothing about the PR. The newest run
-        may still be queued and report no checks yet, so the head commit's run list counts too (#244, #282)."""
-        newest: dict[str, int] = {}   # workflow database id (unique across GitHub) → newest run id
+        """Of several runs of one workflow on the same commit only one counts: the newest run that was not cancelled. An
+        older one was superseded (concurrency cancel-in-progress), and a cancelled one that another run of the workflow
+        replaces says nothing about the PR, also when it is the newer one (#510: `opened` and `labeled` start two runs,
+        concurrency may cancel either). The counted run may still be queued and report no checks yet, so the head commit's
+        run list counts too (#244, #282). A cancelled run nothing replaces is noted in `lone_cancelled` (rerun once)."""
+        cancelled: dict[int, bool] = {}   # run id → cancelled (from the run list, else from its checks)
         runs_seen = [(str(r["workflowDatabaseId"]), int(r["databaseId"])) for r in self.head_runs
                      if r.get("databaseId") and r.get("workflowDatabaseId")]
+        for r in self.head_runs:
+            if r.get("databaseId") and r.get("conclusion"):
+                cancelled[int(r["databaseId"])] = r["conclusion"] == "cancelled"
+        buckets: dict[int, set[str]] = {}
         for c in cs:
             r = run_of(c)
-            wf = self.run_workflow.get(r[1]) if r else None
-            if r and wf:
-                runs_seen.append((wf, int(r[1])))
-        for wf, rid in runs_seen:
-            newest[wf] = max(newest.get(wf, 0), rid)
-        out = []
-        for c in cs:
-            r = run_of(c)
-            wf = self.run_workflow.get(r[1]) if r else None
-            if r and wf and int(r[1]) < newest[wf]:
+            if not r:
                 continue
+            buckets.setdefault(int(r[1]), set()).add(c.get("bucket", ""))
+            wf = self.run_workflow.get(r[1])
+            if wf:
+                runs_seen.append((wf, int(r[1])))
+        for rid, bs in buckets.items():
+            cancelled.setdefault(rid, "cancel" in bs and bs <= {"cancel", "skipping"})
+        by_wf: dict[str, set[int]] = {}   # workflow database id (unique across GitHub) → its runs on this commit
+        for wf, rid in runs_seen:
+            by_wf.setdefault(wf, set()).add(rid)
+        counted = {wf: max([r for r in rids if not cancelled.get(r)] or rids) for wf, rids in by_wf.items()}
+        out = []
+        self.lone_cancelled = set()
+        for c in cs:
+            r = run_of(c)
+            wf = self.run_workflow.get(r[1]) if r else None
+            if r and wf and int(r[1]) != counted[wf]:
+                continue
+            if r and cancelled.get(int(r[1])):
+                self.lone_cancelled.add(r)
             out.append(c)
         return out
 
@@ -775,7 +792,8 @@ class CheckWatch:
         if not self.head:
             return []
         slug = self._slug()
-        out = gh(["run", "list", "--commit", self.head, "--json", "status,databaseId,workflowDatabaseId", "-L", "50"]
+        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId",
+                  "-L", "50"]
                  + (["-R", slug] if slug else []), cwd=self.repo, check=False)
         try:
             rows = json.loads(out or "[]")
@@ -798,15 +816,31 @@ class CheckWatch:
         h = self.healed.get(r or ("", ""))
         if not h or now() - h[1] >= RERUN_GRACE:
             return False
-        return (h[0] == "queued" and c.get("bucket") == "cancel") or (h[0] == "transient" and c.get("bucket") in FAILED)
+        return (h[0] == "queued" and c.get("bucket") == "cancel") or (h[0] in ("transient", "cancelled")
+                                                                       and c.get("bucket") in FAILED)
 
     def _transient(self, failed: list[dict]) -> list[dict]:
-        """Rerun, once per run, the failed jobs of a run whose log shows a transient error (spec 079); returns the rest."""
-        final = []
+        """Rerun, once per run, the failed jobs of a run whose log shows a transient error (spec 079), and a cancelled run
+        no other run of its workflow replaces (#510); returns the rest."""
+        final: list[dict] = []
+        rerun_now: set[tuple[str, str]] = set()
         for c in failed:
             r = run_of(c)
+            if r and r in rerun_now:
+                continue                      # another check of a run this call just reran
             if not r or r in self.healed:
                 final.append(c)
+                continue
+            if r in self.lone_cancelled:
+                if not budget.allow_rerun(self.run_id):
+                    self.refused = budget.REFUSED_RERUN
+                    final.append(c)
+                    continue
+                say(f"  rerun    run {r[1]}: cancelled, and no other run of its workflow on this commit")
+                gh(["run", "rerun", r[1], "-R", r[0]], cwd=self.repo, check=False)
+                runs.rerun(self.run_id, ", ".join(sorted(x["name"] for x in failed if run_of(x) == r)), "stuck")
+                self.healed[r] = ("cancelled", now())
+                rerun_now.add(r)
                 continue
             log = gh(["run", "view", r[1], "-R", r[0], "--log-failed"], cwd=self.repo, check=False)
             hit = TRANSIENT.search("\n".join(log.splitlines()[-80:]))
@@ -822,6 +856,7 @@ class CheckWatch:
             gh(["run", "rerun", r[1], "-R", r[0], "--failed"], cwd=self.repo, check=False)
             runs.rerun(self.run_id, ", ".join(sorted(x["name"] for x in failed if run_of(x) == r)), "transient")
             self.healed[r] = ("transient", now())
+            rerun_now.add(r)
         return final
 
     def poll(self) -> tuple[str, list[dict], list[dict]]:
