@@ -693,7 +693,8 @@ def check_service_repos_token(repo: Path) -> list[dict]:
     if names is None:
         return [check(WARN, name, "could not be read with this gh login", fix)]
     if "SERVICE_REPOS_READ_TOKEN" not in names:
-        return [check(WARN, name, "not set: gitops PRs with a Service-ref marker (opened by /component:ship) fail their CRD check", fix)]
+        return [check(WARN, name, "not set: CI reads public component repos with its own token; gitops PRs with a Service-ref "
+                      "marker for a private one fail their CRD check", fix)]
     return [check(OK, name, "set: gitops CI can read the service repos named by Service-ref markers")]
 
 

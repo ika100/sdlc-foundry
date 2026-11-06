@@ -549,7 +549,8 @@ def test_ac_098_10_the_step_gets_the_body_and_the_token_through_env():
     """AC-098.10 / AC-098.13: PR_BODY and the secret reach the step only as environment variables."""
     step = next(s for s in quality_steps() if s.get("run") == "devbox run service-crds")
     assert step["env"]["PR_BODY"] == "${{ github.event.pull_request.body }}"
-    assert step["env"]["SERVICE_REPOS_READ_TOKEN"] == "${{ secrets.SERVICE_REPOS_READ_TOKEN }}"
+    # the workflow's own token reads public component repos when the secret is not set (journey 5)
+    assert step["env"]["SERVICE_REPOS_READ_TOKEN"] == "${{ secrets.SERVICE_REPOS_READ_TOKEN || github.token }}"
     assert set(step["env"]) == {"PR_BODY", "SERVICE_REPOS_READ_TOKEN"}
     assert "github.event.pull_request.body" not in step["run"]
 
@@ -632,3 +633,11 @@ def test_ac_098_17_the_rest_of_validate_is_unchanged():
     for part in ("render.py --check", "plan.py validate", "check-k8s-labels.py", "kustomize build", "check-policies.sh"):
         assert part in v
     assert devbox()["quality"] == "devbox run validate"
+
+
+def test_a_repo_the_token_cannot_read_names_the_secret(gitops):
+    """Journey 5: with the workflow's own token a private component repo answers 404; the error names the secret."""
+    p, fake = with_fake(gitops, lambda f: f.status.update({"/repos/acme/shop-api": 404}))
+    assert p.returncode == 1
+    i = p.lines.index("ERROR: cannot read acme/shop-api: HTTP 404 (repository not found, or the token has no access to it)")
+    assert "SERVICE_REPOS_READ_TOKEN" in p.lines[i + 1] and p.lines[i + 1].startswith("  fix: ")

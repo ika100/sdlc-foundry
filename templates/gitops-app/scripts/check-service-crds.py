@@ -161,7 +161,10 @@ class Repo:
         except ApiError as e:
             if e.status == 404 and tail.startswith("/branches/"):
                 raise
-            raise Fail(f"ERROR: cannot read {self.slug}: {e.reason}") from None
+            hint = ("\n  fix: CI reads public component repos with its own token; a private one needs the secret "
+                    "SERVICE_REPOS_READ_TOKEN with read access to it (run cplat doctor in this repo for how)"
+                    if e.status in (401, 403, 404) else "")
+            raise Fail(f"ERROR: cannot read {self.slug}: {e.reason}{hint}") from None
 
     def contents(self, path: str) -> Any:
         return self.get(f"/contents/{urllib.parse.quote(path, safe='/')}?ref={self.sha}")
