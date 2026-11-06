@@ -70,7 +70,8 @@ def _lines(text: str) -> list[str]:
 
 
 def _last_line(text: str) -> str:
-    lines = _lines(text)
+    # devbox's own `Error: error running script ...` closes every failed recipe: the recipe's last line says why (#502)
+    lines = [ln for ln in _lines(text) if not ln.startswith("Error: error running script")]
     return lines[-1].strip() if lines else "no output"
 
 
@@ -110,7 +111,8 @@ def findings(repo: Path) -> list[Finding]:
     out.unlink(missing_ok=True)
     p = devbox(repo, ["run", "deps-findings", str(out)], GATE_TIMEOUT)
     if p.returncode != 0:
-        raise PlatformError(f"deps-findings failed: {_last_line(p.stderr or p.stdout or '')}", hint=HINT)
+        raise PlatformError(f"deps-findings failed: {_last_line(_output(p))}",
+                            hint="run `devbox run deps-findings <out-file>` for the whole output")
     try:
         text = out.read_text()
     except OSError:

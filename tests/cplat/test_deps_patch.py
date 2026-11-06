@@ -38,6 +38,7 @@ class World:
         self.touch_pyproject = False
         self.report_override = None
         self.findings_rc = 0
+        self.findings_err = "pip-audit: no network"
         self.bumped = False
         self.other_red = False     # the security gate is red for a non-dependency reason (bandit, secrets)
         self.calls = []
@@ -88,7 +89,7 @@ class World:
             return subprocess.CompletedProcess(args, rc, out, err)
         if name == "deps-findings":
             if self.findings_rc:
-                return cp(self.findings_rc, "", "pip-audit: no network")
+                return cp(self.findings_rc, "", self.findings_err)
             Path(args[1]).write_text(self.report())
             return cp(0)
         if name == "deps-bump":
@@ -224,6 +225,15 @@ def test_findings_reports_a_failing_scanner_with_its_last_line(make, capsys):  #
     w.findings_rc = 1
     rc, out = w.run(capsys, "findings")
     assert rc == 1 and "deps-findings failed: pip-audit: no network" in out
+
+
+def test_findings_reports_the_recipe_line_not_devbox_wrapper_and_no_update_hint(make, capsys):  # #502
+    w = one_advisory(make())
+    w.findings_rc = 2
+    w.findings_err = 'usage: devbox run deps-findings <out-file>\nError: error running script "deps-findings" in Devbox: exit status 2\n'
+    rc, out = w.run(capsys, "findings")
+    assert rc == 1 and "deps-findings failed: usage: devbox run deps-findings <out-file>" in out
+    assert "/platform:update" not in out  # the recipe exists: an update is not the fix
 
 
 # ---------------- AC-095.4: own commits, PR section ----------------

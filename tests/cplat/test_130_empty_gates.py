@@ -507,16 +507,16 @@ def _template_recipe(template: str, name: str) -> str:
 
 
 EXPECTED_TEST_RECIPES = {
-    "service-python": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test pytest -- uv run python -m pytest tests/ -p scripts.smoke_pytest --cov=demo_app --cov-report=term-missing",
-                       "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast pytest -- uv run python -m pytest tests/ -p scripts.smoke_pytest -q --tb=line"),
-    "library-python": ("bash scripts/gate.sh tests test pytest -- uv run pytest tests/ --cov=demo_app --cov-report=term-missing",
-                       "bash scripts/gate.sh tests test-fast pytest -- uv run pytest tests/ -q --tb=line"),
-    "service-go": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test go -- go test -v -race -cover ./...",
-                   "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast go -- go test -v ./..."),
-    "service-java": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test maven -- mvn -B verify",
-                     "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast maven -- mvn -B test"),
-    "web-nextjs": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test vitest -- pnpm test",
-                   "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast vitest -- pnpm test:fast"),
+    "service-python": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test pytest -- uv run python -m pytest -p scripts.smoke_pytest --cov=demo_app --cov-report=term-missing \"$@\"",
+                       "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast pytest -- uv run python -m pytest -p scripts.smoke_pytest -q --tb=line \"$@\""),
+    "library-python": ("bash scripts/gate.sh tests test pytest -- uv run pytest --cov=demo_app --cov-report=term-missing \"$@\"",
+                       "bash scripts/gate.sh tests test-fast pytest -- uv run pytest -q --tb=line \"$@\""),
+    "service-go": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test go -- go test -v -race -cover ./... \"$@\"",
+                   "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast go -- go test -v ./... \"$@\""),
+    "service-java": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test maven -- mvn -B verify \"$@\"",
+                     "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast maven -- mvn -B test \"$@\""),
+    "web-nextjs": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test vitest -- pnpm test \"$@\"",
+                   "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast vitest -- pnpm test:fast \"$@\""),
 }
 
 
@@ -525,6 +525,40 @@ def test_test_and_test_fast_run_through_the_gate_helper_as_the_contract_says_ac_
     test, fast = EXPECTED_TEST_RECIPES[template]
     assert _template_recipe(template, "test") == test
     assert _template_recipe(template, "test-fast") == fast
+
+
+PASS_ENV = {"service-python": {"STUB_PYTEST": "pass"}, "library-python": {"STUB_PYTEST": "pass"}, "service-go": {"STUB_GO": "pass"},
+            "service-java": {"STUB_MVN": "pass"}, "web-nextjs": {"STUB_VITEST": "pass"}}
+TARGETS = {"service-python": ["tests/test_a.py", "tests/test_b.py"], "library-python": ["tests/test_a.py"],
+           "service-go": ["-run", "TestA"], "service-java": ["-Dtest=DemoTest"], "web-nextjs": ["tests/a.test.ts"]}
+RUNNER = {"service-python": "pytest ", "library-python": "pytest ", "service-go": "go test ", "service-java": "mvn ", "web-nextjs": "pnpm "}
+
+
+@pytest.mark.parametrize("gate", GATES)
+@pytest.mark.parametrize("template", TEST_TEMPLATES)
+def test_test_recipes_run_only_the_targets_cplat_passes(world, tmp_path, template, gate):
+    """`cplat validate` runs `devbox run <gate> -- <targets>`; devbox 0.19 drops the `--` and hands the targets to the recipe's
+    script as $1..$n, so the recipe forwards "$@" (a scoped run runs only its targets) and without targets runs the whole suite."""
+    repo, env = world(template, **PASS_ENV[template])
+    script = tmp_path / f"{gate}.sh"
+    script.write_text(recipe_of(repo, gate) + "\n")
+    runner = RUNNER[template]
+
+    def runs(*args):
+        log = tmp_path / "stub.log"
+        log.unlink(missing_ok=True)
+        proc = subprocess.run(["sh", str(script), *args], cwd=repo, env=env, capture_output=True, text=True, timeout=180)
+        assert proc.returncode == 0, proc.stderr
+        return [ln[len(runner):] for ln in log.read_text().splitlines() if ln.startswith(runner)][-1]
+
+    scoped = runs(*TARGETS[template])
+    assert " ".join(TARGETS[template]) in scoped, scoped
+    whole = runs()
+    assert not any(t in whole for t in TARGETS[template]), whole
+    if template in PYTHON:
+        # no positional path: pytest runs the testpaths of pyproject.toml (the whole suite), a target replaces them
+        assert "tests/" not in whole.split(), whole
+        assert ("--cov=" in whole) == (gate == "test")
 
 
 def test_gitops_app_recipes_follow_the_contract_ac_130_7():  # AC-130.7, AC-130.9
