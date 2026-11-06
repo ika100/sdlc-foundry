@@ -57,3 +57,31 @@ def test_discard_changes_touches_only_the_gitops_paths(clone):
     (clone / "notes.txt").write_text("mine\n")
     gitops.discard_changes(clone)
     assert (clone / "applications/shop/system.yaml").read_text() == "pin: sha-1\n" and (clone / "notes.txt").is_file()
+
+
+def test_operator_files_the_render_wrote_are_committed(clone):
+    """#504: a prod promotion with a backed-up bucket rendered operators/apps/*.yaml but committed only applications/ and
+    bootstrap/; CI's render-check failed on the PR and the leftovers blocked the next promotion."""
+    (clone / "applications/shop/system.yaml").write_text("pin: 1.0.0\n")
+    (clone / "operators/apps").mkdir(parents=True)
+    (clone / "operators/apps/seaweedfs.yaml").write_text("kind: Application\n")
+    gitops.open_pr(clone, "promote/shop-prod", "chore(promote): shop staging→prod", "body")
+    assert git(clone, "status", "--porcelain") == ""
+    assert "operators/apps/seaweedfs.yaml" in git(clone, "show", "--name-only", "--format=", "HEAD").splitlines()
+
+
+def test_a_change_outside_the_commit_refuses_the_pr_before_the_push(clone):
+    (clone / "applications/shop/system.yaml").write_text("pin: 1.0.0\n")
+    (clone / "stray.yaml").write_text("x: 1\n")
+    with pytest.raises(core.PlatformError, match="outside the commit: stray.yaml"):
+        gitops.open_pr(clone, "promote/shop-prod", "chore(promote): shop staging→prod", "body")
+    assert git(clone, "branch", "--show-current") == "main" and "promote/shop-prod" not in git(clone, "branch")
+    assert git(clone, "ls-remote", "--heads", "origin", "promote/shop-prod") == ""
+    assert (clone / "applications/shop/system.yaml").read_text() == "pin: sha-1\n"
+
+
+def test_discard_changes_removes_operator_leftovers(clone):
+    (clone / "operators/apps").mkdir(parents=True)
+    (clone / "operators/apps/external-secrets.yaml").write_text("kind: Application\n")
+    gitops.discard_changes(clone)
+    assert git(clone, "status", "--porcelain") == ""

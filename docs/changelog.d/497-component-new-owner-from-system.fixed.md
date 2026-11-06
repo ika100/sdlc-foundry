@@ -1,0 +1,1 @@
+**`/component:new --system OWNER/REPO` creates the repo under OWNER (#497).** Without `--org` the new component repo went to the personal `gh` login, not to the owner of the system it joins. The owner of `--system` is now the default; `--org` still overrides it.

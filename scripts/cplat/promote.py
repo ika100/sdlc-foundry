@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -29,7 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("items", nargs="*", metavar="component", help="the components to promote (or --all)")
     p.add_argument("--to", help="the environment to promote into (the source is the environment before it)")
     p.add_argument("--all", action="store_true", help="every component that has an instance in the source environment")
-    p.add_argument("--version", help="prod: release to pin (vX.Y.Z); default: newest release tag with a published image")
+    p.add_argument("--version", help="prod: release to pin: vX.Y.Z (one component) or <component>=vX.Y.Z,… (several, one PR); "
+                                     "default: each component's newest release tag with a published image")
     p.add_argument("--sha", help="staging: full commit SHA to pin; default: head of the service's main branch")
     p.add_argument("--no-verify", action="store_true", help="do not check that the image tag exists in GHCR")
     p.add_argument("--accept-digest-mismatch", metavar="REASON", default=None,
@@ -37,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--system", dest="app", help="the system (applications/<name>) when the repo holds several")
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--pr", action="store_true")
+    p.add_argument("--smoke", action="store_true",
+                   help="staging, after the merge: wait until staging runs the pins, then run and record each component's staging smoke")
+    p.add_argument("--refresh", action="store_true", help="--smoke: ask Argo CD for a hard refresh (right after a merge you made)")
+    p.add_argument("--context", help="--smoke: kube context (default: the configured one, else the current one)")
+    p.add_argument("--timeout", type=float, default=None, help="--smoke: seconds to wait for staging")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
     return p
@@ -75,7 +82,7 @@ def pick_tag(svc: dict, to_env: str, ns: argparse.Namespace) -> tuple[str, str]:
         if not re.fullmatch(r"[0-9a-f]{40}", sha):
             raise PlatformError(f"--sha must be a full 40-character commit SHA, got '{sha}'")
         return f"sha-{sha}", f"commit {sha[:7]}"
-    wanted = ns.version
+    wanted = ns.versions.get(svc["name"]) if getattr(ns, "versions", None) is not None else ns.version
     if wanted:
         m = SEMVER.match(wanted)
         if not m:
@@ -136,7 +143,8 @@ def _rollback_dev(ns: argparse.Namespace, repo: Path, app_dir: Path, names: list
     """Spec 124 (AC-124.15): the one promotion into dev, a pin back to a tag dev ran before (git history decides)."""
     if ns.all or len(names) != 1:
         raise PlatformError("a dev rollback is for one component: cplat instance promote <component> --to dev --version <tag>")
-    n, tag = names[0], ns.version
+    n = names[0]
+    tag = ns.versions.get(n) if ns.versions is not None else ns.version
     m = model.load_dir(app_dir)
     if m.component(n) is None:
         raise PlatformError(f"{n} is not a component of {m.system}", hint="components: " + ", ".join(c.name for c in m.components))
@@ -167,9 +175,74 @@ def _rollback_dev(ns: argparse.Namespace, repo: Path, app_dir: Path, names: list
     return 0
 
 
+def parse_versions(value: str) -> dict[str, str]:
+    """#505: `api=v0.1.0,web=v0.1.0` → {component: version}, so one prod PR carries a release of several components."""
+    out: dict[str, str] = {}
+    for part in value.split(","):
+        n, sep, v = part.strip().partition("=")
+        if not (sep and n.strip() and v.strip()):
+            raise PlatformError(f"--version: '{part.strip()}' is not <component>=vX.Y.Z", hint="e.g. --version api=v0.1.0,web=v0.1.0")
+        if n.strip() in out:
+            raise PlatformError(f"--version names {n.strip()} twice")
+        out[n.strip()] = v.strip()
+    return out
+
+
+def component_clone(repo: Path, slug: str) -> Path:
+    """The component's clone next to the gitops repo (where `/system:ship` keeps it), cloned when missing (tests replace this)."""
+    path = repo.parent / slug.split("/")[-1]
+    if not path.exists():
+        run(["gh", "repo", "clone", slug, str(path), "--", "-q"], cwd=repo.parent)
+    return path
+
+
+def _smoke_staging(ns: argparse.Namespace, repo: Path, app_dir: Path, names: list[str]) -> int:
+    """#503: after a promotion to staging is merged, the same steps as the automatic one (spec 093): wait until staging runs
+    the pins (`cplat system wait`), then the staging smoke of each component from its repo, recorded in the run store like
+    `cplat instance verify staging`, so the prod evidence finds it. Exit code: the wait's when not READY, else the worst smoke's."""
+    import envwait
+    import smoke
+    import waits
+    if ns.to != "staging" or ns.pr or ns.dry_run:
+        raise PlatformError("--smoke is a step of its own after the staging promotion was merged",
+                            hint="cplat instance promote <component...> --to staging --smoke [--refresh]")
+    m = model.load_dir(app_dir)
+    if ns.all:
+        names = [c.name for c in m.components if c.type != "library" and m.instance(c.name, "staging")]
+    for n in names:
+        if m.component(n) is None:
+            raise PlatformError(f"{n} is not a component of {m.system}", hint="components: " + ", ".join(c.name for c in m.components))
+        if m.instance(n, "staging") is None:
+            raise PlatformError(f"{n} has no instance in staging", hint="merge its promotion PR first")
+    command = shlex.join(["cplat", "instance", "promote", *names, "--to", "staging", "--smoke"])
+    wait = argparse.Namespace(revision=None, system=ns.app, env="staging", components=names, context=ns.context, refresh=ns.refresh,
+                              timeout=ns.timeout or waits.DEFAULT_TIMEOUT, interval=10.0)
+    code, lines = envwait.system_wait(repo, wait, command)
+    print("\n".join(lines), flush=True)
+    if code != waits.REACHED:
+        return code
+    worst = 0
+    for n in names:
+        slug = m.component(n).repo
+        try:
+            clone = component_clone(repo, slug)
+        except PlatformError as e:
+            print(f"Smoke (staging) {n}: not run: cannot clone {slug}: {str(e).splitlines()[0]}", flush=True)
+            worst = max(worst, 3)
+            continue
+        print(f"staging smoke of {n} ({clone}):", flush=True)
+        worst = max(worst, smoke.main(["run", "staging", "--repo", str(clone)]))
+    return worst
+
+
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
     names = list(ns.items)
+    ns.versions = None
+    if ns.version and "=" in ns.version:
+        ns.versions = parse_versions(ns.version)
+        if not names and not ns.all:
+            names = list(ns.versions)
     if not ns.to or (not names and not ns.all):
         raise PlatformError("promote names its target with --to: cplat instance promote <component...|--all> --to <env>")
     to = ns.to
@@ -183,11 +256,15 @@ def main(argv: list[str]) -> int:
     if ns.accept_digest_mismatch is not None and not _reason_ok(ns.accept_digest_mismatch):
         raise PlatformError("--accept-digest-mismatch needs a reason of at least one sentence (3 or more words, ending in . ! or ?)",
                             hint='e.g. --accept-digest-mismatch "The release was rebuilt on purpose."')
-    if ns.version and len(names) > 1:
-        raise PlatformError("--version applies to a single component")
+    if ns.version and ns.versions is None and len(names) > 1:
+        raise PlatformError("--version vX.Y.Z names the release of one component",
+                            hint="several in one PR: --version api=v0.1.0,web=v0.1.0, or leave --version out to pin each "
+                                 "component's newest release")
 
     repo = Path(ns.repo_dir).resolve()
     app_dir = gitops.find_app(repo, ns.app)
+    if ns.smoke:
+        return _smoke_staging(ns, repo, app_dir, names)
     if not ns.dry_run:
         gitops.require_clean(repo)
     if to == model.ENVIRONMENTS[0]:
@@ -203,6 +280,9 @@ def main(argv: list[str]) -> int:
         names = [c for c in by_name if m.instance(c, frm)]
         if not names:
             raise PlatformError(f"no component is in {frm}")
+    if ns.versions is not None and (extra := sorted(set(ns.versions) - set(names))):
+        raise PlatformError(f"--version names {', '.join(extra)}, which this promotion does not include",
+                            hint="name each component once, with its version: --version api=v0.1.0,web=v0.1.0")
     r = Report(title=f"promote {', '.join(names)}: {frm} → {to} ({app_dir.name})")
     plan: list[tuple[str, str]] = []
     checks: dict[str, dict] = {}

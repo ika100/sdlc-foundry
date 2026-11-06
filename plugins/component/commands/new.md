@@ -10,7 +10,7 @@ Create a repo with the platform script (all logic and tests live in `scripts/cpl
 cplat component new <ARGS>
 ```
 
-Without `--type` and `--lang` the component is a `service` in `python`; an invalid pair fails and lists the valid ones (show them). `--system OWNER/REPO` links the repo to its system's gitops repo. The 4.x flags (`--web`, `--gitops`, `--library`, `--type <shape id>`, `--app`) fail naming their replacement: show that line and use it.
+Without `--type` and `--lang` the component is a `service` in `python`; an invalid pair fails and lists the valid ones (show them). `--system OWNER/REPO` links the repo to its system's gitops repo and creates it under OWNER unless `--org` names another owner. The 4.x flags (`--web`, `--gitops`, `--library`, `--type <shape id>`, `--app`) fail naming their replacement: show that line and use it.
 
 With `--ref <tag>`, prefix every call with `CPLAT_REF=<tag>` so the templates come from that release.
 

@@ -60,6 +60,15 @@ def test_app_is_ignored_for_non_deployable_shapes():
     assert resolve("s1", "d", "--system", "acme/g1")["app"] == "acme/g1"
 
 
+def test_system_owner_is_the_default_owner_of_a_new_component(monkeypatch):
+    """#497: `--system OWNER/REPO` without `--org` creates the repo under OWNER, not under the gh login."""
+    monkeypatch.setattr(core, "gh_login", lambda: "me")
+    r = newsvc.resolve(["web1", "d", "--system", "demo-org/shop-gitops"])
+    assert r["org"] == "demo-org" and r["data"]["github_org"] == "demo-org"
+    assert newsvc.resolve(["web2", "d", "--system", "demo-org/shop-gitops", "--org", "other"])["org"] == "other"
+    assert newsvc.resolve(["web3", "d"])["org"] == "me"
+
+
 def test_existing_nonempty_target_is_refused(tmp_path):
     (tmp_path / "taken").mkdir()
     (tmp_path / "taken" / "file").write_text("x")

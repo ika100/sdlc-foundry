@@ -59,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     for flag in REPLACED:
         p.add_argument(f"--{flag}", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--python", help="Python version (Python shapes only)")
-    p.add_argument("--org", help="GitHub org/user (default: your gh login)")
+    p.add_argument("--org", help="GitHub org/user (default: the owner of --system, else your gh login)")
     p.add_argument("--ref", default="main", help="platform git ref recorded for the plugin marketplace (default main)")
     p.add_argument("--system", dest="app", metavar="OWNER/REPO", help="the system's gitops repo: write .platform-app.yml (deployable types)")
     p.add_argument("--app", dest="old_app", help=argparse.SUPPRESS)
@@ -119,6 +119,8 @@ def resolve(argv: list[str]) -> dict:
 
     python = entry["default_stack"].get("language") == "python" or shape in PYTHON_SHAPES
     org = ns.org
+    if not org and ns.app and "/" in ns.app:    # #497: a component of a system lives where the system's gitops repo lives
+        org = ns.app.split("/", 1)[0]
     if not org and not ns.no_github:
         org = core.gh_login()
     org = org or "ika100"

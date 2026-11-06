@@ -97,10 +97,14 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40]
 
 
+GENERATED = ("applications", "bootstrap", "operators")   # what a command and scripts/render.py write (operators/: #504)
+
+
 def discard_changes(repo: Path) -> None:
-    """Undo the working-tree changes of a command under applications/ and bootstrap/ (every caller started clean)."""
-    run(["git", "checkout", "-q", "--", "applications", "bootstrap"], cwd=repo, check=False)
-    run(["git", "clean", "-fdq", "--", "applications", "bootstrap"], cwd=repo, check=False)
+    """Undo the working-tree changes of a command under the GENERATED folders (every caller started clean)."""
+    for d in GENERATED:              # one call per folder: a folder git does not know would make the whole call do nothing
+        run(["git", "checkout", "-q", "--", d], cwd=repo, check=False)
+        run(["git", "clean", "-fdq", "--", d], cwd=repo, check=False)
 
 
 TRANSIENT = re.compile(r"HTTP 5\d\d|\b50[0-4]\b|Bad Gateway|Service Unavailable|Gateway Time-?out|something went wrong|"
@@ -122,7 +126,8 @@ def _create_pr(repo: Path, title: str, body: str) -> str:
 
 
 def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
-    """Create the branch, commit everything under applications/ and bootstrap/, push, and open a PR. Returns the URL.
+    """Create the branch, commit everything under the GENERATED folders, push, and open a PR. Returns the URL. A change left
+    outside the commit refuses the PR before the push (#504: CI's render-check would fail on it, the next command on it).
 
     A local branch of that name left by a merged PR (its remote branch is gone) is replaced. When a step fails, the clone
     is restored before the error is raised: back on the starting branch, the change discarded, the new local branch deleted
@@ -136,8 +141,11 @@ def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
     try:
         run(["git", "checkout", "-q", "-b", branch], cwd=repo)
         created = True
-        run(["git", "add", "applications", "bootstrap"], cwd=repo, check=False)
+        for d in GENERATED:
+            run(["git", "add", "-A", "--", d], cwd=repo, check=False)
         run(["git", *core.git_identity(repo), "commit", "-q", "-m", title], cwd=repo)
+        if left := rendered_changes(repo):
+            raise PlatformError("files changed outside the commit: " + ", ".join(left[:10]) + (" …" if len(left) > 10 else ""))
         run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
         pushed = True
         return _create_pr(repo, title, body)

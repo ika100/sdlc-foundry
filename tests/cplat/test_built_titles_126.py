@@ -39,6 +39,8 @@ class Recorder:
 
     def __call__(self, cmd, cwd=None, check=True, **kw):
         self.calls.append(list(cmd))
+        if list(cmd[:3]) == ["git", "status", "--porcelain"]:       # #504: the tree is clean after the commit
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout=URL + "\n", stderr="")
 
     def first(self, *prefix: str) -> list[str]:
