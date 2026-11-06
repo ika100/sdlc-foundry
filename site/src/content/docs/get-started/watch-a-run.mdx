@@ -10,6 +10,18 @@ One system, recorded in one run from an empty folder to prod. **Part 1** (steps 
 
 <DemoWalkthrough />
 
+## What the run built
+
+Taken right after the restore drill, from the local cluster the run created (`scripts/journey/shots.py`). Select a picture to see it full size.
+
+<div class="shots">
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/web.png"><img src="/sdlc-foundry/demo/shots/web.png" alt="The taskboard4 web UI in prod: a form with title and due date, and the task Prod check below it" loading="lazy" width="1440" height="900" /></a><figcaption>The Next.js web UI in prod, with the "Prod check" task that step 11 created and the restore drill found in its copy.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/api-docs.png"><img src="/sdlc-foundry/demo/shots/api-docs.png" alt="The OpenAPI page of taskboard4-api 0.1.0 with GET and POST /tasks, health, ready, ping and metrics" loading="lazy" width="1440" height="900" /></a><figcaption>The API in prod: version 0.1.0 from the release, the task endpoints from the spec and the template's health, ready and metrics endpoints.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/argocd.png"><img src="/sdlc-foundry/demo/shots/argocd.png" alt="Argo CD listing taskboard4-api and taskboard4-web in dev, staging and prod, all Healthy and Synced" loading="lazy" width="1440" height="900" /></a><figcaption>Argo CD: both components in dev, staging and prod, all Synced and Healthy, each from the gitops repo's <code>main</code>.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/grafana.png"><img src="/sdlc-foundry/demo/shots/grafana.png" alt="Grafana Explore showing the request rate of taskboard4-api over three hours" loading="lazy" width="1440" height="900" /></a><figcaption>Grafana in dev: the API's requests per second since step 8 turned on the observability stack.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/k9s.png"><img src="/sdlc-foundry/demo/shots/k9s.png" alt="k9s listing the cluster's pods: Argo CD, operators, the observability stack and taskboard4 in dev, staging and prod, all Running" loading="lazy" /></a><figcaption>k9s on the local cluster: the operators, the observability stack, Postgres and both components in every environment, all Running.</figcaption></figure>
+</div>
+
 ## About the timing
 
 Every time on this page is wall-clock time with CI rounds included. Nobody watched this run: Claude Code typed the sentences and took the suggested answer to every question, so a person's time is only the 2 minutes those answers took. **Part 1 took about 31 minutes, part 2 about 77 and part 3 about 56**, 164 in all; the recording shows them in under 6 minutes. Most of it is the two ships (21 and 65 minutes: specs, plans, acceptance tests first, code, review and CI for each repo) and 29 pull requests, each with its own CI round. Not counted: 88 minutes before step 11, when the command that typed the prod sentence was held by a permission check until a person allowed it. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/489)); this is the fourth measured run and the first clearly faster one (256 minutes in journey 3). Every journey, with its time, tokens, a person's share, its quality and what changed in the platform since the one before, is tracked in [Performance measurements](/sdlc-foundry/reference/performance/).

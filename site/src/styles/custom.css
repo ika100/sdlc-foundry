@@ -509,6 +509,25 @@ header.header {
   font-size: var(--sl-text-sm);
 }
 
+/* the screenshots of what a recorded run built: two columns, one on a phone */
+.shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1.5rem;
+}
+
+.shots .map {
+  margin: 0;
+}
+
+.shots .map img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: var(--radius);
+}
+
 /* an option group in a usage line ([--env K=V]) stays on one line; the line wraps between groups */
 .sl-markdown-content code .nw {
   white-space: nowrap;
