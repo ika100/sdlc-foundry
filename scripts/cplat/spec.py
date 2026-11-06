@@ -780,7 +780,8 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
         parts.append("### Notes for this repo\n\n" + str(repo["arguments"]).strip())
     parent = f"{meta.get('gitops_app')}:{meta.get('spec') or meta.get('plan_id')}"
     return {"title": str(repo.get("summary") or repo_id), "priority": priority if priority in PRIORITIES else "P1",
-            "parent": parent, "problem": problem, "context": "\n\n".join(parts)}
+            "parent": parent, "problem": problem, "context": "\n\n".join(parts),
+            "criteria": [str(c).strip() for c in repo.get("criteria") or [] if str(c).strip()]}
 
 
 def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | None) -> Spec:
@@ -789,6 +790,10 @@ def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | Non
     body = spec.body.replace("## Stories", f"## System context\n\n{sl['context']}\n\n## Stories", 1)
     if sl["problem"]:
         body = re.sub(r"(## Problem\n\n)<!--.*?-->", lambda m: m.group(1) + sl["problem"], body, count=1, flags=re.S)
+    if sl["criteria"]:      # spec 147 (AC-147.3): the plan wrote this repo's criteria; the spec is ready to approve
+        lines = "\n".join(f"- **AC-{spec.number}.{i}** {c}" for i, c in enumerate(sl["criteria"], 1))
+        body = re.sub(r"(## Acceptance criteria\n\n)<!--.*?-->", lambda m: m.group(1) + lines, body, count=1, flags=re.S)
+        body = body.replace("- " + today() + " created", f"- {today()} created from the system plan, with its criteria (spec 147)", 1)
     save(spec.dir / "spec.md", spec.meta, body)
     return read(spec.dir)
 
@@ -1219,6 +1224,18 @@ def ci(root: Path, strict: bool) -> int:
 
 # ---------------- CLI ----------------
 
+MANY_CRITERIA = 12
+
+
+def size_warning(spec: Spec) -> str | None:
+    """Spec 147 (AC-147.6): more than 12 active criteria usually means two specs; 3 to 8 is typical."""
+    n = len(spec.active_acs())
+    if n <= MANY_CRITERIA:
+        return None
+    return (f"{n} active criteria (more than {MANY_CRITERIA}): each one is a test, code and review; "
+            "3 to 8 is typical, so consider splitting the spec")
+
+
 def _print_errors(results: dict[str, list[str]]) -> int:
     bad = 0
     for sid, errs in results.items():
@@ -1320,6 +1337,9 @@ def main(argv: list[str]) -> int:
         import adr
         if clash := adr.clashes(root):          # #337: an ADR number taken twice, here or on another branch
             results[adr.ADR_DIR] = clash
+        for s in specs:                          # spec 147 (AC-147.6): a warning, never an error
+            if w := size_warning(s):
+                print(f"WARNING: {s.id}: {w}")
         return _print_errors(results)
     if ns.cmd == "adr-next":
         import adr

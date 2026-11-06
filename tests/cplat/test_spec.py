@@ -495,6 +495,23 @@ def test_a_repo_spec_is_sliced_from_the_product_plan(tmp_path, product):
     assert spec.check(s) == []
 
 
+def test_a_plan_with_repo_criteria_gives_a_spec_ready_to_approve_ac_147_3(tmp_path, product):  # AC-147.3
+    plan = product / "docs" / "plan" / "012-billing.md"
+    plan.write_text(PRODUCT_PLAN.replace(
+        'depends_on: [], done: false}\n  - {id: shop-web',
+        'depends_on: [], done: false, criteria: ["Given a cart, when POST /billing/checkout, then 201 with the session URL (system AC-012.1)", '
+        '"Given a paid session, when the webhook arrives, then the order reads paid (system AC-012.2)"]}\n  - {id: shop-web'))
+    repo = tmp_path / "shop-api"
+    repo.mkdir()
+    s = spec.new_from_plan(repo, plan, "shop-api", shape="service-python")
+    assert s.active_acs() == ["AC-001.1", "AC-001.2"]
+    crit = spec.sections(s.body)["acceptance criteria"]
+    assert "- **AC-001.1** Given a cart, when POST /billing/checkout, then 201 with the session URL (system AC-012.1)" in crit
+    assert s.open_questions() == [] and "**AC-012.1**" in spec.sections(s.body)["system context"]
+    assert spec.check(s) == []
+    assert spec.approve(s, "service-python") is None and spec.read(s.dir).status == "approved"
+
+
 def test_slice_of_an_unknown_repo(tmp_path, product):
     with pytest.raises(core.PlatformError, match="no repo 'shop-x'"):
         spec.slice_from_plan(product / "docs" / "plan" / "012-billing.md", "shop-x")
@@ -769,3 +786,16 @@ def test_task_done_changes_only_the_done_flag_of_that_task(tmp_path, front, expe
     before = p.read_text()
     spec.task_done(spec.read(s.dir), "t1")
     assert p.read_text() == before.replace(front, expect)
+
+
+def test_more_than_twelve_criteria_warn_but_pass_ac_147_6(tmp_path, capsys):  # AC-147.6
+    s = spec.new(tmp_path, "Big", shape="service-python", priority="P1", tracks=[], parent=None)
+    lines = "\n".join(f"- **AC-{s.number}.{i}** Given x{i}, when y, then z." for i in range(1, 14))
+    (s.dir / "spec.md").write_text(s.dir.joinpath("spec.md").read_text().replace(
+        f"- **AC-{s.number}.1** Given <context>, when <action>, then <observable outcome>. -->", "-->\n" + lines))
+    big = spec.read(s.dir)
+    assert len(big.active_acs()) == 13 and spec.check(big) == []
+    assert "13 active criteria" in spec.size_warning(big)
+    assert spec.main(["--repo", str(tmp_path), "check"]) == 0
+    assert f"WARNING: {big.id}: 13 active criteria" in capsys.readouterr().out
+    assert spec.size_warning(s) is None                  # the empty skeleton

@@ -272,3 +272,36 @@ def test_the_todo_plan_written_before_v4_passes(repo):
     out = plan(repo, "validate")
     assert out.returncode == 0, out.stderr
     assert "WARNING: docs/plan/001-todo-list.md" in out.stdout + out.stderr
+
+
+# ---------------- spec 147: the plan writes the repo specs ----------------
+
+CRITERIA_PLAN = SPEC_PLAN.replace(
+    "acs: [AC-012.1], depends_on: [], done: false}",
+    "acs: [AC-012.1], depends_on: [], done: false,\n"
+    "     criteria: ['Given a cart, when POST /checkout, then 201 with a payment URL (system AC-012.1)']}").replace(
+    "acs: [AC-012.2], depends_on: [], done: false}",
+    "acs: [AC-012.2], depends_on: [], done: false,\n"
+    "     criteria: ['Given a paid webhook, when it arrives, then the order shows paid (system AC-012.2)']}")
+
+
+def test_a_plan_with_repo_criteria_passes_ac_147_2(spec_repo):  # AC-147.2
+    out = check(spec_repo, CRITERIA_PLAN)
+    assert out.returncode == 0, out.stderr
+
+
+@pytest.mark.parametrize("change, error", [
+    ((",\n     criteria: ['Given a paid webhook, when it arrives, then the order shows paid (system AC-012.2)']}", "}"),
+     "repo shop-web: no `criteria`"),
+    (("then the order shows paid (system AC-012.2)", "then the order shows paid"), "criterion names no system criterion"),
+    (("(system AC-012.2)", "(system AC-012.1)"), "repo shop-web: a criterion serves AC-012.1, which is not in its acs"),
+])
+def test_repo_criteria_must_cover_their_slice_ac_147_2(spec_repo, change, error):  # AC-147.2
+    out = check(spec_repo, CRITERIA_PLAN.replace(*change))
+    assert out.returncode == 1 and error in out.stderr
+    if "not in its acs" in error:
+        assert "repo shop-web: AC-012.2 is served by none of its criteria" in out.stderr
+
+
+def test_a_plan_without_repo_criteria_stays_valid_ac_147_5(spec_repo):  # AC-147.5
+    assert check(spec_repo, SPEC_PLAN).returncode == 0

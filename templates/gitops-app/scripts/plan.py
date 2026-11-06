@@ -170,6 +170,35 @@ def check_contract(meta: dict, body: str) -> list[str]:
 FINISHED = {"completed", "abandoned"}
 
 
+SERVES = re.compile(r"\(system ([^)]*)\)")
+AC_ID = re.compile(r"AC-\d{3,}\.\d+")
+
+
+def check_criteria(repos: list[dict]) -> list[str]:
+    """Spec 147 (AC-147.2): a plan that writes the repo specs lists criteria for every component repo; each names the
+    system criteria of its slice it serves, `(system AC-<NNN>.<n>)`, and every system criterion of a slice is served."""
+    errs: list[str] = []
+    for r in repos:
+        rid = r.get("id", "<no id>")
+        if r.get("shape") == "gitops-app":
+            continue
+        lines = r.get("criteria") or []
+        if not isinstance(lines, list) or not lines:
+            errs.append(f"repo {rid}: no `criteria` (spec 147: every component repo lists its own criteria)")
+            continue
+        acs, served = set(r.get("acs") or []), set()
+        for c in lines:
+            refs = {a for m in SERVES.finditer(str(c)) for a in AC_ID.findall(m.group(1))}
+            if not refs:
+                errs.append(f"repo {rid}: criterion names no system criterion, `(system AC-<NNN>.<n>)`: {str(c)[:70]}")
+            for a in sorted(refs - acs):
+                errs.append(f"repo {rid}: a criterion serves {a}, which is not in its acs")
+            served |= refs
+        for a in sorted(acs - served):
+            errs.append(f"repo {rid}: {a} is served by none of its criteria")
+    return errs
+
+
 def check(path: Path) -> list[str]:
     return check_all(path)[0]
 
@@ -236,6 +265,8 @@ def check_all(path: Path) -> tuple[list[str], list[str]]:
                 assigned |= set(r.get("acs") or [])
             for a in sorted(active - assigned):
                 errs.append(f"{a} is not assigned to any repo")
+            if any(r.get("criteria") for r in repos):
+                errs += check_criteria(repos)
     if not errs:
         try:
             topo_levels(repos)

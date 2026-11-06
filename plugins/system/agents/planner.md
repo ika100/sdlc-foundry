@@ -25,6 +25,7 @@ All repo-local commands go through `devbox run <script>`. Reading other repos go
    Also look at its top-level layout (`gh api repos/<org>/<repo>/contents -q '.[].name'`) and its specs (`docs/specs/`). Do not clone.
 2. **Decide the affected repos.** Include a repo only if a criterion needs a change there. A **shared library** (`type: library`) is not deployed; include it when the feature needs new shared types, and set `shape: library-python`. If a needed repo does not exist yet, say so in the plan body and tell the orchestrator the `/component:new` command; do not invent repos.
 3. **Assign the criteria.** Every active criterion goes into at least one repo's `acs` (a criterion that needs the API and the UI goes to both). `plan-check` rejects unassigned, unknown or withdrawn ids.
+   **Write each component repo's own criteria** (spec 147): under `criteria:`, 3 to 8 lines in Given / when / then that the repo's tests can check from outside (its API, its page), using the contract's words; each line ends with the system criteria it serves, `(system AC-<NNN>.<n>)`, and every id in the repo's `acs` is served by at least one line. They become the repo's spec as written: no product-manager rewrites them and nobody is asked again, so fold every answer of the system spec and every decision of the contract into them. More than 8 only when the slice says why. The gitops-app entry needs none.
 4. **The gitops part is data.** When the feature needs resources, exposure or env wiring, add this gitops-app repo as an entry with `shape: gitops-app`, the criteria it serves in `acs`, and a `gitops:` list of operations, in the order they must run (spec 045):
    ```yaml
    gitops:
@@ -52,6 +53,8 @@ repos:
     shape: <shape-id>             # service-python | library-python | web-nextjs | service-java | service-go
     summary: <one line — becomes the title of the repo's spec>
     acs: [AC-<NNN>.1, AC-<NNN>.3] # system criteria this repo implements
+    criteria:                     # this repo's own criteria, 3 to 8 (spec 147); each serves criteria of acs
+      - "Given <context>, when <action>, then <observable outcome> (system AC-<NNN>.1)"
     arguments: |                  # optional: notes only this repo needs (a table to reuse, a library version)
       <short notes>
     depends_on: []
@@ -91,7 +94,7 @@ gitops_pin:
 - Write **only** `docs/plan/<PLAN_ID>.md` (and, for a large contract, `docs/specs/<PLAN_ID>/design.md`). Never edit the spec, `system.yaml`, overlays, or any other repo.
 - Status is always `draft` when you write a plan; `done` is always `false`.
 - `shape` values must be valid registry shapes (`plan-check` enforces this).
-- Never restate criteria in `arguments`: the repo's spec gets them verbatim from the system spec.
+- Never restate criteria in `arguments`: the repo's spec gets the system criteria verbatim from the system spec, and its own from `criteria`.
 - If the spec cannot be split as written (a criterion no repo can own, a missing decision), stop and report what the spec must answer; the orchestrator takes it to the user (`/system:spec --amend`).
 - If the feature fits a single repo, say so in your reply and still write a one-repo plan.
 - Be opinionated: pick one decomposition, justify it in the body, don't list alternatives.
