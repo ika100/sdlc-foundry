@@ -6,6 +6,24 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.12.0] - 2026-11-06
+
+### Changed
+
+**The system plan writes the repo specs (spec 147).** A system ship no longer has a product-manager write every repo spec again from the system criteria. The system planner lists each component repo's own criteria in the plan (`criteria:`, 3 to 8, each naming the system criterion it serves); `cplat spec new --from-plan` writes them into the repo spec, which `/system:ship` approves at once, without questions. The gitops plan check refuses a slice whose criteria miss a system criterion of its slice. Plans without repo criteria keep the old flow. `cplat spec check` warns (never fails) when a spec has more than 12 active criteria. In journey 4 the repo specs came out at 19 and 23 criteria and the step took 65 minutes and half of the tokens; existing gitops repos get the new plan check with `/platform:update`.
+
+**Agents keep their final report short, and the docs recommend a fresh session per feature (journey 4 analysis).** Every agent's last message stays in its caller's context for the rest of the run; in journey 4 the 23 reports ran to 2–5 k characters each. Every agent now keeps it to at most 15 lines (the outcome and what the caller must act on). "Unattended delivery" explains that the session's length drives token usage (71 % of journey 4's tokens were the main session re-reading about 183 k tokens per call) and recommends `/clear` after a finished feature: the ship commands resume from their state files.
+
+### Fixed
+
+**A reordered import inside a test function no longer stops a build (#519).** `cplat spec test-diff` already ignored top-level imports that a formatter re-sorts, but not imports inside a fixture or test function. When `lint-fix` moved such an import once the imported package existed, the build stopped for a person's OK although no assertion had changed. Runs of imports are now compared sorted at every level of the test file.
+
+**The Python service's metrics smoke test passes with several instances (#520).** It sent a request and read `/metrics` once, but each instance counts only its own requests, so with two API instances the read could reach the other one and the dev smoke went red. It now repeats the requests and the read, up to 20 times, until one instance has counted both. Existing Python repos get the change with `/platform:update`.
+
+**A system ship finishes after a red dev smoke that only a test change fixed (#521).** The fixed build has the image dev already runs, so the resumed ship's pin changed nothing, and opening the dev PR failed with "No commits between main and compose/…": the ship could neither rerun the smoke nor complete. Now `cplat system ship repo result` sees that dev already runs the image, opens no PR, and `land` reruns the dev smoke on the revision that landed.
+
+**New operators reach a cluster through git; agents no longer run `bootstrap` for them (#522).** Once `operators/root.yaml` is applied, the Argo CD application `platform-operators` syncs every new file under `operators/apps/` by itself, but `/system:ship` still ran `devbox run bootstrap` after every change under `operators/`, and the hints of `/resource:add` told agents to run it, against the gitops repo's rule that only a person runs bootstrap. Now the land step checks the cluster for `platform-operators` and, when it is there, leaves the operators to Argo CD; the hints and the gitops CLAUDE.md say that bootstrap is needed only once per cluster. Existing gitops repos get the CLAUDE.md change with `/platform:update`.
+
 ## [5.11.0] - 2026-11-06
 
 ### Changed
