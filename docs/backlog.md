@@ -22,6 +22,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [142-no-avoidable-stops-in-the-journey](specs/142-no-avoidable-stops-in-the-journey/spec.md) — No avoidable stops in the journey | P1 | approved | 5 |  |
 | [148-transient-errors-never-stop-a-run](specs/148-transient-errors-never-stop-a-run/spec.md) — Transient errors and slow progress never stop a run | P1 | approved | 8 | #539, #540, #541, #542, #543, #544, #545 |
 | [149-a-spec-decides-by-default](specs/149-a-spec-decides-by-default/spec.md) — A spec decides by default | P1 | approved | 6 |  |
+| [151-prompt-changes-pass-the-benchmark](specs/151-prompt-changes-pass-the-benchmark/spec.md) — Prompt changes pass the benchmark before a release | P1 | approved | 4 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [150-the-house-rules-run-before-the-pr](specs/150-the-house-rules-run-before-the-pr/spec.md) — The house rules run before the PR | P2 | approved | 5 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |

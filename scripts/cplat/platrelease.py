@@ -29,6 +29,7 @@ class Opts:
     confirm: str | None = None
     timeout: float = 5400
     interval: float = 20
+    skip_eval: str | None = None   # spec 151: release without the eval gate, for this reason
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> str:
@@ -37,7 +38,7 @@ def _git(repo: Path, *args: str, check: bool = True) -> str:
 
 # ---------------- preflight ----------------
 
-def _preflight(repo: Path) -> None:
+def _preflight(repo: Path, skip_eval: str | None = None) -> None:
     for key in ("user.name", "user.email"):
         if not _git(repo, "config", key, check=False).strip():
             raise core.PlatformError("no git user for the DCO sign-off",
@@ -53,6 +54,13 @@ def _preflight(repo: Path) -> None:
     fragments = _fragments_at(repo, "origin/main")
     if not changelog.unreleased_body(text).strip() and not fragments:
         raise core.PlatformError(f"## [Unreleased] in {CHANGELOG} has no content")
+    if skip_eval is None:   # spec 151: changed prompts ship only after the benchmark ran on them
+        import evalgate
+        changed, fails = evalgate.check(repo)
+        if fails:
+            raise core.PlatformError(f"eval gate: {len(changed)} prompt file(s) changed since the last release and "
+                                     + "; ".join(fails),
+                                     hint="run the benchmarks it names, or release with --skip-eval \"<why>\" (named in the PR)")
 
 
 def _fragments_at(repo: Path, ref: str) -> list[tuple[str, str]]:
@@ -78,7 +86,7 @@ def _check(repo: Path, cmd: list[str], name: str) -> None:
         raise core.PlatformError(f"{name} failed")
 
 
-def _prepare(repo: Path, state: st.State, version: str) -> str:
+def _prepare(repo: Path, state: st.State, version: str, skip_eval: str | None = None) -> str:
     """idle/branch → the PR is open; returns the PR URL."""
     branch = f"release/{version}"
     if state.phase == st.IDLE:
@@ -115,6 +123,8 @@ def _prepare(repo: Path, state: st.State, version: str) -> str:
     source = f"[Unreleased] of {CHANGELOG}" + (f" and {len(gone)} fragment(s) of {changelog.FRAGMENTS}" if gone else "")
     body = (f"Release {version}: {source} moved under ## [{version}].\n"
             "Opened by cplat platform release.")
+    if skip_eval:
+        body += f"\n\nEval gate skipped (spec 151): {skip_eval}"
     out = ship.gh(["pr", "create", "--base", "main", "--head", branch, "--title", f"chore: release {version}",
                    "--body", body], cwd=repo)
     url = [ln for ln in out.splitlines() if ln.strip()][-1].strip()
@@ -195,8 +205,9 @@ def _parse(argv: list[str]) -> tuple[Opts, Path]:
     ap.add_argument("--timeout", type=float, default=5400)
     ap.add_argument("--interval", type=float, default=20)
     ap.add_argument("--repo", default=".")
+    ap.add_argument("--skip-eval", metavar="WHY", help="release without the eval gate (spec 151); the reason goes into the PR")
     ns = ap.parse_args(argv)
-    return Opts(ns.version, ns.dry_run, ns.confirm, ns.timeout, ns.interval), Path(ns.repo)
+    return Opts(ns.version, ns.dry_run, ns.confirm, ns.timeout, ns.interval, ns.skip_eval), Path(ns.repo)
 
 
 def main(argv: list[str]) -> int:
@@ -230,7 +241,7 @@ def main(argv: list[str]) -> int:
     if state.phase == st.IDLE:
         if o.version is not None:
             st.check_version(o.version, state, changes)
-        _preflight(repo)
+        _preflight(repo, o.skip_eval)
     if state.phase == st.GUARD_RED and not o.dry_run:
         raise core.PlatformError(f"release-guard on {state.tag} is red: {(state.guard or {}).get('url')}; "
                                  "the tag and the release stay")
@@ -238,7 +249,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     if state.phase in (st.IDLE, st.BRANCH):
-        url = _prepare(repo, state, version)
+        url = _prepare(repo, state, version, o.skip_eval)
     elif state.phase == st.PR_OPEN:
         url = state.pr["url"]
     else:
