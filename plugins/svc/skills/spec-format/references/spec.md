@@ -36,9 +36,14 @@ As a trader, I want an alert when a watched symbol crosses my threshold, so that
 - SMS and push notifications.
 - Alerts on derived values (moving averages).
 
+## Assumptions
+
+- **A1** A rule fires again only after the price crossed back below its threshold (other option: once per hour; affects AC-007.3).
+- ~~**A2** Alerts go by email only.~~ Revised 2026-10-09: webhooks too, AC-007.4.
+
 ## Open questions
 
-- Should a user be limited in the number of rules? (suggested: 50 per user; affects a new criterion)
+- May a rule call a webhook outside the company network? (suggested: no, only allow-listed hosts; affects AC-007.4)
 - ~~Email provider?~~ Answered: the existing SMTP relay, see AC-007.1.
 
 ## Changelog
@@ -57,12 +62,13 @@ As a trader, I want an alert when a watched symbol crosses my threshold, so that
 - **Smoke marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL; after deploy, `devbox run smoke` checks it in dev against `SMOKE_BASE_URL`. Only for deployable shapes (not libraries), and only for behaviour a test can check using nothing but the base URL.
 - **Small features have few criteria.** Three to eight is typical. More than twelve usually means two specs.
 
-## Open questions
+## Assumptions and open questions
 
-- A question is anything the user must decide that changes behaviour: a limit, a permission, a priority between two goals, a wording users see.
-- Write each as a question with a **suggested answer** and what it affects, so the user can answer in one word.
-- Never answer your own questions by assumption. If a default is obvious and harmless, write it as a criterion and list it under Open questions as "Confirm: …" so the user sees it.
-- Answered questions are struck through, with the answer folded into a criterion or a non-goal. `cplat spec approve` refuses while any unstruck question remains.
+Spec 149 ([ADR-084](../../../../../docs/adr/084-a-spec-decides-by-default.md)): a spec decides by default and asks only what may not be decided by default.
+
+- **Assumptions:** every decision with a sensible default (a limit, a format, an order, a status code, a wording, a small scope call) is taken, written into the criteria and listed as `- **A<n>** <decision> (other option: <…>; affects AC-…)`. The user approves them together with the spec. A changed assumption is struck through with the date and the new decision, never deleted.
+- **Open questions** are only: (a) security, access or secrets; (b) money: paid services, quotas, cost limits; (c) deleting, migrating or exposing existing data; (d) a request so ambiguous that the default may build the wrong feature. Write each with a **suggested answer** and what it affects, so the user can answer in one word.
+- Answered questions are struck through, with the answer folded into a criterion or a non-goal. `cplat spec approve` refuses while any unstruck question remains; assumptions never block approval.
 
 ## Amending
 

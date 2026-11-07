@@ -10,7 +10,7 @@ A feature is described, planned, built and verified from one folder: `docs/specs
 
 | File | Written by | Holds | Format |
 |---|---|---|---|
-| `spec.md` | product-manager | **What**: problem, stories, acceptance criteria, non-goals, open questions, changelog | [spec.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/spec.md) |
+| `spec.md` | product-manager | **What**: problem, stories, acceptance criteria, non-goals, assumptions, open questions, changelog | [spec.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/spec.md) |
 | `design.md` | architect (optional) | **How**: decisions, module boundaries, the contract (API, events, errors), data changes | [design.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/design.md) |
 | `plan.md` | architect | **Tasks**: files, dependencies, parallel safety, which criteria each task covers | [plan.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/plan.md) |
 | `verification.md` | reviewer | **Evidence**: per criterion met / not met, with tests and code | [verification.md](${CLAUDE_PLUGIN_ROOT}/skills/spec-format/references/verification.md) |
@@ -26,7 +26,7 @@ draft ──approve──► approved ──► building ──► done
 ```
 
 - `draft`: being written. Open questions are allowed.
-- `approved`: the user reviewed it. Approval is refused while open questions remain or no criterion exists. Only an approved spec can be planned and built.
+- `approved`: the user reviewed it, with its assumptions (spec 149). Approval is refused while open questions remain or no criterion exists. Only an approved spec can be planned and built.
 - `building`: the build started; tasks in `plan.md` are marked `done` as they merge, so a re-run resumes.
 - `done`: built, verified, PR opened.
 - Amending an approved, building or done spec moves it back to `draft`.

@@ -39,15 +39,15 @@ First `cplat spec review <id> --comments --json` (pass the comments to the produ
 
 ## Q. Questions loop
 
-While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds): **AskUserQuestion** (up to 4 per call; suggested answer first, marked "(Recommended)"; the user can type their own), answers back (`MODE: amend`, "answers to open questions: …"), `cplat spec check`, commit the answers, `cplat spec publish <spec_id>`. Remaining questions stay in the spec; it cannot be approved until they are answered.
+Only open questions are asked here (spec 149: the product-manager decides the rest by default and lists them under Assumptions, shown at F). While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds): **AskUserQuestion** (up to 4 per call; suggested answer first, marked "(Recommended)"; the user can type their own), answers back (`MODE: amend`, "answers to open questions: …"), `cplat spec check`, commit the answers, `cplat spec publish <spec_id>`. Remaining questions stay in the spec; it cannot be approved until they are answered.
 
 ## F. Finish
 
-Print the spec id, title, status, each criterion on one line, the repos named in the stories, and the open questions. No open questions → AskUserQuestion "Approve (Recommended)" / "I'll review the file first"; approve → A. Otherwise print `/system:spec approve <NNN>` and `/system:spec --amend <NNN> <change>`.
+Print the spec id, title, status, each criterion on one line, the repos named in the stories, the assumptions (one line each) and the open questions. No open questions → one AskUserQuestion "Approve with these <n> assumptions (Recommended)" / "Change an assumption" / "I'll review the file first"; approve → A; change → ask which one and the new decision, then C with it and F again. Otherwise print `/system:spec approve <NNN>` and `/system:spec --amend <NNN> <change>`.
 
 ## Rules
 
-- Never answer an open question for the user; never approve without their word.
+- Never answer an open question for the user; never approve without their word. Assumptions are the product-manager's to take ([ADR-084](../../../docs/adr/084-a-spec-decides-by-default.md)); the approval shows them.
 - Never touch `system.yaml`, overlays or component repos. The only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, only `docs/specs/<id>/`, never forced); anything else needs the user's confirmation.
 
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

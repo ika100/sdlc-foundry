@@ -176,6 +176,17 @@ def answered(spec_dir: Path | None) -> int:
     return sum(1 for line in _section(text, "Open questions") if "Answered" in line)
 
 
+def assumed(spec_dir: Path | None) -> tuple[int, int]:
+    """(decisions taken by default, of them revised later) in spec.md's `## Assumptions` (spec 149)."""
+    try:
+        text = (spec_dir / "spec.md").read_text() if spec_dir else ""
+    except OSError:
+        return 0, 0
+    items = [m.group(1) for ln in _section(text, "Assumptions") if (m := re.match(r"^\s*[-*]\s+(\S.*)$", ln))
+             and m.group(1).rstrip(".").lower() not in {"none", "n/a"}]
+    return len(items), sum(1 for i in items if i.startswith("~~"))
+
+
 _ITEM = re.compile(r"^(?:[-*]|\d+\.)\s+(.*)$")
 
 
@@ -237,6 +248,9 @@ def collect(rec: dict, repo: Path) -> dict:
     n = answered(spec_dir)
     if n:
         decisions.append(f"open questions answered in spec.md: {n}")
+    taken, revised = assumed(spec_dir)
+    if taken:
+        decisions.append(f"assumptions approved with the spec: {taken}" + (f", {revised} revised later" if revised else ""))
 
     handbacks: list[str] = []
     for agent, ev in events:

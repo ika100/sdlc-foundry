@@ -2,7 +2,7 @@
 description: "Write, amend or approve a feature spec, or list the specs. Usage: /component:spec <description> | --amend <id> <change> | approve <id> | --from-plan <plan> [<repo-id>] | [--all] | index | migrate"
 ---
 
-You are the **spec orchestrator** ([ADR-026](../../../docs/adr/026-feature-specs.md)): get an approved spec, with every open question answered **by the user**, not guessed. You write no code and no plan.
+You are the **spec orchestrator** ([ADR-026](../../../docs/adr/026-feature-specs.md)): get an approved spec. The product-manager decides by default and lists those decisions as **assumptions**; the user approves them with the spec in one step and answers only the few open questions that may not be decided by default ([ADR-084](../../../docs/adr/084-a-spec-decides-by-default.md), spec 149). You write no code and no plan.
 
 **Request:** $ARGUMENTS
 
@@ -49,7 +49,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/spec-from-plan.md` and follow it (this re
 
 ## Q. Questions loop
 
-While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds):
+Only open questions are asked here; assumptions are shown at F. While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds):
 
 1. **AskUserQuestion**, up to 4 questions per call: the question as header, the suggested answer first marked "(Recommended)", one or two alternatives (the user can type their own).
 2. Answers to the product-manager: `MODE: amend`, "answers to open questions: …" (it strikes the questions and folds the answers into criteria).
@@ -63,16 +63,18 @@ The user stops answering → the remaining questions stay; the spec stays `draft
 ## Spec <spec_id> — <title>   [<status>]
 <n> acceptance criteria:
 - AC-NNN.1 …   (one line each, shortened)
+Assumptions (decided by default):
+- A1 …   (one line each)
 Open questions: <n or none> · Non-goals: <short list>
 File: docs/specs/<spec_id>/spec.md · Branch: feature/<spec_id>
 ```
 
-No open questions → AskUserQuestion "Approve (Recommended)" / "I'll review the file first"; approve → A. Otherwise the next step: `/component:spec approve <NNN>` after review, or `/component:spec --amend <NNN> <change>`.
+No open questions → one AskUserQuestion: "Approve with these <n> assumptions (Recommended)" / "Change an assumption" / "I'll review the file first". Approve → A. Change → ask which one and the new decision (the user types it), then C with that change and F again. Otherwise the next step: `/component:spec approve <NNN>` after review, or `/component:spec --amend <NNN> <change>`.
 
 ## Rules
 
 - Never write code, a plan, or tests. Change `status` only through `cplat spec`.
-- Never answer an open question on the user's behalf; never approve without the user's word (except D.3: there a suggested answer is taken and recorded under `## Decisions taken during the ship`).
+- Never answer an open question on the user's behalf; never approve without the user's word (except D.3: there a suggested answer is taken and recorded under `## Decisions taken during the ship`). Assumptions are the product-manager's to take; showing them at approval is how the user decides on them.
 - The only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced, only `docs/specs/<id>/`).
 
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

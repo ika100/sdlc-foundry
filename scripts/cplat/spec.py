@@ -152,6 +152,14 @@ class Spec:
         """Active criteria marked `(smoke)` (spec 091), in order."""
         return [a.id for a in self.acs() if a.smoke and not a.withdrawn]
 
+    def assumptions(self, *, revised: bool = False) -> list[str]:
+        """The bullets of `## Assumptions` (spec 149): decisions the product-manager took by default and the user approves with
+        the spec. A revised one is struck through (`~~…~~`) and kept; `revised=True` returns those instead."""
+        text = sections(self.body).get("assumptions", "")
+        items = [ln.strip()[2:].strip() for ln in text.splitlines() if re.match(r"^\s*[-*]\s+\S", ln)]
+        items = [i for i in items if i.rstrip(".").lower() not in {"none", "n/a"}]
+        return [i for i in items if i.startswith("~~") == revised]
+
     def open_questions(self) -> list[str]:
         text = sections(self.body).get("open questions", "")
         items = [ln.strip()[2:].strip() for ln in text.splitlines() if re.match(r"^\s*[-*]\s+\S", ln)]
@@ -663,9 +671,13 @@ def skeleton(number: str, title: str) -> str:
 
 ## Non-goals
 
+## Assumptions
+
+<!-- Spec 149: decisions taken by default, approved with the spec. One bullet each: - **A1** <the decision> (other option: <…>; affects AC-…). A revised one is struck through (~~…~~), never deleted. -->
+
 ## Open questions
 
-<!-- One bullet per question the user must answer; approval is refused while any is open. Strike answered ones (~~…~~) and fold the answer into the criteria. -->
+<!-- Only what may not be decided by default (spec 149): security or access, money, destroying or migrating data, or a request too ambiguous to build. Approval is refused while any is open. Strike answered ones (~~…~~) and fold the answer into the criteria. -->
 
 ## Changelog
 
@@ -938,7 +950,7 @@ def summary(root: Path, spec: Spec) -> dict:
     tasks = (spec.plan[0].get("tasks") or []) if spec.plan else []
     return {"id": spec.id, "title": spec.meta.get("title", ""), "status": spec.status,
             "priority": spec.meta.get("priority", ""), "acs": len(spec.active_acs()),
-            "open_questions": len(spec.open_questions()), "tasks": len(tasks),
+            "open_questions": len(spec.open_questions()), "assumptions": len(spec.assumptions()), "tasks": len(tasks),
             "tasks_done": sum(1 for t in tasks if t.get("done")), "tracks": spec.meta.get("tracks") or [],
             "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
 
@@ -1022,6 +1034,7 @@ def detail(root: Path, spec: Spec, shape: str | None) -> dict:
     return {**summary(root, spec), "level": "system" if spec.meta.get("shape") == "gitops-app" else "component",
             "parent": spec.meta.get("parent"), "criteria": _criteria(root, spec, own),
             "questions": [_question(q) for q in spec.open_questions()],
+            "assumption_list": spec.assumptions(), "assumptions_revised": len(spec.assumptions(revised=True)),
             "check": {"ok": not errors, "errors": errors}, "slices": _slices(root, spec),
             "contract_change": _contract_change(spec), "draft_pr": _draft_pr(spec)}
 
