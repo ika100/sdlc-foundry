@@ -208,6 +208,13 @@ def open_pr(repo: Path, o: Opts) -> Result:
             res.commit = ("failed", None, "nothing to commit")
     if res.commit[0] == "failed":
         return res
+    if settings.declared_shape(repo) == "platform":   # spec 150: the house rules CI checks, before anything is pushed
+        import house_rules
+        _, problems = house_rules.check(repo, title=o.title, body=resolved, labels=[pr_rules.NO_SPEC] if o.no_spec else [],
+                                        base=base_ref, fix=False, rules=house_rules.PR_OPEN_RULES)
+        if problems:
+            raise Refused("the platform's house rules fail (spec 150): " + "; ".join(problems),
+                          hint="fix them (`cplat platform pr-check --title …` shows each), then run `cplat pr open` again")
 
     push = run(["git", "push", "-u", "origin", branch], cwd=repo, check=False)
     if push.returncode != 0:
