@@ -12,10 +12,10 @@
       "max_minutes": 30
     },
     "build": {
-      "task_version": 5,
+      "task_version": 6,
       "spec_file": "spec-900.md",
       "spec_id": "900-count-todos-with-get-todos-count",
-      "max_runs": 2,
+      "max_runs": 8,
       "max_minutes": 120,
       "steps": [
         {
@@ -29,17 +29,17 @@
       ]
     },
     "ship": {
-      "task_version": 4,
+      "task_version": 5,
       "spec_file": "spec-900.md",
       "spec_id": "900-count-todos-with-get-todos-count",
       "prompt": "/component:ship 900",
-      "max_runs": 4,
+      "max_runs": 12,
       "max_minutes": 240
     },
     "fix-rounds": {
-      "task_version": 1,
+      "task_version": 2,
       "prompt": "/component:build 901",
-      "max_runs": 2,
+      "max_runs": 8,
       "max_minutes": 90,
       "seed": "seeds/fix-rounds.json"
     }

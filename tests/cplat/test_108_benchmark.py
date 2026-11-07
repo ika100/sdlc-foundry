@@ -69,7 +69,7 @@ def bench(world, monkeypatch):  # noqa: F811
 
 def test_the_fix_rounds_workflow_is_a_fixed_task_with_a_seed_ac_108_11():  # AC-108.11
     t = tasks()["workflows"]["fix-rounds"]
-    assert t["task_version"] == 1 and t["prompt"] == "/component:build 901" and t["max_runs"] == 2 and t["max_minutes"] == 90
+    assert t["task_version"] == 2 and t["prompt"] == "/component:build 901" and t["max_runs"] == 8 and t["max_minutes"] == 90
     assert t["seed"] == "seeds/fix-rounds.json" and "spec_file" not in t
     assert runs_bench.EXPECTED["fix-rounds"] == "open"
 
@@ -91,7 +91,7 @@ def test_the_seed_starts_a_finished_build_with_one_failing_test_and_one_lint_fin
 def test_two_passes_run_the_same_build_with_the_setting_added_in_the_second_ac_108_11(bench, store):  # AC-108.11
     assert runs.main(["benchmark", "fix-rounds"]) == 0
     on, off = bench.seen.sessions
-    assert on["prompt"] == off["prompt"] == "/component:build 901" and on["max_runs"] == "2"
+    assert on["prompt"] == off["prompt"] == "/component:build 901" and on["max_runs"] == "8"
     assert on["settings"] is None and off["settings"] == "failure_summary: off\n"
     assert len(on["spec"]) == 1 and on["spec"] == off["spec"], "the seed (spec 901) is in the clone in both passes"
     pushes = [c for c in bench.log if "push" in c and "--force" not in c]
@@ -103,7 +103,7 @@ def test_both_passes_are_reported_and_recorded_ac_108_11(bench, store, capsys): 
     out = capsys.readouterr().out
     assert "  summaries on: done, fix rounds 1, fixing agents 1600 tokens est. USD 0.15, total 6000 tokens est. USD 0.50" in out.splitlines()
     assert "  summaries off: done, fix rounds 3, fixing agents 2400 tokens est. USD 0.24, total 8400 tokens est. USD 0.84" in out.splitlines()
-    assert out.index("benchmark fix-rounds v1") < out.index("summaries on:") < out.index("summaries off:")
+    assert out.index("benchmark fix-rounds v2") < out.index("summaries on:") < out.index("summaries off:")
     (r,) = benchmark_records(store)
     cmp = r["benchmark"]["summary_compare"]
     assert cmp["verdict"] is None and len(cmp["passes"]) == 2
@@ -112,7 +112,7 @@ def test_both_passes_are_reported_and_recorded_ac_108_11(bench, store, capsys): 
     assert (off["outcome"], off["fix_rounds"], off["gates_failed"]) == ("done", 3, [])
     assert on["fixing"]["tokens"] == 1600 and on["total"]["tokens"] == 6000 and off["fixing"]["tokens"] == 2400
     assert float(on["fixing"]["cost_usd"]) == pytest.approx(0.15) and float(off["total"]["cost_usd"]) == pytest.approx(0.84)
-    assert r["benchmark"]["workflow"] == "fix-rounds" and r["benchmark"]["task_version"] == 1
+    assert r["benchmark"]["workflow"] == "fix-rounds" and r["benchmark"]["task_version"] == 2
 
 
 def test_equal_fix_rounds_are_no_failure_and_there_is_no_savings_target_ac_108_11(bench, store, capsys):  # AC-108.11
