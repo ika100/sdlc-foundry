@@ -38,6 +38,19 @@ PUSH_TRANSIENT = re.compile(
     r"|could not resolve host|connection (?:reset|refused|timed out)|operation timed out|failed to connect"
     r"|TLS handshake timeout|SSL_ERROR_SYSCALL|gnutls_handshake|kex_exchange_identification", re.I)
 PUSH_RETRY_MAX_WAIT = 8 * 60    # seconds a push may wait in total for GitHub to accept it again
+# A dropped network (spec 148, #539 #543): the request never reached GitHub (`dial tcp … network is down`, no DNS, refused),
+# so any `gh` call and any networked git command may simply run again. An error after the request was sent (a reset, a
+# timeout, a 5xx) is retried only for a call that is safe to repeat: a read, or a write that sets a state (`pr ready`, PUT).
+NETWORK_DOWN = re.compile(
+    r"dial tcp|network is (?:down|unreachable)|no such host|could not resolve host|temporary failure in name resolution"
+    r"|connection refused|TLS handshake timeout|no route to host|failed to connect", re.I)
+NETWORK_FLAKY = re.compile(
+    r"connection reset|i/o timeout|unexpected EOF|operation timed out|context deadline exceeded|HTTP 5\d\d|\b50[234]\b"
+    r"|bad gateway|service unavailable|gateway time-?out|something went wrong|remote end hung up unexpectedly|early EOF", re.I)
+NETWORK_RETRY_MAX_WAIT = 5 * 60   # seconds one call may wait in total for the network to come back
+_GIT_NETWORK = ("fetch", "pull", "ls-remote", "clone")   # push has its own rule (PUSH_TRANSIENT)
+_GH_SAFE = ("view", "list", "status", "checks", "diff", "ready", "edit", "download")
+_GH_FIELDS = ("-f", "-F", "--field", "--raw-field", "--input")
 
 
 def _is_push(cmd: list[str]) -> bool:
@@ -48,6 +61,40 @@ def _is_push(cmd: list[str]) -> bool:
     while i < len(rest) and str(rest[i]).startswith("-"):
         i += 2 if rest[i] in ("-C", "-c") else 1
     return i < len(rest) and rest[i] == "push"
+
+
+def _subcommand(cmd: list[str]) -> list[str]:
+    """The words after the program and its global options (`git -C dir fetch` → ["fetch", …])."""
+    rest, i = [str(c) for c in cmd[1:]], 0
+    while i < len(rest) and rest[i].startswith("-"):
+        i += 2 if rest[i] in ("-C", "-c", "-R", "--repo") else 1
+    return rest[i:]
+
+
+def _gh_safe(words: list[str]) -> bool:
+    """A `gh` call that may run twice: a read, `pr ready`, `repo edit`, or `gh api` as GET or PUT."""
+    if not words:
+        return False
+    if words[0] == "api":
+        method = next((words[k + 1] for k, w in enumerate(words[:-1]) if w in ("-X", "--method")), None)
+        if method is None:              # gh api sends a POST once a field is given
+            return not any(w in _GH_FIELDS for w in words)
+        return method.upper() in ("GET", "PUT")
+    return words[0] in ("auth", "search") or (len(words) > 1 and words[1] in _GH_SAFE)
+
+
+def network_retry(cmd: list[str], said: str) -> str | None:
+    """The network error that makes a failed `cmd` worth running again (spec 148), or None."""
+    if not cmd:
+        return None
+    prog, words = Path(str(cmd[0])).name, _subcommand(cmd)
+    if prog == "git" and words and words[0] in _GIT_NETWORK:
+        hit = NETWORK_DOWN.search(said) or NETWORK_FLAKY.search(said)
+    elif prog == "gh":
+        hit = NETWORK_DOWN.search(said) or (NETWORK_FLAKY.search(said) if _gh_safe(words) else None)
+    else:
+        return None
+    return hit.group(0) if hit else None
 
 
 def _rate_limit_kind(text: str) -> str:
@@ -81,10 +128,12 @@ def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, ca
         env: dict[str, str] | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
     """Run a command; raise PlatformError with the command's stderr when it fails and `check` is set. A `gh` call that GitHub
     refuses for its rate limit waits for the reset and runs again (spec 137, #409); a `git push` the remote refuses for a
-    transient reason backs off and pushes again for up to PUSH_RETRY_MAX_WAIT (#500)."""
+    transient reason backs off and pushes again for up to PUSH_RETRY_MAX_WAIT (#500); a `gh` or networked git call that
+    failed on a dropped network runs again for up to NETWORK_RETRY_MAX_WAIT (spec 148)."""
     full_env = {**os.environ, **(env or {})}
     waited, backoff = 0.0, 60.0
     pushed, push_backoff = 0.0, 15.0
+    offline, net_backoff = 0.0, 10.0
     while True:
         try:
             proc = subprocess.run(cmd, cwd=cwd, env=full_env, text=True, capture_output=capture, timeout=timeout)
@@ -100,6 +149,14 @@ def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, ca
             sleep(push_backoff)
             pushed += push_backoff
             push_backoff = min(push_backoff * 2, 120.0)
+            continue
+        dropped = network_retry(cmd, said) if proc.returncode != 0 and not transient else None
+        if dropped and offline + net_backoff <= NETWORK_RETRY_MAX_WAIT:
+            print(f"`{' '.join(str(c) for c in cmd[:3])}` hit a network error ({dropped}): trying again in {int(net_backoff)} s",
+                  file=sys.stderr, flush=True)
+            sleep(net_backoff)
+            offline += net_backoff
+            net_backoff = min(net_backoff * 2, 60.0)
             continue
         if not (cmd and cmd[0] == "gh" and proc.returncode != 0 and RATE_LIMITED.search(said)):
             break

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import appship_sched as sched
 import appship_state as state
+import core
 import runs
 import ship
 import waits
@@ -71,11 +72,20 @@ def ship_wait(repo: Path, phase: str | None, timeout: float, interval: float = S
         waits.sleep(min(interval, left))
 
 
+PROGRESS_CAP = 6   # spec 148: progress extends one wait to at most this many timeouts in all
+
+
+def _head(clone: Path) -> str:
+    p = core.run(["git", "rev-parse", "-q", "HEAD"], cwd=clone, check=False) if clone.is_dir() else None
+    return (p.stdout.strip() if p and p.returncode == 0 else "")
+
+
 def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEXT_INTERVAL) -> tuple[int, dict | None, list[str]]:
     """(exit code, the action when it is no longer `wait`, the TIMEOUT lines)."""
     out = sys.stderr if as_json else sys.stdout
-    begin = waits.now()
+    begin = first = waits.now()
     seen: dict[str, str] = {}
+    marks: dict[str, str] = {}
     while True:
         st = state.require_state(gitops)
         action = sched.next_action(gitops, st)
@@ -89,6 +99,10 @@ def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEX
             if seen.get(rid) != text:
                 print(f"{waits.clock()} {rid}: phase {text}", file=out, flush=True)
                 seen[rid] = text
+            mark = f"{text} {_head(clone)}"   # spec 148 (#544): a new phase or commit is progress, and the wait goes on
+            if marks.get(rid) not in (None, mark) and waits.now() - first < PROGRESS_CAP * timeout:
+                begin = waits.now()
+            marks[rid] = mark
             if sh and (sh.get("escalated") or sh.get("phase") == "done"):
                 ended.append(rid)
         for rid in ended:                         # the step /system:ship takes next: record the repo's result
@@ -99,6 +113,6 @@ def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEX
         left = timeout - (waits.now() - begin)
         if left <= 0:
             running = ", ".join(f"{rid} ({seen.get(rid, '?')})" for rid in action["running"]) or "none"
-            return waits.TIMEOUT, None, [f"TIMEOUT: action still wait after {int(timeout)}s; running: {running}",
+            return waits.TIMEOUT, None, [f"TIMEOUT: action still wait, no repo made progress for {int(timeout)}s; running: {running}",
                                          "run the same wait again"]
         waits.sleep(min(interval, left))

@@ -121,15 +121,18 @@ def test_dry_run_announces_the_single_compose_pr(tmp_path, monkeypatch, capsys):
 class Fakes:
     def __init__(self, monkeypatch, fail_on=None):
         self.created, self.composed, self.fail_on = [], [], fail_on
+        self.on_github: set[str] = set()
         monkeypatch.setattr(newapp.newsvc, "execute", self.execute)
         monkeypatch.setattr(newapp.compose, "main", self.compose_main)
         monkeypatch.setattr(newapp.core, "has_gh", lambda: True)
         monkeypatch.setattr(newapp, "_remote_exists", lambda slug: False)
+        monkeypatch.setattr(newapp, "_published", lambda slug: slug.split("/")[-1] in self.on_github)   # spec 148 (#540)
 
     def execute(self, req):
         if req["name"] == self.fail_on:
             raise core.PlatformError("gh repo create failed: boom")
         self.created.append(req["name"])
+        self.on_github.add(req["name"])
         (req["target"]).mkdir(parents=True)
         (req["target"] / ".copier-answers.yml").write_text(f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}\n")
         r = core.Report(title="x")

@@ -40,7 +40,7 @@ Print `## Phase 1 complete — releasing <VERSION> on <TAG_COMMIT> (<the commit 
 
 ## Phase 4 — Security gate
 
-**security agent**: "Run `devbox run security`. Report all findings (pip-audit CVEs, detect-secrets findings, bandit issues). Do not fix anything." Non-zero exit (any CVE, secret or bandit finding) → **STOP** ("Fix all findings (or add justified suppressions)").
+**security agent**: "Run `devbox run security`; name each tool by the recipe `devbox.json` runs (its `audit` is `pip-audit`, `pnpm audit`, `govulncheck` or OWASP Dependency-Check). With a `Dockerfile`, also run `devbox run image-build` and `devbox run image-scan`, else report the image scan as skipped. Report all findings. Do not fix anything." Non-zero exit of `security` (any CVE, secret or bandit finding) → **STOP** ("Fix all findings (or add justified suppressions)"). Image findings are reported in the release summary, fixable and base-image ones apart (spec 059); they do not stop the release.
 
 A failed gate prints `## Release aborted: <quality|test|security> gate failed`, the agent's output, and `Fix … and re-run /component:release.`; a passed one `## Phase N complete — <gate> gate passed` (Phase 3 adds `(X% coverage)`).
 

@@ -275,6 +275,8 @@ def stubs(tmp_path: Path, monkeypatch, fixtures: Path | None = None, *, extra: t
         monkeypatch.delenv(k, raising=False)
     for k, v in (("GIT_AUTHOR_NAME", "t"), ("GIT_AUTHOR_EMAIL", "t@t"), ("GIT_COMMITTER_NAME", "t"), ("GIT_COMMITTER_EMAIL", "t@t")):
         monkeypatch.setenv(k, v)
+    import newsvc   # spec 148: the push of a new repo follows `gh repo create`; the stub GitHub has no remote to push to
+    monkeypatch.setattr(newsvc, "push_main", lambda target: None)
     return {"fixtures": fx, "gh_log": gh_log, "kube_log": kube_log, "bin": bin_dir}
 
 

@@ -69,6 +69,14 @@ def no_leaking_alert_settings(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def no_network_retries(monkeypatch):
+    """Spec 148: a scripted `gh` or git failure that reads like a dropped network fails at once in tests; the tests of the
+    retry itself raise `core.NETWORK_RETRY_MAX_WAIT` again."""
+    import core
+    monkeypatch.setattr(core, "NETWORK_RETRY_MAX_WAIT", 0)
+
+
 @pytest.fixture()
 def clock(monkeypatch):
     """The run-clock fixture of test_runs.py for modules that import `mem` / `store` from there under an alias

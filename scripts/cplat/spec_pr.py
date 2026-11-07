@@ -172,7 +172,11 @@ def land(root: Path, spec: specmod.Spec) -> tuple[bool, list[str]]:
         gh(["pr", "comment", number, "--body", f"approved by {me} (author is the system owner)"], cwd=root)
     else:
         gh(["pr", "review", number, "--approve"], cwd=root)
-    gh(["pr", "ready", number], cwd=root)
+    rc, _ = gh(["pr", "ready", number], cwd=root)   # a dropped network is retried by core.run (spec 148)
+    if rc != 0:   # #543: a draft PR cannot merge; say so instead of letting the merge blame a conflict
+        raise PlatformError(f"{spec.id}: marking spec PR #{number} ready failed (gh exit {rc})"
+                            + (f": {_last_error}" if _last_error else ""),
+                            hint=f"the PR is still a draft; run `cplat spec land {spec.id}` again once GitHub answers")
     import pr
     import ship
     return pr.wait(root, number, True, 3600, 20, ship.QUEUE_TIMEOUT)

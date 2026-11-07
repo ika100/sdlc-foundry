@@ -118,6 +118,19 @@ def _remote_exists(slug: str) -> bool:
     return run(["gh", "repo", "view", slug], check=False).returncode == 0
 
 
+def _published(slug: str) -> bool:
+    """#540: the GitHub repo exists and holds a commit (GitHub answers 409 for an empty repo)."""
+    return run(["gh", "api", f"repos/{slug}/commits?per_page=1", "--jq", "length"], check=False).returncode == 0
+
+
+def _owner_org(owner: str) -> str | None:
+    """#541: without `org:`, an `owner:` that names a GitHub organisation is where the repos go."""
+    name = owner.strip()
+    if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})", name):
+        return None
+    return name if run(["gh", "api", f"orgs/{name}", "--jq", ".login"], check=False).returncode == 0 else None
+
+
 def resolve(argv: list[str]) -> dict:
     """Parse and validate everything; no side effects. Each repo is validated by new-service's own resolver."""
     ns = build_parser().parse_args(argv)
@@ -125,7 +138,8 @@ def resolve(argv: list[str]) -> dict:
     system = manifest["system"]
     app = f"{system}-gitops"  # the gitops repo; the system name stays the application directory
     github = not ns.no_github and core.has_gh()
-    org = ns.org or manifest.get("org") or (core.gh_login() if not ns.no_github else None) or "ika100"
+    org = ns.org or manifest.get("org") or (_owner_org(manifest["owner"]) if github else None) \
+        or (core.gh_login() if not ns.no_github else None) or "ika100"
     visibility = "public" if ns.public else manifest.get("visibility", "private")
     if visibility == "public" and ns.no_github:
         raise PlatformError("public repositories need GitHub", hint="drop --no-github, or set visibility: private")
@@ -149,11 +163,16 @@ def resolve(argv: list[str]) -> dict:
         e["slug"] = f"{org}/{e['name']}"
         shape = shapes.get(e["shape"])
         e["existing"] = bool(ns.resume and shape and _is_repo(target, shape["template"]))
+        # #540: a local repo whose GitHub repo is missing or empty was interrupted before its push: publish it, don't skip it
+        e["publish"] = bool(e["existing"] and github and not _published(e["slug"]))
+        if e["publish"]:
+            e["existing"] = False
         try:
-            e["req"] = None if e["existing"] else newsvc.resolve([e["name"], "--description", e["description"], *e["args"], *base])
+            e["req"] = None if e["existing"] else newsvc.resolve([e["name"], "--description", e["description"], *e["args"], *base,
+                                                                  *(["--publish-only"] if e["publish"] else [])])
         except PlatformError as err:
             raise PlatformError(f"{e['name']}: {err}", hint=err.hint) from None
-        if github and not e["existing"] and _remote_exists(e["slug"]):
+        if github and not e["existing"] and not e["publish"] and _remote_exists(e["slug"]):
             raise PlatformError(f"GitHub repository {e['slug']} already exists",
                                 hint="choose another name, or clone it into the target directory and re-run with --resume" if ns.resume
                                 else "choose another name; to continue an interrupted run use --resume")
@@ -166,6 +185,8 @@ def plan(req: dict) -> Report:
     for i, e in enumerate(req["entries"], 1):
         if e["req"] is None:
             r.will_do.append(f"{e['name']} ({e['shape']}): already exists, skipped (--resume)")
+        elif e.get("publish"):
+            r.will_do.append(f"{e['name']} ({e['shape']}): exists here but not on GitHub: create {e['slug']} and push (--resume)")
         else:
             r.will_do.append(f"{e['name']} ({e['shape']}): " + "; ".join(newsvc.plan(e["req"]).will_do))
     if req["deployable"]:

@@ -17,7 +17,7 @@ You are the **security agent**. Your job is to identify and document security vu
 devbox run audit
 ```
 
-(`audit` runs `pip-audit --strict` under the project venv.)
+(`audit` runs the shape's audit tool: `pip-audit --strict` in a Python repo, `pnpm audit` in a web repo, `govulncheck` in Go, OWASP Dependency-Check in Java. Name the tool the recipe in `devbox.json` runs, never another one.)
 
 Parse the output and report all CRITICAL and HIGH severity findings. For each finding include:
 - Package name and version

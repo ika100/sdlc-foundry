@@ -72,6 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--skip-tasks", action="store_true", help="skip the template's bootstrap tasks (tests/CI)")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--publish-only", action="store_true", help=argparse.SUPPRESS)   # spec 148 (#540): system new --resume
     return p
 
 
@@ -126,7 +127,10 @@ def resolve(argv: list[str]) -> dict:
     org = org or "ika100"
 
     target = Path(ns.dir).resolve() / name
-    if target.exists() and any(p.name != ".claude" for p in target.iterdir()):
+    if ns.publish_only:
+        if not target.is_dir() or run(["git", "rev-parse", "--verify", "-q", "HEAD"], cwd=target, check=False).returncode != 0:
+            raise PlatformError(f"{target} has no bootstrap commit to publish", hint="remove the directory and create the repo again")
+    elif target.exists() and any(p.name != ".claude" for p in target.iterdir()):
         raise PlatformError(f"{target} already exists and is not empty", hint="choose another name or remove the directory")
 
     visibility = "public" if ns.public else (ns.visibility or "private")
@@ -152,6 +156,7 @@ def resolve(argv: list[str]) -> dict:
         "org": org, "target": target, "data": data, "app": ns.app if entry["deployable"] else None,
         "ignored_app": bool(ns.app and not entry["deployable"]), "github": not ns.no_github and core.has_gh(),
         "want_github": not ns.no_github, "visibility": visibility, "set_keys": [kv.partition("=")[0] for kv in ns.data], "skip_tasks": ns.skip_tasks, "dry_run": ns.dry_run, "json": ns.json, "ref": ns.ref,
+        "publish_only": ns.publish_only,
     }
 
 
@@ -223,48 +228,77 @@ def token_step(app: str, services: list[str]) -> str:
             f"with repository access {app} only and Contents: Read and write, then paste it into: {sets}")
 
 
+def _clone_url(slug: str) -> str:
+    proto = run(["gh", "config", "get", "git_protocol"], check=False).stdout.strip()
+    return f"git@github.com:{slug}.git" if proto == "ssh" else f"https://github.com/{slug}.git"
+
+
+def create_remote(slug: str, visibility: str, description: str, target: Path) -> None:
+    """Create the GitHub repo and push main (spec 148, #539). The push is its own step, retried by core.run; a create whose
+    answer was lost (the repo exists now) or done by an interrupted run goes on with the push."""
+    if run(["git", "remote", "get-url", "origin"], cwd=target, check=False).returncode == 0 and \
+            run(["gh", "repo", "view", slug, "--json", "name"], check=False).returncode != 0:
+        run(["git", "remote", "remove", "origin"], cwd=target)   # left by a create that never reached GitHub
+    res = run(["gh", "repo", "create", slug, f"--{visibility}", "--description", description, "--source=.", "--remote=origin"],
+              cwd=target, check=False)
+    if res.returncode != 0:
+        if run(["gh", "repo", "view", slug, "--json", "name"], check=False).returncode != 0:
+            detail = " | ".join((res.stderr or res.stdout or "").strip().splitlines()[-3:])
+            raise PlatformError(f"`gh repo create {slug}` failed (exit {res.returncode}): {detail}")
+        if run(["git", "remote", "get-url", "origin"], cwd=target, check=False).returncode != 0:
+            run(["git", "remote", "add", "origin", _clone_url(slug)], cwd=target)
+    push_main(target)
+
+
+def push_main(target: Path) -> None:   # tests replace this
+    run(["git", "push", "-q", "-u", "origin", "main"], cwd=target)
+
+
 def execute(req: dict) -> Report:
     r = plan(req)
     target: Path = req["target"]
-    if target.exists():  # empty or .claude-only stub (checked in resolve)
-        import shutil
-        shutil.rmtree(target)
+    if req.get("publish_only"):   # spec 148 (#540): rendered and committed by an interrupted run; only GitHub is left
+        r.did.append(f"kept the bootstrap commit in {target} (it never reached GitHub)")
+    else:
+        if target.exists():  # empty or .claude-only stub (checked in resolve)
+            import shutil
+            shutil.rmtree(target)
 
-    cmd = [*core.find_copier(), "copy", str(PLATFORM_ROOT / "templates" / req["template"]), str(target), "--defaults", "--trust"]
-    if req["skip_tasks"]:
-        cmd.append("--skip-tasks")
-    for k, v in req["data"].items():
-        cmd += ["--data", f"{k}={v}"]
-    run(cmd)
-    r.did.append(f"rendered templates/{req['template']} → {target}")
+        cmd = [*core.find_copier(), "copy", str(PLATFORM_ROOT / "templates" / req["template"]), str(target), "--defaults", "--trust"]
+        if req["skip_tasks"]:
+            cmd.append("--skip-tasks")
+        for k, v in req["data"].items():
+            cmd += ["--data", f"{k}={v}"]
+        run(cmd)
+        r.did.append(f"rendered templates/{req['template']} → {target}")
 
-    # copier records the (temporary) template path; point it at the stable source so shape detection and docs make sense
-    answers = target / ".copier-answers.yml"
-    text = answers.read_text()
-    answers.write_text(re.sub(r"^_src_path:.*$", f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}", text, flags=re.M))
-    core.write_stamp(target, req["shape"], req["ref"])
-    if req["app"]:
-        (target / ".platform-app.yml").write_text(
-            "# Application repos this service belongs to (read by /instance:promote)\n"
-            f"gitops_apps:\n  - {req['app']}\n")
-        r.did.append(f".platform-app.yml → {req['app']}")
+        # copier records the (temporary) template path; point it at the stable source so shape detection and docs make sense
+        answers = target / ".copier-answers.yml"
+        text = answers.read_text()
+        answers.write_text(re.sub(r"^_src_path:.*$", f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}", text, flags=re.M))
+        core.write_stamp(target, req["shape"], req["ref"])
+        if req["app"]:
+            (target / ".platform-app.yml").write_text(
+                "# Application repos this service belongs to (read by /instance:promote)\n"
+                f"gitops_apps:\n  - {req['app']}\n")
+            r.did.append(f".platform-app.yml → {req['app']}")
 
-    # one commit owned by the user (copier's task commit uses a generic identity)
-    if not (target / ".git").exists():
-        run(["git", "init", "-q"], cwd=target)
-    run(["git", "add", "-A"], cwd=target)
-    ident = core.git_identity(target)
-    msg = (f"chore: bootstrap from {req['template']} template\n\nGenerated by /component:new.\n"
-           f"Template: ika100/sdlc-foundry/templates/{req['template']} (platform {core.platform_version()})\nDescription: {req['description']}")
-    has_head = run(["git", "rev-parse", "--verify", "-q", "HEAD"], cwd=target, check=False).returncode == 0
-    run(["git", *ident, "commit", "-q", *(["--amend", "--reset-author"] if has_head else []), "-m", msg], cwd=target)
-    run(["git", "branch", "-M", "main"], cwd=target, check=False)
-    r.did.append("created the bootstrap commit on branch main")
+        # one commit owned by the user (copier's task commit uses a generic identity)
+        if not (target / ".git").exists():
+            run(["git", "init", "-q"], cwd=target)
+        run(["git", "add", "-A"], cwd=target)
+        ident = core.git_identity(target)
+        msg = (f"chore: bootstrap from {req['template']} template\n\nGenerated by /component:new.\n"
+               f"Template: ika100/sdlc-foundry/templates/{req['template']} (platform {core.platform_version()})\nDescription: {req['description']}")
+        has_head = run(["git", "rev-parse", "--verify", "-q", "HEAD"], cwd=target, check=False).returncode == 0
+        run(["git", *ident, "commit", "-q", *(["--amend", "--reset-author"] if has_head else []), "-m", msg], cwd=target)
+        run(["git", "branch", "-M", "main"], cwd=target, check=False)
+        r.did.append("created the bootstrap commit on branch main")
 
     cmds_if_manual = []
     slug = f"{req['org']}/{req['name']}"
     if req["want_github"] and req["github"]:
-        run(["gh", "repo", "create", slug, f"--{req['visibility']}", "--description", req["description"], "--source=.", "--remote=origin", "--push"], cwd=target)
+        create_remote(slug, req["visibility"], req["description"], target)
         r.did.append(f"created {req['visibility']} GitHub repo https://github.com/{slug} and pushed")
         if req["entry"]["deployable"]:
             run(["gh", "repo", "edit", slug, "--add-topic", "deployable-service"])

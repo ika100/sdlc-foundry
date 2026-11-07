@@ -32,6 +32,9 @@ from core import PlatformError, run
 
 ROOTS = ("platform-operators", "platform-systems")     # the cluster repo's own applications (spec 125, scripts/render.py)
 REFRESH = "argocd.argoproj.io/refresh=hard"
+# Spec 148 (#542): an app still behind (or not generated yet) this long into the wait gets one hard refresh, and so does the
+# system's root app: Argo CD polls git every 3 minutes, and a root app whose repo fetch timed out never generates the app.
+AUTO_REFRESH_AFTER = 45.0
 NO_ARGO = re.compile(r"doesn't have a resource type|the server could not find the requested resource|namespaces? \"?argocd\"? not found",
                      re.I)
 # A ComparisonError whose cause is the network (#506): Argo CD could not reach the repo and retries by itself, so the wait keeps
@@ -249,17 +252,27 @@ def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None) -> t
 
 # ---------------- the wait ----------------
 
+def _refresh(names: list[str], ctx: str) -> None:
+    for name in names:
+        kubectl(["-n", "argocd", "annotate", "application", name, REFRESH, "--overwrite"], ctx)
+
+
+def _errored(st: dict | None) -> bool:
+    return any(str(c.get("type", "")) == "ComparisonError" for c in (st or {}).get("conditions") or [])
+
+
 def watch(repo: Path, targets: list[Target], wanted: str, ctx: str, items: dict[str, dict], label: str, command: str,
           refresh: bool, timeout: float, interval: float, system: str | None = None) -> tuple[int, list[str]]:
     at, pins = Ancestry(repo, wanted), Pins(repo, wanted, system)
     w7 = waits.short(wanted)
     if refresh:
         behind = [t.app for t in targets if t.app in items and not at(((items[t.app].get("sync") or {}).get("revision")))]
-        for name in behind:
-            kubectl(["-n", "argocd", "annotate", "application", name, REFRESH, "--overwrite"], ctx)
+        _refresh(behind, ctx)
         if behind:
             ship.say(f"asked Argo CD for a hard refresh of {', '.join(behind)} (not at {w7} yet)")
     begin = waits.now()
+    auto_refreshed = refresh
+    root = f"{system}-root" if system else None
     last: dict[str, str] = {}
     while True:
         states = [(t, *judge(t, items.get(t.app), wanted, at, ctx, pins)) for t in targets]
@@ -274,6 +287,14 @@ def watch(repo: Path, targets: list[Target], wanted: str, ctx: str, items: dict[
         behind = [(t, why) for t, kind, _, why in states if kind in ("behind", "retrying")]
         if not behind:
             return waits.REACHED, [f"READY: {len(targets)} app(s) {label} run {w7}"]
+        if not auto_refreshed and waits.now() - begin >= AUTO_REFRESH_AFTER:   # spec 148 (#542): once per wait
+            auto_refreshed = True
+            stale = [t.app for t, why in behind if t.app in items and (why.startswith("waiting for revision") or _errored(items[t.app]))]
+            if root and root in items and (_errored(items[root]) or any(why == "missing" for _, why in behind)):
+                stale.insert(0, root)
+            if stale:
+                _refresh(stale, ctx)
+                ship.say(f"asked Argo CD for a hard refresh of {', '.join(stale)} (not at {w7} after {int(AUTO_REFRESH_AFTER)}s)")
         left = timeout - (waits.now() - begin)
         if left <= 0:
             flaky = next(((t, why) for t, kind, _, why in states if kind == "retrying"), None)

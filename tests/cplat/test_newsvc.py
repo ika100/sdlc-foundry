@@ -98,6 +98,14 @@ def test_real_local_render_of_each_shape(tmp_path):
     assert not (tmp_path / "t-service-go" / ".platform-app.yml").exists() or "acme/app-gitops" in (tmp_path / "t-service-go" / ".platform-app.yml").read_text()
 
 
+@pytest.fixture(autouse=True)
+def no_real_push(monkeypatch):
+    """Spec 148: the push of a new repo is its own step after `gh repo create`; these tests fake GitHub, so nothing is pushed."""
+    pushed = []
+    monkeypatch.setattr(newsvc, "push_main", pushed.append)
+    return pushed
+
+
 # ---------------- visibility and template options ----------------
 
 def test_public_flag_is_shown_in_the_preview_and_used_for_the_github_repo(tmp_path, monkeypatch, capsys):
