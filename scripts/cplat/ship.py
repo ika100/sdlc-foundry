@@ -1649,13 +1649,24 @@ def _healthy(context: str, want: dict[str, dict], timeout: float, interval: floa
     return lines
 
 
+def envwait_refresh_after() -> float:
+    import envwait
+    return envwait.AUTO_REFRESH_AFTER
+
+
 def argo_health(context: str, app: str, timeout: float, interval: float, images: set[str] | None = None,
                 revision: str | None = None, slug: str = "") -> str:
     """`Synced/Healthy` once the app runs the wanted build (spec 077: an image tag in `status.summary.images`, or a
     revision at least `revision`), a sync error of that build (stops at once), or the last state when the time is up."""
     begin = now()
     state = "missing"
+    refreshed = False
     while True:
+        if not refreshed and state.startswith(("waiting for", "missing")) and now() - begin >= envwait_refresh_after():
+            refreshed = True   # spec 153: Argo CD polls git every 3 minutes; ask once instead of waiting for the poll
+            run(["kubectl", "--context", context, "-n", "argocd", "annotate", "application", app,
+                 "argocd.argoproj.io/refresh=hard", "--overwrite"], check=False)
+            say(f"asked Argo CD for a hard refresh of {app} ({state} after {int(now() - begin)}s)")
         p = run(["kubectl", "--context", context, "-n", "argocd", "get", "application", app, "-o", "json"], check=False)
         if p.returncode == 0:
             s = json.loads(p.stdout).get("status", {})

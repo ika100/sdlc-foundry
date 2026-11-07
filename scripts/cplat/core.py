@@ -43,7 +43,8 @@ PUSH_RETRY_MAX_WAIT = 8 * 60    # seconds a push may wait in total for GitHub to
 # timeout, a 5xx) is retried only for a call that is safe to repeat: a read, or a write that sets a state (`pr ready`, PUT).
 NETWORK_DOWN = re.compile(
     r"dial tcp|network is (?:down|unreachable)|no such host|could not resolve host|temporary failure in name resolution"
-    r"|connection refused|TLS handshake timeout|no route to host|failed to connect", re.I)
+    r"|connection refused|TLS handshake timeout|no route to host|failed to connect"
+    r"|error connecting to api\.github\.com|check your internet connection", re.I)   # gh's own words offline (spec 153)
 NETWORK_FLAKY = re.compile(
     r"connection reset|i/o timeout|unexpected EOF|operation timed out|context deadline exceeded|HTTP 5\d\d|\b50[234]\b"
     r"|bad gateway|service unavailable|gateway time-?out|something went wrong|remote end hung up unexpectedly|early EOF", re.I)
