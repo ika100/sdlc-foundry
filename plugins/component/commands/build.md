@@ -97,7 +97,8 @@ Merge exit 3 or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references
 1. `cplat spec trace <id> --json` must pass.
 2. **reviewer** (`agents.reviewer`): `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON, the Phase 3 test summary. After each pass (cycle `<n>`): `cplat platform runs agent findings --cycle <n> [--deviation <AC or task>]...` for deviations it judged not acceptable.
 3. `RESULT: fail` → each `NOT MET` item to a coder of a covering task (`cplat platform runs agent fix-round verification --task <task>`), then `cplat quiet test-fast` and the reviewer again; at most 2 cycles, then escalate with `verification.md`.
-4. Commit `docs/specs/<spec_id>/verification.md`: `docs(spec): verify <spec_id>`.
+4. `cplat spec mutate <id> --write` (spec 152, report only: how many small faults in the changed code the acceptance tests catch, written into `verification.md`; it never fails the build and nothing acts on its score).
+5. Commit `docs/specs/<spec_id>/verification.md`: `docs(spec): verify <spec_id>`.
 
 ## Phase 5 — Container image
 

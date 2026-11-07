@@ -25,6 +25,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [151-prompt-changes-pass-the-benchmark](specs/151-prompt-changes-pass-the-benchmark/spec.md) — Prompt changes pass the benchmark before a release | P1 | approved | 4 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [150-the-house-rules-run-before-the-pr](specs/150-the-house-rules-run-before-the-pr/spec.md) — The house rules run before the PR | P2 | approved | 5 |  |
+| [152-a-mutation-check-reports-test-strength](specs/152-a-mutation-check-reports-test-strength/spec.md) — A mutation check reports how strong the acceptance tests are | P2 | approved | 3 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |

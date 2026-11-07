@@ -1297,6 +1297,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("task")
     p = sub.add_parser("hash", help="print the acceptance-criteria hash a plan records as spec_hash")
     p.add_argument("id")
+    import mutation
+    mutation.add_parser(sub)
     p = sub.add_parser("trace", help="every active criterion must be named by at least one test")
     p.add_argument("id")
     p.add_argument("--json", action="store_true")
@@ -1386,6 +1388,9 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "hash":
         print(find(root, ns.id).ac_hash())
         return 0
+    if ns.cmd == "mutate":
+        import mutation
+        return mutation.main(ns, root)
     if ns.cmd == "trace":
         spec = find(root, ns.id)
         if ns.chain:
