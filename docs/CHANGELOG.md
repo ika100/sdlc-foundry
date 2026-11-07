@@ -6,6 +6,14 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.13.1] - 2026-11-07
+
+### Fixed
+
+**A build no longer stops before its PR because an earlier run's land unit was left done (spec 131).** A unit-mode build keeps its units in the clone's git directory. When the same spec ran again in that clone (the benchmark reuses its sample clone), the `land` unit was still marked done from the earlier run, because the check that reopens units whose commit left the branch skipped `land`. The build then ended after `verification` without a PR. A done `land` unit now stays done only while its commit is on the branch or its PR is still found. The 5.13.1 eval gate found it: two build benchmarks in a row ended without a PR.
+
+**The journey 6 findings (spec 154, #557–#560).** `scripts/release-check.py gate` retries a GitHub read that hit a dropped network and says "cannot read … run the gate again" instead of "no green upgrade e2e" when it still cannot read. `cplat system wait` fetches `main` once when Argo CD reports a revision the clone does not know, so a wait started before a pin PR follows the newer build. `/resource:restore` names the way out when no backup has completed yet (or the time is after the latest restore point): `/resource:backup <db> --env <env>` first. The system plan check refuses a component repo slice with more than 12 criteria unless it says why in `criteria_why:`. Existing gitops repos get the new plan check with `/platform:update`.
+
 ## [5.13.0] - 2026-11-07
 
 ### Added
