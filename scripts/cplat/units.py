@@ -312,9 +312,11 @@ def prepare(repo: Path, command: str, spec_id: str) -> dict:
     for u in entries.values():
         if u["status"] == "running":
             u["status"] = "open"
-        if u["id"] != "land" and u["status"] == "done" and not skip_validity:
+        if u["status"] == "done" and not skip_validity:
             ok = u["commit"] and _git(repo, "merge-base", "--is-ancestor", u["commit"], head)[0] == 0
-            if not ok:
+            if not ok and u["id"] == "land":   # a squash merge is no ancestor: land stays done while its PR is still found
+                ok = detect(repo, command, spec_id, "land") is not None
+            if not ok:                         # e.g. a file left by an earlier run of the same spec in a reused clone
                 u.update(status="open", commit=None, at=None)
     for u in entries.values():
         if u["status"] != "done":

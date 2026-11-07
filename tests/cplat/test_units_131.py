@@ -316,3 +316,17 @@ def test_only_verification_left_without_a_units_file_reads_the_ship_phase_and_th
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "test(007): acceptance tests for AC-007.1-AC-007.2")
     assert u.only_verification_left(repo) is True
+
+
+def test_a_land_unit_left_done_by_an_earlier_run_reopens_unless_its_pr_is_found(repo, monkeypatch):  # AC-131.3
+    """A benchmark reuses its clone: the units file of an earlier run of the same spec said land was done, so a later build
+    stopped after verification without a PR (found by the 5.13.1 eval gate)."""
+    u = units()
+    git(repo, "checkout", "-qb", BRANCH)
+    data = u.prepare(repo, "build", SPEC_ID)
+    u._update(repo, lambda d: u._checkpoint(u._unit(d, "land"), "0" * 40))      # a commit this clone never had
+    monkeypatch.setattr(u, "_pr_pushed", lambda repo, spec_id, head: False)
+    assert status_of(u.prepare(repo, "build", SPEC_ID), "land")["status"] == "open"
+    u._update(repo, lambda d: u._checkpoint(u._unit(d, "land"), "0" * 40))
+    monkeypatch.setattr(u, "_pr_pushed", lambda repo, spec_id, head: True)      # a squash merge: its PR is still found
+    assert status_of(u.prepare(repo, "build", SPEC_ID), "land")["status"] == "done"
