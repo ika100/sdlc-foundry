@@ -1,7 +1,7 @@
 ---
 spec_id: 152-a-mutation-check-reports-test-strength
 title: A mutation check reports how strong the acceptance tests are
-status: approved
+status: done
 priority: P2
 shape: platform
 ---
@@ -36,3 +36,5 @@ As someone reading a build's verification, I want to see how many small faults i
 ## Changelog
 
 - 2026-11-07 created from the strategy after journey 5 (item B3, "mutation check on the acceptance tests"); approved with the recommended answers, as the user asked for this round.
+- 2026-11-07 building
+- 2026-11-07 done

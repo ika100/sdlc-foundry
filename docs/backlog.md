@@ -20,13 +20,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [140-one-repo-feature-takes-the-component-route](specs/140-one-repo-feature-takes-the-component-route/spec.md) — A one-repo feature takes the component route | P1 | approved | 4 |  |
 | [141-an-approved-plan-asks-no-new-questions](specs/141-an-approved-plan-asks-no-new-questions/spec.md) — An approved system plan asks no new questions | P1 | approved | 5 |  |
 | [142-no-avoidable-stops-in-the-journey](specs/142-no-avoidable-stops-in-the-journey/spec.md) — No avoidable stops in the journey | P1 | approved | 5 |  |
-| [148-transient-errors-never-stop-a-run](specs/148-transient-errors-never-stop-a-run/spec.md) — Transient errors and slow progress never stop a run | P1 | approved | 8 | #539, #540, #541, #542, #543, #544, #545 |
-| [149-a-spec-decides-by-default](specs/149-a-spec-decides-by-default/spec.md) — A spec decides by default | P1 | approved | 6 |  |
-| [151-prompt-changes-pass-the-benchmark](specs/151-prompt-changes-pass-the-benchmark/spec.md) — Prompt changes pass the benchmark before a release | P1 | approved | 4 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
-| [150-the-house-rules-run-before-the-pr](specs/150-the-house-rules-run-before-the-pr/spec.md) — The house rules run before the PR | P2 | approved | 5 |  |
-| [152-a-mutation-check-reports-test-strength](specs/152-a-mutation-check-reports-test-strength/spec.md) — A mutation check reports how strong the acceptance tests are | P2 | approved | 3 |  |
-| [153-fewer-waits-after-a-merge](specs/153-fewer-waits-after-a-merge/spec.md) — Fewer waits after a merge | P2 | approved | 2 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -144,6 +138,9 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [145-smoke-tests-that-write-run-only-in-dev](specs/145-smoke-tests-that-write-run-only-in-dev/spec.md) — Smoke tests that write run only in dev | P1 | done | 7 | #474 |
 | [146-one-owner-per-operator-on-the-local-cluster](specs/146-one-owner-per-operator-on-the-local-cluster/spec.md) — One owner per operator on the local cluster | P1 | done | 5 | #425 |
 | [147-the-system-plan-writes-the-repo-specs](specs/147-the-system-plan-writes-the-repo-specs/spec.md) — The system plan writes the repo specs | P1 | done | 7 |  |
+| [148-transient-errors-never-stop-a-run](specs/148-transient-errors-never-stop-a-run/spec.md) — Transient errors and slow progress never stop a run | P1 | done | 8 | #539, #540, #541, #542, #543, #544, #545 |
+| [149-a-spec-decides-by-default](specs/149-a-spec-decides-by-default/spec.md) — A spec decides by default | P1 | done | 6 |  |
+| [151-prompt-changes-pass-the-benchmark](specs/151-prompt-changes-pass-the-benchmark/spec.md) — Prompt changes pass the benchmark before a release | P1 | done | 4 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
@@ -165,6 +162,9 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [127-the-cache-url-names-its-user-and-ci-pins](specs/127-the-cache-url-names-its-user-and-ci-pins/spec.md) — the cache URL names its user and CI pins its test tools | P2 | done | 6 |  |
 | [132-changelog-fragments-that-the-release](specs/132-changelog-fragments-that-the-release/spec.md) — Changelog fragments that the release assembles | P2 | done | 13 | #321 |
 | [133-build-prs-show-how-they-were-built](specs/133-build-prs-show-how-they-were-built/spec.md) — Build PRs show how they were built | P2 | done | 13 | #338 |
+| [150-the-house-rules-run-before-the-pr](specs/150-the-house-rules-run-before-the-pr/spec.md) — The house rules run before the PR | P2 | done | 5 |  |
+| [152-a-mutation-check-reports-test-strength](specs/152-a-mutation-check-reports-test-strength/spec.md) — A mutation check reports how strong the acceptance tests are | P2 | done | 3 |  |
+| [153-fewer-waits-after-a-merge](specs/153-fewer-waits-after-a-merge/spec.md) — Fewer waits after a merge | P2 | done | 2 |  |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)

@@ -1,7 +1,7 @@
 ---
 spec_id: 148-transient-errors-never-stop-a-run
 title: Transient errors and slow progress never stop a run
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [539, 540, 541, 542, 543, 544, 545]
@@ -44,3 +44,5 @@ As someone running a journey unattended, I want a dropped network, a slow repo-s
 ## Changelog
 
 - 2026-11-07 created from the journey 5 findings #539–#545 (strategy round 5.13, item "one retry rule"); approved with the recommended answers, as the user asked for this round.
+- 2026-11-07 building
+- 2026-11-07 done

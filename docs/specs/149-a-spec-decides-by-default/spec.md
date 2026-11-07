@@ -1,7 +1,7 @@
 ---
 spec_id: 149-a-spec-decides-by-default
 title: A spec decides by default
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -39,3 +39,5 @@ As someone who asks for a feature, I want the product-manager to take the sensib
 ## Changelog
 
 - 2026-11-07 created from the strategy after journey 5 (item B4, "decide by default"); approved with the recommended answers, as the user asked for this round.
+- 2026-11-07 building
+- 2026-11-07 done

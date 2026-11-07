@@ -1,7 +1,7 @@
 ---
 spec_id: 151-prompt-changes-pass-the-benchmark
 title: Prompt changes pass the benchmark before a release
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -36,3 +36,5 @@ As the person releasing the platform, I want a release that changed the prompts 
 ## Changelog
 
 - 2026-11-07 created from the strategy after journey 5 (item A1, "evals gate prompt changes"); approved with the recommended answers, as the user asked for this round.
+- 2026-11-07 building
+- 2026-11-07 done

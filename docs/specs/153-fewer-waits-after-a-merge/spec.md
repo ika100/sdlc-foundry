@@ -1,7 +1,7 @@
 ---
 spec_id: 153-fewer-waits-after-a-merge
 title: Fewer waits after a merge
-status: approved
+status: done
 priority: P2
 shape: platform
 ---
@@ -33,3 +33,5 @@ As someone waiting for a ship to reach dev, I want the platform to tell Argo CD 
 ## Changelog
 
 - 2026-11-07 created from the strategy after journey 5 (round 3, "fewer round trips"); approved with the recommended answers, as the user asked for this round.
+- 2026-11-07 building
+- 2026-11-07 done

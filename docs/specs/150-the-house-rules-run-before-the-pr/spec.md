@@ -1,7 +1,7 @@
 ---
 spec_id: 150-the-house-rules-run-before-the-pr
 title: The house rules run before the PR
-status: approved
+status: done
 priority: P2
 shape: platform
 ---
@@ -36,3 +36,5 @@ As someone (or an agent) opening a PR in the platform repo, I want one command t
 ## Changelog
 
 - 2026-11-07 created from the strategy after journey 5 (item A2, "cplat applies the house rules"); approved with the recommended answers, as the user asked for this round.
+- 2026-11-07 building
+- 2026-11-07 done
