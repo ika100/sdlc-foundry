@@ -174,6 +174,9 @@ SERVES = re.compile(r"\(system ([^)]*)\)")
 AC_ID = re.compile(r"AC-\d{3,}\.\d+")
 
 
+MAX_REPO_CRITERIA = 12   # spec 154: a slice above this is refused unless it says why (`criteria_why:`)
+
+
 def check_criteria(repos: list[dict]) -> list[str]:
     """Spec 147 (AC-147.2): a plan that writes the repo specs lists criteria for every component repo; each names the
     system criteria of its slice it serves, `(system AC-<NNN>.<n>)`, and every system criterion of a slice is served."""
@@ -196,6 +199,9 @@ def check_criteria(repos: list[dict]) -> list[str]:
             served |= refs
         for a in sorted(acs - served):
             errs.append(f"repo {rid}: {a} is served by none of its criteria")
+        if len(lines) > MAX_REPO_CRITERIA and not str(r.get("criteria_why") or "").strip():   # spec 154 (#560)
+            errs.append(f"repo {rid}: {len(lines)} criteria, more than {MAX_REPO_CRITERIA}: merge the ones a single test covers "
+                        "(spec 147 aims at 3 to 8), or say why in `criteria_why:`")
     return errs
 
 

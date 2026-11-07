@@ -308,8 +308,12 @@ def main(argv: list[str]) -> int:
             raise PlatformError(f"cannot read the cluster: {row['backup']['error']}")
         pts = backupstate.restore_points(row)
         server = backupstate.source_server(row, state, when, system, db) if (when != "latest" or pts["earliest"]) else None
-        if server is None:
-            raise PlatformError(f"{when} is outside the restore points of {db}/{env}: earliest {pts['earliest'] or 'none'}, latest {pts['latest'] or 'none'}")
+        if server is None:   # spec 154 (#559): name the way out; right after go-live no backup has completed yet
+            first = not pts["earliest"]
+            raise PlatformError(f"{when} is outside the restore points of {db}/{env}: earliest {pts['earliest'] or 'none'}, latest {pts['latest'] or 'none'}"
+                                + ("; no backup of it has completed yet" if first else ""),
+                                hint=f"take a backup now with /resource:backup {db} --env {env}, then run the restore again"
+                                     if first or when == "latest" or (pts["latest"] and when > pts["latest"]) else None)
         name = f"{system}-{db}-g{base_state['next']}"
         new["clusters"].append({"name": name, "role": "restored", "from": {"server": server, "to": when}})
         new["next"] = base_state["next"] + 1

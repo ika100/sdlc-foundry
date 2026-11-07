@@ -204,12 +204,19 @@ class Pins:
 
     def __init__(self, repo: Path, wanted: str, system: str | None):
         self.repo, self.wanted, self.system, self.cache = repo, wanted, system, {}
+        self.refetched = False
 
     def __call__(self, t: Target, rev: str) -> str | None:
         if not t.component or not rev or rev == self.wanted or not self.system:
             return t.tag
         key = (rev, t.env, t.name)
         if key not in self.cache:
+            if not self.refetched and git(self.repo, "cat-file", "-e", f"{rev}^{{commit}}").returncode != 0:
+                self.refetched = True   # spec 154 (#558): Argo is at a commit newer than the fetch (a pin PR merged since)
+                try:
+                    _fetch(self.repo)
+                except PlatformError:
+                    pass
             read = _reader(self.repo, rev)          # a revision the clone does not know reads as None: the wanted pin stays
             self.cache[key] = model.pin_of(read(f"applications/{self.system}/{model.pin_path(t.env, t.name)}"))
         return self.cache[key] or t.tag

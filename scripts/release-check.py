@@ -181,7 +181,9 @@ def cmd_needs(base: str) -> int:
 
 
 def gh(*args: str) -> str:
-    p = subprocess.run(["gh", *args], capture_output=True, text=True)
+    """A read from GitHub; a dropped network is retried by core.run (spec 154, #557)."""
+    import core
+    p = core.run(["gh", *args], check=False)
     if p.returncode != 0:
         raise RuntimeError((p.stderr or "gh failed").strip())
     return p.stdout
@@ -213,6 +215,9 @@ def cmd_gate(sha: str) -> int:
                     print(f"OK: {sha} has a green upgrade e2e on {head}, the head of its pull request with the same tree")
                     return 0
     except (RuntimeError, ValueError, KeyError, TypeError) as e:
+        if conclusion == "none":   # #557: an unreadable answer is not a red one; say which it is
+            print(f"ERROR: cannot read the check runs of {sha} ({e}): nothing was decided, run the gate again")
+            return 1
         print(f"WARNING: cannot read the check runs of {sha}: {e}", file=sys.stderr)
     if conclusion == "success":
         print(f"OK: {sha} has a green upgrade e2e")
