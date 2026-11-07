@@ -6,6 +6,28 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.13.0] - 2026-11-07
+
+### Added
+
+**`cplat platform pr-check` runs the platform repo's house rules before a PR opens (spec 150).** It checks the PR title, the spec rule, the changelog fragment (a `feat`, `fix` or `perf` PR that changes code needs one, with a valid name and text), the plugin manifests and versions, the DCO sign-off of every commit and the Markdown links with the same functions CI runs, and prints one `ERROR:` line per problem with the fix; `--fix` shortens a title longer than 72 characters. `cplat pr open` in the platform repo refuses before the push when the fragment or the versions break a rule. In the 14 days before 2026-11-07 these rules turned 31 CI rounds red.
+
+**Prompt changes pass the benchmark before a release (spec 151, [ADR-085](adr/085-prompt-changes-pass-the-benchmark-before-a-release.md)).** `cplat platform eval-gate` finds the prompt files (agents, commands, references, skills) changed since the last tag and then needs a `done` benchmark record of `quick-task` and `build` run with exactly this `plugins/` tree, at most 1.5 times the last release's median tokens. `cplat platform release` runs the gate before it creates the release branch; `--skip-eval "<why>"` releases anyway and writes the reason into the release PR.
+
+**A build reports how strong its acceptance tests are (spec 152).** `cplat spec mutate <id>` changes the lines a Python build changed in small ways, one at a time (a comparison or boolean flipped, `not` dropped, a constant changed, a returned value replaced by None, at most 20), runs the tests that name the spec's criteria against each, and reports how many of these faults they catch and which survive. `/component:build` writes the result into `verification.md` after the reviewer (report only; nothing stops on the score). Other shapes are skipped for now.
+
+### Changed
+
+**A spec decides by default and asks only what it may not decide (spec 149, [ADR-084](adr/084-a-spec-decides-by-default.md)).** The product-manager takes every decision with a sensible default (a limit, a format, an order, a status code, a wording), writes it into the criteria and lists it in the spec's new `## Assumptions` section. Open questions are only about security or access, money, deleting, migrating or exposing data, or a request too ambiguous to build. `/component:spec` and `/system:spec` show the assumptions with the criteria and ask once: approve with these assumptions, change one, or review the file first. A changed assumption is struck through, so `cplat spec list --json` and the "How this was built" block can count the revised ones. In journeys 3 to 5 every one of 56 questions was answered with the suggested answer. Update the plugins (`/plugin marketplace update`); specs written before keep working unchanged.
+
+**The ship's deploy wait asks Argo CD for a refresh instead of waiting for its poll (spec 153).** When the app of `/component:ship`'s deploy phase still waits for the new build 45 seconds into the wait, `cplat` asks Argo CD once for a hard refresh (Argo CD polls git every 3 minutes), as `cplat system wait` does since spec 148. `gh`'s own offline message (`error connecting to api.github.com`, `check your internet connection`) is now retried like any call that never reached GitHub.
+
+### Fixed
+
+**Transient errors and slow progress no longer stop a run (spec 148, #539–#545).** A `gh` call or a networked git command that failed because the network dropped runs again for up to 5 minutes; after a reset, a timeout or a 5xx only calls that are safe to repeat run again (reads, `gh pr ready`, `gh repo edit`, `gh api` GET/PUT). `cplat system new` creates each repo and pushes it in two steps, and `--resume` decides per repo from GitHub, so a repo that never reached GitHub is created and pushed instead of skipped; a manifest's `owner:` that names a GitHub organisation sets the organisation when `org:` is missing. `cplat system wait` asks Argo CD once for a hard refresh of apps still behind after 45 seconds and of the root app when it shows a ComparisonError. `cplat spec land` stops with the real cause when the draft PR cannot be marked ready. `cplat system ship next --wait` keeps waiting while a repo makes progress (a new phase or commit). The release's security gate names the audit tool the repo's recipe runs and runs or reports the image scan. In journey 5 these cost three stops and about 20 minutes. Update the plugins (`/plugin marketplace update`).
+
+**The build, ship and fix-rounds benchmarks fit a build made of unit sessions (spec 151).** Since spec 131 a build runs one session per unit (acceptance tests, each task, verification, land), but the benchmark tasks still allowed 2 sessions for a build and 4 for a ship, so every build benchmark stopped after its first task ("stopped after 2 runs"). They now allow 8, 12 and 8 sessions (task versions 6, 5 and 2). The eval gate found it on its first use, for 5.13.0.
+
 ## [5.12.1] - 2026-11-06
 
 ### Fixed
