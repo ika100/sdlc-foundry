@@ -23,6 +23,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [154-the-journey-6-findings](specs/154-the-journey-6-findings/spec.md) — The journey 6 findings | P1 | approved | 4 | #557, #558, #559, #560 |
 | [155-each-repo-of-a-system-ship-runs-in-its-own-session](specs/155-each-repo-of-a-system-ship-runs-in-its-own-session/spec.md) — Each repo of a system ship runs in its own session | P1 | approved | 10 | #560 |
 | [156-a-system-ship-benchmark](specs/156-a-system-ship-benchmark/spec.md) — A system ship benchmark | P1 | approved | 7 | #560 |
+| [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — PRs and issues get short summaries for reviewers and reporters | P1 | draft | 12 | #568 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
