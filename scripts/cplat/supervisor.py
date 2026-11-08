@@ -170,7 +170,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
             except PlatformError:
                 st = None
             deployed = (st or {}).get("deployed")
-            if st is not None:
+            if st is not None and not st.get("product"):   # spec 155: a system ship records and archives a linked run
                 ship.finish(repo)
             done.append(f"shipped {spec}" + (f" ({deployed} in dev)" if deployed else ""))
         else:

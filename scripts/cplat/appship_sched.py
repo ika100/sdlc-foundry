@@ -250,6 +250,11 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
         return True, [f"{repo_id}: {cur['state']}"]
     clone = Path(cur.get("clone") or clone_path(gitops_dir, repo_id))
     sh = ship.load_state(clone) if clone.is_dir() else None
+    archived = False
+    if not sh and cur.get("spec") and clone.is_dir():   # spec 155: the repo's session archived its ship already
+        import shipwait
+        sh = shipwait._archived(clone, cur["spec"])
+        archived = sh is not None
     if not sh:
         raise PlatformError(f"no ship run in {clone}", hint=f"start it: cplat component ship start <spec> --system-dir {gitops_dir}")
     slug = state.slug(gitops_dir)
@@ -263,7 +268,7 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
     smoke = sh.get("smoke") or {}
     if (st.get("joint") and smoke.get("outcome") == "deferred" and not sh.get("escalated") and sh["phase"] == "done"
             and gate != "library"):
-        return _pin_result(gitops_dir, st, repo_id, clone, sh, repo_spec, gate)
+        return _pin_result(gitops_dir, st, repo_id, clone, sh, repo_spec, gate, archived)
     sha, svc = sh.get("merge_sha") or "", repo_id
     argo = "-"
     outcome: tuple[str, str | None] = ("passed", None)
@@ -304,14 +309,15 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
         if sh.get("run_id") and sh["run_id"] not in s.setdefault("ships", []):
             s["ships"].append(sh["run_id"])
     state.update(gitops_dir, change)
-    ship.finish(clone)
+    if not archived:
+        ship.finish(clone)
     if outcome[0] == "passed":
         return True, [f"{repo_id}: passed ({gate})"]
     return False, [f"{repo_id}: escalated ({sh.get('escalated') or outcome[1]})"]
 
 
 def _pin_result(gitops_dir: Path, st: dict, repo_id: str, clone: Path, sh: dict, repo_spec: specmod.Spec,
-                gate: str) -> tuple[bool, list[str]]:
+                gate: str, archived: bool = False) -> tuple[bool, list[str]]:
     """Spec 144 (AC-144.1, AC-144.3): a component ship of a joint run ended at its image: pin it in the dev PR."""
     import appship_joint
     tag = (sh.get("joint") or {}).get("tag") or f"sha-{sh.get('merge_sha')}"
@@ -328,6 +334,7 @@ def _pin_result(gitops_dir: Path, st: dict, repo_id: str, clone: Path, sh: dict,
         if sh.get("run_id") and sh["run_id"] not in s.setdefault("ships", []):
             s["ships"].append(sh["run_id"])
     state.update(gitops_dir, change)
-    ship.finish(clone)
+    if not archived:
+        ship.finish(clone)
     pr = state.require_state(gitops_dir).get("joint_pr")
     return True, [f"{repo_id}: pinned {tag} in the system ship's dev PR ({pr})", *lines]

@@ -331,3 +331,25 @@ def test_the_process_model_is_documented_with_an_adr_ac_155_10():  # AC-155.10
     assert "spec 155" in agents
     adrs = list((ROOT / "docs" / "adr").glob("*-a-system-ships-repos-run-in-their-own-sessions.md"))
     assert adrs and "subagent" in adrs[0].read_text()
+
+
+# ---------------- found by the first benchmark run: a finished repo session archived its ship ----------------
+
+def test_a_ship_archived_by_its_own_session_is_still_recorded_ac_155_4(w, tick, monkeypatch):  # AC-155.4
+    started_api(w)
+    monkeypatch.setattr(appship_proc, "alive", lambda pid: False)
+    sid = repo_spec(w, "shop-api").id
+    w.ship_state("shop-api")
+    st = ship.load_state(w.clone("shop-api"))
+    st["spec"] = sid
+    ship.save_state(w.clone("shop-api"), st)
+    ship.finish(w.clone("shop-api"))                                      # what the supervisor did before the fix
+    w.app("next", "--wait", "--timeout", "60")
+    e = w.state()["repos"]["shop-api"]
+    assert e["state"] == "passed" and e["spec"] == sid
+    assert len(appship_proc.SPAWNED) == 1                                 # not started again
+
+
+def test_the_supervisor_leaves_a_linked_ship_for_the_system_ship_ac_155_4():  # AC-155.4
+    text = (ROOT / "scripts" / "cplat" / "supervisor.py").read_text()
+    assert 'if st is not None and not st.get("product"):' in text

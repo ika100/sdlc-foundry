@@ -93,8 +93,11 @@ def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEX
             return waits.REACHED, action, []
         ended = []
         for rid in action["running"]:
-            clone = Path((st.get("repos") or {}).get(rid, {}).get("clone") or sched.clone_path(gitops, rid))
+            entry = (st.get("repos") or {}).get(rid, {})
+            clone = Path(entry.get("clone") or sched.clone_path(gitops, rid))
             sh = ship.load_state(clone) if clone.is_dir() else None
+            if sh is None and entry.get("spec") and clone.is_dir():   # spec 155: archived by the repo's own session
+                sh = _archived(clone, entry["spec"])
             text = ((sh or {}).get("phase") or "not started") + (" (escalated)" if (sh or {}).get("escalated") else "")
             if seen.get(rid) != text:
                 print(f"{waits.clock()} {rid}: phase {text}", file=out, flush=True)
