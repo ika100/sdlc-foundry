@@ -39,5 +39,6 @@ Writing data (#474): smoke runs in dev, staging and prod (`SMOKE_ENV`); outside 
 
 ## After that
 
+- Assert on parsed values, never on serialized text: decode a JSON body into a typed value (or compare decoded values) and check the fields and the order of lists the criterion names. The order of keys in a JSON object is never part of a contract, and a map does not keep it.
 - Coders make these tests pass and never edit, skip or weaken them. Formatting through `devbox run lint-fix` is fine, and so is a line-level linter suppression that names its rule for a false positive (`//nolint:<rule>`, `# noqa: <code>`, `# type: ignore[<code>]`, `// eslint-disable-next-line <rule>`, `@SuppressWarnings("<name>")` on a method; spec 160): the build checks every change with `cplat spec test-diff <red commit>` (same parsed code for Python, same text without whitespace for other languages, same criterion ids, the suppressions aside) and stops on anything else, a file-wide or rule-less suppression included. If a test contradicts the spec or the contract, the coder stops and reports it; the orchestrator decides (and records the change in the spec's Changelog if the spec was wrong).
 - Unit and integration tests for internals are added later as usual; they do not need criterion ids.

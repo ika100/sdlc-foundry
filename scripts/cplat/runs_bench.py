@@ -27,9 +27,11 @@ GIT_IDENTITY = ["-c", "user.name=cplat-benchmark", "-c", "user.email=benchmark@i
 
 
 def run(cmd: list[str], cwd: Path | str | None = None) -> tuple[int, str, str]:   # tests replace this
+    """One git or gh call; a dropped network is retried as in `core.run` (spec 148)."""
+    import core
     try:
-        p = subprocess.run([str(c) for c in cmd], cwd=cwd, capture_output=True, text=True, timeout=300)
-    except (OSError, subprocess.SubprocessError) as e:
+        p = core.run([str(c) for c in cmd], cwd=cwd, check=False, timeout=300)
+    except (OSError, subprocess.SubprocessError, core.PlatformError) as e:
         return 127, "", f"{type(e).__name__}: {e}"
     return p.returncode, p.stdout, p.stderr
 

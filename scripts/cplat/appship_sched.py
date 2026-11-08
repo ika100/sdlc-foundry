@@ -232,6 +232,13 @@ def check_session(gitops_dir: Path, repo_id: str, sh: dict | None) -> str | None
     return f"{repo_id}: escalated ({reason})"
 
 
+def _session_runs(entry: dict) -> bool:
+    """Spec 155: the repo's own session still runs, so its ship and units state stay where it reads them (archiving them
+    under it made its supervisor see no unit left and report the escalated run as shipped)."""
+    import appship_proc
+    return bool((entry.get("proc") or {}).get("pid")) and appship_proc.alive(entry["proc"]["pid"])
+
+
 def escalate_repo(gitops_dir: Path, repo_id: str, reason: str, cause: str | None) -> dict:
     final = ship._coerce_cause(cause)[0]
 
@@ -309,7 +316,7 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
         if sh.get("run_id") and sh["run_id"] not in s.setdefault("ships", []):
             s["ships"].append(sh["run_id"])
     state.update(gitops_dir, change)
-    if not archived:
+    if not archived and not _session_runs(cur):
         ship.finish(clone)
     if outcome[0] == "passed":
         return True, [f"{repo_id}: passed ({gate})"]
@@ -334,7 +341,7 @@ def _pin_result(gitops_dir: Path, st: dict, repo_id: str, clone: Path, sh: dict,
         if sh.get("run_id") and sh["run_id"] not in s.setdefault("ships", []):
             s["ships"].append(sh["run_id"])
     state.update(gitops_dir, change)
-    if not archived:
+    if not archived and not _session_runs(st["repos"].get(repo_id) or {}):
         ship.finish(clone)
     pr = state.require_state(gitops_dir).get("joint_pr")
     return True, [f"{repo_id}: pinned {tag} in the system ship's dev PR ({pr})", *lines]

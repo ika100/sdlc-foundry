@@ -260,3 +260,16 @@ def test_a_headless_system_ship_may_work_in_its_component_clones_ac_156_1(j):  #
     assert dirs == [str(j.clone("shop-api").absolute()), str(j.clone("shop-web").absolute())]
     cmd = headless.claude_cmd("/system:ship 012", "sonnet", add_dirs=dirs)
     assert cmd[cmd.index("--add-dir") + 1] == dirs[0] and cmd.count("--add-dir") == 2
+
+
+def test_the_benchmarks_git_calls_retry_a_dropped_network_ac_156_1(monkeypatch):  # AC-156.1 (a run died in `ls-remote`)
+    import core
+    seen = []
+
+    def fake(cmd, **kw):
+        seen.append(kw)
+        import subprocess
+        return subprocess.CompletedProcess(cmd, 0, "ok", "")
+    monkeypatch.setattr(core, "run", fake)
+    assert runs_bench.run(["git", "ls-remote", "x"]) == (0, "ok", "")
+    assert seen and seen[0]["check"] is False

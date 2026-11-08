@@ -353,3 +353,26 @@ def test_a_ship_archived_by_its_own_session_is_still_recorded_ac_155_4(w, tick, 
 def test_the_supervisor_leaves_a_linked_ship_for_the_system_ship_ac_155_4():  # AC-155.4
     text = (ROOT / "scripts" / "cplat" / "supervisor.py").read_text()
     assert 'if st is not None and not st.get("product"):' in text
+
+
+def test_result_leaves_the_ship_state_while_the_repos_session_still_runs_ac_155_6(w, tick):  # AC-155.6 (found by the benchmark)
+    started_api(w)                                                        # the conftest reports the session as running
+    running(w, "shop-api", "build", escalated="the acceptance test can never pass", cause="decision")
+    w.app("next", "--wait", "--timeout", "60")
+    assert w.state()["repos"]["shop-api"]["state"] == "escalated"
+    assert ship.load_state(w.clone("shop-api")) is not None              # its supervisor still reads it
+
+
+def test_result_archives_the_ship_once_the_session_has_ended_ac_155_6(w, tick, monkeypatch):  # AC-155.6
+    started_api(w)
+    monkeypatch.setattr(appship_proc, "alive", lambda pid: False)
+    running(w, "shop-api", "build", escalated="the acceptance test can never pass", cause="decision")
+    w.app("next", "--wait", "--timeout", "60")
+    assert w.state()["repos"]["shop-api"]["state"] == "escalated"
+    assert ship.load_state(w.clone("shop-api")) is None
+
+
+def test_testers_assert_on_parsed_values_not_serialized_text():  # found by the benchmark
+    for plugin in ("svc", "web", "svc-go", "svc-java"):
+        text = (ROOT / "plugins" / plugin / "agents" / "tester.md").read_text()
+        assert "Assert on parsed values, never on serialized text" in text, plugin
