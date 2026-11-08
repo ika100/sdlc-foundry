@@ -1,7 +1,7 @@
 ---
 spec_id: 157-unit-mode-runs-independent-tasks-at-once
 title: Unit mode runs independent tasks at once
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [560]
@@ -45,4 +45,4 @@ As someone shipping a spec unattended, I want the independent tasks of a build t
 
 ## Changelog
 
-- 2026-11-08 drafted after the first system-ship benchmark run (spec 155 branch) showed sequential task units; waits for approval.
+- 2026-11-08 drafted after the first system-ship benchmark run (spec 155 branch) showed sequential task units; approved by the user on 2026-11-08.
