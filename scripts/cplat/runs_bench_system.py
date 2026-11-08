@@ -170,7 +170,7 @@ def prepare(task: dict, base: Path, reset_first: bool) -> dict[str, dict]:
             if not rb.trusted(clone):
                 raise PlatformError(f"the benchmark folder {clone} is not trusted in Claude Code, so its permission rules would be ignored",
                                     hint=f"cd {clone} && claude   (accept the trust dialog, then /exit), and run the benchmark again")
-            if now != rev:
+            if now != rev or reset_first:          # also the branches and PRs a stopped run left behind
                 rb.reset_sample(repo, rev, clone)
             keep = rb.snapshot(repo, clone)
         except RuntimeError as e:
@@ -190,7 +190,7 @@ def reset_all(repos: dict[str, dict]) -> tuple[str, str | None]:
 
 
 def one_run(task: dict, base: Path, ns: argparse.Namespace, n: int) -> dict:
-    repos = prepare(task, base, ns.reset_first or n > 0)
+    repos = prepare(task, base, ns.reset_first)
     gitops = next(r for r in repos.values() if r["gitops"])
     _commit_spec_and_plan(task, gitops["clone"])
     plugin_flags, plugin_info = rb.plugin_args(ns.plugins, gitops["clone"]) if ns.plugins else ([], None)
