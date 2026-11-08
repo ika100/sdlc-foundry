@@ -208,3 +208,47 @@ def test_the_sample_differs_from_the_journey_system_ac_156_6():  # AC-156.6
 def test_the_eval_gate_does_not_require_the_system_benchmark_ac_156_7():  # AC-156.7
     import evalgate
     assert "system-ship" not in json.dumps(getattr(evalgate, "REQUIRED", None) or getattr(evalgate, "WORKFLOWS", None) or [])
+
+
+# ---------------- found by the first benchmark run ----------------
+
+def test_the_entry_pr_needs_no_body_file_ac_156_1(j):  # AC-156.1 (a headless session may not write the file)
+    import subprocess
+    from test_appship_097 import GITOPS, git
+    j.started()
+    assert j.app("repo", "start", GITOPS).rc == 0
+    wt = j.common / "cplat-app-ship" / f"{SPEC}-entry"
+    (wt / "x.yaml").write_text("x: 1\n")
+    git(wt, "add", "-A")
+    git(wt, "commit", "-qm", "feat(compose): x")
+    r = j.app("entry", "pr", GITOPS, "--title", "feat(compose): x")
+    assert r.rc == 0, r.out
+    create = j.made("pr", "create")[-1]
+    body = create[create.index("--body") + 1]
+    assert "## Operations of the plan" in body and "- feat(compose): x" in body
+    assert subprocess.run(["git", "status", "--porcelain"], cwd=wt, capture_output=True, text=True).stdout == ""
+
+
+def test_a_run_starts_without_the_last_runs_worktrees_and_state_ac_156_1(tmp_path):  # AC-156.1
+    import subprocess
+
+    def g(*a, cwd):
+        subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True)
+    repo = tmp_path / "bench-files-gitops"
+    repo.mkdir()
+    g("init", "-q", "-b", "main", cwd=repo)
+    g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x", cwd=repo)
+    (repo / ".git" / "cplat-app-ship").mkdir()
+    g("worktree", "add", "-q", "-b", "compose/001", str(repo / ".git" / "cplat-app-ship" / "001-entry"), cwd=repo)
+    (repo / ".git" / "cplat-app-ship.json").write_text("{}")
+    (repo / ".git" / "cplat-units.json").write_text("{}")
+    rbs.clear_runs(repo)
+    assert not list((repo / ".git").glob("cplat-*"))
+    g("branch", "-D", "compose/001", cwd=repo)                      # no longer held by a worktree
+
+
+def test_no_refused_rule_ends_in_the_prefix_syntax_ac_156_1():  # AC-156.1 (Claude Code matched `* main:*` literally)
+    import preflight
+    rules = preflight.refused_rules("main")
+    assert not [r for r in rules if r.endswith(":*)") and "*" in r[:-3]]
+    assert "Bash(git push * main)" in rules

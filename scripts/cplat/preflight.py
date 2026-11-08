@@ -53,7 +53,7 @@ def refused_rules(default_branch: str) -> list[str]:
     d = default_branch
     return [
         "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push * --force*)", "Bash(git push * -f*)",
-        "Bash(git push * +*)", f"Bash(git push * {d})", f"Bash(git push * {d}:*)", f"Bash(git push * *:{d})",
+        "Bash(git push * +*)", f"Bash(git push * {d})", f"Bash(git push * {d}:*{d}*)", f"Bash(git push * {d}:refs*)", f"Bash(git push * *:{d})",
         f"Bash(git push * *:refs/heads/{d})", "Bash(gh pr merge*)", "Bash(gh api *merge*)",
         "Bash(cplat pr wait *--merge*)",
     ]

@@ -12,7 +12,8 @@ Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-a
   cplat system ship repo start <id>                        mark running; prints the clone path (the entry: its worktree on compose/<spec>)
   cplat system ship repo result <id>                       read the clone's finished ship, evaluate the gate (exit 1: escalated)
   cplat system ship repo escalate <id> <reason> --cause C  a repo that escalated before its ship existed (open questions)
-  cplat system ship entry pr <id> --title T --body-file F  push the entry's branch and open (or reuse) its PR
+  cplat system ship entry pr <id> --title T [--body-file F]  push the entry's branch and open (or reuse) its PR
+                                                           (no file: a body from the plan's gitops operations)
   cplat system ship entry land <id> [--timeout S]          wait for all checks, merge through the merge slot
   cplat system ship land [--timeout S] [--wait-timeout S]  spec 144: merge the one dev PR, Argo CD once, every dev smoke,
                                                            staging in one PR (exit 2: Argo CD timeout, run it again)
@@ -128,13 +129,23 @@ def publish(repo: Path, timeout: float) -> tuple[bool, list[str]]:
 
 # ---------------- the gitops entry ----------------
 
-def entry_pr(repo: Path, repo_id: str, title: str, body_file: Path) -> str:
+def entry_body(repo: Path, st: dict, repo_id: str, wt: Path) -> str:
+    """The entry PR's body when no file is given: the plan's gitops operations and the commits (a headless session may
+    not write a file outside the worktree, and the worktree lives in the git dir)."""
+    entry = next((r for r in state.plan_repos(repo, st["spec"]) if r["id"] == repo_id), {})
+    ops = "\n".join(f"- `{json.dumps(op, sort_keys=True)}`" for op in entry.get("gitops") or []) or "- (none listed in the plan)"
+    log = git(wt, "log", "--format=- %s", "origin/main..HEAD")
+    return (f"## Summary\n\nThe gitops part of system spec {st['spec']} (`/system:ship`).\n\n## Operations of the plan\n\n{ops}\n\n"
+            f"## Commits\n\n{log}\n")
+
+
+def entry_pr(repo: Path, repo_id: str, title: str, body_file: Path | None) -> str:
     st = state.require_state(repo)
     wt = Path((st["repos"].get(repo_id) or {}).get("clone") or "")
     if not wt.is_dir():
         raise PlatformError(f"{repo_id} has no worktree yet", hint=f"cplat system ship repo start {repo_id}")
-    if not body_file.is_file():
-        raise PlatformError(f"{body_file} does not exist", hint="write the PR body first")
+    if body_file is not None and not body_file.is_file():
+        raise PlatformError(f"{body_file} does not exist", hint="write the PR body first, or leave out --body-file")
     ship.check_title(title)
     git(wt, "fetch", "-q", "origin")
     if int(git(wt, "rev-list", "--count", "origin/main..HEAD") or 0) == 0:
@@ -145,8 +156,8 @@ def entry_pr(repo: Path, repo_id: str, title: str, body_file: Path) -> str:
     if existing:
         pr = existing[0]["url"]
     else:
-        pr = ship.gh(["pr", "create", "--base", "main", "--head", branch, "--title", title, "--body-file", str(body_file)],
-                     cwd=wt).strip().splitlines()[-1]
+        body = ["--body-file", str(body_file)] if body_file is not None else ["--body", entry_body(repo, st, repo_id, wt)]
+        pr = ship.gh(["pr", "create", "--base", "main", "--head", branch, "--title", title, *body], cwd=wt).strip().splitlines()[-1]
     state.update(repo, lambda s: s["repos"][repo_id].__setitem__("pr", pr))
     return pr
 
@@ -332,7 +343,7 @@ def main(argv: list[str]) -> int:
     p = e.add_parser("pr")
     p.add_argument("id")
     p.add_argument("--title", required=True)
-    p.add_argument("--body-file", required=True)
+    p.add_argument("--body-file", default=None, help="the PR body (default: the plan's gitops operations and the commits)")
     p = e.add_parser("land")
     p.add_argument("id")
     p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
@@ -402,7 +413,7 @@ def main(argv: list[str]) -> int:
         return 0 if ok else 1
     if ns.cmd == "entry":
         if ns.ecmd == "pr":
-            print(f"PR: {entry_pr(repo, ns.id, ns.title, Path(ns.body_file))}")
+            print(f"PR: {entry_pr(repo, ns.id, ns.title, Path(ns.body_file) if ns.body_file else None)}")
             return 0
         ok, lines = entry_land(repo, ns.id, ns.timeout)
         say(lines)
