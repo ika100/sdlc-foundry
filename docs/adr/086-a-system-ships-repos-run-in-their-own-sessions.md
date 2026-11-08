@@ -28,7 +28,7 @@ one path: the coordinator starts no subagent for a component repo.
 
 - A repo inside a system ship is built exactly as on its own: unit mode, the repo's coordinator model. Independent
   repos still run at once up to `--max`. Unit mode runs a repo's tasks one after another; running `parallel_safe` tasks
-  at once is spec 157's.
+  at once is spec 159's.
 - The gitops session no longer carries the repo ships' context; it waits with `next --wait` and records results.
 - Repo ships run on the same machine as the gitops session; a remote session per repo is a later step.
 - A plan from before spec 147 (no criteria per repo) is refused at `repo start` with the hint to re-plan, instead of
