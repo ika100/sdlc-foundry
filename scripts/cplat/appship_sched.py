@@ -154,14 +154,82 @@ def start_repo(gitops_dir: Path, repo_id: str) -> Path:
             escalate_repo(gitops_dir, repo_id, failure.reason(), "environment")
             raise PlatformError(failure.line())
     gate = gate_class(gitops_dir, repo)
+    repo_spec = None if repo.get("shape") == "gitops-app" else repo_spec_of(gitops_dir, st, repo_id, path)
 
     def change(s: dict) -> None:
         e = s["repos"].setdefault(repo_id, {})
         e.update(state="running", clone=str(path), gate=gate, shape=repo.get("shape"), depends_on=list(repo.get("depends_on") or []))
+        if repo_spec:
+            e["spec"] = repo_spec
         e.pop("reason", None)
         e.pop("cause", None)
     state.update(gitops_dir, change)
+    if repo_spec:
+        launch(gitops_dir, repo_id)
     return path
+
+
+# ---------------- spec 155: each component repo in its own session ----------------
+
+def repo_spec_of(gitops_dir: Path, st: dict, repo_id: str, clone: Path) -> str:
+    """AC-155.1: the repo spec of this system spec in the clone; written from the plan and approved when there is none."""
+    want = f"{state.slug(gitops_dir)}:{st['spec']}"
+    specs, _ = specmod.scan(clone)
+    found = next((s for s in specs if s.meta.get("parent") == want and s.status not in ("superseded", "abandoned")), None)
+    if found is not None:
+        return found.id
+    plan = state.plan_path(gitops_dir, st["spec"])
+    if not specmod.slice_from_plan(plan, repo_id)["criteria"]:
+        reason = f"the plan of {st['spec']} writes no criteria for {repo_id} (a plan from before spec 147): re-plan it with /system:plan"
+        escalate_repo(gitops_dir, repo_id, reason, "decision")
+        raise PlatformError(reason, hint=f"/system:plan {st['spec']}, then /system:ship {st['spec']}")
+    shape = specmod.repo_shape(clone)
+    sp = specmod.new_from_plan(clone, plan, repo_id, shape=shape)
+    run(["git", "checkout", "-q", "-B", f"feature/{sp.id}"], cwd=clone)
+    specmod.approve(specmod.find(clone, sp.id), shape)                     # spec 147 (AC-147.4): approved at once
+    specmod.write_index(clone)
+    run(["git", "add", "-A"], cwd=clone)
+    run(["git", *core.git_identity(clone), "commit", "-q", "-s", "-m", f"docs(spec): {sp.id} from the system plan of {st['spec']}"],
+        cwd=clone)
+    return sp.id
+
+
+def launch(gitops_dir: Path, repo_id: str, starts: int = 1) -> dict:
+    """AC-155.1: start the repo's headless `/component:ship` and keep its process in the state (cause environment on failure)."""
+    import appship_proc
+    st = state.require_state(gitops_dir)
+    e = st["repos"][repo_id]
+    try:
+        proc = appship_proc.spawn(Path(e["clone"]), e["spec"], gitops_dir, st.get("run_id"), starts)
+    except OSError as err:
+        escalate_repo(gitops_dir, repo_id, f"the ship session of {repo_id} could not start: {err}", "environment")
+        raise PlatformError(f"{repo_id}: the ship session could not start: {err}") from None
+
+    def change(s: dict) -> None:
+        s["repos"][repo_id]["proc"] = proc
+    state.update(gitops_dir, change)
+    return proc
+
+
+def check_session(gitops_dir: Path, repo_id: str, sh: dict | None) -> str | None:
+    """AC-155.5: a running repo whose session ended before its ship did is started once more; then it escalates.
+    Returns the line to print, or None while the session runs or its ship has ended."""
+    import appship_proc
+    st = state.require_state(gitops_dir)
+    e = (st.get("repos") or {}).get(repo_id) or {}
+    if e.get("state") != "running" or not e.get("spec") or (sh and (sh.get("escalated") or sh.get("phase") == "done")):
+        return None
+    proc = e.get("proc") or {}
+    if proc and appship_proc.alive(proc.get("pid")):
+        return None
+    starts = int(proc.get("starts") or 0)
+    if starts < appship_proc.MAX_STARTS:
+        new = launch(gitops_dir, repo_id, starts + 1)
+        return (f"{repo_id}: ship session started again (pid {new['pid']}, log {new['log']})" if proc
+                else f"{repo_id}: ship session started (pid {new['pid']}, log {new['log']})")
+    reason = f"the ship session of {repo_id} ended {starts} times before its ship finished; see {proc.get('log')}"
+    escalate_repo(gitops_dir, repo_id, reason, "environment")
+    return f"{repo_id}: escalated ({reason})"
 
 
 def escalate_repo(gitops_dir: Path, repo_id: str, reason: str, cause: str | None) -> dict:

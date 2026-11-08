@@ -9,7 +9,9 @@ Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-a
   cplat system ship phase <plan|publish|repos|complete|done>
   cplat system ship publish [--timeout S]                  spec and plan on main: PR merged on green checks (nothing to do when they are)
   cplat system ship next [--json]                          which repos start, run, wait, escalated; the action
-  cplat system ship repo start <id>                        mark running; prints the clone path (the entry: its worktree on compose/<spec>)
+  cplat system ship repo start <id>                        mark running; prints the clone path (the entry: its worktree on compose/<spec>);
+                                                           a component repo gets its spec from the plan and its own headless
+                                                           `/component:ship` session (spec 155)
   cplat system ship repo result <id>                       read the clone's finished ship, evaluate the gate (exit 1: escalated)
   cplat system ship repo escalate <id> <reason> --cause C  a repo that escalated before its ship existed (open questions)
   cplat system ship entry pr <id> --title T [--body-file F]  push the entry's branch and open (or reuse) its PR
@@ -402,6 +404,9 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "repo":
         if ns.rcmd == "start":
             print(appship_sched.start_repo(repo, ns.id))
+            proc = state.require_state(repo)["repos"].get(ns.id, {}).get("proc")
+            if proc:                                  # spec 155: the repo ships in its own session
+                print(f"{ns.id}: ship session started (pid {proc['pid']}, log {proc['log']}); next: cplat system ship next --wait")
             return 0
         if ns.rcmd == "escalate":
             appship_sched.escalate_repo(repo, ns.id, ns.reason, ns.cause)

@@ -77,6 +77,25 @@ def no_network_retries(monkeypatch):
     monkeypatch.setattr(core, "NETWORK_RETRY_MAX_WAIT", 0)
 
 
+@pytest.fixture(autouse=True)
+def no_real_repo_sessions(monkeypatch):
+    """Spec 155: a system ship starts each component repo's headless ship as a process; tests never do. `spawn` records the
+    start in `appship_proc.SPAWNED` and a started session counts as running; the tests of spec 155 replace both, and the
+    tests of the real process call the saved `REAL_SPAWN`. CPLAT_SYSTEM_DIR / CPLAT_PLUGIN_DIRS never leak in."""
+    import appship_proc
+    if not hasattr(appship_proc, "REAL_SPAWN"):
+        appship_proc.REAL_SPAWN, appship_proc.REAL_ALIVE = appship_proc.spawn, appship_proc.alive
+    appship_proc.SPAWNED = []
+
+    def fake(clone, spec_id, gitops, parent_run, starts=1):
+        appship_proc.SPAWNED.append((str(clone), spec_id, str(gitops), parent_run, starts))
+        return {"pid": 4242, "log": f"{clone}/session.log", "started": "2026-11-08T10:00:00", "starts": starts}
+    monkeypatch.setattr(appship_proc, "spawn", fake)
+    monkeypatch.setattr(appship_proc, "alive", lambda pid: True)
+    for name in ("CPLAT_SYSTEM_DIR", "CPLAT_PLUGIN_DIRS"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture()
 def clock(monkeypatch):
     """The run-clock fixture of test_runs.py for modules that import `mem` / `store` from there under an alias

@@ -29,7 +29,7 @@ MOVED = {
     },
     "spec": {                                                              # #496
         "spec-list.md": ["docs(spec): migrate backlog stories to docs/specs"],
-        "spec-from-plan.md": ["## Decisions taken during the ship", "cplat spec new --from-plan"],
+        "spec-from-plan.md": ["cplat spec new --from-plan"],
     },
 }
 

@@ -105,6 +105,9 @@ def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEX
             marks[rid] = mark
             if sh and (sh.get("escalated") or sh.get("phase") == "done"):
                 ended.append(rid)
+            elif line := sched.check_session(gitops, rid, sh):        # spec 155 (AC-155.5)
+                print(f"{waits.clock()} {line}", file=out, flush=True)
+                begin = waits.now()
         for rid in ended:                         # the step /system:ship takes next: record the repo's result
             _, lines = sched.result(gitops, rid, st.get("context"))
             print("\n".join(lines), file=out, flush=True)

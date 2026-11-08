@@ -45,7 +45,7 @@ You are the **spec orchestrator** ([ADR-026](../../../docs/adr/026-feature-specs
 
 ## D. --from-plan <plan> [<repo-id>]
 
-Read `${CLAUDE_PLUGIN_ROOT}/references/spec-from-plan.md` and follow it (this repo's slice of a system plan; D.3 when `/system:ship` runs it unattended).
+Read `${CLAUDE_PLUGIN_ROOT}/references/spec-from-plan.md` and follow it (this repo's slice of a system plan, by hand; `/system:ship` writes it itself, spec 155).
 
 ## Q. Questions loop
 
@@ -74,7 +74,7 @@ No open questions → one AskUserQuestion: "Approve with these <n> assumptions (
 ## Rules
 
 - Never write code, a plan, or tests. Change `status` only through `cplat spec`.
-- Never answer an open question on the user's behalf; never approve without the user's word (except D.3: there a suggested answer is taken and recorded under `## Decisions taken during the ship`). Assumptions are the product-manager's to take; showing them at approval is how the user decides on them.
+- Never answer an open question on the user's behalf; never approve without the user's word. Assumptions are the product-manager's to take; showing them at approval is how the user decides on them.
 - The only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced, only `docs/specs/<id>/`).
 
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

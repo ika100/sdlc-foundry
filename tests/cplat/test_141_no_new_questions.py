@@ -79,12 +79,12 @@ def test_a_repo_spec_without_decisions_posts_no_comment_ac_141_5(repo, gh, monke
 
 
 def test_the_unattended_rules_take_suggested_answers_and_stop_only_without_one_ac_141_1_ac_141_2():  # AC-141.1, AC-141.2
-    assert "references/spec-from-plan.md" in (ROOT / "plugins/component/commands/spec.md").read_text()
-    d3 = (ROOT / "plugins/component/references/spec-from-plan.md").read_text()      # #496: section D moved there
-    assert "## Decisions taken during the ship" in d3 and "a question without a suggestion" in d3
-    assert "changes the system spec or the contract" in d3 and "stop and report the questions verbatim" in d3
+    # spec 155: a system ship writes each repo spec from the plan's criteria (spec 147) with cplat, so no repo spec of a
+    # system ship has questions to answer; the unattended answering path (section D.3) is gone, nothing is invented
+    d = (ROOT / "plugins/component/references/spec-from-plan.md").read_text()
+    assert "When run unattended by `/system:ship`" not in d and "writes and approves a repo's spec itself" in d
     sys_ship = (ROOT / "plugins/system/commands/ship.md").read_text()
-    assert "take their suggested answers" in sys_ship and "only a question without a suggestion" in sys_ship
+    assert "Never answer a repo spec's questions." in sys_ship and "writes and approves the repo spec from the plan" in sys_ship
 
 
 def test_the_product_manager_prefers_the_system_specs_answers_ac_141_4():  # AC-141.4

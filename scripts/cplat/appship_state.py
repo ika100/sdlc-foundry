@@ -355,6 +355,13 @@ def _code_red(repo: Path) -> bool:
 def _mark(repo: Path, st: dict) -> dict:
     head = run(["git", "rev-parse", "HEAD"], cwd=repo, check=False).stdout.strip() or None
     repos = {i: r.get("state") for i, r in sorted((st.get("repos") or {}).items())}
+    # spec 155 (AC-155.4): a commit or a phase change in a running repo's own session is progress of the system ship
+    for i, r in sorted((st.get("repos") or {}).items()):
+        clone = Path(r["clone"]) if r.get("state") == "running" and r.get("clone") and r.get("shape") != "gitops-app" else None
+        if clone is not None and clone.is_dir():
+            sh = ship.load_state(clone) or {}
+            at = run(["git", "rev-parse", "HEAD"], cwd=clone, check=False).stdout.strip()
+            repos[i] = f"running {sh.get('phase') or '-'} {at[:12]}"
     return {"head": head, "phase": f"{st['phase']} {json.dumps(repos)}"}
 
 

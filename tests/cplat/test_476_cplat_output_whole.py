@@ -50,10 +50,12 @@ def test_every_command_and_agent_that_calls_cplat_says_to_read_its_output_whole(
     assert RULE in text and "whole" in text, f"{path.relative_to(ROOT)}: say that cplat's output is read whole, never through {RULE}"
 
 
-def test_the_system_ships_subagent_prompt_carries_the_rule():
+def test_the_system_ship_has_no_repo_subagent_prompt_left_to_carry_the_rule():
+    """Spec 155: a repo ships in its own `/component:ship` session, whose command file carries the rule; the coordinator's
+    own cplat section reads every output whole."""
     text = (PLUGINS / "system/commands/ship.md").read_text()
-    prompt = text[text.index("Prompt: *"):text.index("*", text.index("Prompt: *") + 9)]
-    assert RULE in prompt
+    assert "Prompt: *" not in text
+    assert "output read whole (never piped into `grep`, `head` or `tail`" in text
 
 
 def test_the_changelog_fragment_exists():

@@ -142,9 +142,9 @@ def test_app_plan_and_build_need_an_approved_product_spec():
 
 def test_app_build_runs_each_repo_through_its_own_spec_and_never_answers_questions():
     text = (APP / "commands" / "ship.md").read_text()
-    # spec 141: suggested answers are taken and recorded; a question without one is still reported, never invented
-    assert "/component:spec --from-plan <absolute plan path> <repo-id>" in text and "only a question without a suggestion" in text
-    assert "never merge" in text.lower()
+    # spec 155: each repo gets its spec from the plan and ships in its own /component:ship session; questions are never answered
+    assert "writes and approves the repo spec from the plan" in text and '`cplat headless "/component:ship <repo spec>"`' in text
+    assert "Never answer a repo spec's questions." in text and "never merge" in text.lower()
 
 
 def test_planner_assigns_criteria_instead_of_writing_prompts():
@@ -227,7 +227,8 @@ def test_security_agent_summarises_unfixable_base_image_findings():
 def test_app_build_waits_for_repo_agents_in_the_foreground():
     """AC-046.1: print mode stops background agents after 600 s; foreground calls in one message still run in parallel."""
     text = (APP / "commands" / "ship.md").read_text()
-    assert "foreground" in text and "never `run_in_background`" in text
+    # spec 155: repos ship in their own sessions; a subagent the coordinator still starts runs in the foreground
+    assert "runs in the foreground" in text and "Component repos ship in their own sessions" in text
 
 
 def test_unattended_runs_are_documented():

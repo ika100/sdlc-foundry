@@ -193,7 +193,11 @@ def git(repo, *args):
 
 
 def plan_text(repos=DEFAULT_REPOS):
-    rows = "".join(f"  - {{id: {i}, shape: {s}, summary: {i}, depends_on: {d}, acs: {a}, done: {str(done).lower()}}}\n"
+    # spec 147: the plan writes each component repo's criteria (spec 155: `repo start` writes the repo spec from them)
+    def crit(s, a):
+        return "" if s == "gitops-app" else ", criteria: [" + ", ".join(f"'Given a request, when it is served, then {x} holds (system {x})'"
+                                                                          for x in a) + "]"
+    rows = "".join(f"  - {{id: {i}, shape: {s}, summary: {i}, depends_on: {d}, acs: {a}{crit(s, a)}, done: {str(done).lower()}}}\n"
                    for i, s, d, a, done in repos)
     return PLAN_HEAD + rows + "---\n\n## Contract\n"
 

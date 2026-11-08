@@ -1885,7 +1885,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("spec")
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
-    p.add_argument("--system-dir", default=None, help="the gitops-app clone of the system ship this run belongs to (/system:ship only, spec 097)")
+    p.add_argument("--system-dir", default=os.environ.get("CPLAT_SYSTEM_DIR") or None,
+                   help="the gitops-app clone of the system ship this run belongs to (/system:ship only, spec 097; "
+                        "default $CPLAT_SYSTEM_DIR, which the system ship sets for the repo's session, spec 155)")
     p.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
                    help="replace a limit of the run's budget: minutes, invocations, reruns, cost (a number or off; spec 102)")
     p = sub.add_parser("status")
@@ -2007,6 +2009,11 @@ def main(argv: list[str]) -> int:
             print(line)
         return 0
     if ns.cmd == "finish":
+        st = load_state(repo)
+        if st and st.get("product") and (st["phase"] == "done" or st.get("escalated")):
+            # spec 155: the system ship reads this run (`cplat system ship repo result`) and archives it then
+            print(f"ship run of {st['spec']} belongs to the system ship in {st['product'].get('dir')}: it records and archives it")
+            return 0
         print(f"ship run ended; state archived to {finish(repo)}")
         return 0
     return 2

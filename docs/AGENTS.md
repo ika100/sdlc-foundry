@@ -56,13 +56,15 @@ Commands never contain logic that can be code: they call `cplat <noun> <verb>` a
 
 **A system ship changes each environment in one gitops PR** (spec 144, [ADR-083](adr/083-a-system-ship-lands-each-environment-in-one-gitops-pr.md)). The gitops entry's `compose/<spec>` PR stays open; each component ship pushes a marker `ship/<spec>/<component>-<sha7>` when it merged (the gitops-app's `pin-dev` then opens no PR for that build) and ends its deploy once its image is built; the system ship pins every build on `compose/<spec>` and `cplat system ship land` merges that PR after the last component, waits for Argo CD once, runs every dev smoke and promotes staging (`promote: after-dev-smoke`) in one PR. A gitops-app whose `pin-dev.yml` predates spec 144 keeps one PR per component until `/platform:update`.
 
+**A system ship's repos run in their own sessions** (spec 155, [ADR-086](adr/086-a-system-ships-repos-run-in-their-own-sessions.md)). A subagent cannot start subagents, so a repo shipped by a subagent of the gitops session ran without unit mode, in one long context. `cplat system ship repo start` writes and approves the repo spec from the plan and starts `cplat headless "/component:ship <repo spec>"` in the clone as its own process, a child run of the system ship (one budget, tokens counted once); `cplat system ship next --wait` records each finished ship and starts a session that ended early once more before it escalates the repo.
+
 **Waits are cplat commands** (spec 143, [ADR-082](adr/082-a-coordinator-waits-with-a-cplat-wait-never-a-polling-loop.md)). A command that must wait runs one: `cplat pr wait` (a PR's CI), `cplat system wait --env <env> [<component>…]` (Argo CD runs `main` of the gitops repo: revision, `Synced`/`Healthy`, the pinned image), `cplat cluster wait` (the cluster repo's roots), `cplat component ship wait --repo <clone>` (a ship run reaches a phase or ends), `cplat system ship next --wait` (the next action of a system ship) and `cplat component release wait --commit <sha>` (`main`'s `ci` run). Exit 0 reached, 1 red or escalated, 2 timeout (run it again, at most twice, then escalate with cause `environment`); `--refresh` right after a merge the command made. Commands and agents never write a polling loop: a test fails on a shell loop with `sleep` on `kubectl`, `gh` or `cplat` in their files.
 
 ---
 
 ## Shapes and agent dispatch
 
-Every `/component:*` command starts by detecting the repo's **shape** (`.copier-answers.yml`, falling back to file sniffing) and looks it up in `shapes.yml`. Coder, tester, deployment, observability and release agents are then spawned from the plugin that owns the shape (`web:coder`, `svc-java:tester`, `svc-go:release`, …; `svc:*` for Python); product-manager and architect (`svc`) and quality and security (`shared`) are shared by all shapes. `gitops-app` repos do not use `/component:spec`, `/component:plan` or `/component:build`; they use `/component:add|set|remove`, `/resource:add`, `/instance:promote` and `/system:spec|plan|ship` (`cplat shape` prints the routing). The multi-repo flow: `/system:spec` (system spec, approved) → `/system:plan` (criteria per repo, contract) → `/system:ship` runs `/component:spec --from-plan <plan> <repo-id>`, `/component:plan`, `/component:build` in each ready repo in parallel → you merge → `/instance:promote`.
+Every `/component:*` command starts by detecting the repo's **shape** (`.copier-answers.yml`, falling back to file sniffing) and looks it up in `shapes.yml`. Coder, tester, deployment, observability and release agents are then spawned from the plugin that owns the shape (`web:coder`, `svc-java:tester`, `svc-go:release`, …; `svc:*` for Python); product-manager and architect (`svc`) and quality and security (`shared`) are shared by all shapes. `gitops-app` repos do not use `/component:spec`, `/component:plan` or `/component:build`; they use `/component:add|set|remove`, `/resource:add`, `/instance:promote` and `/system:spec|plan|ship` (`cplat shape` prints the routing). The multi-repo flow: `/system:spec` (system spec, approved) → `/system:plan` (criteria per repo, contract) → `/system:ship` writes each ready repo's spec from the plan and ships the repo in its own headless `/component:ship` session (spec 155), independent repos at once → dev → `/instance:promote`.
 
 ---
 
@@ -160,7 +162,7 @@ The `/component:release` pipeline adds a second safety net: **Phase 7** scans al
 /instance:promote <component...> --to <env>   ──►  cplat instance promote  ──►  PR (Argo reconciles on merge)
 /component:add|set|remove <component...>    ──►  cplat component add|set|remove  ──►  PR (system.yaml + generated ApplicationSets)
 /system:spec <desc> → /system:plan <id>      ──►  product-manager ──► system:planner ──►  docs/specs/<id>/ + docs/plan/<id>.md
-/system:ship <id>                        ──►  one agent per ready repo: /component:spec --from-plan → /component:plan → /component:build  ──►  PRs
+/system:ship <id>                        ──►  one headless /component:ship session per ready repo (spec 155), repo spec from the plan  ──►  PRs
 ```
 
 ---

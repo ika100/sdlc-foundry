@@ -269,6 +269,8 @@ def main(argv: list[str]) -> int:
     covered = command in COVERED_COMMANDS
     unit_mode = command in UNIT_COMMANDS and bool(refs)
     dirs = plugin_dirs_of(ns.plugin_dir)
+    if dirs:                                   # spec 155: a system ship's repo sessions load the same plugins
+        os.environ["CPLAT_PLUGIN_DIRS"] = os.pathsep.join(dirs)
     allow = deny = None
     ids: list[str] = []
     if covered:

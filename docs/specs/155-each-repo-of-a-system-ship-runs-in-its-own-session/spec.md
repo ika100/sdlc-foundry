@@ -27,7 +27,7 @@ As someone shipping a system spec, I want each repo's part to be built exactly a
 
 - **AC-155.1** Given `/system:ship` with a component repo whose dependencies have passed, when the scheduler starts it, then cplat writes and approves the repo spec from the plan (`cplat spec new --from-plan`, spec 147) and starts `cplat headless "/component:ship <repo spec>"` for that clone as its own process, linked to the gitops repo. It records the process and its log path in the system ship state. The gitops session starts no subagent for a component repo.
 - **AC-155.2** Given a plan with repos that do not depend on each other, when they are ready, then their headless ships run at the same time, up to `--max` (default 3); a test with a fake `headless` shows the runs overlapping. A repo starts only after every repo it depends on has passed, as today.
-- **AC-155.3** Given a repo ship started by a system ship, when it runs, then it uses the same code path as a standalone `/component:ship`: unit mode (spec 131), the coordinator model and budget rules of `cplat headless`, and concurrent coders for `parallel_safe` tasks. Nothing in a component ship depends on whether a system ship started it, except the link to the gitops repo.
+- **AC-155.3** Given a repo ship started by a system ship, when it runs, then it uses the same code path as a standalone `/component:ship`: unit mode (spec 131) and the coordinator model and budget rules of `cplat headless`. Nothing in a component ship depends on whether a system ship started it, except the link to the gitops repo. (Amended 2026-11-08: unit mode runs a repo's tasks one after another, so concurrent coders are spec 157's, not this spec's.)
 - **AC-155.4** Given the gitops session in phase `repos`, when it waits, then `cplat system ship next --wait` reads each running repo's ship state and whether its process is alive. It reports a finished repo through `repo result` as today. A commit or phase change in any repo counts as progress for the wait and for the Stop hook (spec 148).
 - **AC-155.5** Given a repo whose headless process ended while its ship is neither finished nor escalated (a crash, a closed laptop, a killed process), when the wait sees it, then the scheduler starts it once more, resuming from disk. A second such end escalates the repo with cause `environment`, naming the log path.
 - **AC-155.6** Given a repo ship that ends with open questions or escalates, when the wait records it, then the repo is escalated with the reason and questions verbatim (cause from the repo ship). Repos already running finish, nothing new starts, and `/system:ship <spec>` resumes the run as today.
@@ -45,9 +45,10 @@ As someone shipping a system spec, I want each repo's part to be built exactly a
 
 ## Open questions
 
-- ~~Should `--max` keep its default of 3?~~ Answered (recommended, approved 2026-11-08): keep 3. A local machine runs three repo sessions with up to two or three coders each without trouble, and `--max` stays the knob.
+- ~~Should `--max` keep its default of 3?~~ Answered (recommended, approved 2026-11-08): keep 3. A local machine runs three repo sessions without trouble, and `--max` stays the knob.
 - ~~Gitops session's coordinator model or the repo's own?~~ Answered (recommended, approved 2026-11-08): the repo's own (`.platform-settings.yml`, else the user default), as a standalone `/component:ship` would. AC-155.3 asks for the same behavior.
 
 ## Changelog
 
 - 2026-11-08 drafted from #560 and the journey 6 analysis; approved as recommended on 2026-11-08.
+- 2026-11-08 AC-155.3 amended with the user's approval: the first benchmark run showed that unit mode runs a repo's tasks one after another, so concurrent coders move to spec 157.
