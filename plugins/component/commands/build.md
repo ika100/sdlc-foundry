@@ -50,7 +50,7 @@ Before the first parallel batch, a probe Agent with `isolation: "worktree"` repo
 
 - `<project-map>` and the **brief**, copied from `spec.md`, `plan.md` and `design.md` you read once in Phase 0 (never tell the coder to read them): `Criteria` (id and full text of each criterion in the task's `covers`), `Task` (`id`, prose section verbatim, `files`; touch nothing else except new test helpers, which it reports), `Contract` (the `design.md` sections it touches, verbatim, or `none`), `Tests` (from `TRACE`), `Commands` (`cplat quiet test-fast`, `cplat quiet quality`).
 - **Done when:** the acceptance tests of its `covers` criteria pass (`cplat quiet test-fast`; name the files from `TRACE`). One that also depends on a not-yet-done task may still fail: the coder says which and why.
-- "Never edit, skip or weaken the acceptance tests."
+- "Never edit, skip or weaken the acceptance tests. A linter false positive in one gets the linter's line suppression naming the rule, nothing else (spec 160); name the suppressed rules in the commit."
 - A re-planned task (a `replans[].tasks[]` entry in `cplat component build state <id> --json` not yet merged) → read `${CLAUDE_PLUGIN_ROOT}/references/build-replan.md` and add its text to the prompt.
 - Parallel batch only (`FEATURE_HEAD` = HEAD before the batch): "You are in an isolated worktree. First `git reset --hard <FEATURE_HEAD>`. Commit locally (`git add` + `git commit -s -m '<type>(<scope>): <title>'`, task id in the body; `-s` is required) before returning. Do not push or switch branches."
 
@@ -95,7 +95,7 @@ Merge exit 3 or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references
 `cplat platform runs phase build:verify`
 
 1. `cplat spec trace <id> --json` must pass.
-2. **reviewer** (`agents.reviewer`): `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON, the Phase 3 test summary. After each pass (cycle `<n>`): `cplat platform runs agent findings --cycle <n> [--deviation <AC or task>]...` for deviations it judged not acceptable.
+2. **reviewer** (`agents.reviewer`): `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON, the Phase 3 test summary, and `SUPPRESSIONS`: the `lint suppression only` lines of the last test diff (Phase 3, step 4), or `none`. After each pass (cycle `<n>`): `cplat platform runs agent findings --cycle <n> [--deviation <AC or task>]...` for deviations it judged not acceptable.
 3. `RESULT: fail` → each `NOT MET` item to a coder of a covering task (`cplat platform runs agent fix-round verification --task <task>`), then `cplat quiet test-fast` and the reviewer again; at most 2 cycles, then escalate with `verification.md`.
 4. `cplat spec mutate <id> --write` (spec 152, report only: how many small faults in the changed code the acceptance tests catch, written into `verification.md`; it never fails the build and nothing acts on its score).
 5. Commit `docs/specs/<spec_id>/verification.md`: `docs(spec): verify <spec_id>`.

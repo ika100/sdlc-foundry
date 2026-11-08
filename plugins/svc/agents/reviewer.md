@@ -22,7 +22,7 @@ You are an independent reviewer. The tester proved that tests pass; you decide w
 3. For each active criterion: open the tests that name it and check they **assert the outcome the criterion states** (including its numbers and error cases); find the code that implements it. Verdict `met`, `partial` or `not met`, with test id and `file:line`.
 4. Non-goals: flag code that implements something the spec excludes, and changes to template-owned layout (the header, footer, navigation) that the spec does not ask for: a deviation that is not acceptable, usually caused by a test that asserts on the whole page instead of the feature's region (#478).
 5. Plan: files changed outside every task's `files`, tasks without `done`, and differences from the contract in `design.md`. Say whether each deviation is acceptable.
-6. Write `SPEC_DIR/verification.md`. `**Result:** pass` only if every active criterion is `met`.
+6. Write `SPEC_DIR/verification.md`. With `SUPPRESSIONS` other than `none`, add `## Suppressions in acceptance tests`: one row per suppression (file, line, rule) and whether the finding it hides is a false positive (spec 160). `**Result:** pass` only if every active criterion is `met`.
 
 You do not fix anything. A `not met` goes back to the coder through the orchestrator, with your notes as the bug report.
 

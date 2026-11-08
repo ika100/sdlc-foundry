@@ -26,7 +26,15 @@ No SMS or push code was added. ✔
 ## Contract
 
 Matches `design.md` (status codes, webhook body). ✔
+
+## Suppressions in acceptance tests
+
+| File | Line | Rule | False positive |
+|---|---|---|---|
+| `tests/test_alerts.py` | 41 | `noqa: S105` | yes: a test password, not a secret |
 ```
+
+The suppressions section only when the build suppressed a lint finding in an acceptance test (spec 160).
 
 ## Rules
 

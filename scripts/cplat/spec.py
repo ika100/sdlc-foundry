@@ -547,6 +547,51 @@ def formatting_only(old: str, new: str, name: str) -> tuple[bool, str]:
     return False, f"differs near …{b[max(0, i - 20):i + 20]}…"
 
 
+# spec 160: line-level linter suppressions that name a rule; file-wide or rule-less ones never match
+_SUPPRESS = [
+    re.compile(r"[ \t]*//[ \t]?nolint:[\w-]+(?:,[\w-]+)*(?:[ \t]*//[^\n]*)?"),                       # Go
+    re.compile(r"[ \t]*#[ \t]*noqa:[ \t]*[A-Z]+[0-9]+(?:[ \t]*,[ \t]*[A-Z]+[0-9]+)*"),                # Python
+    re.compile(r"[ \t]*#[ \t]*type:[ \t]*ignore\[[\w-]+(?:,[ \t]*[\w-]+)*\]"),                         # Python
+    re.compile(r"^[ \t]*//[ \t]*eslint-disable-next-line[ \t]+[@\w/-]+(?:[ \t]*,[ \t]*[@\w/-]+)*(?:[ \t]+--[^\n]*)?\n", re.M),  # TS/JS
+    re.compile(r"^[ \t]*@SuppressWarnings\((?:\"[\w-]+\"|\{[ \t]*\"[\w-]+\"(?:[ \t]*,[ \t]*\"[\w-]+\")*[ \t]*\})\)[ \t]*\n"
+               r"(?=(?:[ \t]*@[^\n]*\n)*[ \t]*(?:public|protected|private|static|final|void|[\w<>\[\]]+[ \t]+\w+[ \t]*\())", re.M),  # Java, on a method
+]
+_BARE = re.compile(r"//[ \t]?nolint(?![:\w])|#[ \t]*noqa(?![:\w])|#[ \t]*type:[ \t]*ignore(?!\[)|"
+                   r"//[ \t]*eslint-disable-next-line[ \t]*(?:--[^\n]*)?$", re.M)
+_FILE_WIDE = re.compile(r"^package[^\n]*//[ \t]?nolint|#[ \t]*(?:ruff|flake8):[ \t]*noqa|/\*[ \t]*eslint-disable[ \t]*\*/", re.M)
+
+
+def suppressions(text: str) -> list[tuple[int, str]]:
+    """The line-level, rule-naming suppressions in `text` (spec 160): (line, as written)."""
+    return sorted((text.count("\n", 0, m.start() + len(m.group(0)) - len(m.group(0).lstrip())) + 1, m.group(0).strip())
+                  for rx in _SUPPRESS for m in rx.finditer(text))
+
+
+def _without_suppressions(text: str) -> str:
+    for rx in _SUPPRESS:
+        text = rx.sub(lambda m: "\n" if m.group(0).endswith("\n") else "", text)
+    return text
+
+
+def suppression_only(old: str, new: str, name: str) -> tuple[bool, str]:
+    """Spec 160 (AC-160.1, AC-160.2): `new` only adds line-level suppressions that name a rule to `old`."""
+    if len(_FILE_WIDE.findall(new)) > len(_FILE_WIDE.findall(old)):
+        return False, "adds a file-wide suppression"
+    if len(_BARE.findall(new)) > len(_BARE.findall(old)):
+        return False, "adds a suppression that names no rule"
+    before, after = [s for _, s in suppressions(old)], suppressions(new)
+    added = list(after)
+    for s in before:
+        hit = next((a for a in added if a[1] == s), None)
+        if hit is None:
+            return False, ""                       # a suppression was removed or changed: not only added
+        added.remove(hit)
+    if not added:
+        return False, ""
+    ok, _ = formatting_only(_without_suppressions(old), _without_suppressions(new), name)
+    return (True, "lint suppression only: " + "; ".join(f"line {n} `{s}`" for n, s in added)) if ok else (False, "")
+
+
 def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, str]]:
     """Each changed test file against `base`. Default: files under the shape's `test_globs` (never `docs/` or `*.md`, spec 063)
     that name a criterion of a `building` spec. A file that did not exist at `base` and that a task of a `building`
@@ -574,7 +619,11 @@ def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, 
     for f in files:
         old = subprocess.run(["git", "-C", str(root), "show", f"{base}:{f}"], capture_output=True, text=True)
         new = (root / f).read_text() if (root / f).is_file() else ""
-        out[f] = (False, "new or deleted file") if old.returncode != 0 or not new else formatting_only(old.stdout, new, f)
+        if old.returncode != 0 or not new:
+            out[f] = (False, "new or deleted file")
+            continue
+        lint = suppression_only(old.stdout, new, f)        # spec 160: before formatting, as a comment can be formatting
+        out[f] = lint if lint[0] or lint[1] else formatting_only(old.stdout, new, f)
     approved = _approvals(root, base)
     for f, (ok, _) in out.items():
         rec = approved.get(f)
