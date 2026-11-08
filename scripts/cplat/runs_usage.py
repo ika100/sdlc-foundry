@@ -63,7 +63,7 @@ def register(run_id: str, *, mode: str, session: str | None = None, project_dir:
                  "dir": dir or os.getcwd(), "started_at": started_at or runs._iso(runs.utcnow()), "ended_at": None}
         with runs._locked():
             _save([e for e in _load() if not (e.get("run_id") == run_id and e.get("session") == session
-                                              and e.get("mode") == mode)] + [entry])
+                                              and e.get("mode") == mode and e.get("project_dir") == project_dir)] + [entry])
     except Exception:  # noqa: BLE001
         pass
 

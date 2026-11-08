@@ -198,8 +198,11 @@ def _open_budget(repo: Path, st: dict, options: dict) -> None:
     budget.add_parts(st.get("run_id"), parts, replace=f"{entry}:*")
 
 
+UNTIL = ("repos",)
+
+
 def start(repo: Path, ref: str, max_: int | None = None, context: str | None = None,
-          budget_options: list[str] | dict | None = None) -> dict:
+          budget_options: list[str] | dict | None = None, until: str | None = None) -> dict:
     import shapecmd
     options = budget.parse_options(budget_options)
     try:
@@ -213,7 +216,11 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
         raise PlatformError(f"{sp.id} is '{sp.status}'; only an approved product spec is shipped",
                             hint=f"/system:spec approve {sp.number}")
     st = load_state(repo)
-    ctx = resolve_context(repo, context or (st.get("context") if st and st.get("spec") == sp.id else None))
+    until = until or (st.get("until") if st and st.get("spec") == sp.id else None)
+    if until is not None and until not in UNTIL:
+        raise PlatformError(f"--until {until}: unknown stop point", hint="--until repos")
+    # spec 156 (AC-156.3): a run that stops after the repos never lands, so it needs no cluster
+    ctx = None if until == "repos" else resolve_context(repo, context or (st.get("context") if st and st.get("spec") == sp.id else None))
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated"):
         raise PlatformError(f"another product ship run is in progress: {st['spec']} (phase {st['phase']})",
                             hint="finish it with `cplat system ship finish`")
@@ -225,6 +232,7 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
         st["escalated"] = st["cause"] = None
         stopgate.claim(st, stopgate.session_of_env())
         st["context"] = ctx
+        st["until"] = until
         if max_:
             st["max"] = max_
         for r in st.get("repos", {}).values():
@@ -245,7 +253,7 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
     phase = "publish" if plan_path(repo, sp.id).is_file() else "plan"
     st = {"spec": sp.id, "phase": phase, "max": max_ or DEFAULT_MAX, "context": ctx, "recorded": False,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "escalated": None, "cause": None,
-          "repos": {}, "ships": [], "waiting": [], "gitops_merged": [], "joint": joint}
+          "repos": {}, "ships": [], "waiting": [], "gitops_merged": [], "joint": joint, "until": until}
     stopgate.claim(st, stopgate.session_of_env())
     if st["phase"] != "plan":
         refresh_repos(repo, st)

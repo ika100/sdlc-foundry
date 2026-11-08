@@ -138,7 +138,7 @@ jobs:
           for d in /tmp/v2/applications/fx/overlays/*/*/ /tmp/v2/applications/fx/addons/*/*/; do kubectl kustomize "$d" > /dev/null; done
       - name: Install the Kyverno CLI (pinned, checksum-verified)
         run: |
-          curl -fsSL -o /tmp/kyverno-cli.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
+          curl -fsSL --retry 5 --retry-delay 15 --retry-all-errors -o /tmp/kyverno-cli.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
           echo "b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae  /tmp/kyverno-cli.tgz" | sha256sum -c -
           mkdir -p "$HOME/.local/bin" && tar xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -175,7 +175,7 @@ jobs:
         run: uv tool install copier
       - name: Install the Kyverno CLI (pinned, checksum-verified)
         run: |
-          curl -fsSL -o /tmp/kyverno-cli.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
+          curl -fsSL --retry 5 --retry-delay 15 --retry-all-errors -o /tmp/kyverno-cli.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
           echo "b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae  /tmp/kyverno-cli.tgz" | sha256sum -c -
           mkdir -p "$HOME/.local/bin" && tar xzf /tmp/kyverno-cli.tgz -C "$HOME/.local/bin" kyverno
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"

@@ -2,7 +2,9 @@
 
 Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-app-ship.json (never committed).
 
-  cplat system ship start <spec> [--max N] [--context C] [--budget KEY=VALUE]   refuse or begin/resume; prints phase, repo table and the next step
+  cplat system ship start <spec> [--max N] [--context C] [--budget KEY=VALUE] [--until repos]
+                                                           refuse or begin/resume; prints phase, repo table and the next step
+                                                           (--until repos: stop done after the repos, before land; no cluster)
   cplat system ship status [--json]                        the state and what the scheduler does next
   cplat system ship phase <plan|publish|repos|complete|done>
   cplat system ship publish [--timeout S]                  spec and plan on main: PR merged on green checks (nothing to do when they are)
@@ -226,6 +228,10 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     open_ = [i for i, r in st["repos"].items() if r.get("state") not in state.PASSED]
     if open_:
         raise PlatformError("repos not past their gate: " + ", ".join(open_), hint="cplat system ship next --json")
+    if st.get("until") == "repos":                 # spec 156 (AC-156.3): nothing landed, so the spec is not done
+        state.set_phase(repo, "done")
+        return True, [f"product ship {sid}: stopped after the repos (--until repos); nothing landed, the spec stays "
+                      f"'{specmod.find(repo, sid).status}'", *appship_report.state_table(state.require_state(repo))]
     import appship_joint
     if appship_joint.needs_land(st):
         raise PlatformError(f"the dev PR {st['joint_pr']} has not landed yet", hint="cplat system ship land")
@@ -300,6 +306,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--context", default=None)
     p.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
                    help="replace a limit of the product's budget (ship defaults times the plan's repos; spec 102)")
+    p.add_argument("--until", choices=state.UNTIL, default=None,
+                   help="stop the run done after every repo passed, before land: no cluster needed (benchmarks, spec 156)")
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("phase")
@@ -353,7 +361,7 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        st = state.start(repo, ns.spec, ns.max, ns.context, ns.budget)
+        st = state.start(repo, ns.spec, ns.max, ns.context, ns.budget, ns.until)
         show(st)
         if st.get("joint") is False:
             import appship_joint

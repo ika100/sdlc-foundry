@@ -15,7 +15,7 @@ Measured with `cplat platform runs benchmark` (spec 099) on `ika100/todo-api`, C
 
 **4.7.0 baseline (2026-10-26, sample `ika100/todo-api@9cba320`, plugins at the tag):** quick-task **$0.30** (18 calls: coordinator plus coder, quality and tester, as `/component:fix` prescribes; the $0.15 runs above had the coordinator make the change itself), build **$1.36 and $1.25** (median $1.31, within the ±$0.10 spread of 4.6.0), ship **$1.20 to $1.60** (two runs, 4.6.0 plus the deploy fixes). Run ids are in the run store (`cplat platform runs report --benchmarks`).
 
-Re-measure with `cplat platform runs benchmark quick-task|build` after changes to the commands, agents or `cplat`; `cplat platform runs report --benchmarks` shows the median per workflow and platform version.
+Re-measure with `cplat platform runs benchmark quick-task|build` after changes to the commands, agents or `cplat`; `cplat platform runs report --benchmarks` shows the median per workflow and platform version. A system ship across several repos is measured with `cplat platform runs benchmark system-ship` (spec 156, [its README](../scripts/cplat/benchmark/README.md)); `--report` shows median and spread per plugins tree.
 
 ## Prompt/token footprint (static)
 

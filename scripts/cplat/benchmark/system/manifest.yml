@@ -1,0 +1,20 @@
+# The sample system of the system-ship benchmark (spec 156): created once with (in ika100-demo, whose organization secret GITOPS_TOKEN the component ships need)
+#   cplat system new scripts/cplat/benchmark/system/manifest.yml --dir <state dir>/benchmark/system-ship
+# It differs from the journey's system on purpose: another domain, a Go service, and a plan in which two repos run at once.
+system: bench-files
+owner: platform-benchmark
+org: ika100-demo
+visibility: private
+components:
+  - name: bench-files-api
+    description: Stores file records (name, size, owner) and serves them over HTTP
+    type: service
+    lang: python
+  - name: bench-files-worker
+    description: Computes reports over the file records of the API
+    type: service
+    lang: go
+  - name: bench-files-web
+    description: Web UI to browse the file records
+    type: website
+    lang: typescript

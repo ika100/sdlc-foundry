@@ -1,4 +1,4 @@
-"""`cplat platform runs benchmark <quick-task|build|ship> [--reset-first] [--plugins DIR]` (spec 099, ADR-035): one fixed task on a clean clone of the
+"""`cplat platform runs benchmark <quick-task|build|ship|fix-rounds> [--reset-first] [--plugins DIR]` (spec 099, ADR-035): one fixed task on a clean clone of the
 sample repo (one fixed, trusted folder per workflow), run through `cplat headless`, recorded as a run of kind `benchmark` with its usage, and the sample repo reset.
 
 The tasks and the pinned sample revision are in benchmark/tasks.json. Every git / gh call goes through `run`, which tests replace.
@@ -361,6 +361,9 @@ def _summary(usage: dict | None) -> tuple[int, str, str]:
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["system-ship"]:          # spec 156: several repos, its own flow
+        import runs_bench_system
+        return runs_bench_system.main(argv[1:])
     ap = argparse.ArgumentParser(prog="cplat platform runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")

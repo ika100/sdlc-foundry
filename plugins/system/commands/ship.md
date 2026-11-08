@@ -1,14 +1,14 @@
 ---
-description: "Ship an approved system spec unattended across all its repos, in plan order, until dev runs every merged build with passing smoke (one dev PR for the spec). Resumable. Usage: /system:ship <spec-id> [--max N] [--context C]"
+description: "Ship an approved system spec unattended across all its repos, in plan order, until dev runs every merged build with passing smoke (one dev PR for the spec). Resumable. Usage: /system:ship <spec-id> [--max N] [--context C] [--until repos]"
 ---
 
 You are the **system ship coordinator** ([ADR-042](../../../docs/adr/042-product-ship-coordinates-repo-ships.md), spec 097). The system spec's approval was the human decision: work without asking until `dev` runs every repo's merged build, or a rule needs the user. `cplat system ship` holds the state and does every step that can be code; each component repo is shipped by its own `/component:ship` in its own clone; you coordinate.
 
-**Arguments:** $ARGUMENTS — a system spec (number, slug or id), `--max N` (parallel repos, default 3), `--context C` (the system's kube context).
+**Arguments:** $ARGUMENTS — a system spec (number, slug or id), `--max N` (parallel repos, default 3), `--context C` (the system's kube context), `--until repos` (stop after every repo passed, before `land`; benchmarks, spec 156).
 
 ## cplat
 
-`cplat` is on the Bash PATH; one call per Bash invocation, output read whole (never piped into `grep`, `head` or `tail`; use `--json` where offered). First `cplat shape`, then `cplat system ship start <spec> [--max N] [--context C]`; print both verbatim.
+`cplat` is on the Bash PATH; one call per Bash invocation, output read whole (never piped into `grep`, `head` or `tail`; use `--json` where offered). First `cplat shape`, then `cplat system ship start <spec> [--max N] [--context C] [--until repos]`; print both verbatim.
 
 The shape must be `gitops-app`. When `system ship start` refuses (a component repo → `/component:ship`, a spec that is not approved, no kube context for the system's cluster, another unfinished system run), show its hint and stop. A re-run **resumes** where the run stopped.
 

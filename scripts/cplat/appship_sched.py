@@ -58,7 +58,8 @@ def next_action(gitops_dir: Path, st: dict) -> dict:
         action = "start"
     elif plan and all(_state_of(st, r["id"]) in PASSED for r in plan) and not st.get("escalated"):
         import appship_joint
-        action = "land" if appship_joint.needs_land(st) else "complete"     # spec 144: the one dev PR first
+        # spec 144: the one dev PR first; spec 156: a run --until repos stops before it
+        action = "land" if appship_joint.needs_land(st) and st.get("until") != "repos" else "complete"
     elif stopped:
         action = "escalate"
     else:
