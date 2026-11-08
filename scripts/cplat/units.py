@@ -1,6 +1,7 @@
 """`units`: the units of an unattended run, when each one is done, and what the run state says about them (spec 131).
 
-A ship or build run is split into units: `plan`, `red-tests`, one `task:<id>` per plan task, `verification` and `land`.
+A ship or build run is split into units: `plan`, `red-tests`, one `task:<id>` per plan task, or one `batch:<id>,<id>` per
+batch of `parallel_safe` tasks that may run at once (spec 159), `verification` and `land`.
 Each unit is complete when its rule holds in the **committed** tree of the feature head (`git show B:<path>`), never in the
 working tree. The state lives in `<git dir>/cplat-units.json` (local, never committed): one entry per unit with its status,
 sessions, stalls and checkpoint commit. The supervisor in headless.py starts one session per open unit.
@@ -20,6 +21,8 @@ import yaml
 from core import PlatformError, run
 
 STALL_LIMIT = 2
+PARALLEL_ENV = "CPLAT_PARALLEL_TASKS"   # spec 159: tasks per batch unit (`cplat headless --parallel N`); 1 = one task per unit
+DEFAULT_PARALLEL = 3
 FILE = "cplat-units.json"
 VERSION = 1
 ACCEPTANCE_MSG = "acceptance tests for"
@@ -91,6 +94,37 @@ def _plan_tasks(sp: specmod.Spec | None) -> list[dict]:
 
 # ---------------- ids and order ----------------
 
+def parallel() -> int:
+    """Spec 159: how many tasks one batch unit runs at once ($CPLAT_PARALLEL_TASKS, default 3)."""
+    import os
+    try:
+        return max(1, int(os.environ.get(PARALLEL_ENV) or DEFAULT_PARALLEL))
+    except ValueError:
+        return DEFAULT_PARALLEL
+
+
+def _task_units(by_id: dict[str, dict], level: list[str], cap: int) -> list[str]:
+    """One level's units in plan order: the `parallel_safe` tasks with disjoint `files` share a batch (as
+    `cplat component build schedule` groups them), at most `cap` per batch; every other task is a unit of its own."""
+    batches: list[dict] = []
+    for tid in level:
+        t, files = by_id[tid], set(by_id[tid].get("files") or [])
+        if t.get("parallel_safe") and cap > 1:
+            target = next((b for b in batches if b["safe"] and len(b["ids"]) < cap and not (b["files"] & files)), None)
+            if target:
+                target["ids"].append(tid)
+                target["files"] |= files
+                continue
+        batches.append({"ids": [tid], "files": files, "safe": bool(t.get("parallel_safe"))})
+    return [f"batch:{','.join(b['ids'])}" if len(b["ids"]) > 1 else f"task:{b['ids'][0]}" for b in batches]
+
+
+def tasks_of(unit: str) -> list[str]:
+    """The plan tasks a `task:` or `batch:` unit covers; [] for any other unit."""
+    kind, _, rest = unit.partition(":")
+    return [rest] if kind == "task" else [t for t in rest.split(",") if t] if kind == "batch" else []
+
+
 def _ids_from(sp: specmod.Spec | None) -> list[str]:
     tasks = _plan_tasks(sp)
     order: list[str] = []
@@ -101,9 +135,10 @@ def _ids_from(sp: specmod.Spec | None) -> list[str]:
         except PlatformError:
             levels = [[str(t["id"]) for t in tasks]]
         plan_pos = {str(t["id"]): i for i, t in enumerate(tasks)}
+        cap = parallel()
         for level in levels:
-            order += sorted((i for i in level if i in by_id), key=lambda i: plan_pos[i])
-    return ["plan", "red-tests", *[f"task:{t}" for t in order], "verification", "land"]
+            order += _task_units(by_id, sorted((i for i in level if i in by_id), key=lambda i: plan_pos[i]), cap)
+    return ["plan", "red-tests", *order, "verification", "land"]
 
 
 def unit_ids(repo: Path, spec_id: str) -> list[str]:
@@ -225,10 +260,10 @@ def _evaluate(repo: Path, command: str, spec_id: str, unit: str) -> tuple[str | 
         if not _acceptance_commit(repo, head):
             return None, f"no commit 'acceptance tests for ...' on feature/{spec_id}"
         return head, ""
-    if unit.startswith("task:"):
-        task = unit.split(":", 1)[1]
-        if not _done_in(sp, task):
-            return None, f"plan.md does not have `done: true` for {task} in a commit"
+    if tasks := tasks_of(unit):
+        open_ = [task for task in tasks if not _done_in(sp, task)]
+        if open_:
+            return None, f"plan.md does not have `done: true` for {', '.join(open_)} in a commit"
         return head, ""
     if unit == "verification":
         if not _verified(repo, spec_id, head, sp):
@@ -264,6 +299,10 @@ def next_step(unit: str, spec_id: str) -> str:
     if unit == "red-tests":
         return (f"write the acceptance tests for every criterion of {spec_id} and commit them as "
                 f"'test: acceptance tests for ...' (`cplat spec trace {spec_id}` must pass)")
+    if unit.startswith("batch:"):
+        tasks = tasks_of(unit)
+        return (f"implement tasks {', '.join(tasks)} of the plan at once, as build Phase 2's parallel batch (coders in worktrees, "
+                f"merged with `cplat component build merge`), mark each done (`cplat spec task done {spec_id} <task>`) and commit")
     if unit.startswith("task:"):
         task = unit.split(":", 1)[1]
         return f"implement task {task} of the plan, mark it done (`cplat spec task done {spec_id} {task}`) and commit"
@@ -282,9 +321,10 @@ def _derive(repo: Path, spec_id: str, entries: dict[str, dict], head: str, sp: s
 
     if phase == "build":
         mark("plan")
-        for t in _plan_tasks(sp):
-            if t.get("done") is True:
-                mark(f"task:{t['id']}")
+        done = {str(t["id"]) for t in _plan_tasks(sp) if t.get("done") is True}
+        for unit in entries:
+            if tasks_of(unit) and set(tasks_of(unit)) <= done:
+                mark(unit)
     elif phase in SHIP_PHASES_AFTER_BUILD:
         for unit in entries:
             if unit != "land":

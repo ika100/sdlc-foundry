@@ -19,7 +19,8 @@ prompt; `--budget KEY=VALUE` (repeatable, a number or `off`) replaces a limit. T
 is used up: `budget exhausted: <limit>`, stop reason `budget`, exit 1.
 
 Unit mode (spec 131): `/component:ship` and `/component:build` with at least one spec run one fresh session per unit of the
-plan (cplat supervisor.py), saved at checkpoints; the same command again continues at the first unit without one. No session
+plan (cplat supervisor.py), saved at checkpoints; independent `parallel_safe` tasks share one batch unit whose session runs
+their coders at once (spec 159, `--parallel N`, default 3); the same command again continues at the first unit without one. No session
 or time cap applies unless `--max-runs`/`--max-minutes` is given. The legacy loop (other prompts and `/system:ship`) caps at
 6 sessions and 240 minutes when they are not given.
 
@@ -250,6 +251,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--no-wait", action="store_true", help="inside the quiet window: exit (code 3) instead of waiting")
     ap.add_argument("--model", help="coordinator model: sonnet (default), opus or haiku; else the settings files")
     ap.add_argument("--plugin-dir", action="append", default=[], help="load a plugin from this folder (repeatable)")
+    ap.add_argument("--parallel", type=int, default=None, metavar="N",
+                    help="unit mode: independent tasks run at once, at most N per batch (default 3; 1 runs one task per session; spec 159)")
     ap.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
                     help="replace a limit of the run's budget: minutes, invocations, reruns, cost (a number or off; spec 102)")
     ap.add_argument("--dry-run", action="store_true")
@@ -269,6 +272,10 @@ def main(argv: list[str]) -> int:
     covered = command in COVERED_COMMANDS
     unit_mode = command in UNIT_COMMANDS and bool(refs)
     dirs = plugin_dirs_of(ns.plugin_dir)
+    if ns.parallel is not None:                # spec 159: read by units.py in this process and in every session
+        if ns.parallel < 1:
+            raise PlatformError("--parallel needs at least 1")
+        os.environ["CPLAT_PARALLEL_TASKS"] = str(ns.parallel)
     if dirs:                                   # spec 155: a system ship's repo sessions load the same plugins
         os.environ["CPLAT_PLUGIN_DIRS"] = os.pathsep.join(dirs)
     allow = deny = None

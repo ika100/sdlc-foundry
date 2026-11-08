@@ -16,6 +16,12 @@ from test_ship import repo  # noqa: F401  (fixture)
 from units131_support import BRANCH, SPEC_ID, git, head, make_repo, plan_for
 
 
+
+@pytest.fixture(autouse=True)
+def one_task_per_unit(monkeypatch):
+    """Spec 159: these tests are about units as spec 131 made them; batch units are tested in test_159_batch_units.py."""
+    monkeypatch.setenv("CPLAT_PARALLEL_TASKS", "1")
+
 def units():
     return importlib.import_module("units")
 

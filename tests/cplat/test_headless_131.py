@@ -12,6 +12,12 @@ import pytest
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 from units131_support import BRANCH, SPEC_ID, World, git, snapshot_settings
 
+
+@pytest.fixture(autouse=True)
+def one_task_per_unit(monkeypatch):
+    """Spec 159: these tests are about units as spec 131 made them; batch units are tested in test_159_batch_units.py."""
+    monkeypatch.setenv("CPLAT_PARALLEL_TASKS", "1")
+
 ALLOW_HEAD = "run allowlist (this run's sessions only; no settings file is changed):"
 
 

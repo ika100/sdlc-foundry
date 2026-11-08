@@ -16,6 +16,12 @@ from test_spec import PLAN
 from units131_support import BRANCH, SPEC_ID, commit, git, head, make_repo, plan_text
 
 
+
+@pytest.fixture(autouse=True)
+def one_task_per_unit(monkeypatch):
+    """Spec 159: these tests are about units as spec 131 made them; batch units are tested in test_159_batch_units.py."""
+    monkeypatch.setenv("CPLAT_PARALLEL_TASKS", "1")
+
 def units():
     return importlib.import_module("units")
 

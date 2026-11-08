@@ -21,14 +21,14 @@ As someone shipping a spec unattended, I want the independent tasks of a build t
 
 ## Acceptance criteria
 
-- **AC-159.1** Given a unit-mode build whose next batch in `cplat component build schedule` has several open task units, when the supervisor starts them, then it runs up to `--parallel N` of them at once (default 3; 1 keeps today's order), each as its own fresh session in its own git worktree on its own branch from the feature head.
-- **AC-159.2** Given a task session in a worktree that reached its checkpoint (the task's commit), when the supervisor merges it, then the task's branch goes onto the feature branch through `cplat component build merge` (merged, set aside, or escalated, as in build Phase 2), one task at a time in the schedule's order. The worktree and branch are removed after a merge.
+- **AC-159.1** Given a unit-mode build whose plan has a batch of `parallel_safe` tasks with disjoint `files` in one level (as `cplat component build schedule` groups them), when its units are derived, then those tasks form one unit `batch:<id>,<id>…` of at most `--parallel N` tasks (default 3; 1 keeps one `task:` unit per task), and its one fresh session runs build Phase 2's parallel batch: one coder per task at once, as subagents in their own worktrees.
+- **AC-159.2** Given a batch session whose coders finished, when it merges them, then each task's branch goes onto the feature branch through `cplat component build merge` (merged, set aside, or escalated, as in build Phase 2), one task at a time in the unit's order; the batch unit is done when every task of it is `done: true` in a commit.
 - **AC-159.3** Given a task whose merge conflicts, when the merge is refused, then the existing rule applies: the task is re-planned once and rerun on the merged work (at most 3 re-plans per build), then the build escalates. No hunk is resolved by hand.
-- **AC-159.4** Given a batch where some tasks end without a checkpoint, when the supervisor handles them, then each such task follows the existing stall rule of unit mode on its own (another session, then the escalation). The other tasks' merges are kept.
+- **AC-159.4** Given a batch session that ends with some of its tasks done and others not, when the supervisor handles it, then the merged tasks stay done, the next session of the same unit runs only the open ones, and the unit's stall rule applies to the batch as a whole (a session that moved the feature head is progress).
 - **AC-159.5** Given tasks that depend on each other, or units that are not tasks (plan, red-tests, verification, land), when they come next, then they run alone and in order, as today; a task starts only after every task it depends on is merged.
-- **AC-159.6** Given parallel sessions, when they run, then each counts as one invocation of the run's budget (spec 102) and is recorded as its own session, so the budget, the run record and the token count stay right. A used-up budget starts no new session; running ones finish.
-- **AC-159.7** Given the worktrees of a batch, when the build is resumed after a crash, then a task whose branch carries its checkpoint is merged without a new session, and a stale worktree is removed and its task rerun.
-- **AC-159.8** Given a repo whose plan has no `parallel_safe` tasks, or `--parallel 1`, when it builds, then the sessions, commits and result are the same as before this spec. Tests cover a batch of three independent tasks, a dependency chain, a conflict and a stall within a batch.
+- **AC-159.6** Given a batch unit, when it runs, then it is one session and one invocation of the run's budget (spec 102), and its coders' tokens are recorded under that session, as for any subagent.
+- **AC-159.7** Given a batch unit whose worktree probe fails, when its session runs, then it runs the tasks one after another as build Phase 2's fallback does, and the unit completes the same way.
+- **AC-159.8** Given a repo whose plan has no `parallel_safe` tasks, or `--parallel 1`, when it builds, then its units, sessions, commits and result are the same as before this spec. Tests cover a batch of three independent tasks, the cap, a dependency chain, overlapping files and a partly done batch.
 
 ## Non-goals
 
@@ -39,10 +39,11 @@ As someone shipping a spec unattended, I want the independent tasks of a build t
 ## Assumptions
 
 - **A1** The default is 3 parallel task sessions, the same as `/system:ship --max`. With three repos at once a machine runs up to nine sessions at its peak, which is the reason for the cap (other option: 2; affects AC-159.1).
-- **A2** Merges happen in the schedule's order once every task of the batch has ended, not as soon as each one ends, so the feature branch's history does not depend on timing (other option: merge as they finish; affects AC-159.2).
+- **A2** Merges happen in the unit's order once every coder of the batch has finished, as in build Phase 2, so the feature branch's history does not depend on timing (other option: merge as they finish; affects AC-159.2).
 
 ## Open questions
 
 ## Changelog
 
+- 2026-11-08 AC-159.1, .2, .4, .6, .7, .8 amended with the user's approval: one session per batch (build Phase 2's parallel batch) instead of one session per task in its own worktree, which would need the unit and ship state carried into each worktree.
 - 2026-11-08 drafted after the first system-ship benchmark run (spec 155 branch) showed sequential task units; approved by the user on 2026-11-08 (as 157; renumbered to 159, another session had merged a spec 157).

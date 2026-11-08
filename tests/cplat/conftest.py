@@ -92,7 +92,7 @@ def no_real_repo_sessions(monkeypatch):
         return {"pid": 4242, "log": f"{clone}/session.log", "started": "2026-11-08T10:00:00", "starts": starts}
     monkeypatch.setattr(appship_proc, "spawn", fake)
     monkeypatch.setattr(appship_proc, "alive", lambda pid: True)
-    for name in ("CPLAT_SYSTEM_DIR", "CPLAT_PLUGIN_DIRS"):
+    for name in ("CPLAT_SYSTEM_DIR", "CPLAT_PLUGIN_DIRS", "CPLAT_PARALLEL_TASKS"):
         monkeypatch.delenv(name, raising=False)
 
 
