@@ -1,7 +1,7 @@
 ---
 spec_id: 157-prs-and-issues-get-short-summaries-for
 title: Build and ship PRs start with a short summary
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [568]
@@ -88,3 +88,4 @@ same in every repo, including component repos that have no changelog fragments.
 
 - 2026-11-08 created
 - 2026-11-08 split: the issue comments moved to spec 158; `Changed`/`Why` sources revised for component repos (A2b)
+- 2026-11-08 approved

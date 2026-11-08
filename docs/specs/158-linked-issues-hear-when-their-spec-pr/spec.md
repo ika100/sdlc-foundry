@@ -1,7 +1,7 @@
 ---
 spec_id: 158-linked-issues-hear-when-their-spec-pr
 title: Linked issues hear when their spec, PR and release land
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [568]
@@ -104,3 +104,4 @@ command, so that GitHub trouble with one issue costs at most a note in the outpu
 
 - 2026-11-08 created (split from spec 157): time limits and per-issue error isolation added (AC-158.7), release text no longer
   depends on changelog fragments (AC-158.4)
+- 2026-11-08 approved
