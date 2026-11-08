@@ -1,7 +1,7 @@
 ---
 spec_id: 155-each-repo-of-a-system-ship-runs-in-its-own-session
 title: Each repo of a system ship runs in its own session
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [560]
@@ -45,9 +45,9 @@ As someone shipping a system spec, I want each repo's part to be built exactly a
 
 ## Open questions
 
-- Should `--max` keep its default of 3 now that each repo is a full session with its own concurrent coders? Recommended: keep 3. A local machine runs three repo sessions with up to two or three coders each without trouble, and `--max` stays the knob.
-- Should a repo session use the gitops session's coordinator model or the repo's own setting? Recommended: the repo's own (`.platform-settings.yml`, else the user default), as a standalone `/component:ship` would. AC-155.3 asks for the same behavior.
+- ~~Should `--max` keep its default of 3?~~ Answered (recommended, approved 2026-11-08): keep 3. A local machine runs three repo sessions with up to two or three coders each without trouble, and `--max` stays the knob.
+- ~~Gitops session's coordinator model or the repo's own?~~ Answered (recommended, approved 2026-11-08): the repo's own (`.platform-settings.yml`, else the user default), as a standalone `/component:ship` would. AC-155.3 asks for the same behavior.
 
 ## Changelog
 
-- 2026-11-08 drafted from #560 and the journey 6 analysis; waits for approval.
+- 2026-11-08 drafted from #560 and the journey 6 analysis; approved as recommended on 2026-11-08.

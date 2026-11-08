@@ -1,7 +1,7 @@
 ---
 spec_id: 156-a-system-ship-benchmark
 title: A system ship benchmark
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [560]
@@ -38,10 +38,10 @@ As the platform maintainer, I want to measure a system ship on a fixed sample th
 
 ## Open questions
 
-- Where should the sample system live? Recommended: four new private repos under `ika100`: `bench-sys-gitops`, `bench-sys-api` (Python service), `bench-sys-worker` (Go service) and `bench-sys-web` (Next.js), created once with `/system:new` from a manifest kept in `scripts/cplat/benchmark/`. Creating the repos is the one outward-facing step, and it is done once.
-- What should the sample spec be? Recommended: a small feature in a domain unlike the journey's task board, for example "labels on stored files". The API adds the label model and endpoints. The worker and the web UI each consume the API contract and do not depend on each other. About 3 to 6 criteria per repo.
-- How many runs to judge a change? Recommended: `--repeat 3` for a round's before and after, `--repeat 1` for a quick check; the report's spread rule (AC-156.5) decides.
+- ~~Where should the sample system live?~~ Answered (recommended, approved 2026-11-08): four new private repos under `ika100`: `bench-sys-gitops`, `bench-sys-api` (Python service), `bench-sys-worker` (Go service) and `bench-sys-web` (Next.js), created once with `/system:new` from a manifest kept in `scripts/cplat/benchmark/`. Creating the repos is the one outward-facing step, and it is done once.
+- ~~What should the sample spec be?~~ Answered (recommended, approved 2026-11-08): a small feature in a domain unlike the journey's task board, for example "labels on stored files". The API adds the label model and endpoints. The worker and the web UI each consume the API contract and do not depend on each other. About 3 to 6 criteria per repo.
+- ~~How many runs to judge a change?~~ Answered (recommended, approved 2026-11-08): `--repeat 3` for a round's before and after, `--repeat 1` for a quick check; the report's spread rule (AC-156.5) decides.
 
 ## Changelog
 
-- 2026-11-08 drafted with spec 155, so that its effect can be measured without fitting to the journey; waits for approval.
+- 2026-11-08 drafted with spec 155, so that its effect can be measured without fitting to the journey; approved as recommended on 2026-11-08.
