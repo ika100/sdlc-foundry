@@ -42,6 +42,35 @@
       "max_runs": 8,
       "max_minutes": 90,
       "seed": "seeds/fix-rounds.json"
+    },
+    "system-ship": {
+      "task_version": 1,
+      "system": {
+        "gitops": {
+          "repo": "ika100-demo/bench-files-gitops",
+          "rev": "94ebf39544e0599c0df1965b6cd409aa3bdfb51d"
+        },
+        "components": [
+          {
+            "repo": "ika100-demo/bench-files-api",
+            "rev": "80b1514f0376fb3bb33799e62e1f20f0e399cce8"
+          },
+          {
+            "repo": "ika100-demo/bench-files-worker",
+            "rev": "688866102e871e12bdd6e681e7dd1cf86f8950d5"
+          },
+          {
+            "repo": "ika100-demo/bench-files-web",
+            "rev": "a2fa588028838cad3ce054c6650fbac7a4c0e387"
+          }
+        ]
+      },
+      "spec_file": "system/spec.md",
+      "spec_id": "001-labels-on-file-records",
+      "plan_file": "system/plan.md",
+      "prompt": "/system:ship 001 --until repos",
+      "max_runs": 6,
+      "max_minutes": 180
     }
   }
 }
