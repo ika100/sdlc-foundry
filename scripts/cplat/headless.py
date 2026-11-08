@@ -101,9 +101,11 @@ def command_of(prompt: str) -> str:
 
 
 def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None = None,
-               allow: list[str] | None = None, deny: list[str] | None = None) -> list[str]:
+               allow: list[str] | None = None, deny: list[str] | None = None, add_dirs: list[str] | None = None) -> list[str]:
     exe = os.environ.get("CPLAT_CLAUDE") or "claude"
     cmd = [exe, "-p", prompt, "--permission-mode", "acceptEdits", "--output-format", "text"]
+    for d in add_dirs or []:      # a system ship's clones next to the gitops repo (a session may work only where it may cd)
+        cmd += ["--add-dir", d]
     if model:
         cmd += ["--model", model]
     for d in plugin_dirs or []:
@@ -140,6 +142,14 @@ def plan_targets(repo: Path, ids: list[str]) -> list[tuple[Path, str]]:
             if clone.is_dir():
                 out.append((clone, f"{sched._org(repo)}/{r['id']}"))
     return out
+
+
+def system_clones(repo: Path, ids: list[str]) -> list[str]:
+    """The clone folders of every component repo of a system ship's plans, whether they exist yet or not."""
+    import appship_sched as sched
+    import appship_state as astate
+    return [str(sched.clone_path(repo, r["id"]).absolute()) for sid in ids for r in astate.plan_repos(repo, sid)
+            if r.get("shape") != "gitops-app"]
 
 
 def allowlist_block(allow: list[str], deny: list[str]) -> str:
@@ -265,7 +275,7 @@ def main(argv: list[str]) -> int:
         ids = spec_ids(repo, refs)
         allow = preflight.run_allowlist(command, preflight.branches_of(command, ids))
         deny = preflight.refused_rules(preflight.default_branch(repo))
-    cmd = claude_cmd(prompt, model, dirs, allow, deny)
+    cmd = claude_cmd(prompt, model, dirs, allow, deny, system_clones(repo, ids) if command == "/system:ship" else None)
     if ns.dry_run:
         print(shlex.join(cmd))
         if allow is not None:

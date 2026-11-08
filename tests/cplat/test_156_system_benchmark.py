@@ -252,3 +252,11 @@ def test_no_refused_rule_ends_in_the_prefix_syntax_ac_156_1():  # AC-156.1 (Clau
     rules = preflight.refused_rules("main")
     assert not [r for r in rules if r.endswith(":*)") and "*" in r[:-3]]
     assert "Bash(git push * main)" in rules
+
+
+def test_a_headless_system_ship_may_work_in_its_component_clones_ac_156_1(j):  # AC-156.1 (found by the benchmark)
+    import headless
+    dirs = headless.system_clones(j.gitops, [SPEC])
+    assert dirs == [str(j.clone("shop-api").absolute()), str(j.clone("shop-web").absolute())]
+    cmd = headless.claude_cmd("/system:ship 012", "sonnet", add_dirs=dirs)
+    assert cmd[cmd.index("--add-dir") + 1] == dirs[0] and cmd.count("--add-dir") == 2
