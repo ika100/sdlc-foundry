@@ -56,5 +56,5 @@ def alive(pid: int | None) -> bool:
         return False
     except PermissionError:
         return True
-    out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, check=False)
+    out = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, check=False)
     return out.returncode != 0 or "headless" in out.stdout      # a reused pid runs something else
