@@ -179,6 +179,38 @@ def prepare(task: dict, base: Path, reset_first: bool) -> dict[str, dict]:
     return out
 
 
+SESSION_WAIT_S = 3600.0
+
+
+def wait_for_sessions(gitops: Path, limit: float = SESSION_WAIT_S, interval: float = 20.0) -> list[str]:
+    """The repo sessions a system ship started keep running after it ends escalated (spec 155, AC-155.6): wait for them, and
+    stop what still runs after `limit`, before the sample repos are reset under them. Returns the repos it had to stop."""
+    import os
+    import signal
+    import time
+
+    import appship_proc
+    import appship_state
+    try:
+        st = appship_state.load_state(gitops)
+        if st is None:                                   # finished: the newest archived state
+            done = sorted(appship_state.state_path(gitops).parent.glob("cplat-app-ship-*-[0-9]*.json"))
+            st = json.loads(done[-1].read_text()) if done else {}
+    except Exception:  # noqa: BLE001
+        st = {}
+    pids = {rid: (e.get("proc") or {}).get("pid") for rid, e in (st.get("repos") or {}).items() if (e.get("proc") or {}).get("pid")}
+    end = time.monotonic() + limit
+    while any(appship_proc.alive(p) for p in pids.values()) and time.monotonic() < end:
+        time.sleep(interval)
+    stopped = [rid for rid, p in pids.items() if appship_proc.alive(p)]
+    for rid in stopped:
+        try:
+            os.killpg(pids[rid], signal.SIGTERM)       # the session runs in its own process group (start_new_session)
+        except OSError:
+            pass
+    return stopped
+
+
 def reset_all(repos: dict[str, dict]) -> tuple[str, str | None]:
     notes = []
     for name, r in repos.items():
@@ -207,6 +239,7 @@ def one_run(task: dict, base: Path, ns: argparse.Namespace, n: int) -> dict:
         runs.phase(rid, f"benchmark:{WORKFLOW}")
         out = rb._run_headless(["--repo", str(gitops["clone"]), "--max-runs", str(task["max_runs"]),
                                 "--max-minutes", str(task["max_minutes"]), *model_flags, *plugin_flags, task["prompt"]], rid, platform)
+        wait_for_sessions(gitops["clone"])
         missing = [r["repo"] for r in repos.values() if not r["gitops"] and not _merged_since(r["repo"], r["keep"])]
         if out != "done":
             check = "the system ship did not finish"

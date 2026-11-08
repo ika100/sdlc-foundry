@@ -7,6 +7,9 @@ import datetime
 import json
 
 import pytest
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
 import appship_state
 import core
@@ -273,3 +276,31 @@ def test_the_benchmarks_git_calls_retry_a_dropped_network_ac_156_1(monkeypatch):
     monkeypatch.setattr(core, "run", fake)
     assert runs_bench.run(["git", "ls-remote", "x"]) == (0, "ok", "")
     assert seen and seen[0]["check"] is False
+
+
+def test_the_benchmark_waits_for_the_repo_sessions_and_stops_what_outlives_the_limit_ac_156_1(j, monkeypatch):  # AC-156.1
+    import appship_proc
+    j.started()
+    j.edit(lambda st: st["repos"].update({"shop-api": {"state": "running", "proc": {"pid": 111}},
+                                          "shop-web": {"state": "running", "proc": {"pid": 222}}}))
+    left = {111: 2, 222: 99}                      # 111 ends after two checks, 222 never
+
+    def alive(pid):
+        left[pid] -= 1
+        return left[pid] > 0
+    killed = []
+    monkeypatch.setattr(appship_proc, "alive", alive)
+    monkeypatch.setattr("os.killpg", lambda pid, sig: killed.append(pid))
+    assert rbs.wait_for_sessions(j.gitops, limit=0.05, interval=0.01) == ["shop-web"]
+    assert killed == [222]
+
+
+def test_the_entry_is_applied_by_cplat_one_commit_per_operation(j, monkeypatch):  # found by the benchmark
+    import appship
+    assert appship.entry_ops({"resource": "db", "type": "database"}) == ["resource", "add", "db", "--type", "database"]
+    assert appship.entry_ops({"uses": "db", "component": "api"}) == ["component", "set", "api", "--uses", "db"]
+    assert appship.entry_ops({"expose": "web", "host": "web"}) == ["component", "set", "web", "--expose", "web"]
+    assert appship.entry_ops({"env": {"A": "1", "B": "2"}, "component": "w"}) == ["component", "set", "w", "--env", "A=1", "--env", "B=2"]
+    assert appship.entry_ops({"bogus": 1}) is None
+    text = (ROOT_DIR / "plugins" / "system" / "references" / "ship-entry.md").read_text()
+    assert "`cplat system ship entry apply <id>`" in text and "never run git or edit files in that worktree yourself" in text

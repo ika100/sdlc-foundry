@@ -14,6 +14,7 @@ Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-a
                                                            `/component:ship` session (spec 155)
   cplat system ship repo result <id>                       read the clone's finished ship, evaluate the gate (exit 1: escalated)
   cplat system ship repo escalate <id> <reason> --cause C  a repo that escalated before its ship existed (open questions)
+  cplat system ship entry apply <id>                       the plan's gitops operations in the entry worktree, a commit each, validate
   cplat system ship entry pr <id> --title T [--body-file F]  push the entry's branch and open (or reuse) its PR
                                                            (no file: a body from the plan's gitops operations)
   cplat system ship entry land <id> [--timeout S]          wait for all checks, merge through the merge slot
@@ -130,6 +131,50 @@ def publish(repo: Path, timeout: float) -> tuple[bool, list[str]]:
 
 
 # ---------------- the gitops entry ----------------
+
+def entry_ops(op: dict) -> list[str] | None:
+    """One `gitops:` operation of the plan as the cplat command that applies it (ship-entry.md); None for an unknown one."""
+    if "resource" in op:
+        return ["resource", "add", str(op["resource"]), *(["--type", str(op["type"])] if op.get("type") else [])]
+    if "uses" in op and "component" in op:
+        return ["component", "set", str(op["component"]), "--uses", str(op["uses"])]
+    if "expose" in op:
+        return ["component", "set", str(op["expose"]), "--expose", *([str(op["host"])] if op.get("host") else [])]
+    if isinstance(op.get("env"), dict) and "component" in op:
+        return ["component", "set", str(op["component"]), *[a for k, v in op["env"].items() for a in ("--env", f"{k}={v}")]]
+    return None
+
+
+def entry_apply(repo: Path, repo_id: str) -> list[str]:
+    """Apply the plan's `gitops:` operations in the entry's worktree, one commit each, and validate it. cplat does this so the
+    session never runs git in a worktree inside the git dir (a headless session may not). An operation that changes
+    nothing (already applied on a resume) gets no commit."""
+    st = state.require_state(repo)
+    wt = Path((st["repos"].get(repo_id) or {}).get("clone") or "")
+    if not wt.is_dir():
+        raise PlatformError(f"{repo_id} has no worktree yet", hint=f"cplat system ship repo start {repo_id}")
+    entry = next((r for r in state.plan_repos(repo, st["spec"]) if r["id"] == repo_id), {})
+    cplat = [sys.executable, str(Path(__file__).with_name("cplat.py"))]
+    lines: list[str] = []
+    for op in entry.get("gitops") or []:
+        args = entry_ops(op)
+        if args is None:
+            raise PlatformError(f"unknown gitops operation in the plan: {json.dumps(op)}", hint="ship-entry.md lists the operations")
+        res = run([*cplat, *args, "--repo-dir", str(wt)], cwd=wt, check=False)
+        if res.returncode != 0:
+            raise PlatformError(f"`cplat {' '.join(args)}` failed: {(res.stderr or res.stdout).strip().splitlines()[-1:]}")
+        git(wt, "add", "-A")
+        if run(["git", "diff", "--cached", "--quiet"], cwd=wt, check=False).returncode == 0:
+            lines.append(f"unchanged: cplat {' '.join(args)}")
+            continue
+        git(wt, *core.git_identity(wt), "commit", "-q", "-s", "-m", pr_rules.fit(f"feat(compose): {st['spec']} — {' '.join(args[:3])}"))
+        lines.append(f"applied: cplat {' '.join(args)}")
+    res = run(["devbox", "run", "validate"], cwd=wt, check=False, timeout=900)
+    if res.returncode != 0:
+        tail = (res.stdout + res.stderr).strip().splitlines()[-5:]
+        raise PlatformError("`devbox run validate` is red in the entry worktree: " + " / ".join(tail))
+    return lines + ["validate: green", f"next: cplat system ship entry pr {repo_id} --title 'feat(compose): {st['spec']} — <summary>'"]
+
 
 def entry_body(repo: Path, st: dict, repo_id: str, wt: Path) -> str:
     """The entry PR's body when no file is given: the plan's gitops operations and the commits (a headless session may
@@ -342,6 +387,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("reason")
     p.add_argument("--cause", default=None)
     e = sub.add_parser("entry").add_subparsers(dest="ecmd", required=True)
+    p = e.add_parser("apply", help="apply the plan's gitops operations in the entry worktree, one commit each, and validate")
+    p.add_argument("id")
     p = e.add_parser("pr")
     p.add_argument("id")
     p.add_argument("--title", required=True)
@@ -417,6 +464,9 @@ def main(argv: list[str]) -> int:
         say(lines)
         return 0 if ok else 1
     if ns.cmd == "entry":
+        if ns.ecmd == "apply":
+            say(entry_apply(repo, ns.id))
+            return 0
         if ns.ecmd == "pr":
             print(f"PR: {entry_pr(repo, ns.id, ns.title, Path(ns.body_file) if ns.body_file else None)}")
             return 0
