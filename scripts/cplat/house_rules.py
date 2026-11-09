@@ -4,7 +4,8 @@
 
 The rules are CI's own (`scripts/check-pr-title.py`, `scripts/check-spec-required.py`, the `dco` job, the `validate` and
 `quality` version loop, `scripts/check-links.py`, the fragment names of `scripts/release-check.py`); this module calls the
-same functions, so a check that passes here passes there. `--fix` shortens the title to 72 characters and prints it.
+same functions, so a check that passes here passes there. `--fix` shortens the title to 72 characters and prints it, and
+writes the benchmark run ids into newly retired register entries (spec 168).
 Exit 0 all rules pass, 1 a rule fails (one `ERROR:` line each, with the fix).
 """
 from __future__ import annotations
@@ -18,11 +19,14 @@ from pathlib import Path
 
 import platrelease_changelog as fragments
 import pr_rules
+import promptrules
+import rulescheck
+import rules_retire
 from core import PlatformError
 
 KINDS_WITH_ENTRY = ("feat", "fix", "perf")   # a change users can notice; docs/chore/ci/test/refactor need no fragment
 SIGNED = re.compile(r"^Signed-off-by: .+ <.+>$", re.M)
-RULES = ("pr-title", "spec-required", "fragment", "validate", "dco", "links")
+RULES = ("pr-title", "spec-required", "fragment", "validate", "dco", "links", "rules", "rules-retired")
 PR_OPEN_RULES = ("fragment", "validate")   # `cplat pr open` checks title and spec itself and commits with a sign-off
 
 
@@ -49,9 +53,23 @@ def unsigned(repo: Path, base: str) -> list[str]:
     return rows
 
 
+MAX_RULE_PROBLEMS = 10
+
+
+def rule_problems(repo: Path) -> list[str]:
+    """The `rules` rule: the failures of `cplat platform rules check`, at most 10 (spec 168)."""
+    failures = rulescheck.check(repo).failures
+    out = [f"rules: {f.file}:{f.line}: {f.kind}: {f.message}" for f in failures[:MAX_RULE_PROBLEMS]]
+    if len(failures) > MAX_RULE_PROBLEMS:
+        out.append(f"rules: … and {len(failures) - MAX_RULE_PROBLEMS} more (run cplat platform rules check)")
+    return out
+
+
 def check(repo: Path, *, title: str, body: str, labels: list[str], base: str, fix: bool,
-          rules: tuple[str, ...] = RULES) -> tuple[str, list[str]]:
-    """(the title to use, the problems of the named rules). Each problem is one line that says what to do."""
+          rules: tuple[str, ...] = RULES, notes: list[str] | None = None) -> tuple[str, list[str]]:
+    """(the title to use, the problems of the named rules). Each problem is one line that says what to do.
+
+    `fix` also writes the benchmark run ids into newly retired register entries; each entry written is a line of `notes`."""
     problems: list[str] = []
     if fix:
         try:
@@ -94,6 +112,11 @@ def check(repo: Path, *, title: str, body: str, labels: list[str], base: str, fi
         if links.returncode != 0:
             detail = [ln for ln in (links.stdout + links.stderr).splitlines() if ln.strip()][:5]
             problems.append("links: " + " | ".join(detail))
+    if (repo / promptrules.REGISTER).is_file():
+        if "rules" in rules:
+            problems.extend(rule_problems(repo))
+        if "rules-retired" in rules:
+            problems.extend(rules_retire.check(repo, base, fix=fix, notes=notes))
     return title, problems
 
 
@@ -112,14 +135,18 @@ def main(argv: list[str]) -> int:
         raise PlatformError("pr-check runs in the platform repo (no .claude-plugin/marketplace.json here)",
                             hint="a component or gitops repo opens its PRs with `cplat pr open`, which applies its own rules")
     body = Path(ns.body_file).read_text() if ns.body_file else ""
-    title, problems = check(repo, title=ns.title, body=body, labels=ns.label, base=ns.base, fix=ns.fix)
+    notes: list[str] = []
+    title, problems = check(repo, title=ns.title, body=body, labels=ns.label, base=ns.base, fix=ns.fix, notes=notes)
     if ns.json:
         print(json.dumps({"title": title, "ok": not problems, "problems": problems}, indent=2))
     else:
         if ns.fix or title != ns.title:
             print(f"TITLE: {title}")
+        for line in notes:
+            print(line)
         for p in problems:
             print(f"ERROR: {p}")
         if not problems:
-            print("OK: the house rules pass (pr-title, spec-required, changelog fragment, validate, dco, links)")
+            print("OK: the house rules pass (pr-title, spec-required, changelog fragment, validate, dco, links, rules, "
+                  "rules-retired)")
     return 1 if problems else 0
