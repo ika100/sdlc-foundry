@@ -1,0 +1,15 @@
+rules:
+  - id: R1
+    text: "You never change code or tests, so that the verdict describes the code as it is."
+    class: practice
+  - id: R2
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R3
+    text: "A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape."
+    class: practice
+  - id: R4
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
