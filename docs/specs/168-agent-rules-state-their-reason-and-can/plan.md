@@ -110,6 +110,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s12
     title: Sweep - shared agents quality and security
     files: [plugins/shared/agents/quality.md, plugins/shared/agents/security.md, docs/rules/plugins/shared/agents/quality.yml, docs/rules/plugins/shared/agents/security.yml]
