@@ -10,12 +10,14 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.4, AC-168.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: The register skeleton - register.yml (baseline, hard-rule table) and its README
     files: [docs/rules/register.yml, docs/rules/README.md]
     covers: [AC-168.4, AC-168.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cplat platform rules check
     files: [scripts/cplat/rulescheck.py, scripts/cplat/cplat.py]
