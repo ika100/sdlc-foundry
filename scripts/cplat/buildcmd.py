@@ -6,6 +6,7 @@
   cplat.py build replan-commit <spec>
   cplat.py build replan-abort <spec> --reason TEXT
   cplat.py build resolved <spec> <task>
+  cplat.py build reset <sha>     a coder moves its fresh agent worktree to the feature head
 """
 from __future__ import annotations
 
@@ -128,7 +129,7 @@ def merge(repo: Path, ref: str, task: str, branch: str, helpers: list[str]) -> i
     red = _out(repo, "log", "-1", "--format=%H", "--grep", "acceptance tests for", "HEAD")
     if red and _git(repo, "merge-base", "--is-ancestor", red, branch).returncode != 0:     # #501
         raise PlatformError(f"branch '{branch}' does not contain the acceptance tests ({red[:7]}): its worktree did not start "
-                            "at the feature head", hint="run the task again, its coder first doing `git reset --hard <FEATURE_HEAD>`")
+                            "at the feature head", hint="run the task again, its coder first doing `cplat component build reset <FEATURE_HEAD>`")
     pre = _out(repo, "rev-parse", "HEAD")
     proc = _git(repo, *core.git_identity(repo), "merge", "--no-ff", "--signoff", "-m", f"merge({task}): {branch}", branch)
     merging = _git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
@@ -194,6 +195,27 @@ def state(repo: Path, ref: str, as_json: bool) -> int:
     return 0
 
 
+def reset(repo: Path, sha: str) -> int:
+    """Move a coder's agent worktree to the feature head: `git reset --hard` without an allowlist rule for it (spec 159).
+    Only a clean linked worktree is moved, never the main checkout or a tree with uncommitted work."""
+    top = _git(repo, "rev-parse", "--show-toplevel", "--git-dir", "--git-common-dir")
+    if top.returncode != 0:
+        raise PlatformError(f"{repo} is not in a git repository")
+    root, gdir, common = top.stdout.split()
+    root = Path(root)
+    if (root / gdir).resolve() == (root / common).resolve():
+        raise PlatformError(f"{root} is the main checkout, not an agent worktree", hint="run this only in a coder's worktree")
+    if sha.startswith("-") or _git(root, "rev-parse", "--verify", "-q", f"{sha}^{{commit}}").returncode != 0:
+        raise PlatformError(f"'{sha}' is not a commit")
+    if _out(root, "status", "--porcelain"):
+        raise PlatformError(f"{root} has uncommitted changes", hint="reset only a fresh worktree, before any edit")
+    proc = _git(root, "reset", "-q", "--hard", sha)
+    if proc.returncode != 0:
+        raise PlatformError(f"git reset failed: {proc.stderr.strip()}")
+    print(f"RESET {root.name} to {_out(root, 'rev-parse', '--short', 'HEAD')}")
+    return 0
+
+
 # ---------------- CLI ----------------
 
 def main(argv: list[str]) -> int:
@@ -211,8 +233,14 @@ def main(argv: list[str]) -> int:
     sub.add_parser("replan-commit", parents=[common])
     sub.add_parser("replan-abort", parents=[common]).add_argument("--reason", required=True)
     sub.add_parser("resolved", parents=[common]).add_argument("task")
+    r = sub.add_parser("reset")
+    r.add_argument("--repo", default=".")
+    r.add_argument("sha")
     ns = ap.parse_args(argv)
     repo = Path(ns.repo).resolve()
+
+    if ns.cmd == "reset":
+        return reset(repo, ns.sha)
 
     if ns.cmd == "schedule":
         data = schedule(repo, ns.spec)

@@ -6,6 +6,7 @@ from pathlib import Path
 from test_replan import PLAN, SPEC_ID, branch_from, build, commit, jbuild, write_plan
 from test_ship import git, repo  # noqa: F401  (fixture)
 
+import cplat
 import spec
 
 BUILD = Path(__file__).resolve().parents[2] / "plugins" / "component" / "commands" / "build.md"
@@ -48,4 +49,37 @@ def test_a_probe_off_the_feature_head_no_longer_means_sequential():
     text = BUILD.read_text()
     probe = text.split("### 2.2 Worktree probe", 1)[1].split("### 2.3", 1)[0]
     assert "is fine (#501)" in probe
-    assert "git reset --hard <FEATURE_HEAD>" in text.split("### 2.3", 1)[1].split("### 2.4", 1)[0]
+    assert "cplat component build reset <FEATURE_HEAD>" in text.split("### 2.3", 1)[1].split("### 2.4", 1)[0]
+
+
+def _reset(capsys, where, sha):
+    capsys.readouterr()
+    rc = cplat.main(["component", "build", "reset", sha, "--repo", str(where)])
+    out = capsys.readouterr()
+    return rc, out.out, out.err
+
+
+def test_reset_moves_a_clean_agent_worktree_to_the_feature_head(repo, tmp_path, capsys):
+    """A headless coder may not run `git reset --hard` (no allowlist rule); `cplat component build reset` does it."""
+    main, head = _feature(repo)
+    wt = tmp_path / "agent-1"
+    git(repo, "worktree", "add", "-q", "-b", "worktree-agent-1", str(wt), main)
+    rc, out, err = _reset(capsys, wt, head)
+    assert rc == 0, err
+    assert git(wt, "rev-parse", "HEAD") == head
+    assert (wt / "test_acceptance.py").exists()
+
+
+def test_reset_refuses_the_main_checkout_and_a_worktree_with_edits(repo, tmp_path, capsys):
+    main, head = _feature(repo)
+    rc, out, err = _reset(capsys, repo, main)
+    assert rc != 0 and "main checkout" in err
+    assert git(repo, "rev-parse", "HEAD") == head
+    wt = tmp_path / "agent-2"
+    git(repo, "worktree", "add", "-q", "-b", "worktree-agent-2", str(wt), main)
+    (wt / "a.py").write_text("edited\n")
+    rc, out, err = _reset(capsys, wt, head)
+    assert rc != 0 and "uncommitted changes" in err
+    assert (wt / "a.py").read_text() == "edited\n"
+    rc, out, err = _reset(capsys, wt, "no-such-ref")
+    assert rc != 0 and "not a commit" in err

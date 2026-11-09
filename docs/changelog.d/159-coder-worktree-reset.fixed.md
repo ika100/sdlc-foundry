@@ -1,0 +1,1 @@
+A coder of a parallel batch now moves its worktree to the feature head with `cplat component build reset <sha>` instead of `git reset --hard`, which no allowlist grants. Headless runs refused that command, so every coder of a batch stopped before writing code and the run escalated. The new command moves only a clean agent worktree and refuses the main checkout (component 1.13.2).

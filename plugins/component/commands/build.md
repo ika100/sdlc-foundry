@@ -52,7 +52,7 @@ Before the first parallel batch, a probe Agent with `isolation: "worktree"` repo
 - **Done when:** the acceptance tests of its `covers` criteria pass (`cplat quiet test-fast`; name the files from `TRACE`). One that also depends on a not-yet-done task may still fail: the coder says which and why.
 - "Never edit, skip or weaken the acceptance tests. A linter false positive in one gets the linter's line suppression naming the rule, nothing else (spec 160); name the suppressed rules in the commit."
 - A re-planned task (a `replans[].tasks[]` entry in `cplat component build state <id> --json` not yet merged) → read `${CLAUDE_PLUGIN_ROOT}/references/build-replan.md` and add its text to the prompt.
-- Parallel batch only (`FEATURE_HEAD` = HEAD before the batch): "You are in an isolated worktree. First `git reset --hard <FEATURE_HEAD>`. Commit locally (`git add` + `git commit -s -m '<type>(<scope>): <title>'`, task id in the body; `-s` is required) before returning. Do not push or switch branches."
+- Parallel batch only (`FEATURE_HEAD` = HEAD before the batch): "You are in an isolated worktree. First `cplat component build reset <FEATURE_HEAD>`. Commit locally (`git add` + `git commit -s -m '<type>(<scope>): <title>'`, task id in the body; `-s` is required) before returning. Do not push or switch branches."
 
 ### 2.4 Run batches
 
