@@ -25,9 +25,6 @@ rules:
     text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
     class: hard
     hard: issue-filing-needs-consent
-  - id: R9
-    text: "`spec.md`, `plan.md` or `design.md` are read only when the brief lacks a fact you need, and you say which fact in your report"
-    class: not a rule
   - id: R10
     text: "Always go through devbox. No `ruff …`, `mypy …`, or `uv run …` directly."
     class: retired

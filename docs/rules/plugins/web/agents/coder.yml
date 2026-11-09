@@ -1,7 +1,4 @@
 rules:
-  - id: R1
-    text: "Start from it and read `spec.md`, `plan.md` or `design.md` only when the brief lacks a fact you need"
-    class: not a rule
   - id: R2
     text: "never modify code you haven't seen, because an edit made blind breaks what it cannot see"
     class: practice

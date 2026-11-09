@@ -1,8 +1,4 @@
 rules:
-  - id: R1
-    text: "only when the brief lacks a fact you need, and say which fact in your report"
-    class: not a rule
-    source: spec 100
   - id: R2
     text: "integration tests only for real service boundaries, because unit tests cover the rest faster"
     class: practice

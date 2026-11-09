@@ -1,8 +1,4 @@
 rules:
-  - id: R1
-    text: "Start from it and read `spec.md`, `plan.md` or `design.md` only when the brief lacks a fact you need"
-    class: not a rule
-    source: spec 100
   - id: R2
     text: "**Do not fix implementation bugs yourself**"
     class: practice
