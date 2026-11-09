@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "4.6.1",
+      "version": "4.7.0",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": [
@@ -23,7 +23,7 @@
     {
       "name": "web",
       "source": "./plugins/web",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "description": "Agents for Next.js (App Router, pnpm, TypeScript) web repos: coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
@@ -114,7 +114,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.13.2",
+      "version": "1.14.0",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [

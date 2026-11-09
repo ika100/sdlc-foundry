@@ -241,7 +241,8 @@ def collect(rec: dict, repo: Path) -> dict:
     if isinstance(rec.get("approved_test_diffs"), list):     # the #324 hook (design.md)
         for item in rec["approved_test_diffs"]:
             if isinstance(item, dict):
-                decisions.append(f"test change approved `{item.get('file')}` (task {item.get('task') or '-'}): "
+                what = "test tightened by an agent" if item.get("kind") == "tightened" else "test change approved"
+                decisions.append(f"{what} `{item.get('file')}` (task {item.get('task') or '-'}): "
                                  f"{item.get('reason') or 'no reason given'}")
     else:
         decisions.append("user-approved test changes: not recorded (#324)")

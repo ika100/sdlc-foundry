@@ -592,6 +592,41 @@ def suppression_only(old: str, new: str, name: str) -> tuple[bool, str]:
     return (True, "lint suppression only: " + "; ".join(f"line {n} `{s}`" for n, s in added)) if ok else (False, "")
 
 
+# spec 165: a test the agents tightened keeps its tests and assertions and adds no skip
+_TEST_DEFS = [
+    re.compile(r"^[ \t]*(?:async[ \t]+)?def[ \t]+(test\w*)", re.M),                                   # Python
+    re.compile(r"\b(?:it|test)(?:\.(?:concurrent|only|skip|todo|fixme|each\([^)]*\)))?\(\s*([\"'`])(.+?)\1"),                # TS/JS
+    re.compile(r"^func[ \t]+(Test\w+)[ \t]*\(", re.M),                                                # Go
+    re.compile(r"@Test\b(?:\s*@\w+(?:\([^)]*\))?)*\s*(?:(?:public|protected|private)\s+)?void\s+(\w+)\s*\("),  # Java
+]
+_ASSERTS = re.compile(r"\bassert\b|\bexpect(?:\.\w+)?\(|\bassert[A-Z]\w*\(|\bt\.(?:Error|Errorf|Fatal|Fatalf|Fail|FailNow)\b|"
+                      r"\b(?:require|assert)\.\w+\(")
+_SKIPS = re.compile(r"pytest\.mark\.(?:skip|skipif|xfail)|pytest\.(?:skip|xfail)\(|\b(?:it|test|describe)\.(?:skip|todo|fixme)\b|"
+                    r"\btest\.fixme\(|\bt\.Skip(?:f|Now)?\(|@Disabled\b|@Ignore\b|\bxit\(|\bxdescribe\(")
+
+
+def _test_names(text: str) -> set[str]:
+    return {m.group(m.lastindex) for rx in _TEST_DEFS for m in rx.finditer(text)}
+
+
+def tightening(old: str, new: str, name: str) -> tuple[bool, str]:
+    """Spec 165 (AC-165.1): `new` may be a stricter `old`: same criterion ids, no test removed or newly skipped, no
+    fewer assertions. Not a proof of strictness: the obvious weakenings are refused and every tightening is listed."""
+    if sorted(AC_ANY.findall(old)) != sorted(AC_ANY.findall(new)):
+        return False, f"criterion ids changed: {sorted(set(AC_ANY.findall(old)) ^ set(AC_ANY.findall(new)))}"
+    gone = sorted(_test_names(old) - _test_names(new))
+    if gone:
+        return False, f"test removed or renamed: {', '.join(gone)}"
+    if len(_SKIPS.findall(new)) > len(_SKIPS.findall(old)):
+        return False, "adds a skip"
+    a, b = len(_ASSERTS.findall(old)), len(_ASSERTS.findall(new))
+    if b < a:
+        return False, f"fewer assertions ({a} before, {b} now)"
+    if old == new:
+        return False, "unchanged"
+    return True, ""
+
+
 def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, str]]:
     """Each changed test file against `base`. Default: files under the shape's `test_globs` (never `docs/` or `*.md`, spec 063)
     that name a criterion of a `building` spec. A file that did not exist at `base` and that a task of a `building`
@@ -628,7 +663,8 @@ def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, 
     for f, (ok, _) in out.items():
         rec = approved.get(f)
         if not ok and rec and rec.get("sha256") == _content_hash(root / f):
-            out[f] = (True, f"approved by the user{': ' + rec['reason'] if rec.get('reason') else ''}")
+            who = "tightened by an agent" if rec.get("kind") == "tightened" else "approved by the user"
+            out[f] = (True, f"{who}{': ' + rec['reason'] if rec.get('reason') else ''}")
     return out
 
 
@@ -661,7 +697,24 @@ def _approvals(root: Path, base: str) -> dict:
     return found if isinstance(found, dict) else {}
 
 
-def approve_test_change(root: Path, base: str, files: list[str], reason: str | None) -> dict[str, str]:
+def tighten_test_change(root: Path, base: str, files: list[str], reason: str | None) -> dict[str, tuple[bool, str]]:
+    """Spec 165 (AC-165.1): record each file that passes `tightening` against the red commit `base` as tightened by an
+    agent; a refused file is not recorded. {file: (accepted, why)}."""
+    import subprocess
+    out: dict[str, tuple[bool, str]] = {}
+    for f in files:
+        old = subprocess.run(["git", "-C", str(root), "show", f"{base}:{f}"], capture_output=True, text=True)
+        if old.returncode != 0 or not (root / f).is_file():
+            out[f] = (False, "new or deleted file")
+            continue
+        out[f] = tightening(old.stdout, (root / f).read_text(), f)
+    ok = [f for f, (good, _) in out.items() if good]
+    if ok:
+        approve_test_change(root, base, ok, reason, kind="tightened")
+    return out
+
+
+def approve_test_change(root: Path, base: str, files: list[str], reason: str | None, kind: str = "approved") -> dict[str, str]:
     """Record that the user approved the current content of `files` against the red commit `base` (#324): `test_diff`
     accepts exactly that content; any later change is flagged again. Kept in the checkout's git dir, per red commit."""
     path = _approvals_path(root)
@@ -679,7 +732,8 @@ def approve_test_change(root: Path, base: str, files: list[str], reason: str | N
     out = {}
     for f in files:
         digest = out[f] = _content_hash(root / f) or ""
-        mine[f] = {"sha256": digest, "reason": reason or "", "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+        mine[f] = {"sha256": digest, "reason": reason or "", "kind": kind,
+                   "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
     path.write_text(json.dumps(data, indent=2) + "\n")
     return out
 
@@ -1375,7 +1429,10 @@ def main(argv: list[str]) -> int:
     p.add_argument("--task", help="the task being built, for agent metrics")
     p.add_argument("--approve", nargs="*", metavar="FILE",
                    help="record that the user approved the current content of FILE (#324); a later change is flagged again")
-    p.add_argument("--reason", help="with --approve: why the user approved the change")
+    p.add_argument("--tighten", nargs="*", metavar="FILE",
+                   help="record that an agent tightened FILE to its criterion (spec 165): refused when a test, an assertion "
+                        "or a criterion id is gone, or a skip was added")
+    p.add_argument("--reason", help="with --approve: why the user approved the change; with --tighten: the reviewer's finding")
     p = sub.add_parser("ci", help="check every spec and trace built ones; GitHub annotations (warnings unless --strict)")
     p.add_argument("--strict", action="store_true")
     p = sub.add_parser("migrate", help="convert STORY-NNN stories in docs/backlog.md into spec folders")
@@ -1498,6 +1555,22 @@ def main(argv: list[str]) -> int:
         except Exception:  # noqa: BLE001
             pass
         return 0
+    if ns.cmd == "test-diff" and ns.tighten is not None:
+        if not ns.tighten or not ns.reason:
+            print("ERROR: --tighten needs the files and --reason (the reviewer's finding)", file=sys.stderr)
+            return 2
+        result = tighten_test_change(root, ns.base, ns.tighten, ns.reason)
+        for f, (ok, why) in result.items():
+            print(f"{f}: tightened by an agent, recorded" if ok else f"{f}: refused — {why}")
+        try:  # the run record's `approved_test_diffs` (spec 133's PR block reads it); never changes the result
+            import runs
+            rid = runs.current_run(root)
+            for f, (ok, _) in result.items():
+                if ok:
+                    runs.add_to(rid, "approved_test_diffs", {"file": f, "task": ns.task, "reason": ns.reason, "kind": "tightened"})
+        except Exception:  # noqa: BLE001
+            pass
+        return 0 if all(ok for ok, _ in result.values()) else 1
     if ns.cmd == "test-diff":
         result = test_diff(root, ns.base, ns.files)
         for f, (ok, why) in result.items():

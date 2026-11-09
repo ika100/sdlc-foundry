@@ -32,6 +32,36 @@ def _log_path(cwd: Path, script: str) -> Path:
     return d / f"{datetime.now():%Y%m%d-%H%M%S}-{script}.log"
 
 
+def _flaky(cwd: Path, summary) -> bool:
+    """Spec 165 (AC-165.7): run the few failed tests of `summary` again alone once; True (printed and recorded as
+    flaky) when they all pass. Never raises: any problem keeps the first result."""
+    try:
+        import flaky
+        found = flaky.failed_tests(summary)
+        if not found:
+            return False
+        tool, tests = found
+        log = _log_path(cwd, "test-fast-rerun")
+        with log.open("wb") as fh:
+            rc = subprocess.run(["devbox", "run", "test-fast", "--", *flaky.rerun_args(tool, tests)], cwd=cwd, stdout=fh,
+                                stderr=subprocess.STDOUT).returncode
+        if rc != 0:
+            return False
+        print(f"ok: devbox run test-fast (flaky: {len(tests)} test(s) failed, then passed when run again alone; log: {log})")
+        for t in tests:
+            print(f"  flaky: {t}")
+        try:
+            import runs
+            rid = runs.current_run(cwd)
+            for t in tests:
+                runs.add_to(rid, "flaky_tests", {"test": t, "script": "test-fast"})
+        except Exception:  # noqa: BLE001  (recording never changes the result)
+            pass
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main(argv: list[str]) -> int:
     cwd = Path.cwd()
     raw = bool(argv) and argv[0] == "--raw"
@@ -62,6 +92,8 @@ def main(argv: list[str]) -> int:
         if on:
             s = failsum.summarize("\n".join(lines), title=title, check=script, command=f"devbox run {script}",
                                   exit_code=rc, log=log, root=cwd)
+            if script == "test-fast" and _flaky(cwd, s):
+                return 0
             print(s.render())
             failsum.write_sidecar(log, s)
         else:

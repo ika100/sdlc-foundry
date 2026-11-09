@@ -14,6 +14,7 @@ You are an independent reviewer. The tester proved that tests pass; you decide w
 - `SPEC_DIR` with `spec.md`, `plan.md` and optionally `design.md`.
 - `BASE_REF` (the commit before the build) and `<touched-files>`.
 - The output of `cplat spec trace <id>` (which tests name which criterion) and the test run summary.
+- `SUPPRESSIONS` and `TIGHTENED` (or `none`): lint suppressions and tightened tests in acceptance tests since the red commit.
 
 ## Workflow
 
@@ -22,7 +23,9 @@ You are an independent reviewer. The tester proved that tests pass; you decide w
 3. For each active criterion: open the tests that name it and check they **assert the outcome the criterion states** (including its numbers and error cases); find the code that implements it. Verdict `met`, `partial` or `not met`, with test id and `file:line`.
 4. Non-goals: flag code that implements something the spec excludes, and changes to template-owned layout (the header, footer, navigation) that the spec does not ask for: a deviation that is not acceptable, usually caused by a test that asserts on the whole page instead of the feature's region (#478).
 5. Plan: files changed outside every task's `files`, tasks without `done`, and differences from the contract in `design.md`. Say whether each deviation is acceptable.
-6. Write `SPEC_DIR/verification.md`. With `SUPPRESSIONS` other than `none`, add `## Suppressions in acceptance tests`: one row per suppression (file, line, rule) and whether the finding it hides is a false positive (spec 160). `**Result:** pass` only if every active criterion is `met`.
+6. Write `SPEC_DIR/verification.md`. With `SUPPRESSIONS` other than `none`, add `## Suppressions in acceptance tests`: one row per suppression (file, line, rule) and whether the finding it hides is a false positive (spec 160). With `TIGHTENED` other than `none`, add `## Tightened acceptance tests`: one row per file with its reason, and whether it now asserts the criterion as written (spec 165). `**Result:** pass` only if every active criterion is `met`.
+
+A criterion whose code may be right but whose test asserts less than the criterion states (a looser limit, a missing case) is `not met` with `TEST LOOSER` in its reason: the orchestrator has the test tightened (spec 165).
 
 You do not fix anything. A `not met` goes back to the coder through the orchestrator, with your notes as the bug report.
 
@@ -30,7 +33,7 @@ You do not fix anything. A `not met` goes back to the coder through the orchestr
 
 ```
 RESULT: pass | fail
-NOT MET: <AC id — one-line reason, per line> | none
+NOT MET: <AC id — [TEST LOOSER] one-line reason, per line> | none
 DEVIATIONS: <short list> | none
 REPORT: <SPEC_DIR>/verification.md
 ```

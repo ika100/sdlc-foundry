@@ -30,6 +30,7 @@ Do not wait for CI on `main`.
 **tester** (`agents.tester`): "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion in full, and the non-goals), `Contract` (`design.md`'s contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests (a `(smoke)` criterion also gets its smoke test, base URL only), confirms they fail because the behaviour is missing, and commits only test files. Then:
 - `cplat spec trace <id>` must pass; else the missing ids go back to the tester once.
 - `cplat quiet test-fast`: the new tests fail, nothing else newly fails; a test erroring for another reason goes back.
+- Trace files `test-fast` does not run (Playwright specs under `e2e/`): `cplat quiet e2e` once; one failing before any assertion about the missing behaviour (server does not start, harness error) goes back as a wrong failure (spec 165).
 - One call, even with no misses: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...`.
 - `cplat spec trace <id> --json` → `TRACE` (criterion → test files).
 - `cplat quiet lint-fix`; commit changed tests as `test(<slug>): lint-fix acceptance tests for <id>` (#367). `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`.
@@ -95,8 +96,8 @@ Merge exit 3 or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references
 `cplat platform runs phase build:verify`
 
 1. `cplat spec trace <id> --json` must pass.
-2. **reviewer** (`agents.reviewer`): `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON, the Phase 3 test summary, and `SUPPRESSIONS`: the `lint suppression only` lines of the last test diff (Phase 3, step 4), or `none`. After each pass (cycle `<n>`): `cplat platform runs agent findings --cycle <n> [--deviation <AC or task>]...` for deviations it judged not acceptable.
-3. `RESULT: fail` → each `NOT MET` item to a coder of a covering task (`cplat platform runs agent fix-round verification --task <task>`), then `cplat quiet test-fast` and the reviewer again; at most 2 cycles, then escalate with `verification.md`.
+2. **reviewer** (`agents.reviewer`): `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON, the Phase 3 test summary, and `SUPPRESSIONS`: the `lint suppression only` lines of the last test diff (Phase 3, step 4), or `none`, and `TIGHTENED` (`build-tighten.md`) or `none`. After each pass (cycle `<n>`): `cplat platform runs agent findings --cycle <n> [--deviation <AC or task>]...` for deviations it judged not acceptable.
+3. A `NOT MET` item marked `TEST LOOSER` → read `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` and follow it (spec 165). `RESULT: fail` → each other `NOT MET` item to a coder of a covering task (`cplat platform runs agent fix-round verification --task <task>`), then `cplat quiet test-fast` and the reviewer again; at most 2 cycles, then escalate with `verification.md`.
 4. `cplat spec mutate <id> --write` (spec 152, report only: how many small faults in the changed code the acceptance tests catch, written into `verification.md`; it never fails the build and nothing acts on its score).
 5. Commit `docs/specs/<spec_id>/verification.md`: `docs(spec): verify <spec_id>`.
 
@@ -116,7 +117,7 @@ Merge exit 3 or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references
 
 - **Every stop and the end are recorded** with `cplat platform runs end`.
 - **Only approved specs are built**, and only as planned. A decision the spec does not answer stops the build: `/component:spec --amend`, then `/component:plan` again.
-- **Acceptance tests are fixed** once Phase 1 committed them; a wrong one goes to the user (a changed test is a changed spec).
+- **Acceptance tests are fixed** once Phase 1 committed them; a wrong one goes to the user (a changed test is a changed spec). Only tightening one the reviewer found looser than its criterion is decided without the user (`build-tighten.md`).
 - **Push only in Phase 7**, through `cplat pr open`.
 - **A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** The architect amends only the plan and the task reruns on the merged work, without asking. Never edit conflicting hunks.
 - **Subagents run in the foreground** (`run_in_background: false`; a batch is several Agent calls in one message); never poll for one in a shell loop (#496).
