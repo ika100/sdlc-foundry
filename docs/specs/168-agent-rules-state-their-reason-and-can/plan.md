@@ -38,6 +38,7 @@ tasks:
     covers: [AC-168.7]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: s1
     title: Sweep - component build and its references
     files: [plugins/component/commands/build.md, plugins/component/references/build-pr.md, plugins/component/references/build-red-rounds.md, plugins/component/references/build-replan.md, plugins/component/references/build-resume.md, plugins/component/references/build-security-red.md, plugins/component/references/build-test-approval.md, plugins/component/references/build-tighten.md, plugins/component/references/build-worktree-fallback.md, plugins/component/references/unit-mode.md, docs/rules/plugins/component/commands/build.yml, docs/rules/plugins/component/references/build-pr.yml, docs/rules/plugins/component/references/build-red-rounds.yml, docs/rules/plugins/component/references/build-replan.yml, docs/rules/plugins/component/references/build-resume.yml, docs/rules/plugins/component/references/build-security-red.yml, docs/rules/plugins/component/references/build-test-approval.yml, docs/rules/plugins/component/references/build-tighten.yml, docs/rules/plugins/component/references/build-worktree-fallback.yml, docs/rules/plugins/component/references/unit-mode.yml]
