@@ -245,9 +245,28 @@ def test_a_run_starts_without_the_last_runs_worktrees_and_state_ac_156_1(tmp_pat
     g("worktree", "add", "-q", "-b", "compose/001", str(repo / ".git" / "cplat-app-ship" / "001-entry"), cwd=repo)
     (repo / ".git" / "cplat-app-ship.json").write_text("{}")
     (repo / ".git" / "cplat-units.json").write_text("{}")
-    rbs.clear_runs(repo)
+    runs_bench.clear_runs(repo)
     assert not list((repo / ".git").glob("cplat-*"))
     g("branch", "-D", "compose/001", cwd=repo)                      # no longer held by a worktree
+
+
+def test_every_benchmark_prepare_drops_the_last_runs_state(tmp_path):  # AC-156.1
+    """The build benchmark kept `.git/cplat-units.json`, and every run after an escalation resumed that escalation."""
+    import subprocess
+
+    def g(*a, cwd):
+        return subprocess.run(["git", *a], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    g("init", "-q", "-b", "main", cwd=remote)
+    g("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x", cwd=remote)
+    rev = g("rev-parse", "HEAD", cwd=remote)
+    clone = tmp_path / "build"
+    runs_bench._prepare(str(remote), rev, {}, clone, spec=False)
+    (clone / ".git" / "cplat-units.json").write_text('{"escalated": {"reason": "old"}}')
+    (clone / ".git" / "cplat-ship.json").write_text("{}")
+    runs_bench._prepare(str(remote), rev, {}, clone, spec=False)
+    assert not list((clone / ".git").glob("cplat-*"))
 
 
 def test_no_refused_rule_ends_in_the_prefix_syntax_ac_156_1():  # AC-156.1 (Claude Code matched `* main:*` literally)

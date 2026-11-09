@@ -133,23 +133,6 @@ def _repos(task: dict) -> list[dict]:
     return [{**sys_["gitops"], "gitops": True}] + [dict(c) for c in sys_["components"]]
 
 
-def clear_runs(clone: Path) -> None:
-    """The previous run's worktrees (the gitops entry's) and the cplat run state kept in the git dir: a run starts fresh,
-    never resuming the last one (#564 was such a leftover)."""
-    if not (clone / ".git").exists():
-        return
-    rb.run(["git", "worktree", "prune"], clone)
-    for line in rb._ok(["git", "worktree", "list", "--porcelain"], clone).splitlines()[1:]:
-        if line.startswith("worktree "):
-            rb.run(["git", "worktree", "remove", "--force", line[len("worktree "):]], clone)
-    git_dir = Path(rb._ok(["git", "rev-parse", "--absolute-git-dir"], clone).strip())
-    for f in git_dir.glob("cplat-*"):
-        if f.is_dir():
-            shutil.rmtree(f, ignore_errors=True)
-        else:
-            f.unlink(missing_ok=True)
-
-
 def prepare(task: dict, base: Path, reset_first: bool) -> dict[str, dict]:
     """Clone (or reuse) every sample repo, check trust, reset what is off its pin; returns name → {repo, rev, clone, keep}."""
     out: dict[str, dict] = {}
@@ -165,7 +148,6 @@ def prepare(task: dict, base: Path, reset_first: bool) -> dict[str, dict]:
             raise PlatformError(f"sample repo {repo}: main is at {now[:7] or 'nothing'}, not the pinned {rev[:7]}",
                                 hint=f"cplat platform runs benchmark {WORKFLOW} --reset-first")
         try:
-            clear_runs(clone)
             rb._prepare(url, rev, {}, clone, spec=False)
             if not rb.trusted(clone):
                 raise PlatformError(f"the benchmark folder {clone} is not trusted in Claude Code, so its permission rules would be ignored",

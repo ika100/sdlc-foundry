@@ -1,0 +1,1 @@
+Every benchmark starts from a fresh state. The single-repo benchmarks (`quick-task`, `build`) now remove the last run's cplat state from the git directory too, as `system-ship` already did. Before, after one escalated build, every later run resumed that escalation.

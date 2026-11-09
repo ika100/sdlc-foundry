@@ -136,9 +136,28 @@ def reset_sample(repo: str, rev: str, clone: Path, keep: dict | None = None) -> 
         raise RuntimeError(f"main of {repo} is not at {rev[:7]} after the reset")
 
 
+def clear_runs(clone: Path) -> None:
+    """The previous run's worktrees (the gitops entry's) and the cplat run state kept in the git dir: a run starts fresh,
+    never resuming the last one (#564 was such a leftover)."""
+    if not (clone / ".git").exists():
+        return
+    run(["git", "worktree", "prune"], clone)
+    for line in _ok(["git", "worktree", "list", "--porcelain"], clone).splitlines()[1:]:
+        if line.startswith("worktree "):
+            run(["git", "worktree", "remove", "--force", line[len("worktree "):]], clone)
+    git_dir = Path(_ok(["git", "rev-parse", "--absolute-git-dir"], clone).strip())
+    for f in git_dir.glob("cplat-*"):
+        if f.is_dir():
+            shutil.rmtree(f, ignore_errors=True)
+        else:
+            f.unlink(missing_ok=True)
+
+
 def _prepare(url: str, rev: str, task: dict, clone: Path, spec: bool = True) -> None:
-    """Clone once, then reuse the folder (its trust stays): back to `rev` with no local branches and no untracked files."""
+    """Clone once, then reuse the folder (its trust stays): back to `rev` with no local branches, no untracked files and
+    no run state of the last run (an escalated build once resumed its old escalation in every later run)."""
     clone.parent.mkdir(parents=True, exist_ok=True)
+    clear_runs(clone)
     if not (clone / ".git").exists():
         _ok(["git", "clone", url, str(clone)])
     _ok(["git", "fetch", "--prune", "origin"], clone)
