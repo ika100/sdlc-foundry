@@ -54,23 +54,23 @@ As a trader, I want an alert when a watched symbol crosses my threshold, so that
 
 ## Writing good criteria
 
-- **One observable behaviour each**, in Given / when / then. A tester must be able to write a test from the line alone.
+- **One observable behaviour each**, in Given / when / then, so that a tester can write a test from the line alone.
 - **Concrete:** numbers, limits, field names the user sees, error responses. "Fast" and "user-friendly" are not criteria.
-- **Cover the unhappy paths:** invalid input, missing permission, a dependency down, limits reached. Most defects live there.
+- **Cover the unhappy paths:** invalid input, missing permission, a dependency down, limits reached.
 - **Behaviour, not implementation:** "the price is stored" is untestable from outside; say what the user or caller can observe.
-- **Environment-neutral:** no host ports, local hostnames or machine paths (`:8088`, `todo-web.todo-dev.localhost`, `/Users/...`). Say what is observable wherever the system runs: "the todo list page loads at the web app's root URL".
-- **Smoke marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL; after deploy, `devbox run smoke` checks it in dev against `SMOKE_BASE_URL`. Only for deployable shapes (not libraries), and only for behaviour a test can check using nothing but the base URL.
-- **Small features have few criteria.** Three to eight is typical. More than twelve usually means two specs.
+- **Environment-neutral:** no host ports, local hostnames or machine paths (`:8088`, `todo-web.todo-dev.localhost`, `/Users/...`). Say what is observable wherever the system runs.
+- **Smoke marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL; after deploy `devbox run smoke` checks it in dev against `SMOKE_BASE_URL`. Use it for deployable shapes (not libraries) and for behaviour a test can check using nothing but the base URL, because the smoke run reaches nothing else.
+- **Small features have few criteria.** Three to eight is typical; more than twelve usually means two specs.
 
 ## Assumptions and open questions
 
-Spec 149 ([ADR-084](../../../../../docs/adr/084-a-spec-decides-by-default.md)): a spec decides by default and asks only what may not be decided by default.
+A spec decides by default and asks only what may not be decided by default, so that the user answers few questions.
 
-- **Assumptions:** every decision with a sensible default (a limit, a format, an order, a status code, a wording, a small scope call) is taken, written into the criteria and listed as `- **A<n>** <decision> (other option: <…>; affects AC-…)`. The user approves them together with the spec. A changed assumption is struck through with the date and the new decision, never deleted.
-- **Open questions** are only: (a) security, access or secrets; (b) money: paid services, quotas, cost limits; (c) deleting, migrating or exposing existing data; (d) a request so ambiguous that the default may build the wrong feature. Write each with a **suggested answer** and what it affects, so the user can answer in one word.
-- Answered questions are struck through, with the answer folded into a criterion or a non-goal. `cplat spec approve` refuses while any unstruck question remains; assumptions never block approval.
+- **Assumptions:** every decision with a sensible default (a limit, a format, an order, a status code, a wording, a small scope call) is taken, written into the criteria and listed as `- **A<n>** <decision> (other option: <…>; affects AC-…)`. The user approves them together with the spec. A changed assumption is struck through with the date and the new decision, never deleted, because the user approved the old one.
+- **Open questions** are only: (a) security, access or secrets; (b) money: paid services, quotas, cost limits; (c) deleting, migrating or exposing existing data; (d) a request so ambiguous that the default may build the wrong feature. Write each with a **suggested answer** and what it affects, so that the user can answer in one word.
+- Answered questions are struck through, with the answer folded into a criterion or a non-goal. `cplat spec approve` refuses while any unstruck question remains; assumptions block nothing.
 
 ## Amending
 
-- Add new criteria with the next free number. Change the text of an existing one only to clarify the same behaviour; if behaviour changes, withdraw the old id and add a new one.
-- Add a Changelog line for every amendment. The orchestrator moves an approved spec back to `draft`; it needs a new approval and, if criteria changed, a new plan (`spec_hash` drift).
+- Add new criteria with the next free number. Change the text of an existing one only to clarify the same behaviour, because tests that cite the id keep proving it; if behaviour changes, withdraw the old id and add a new one.
+- Add a Changelog line for every amendment. The orchestrator moves an approved spec back to `draft`: it needs a new approval and, if criteria changed, a new plan (`spec_hash` drift).

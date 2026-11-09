@@ -1,0 +1,19 @@
+rules:
+  - id: R1
+    text: "only an approved spec can be planned and built, because a build without approval overrides the user's consent"
+    class: hard
+    hard: only-approved-specs-built
+  - id: R2
+    text: "Status is never edited by hand or by an agent, because the checks run in `cplat spec approve` and `cplat spec set-status`"
+    class: practice
+    source: ADR-026
+    enforced_by: cplat spec set-status
+  - id: R3
+    text: "An id is never reused or renumbered, because tests and plans cite it"
+    class: practice
+    source: ADR-026
+  - id: R4
+    text: "Agents never validate a spec in prose, because only `cplat spec check` is exact"
+    class: practice
+    source: ADR-026
+    enforced_by: cplat spec check
