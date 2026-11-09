@@ -72,7 +72,7 @@ owner_team:
 go_version:
   type: str
   help: "Go toolchain version (major.minor). Pinned in go.mod, devbox.json and the Dockerfile; bumped via /shared:update-service."
-  default: "1.25"
+  default: "1.26"
 
 port:
   type: int

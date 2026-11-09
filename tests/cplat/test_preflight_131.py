@@ -225,6 +225,21 @@ def test_the_account_cannot_push(world, monkeypatch):  # AC-131.11
     assert "cannot push to acme/shop-api: ask for write access to it" in f.line()
 
 
+def test_a_dropped_network_is_retried_and_never_read_as_no_push_access(world, monkeypatch):  # AC-131.11
+    """A network drop during the check once escalated a repo as `cannot push` (system-ship benchmark, 2026-11-09)."""
+    import core
+    monkeypatch.setattr(core, "sleep", lambda s: None)
+    monkeypatch.setattr(core, "NETWORK_RETRY_MAX_WAIT", 60)       # conftest turns retries off
+    git(world.repo, "remote", "set-url", "origin", "https://github.com/acme/shop-api.git")
+    monkeypatch.setenv("FAKE_GH_PUSH", "flaky")
+    assert check(world) is None
+    monkeypatch.setenv("FAKE_GH_PUSH", "offline")
+    f = check(world)
+    assert f.category == "no-push-access"
+    assert "could not read the push access to acme/shop-api (dial tcp" in f.line()
+    assert "ask for write access" not in f.line()
+
+
 def test_the_first_failure_wins_in_the_documented_order(world, monkeypatch):  # AC-131.11
     monkeypatch.setenv("FAKE_GH_AUTH", "fail")
     monkeypatch.setenv("FAKE_GH_PUSH", "false")

@@ -8,3 +8,8 @@ target/
 .env.local
 .devbox/
 .DS_Store
+
+# Claude Code: agent worktrees, local settings and locks are never committed
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+.claude/settings.local.json

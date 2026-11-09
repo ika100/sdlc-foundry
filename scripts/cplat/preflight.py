@@ -12,6 +12,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import core
+
 TIMEOUT = 30
 LAND_COMMANDS = ("/component:ship", "/system:ship")
 
@@ -197,9 +199,17 @@ def _auth(repo: Path) -> Failure | None:
 def _push_access(repo: Path, slug: str) -> Failure | None:
     if not slug:
         return None
-    code, out = gh(["api", f"repos/{slug}", "--jq", ".permissions.push"], repo)
+    try:          # core.run retries a dropped network, which once read as "cannot push" and escalated a run
+        res = core.run(["gh", "api", f"repos/{slug}", "--jq", ".permissions.push"], cwd=repo, check=False, timeout=TIMEOUT)
+        code, out, err = res.returncode, (res.stdout or "").strip(), (res.stderr or "").strip()
+    except core.PlatformError as e:
+        code, out, err = 1, "", str(e)
     if code == 0 and out == "true":
         return None
+    if code != 0:
+        why = err.splitlines()[-1] if err else f"gh exited {code}"
+        return Failure("no-push-access", f"could not read the push access to {slug} ({why}): check the network "
+                                         "and gh, then run again")
     user = gh(["api", "user", "--jq", ".login"], repo)[1] or "this account"
     return Failure("no-push-access", f"{user} cannot push to {slug}: ask for write access to it")
 

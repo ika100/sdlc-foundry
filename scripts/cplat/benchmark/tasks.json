@@ -44,11 +44,11 @@
       "seed": "seeds/fix-rounds.json"
     },
     "system-ship": {
-      "task_version": 1,
+      "task_version": 2,
       "system": {
         "gitops": {
           "repo": "ika100-demo/bench-files-gitops",
-          "rev": "94ebf39544e0599c0df1965b6cd409aa3bdfb51d"
+          "rev": "80d96d5c9ccc523e3149987f73a0ac9f4a3f3680"
         },
         "components": [
           {
@@ -57,11 +57,11 @@
           },
           {
             "repo": "ika100-demo/bench-files-worker",
-            "rev": "688866102e871e12bdd6e681e7dd1cf86f8950d5"
+            "rev": "91302f85308942aaf26233b252ea17f7a1505152"
           },
           {
             "repo": "ika100-demo/bench-files-web",
-            "rev": "a2fa588028838cad3ce054c6650fbac7a4c0e387"
+            "rev": "37d26bd67d13d2c746133ddad7c01fba94f7e488"
           }
         ]
       },
