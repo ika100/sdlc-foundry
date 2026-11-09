@@ -54,7 +54,15 @@ def tokens(rec: dict) -> int | None:
 def verdict(records: list[dict], *, head_tree: str, tree_of: Callable[[str], str], baseline_version: str,
             workflows: tuple[str, ...] = WORKFLOWS) -> list[str]:
     """The failures (empty: pass). `tree_of(commit)` is the `plugins/` tree of a commit ("" when unknown)."""
+    return verdict_runs(records, head_tree=head_tree, tree_of=tree_of, baseline_version=baseline_version,
+                        workflows=workflows)[0]
+
+
+def verdict_runs(records: list[dict], *, head_tree: str, tree_of: Callable[[str], str], baseline_version: str,
+                 workflows: tuple[str, ...] = WORKFLOWS) -> tuple[list[str], dict[str, str]]:
+    """(the failures, `{workflow: run_id}` of the record that passed for each passing workflow)."""
     fails = []
+    passed: dict[str, str] = {}
     for w in workflows:
         mine = [r for r in records if r.get("kind") == "benchmark" and (r.get("benchmark") or {}).get("workflow") == w]
         cand = []
@@ -77,7 +85,9 @@ def verdict(records: list[dict], *, head_tree: str, tree_of: Callable[[str], str
         if base and have is not None and have > TOKEN_LIMIT * statistics.median(base):
             fails.append(f"{w}: {have:,} tokens, more than {TOKEN_LIMIT}× the {baseline_version} median of "
                          f"{int(statistics.median(base)):,} ({len(base)} run(s)); make the prompts leaner or explain it in the release")
-    return fails
+            continue
+        passed[w] = str(last.get("run_id"))
+    return fails, passed
 
 
 def _records(days: int) -> list[dict]:
