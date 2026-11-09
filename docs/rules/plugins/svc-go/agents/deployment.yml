@@ -1,0 +1,25 @@
+rules:
+  - id: R1
+    text: "run every tool through `devbox run <script>`, never `docker`, `trivy` or the language tools directly, so that versions and flags match CI"
+    class: practice
+  - id: R2
+    text: "`USER` must be **numeric** because Kubernetes cannot verify `runAsNonRoot` for a name"
+    class: practice
+    source: ADR-012
+  - id: R3
+    text: "never create `k8s/` or `kubectl apply` here, because the gitops-app repo owns cluster state"
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R4
+    text: "never put plaintext secrets in the image, the repo or CI logs, because layers and history keep them"
+    class: hard
+    hard: no-secrets-in-git
+  - id: R5
+    text: "do not invent others, because promotion reads these tags"
+    class: practice
+  - id: R6
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
