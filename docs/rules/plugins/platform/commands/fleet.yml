@@ -1,0 +1,15 @@
+rules:
+  - id: R1
+    text: "its output read whole (never piped into `grep`, `head` or `tail`, because its last lines carry the decisions and next steps; use `--json` where offered)"
+    class: practice
+    source: "#476"
+  - id: R2
+    text: "Never merge, label, comment on or edit a PR by hand, because the labelled open PR and its comment are the work item."
+    class: practice
+  - id: R3
+    text: "Never resolve a conflict or restore a customisation for the user, because the repo's owner decides what stays."
+    class: practice
+  - id: R4
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
