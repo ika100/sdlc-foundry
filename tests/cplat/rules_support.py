@@ -50,7 +50,7 @@ GOOD_ENTRIES = [e("R1", "Always run the tests first", "practice", source="#476")
 
 
 def _scalar(key, value):
-    if key == "retired" or isinstance(value, (int, float)):
+    if key in ("retired", "id") or isinstance(value, (int, float)):
         return str(value)                      # an ISO date is written bare, as a YAML date
     return json.dumps(value, ensure_ascii=False)
 
