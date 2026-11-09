@@ -49,4 +49,6 @@ Loop on `cplat system ship next --json`, one call per action, never a shell loop
 
 `cplat system ship escalate '<one line: what needs the user and where>' --cause platform|code|decision|environment` (`code` = the user's code or tests, `decision` = a spec or rule needs the user, `environment` = runner, cluster, network, secret or login, `platform` = a platform template, script or command misbehaved). Print the reason, the repo table and only what the user must decide.
 
+When the user's answer changes a repo's acceptance test (for example: tighten it to its criterion), make the change in that repo's clone and record it as their approval in the same step, so its build does not stop on the change again (#596): in the clone, `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`, commit the test, then `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (`references/build-test-approval.md` of the component plugin). Then resume with `/system:ship <spec>`.
+
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).

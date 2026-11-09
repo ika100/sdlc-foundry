@@ -29,6 +29,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [160-a-lint-suppression-in-an-acceptance-test-is-not-a](specs/160-a-lint-suppression-in-an-acceptance-test-is-not-a/spec.md) — A lint suppression in an acceptance test is not a changed test | P1 | approved | 4 | #570 |
 | [162-repo-sessions-apply-the-repo-s-rules-in-an](specs/162-repo-sessions-apply-the-repo-s-rules-in-an/spec.md) — Repo sessions apply the repo's rules in an untrusted clone | P1 | approved | 3 | #588 |
 | [163-a-resumed-unit-run-drops-the-escalation-of](specs/163-a-resumed-unit-run-drops-the-escalation-of/spec.md) — A resumed unit run drops the escalation of the run before | P1 | approved | 2 | #591 |
+| [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |

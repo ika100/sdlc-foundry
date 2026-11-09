@@ -68,6 +68,23 @@ def head_sha(repo_slug: str) -> str:
     return gh(["api", f"repos/{repo_slug}/commits/main", "-q", ".sha"]).strip()
 
 
+BOOKKEEPING = re.compile(r"^chore\(release\)")   # the release's follow-up PR: changelog and next development version
+
+
+def release_base(repo_slug: str, head: str) -> tuple[str, str] | None:
+    """#598: (commit, tag) of the newest release when every commit after it up to `head` is release bookkeeping, else None.
+    Such a head is no new release (`/component:release` refuses it), so staging tests the release's own build."""
+    versions = release_versions(repo_slug)
+    if not versions:
+        return None
+    raw = gh(["api", f"repos/{repo_slug}/compare/{versions[0]}...{head}", "--jq",
+              '{status: .status, base: .merge_base_commit.sha, titles: [.commits[].commit.message | split("\\n")[0]]}'])
+    d = json.loads(raw or "{}")
+    if d.get("status") == "ahead" and d.get("titles") and all(BOOKKEEPING.match(t) for t in d["titles"]):
+        return str(d["base"]), versions[0]
+    return None
+
+
 def release_versions(repo_slug: str) -> list[str]:
     raw = gh(["api", f"repos/{repo_slug}/tags?per_page=100", "--jq", "[.[].name]"])
     versions = [t for t in json.loads(raw or "[]") if SEMVER.match(t)]
@@ -81,6 +98,8 @@ def pick_tag(svc: dict, to_env: str, ns: argparse.Namespace) -> tuple[str, str]:
         sha = ns.sha or head_sha(slug)
         if not re.fullmatch(r"[0-9a-f]{40}", sha):
             raise PlatformError(f"--sha must be a full 40-character commit SHA, got '{sha}'")
+        if not ns.sha and (base := release_base(slug, sha)):
+            return f"sha-{base[0]}", f"commit {base[0][:7]} (release {base[1]}; main adds only its release bookkeeping)"
         return f"sha-{sha}", f"commit {sha[:7]}"
     wanted = ns.versions.get(svc["name"]) if getattr(ns, "versions", None) is not None else ns.version
     if wanted:

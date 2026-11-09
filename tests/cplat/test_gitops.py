@@ -60,6 +60,7 @@ class FakeGh:
                       ("acme/todo-web", "k8s/base/deployment.yaml"): OLD_K8S}
         self.image_tags = {"todo-api": {"latest", "sha-" + SHA[:7], "1.2.0", "1.3.0"}, "todo-web": {"latest", "sha-" + SHA[:7]}}
         self.git_tags = {"acme/todo-api": ["v1.3.1", "v1.3.0", "v1.2.0", "not-semver"], "acme/todo-web": []}
+        self.compare = {}   # #598: slug -> {status, base, titles} of compare/<newest tag>...<head>; default: a feature after it
 
     def __call__(self, args):
         if args[:2] == ["repo", "view"]:
@@ -76,6 +77,9 @@ class FakeGh:
                 return base64.b64encode(self.files[(slug, f)].encode()).decode()
             if path.endswith("/commits/main"):
                 return SHA + "\n"
+            if "/compare/" in path:
+                slug = path[len("repos/"):].split("/compare/")[0]
+                return json.dumps(self.compare.get(slug, {"status": "ahead", "base": "c" * 40, "titles": ["feat: more"]}))
             if path.endswith("/tags"):
                 return json.dumps(self.git_tags[path[len("repos/"):-len("/tags")]])
             if "/packages/container/" in path:
