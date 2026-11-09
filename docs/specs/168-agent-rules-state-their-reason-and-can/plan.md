@@ -136,6 +136,7 @@ tasks:
     covers: [AC-168.6]
     parallel_safe: false
     depends_on: [t3, t4, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13]
+    done: true
 human_steps:
   - "Before merging the PR, in a Claude session on its final commit: run `cplat platform runs benchmark quick-task --plugins plugins --reset-first` and `cplat platform runs benchmark build --plugins plugins --reset-first`, then `cplat platform pr-check --title \"<title>\" --body-file <body> --fix`, which writes the passing run ids into the retired register entries; commit and push that change (AC-168.7). The release gate of spec 151 needs the same two runs."
 ---
