@@ -188,22 +188,35 @@ def _identity(repo: Path) -> Failure | None:
                                    "and user.email '<email>'")
 
 
+def _retried(args: list[str], repo: Path) -> tuple[int, str, str]:
+    """A `gh` call through core.run, which runs it again on a dropped network: (exit code, stdout, stderr)."""
+    try:
+        res = core.run(["gh", *args], cwd=repo, check=False, timeout=TIMEOUT)
+    except core.PlatformError as e:
+        return 1, "", str(e)
+    return res.returncode, (res.stdout or "").strip(), (res.stderr or "").strip()
+
+
+def _offline(err: str) -> str | None:
+    """The network error in `err`, if the call failed for want of a network rather than for its own reason."""
+    hit = core.NETWORK_DOWN.search(err) or core.NETWORK_FLAKY.search(err)
+    return err.splitlines()[-1] if hit else None
+
+
 def _auth(repo: Path) -> Failure | None:
     host = _origin(repo)[0]
-    code, _ = gh(["auth", "status", "--hostname", host], repo)
+    code, _, err = _retried(["auth", "status", "--hostname", host], repo)
     if code == 0:
         return None
+    if (why := _offline(err)):          # a dropped network once read as "not logged in" and escalated a run
+        return Failure("gh-auth", f"could not reach {host} to check the gh login ({why}): check the network, then run again")
     return Failure("gh-auth", f"gh is not logged in for {host}: gh auth login --hostname {host}")
 
 
 def _push_access(repo: Path, slug: str) -> Failure | None:
     if not slug:
         return None
-    try:          # core.run retries a dropped network, which once read as "cannot push" and escalated a run
-        res = core.run(["gh", "api", f"repos/{slug}", "--jq", ".permissions.push"], cwd=repo, check=False, timeout=TIMEOUT)
-        code, out, err = res.returncode, (res.stdout or "").strip(), (res.stderr or "").strip()
-    except core.PlatformError as e:
-        code, out, err = 1, "", str(e)
+    code, out, err = _retried(["api", f"repos/{slug}", "--jq", ".permissions.push"], repo)   # a drop once read as "cannot push"
     if code == 0 and out == "true":
         return None
     if code != 0:

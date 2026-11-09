@@ -186,11 +186,17 @@ elif unit == "land":
 '''
 
 GH_STUB = '''#!/bin/sh
-# stub gh: FAKE_GH_AUTH=fail -> `auth status` fails; FAKE_GH_PUSH=false -> no push permission, =offline -> the network
+# stub gh: FAKE_GH_AUTH=fail -> `auth status` fails (=offline, =flaky as for FAKE_GH_PUSH); FAKE_GH_PUSH=false -> no push permission, =offline -> the network
 # is down, =flaky -> down for the first call only; every call is logged.
 echo "$@" >> "$FAKE_GH_LOG"
 case "$1 $2" in
-  "auth status") [ "$FAKE_GH_AUTH" = "fail" ] && { echo "You are not logged in" >&2; exit 1; }; exit 0 ;;
+  "auth status")
+    [ "$FAKE_GH_AUTH" = "fail" ] && { echo "You are not logged in" >&2; exit 1; }
+    [ "$FAKE_GH_AUTH" = "offline" ] && { echo "error connecting to api.github.com" >&2; exit 1; }
+    if [ "$FAKE_GH_AUTH" = "flaky" ] && [ ! -e "$FAKE_GH_LOG.authflaky" ]; then
+      touch "$FAKE_GH_LOG.authflaky"; echo "dial tcp: lookup api.github.com: no such host" >&2; exit 1
+    fi
+    exit 0 ;;
   "pr list") echo "[]"; exit 0 ;;
 esac
 if [ "$1" = "api" ]; then

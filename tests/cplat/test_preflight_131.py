@@ -240,6 +240,20 @@ def test_a_dropped_network_is_retried_and_never_read_as_no_push_access(world, mo
     assert "ask for write access" not in f.line()
 
 
+def test_a_dropped_network_is_never_read_as_not_logged_in(world, monkeypatch):  # AC-131.11
+    """A network drop during `gh auth status` once escalated a build as `gh-auth` (eval gate, 2026-11-09)."""
+    import core
+    monkeypatch.setattr(core, "sleep", lambda s: None)
+    monkeypatch.setattr(core, "NETWORK_RETRY_MAX_WAIT", 60)       # conftest turns retries off
+    monkeypatch.setenv("FAKE_GH_AUTH", "flaky")
+    assert check(world) is None
+    monkeypatch.setenv("FAKE_GH_AUTH", "offline")
+    f = check(world)
+    assert f.category == "gh-auth"
+    assert "could not reach github.com to check the gh login (error connecting to api.github.com)" in f.line()
+    assert "gh auth login" not in f.line()
+
+
 def test_the_first_failure_wins_in_the_documented_order(world, monkeypatch):  # AC-131.11
     monkeypatch.setenv("FAKE_GH_AUTH", "fail")
     monkeypatch.setenv("FAKE_GH_PUSH", "false")
