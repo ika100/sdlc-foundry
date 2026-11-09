@@ -31,6 +31,9 @@ python3 scripts/pin-actions.py --check
 step "relative Markdown links"
 python3 scripts/check-links.py
 
+step "every prompt rule is classified, reasoned and marked (spec 168)"
+uv run scripts/cplat/cplat.py platform rules check
+
 step "no \"\$\$\" in a pod command of the e2e scripts (#323)"
 python3 scripts/check-e2e-probes.py
 

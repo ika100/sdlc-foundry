@@ -257,6 +257,10 @@ They have no agent. `/instance:promote`, `/component:add|set|remove`, `/resource
 
 ---
 
+## Rules in prompts
+
+Every rule in an agent or command prompt states its reason, so that an agent can tell where the reason does not apply and say so in its report instead of following the letter. Rules have a class: `hard` (departing does harm that cannot be undone or overrides the user's consent or a gate's integrity; the prompt marks the sentence `**Hard rule:**` and states the rule), `practice`, `experience` (added after an incident, with its issue as source), `not a rule` and `retired`. The register in [`docs/rules/`](rules/README.md) holds one entry per rule sentence and the list of hard rules with what enforces each. `cplat platform rules check` validates it in CI and fails when a sentence is unclassified, has no reason, a hard rule is unmarked, or the prompts grow past the recorded size. A rule is retired through the retro, which proposes rules to retire, and `cplat platform pr-check` gates the retirement on the benchmark. Decision: [ADR-091](adr/091-agent-rules-carry-their-reason-in-a-checked-register.md).
+
 ## Model selection convention
 
 - `model: opus` — agents whose primary output is *decisions* downstream agents consume (`product-manager`, `architect`, `system:planner`) or that judge the result (`reviewer`). One bad plan poisons the whole run, so the reasoning headroom pays for itself.

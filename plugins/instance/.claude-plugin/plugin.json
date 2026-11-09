@@ -1,6 +1,6 @@
 {
   "name": "instance",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "The instance noun: /instance:promote, /instance:secret and /instance:verify act on where a component runs, per environment.",
   "author": {
     "name": "Eike Hensler",
