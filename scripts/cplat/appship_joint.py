@@ -228,6 +228,84 @@ def pin(gitops: Path, st: dict, repo_id: str, tag: str) -> tuple[str, list[str]]
     return comp, lines
 
 
+# ---------------- refresh before land (spec 166) ----------------
+
+# what render.py writes (and cplat's restore state): a conflict there is resolved by taking main's file and rendering again
+GENERATED = re.compile(r"^(?:applications/[^/]+/(?:applicationset\.yaml|overlays/|addons/|policies/|autonomy\.json)|operators/|bootstrap/)")
+
+
+def _newer_pin(e: dict, ours: str, theirs: str | None, org: str, rid: str) -> bool:
+    """Whether main's dev pin `theirs` is a later build of the component than `ours` (its main moved on, #597)."""
+    a, b = ours.removeprefix("sha-"), (theirs or "").removeprefix("sha-")
+    if not (SHA40.fullmatch(a) and SHA40.fullmatch(b)) or a == b:
+        return False
+    clone = Path(e.get("clone") or ".")
+    return staging.newer(e.get("slug") or f"{org}/{rid}", a, b, clone) == "ahead"
+
+
+def refresh(gitops: Path, st: dict) -> tuple[str | None, list[str]]:
+    """Spec 166 (#597): bring compose/<spec> up to the current main before the dev PR lands. Main is merged in; a conflict in
+    a rendered file takes main's file, then every build of the run is pinned again (or main's later build of it kept) and
+    the system rendered again. Returns (escalation reason or None, lines); a conflict in any other file aborts the merge."""
+    import appship_sched as sched
+    spec_id = st["spec"]
+    org = _org(gitops)
+    lines: list[str] = []
+    with _locked(gitops):
+        wt = sched._start_entry(gitops, spec_id)
+        run(["git", "fetch", "-q", "origin"], cwd=wt, check=False)
+        if run(["git", "rev-parse", "--verify", "-q", f"origin/{branch(spec_id)}"], cwd=wt, check=False).returncode == 0:
+            run(["git", "merge", "-q", "--ff-only", f"origin/{branch(spec_id)}"], cwd=wt, check=False)
+        if run(["git", "merge-base", "--is-ancestor", "origin/main", "HEAD"], cwd=wt, check=False).returncode == 0:
+            return None, []
+        merged = run(["git", *core.git_identity(wt), "merge", "-q", "--no-edit", "--no-ff", "origin/main"], cwd=wt, check=False)
+        if merged.returncode != 0:
+            conflicted = git(wt, "diff", "--name-only", "--diff-filter=U").split()
+            source = [f for f in conflicted if not GENERATED.match(f)]
+            if source or not conflicted:
+                run(["git", "merge", "--abort"], cwd=wt, check=False)
+                where = f"conflicts with main in {', '.join(source)}" if source else "could not merge main"
+                return (f"the dev PR {st.get('joint_pr')} {where}: merge main into {branch(spec_id)} by hand, then run "
+                        f"`cplat system ship land` again"), lines
+            for f in conflicted:
+                run(["git", "checkout", "--theirs", "--", f], cwd=wt, check=False)
+                if not (wt / f).exists():
+                    run(["git", "rm", "-q", "--", f], cwd=wt, check=False)
+                else:
+                    git(wt, "add", "--", f)
+            lines.append(f"{branch(spec_id)}: took main's rendered files in {len(conflicted)} conflict(s), rendering again")
+        app = _app_dir(wt)
+        kept: dict[str, str] = {}
+        for rid, e in st["repos"].items():
+            ours, comp = e.get("pinned"), e.get("component")
+            if not ours or not comp:
+                continue
+            now = model.read_pin(app, "dev", comp)
+            if now == ours:
+                continue
+            if _newer_pin(e, ours, now, org, rid):
+                kept[rid] = now
+                lines.append(f"{comp}: main pins a later build ({now}) than this run's {ours}: dev keeps {now}")
+            else:
+                _devbox(wt, "scripts/pin.py", "dev", comp, ours)
+                lines.append(f"{comp}: pinned {ours} again on {branch(spec_id)}")
+        _devbox(wt, "scripts/render.py")
+        _devbox(wt, "scripts/render.py", "--check")
+        git(wt, "add", "-A")
+        if run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], cwd=wt, check=False).returncode == 0:
+            git(wt, *core.git_identity(wt), "commit", "-q", "-s", "--no-edit")
+        elif run(["git", "diff", "--cached", "--quiet"], cwd=wt, check=False).returncode != 0:
+            git(wt, *core.git_identity(wt), "commit", "-q", "-s", "-m", f"chore(dev): {spec_id} pins after main")
+        git(wt, "push", "-q", "origin", f"HEAD:{branch(spec_id)}")
+        if kept:
+            def keep(s: dict) -> None:
+                for rid, tag in kept.items():
+                    s["repos"][rid]["pinned"] = tag
+            st.update(state.update(gitops, keep))
+        lines.insert(0, f"{branch(spec_id)}: merged main ({git(wt, 'rev-parse', '--short', 'origin/main')}) before landing")
+    return None, lines
+
+
 # ---------------- land ----------------
 
 def needs_land(st: dict) -> bool:
@@ -327,6 +405,11 @@ def land(gitops: Path, timeout: float, wait_timeout: float, interval: float = 20
         return waits.REACHED, [f"dev PR {pr} landed already" + (f", staging PR {st['staging_pr']}" if st.get("staging_pr") else "")]
     lines: list[str] = []
     if not st.get("dev_merged"):
+        reason, more = refresh(gitops, st)
+        lines += more
+        if reason:
+            state.escalate(gitops, reason, "code")
+            return waits.RED, [*lines, reason]
         ok, more = _land_pr(gitops, pr, "dev", "dev PR", timeout, interval)
         if not ok:
             return waits.RED, more
