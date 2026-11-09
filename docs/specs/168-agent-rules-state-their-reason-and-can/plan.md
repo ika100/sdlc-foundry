@@ -70,6 +70,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s6
     title: Sweep - svc agents architect, coder, product-manager, reviewer, tester
     files: [plugins/svc/agents/architect.md, plugins/svc/agents/coder.md, plugins/svc/agents/product-manager.md, plugins/svc/agents/reviewer.md, plugins/svc/agents/tester.md, docs/rules/plugins/svc/agents/architect.yml, docs/rules/plugins/svc/agents/coder.yml, docs/rules/plugins/svc/agents/product-manager.yml, docs/rules/plugins/svc/agents/reviewer.yml, docs/rules/plugins/svc/agents/tester.yml]
