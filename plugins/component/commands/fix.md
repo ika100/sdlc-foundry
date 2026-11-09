@@ -41,7 +41,7 @@ Quality failures → the coder (lint/type fixes only), re-run quality. Tester fa
 
 ## Phase 3 — Commit and open PR
 
-After the tester passes: read `${CLAUDE_PLUGIN_ROOT}/references/fix-pr.md` and follow it.
+After the tester passes: read `${CLAUDE_PLUGIN_ROOT}/references/fix-pr.md` and follow it (one `cplat pr open` call).
 
 **If Phase 0 found `main` and made no branch:** read `${CLAUDE_PLUGIN_ROOT}/references/fix-on-main.md` and follow it.
 

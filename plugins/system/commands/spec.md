@@ -41,7 +41,7 @@ First `cplat spec review <id> --comments --json` (pass the comments to the produ
 
 ## Q. Questions loop
 
-Ask only the open questions, because the product-manager decides the rest by default and lists them under Assumptions, shown at F (spec 149). While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds): **AskUserQuestion** (up to 4 per call; suggested answer first, marked "(Recommended)"; the user can type their own), answers back (`MODE: amend`, "answers to open questions: …"), `cplat spec check`, commit the answers, `cplat spec publish <spec_id>`. Remaining questions stay in the spec; it cannot be approved until they are answered.
+Only open questions are asked here, because the product-manager decides the rest by default and lists them under Assumptions, shown at F (spec 149). While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds): **AskUserQuestion** (up to 4 per call; suggested answer first, marked "(Recommended)"; the user can type their own), answers back (`MODE: amend`, "answers to open questions: …"), `cplat spec check`, commit the answers, `cplat spec publish <spec_id>`. Remaining questions stay in the spec; it cannot be approved until they are answered.
 
 ## F. Finish
 

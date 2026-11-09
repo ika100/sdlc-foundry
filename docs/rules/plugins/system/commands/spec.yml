@@ -8,7 +8,7 @@ rules:
     class: not a rule
     source: spec 140
   - id: R3
-    text: "Ask only the open questions, because the product-manager decides the rest by default and lists them under Assumptions, shown at F (spec 149)."
+    text: "Only open questions are asked here, because the product-manager decides the rest by default and lists them under Assumptions, shown at F (spec 149)."
     class: practice
   - id: R4
     text: "never answer an open question for the user or approve without their word, because the approval is the one human decision a system ship runs on."
