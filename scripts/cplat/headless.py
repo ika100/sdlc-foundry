@@ -5,7 +5,8 @@
                                                          same subscription); wait for it to end, or --no-wait to exit
   cplat headless --dry-run "/component:fix ..."            print the claude command
 
-Each run is a fresh `claude -p` session with `--permission-mode acceptEdits` and the repo's committed permission allowlist:
+Each run is a fresh `claude -p` session with `--permission-mode acceptEdits` and the repo's committed permission allowlist
+(passed as `--settings`, so it applies in a clone Claude Code has not trusted, #588):
 file edits inside the repo are accepted, any other tool not allowlisted is refused instead of prompting, so nobody has to watch. A run ends when Claude stops, the
 time is up, or the context runs out; if `cplat ship` state says the run is unfinished and not escalated, the next run
 resumes it from disk (spec status, plan.md `done` flags, the ship state). Logs: ~/.cache/sdlc-foundry/headless/<repo>/.
@@ -101,8 +102,25 @@ def command_of(prompt: str) -> str:
     return words[0] if words else ""
 
 
+def repo_rules(repo: Path) -> dict[str, list[str]]:
+    """The permission rules of the repo's committed `.claude/settings.json` (the HEAD version, so an uncommitted edit
+    grants nothing). Claude Code ignores the file in a folder it has not trusted, such as a system ship's fresh clone
+    (#588); passed as `--settings` they apply there too, while the file's hooks and other settings stay gated by trust."""
+    try:
+        text = subprocess.run(["git", "-C", str(repo), "show", "HEAD:.claude/settings.json"],
+                              capture_output=True, text=True, check=True).stdout
+        perms = json.loads(text).get("permissions") or {}
+    except (OSError, subprocess.CalledProcessError, ValueError, AttributeError):
+        return {}
+    if not isinstance(perms, dict):
+        return {}
+    return {k: [r for r in v if isinstance(r, str)] for k in ("allow", "deny", "ask")
+            if isinstance(v := perms.get(k), list) and v}
+
+
 def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None = None,
-               allow: list[str] | None = None, deny: list[str] | None = None, add_dirs: list[str] | None = None) -> list[str]:
+               allow: list[str] | None = None, deny: list[str] | None = None, add_dirs: list[str] | None = None,
+               rules: dict[str, list[str]] | None = None) -> list[str]:
     exe = os.environ.get("CPLAT_CLAUDE") or "claude"
     cmd = [exe, "-p", prompt, "--permission-mode", "acceptEdits", "--output-format", "text"]
     for d in add_dirs or []:      # a system ship's clones next to the gitops repo (a session may work only where it may cd)
@@ -111,9 +129,11 @@ def claude_cmd(prompt: str, model: str | None, plugin_dirs: list[str] | None = N
         cmd += ["--model", model]
     for d in plugin_dirs or []:
         cmd += ["--plugin-dir", d]
+    perms = {k: list(v) for k, v in (rules or {}).items()}
     if plugin_dirs:   # plugins loaded in place are not under ~/.claude/plugins, so their files need their own Read rule
-        rules = [f"Read(/{d}/**)" for d in plugin_dirs]
-        cmd += ["--settings", json.dumps({"permissions": {"allow": rules}})]
+        perms.setdefault("allow", []).extend(f"Read(/{d}/**)" for d in plugin_dirs)
+    if perms:
+        cmd += ["--settings", json.dumps({"permissions": perms})]
     if allow:
         cmd += ["--allowedTools", *allow]
     if deny:
@@ -284,7 +304,8 @@ def main(argv: list[str]) -> int:
         ids = spec_ids(repo, refs)
         allow = preflight.run_allowlist(command, preflight.branches_of(command, ids))
         deny = preflight.refused_rules(preflight.default_branch(repo))
-    cmd = claude_cmd(prompt, model, dirs, allow, deny, system_clones(repo, ids) if command == "/system:ship" else None)
+    rules = repo_rules(repo)
+    cmd = claude_cmd(prompt, model, dirs, allow, deny, system_clones(repo, ids) if command == "/system:ship" else None, rules)
     if ns.dry_run:
         print(shlex.join(cmd))
         if allow is not None:
@@ -310,7 +331,7 @@ def main(argv: list[str]) -> int:
                 return finish(repo, log_dir(repo) / f"{clock():%Y-%m-%d_%H%M%S}.log", failure.reason(), EXIT_STOPPED)
         if unit_mode:
             log = log_dir(repo) / f"{clock():%Y-%m-%d_%H%M%S}.log"
-            return supervisor.drive(repo, command, ids, prompt, lambda p: claude_cmd(p, model, dirs, allow, deny),
+            return supervisor.drive(repo, command, ids, prompt, lambda p: claude_cmd(p, model, dirs, allow, deny, rules=rules),
                                     preflight.env(allow or []), rid, ns, log, state)
         return _drive(ns, repo, prompt, window, cmd, rid, state, preflight.env(allow) if allow else {})
     except BaseException as e:
