@@ -81,6 +81,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s8
     title: Sweep - svc skill spec-format
     files: [plugins/svc/skills/spec-format/SKILL.md, plugins/svc/skills/spec-format/references/design.md, plugins/svc/skills/spec-format/references/plan.md, plugins/svc/skills/spec-format/references/spec.md, plugins/svc/skills/spec-format/references/testing.md, plugins/svc/skills/spec-format/references/verification.md, docs/rules/plugins/svc/skills/spec-format/SKILL.yml, docs/rules/plugins/svc/skills/spec-format/references/design.yml, docs/rules/plugins/svc/skills/spec-format/references/plan.yml, docs/rules/plugins/svc/skills/spec-format/references/spec.yml, docs/rules/plugins/svc/skills/spec-format/references/testing.yml, docs/rules/plugins/svc/skills/spec-format/references/verification.yml]
