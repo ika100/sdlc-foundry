@@ -150,6 +150,7 @@ class FakeRetroTracker:
         self.autos = auto_issues()
         self.opens = open_issues()
         self.retros: list[dict] = []
+        self.states: dict[int, dict] = {}      # spec 168: issue number -> {"state": "open"|"closed", "body": str}
         self.calls: list[tuple] = []
         self.error: Exception | None = None
         self.n = 200
@@ -181,6 +182,10 @@ class FakeRetroTracker:
     def retro_issues(self, repo):
         self._enter("retro_issues", repo)
         return [dict(i) for i in sorted(self.retros, key=lambda i: -i["number"]) if "retro" in i["labels"]]
+
+    def issue_states(self, repo, numbers):
+        self._enter("issue_states", repo, list(numbers))
+        return {n: dict(self.states[n]) for n in numbers if n in self.states}
 
     def create(self, repo, title, body, labels):
         self._enter("create", repo, title, body, list(labels))
