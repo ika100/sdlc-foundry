@@ -77,6 +77,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s7
     title: Sweep - svc agents deployment, migrations, observability, release
     files: [plugins/svc/agents/deployment.md, plugins/svc/agents/migrations.md, plugins/svc/agents/observability.md, plugins/svc/agents/release.md, docs/rules/plugins/svc/agents/deployment.yml, docs/rules/plugins/svc/agents/migrations.yml, docs/rules/plugins/svc/agents/observability.yml, docs/rules/plugins/svc/agents/release.yml]
