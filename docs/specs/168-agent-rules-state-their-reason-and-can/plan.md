@@ -24,6 +24,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.4, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: Weekly retro - Rules to retire
     files: [scripts/cplat/retro_rules.py, scripts/cplat/retro.py, scripts/cplat/retro_report.py, scripts/cplat/retro_github.py, tests/cplat/retro_world.py]
