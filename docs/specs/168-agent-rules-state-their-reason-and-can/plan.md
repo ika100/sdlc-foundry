@@ -87,6 +87,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s9
     title: Sweep - svc-go agents
     files: [plugins/svc-go/agents/coder.md, plugins/svc-go/agents/deployment.md, plugins/svc-go/agents/observability.md, plugins/svc-go/agents/release.md, plugins/svc-go/agents/tester.md, docs/rules/plugins/svc-go/agents/coder.yml, docs/rules/plugins/svc-go/agents/deployment.yml, docs/rules/plugins/svc-go/agents/observability.yml, docs/rules/plugins/svc-go/agents/release.yml, docs/rules/plugins/svc-go/agents/tester.yml]
