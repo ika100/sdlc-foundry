@@ -115,6 +115,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s13
     title: Sweep - system plugin (planner, commands, references)
     files: [plugins/system/agents/planner.md, plugins/system/commands/autonomy.md, plugins/system/commands/new.md, plugins/system/commands/plan.md, plugins/system/commands/restore.md, plugins/system/commands/set.md, plugins/system/commands/ship.md, plugins/system/commands/spec.md, plugins/system/commands/status.md, plugins/system/references/ship-entry.md, plugins/system/references/spec-list.md, docs/rules/plugins/system/agents/planner.yml, docs/rules/plugins/system/commands/autonomy.yml, docs/rules/plugins/system/commands/new.yml, docs/rules/plugins/system/commands/plan.yml, docs/rules/plugins/system/commands/restore.yml, docs/rules/plugins/system/commands/set.yml, docs/rules/plugins/system/commands/ship.yml, docs/rules/plugins/system/commands/spec.yml, docs/rules/plugins/system/commands/status.yml, docs/rules/plugins/system/references/ship-entry.yml, docs/rules/plugins/system/references/spec-list.yml]
