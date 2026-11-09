@@ -6,6 +6,41 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.14.0] - 2026-11-09
+
+### Added
+
+**A system ship benchmark (spec 156).** `cplat platform runs benchmark system-ship [--repeat N]` ships a fixed system spec with `/system:ship --until repos` on a sample system that differs from the journey's (a Python API, a Go worker and a Next.js UI, two of them independent), and records per repo wall clock, agent time, tokens, sessions, criteria and parallel subagents, plus the run's overlap. `--report` prints median and spread per plugins tree; a difference inside the spread is not a gain. `cplat system ship start --until repos` stops a run done after its repos, before `land`, without a cluster. Report-only: not part of the eval gate.
+
+**Unit mode runs independent tasks at once (spec 159, #560).** In an unattended ship or build (`cplat headless`, and every repo of a `/system:ship`), the `parallel_safe` tasks of one plan level with disjoint `files` now share one unit `batch:<id>,<id>`: its fresh session runs build Phase 2's parallel batch (one coder per task at once in worktrees, merged in order with `cplat component build merge`, the existing re-plan and fallback rules). `cplat headless --parallel N` caps a batch (default 3); `--parallel 1` keeps one task per session. Before, the supervisor ran every task in a session of its own, one after another.
+
+### Changed
+
+**A system ship's repos run in their own sessions (spec 155, ADR-086, #560).** `/system:ship` no longer ships a component repo through a subagent of the gitops session, which could not start subagents of its own and ran without unit mode. `cplat system ship repo start` writes and approves the repo spec from the plan and starts `cplat headless "/component:ship <repo spec>"` in the clone, a child run of the system ship: the same ship as on its own, with one session per unit; independent repos still run at once up to `--max`. `cplat system ship next --wait` records each finished ship and starts a session that ended early once more, then escalates the repo (`environment`). A plan from before spec 147 is refused with the hint to re-plan.
+
+### Fixed
+
+**cplat builds a system ship's gitops entry (specs 155, 156).** `cplat system ship entry apply <id>` applies the plan's `gitops:` operations in the entry's worktree, one commit each, and runs `devbox run validate`; `/system:ship` uses it instead of having the session run each `cplat component set` and git itself. The worktree lives in the git dir, where a headless session may not run git, so the entry failed in some unattended runs. The system-ship benchmark now waits for the repo sessions a run started (they finish after an escalation) and stops what still runs after an hour, before it resets the sample repos under them.
+
+**A system ship records a repo whose own session finished (spec 155).** A repo's headless `/component:ship` archived its ship state when it finished, so `cplat system ship next --wait` no longer saw the finished ship and would have started the session again. The unit-mode supervisor now leaves a run linked to a system ship for the system ship to record and archive, and the wait and `repo result` also read an archived state. Found by the system-ship benchmark.
+
+Every benchmark starts from a fresh state. The single-repo benchmarks (`quick-task`, `build`) now remove the last run's cplat state from the git directory too, as `system-ship` already did. Before, after one escalated build, every later run resumed that escalation.
+
+**Found by the second system-ship benchmark run (specs 155, 156).** `cplat system ship repo result` no longer archives a component ship while the repo's own session still runs: archiving it under the session made its supervisor see no unit left and report an escalated run as shipped. The benchmark's git and gh calls retry a dropped network as `core.run` does (spec 148). The testers assert on parsed values, never on serialized text: the order of keys in a JSON object is never part of a contract (an acceptance test that compared re-marshalled JSON could never pass).
+
+Three causes of escalated unattended runs, found by the system-ship benchmark:
+- The preflight retries a dropped network when it checks push access. A failed check no longer reads as "cannot push to <repo>: ask for write access".
+- The Go, Java, Next.js, gitops-app and cluster-gitops templates ignore `.claude/worktrees/`, `.claude/settings.local.json` and `.claude/scheduled_tasks.lock`, as the Python templates already did. A `git add -A` no longer stages a parallel batch's agent worktrees. Existing repos get the change with `/platform:update`.
+- New Go repos start on Go 1.26. Go 1.25 is out of support, and its standard library vulnerabilities failed the security gate of every Go build.
+
+The `system-ship` benchmark sample is refreshed to match (task version 2).
+
+The preflight retries a dropped network when it checks the `gh` login. When GitHub stays unreachable, it says so, instead of reporting that gh is not logged in.
+
+A coder of a parallel batch now moves its worktree to the feature head with `cplat component build reset <sha>` instead of `git reset --hard`, which no allowlist grants. Headless runs refused that command, so every coder of a batch stopped before writing code and the run escalated. The new command moves only a clean agent worktree and refuses the main checkout (component 1.13.2).
+
+**A lint suppression in an acceptance test is not a changed test (spec 160, #570).** `cplat spec test-diff` accepts an acceptance test whose only change is a line-level linter suppression that names its rule (`//nolint:<rule>`, `# noqa: <code>`, `# type: ignore[<code>]`, `// eslint-disable-next-line <rule>`, `@SuppressWarnings("<name>")` on a method) and reports it as `lint suppression only: line <n> …`; a file-wide or rule-less suppression, or one with a code change, is refused. Coders suppress a linter false positive in an acceptance test that way instead of stopping the build, and the reviewer lists every such suppression in `verification.md`.
+
 ## [5.13.1] - 2026-11-07
 
 ### Fixed
