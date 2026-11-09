@@ -1,0 +1,8 @@
+rules:
+  - id: R1
+    text: "(never into `.git/`, because Claude Code refuses edits there;"
+    class: practice
+  - id: R2
+    text: "the title must be a Conventional Commits title, otherwise the `pr-title` CI check fails."
+    class: practice
+    enforced_by: ci:pr-title
