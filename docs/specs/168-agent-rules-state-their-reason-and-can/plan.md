@@ -125,6 +125,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: t6
     title: CI step, docs, plugin versions and changelog
     files: [.github/workflows/ci.yml, scripts/ci-local.sh, docs/AGENTS.md, CLAUDE.md, docs/changelog.d/168-agent-rules-reasons.added.md, .claude-plugin/marketplace.json, plugins/api/.claude-plugin/plugin.json, plugins/cluster/.claude-plugin/plugin.json, plugins/component/.claude-plugin/plugin.json, plugins/instance/.claude-plugin/plugin.json, plugins/issue/.claude-plugin/plugin.json, plugins/platform/.claude-plugin/plugin.json, plugins/resource/.claude-plugin/plugin.json, plugins/shared/.claude-plugin/plugin.json, plugins/svc/.claude-plugin/plugin.json, plugins/svc-go/.claude-plugin/plugin.json, plugins/svc-java/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, plugins/web/.claude-plugin/plugin.json]
