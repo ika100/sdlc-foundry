@@ -104,6 +104,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s11
     title: Sweep - web agents
     files: [plugins/web/agents/coder.md, plugins/web/agents/deployment.md, plugins/web/agents/observability.md, plugins/web/agents/release.md, plugins/web/agents/tester.md, docs/rules/plugins/web/agents/coder.yml, docs/rules/plugins/web/agents/deployment.yml, docs/rules/plugins/web/agents/observability.yml, docs/rules/plugins/web/agents/release.yml, docs/rules/plugins/web/agents/tester.yml]
