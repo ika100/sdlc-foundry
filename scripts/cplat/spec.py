@@ -627,6 +627,26 @@ def tightening(old: str, new: str, name: str) -> tuple[bool, str]:
     return True, ""
 
 
+def frozen_base(root: Path, base: str) -> str:
+    """Spec 169: in a unit-mode run the acceptance tests freeze when the `red-tests` unit ends, not at its first
+    'acceptance tests for' commit. When `<git dir>/cplat-units.json` records that unit done at a commit that `base` is an
+    ancestor of and HEAD descends from, that commit is the base; otherwise `base` is."""
+    import subprocess
+    d = core.git_dir(root)
+    try:
+        data = json.loads((d / "cplat-units.json").read_text()) if d else {}
+    except (OSError, ValueError):
+        return base
+    unit = next((u for u in data.get("units") or [] if isinstance(u, dict) and u.get("id") == "red-tests"), None)
+    end = unit.get("commit") if unit and unit.get("status") == "done" else None
+    if not end or _red_sha(root, end) == _red_sha(root, base):
+        return base
+
+    def ancestor(a: str, b: str) -> bool:
+        return subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", a, b], capture_output=True).returncode == 0
+    return end if ancestor(base, end) and ancestor(end, "HEAD") else base
+
+
 def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, str]]:
     """Each changed test file against `base`. Default: files under the shape's `test_globs` (never `docs/` or `*.md`, spec 063)
     that name a criterion of a `building` spec. A file that did not exist at `base` and that a task of a `building`
@@ -1541,6 +1561,9 @@ def main(argv: list[str]) -> int:
     if ns.cmd in ("publish", "land", "review"):
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
+    if ns.cmd == "test-diff" and (base := frozen_base(root, ns.base)) != ns.base:
+        print(f"base: {base[:7]}, where the red-tests unit ended (spec 169), not {ns.base[:7]}")
+        ns.base = base
     if ns.cmd == "test-diff" and ns.approve is not None:
         if not ns.approve:
             print("ERROR: --approve needs the files the user approved", file=sys.stderr)
