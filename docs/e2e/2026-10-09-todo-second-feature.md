@@ -1,5 +1,8 @@
 # End-to-end run 2: a second feature on the todo product with v4.0.0 (2026-10-08/09)
 
+<!-- historical -->
+> **Historical.** This field report describes a run with v4.0.0; command and file names are those of 4.x. It is kept as a record and is not part of the current documentation; the current flow is in the [quickstart](../QUICKSTART.md) and the [user journey](../USER-JOURNEY.md).
+
 The first run against the **released** v4.0.0: an existing product (from [run 1](2026-10-08-todo-spec-driven.md)) is upgraded and gets a second feature, requested by the user in one sentence: *"It shall be possible to update a notice."*
 
 **Result:** the feature (edit a todo's title in place) is specified, planned, built test-first, verified, merged, deployed on the local cluster and checked live. About 68 minutes of active time and $12.10 of agent cost. 17 findings: 4 high, 5 medium, 8 low.

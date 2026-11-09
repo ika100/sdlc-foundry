@@ -2,7 +2,7 @@
 
 The nouns the platform is built around: what a system is made of, where it runs, and how it changes. The model takes [Backstage's system model](https://backstage.io/docs/features/software-catalog/system-model) for the first part and adds environments and the delivery process. It is a model only: the platform does not use or need Backstage. Decisions and the migration path are in [ADR-053](adr/053-domain-model.md).
 
-**Status:** 5.0 is current. `system.yaml` and the noun-based commands described below are what the platform runs (spec 114, [ADR-054](adr/054-five-zero-interface-and-proved-migration.md)); `cplat model show` prints a system in these nouns (JSON `schema: 2`). A repo from 4.x moves over with `cplat platform update --migrate` ([Migrating from 4.x to 5.0](ADOPTING.md#migrating-from-4x-to-50)). [The model in 4.7](#the-model-in-47) and [4.7 features on the model](#47-features-on-the-model) keep the old names as history.
+**Status:** 5.0 is current. `system.yaml` and the noun-based commands described below are what the platform runs (spec 114, [ADR-054](adr/054-five-zero-interface-and-proved-migration.md)); `cplat model show` prints a system in these nouns (JSON `schema: 2`). A repo from 4.x moves over with `cplat platform update --migrate` ([Migrating from 4.x to 5.0](ADOPTING.md#migrating-from-4x-to-50)). What the 4.7 names were and where each feature moved is part of the migration guide ([What moved where](ADOPTING.md#what-moved-where)).
 
 ## Three questions
 
@@ -277,53 +277,3 @@ Every command names the thing it acts on; the same verbs work for a system and f
 | `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` · `ui` · `release` |
 
 The contract check of an API is not built yet: it comes with spec 110.
-
-## 4.7 features on the model
-
-| Layer | Feature today | Acts on | In 5.0 |
-|---|---|---|---|
-| What it is | `/shared:new-app` | System and its components | `system new` |
-| | `/shared:new-service` | Component (a System with `--gitops`) | `component new` |
-| | `/gitops:compose` | Component in a System | `component add \| set \| remove` |
-| | `/gitops:addon add postgres` | Resource | `resource add` |
-| | `/gitops:addon add observability` | Environment property | `environments:` in system.yaml |
-| | spec 110 contract check | API | `api check` |
-| Where it runs | `/gitops:promote`, digest check (spec 106) | Instance, next Environment; Release for prod | `instance promote --to` |
-| | `/gitops:secret` | Instance | `instance secret` |
-| | `/shared:status` | every Instance of a System | `system status` |
-| | `cplat smoke`, deploy gate (spec 105) | Instance | `instance verify` |
-| | `promotion:` (spec 093), Kyverno policies | Environment rules | `environments:` in system.yaml |
-| Delivery | `/shared:triage`, `/shared:report-issue` | Issue | `issue triage \| report` |
-| | `/app:spec`, `/svc:spec` | Spec of a System or a Component | `system spec`, `component spec` |
-| | `/app:plan`, `/svc:plan` | Plan | `system plan`, `component plan` |
-| | `/svc:build`, `/svc:verify` | Criterion, Test, Verification | `component build \| verify` |
-| | `/svc:ship`, `/app:ship`, budgets (spec 102) | Run | `component ship`, `system ship` |
-| | `/svc:quick-task`, `/svc:fix-bug` | Run without a spec | `component fix` |
-| | `/svc:release` | Release | `component release` |
-| Feedback | run records, agent metrics, weekly retro | Runs as data; proposals as Issues | `platform runs \| retro` |
-| | alert poll (spec 092), smoke failures (spec 091) | Instance → Issue | automatic |
-| Platform | `/shared:doctor`, `/shared:update-service`, `/shared:fleet` | your setup, repo skeletons | `platform doctor \| update \| fleet` |
-
-## The model in 4.7
-
-![The domain model as built in 4.7.0](img/model-today.svg)
-
-As built in 4.7.0, in the platform's own names:
-
-- **Composition was solid.** The 4.7 concepts in the table below each had a file, a schema and an identity. The work was naming, not structure.
-- **Names drifted in four places:** one thing had three names; the services file and the new-system manifest disagreed on service and component; add-ons were also called backing services; pin and image tag.
-- **Environment was the gap.** It is the axis every delivery command works on (pin, promote, smoke, status, alerts), yet the list of environments was hard-coded in `render.py` and an environment's settings were spread over four keys in one file, per-environment maps in another and the overlay paths. Service × environment and database × environment had no names.
-- **Three relations were missing:** which services use a library, which services provide or consume an API (only prose in the plan), and who owns what. 5.0 adds them.
-
-| Concept today | Names in use | Defined in | Model noun |
-|---|---|---|---|
-| Product | product, app, application | gitops-app repo, `app.yaml`; `app:` in the new-app manifest | System |
-| Service | service; component in the new-app manifest | `services.yaml` entry, generated or `external:` | Component |
-| Shape | shape | `shapes.yml`, `.copier-answers.yml` | Component `type` + `lang` |
-| Library | library | a `library-python` repo | Component, type library |
-| Addon | addon, backing service | `app.yaml addons:`, `uses:` | Resource (postgres) or Environment property (observability) |
-| Secret | secrets, secretRefs | `services.yaml`, External Secrets | Component config, per Instance |
-| Environment | env, environment | `ENVS` in `render.py`; keys in `app.yaml`, `services.yaml`, overlays | Environment |
-| Pin | pin, image tag | `overlays/<env>/<svc>/kustomization.yaml` | Instance version |
-| Addon instance | (no name) | `addons/<env>/<addon>/` | Resource instance |
-| Contract | contract | plan `## Contract`, prose | API |

@@ -1,5 +1,8 @@
 # End-to-end run: todo app, spec-driven (2026-10-08)
 
+<!-- historical -->
+> **Historical.** This field report describes a run with a pre-5.0 platform; command and file names are those of 4.x. It is kept as a record and is not part of the current documentation; the current flow is in the [quickstart](../QUICKSTART.md) and the [user journey](../USER-JOURNEY.md).
+
 A real run of the spec-driven platform ([ADR-026](../adr/026-feature-specs.md)) from an empty folder to a running, verified product: three public repos, one product spec, a multi-repo plan, three builds, a local cluster. It used the implementation of PRs #77–#81 (`feature/spec-dx` at `33432d0`).
 
 **Result:** the todo app runs on the local cluster and meets its spec. 60 min 32 s wall clock; 17 issues found (3 high, 6 medium, 8 low), each with the workaround used.

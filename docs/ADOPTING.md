@@ -196,6 +196,56 @@ Host templates change their placeholders: `{service}` is `{component}` and `{app
 
 ---
 
+### What moved where
+
+| Layer | 4.7 feature | Acts on | In 5.0 |
+|---|---|---|---|
+| What it is | `/shared:new-app` | System and its components | `/system:new` |
+| | `/shared:new-service` | Component (a System with `--gitops`) | `/component:new` |
+| | `/gitops:compose` | Component in a System | `/component:add` · `/component:set` · `/component:remove` |
+| | `/gitops:addon add postgres` | Resource | `/resource:add` |
+| | `/gitops:addon add observability` | Environment property | `environments:` in system.yaml |
+| | contract check (planned) | API | `/api:list` today; the contract check is not built yet |
+| Where it runs | `/gitops:promote`, digest check (spec 106) | Instance, next Environment; Release for prod | `/instance:promote --to` |
+| | `/gitops:secret` | Instance | `/instance:secret` |
+| | `/shared:status` | every Instance of a System | `/system:status` |
+| | `cplat smoke`, deploy gate (spec 105) | Instance | `/instance:verify` |
+| | `promotion:` (spec 093), Kyverno policies | Environment rules | `environments:` in system.yaml |
+| Delivery | `/shared:triage`, `/shared:report-issue` | Issue | `/issue:triage` · `/issue:report` |
+| | `/app:spec`, `/svc:spec` | Spec of a System or a Component | `/system:spec`, `/component:spec` |
+| | `/app:plan`, `/svc:plan` | Plan | `/system:plan`, `/component:plan` |
+| | `/svc:build`, `/svc:verify` | Criterion, Test, Verification | `/component:build` · `/component:verify` |
+| | `/svc:ship`, `/app:ship`, budgets (spec 102) | Run | `/component:ship`, `/system:ship` |
+| | `/svc:quick-task`, `/svc:fix-bug` | Run without a spec | `/component:fix` |
+| | `/svc:release` | Release | `/component:release` |
+| Feedback | run records, agent metrics, weekly retro | Runs as data; proposals as Issues | `/platform:runs` · `/platform:retro` |
+| | alert poll (spec 092), smoke failures (spec 091) | Instance → Issue | automatic |
+| Platform | `/shared:doctor`, `/shared:update-service`, `/shared:fleet` | your setup, repo skeletons | `/platform:doctor` · `/platform:update` · `/platform:fleet` |
+
+### The model in 4.7
+
+![The domain model as built in 4.7.0](img/model-today.svg)
+
+As built in 4.7.0, in the platform's own names:
+
+- **Composition was solid.** The 4.7 concepts in the table below each had a file, a schema and an identity. The work was naming, not structure.
+- **Names drifted in four places:** one thing had three names; the services file and the new-system manifest disagreed on service and component; add-ons were also called backing services; pin and image tag.
+- **Environment was the gap.** It is the axis every delivery command works on (pin, promote, smoke, status, alerts), yet the list of environments was hard-coded in `render.py` and an environment's settings were spread over four keys in one file, per-environment maps in another and the overlay paths. Service × environment and database × environment had no names.
+- **Three relations were missing:** which services use a library, which services provide or consume an API (only prose in the plan), and who owns what. 5.0 adds them.
+
+| Concept today | Names in use | Defined in | Model noun |
+|---|---|---|---|
+| Product | product, app, application | gitops-app repo, `app.yaml`; `app:` in the new-app manifest | System |
+| Service | service; component in the new-app manifest | `services.yaml` entry, generated or `external:` | Component |
+| Shape | shape | `shapes.yml`, `.copier-answers.yml` | Component `type` + `lang` |
+| Library | library | a `library-python` repo | Component, type library |
+| Addon | addon, backing service | `app.yaml addons:`, `uses:` | Resource (postgres) or Environment property (observability) |
+| Secret | secrets, secretRefs | `services.yaml`, External Secrets | Component config, per Instance |
+| Environment | env, environment | `ENVS` in `render.py`; keys in `app.yaml`, `services.yaml`, overlays | Environment |
+| Pin | pin, image tag | `overlays/<env>/<svc>/kustomization.yaml` | Instance version |
+| Addon instance | (no name) | `addons/<env>/<addon>/` | Resource instance |
+| Contract | contract | plan `## Contract`, prose | API |
+
 ## Unattended runs
 
 Specs, plans and builds can run without anyone at the keyboard (`claude -p`, `/loop`, `/schedule`, CI). Four things differ from an interactive session:

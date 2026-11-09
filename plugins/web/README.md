@@ -19,6 +19,6 @@ Agents for **Next.js (App Router) web repos** — the `web-nextjs` shape. Used b
 ## Dependencies
 
 1. `svc` and `shared` plugins enabled (the web template's `.claude/settings.json` enables all three).
-2. Project has a `devbox.json` with the canonical recipes (`install`, `dev`, `test`, `test-fast`, `lint`, `lint-fix`, `typecheck`, `quality`, `audit`, `security`, `image-build`, `image-scan`). Bootstrap with `/shared:new-service <name> --web`.
+2. Project has a `devbox.json` with the canonical recipes (`install`, `dev`, `test`, `test-fast`, `lint`, `lint-fix`, `typecheck`, `quality`, `audit`, `security`, `image-build`, `image-scan`). Bootstrap with `/component:new <name> <description> --type website`.
 
 All agents invoke `devbox run <recipe>` — never `pnpm`/`npx`/`node` directly.

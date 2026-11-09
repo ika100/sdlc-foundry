@@ -33,6 +33,8 @@ python3 scripts/check-links.py
 
 step "every prompt rule is classified, reasoned and marked (spec 168)"
 uv run scripts/cplat/cplat.py platform rules check
+step "user docs name only things that exist (spec 161)"
+uv run --with-requirements requirements-test.txt python scripts/check-docs.py
 
 step "no \"\$\$\" in a pod command of the e2e scripts (#323)"
 python3 scripts/check-e2e-probes.py

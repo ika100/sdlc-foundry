@@ -23,6 +23,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [154-the-journey-6-findings](specs/154-the-journey-6-findings/spec.md) — The journey 6 findings | P1 | approved | 4 | #557, #558, #559, #560 |
 | [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | approved | 7 | #568 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
+| [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | approved | 10 |  |
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |

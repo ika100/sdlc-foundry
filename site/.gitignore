@@ -5,6 +5,5 @@ dist/
 src/content/docs/guides/
 src/content/docs/reference/
 src/content/docs/community/
-src/content/docs/vision/design-history.md
-src/content/docs/vision/end-to-end-scenario.md
+src/content/docs/get-started.md
 public/img/

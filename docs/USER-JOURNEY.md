@@ -18,7 +18,7 @@ flowchart TB
   CC["You: Claude Code + devbox"]
   subgraph REPOS["Your repos on GitHub"]
     direction LR
-    GIT["taskboard<br/><i>gitops-app</i>: which services,<br/>which version runs where"]
+    GIT["taskboard-gitops<br/><i>gitops-app</i>: which services,<br/>which version runs where"]
     subgraph SVC["Service repos"]
       direction LR
       API["taskboard-api<br/><i>service-python</i>"]
@@ -51,22 +51,26 @@ The nouns behind all of this (system, component, API, resource, environment, ins
 
 ## Chapter 0 — One-time setup (10 minutes)
 
+The [quickstart](QUICKSTART.md) has the prerequisites and the install with a check per step. In short:
+
 | Need | How |
 |---|---|
-| Claude Code | already installed |
+| Claude Code, `git`, `uv`, Docker | already installed; Docker only for images and the local cluster |
 | devbox | `curl -fsSL https://get.jetify.com/devbox/install.sh \| bash` |
 | GitHub CLI, logged in | `gh auth login` (without it, `/component:new` prints the GitHub commands instead of running them) |
-| copier | installed for you via `uv` on first use |
-| A Kubernetes cluster with ArgoCD installed | out of scope here; Argo needs read access to your GitHub repos (and the cluster must be able to pull your images) |
+| A Kubernetes cluster | `devbox run cluster-up` in the GitOps repo creates a local one (chapter 1); a real cluster is bootstrapped once by a human |
 
-Make the platform's commands available (once per machine/user, or pre-wired in each repo — step 1 of every new repo does that for you):
+Install the starter plugins once per machine, then restart Claude Code:
 
 ```
 /plugin marketplace add ika100/sdlc-foundry
 /plugin install shared@sdlc-foundry
+/plugin install system@sdlc-foundry
+/plugin install component@sdlc-foundry
+/plugin install platform@sdlc-foundry
 ```
 
-You can already create repos with just `shared`. Every generated repo enables the plugins it needs.
+Every generated repo enables the other plugins it needs in its own `.claude/settings.json`.
 
 ---
 
@@ -86,7 +90,7 @@ What happens (no questions asked beyond the name and a description):
 
 > **One command for the whole system.** `/system:new` creates the GitOps repo and every component in the right order and opens one pull request that adds the components to `system.yaml`. Add `--dry-run` to preview; after a failure, `--resume` continues.
 
-Open it: `cd taskboard && claude`. Its `CLAUDE.md` already explains the layout and pin policy to Claude.
+Open it: `cd taskboard-gitops && claude`. Its `CLAUDE.md` already explains the layout and pin policy to Claude.
 
 > **One-time cluster step (human, once per cluster).** Make sure Argo can read your GitHub repos (repo credentials), then run `KUBE_CONTEXT=<your-cluster> devbox run bootstrap` in `taskboard` (it applies `bootstrap/taskboard-root.yaml`). That root Application watches `applications/taskboard/applicationset.yaml` in git — from then on every change reaches the cluster through merged pull requests, and agents never run `kubectl apply`.
 
@@ -101,7 +105,7 @@ Open it: `cd taskboard && claude`. Its `CLAUDE.md` already explains the layout a
 /component:new taskboard-web Taskboard frontend --type website --system <you>/taskboard
 ```
 
-Each command: renders the template → commits → creates a private repo → adds the `deployable-service` topic → writes `.platform-app.yml` (so `/instance:promote` can later find `taskboard` from inside this repo).
+Each command: renders the template → commits → creates a private repo → adds the `deployable-service` topic → writes `.platform-app.yml` (so `/instance:promote` can later find `taskboard-gitops` from inside this repo).
 
 | Repo | Type / language | What you get on day one |
 |---|---|---|
@@ -155,7 +159,7 @@ Same commands in `taskboard-web`: the orchestrator detects the `website` type an
 
 ## Chapter 4 — Put the components into the system
 
-Both services have merged to `main` and their images exist. In `taskboard`:
+Both services have merged to `main` and their images exist. In `taskboard-gitops`:
 
 ```
 /component:add taskboard-api taskboard-web
@@ -183,7 +187,7 @@ Wiring and exposure are decided here, in the system repo — not in the componen
 
 One PR that adds a **staging** instance to both components and pins each to the `sha-<40>` image built from its `main` — the script checks that the image exists in GHCR first, so a promotion can never point at a build that CI has not finished. Merge → Argo creates and rolls staging.
 
-After the first promotion, staging follows dev by itself: when a build passes its smoke tests in dev, `/component:ship` has the gitops-app's `pin-staging` workflow open a PR that merges itself once CI passes (spec 093, ADR-041), then smokes staging. Turn it off with `promote: manual` on the `staging` environment in `system.yaml`, or on one component's `staging` instance.
+After the first promotion, staging follows dev by itself: when a build passes its smoke tests in dev, `/component:ship` has the gitops-app's `pin-staging` workflow open a PR that merges itself once CI passes ([ADR-041](adr/041-staging-follows-green-dev-smoke.md)), then smokes staging. Turn it off with `promote: manual` on the `staging` environment in `system.yaml`, or on one component's `staging` instance.
 
 For **prod** you pin a release: in each service repo run `/component:release` (the commit staging runs → quality gate → test gate → security gate → tag `vX.Y.Z` on that commit → CI re-tags its image with the semver tags → follow-up PR with the changelog and the next development version). Then:
 
@@ -198,7 +202,7 @@ Prod pins the release image `1.2.0` (the `v1.2.0` git tag without the `v`, exact
 
 ## Chapter 6 — A feature that spans repos
 
-"Add billing" touches the API, the web app, maybe a shared models library. In `taskboard`:
+"Add billing" touches the API, the web app, maybe a shared models library. In `taskboard-gitops`:
 
 ```
 /system:spec "add billing with Stripe checkout"   # system spec: criteria across the system; answer, approve
@@ -208,7 +212,7 @@ Prod pins the release image `1.2.0` (the `v1.2.0` git tag without the `v`, exact
 
 `/system:spec` writes one **system spec** in `docs/specs/` with criteria users of the system observe, asking you its open questions and for approval. `/system:plan` has the planner assign **every criterion to a repo** (`plan-check` refuses a plan that leaves one out), order the repos by real dependencies (library → API; an API and the web app that calls it run in parallel when the plan's `## Contract` section fixes the interface) and plan the version pins.
 
-When the feature needs wiring in this repo (a resource, exposure, an env variable), the plan lists it as `gitops:` operations on the `taskboard` entry; `/system:ship` applies them here with `cplat resource add` and `cplat component set` and opens that PR first, marked **merge first**.
+When the feature needs wiring in this repo (a resource, exposure, an env variable), the plan lists it as `gitops:` operations on the `taskboard-gitops` entry; `/system:ship` applies them here with `cplat resource add` and `cplat component set` and opens that PR first, marked **merge first**.
 
 `/system:ship` then starts one agent per ready repo **in parallel**. Each runs `/component:spec --from-plan` in its repo: the platform writes the repo's own spec with the system criteria it owns and the contract, the product-manager turns them into the repo's criteria, and the normal Chapter 3 pipeline (`/component:plan`, `/component:build`) runs to an open PR. Questions a repo spec raises come back to you. You merge; it moves on to the next level and finally prints the `/instance:promote` commands. By hand, the same per repo: `cd ../taskboard-api && /component:spec --from-plan <plan> taskboard-api`, then `/component:plan` and `/component:build`. `/system:spec` shows the progress.
 
@@ -258,10 +262,10 @@ Everything here is a declaration in the GitOps repo; `render.py` turns it into m
 /component:new taskboard-web  Frontend --type website --system me/taskboard
 
 (in each service)   /component:spec "first feature" → answer, approve → /component:plan 001 → /component:build 001  → PR → merge → image pushed
-(in taskboard)      /component:add taskboard-api taskboard-web
+(in taskboard-gitops)      /component:add taskboard-api taskboard-web
                     /instance:promote taskboard-api taskboard-web --to staging
 (in each service)   /component:release                              → vX.Y.Z → semver image
-(in taskboard)      /instance:promote taskboard-api taskboard-web --to prod
+(in taskboard-gitops)      /instance:promote taskboard-api taskboard-web --to prod
 (any time)          /system:spec "add billing" → /system:plan → /system:ship   (system spec → per-repo specs → PRs)
                     /component:check     /platform:update     /component:fix "…"
 ```
