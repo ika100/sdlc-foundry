@@ -105,7 +105,7 @@ def command_of(prompt: str) -> str:
 def repo_rules(repo: Path) -> dict[str, list[str]]:
     """The permission rules of the repo's committed `.claude/settings.json` (the HEAD version, so an uncommitted edit
     grants nothing). Claude Code ignores the file in a folder it has not trusted, such as a system ship's fresh clone
-    (#588); passed as `--settings` they apply there too, while the file's hooks and other settings stay gated by trust."""
+    (#588, spec 162); passed as `--settings` they apply there too, while the file's hooks and other settings stay gated by trust."""
     try:
         text = subprocess.run(["git", "-C", str(repo), "show", "HEAD:.claude/settings.json"],
                               capture_output=True, text=True, check=True).stdout
