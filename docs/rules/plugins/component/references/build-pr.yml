@@ -1,0 +1,11 @@
+rules:
+  - id: R1
+    text: "never into `.git/`, because cplat itself moves it there"
+    class: practice
+  - id: R2
+    text: "never edit it, so that it shows what the run recorded"
+    class: practice
+    source: spec 133
+  - id: R3
+    text: "A re-run never makes a second commit or PR."
+    class: not a rule

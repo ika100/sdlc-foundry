@@ -1,0 +1,5 @@
+rules:
+  - id: R1
+    text: "Claude Code reads `.claude/settings.json` only from the directory the session started in"
+    class: not a rule
+    source: "#319"

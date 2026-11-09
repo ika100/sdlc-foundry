@@ -1,0 +1,10 @@
+rules:
+  - id: R1
+    text: "Tighten only the tests of `<AC>` in `<file>` so that they assert the criterion as written"
+    class: practice
+    source: spec 165
+  - id: R2
+    text: "Never loosen, delete or skip an acceptance test this way, because that is always the user's decision"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 165
