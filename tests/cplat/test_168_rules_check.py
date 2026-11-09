@@ -323,7 +323,7 @@ def test_a_hard_rule_may_keep_a_condition_clause_ac_168_3(tmp_path, condition): 
 
 def test_only_without_when_or_if_is_no_condition_and_a_non_rule_may_have_one_ac_168_3(tmp_path):  # AC-168.3
     sentence = "Run only the changed tests, because the full suite takes too long."
-    assert reasoned(tmp_path, sentence)[1].ok
+    assert check(with_entry(tmp_path, sentence + "\n", e("R4", "Run only the changed tests", "practice"))).ok
     root = with_entry(tmp_path / "b", "Lint fixes except docs.\n", e("R4", "Lint fixes except docs", "not a rule"))
     assert check(root).ok
 
