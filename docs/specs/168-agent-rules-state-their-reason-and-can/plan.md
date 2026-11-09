@@ -64,6 +64,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s5
     title: Sweep - issue and platform commands
     files: [plugins/issue/commands/report.md, plugins/issue/commands/triage.md, plugins/platform/commands/doctor.md, plugins/platform/commands/fleet.md, plugins/platform/commands/release.md, plugins/platform/commands/retro.md, plugins/platform/commands/runs.md, plugins/platform/commands/ui.md, plugins/platform/commands/update.md, docs/rules/plugins/issue/commands/report.yml, docs/rules/plugins/issue/commands/triage.yml, docs/rules/plugins/platform/commands/doctor.yml, docs/rules/plugins/platform/commands/fleet.yml, docs/rules/plugins/platform/commands/release.yml, docs/rules/plugins/platform/commands/retro.yml, docs/rules/plugins/platform/commands/runs.yml, docs/rules/plugins/platform/commands/ui.yml, docs/rules/plugins/platform/commands/update.yml]
