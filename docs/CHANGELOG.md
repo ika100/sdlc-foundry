@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.14.3] - 2026-11-09
+
+### Fixed
+
+**The journey 7 findings (spec 164).** After a prod merge `/instance:promote` waits for the whole prod environment, so a database's backup bucket is synced before anyone relies on the backup (#600). `devbox run pin -- dev <component> <tag>` passes its arguments in new gitops-app repos (`/platform:update` brings it to existing ones; #599). A promotion to staging pins the newest release's own build when main holds only that release's changelog and version bump, so staging tests the image prod will get (#598). When you answer a system ship by changing an acceptance test, the change is recorded as your approval in the same step (#596). Instance plugin 1.4.1, system plugin 1.14.1.
+
 ## [5.14.2] - 2026-11-09
 
 ### Fixed
