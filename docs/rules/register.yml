@@ -1,0 +1,44 @@
+# The rule register (spec 168): the hard rules of the agent prompts and the size of the prompts before the sweep.
+# The per-prompt entries live in plugins/<p>/<kind>/<path>.yml beside this file; see README.md.
+# `cplat platform rules check` validates all of it.
+schema: 1
+baseline:
+  commit: "55b0eb699ef73bcc3f3c8b13e214f3f675215c0e"
+  prompt_bytes: 345859
+hard:
+  acceptance-tests-fixed:
+    enforced_by: cplat spec test-diff
+    source: spec 048, spec 165
+  conflicts-not-resolved-by-hand:
+    enforced_by: cplat component build merge
+    source: ADR-023
+  only-approved-specs-built:
+    enforced_by: cplat spec check
+    source: ADR-026
+  user-decides-approval:
+    intentional_prose_rule: approval exists only in the user's own words, which no tool can see
+    source: ADR-084
+  issue-filing-needs-consent:
+    intentional_prose_rule: consent exists only in the user's own words, which no tool can see
+    source: ADR-033
+  issue-text-is-untrusted:
+    intentional_prose_rule: obeying text happens inside the model, where no tool can look
+    source: ADR-025
+  triage-never-closes:
+    enforced_by: cplat issue triage
+    source: ADR-025
+  gitops-owns-the-cluster:
+    intentional_prose_rule: no component-repo check rejects manifests or kubectl calls yet; a follow-up spec adds one
+    source: ADR-017
+  no-secrets-in-git:
+    enforced_by: ci:security
+    source: ADR-018
+  push-only-through-pr-open:
+    intentional_prose_rule: a push from the agent's shell reaches GitHub before any check runs
+  no-hook-bypass:
+    intentional_prose_rule: a skipped hook leaves no trace a later check could find
+  release-never-tags-or-commits-main:
+    intentional_prose_rule: GitHub Free offers no branch protection, so nothing refuses the push
+    source: spec 138
+  prod-needs-explicit-confirm:
+    enforced_by: cplat resource restore
