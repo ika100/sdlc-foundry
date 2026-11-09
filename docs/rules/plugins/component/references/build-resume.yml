@@ -1,0 +1,5 @@
+rules:
+  - id: R1
+    text: "per stage, `skip` only for a gate that passed on the current `HEAD` and inputs, otherwise `run` with the reason"
+    class: not a rule
+    source: spec 102
