@@ -1,0 +1,16 @@
+rules:
+  - id: R1
+    text: "do not ask again, because removing the entry and opening the PR is what the user asked for"
+    class: practice
+  - id: R2
+    text: "never `kubectl apply`, because the gitops repo and Argo CD own the cluster"
+    class: hard
+    hard: gitops-owns-the-cluster
+  - id: R3
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R4
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"
