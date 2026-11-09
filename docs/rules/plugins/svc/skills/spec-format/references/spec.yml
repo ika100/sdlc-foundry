@@ -1,0 +1,17 @@
+rules:
+  - id: R1
+    text: "A spec decides by default and asks only what may not be decided by default, so that the user answers few questions"
+    class: practice
+    source: spec 149, ADR-084
+  - id: R2
+    text: "A changed assumption is struck through with the date and the new decision, never deleted, because the user approved the old one"
+    class: practice
+    source: spec 149
+  - id: R3
+    text: "are only: (a) security, access or secrets"
+    class: practice
+    source: spec 149, ADR-084
+  - id: R4
+    text: "Change the text of an existing one only to clarify the same behaviour, because tests that cite the id keep proving it"
+    class: practice
+    source: ADR-026

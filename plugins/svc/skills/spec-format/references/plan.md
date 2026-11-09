@@ -1,6 +1,6 @@
 # plan.md
 
-The tasks that implement an approved spec. The orchestrator schedules coders from the metadata, so it must be exact; `cplat spec check` validates it.
+The tasks that implement an approved spec. The metadata must be exact because the orchestrator schedules coders from it; `cplat spec check` validates it.
 
 ## Metadata (machine-readable, mandatory)
 
@@ -43,7 +43,7 @@ human_steps:                       # optional: what only a person can do (permis
 ---
 ```
 
-The orchestrator adds `done: true` to each task as it merges; never write `done` yourself.
+The orchestrator adds `done: true` to each task as it merges; never write `done` yourself, because a hand-written flag makes a re-run skip work.
 
 ## Prose (one section per task)
 
@@ -62,18 +62,18 @@ The orchestrator adds `done: true` to each task as it merges; never write `done`
 
 ## Rules
 
-- **`covers`**: every active criterion of the spec appears in at least one task; a task never covers a withdrawn or unknown id. A criterion that needs several tasks is listed on each.
-- **`spec_hash`**: copy the value the orchestrator gives you. If the spec's criteria change later, the hash no longer matches and the plan must be redone; that is intended.
+- **`covers`**: every active criterion of the spec appears in at least one task; a task never covers a withdrawn or unknown id, because an uncovered criterion is never built. A criterion that needs several tasks is listed on each.
+- **`spec_hash`**: copy the value the orchestrator gives you, so that a plan built on changed criteria is detected and redone.
 - **`files`**: every file the task creates or modifies, in the shape's layout (`app/**/page.tsx` for web-nextjs, `src/main/java/...` for service-java, `internal/...` for service-go). Listing a file locks it for that task. Do **not** list the acceptance test files: they exist before the coders start and are not edited by them.
-- **`parallel_safe`**: `true` only when the task's files do not overlap any other parallel task at the same dependency level and the change is local. Cross-cutting refactors and renames are `false`. `cplat spec check` rejects two parallel-safe tasks of one level that share a file.
-- **`depends_on`**: only real dependencies (t2 imports what t1 creates). Cosmetic ordering serializes work that could run in parallel.
+- **`parallel_safe`**: `true` so that tasks run at once without sharing files: `false` for a task whose files overlap another at its level and for cross-cutting refactors and renames. `cplat spec check` rejects two parallel-safe tasks of one level that share a file.
+- **`depends_on`**: list real dependencies (t2 imports what t1 creates) and no others, because cosmetic ordering serializes work that could run in parallel.
 - **Granularity**: a task a coder finishes in one focused pass; more than ~10 implementation bullets means split it.
 - **Gitops tasks** (`repo:`): every change the spec needs in the system's gitops-app repo (system.yaml values,
-  Components, ExternalSecrets, removing what the release no longer uses) is a task here, not a note in design.md.
-  `order: before-merge` for what the new code needs to start (new env, secrets, CRD fields it reads);
-  `order: after-release` for clean-ups once dev runs it. `files` are paths in that repo. `/component:ship` opens each as a
+  Components, ExternalSecrets, removals) is a task here, not a note in design.md.
+  `order: before-merge` for what the new code needs to start (new env, secrets, CRD fields);
+  `order: after-release` for clean-ups once dev runs it. `/component:ship` opens each as a
   draft PR during the build and merges them in that order; `/component:build` alone lists them in its report.
-- **Expand/contract**: removing or renaming CRD fields, namespaces or config keys takes two releases. This plan adds
+- **Expand/contract**: removing or renaming CRD fields, namespaces or config keys takes two releases so that no gitops repo breaks. This plan adds
   the new shape and keeps accepting the old one (expand); a later spec removes the old one (contract) after every
-  gitops repo moved. Never remove in the same release that adds.
-- `<module>` placeholders are illustrative; use the repo's real package path.
+  gitops repo moved.
+- `<module>` is a placeholder for the repo's real package path.
