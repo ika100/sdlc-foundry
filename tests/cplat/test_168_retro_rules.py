@@ -72,7 +72,7 @@ def by_entry(sec):
     return {x["entry"]: x for x in sec["entries"]}
 
 
-ENFORCED = "Always sign off every commit, because the DCO check refuses unsigned ones."
+ENFORCED = "Always sign off every commit, because the DCO check refuses unsigned ones today."
 QUIET = "Never pipe cplat output into head, because its last lines carry the decisions and fixes (é)."
 CMD = "Never poll for a PR in a loop, because the wait command reports every check."
 JOB = "Never commit a secret, because the security job refuses it."
