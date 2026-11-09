@@ -1,0 +1,8 @@
+rules:
+  - id: R1
+    text: "never run git or edit files in that worktree yourself, because it lives in the git dir, where a headless session may not run git"
+    class: practice
+  - id: R2
+    text: "`entry land` only waits for the entry PR's checks"
+    class: not a rule
+    source: spec 144

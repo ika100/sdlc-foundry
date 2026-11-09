@@ -1,0 +1,22 @@
+rules:
+  - id: R1
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R2
+    text: "Never write a polling loop on `kubectl`, `gh` or `cplat`, because the wait already polls and ends in `READY:`, `RED:` or `TIMEOUT:`."
+    class: practice
+  - id: R3
+    text: "`--promote` takes `after-dev-smoke` or `manual` on staging, only `manual` on prod and nothing on dev."
+    class: not a rule
+  - id: R4
+    text: "Only `applications/` and `bootstrap/` change, because Argo CD reads the cluster state from there."
+    class: practice
+  - id: R5
+    text: "never `kubectl apply`, because a manual apply drifts the cluster from git."
+    class: hard
+    hard: gitops-owns-the-cluster
+  - id: R6
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
