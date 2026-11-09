@@ -21,6 +21,7 @@ import doctor
 import retro_github
 import retro_proposals
 import retro_report
+import retro_rules
 import runs
 import runs_report
 import runs_store
@@ -65,7 +66,8 @@ def _store():
 def build_report(week: str) -> dict:
     slug, store = _store()
     first = retro_report.week_bounds(retro_report.previous_week(week))[0].date()
-    days = [first + datetime.timedelta(days=i) for i in range(14)]
+    window_start = retro_report.week_bounds(retro_rules.weeks_of(week)[0])[0].date()   # spec 168: 4 complete weeks
+    days = [window_start + datetime.timedelta(days=i) for i in range(7 * retro_rules.WINDOW_WEEKS)]
     try:
         texts = [t for _, t in store.read(days)]
     except runs_store.StoreError as e:
@@ -82,8 +84,9 @@ def build_report(week: str) -> dict:
     specs = [{"number": s.number, "id": s.id, "title": str(s.meta.get("title", "")), "status": s.status,
               "tracks": list(s.meta.get("tracks") or [])}
              for s in good if s.status.lower() not in ("done", "superseded")]
+    rules = retro_rules.section(core.PLATFORM_ROOT, records, week=week, issues=lambda ns: tracker.issue_states(repo, ns))
     return retro_report.build(records, auto_issues=autos, open_issues=opens, specs=specs, week=week, store=slug,
-                              generated_at=_now(), malformed=malformed)
+                              generated_at=_now(), malformed=malformed, rules_to_retire=rules)
 
 
 # ---------------- report ----------------
