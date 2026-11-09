@@ -98,6 +98,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s10
     title: Sweep - svc-java agents
     files: [plugins/svc-java/agents/coder.md, plugins/svc-java/agents/deployment.md, plugins/svc-java/agents/observability.md, plugins/svc-java/agents/release.md, plugins/svc-java/agents/tester.md, docs/rules/plugins/svc-java/agents/coder.yml, docs/rules/plugins/svc-java/agents/deployment.yml, docs/rules/plugins/svc-java/agents/observability.yml, docs/rules/plugins/svc-java/agents/release.yml, docs/rules/plugins/svc-java/agents/tester.yml]
