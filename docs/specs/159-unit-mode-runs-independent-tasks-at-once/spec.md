@@ -1,7 +1,7 @@
 ---
 spec_id: 159-unit-mode-runs-independent-tasks-at-once
 title: Unit mode runs independent tasks at once
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [560]
@@ -47,3 +47,5 @@ As someone shipping a spec unattended, I want the independent tasks of a build t
 
 - 2026-11-08 AC-159.1, .2, .4, .6, .7, .8 amended with the user's approval: one session per batch (build Phase 2's parallel batch) instead of one session per task in its own worktree, which would need the unit and ship state carried into each worktree.
 - 2026-11-08 drafted after the first system-ship benchmark run (spec 155 branch) showed sequential task units; approved by the user on 2026-11-08 (as 157; renumbered to 159, another session had merged a spec 157).
+- 2026-11-09 building
+- 2026-11-09 done

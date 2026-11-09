@@ -1,7 +1,7 @@
 ---
 spec_id: 163-a-resumed-unit-run-drops-the-escalation-of
 title: A resumed unit run drops the escalation of the run before
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [591]
@@ -34,3 +34,8 @@ As someone resuming an escalated run, I want it to go on until it is done or esc
 ## Open questions
 
 None.
+
+## Changelog
+
+- 2026-11-09 building
+- 2026-11-09 done

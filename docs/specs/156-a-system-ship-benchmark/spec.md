@@ -1,7 +1,7 @@
 ---
 spec_id: 156-a-system-ship-benchmark
 title: A system ship benchmark
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [560]
@@ -45,3 +45,5 @@ As the platform maintainer, I want to measure a system ship on a fixed sample th
 ## Changelog
 
 - 2026-11-08 drafted with spec 155, so that its effect can be measured without fitting to the journey; approved as recommended on 2026-11-08.
+- 2026-11-09 building
+- 2026-11-09 done

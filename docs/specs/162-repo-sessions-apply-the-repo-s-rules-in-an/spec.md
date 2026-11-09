@@ -1,7 +1,7 @@
 ---
 spec_id: 162-repo-sessions-apply-the-repo-s-rules-in-an
 title: Repo sessions apply the repo's rules in an untrusted clone
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [588]
@@ -36,3 +36,8 @@ As someone shipping a system unattended, I want each repo session to run with th
 ## Open questions
 
 None.
+
+## Changelog
+
+- 2026-11-09 building
+- 2026-11-09 done
