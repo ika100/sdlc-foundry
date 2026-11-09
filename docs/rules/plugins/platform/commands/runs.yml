@@ -1,0 +1,12 @@
+rules:
+  - id: R1
+    text: "read its output whole (never piped into `grep`, `head` or `tail`, because its last lines carry the decisions and next steps; use `--json` where offered)"
+    class: practice
+    source: "#476"
+  - id: R2
+    text: "Do not paste the run store's content into public issues, because the store is private."
+    class: practice
+  - id: R3
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
