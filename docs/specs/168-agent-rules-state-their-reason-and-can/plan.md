@@ -51,6 +51,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s3
     title: Sweep - component spec, plan, check, verify, release
     files: [plugins/component/commands/spec.md, plugins/component/commands/plan.md, plugins/component/commands/check.md, plugins/component/commands/verify.md, plugins/component/commands/release.md, plugins/component/references/spec-from-plan.md, plugins/component/references/spec-list.md, docs/rules/plugins/component/commands/spec.yml, docs/rules/plugins/component/commands/plan.yml, docs/rules/plugins/component/commands/check.yml, docs/rules/plugins/component/commands/verify.yml, docs/rules/plugins/component/commands/release.yml, docs/rules/plugins/component/references/spec-from-plan.yml, docs/rules/plugins/component/references/spec-list.yml]
