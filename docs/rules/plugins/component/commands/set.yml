@@ -6,10 +6,6 @@ rules:
     text: "do not ask again, because that request already says so"
     class: practice
     source: spec 142
-  - id: R7
-    text: "The merge follows the request, unless the user said not to merge (then leave the PR open)"
-    class: not a rule
-    source: spec 142
   - id: R3
     text: "Never write a polling loop on `kubectl`, `gh` or `cplat`, because the wait already ends on the synced revision"
     class: practice
