@@ -30,6 +30,7 @@ tasks:
     covers: [AC-168.8]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: pr-check - rules and the eval gate on retired or removed entries
     files: [scripts/cplat/evalgate.py, scripts/cplat/rules_retire.py, scripts/cplat/house_rules.py]
