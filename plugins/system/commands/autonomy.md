@@ -1,22 +1,24 @@
 ---
-description: "Show and change autonomy per environment, pause or resume it, undo or approve what an engine did. Usage: /system:autonomy show | set <env> <level> [flags] | pause | resume | undo <event> | approve <repo>#<n>"
+description: "Show or change autonomy per environment, pause, undo, approve. Usage: /system:autonomy show | set <env> <level> [flags] | pause | resume | undo <event> | approve <repo>#<n>"
 ---
 
 Run the platform script inside the gitops-app repo. **Request:** $ARGUMENTS
 
-`cplat` is on the Bash PATH while the shared plugin is enabled; one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered), from the repo root:
+A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
+
+Run `cplat` from the repo root, one call per Bash invocation. Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
 
 ```bash
 cplat system autonomy <ARGS>
 ```
 
 1. `show`: run it as is and report the output verbatim.
-2. `set`, `pause`, `resume`: **preview** with `--dry-run` and show the plan verbatim. Errors name the key and the allowed values: show them and stop. Then **run** with `--pr`; opening the pull request (and, to lower autonomy or pause, signalling the engines) is what the user asked for, so do not ask again. **Pause is urgent:** run it right after the preview.
+2. `set`, `pause`, `resume`: **preview** with `--dry-run` and show the plan verbatim. Show errors and stop. Then **run** with `--pr`; opening the pull request (and, to lower autonomy or pause, signalling the engines) is what the user asked for, so ask nothing more. **Pause is urgent:** run it right after the preview.
 3. `undo <event>` and `approve <owner/repo>#<n>`: show the `--dry-run` plan, then run it without `--dry-run`.
 4. **Report** the output verbatim, including every environment that was `not confirmed`.
 
-`set <env> <level>` takes the flags `--routes`, `--max-criticality`, `--max-files`, `--max-lines`, `--regression-test`, `--second-review`, `--runs-per-day`, `--merges-per-day`, `--per-run KEY=VALUE`, `--days`, `--from`, `--to`, `--timezone`, `--undo-window` and `--engine`. Only `environments.<env>.autonomy` changes. A higher level takes effect after the merge; a lower level or a tighter guardrail takes effect at once by a signal, and the pull request records it.
+`set <env> <level>` takes guardrail flags such as `--routes`, `--max-criticality`, `--max-files`, `--max-lines`, `--runs-per-day`, `--days`, `--undo-window` and `--engine`; `--help` lists them all. Only `environments.<env>.autonomy` changes.
 
-Rules: only `applications/` and `bootstrap/` change; never `kubectl apply`.
+Only `applications/` and `bootstrap/` change, because Argo CD reads the cluster state from there. **Hard rule:** never `kubectl apply`, because a manual apply drifts the cluster from git.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).

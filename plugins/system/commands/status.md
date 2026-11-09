@@ -1,15 +1,17 @@
 ---
-description: "One-table overview of a system (run in its gitops-app repo): per component and environment the pinned version, CI state on main and Argo sync/health. Usage: /system:status [--context <kube-context>]"
+description: "One-table overview of a system: per component and environment the pinned version, CI state and Argo health. Usage: /system:status [--context <kube-context>]"
 ---
 
-Show the system status. One Bash call from the gitops-app repo root:
+Show the system status. One Bash call from the gitops-app repo root.
+
+A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
 ```bash
 cplat system status <ARGS>
 ```
 
-Pass `--context k3d-<system>-local` (or the user's cluster context) when they want the Argo column. The table has one row per component and one column per environment, in the order of `environments:` in `system.yaml`. A scaled instance's cell shows `replicas <n> (<min>–<max>)`, or `?` when the cluster cannot be read. Show it verbatim (with the Resource versions section: per resource and environment the major, the image pin and whether an upgrade is verified, and the Backups section below it: last backup, archiving and restore points per database and environment), then add at most three lines: anything not `ok`/`Synced/Healthy`, whether staging/prod lag behind dev, and the one command that would fix the most obvious problem. Read-only: never change anything.
+Pass `--context k3d-<system>-local` (or the user's cluster context) when they want the Argo column. A scaled instance's cell shows `replicas <n> (<min>–<max>)`, or `?` when the cluster cannot be read. Show it verbatim (with its Resource versions and Backups sections), then add at most three lines: anything not `ok`/`Synced/Healthy`, whether staging/prod lag behind dev, and the one command that fixes the worst problem. Read-only: never change anything, so that a status call is always safe.
 
-Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.
+Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).

@@ -1,0 +1,4 @@
+rules:
+  - id: R1
+    text: "never push without confirmation, because a push publishes the branch."
+    class: practice
