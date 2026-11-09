@@ -78,6 +78,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
 
     for spec in specs:
         units.prepare(repo, kind, spec)
+        units.resume(repo)
         while True:
             data = units._read(repo) or {"units": []}
             unit = units.next_open(data)

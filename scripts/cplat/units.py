@@ -413,6 +413,15 @@ def escalate(repo: Path, reason: str, cause: str) -> None:
         pass
 
 
+def resume(repo: Path) -> None:
+    """A new run after an escalation resumes where it stopped (spec 163): the escalation of the run before is dropped,
+    as ship.py does for the ship state, so the supervisor does not read it again after the next session. Never raises."""
+    try:
+        _update(repo, lambda data: data.__setitem__("escalated", None))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ---------------- status ----------------
 
 def rows(repo: Path) -> list[dict]:
