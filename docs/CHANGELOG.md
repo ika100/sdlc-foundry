@@ -6,6 +6,12 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.14.2] - 2026-11-09
+
+### Fixed
+
+A resumed unit-mode run no longer stops on the escalation of the run before (spec 163). `cplat headless` kept the old escalation in `.git/cplat-units.json`, so after a fix and a restart every session stopped again with the old reason. Starting the command again now drops it, as the ship state already did. Found by journey 7.
+
 ## [5.14.1] - 2026-11-09
 
 ### Fixed
