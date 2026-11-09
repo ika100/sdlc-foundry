@@ -1,0 +1,33 @@
+rules:
+  - id: R1
+    text: "never ask for the shape."
+    class: practice
+  - id: R2
+    text: "Run subagents in the foreground (`run_in_background: false`), never polling in a shell loop, because a loop can match itself and never end."
+    class: experience
+    source: "#496"
+  - id: R3
+    text: "Never ask the user, because the spec's approval was the decision."
+    class: practice
+    source: ADR-028
+  - id: R4
+    text: "never create, reset or switch branches yourself, so that the run stays on its branch."
+    class: practice
+  - id: R5
+    text: "never run `git push` or `gh pr create`, because `cplat component ship pr` runs the whole CI before it pushes."
+    class: hard
+    hard: push-only-through-pr-open
+  - id: R6
+    text: "run every tool other than git, gh and cplat through `devbox run <script>`, never directly, so that versions and flags match CI."
+    class: practice
+  - id: R7
+    text: "Write `.pr-body.md` in the repo root (Write tool, never into `.git/`, because Claude Code refuses edits there)"
+    class: practice
+  - id: R8
+    text: "since deploy escalates by itself and files the `smoke-failure` issue, never call `cplat component ship escalate` for it; report its lines and stop."
+    class: practice
+    source: spec 091
+  - id: R9
+    text: "(always pass the cause, since it decides whether cplat files an issue:"
+    class: practice
+    source: spec 088

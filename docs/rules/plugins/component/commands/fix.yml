@@ -1,0 +1,18 @@
+rules:
+  - id: R1
+    text: "never tell the agent to read the spec files, because the brief already carries every fact it needs."
+    class: practice
+  - id: R2
+    text: "Quality failures → the coder (lint/type fixes only), re-run quality."
+    class: not a rule
+  - id: R3
+    text: "never edit, skip or weaken a test that names a criterion (`AC-<NNN>.<n>`), because it is the spec; changing one needs `/component:spec --amend` first."
+    class: hard
+    hard: acceptance-tests-fixed
+  - id: R4
+    text: "run every tool through `devbox run <script>`, never directly, so that versions and flags match CI."
+    class: practice
+  - id: R5
+    text: "never file an issue without the user's OK, because the platform repository is public."
+    class: hard
+    hard: issue-filing-needs-consent

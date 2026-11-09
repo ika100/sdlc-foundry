@@ -1,0 +1,5 @@
+rules:
+  - id: R1
+    text: "never edit, skip or weaken an acceptance test, because it is the spec"
+    class: hard
+    hard: acceptance-tests-fixed
