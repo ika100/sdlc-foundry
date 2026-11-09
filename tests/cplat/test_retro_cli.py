@@ -243,7 +243,7 @@ def test_at_most_three_prompt_proposals_and_no_agent_file_or_pull_request(world,
     body = issue_body(world)
     assert len(re.findall(r"^- \*\*svc:coder\*\* on service-python: ", body, re.M)) == 3 and "Change number 3." not in body
     assert digest() == before
-    assert {c[0] for c in world.tracker.calls} <= {"auto_issues", "open_issues", "retro_issues", "create", "edit_body", "comment", "close"}
+    assert {c[0] for c in world.tracker.calls} <= {"auto_issues", "open_issues", "retro_issues", "issue_states", "create", "edit_body", "comment", "close"}
 
 
 # ---------------- AC-090.10 the issue ----------------
