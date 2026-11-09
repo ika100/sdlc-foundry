@@ -45,6 +45,7 @@ tasks:
     covers: [AC-168.1, AC-168.2, AC-168.3, AC-168.5, AC-168.6]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: s2
     title: Sweep - component ship and fix and their references
     files: [plugins/component/commands/ship.md, plugins/component/commands/fix.md, plugins/component/references/fix-on-main.md, plugins/component/references/fix-pr.md, plugins/component/references/ship-finish.md, plugins/component/references/ship-gitops.md, plugins/component/references/ship-land-red.md, docs/rules/plugins/component/commands/ship.yml, docs/rules/plugins/component/commands/fix.yml, docs/rules/plugins/component/references/fix-on-main.yml, docs/rules/plugins/component/references/fix-pr.yml, docs/rules/plugins/component/references/ship-finish.yml, docs/rules/plugins/component/references/ship-gitops.yml, docs/rules/plugins/component/references/ship-land-red.yml]
