@@ -2,18 +2,22 @@
 description: "Remove components from the system.yaml of a gitops-app repo; the rendered manifests go in one PR. Usage: /component:remove <component...>"
 ---
 
-Run the platform script inside the gitops-app repo. **Request:** $ARGUMENTS
+Run in the gitops-app repo. **Request:** $ARGUMENTS
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from; one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered), from the repo root:
+A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
+
+One `cplat` call per Bash invocation, from the repo root:
 
 ```bash
 cplat component remove <ARGS>
 ```
 
-1. **Preview** with `--dry-run`; show it verbatim. Errors carry a `fix:` line (typical: component not found, another component still uses it, dirty tree) — show them and stop.
-2. **Run** with `--pr` (one PR per invocation, however many components). Removing the entry and opening the PR is what the user asked for; do not ask again.
+Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
+
+1. **Preview** with `--dry-run`; show it verbatim. Errors carry a `fix:` line; show them and stop.
+2. **Run** with `--pr` (one PR for all); do not ask again, because removing the entry and opening the PR is what the user asked for.
 3. **Report** the script's output, including what the render deletes.
 
-Rules: only `applications/` and `bootstrap/` change; never `kubectl apply`. Removal deletes the component's manifests, so the cluster prunes it after merge: if the user did not name the component, ask once before running.
+The script changes `applications/` and `bootstrap/` alone. **Hard rule:** never `kubectl apply`, because the gitops repo and Argo CD own the cluster. Removal deletes the component's manifests, so the cluster prunes it after merge: if the user did not name the component, ask once before running.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
