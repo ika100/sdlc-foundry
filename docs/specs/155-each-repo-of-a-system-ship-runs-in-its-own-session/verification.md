@@ -1,0 +1,16 @@
+# Verification — 155 Each repo of a system ship runs in its own session
+
+**Result:** pass
+
+| Criterion | Evidence |
+|---|---|
+| AC-155.1 | `tests/cplat/test_155_repo_sessions.py::test_repo_start_writes_and_approves_the_repo_spec_from_the_plan_ac_155_1`, `tests/cplat/test_155_repo_sessions.py::test_repo_start_starts_the_repos_headless_ship_and_keeps_its_process_ac_155_1`, `tests/cplat/test_155_repo_sessions.py::test_a_resumed_repo_reuses_its_repo_spec_ac_155_1`, `tests/cplat/test_155_repo_sessions.py::test_the_gitops_entry_gets_no_session_ac_155_1` |
+| AC-155.2 | `tests/cplat/test_155_repo_sessions.py::test_independent_repos_start_together_up_to_max_ac_155_2` |
+| AC-155.3 | `tests/cplat/test_155_repo_sessions.py::test_one_repo_alone_ships_in_its_own_session_ac_155_9`, `tests/cplat/test_155_repo_sessions.py::test_the_session_runs_the_standalone_component_ship_command_ac_155_3`, `tests/cplat/test_155_repo_sessions.py::test_the_component_ship_links_itself_from_the_environment_ac_155_3`, `tests/cplat/test_155_repo_sessions.py::test_headless_hands_its_plugin_folders_to_the_repo_sessions_ac_155_3` |
+| AC-155.4 | `tests/cplat/test_155_repo_sessions.py::test_a_finished_ship_is_recorded_whether_or_not_its_session_still_runs_ac_155_4`, `tests/cplat/test_155_repo_sessions.py::test_a_commit_in_a_running_repo_is_progress_for_the_stop_gate_ac_155_4`, `tests/cplat/test_155_repo_sessions.py::test_a_linked_finished_ship_is_left_for_the_system_ship_to_archive_ac_155_4`, `tests/cplat/test_155_repo_sessions.py::test_a_ship_archived_by_its_own_session_is_still_recorded_ac_155_4` |
+| AC-155.5 | `tests/cplat/test_155_repo_sessions.py::test_alive_is_false_for_a_finished_child_and_true_for_a_running_headless_ac_155_5`, `tests/cplat/test_155_repo_sessions.py::test_a_session_that_ended_before_its_ship_is_started_once_more_then_escalates_ac_155_5`, `tests/cplat/test_155_repo_sessions.py::test_a_running_session_is_left_alone_while_its_ship_works_ac_155_5`, `tests/cplat/test_155_repo_sessions.py::test_a_running_repo_without_a_session_gets_one_ac_155_5` |
+| AC-155.6 | `tests/cplat/test_155_repo_sessions.py::test_an_escalated_repo_ship_escalates_the_repo_with_its_reason_ac_155_6`, `tests/cplat/test_155_repo_sessions.py::test_result_leaves_the_ship_state_while_the_repos_session_still_runs_ac_155_6`, `tests/cplat/test_155_repo_sessions.py::test_result_archives_the_ship_once_the_session_has_ended_ac_155_6` |
+| AC-155.7 | `tests/cplat/test_155_repo_sessions.py::test_the_real_spawn_links_the_session_and_detaches_it_ac_155_3_ac_155_7`, `tests/cplat/test_155_repo_sessions.py::test_the_repo_session_is_a_child_of_the_system_ship_run_ac_155_7` |
+| AC-155.8 | `tests/cplat/test_155_repo_sessions.py::test_the_merge_slot_is_untouched_ac_155_8` |
+| AC-155.9 | `tests/cplat/test_155_repo_sessions.py::test_max_1_runs_the_repos_one_at_a_time_ac_155_9`, `tests/cplat/test_155_repo_sessions.py::test_a_diamond_runs_its_levels_in_order_ac_155_9`, `tests/cplat/test_155_repo_sessions.py::test_one_repo_alone_ships_in_its_own_session_ac_155_9` |
+| AC-155.10 | `tests/cplat/test_155_repo_sessions.py::test_the_merge_slot_is_untouched_ac_155_8`, `tests/cplat/test_155_repo_sessions.py::test_the_command_file_has_no_subagent_per_repo_path_ac_155_10`, `tests/cplat/test_155_repo_sessions.py::test_the_process_model_is_documented_with_an_adr_ac_155_10` |

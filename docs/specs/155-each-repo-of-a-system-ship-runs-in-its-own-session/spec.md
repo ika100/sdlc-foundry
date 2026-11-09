@@ -1,7 +1,7 @@
 ---
 spec_id: 155-each-repo-of-a-system-ship-runs-in-its-own-session
 title: Each repo of a system ship runs in its own session
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [560]
@@ -52,3 +52,5 @@ As someone shipping a system spec, I want each repo's part to be built exactly a
 
 - 2026-11-08 drafted from #560 and the journey 6 analysis; approved as recommended on 2026-11-08.
 - 2026-11-08 AC-155.3 amended with the user's approval: the first benchmark run showed that unit mode runs a repo's tasks one after another, so concurrent coders move to spec 159.
+- 2026-11-09 building
+- 2026-11-09 done

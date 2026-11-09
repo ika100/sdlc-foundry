@@ -1,7 +1,7 @@
 ---
 spec_id: 160-a-lint-suppression-in-an-acceptance-test-is-not-a
 title: A lint suppression in an acceptance test is not a changed test
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [570]
@@ -42,3 +42,5 @@ As someone shipping unattended, I want a linter false positive in an acceptance 
 ## Changelog
 
 - 2026-11-08 drafted from #570, found by the system-ship benchmark; approved by the user on 2026-11-08 (as 158; renumbered to 160, another session had merged a spec 158).
+- 2026-11-09 building
+- 2026-11-09 done
