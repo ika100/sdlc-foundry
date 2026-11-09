@@ -1,0 +1,5 @@
+rules:
+  - id: R1
+    text: "The plan lives in the gitops-app repo (`docs/plan/<spec_id>.md`, ADR-011/026); never edit it from here, since that repo owns it."
+    class: practice
+    source: "ADR-011, ADR-026"

@@ -2,25 +2,27 @@
 description: "Read-only quality and security audit for the repo (the devbox quality and security recipes); changes no file. Usage: /component:check"
 ---
 
-You are the **orchestrator** for a read-only quality and security check. Run both agents against the current codebase and produce a combined report. Do not modify any files.
+You are the **orchestrator** for a quality and security check without edits. Run both agents against the current codebase and produce a combined report.
+
+A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
 **Arguments:** $ARGUMENTS (none expected; ignore any).
 
-First resolve the shape: run `cplat shape` and print `Shape: <shape>`. The commands below are the same for every shape (the repo's `devbox.json` maps them to the right tools). Image build/scan only applies when a `Dockerfile` exists.
+First resolve the shape: run `cplat shape` and print `Shape: <shape>`. The commands below are the same for every shape (the repo's `devbox.json` maps them to the right tools). Image build/scan applies to a repo with a `Dockerfile`.
 
 ---
 
 ## Step 1 — Run quality and security agents in parallel
 
-Invoke both agents simultaneously:
+Invoke both at once:
 
 **quality agent** — run with instruction:
-> Run `devbox run quality` against the entire codebase. Report all violations with file:line references. Do not modify any files.
+> Run `devbox run quality` against the entire codebase. Report all violations with file:line references (no edits).
 
 **security agent** — run with instruction:
-> Run `devbox run security`. If a Dockerfile exists, also run `devbox run image-build && devbox run image-scan`. Document findings in `docs/security/scan-<today's date>.md`. Do not modify any application code.
+> Run `devbox run security`. If a Dockerfile exists, also run `devbox run image-build && devbox run image-scan`. Document findings in `docs/security/scan-<today's date>.md` (no edits apart from that report).
 
-Wait for both agents to complete.
+Wait for both.
 
 ---
 
@@ -33,22 +35,16 @@ Print a unified report:
 Date: <YYYY-MM-DD>
 
 ### Quality
-<paste quality agent verdict and violation summary>
+<quality verdict and violation summary>
 
 ### Security
-<paste security agent verdict and findings summary>
+<security verdict and findings summary>
 
 ---
 
 ### Overall Verdict
 
-| Check | Result |
-|---|---|
-| Lint / format (ruff, ESLint, Spotless, golangci-lint, kubeconform …) | PASS / FAIL (N violations) |
-| Type check (mypy, `tsc`, compiler …) | PASS / FAIL (N errors) |
-| Dependency audit (pip-audit, pnpm audit, OWASP DC, govulncheck …) | PASS / FAIL / WARN (N critical, N high) |
-| detect-secrets | PASS / N potential secrets found |
-| trivy | PASS / FAIL / SKIPPED |
+One line each for lint / format, type check, dependency audit (N critical, N high), detect-secrets and trivy: PASS / FAIL / WARN / SKIPPED, with the counts.
 
 **OVERALL: PASS / FAIL**
 ```
@@ -56,16 +52,15 @@ Date: <YYYY-MM-DD>
 ### Exit conditions
 
 - **PASS:** all checks clean — safe to proceed with release or deployment.
-- **FAIL:** one or more checks failed — list the issues that must be resolved.
+- **FAIL:** one or more checks failed — list the issues to resolve.
 
 ---
 
 ## Rules
 
-- This command is **read-only** — do not fix violations, install packages, or modify files.
-- If a tool is not installed, note it in the report as a gap but do not abort the other checks.
-- The security scan report file (`docs/security/scan-<date>.md`) is the one exception — the security agent creates that as its normal output.
+- This command is **read-only**: do not fix violations, install packages or modify files, so that a check never changes what it checks.
+- If a tool is not installed, note it in the report as a gap but do not abort the other checks, so that one missing tool hides no other result.
 
-Read `cplat`'s output whole: never pipe it into `grep`, `head` or `tail` (its last lines carry the decisions, next steps and fixes); use `--json` where the command offers it.
+Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
