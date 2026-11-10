@@ -17,7 +17,8 @@ import yaml
 
 from core import PlatformError
 
-EVENTS = ("approve", "answer", "escalation", "promote", "alert", "smoke", "run-done", "retro", "review", "signal", "done-on-its-own")
+EVENTS = ("approve", "answer", "escalation", "promote", "alert", "smoke", "run-done", "retro", "review", "signal", "done-on-its-own",
+          "triage", "budget", "stuck")
 CHANNELS = ("github", "slack", "email", "desktop")
 VALUES = ("off", "instant", "digest")
 DIGEST_CHANNELS = ("slack", "email")
@@ -26,8 +27,9 @@ TOP_KEYS = ("preset", "events", "slack", "email", "digest", "quiet_hours")
 EMAIL_KEYS = ("to", "from", "host", "port", "user", "starttls")
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 KEYCHAIN_SERVICE = "sdlc-foundry"
-GITHUB_INSTANT = ("approve", "answer", "escalation", "alert", "smoke", "review", "signal")
-DESKTOP_INSTANT = ("approve", "answer", "escalation", "promote", "alert", "smoke", "review", "signal", "done-on-its-own")
+GITHUB_INSTANT = ("approve", "answer", "escalation", "alert", "smoke", "review", "signal", "stuck")
+DESKTOP_INSTANT = ("approve", "answer", "escalation", "promote", "alert", "smoke", "review", "signal", "done-on-its-own",
+                 "triage", "budget", "stuck")
 HINT = "see docs/console.md (notifications)"
 
 
@@ -179,6 +181,11 @@ def secret(name: str, account: str | None = None) -> str | None:
         return None
     out = (p.stdout or "").strip()
     return out if p.returncode == 0 and out else None
+
+
+def digest_channels(cfg: Config) -> list[str]:
+    """The digest channels (slack, email) that have at least one event set to `digest`."""
+    return [c for c in DIGEST_CHANNELS if any(cells.get(c) == "digest" for cells in cfg.events.values())]
 
 
 def used_channels(cfg: Config) -> set[str]:

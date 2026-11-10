@@ -31,6 +31,7 @@ REVIEW_REQUEST = ("approve", "answer")           # GitHub already asks for a rev
 ASSIGN = ("alert", "smoke", "retro", "signal")           # GitHub: assign the user to the existing issue
 ISSUE_LABELS = {"alert": "alert", "smoke-failure": "smoke", "signal": "signal"}
 HELD = "held"
+CONSOLE_KINDS = ("approve", "answer", "escalation", "promote", "review")      # the needs kinds the console notifier sends
 STALE_AFTER = dt.timedelta(hours=72)    # an escalation not sent by then is not news any more (#355)
 FINISHED = ("done", "superseded")       # spec statuses after which an escalation of the spec is stale (#355)
 
@@ -155,13 +156,19 @@ def collect(repo_dir: Path) -> dict:
             "issues_failed": failed}
 
 
-def events_of(doc: dict) -> dict[str, dict]:
-    """key -> event: `event`, `title`, `text`, `repo`, `number`, `prod`, `spec`."""
+def events_of(doc: dict, kinds: tuple[str, ...] = CONSOLE_KINDS) -> dict[str, dict]:
+    """key -> event: `event`, `title`, `text`, `repo`, `number`, `prod`, `spec`; needs items of `kinds` only."""
     out: dict[str, dict] = {}
     for it in (doc.get("needs") or {}).get("items") or []:
-        if it.get("kind") not in ("approve", "answer", "escalation", "promote", "review"):
+        if it.get("kind") not in kinds:
             continue
         obj = it.get("object") or {}
+        if it["kind"] in ("triage", "budget", "stuck"):
+            what = (f"#{obj['issue']}" if obj.get("issue") else "") or obj.get("run_id") or obj.get("spec") or ""
+            out[it["id"]] = {"event": it["kind"], "title": f"{it['kind']}: {what}".rstrip(": ") if what else it["kind"],
+                             "text": it.get("reason") or "", "repo": obj.get("repo") or it.get("cwd_repo"), "number": None,
+                             "prod": False, "spec": what, "stage": it.get("stage") or "", "since": it.get("since") or ""}
+            continue
         if it["kind"] == "review":
             out[it["id"]] = {"event": "review", "title": f"review: {obj.get('repo')}#{obj.get('pr')}", "text": it.get("reason") or "",
                              "repo": obj.get("repo"), "number": obj.get("pr"), "prod": False, "spec": ""}
@@ -239,8 +246,9 @@ def in_quiet_hours(cfg: notify_config.Config, when: dt.datetime) -> bool:
     return start <= t < end if start <= end else (t >= start or t < end)
 
 
-def digest_due(cfg: notify_config.Config, state: dict, when: dt.datetime) -> bool:
-    if DAYS[when.weekday()] not in cfg.digest["days"] or when.time() < dt.time.fromisoformat(cfg.digest["at"]):
+def digest_due(cfg: notify_config.Config, state: dict, when: dt.datetime, *, every_day: bool = False) -> bool:
+    """Due at `digest.at` on the configured days, or on every day with `every_day`, once per day."""
+    if (not every_day and DAYS[when.weekday()] not in cfg.digest["days"]) or when.time() < dt.time.fromisoformat(cfg.digest["at"]):
         return False
     last = _parse(state.get("last_digest"))
     return last is None or last.date() < when.date()
@@ -447,13 +455,21 @@ def run_once(repo_dir: Path) -> None:
     """One pass: detect events, send instant notifications, resolve gone events, send the digest when due."""
     cfg = notify_config.load()
     doc = collect(Path(repo_dir))
+    process(cfg, doc, state_path((doc.get("needs") or {}).get("system") or "system"), kinds=CONSOLE_KINDS,
+            digest=_send_digest, every_day=False)
+
+
+def process(cfg: notify_config.Config, doc: dict, path: Path, *, kinds: tuple[str, ...] = CONSOLE_KINDS, digest=None,
+            every_day: bool | None = None) -> None:
+    """One pass over `doc` with the state at `path`: instant notifications for new events (needs items of `kinds`), quiet
+    hours, resolving gone events, and `digest(cfg, state, doc, when)` when due and not quiet. `every_day` defaults to
+    true when a custom `digest` is given only (the dispatcher's digest is daily, the console's follows `digest.days`)."""
     when = now()
-    path = state_path((doc.get("needs") or {}).get("system") or "system")
     state = load_state(path)
     fresh = state is None
     state = state or {"events": {}, "last_digest": None}
     state.setdefault("events", {})
-    current = events_of(doc)
+    current = events_of(doc, kinds)
     hidden = {k for u in (doc.get("needs") or {}).get("unavailable") or [] for k in u.get("kinds") or []}
     quiet = in_quiet_hours(cfg, when)
     cache: dict = {}
@@ -505,8 +521,9 @@ def run_once(repo_dir: Path) -> None:
                           "message": f"dropped {sum(dropped.values())} escalations not sent yet: {dropped['stale']} older than "
                                      f"{int(STALE_AFTER.total_seconds() // 3600)} h, {dropped['finished']} of finished specs, "
                                      f"{dropped['duplicate']} duplicates"}), file=sys.stderr)
-    if not quiet and digest_due(cfg, state, when):
-        _send_digest(cfg, state, doc, when)
+    daily = (digest is not None) if every_day is None else every_day
+    if digest is not None and not quiet and digest_due(cfg, state, when, every_day=daily):
+        digest(cfg, state, doc, when)
     save_state(path, state)
 
 
