@@ -1,7 +1,7 @@
 ---
 spec_id: 179-unattended-runs-ask-less
 title: Unattended runs ask less
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [616, 653, 654, 655]
@@ -80,3 +80,4 @@ None.
 - 2026-11-10 amended: tracks #616; added AC-179.9 (a reviewer finding on a loose smoke test is fixed by the build, not asked of the person) and A8
 - 2026-11-10 draft: amend: add #616 (loose smoke-test finding fixed by the build)
 - 2026-11-10 approved
+- 2026-11-10 building
