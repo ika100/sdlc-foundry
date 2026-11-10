@@ -10,12 +10,14 @@ tasks:
     covers: [AC-181.1, AC-181.2, AC-181.3, AC-181.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: journey_sources.py — run records, system ship tree, repo sessions, Actions runs, record evidence; runs.followup
     files: [scripts/cplat/journey_sources.py, scripts/cplat/runs.py, scripts/cplat/runs_store.py]
     covers: [AC-181.1, AC-181.3, AC-181.4, AC-181.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: journey_measure.py — the `runs journey measure` verb, per-step table, JSON, --journey follow-up; measure.py forwards
     files: [scripts/cplat/journey_measure.py, scripts/cplat/runs_journey.py, scripts/journey/measure.py]
