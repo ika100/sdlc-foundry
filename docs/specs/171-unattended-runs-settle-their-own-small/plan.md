@@ -72,6 +72,7 @@ tasks:
     covers: [AC-171.3, AC-171.4, AC-171.6, AC-171.8]
     parallel_safe: true
     depends_on: [t4, t5]
+    done: true
   - id: t10
     title: Build prompt - a test helper is tightened without asking
     files: [plugins/component/commands/build.md, plugins/component/references/build-tighten.md, docs/rules/plugins/component/commands/build.yml, docs/rules/plugins/component/references/build-tighten.yml, plugins/component/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
