@@ -1,4 +1,4 @@
-"""Module-level tests of dispatch_state (spec 167, AC-167.5, AC-167.9, AC-167.11): steering survives a reload, unit files are read
+"""Module-level tests of dispatch_state (spec 167): steering survives a reload, unit files are read
 back from a worktree's git dir, events and the loop lock."""
 import datetime as dt
 import subprocess
