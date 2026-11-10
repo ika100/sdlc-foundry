@@ -4,6 +4,7 @@
 before the world is built, so the 171 tests keep their own stub):
 
   `pr checks --required --json name`   answers from `state["required"]` and moves no poll
+  `api …/protection/required_status_checks`  answers the same names as the branch's required checks
   per-head check scripts               `state["scripts"][sha]` or, for any head but `state["orig_head"]`, `state["moved_script"]`:
                                        one `{check name: bucket}` answer per poll (the last one repeats)
   `state["strict"]`                    a merge is refused like GitHub does while a required check of the head is not `pass` in
@@ -61,8 +62,16 @@ NEW_ATTEMPT = '''rep = st.get("reported", {}).get(h) or {}
 '''
 
 
+PROTECTION = '''    if path.endswith("/protection/required_status_checks"):
+        log(args=args, kind="protection", path=path)
+        out({"contexts": st.get("required", []), "checks": [{"context": n} for n in st.get("required", [])]})
+'''
+
+
 def patched_stub() -> str:
     text = land171_world.STUB
+    assert text.count('    print("tester")\n') == 1, "the api fallback of the 171 stub changed"
+    text = text.replace('    print("tester")\n', PROTECTION + '    print("tester")\n')
     start, end = text.index('if cmd == ["pr", "checks"]:'), text.index('if cmd == ["run", "view"]:')
     text = text[:start] + NEW_CHECKS + text[end:]
     assert text.count(OLD_ATTEMPT) == 1, "the merge-attempt line of the 171 stub changed"
