@@ -1,7 +1,7 @@
 ---
 spec_id: 166-the-dev-pr-of-a-system-ship-lands-on-the
 title: The dev PR of a system ship lands on the current main
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [597]
@@ -40,3 +40,4 @@ None.
 ## Changelog
 
 - 2026-11-09 created from #597 (journey 7); approved as the user asked ("go on, I follow your proposals").
+- 2026-11-10 done

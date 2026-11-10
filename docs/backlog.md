@@ -24,13 +24,9 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | approved | 7 | #568 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
-| [165-a-test-problem-does-not-stop-an-unattended-run](specs/165-a-test-problem-does-not-stop-an-unattended-run/spec.md) — A test problem does not stop an unattended run | P1 | approved | 7 | #595, #582, #583 |
-| [166-the-dev-pr-of-a-system-ship-lands-on-the](specs/166-the-dev-pr-of-a-system-ship-lands-on-the/spec.md) — The dev PR of a system ship lands on the current main | P1 | approved | 4 | #597 |
 | [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | approved | 12 |  |
 | [168-agent-rules-state-their-reason-and-can](specs/168-agent-rules-state-their-reason-and-can/spec.md) — Agent rules state their reason and can retire | P1 | approved | 8 |  |
-| [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | approved | 4 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
-| [170-release-wait-names-a-commit-of-another-repo](specs/170-release-wait-names-a-commit-of-another-repo/spec.md) — Release wait names a commit of another repo | P2 | approved | 2 | #614 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -157,6 +153,9 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [160-a-lint-suppression-in-an-acceptance-test-is-not-a](specs/160-a-lint-suppression-in-an-acceptance-test-is-not-a/spec.md) — A lint suppression in an acceptance test is not a changed test | P1 | done | 4 | #570 |
 | [162-repo-sessions-apply-the-repo-s-rules-in-an](specs/162-repo-sessions-apply-the-repo-s-rules-in-an/spec.md) — Repo sessions apply the repo's rules in an untrusted clone | P1 | done | 3 | #588 |
 | [163-a-resumed-unit-run-drops-the-escalation-of](specs/163-a-resumed-unit-run-drops-the-escalation-of/spec.md) — A resumed unit run drops the escalation of the run before | P1 | done | 2 | #591 |
+| [165-a-test-problem-does-not-stop-an-unattended-run](specs/165-a-test-problem-does-not-stop-an-unattended-run/spec.md) — A test problem does not stop an unattended run | P1 | done | 7 | #595, #582, #583 |
+| [166-the-dev-pr-of-a-system-ship-lands-on-the](specs/166-the-dev-pr-of-a-system-ship-lands-on-the/spec.md) — The dev PR of a system ship lands on the current main | P1 | done | 4 | #597 |
+| [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | done | 4 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
@@ -181,6 +180,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [150-the-house-rules-run-before-the-pr](specs/150-the-house-rules-run-before-the-pr/spec.md) — The house rules run before the PR | P2 | done | 5 |  |
 | [152-a-mutation-check-reports-test-strength](specs/152-a-mutation-check-reports-test-strength/spec.md) — A mutation check reports how strong the acceptance tests are | P2 | done | 3 |  |
 | [153-fewer-waits-after-a-merge](specs/153-fewer-waits-after-a-merge/spec.md) — Fewer waits after a merge | P2 | done | 2 |  |
+| [170-release-wait-names-a-commit-of-another-repo](specs/170-release-wait-names-a-commit-of-another-repo/spec.md) — Release wait names a commit of another repo | P2 | done | 2 | #614 |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)
