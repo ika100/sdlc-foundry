@@ -65,6 +65,7 @@ tasks:
     covers: [AC-167.8, AC-167.10, AC-167.12]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t10
     title: Backlog snapshot and candidate list
     files: [scripts/cplat/dispatch_backlog.py]
