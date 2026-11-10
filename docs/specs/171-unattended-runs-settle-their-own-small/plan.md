@@ -40,6 +40,7 @@ tasks:
     covers: [AC-171.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: spec - repeatable --tracks and test-diff names test helpers
     files: [scripts/cplat/spec.py]
