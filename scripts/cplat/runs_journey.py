@@ -9,6 +9,7 @@ every stage's wall-clock, working, person-wait and external-wait minutes, its PR
   round <kind> --cause C [--stage <id>] [--note N]                an extra round of the stage
   show [--json]                                                   the stage table so far
   end --outcome done|failed|escalated|abandoned [--reason R] [--at T]
+  measure <session>[,..] <start> <end> <owner/repo>... [--steps F] [--json] [--journey RUN_ID] [--records F]   (spec 181)
 
 Working time = wall clock − person-wait; a part and the journey are spans over their (overlapping) stages, not sums.
 """
@@ -399,6 +400,9 @@ VERBS = {"begin": begin, "stage": stage, "wait": wait, "pr": pr, "round": round_
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["measure"]:
+        import journey_measure
+        return journey_measure.main(argv[1:])
     ns = build_parser().parse_args(argv)
     for line in VERBS[ns.verb](ns):
         print(line)
