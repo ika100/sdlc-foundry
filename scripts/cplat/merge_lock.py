@@ -5,7 +5,9 @@ before it merges.
   with merge_lock.held(slug, who, timeout):   an exclusive flock on `<state>/locks/<owner>__<name>.merge.lock`
       caught = merge_lock.catch_up(...)       inside the lock: behind check, `gh pr update-branch`, the new head's checks
 
-The callers (`pr wait --merge`, `ship land`) run `gh pr merge` themselves, so their own error handling stays theirs.
+The callers (`pr wait --merge`, `ship land`) merge through `land_merge` (spec 171), which settles inside this lock: a head
+that was not known is read here and guards the merge, a conflict in a generated file is regenerated, the cleanup after the
+merge never fails it.
 """
 from __future__ import annotations
 
@@ -129,6 +131,8 @@ def _known(repo: Path, url: str, watch: ship.CheckWatch, interval: float) -> tup
         if head:
             behind, base = _behind(repo, slug_of(repo, url), url, head)
             if behind is not None:
+                if watch.head is None:      # spec 171: the merge carries the head this answer was read for
+                    watch.head = head
                 return behind, base, head
         if attempt < BEHIND_TRIES - 1:
             ship.say(f"  could not tell whether {url} is behind its base; retrying in {int(backoff)}s")
