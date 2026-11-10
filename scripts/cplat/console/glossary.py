@@ -22,7 +22,7 @@ TERMS: dict[str, tuple[str, str]] = {
     # ---- decisions (the Inbox)
     "decision": (
         "Decision",
-        "Something only you can decide: answer, approve, escalation, promote, triage or review. Select a row to see what it "
+        "Something only you can decide: answer, approve, escalation, promote, triage, review, budget or stuck. Select a row to see what it "
         "changes and decide there. Everything else runs without you.",
     ),
     "answer": (
@@ -52,6 +52,15 @@ TERMS: dict[str, tuple[str, str]] = {
         "Review",
         "A fix an engine opened but may not merge by itself (at propose, or outside a guardrail at act). Approve merges it "
         "once every check passed.",
+    ),
+    "daily_budget": (
+        "Budget",
+        "The dispatcher's daily token budget is used up. Starts continue after midnight, or when you raise "
+        "budget.tokens_per_day in .platform/dispatch.yml.",
+    ),
+    "stuck": (
+        "Stuck",
+        "A dispatcher unit ended twice without finishing. The panel names its log; the item waits until you resume it.",
     ),
     "waiting": ("Waiting", "How long the decision has waited. The Inbox lists the oldest first."),
     # ---- the Board
@@ -184,7 +193,7 @@ TERMS: dict[str, tuple[str, str]] = {
 
 SECTIONS = (
     ("decisions", "Your decisions", "The Inbox lists what only you can decide. Each kind:",
-     ("decision", "answer", "approve", "escalation", "promote", "triage", "review", "waiting")),
+     ("decision", "answer", "approve", "escalation", "promote", "triage", "review", "daily_budget", "stuck", "waiting")),
     ("board", "Items and their state", "The Board shows every open item in its stage; the colour of a card is its state.",
      ("stage", "decision_stage", "spec", "run", "slice", "running", "stopped", "waits", "not_started", "budget", "done_view")),
     ("where", "The system and where it runs", "System shows the system as a tree: its components, libraries, resources and "
