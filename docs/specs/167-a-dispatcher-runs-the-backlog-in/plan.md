@@ -24,6 +24,7 @@ tasks:
     covers: [AC-167.6, AC-167.8, AC-167.10, AC-167.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Dispatcher claims in claim.py and the approver in spec.approve
     files: [scripts/cplat/claim.py, scripts/cplat/spec.py]
