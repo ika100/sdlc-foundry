@@ -11,4 +11,4 @@ Read from `/component:build` Phase 4 when the reviewer's `NOT MET` names a crite
 
 ## A test helper changed
 
-`test-diff` names `test helper (defines no test): <file>` → `cplat spec test-diff $RED --tighten <file> --task <task> --reason '<why>'` without asking, because the check refuses a helper change that drops an assertion, test or criterion id. Exit 1 → as a changed test (`build-test-approval.md`). `TIGHTENED` lists the helper.
+`test-diff` names `test helper (defines no test): <file>` → `cplat spec test-diff $RED --tighten <file> --task <task> --reason '<why>'` without asking, because the check refuses a helper change that drops an assertion, test or criterion id. Exit 1 → a changed test (`build-test-approval.md`); `TIGHTENED` lists it.
