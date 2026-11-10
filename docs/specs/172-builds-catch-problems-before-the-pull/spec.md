@@ -1,7 +1,7 @@
 ---
 spec_id: 172-builds-catch-problems-before-the-pull
 title: Builds catch problems before the pull request
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [628, 629, 630, 631, 632]
@@ -70,3 +70,4 @@ None.
 ## Changelog
 
 - 2026-11-10 created
+- 2026-11-10 approved
