@@ -31,7 +31,9 @@ LABELS = {
     "needs-decision": ("e99695", "A decision of the user holds this issue (spec 167)"),
     "stale-premise": ("bfdadc", "Closed: already resolved on main (spec 167)"),
 }
-DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix"}
+# A decision takes an issue out of the queue; so does a label that marks it as no triage work (platform notes, started work).
+DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix", "triaged", "needs-decision"}
+NOT_TRIAGE_LABELS = {"retro", "notify", "in-progress"}
 BODY_LIMIT = 4000
 COMMENT_LIMIT = 1500
 FENCE = "-----"
@@ -46,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-R", "--repo", help="OWNER/REPO (default: the repo of the current directory)")
     sub = p.add_subparsers(dest="action", required=True)
     ls = sub.add_parser("list", help="the intake queue")
-    ls.add_argument("--new", action="store_true", help="also issues that carry none of the triage labels (filed without the form)")
+    ls.add_argument("--new", action="store_true", help="no effect: the queue already holds issues filed without the form")
     ls.add_argument("--waiting", action="store_true", help="only issues labelled needs-info")
     ls.add_argument("--json", action="store_true")
     sh = sub.add_parser("show", help="one issue with its comments, redacted and fenced as untrusted text")
@@ -83,15 +85,15 @@ def summary(issue: dict) -> dict:
 
 
 def queue(issues: list[dict], *, new: bool = False, waiting: bool = False) -> list[dict]:
-    """Issues to look at: `triage` and no decision yet; with `new` also issues without any triage label; `waiting` = needs-info."""
+    """Issues to look at: every open issue without a decision, whatever labels it was filed with (a form, `/issue:report`,
+    by hand), except platform notes and started work; `waiting` = needs-info. `new` is kept for old callers and changes nothing."""
     out = []
     for issue in issues:
         labels = _labels(issue)
         if waiting:
             keep = "needs-info" in labels
         else:
-            undecided = not labels & DECISION_LABELS
-            keep = undecided and ("triage" in labels or (new and not labels & set(LABELS)))
+            keep = not labels & (DECISION_LABELS | NOT_TRIAGE_LABELS)
         if keep:
             out.append(issue)
     return sorted(out, key=lambda i: i.get("createdAt", ""))
