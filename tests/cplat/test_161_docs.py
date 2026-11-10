@@ -109,7 +109,7 @@ def test_the_check_runs_in_ci_quality_and_ci_local_ac_161_4():  # AC-161.4
 def test_the_quickstart_manifest_creates_the_system_ac_161_5(tmp_path, capsys, monkeypatch):  # AC-161.5
     text = QUICKSTART.read_text()
     installs = re.findall(r"/plugin install ([a-z-]+)@sdlc-foundry", "".join(blocks(text, "text")))
-    assert set(check_docs.STARTER) <= set(installs)
+    assert installs == ["starter"]  # spec 174: one plugin installs the starter set
     manifest = next(b for b in blocks(text, "yaml") if b.startswith("system:"))
     name = yaml.safe_load(manifest)["system"]
     f = tmp_path / f"{name}.yaml"
@@ -166,7 +166,7 @@ def test_outdated_material_leaves_the_site_and_is_marked_historical_ac_161_8(): 
     migration = adopting.split("## Migrating from 4.x to 5.0", 1)[1].split("\n## ", 1)[0]
     assert "### What moved where" in migration and "| | `/gitops:compose` |" in migration
     journey = (ROOT / "docs" / "USER-JOURNEY.md").read_text().split("## Chapter 1", 1)[0]
-    assert all(f"/plugin install {p}@sdlc-foundry" in journey for p in check_docs.STARTER)
+    assert "/plugin install starter@sdlc-foundry" in journey  # spec 174
     assert "devbox run cluster-up" in journey and "just `shared`" not in journey
 
 
