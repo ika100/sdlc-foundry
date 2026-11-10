@@ -10,6 +10,7 @@ tasks:
     covers: [AC-178.2, AC-178.3, AC-178.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: waiting helper and check-test-sleeps.py in quality, ci-local and CI
     files: [tests/cplat/waiting.py, scripts/check-test-sleeps.py, devbox.json, scripts/ci-local.sh, .github/workflows/ci.yml]
