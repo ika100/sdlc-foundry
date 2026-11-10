@@ -95,6 +95,8 @@ jobs:
             fi
             echo "OK $plugin_name @ $plugin_version"
           done
+      - name: plugin dependencies name live plugins of this marketplace (spec 174)
+        run: python3 scripts/check-plugin-deps.py
 
   validate-shapes:
     name: shape registry + detection
