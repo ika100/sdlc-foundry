@@ -49,7 +49,7 @@ def test_claim_labels_assigns_and_names_the_branch(tmp_path, monkeypatch):
 
 
 def test_holder_by_tells_a_dispatcher_claim_from_a_manual_one(tmp_path, monkeypatch):
-    """Spec 167 (AC-167.3): the label alone is a manual claim; the claim comment names who claimed."""
+    """Spec 167: the label alone is a manual claim; the claim comment names who claimed."""
     gh = Issues(**{"1": {}, "2": {}, "3": {}, "4": {}})
     monkeypatch.setattr(claim, "gh", gh)
     assert claim.holder_by(gh.issues[1]) == (None, False)
