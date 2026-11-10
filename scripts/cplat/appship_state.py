@@ -19,6 +19,7 @@ import runs
 import ship
 import stopgate
 import spec as specmod
+import waits
 from core import PlatformError, run
 
 PHASES = ["plan", "publish", "repos", "complete", "done"]
@@ -382,10 +383,11 @@ def gate(repo: Path, hook_input: dict) -> dict | None:
         return None
     mark = _mark(repo, st)
     running = stopgate.running_agents(hook_input)
+    waiting = waits.live(repo)
     box: dict = {}
 
     def change(s: dict) -> None:
-        box["verdict"] = stopgate.check(s, session, mark, running)
+        box["verdict"] = stopgate.check(s, session, mark, running, waiting)
 
     st = update(repo, change)
     verdict = box["verdict"]
@@ -397,9 +399,14 @@ def gate(repo: Path, hook_input: dict) -> dict | None:
         with contextlib.redirect_stderr(io.StringIO()):     # the hook's output is its answer only
             escalate(repo, reason, stopgate.cause(message, _code_red(repo)), keep_cause=True)
         return {"systemMessage": f"product ship {spec_id}: escalated ({reason}); resume it with {command}"}
-    text = [f"The product ship of {spec_id} is not finished (phase {phase}, stops without progress: {verdict.no_progress}/2).",
-            f"Next: {next_step(st)}.",
-            "Keep going. Only if a rule needs the user (a question of a repo spec, a conflict, a decision the spec does not answer) "
+    if verdict.waiting:
+        text = [stopgate.wait_line(verdict),
+                f"The product ship of {spec_id} is not finished (phase {phase}); the wait above is still running.",
+                "Next: read its result when it ends (a blocking read of its background task, never a polling loop), then go on from it."]
+    else:
+        text = [f"The product ship of {spec_id} is not finished (phase {phase}, stops without progress: {verdict.no_progress}/2).",
+                f"Next: {next_step(st)}."]
+    text += ["Keep going. Only if a rule needs the user (a question of a repo spec, a conflict, a decision the spec does not answer) "
             "or the user asked you to stop: run `cplat system ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop."]
     return {"decision": "block", "reason": "\n".join(text)}
 

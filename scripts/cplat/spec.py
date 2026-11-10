@@ -671,6 +671,7 @@ def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, 
                  and not f.startswith("docs/") and not f.endswith(".md")
                  and set(AC_ANY.findall((root / f).read_text(errors="ignore"))) & ids and not created_by_plan(f)]
     out = {}
+    texts: dict[str, tuple[str, str]] = {}
     for f in files:
         old = subprocess.run(["git", "-C", str(root), "show", f"{base}:{f}"], capture_output=True, text=True)
         new = (root / f).read_text() if (root / f).is_file() else ""
@@ -679,12 +680,16 @@ def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, 
             continue
         lint = suppression_only(old.stdout, new, f)        # spec 160: before formatting, as a comment can be formatting
         out[f] = lint if lint[0] or lint[1] else formatting_only(old.stdout, new, f)
+        texts[f] = (old.stdout, new)
     approved = _approvals(root, base)
     for f, (ok, _) in out.items():
         rec = approved.get(f)
         if not ok and rec and rec.get("sha256") == _content_hash(root / f):
             who = "tightened by an agent" if rec.get("kind") == "tightened" else "approved by the user"
             out[f] = (True, f"{who}{': ' + rec['reason'] if rec.get('reason') else ''}")
+    for f, (ok, why) in out.items():          # spec 171 (AC-171.7): a refused file that defines no test is a helper
+        if not ok and f in texts and not _test_names(texts[f][0]) and not _test_names(texts[f][1]):
+            out[f] = (False, "test helper (defines no test): " + why)
     return out
 
 
@@ -1400,7 +1405,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--from-plan", nargs=2, metavar=("PLAN", "REPO_ID"),
                    help="this repo's slice of a product plan (docs/plan/<id>.md in the gitops-app repo)")
     p.add_argument("--priority", default="P1", choices=sorted(PRIORITIES))
-    p.add_argument("--tracks", type=int, nargs="*", default=[])
+    p.add_argument("--tracks", type=int, nargs="*", action="extend", default=None)
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this spec (spec 082)")
     p.add_argument("--parent")
     p.add_argument("--no-shape", action="store_true", help="do not record the repo's shape")
@@ -1453,7 +1458,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--tighten", nargs="*", metavar="FILE",
                    help="record that an agent tightened FILE to its criterion (spec 165): refused when a test, an assertion "
                         "or a criterion id is gone, or a skip was added")
-    p.add_argument("--reason", help="with --approve: why the user approved the change; with --tighten: the reviewer's finding")
+    p.add_argument("--reason", help="with --approve: why the user approved the change; with --tighten: the reviewer's finding, or why a test helper changed")
     p = sub.add_parser("ci", help="check every spec and trace built ones; GitHub annotations (warnings unless --strict)")
     p.add_argument("--strict", action="store_true")
     p = sub.add_parser("migrate", help="convert STORY-NNN stories in docs/backlog.md into spec folders")
@@ -1468,7 +1473,7 @@ def main(argv: list[str]) -> int:
         elif not ns.title:
             raise PlatformError("a title or --from-plan PLAN REPO_ID is required")
         else:
-            spec = new(root, " ".join(ns.title), shape=shape, priority=ns.priority, tracks=ns.tracks, parent=ns.parent)
+            spec = new(root, " ".join(ns.title), shape=shape, priority=ns.priority, tracks=list(dict.fromkeys(ns.tracks or [])), parent=ns.parent)
         print(spec.dir.relative_to(root) / "spec.md")
         if spec.meta.get("tracks"):
             import claim

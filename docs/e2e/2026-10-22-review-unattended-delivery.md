@@ -1,5 +1,8 @@
 # Review 2026-10-22: three lan repos against the platform
 
+<!-- historical -->
+> **Historical.** This review was done with a 4.x platform; command and file names are those of 4.x. It is kept as a record and is not part of the current documentation; the current flow is in the [quickstart](../QUICKSTART.md) and the [user journey](../USER-JOURNEY.md).
+
 A review of three repos built and run with the platform on a home cluster ("lan", k3s with Argo CD and self-hosted ARC runners), done to find what stops Claude from running a feature unattended from spec to deployment. The repos: **stock-manager** (a Python service with a nightly pipeline), **stock-manager-gitops** (its gitops-app, which also holds the cluster's infrastructure), and **ai-ops** (a service-go controller that watches onboarded components). Specs 065–071 come from it.
 
 ## Findings

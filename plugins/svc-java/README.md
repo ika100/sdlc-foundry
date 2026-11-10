@@ -15,6 +15,6 @@ Agents for **Java service repos** — the `service-java` shape (Spring Boot 3.x,
 ## Dependencies
 
 1. `svc` and `shared` plugins enabled (the template's `.claude/settings.json` enables all three).
-2. Project has a `devbox.json` with the canonical recipes (`dev`, `test`, `test-fast`, `lint`, `lint-fix`, `typecheck`, `quality`, `audit`, `security`, `image-build`, `image-scan`). Bootstrap with `/shared:new-service <name> --type service-java`.
+2. Project has a `devbox.json` with the canonical recipes (`dev`, `test`, `test-fast`, `lint`, `lint-fix`, `typecheck`, `quality`, `audit`, `security`, `image-build`, `image-scan`). Bootstrap with `/component:new <name> <description> --lang java`.
 
 All agents invoke `devbox run <recipe>` — never `mvn`/`java` directly.

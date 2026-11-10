@@ -16,6 +16,7 @@ import core
 
 TIMEOUT = 30
 LAND_COMMANDS = ("/component:ship", "/system:ship")
+MINIMUM = ("Bash(cplat *)", "Read(~/.claude/plugins/**)")     # what a session needs first (spec 171)
 
 
 @dataclass
@@ -75,6 +76,22 @@ def matches(rule: str, command: str) -> bool:
         p = pat[:-2]
         return command == p or command.startswith(p + " ")
     return re.fullmatch(".*".join(re.escape(part) for part in pat.split("*")), command, re.DOTALL) is not None
+
+
+def read_matches(rule: str, path: str) -> bool:
+    """Whether a `Read` allow rule covers `path`: `Read`, `Read(**)` or a glob (`**` any, `*` no `/`; `~` or the home accepted)."""
+    if rule == "Read":
+        return True
+    if not (rule.startswith("Read(") and rule.endswith(")")):
+        return False
+    glob = rule[5:-1]
+    home = str(Path.home())
+    if glob.startswith("~"):
+        glob = home + glob[1:]
+    target = home + path[1:] if path.startswith("~") else path
+    pat = "".join(".*" if part == "**" else "[^/]*" if part == "*" else re.escape(part)
+                  for part in re.split(r"(\*\*|\*)", glob))
+    return re.fullmatch(pat, target, re.DOTALL) is not None
 
 
 def _self_check() -> None:
@@ -171,10 +188,21 @@ def _blocked(repo: Path, command: str, branches: list[str], only: tuple[str, ...
 
 
 def _no_allowlist(repo: Path) -> Failure | None:
-    if (repo / ".claude" / "settings.json").is_file():
+    path = repo / ".claude" / "settings.json"
+    if not path.is_file():
+        return Failure("no-repo-allowlist",
+                       f"{repo} has no committed allowlist (.claude/settings.json): run /platform:update or cplat adopt")
+    allow = _rules(path, "allow")
+    missing = []
+    if not any(matches(r, "cplat spec check") for r in allow):
+        missing.append(MINIMUM[0])
+    if not any(read_matches(r, "~/.claude/plugins/cache/sdlc-foundry/component/1.0.0/commands/ship.md") for r in allow):
+        missing.append(MINIMUM[1])
+    if not missing:
         return None
     return Failure("no-repo-allowlist",
-                   f"{repo} has no committed allowlist (.claude/settings.json): run /platform:update or cplat adopt")
+                   f"{' and '.join(missing)} not allowed by {path}: add to permissions.allow "
+                   "(the library template's allowlist has it), or run /platform:update")
 
 
 def _identity(repo: Path) -> Failure | None:

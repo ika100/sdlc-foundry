@@ -15,6 +15,6 @@ Agents for **Go service repos** — the `service-go` shape. Used by the `/svc:*`
 ## Dependencies
 
 1. `svc` and `shared` plugins enabled (the template's `.claude/settings.json` enables all three).
-2. Project has a `devbox.json` with the canonical recipes (`dev`, `test`, `test-fast`, `lint`, `lint-fix`, `typecheck`, `quality`, `audit`, `security`, `image-build`, `image-scan`). Bootstrap with `/shared:new-service <name> --type service-go`.
+2. Project has a `devbox.json` with the canonical recipes (`dev`, `test`, `test-fast`, `lint`, `lint-fix`, `typecheck`, `quality`, `audit`, `security`, `image-build`, `image-scan`). Bootstrap with `/component:new <name> <description> --lang go`.
 
 All agents invoke `devbox run <recipe>` — never `go`/`golangci-lint` directly.

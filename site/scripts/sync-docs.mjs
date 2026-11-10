@@ -11,6 +11,7 @@ const BASE = '/sdlc-foundry';
 
 /** repo file -> site page. `slug` is relative to the docs collection. */
 const PAGES = [
+  { src: 'docs/QUICKSTART.md', slug: 'get-started', title: 'Quickstart: from an empty folder to a shipped feature', label: 'Quickstart', order: 0 },
   { src: 'docs/USER-JOURNEY.md', slug: 'guides/user-journey', title: 'User journey: from empty folder to a running system', label: 'User journey', order: 1 },
   { src: 'docs/HOW-IT-WORKS.md', slug: 'guides/how-it-works', title: 'How it works', order: 2 },
   { src: 'docs/console.md', slug: 'guides/console', title: 'The local console', order: 3 },
@@ -25,12 +26,8 @@ const PAGES = [
   { src: 'docs/ARCHITECTURE.md', slug: 'guides/architecture', title: 'Architecture', order: 11 },
   { src: 'docs/DOMAIN-MODEL.md', slug: 'guides/domain-model', title: 'Domain model', label: 'Domain model in depth', order: 12 },
   { src: 'docs/templates.md', slug: 'guides/add-a-shape', title: 'Adding a new shape', order: 13 },
-  { src: 'docs/requirements/platform-vision.md', slug: 'vision/design-history', title: 'Design history: the original vision PRD', order: 9 },
-  { src: 'docs/requirements/end-to-end-scenario.md', slug: 'vision/end-to-end-scenario', title: 'Design history: the end-to-end scenario', order: 10 },
   { src: 'docs/BASELINES.md', slug: 'reference/baselines', title: 'Measured baselines', order: 20 },
   { src: 'docs/PERFORMANCE.md', slug: 'reference/performance', title: 'Performance measurements', order: 19 },
-  { src: 'docs/e2e/2026-10-08-todo-spec-driven.md', slug: 'reference/e2e-todo-2026-10-08', title: 'Field report: a todo product end to end (2026-10-08)', order: 21 },
-  { src: 'docs/e2e/2026-10-09-todo-second-feature.md', slug: 'reference/e2e-todo-2026-10-09', title: 'Field report: a second feature with v4.0.0 (2026-10-09)', order: 22 },
   { src: 'docs/CHANGELOG.md', slug: 'reference/changelog', title: 'Changelog', order: 30 },
   { src: 'docs/adr/README.md', slug: 'reference/adr', title: 'Architecture decision records', order: 25 },
   { src: 'CONTRIBUTING.md', slug: 'community/contributing', title: 'Contributing', order: 1 },

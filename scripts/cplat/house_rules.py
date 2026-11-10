@@ -22,6 +22,7 @@ import pr_rules
 import promptrules
 import rulescheck
 import rules_retire
+import core
 from core import PlatformError
 
 KINDS_WITH_ENTRY = ("feat", "fix", "perf")   # a change users can notice; docs/chore/ci/test/refactor need no fragment
@@ -120,6 +121,14 @@ def check(repo: Path, *, title: str, body: str, labels: list[str], base: str, fi
     return title, problems
 
 
+def _read_reason(exc: Exception) -> str:
+    if isinstance(exc, FileNotFoundError):
+        return "does not exist"
+    if isinstance(exc, IsADirectoryError):
+        return "is a directory"
+    return (getattr(exc, "strerror", None) or str(exc)).lower() if isinstance(exc, OSError) else str(exc)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat platform pr-check", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--title", required=True)
@@ -134,7 +143,13 @@ def main(argv: list[str]) -> int:
     if not (repo / ".claude-plugin" / "marketplace.json").is_file():
         raise PlatformError("pr-check runs in the platform repo (no .claude-plugin/marketplace.json here)",
                             hint="a component or gitops repo opens its PRs with `cplat pr open`, which applies its own rules")
-    body = Path(ns.body_file).read_text() if ns.body_file else ""
+    body = ""
+    if ns.body_file:
+        try:
+            body = core.git_path(repo, ns.body_file).read_text()
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"ERROR: body file {ns.body_file}: {_read_reason(exc)}")
+            return 1
     notes: list[str] = []
     title, problems = check(repo, title=ns.title, body=body, labels=ns.label, base=ns.base, fix=ns.fix, notes=notes)
     if ns.json:

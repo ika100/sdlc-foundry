@@ -1,6 +1,6 @@
 {
   "name": "api",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "The api noun: /api:list shows the APIs a system declares, with provider and consumers.",
   "author": {
     "name": "Eike Hensler",

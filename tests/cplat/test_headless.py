@@ -18,7 +18,7 @@ def repo(tmp_path, monkeypatch):
     r.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=r, check=True)
     (r / ".claude").mkdir()
-    (r / ".claude" / "settings.json").write_text("{}")
+    (r / ".claude" / "settings.json").write_text('{"permissions": {"allow": ["Bash(devbox run *)", "Bash(cplat *)", "Read(~/.claude/plugins/**)"]}}')
     make(r, status="approved")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setattr(headless, "notify", lambda *a: None)

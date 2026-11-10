@@ -462,7 +462,7 @@ def test_the_e2e_script_proves_no_cache_data_is_in_the_backup_ac_118_14():  # AC
 def test_the_domain_model_guide_documents_the_cache_type_ac_118_21():  # AC-118.21
     text = (ROOT / "docs" / "DOMAIN-MODEL.md").read_text()
     for needle in ("Valkey", "BSD", "AGPL", "Redis protocol", "REDIS_URL", "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "SESSIONS_REDIS_URL",
-                   "<system>-<name>-app", "maxmemoryPolicy", "persistence", "256Mi", "allkeys-lru", "1Gi", "spec 120", "spec 118", "spec 119"):
+                   "<system>-<name>-app", "maxmemoryPolicy", "persistence", "256Mi", "allkeys-lru", "1Gi"):
         assert needle in text, f"DOMAIN-MODEL.md lacks {needle!r}"
     assert re.search(r"not (called )?`redis`", text)
     assert "`cache` and `broker`, which are reserved" not in text

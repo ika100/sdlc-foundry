@@ -69,7 +69,7 @@ Plan for one environment per step. The platform waits up to 15 minutes for the r
 
 ## Operators on one cluster
 
-Every environment of a gitops repo deploys to one cluster, the shared cluster of the system, so an operator exists once there. It moves with dev's step and is checked against the smoke tests of every environment on that cluster. The order of AC-121.20 for separate clusters, one cluster per environment, is stated for a later spec: until then a system has one cluster and the operator moves once.
+Every environment of a gitops repo deploys to one cluster, the shared cluster of the system, so an operator exists once there. It moves with dev's step and is checked against the smoke tests of every environment on that cluster. Separate clusters, one per environment, are not supported yet: a system has one cluster and the operator moves once.
 
 With `operators: owner` on an environment, the cluster's owner installs the operators and the platform does not render them; `cplat platform update --verify` and doctor still check what the environment needs. A cluster repo installs the operators for several systems; see [CLUSTERS.md](CLUSTERS.md).
 

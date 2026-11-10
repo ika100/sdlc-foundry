@@ -31,8 +31,13 @@ python3 scripts/pin-actions.py --check
 step "relative Markdown links"
 python3 scripts/check-links.py
 
+step "the platform's allowlist holds the library template's rules (spec 171)"
+python3 scripts/check-settings.py
+
 step "every prompt rule is classified, reasoned and marked (spec 168)"
 uv run scripts/cplat/cplat.py platform rules check
+step "user docs name only things that exist (spec 161)"
+uv run --with-requirements requirements-test.txt python scripts/check-docs.py
 
 step "no \"\$\$\" in a pod command of the e2e scripts (#323)"
 python3 scripts/check-e2e-probes.py

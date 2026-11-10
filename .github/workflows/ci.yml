@@ -110,8 +110,12 @@ jobs:
         run: bash scripts/test-detect-shape.sh
       - name: relative Markdown links resolve
         run: python3 scripts/check-links.py
+      - name: the platform's allowlist holds the library template's rules (spec 171)
+        run: python3 scripts/check-settings.py
       - name: every prompt rule is classified, reasoned and marked (spec 168)
         run: uv run scripts/cplat/cplat.py platform rules check
+      - name: the user docs name only commands, flags, plugins, recipes and manifests that exist (spec 161)
+        run: uv run --with-requirements requirements-test.txt python scripts/check-docs.py
       - name: no "$$" in a string the e2e scripts send as a pod command (#323)
         run: python3 scripts/check-e2e-probes.py
       - name: every image and chart comes from the versions table

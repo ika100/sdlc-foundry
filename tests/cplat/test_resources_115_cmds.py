@@ -441,7 +441,7 @@ def test_migrate_renders_the_4_7_tree_except_the_pinned_image_ac_115_6(migrated)
 
 def test_the_domain_model_guide_documents_the_resources_ac_115_16():  # AC-115.16
     text = (ROOT / "docs" / "DOMAIN-MODEL.md").read_text()
-    for needle in ("resources.<name>", "database", "bucket", "cache", "broker", "spec 116", "spec 118", "spec 119", "external", "remote",
+    for needle in ("resources.<name>", "database", "bucket", "cache", "broker", "external", "remote",
                    "instances.<env>", "ORDERS_DB_DATABASE_URL", "USERS_DB_PGHOST", "operators"):
         assert needle in text, f"DOMAIN-MODEL.md lacks {needle!r}"
 

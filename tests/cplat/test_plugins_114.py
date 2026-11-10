@@ -407,11 +407,11 @@ def test_the_command_tables_list_api_list_check_and_fix_ac_114_71():  # AC-114.7
     text = domain()
     table = text.split("## Commands follow the nouns", 1)[1].split("\n## ", 1)[0]
     api = next(ln for ln in table.splitlines() if ln.startswith("| `api`"))
-    assert "`list`" in api and ("`check`" not in api or "spec 110" in api)
+    assert "`list`" in api and "`check`" not in api
     comp = next(ln for ln in table.splitlines() if ln.startswith("| `component`"))
     assert "`check`" in comp and "`fix`" in comp
     assert re.search(r"(?s)fix.{0,300}quick-task|quick-task.{0,300}fix", table + text)
-    assert "spec 110" in text
+    assert "The contract check of an API is not built yet." in text
     assert not [ln for ln in text.splitlines() if "/api:check" in ln and "spec 110" not in ln and "coming" not in ln]
 
 

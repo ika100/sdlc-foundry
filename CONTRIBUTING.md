@@ -25,6 +25,13 @@ By contributing you agree that your contribution is licensed under the [Apache L
 
 Read [CLAUDE.md](CLAUDE.md) (conventions and "how to add X" recipes), [docs/AGENTS.md](docs/AGENTS.md) (orchestration model) and [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) before changing agents, commands or templates.
 
+## How changes reach consumers
+
+- **Agent and command changes:** bump the version in `plugins/<name>/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, then release. Consumers run `/plugin marketplace update`.
+- **Template changes:** edit `templates/<shape>/` and release. Consumers run `/platform:update` (optionally `--ref <tag>`) in their repo: it re-applies the template on a review branch and leaves project-owned files alone.
+
+The two channels are independent: new agents ship without forcing every repo through `/platform:update`, and the other way round.
+
 ## Development setup
 
 You need `git`, [`uv`](https://docs.astral.sh/uv/) and `copier` (`uv tool install copier`). Docker, `kubectl` and `k3d` are only needed for the end-to-end test. [`devbox`](https://www.jetify.com/devbox) provides the same tools in one shell (`devbox shell`).
@@ -39,6 +46,7 @@ git clone https://github.com/ika100/sdlc-foundry && cd sdlc-foundry
 uv run scripts/shapes.py check                                              # registry, templates, plugins, descriptions
 python3 scripts/pin-actions.py --check                                      # every GitHub Action pinned by SHA, workflows have permissions
 python3 scripts/check-links.py                                               # relative Markdown links resolve
+uv run --with-requirements requirements-test.txt python scripts/check-docs.py   # the user docs name only commands, flags, plugins, recipes and manifests that exist
 uvx --from "reuse[charset-normalizer]" reuse lint                           # every file has license + copyright metadata (REUSE)
 uv run --with-requirements requirements-test.txt pytest tests/cplat -q # CLI + render tests (3 tests need the Kyverno CLI and skip without it)
 copier copy ./templates/web-nextjs /tmp/try --defaults --trust --skip-tasks --data project_name=try   # render a template you touched
@@ -46,13 +54,13 @@ bash tests/e2e/run.sh                                                       # wh
 E2E_PART=<part> bash tests/e2e/run.sh                                       # one part only: core, scaling or backups (as a PR runs it)
 ```
 
-`bash scripts/ci-local.sh` (or `devbox run ci-local`; add `--render` to render every template) runs the first five in one go. The same checks are devbox scripts for the `/component:*` gates: `devbox run test-fast` (cplat tests), `quality` (static checks, no tests), `ci` (= `ci-local.sh`), `lint-fix` (no-op, no formatter here).
+`bash scripts/ci-local.sh` (or `devbox run ci-local`; add `--render` to render every template) runs the first six in one go. The same checks are devbox scripts for the `/component:*` gates: `devbox run test-fast` (cplat tests), `quality` (static checks, no tests), `ci` (= `ci-local.sh`), `lint-fix` (no-op, no formatter here).
 
 CI runs the same checks plus a smoke test per template (generated repos must pass their own `quality` and `test` recipes). Pull requests that only touch documentation run a reduced set of jobs.
 
 ## Documentation site
 
-The site at <https://ika100.github.io/sdlc-foundry/> is built from `site/` (Astro Starlight). Narrative pages (vision, problem, value, scenarios, concepts, get started) live in `site/src/content/docs`; the guides, ADRs, changelog and community pages are **synced from the repository's Markdown** at build time, and the command, shape, configuration and CLI reference pages are **generated from the code**, so edit the source (`docs/`, `plugins/`, `shapes.yml`, `render.py`), not the copies. Preview locally:
+The site at <https://ika100.github.io/sdlc-foundry/> is built from `site/` (Astro Starlight). Narrative pages (vision, problem, value, scenarios, concepts, the laptop and recorded-run pages) live in `site/src/content/docs`; the quickstart is `docs/QUICKSTART.md`, the one getting-started page the README and the user journey link to; the guides, ADRs, changelog and community pages are **synced from the repository's Markdown** at build time, and the command, shape, configuration and CLI reference pages are **generated from the code**, so edit the source (`docs/`, `plugins/`, `shapes.yml`, `render.py`), not the copies. Preview locally:
 
 ```bash
 cd site && npm ci --ignore-scripts && npm run dev      # http://localhost:4321/sdlc-foundry/
@@ -60,6 +68,8 @@ npm test && npm run build                              # unit tests, then a full
 ```
 
 CI builds the site on pull requests that touch its inputs; merging to `main` publishes it.
+
+**Docs that stay true.** `scripts/check-docs.py` reads every user-facing page and fails on a slash command that does not exist or is a tombstone, a flag its command file does not name, a plugin that is only tombstones, a `devbox run` recipe nobody defines, and an invalid system manifest; an install block must include the starter plugins (`shared`, `system`, `component`, `platform`), and newcomer pages keep spec numbers in a closing "Background" section. A test runs the quickstart's own manifest through `cplat system new`. Mark a page that records history with `<!-- historical -->` and keep it off the site.
 
 ## Legal and privacy
 

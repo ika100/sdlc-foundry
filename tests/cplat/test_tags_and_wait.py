@@ -135,14 +135,19 @@ def test_a_pr_that_never_reported_a_check_still_stops(fake, tmp_path):
 
 
 def test_a_merge_that_landed_but_failed_locally_counts_as_merged(fake, tmp_path, monkeypatch):
-    """#371: in a worktree `gh pr merge` merges on GitHub, then cannot check out main; the PR is merged, so it is reported so."""
+    """#371, spec 171: `gh pr merge` merges on GitHub, then a local step fails; the PR is merged, so it is reported so, with a WARNING."""
     def merged_then_local_error(cmd, **kw):
-        fake.state = "MERGED"
-        return subprocess.CompletedProcess(cmd, 1, "", "failed to run git: fatal: 'main' is already used by worktree at '/x'")
+        if cmd[:3] == ["gh", "pr", "merge"]:
+            fake.state = "MERGED"
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, "", "HTTP 422: Reference does not exist but the gateway failed")
+        return subprocess.CompletedProcess(cmd, 1, "", "fatal: 'main' is already used by worktree at '/x'")
     monkeypatch.setattr(prmod, "run", merged_then_local_error)
     fake.checks = [[check("quality", "pass")]]
     ok, lines = prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 600, 10, 300)
-    assert ok and lines[-1].startswith("merged https://github.com/acme/other/pull/5 (squash); the local cleanup failed: ")
+    assert ok and "merged https://github.com/acme/other/pull/5 (squash)" in lines
+    assert not any("local cleanup failed" in ln for ln in lines)
 
 
 def test_pr_wait_is_red_without_merging(fake, tmp_path):
