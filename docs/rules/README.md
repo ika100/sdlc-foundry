@@ -20,7 +20,8 @@ and `cplat platform rules check` validates it on every run of CI.
   Only the keys of `register.yml`; the prompt marks the sentence `**Hard rule:**`.
 - `practice`: a way of working with a stated purpose; an agent may depart where the purpose does not apply.
 - `experience`: a practice added after an incident; its `source` names the issue (`#<n>`).
-- `not a rule`: the sentence has a rule word but instructs nobody.
+- `not a rule`: the sentence has a rule word but instructs nobody. The check fails (`hidden-rule`) a sentence with a condition word that reads as an instruction:
+  it addresses `you`, or, after labels and a leading `If …,`/`When …,` clause, starts with a verb such as `read`.
 - `retired`: a rule removed because a `cplat` command or CI job now does it, because it repeats another rule, or
   because its cause cannot recur. The entry keeps the removed sentence, the date, the reason.
 
@@ -31,7 +32,9 @@ and `cplat platform rules check` validates it on every run of CI.
 2. A practice or experience never keeps `only when`, `only if`, `unless` or `except`; state the purpose instead.
 3. Issue, spec and ADR references go to the entry's `source`; references alone are no reason.
 4. Phrases that existing tests pin stay verbatim; add the reason around them.
-5. A prompt never grows: the files of a change total at most the bytes they had before it.
+5. An instruction with a condition (`only when`, `only if`, `unless`, `except`) is never classed `not a rule`: class it
+   `practice` and state its purpose, or reword it as a statement.
+6. A prompt never grows: the files of a change total at most the bytes they had before it.
 
 ## Add a rule
 

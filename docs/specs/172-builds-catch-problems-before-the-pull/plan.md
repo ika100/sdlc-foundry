@@ -66,6 +66,7 @@ tasks:
     covers: [AC-172.8]
     parallel_safe: true
     depends_on: [t7]
+    done: true
 ---
 
 # Plan — 172 Builds catch problems before the pull request

@@ -31,11 +31,23 @@ CLASSES = ("hard", "practice", "experience", "not a rule", "retired")
 ENTRY_KEYS = ("id", "text", "class", "source", "hard", "enforced_by", "retired", "reason", "benchmark_runs")
 HARD_KEYS = ("enforced_by", "intentional_prose_rule", "source")
 MIN_REASON_WORDS = 3
+IMPERATIVES = frozenset("""
+    add aim apply ask avoid build bump call change check choose commit compare confirm copy create decide delegate delete
+    depart describe do don't edit end escalate explain file fill find fix follow give go hand include keep leave let list
+    load look make mark merge move name note offer open pass pick prefer prepend print pull push put read rebase record
+    refuse remove rename replace reply report re-run rerun reset resolve restart resume return review rewrite run say scan
+    send set show skip spawn split stage start state stop switch take tell treat try update use verify wait write
+    """.split())
 
 _WORD = re.compile(r"[A-Za-z0-9][A-Za-z0-9'’_-]*")
 _RULE = re.compile(r"\b(?:" + "|".join(w.replace(" ", r"\s+") for w in RULE_WORDS) + r")\b", re.I)
 _REASON = re.compile(r"\b(?:" + "|".join(w.replace(" ", r"\s+") for w in REASON_WORDS) + r")\b", re.I)
 _CONDITION = re.compile(r"\b(?:only\s+when|only\s+if|unless|except)\b", re.I)
+_YOU = re.compile(r"\b(?:you|your)\b", re.I)
+_LEAD = re.compile(r"^(?:[\s|>*+_\"“'(-]+|\d+\.\s+)")
+_LABEL = re.compile(r"^[^:]*:")
+_CLAUSE = re.compile(r"^(?:if|when)\b[^,]*,", re.I)
+_FIRST = re.compile(r"[A-Za-z][A-Za-z'’-]*")
 _CODE = re.compile(r"(`+)(.+?)\1", re.S)
 _COMMENT = re.compile(r"<!--.*?-->", re.S)
 _FENCE = re.compile(r"^\s*(```|~~~)")
@@ -252,6 +264,27 @@ def reason_clause(scope: str) -> str | None:
 def condition(sentence: str) -> str | None:
     m = _CONDITION.search(_mask(sentence))
     return _collapse(sentence[m.start():m.end()]) if m else None
+
+
+def _strip_lead(text: str) -> str:
+    while m := _LEAD.match(text):
+        text = text[m.end():]
+    return text
+
+
+def instruction(sentence: str) -> bool:
+    """Whether `sentence` reads as an instruction (spec 172): it addresses `you`, or, after its markers, one short label and
+    one leading `If …,` or `When …,` clause, it starts with a verb of IMPERATIVES."""
+    text = _mask(sentence)
+    if _YOU.search(text):
+        return True
+    text = _strip_lead(text)
+    if (m := _LABEL.match(text)) and len(m.group(0).split()) <= 8:
+        text = _strip_lead(text[m.end():])
+    if m := _CLAUSE.match(text):
+        text = _strip_lead(text[m.end():])
+    first = _FIRST.match(text)
+    return bool(first) and first.group(0).lower().replace("’", "'") in IMPERATIVES
 
 
 def prompt_files(root: Path) -> list[str]:

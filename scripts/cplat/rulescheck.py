@@ -2,7 +2,7 @@
 
 Every rule sentence of the plugin prompts has exactly one register entry (docs/rules/plugins/...) classed hard, practice,
 experience or not a rule; hard, practice and experience sentences state a reason of at least 3 words; practices do not hide
-behind a bare condition; hard rules are marked and enforced (or an intentional prose rule); every agent and command prompt
+behind a bare condition and an instruction with a condition is never classed not a rule (`hidden-rule`, spec 172); hard rules are marked and enforced (or an intentional prose rule); every agent and command prompt
 carries the statement once; retired entries are valid and gone from the prompt; the prompts stay within the baseline bytes.
 
 `--only` limits the per-file checks to prompt files equal to or under PATH and their register files, and skips the two global
@@ -162,6 +162,10 @@ def _check_prompt(rel: str, root: Path, reg: pr.Register, fails: list[Failure], 
             fails.append(Failure("ambiguous-entry", rel, s.line, s.text, f"rule sentence matched by more than one entry ({ids})"))
             continue
         entry = hits[0]
+        if entry.cls == "not a rule" and (cond := pr.condition(s.text)) and pr.instruction(s.text):
+            fails.append(Failure("hidden-rule", rel, s.line, s.text,
+                                 f"`{cond}` in an instruction classed `not a rule` ({entry.id}): "
+                                 "class it `practice` and state its purpose"))
         if entry.cls in ("hard", "practice", "experience"):
             words = pr.reason_words(s.scope)
             if words is None:
