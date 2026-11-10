@@ -4,14 +4,14 @@ title: Unattended runs ask less
 status: approved
 priority: P1
 shape: platform
-tracks: [653, 654, 655]
+tracks: [616, 653, 654, 655]
 ---
 
 # 179 — Unattended runs ask less
 
 ## Problem
 
-Journeys 9 and 10 (5.16.0, 5.17.0) still asked the person questions whose answer the platform already had. Journey 10's system spec asked for two API replicas, but the system plan carried no gitops task for it, so the ship could not apply it and the coordinator opened a separate gitops PR as a "Decision for you" (#653). The web build's headless session was not allowed to `git rm` three template starter files the feature replaced, stopped, and the coordinator asked and deleted them by hand (#654). A type annotation in a frozen web acceptance test, needed for the type check and changing no assertion, test or criterion id, was put to the person (#655). Across the last round, agent-written acceptance tests contradicted their own spec or design six times (a fixture whose data contradicts its assertion, a pinned message the contract does not define, an entry text that cannot match); each became a stop or an approval because the tests were already frozen. And escalations of runs in the platform repo itself were posted as GitHub issues in the public platform repo (#642, #643). This is a consolidation round: no new feature, only fewer questions.
+Journeys 9 and 10 (5.16.0, 5.17.0) still asked the person questions whose answer the platform already had. Journey 10's system spec asked for two API replicas, but the system plan carried no gitops task for it, so the ship could not apply it and the coordinator opened a separate gitops PR as a "Decision for you" (#653). The web build's headless session was not allowed to `git rm` three template starter files the feature replaced, stopped, and the coordinator asked and deleted them by hand (#654). A type annotation in a frozen web acceptance test, needed for the type check and changing no assertion, test or criterion id, was put to the person (#655). Across the last round, agent-written acceptance tests contradicted their own spec or design six times (a fixture whose data contradicts its assertion, a pinned message the contract does not define, an entry text that cannot match); each became a stop or an approval because the tests were already frozen. Journey 8 asked the person whether to narrow a dev smoke test whose locator also matched the header's navigation list, though smoke tests are not frozen acceptance tests and tightening one is ordinary build work (#616). And escalations of runs in the platform repo itself were posted as GitHub issues in the public platform repo (#642, #643). This is a consolidation round: no new feature, only fewer questions.
 
 ## Stories
 
@@ -41,6 +41,10 @@ Acceptance tests checked before they freeze.
 - **AC-179.5** Given a build whose red-tests step has written the acceptance tests, when that step ends and before the tests freeze (AC-169.1), then a review compares each acceptance test with its criterion and the design's contract and reports each contradiction with the test, the criterion id and what contradicts (at least: fixture data that contradicts the test's own assertion, an asserted message or field the contract does not define, an expected text that the specified behaviour cannot produce); with no finding, the tests freeze at once with no further tester round.
 - **AC-179.6** Given review findings from AC-179.5, when the build handles them, then the tester (acceptance mode) gets them once, changes only the tests named, and the tests freeze at the commit after that round (the `red-tests` unit is recorded done there, so `cplat spec test-diff` compares against it); the review does not run a second time, and every finding the tester did not resolve is listed in `verification.md` and the PR's "How this was built" block with its test and criterion id.
 
+Loose smoke tests (#616).
+
+- **AC-179.9** Given a build whose review reports a finding on a smoke test (a test outside the frozen acceptance tests, which `cplat spec test-diff` does not cover), for example a locator that also matches elements the feature does not render so the test can pass without the feature, when the build handles the finding, then the tester tightens that smoke test in the build's fix round and the build goes on without asking the person or escalating; the smoke test passes after the change, the PR's "How this was built" block lists the file and the finding, and a finding that names a frozen acceptance test still follows AC-179.4 and spec 165.
+
 Notifications of platform-repo runs.
 
 - **AC-179.7** Given a run in a repo whose shape is `platform` and no notify setting the user wrote for `escalation` on `github`, when the run escalates with cause `code`, `decision`, `environment` or `unknown`, then a desktop notification is sent and no issue or comment is created in any GitHub repo; in a repo of any other shape, escalations are notified as today.
@@ -63,6 +67,7 @@ Notifications of platform-repo runs.
 - **A5** The pre-freeze review is done by the reviewer agent in a test-review mode, inside the build's existing budget (other option: the architect who wrote the contract; affects AC-179.5).
 - **A6** Findings go to the tester exactly once; unresolved ones do not block the freeze but are listed for the person in the PR (other option: escalate on any unresolved finding; affects AC-179.6).
 - **A7** The platform repo is recognised by `shape: platform` in its committed settings (ADR-056); in it, the default for `escalation` is desktop only, and an explicit user setting still wins (other option: never post escalations from the platform repo to GitHub, whatever the file says; affects AC-179.7, AC-179.8).
+- **A8** A smoke-test finding is fixed in the build's existing review fix round, no extra round; if the tightened smoke test then fails, that is an ordinary build failure handled like any other (other option: a separate smoke fix round after verification; affects AC-179.9).
 
 ## Open questions
 
@@ -71,4 +76,7 @@ None.
 ## Changelog
 
 - 2026-11-10 created
+- 2026-11-10 approved
+- 2026-11-10 amended: tracks #616; added AC-179.9 (a reviewer finding on a loose smoke test is fixed by the build, not asked of the person) and A8
+- 2026-11-10 draft: amend: add #616 (loose smoke-test finding fixed by the build)
 - 2026-11-10 approved
