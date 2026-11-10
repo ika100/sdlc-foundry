@@ -922,7 +922,7 @@ def _report(ns: argparse.Namespace) -> int:
     if ns.benchmarks:
         import runs_usage_report
         agg = runs_usage_report.aggregate_benchmarks(records, since_days=ns.since, repo=ns.repo, store=slug, now=now,
-                                                     malformed=malformed)
+                                                     malformed=malformed, followups=follows)
         print(json.dumps(agg, indent=2) if ns.json else runs_usage_report.render_benchmarks_text(agg))
         return 0
     if ns.agents:
