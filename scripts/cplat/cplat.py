@@ -167,7 +167,7 @@ def main(argv: list[str]) -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         if e.hint:
             print(f"  fix: {e.hint}", file=sys.stderr)
-        return 1
+        return getattr(e, "exit_code", 1)
     except Exception as e:  # noqa: BLE001  (an unexpected crash is a platform defect, not a user error)
         print(f"ERROR: unexpected failure in `cplat {label}`: {type(e).__name__}: {e}", file=sys.stderr)
         for line in _file_crash(argv, e):

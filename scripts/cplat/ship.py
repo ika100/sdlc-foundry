@@ -43,6 +43,7 @@ import escalation_rules
 import failsum
 import feedback
 import model
+import pr_open
 import pr_rules
 import quiet
 import runs
@@ -566,6 +567,32 @@ def _ready_if_draft(repo: Path, pr: str) -> None:
         pass
 
 
+class BodyRefused(PlatformError):
+    """Exit 2: the PR body still holds `{{CLOSES}}` (spec 175); nothing ran after the check."""
+    exit_code = 2     # read by `cplat.main`, which prints `ERROR:` and `  fix:`
+
+
+def _fill_closes(repo: Path, st: dict, body: str) -> str:
+    """Spec 175: `{{CLOSES}}` -> the `Closes #N` lines `cplat pr open --spec` writes; refused when it stays."""
+    if "{{CLOSES}}" not in body:
+        return body
+    tracks: list[int] = []
+    why = "filling left the placeholder"
+    spec = st.get("spec") or ""
+    try:
+        if spec:
+            tracks = [int(t) for t in specmod.find(repo, spec).meta.get("tracks") or []]
+        base = "origin/main" if run(["git", "rev-parse", "--verify", "--quiet", "origin/main"], cwd=repo, check=False).returncode == 0 else "main"
+        body = pr_open.fill_closes(body, pr_open.closes_for(repo, base, tracks=tracks))
+    except (PlatformError, ValueError) as e:
+        why = f"the ship run's spec {spec} cannot be read: {(str(e).splitlines() or [type(e).__name__])[0]}"
+    if "{{CLOSES}}" in body:
+        raise BodyRefused(f"PR body still contains {{{{CLOSES}}}}: {why}",
+                          hint=f"fix the spec (cplat spec check {spec}) or write the Closes lines into the body, "
+                               "then run cplat component ship pr again")
+    return body
+
+
 def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> dict:
     st = require_state(repo)
     branch = st["branch"]
@@ -575,10 +602,14 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
     check_title(title)
+    body = body_file.read_text()
+    filled = _fill_closes(repo, st, body)
+    if filled != body:
+        body_file.write_text(filled)
+        body = filled
     existing = json.loads(gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url,title,labels,isDraft"], cwd=repo) or "[]")
     open_pr_ = existing[0] if existing else None
     labels = [lb["name"] for lb in (open_pr_ or {}).get("labels", [])]
-    body = body_file.read_text()
     if _is_platform(repo, st):
         if no_spec and pr_rules.NO_SPEC not in labels:
             labels.append(pr_rules.NO_SPEC)

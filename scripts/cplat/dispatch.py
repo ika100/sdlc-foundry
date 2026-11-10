@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 import dispatch_cycle
+import dispatch_items
 import dispatch_policy
 import dispatch_state as ds
 import dispatch_units as du
@@ -178,9 +179,9 @@ def _resume(repo: Path, item: str | None) -> int:
     dispatch_policy.load(repo, require_file=True, require_budget=True)
     slug = ds.slug_of(repo)
     if item:
-        key = ds.parse_item(item)
-        ds.resume_item(slug, key)
-        _out(f"resumed {ds.item_of(key)}: its skip and hold are dropped")
+        found = dispatch_items.resolve(repo, slug, item)
+        ds.resume_item(slug, found.key)
+        _out(f"resumed: {found.label}")
         return 0
     ds.resume(slug)
     du.clear_flags(du.adopt(repo, slug))
@@ -195,16 +196,18 @@ def _slots(repo: Path, n: int) -> int:
 
 
 def _prioritize(repo: Path, item: str) -> int:
-    key = ds.parse_item(item)
-    ds.pin(ds.slug_of(repo), key)
-    _out(f"prioritized {ds.item_of(key)}: first in line until its unit starts")
+    slug = ds.slug_of(repo)
+    found = dispatch_items.resolve(repo, slug, item)
+    ds.pin(slug, found.key)
+    _out(f"prioritized: {found.label}")
     return 0
 
 
 def _skip(repo: Path, item: str, reason: str) -> int:
-    key = ds.parse_item(item)
-    ds.skip(ds.slug_of(repo), key, reason)
-    _out(f"skipped {ds.item_of(key)}: {reason}")
+    slug = ds.slug_of(repo)
+    found = dispatch_items.resolve(repo, slug, item)
+    ds.skip(slug, found.key, reason)
+    _out(f"skipped: {found.label} (reason: {reason})")
     return 0
 
 
@@ -252,6 +255,14 @@ def main(argv: list[str]) -> int:
         ns = build_parser().parse_args(argv)
     except SystemExit as e:
         return 1 if e.code else 0
+    try:
+        return _run(ns)
+    except ds.ItemRefused as err:
+        print(f"ERROR: {err}", file=sys.stderr, flush=True)
+        return 2
+
+
+def _run(ns: argparse.Namespace) -> int:
     repo = Path(ns.repo).resolve()
     v = ns.verb
     if v == "start":

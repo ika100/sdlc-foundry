@@ -138,7 +138,7 @@ All verbs take `--repo DIR` (default `.`); `plan`, `status`, `report` and `inbox
 | `cplat dispatch prioritize <item>` | pin an item first |
 | `cplat dispatch skip <item> --reason <text>` | hold an item |
 
-An item is `#<N>` (issue) or a spec (`<NNN>`, `spec-<NNN>` or the spec id). Steering takes effect within one cycle (60 seconds, sooner when a
+An item is `#<N>` or `issue-<N>` (the issue), or `spec-<N>`, a zero-padded number (`054`) or the spec id (the spec). A bare number is the spec or the open issue with that number, and is refused (exit 2, nothing changes) when it is both or neither, or when it matches a spec and the open issues cannot be read; write `spec-<N>` or `#<N>` then. Each verb prints what it acted on (`skipped: spec <id> (reason: ...)`, `prioritized: issue #<N>`). Steering takes effect within one cycle (60 seconds, sooner when a
 unit ends) and survives a restart of the loop.
 
 ## Needs and notifications
