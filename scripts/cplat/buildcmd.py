@@ -7,6 +7,7 @@
   cplat.py build replan-abort <spec> --reason TEXT
   cplat.py build resolved <spec> <task>
   cplat.py build reset <sha>     a coder moves its fresh agent worktree to the feature head
+  cplat.py build tests ...       the build's test-running steps (buildtests.main)
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ import core
 import replan
 import runs
 import runs_agents
+import signoff
 import spec as specmod
 from core import PlatformError
 
@@ -130,6 +132,18 @@ def merge(repo: Path, ref: str, task: str, branch: str, helpers: list[str]) -> i
     if red and _git(repo, "merge-base", "--is-ancestor", red, branch).returncode != 0:     # #501
         raise PlatformError(f"branch '{branch}' does not contain the acceptance tests ({red[:7]}): its worktree did not start "
                             "at the feature head", hint="run the task again, its coder first doing `cplat component build reset <FEATURE_HEAD>`")
+    if specmod.repo_shape(repo) == "platform":                                              # spec 172
+        bad = signoff.unsigned(repo, f"HEAD..{branch}")
+        if bad:
+            mb = _out(repo, "rev-parse", "--short", _out(repo, "merge-base", "HEAD", branch))
+            wt = signoff.worktree_of(repo, branch)
+            cmd = (f"in the task's worktree: `git -C {wt} rebase --signoff {mb}`" if wt
+                   else f"in the worktree of {branch}: `git rebase --signoff {mb}`")
+            raise PlatformError(
+                f"branch '{branch}' brings in {len(bad)} commit(s) without a Signed-off-by line: "
+                + "; ".join(f"{s} {t}" for s, t in bad),
+                hint=f"rebase it with sign-off onto its merge base {cmd}, "
+                     f"then run `cplat component build merge {sp.number} {task} {branch}` again")
     pre = _out(repo, "rev-parse", "HEAD")
     proc = _git(repo, *core.git_identity(repo), "merge", "--no-ff", "--signoff", "-m", f"merge({task}): {branch}", branch)
     merging = _git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
@@ -219,6 +233,9 @@ def reset(repo: Path, sha: str) -> int:
 # ---------------- CLI ----------------
 
 def main(argv: list[str]) -> int:
+    if argv and argv[0] == "tests":
+        import buildtests
+        return buildtests.main(argv[1:])
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--repo", default=".")
     common.add_argument("spec")
