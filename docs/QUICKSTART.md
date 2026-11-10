@@ -96,7 +96,7 @@ Open Claude Code in the `taskboard-api` folder:
 /component:spec "create and list tasks, each with a title and an optional due date, kept in memory"
 ```
 
-**You will see** a spec with numbered acceptance criteria, the assumptions it made for you, and at most a few questions. Answer them, read the criteria, then approve:
+**You will see** a spec with numbered acceptance criteria, the assumptions it made for you, and at most a few questions. Answer them, read the criteria ([what to look for](REVIEWING-A-SPEC.md)), then approve:
 
 ```text
 /component:spec approve 001
