@@ -24,6 +24,7 @@ tasks:
     covers: [AC-181.1, AC-181.2, AC-181.3, AC-181.4, AC-181.5, AC-181.6]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t4
     title: report --benchmarks — split medians per stage, part and journey from the journey_split follow-ups
     files: [scripts/cplat/runs_journey_report.py, scripts/cplat/runs_usage_report.py, scripts/cplat/runs.py]
