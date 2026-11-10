@@ -20,10 +20,10 @@ import dispatch_agent
 import dispatch_backlog
 import dispatch_budget
 import dispatch_notify
-import dispatch_policy
 import dispatch_ready
 import dispatch_state as ds
 import dispatch_units as du
+import dispatch_view
 import spec as specmod
 from core import PlatformError
 
@@ -323,18 +323,8 @@ def evaluate(repo: Path | str, policy, *, max_age: int = 0) -> dict:
     state = ds.load(slug)
     ordered, held = _judge(repo, slug, policy, snap, state, units)
     sched = _schedule(repo, slug, policy, snap, state, units, ordered, held, usage, act=False)
-    total = effective_slots(state, policy)
-    running = _running(units)
-    used = dispatch_budget.usage_today(slug).used
-    return {"schema": SCHEMA, "repo": slug, "read_at": snap.read_at,
-            "policy": {"file": dispatch_policy.FILE if policy.file else None, "values": policy.values,
-                       "defaulted": list(policy.defaulted), "unset": list(policy.unset),
-                       "usage_hint": dispatch_budget.history_hint(slug) if policy.unset else []},
-            "tokens": {"day": usage.day, "used": used, "limit": dispatch_budget.limit_of(policy), "unknown": list(usage.unknown)},
-            "starts": {"allowed": sched.why_not is None, "why_not": sched.why_not},
-            "slots": {"total": total, "running": len(running), "free": max(0, total - len(running))},
-            "candidates": [_candidate_doc(e) for e in sched.entries],
-            "unavailable": [{"source": k, "error": v} for k, v in snap.unavailable.items()]}
+    return dispatch_view.plan_doc(repo, slug, policy, [_candidate_doc(e) for e in sched.entries], read_at=snap.read_at,
+                                  unavailable=[{"source": k, "error": v} for k, v in snap.unavailable.items()])
 
 
 __all__ = ["CycleResult", "Entry", "Schedule", "effective_slots", "evaluate", "free_numbers", "run_cycle"]
