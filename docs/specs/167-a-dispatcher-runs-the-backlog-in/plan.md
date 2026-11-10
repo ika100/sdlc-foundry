@@ -77,6 +77,7 @@ tasks:
     covers: [AC-167.2, AC-167.4, AC-167.6]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t12
     title: Daily token ledger, unit usage, unknown usage and the 7-day hint
     files: [scripts/cplat/dispatch_budget.py]
