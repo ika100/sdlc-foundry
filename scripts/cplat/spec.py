@@ -647,13 +647,28 @@ def frozen_base(root: Path, base: str) -> str:
     return end if ancestor(base, end) and ancestor(end, "HEAD") else base
 
 
-def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, str]]:
+def test_diff(root: Path, base: str, files: list[str], *, red: str | None = None,
+              notes: list[str] | None = None) -> dict[str, tuple[bool, str]]:
     """Each changed test file against `base`. Default: files under the shape's `test_globs` (never `docs/` or `*.md`, spec 063)
     that name a criterion of a `building` spec. A file that did not exist at `base` and that a task of a `building`
-    spec's plan lists in `files:` is the build's own new file, not a changed acceptance test, and is left out."""
+    spec's plan lists in `files:` is the build's own new file, not a changed acceptance test, and is left out.
+    Spec 172: when a `building` spec's red-tests commit lies between `red` (the base as typed) and HEAD, only the files that
+    step committed are checked; otherwise the selection above applies and `notes` gets one line saying so."""
     import fnmatch
     import subprocess
+    import testdiff_select
+    frozen = None
     if not files:
+        frozen = testdiff_select.frozen_files(root, red or base, base, [s for s in all_specs(root) if s.status == "building"])
+        if frozen is not None:
+            changed = subprocess.run(["git", "-C", str(root), "diff", "--name-only", base], capture_output=True, text=True,
+                                     check=True).stdout.split()
+            files = [f for f in changed if f in frozen]
+        elif notes is not None:
+            notes.append(f"fallback: no 'acceptance tests for' commit of a building spec between {_red_sha(root, red or base)[:7]} "
+                         "and HEAD; checking every changed test file that names a criterion of a building spec "
+                         "(as before spec 172)")
+    if not files and frozen is None:
         changed = subprocess.run(["git", "-C", str(root), "diff", "--name-only", base], capture_output=True, text=True,
                                  check=True).stdout.split()
         building = [s for s in all_specs(root) if s.status == "building"]
@@ -1567,6 +1582,7 @@ def main(argv: list[str]) -> int:
     if ns.cmd in ("publish", "land", "review"):
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
+    given = ns.base if ns.cmd == "test-diff" else None
     if ns.cmd == "test-diff" and (base := frozen_base(root, ns.base)) != ns.base:
         print(f"base: {base[:7]}, where the red-tests unit ended (spec 169), not {ns.base[:7]}")
         ns.base = base
@@ -1601,7 +1617,10 @@ def main(argv: list[str]) -> int:
             pass
         return 0 if all(ok for ok, _ in result.values()) else 1
     if ns.cmd == "test-diff":
-        result = test_diff(root, ns.base, ns.files)
+        notes: list[str] = []
+        result = test_diff(root, ns.base, ns.files, red=given, notes=notes)
+        for line in notes:
+            print(line)
         for f, (ok, why) in result.items():
             print((f"{f}: {why}" if why else f"{f}: formatting only") if ok else f"{f}: changed — {why}")
         if not result:
