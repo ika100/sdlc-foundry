@@ -1,5 +1,5 @@
-"""Spec 167 (t3): `cplat headless` writes the dispatcher's result file (AC-167.6, AC-167.8, AC-167.10) and stops at the stop flag
-before its next session (AC-167.11). Nothing changes without `CPLAT_DISPATCH_RESULT` and `CPLAT_DISPATCH_UNIT`."""
+"""Spec 167 (t3): `cplat headless` writes the dispatcher's result file and stops at the stop flag
+before its next session. Nothing changes without `CPLAT_DISPATCH_RESULT` and `CPLAT_DISPATCH_UNIT`."""
 import json
 
 import pytest
