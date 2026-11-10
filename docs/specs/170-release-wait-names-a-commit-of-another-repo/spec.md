@@ -1,7 +1,7 @@
 ---
 spec_id: 170-release-wait-names-a-commit-of-another-repo
 title: Release wait names a commit of another repo
-status: approved
+status: done
 priority: P2
 shape: platform
 tracks: [614]
@@ -37,3 +37,4 @@ None.
 ## Changelog
 
 - 2026-11-10 created from #614 (journey 8); self-approved under the standing order to fix what a journey finds.
+- 2026-11-10 done

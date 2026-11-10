@@ -1,7 +1,7 @@
 ---
 spec_id: 165-a-test-problem-does-not-stop-an-unattended-run
 title: A test problem does not stop an unattended run
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [595, 582, 583]
@@ -50,3 +50,4 @@ None.
 ## Changelog
 
 - 2026-11-09 created from #595, #582 and #583 (#570 was fixed by spec 160); approved as the user asked ("go on, I follow your proposals"): agents may tighten a frozen acceptance test, every tightening is listed in the PR.
+- 2026-11-10 done

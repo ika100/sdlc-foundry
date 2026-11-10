@@ -1,7 +1,7 @@
 ---
 spec_id: 169-the-acceptance-tests-freeze-when-the-red-tests
 title: The acceptance tests freeze when the red-tests unit ends
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: []
@@ -39,3 +39,4 @@ None.
 ## Changelog
 
 - 2026-11-10 created from journey 8 (finding F1); self-approved under the standing order to fix what a journey finds.
+- 2026-11-10 done
