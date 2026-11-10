@@ -269,7 +269,7 @@ Every command names the thing it acts on; the same verbs work for a system and f
 |---|---|
 | `system` | `new` · `set` · `status` · `spec` · `plan` · `ship` · `restore` |
 | `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
-| `api` | `list` (a contract `check` is planned) |
+| `api` | `list` |
 | `resource` | `add` · `remove` · `backup` · `restore` · `upgrade` |
 | `cluster` | `new` · `add` · `remove` (`/cluster:new`, `/cluster:add`, `/cluster:remove`) |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |

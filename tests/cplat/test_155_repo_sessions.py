@@ -328,7 +328,7 @@ def test_the_command_file_has_no_subagent_per_repo_path_ac_155_10():  # AC-155.1
 
 def test_the_process_model_is_documented_with_an_adr_ac_155_10():  # AC-155.10
     agents = (ROOT / "docs" / "AGENTS.md").read_text()
-    assert "spec 155" in agents
+    assert "ADR-086" in agents
     adrs = list((ROOT / "docs" / "adr").glob("*-a-system-ships-repos-run-in-their-own-sessions.md"))
     assert adrs and "subagent" in adrs[0].read_text()
 
