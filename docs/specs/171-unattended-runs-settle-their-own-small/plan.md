@@ -31,6 +31,7 @@ tasks:
     covers: [AC-171.3, AC-171.4, AC-171.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: Running waits - marks, stopgate and the system ship gate
     files: [scripts/cplat/waits.py, scripts/cplat/stopgate.py, scripts/cplat/appship_state.py]
