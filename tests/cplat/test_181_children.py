@@ -40,7 +40,7 @@ def test_a_repo_session_without_a_transcript_is_warned_about_and_counted_ac_181_
     w = split_of(out["wall"])
     assert abs(w["waiting"]["no_transcript"] - 20) <= 0.1       # 08:12-08:32, where nothing else works
     assert w["waiting"]["deploy"] == 0                          # the deploy phase of the record does not win
-    assert abs(w["waiting"]["unattributed"] - 18) <= 0.1        # the rest of the wait, 08:32-08:50
+    assert abs(w["waiting"]["unattributed"] - 20) <= 0.1        # the rest of the wait, 08:10-08:12 and 08:32-08:50
 
 
 def test_the_coordinator_session_id_is_not_a_repo_session_ac_181_1(world, capsys):  # AC-181.1
