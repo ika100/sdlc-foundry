@@ -49,15 +49,16 @@ def test_slots_are_limited(home):
         ds.set_slots(SLUG, 11)
 
 
-@pytest.mark.parametrize("text,key", [("#123", "issue-123"), ("123", "issue-123"), ("007", "spec-007"), ("spec-007", "spec-007"),
+@pytest.mark.parametrize("text,key", [("#123", "issue-123"), ("007", "spec-007"), ("spec-007", "spec-007"),
                                       ("167-a-dispatcher-runs", "spec-167"), ("spec-12", "spec-012")])
 def test_parse_item(text, key):
     assert ds.parse_item(text) == key
 
 
-def test_parse_item_refuses_other_text():
-    with pytest.raises(PlatformError):
-        ds.parse_item("nonsense")
+@pytest.mark.parametrize("text", ["nonsense", "123"])
+def test_parse_item_refuses_other_text_and_a_bare_number(text):
+    with pytest.raises(ds.ItemRefused):
+        ds.parse_item(text)
 
 
 def test_events_unseen_and_seen_and_unit_seq(home):

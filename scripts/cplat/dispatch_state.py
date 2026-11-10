@@ -4,7 +4,7 @@ Everything the dispatcher keeps lives under `${XDG_STATE_HOME:-~/.local/state}/s
 state.lock, loop.lock, needs.json, logs/, worktrees/) and, per unit, in the unit worktree's git dir (`cplat-dispatch-unit.json`,
 `cplat-dispatch-result.json`, `cplat-dispatch-stop`). Nothing lives only in memory, so a killed dispatcher is rebuilt from these files.
 Every function that touches `state.json` takes the repo slug (`owner/name`) first; writes are atomic and made under `state.lock`.
-Items are kept by key (`issue-<N>`, `spec-<NNN>`), see `parse_item`.
+Items are kept by key (`issue-<N>`, `spec-<NNN>`), see `parse_form` and `parse_item`; a bare number needs `dispatch_items.resolve`.
 """
 from __future__ import annotations
 
@@ -190,20 +190,31 @@ def _prune(st: dict) -> None:
 
 # ---------------- items ----------------
 
-def parse_item(text: str) -> str:
-    """The key of an item named on the command line: `#123` or a plain `123` is an issue (`issue-123`); `spec-123`, `007` (a
-    number with a leading zero) or a spec id such as `167-a-dispatcher-runs-the-backlog-in` is a spec (`spec-167`)."""
+class ItemRefused(PlatformError):
+    """A steering item that names no single spec or issue (exit 2; the message already says what to write)."""
+
+    exit_code = 2
+
+
+def parse_form(text: str) -> tuple[str, int]:
+    """How an item is written and its number: `("issue", N)` for `#N` / `issue-N`, `("spec", N)` for `spec-N`, `0N` or `<N>-<slug>`,
+    `("bare", N)` for digits without a leading zero. Anything else is refused."""
     s = text.strip()
-    if m := re.fullmatch(r"#(\d+)", s):
-        return f"issue-{int(m.group(1))}"
-    if m := re.fullmatch(r"issue-(\d+)", s):
-        return f"issue-{int(m.group(1))}"
+    if m := re.fullmatch(r"(?:#|issue-)(\d+)", s):
+        return "issue", int(m.group(1))
     if m := re.fullmatch(r"(?:spec-)?(\d+)(?:-.*)?", s):
         digits = m.group(1)
-        if s == digits and not digits.startswith("0"):
-            return f"issue-{int(digits)}"
-        return f"spec-{int(digits):03d}"
-    raise PlatformError(f"{text!r} is not an item", "name an issue as #<N> and a spec as <NNN>, spec-<NNN> or its id")
+        return ("bare" if s == digits and not digits.startswith("0") else "spec"), int(digits)
+    raise ItemRefused(f"'{text}' is not an item: write #<N> or issue-<N> for an issue, spec-<N>, <NNN> or the spec id for a spec")
+
+
+def parse_item(text: str) -> str:
+    """The key of an item written in an explicit form: `#123` or `issue-123` is `issue-123`; `spec-123`, `007` or a spec id such as
+    `167-a-dispatcher-runs-the-backlog-in` is `spec-167`. A bare number is the spec or the open issue: `dispatch_items.resolve`."""
+    form, n = parse_form(text)
+    if form == "bare":
+        raise ItemRefused(f"{text.strip()} is a bare number: write spec-{n} or #{n}")
+    return f"issue-{n}" if form == "issue" else f"spec-{n:03d}"
 
 
 def item_of(key: str) -> str:
