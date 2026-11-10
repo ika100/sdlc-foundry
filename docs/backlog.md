@@ -28,7 +28,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [166-the-dev-pr-of-a-system-ship-lands-on-the](specs/166-the-dev-pr-of-a-system-ship-lands-on-the/spec.md) — The dev PR of a system ship lands on the current main | P1 | approved | 4 | #597 |
 | [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | approved | 12 |  |
 | [168-agent-rules-state-their-reason-and-can](specs/168-agent-rules-state-their-reason-and-can/spec.md) — Agent rules state their reason and can retire | P1 | approved | 8 |  |
-| [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | approved | 2 |  |
+| [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | approved | 3 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |

@@ -528,7 +528,7 @@ def _py_shape(src: str) -> list[str]:
 
 def formatting_only(old: str, new: str, name: str) -> tuple[bool, str]:
     """True when `new` differs from `old` only in formatting (spec 048); else False and the first difference."""
-    if sorted(AC_ANY.findall(old)) != sorted(AC_ANY.findall(new)):
+    if set(AC_ANY.findall(old)) != set(AC_ANY.findall(new)):   # spec 169: a new test may name its criterion again
         return False, f"criterion ids changed: {sorted(set(AC_ANY.findall(old)) ^ set(AC_ANY.findall(new)))}"
     if name.endswith(".py"):
         try:
@@ -612,7 +612,7 @@ def _test_names(text: str) -> set[str]:
 def tightening(old: str, new: str, name: str) -> tuple[bool, str]:
     """Spec 165 (AC-165.1): `new` may be a stricter `old`: same criterion ids, no test removed or newly skipped, no
     fewer assertions. Not a proof of strictness: the obvious weakenings are refused and every tightening is listed."""
-    if sorted(AC_ANY.findall(old)) != sorted(AC_ANY.findall(new)):
+    if set(AC_ANY.findall(old)) != set(AC_ANY.findall(new)):   # spec 169: a new test may name its criterion again
         return False, f"criterion ids changed: {sorted(set(AC_ANY.findall(old)) ^ set(AC_ANY.findall(new)))}"
     gone = sorted(_test_names(old) - _test_names(new))
     if gone:

@@ -59,3 +59,11 @@ def test_a_unit_commit_off_the_branch_is_ignored_ac_169_2(built):  # AC-169.2
     g("checkout", "-q", "-b", "other", red, cwd=root)
     _units(root, end)
     assert spec.frozen_base(root, red) == red
+
+
+def test_a_new_test_naming_its_criterion_is_a_tightening_ac_169_3():  # AC-169.3
+    old = '// AC-001.5\nit("lists", async () => {\n  expect(await list()).toEqual([]);\n});\n'
+    new = old + 'it("AC-001.5 limits GET /tasks to 5 seconds", async () => {\n  expect(spy).toHaveBeenCalledWith(5000);\n});\n'
+    assert spec.tightening(old, new, "tests/ac-001-task-api.test.ts") == (True, "")
+    good, why = spec.tightening(old, new.replace('it("AC-001.5 limits', 'it("AC-001.6 limits'), "tests/ac-001-task-api.test.ts")
+    assert not good and why == "criterion ids changed: ['AC-001.6']"
