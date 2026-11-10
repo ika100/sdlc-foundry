@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -42,6 +43,14 @@ def isolated_run_store(monkeypatch, tmp_path_factory):
     (Only the environment is touched here: the `runs` module itself is not imported.)"""
     monkeypatch.setenv("CPLAT_RUNS_DIR", str(tmp_path_factory.mktemp("runs-state")))
     for name in ("CPLAT_RUNS_REPO", "CPLAT_RUN_PARENT", "CPLAT_HEADLESS", "CLAUDE_CODE_SESSION_ID"):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def no_run_environment(monkeypatch):
+    """A test never sees the CPLAT_* variables of the run it is started from (an unattended ship of a platform spec sets
+    CPLAT_UNIT, CPLAT_RUN_PARENT, ...), so the suite gives the same result inside and outside a run. Tests set their own."""
+    for name in [n for n in os.environ if n.startswith("CPLAT_")]:
         monkeypatch.delenv(name, raising=False)
 
 
