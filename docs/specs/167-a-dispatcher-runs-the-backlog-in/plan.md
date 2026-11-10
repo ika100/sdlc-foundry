@@ -119,6 +119,7 @@ tasks:
     covers: []
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 167 A dispatcher runs the backlog in parallel slots
