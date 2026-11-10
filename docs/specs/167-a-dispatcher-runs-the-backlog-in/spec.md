@@ -1,7 +1,7 @@
 ---
 spec_id: 167-a-dispatcher-runs-the-backlog-in
 title: A dispatcher runs the backlog in parallel slots
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -101,3 +101,4 @@ Budget, steering and seeing it.
 - 2026-11-09 created
 - 2026-11-09 amended: both open questions answered; `budget.tokens_per_day` is required to start or resume and `plan` shows a 7-day usage hint (AC-167.1, AC-167.2, AC-167.10); `gates.approve_specs: self` lets the dispatcher approve clean drafts (AC-167.1, AC-167.6)
 - 2026-11-09 approved
+- 2026-11-10 building
