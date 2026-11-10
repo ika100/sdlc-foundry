@@ -59,7 +59,7 @@ def pre(w, tmp_path, monkeypatch):  # noqa: F811
     for rid in ("shop-lib", "shop-api", "shop-worker", "shop-web"):
         c = w.clone(rid)
         (c / ".claude").mkdir(exist_ok=True)
-        (c / ".claude" / "settings.json").write_text('{"permissions": {"allow": ["Bash(devbox run *)"]}}\n')
+        (c / ".claude" / "settings.json").write_text('{"permissions": {"allow": ["Bash(devbox run *)", "Bash(cplat *)", "Read(~/.claude/plugins/**)"]}}\n')
         (c / ".gitignore").write_text(".claude/settings.local.json\n")     # as a generated repo ignores it
         w_git(c, "add", "-A")
         w_git(c, "commit", "-qm", "allowlist")
