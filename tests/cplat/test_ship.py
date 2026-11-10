@@ -150,7 +150,7 @@ def test_land_waits_for_pending_checks_and_merges_when_all_pass(repo, gh):
     to_land(repo, gh)
     gh.checks = [[check("test", "pending"), check("quality", "pass")], [check("test", "pass"), check("quality", "pass"), check("lint", "skipping")]]
     ok, lines = ship.land(repo, timeout=600, interval=10)
-    assert ok and gh.merges == [["gh", "pr", "merge", "https://github.com/acme/shop-api/pull/7", "--squash", "--delete-branch", "--match-head-commit", SHA]]
+    assert ok and gh.merges == [["gh", "pr", "merge", "https://github.com/acme/shop-api/pull/7", "--squash", "--match-head-commit", SHA]]
     st = ship.load_state(repo)
     assert st["phase"] == "deploy" and st["merge_sha"] == SHA
 

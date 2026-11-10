@@ -1087,29 +1087,82 @@ def refused(repo: Path, st: dict, reason: str, lines: list[str]) -> list[str]:
 
 
 def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUEUE_TIMEOUT) -> tuple[bool, list[str]]:
-    """Wait for the PR's checks: the first red one ends the wait; all green → merge the before-merge gitops PRs, then
-    the PR (unless --no-merge). Returns (merged_or_green, report lines)."""
+    """Push local commits, wait for the PR's checks: the first red one ends the wait; all green → merge the before-merge
+    gitops PRs, then the PR (unless --no-merge). Returns (merged_or_green, report lines)."""
+    import merge_lock
     st = require_state(repo)
     pr = st.get("pr")
     if not pr:
         raise PlatformError("the run has no PR yet", hint="cplat component ship pr --title <title> --body-file .pr-body.md")
     state = json.loads(gh(["pr", "view", pr, "--json", "state,mergeCommit"], cwd=repo) or "{}")
     if state.get("state") == "MERGED":
-        return _merged(repo, st, (state.get("mergeCommit") or {}).get("oid", ""), ["already merged"])
+        return _merged(repo, st, (state.get("mergeCommit") or {}).get("oid", ""), ["already merged"], cleanup_of=pr)
     if state.get("state") == "CLOSED":
         raise PlatformError(f"{pr} was closed without merging", hint="reopen it, or `cplat component ship escalate 'PR closed'`")
-    import dispatch_policy
-    import merge_lock                    # spec 167: every merge into main holds the repo merge lock
+    import dispatch_policy                  # spec 167: every merge into main holds the repo merge lock
     slug, who = merge_lock.slug_of(repo, pr), merge_lock.who_of(pr)
     whole = bool(st.get("merge", True)) and "e2e" in dispatch_policy.serialize(repo)   # with e2e: the whole land phase
-    with merge_lock.held(slug, who, timeout, min(interval, 5)) if whole else contextlib.nullcontext():
-        return _land(repo, st, pr, timeout, interval, queue_timeout, (slug, who, whole))
+    try:
+        with merge_lock.held(slug, who, timeout, min(interval, 5)) if whole else contextlib.nullcontext():
+            return _land(repo, st, pr, timeout, interval, queue_timeout, (slug, who, whole))
+    except merge_lock.Conflict as e:        # spec 171: only a conflict that is not a generated file's reaches here
+        raise PlatformError(str(e), hint=CONFLICT_HINT) from e
+
+
+CONFLICT_HINT = "merge conflicts with main: rebase is a human decision; cplat component ship escalate 'merge failed'"
+
+
+def push_ahead(repo: Path, st: dict, pr: str, watch: CheckWatch) -> str | None:
+    """Spec 171 (AC-171.5): local commits of the feature branch that the PR does not have are checked (`devbox run ci`, with
+    the PR's own title, body and labels) and pushed before any check is read. The line it says; None when nothing is ahead."""
+    import land_merge
+    branch = st.get("branch")
+    if not branch:
+        return None
+    run(["git", "fetch", "-q", "origin", branch], cwd=repo, check=False)
+    try:
+        head = json.loads(gh(["pr", "view", pr, "--json", "headRefOid"], cwd=repo, check=False) or "{}").get("headRefOid") or ""
+    except (ValueError, AttributeError):
+        head = ""
+    if not head:
+        return None
+    counted = run(["git", "rev-list", "--count", f"{head}..refs/heads/{branch}"], cwd=repo, check=False)
+    n = int(counted.stdout.strip()) if counted.returncode == 0 and counted.stdout.strip().isdigit() else 0
+    if n == 0:
+        return None
+    try:
+        meta = json.loads(gh(["pr", "view", pr, "--json", "title,body,labels"], cwd=repo, check=False) or "{}")
+    except (ValueError, AttributeError):
+        meta = {}
+    title = meta.get("title") or ""
+    cur = run(["git", "symbolic-ref", "--short", "-q", "HEAD"], cwd=repo, check=False).stdout.strip()
+    reason = "" if cur == branch else f"the checkout is on {cur or 'no branch'}, not on {branch}"
+    if not reason:
+        run_ci(repo, {"PR_TITLE": title, "PR_BODY": meta.get("body") or "",
+                      "PR_LABELS": ",".join(lb.get("name", "") for lb in meta.get("labels") or [] if isinstance(lb, dict))})
+        pushed = run(["git", "push", "-q", "origin", branch], cwd=repo, check=False)
+        if pushed.returncode != 0:
+            lines = [ln.strip() for ln in (pushed.stderr or pushed.stdout or "").splitlines() if ln.strip()]
+            reason = lines[-1] if lines else f"exit {pushed.returncode}"
+    if reason:
+        say(f"  push of {branch} failed: {reason}")
+        raise PlatformError(f"local commits not pushed: {n} commit(s) ahead of the PR head",
+                            hint=f"cplat component ship pr --title '{title}' --body-file {core.PR_BODY}")
+    sha = run(["git", "rev-parse", f"refs/heads/{branch}"], cwd=repo, check=False).stdout.strip()
+    line = f"pushed {n} local commit(s) to {branch}: waiting for the checks of {sha[:7]}"
+    say(line)
+    if not land_merge.await_head(watch, sha):
+        raise PlatformError(f"GitHub does not show the pushed head {sha[:7]} of {pr} yet", hint="run the land again")
+    return line
 
 
 def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_timeout: float,
           lock: tuple[str, str, bool]) -> tuple[bool, list[str]]:
+    import land_merge
     watch = CheckWatch(repo, pr, queue_timeout, st.get("run_id"))
-    status, cs, failed = wait_checks(watch, timeout, interval)
+    push_ahead(repo, st, pr, watch)
+    rounds = land_merge.Rounds()                 # one budget of regeneration rounds for the whole land
+    status, cs, failed, regenerated = land_merge.wait_green(repo, pr, watch, timeout, interval, rounds, run)
     try:  # agent metrics (spec 089): never changes the result
         import runs_agents
         runs_agents.red_ci(st.get("run_id"), repo, [c["name"] for c in failed] if status == "red" else [])
@@ -1133,7 +1186,7 @@ def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_
             escalate(repo, why, "code", evidence=text, stage="ci", summary=text if summary else None)
             lines.append(why)
         return False, lines
-    lines = [f"GREEN: all {len(cs)} check(s) passed on {pr}"]
+    lines = [*regenerated, f"GREEN: all {len(cs)} check(s) passed on {pr}"]
     if not st.get("merge", True):
         st["phase"] = "done"
         save_state(repo, st)
@@ -1142,39 +1195,44 @@ def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_
     import merge_lock
     slug, who, whole = lock
     with contextlib.nullcontext() if whole else merge_lock.held(slug, who, timeout, min(interval, 5)):
-        return _merge_locked(repo, st, pr, watch, lines, timeout, interval, queue_timeout)
+        return _merge_locked(repo, st, pr, watch, lines, timeout, interval, queue_timeout, rounds)
 
 
 def _merge_locked(repo: Path, st: dict, pr: str, watch: CheckWatch, lines: list[str], timeout: float, interval: float,
-                  queue_timeout: float) -> tuple[bool, list[str]]:
-    """Inside the merge lock: bring a branch that is behind main up to date (its checks run again), then the before-merge
-    gitops PRs, then the PR."""
-    import merge_lock
-    caught = merge_lock.catch_up(repo, pr, watch, timeout, interval)
-    lines += caught.lines
-    if caught.updated:
+                  queue_timeout: float, rounds) -> tuple[bool, list[str]]:
+    """Inside the merge lock (spec 171): `land_merge.settle` catches the branch up, regenerates a conflict in a generated
+    file, merges on the head its checks were judged on and cleans up; the before-merge gitops PRs and a draft go first."""
+    import land_merge
+
+    def before_merge() -> tuple[bool, list[str]]:
+        ok, more = merge_gitops(repo, st, "before-merge", timeout, interval, queue_timeout)
+        if ok:
+            _ready_if_draft(repo, pr)
+        return ok, more
+
+    try:
+        settled = land_merge.settle(repo, pr, watch, timeout, interval, rounds, run, before_merge=before_merge)
+    except land_merge.Unresolvable as e:
+        raise PlatformError(str(e), hint=CONFLICT_HINT) from e
+    except land_merge.MergeFailed as e:
+        if "draft" in str(e).lower():
+            raise land_merge.MergeFailed(str(e), hint=f"the PR is a draft: gh pr ready {pr}, then run land again") from e
+        raise land_merge.MergeFailed(str(e), hint="read the error, then run cplat component ship land again") from e
+    lines += settled.lines
+    if settled.status == "merged":
+        return _merged(repo, st, settled.sha, lines)
+    if settled.updated:
         run(["git", "pull", "-q", "--ff-only", "origin", st.get("branch") or "HEAD"], cwd=repo, check=False)   # the local branch follows
-    if caught.status == "red":
-        st["fix_rounds"] = st.get("fix_rounds", 0) + 1
-        save_state(repo, st)
-        return False, lines + red(repo, pr, caught.cs, caught.failed)
-    ok, more = merge_gitops(repo, st, "before-merge", timeout, interval, queue_timeout)
-    lines += more
-    if not ok:
+    if not settled.cs and not settled.failed:      # the before-merge gitops PRs stopped it: no check of this PR was red
         return False, lines
-    _ready_if_draft(repo, pr)
-    res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"] + (["--match-head-commit", watch.head] if watch.head else []), cwd=repo, check=False)
-    if res.returncode != 0:
-        detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
-        if "draft" in detail[0].lower():
-            raise PlatformError(f"merging {pr} failed: {detail[0]}", hint=f"the PR is a draft: gh pr ready {pr}, then run land again")
-        raise PlatformError(f"merging {pr} failed: {detail[0]}", hint="merge conflicts with main: rebase is a human decision; "
-                                                                       "`cplat component ship escalate 'merge failed'`")
-    merged = json.loads(gh(["pr", "view", pr, "--json", "mergeCommit"], cwd=repo) or "{}")
-    return _merged(repo, st, (merged.get("mergeCommit") or {}).get("oid", ""), lines + [f"merged {pr} (squash)"])
+    st["fix_rounds"] = st.get("fix_rounds", 0) + 1
+    save_state(repo, st)
+    return False, lines + red(repo, pr, settled.cs, settled.failed)
 
 
-def _merged(repo: Path, st: dict, sha: str, lines: list[str]) -> tuple[bool, list[str]]:
+def _merged(repo: Path, st: dict, sha: str, lines: list[str], cleanup_of: str | None = None) -> tuple[bool, list[str]]:
+    """The merge is recorded first, so no local step after it can lose it; `cleanup_of` (a PR merged before this land) is
+    cleaned up now, a land that merged itself has its cleanup lines already."""
     st["merge_sha"] = sha
     st["phase"] = "deploy"
     save_state(repo, st)
@@ -1182,8 +1240,9 @@ def _merged(repo: Path, st: dict, sha: str, lines: list[str]) -> tuple[bool, lis
     if prod.get("joint") and re.fullmatch(r"[0-9a-f]{40}", sha or ""):   # spec 144: pin-dev skips this build
         import appship_joint
         lines = [*lines, appship_joint.push_marker(Path(prod["dir"]), prod["spec"], service_name(repo), sha)]
-    run(["git", "switch", "-q", "main"], cwd=repo, check=False)
-    run(["git", "pull", "-q", "--ff-only"], cwd=repo, check=False)
+    if cleanup_of:
+        import land_merge
+        lines = [*lines, *land_merge.cleanup(repo, cleanup_of, run)]
     return True, lines
 
 
@@ -1806,7 +1865,8 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
     session = hook_input.get("session_id") or None
     mark = {"head": _head(repo, st["branch"]), "phase": st["phase"]}
     running = stopgate.running_agents(hook_input)
-    verdict = stopgate.check(st, session, mark, running)
+    import waits
+    verdict = stopgate.check(st, session, mark, running, waits.live(repo))   # spec 171: a running cplat wait holds the count
     command = f"/component:ship {st['spec']}"
     if verdict.action == "silent":
         return None
@@ -1822,11 +1882,16 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             escalate(repo, why, cause)
         return {"systemMessage": f"ship {st['spec']}: escalated ({why}); resume it with {command}"}
-    reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
-              f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
-              f"Next: {next_step(st)}."]
-    if st["phase"] == "build" and run_tests:
-        reason += build_status(repo, st["spec"])
+    if verdict.waiting:
+        reason = [stopgate.wait_line(verdict),
+                  f"The ship run of {st['spec']} is not finished (phase {st['phase']}); the wait above is still running.",
+                  "Next: read its result when it ends (a blocking read of its background task, never a polling loop), then go on from it."]
+    else:
+        reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
+                  f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
+                  f"Next: {next_step(st)}."]
+        if st["phase"] == "build" and run_tests:
+            reason += build_status(repo, st["spec"])
     reason.append("Keep going. Only if a rule needs the user (a merge conflict after its re-plan, a changed acceptance test, a CRITICAL finding, "
                   "a decision the spec does not answer) or the user asked you to stop: run "
                   "`cplat component ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop.")
@@ -2014,7 +2079,9 @@ def main(argv: list[str]) -> int:
         print(f"gitops PR ({info['order']}): {info['pr']}")
         return 0
     if ns.cmd == "land":
-        ok, lines = land(repo, ns.timeout, ns.interval, ns.queue_timeout)
+        import waits
+        with waits.running("cplat component ship land", Path.cwd()):    # spec 171: the Stop hook sees the wait
+            ok, lines = land(repo, ns.timeout, ns.interval, ns.queue_timeout)
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "deploy":
