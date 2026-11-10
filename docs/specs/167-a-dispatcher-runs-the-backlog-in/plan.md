@@ -86,6 +86,7 @@ tasks:
     covers: [AC-167.2, AC-167.10]
     parallel_safe: true
     depends_on: [t2, t3]
+    done: true
   - id: t13
     title: Readiness verdicts and priority order
     files: [scripts/cplat/dispatch_ready.py]
