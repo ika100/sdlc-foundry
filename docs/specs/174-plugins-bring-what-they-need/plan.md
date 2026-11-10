@@ -10,12 +10,14 @@ tasks:
     covers: [AC-174.1, AC-174.2, AC-174.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: plugin_set module and the plugin dependency validator in validate, CI and ci-local
     files: [scripts/cplat/plugin_set.py, scripts/check-plugin-deps.py, devbox.json, .github/workflows/ci.yml, scripts/ci-local.sh]
     covers: [AC-174.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: The docs check reads the starter set from the starter plugin
     files: [scripts/check-docs.py]
