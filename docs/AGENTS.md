@@ -96,9 +96,11 @@ The orchestrator:
 
 1. **Topologically sorts** tasks by `depends_on`.
 2. At each dependency level, **greedily groups `parallel_safe: true` tasks into batches** whose `files` sets are disjoint.
-3. For each batch ≥ 2: spawns one coder per task **in one assistant turn** (multiple Agent tool calls in parallel), each in its own worktree. Each coder commits inside its worktree before returning.
+3. For each batch ≥ 2: spawns one coder per task **in one assistant turn** (multiple Agent tool calls in parallel), each in its own worktree. Each coder commits inside its worktree before returning, and runs only its own task's tests with `cplat quiet test-fast -- <its tests>` ([ADR-094](adr/094-a-build-runs-each-coder-on-its-own-tests-and-new-tests-under-load.md)).
 4. **Merges sequentially** back onto the base branch with `cplat component build merge` (`git merge --no-ff`). After each merge: `devbox run lint-fix`, then `cplat spec test-diff <red commit>` (acceptance tests may only be reformatted), `devbox run quality` and `devbox run test-fast`. On failure, hand back to that task's coder for lint/type fixes only. Each merged task is marked `done` in the plan and committed on its own (one commit per task), so the next merge starts from a clean tree.
 5. Cleans up worktrees and branches as it merges.
+
+In the platform repo `cplat component build merge` refuses a task branch with an unsigned commit (DCO), so the coder signs off with `git commit -s`. Before Phase 3 the build runs the spec's new acceptance tests three times at once (the load run, step 2.6); a failure that does not repeat goes to the tester as a harness problem.
 
 **A merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand.** A conflict means the architect's `files` declarations were inaccurate, so the fix is to update the plan. `cplat component build merge` aborts the merge and sets the task aside; the architect amends only `files` / `depends_on` / `parallel_safe` of tasks that are not done; the task runs again on top of the merged work. This happens without asking, attended or not.
 
