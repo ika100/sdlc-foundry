@@ -1,7 +1,7 @@
 ---
 spec_id: 171-unattended-runs-settle-their-own-small
 title: Unattended runs settle their own small problems
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [613, 621, 622, 623, 624, 625, 626, 633]
@@ -81,3 +81,4 @@ None.
 - 2026-11-10 amended: AC-171.10 added (a repeated `--tracks` keeps every value; the created spec had kept only the last of eight issues), with A9
 - 2026-11-10 approved
 - 2026-11-10 building
+- 2026-11-10 done
