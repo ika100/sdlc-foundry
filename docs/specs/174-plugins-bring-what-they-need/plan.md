@@ -24,12 +24,14 @@ tasks:
     covers: [AC-174.4]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t4
     title: Doctor warns below the minimum Claude Code and fails without shared
     files: [scripts/cplat/doctor.py]
     covers: [AC-174.6]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t5
     title: Two-line install on the quickstart, README, user journey and laptop page
     files: [docs/QUICKSTART.md, README.md, docs/USER-JOURNEY.md, site/src/content/docs/get-started/local-cluster.md]
