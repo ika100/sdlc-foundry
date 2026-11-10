@@ -86,7 +86,7 @@ def test_a_run_still_going_at_the_timeout_exits_2_ac_143_11(comp, capsys):  # AC
     assert rc == 2 and out[0].startswith("TIMEOUT:") and t["slept"] >= 300
 
 
-def test_a_commit_of_another_repo_says_so_at_once_614(comp, capsys):  # #614
+def test_a_commit_of_another_repo_says_so_at_once_ac_170_1(comp, capsys):  # AC-170.1
     repo, answers, calls, t = comp
     answers += [[]]
     capsys.readouterr()
@@ -96,7 +96,7 @@ def test_a_commit_of_another_repo_says_so_at_once_614(comp, capsys):  # #614
     assert rc == 1 and "NO COMMIT: 3eef2a6 is not a commit of acme/todo-api" in out and t["slept"] == 0
 
 
-def test_a_network_error_on_the_commit_check_keeps_waiting_614(comp, capsys, monkeypatch):  # #614
+def test_a_network_error_on_the_commit_check_keeps_waiting_ac_170_2(comp, capsys, monkeypatch):  # AC-170.2
     repo, answers, calls, t = comp
     answers += [[]]
 
