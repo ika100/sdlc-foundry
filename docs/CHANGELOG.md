@@ -6,6 +6,14 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.15.1] - 2026-11-10
+
+### Fixed
+
+**A test fix the red-tests session commits before any code exists no longer stops an unattended run (spec 169).** `cplat spec test-diff` compared against the first 'acceptance tests for' commit, so the session's own second commit counted as a changed acceptance test and the run waited for a person. In a unit-mode run the tests now freeze where the runner recorded the red-tests unit as done; a change after that is still flagged. A tightening that adds a test naming its criterion is no longer refused as `criterion ids changed: []`. `cplat system ship next --wait` no longer reports a repo's escalation from the run before while its restarted session is starting. Found by journey 8.
+
+**`cplat component release wait --commit` names a commit of another repo at once (spec 170, #614).** Run in the wrong clone, it waited 120 s and reported `NO RUN`, blaming a Markdown-only commit. It now asks GitHub whether the commit exists in that repo and answers `NO COMMIT: <sha> is not a commit of <repo>` at the first poll; a network error keeps the old wait. Found by journey 8.
+
 ## [5.15.0] - 2026-11-09
 
 ### Changed
