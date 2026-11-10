@@ -121,6 +121,7 @@ tasks:
     covers: [AC-167.2, AC-167.11]
     parallel_safe: true
     depends_on: [t2, t9, t12, t14]
+    done: true
   - id: t18
     title: cplat dispatch CLI, the loop, steering verbs and registration
     files: [scripts/cplat/dispatch.py, scripts/cplat/cplat.py]
