@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 650" role="img" aria-labelledby="title desc">
-  <title id="title">SDLC Foundry map (5.14): delivery flow, planned dispatcher and feedback loops</title>
-  <desc id="desc">Swimlanes for you, agents, cplat, GitHub with gitops and Argo, and the feedback loops. You route an issue and approve the spec, which merges its draft pull request. Agents write the spec, plan, red tests, code and verification; the platform script runs the gates, opens the PR, merges on green, waits for dev, runs the smoke tests and promotes to staging on green. In the build, a red gate goes back to the coder and a criterion the reviewer finds not met goes back to the coder that covers it, each at most twice before it escalates. Red CI on the pull request goes back to the coder, a merge conflict goes back to the architect. A planned dispatcher (spec 167, cplat dispatch) starts the fix run of a triaged issue and the ship run of an approved spec in parallel slots, so you no longer start each run yourself. Escalations reach you in the console Inbox and as notifications. Prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts all come back as deduplicated GitHub issues that you route in triage. An optional autonomy engine per environment can open fix pull requests and roll dev back; it never promotes forward.</desc>
+  <title id="title">SDLC Foundry map (5.14): delivery flow, dispatcher and feedback loops</title>
+  <desc id="desc">Swimlanes for you, agents, cplat, GitHub with gitops and Argo, and the feedback loops. You route an issue and approve the spec, which merges its draft pull request. Agents write the spec, plan, red tests, code and verification; the platform script runs the gates, opens the PR, merges on green, waits for dev, runs the smoke tests and promotes to staging on green. In the build, a red gate goes back to the coder and a criterion the reviewer finds not met goes back to the coder that covers it, each at most twice before it escalates. Red CI on the pull request goes back to the coder, a merge conflict goes back to the architect. The dispatcher (spec 167, cplat dispatch) starts the fix run of a triaged issue and the ship run of an approved spec in parallel slots, so you no longer start each run yourself. Escalations reach you in the console Inbox and as notifications. Prod promotion stays yours. Run records, the weekly retro, platform failures, red smoke tests and firing alerts all come back as deduplicated GitHub issues that you route in triage. An optional autonomy engine per environment can open fix pull requests and roll dev back; it never promotes forward.</desc>
   <style>
     svg { --bg: #FFFFFF; --ink: #17201D; --muted: #5A6561; --rule: #D6DBD5; --human: #A95A07; --human-tint: #FBEBD6;
       --agent: #5847C2; --code: #0E6E66; --ext: #6A717B; --band: #E3EFEC; --hot: #C2352B; --loop: #8A4FB8; --loop-tint: #F3EAFA; }
@@ -75,7 +75,7 @@
   <!-- delivery edges -->
   <line class="edge" x1="118" y1="391" x2="118" y2="126" marker-end="url(#ar)"/>
   <line class="edge" x1="175" y1="124" x2="236" y2="179" marker-end="url(#ar)"/>
-  <!-- dispatcher (planned, spec 167): starts fix and ship runs for triaged issues and approved specs -->
+  <!-- dispatcher (spec 167): starts fix and ship runs for triaged issues and approved specs -->
   <line class="edge" x1="160" y1="126" x2="160" y2="284" marker-end="url(#ar)"/>
   <text class="elab" x="155" y="262" text-anchor="end">fix</text>
   <line class="edge" x1="236" y1="389" x2="214" y2="336" marker-end="url(#ar)"/>
@@ -142,7 +142,7 @@
   <g class="n a"><rect x="778" y="181" width="88" height="48" rx="6"/><text class="t" x="822" y="201">reviewer</text><text class="s" x="822" y="216">verification</text></g>
   <g class="n a dash"><rect x="1002" y="181" width="88" height="48" rx="6"/><text class="t" x="1046" y="201">coder</text><text class="s" x="1046" y="216">fix red CI</text></g>
   <!-- cplat -->
-  <g class="n c dash"><rect x="130" y="286" width="96" height="48" rx="6"/><text class="t" x="178" y="306">dispatcher</text><text class="s" x="178" y="321">planned (167)</text></g>
+  <g class="n c"><rect x="130" y="286" width="96" height="48" rx="6"/><text class="t" x="178" y="306">dispatcher</text><text class="s" x="178" y="321">cplat dispatch</text></g>
   <g class="n c"><rect x="330" y="286" width="88" height="48" rx="6"/><text class="t" x="374" y="306">spec check</text><text class="s" x="374" y="321">plan ⊇ ACs</text></g>
   <g class="n c"><rect x="554" y="286" width="88" height="48" rx="6"/><text class="t" x="598" y="306">merge gates</text><text class="s" x="598" y="321">test-diff·fast</text></g>
   <g class="n c"><rect x="666" y="286" width="88" height="48" rx="6"/><text class="t" x="710" y="306">devbox run ci</text><text class="s" x="710" y="321">+ CVE patch</text></g>

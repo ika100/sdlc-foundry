@@ -236,6 +236,16 @@ They have no agent. `/instance:promote`, `/component:add|set|remove`, `/resource
 
 ---
 
+## The dispatcher (spec 167)
+
+`cplat dispatch` starts the `/component:fix` and `/component:ship` runs of a repo for you: plain code that reads `.platform/dispatch.yml`, picks the
+ready issues and specs, and runs one headless session per slot in its own worktree. It calls a model only for two short read-only checks (is
+the issue still true on `main`; does a spec's work split into parallel tasks) and never replaces the orchestrators described here: a unit is
+the same fix or ship run you would start by hand. Every merge cplat makes holds a per-repo merge lock
+([ADR-089](adr/089-every-merge-into-main-holds-the-repo-merge-lock.md)). Setup, verbs and held reasons are in the [dispatcher guide](dispatch.md).
+
+---
+
 ## File conventions in consumer repos
 
 | Path | Purpose |
