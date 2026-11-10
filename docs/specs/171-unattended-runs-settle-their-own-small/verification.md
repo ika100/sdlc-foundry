@@ -79,3 +79,7 @@ Matches design.md: the `land_merge` API, the merge argv without `--delete-branch
 other-worktree skip, the `_known` head guard, the regeneration steps and messages, `push_ahead` messages and hint, the mark file
 format and `stopgate.check(..., waiting=)` order, the pr-check error line, and `--tracks` extend with de-duplication. The only
 difference is the `pr wait` MergeFailed hint wording noted above. ✔
+
+## Mutation check (report only)
+
+Skipped: no mutation check for shape platform yet.
