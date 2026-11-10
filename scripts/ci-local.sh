@@ -43,6 +43,9 @@ uv run --with-requirements requirements-test.txt python scripts/check-docs.py
 step "no \"\$\$\" in a pod command of the e2e scripts (#323)"
 python3 scripts/check-e2e-probes.py
 
+step "no fixed sleep in a cplat test (spec 178)"
+python3 scripts/check-test-sleeps.py
+
 step "license and copyright metadata (REUSE)"
 uvx --quiet --from "reuse[charset-normalizer]" reuse lint | tail -3
 
