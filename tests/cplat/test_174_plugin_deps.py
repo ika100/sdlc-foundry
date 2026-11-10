@@ -354,7 +354,7 @@ def test_the_none_installed_fix_names_the_starter_plugin_ac_174_6(monkeypatch): 
 # ---------------- AC-174.7: versions, description, changelog ----------------
 
 # the minor each plugin reached with spec 174 (one minor up from 5.16.0); later releases may only go higher, same major
-SHIPPED = {"api": (1, 3), "cluster": (1, 4), "component": (1, 16), "instance": (1, 6), "issue": (1, 2), "platform": (1, 8), "resource": (1, 9), "shared": (1, 4), "svc": (4, 9), "svc-go": (0, 8), "svc-java": (0, 8), "system": (1, 16), "web": (0, 8)}
+SHIPPED = {"api": (1, 3), "cluster": (1, 4), "component": (1, 17), "instance": (1, 6), "issue": (1, 2), "platform": (1, 8), "resource": (1, 9), "shared": (1, 4), "svc": (4, 9), "svc-go": (0, 8), "svc-java": (0, 8), "system": (1, 16), "web": (0, 8)}
 
 
 @pytest.mark.parametrize("name", (*LIVE, "shared"))
