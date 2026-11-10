@@ -240,6 +240,14 @@ To get the earlier output back, run `cplat quiet --raw <script>` or set `failure
 
 To see running sessions, their status and a way to step in while a run works, you can use [dot-agent-deck](agent-deck.md) next to the platform. It is optional and only shows activity: outcomes, costs and gates still come from the run store, CI and the ship gates.
 
+## The dispatcher (spec 167)
+
+To stop starting each run yourself, let `cplat dispatch` do it: a repo opts in with `.platform/dispatch.yml` (slots, a daily token budget, the
+sources `issues` and `specs`), and the dispatcher starts `/component:fix` for each triaged issue and `/component:ship` for each approved spec, one
+per slot, lands the fix PRs on green checks and escalates what needs you (`needs-decision`, the console Inbox and your notifications).
+Start with `cplat dispatch plan`, then one slot for fixes, then specs and more slots. Parallel merges are safe because every merge holds a
+per-repo lock and re-checks a branch that fell behind `main`. See the [dispatcher guide](dispatch.md).
+
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat component ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`, spec 068) are the review. Use `/component:ship <NNN> --no-merge` to read the PR yourself first.
