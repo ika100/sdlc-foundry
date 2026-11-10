@@ -729,6 +729,39 @@ class CheckWatch:
         self.lone_cancelled: set[tuple[str, str]] = set()            # cancelled runs no other run of their workflow replaces
         self.refused: str | None = None                               # spec 102: the budget refused a rerun
         self.refused_checks: list[dict] = []
+        self.expected: dict[str, bool] = {}                           # spec 178: check name -> required; {} = no expectation
+        self.missing: list[str] = []                                  # expected names the head does not show as passed yet
+        self.concluded_since: float | None = None
+
+    def expect_from_current(self) -> None:
+        """Before the land changes the head: the checks the new head must show (required ones, and those that passed here)."""
+        try:
+            rows = json.loads(gh(["pr", "checks", self.pr, "--required", "--json", "name"], cwd=self.repo, check=False) or "[]")
+            required = {c["name"] for c in rows if isinstance(c, dict) and c.get("name")}
+        except (ValueError, TypeError):
+            required = set()
+        try:
+            seen = {c["name"] for c in checks(self.repo, self.pr) if c.get("bucket") in ("pass", "skipping")}
+        except GhError:
+            seen = set()
+        self.expected = {n: True for n in required} | {n: False for n in seen - required}
+        self.concluded_since = None
+
+    def _unmet(self, cs: list[dict]) -> list[str]:
+        """Expected names without a passed check on this head; a non-required one that stays absent is dropped."""
+        buckets = {c["name"]: c.get("bucket", "") for c in cs}
+        absent = [n for n in self.expected if buckets.get(n) not in ("pass", "skipping")]
+        if any(b == "pending" for b in buckets.values()):
+            self.concluded_since = None
+        elif absent:
+            if self.concluded_since is None:
+                self.concluded_since = now()
+            if now() - self.concluded_since > NO_CHECKS_GRACE:
+                for n in [n for n in absent if not self.expected[n] and n not in buckets]:
+                    say(f"  {n} did not run on {(self.head or '')[:7]}: not expected")
+                    del self.expected[n]
+                    absent.remove(n)
+        return absent
 
     def conflicting(self) -> bool:
         """GitHub starts no pull_request workflow while a PR conflicts with its base (#221): its green is not CI's."""
@@ -914,7 +947,12 @@ class CheckWatch:
         if cs and not pending:
             if self._runs_pending():
                 return "pending", cs, []
+            self.missing = self._unmet(cs) if self.expected else []
+            if self.missing:
+                return "pending", cs, []
             return "green", cs, []
+        names = {c["name"] for c in cs}
+        self.missing = [n for n in self.expected if n not in names]
         self._heal(pending)
         if self.refused:
             return "red", cs, self.refused_checks
@@ -1033,7 +1071,7 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
                            hint="is CI set up for pull requests, and is a runner online (vars.CI_RUNNER)? "
                                 "Merging without any check is never done automatically")
         if waited > timeout:
-            pending = [c["name"] for c in cs if c.get("bucket") == "pending"] or ["a workflow run that reports no checks yet (queued)"]
+            pending = [c["name"] for c in cs if c.get("bucket") == "pending"] + watch.missing or ["a workflow run that reports no checks yet (queued)"]
             raise ChecksPending(f"checks on {watch.pr} still pending after {int(timeout)}s: {', '.join(pending)}",
                                 hint="run the command again later; a runner may be busy or offline", checks=pending)
         sleep(interval)
@@ -1171,6 +1209,7 @@ def push_ahead(repo: Path, st: dict, pr: str, watch: CheckWatch) -> str | None:
     if not reason:
         run_ci(repo, {"PR_TITLE": title, "PR_BODY": meta.get("body") or "",
                       "PR_LABELS": ",".join(lb.get("name", "") for lb in meta.get("labels") or [] if isinstance(lb, dict))})
+        watch.expect_from_current()
         pushed = run(["git", "push", "-q", "origin", branch], cwd=repo, check=False)
         if pushed.returncode != 0:
             lines = [ln.strip() for ln in (pushed.stderr or pushed.stdout or "").splitlines() if ln.strip()]
@@ -1193,7 +1232,8 @@ def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_
     watch = CheckWatch(repo, pr, queue_timeout, st.get("run_id"))
     push_ahead(repo, st, pr, watch)
     rounds = land_merge.Rounds()                 # one budget of regeneration rounds for the whole land
-    status, cs, failed, regenerated = land_merge.wait_green(repo, pr, watch, timeout, interval, rounds, run)
+    status, cs, failed, regenerated = land_merge.wait_green(repo, pr, watch, timeout, interval, rounds, run,
+                                                                  mode=land_merge.CATCH_UP)
     try:  # agent metrics (spec 089): never changes the result
         import runs_agents
         runs_agents.red_ci(st.get("run_id"), repo, [c["name"] for c in failed] if status == "red" else [])
@@ -1242,9 +1282,12 @@ def _merge_locked(repo: Path, st: dict, pr: str, watch: CheckWatch, lines: list[
         return ok, more
 
     try:
-        settled = land_merge.settle(repo, pr, watch, timeout, interval, rounds, run, before_merge=before_merge)
+        settled = land_merge.settle(repo, pr, watch, timeout, interval, rounds, run, before_merge=before_merge,
+                                   mode=land_merge.CATCH_UP)
     except land_merge.Unresolvable as e:
         raise PlatformError(str(e), hint=CONFLICT_HINT) from e
+    except land_merge.MergeRefused:
+        raise
     except land_merge.MergeFailed as e:
         if "draft" in str(e).lower():
             raise land_merge.MergeFailed(str(e), hint=f"the PR is a draft: gh pr ready {pr}, then run land again") from e
