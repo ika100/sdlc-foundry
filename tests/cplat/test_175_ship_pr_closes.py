@@ -9,7 +9,6 @@ import re
 
 import pytest
 
-import core
 import pr as prmod
 import pr_open
 import ship
@@ -97,38 +96,43 @@ def test_without_a_spec_the_lines_come_from_the_commits_only_ac_175_4(world, fak
 
 # ---------------- AC-175.5: a body that keeps the placeholder is refused ----------------
 
-def test_an_unreadable_spec_refuses_the_body_before_ci_and_push_ac_175_5(world, fake):  # AC-175.5
+def refused(world, capsys, reason):
+    """`cplat component ship pr` exits 2 with the ERROR line (and its reason) and the fix line on stderr."""
+    import cplat
+    rc = cplat.main(["component", "ship", "--repo", str(world.repo), "pr", "--title", TITLE, "--body-file", str(world.body)])
+    err = capsys.readouterr().err.splitlines()
+    assert rc == 2
+    assert any(ln.startswith("ERROR: PR body still contains {{CLOSES}}: " + reason) for ln in err), err
+    assert any(ln.startswith("  fix: ") for ln in err), err
+
+
+def test_an_unreadable_spec_refuses_the_body_before_ci_and_push_ac_175_5(world, fake, capsys):  # AC-175.5
     tracks(world, "[abc]")                                               # a non-integer track: the spec cannot be read
     world.body.write_text("{{CLOSES}}\n")
-    with pytest.raises(core.PlatformError, match=r"PR body still contains \{\{CLOSES\}\}") as e:
-        world.pr()
-    assert "007" in str(e.value) or "spec" in str(e.value)
+    refused(world, capsys, "the ship run's spec")
     nothing_done(world)
     assert "{{CLOSES}}" in (world.repo / ".git" / "PR_BODY.md").read_text()      # the body file is not written
 
 
-def test_a_missing_spec_refuses_the_body_ac_175_5(world, fake):  # AC-175.5
+def test_a_missing_spec_refuses_the_body_ac_175_5(world, fake, capsys):  # AC-175.5
     (world.repo / SPEC_FILE).unlink()
     world.change("docs/guide.md")
     world.body.write_text("{{CLOSES}}\n")
-    with pytest.raises(core.PlatformError, match=r"PR body still contains \{\{CLOSES\}\}"):
-        world.pr()
+    refused(world, capsys, "the ship run's spec")
     nothing_done(world)
 
 
-def test_filling_that_leaves_the_placeholder_refuses_the_body_ac_175_5(world, fake, monkeypatch):  # AC-175.5
+def test_filling_that_leaves_the_placeholder_refuses_the_body_ac_175_5(world, fake, monkeypatch, capsys):  # AC-175.5
     monkeypatch.setattr(pr_open, "fill_closes", lambda text, kept: text)
     world.change("docs/guide.md")
     world.body.write_text("{{CLOSES}}\n")
-    with pytest.raises(core.PlatformError, match=r"PR body still contains \{\{CLOSES\}\}"):
-        world.pr()
+    refused(world, capsys, "filling left the placeholder")
     nothing_done(world)
 
 
-def test_an_open_pr_is_neither_created_nor_edited_for_a_refused_body_ac_175_5(world, fake):  # AC-175.5
+def test_an_open_pr_is_neither_created_nor_edited_for_a_refused_body_ac_175_5(world, fake, capsys):  # AC-175.5
     tracks(world, "[abc]")
     world.gh.open = [{"number": 7, "url": "https://github.com/acme/shop-api/pull/7", "title": "old", "labels": []}]
     world.body.write_text("{{CLOSES}}\n")
-    with pytest.raises(core.PlatformError, match=r"PR body still contains"):
-        world.pr()
+    refused(world, capsys, "the ship run's spec")
     nothing_done(world)
