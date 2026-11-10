@@ -10,6 +10,7 @@ tasks:
     covers: [AC-171.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: The platform repo's committed allowlist
     files: [.claude/settings.json]
