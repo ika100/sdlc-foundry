@@ -17,6 +17,7 @@ Add a row to every table below for each new journey (see [Recording a journey](#
 | 7 | 2026-11-09 | 5.14.0 → 5.14.2 (two fixes during the run, [#589](https://github.com/ika100/sdlc-foundry/pull/589), [#592](https://github.com/ika100/sdlc-foundry/pull/592)) | [taskboard7-*](https://github.com/ika100-demo/taskboard7-gitops) | unattended, a fresh session per part; each repo of the system ship in its own headless session (spec 155); four replies to recover a missed stop | recorded, not published: Watch a real run keeps journey 6 |
 | 8 | 2026-11-09/10 | 5.15.0 (no change during the run) | [taskboard8-*](https://github.com/ika100-demo/taskboard8-gitops) | unattended, a fresh session per part, each repo of the system ship in its own headless session; one reply to a stop | recorded, not published: Watch a real run keeps journey 6 |
 | 9 | 2026-11-10 | 5.16.0 (no change during the run) | [taskboard9-*](https://github.com/ika100-demo/taskboard9-gitops) | unattended, a fresh session per part, each repo of the system ship in its own headless session; one reply to a stop | recorded, not published: Watch a real run keeps journey 6 |
+| 10 | 2026-11-10 | 5.17.0 (no change during the run) | [taskboard10-*](https://github.com/ika100-demo/taskboard10-gitops) | unattended, a fresh session per part, each repo of the system ship in its own headless session; one reply (a confirmation) | recorded, not published: Watch a real run keeps journey 6 |
 
 ## Time
 
@@ -33,6 +34,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 7 | 30 | 38 (+ 121 blocked) | 90, about 45 of them finishing part 2's ship | 158 (+ 121 blocked) | 279 |
 | 8 | 29 | 73 | 54 | 156 | 156 |
 | 9 | 29 | 61 | 50 | 140 | 140 |
+| 10 | 30 | 60 | 48 | 138 | 138 |
 
 **Where the wall clock went**, each minute counted once, agent work first (`scripts/journey/measure.py`):
 
@@ -47,6 +49,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 7 | 5 (2 %): answers and four replies; the 121 blocked minutes fall in the step "Plan and ship it to dev" | 107 (38 %): deploys and Argo 45, CI 34, promotions 23, cluster 3 | 166 (60 %): model 156, commands, tests and platform calls 10; the coordinator's waits on the repo sessions count here | 21 (plus 22 headless repo sessions) |
 | 8 | 5 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 104 (67 %): deploys and Argo 62, CI 23, promotions and restores 16, cluster 3; the coordinator's waits on the repo sessions count as deploys now | 47 (30 %): model 35, commands, tests and platform calls 12 | 17 (plus 16 headless repo sessions) |
 | 9 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 88 (63 %): deploys and Argo 50, CI 21, promotions and restores 16, cluster and smoke 1 | 48 (34 %): model 36, commands, tests and platform calls 12 | 20 (plus 16 headless repo sessions) |
+| 10 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 91 (66 %): deploys and Argo 48, CI 25, promotions and restores 17, cluster and smoke 1 | 44 (32 %): model 33, commands, tests and platform calls 10 | 16 (plus 14 headless repo sessions) |
 
 **CI on GitHub** (the demo repos' Actions runs within the journey):
 
@@ -61,6 +64,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 7 | 32 | 181 | 0 | 128 | 8 | 64 of 278 min |
 | 8 | 26 | 160 | 1 | 134 | 6 | 55 of 156 min |
 | 9 | 27 | 157 | 1 | 119 | 6 | 53 of 139 min |
+| 10 | 27 | 155 | 1 | 134 | 5 | 52 of 138 min |
 
 ## Tokens
 
@@ -77,6 +81,7 @@ Summed over every API message of the recorded session, main thread and subagents
 | 7 | 54.0 M (coordinator 40.4, repo sessions 13.6) | 51.8 M | 1.96 M | 322 k | 185 k / 137 k / – | 787 |
 | 8 | 42.2 M (coordinator 26.5, repo sessions 15.7) | 39.8 M | 2.03 M | 377 k | 223 k / 155 k / – | 725 |
 | 9 | 45.0 M (coordinator 29.8, repo sessions 15.2) | 42.7 M | 1.95 M | 361 k | 221 k / 140 k / – | 723 |
+| 10 | 43.4 M (coordinator 28.5, repo sessions 14.9) | 41.2 M | 1.86 M | 365 k | 228 k / 136 k / – | 721 |
 
 About 97 % of the tokens are cache reads: the context the agents read again on every turn. The number of turns, not the size of the answers, drives the usage.
 
@@ -95,6 +100,7 @@ Where the tokens went (main session / slice coordinators of `/system:ship` / spe
 | 7 | 18 (12 sentences, 2 resumes after a fix, 4 replies) | 7 in 7 rounds, all with the suggested answer, plus one decision the driver missed (below) | 2 ([#588](https://github.com/ika100/sdlc-foundry/issues/588), [#591](https://github.com/ika100/sdlc-foundry/issues/591), both fixed and released during the run) | 5 |
 | 8 | 13 (12 sentences, 1 reply) | 5 in 4 rounds, all with the suggested answer; two of them (a test tightening, a smoke test) the platform should have settled itself | 1 (a test fix inside the red-tests step read as a changed acceptance test, spec 169) | 2 |
 | 9 | 13 (12 sentences, 1 reply) | 3 in 3 rounds (spec approvals), all with the suggested answer, plus one approval of a test-helper fix the platform should settle itself ([#624](https://github.com/ika100/sdlc-foundry/issues/624)) | 1 (a Linux-only test-helper fix read as a changed acceptance test) | 4 |
+| 10 | 13 (12 sentences, 1 reply) | 7 in 7 rounds, all with the suggested answer; two of them the platform should settle itself ([#654](https://github.com/ika100/sdlc-foundry/issues/654) template files a headless session may not delete, [#655](https://github.com/ika100/sdlc-foundry/issues/655) a type-only change to a frozen test) | 0 | 4 |
 
 ## Quality
 
@@ -109,6 +115,7 @@ Where the tokens went (main session / slice coordinators of `/system:ship` / spe
 | 7 | 8: [#588](https://github.com/ika100/sdlc-foundry/issues/588) and [#591](https://github.com/ika100/sdlc-foundry/issues/591) fixed during the run, [#595](https://github.com/ika100/sdlc-foundry/issues/595)–[#600](https://github.com/ika100/sdlc-foundry/issues/600) filed | 35 in 4 specs (repo specs written by the system plan: 20) | green in dev (API 5/5, web 1/1), staging and prod (the "Prod check" task created) | first prod PR refused by the driver (web digest mismatch accepted, no staging smoke record, [#598](https://github.com/ika100/sdlc-foundry/issues/598)); clean on the second, after re-pinning staging | passed after an on-demand backup; archiving had failed unreported until Argo synced ([#600](https://github.com/ika100/sdlc-foundry/issues/600)) |
 | 8 | 5: three fixed after the run by spec 169 ([#611](https://github.com/ika100/sdlc-foundry/pull/611)), [#614](https://github.com/ika100/sdlc-foundry/issues/614) fixed by spec 170 ([#615](https://github.com/ika100/sdlc-foundry/pull/615)), [#616](https://github.com/ika100/sdlc-foundry/issues/616) filed | 38 in 4 specs (repo specs written by the system plan: 22) | green in dev, staging (web 2/2, API 3/5 with the 2 writing tests skipped) and prod (API 3/5, web 2/2; the "Prod check" task created) | clean, no warning; same digests as staging | passed from the daily backup's first run, without an on-demand backup; the copy was discarded and prod stayed READY |
 | 9 | 3, filed as [#624](https://github.com/ika100/sdlc-foundry/issues/624)–[#626](https://github.com/ika100/sdlc-foundry/issues/626); one stopped the run once | 34 in 4 specs (repo specs written by the system plan: 20) | green in dev, staging (API 4/5 with the writing test skipped, web 2/2) and prod (the "Prod check" task created) | clean, no warning; same digests as staging | passed from the daily backup's first full backup; the copy was discarded and live prod was not touched |
+| 10 | 3, filed as [#653](https://github.com/ika100/sdlc-foundry/issues/653)–[#655](https://github.com/ika100/sdlc-foundry/issues/655); none stopped the run | 37 in 4 specs (repo specs written by the system plan: 22) | green in dev, staging and prod (the "Prod check" task created) | clean, no warning | passed from the daily backup; the copy was discarded and live prod was not touched |
 
 ## What changed between the journeys
 
@@ -159,6 +166,12 @@ Effect on journey 8: **the fastest unattended run so far, with nothing blocked**
 Effect on journey 9: **the fastest unattended run so far, again with nothing blocked**: 140 minutes against 156 for journey 8. Part 1 took 29 minutes without a question; part 3, staging to the restore drill, 50 minutes without a stop. Part 2 took 61 minutes, 43 of them in "Plan and ship it to dev": the API's new "database is down" tests passed on macOS and failed on the Linux CI runner because their helper faked the outage in a way Linux ignores; the coordinator found the one-line helper fix, which changes no assertion, and stopped for the one reply of the journey because the helper counts as a frozen acceptance test ([#624](https://github.com/ika100/sdlc-foundry/issues/624)). After it, the resumed API session landed without pushing the fix ([#625](https://github.com/ika100/sdlc-foundry/issues/625)) and background waits counted as no progress ([#626](https://github.com/ika100/sdlc-foundry/issues/626)); the coordinator worked around both itself. Tokens rose slightly (42.2 → 45.0 M; coordinator 29.8 M, repo sessions 15.2 M). The rules sweep of spec 168 was visible once: in the restore drill the agent ran one read-only `kubectl exec` that `cplat` had printed and named it as a departure from the shell practice in its report. The prod PR was clean on the first try and the restore drill passed from the daily backup.
 
 **Open after journey 9:** [#624](https://github.com/ika100/sdlc-foundry/issues/624) a helper fix without an assertion change is asked of the person, [#625](https://github.com/ika100/sdlc-foundry/issues/625) a resumed repo ship lands without pushing, [#626](https://github.com/ika100/sdlc-foundry/issues/626) background waits count as no progress; [#616](https://github.com/ika100/sdlc-foundry/issues/616) from journey 8.
+
+**Journey 9 → journey 10 — 5.17.0**, the round after journey 9: the platform repo commits the template allowlist so platform specs ship unattended (specs 172 and 175 were the first, 175 without a single stop), a land treats a merged PR as merged, guards the merge with the head it read, pushes local commits first and regenerates a conflict in the backlog index, a running `cplat` wait no longer counts as a stop without progress, and a test-helper fix is a tightening (spec 171, [#634](https://github.com/ika100/sdlc-foundry/pull/634)); test-diff judges only the files the red-tests step froze, a coder runs only its task's tests, the new acceptance tests run under load before the PR and build merge refuses an unsigned commit (spec 172, [#635](https://github.com/ika100/sdlc-foundry/pull/635)); plugins bring what they need (spec 174, [#644](https://github.com/ika100/sdlc-foundry/pull/644)); a spec number steers the spec in the dispatcher and ship PRs close their issues (spec 175, [#646](https://github.com/ika100/sdlc-foundry/pull/646)).
+
+Effect on journey 10: **about the same as journey 9**: 138 minutes against 140, no person's stop, and tokens 4 % lower (45.0 → 43.4 M). The fixes of this round removed the stops of journey 9 (no helper approval, no unpushed resume, waits in the foreground), but the time did not move, because two thirds of the wall clock is waiting on deploys, CI and promotions (91 of 138 minutes), which none of the fixes touch. Part 2 ran the whole system ship inside the spec sentence (the coordinator asked whether to ship the plan right away), so "Plan and ship it to dev" took 1.5 minutes. Seven questions reached the person instead of three: two specs' open question and approval each, the confirmation to ship, and two the platform should settle itself, three template files a headless repo session was not allowed to delete ([#654](https://github.com/ika100/sdlc-foundry/issues/654)) and a type-only fix to a frozen web test ([#655](https://github.com/ika100/sdlc-foundry/issues/655)). The API's two replicas from the system spec needed a separate gitops PR because the plan had no task for them ([#653](https://github.com/ika100/sdlc-foundry/issues/653)). The prod PR was clean on the first try and the restore drill passed from the daily backup.
+
+**Open after journey 10:** [#653](https://github.com/ika100/sdlc-foundry/issues/653), [#654](https://github.com/ika100/sdlc-foundry/issues/654), [#655](https://github.com/ika100/sdlc-foundry/issues/655); [#648](https://github.com/ika100/sdlc-foundry/issues/648) (a release merge caught the release branch up with main during this round). The next round consolidates instead of adding features.
 
 ## Recording a journey
 
