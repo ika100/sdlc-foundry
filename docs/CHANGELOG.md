@@ -6,6 +6,16 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.15.0] - 2026-11-09
+
+### Changed
+
+**A test problem with an obvious answer no longer stops an unattended build (spec 165).** When the reviewer finds an acceptance test looser than its criterion, the tester tightens it to the criterion and `cplat spec test-diff --tighten` records it. The check refuses a removed test, fewer assertions, a new skip or a changed criterion id, and the PR lists every tightened test apart from the changes you approved (#595). Build Phase 1 runs Playwright acceptance tests once before freezing them, so a test that cannot even start goes back to the tester, and the web tester never starts the app inside a test (#582). `cplat quiet test-fast` runs up to five failed tests again alone once; tests that then pass are reported and recorded as flaky and the run goes on (#583). Component plugin 1.14.0, svc plugin 4.7.0, web plugin 0.6.3.
+
+### Fixed
+
+**The dev PR of a system ship lands on the current main (spec 166).** `cplat system ship land` merges main into the `compose/<spec>` branch before it merges the PR, so gitops PRs merged during the run no longer make it conflict or get lost. A conflict in a rendered file takes main's file, pins the run's builds again and renders again; when main already pins a later build of a component, dev keeps it and the report names it. A conflict in `system.yaml` or another hand-edited file stops the run and names the files (#597).
+
 ## [5.14.3] - 2026-11-09
 
 ### Fixed

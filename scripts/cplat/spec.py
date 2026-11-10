@@ -528,7 +528,7 @@ def _py_shape(src: str) -> list[str]:
 
 def formatting_only(old: str, new: str, name: str) -> tuple[bool, str]:
     """True when `new` differs from `old` only in formatting (spec 048); else False and the first difference."""
-    if sorted(AC_ANY.findall(old)) != sorted(AC_ANY.findall(new)):
+    if set(AC_ANY.findall(old)) != set(AC_ANY.findall(new)):   # spec 169: a new test may name its criterion again
         return False, f"criterion ids changed: {sorted(set(AC_ANY.findall(old)) ^ set(AC_ANY.findall(new)))}"
     if name.endswith(".py"):
         try:
@@ -612,7 +612,7 @@ def _test_names(text: str) -> set[str]:
 def tightening(old: str, new: str, name: str) -> tuple[bool, str]:
     """Spec 165 (AC-165.1): `new` may be a stricter `old`: same criterion ids, no test removed or newly skipped, no
     fewer assertions. Not a proof of strictness: the obvious weakenings are refused and every tightening is listed."""
-    if sorted(AC_ANY.findall(old)) != sorted(AC_ANY.findall(new)):
+    if set(AC_ANY.findall(old)) != set(AC_ANY.findall(new)):   # spec 169: a new test may name its criterion again
         return False, f"criterion ids changed: {sorted(set(AC_ANY.findall(old)) ^ set(AC_ANY.findall(new)))}"
     gone = sorted(_test_names(old) - _test_names(new))
     if gone:
@@ -625,6 +625,26 @@ def tightening(old: str, new: str, name: str) -> tuple[bool, str]:
     if old == new:
         return False, "unchanged"
     return True, ""
+
+
+def frozen_base(root: Path, base: str) -> str:
+    """Spec 169: in a unit-mode run the acceptance tests freeze when the `red-tests` unit ends, not at its first
+    'acceptance tests for' commit. When `<git dir>/cplat-units.json` records that unit done at a commit that `base` is an
+    ancestor of and HEAD descends from, that commit is the base; otherwise `base` is."""
+    import subprocess
+    d = core.git_dir(root)
+    try:
+        data = json.loads((d / "cplat-units.json").read_text()) if d else {}
+    except (OSError, ValueError):
+        return base
+    unit = next((u for u in data.get("units") or [] if isinstance(u, dict) and u.get("id") == "red-tests"), None)
+    end = unit.get("commit") if unit and unit.get("status") == "done" else None
+    if not end or _red_sha(root, end) == _red_sha(root, base):
+        return base
+
+    def ancestor(a: str, b: str) -> bool:
+        return subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", a, b], capture_output=True).returncode == 0
+    return end if ancestor(base, end) and ancestor(end, "HEAD") else base
 
 
 def test_diff(root: Path, base: str, files: list[str]) -> dict[str, tuple[bool, str]]:
@@ -1541,6 +1561,9 @@ def main(argv: list[str]) -> int:
     if ns.cmd in ("publish", "land", "review"):
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
+    if ns.cmd == "test-diff" and (base := frozen_base(root, ns.base)) != ns.base:
+        print(f"base: {base[:7]}, where the red-tests unit ended (spec 169), not {ns.base[:7]}")
+        ns.base = base
     if ns.cmd == "test-diff" and ns.approve is not None:
         if not ns.approve:
             print("ERROR: --approve needs the files the user approved", file=sys.stderr)
