@@ -1,6 +1,6 @@
 {
   "name": "svc",
-  "version": "4.8.0",
+  "version": "4.9.0",
   "description": "Spec-driven pipeline: spec → plan → build → verify. Provides product-manager, architect, reviewer, and the Python coder, tester, migrations, observability, release and deployment agents, the spec-format skill, and the /svc:spec, plan, build, ship, verify, specs, quick-task, fix-bug and release commands. Requires `devbox run` recipes from the platform templates.",
   "author": {
     "name": "Eike Hensler",
@@ -9,5 +9,6 @@
   "homepage": "https://github.com/ika100/sdlc-foundry",
   "repository": "https://github.com/ika100/sdlc-foundry",
   "license": "Apache-2.0",
+  "dependencies": ["shared"],
   "keywords": ["python", "fastapi", "devbox", "k8s", "agents"]
 }

@@ -9,5 +9,6 @@
   "homepage": "https://github.com/ika100/sdlc-foundry",
   "repository": "https://github.com/ika100/sdlc-foundry",
   "license": "Apache-2.0",
+  "dependencies": ["shared"],
   "keywords": ["component", "devbox", "k8s", "agents"]
 }
