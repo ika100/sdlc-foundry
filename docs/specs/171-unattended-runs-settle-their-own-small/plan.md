@@ -66,6 +66,7 @@ tasks:
     covers: [AC-171.3, AC-171.4, AC-171.5, AC-171.6, AC-171.8]
     parallel_safe: true
     depends_on: [t4, t5]
+    done: true
   - id: t9
     title: pr wait --merge through land_merge, the wait marks itself running
     files: [scripts/cplat/pr.py, tests/cplat/test_tags_and_wait.py]
