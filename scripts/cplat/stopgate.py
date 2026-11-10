@@ -39,6 +39,7 @@ def claim(st: dict, session: str | None) -> None:
 class Verdict:
     action: str  # "silent" | "notice" | "wait" | "block" | "escalate"
     no_progress: int
+    waiting: str | None = None
 
 
 def running_agents(hook_input: dict, now: float | None = None) -> int:
@@ -62,8 +63,13 @@ def running_agents(hook_input: dict, now: float | None = None) -> int:
     return n
 
 
-def check(st: dict, session: str | None, mark: dict, running: int = 0) -> Verdict:
-    """`running` background agents of the session count as progress: the session waits for their notification (#496)."""
+def wait_line(v: Verdict) -> str:
+    return f"waiting: {v.waiting}; stops without progress: {v.no_progress}/{NO_PROGRESS_LIMIT}"
+
+
+def check(st: dict, session: str | None, mark: dict, running: int = 0, waiting: list[str] | None = None) -> Verdict:
+    """`running` background agents of the session count as progress: the session waits for their notification (#496).
+    A running `cplat` wait (`waiting`, spec 171) blocks the stop and holds the count where it is (AC-171.8)."""
     owner = st.get("owner")
     if not owner:
         return Verdict("notice", 0)
@@ -75,6 +81,10 @@ def check(st: dict, session: str | None, mark: dict, running: int = 0) -> Verdic
         st["stop_gate"] = {"head": head, "phase": phase, "no_progress": 0}
         return Verdict("wait", 0)
     progress = not prev or prev.get("head") != head or prev.get("phase") != phase
+    if waiting:
+        held = 0 if progress else int(prev.get("no_progress", 0))
+        st["stop_gate"] = {"head": head, "phase": phase, "no_progress": held}
+        return Verdict("block", held, ", ".join(waiting))
     n = 0 if progress else int(prev.get("no_progress", 0)) + 1
     st["stop_gate"] = {"head": head, "phase": phase, "no_progress": n}
     return Verdict("escalate" if n >= NO_PROGRESS_LIMIT else "block", n)

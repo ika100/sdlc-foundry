@@ -7,15 +7,21 @@ with a `wait` section {command, result, seconds} (AC-143.10).
 """
 from __future__ import annotations
 
+import contextlib
+import datetime as dt
+import json
+import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
+import core
 import runs
 
 REACHED, RED, TIMEOUT = 0, 1, 2
 RESULTS = {REACHED: "reached", RED: "red", TIMEOUT: "timeout"}
 DEFAULT_TIMEOUT = 540.0
+WAITS_DIR = "cplat-waits"
 
 
 def now() -> float:                   # tests replace this
@@ -61,6 +67,60 @@ def attach(repo: Path) -> str | None:
     return None
 
 
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except (ProcessLookupError, OverflowError, ValueError, OSError):
+        return False
+    return True
+
+
+@contextlib.contextmanager
+def running(command: str, cwd: Path | None = None) -> Iterator[None]:
+    """Mark the wait `command` as running in the git dir of `cwd` while the block runs (spec 171, AC-171.8): the Stop hook
+    reads the marks. Outside a checkout, or when the mark cannot be written, nothing is marked."""
+    mark: Path | None = None
+    try:
+        base = core.git_dir(cwd or Path.cwd())
+        if base is not None:
+            folder = base / WAITS_DIR
+            folder.mkdir(parents=True, exist_ok=True)
+            mark = folder / f"{os.getpid()}.json"
+            mark.write_text(json.dumps({"pid": os.getpid(), "command": command,
+                                        "started_at": dt.datetime.now().isoformat(timespec="seconds")}))
+    except (OSError, core.PlatformError):
+        mark = None
+    try:
+        yield
+    finally:
+        if mark is not None:
+            mark.unlink(missing_ok=True)
+
+
+def live(repo: Path) -> list[str]:
+    """Commands of the waits running in the checkout of `repo`, oldest first; the marks of dead processes are removed."""
+    try:
+        base = core.git_dir(repo)
+    except (OSError, core.PlatformError):
+        return []
+    if base is None:
+        return []
+    found: list[tuple[str, int, str]] = []
+    for f in (base / WAITS_DIR).glob("*.json"):
+        try:
+            data = json.loads(f.read_text())
+            pid, command = int(data["pid"]), str(data["command"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if not _alive(pid):
+            f.unlink(missing_ok=True)
+            continue
+        found.append((str(data.get("started_at") or ""), pid, command))
+    return [c for _, _, c in sorted(found)]
+
+
 def _add_wait(rec: dict, name: str, result: str, seconds: float) -> None:
     rec["waiting_s"] = float(rec.get("waiting_s") or 0) + seconds
     rec.setdefault("waits", []).append({"wait": name, "result": result, "seconds": round(seconds)})
@@ -74,7 +134,8 @@ def record(repo: Path, name: str, body: Callable[[], tuple[int, str]], about: Pa
     begin = now()
     result, code = "error", RED
     try:
-        code, result = body()
+        with running(f"cplat {name}", Path.cwd()):
+            code, result = body()
         return code
     finally:
         secs = max(0.0, now() - begin)
