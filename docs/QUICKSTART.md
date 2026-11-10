@@ -8,7 +8,7 @@ You type slash commands in Claude Code, or just say what you want ("create a sys
 
 | You need | Check |
 |---|---|
-| [Claude Code](https://claude.com/claude-code) | `claude --version` |
+| [Claude Code](https://claude.com/claude-code), 2.1.311 or later | `claude --version` |
 | A GitHub account and [`gh`](https://cli.github.com), logged in | `gh auth status` |
 | [`uv`](https://docs.astral.sh/uv/) | `uv --version` |
 | [`devbox`](https://www.jetify.com/devbox) | `devbox version` (install: `curl -fsSL https://get.jetify.com/devbox/install.sh \| bash`) |
@@ -22,11 +22,10 @@ Start Claude Code in an empty folder and run:
 
 ```text
 /plugin marketplace add ika100/sdlc-foundry
-/plugin install shared@sdlc-foundry
-/plugin install system@sdlc-foundry
-/plugin install component@sdlc-foundry
-/plugin install platform@sdlc-foundry
+/plugin install starter@sdlc-foundry
 ```
+
+`starter` installs the four plugins you need to begin: `shared`, `system`, `component` and `platform`. You can also install a plugin on its own; `component`, for example, brings `shared` with it. This needs Claude Code 2.1.311 or later (`claude update`).
 
 **Restart Claude Code** (a running session keeps the old commands), then check your machine:
 
@@ -38,7 +37,7 @@ Start Claude Code in an empty folder and run:
 
 **If a row fails:** run the fix it prints and run `/platform:doctor` again. A missing `gh` scope is fixed with `gh auth refresh -s repo,workflow,read:packages`.
 
-The four plugins are the starter set. Repositories created by the platform enable every other plugin they need (`instance`, `resource`, `api`, the language agents) in their own `.claude/settings.json`.
+The `starter` plugin is the starter set. Repositories created by the platform enable every other plugin they need (`instance`, `resource`, `api`, the language agents) in their own `.claude/settings.json`.
 
 ## 2. Create the system (3 minutes)
 

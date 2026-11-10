@@ -25,7 +25,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
 | [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | approved | 10 |  |
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
-| [174-plugins-bring-what-they-need](specs/174-plugins-bring-what-they-need/spec.md) — Plugins bring what they need, and one plugin installs the starter set | P1 | approved | 7 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [173-the-guides-read-without-spec-numbers](specs/173-the-guides-read-without-spec-numbers/spec.md) — The guides read without spec numbers | P2 | approved | 3 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
@@ -161,6 +160,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | done | 4 |  |
 | [171-unattended-runs-settle-their-own-small](specs/171-unattended-runs-settle-their-own-small/spec.md) — Unattended runs settle their own small problems | P1 | done | 10 | #613, #621, #622, #623, #624, #625, #626, #633 |
 | [172-builds-catch-problems-before-the-pull](specs/172-builds-catch-problems-before-the-pull/spec.md) — Builds catch problems before the pull request | P1 | done | 8 | #628, #629, #630, #631, #632 |
+| [174-plugins-bring-what-they-need](specs/174-plugins-bring-what-they-need/spec.md) — Plugins bring what they need, and one plugin installs the starter set | P1 | done | 7 |  |
 | [175-a-spec-number-means-the-spec-and-ship](specs/175-a-spec-number-means-the-spec-and-ship/spec.md) — A spec number means the spec and ship PRs close their issues | P1 | done | 5 | #638, #645 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |

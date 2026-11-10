@@ -1,6 +1,6 @@
 {
   "name": "svc-go",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Agents for Go service repos (chi, slog, golangci-lint, distroless): coder, tester, deployment, observability, and release. Used by the /svc:* orchestrators when the repo shape is service-go. Requires devbox recipes from the service-go Copier template.",
   "author": {
     "name": "Eike Hensler",
@@ -9,5 +9,6 @@
   "homepage": "https://github.com/ika100/sdlc-foundry",
   "repository": "https://github.com/ika100/sdlc-foundry",
   "license": "Apache-2.0",
+  "dependencies": ["shared"],
   "keywords": ["go", "chi", "devbox", "k8s", "agents"]
 }

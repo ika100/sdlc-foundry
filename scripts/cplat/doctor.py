@@ -22,6 +22,23 @@ def check(status: str, name: str, detail: str, fix: str | None = None) -> dict:
     return {"status": status, "name": name, "detail": detail, "fix": fix}
 
 
+def _claude_version_row() -> list[dict]:
+    """The `claude version` row (spec 174): none when the version cannot be read."""
+    try:
+        p = run(["claude", "--version"], check=False, timeout=10)
+    except core.PlatformError:
+        return []
+    m = re.search(r"\d+\.\d+\.\d+", p.stdout or "") if p.returncode == 0 else None
+    if not m:
+        return []
+    have = m.group(0)
+    if core.vtuple(have) >= core.vtuple(MIN_CLAUDE_VERSION):
+        return [check(OK, "claude version", f"{have} (minimum {MIN_CLAUDE_VERSION})")]
+    return [check(WARN, "claude version",
+                  f"{have}, older than {MIN_CLAUDE_VERSION}: installing one plugin does not install the plugins it depends on",
+                  "claude update")]
+
+
 def check_tools() -> list[dict]:
     out = []
     for tool, required in (("git", True), ("uv", True), ("gh", True), ("devbox", False), ("docker", False), ("claude", False)):
@@ -29,6 +46,8 @@ def check_tools() -> list[dict]:
             continue   # `check_gh` reports the one `gh` row (installed and logged in)
         if shutil.which(tool):
             out.append(check(OK, tool, shutil.which(tool)))
+            if tool == "claude":
+                out.extend(_claude_version_row())
         elif tool == "claude":
             out.append(check(WARN, tool, "not found", "install Claude Code: https://docs.anthropic.com/claude-code"))
         else:
@@ -105,6 +124,7 @@ def check_kube_envs(repo: Path) -> list[dict]:
 
 
 MARKETPLACE = "sdlc-foundry"
+MIN_CLAUDE_VERSION = "2.1.311"   # the first Claude Code that installs a plugin's dependencies (spec 174)
 LEGACY_MARKETPLACE = "ika100-claude"   # the marketplace id before the v3.0.0 rename
 
 
@@ -137,7 +157,7 @@ def check_plugins() -> list[dict]:
         out_legacy.append(check(WARN, "plugins (old marketplace)", f"installed from '{LEGACY_MARKETPLACE}', renamed to '{MARKETPLACE}' in v3.0.0: {', '.join(sorted(legacy))}",
                                 f"/plugin marketplace remove {LEGACY_MARKETPLACE} && /plugin marketplace add ika100/{MARKETPLACE} && {reinstall}, then RESTART Claude Code"))
     if not have:
-        return out_legacy or [check(WARN, "plugins", f"none installed from {MARKETPLACE}", f"/plugin marketplace add ika100/{MARKETPLACE} && /plugin install shared@{MARKETPLACE}")]
+        return out_legacy or [check(WARN, "plugins", f"none installed from {MARKETPLACE}", f"/plugin marketplace add ika100/{MARKETPLACE} && /plugin install starter@{MARKETPLACE}")]
     stale = {n: (have[n], avail[n]) for n in have if n in avail and core.vtuple(have[n]) < core.vtuple(avail[n])}
     out = list(out_legacy)
     if stale:
@@ -145,6 +165,13 @@ def check_plugins() -> list[dict]:
         out.append(check(WARN, "plugins", f"outdated: {names}", "claude plugin marketplace update sdlc-foundry && claude plugin update <name>@sdlc-foundry, then RESTART Claude Code (a running session keeps the old prompts)"))
     else:
         out.append(check(OK, "plugins", ", ".join(f"{n} {v}" for n, v in sorted(have.items()))))
+    if "shared" not in have:
+        import plugin_set
+        cat = plugin_set.catalog(PLATFORM_ROOT)
+        live = sorted(n for n in have if n in cat and not plugin_set.is_tombstone_only(plugin_set.plugin_dir(PLATFORM_ROOT, cat[n])))
+        if live:
+            out.append(check(FAIL, "plugin shared", f"not installed, but {', '.join(live)} need it: their commands call cplat, which shared provides",
+                             f"claude plugin install shared@{MARKETPLACE}"))
     missing = sorted(set(avail) - set(have))
     if missing:
         out.append(check(OK, "plugins not installed", ", ".join(missing) + " (install the ones your shapes need)"))

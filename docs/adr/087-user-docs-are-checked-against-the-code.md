@@ -41,3 +41,9 @@ history carry `<!-- historical -->` and stay off the site.
 
 The spec-number rule covers every guide in `docs/`, not only the newcomer pages. The measurement records
 (`PERFORMANCE.md`, `BASELINES.md`), `## … 4.x …` history sections and closing "Background" sections keep their spec numbers.
+
+## Addendum (2026-11-10, spec 174)
+
+The starter set is no longer a constant of the script: it is the `dependencies` list of the `starter` plugin
+([ADR-095](095-plugins-declare-dependencies-and-starter-bundles-the-set.md)), and an install block that installs
+`starter@sdlc-foundry` counts as installing the whole set.

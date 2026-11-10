@@ -1,6 +1,6 @@
 {
   "name": "api",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "The api noun: /api:list shows the APIs a system declares, with provider and consumers.",
   "author": {
     "name": "Eike Hensler",
@@ -9,5 +9,6 @@
   "homepage": "https://github.com/ika100/sdlc-foundry",
   "repository": "https://github.com/ika100/sdlc-foundry",
   "license": "Apache-2.0",
+  "dependencies": ["shared"],
   "keywords": ["api", "domain-model", "cplat"]
 }

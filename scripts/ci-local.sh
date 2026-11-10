@@ -18,6 +18,7 @@ for plugin in plugins/*/; do
   [ "$have" = "$want" ] || { echo "version mismatch for $name: plugin.json=$have marketplace.json=$want" >&2; exit 1; }
 done
 echo "OK: plugin manifests match the marketplace"
+python3 scripts/check-plugin-deps.py
 
 step "shape registry, templates, plugins, descriptions"
 uv run scripts/shapes.py check

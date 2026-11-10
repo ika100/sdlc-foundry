@@ -44,11 +44,10 @@ You need Claude Code, `git` and a logged-in `gh`, `uv`, [devbox](https://www.jet
 
 ```text
 /plugin marketplace add ika100/sdlc-foundry
-/plugin install shared@sdlc-foundry
-/plugin install system@sdlc-foundry
-/plugin install component@sdlc-foundry
-/plugin install platform@sdlc-foundry
+/plugin install starter@sdlc-foundry
 ```
+
+`starter` installs `shared`, `system`, `component` and `platform`; each plugin can be installed alone (for example `component`, which brings `shared`); plugins bring their dependencies from Claude Code 2.1.311 (`claude update`).
 
 Restart Claude Code, run `/platform:doctor`, then:
 

@@ -1,0 +1,11 @@
+{
+  "name": "starter",
+  "version": "1.0.0",
+  "description": "Installs the sdlc-foundry starter set: shared, system, component and platform. Each plugin can still be installed on its own.",
+  "author": {
+    "name": "Eike Hensler",
+    "email": "eike.hensler@gmail.com"
+  },
+  "license": "Apache-2.0",
+  "dependencies": ["shared", "system", "component", "platform"]
+}

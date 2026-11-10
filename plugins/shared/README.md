@@ -69,5 +69,5 @@ Removal of topics, deletion of repos, and `--public` repo creation **prompt** th
 
 ## Usage notes
 
-- Enable this plugin on every repo that uses any shape plugin — they depend on it for the canonical `quality` and `security` definitions and for `cplat`.
+- Every other live plugin declares this plugin as a dependency, so it is installed with them.
 - `/component:new` requires `copier` to be installed on the host. If absent, install once: `uv tool install copier`.

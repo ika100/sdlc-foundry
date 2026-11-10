@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "4.8.0",
+      "version": "4.9.0",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": [
@@ -23,7 +23,7 @@
     {
       "name": "web",
       "source": "./plugins/web",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "description": "Agents for Next.js (App Router, pnpm, TypeScript) web repos: coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
@@ -49,7 +49,7 @@
     {
       "name": "svc-go",
       "source": "./plugins/svc-go",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "description": "Agents for Go service repos (chi, slog, golangci-lint, distroless): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
@@ -62,7 +62,7 @@
     {
       "name": "svc-java",
       "source": "./plugins/svc-java",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "description": "Agents for Java service repos (Spring Boot 3, Maven, JDK 21, distroless): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
@@ -88,8 +88,8 @@
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "1.3.0",
-      "description": "Common quality and security agents plus the cplat launcher and session hooks.",
+      "version": "1.4.0",
+      "description": "The cplat launcher every sdlc-foundry command calls, the quality and security agents and the session hooks. The other plugins depend on it and install it with them.",
       "category": "agents",
       "tags": [
         "quality",
@@ -100,7 +100,7 @@
     {
       "name": "system",
       "source": "./plugins/system",
-      "version": "1.15.1",
+      "version": "1.16.0",
       "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
       "category": "agents",
       "tags": [
@@ -114,7 +114,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [
@@ -127,7 +127,7 @@
     {
       "name": "api",
       "source": "./plugins/api",
-      "version": "1.2.1",
+      "version": "1.3.0",
       "description": "The api noun: /api:list shows the APIs a system declares, with provider and consumers.",
       "category": "agents",
       "tags": [
@@ -139,7 +139,7 @@
     {
       "name": "resource",
       "source": "./plugins/resource",
-      "version": "1.8.0",
+      "version": "1.9.0",
       "description": "The resource noun: /resource:add and /resource:remove declare named, typed resources (databases, buckets, caches, brokers) of a system in system.yaml; /resource:backup and /resource:restore back up and restore a database; /resource:upgrade moves one environment to a new major, in verified steps.",
       "category": "agents",
       "tags": [
@@ -152,7 +152,7 @@
     {
       "name": "instance",
       "source": "./plugins/instance",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "description": "The instance noun: /instance:promote, /instance:secret and /instance:verify act on where a component runs, per environment.",
       "category": "agents",
       "tags": [
@@ -166,7 +166,7 @@
     {
       "name": "issue",
       "source": "./plugins/issue",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "description": "The issue noun: /issue:triage routes GitHub issues to specs and fixes; /issue:report files a platform issue.",
       "category": "agents",
       "tags": [
@@ -179,7 +179,7 @@
     {
       "name": "platform",
       "source": "./plugins/platform",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "description": "The platform noun: /platform:doctor, update, fleet, runs, retro and release look after the platform itself.",
       "category": "agents",
       "tags": [
@@ -194,7 +194,7 @@
     {
       "name": "cluster",
       "source": "./plugins/cluster",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "description": "The cluster noun: /cluster:new creates a cluster repo, /cluster:add installs a system in it, /cluster:remove takes one out. The cluster repo owns the shared operators and the secret store.",
       "category": "agents",
       "tags": [
@@ -202,6 +202,17 @@
         "gitops",
         "argocd",
         "operators"
+      ]
+    },
+    {
+      "name": "starter",
+      "source": "./plugins/starter",
+      "version": "1.0.0",
+      "description": "Installs the sdlc-foundry starter set: shared, system, component and platform. Each plugin can still be installed on its own.",
+      "category": "agents",
+      "tags": [
+        "starter",
+        "bundle"
       ]
     }
   ]
