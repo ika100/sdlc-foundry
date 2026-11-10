@@ -1,7 +1,9 @@
 """`cplat needs [--json] [--repo-dir DIR] [--system NAME]`: every open decision point of a system (spec 122, AC-122.4).
 
-Five kinds: a draft spec is `answer` (open questions) or `approve`, an escalated run is `escalation`, a release verified in
-staging and not in prod is `promote`, an unrouted alert or smoke issue is `triage`. Each item carries the consequence and the
+Kinds: a draft spec is `answer` (open questions) or `approve`, an escalated run is `escalation`, a release verified in
+staging and not in prod is `promote`, an unrouted alert or smoke issue is `triage`, a dispatcher that reached its daily token
+budget is `budget`, a unit it could not finish is `stuck` (spec 167). In a repo with `.platform/dispatch.yml` and no
+system the document is that of the repo. Each item carries the consequence and the
 way back of its decision (AC-122.34, AC-122.35). A source that fails is listed under `unavailable` with the kinds it hides;
 the exit stays 0. GitHub goes through the replaceable `gh`.
 """
@@ -17,6 +19,8 @@ import sys
 from pathlib import Path
 
 import autonomy
+import dispatch_policy
+import dispatch_state
 import engine_issue
 import gitops
 import model
@@ -174,13 +178,25 @@ def _draft_item(d: dict, gitops_slug: str | None, done: list[dict]) -> dict:
     return item
 
 
+def _issue_of(r: dict) -> dict | None:
+    """The `issue` section of an engine or dispatcher run row (`{repo, number, url}`), else None."""
+    issue = r.get("issue")
+    return issue if isinstance(issue, dict) and (r.get("engine") or r.get("kind") == "dispatch") and issue.get("number") else None
+
+
 def _escalations(rows: list[dict]) -> list[dict]:
-    """Escalated runs with no newer active or done run of the same repo and spec."""
+    """Escalated runs with no newer active or done run of the same repo and spec (of a run for an issue: the same issue);
+    a dispatcher unit whose `escalation.run` names another escalated run is left to that run's item."""
     items = []
+    escalated = {r["run_id"] for r in rows if r.get("phase") == "escalated"}
     for r in rows:
         if r.get("phase") != "escalated":
             continue
+        issue = _issue_of(r)
+        if r.get("kind") == "dispatch" and (r.get("escalation") or {}).get("run") in escalated - {r["run_id"]}:
+            continue
         newer = [o for o in rows if o is not r and o.get("repo") == r.get("repo") and o.get("spec") == r.get("spec")
+                 and (not issue or (_issue_of(o) or {}).get("number") == issue["number"])
                  and (o.get("active") or o.get("phase") == "done") and str(o.get("started_at") or "") >= str(r.get("ended_at") or r.get("started_at") or "")]
         if newer:
             continue
@@ -188,13 +204,18 @@ def _escalations(rows: list[dict]) -> list[dict]:
         number = (spec_id or "").split("-", 1)[0]
         ref = f" pull request #{pr['number']}" if pr.get("number") else " any pull request"
         reason = (r.get("escalation") or {}).get("reason") or "run escalated"
-        issue = r.get("issue") if r.get("engine") and isinstance(r.get("issue"), dict) else None
-        command = f"/component:fix #{issue['number']}" if issue else f"/{r.get('level') or 'component'}:ship {number}".rstrip()
+        if r.get("kind") == "dispatch":
+            command = f"gh issue edit {issue['number']} --remove-label needs-decision" if issue else f"cplat dispatch resume {spec_id}"
+        elif issue:
+            command = f"/component:fix #{issue['number']}"
+        else:
+            command = f"/{r.get('level') or 'component'}:ship {number}".rstrip()
         items.append({
             "id": f"escalation:{r['run_id']}", "kind": "escalation", "stage": r.get("stage") or "Build",
-            "object": _obj("run", r.get("repo"), spec=spec_id, run_id=r["run_id"], pr=pr.get("number"), url=pr.get("url")),
+            "object": _obj("run", r.get("repo"), spec=spec_id, run_id=r["run_id"], pr=pr.get("number"), url=pr.get("url"),
+                           **({"issue": issue["number"]} if issue else {})),
             "since": r.get("ended_at") or r.get("started_at") or "", "reason": reason,
-            "command": command, "cwd_repo": issue.get("repo") if issue else r.get("repo"),
+            "command": command, "cwd_repo": (issue.get("repo") if issue else None) or r.get("repo"),
             "consequence": {"branch": f"feature/{spec_id}" if spec_id else None, "pr": pr.get("number"), "deployed": False},
             "way_back": {"text": f"Stopping keeps the branch and{ref}; nothing was deployed."}})
     return items
@@ -386,13 +407,14 @@ def _engine_of(names) -> str | None:
     return next((n[len("engine:"):] for n in sorted(n for n in names if n) if n.startswith("engine:")), None)
 
 
-def _triage(slug: str) -> list[dict]:
+def _triage(slug: str, all_triage: bool = False) -> list[dict]:
+    """The open `triage` issues of a repo with an alert, smoke-failure or signal label; every one with `all_triage`."""
     issues = _json(["issue", "list", "-R", slug, "--state", "open", "--label", "triage",
                     "--json", "number,title,createdAt,url,labels,body"]) or []
     items = []
     for i in issues:
         names = {(x.get("name") if isinstance(x, dict) else x) for x in i.get("labels") or []}
-        if "triage" not in names or not names & TRIAGE_LABELS:
+        if "triage" not in names or not (all_triage or names & TRIAGE_LABELS):
             continue
         extra: dict = {}
         detail = triage_detail(names, i.get("body") or "")
@@ -436,10 +458,55 @@ def _releases(components: dict[str, str], since_days: int) -> list[dict]:
     return sorted(out, key=lambda r: r["published_at"], reverse=True)
 
 
+def _dispatch_items(repos: list[str], src: _Sources) -> list[dict]:
+    """The `budget` and `stuck` items the dispatchers wrote (`dispatch/*/needs.json`) for these repos."""
+    items = []
+    for path in dispatch_state.needs_files():
+        try:
+            doc = json.loads(path.read_text())
+            found = doc.get("items") if isinstance(doc, dict) else None
+            items += [i for i in found or [] if isinstance(i, dict) and (i.get("object") or {}).get("repo") in repos]
+        except (OSError, ValueError, AttributeError) as e:
+            src.fail("dispatcher", f"{path}: {e}", ["budget", "stuck"])
+    return items
+
+
+def collect_repo(repo_dir: Path) -> dict:
+    """The needs document of one repo without a system (spec 167): its drafts, escalations, every `triage` issue, and the
+    `budget` and `stuck` items of its dispatcher."""
+    slug = dispatch_state.slug_of(repo_dir)
+    src, items = _Sources(), []
+    done: list[dict] = []
+    try:
+        rows = [r for r in runlist.collect(30)["runs"] if r.get("repo") == slug]
+        done = [r for r in rows if r.get("phase") == "done"]
+        items += _escalations(rows)
+    except Exception as e:  # noqa: BLE001
+        src.fail("runs", e, ["escalation"])
+    try:
+        items += [_draft_item(d, None, done) for d in _drafts(slug)]
+    except Exception as e:  # noqa: BLE001
+        src.fail("github", e, ["approve", "answer"])
+    try:
+        items += _triage(slug, all_triage=True)
+    except Exception as e:  # noqa: BLE001
+        src.fail("github", e, ["triage"])
+    items += _dispatch_items([slug], src)
+    items.sort(key=lambda i: i["since"] or "")
+    return {"schema": SCHEMA, "system": slug.rsplit("/", 1)[-1], "read_at": runs._iso(runs.utcnow()), "items": items,
+            "issues": [], "releases": [], "unavailable": src.listing()}
+
+
 def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> dict:
     """The needs document (schema 1); sources that fail are listed under `unavailable`. `issues` lists the untracked
-    issues of the system's repos (open, and closed within `since_days`)."""
-    app_dir = find_system(repo_dir, system)
+    issues of the system's repos (open, and closed within `since_days`). Without a system but with a dispatcher policy
+    file the document is that of the repo (`collect_repo`)."""
+    try:
+        app_dir = find_system(repo_dir, system)
+    except PlatformError as e:
+        if system is None and str(e).startswith("no applications/<system>/system.yaml") and (repo_dir / dispatch_policy.FILE).is_file():
+            return collect_repo(repo_dir)
+        raise
     m = model.load_dir(app_dir)
     gitops_slug, repos = _repos(repo_dir, m)
     src, items, issues = _Sources(), [], []
@@ -469,6 +536,7 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
         items += _promotions(status_rows, {c.name: c.repo for c in m.components if c.repo}, _prod_promotion(m))
     except Exception as e:  # noqa: BLE001
         src.fail("cluster", e, ["promote"])
+    items += _dispatch_items(repos, src)
     releases: list[dict] = []
     try:
         releases = _releases({c.name: c.repo for c in m.components if c.repo}, since_days)

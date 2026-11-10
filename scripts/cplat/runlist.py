@@ -91,7 +91,10 @@ def _escalation(rec: dict) -> dict | None:
     if not isinstance(esc, dict):
         return None
     reason = _one_line(esc.get("reason"))
-    return {"reason": reason, "cause": runs_report.effective_escalation(rec).cause, "summary": reason}
+    out = {"reason": reason, "cause": runs_report.effective_escalation(rec).cause, "summary": reason}
+    if esc.get("run"):    # a dispatcher unit names the escalated ship run it served (spec 167)
+        out["run"] = esc["run"]
+    return out
 
 
 def _snapshot(repo_dir: str | None) -> dict:
@@ -317,9 +320,12 @@ _FIX_KEYS = ("route", "criticality", "change", "regression", "second_review", "s
 def _engine_keys(rec: dict) -> dict:
     """The row keys of an engine fix run; all None for a platform run."""
     actor = _engine(rec)
-    if actor is None:
-        return {k: None for k in ("actor", "engine", "issue", "system", "component", "environment", "fix")}
     issue = rec.get("issue") if isinstance(rec.get("issue"), dict) else None
+    if actor is None:
+        keys = {k: None for k in ("actor", "engine", "issue", "system", "component", "environment", "fix")}
+        if rec.get("kind") == "dispatch" and issue:    # a dispatcher unit run for an issue (spec 167)
+            keys["issue"] = {k: issue.get(k) for k in ("repo", "number", "url")}
+        return keys
     return {"actor": {"type": "engine", "name": actor.get("name"), "id": actor.get("id")}, "engine": actor.get("name"),
             "issue": {k: issue.get(k) for k in ("repo", "number", "url")} if issue else None,
             "system": rec.get("system"), "component": rec.get("component"), "environment": rec.get("environment"),

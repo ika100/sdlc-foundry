@@ -610,6 +610,8 @@ def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, 
                 rec["escalation"] = {"reason": reason, "cause": res.cause, "cause_source": res.source}
                 if res.rule:
                     rec["escalation"]["rule"] = res.rule
+                if escalation.get("run"):    # a dispatcher unit names the escalated ship run it served (spec 167)
+                    rec["escalation"]["run"] = str(escalation["run"])
             for k, v in (fields or {}).items():
                 if k not in RESERVED:
                     rec[k] = v
