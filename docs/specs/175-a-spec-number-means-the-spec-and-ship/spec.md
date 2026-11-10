@@ -1,7 +1,7 @@
 ---
 spec_id: 175-a-spec-number-means-the-spec-and-ship
 title: A spec number means the spec and ship PRs close their issues
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [638, 645]
@@ -55,3 +55,4 @@ The ship PR body.
 ## Changelog
 
 - 2026-11-10 created
+- 2026-11-10 approved
