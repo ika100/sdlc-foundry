@@ -38,6 +38,7 @@ tasks:
     covers: [AC-181.7]
     parallel_safe: true
     depends_on: [t3]
+    done: true
 human_steps:
   - "If the t6 session cannot read the journey 9 and 10 transcripts under ~/.claude/projects (a headless session may only read the repo), run `cplat platform runs journey measure ... --steps <steps.tsv> --json` for both journeys by hand and hand the output to the session"
 ---
