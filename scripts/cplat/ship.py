@@ -747,6 +747,18 @@ class CheckWatch:
         self.expected = {n: True for n in required} | {n: False for n in seen - required}
         self.concluded_since = None
 
+    def expect_required(self, base: str) -> None:
+        """Before a push of local commits (AC-171.5: the old head's checks are never read): the base branch's required checks."""
+        try:
+            out = gh(["api", f"repos/{{owner}}/{{repo}}/branches/{base}/protection/required_status_checks"], cwd=self.repo, check=False)
+            data = json.loads(out or "{}")
+            contexts = [c for c in data.get("contexts") or [] if isinstance(c, str)]
+            contexts += [c["context"] for c in data.get("checks") or [] if isinstance(c, dict) and c.get("context")]
+        except (ValueError, TypeError, AttributeError, GhError):
+            contexts = []
+        self.expected = {n: True for n in contexts}
+        self.concluded_since = None
+
     def _unmet(self, cs: list[dict]) -> list[str]:
         """Expected names without a passed check on this head; a non-required one that stays absent is dropped."""
         buckets = {c["name"]: c.get("bucket", "") for c in cs}
@@ -1209,7 +1221,11 @@ def push_ahead(repo: Path, st: dict, pr: str, watch: CheckWatch) -> str | None:
     if not reason:
         run_ci(repo, {"PR_TITLE": title, "PR_BODY": meta.get("body") or "",
                       "PR_LABELS": ",".join(lb.get("name", "") for lb in meta.get("labels") or [] if isinstance(lb, dict))})
-        watch.expect_from_current()
+        try:
+            base = json.loads(gh(["pr", "view", pr, "--json", "baseRefName"], cwd=repo, check=False) or "{}").get("baseRefName") or "main"
+        except (ValueError, AttributeError):
+            base = "main"
+        watch.expect_required(base)
         pushed = run(["git", "push", "-q", "origin", branch], cwd=repo, check=False)
         if pushed.returncode != 0:
             lines = [ln.strip() for ln in (pushed.stderr or pushed.stdout or "").splitlines() if ln.strip()]
