@@ -811,7 +811,7 @@ def design_example() -> str:
 def test_the_domain_model_documents_the_broker_and_its_environment_contract_ac_119_25():  # AC-119.25
     text = domain_model()
     for needle in ("JetStream", "NATS_URL", "NATS_USER", "NATS_PASSWORD", "NATS_INBOX_PREFIX", "EVENTS_<API>_STREAM", "EVENTS_<API>_SUBJECT_PREFIX",
-                   "EVENTS_<API>_CONSUMER", "<system>-<name>-<component>-app", "/jsz", "spec 120", "spec 119", "apis.<api>.broker"):
+                   "EVENTS_<API>_CONSUMER", "<system>-<name>-<component>-app", "/jsz", "apis.<api>.broker"):
         assert needle in text, f"DOMAIN-MODEL.md lacks {needle!r}"
     assert "`broker`, which is reserved" not in text and "spec 119 delivers it" not in text
     assert re.search(r"7 days", text) and re.search(r"30 s(econds)?", text)

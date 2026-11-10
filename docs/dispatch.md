@@ -1,6 +1,6 @@
 # The dispatcher: run the backlog in parallel slots
 
-`cplat dispatch` (spec 167, [ADR-088](adr/088-a-dispatcher-schedules-orchestrator-runs-from-a-policy-file.md)) works through the backlog of a repo
+`cplat dispatch` ([ADR-088](adr/088-a-dispatcher-schedules-orchestrator-runs-from-a-policy-file.md)) works through the backlog of a repo
 so you do not start each run yourself. It reads a policy file, picks the issues and specs that are ready, and starts the existing
 `/component:fix` and `/component:ship` runs, one per slot, each in its own git worktree. It is plain code: it calls a model only to check
 whether an issue is still true on `main` and whether a spec's work splits into parallel tasks. Your decisions stay yours: you route issues in

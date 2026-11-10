@@ -489,7 +489,7 @@ def test_the_e2e_script_applies_the_bucket_in_sync_wave_order_ac_116_14():  # AC
 
 def test_the_domain_model_guide_documents_the_bucket_contract_ac_116_16():  # AC-116.16
     text = (ROOT / "docs" / "DOMAIN-MODEL.md").read_text()
-    for needle in ("S3_ENDPOINT", "S3_FORCE_PATH_STYLE", "AWS_ENDPOINT_URL_S3", "UPLOADS_S3_BUCKET", "versioning", "storage", "spec 116"):
+    for needle in ("S3_ENDPOINT", "S3_FORCE_PATH_STYLE", "AWS_ENDPOINT_URL_S3", "UPLOADS_S3_BUCKET", "versioning", "storage"):
         assert needle in text, f"DOMAIN-MODEL.md lacks {needle!r}"
 
 

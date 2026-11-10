@@ -1,5 +1,8 @@
 ### Platform Vision PRD — Multi-Service-Type Claude Platform
 
+<!-- historical -->
+> **Historical.** This is the original vision PRD from May 2026, written before 5.0; its command and file names are those of 4.x and earlier. It is kept as a record and is not part of the current documentation; the current flow is in the [quickstart](../QUICKSTART.md) and the [user journey](../USER-JOURNEY.md).
+
 **Status:** Implemented (P0 + P1; P2 items C4 `/system:ship`, E3 deferred) — open decisions resolved 2026-05-22, Java/Go shapes added as extensibility test 2026-05-22
 **Author:** @ika100
 **Last updated:** 2026-05-22

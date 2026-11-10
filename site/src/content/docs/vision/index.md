@@ -39,4 +39,4 @@ The roadmap is a direction, not a promise; priorities follow what real users rep
 
 ## Where this came from
 
-The original product requirements are kept as [design history](/sdlc-foundry/vision/design-history/); the platform's first end-to-end run is described in the [end-to-end scenario](/sdlc-foundry/vision/end-to-end-scenario/). The decisions since then are the [ADRs](/sdlc-foundry/reference/adr/).
+The decisions that shaped the platform are the [ADRs](/sdlc-foundry/reference/adr/). The original product requirements and the first end-to-end scenario, both from before 5.0, stay in the repository as history ([docs/requirements](https://github.com/ika100/sdlc-foundry/tree/main/docs/requirements)).

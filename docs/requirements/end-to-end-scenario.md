@@ -1,5 +1,8 @@
 # End-to-end scenario: building `taskboard.saas`
 
+<!-- historical -->
+> **Historical.** This scenario was written in May 2026 to harden the first design; most of its commands were renamed in 5.0. It is kept as a record and is not part of the current documentation; the current flow is in the [quickstart](../QUICKSTART.md) and the [user journey](../USER-JOURNEY.md).
+
 **Purpose:** harden [platform-vision.md](platform-vision.md) by walking a realistic SaaS build from zero. As of 2026-05-22 this doc shows the canonical post-UX flow; the original pre-UX friction that motivated each improvement is preserved in the Resolution log and UX improvements proposed sections below, and called out per phase in "Pre-UX baseline" notes.
 
 **Status (2026-10-07):** `/system:new` (Phase 1, UX-2) is **built** ([STORY-033](../backlog.md)); `shapes` (UX-4) was **dropped**. Everything in this walkthrough exists except interactive mode and the per-component compose options (`--expose`, env wiring), which stay with `/component:add`. The gitops-app repo is named after `app` (`taskboard`, not `taskboard-app`).

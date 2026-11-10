@@ -24,7 +24,7 @@ Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its
 
 A component that still has `k8s/base` (platform v1): add `--from-k8s` to seed port, probes, env, replicas and resources from it; afterwards `/platform:update --migrate` removes its `k8s/` directory.
 
-Secrets: `--generate NAME=KEY,KEY` has the platform's credentials Job create random values in the cluster once per environment; `--secret NAME=KEY` declares values read from the secret store. **Hard rule:** values never go to git, because a committed secret stays in the history for good.
+Secrets: `--generate NAME=KEY,KEY` has the platform's credentials Job create random values in the cluster once per environment; `--secret NAME=KEY` declares values read from the secret store. **Hard rule:** values never go to git, because a committed secret stays in the history for good. `--secret-ref NAME` exposes an existing Secret of the namespace as env variables (one component per call).
 
 The script changes `applications/` and `bootstrap/` alone. **Hard rule:** never `kubectl apply`, because the gitops repo and Argo CD own the cluster. Never add GitHub topics, because that changes the repo's settings outside this PR; report the missing one instead.
 

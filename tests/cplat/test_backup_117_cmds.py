@@ -756,7 +756,7 @@ def test_the_domain_model_lists_backup_next_to_observability_and_as_a_database_i
     inst = [ln for ln in lines if ln.startswith("| `resources.<name>.instances.<env>`") or ln.startswith("| database `resources.<name>.instances.<env>`")]
     assert inst and any("`backup`" in ln for ln in inst)
     text = "\n".join(lines)
-    assert "BACKUP-AND-RESTORE.md" in text and "spec 117" in text
+    assert "BACKUP-AND-RESTORE.md" in text
 
 
 def test_the_backup_guide_states_what_each_kind_of_backup_covers_ac_117_25():  # AC-117.25
