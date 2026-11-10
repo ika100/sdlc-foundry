@@ -71,6 +71,7 @@ tasks:
     covers: [AC-167.2, AC-167.3]
     parallel_safe: true
     depends_on: [t1, t2, t4]
+    done: true
   - id: t11
     title: Premise and mode checks (the two agent calls)
     files: [scripts/cplat/dispatch_agent.py]
