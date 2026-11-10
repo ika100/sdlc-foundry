@@ -108,7 +108,7 @@ def plugins_label(info: dict) -> str:
 
 
 def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | None, store: str,
-                         now: datetime.datetime, malformed: int) -> dict:
+                         now: datetime.datetime, malformed: int, followups: list[dict] | None = None) -> dict:
     kept = runs_report.select(records, since_days=since_days, repo=repo, now=now)
     cells: dict[tuple[str, str, str, str, str], list[dict]] = {}
     tables: set[str] = set()
@@ -142,7 +142,7 @@ def aggregate_benchmarks(records: list[dict], *, since_days: int, repo: str | No
                    "days": since_days, "repo": repo, "store": store, "records": len(kept), "malformed": malformed},
         "price_tables": sorted(tables),
         "benchmarks": out,
-        "journey": runs_journey_report.aggregate(kept),   # spec 136
+        "journey": runs_journey_report.aggregate(kept, followups),   # spec 136
     }
 
 
