@@ -15,6 +15,7 @@ from core import PlatformError, run
 LABEL = "in-progress"
 MARK = "<!-- cplat-claim -->"
 RELEASE = "<!-- cplat-release -->"
+DISPATCH = "cplat dispatch"   # the `what` of a claim made by the dispatcher (spec 167)
 
 
 def gh(args: list[str], *, cwd: Path) -> tuple[int, str]:   # tests replace this
@@ -25,19 +26,26 @@ def gh(args: list[str], *, cwd: Path) -> tuple[int, str]:   # tests replace this
     return p.returncode, p.stdout
 
 
-def holder(issue: dict) -> str | None:
-    """The branch of the last claim that was not released, if the issue still carries the label."""
+def holder_by(issue: dict) -> tuple[str | None, bool]:
+    """The branch of the last claim that was not released (if the issue still carries the label), and whether that claim
+    comment names `(cplat dispatch)` (spec 167: a dispatcher claim differs from a manual one)."""
     if LABEL not in {lb.get("name") for lb in issue.get("labels") or []}:
-        return None
-    branch = None
+        return None, False
+    branch, by_dispatch = None, False
     for c in issue.get("comments") or []:
         body = c.get("body") or ""
         if body.startswith(MARK):
             m = re.search(r"branch `([^`]+)`", body)
             branch = m.group(1) if m else branch
+            by_dispatch = f"({DISPATCH})" in body
         elif body.startswith(RELEASE):
-            branch = None
-    return branch
+            branch, by_dispatch = None, False
+    return branch, by_dispatch
+
+
+def holder(issue: dict) -> str | None:
+    """The branch of the last claim that was not released, if the issue still carries the label."""
+    return holder_by(issue)[0]
 
 
 def claim(repo: Path, issues: list[int], branch: str, *, take_over: bool = False, what: str = "") -> list[str]:

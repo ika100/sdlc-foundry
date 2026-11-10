@@ -130,6 +130,15 @@ def test_a_plan_that_still_fits_stays_on_approval(tmp_path):   # #208
     assert (s.dir / "plan.md").is_file() and not (s.dir / "plan.v1.md").exists()
 
 
+def test_approve_records_who_approved(tmp_path):   # spec 167: the dispatcher's approval is named
+    s = make(tmp_path)
+    spec.approve(s, None, by="cplat dispatch")
+    assert "approved by cplat dispatch" in (s.dir / "spec.md").read_text()
+    s2 = make(tmp_path / "b")
+    spec.approve(s2, None)
+    assert " approved\n" in (s2.dir / "spec.md").read_text()
+
+
 def test_a_second_set_aside_takes_the_next_number(tmp_path):   # #208
     s = make(tmp_path, hash_="000000000000")
     (s.dir / "plan.v1.md").write_text("old")

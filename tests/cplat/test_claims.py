@@ -48,6 +48,25 @@ def test_claim_labels_assigns_and_names_the_branch(tmp_path, monkeypatch):
     assert claim.claim(tmp_path, [104], "feature/074-ci") == []
 
 
+def test_holder_by_tells_a_dispatcher_claim_from_a_manual_one(tmp_path, monkeypatch):
+    """Spec 167 (AC-167.3): the label alone is a manual claim; the claim comment names who claimed."""
+    gh = Issues(**{"1": {}, "2": {}, "3": {}, "4": {}})
+    monkeypatch.setattr(claim, "gh", gh)
+    assert claim.holder_by(gh.issues[1]) == (None, False)
+    gh.issues[1]["labels"].append({"name": "in-progress"})
+    assert claim.holder_by(gh.issues[1]) == (None, False)   # a manual label without a claim comment
+    claim.claim(tmp_path, [2], "feature/x")
+    assert claim.holder_by(gh.issues[2]) == ("feature/x", False)
+    claim.claim(tmp_path, [3], "fix/3", what=claim.DISPATCH)
+    assert claim.holder_by(gh.issues[3]) == ("fix/3", True)
+    assert claim.holder(gh.issues[3]) == "fix/3"
+    claim.claim(tmp_path, [4], "fix/4", what=claim.DISPATCH)
+    claim.release(tmp_path, [4], "done")
+    assert claim.holder_by(gh.issues[4]) == (None, False)
+    claim.claim(tmp_path, [4], "fix/4b", take_over=True)   # re-claimed by hand after a dispatcher claim
+    assert claim.holder_by(gh.issues[4]) == ("fix/4b", False)
+
+
 def test_a_claim_for_another_branch_stops_the_second_session(tmp_path, monkeypatch):
     """AC-082.1: the collision of 2026-10-22 (#107/#108 vs #111) is refused; --take-over moves the claim."""
     gh = Issues(**{"104": {}})

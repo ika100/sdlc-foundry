@@ -941,7 +941,7 @@ def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | Non
     return read(spec.dir)
 
 
-def approve(spec: Spec, shape: str | None) -> str | None:
+def approve(spec: Spec, shape: str | None, by: str | None = None) -> str | None:
     """Approve a draft. The spec is checked on its own: a plan written for earlier criteria (an amended spec) does not
     block approval, as only an approved spec can be re-planned (#208); it is moved aside, and its new name returned."""
     if spec.status != "draft":
@@ -953,7 +953,8 @@ def approve(spec: Spec, shape: str | None) -> str | None:
                             hint=f"fix the spec (`/component:spec --amend {spec.number}`), then approve again")
     aside = _set_plan_aside(spec.dir) if spec.plan and check_plan(trial, *spec.plan) else None
     spec.meta["status"] = "approved"
-    save(spec.dir / "spec.md", spec.meta, add_changelog(spec.body, "approved" + (f"; the old plan is {aside}" if aside else "")))
+    save(spec.dir / "spec.md", spec.meta, add_changelog(spec.body, "approved" + (f" by {by}" if by else "")
+                                                   + (f"; the old plan is {aside}" if aside else "")))
     return aside
 
 
