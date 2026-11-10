@@ -16,6 +16,7 @@ tasks:
     covers: [AC-171.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: check-settings.py in validate, ci-local and CI
     files: [scripts/check-settings.py, devbox.json, .github/workflows/ci.yml, scripts/ci-local.sh]
