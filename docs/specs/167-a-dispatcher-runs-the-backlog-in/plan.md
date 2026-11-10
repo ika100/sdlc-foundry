@@ -17,6 +17,7 @@ tasks:
     covers: [AC-167.5, AC-167.9, AC-167.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Headless writes the dispatch result file and stops at a checkpoint on the stop flag
     files: [scripts/cplat/headless.py, scripts/cplat/supervisor.py]
@@ -43,12 +44,14 @@ tasks:
     covers: [AC-167.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: Console Inbox panels and glossary terms for budget and stuck
     files: [scripts/cplat/console/inbox.py, scripts/cplat/console/glossary.py]
     covers: [AC-167.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: Repo merge lock with behind check in pr wait --merge and ship land
     files: [scripts/cplat/merge_lock.py, scripts/cplat/pr.py, scripts/cplat/ship.py]
