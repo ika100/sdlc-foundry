@@ -47,14 +47,17 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: it repeats the rule never to modify code you have not seen
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R15
     text: "Do not hand-format."
     class: retired
     retired: 2026-11-10
     reason: the CI quality job now rejects code that lint-fix would change
     enforced_by: ci:quality
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R16
     text: "You do not run the full verify for acceptance"
     class: retired
     retired: 2026-11-10
     reason: it repeats the last item, which hands the verification to the tester
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

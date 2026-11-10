@@ -28,3 +28,4 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the Rules section states the same hard rule once, so the role paragraph no longer repeats it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

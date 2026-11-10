@@ -18,8 +18,10 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the Rules section already says the command is read-only and gives the reason
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R6
     text: "Do not modify any application code."
     class: retired
     retired: 2026-11-10
     reason: the security agent prompt now says no edits apart from the scan report
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

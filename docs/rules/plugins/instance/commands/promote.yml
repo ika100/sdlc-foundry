@@ -30,9 +30,11 @@ rules:
     retired: 2026-11-10
     reason: the script refuses a promotion whose registry digests differ, so the sentence states a fact now
     enforced_by: cplat instance promote
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R8
     text: "Rules (enforced by the script; do not work around them)"
     class: retired
     retired: 2026-11-10
     reason: the script enforces each rule itself so the warning only repeats that
     enforced_by: cplat instance promote
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

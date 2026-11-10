@@ -44,24 +44,29 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the gate prompts now say no edits and the Rules section forbids auto-fixing failures
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R12
     text: "Do not fix bugs."
     class: retired
     retired: 2026-11-10
     reason: the test gate prompt now says no edits and the Rules section forbids auto-fixing failures
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R13
     text: "all in the foreground (`run_in_background: false`; never polled, #496)"
     class: retired
     retired: 2026-11-10
     reason: the foreground flag already returns each answer, so nothing is left to poll
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R14
     text: "**The tag goes on `TAG_COMMIT` only**; never another commit, and no release PR merges before the tag."
     class: retired
     retired: 2026-11-10
     reason: Phase 1 and Phase 5 already say the tag goes on TAG_COMMIT before any release PR merges
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R15
     text: "**Phase 6 merges the follow-up PR after green CI** with `cplat pr wait --merge`; it is never tagged."
     class: retired
     retired: 2026-11-10
     reason: Phase 6 already says the same and its follow-up commit stays untagged
     enforced_by: cplat pr wait
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

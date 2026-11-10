@@ -30,3 +30,4 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the shell rule of the same prompt already says every tool runs through devbox
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

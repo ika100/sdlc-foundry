@@ -23,18 +23,22 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the hard rule in the opening paragraph already forbids committing to main
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R7
     text: "**Never create the git tag** and never move it — the orchestrator tagged `TAG_COMMIT` before you started."
     class: retired
     retired: 2026-11-10
     reason: the hard rule in the opening paragraph already forbids creating or moving the tag
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R8
     text: "**Never compute the version or pick a commit** — use the input values."
     class: retired
     retired: 2026-11-10
     reason: the opening paragraph and the Input section already say to use the given version and commit
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R9
     text: "**Never force-push** or amend published commits."
     class: retired
     retired: 2026-11-10
     reason: the hard rule in the opening paragraph already forbids force-pushing
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

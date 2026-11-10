@@ -18,6 +18,7 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: reading endpoints and thresholds from env already excludes hardcoding them
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R6
     text: "Do not provision Prometheus, Grafana or collectors, because the system owns monitoring infrastructure; write application code and PrometheusRule manifests."
     class: practice
@@ -30,3 +31,4 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the opening line and step 1 already say to verify and re-create only a missing file
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

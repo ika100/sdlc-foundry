@@ -39,13 +39,16 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: read-only gh calls already rule out a clone
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R12
     text: "Status is always `draft` when you write a plan; `done` is always `false`."
     class: retired
     retired: 2026-11-10
     reason: the plan format in step 8 shows both values and plan-check reads them
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R13
     text: "`shape` values must be valid registry shapes (`plan-check` enforces this)."
     class: retired
     retired: 2026-11-10
     reason: plan-check refuses a shape outside the registry
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

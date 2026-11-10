@@ -25,9 +25,11 @@ rules:
     retired: 2026-11-10
     reason: the script creates a private repo and only the user's own flag makes one public
     enforced_by: cplat component new
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R8
     text: "never overwrite a non-empty directory"
     class: retired
     retired: 2026-11-10
     reason: the script refuses a non-empty directory itself
     enforced_by: cplat component new
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

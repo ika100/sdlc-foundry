@@ -47,3 +47,4 @@ rules:
     retired: 2026-11-10
     reason: system ship start refuses a repo whose shape is not gitops-app
     enforced_by: cplat system ship
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

@@ -5,3 +5,4 @@ rules:
     retired: 2026-11-10
     reason: repeats the Phase 3 rule of build.md that points here
     enforced_by: cplat spec test-diff
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

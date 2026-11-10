@@ -21,18 +21,22 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: it repeats the hard rule and the version rule of the Rules section
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R6
     text: "**Never commit to main** — all changes go on `release/vX.Y.Z`."
     class: retired
     retired: 2026-11-10
     reason: the hard rule in the Rules section now covers it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R7
     text: "**Never create the git tag** and never move it — the orchestrator tagged `TAG_COMMIT` before you started."
     class: retired
     retired: 2026-11-10
     reason: the hard rule in the Rules section now covers it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R8
     text: "**Never force-push** or amend published commits."
     class: retired
     retired: 2026-11-10
     reason: the hard rule in the Rules section now covers it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

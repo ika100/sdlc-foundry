@@ -124,18 +124,21 @@ rules:
     retired: 2026-11-10
     reason: repeats the rule against editing conflicting hunks in the Rules section
     enforced_by: cplat component build merge
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R33
     text: "The architect amends only the plan and the task reruns on the merged work, without asking."
     class: retired
     retired: 2026-11-10
     reason: build-replan.md tells the architect to change only the plan
     enforced_by: cplat component build replan-commit
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R34
     text: "Only tightening one the reviewer found looser than its criterion is decided without the user (`build-tighten.md`)."
     class: retired
     retired: 2026-11-10
     reason: repeats Phase 4 step 3 and build-tighten.md, which decide a tightening
     enforced_by: cplat spec test-diff
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R35
     text: "read-only-filesystem friendly"
     class: not a rule

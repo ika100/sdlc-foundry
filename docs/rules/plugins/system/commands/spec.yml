@@ -31,3 +31,4 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the hard push rule now forbids any push outside cplat spec publish and land
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

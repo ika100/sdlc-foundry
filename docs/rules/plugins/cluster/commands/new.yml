@@ -16,9 +16,11 @@ rules:
     retired: 2026-11-10
     reason: the script creates a private repo and repeats the sentence on the repo being private
     enforced_by: cplat cluster new
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R5
     text: "never overwrite a non-empty directory"
     class: retired
     retired: 2026-11-10
     reason: the script refuses a non-empty directory itself
     enforced_by: cplat cluster new
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

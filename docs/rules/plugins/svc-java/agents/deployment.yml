@@ -27,3 +27,4 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: it repeats the first rule of this prompt, which now names kubectl apply as well
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

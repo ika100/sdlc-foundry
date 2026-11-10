@@ -53,8 +53,10 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: it repeats the shell rule, which already forbids calling pytest directly
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R16
     text: "the order of keys in a JSON object is never part of a contract"
     class: retired
     retired: 2026-11-10
     reason: the preceding sentence now states that key order is no part of a contract
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

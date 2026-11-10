@@ -34,9 +34,11 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the role paragraph already says the command writes no code and no plan
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R10
     text: "Print cplat output verbatim; never validate a spec yourself."
     class: retired
     retired: 2026-11-10
     reason: cplat spec check validates every spec, so the agent has nothing to check by hand
     enforced_by: cplat spec check
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

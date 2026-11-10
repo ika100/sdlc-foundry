@@ -26,3 +26,4 @@ rules:
     class: retired
     retired: 2026-11-10
     reason: the foreground flag run_in_background false already returns the plan, so nothing is left to poll
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
