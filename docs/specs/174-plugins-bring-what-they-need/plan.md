@@ -38,6 +38,7 @@ tasks:
     covers: [AC-174.5, AC-174.6]
     parallel_safe: true
     depends_on: [t3, t4]
+    done: true
 ---
 
 # Plan — 174 Plugins bring what they need, and one plugin installs the starter set
