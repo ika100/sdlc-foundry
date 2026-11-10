@@ -10,6 +10,7 @@ tasks:
     covers: [AC-167.1, AC-167.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Dispatcher state, steering, unit files, events, history and locks
     files: [scripts/cplat/dispatch_state.py]
