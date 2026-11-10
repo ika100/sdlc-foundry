@@ -51,6 +51,8 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 9 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 88 (63 %): deploys and Argo 50, CI 21, promotions and restores 16, cluster and smoke 1 | 48 (34 %): model 36, commands, tests and platform calls 12 | 20 (plus 16 headless repo sessions) |
 | 10 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 91 (66 %): deploys and Argo 48, CI 25, promotions and restores 17, cluster and smoke 1 | 44 (32 %): model 33, commands, tests and platform calls 10 | 16 (plus 14 headless repo sessions) |
 
+**Corrected split for journeys 9 and 10** (`cplat platform runs journey measure`, spec 181): the rows above count the coordinator's wait on a building repo session as waiting. Counted from evidence instead, with the repo sessions as agent work: journey 9 — a person 4, agents 72 (coordinator 48, repo sessions 24), waiting 64 (CI 23, deploys and Argo 24, restore 6, promotions 6, smoke and cluster 0.3, unattributed 5); journey 10 — a person 4, agents 70 (coordinator 45, repo sessions 25), waiting 65 (CI 23, deploys and Argo 23, restore 7, promotions 6, smoke and cluster 0.4, unattributed 6). Real waiting is about 46 % of the wall clock, CI and deploys about a third each of it.
+
 **CI on GitHub** (the demo repos' Actions runs within the journey):
 
 | # | Merged PRs | Actions runs | Failed runs | Run time | Queued | CI running during |
