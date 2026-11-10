@@ -10,12 +10,14 @@ tasks:
     covers: [AC-175.1, AC-175.2, AC-175.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: ship pr fills the closing lines like pr open and refuses a body that keeps the placeholder
     files: [scripts/cplat/pr_open.py, scripts/cplat/ship.py, docs/changelog.d/175-a-spec-number-means-the-spec.fixed.md]
     covers: [AC-175.4, AC-175.5]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 175 A spec number means the spec and ship PRs close their issues
