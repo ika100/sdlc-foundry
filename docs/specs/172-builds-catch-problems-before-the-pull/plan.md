@@ -38,6 +38,7 @@ tasks:
     covers: [AC-172.7, AC-172.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: Build prompt - coder runs its own tests, sign-off rebase, the load run 2.6
     files: [plugins/component/commands/build.md, docs/rules/plugins/component/commands/build.yml, plugins/component/references/build-load-run.md, docs/rules/plugins/component/references/build-load-run.yml]
