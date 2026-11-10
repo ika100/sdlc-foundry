@@ -52,12 +52,14 @@ tasks:
     covers: [AC-172.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: Plugin versions, changelog fragment, ADR index and AGENTS.md
     files: [plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/changelog.d/172-builds-catch-problems.added.md, docs/adr/README.md, docs/AGENTS.md]
     covers: []
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: rules check fails on an instruction with a condition classed not a rule
     files: [scripts/cplat/promptrules.py, scripts/cplat/rulescheck.py, docs/rules/README.md]
