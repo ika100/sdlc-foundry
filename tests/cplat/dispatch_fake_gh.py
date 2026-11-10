@@ -1,8 +1,8 @@
 """Spec 167 acceptance tests: the fake `gh` executable of the dispatcher world (see `dispatch_world.py`).
 
 It is a script on PATH, so every module that calls `gh` (snapshot, claims, labels, comments, `pr wait`, the merge lock) is served the
-same way, whatever seam it goes through. State lives in the JSON file `$FAKE_GH_STATE` (one flock per call), every call is
-logged under `log`, and the `merge` of a pull request can take time (`merge_delay`) with the lock released, so two
+same way, whatever seam it goes through. State lives in the JSON file `$FAKE_GH_STATE` (one flock per call, written atomically
+with a temp file and `os.replace`), every call is logged under `log`, and the `merge` of a pull request can take time (`merge_delay`) with the lock released, so two
 concurrent merges really overlap when nothing serializes them.
 """
 import sys
@@ -22,11 +22,16 @@ def load():
 
 
 S = load()
+if S.get("closed"):                      # the world of the test is over: nothing of a leftover process reaches it
+    print("fake gh: world closed", file=sys.stderr)
+    sys.exit(1)
 
 
 def save():
-    with open(PATH, "w") as fh:
+    tmp = f"{PATH}.{os.getpid()}.tmp"      # atomic: a reader sees the old or the new document, never half of one
+    with open(tmp, "w") as fh:
         json.dump(S, fh)
+    os.replace(tmp, PATH)
 
 
 S["log"].append({"argv": args, "t": time.time(), "cwd": os.getcwd()})

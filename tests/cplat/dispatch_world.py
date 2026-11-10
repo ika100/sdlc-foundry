@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import fcntl
 import importlib
 import io
 import json
@@ -26,6 +27,7 @@ import signal
 import stat
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -80,15 +82,21 @@ cfg.update({k: v for k, v in u.items() if not k.startswith("start")})
 cfg.update(u.get("start%%d" %% n, {}))
 now = lambda: datetime.datetime.now().isoformat(timespec="seconds")
 rec = {"unit": unit, "run_id": "fake-run-" + unit, "pid": os.getpid(), "started_at": now(), "ended_at": None}
+def put(text):
+    tmp = res.with_name(res.name + ".%%d.tmp" %% os.getpid())
+    tmp.write_text(text)
+    os.replace(tmp, res)
+
+
 if res:
-    res.write_text(json.dumps(rec))
+    put(json.dumps(rec))
 
 
 def end(outcome, result, stop_reason, cause=None, code=0):
     rec.update({"ended_at": now(), "result": result, "stop_reason": stop_reason, "outcome": outcome, "cause": cause, "code": code,
                 "tokens": cfg.get("tokens", 1234)})
     if res:
-        res.write_text(json.dumps(rec))
+        put(json.dumps(rec))
     sys.exit(code)
 
 
@@ -124,6 +132,13 @@ def git(cwd, *args, check=True):
     if check and p.returncode:
         raise AssertionError(f"git {' '.join(args)}: {p.stderr}")
     return p.stdout.strip()
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """Readers in other processes see the old or the new text, never an empty or half-written file."""
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
 
 
 def _exe(path: Path, text: str) -> Path:
@@ -165,9 +180,10 @@ class World:
         self.now = dt.datetime(2026, 11, 10, 12, 0, 0)
         self.desktop, self.posts, self.mails, self.notify_gh = [], [], [], []
         self.gh_file = tmp_path / "gh.json"
-        self.gh_file.write_text(json.dumps({
+        _atomic_write(self.gh_file, json.dumps({
             "slug": SLUG, "issues": {}, "prs": {}, "labels": [], "log": [], "events": [], "main": 0, "merge_delay": 0,
             "default_checks": [[{"name": "ci", "bucket": "pass"}]]}))
+        self._threads = set(threading.enumerate())      # threads of the test (not ours) are joined on close
         _exe(self.bin / "gh", gh_script())
         _exe(self.bin / "claude", FAKE_CLAUDE % {"py": sys.executable})
         _exe(self.bin / "fake-headless", FAKE_HEADLESS % {"py": sys.executable})
@@ -261,12 +277,15 @@ class World:
         return json.loads(self.gh_file.read_text())
 
     def _put(self, doc):
-        self.gh_file.write_text(json.dumps(doc))
+        _atomic_write(self.gh_file, json.dumps(doc))
 
     def edit_gh(self, fn):
-        doc = self._gh()
-        fn(doc)
-        self._put(doc)
+        """Read-modify-write under the lock the fake gh holds for each call: no update of either side is lost."""
+        with open(f"{self.gh_file}.lock", "a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            doc = self._gh()
+            fn(doc)
+            self._put(doc)
 
     def issue(self, n, title=None, labels=("triaged",), body="", created=None, state="OPEN", comments=()):
         created = created or f"2026-11-0{min(n, 9)}T08:00:00Z"
@@ -314,8 +333,8 @@ class World:
     # ---- the fake claude and the fake headless ----
 
     def _write_cfg(self):
-        (self.dir / "claude.json").write_text(json.dumps(self.claude_cfg))
-        (self.dir / "behave.json").write_text(json.dumps(self.behave_cfg))
+        _atomic_write(self.dir / "claude.json", json.dumps(self.claude_cfg))
+        _atomic_write(self.dir / "behave.json", json.dumps(self.behave_cfg))
 
     def answer(self, match, **result):
         """The premise answer for the issue whose text holds `match` (e.g. its title)."""
@@ -468,14 +487,35 @@ class World:
     def order(self, doc):
         return [c["item"] for c in doc["candidates"]]
 
+    def _stragglers(self):
+        """Pids of every process whose command line names this world (headless units, land processes, anything they started)."""
+        out = subprocess.run(["ps", "-axww", "-o", "pid=,command="], capture_output=True, text=True, check=False).stdout
+        mine = str(self.tmp)
+        pids = []
+        for ln in out.splitlines():
+            pid, _, cmd = ln.strip().partition(" ")
+            if pid.isdigit() and int(pid) != os.getpid() and mine in cmd:
+                pids.append(int(pid))
+        return pids
+
     def close(self):
-        (self.dir / "release" / "all").write_text("")
-        for pid in self.pids():
+        """End the world: release and kill every process it started, close the fake gh to leftover callers, join leftover threads."""
+        with contextlib.suppress(OSError):
+            (self.dir / "release" / "all").write_text("")
+        victims = set(self.pids()) | set(self._stragglers())
+        for pid in victims:
+            with contextlib.suppress(OSError):
+                os.killpg(pid, signal.SIGKILL)      # a detached process leads its own session and group
             with contextlib.suppress(OSError):
                 os.kill(pid, signal.SIGKILL)
-        for pid in self.pids():
+        for pid in victims:
             with contextlib.suppress(OSError):
                 os.waitpid(pid, os.WNOHANG)
+        with contextlib.suppress(OSError, ValueError):
+            self.edit_gh(lambda d: d.update(closed=True))
+        end = time.time() + 20                      # a thread the test left behind would call gh in the next test's world
+        for t in [t for t in threading.enumerate() if t not in self._threads and t is not threading.current_thread()]:
+            t.join(max(0.0, end - time.time()))
 
 
 @pytest.fixture()
