@@ -25,7 +25,7 @@ Start Claude Code in an empty folder and run:
 /plugin install starter@sdlc-foundry
 ```
 
-`starter` installs `shared`, `system`, `component` and `platform`; each plugin can be installed alone (for example `component`, which brings `shared`); plugins bring their dependencies from Claude Code 2.1.311 (`claude update`).
+`starter` installs the four plugins you need to begin: `shared`, `system`, `component` and `platform`. You can also install a plugin on its own; `component`, for example, brings `shared` with it. This needs Claude Code 2.1.311 or later (`claude update`).
 
 **Restart Claude Code** (a running session keeps the old commands), then check your machine:
 

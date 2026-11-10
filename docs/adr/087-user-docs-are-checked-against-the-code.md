@@ -45,5 +45,5 @@ The spec-number rule covers every guide in `docs/`, not only the newcomer pages.
 ## Addendum (2026-11-10, spec 174)
 
 The starter set is no longer a constant of the script: it is the `dependencies` list of the `starter` plugin
-([ADR-094](094-plugins-declare-dependencies-and-starter-bundles-the-set.md)), and an install block that installs
+([ADR-095](095-plugins-declare-dependencies-and-starter-bundles-the-set.md)), and an install block that installs
 `starter@sdlc-foundry` counts as installing the whole set.

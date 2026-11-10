@@ -8,7 +8,7 @@
   never `name@sdlc-foundry`, because a bare name resolves in this marketplace and a fork that renames the marketplace keeps working.
 - **`starter` is a bundle plugin:** `.claude-plugin/plugin.json` and a `README.md`, nothing else. Its `dependencies` are the one
   definition of the starter set; `scripts/check-docs.py` reads them (AC-174.4), the docs name the plugin (AC-174.5).
-  ADR: [docs/adr/094-plugins-declare-dependencies-and-starter-bundles-the-set.md](../../adr/094-plugins-declare-dependencies-and-starter-bundles-the-set.md).
+  ADR: [docs/adr/095-plugins-declare-dependencies-and-starter-bundles-the-set.md](../../adr/095-plugins-declare-dependencies-and-starter-bundles-the-set.md).
 - **One definition of "tombstone-only".** A new stdlib-only module `scripts/cplat/plugin_set.py` decides it; the dependency
   validator, the docs check and `/platform:doctor` all ask it. Today `check-docs.py` decides it from command descriptions; that
   logic moves into the module (keyed on the `moved-to:` front-matter key that `scripts/tombstones.py` writes), so a bundle with no

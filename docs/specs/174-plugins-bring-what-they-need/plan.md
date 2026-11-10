@@ -44,7 +44,7 @@ tasks:
 # Plan — 174 Plugins bring what they need, and one plugin installs the starter set
 
 The contract is in [design.md](design.md); the decision record is
-[ADR-094](../../adr/094-plugins-declare-dependencies-and-starter-bundles-the-set.md) (written, with an addendum to ADR-087).
+[ADR-095](../../adr/095-plugins-declare-dependencies-and-starter-bundles-the-set.md) (written, with an addendum to ADR-087).
 Levels: t1, t2 → t3, t4 → t5.
 
 ## t1 — Declare dependencies on shared, add the starter plugin, bump versions
@@ -70,7 +70,7 @@ current, and users are told.
   installed with them.
 - Minor bump of each changed plugin from its version on `main` at build time, both files (table in design.md); `starter` starts at
   1.0.0. `app` and `gitops` keep their versions.
-- `docs/adr/README.md`: add the row for ADR-094 after 093 (one sentence: live plugins depend on `shared` by bare name, `starter`'s
+- `docs/adr/README.md`: add the row for ADR-095 after 093 (one sentence: live plugins depend on `shared` by bare name, `starter`'s
   dependencies are the starter set, no version ranges, `check-plugin-deps.py`, doctor minimum 2.1.311). `scripts/shapes.py check`
   fails without it.
 - Changelog fragment (`added`): bold summary ending `(spec 174).`, then: `/plugin install starter@sdlc-foundry` installs `shared`,

@@ -1,4 +1,4 @@
-# ADR-094: Plugins declare their dependencies, and `starter` bundles the starter set
+# ADR-095: Plugins declare their dependencies, and `starter` bundles the starter set
 
 **Status:** Accepted (2026-11-10, spec 174)
 **Builds on:** [ADR-087](087-user-docs-are-checked-against-the-code.md) (the docs check and its starter set)
