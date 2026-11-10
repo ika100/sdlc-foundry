@@ -35,6 +35,7 @@ tasks:
     covers: [AC-167.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: Notify events triage, budget, stuck and a reusable notify pass
     files: [scripts/cplat/notify_config.py, scripts/cplat/notify.py]
