@@ -31,6 +31,7 @@ tasks:
     covers: [AC-172.4, AC-172.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: build merge refuses unsigned commits in the platform repo; dispatch of build tests
     files: [scripts/cplat/signoff.py, scripts/cplat/buildcmd.py]
