@@ -115,6 +115,7 @@ tasks:
     covers: [AC-167.2, AC-167.4, AC-167.5, AC-167.6, AC-167.10]
     parallel_safe: true
     depends_on: [t10, t11, t12, t13, t14, t15]
+    done: true
   - id: t17
     title: Status, report, wait and plan documents and their text
     files: [scripts/cplat/dispatch_view.py]
