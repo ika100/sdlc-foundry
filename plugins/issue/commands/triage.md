@@ -1,5 +1,5 @@
 ---
-description: "Read new GitHub issues, discuss gaps with you, and route each to a spec, a fix or a reply. Usage: /issue:triage [<issue-number> | --new | --waiting]"
+description: "Read new GitHub issues, discuss gaps with you, and route each to a spec, a fix or a reply. Usage: /issue:triage [<issue-number> | --waiting]"
 ---
 
 Triage the repo's open issues. **Request:** $ARGUMENTS
@@ -16,7 +16,7 @@ cplat issue triage <ARGS>
 
 ## 1. Queue
 
-Run `list --json` (add `--new` to include issues filed without a form, `--waiting` for issues parked as `needs-info`; with an issue number skip the list). If the labels are missing, run `setup-labels` after the user agrees. An empty queue ends the run. Print the queue as a short table (number, title, author, age).
+Run `list --json` (open issues without a decision; `--waiting` for issues parked as `needs-info`; with an issue number skip the list). If the labels are missing, run `setup-labels` after the user agrees. An empty queue ends the run. Print the queue as a short table (number, title, author, age).
 
 ## 2. Classify each issue
 

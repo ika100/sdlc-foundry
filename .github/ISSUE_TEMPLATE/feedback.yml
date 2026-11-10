@@ -1,6 +1,6 @@
 name: Idea or feedback
 description: Something that would make the platform better
-labels: [feedback, enhancement]
+labels: [triage, feedback, enhancement]
 body:
   - type: textarea
     id: idea
