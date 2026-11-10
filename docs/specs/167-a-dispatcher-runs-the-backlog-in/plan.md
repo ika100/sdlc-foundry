@@ -129,6 +129,7 @@ tasks:
     covers: [AC-167.1, AC-167.2, AC-167.5, AC-167.9, AC-167.11]
     parallel_safe: false
     depends_on: [t16, t17]
+    done: true
   - id: t19
     title: Dispatcher guide, AGENTS.md, ADR index and changelog fragment
     files: [docs/dispatch.md, docs/unattended-delivery.md, docs/AGENTS.md, docs/adr/README.md, docs/changelog.d/167-dispatcher.added.md]
