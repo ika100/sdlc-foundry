@@ -11,11 +11,14 @@ cancelled run that no other run of its workflow replaces is rerun once (#510). A
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
 
 import core
+import dispatch_policy
+import merge_lock
 import pr_open
 import runs
 import ship
@@ -88,33 +91,54 @@ def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, que
         return True, [f"{url} is already merged"], {"result": "merged"}
     if view.get("state") == "CLOSED":
         raise Closed(f"{url} was closed without merging")
-    watch = ship.CheckWatch(repo, url, queue_timeout, run_id)
-    while True:
-        status, cs, failed = ship.wait_checks(watch, timeout, interval)
-        if status == "red" or not merge or not watch.head or watch.head_sha() in (None, watch.head):
-            break   # a push during the last poll means the green belongs to an old head: wait again
+    slug, who = merge_lock.slug_of(repo, url), merge_lock.who_of(url)
+    whole = merge and "e2e" in dispatch_policy.serialize(repo)   # spec 167: with e2e the lock covers the whole land phase
+    with merge_lock.held(slug, who, timeout, min(interval, 5)) if whole else contextlib.nullcontext():
+        return _watch(repo, url, merge, timeout, interval, queue_timeout, run_id, (slug, who, whole))
+
+
+def _red(repo: Path, url: str, watch: ship.CheckWatch, cs: list[dict], failed: list[dict], run_id: str | None) -> tuple[bool, list[str], dict]:
     names = sorted({c["name"] for c in failed})
-    if status == "red" and watch.refused:      # spec 102: the budget refused a rerun; a ship run is escalated
+    if watch.refused:      # spec 102: the budget refused a rerun; a ship run is escalated
         lines = ship.red(repo, url, cs, failed)
         section = {"result": "budget-refused", "checks": names}
         st = ship.load_state(repo) if run_id and runs.attach_point(repo) == run_id else None
         if st:
             return False, ship.refused(repo, st, watch.refused, lines), section
         return False, [watch.refused, *lines], section
+    return False, ship.red(repo, url, cs, failed), {"result": "red", "checks": names}
+
+
+def _watch(repo: Path, url: str, merge: bool, timeout: float, interval: float, queue_timeout: float, run_id: str | None,
+           lock: tuple[str, str, bool]) -> tuple[bool, list[str], dict]:
+    watch = ship.CheckWatch(repo, url, queue_timeout, run_id)
+    while True:
+        status, cs, failed = ship.wait_checks(watch, timeout, interval)
+        if status == "red" or not merge or not watch.head or watch.head_sha() in (None, watch.head):
+            break   # a push during the last poll means the green belongs to an old head: wait again
     if status == "red":
-        return False, ship.red(repo, url, cs, failed), {"result": "red", "checks": names}
+        return _red(repo, url, watch, cs, failed, run_id)
     lines = [f"GREEN: all {len(cs)} check(s) passed on {url}"]
     if merge:
-        res = run(["gh", "pr", "merge", url, "--squash", "--delete-branch"] + (["--match-head-commit", watch.head] if watch.head else []), cwd=repo, check=False)
-        if res.returncode != 0:
-            detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
-            if _state(repo, url) != "MERGED":
-                raise MergeFailed(f"merging {url} failed: {detail[0]}", hint="a conflict with main is a human decision")
-            # gh merged on GitHub, then failed locally (in a worktree it cannot check out main, #371)
-            lines.append(f"merged {url} (squash); the local cleanup failed: {detail[0]}")
-        else:
-            lines.append(f"merged {url} (squash)")
+        slug, who, whole = lock
+        with contextlib.nullcontext() if whole else merge_lock.held(slug, who, timeout, min(interval, 5)):
+            caught = merge_lock.catch_up(repo, url, watch, timeout, interval)    # spec 167: a branch behind main is checked again
+            lines += caught.lines
+            if caught.status == "red":
+                return _red(repo, url, watch, caught.cs, caught.failed, run_id)
+            lines += _merge(repo, url, watch)
     return True, lines, {"result": "merged" if merge else "green"}
+
+
+def _merge(repo: Path, url: str, watch: ship.CheckWatch) -> list[str]:
+    res = run(["gh", "pr", "merge", url, "--squash", "--delete-branch"] + (["--match-head-commit", watch.head] if watch.head else []), cwd=repo, check=False)
+    if res.returncode == 0:
+        return [f"merged {url} (squash)"]
+    detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
+    if _state(repo, url) != "MERGED":
+        raise MergeFailed(f"merging {url} failed: {detail[0]}", hint="a conflict with main is a human decision")
+    # gh merged on GitHub, then failed locally (in a worktree it cannot check out main, #371)
+    return [f"merged {url} (squash); the local cleanup failed: {detail[0]}"]
 
 
 def main(argv: list[str]) -> int:

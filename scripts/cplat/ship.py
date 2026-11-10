@@ -1098,6 +1098,16 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
         return _merged(repo, st, (state.get("mergeCommit") or {}).get("oid", ""), ["already merged"])
     if state.get("state") == "CLOSED":
         raise PlatformError(f"{pr} was closed without merging", hint="reopen it, or `cplat component ship escalate 'PR closed'`")
+    import dispatch_policy
+    import merge_lock                    # spec 167: every merge into main holds the repo merge lock
+    slug, who = merge_lock.slug_of(repo, pr), merge_lock.who_of(pr)
+    whole = bool(st.get("merge", True)) and "e2e" in dispatch_policy.serialize(repo)   # with e2e: the whole land phase
+    with merge_lock.held(slug, who, timeout, min(interval, 5)) if whole else contextlib.nullcontext():
+        return _land(repo, st, pr, timeout, interval, queue_timeout, (slug, who, whole))
+
+
+def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_timeout: float,
+          lock: tuple[str, str, bool]) -> tuple[bool, list[str]]:
     watch = CheckWatch(repo, pr, queue_timeout, st.get("run_id"))
     status, cs, failed = wait_checks(watch, timeout, interval)
     try:  # agent metrics (spec 089): never changes the result
@@ -1129,12 +1139,31 @@ def land(repo: Path, timeout: float, interval: float, queue_timeout: float = QUE
         save_state(repo, st)
         return True, lines + ["not merged (--no-merge): merge the PR (and its gitops PRs) yourself, then run `/component:ship` "
                               "again to wait for dev"]
+    import merge_lock
+    slug, who, whole = lock
+    with contextlib.nullcontext() if whole else merge_lock.held(slug, who, timeout, min(interval, 5)):
+        return _merge_locked(repo, st, pr, watch, lines, timeout, interval, queue_timeout)
+
+
+def _merge_locked(repo: Path, st: dict, pr: str, watch: CheckWatch, lines: list[str], timeout: float, interval: float,
+                  queue_timeout: float) -> tuple[bool, list[str]]:
+    """Inside the merge lock: bring a branch that is behind main up to date (its checks run again), then the before-merge
+    gitops PRs, then the PR."""
+    import merge_lock
+    caught = merge_lock.catch_up(repo, pr, watch, timeout, interval)
+    lines += caught.lines
+    if caught.updated:
+        run(["git", "pull", "-q", "--ff-only", "origin", st.get("branch") or "HEAD"], cwd=repo, check=False)   # the local branch follows
+    if caught.status == "red":
+        st["fix_rounds"] = st.get("fix_rounds", 0) + 1
+        save_state(repo, st)
+        return False, lines + red(repo, pr, caught.cs, caught.failed)
     ok, more = merge_gitops(repo, st, "before-merge", timeout, interval, queue_timeout)
     lines += more
     if not ok:
         return False, lines
     _ready_if_draft(repo, pr)
-    res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"], cwd=repo, check=False)
+    res = run(["gh", "pr", "merge", pr, "--squash", "--delete-branch"] + (["--match-head-commit", watch.head] if watch.head else []), cwd=repo, check=False)
     if res.returncode != 0:
         detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
         if "draft" in detail[0].lower():
