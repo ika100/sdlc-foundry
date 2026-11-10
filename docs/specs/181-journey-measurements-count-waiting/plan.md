@@ -30,6 +30,7 @@ tasks:
     covers: [AC-181.6]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t6
     title: performance record — recipe with the per-step table, corrected split of journeys 9 and 10; ADR index, changelog
     files: [docs/PERFORMANCE.md, docs/adr/README.md, docs/changelog.d/181-journey-measurements-count-waiting.changed.md]
