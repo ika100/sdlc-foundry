@@ -1,0 +1,10 @@
+rules:
+  - id: R1
+    text: "Fix only fixtures, helpers, fakes and process clean-up, in files that are not frozen, so that the tests pass on every run"
+    class: practice
+    source: spec 172
+  - id: R2
+    text: "never change an assertion, because the assertions are the approved criteria"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 172
