@@ -31,6 +31,9 @@ python3 scripts/pin-actions.py --check
 step "relative Markdown links"
 python3 scripts/check-links.py
 
+step "the platform's allowlist holds the library template's rules (spec 171)"
+python3 scripts/check-settings.py
+
 step "every prompt rule is classified, reasoned and marked (spec 168)"
 uv run scripts/cplat/cplat.py platform rules check
 
