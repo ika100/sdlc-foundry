@@ -45,6 +45,7 @@ tasks:
     covers: [AC-172.4, AC-172.6, AC-172.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: Re-class the planner entry the hidden-rule finding flags on main
     files: [plugins/system/agents/planner.md, docs/rules/plugins/system/agents/planner.yml]
