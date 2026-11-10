@@ -6,7 +6,7 @@ rules:
     text: "do not invent repos, because `/component:new` creates them."
     class: practice
   - id: R3
-    text: "Above 12 `plan-check` refuses the slice unless it has `criteria_why:`."
+    text: "above 12 `plan-check` refuses the slice unless it has `criteria_why:`."
     class: not a rule
     source: spec 154
   - id: R4
