@@ -154,7 +154,7 @@ def test_other_forms_are_refused_with_the_usage_line_and_exit_2_ac_172_3(world, 
 
 def test_the_platform_test_fast_recipe_and_script_take_arguments_ac_172_3():  # AC-172.3
     recipe = json.loads((ROOT / "devbox.json").read_text())["shell"]["scripts"]["test-fast"]
-    assert recipe == 'bash scripts/test-fast.sh "$@"'
+    assert 'bash scripts/test-fast.sh "$@"' in recipe        # with arguments; spec 127 keeps the literal suite line beside it (approved 2026-11-10)
     assert (ROOT / "scripts" / "test-fast.sh").is_file()
 
 
