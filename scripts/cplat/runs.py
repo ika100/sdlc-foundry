@@ -5,6 +5,7 @@ Public API for the callers (ship, pr wait, headless, doctor) and for later specs
   start(kind, repo=, spec=, mode=, resumes=, parent=) -> run_id     an in-progress record, local only
   phase / ci_round / rerun / event / set_section / add_to / filed    change it in place (never raise, print nothing)
   finish(run_id, outcome, escalation=, fields=)                      redact, buffer, flush; at most one stderr line
+  followup(run_id, kind, data) -> warning | None                     a follow-up line of a finished run (spec 181)
   flush(budget=, strict=) -> FlushResult                             buffer (and pending filings) -> store
   store_status() / buffered_count() / pending_count()                for `cplat platform doctor`
   attach_point(repo) / link_parent(run_id)                           nested runs and headless parents
@@ -579,6 +580,27 @@ def _scrub(value, chain: tuple[str, ...] = ()):
 def _warning(why: str, buffered: int, dropped: int) -> str:
     extra = f"; {dropped} oldest dropped (the buffer keeps {BUFFER_CAP})" if dropped else ""
     return f"WARNING: run record buffered locally ({why}); {buffered} record(s) buffered{extra}"
+
+
+def followup(run_id: str, kind: str, data: dict) -> str | None:
+    """Buffer a follow-up line of `kind` for `run_id` (signature = kind; a re-write replaces it) and flush.
+
+    Returns the warning line when it stays buffered, else None. Never raises."""
+    item = {"schema": SCHEMA, "followup": kind, "signature": kind, "run_id": run_id, "at": _iso(utcnow()), **data}
+    dropped = 0
+    t0 = monotonic()
+    try:
+        with _locked():
+            dropped = _buffer_add(item)
+    except Exception as e:  # noqa: BLE001
+        return _emit(_warning(f"recording failed: {type(e).__name__}: {e}", buffered_count(), dropped))
+    try:
+        why = flush(budget=max(0.0, BUDGET_SECONDS - (monotonic() - t0))).detail
+    except Exception as e:  # noqa: BLE001
+        why = f"recording failed: {type(e).__name__}: {e}"
+    if any(_key(i) == _key(item) for i in _safe_buffer()) or dropped:
+        return _emit(_warning(why or "recording failed: record not written", buffered_count(), dropped))
+    return None
 
 
 def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, fields: dict | None = None) -> str | None:

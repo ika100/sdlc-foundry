@@ -61,10 +61,10 @@ def _last_line(text: str) -> str:
 
 
 def record_path(record: dict) -> str:
-    """runs/YYYY/MM/DD/<run_id>.json (day = ended_at), or the `.filed.<sha1(signature)[:12]>.json` form of a follow-up."""
+    """runs/YYYY/MM/DD/<run_id>.json (day = ended_at), or the `.<followup>.<sha1(signature)[:12]>.json` form of a follow-up."""
     if record.get("followup"):
         day = str(record.get("at", ""))[:10]
-        name = f"{record['run_id']}.filed.{hashlib.sha1(str(record['signature']).encode()).hexdigest()[:12]}.json"
+        name = f"{record['run_id']}.{record['followup']}.{hashlib.sha1(str(record['signature']).encode()).hexdigest()[:12]}.json"
     else:
         day = str(record.get("ended_at", ""))[:10]
         name = f"{record['run_id']}.json"
