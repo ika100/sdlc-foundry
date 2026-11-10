@@ -18,10 +18,12 @@ from pathlib import Path
 
 import core
 import dispatch_policy
+import land_merge
 import merge_lock
 import pr_open
 import runs
 import ship
+import waits
 from core import PlatformError, run
 
 
@@ -37,8 +39,7 @@ class Closed(PlatformError):
     """The PR was closed without merging."""
 
 
-class MergeFailed(PlatformError):
-    """Every check passed but `gh pr merge` refused."""
+MergeFailed = land_merge.MergeFailed   # every check passed but `gh pr merge` refused (spec 171)
 
 
 def _error_message(e: BaseException) -> str:
@@ -76,19 +77,12 @@ def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queu
     return ok, lines
 
 
-def _state(repo: Path, url: str) -> str | None:
-    try:
-        return json.loads(ship.gh(["pr", "view", url, "--json", "state,url"], cwd=repo, check=False) or "{}").get("state")
-    except ValueError:
-        return None
-
-
 def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float,
           run_id: str | None) -> tuple[bool, list[str], dict]:
     view = json.loads(ship.gh(["pr", "view", pr, "--json", "state,url"], cwd=repo) or "{}")
     url = view.get("url") or pr
     if view.get("state") == "MERGED":
-        return True, [f"{url} is already merged"], {"result": "merged"}
+        return True, [f"{url} is already merged", *(land_merge.cleanup(repo, url, run) if merge else [])], {"result": "merged"}
     if view.get("state") == "CLOSED":
         raise Closed(f"{url} was closed without merging")
     slug, who = merge_lock.slug_of(repo, url), merge_lock.who_of(url)
@@ -112,33 +106,25 @@ def _red(repo: Path, url: str, watch: ship.CheckWatch, cs: list[dict], failed: l
 def _watch(repo: Path, url: str, merge: bool, timeout: float, interval: float, queue_timeout: float, run_id: str | None,
            lock: tuple[str, str, bool]) -> tuple[bool, list[str], dict]:
     watch = ship.CheckWatch(repo, url, queue_timeout, run_id)
-    while True:
-        status, cs, failed = ship.wait_checks(watch, timeout, interval)
-        if status == "red" or not merge or not watch.head or watch.head_sha() in (None, watch.head):
-            break   # a push during the last poll means the green belongs to an old head: wait again
-    if status == "red":
-        return _red(repo, url, watch, cs, failed, run_id)
-    lines = [f"GREEN: all {len(cs)} check(s) passed on {url}"]
-    if merge:
-        slug, who, whole = lock
-        with contextlib.nullcontext() if whole else merge_lock.held(slug, who, timeout, min(interval, 5)):
-            caught = merge_lock.catch_up(repo, url, watch, timeout, interval)    # spec 167: a branch behind main is checked again
-            lines += caught.lines
-            if caught.status == "red":
-                return _red(repo, url, watch, caught.cs, caught.failed, run_id)
-            lines += _merge(repo, url, watch)
+    rounds = land_merge.Rounds()
+    try:
+        if merge:    # only a land regenerates a conflict in a generated file; a plain wait leaves the branch alone
+            status, cs, failed, lines = land_merge.wait_green(repo, url, watch, timeout, interval, rounds, run)
+        else:
+            (status, cs, failed), lines = ship.wait_checks(watch, timeout, interval), []
+        if status == "red":
+            return _red(repo, url, watch, cs, failed, run_id)
+        lines.append(f"GREEN: all {len(cs)} check(s) passed on {url}")
+        if merge:
+            slug, who, whole = lock
+            with contextlib.nullcontext() if whole else merge_lock.held(slug, who, timeout, min(interval, 5)):
+                settled = land_merge.settle(repo, url, watch, timeout, interval, rounds, run)
+            lines += settled.lines
+            if settled.status == "red":
+                return _red(repo, url, watch, settled.cs, settled.failed, run_id)
+    except land_merge.Unresolvable as e:
+        raise land_merge.Unresolvable(str(e), hint="a conflict with main is a human decision") from e
     return True, lines, {"result": "merged" if merge else "green"}
-
-
-def _merge(repo: Path, url: str, watch: ship.CheckWatch) -> list[str]:
-    res = run(["gh", "pr", "merge", url, "--squash", "--delete-branch"] + (["--match-head-commit", watch.head] if watch.head else []), cwd=repo, check=False)
-    if res.returncode == 0:
-        return [f"merged {url} (squash)"]
-    detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
-    if _state(repo, url) != "MERGED":
-        raise MergeFailed(f"merging {url} failed: {detail[0]}", hint="a conflict with main is a human decision")
-    # gh merged on GitHub, then failed locally (in a worktree it cannot check out main, #371)
-    return [f"merged {url} (squash); the local cleanup failed: {detail[0]}"]
 
 
 def main(argv: list[str]) -> int:
@@ -166,7 +152,9 @@ def main(argv: list[str]) -> int:
     ns = ap.parse_args(argv)
     if ns.cmd == "open":
         return _open(ns)
-    ok, lines = wait(Path(ns.repo).resolve(), url_of(ns.pr, ns.slug), ns.merge, ns.timeout, ns.interval, ns.queue_timeout, ns.slug)
+    command = f"cplat pr wait {ns.pr}{' --merge' if ns.merge else ''}"
+    with waits.running(command, Path.cwd()):
+        ok, lines = wait(Path(ns.repo).resolve(), url_of(ns.pr, ns.slug), ns.merge, ns.timeout, ns.interval, ns.queue_timeout, ns.slug)
     print("\n".join(lines))
     return 0 if ok else 1
 
