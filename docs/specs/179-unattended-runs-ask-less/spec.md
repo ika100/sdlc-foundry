@@ -1,7 +1,7 @@
 ---
 spec_id: 179-unattended-runs-ask-less
 title: Unattended runs ask less
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [653, 654, 655]
@@ -71,3 +71,4 @@ None.
 ## Changelog
 
 - 2026-11-10 created
+- 2026-11-10 approved
