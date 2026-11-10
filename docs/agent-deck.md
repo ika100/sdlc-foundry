@@ -11,9 +11,9 @@ This guide was written against **dot-agent-deck v0.48.1** (2026-10-25) and its d
 | Which sessions are running, which is waiting for me, which is stuck? | dot-agent-deck (live status from Claude Code hooks) |
 | Type into a session, or stop one | dot-agent-deck (the agent's pane, `Ctrl+w` in command mode, `dot-agent-deck close`) |
 | Did the run finish, with which outcome, PR and gates? | The run store: `cplat platform runs report`, `cplat component ship status` ([run records](unattended-delivery.md#run-records)) |
-| What did it cost in tokens and dollars? | `cplat platform runs usage` and the run record's `usage` section (spec 099), never the dashboard |
+| What did it cost in tokens and dollars? | `cplat platform runs usage` and the run record's `usage` section, never the dashboard |
 | Is the change correct and safe? | Tests, the reviewer's `verification.md`, CI, `cplat pr wait`, and the ship gates |
-| Is the run within its limits? | The platform's own budgets (spec 102), not the dashboard |
+| Is the run within its limits? | The platform's own budgets, not the dashboard |
 
 The deck shows activity; it does not enforce anything. Approval policies (the allowlists in `settings.json`, `--permission-mode`), quality and security gates and budget limits work the same whether or not the deck is open, and seeing a session in the deck is not evidence that it did the right thing.
 
@@ -61,7 +61,7 @@ This writes `~/.config/dot-agent-deck/config.toml`. A project's `.dot-agent-deck
 
 - **Local by default.** The daemon owns the agent processes and talks to their hooks over a local socket; it opens no network port. Session state is under `~/.config/dot-agent-deck/` (`session.toml`, `config.toml` and a few small state files).
 - **Remote hosts** (`dot-agent-deck remote add`, `connect`) run a daemon on the other machine over ssh with key-based login. Anyone who can ssh into that account as you can drive the agents running there, with that host's agent credentials. Register only machines you control.
-- **Telemetry is off** unless the daemon's environment sets `OTEL_EXPORTER_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`). It then sends metadata only (no prompts, file contents or output), and the agents it starts inherit those variables. If you also export Claude Code's own usage over OpenTelemetry (spec 101), point both at the same private collector, and remember that the cost figures of record still come from the run store.
+- **Telemetry is off** unless the daemon's environment sets `OTEL_EXPORTER_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`). It then sends metadata only (no prompts, file contents or output), and the agents it starts inherit those variables. If you also export Claude Code's own usage over OpenTelemetry, point both at the same private collector, and remember that the cost figures of record still come from the run store.
 - **Credentials** are the agents' own; the deck does not hold an API key. Keep secrets out of `OTEL_RESOURCE_ATTRIBUTES`, which is sent as written.
 
 ## Limitations

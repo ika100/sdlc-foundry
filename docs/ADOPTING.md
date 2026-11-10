@@ -106,7 +106,7 @@ Both commands route through the marketplace plugins.
 
 ### Step 5 (optional) — Adopt the template for skeleton updates
 
-**Shortcut (spec 071):** `cplat adopt --type <shape> [--data key=value]` does steps 1–5 in one commit on `chore/adopt-platform`: it renders the shape's template with answers from the repo (name and org from `origin`, the description from the README), adds only the files the repo lacks (`CLAUDE.md`, `.claude/settings.json`, CI, `docs/specs/` …, never starter code), merges `devbox.json` (your recipes win) and `.gitignore`, keeps every other file and lists those that differ from the template, and writes `.copier-answers.yml` and `.platform-version`. Then make the `devbox run` recipes fit the repo and continue with `/component:spec`. `--dry-run` shows the plan. The manual way:
+**Shortcut:** `cplat adopt --type <shape> [--data key=value]` does steps 1–5 in one commit on `chore/adopt-platform`: it renders the shape's template with answers from the repo (name and org from `origin`, the description from the README), adds only the files the repo lacks (`CLAUDE.md`, `.claude/settings.json`, CI, `docs/specs/` …, never starter code), merges `devbox.json` (your recipes win) and `.gitignore`, keeps every other file and lists those that differ from the template, and writes `.copier-answers.yml` and `.platform-version`. Then make the `devbox run` recipes fit the repo and continue with `/component:spec`. `--dry-run` shows the plan. The manual way:
 
 If you also want skeleton updates (CI workflow, devbox recipes, Dockerfile, CLAUDE.md) to flow from the platform template via `/platform:update`:
 
@@ -130,7 +130,7 @@ If you also want skeleton updates (CI workflow, devbox recipes, Dockerfile, CLAU
 
    Only `_src_path` (its `templates/<shape>` tail drives shape detection) and the answers matter; omitted answers take the template defaults.
 
-2. Commit that file, then run `/platform:update`. It works on a review branch, re-applies the template, and **overwrites skeleton files** (CI workflow, Dockerfile, k8s base except `deployment.yaml`, `CLAUDE.md`, `.claude/settings.json`, lint config). Project-owned files (`README.md`, `src/`, `app/`, `cmd/`, `internal/`, `tests/`, `docs/`, `pyproject.toml`/`pom.xml`/`go.mod`/`package.json`) are never touched; the report says when the template's README changed and how to see it. `devbox.json` is **merged** (spec 060): the template's recipes, packages and env vars win, and the ones only your repo has are kept. The report lists what was kept, and for every template recipe it replaced, your old line.
+2. Commit that file, then run `/platform:update`. It works on a review branch, re-applies the template, and **overwrites skeleton files** (CI workflow, Dockerfile, k8s base except `deployment.yaml`, `CLAUDE.md`, `.claude/settings.json`, lint config). Project-owned files (`README.md`, `src/`, `app/`, `cmd/`, `internal/`, `tests/`, `docs/`, `pyproject.toml`/`pom.xml`/`go.mod`/`package.json`) are never touched; the report says when the template's README changed and how to see it. `devbox.json` is **merged**: the template's recipes, packages and env vars win, and the ones only your repo has are kept. The report lists what was kept, and for every template recipe it replaced, your old line.
 
 3. Review the diff. Skeleton files stay platform-owned, so put additions where an update cannot reach them ([ADR-031](adr/031-repo-owned-companions-for-skeleton-files.md)): extra gates in the `ci-extra` recipe (`devbox run ci` and the `ci-extra` CI check run it), your own recipes in `devbox.json`, your own permission entries in `.claude/settings.json`, extra CI jobs in a workflow file of your own, and project guidance in `.claude/project-notes.md`. The update moves gates you had in `ci` into `ci-extra`, keeps your permission entries, and prints a `replaced …` line for every customisation it overwrote, with the place it belongs now. Commit, push, PR.
 
@@ -206,20 +206,20 @@ Host templates change their placeholders: `{service}` is `{component}` and `{app
 | | `/gitops:addon add postgres` | Resource | `/resource:add` |
 | | `/gitops:addon add observability` | Environment property | `environments:` in system.yaml |
 | | contract check (planned) | API | `/api:list` today; the contract check is not built yet |
-| Where it runs | `/gitops:promote`, digest check (spec 106) | Instance, next Environment; Release for prod | `/instance:promote --to` |
+| Where it runs | `/gitops:promote`, digest check | Instance, next Environment; Release for prod | `/instance:promote --to` |
 | | `/gitops:secret` | Instance | `/instance:secret` |
 | | `/shared:status` | every Instance of a System | `/system:status` |
-| | `cplat smoke`, deploy gate (spec 105) | Instance | `/instance:verify` |
-| | `promotion:` (spec 093), Kyverno policies | Environment rules | `environments:` in system.yaml |
+| | `cplat smoke`, deploy gate | Instance | `/instance:verify` |
+| | `promotion:`, Kyverno policies | Environment rules | `environments:` in system.yaml |
 | Delivery | `/shared:triage`, `/shared:report-issue` | Issue | `/issue:triage` · `/issue:report` |
 | | `/app:spec`, `/svc:spec` | Spec of a System or a Component | `/system:spec`, `/component:spec` |
 | | `/app:plan`, `/svc:plan` | Plan | `/system:plan`, `/component:plan` |
 | | `/svc:build`, `/svc:verify` | Criterion, Test, Verification | `/component:build` · `/component:verify` |
-| | `/svc:ship`, `/app:ship`, budgets (spec 102) | Run | `/component:ship`, `/system:ship` |
+| | `/svc:ship`, `/app:ship`, budgets | Run | `/component:ship`, `/system:ship` |
 | | `/svc:quick-task`, `/svc:fix-bug` | Run without a spec | `/component:fix` |
 | | `/svc:release` | Release | `/component:release` |
 | Feedback | run records, agent metrics, weekly retro | Runs as data; proposals as Issues | `/platform:runs` · `/platform:retro` |
-| | alert poll (spec 092), smoke failures (spec 091) | Instance → Issue | automatic |
+| | alert poll, smoke failures | Instance → Issue | automatic |
 | Platform | `/shared:doctor`, `/shared:update-service`, `/shared:fleet` | your setup, repo skeletons | `/platform:doctor` · `/platform:update` · `/platform:fleet` |
 
 ### The model in 4.7
@@ -253,7 +253,7 @@ Specs, plans and builds can run without anyone at the keyboard (`claude -p`, `/l
 - **Background agents:** headless Claude Code stops background subagents after 600 s ("Background tasks still running after 600s; terminating"). `/system:ship` runs its repo agents in the foreground, so it is not affected; for your own long headless runs set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`.
 - **Permissions:** nobody answers prompts, so run with `--permission-mode acceptEdits` plus the template allowlist, or `bypassPermissions` in a throwaway workspace.
 - **Workspace trust:** in a workspace that was never opened interactively, Claude Code ignores the project's `permissions.allow` list but still applies its `ask` list. Open the repo once interactively (accept the trust dialog) to use the template allowlist.
-- **Pull requests:** `gh pr create` is in the `ask` list on purpose. Unattended pipelines push the branch and end with the exact `gh pr create` command to run (spec 051). `/component:ship` is the exception: `cplat component ship` pushes the spec's feature branch, opens the PR and merges it after green CI itself ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md)).
+- **Pull requests:** `gh pr create` is in the `ask` list on purpose. Unattended pipelines push the branch and end with the exact `gh pr create` command to run. `/component:ship` is the exception: `cplat component ship` pushes the spec's feature branch, opens the PR and merges it after green CI itself ([ADR-028](adr/028-unattended-delivery-without-branch-protection.md)).
 - **Keeping a run going:** `cplat headless "/component:ship <NNN>"` runs `claude -p` with `--permission-mode acceptEdits` (edits inside the repo, otherwise the allowlist, nothing else, no prompts) and resumes an unfinished ship run in fresh sessions; `--quiet 23:30-07:00` keeps it out of a window, for example nightly jobs that share the subscription. The guide: [unattended-delivery.md](unattended-delivery.md).
 
 ## Troubleshooting

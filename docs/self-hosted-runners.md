@@ -35,14 +35,14 @@ The workflows assume what a GitHub-hosted Ubuntu runner has, except where noted:
 - **Docker** for the `docker` job of service shapes and for workflow `services:`: a Docker daemon next to the runner
   (Docker in Docker on Kubernetes).
 
-- **Network access to the query API** for the gitops-app's alert poll (`alerts.yml`, spec 092, [ADR-038](adr/038-alert-poll-on-the-gitops-runner.md)):
+- **Network access to the query API** for the gitops-app's alert poll (`alerts.yml`, [ADR-038](adr/038-alert-poll-on-the-gitops-runner.md)):
   the runner must reach Prometheus (`lgtm.observability.svc:9090` in-cluster) and `gh`. The poll never runs on
   GitHub-hosted runners. For an environment's `observability.querySecret` in `system.yaml`, the runner's ServiceAccount needs `get` on that Secret.
 
 A reference image (official runner + xz, gh, single-user Nix, devbox) is
 [`runner-image/Dockerfile` in stock-manager-gitops](https://github.com/ika100/stock-manager-gitops/blob/main/runner-image/Dockerfile).
 
-The run store repo needs its own runner for the weekly retro (spec 090). A personal account has repository-level runners
+The run store repo needs its own runner for the weekly retro. A personal account has repository-level runners
 only, so give the store a scale set of its own with devbox in the image and set the store's repo variable `CI_RUNNER` to
 its name. The workflow installs Claude Code when the image lacks it.
 
@@ -70,7 +70,7 @@ and `gha-runner-scale-set`) runs ephemeral runner pods that scale to zero. Thing
   - **Recommended for every runner set that builds images:** one persistent dind `/var/lib/docker` volume per
     runner set, under the lock above (one daemon per volume). It is the build cache. A registry cache
     (`cache-to: type=registry,mode=max`) is not a substitute: it uploads every layer to GHCR on each main build,
-    the uplink cost #95 removed (spec 074).
+    the uplink cost #95 removed.
   - `/tmp` as a memory `emptyDir` when tests write SQLite or other fsync-heavy files and the node's disk syncs slowly
     (~7 ms per synced write on a ZFS-backed VM disk made pytest 3× slower).
 - **Isolation.** Cache volumes are shared between jobs, so a job can leave something behind for the next one. Keep

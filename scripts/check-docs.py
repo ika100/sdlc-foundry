@@ -7,7 +7,7 @@ For every page it checks: each `/<plugin>:<command>` exists and is not a tombsto
 code is in the command's usage line, each `/plugin install <name>@sdlc-foundry` names a plugin that is more than tombstones,
 the plugins a page installs in code include the starter set, each `devbox run <recipe>` is defined, and each YAML block with
 `system` and `components` is a valid system manifest. Tombstones may appear in a `## … 4.x …` section or next to the
-command that replaced them. Newcomer pages may not name a spec or criterion outside a closing
+command that replaced them. Reader pages may not name a spec or criterion outside a closing
 "Background" section. A page with `<!-- historical -->` is skipped. Run with pyyaml (`uv run --with-requirements
 requirements-test.txt python scripts/check-docs.py`).
 """
@@ -31,9 +31,11 @@ SITE_GENERATED = ("guides/", "reference/", "community/", "vision/design-history"
 DOCS_SKIPPED = {"CHANGELOG.md", "backlog.md"}
 # recipes a repo defines itself (repo-owned companions, ADR-031)
 OWN_RECIPES = {"ci-extra"}
-# newcomer pages: no spec numbers or criterion ids in the body (AC-161.10)
-PLAIN = ["README.md", "docs/QUICKSTART.md", "docs/USER-JOURNEY.md", "docs/HOW-IT-WORKS.md",
-         "site/src/content/docs/get-started", "site/src/content/docs/concepts", "site/src/content/docs/scenarios"]
+# reader pages: no spec numbers or criterion ids in the body (AC-161.10; every guide since spec 173)
+PLAIN = ["README.md", "docs", "site/src/content/docs/get-started", "site/src/content/docs/concepts",
+         "site/src/content/docs/scenarios"]
+# measurement records name the spec each number came from
+RECORDS = {"docs/PERFORMANCE.md", "docs/BASELINES.md"}
 
 COMMAND = re.compile(r"(?<![\w/.:<-])/([a-z][a-z0-9-]*):([a-z][a-z0-9-]*)")
 FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9-]*")
@@ -89,7 +91,7 @@ def pages(paths: list[str], plugins: set[str]) -> list[Path]:
 
 def is_plain(f: Path) -> bool:
     rel = f.relative_to(ROOT).as_posix()
-    return any(rel == p or rel.startswith(p + "/") for p in PLAIN)
+    return rel not in RECORDS and any(rel == p or rel.startswith(p + "/") for p in PLAIN)
 
 
 def check_manifest(block: str) -> str | None:
@@ -175,8 +177,8 @@ def check_page(f: Path, cmds, plugins, known_recipes) -> list[str]:
         for span in spans:
             scan(span, n, code=True)
         scan(CODE_SPAN.sub("", line), n, code=False)
-        if plain and not background and (m := JARGON.search(CODE_SPAN.sub("", line))):
-            problems.append(f"{rel}:{n}: '{m.group(0)}' on a newcomer page: move it to a closing Background section")
+        if plain and not background and not history and (m := JARGON.search(CODE_SPAN.sub("", line))):
+            problems.append(f"{rel}:{n}: '{m.group(0)}' on a reader page: move it to a closing Background section")
     missing = [p for p in STARTER if p not in installed]
     if installed and missing:
         problems.append(f"{rel}: installs {', '.join(sorted(installed))} but not the starter plugin(s) {', '.join(missing)}")

@@ -36,3 +36,8 @@ history carry `<!-- historical -->` and stay off the site.
   use it, so the command file gets fixed (as `--secret-ref` of `/component:add` was).
 - The check proves that names and manifests exist, not that a step behaves as described; the cluster e2e and the recorded
   journeys still cover behaviour.
+
+## Addendum (2026-11-10, spec 173)
+
+The spec-number rule covers every guide in `docs/`, not only the newcomer pages. The measurement records
+(`PERFORMANCE.md`, `BASELINES.md`), `## … 4.x …` history sections and closing "Background" sections keep their spec numbers.

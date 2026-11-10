@@ -186,9 +186,10 @@ def test_get_started_leads_with_the_quickstart_ac_161_9():  # AC-161.9
 # ---------------- AC-161.10: no jargon on newcomer pages ----------------
 
 def test_newcomer_pages_keep_spec_numbers_in_background_ac_161_10(tmp_path, monkeypatch):  # AC-161.10
+    for page in ("README.md", "docs/QUICKSTART.md", "docs/USER-JOURNEY.md", "docs/HOW-IT-WORKS.md",
+                 "site/src/content/docs/get-started/local-cluster.md", "site/src/content/docs/concepts/index.md"):
+        assert check_docs.is_plain(ROOT / page), page
     out = problems_in(tmp_path, monkeypatch, "# Page\n\nStaging follows dev (spec 093, AC-093.2).\n", plain=True)
-    assert out and "'spec 093' on a newcomer page" in out[0]
+    assert out and "'spec 093' on a reader page" in out[0]
     ok = "# Page\n\nStaging follows dev.\n\n## Background\n\nSee spec 093 and AC-093.2.\n"
     assert problems_in(tmp_path, monkeypatch, ok, plain=True) == []
-    assert {"README.md", "docs/QUICKSTART.md", "docs/USER-JOURNEY.md", "docs/HOW-IT-WORKS.md"} <= set(PLAIN)
-    assert {"site/src/content/docs/get-started", "site/src/content/docs/concepts", "site/src/content/docs/scenarios"} <= set(PLAIN)
