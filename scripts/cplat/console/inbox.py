@@ -22,6 +22,7 @@ from console.html import action_button, command_block, definition_list, engine_b
 
 DEFAULT_BUDGET = "15"
 WAY_BACK_TITLE = "The way back"
+TERM_OF_KIND = {"budget": "daily_budget"}
 
 
 # ---------------- helpers ----------------
@@ -110,7 +111,8 @@ class Decide:
 
 def _head(item: dict, now: datetime) -> str:
     kind = str(item.get("kind"))
-    tip = glossary.tip(kind, "right") if kind in glossary.TERMS else ""
+    term = TERM_OF_KIND.get(kind, kind)   # `budget` is also the Board's run budget, so the Inbox kind has its own term
+    tip = glossary.tip(term, "right") if term in glossary.TERMS else ""
     return (f'<p>{stage_badge(str(item.get("stage")))} <strong class="kind" data-kind="{esc(kind)}">{esc(kind)}</strong>{tip} '
             f'<time datetime="{esc(item.get("since"))}">waiting {esc(age(item.get("since"), now))}</time></p>'
             f'<p>{esc(item.get("reason"))}</p>')
@@ -204,7 +206,7 @@ def panel_need(ctx: Any, ident: str) -> str:
         raise LookupError(ident)
     kind = str(item.get("kind"))
     build = {"answer": _answer, "approve": _approve, "promote": _promote, "escalation": _escalation, "triage": _triage,
-             "review": _review}.get(kind)
+             "review": _review, "budget": _budget, "stuck": _stuck}.get(kind)
     if build is None:
         raise LookupError(ident)
     d = Decide(ctx, item)
@@ -347,3 +349,22 @@ def _review(ctx: Any, item: dict, d: Decide) -> str:
     link = f'<p><a href="{esc(d.obj.get("url"))}">Pull request #{esc(d.obj.get("pr"))}</a></p>' if d.obj.get("url") else ""
     return (f"<h3>Why it waits</h3><ul data-why>{why}</ul><p>Level {esc(c.get('level'))}; CI {esc(c.get('ci') or 'unknown')}.</p>"
             f"<h3>Regression test</h3>{regression}{review}<h3>Summary</h3>{summary}{link}{button}" + _way_back(item))
+
+
+def _budget(ctx: Any, item: dict, d: Decide) -> str:
+    """The daily token budget of the dispatcher is used up (AC-167.12): used of limit, running units, how to raise it."""
+    c = item.get("consequence") or {}
+    running = ", ".join(esc(u) for u in c.get("running") or []) or "none"
+    facts = definition_list("data-budget", [("Used", f"{esc(c.get('used'))} tokens"), ("Limit", f"{esc(c.get('limit'))} tokens"),
+                                            ("Running units", running)])
+    return (f"<h3>The daily budget</h3>{facts}<p>Starts continue after midnight, or once the limit is raised:</p>"
+            f"{command_block(str(item.get('command') or ''))}" + _way_back(item))
+
+
+def _stuck(ctx: Any, item: dict, d: Decide) -> str:
+    """A dispatcher unit ended twice without finishing (AC-167.12): the reason, its log and the command that releases it."""
+    c = item.get("consequence") or {}
+    log = c.get("log") or d.obj.get("log")
+    facts = definition_list("data-stuck", [("Starts", esc(c.get("starts"))), ("Log", f"<code>{esc(log)}</code>")])
+    return (f"<h3>Why it is stuck</h3><p>{esc(item.get('reason'))}</p>{facts}<h3>Ways forward</h3>"
+            f"<p>Read the log, fix the cause, then release the item:</p>{command_block(str(item.get('command') or ''))}" + _way_back(item))
