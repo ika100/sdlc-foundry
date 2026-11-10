@@ -94,6 +94,7 @@ tasks:
     covers: [AC-167.3, AC-167.5, AC-167.6]
     parallel_safe: true
     depends_on: [t1, t2, t4, t10]
+    done: true
   - id: t14
     title: Unit lifecycle (start, adopt, observe, land, restart, pause, done, escalate, stale close, self-approval)
     files: [scripts/cplat/dispatch_units.py]
