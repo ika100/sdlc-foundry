@@ -90,6 +90,8 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
                     return end(f"inside the quiet window {ns.quiet}: not started", h.EXIT_QUIET)
                 print(f"inside the quiet window {ns.quiet}: waiting {wait / 60:.0f} min", flush=True)
                 h.sleep(wait)
+            if h.stop_requested(repo):   # spec 167: a pause stops the run before its next session
+                return end(h.PAUSED_RESULT, h.EXIT_STOPPED)
             begin = begin or h.clock()
             left = NO_CAP_MINUTES
             if max_minutes is not None:

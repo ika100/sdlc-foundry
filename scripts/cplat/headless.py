@@ -47,6 +47,8 @@ import uuid
 from pathlib import Path
 
 import budget
+import core
+import escalation_rules
 import preflight
 import runs as runlog
 import settings
@@ -57,6 +59,8 @@ import telemetry
 from core import PlatformError
 
 EXIT_DONE, EXIT_STOPPED, EXIT_QUIET = 0, 1, 3
+PAUSED_RESULT = "paused at a checkpoint by cplat dispatch"   # spec 167: the dispatcher's stop flag ended the run
+STOP_FLAG = "cplat-dispatch-stop"
 
 
 def clock() -> dt.datetime:   # tests replace this
@@ -65,6 +69,48 @@ def clock() -> dt.datetime:   # tests replace this
 
 def sleep(seconds: float) -> None:   # tests replace this
     time.sleep(seconds)
+
+
+def stop_requested(repo: Path) -> bool:
+    """Spec 167 (AC-167.11): `cplat dispatch pause` wrote the stop flag into this checkout's git dir."""
+    try:
+        gd = core.git_dir(repo)
+        return gd is not None and (gd / STOP_FLAG).exists()
+    except Exception:   # noqa: BLE001  (a missing flag never stops a run)
+        return False
+
+
+def write_dispatch_result(record: dict) -> None:
+    """Spec 167: the result file the dispatcher reads (`CPLAT_DISPATCH_RESULT`); written whole, never raises."""
+    path = os.environ.get("CPLAT_DISPATCH_RESULT")
+    if not path:
+        return
+    try:
+        target = Path(path)
+        tmp = target.with_name(target.name + f".{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(record))
+        os.replace(tmp, target)
+    except OSError:
+        pass
+
+
+def run_tokens(rid: str | None) -> int | None:
+    """Input, output and cache tokens of the run's usage so far; None when the usage is not complete (never 0 by guess)."""
+    if not rid:
+        return None
+    try:
+        import runs_usage
+        rec = runlog.active(rid)
+        if rec is None:
+            return None
+        now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        sec = runs_usage.for_run(rec, ended_at=now, budget_s=3.0, peek=True)
+        totals = (sec or {}).get("totals")
+        if not totals or (sec or {}).get("incomplete"):
+            return None
+        return int(sum(float(totals.get(k) or 0) for k in ("input", "output", "cache_read", "cache_write")))
+    except Exception:   # noqa: BLE001
+        return None
 
 
 def parse_window(text: str | None) -> tuple[dt.time, dt.time] | None:
@@ -316,6 +362,14 @@ def main(argv: list[str]) -> int:
     state_fields = {"coordinator_model": model, "coordinator_model_source": source}
     options = budget.parse_options(ns.budget)
     rid = runlog.start("headless", repo=runlog.repo_slug(repo), mode="headless")
+    dispatch_unit = os.environ.get("CPLAT_DISPATCH_UNIT") or None
+    dispatch_record = {"unit": dispatch_unit, "run_id": rid, "pid": os.getpid(),
+                       "started_at": clock().isoformat(timespec="seconds"), "ended_at": None}
+    tokens: int | None = None
+    write_dispatch_result(dispatch_record)
+    if dispatch_unit:                  # spec 167: the dispatcher finds a unit's run by this field
+        runlog.set_section(rid, "dispatch_unit", dispatch_unit)
+        state_fields["dispatch_unit"] = dispatch_unit
     budget.open_root(rid, budget.work_key(repo, budget.spec_refs(prompt), prompt), ships=budget.ships_in(prompt), options=options, repo=repo)
     if line := budget.limits_line(rid):
         print(line, flush=True)
@@ -336,18 +390,30 @@ def main(argv: list[str]) -> int:
         return _drive(ns, repo, prompt, window, cmd, rid, state, preflight.env(allow) if allow else {})
     except BaseException as e:
         state["result"] = f"error: {e}"
+        tokens = run_tokens(rid) if os.environ.get("CPLAT_DISPATCH_RESULT") else None
         runlog.finish(rid, "failed", fields={"command": prompt, "sessions": state["sessions"], "stop_reason": "error", **state_fields})
         rid = None
         raise
     finally:
+        reason, outcome = stop_of(state["result"], state["code"])
+        esc = None
         if rid:
-            reason, outcome = stop_of(state["result"], state["code"])
             esc = {"reason": state["result"], "cause": "decision"} if reason == "budget" else None
             if reason == "preflight":
                 esc = {"reason": state["result"], "cause": "environment"}
             if reason == "escalated" and state["result"].startswith("no progress"):   # AC-088.18, AC-126.7
                 esc = {"reason": state["result"], "cause": state.get("cause") or "decision"}
+            if os.environ.get("CPLAT_DISPATCH_RESULT"):
+                tokens = run_tokens(rid)        # before runlog.finish removes the active record
             runlog.finish(rid, outcome, escalation=esc, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason, **state_fields})
+        if os.environ.get("CPLAT_DISPATCH_RESULT"):   # spec 167: tell the dispatcher how the run ended (also after an exception)
+            cause = None
+            if esc:
+                cause = esc["cause"]
+            elif reason == "escalated":
+                cause = state.get("cause") or escalation_rules.resolve(None, state["result"]).cause
+            write_dispatch_result({**dispatch_record, "ended_at": clock().isoformat(timespec="seconds"), "result": state["result"],
+                                   "stop_reason": reason, "outcome": outcome, "cause": cause, "code": state["code"], "tokens": tokens})
 
 
 def stop_of(result: str, code: int) -> tuple[str, str]:
@@ -364,6 +430,8 @@ def stop_of(result: str, code: int) -> tuple[str, str]:
         return "out of runs", "failed"
     if "quiet window" in result:
         return "quiet window", "abandoned"
+    if result.startswith("paused at a checkpoint"):   # spec 167: the dispatcher's stop flag
+        return "paused", "abandoned"
     return "error", "failed"
 
 
@@ -386,6 +454,9 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
                 return finish(repo, log, result, EXIT_QUIET)
             print(f"inside the quiet window {ns.quiet}: waiting {wait / 60:.0f} min", flush=True)
             sleep(wait)
+        if stop_requested(repo):                        # spec 167: a pause stops the run before its next session
+            state.update(result=PAUSED_RESULT, code=EXIT_STOPPED)
+            return finish(repo, log, PAUSED_RESULT, EXIT_STOPPED)
         begin = begin or clock()
         left = max_minutes - (clock() - begin).total_seconds() / 60
         if left <= 1:
