@@ -1,7 +1,7 @@
 ---
 spec_id: 183-shared-numbers-and-indexes-come-from
 title: Shared numbers and indexes come from cplat
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [659, 660, 477, 577]
@@ -57,3 +57,4 @@ As a user piping cplat output into `head`, I want the command to stop quietly, s
 ## Changelog
 
 - 2026-11-10 created
+- 2026-11-10 approved
