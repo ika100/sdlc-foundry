@@ -353,18 +353,16 @@ def test_the_none_installed_fix_names_the_starter_plugin_ac_174_6(monkeypatch): 
 
 # ---------------- AC-174.7: versions, description, changelog ----------------
 
-def main_version(rel):
-    p = subprocess.run(["git", "show", f"main:{rel}"], cwd=ROOT, capture_output=True, text=True)
-    assert p.returncode == 0, p.stderr
-    return tuple(int(x) for x in json.loads(p.stdout)["version"].split("."))
+# the minor each plugin reached with spec 174 (one minor up from 5.16.0); later releases may only go higher, same major
+SHIPPED = {"api": (1, 3), "cluster": (1, 4), "component": (1, 16), "instance": (1, 6), "issue": (1, 2), "platform": (1, 8), "resource": (1, 9), "shared": (1, 4), "svc": (4, 9), "svc-go": (0, 8), "svc-java": (0, 8), "system": (1, 16), "web": (0, 8)}
 
 
 @pytest.mark.parametrize("name", (*LIVE, "shared"))
 def test_a_changed_plugin_is_one_minor_up_in_both_files_ac_174_7(name):  # AC-174.7
-    old = main_version(f"plugins/{name}/.claude-plugin/plugin.json")
-    want = (old[0], old[1] + 1)
+    want = SHIPPED[name]
     for have in (manifest(name)["version"], entry(name)["version"]):
-        assert tuple(int(x) for x in have.split("."))[:2] == want, (name, have, old)
+        got = tuple(int(x) for x in have.split("."))[:2]
+        assert got[0] == want[0] and got >= want, (name, have, want)
 
 
 def test_shared_describes_what_it_holds_today_ac_174_7():  # AC-174.7
@@ -374,6 +372,8 @@ def test_shared_describes_what_it_holds_today_ac_174_7():  # AC-174.7
 
 
 def test_a_changelog_fragment_announces_the_starter_ac_174_7():  # AC-174.7
-    frags = [f for f in (ROOT / "docs" / "changelog.d").glob("*.md") if f.name != "README.md"]
-    hits = [f for f in frags if "starter" in f.read_text() and "/plugin marketplace update" in f.read_text()]
-    assert hits, "no changelog fragment names `starter` and `/plugin marketplace update`"
+    # a fragment until the release, then a paragraph of docs/CHANGELOG.md
+    frags = [f.read_text() for f in (ROOT / "docs" / "changelog.d").glob("*.md") if f.name != "README.md"]
+    released = (ROOT / "docs" / "CHANGELOG.md").read_text().split("\n\n")
+    hits = [e for e in frags + released if "`starter`" in e and "/plugin marketplace update" in e]
+    assert hits, "no changelog entry names `starter` and `/plugin marketplace update`"
