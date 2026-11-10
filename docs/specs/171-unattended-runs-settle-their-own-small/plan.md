@@ -37,6 +37,7 @@ tasks:
     covers: [AC-171.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: pr-check reads the body file like the other PR commands
     files: [scripts/cplat/house_rules.py]
