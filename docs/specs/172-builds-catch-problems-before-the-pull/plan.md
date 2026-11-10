@@ -10,18 +10,21 @@ tasks:
     covers: [AC-172.1, AC-172.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cplat quiet passes arguments after -- to test-fast; platform test-fast runs only given tests
     files: [scripts/cplat/quiet.py, scripts/test-fast.sh, devbox.json, scripts/cplat/cplat.py]
     covers: [AC-172.3, AC-172.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: quiet --repeat runs the named tests at once and tells flaky from failing
     files: [scripts/cplat/quiet_repeat.py, scripts/cplat/flaky.py]
     covers: [AC-172.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: cplat component build tests prints a task's and the load run's test command
     files: [scripts/cplat/buildtests.py]
