@@ -5,7 +5,7 @@
 
 For every page it checks: each `/<plugin>:<command>` exists and is not a tombstone, each `--flag` written after a command in
 code is in the command's usage line, each `/plugin install <name>@sdlc-foundry` names a plugin that is more than tombstones,
-the plugins a page installs in code include the starter set, each `devbox run <recipe>` is defined, and each YAML block with
+the plugins a page installs in code include the starter set (read from plugins/starter; installing `starter` counts as all of it), each `devbox run <recipe>` is defined, and each YAML block with
 `system` and `components` is a valid system manifest. Tombstones may appear in a `## … 4.x …` section or next to the
 command that replaced them. Reader pages may not name a spec or criterion outside a closing
 "Background" section. A page with `<!-- historical -->` is skipped. Run with pyyaml (`uv run --with-requirements
@@ -13,6 +13,7 @@ requirements-test.txt python scripts/check-docs.py`).
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 import tempfile
@@ -23,8 +24,12 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts" / "cplat"))
 
-# what a newcomer installs in an empty folder; generated repos enable the rest in .claude/settings.json (spec 161, A1)
-STARTER = ("shared", "system", "component", "platform")
+import plugin_set  # noqa: E402
+
+# what a newcomer installs in an empty folder, read from the starter plugin (spec 174); generated repos enable the rest in .claude/settings.json
+STARTER = tuple(
+    plugin_set.dependency_name(d)
+    for d in json.loads((ROOT / "plugins" / plugin_set.STARTER / ".claude-plugin" / "plugin.json").read_text())["dependencies"])
 SITE = ROOT / "site" / "src" / "content" / "docs"
 # synced from docs/ at build time (site/.gitignore): checked at their source
 SITE_GENERATED = ("guides/", "reference/", "community/", "vision/design-history", "vision/end-to-end-scenario")
@@ -59,14 +64,9 @@ def commands() -> dict[str, tuple[bool, set[str]]]:
 
 
 def live_plugins(cmds: dict[str, tuple[bool, set[str]]]) -> set[str]:
-    """Plugins that hold more than tombstones: agents, skills, hooks, a bin, or one live command."""
-    out = set()
-    for p in sorted((ROOT / "plugins").iterdir()):
-        own = [tomb for name, (tomb, _) in cmds.items() if name.startswith(f"/{p.name}:")]
-        extras = any((p / d).exists() for d in ("agents", "skills", "hooks", "bin"))
-        if (p / ".claude-plugin" / "plugin.json").is_file() and (extras or not all(own)):
-            out.add(p.name)
-    return out
+    """Plugins that hold more than tombstones (`plugin_set.is_tombstone_only`)."""
+    return {p.name for p in sorted((ROOT / "plugins").iterdir())
+            if (p / ".claude-plugin" / "plugin.json").is_file() and not plugin_set.is_tombstone_only(p)}
 
 
 def recipes() -> set[str]:
@@ -179,6 +179,8 @@ def check_page(f: Path, cmds, plugins, known_recipes) -> list[str]:
         scan(CODE_SPAN.sub("", line), n, code=False)
         if plain and not background and not history and (m := JARGON.search(CODE_SPAN.sub("", line))):
             problems.append(f"{rel}:{n}: '{m.group(0)}' on a reader page: move it to a closing Background section")
+    if plugin_set.STARTER in installed:  # the starter plugin depends on the whole starter set
+        installed = installed | set(STARTER)
     missing = [p for p in STARTER if p not in installed]
     if installed and missing:
         problems.append(f"{rel}: installs {', '.join(sorted(installed))} but not the starter plugin(s) {', '.join(missing)}")
