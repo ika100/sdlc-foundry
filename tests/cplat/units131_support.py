@@ -75,7 +75,7 @@ def make_repo(tmp_path, *, plan=True, tasks=None, acs=None, name="shop-api"):
     git(r, "init", "-q", "-b", "main")
     (r / ".copier-answers.yml").write_text("_src_path: gh:ika100/sdlc-foundry/templates/service-go\nproject_name: shop-api\n")
     (r / ".claude").mkdir()
-    (r / ".claude" / "settings.json").write_text('{"permissions": {"allow": ["Bash(devbox run *)"]}}\n')
+    (r / ".claude" / "settings.json").write_text('{"permissions": {"allow": ["Bash(devbox run *)", "Bash(cplat *)", "Read(~/.claude/plugins/**)"]}}\n')
     if tasks:
         text = sized_plan(r, tasks, acs or 2)
         if plan:
