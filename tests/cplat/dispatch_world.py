@@ -222,7 +222,7 @@ class World:
         (self.repo / "README.md").write_text("shop-api\n")
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-qm", "init")
-        git(self.repo, "push", "-q", "origin", "main")
+        git(self.repo, "push", "-q", "-u", "origin", "main")
         git(self.repo, "fetch", "-q", "origin")
 
     def commit(self, name, text, msg):

@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+import land_merge
 import pr as prmod
 import ship
 from test_tags_and_wait import PR, Gh, _run_check, fake  # noqa: F401  (fixture)
@@ -107,7 +108,7 @@ def conflict(fake, monkeypatch):  # noqa: F811
 
 def test_a_conflicting_pr_with_green_codeql_is_not_green_and_not_merged(conflict, tmp_path):   # #221
     conflict.checks = [[_run_check("CodeQL", "pass", 41), _run_check("Analyze (python)", "pass", 41)]]
-    with pytest.raises(ship.Conflicting, match="conflicts with its base"):
+    with pytest.raises(land_merge.Unresolvable, match="conflicts with main"):   # spec 171: a land tries the regeneration first
         prmod.wait(tmp_path, PR, True, 600, 10, 300)
     assert conflict.merges == []
 
