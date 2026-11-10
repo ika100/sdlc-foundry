@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shlex
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -115,20 +116,31 @@ def pr_allowed(repo: Path) -> bool:
     return bool(rules["allow"] & listed) and not (rules["deny"] & listed) and not (rules["ask"] & listed)
 
 
+def closes_for(repo: Path, base_ref: str, *, issues: str = "", tracks: Iterable[int] = (),
+               message: str | None = None, have_gh: bool = True) -> list[int]:
+    """#N of `issues`, `tracks`, `#N` in the branch's commits and in `message`, kept when still OPEN; ascending, unique."""
+    cands: set[int] = {int(n) for n in re.findall(r"#(\d+)", issues)} | {int(t) for t in tracks}
+    cands |= {int(n) for n in re.findall(r"#(\d+)", _out(["git", "log", f"{base_ref}..HEAD", "--format=%B"], repo))}
+    cands |= {int(n) for n in re.findall(r"#(\d+)", message or "")}
+    return sorted(n for n in cands if have_gh and
+                  _out(["gh", "issue", "view", str(n), "--json", "state", "-q", ".state"], repo) == "OPEN")
+
+
+def fill_closes(text: str, kept: list[int]) -> str:
+    """`{{CLOSES}}` -> one `Closes #N` line per issue, or `N/A` when there is none."""
+    return text.replace("{{CLOSES}}", "\n".join(f"Closes #{n}" for n in kept) or "N/A")
+
+
 def _closes(repo: Path, o: Opts, base_ref: str, have_gh: bool, body_path: Path) -> tuple[list[int], str]:
     """The issues to close and the body as it will be sent (`{{CLOSES}}` resolved in memory, nothing written)."""
-    cands: set[int] = {int(n) for n in re.findall(r"#(\d+)", o.issues)}
+    tracks: list[int] = []
     if o.spec:
         try:
-            cands |= {int(t) for t in specmod.find(repo, o.spec).meta.get("tracks") or []}
+            tracks = [int(t) for t in specmod.find(repo, o.spec).meta.get("tracks") or []]
         except PlatformError:
             pass
-    cands |= {int(n) for n in re.findall(r"#(\d+)", _out(["git", "log", f"{base_ref}..HEAD", "--format=%B"], repo))}
-    cands |= {int(n) for n in re.findall(r"#(\d+)", o.message or "")}
-    kept = sorted(n for n in cands if have_gh and
-                  _out(["gh", "issue", "view", str(n), "--json", "state", "-q", ".state"], repo) == "OPEN")
-    text = body_path.read_text()
-    return kept, text.replace("{{CLOSES}}", "\n".join(f"Closes #{n}" for n in kept) or "N/A")
+    kept = closes_for(repo, base_ref, issues=o.issues, tracks=tracks, message=o.message, have_gh=have_gh)
+    return kept, fill_closes(body_path.read_text(), kept)
 
 
 def _uncommitted(repo: Path) -> list[str]:
