@@ -6,6 +6,14 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.16.0] - 2026-11-10
+
+### Added
+
+**A dispatcher runs the backlog in parallel slots (spec 167).** `cplat dispatch` reads `.platform/dispatch.yml` (slots, a daily token budget, sources, readiness labels, priority, gates) and starts the existing `/component:fix` run for each triaged issue and `/component:ship` run for each approved spec, one per slot in its own git worktree, so you no longer start each run yourself. It is plain code: a model is called only to check that an issue is still true on `main` and whether a spec's work splits into parallel tasks. Fix PRs are landed by the dispatcher on green checks; a unit that ends without finishing restarts once, then becomes a `stuck` need; an escalation labels the issue `needs-decision`. The verbs are `start`, `plan` (read-only, works without a policy file), `status`, `wait`, `report`, `inbox`, `pause`, `resume`, `slots`, `prioritize` and `skip`. `cplat needs` works in a single repo that has a policy file and has two new kinds, `budget` and `stuck`; the notification events `triage`, `budget` and `stuck` and a daily digest are new. `/issue:triage` now adds the label `triaged`. Every merge into the default branch that cplat makes (`cplat pr wait --merge`, `cplat component ship land`) now holds a machine-wide lock per repository and updates a branch that is behind `main` and waits for its checks again before merging, with or without a policy file. See [ADR-088](adr/088-a-dispatcher-schedules-orchestrator-runs-from-a-policy-file.md), [ADR-089](adr/089-every-merge-into-main-holds-the-repo-merge-lock.md), the [dispatcher guide](dispatch.md) and the [spec](specs/167-a-dispatcher-runs-the-backlog-in/spec.md). **Action:** update the plugins (`/plugin marketplace update`); to use it, commit a `.platform/dispatch.yml` and follow the guide.
+
+**Agent rules state their reason, and the few hard rules are marked (spec 168).** Every rule in an agent or command prompt now says why it holds, so an agent can see where the reason does not apply; the 13 rules that are never departed from are marked `**Hard rule:**`, each naming the `cplat` command or CI job that enforces it or why no tool can, and an agent that departs from a practice names the departure and the reason in its report. A register in `docs/rules/` classifies every rule sentence, and `cplat platform rules check` runs in the platform's CI and fails on an unclassified or reasonless rule or on prompts that grew. The retro proposes rules to retire, and `cplat platform pr-check` gates a retirement on the benchmark. See [ADR-091](adr/091-agent-rules-carry-their-reason-in-a-checked-register.md) and the [spec](specs/168-agent-rules-state-their-reason-and-can/spec.md). Update the plugins (`/plugin marketplace update`).
+
 ## [5.15.1] - 2026-11-10
 
 ### Fixed
