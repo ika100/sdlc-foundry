@@ -24,7 +24,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | approved | 7 | #568 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
-| [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | approved | 12 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
@@ -154,6 +153,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [163-a-resumed-unit-run-drops-the-escalation-of](specs/163-a-resumed-unit-run-drops-the-escalation-of/spec.md) — A resumed unit run drops the escalation of the run before | P1 | done | 2 | #591 |
 | [165-a-test-problem-does-not-stop-an-unattended-run](specs/165-a-test-problem-does-not-stop-an-unattended-run/spec.md) — A test problem does not stop an unattended run | P1 | done | 7 | #595, #582, #583 |
 | [166-the-dev-pr-of-a-system-ship-lands-on-the](specs/166-the-dev-pr-of-a-system-ship-lands-on-the/spec.md) — The dev PR of a system ship lands on the current main | P1 | done | 4 | #597 |
+| [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | done | 12 |  |
 | [168-agent-rules-state-their-reason-and-can](specs/168-agent-rules-state-their-reason-and-can/spec.md) — Agent rules state their reason and can retire | P1 | done | 8 |  |
 | [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | done | 4 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
