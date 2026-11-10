@@ -3,7 +3,19 @@ title: "Run it on your laptop"
 description: "devbox run cluster-up creates a local k3d cluster with ArgoCD, the Gateway API and your application."
 ---
 
-In the GitOps repository:
+## Install the plugins
+
+In Claude Code, once per machine, then restart it:
+
+```text
+/plugin marketplace add ika100/sdlc-foundry
+/plugin install starter@sdlc-foundry
+```
+
+`starter` installs `shared`, `system`, `component` and `platform`; each plugin can be installed alone (for example `component`, which brings `shared`); plugins bring their dependencies from Claude Code 2.1.311 (`claude update`).
+
+## In the GitOps repository
+
 
 ```bash
 devbox run cluster-up      # about 2 minutes the first time
