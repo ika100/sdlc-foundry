@@ -1,7 +1,7 @@
 ---
 spec_id: 174-plugins-bring-what-they-need
 title: Plugins bring what they need, and one plugin installs the starter set
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: []
@@ -51,3 +51,4 @@ As the maintainer, I want the starter set defined in one place, so that the docs
 ## Changelog
 
 - 2026-11-10 drafted after the manual dependency check; the user asked to write the spec and implement it with the dispatcher, so it is approved with the assumptions above as defaults.
+- 2026-11-10 building
