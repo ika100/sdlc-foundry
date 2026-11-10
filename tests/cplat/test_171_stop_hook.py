@@ -212,4 +212,4 @@ def test_a_running_wait_holds_the_product_ship_too(w, monkeypatch):  # AC-171.8
         answer = sys_stop(w)
         assert sys_first_line(answer) == "waiting: cplat system ship next --wait; stops without progress: 1/2"
         assert f"The product ship of {SYSTEM_SPEC} is not finished" in answer.json["reason"]
-        assert w.state()["stop_gate"]["no_progress"] == 1 and "escalated" not in w.state()
+        assert w.state()["stop_gate"]["no_progress"] == 1 and not w.state().get("escalated")
