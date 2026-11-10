@@ -16,12 +16,14 @@ tasks:
     covers: [AC-178.5, AC-178.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: Docs, ADR index and changelog fragment
     files: [docs/unattended-delivery.md, CONTRIBUTING.md, docs/adr/README.md, docs/changelog.d/648-one-way-to-land.fixed.md]
     covers: [AC-178.1, AC-178.3, AC-178.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Every merging command states its mode; the release stops when main moved
     files: [scripts/cplat/pr.py, scripts/cplat/platrelease.py, scripts/cplat/dispatch_units.py, scripts/cplat/spec_pr.py]
