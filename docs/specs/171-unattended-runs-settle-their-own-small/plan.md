@@ -55,6 +55,7 @@ tasks:
     covers: [AC-171.3, AC-171.6, AC-171.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: ship land through land_merge, push ahead, gate with running waits
     files: [scripts/cplat/ship.py, tests/cplat/test_ship.py, tests/cplat/test_platform_shape_123.py]
