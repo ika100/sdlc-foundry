@@ -49,6 +49,7 @@ tasks:
     covers: [AC-171.7, AC-171.10]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t11
     title: Docs and changelog fragment
     files: [docs/unattended-delivery.md, docs/changelog.d/171-unattended-runs-settle-small-problems.fixed.md]
