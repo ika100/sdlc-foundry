@@ -59,6 +59,7 @@ tasks:
     covers: [AC-167.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t9
     title: cplat needs repo scope, kinds budget and stuck, issue escalations
     files: [scripts/cplat/needs.py]
