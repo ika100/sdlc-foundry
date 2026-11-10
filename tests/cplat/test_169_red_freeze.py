@@ -67,3 +67,14 @@ def test_a_new_test_naming_its_criterion_is_a_tightening_ac_169_3():  # AC-169.3
     assert spec.tightening(old, new, "tests/ac-001-task-api.test.ts") == (True, "")
     good, why = spec.tightening(old, new.replace('it("AC-001.5 limits', 'it("AC-001.6 limits'), "tests/ac-001-task-api.test.ts")
     assert not good and why == "criterion ids changed: ['AC-001.6']"
+
+
+def test_an_escalation_saved_before_the_session_started_is_the_run_before_ac_169_4(monkeypatch):  # AC-169.4
+    import appship_sched
+    import shipwait
+    monkeypatch.setattr(appship_sched, "_session_runs", lambda entry: True)
+    entry = {"proc": {"pid": 1, "started": "2026-11-10T00:38:40"}}
+    assert shipwait._before_start({"escalated": "old", "updated": "2026-11-10T00:23:02"}, entry)
+    assert not shipwait._before_start({"escalated": "new", "updated": "2026-11-10T00:39:00"}, entry)
+    monkeypatch.setattr(appship_sched, "_session_runs", lambda entry: False)       # the session ended: the escalation holds
+    assert not shipwait._before_start({"escalated": "old", "updated": "2026-11-10T00:23:02"}, entry)

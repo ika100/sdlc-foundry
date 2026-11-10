@@ -80,6 +80,18 @@ def _head(clone: Path) -> str:
     return (p.stdout.strip() if p and p.returncode == 0 else "")
 
 
+def _before_start(sh: dict, entry: dict) -> bool:
+    """Spec 169 (AC-169.4): the clone's escalation was saved before the repo's current session started, which is still
+    alive: it belongs to the run before, and the new session clears it when it resumes."""
+    proc = entry.get("proc") or {}
+    if not proc.get("started") or not sched._session_runs(entry):
+        return False
+    try:
+        return dt.datetime.fromisoformat(sh.get("updated") or "") < dt.datetime.fromisoformat(proc["started"])
+    except ValueError:
+        return False
+
+
 def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEXT_INTERVAL) -> tuple[int, dict | None, list[str]]:
     """(exit code, the action when it is no longer `wait`, the TIMEOUT lines)."""
     out = sys.stderr if as_json else sys.stdout
@@ -98,6 +110,8 @@ def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEX
             sh = ship.load_state(clone) if clone.is_dir() else None
             if sh is None and entry.get("spec") and clone.is_dir():   # spec 155: archived by the repo's own session
                 sh = _archived(clone, entry["spec"])
+            if sh and sh.get("escalated") and _before_start(sh, entry):   # spec 169: the session just started has not resumed yet
+                sh = {**sh, "escalated": None}
             text = ((sh or {}).get("phase") or "not started") + (" (escalated)" if (sh or {}).get("escalated") else "")
             if seen.get(rid) != text:
                 print(f"{waits.clock()} {rid}: phase {text}", file=out, flush=True)
