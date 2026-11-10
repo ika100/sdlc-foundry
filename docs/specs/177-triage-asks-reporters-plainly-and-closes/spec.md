@@ -1,7 +1,7 @@
 ---
 spec_id: 177-triage-asks-reporters-plainly-and-closes
 title: Triage asks reporters plainly and closes what needs no work
-status: draft
+status: approved
 priority: P2
 shape: platform
 ---
@@ -49,3 +49,4 @@ Closing what needs no work.
 ## Changelog
 
 - 2026-11-10 created (split from spec 176, AC-176.11 to AC-176.14)
+- 2026-11-10 approved
