@@ -78,6 +78,7 @@ tasks:
     covers: [AC-171.7]
     parallel_safe: true
     depends_on: [t7]
+    done: true
 human_steps:
   - "Before the next platform release (ADR-085): t10 changes component prompts, so in a Claude session on the release candidate run `cplat platform runs benchmark quick-task --plugins plugins --reset-first` and `cplat platform runs benchmark build --plugins plugins --reset-first`; the eval gate of `cplat platform release` needs both."
 ---
