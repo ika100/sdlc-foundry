@@ -1,5 +1,5 @@
 ---
-description: "Read new GitHub issues, show one table, ask only what is open and hand fixes to the dispatcher. Usage: /issue:triage [<issue-number> | --new | --waiting]"
+description: "Read new GitHub issues, show one table, ask only what is open and hand fixes to the dispatcher. Usage: /issue:triage [<issue-number> | --waiting]"
 ---
 
 Triage open issues. **Request:** $ARGUMENTS
@@ -16,7 +16,7 @@ cplat issue triage <ARGS>
 
 ## 1. Batch
 
-Run `batch --json` (add `--new` for issues filed without a form). An empty queue ends the run. If `missing_labels` is not empty, ask after the overview, then run `setup-labels`. With an issue number skip the batch: run `show <n> --json`, classify it as below, and `apply <n> --add L --remove triage --comment-file F` after the user confirms.
+Run `batch --json` (open issues without a decision, however they were filed). An empty queue ends the run. If `missing_labels` is not empty, ask after the overview, then run `setup-labels`. With an issue number skip the batch: run `show <n> --json`, classify it as below, and `apply <n> --add L --remove triage --comment-file F` after the user confirms.
 
 ## 2. Propose
 
