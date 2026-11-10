@@ -15,7 +15,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat component new <name> <description…> [--type service|website|library] [--lang python|java|go|typescript] [--system OWNER/REPO] [--dry-run]
   cplat component add|set|remove <component…> [--type T] [--lang L] [--expose] [--env K=V] [--instance ENV --replicas N] [--from-k8s] [--pr]
   cplat component ship start|status|phase|pr|land|deploy|wait|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
-  cplat component build schedule|merge|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
+  cplat component build schedule|merge|tests|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
   cplat component release target [--json] | wait --commit SHA   /component:release: the commit to tag and the version; main's ci run on it
   cplat cluster new <name> [--org O] [--public] | add <owner>/<repo> [--name S] | remove <system>   the cluster repo and the systems it installs
   cplat cluster wait [--refresh] [--timeout S] [--context C]   until the cluster's root applications run main's head (spec 143)
@@ -49,7 +49,7 @@ Plumbing keeps its name:
   cplat spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
   cplat pr wait|open …   wait <number|url> [-R owner/repo] [--merge]: CI watch; open --title T: commit -s, push, PR in one step
   cplat dispatch start|plan|status|wait|report|inbox|pause|resume|slots|prioritize|skip ...   run the backlog in slots (spec 167)
-  cplat quiet [--raw] <script>  run it with output in a log: one line on success, the failure summary and log path on failure (--raw: the tail)
+  cplat quiet [--raw] <script> | test-fast [--repeat N] -- <test args>  run it with output in a log: one line on success, the failure summary and log path on failure (--raw: the tail)
   cplat validate plan|run|final [--base REF] [--full] [--risk low|medium|high]   change-aware validation of the inner loop
   cplat headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume
   cplat deps findings|patch|report ...   patch fixable dependency findings of a red security gate
