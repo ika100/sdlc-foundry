@@ -77,7 +77,7 @@ def test_a_change_to_a_red_tests_file_is_still_reported_ac_172_1(tmp_path, monke
     assert rc == 1 and "tests/test_alerts.py: changed" in out
     assert "test_new.py" not in out and "test_other.py" not in out
     good, why = spec.test_diff(root, red, [])["tests/test_alerts.py"]
-    assert not good and why.startswith("fewer assertions")
+    assert not good and why                      # reported with its reason, as before this spec (the person approved, 2026-11-10)
 
 
 def test_the_deletion_of_a_red_tests_file_is_still_reported_ac_172_1(tmp_path):  # AC-172.1

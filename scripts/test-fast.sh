@@ -14,6 +14,6 @@ for a in "$@"; do
 done
 
 if [ "$#" -eq 0 ] || [ "$named" -eq 0 ]; then
-  set -- tests/cplat "$@"
+  exec uv run --with-requirements requirements-test.txt pytest tests/cplat -q -n auto "$@"
 fi
 exec uv run --with-requirements requirements-test.txt pytest -q -n auto "$@"
