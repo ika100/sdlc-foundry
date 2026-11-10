@@ -13,15 +13,20 @@ TOOLS = ("pytest", "go-test", "surefire", "vitest")
 _GO_TEST = re.compile(r"(?:^|\.)(Test\w*)(?:/|$)")
 
 
-def failed_tests(summary) -> tuple[str, list[str]] | None:
-    """(tool, test ids) when every entry of every check is a test failure of one tool, at most MAX_TESTS; else None."""
+_DEFAULT = object()
+
+
+def failed_tests(summary, limit=_DEFAULT) -> tuple[str, list[str]] | None:
+    """(tool, test ids) when every entry of every check is a test failure of one tool, at most `limit` (default
+    MAX_TESTS; None: no cap); else None."""
+    cap = MAX_TESTS if limit is _DEFAULT else limit
     checks = [c for c in summary.checks if c.entries]
     if len(checks) != 1:
         return None
     c = checks[0]
     if len(c.formats) != 1 or c.formats[0] not in TOOLS or not all(e.test for e in c.entries):
         return None
-    if c.reported is not None and c.reported != len(c.entries) or len(c.entries) > MAX_TESTS:
+    if c.reported is not None and c.reported != len(c.entries) or cap is not None and len(c.entries) > cap:
         return None
     return c.formats[0], [e.locator for e in c.entries]
 
