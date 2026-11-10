@@ -1,0 +1,34 @@
+rules:
+  - id: R1
+    text: "| `app/api/health/route.ts`, `app/api/ready/route.ts` | liveness / readiness probes (always present) |"
+    class: not a rule
+  - id: R2
+    text: "active only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set"
+    class: not a rule
+  - id: R3
+    text: "Never log secrets or full request bodies, because logs are widely readable."
+    class: practice
+  - id: R4
+    text: "never create `k8s/` in this repo, because the gitops-app repo owns manifests."
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R5
+    text: "read endpoints/thresholds from env, never hardcode."
+    class: retired
+    retired: 2026-11-10
+    reason: reading endpoints and thresholds from env already excludes hardcoding them
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R6
+    text: "Do not provision Prometheus, Grafana or collectors, because the system owns monitoring infrastructure; write application code and PrometheusRule manifests."
+    class: practice
+  - id: R7
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R8
+    text: "Do not regenerate templated files unless one is genuinely missing."
+    class: retired
+    retired: 2026-11-10
+    reason: the opening line and step 1 already say to verify and re-create only a missing file
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

@@ -1,0 +1,38 @@
+rules:
+  - id: R1
+    text: "never commit or hardcode secret values, because a secret in git history stays exposed"
+    class: hard
+    hard: no-secrets-in-git
+    source: ADR-018
+  - id: R2
+    text: "Never use `shell=True` with user input and sanitize inputs at system boundaries, so that input cannot inject commands."
+    class: practice
+  - id: R3
+    text: "Never edit, skip or weaken them"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 048, spec 165
+  - id: R4
+    text: "Write files with Write and Edit, never through the shell (`cat >`, heredocs, `tee`, `echo >`), because headless runs refuse those commands."
+    class: practice
+  - id: R5
+    text: "**Shell rule:** run every tool through `devbox run <script>`, never `pip`, `uv`, `ruff`, `mypy` or `pytest` directly, so that versions and flags match CI; add a missing recipe to `devbox.json` first."
+    class: practice
+  - id: R6
+    text: "read the summary first and open the full log when it is not enough, never rerun with full output, because a rerun floods the context again"
+    class: practice
+  - id: R7
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R8
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R9
+    text: "do not reinvent them"
+    class: retired
+    retired: 2026-11-10
+    reason: the sentence now says the style comes from pyproject.toml, which the linter enforces
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

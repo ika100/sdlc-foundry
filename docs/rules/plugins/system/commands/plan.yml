@@ -1,0 +1,21 @@
+rules:
+  - id: R1
+    text: "You never touch component repos, because each repo builds from its own spec."
+    class: practice
+  - id: R2
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R3
+    text: "Never edit `system.yaml`, overlays or another repo, and never overwrite a plan that has done repos without asking, because finished builds would lose their record."
+    class: practice
+  - id: R4
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R5
+    text: "Every shell command through `devbox run` (and `cplat`, git, gh)."
+    class: retired
+    retired: 2026-11-10
+    reason: the planner and the repo sessions carry the devbox shell rule while this command runs cplat, git and gh
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

@@ -1,0 +1,54 @@
+rules:
+  - id: R1
+    text: "Reading other repos goes through `gh` read-only API calls, so that the planner cannot change a repo."
+    class: practice
+  - id: R2
+    text: "do not invent repos, because `/component:new` creates them."
+    class: practice
+  - id: R3
+    text: "above 12 `plan-check` refuses the slice unless it has `criteria_why:`"
+    class: not a rule
+    source: spec 154
+  - id: R4
+    text: "Only `resource`, `uses`, `expose` and `env` exist"
+    class: not a rule
+    source: spec 045
+  - id: R5
+    text: "Libraries are never pinned, because they are consumed through the service's lockfile bump."
+    class: practice
+    source: ADR-016
+  - id: R6
+    text: "never the spec, `system.yaml`, overlays or another repo, so that the plan is the one change the user reviews."
+    class: practice
+  - id: R7
+    text: "Never restate criteria in `arguments`, because the repo's spec gets the system criteria verbatim"
+    class: practice
+  - id: R8
+    text: "don't list alternatives, so that the user approves one plan."
+    class: practice
+  - id: R9
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R10
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R11
+    text: "Do not clone."
+    class: retired
+    retired: 2026-11-10
+    reason: read-only gh calls already rule out a clone
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R12
+    text: "Status is always `draft` when you write a plan; `done` is always `false`."
+    class: retired
+    retired: 2026-11-10
+    reason: the plan format in step 8 shows both values and plan-check reads them
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R13
+    text: "`shape` values must be valid registry shapes (`plan-check` enforces this)."
+    class: retired
+    retired: 2026-11-10
+    reason: plan-check refuses a shape outside the registry
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

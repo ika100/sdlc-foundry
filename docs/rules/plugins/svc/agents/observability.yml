@@ -1,0 +1,20 @@
+rules:
+  - id: R1
+    text: "never create `k8s/` or manifests in this repo, because the gitops-app repo owns the cluster state"
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R2
+    text: "**Do not** regenerate the templated files, because templated content is the source of truth and drift from it erodes consistency across services"
+    class: practice
+  - id: R3
+    text: "**Do not** provision Grafana, Prometheus server or Jaeger, because this agent only writes application code and `PrometheusRule` YAML"
+    class: practice
+  - id: R4
+    text: "Read env vars; never hardcode endpoints, ports or thresholds, so that each environment sets them without a code change"
+    class: practice
+  - id: R5
+    text: "never file an issue without the user's OK, because the platform repository is public"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033

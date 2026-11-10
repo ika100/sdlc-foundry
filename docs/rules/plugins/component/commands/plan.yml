@@ -1,0 +1,29 @@
+rules:
+  - id: R1
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R2
+    text: "`git status --porcelain` must be empty so that the plan commit holds only the plan."
+    class: practice
+  - id: R3
+    text: "A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape."
+    class: practice
+  - id: R4
+    text: "plan only an approved spec, because approval is the user's gate before any plan or code."
+    class: hard
+    hard: only-approved-specs-built
+  - id: R5
+    text: "Never change the spec, since a change needs a new approval."
+    class: practice
+    source: "ADR-026"
+  - id: R6
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R7
+    text: "never polled for plan.md"
+    class: retired
+    retired: 2026-11-10
+    reason: the foreground flag run_in_background false already returns the plan, so nothing is left to poll
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

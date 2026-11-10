@@ -1,0 +1,28 @@
+rules:
+  - id: R1
+    text: "Check that only the project's own `<version>` changed"
+    class: practice
+  - id: R2
+    text: "never commit to main, never create the git tag and never move it, and never force-push or amend published commits"
+    class: hard
+    hard: release-never-tags-or-commits-main
+    source: spec 138
+  - id: R3
+    text: "Never compute the version or pick a commit"
+    class: practice
+    source: spec 138
+  - id: R4
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`"
+    class: practice
+    source: "#476"
+  - id: R5
+    text: "never file an issue without the user's OK"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R6
+    text: "you never commit to main, never create the git tag and never choose the version or the commit"
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the rules at the end of this prompt
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

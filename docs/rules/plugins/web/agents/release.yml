@@ -1,0 +1,44 @@
+rules:
+  - id: R1
+    text: "never commit to main, never create the git tag (or move it) and never force-push, because GitHub Free has no branch protection to refuse it"
+    class: hard
+    hard: release-never-tags-or-commits-main
+    source: spec 138
+  - id: R2
+    text: "Never choose the version or the commit, because the release must be the image staging tested."
+    class: practice
+  - id: R3
+    text: "run the command through `devbox run --` exactly as shown (never bare `pnpm`, so that versions match CI)"
+    class: practice
+  - id: R4
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R5
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R6
+    text: "**Never commit to main** — all changes go on `release/vX.Y.Z`."
+    class: retired
+    retired: 2026-11-10
+    reason: the hard rule in the opening paragraph already forbids committing to main
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R7
+    text: "**Never create the git tag** and never move it — the orchestrator tagged `TAG_COMMIT` before you started."
+    class: retired
+    retired: 2026-11-10
+    reason: the hard rule in the opening paragraph already forbids creating or moving the tag
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R8
+    text: "**Never compute the version or pick a commit** — use the input values."
+    class: retired
+    retired: 2026-11-10
+    reason: the opening paragraph and the Input section already say to use the given version and commit
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R9
+    text: "**Never force-push** or amend published commits."
+    class: retired
+    retired: 2026-11-10
+    reason: the hard rule in the opening paragraph already forbids force-pushing
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

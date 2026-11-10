@@ -1,0 +1,32 @@
+rules:
+  - id: R1
+    text: "| `pom.xml` | `spring-boot-starter-actuator` (always) and `micrometer-registry-prometheus` |"
+    class: not a rule
+  - id: R2
+    text: "keep tag cardinality bounded (never user ids or raw paths)"
+    class: practice
+  - id: R3
+    text: "never create `k8s/` in this repo"
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R4
+    text: "never hardcode endpoints"
+    class: practice
+  - id: R5
+    text: "never file an issue without the user's OK"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R6
+    text: "Do not regenerate templated files unless one is genuinely missing."
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the role statement to verify and extend, not to regenerate
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R7
+    text: "Do not provision Prometheus, Grafana or collectors"
+    class: retired
+    retired: 2026-11-10
+    reason: the description already says this agent adds no monitoring infrastructure
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

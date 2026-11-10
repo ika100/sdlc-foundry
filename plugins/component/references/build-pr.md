@@ -4,12 +4,12 @@ Read from `/component:build` Phase 7 (the PR body template is also the one `/com
 
 ## PR body
 
-Write it with the Write tool to `.pr-body.md` in the repo root (never into `.git/`). `{{CLOSES}}` stands where the issue lines go; `cplat pr open` fills them from the spec's `tracks:` and the branch's commits.
+Write it with the Write tool to `.pr-body.md` in the repo root (never into `.git/`, because cplat itself moves it there). `{{CLOSES}}` stands where the issue lines go; `cplat pr open` fills them from the spec's `tracks:` and the branch's commits.
 
 ```markdown
 ## Summary
 
-<3–5 sentences: the problem from the spec, what was built, how a user or operator uses it — endpoints, flags, config, responses.>
+<3–5 sentences: the problem, what was built, how a user or operator uses it.>
 
 **Spec:** [docs/specs/<spec_id>/spec.md](docs/specs/<spec_id>/spec.md) · **Plan:** plan.md · **Verification:** verification.md
 
@@ -42,7 +42,7 @@ Write it with the Write tool to `.pr-body.md` in the repo root (never into `.git
 
 ## Open it
 
-One Bash call; it commits what is left with `-s`, pushes the feature branch, opens the PR, adds "Contains WIP commits from an interrupted build: squash-merge." to the body when the branch has `wip(` commits (spec 047), plus the run's generated "How this was built" block (spec 133; never edit it):
+One Bash call; it commits what is left with `-s`, pushes the feature branch, opens the PR, adds "Contains WIP commits from an interrupted build: squash-merge." to the body when the branch has `wip(` commits, plus the run's generated "How this was built" block (never edit it, so that it shows what the run recorded):
 
 ```bash
 cplat pr open --spec <spec_id> --title "feat(<scope>): <spec title, ≤72 chars>" [--no-spec]
@@ -50,7 +50,7 @@ cplat pr open --spec <spec_id> --title "feat(<scope>): <spec title, ≤72 chars>
 
 Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report the failed part and stop; `pr: failed: already open <url>` means the PR exists, so use that URL. Exit 2: fix the reason it prints, then call it again. A re-run never makes a second commit or PR.
 
-**`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed; spec 051) is not an error: the branch is pushed and cplat has moved the body to `.git/PR_BODY.md`. End the report with that exact command as its last line.
+**`pr: ready: <command>`** (headless run, untrusted workspace, or `gh pr create` not allowed) is not an error: the branch is pushed and cplat has moved the body to `.git/PR_BODY.md`. End the report with that exact command as its last line.
 
 ## Final Report
 
@@ -72,4 +72,4 @@ Relay its three lines (`commit:`, `push:`, `pr:`). Exit 1: report the failed par
 <gitops change needed (system.yaml / /instance:promote after release), HIGH findings, sequential fallback, `/component:spec migrate` hint>
 ```
 
-Add the bracketed part of the Implementation row only when `cplat component build state <id>` shows a re-plan count of 1 or more: one `<task>: <files>` entry per re-planned task. Then `cplat platform runs end --outcome done`.
+The bracketed part of the Implementation row appears when `cplat component build state <id>` shows a re-plan count of 1 or more: one `<task>: <files>` entry per re-planned task. Then `cplat platform runs end --outcome done`.

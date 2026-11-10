@@ -1,0 +1,31 @@
+rules:
+  - id: R1
+    text: "Do not add one, because the build injects it and a second copy would drift."
+    class: practice
+  - id: R2
+    text: "The follow-up PR therefore contains only `CHANGELOG.md`."
+    class: not a rule
+  - id: R3
+    text: "never commit to main, never create or move the git tag and never force-push or amend published commits, because GitHub Free has no branch protection and the orchestrator tagged `TAG_COMMIT` before you started"
+    class: hard
+    hard: release-never-tags-or-commits-main
+    source: spec 138
+  - id: R4
+    text: "Never compute the version or pick a commit, because the tagged release is the image staging tested; use the input values."
+    class: practice
+    source: spec 138
+  - id: R5
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R6
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R7
+    text: "you never commit to main, never create the git tag and never choose the version or the commit"
+    class: retired
+    retired: 2026-11-10
+    reason: the Rules section states the same hard rule once, so the role paragraph no longer repeats it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

@@ -1,0 +1,35 @@
+rules:
+  - id: R1
+    text: "do not retry with guesses, because a guess can create the wrong repo"
+    class: practice
+  - id: R2
+    text: "Do not ask again for them, because the user's request to create the repo is the confirmation"
+    class: practice
+  - id: R3
+    text: "never wait for the bootstrap pipeline on `main`, because the feature branch does not depend on it"
+    class: practice
+  - id: R4
+    text: "never suggest building it without a plan, because the plan fixes what the build does"
+    class: practice
+  - id: R5
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R6
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"
+  - id: R7
+    text: "never create public repos"
+    class: retired
+    retired: 2026-11-10
+    reason: the script creates a private repo and only the user's own flag makes one public
+    enforced_by: cplat component new
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R8
+    text: "never overwrite a non-empty directory"
+    class: retired
+    retired: 2026-11-10
+    reason: the script refuses a non-empty directory itself
+    enforced_by: cplat component new
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

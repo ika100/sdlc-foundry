@@ -29,11 +29,16 @@ def comp(tmp_path, monkeypatch):
     monkeypatch.setattr("waits.sleep", sleep)
     answers: list = []
     calls: list = []
+    commits = {SHA: SHA + "\n"}
 
     def gh(args, *, cwd, check=True):
         calls.append(args)
         if args[:2] == ["run", "list"]:
             return json.dumps(answers[min(len([c for c in calls if c[:2] == ["run", "list"]]) - 1, len(answers) - 1)])
+        if args[:1] == ["api"]:
+            sha = args[1].rsplit("/", 1)[-1]
+            ship.GH_ERRORS[" ".join(args[:2])] = "" if sha in commits else f"gh: No commit found for SHA: {sha} (HTTP 422)"
+            return commits.get(sha, "")
         if args[:2] == ["run", "view"]:
             return "##[error] test failed: expected 3, got 4\n"
         return ""
@@ -79,3 +84,25 @@ def test_a_run_still_going_at_the_timeout_exits_2_ac_143_11(comp, capsys):  # AC
     answers += [run("in_progress")]
     rc, out = wait(capsys, repo, "--timeout", "300")
     assert rc == 2 and out[0].startswith("TIMEOUT:") and t["slept"] >= 300
+
+
+def test_a_commit_of_another_repo_says_so_at_once_ac_170_1(comp, capsys):  # AC-170.1
+    repo, answers, calls, t = comp
+    answers += [[]]
+    capsys.readouterr()
+    other = "3eef2a6" + "0" * 33
+    rc = cplat.main(["component", "release", "wait", "--commit", other, "--repo", str(repo)])
+    out = capsys.readouterr().out
+    assert rc == 1 and "NO COMMIT: 3eef2a6 is not a commit of acme/todo-api" in out and t["slept"] == 0
+
+
+def test_a_network_error_on_the_commit_check_keeps_waiting_ac_170_2(comp, capsys, monkeypatch):  # AC-170.2
+    repo, answers, calls, t = comp
+    answers += [[]]
+
+    def gh(args, *, cwd, check=True):
+        ship.GH_ERRORS[" ".join(args[:2])] = "dial tcp: i/o timeout" if args[:1] == ["api"] else ""
+        return "[]" if args[:2] == ["run", "list"] else ""
+    monkeypatch.setattr(ship, "gh", gh)
+    rc, out = wait(capsys, repo)
+    assert rc == 1 and any(ln.startswith("NO RUN:") for ln in out) and t["slept"] >= 120

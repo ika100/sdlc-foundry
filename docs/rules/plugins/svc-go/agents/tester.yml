@@ -1,0 +1,65 @@
+rules:
+  - id: R2
+    text: "integration tests only for real service boundaries, because unit tests cover the rest faster"
+    class: practice
+  - id: R3
+    text: "report them clearly (file, expected vs actual) so that the coder owns the fix"
+    class: practice
+  - id: R4
+    text: "never internals that do not exist yet."
+    class: practice
+  - id: R5
+    text: "Assert on parsed values, never on serialized text, because the order of keys in a JSON object is never part of a contract"
+    class: practice
+  - id: R6
+    text: "Every new test must **fail because the behaviour is missing** (assertion failure, 404, missing module/symbol)."
+    class: practice
+  - id: R7
+    text: "then commit only the test files, so that no implementation reaches the red commit"
+    class: practice
+  - id: R8
+    text: "Committed tests must already be in the project's lint and format style, because a later `lint-fix` that rewrites them makes `cplat spec test-diff` stop the build."
+    class: practice
+  - id: R9
+    text: "do not weaken acceptance tests later to make a build pass, because they are the spec in executable form"
+    class: hard
+    hard: acceptance-tests-fixed
+  - id: R10
+    text: "never the whole page, because a page-wide assertion also matches the template's header, footer and navigation and makes the coder change layout the spec does not ask for"
+    class: experience
+    source: "#478"
+  - id: R11
+    text: "never changes or deletes data it did not create, so that it is repeatable against a shared environment"
+    class: practice
+  - id: R12
+    text: "outside dev `SMOKE_READ_ONLY=1` leaves out every test marked as writing, so only dev gets smoke data (#474)"
+    class: not a rule
+    source: "#474"
+  - id: R13
+    text: "also write a read-only check where the behaviour can be observed without writing"
+    class: experience
+    source: "#474"
+  - id: R14
+    text: "Write files with Write and Edit, never through the shell (`cat >`, heredocs, `tee`, `echo >`), because headless runs refuse those commands."
+    class: practice
+  - id: R15
+    text: "run every tool through `devbox run <script>`, never `go` or `govulncheck` directly, so that versions and flags match CI"
+    class: practice
+  - id: R16
+    text: "read the summary first, the log if it is not enough, and never rerun for full output, because the log holds it"
+    class: practice
+  - id: R17
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R18
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R19
+    text: "Never invoke `go test` directly."
+    class: retired
+    retired: 2026-11-10
+    reason: the Shell rule already forbids calling go directly, so the item repeated it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

@@ -1,0 +1,63 @@
+rules:
+  - id: R2
+    text: "**Do not fix implementation bugs yourself**"
+    class: practice
+  - id: R3
+    text: "never internals that do not exist yet"
+    class: practice
+  - id: R4
+    text: "Assert on parsed values, never on serialized text"
+    class: practice
+  - id: R5
+    text: "Every new test must **fail because the behaviour is missing**"
+    class: practice
+  - id: R6
+    text: "commit only the test files"
+    class: practice
+  - id: R7
+    text: "Committed tests must already be in the project's lint and format style"
+    class: practice
+  - id: R8
+    text: "do not weaken them later to make a build pass"
+    class: hard
+    hard: acceptance-tests-fixed
+  - id: R9
+    text: "never the whole page"
+    class: experience
+    source: "#478"
+  - id: R10
+    text: "The test reaches the service only through the base URL"
+    class: practice
+  - id: R11
+    text: "Smoke runs in dev, staging and prod"
+    class: not a rule
+    source: "#474"
+  - id: R12
+    text: "also write a read-only check where the behaviour can be observed without writing"
+    class: practice
+    source: "#474"
+  - id: R13
+    text: "Write files with Write and Edit, never through the shell"
+    class: practice
+  - id: R14
+    text: "run every tool through `devbox run <script>`, never `mvn` or `java` directly"
+    class: practice
+  - id: R15
+    text: "Run test, quality and lint recipes as `cplat quiet <script>`"
+    class: practice
+    source: spec 108
+  - id: R16
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`"
+    class: practice
+    source: "#476"
+  - id: R17
+    text: "never file an issue without the user's OK"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R18
+    text: "Never invoke `mvn` directly."
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the shell rule that forbids calling mvn directly
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

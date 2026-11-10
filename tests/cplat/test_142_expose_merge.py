@@ -8,4 +8,4 @@ SET = (Path(__file__).resolve().parents[2] / "plugins/component/commands/set.md"
 def test_an_exposure_is_merged_on_green_ci_without_asking_ac_142_1():  # AC-142.1
     step = SET[SET.index("3. **Merge an exposure**"):SET.index("4. **")]   # spec 143 put the wait before the report
     assert "`cplat pr wait <pr-url> --merge`" in step and "do not ask again" in step
-    assert "unless the user said not to merge" in step and "Other changes: leave the PR for review" in step
+    assert "When the user said not to merge, leave the PR open" in step and "Other changes: leave the PR for review" in step

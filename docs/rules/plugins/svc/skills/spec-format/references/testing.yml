@@ -1,0 +1,28 @@
+rules:
+  - id: R1
+    text: "`AC-007.1` never matches `AC-007.10`"
+    class: not a rule
+  - id: R2
+    text: "Every new acceptance test must **fail because the behaviour is missing**"
+    class: practice
+    source: ADR-026
+  - id: R3
+    text: "Put it in a file naming the criterion id and carrying the shape's tag, because `cplat spec trace` counts the criterion only then"
+    class: practice
+    source: spec 091
+    enforced_by: cplat spec trace
+  - id: R4
+    text: "Rules: reach the service only through the base URL; create your own data with unique names"
+    class: practice
+    source: spec 091
+  - id: R5
+    text: "Keep read-only smoke checks too, because outside dev a run where no smoke test passed is reported as not run, never as passed"
+    class: practice
+    source: "#474"
+  - id: R6
+    text: "Assert on parsed values, never on serialized text, because the order of keys in a JSON object is never part of a contract"
+    class: practice
+  - id: R7
+    text: "Coders make these tests pass and never edit, skip or weaken them, because a test that bends to the code proves nothing"
+    class: hard
+    hard: acceptance-tests-fixed

@@ -1,0 +1,50 @@
+rules:
+  - id: R1
+    text: "output read whole (never piped into `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered)"
+    class: practice
+    source: "#476"
+  - id: R2
+    text: "two stops without a new commit or phase change escalate the run, so that you commit each finished task."
+    class: practice
+  - id: R3
+    text: "Stop earlier only after `cplat system ship escalate` or when the run is done, because the hook counts any other stop against the run."
+    class: practice
+  - id: R4
+    text: "Never ask the user, because the spec's approval was the decision."
+    class: practice
+  - id: R5
+    text: "Never merge by hand or promote beyond dev, because `cplat` merges on green checks."
+    class: practice
+  - id: R6
+    text: "push only through `cplat`, never to a default branch or forced, because a shell push reaches GitHub before any check runs."
+    class: hard
+    hard: push-only-through-pr-open
+  - id: R7
+    text: "Never answer a repo spec's questions."
+    class: practice
+    source: spec 141
+  - id: R8
+    text: "Never wait with a shell loop on a file, git HEAD or an image, because `cplat system ship next --wait` blocks until a repo finishes."
+    class: experience
+    source: "#496"
+  - id: R9
+    text: "one call per action, never a shell loop, because each action changes what the next call returns."
+    class: practice
+  - id: R10
+    text: "You start no subagent for a component repo and never work in its clone, because its own session owns it."
+    class: practice
+    source: spec 155
+  - id: R11
+    text: "Never write a polling loop on `cplat component ship status`, `kubectl` or `gh`, because the wait ends at the first state change."
+    class: practice
+  - id: R12
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R13
+    text: "The shape must be `gitops-app`."
+    class: retired
+    retired: 2026-11-10
+    reason: system ship start refuses a repo whose shape is not gitops-app
+    enforced_by: cplat system ship
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

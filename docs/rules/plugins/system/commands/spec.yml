@@ -1,0 +1,34 @@
+rules:
+  - id: R1
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R2
+    text: "This changes only `<component>`"
+    class: not a rule
+    source: spec 140
+  - id: R3
+    text: "Only open questions are asked here, because the product-manager decides the rest by default and lists them under Assumptions, shown at F (spec 149)."
+    class: practice
+  - id: R4
+    text: "never answer an open question for the user or approve without their word, because the approval is the one human decision a system ship runs on."
+    class: hard
+    hard: user-decides-approval
+    source: ADR-084
+  - id: R5
+    text: "Never touch `system.yaml`, overlays or component repos, because this command changes the spec alone."
+    class: practice
+  - id: R6
+    text: "push only through `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced), because a push from the shell reaches GitHub before any check runs."
+    class: hard
+    hard: push-only-through-pr-open
+  - id: R7
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R8
+    text: "anything else needs the user's confirmation."
+    class: retired
+    retired: 2026-11-10
+    reason: the hard push rule now forbids any push outside cplat spec publish and land
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

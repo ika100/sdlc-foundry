@@ -1,0 +1,31 @@
+rules:
+  - id: R1
+    text: "never create `k8s/` or Kubernetes manifests here and never `kubectl apply`, because the gitops-app repo owns the cluster state"
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R2
+    text: "run every tool through `devbox run <script>`, never `docker`, `trivy` or the language tools directly, so that versions and flags match CI"
+    class: practice
+  - id: R3
+    text: "`USER` must be **numeric**, because Kubernetes cannot verify `runAsNonRoot` for a name"
+    class: practice
+  - id: R4
+    text: "never put plaintext secrets in the image, the repo or CI logs, because a leaked secret stays readable in git history and logs"
+    class: hard
+    hard: no-secrets-in-git
+    source: ADR-018
+  - id: R5
+    text: "do not invent others, because pins look images up by these tags"
+    class: practice
+  - id: R6
+    text: "never file an issue without the user's OK, because the platform repository is public"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R7
+    text: "Never `kubectl apply`."
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the hard rule against manifests and kubectl in the first paragraph
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

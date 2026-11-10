@@ -1,0 +1,62 @@
+rules:
+  - id: R1
+    text: "**Do not fix implementation bugs yourself** — report them clearly so that the coder agent can fix them."
+    class: practice
+  - id: R2
+    text: "Test the public surface the criteria and the contract describe — routes, public functions, CLI output — never internals that do not exist yet."
+    class: practice
+  - id: R3
+    text: "Assert on parsed values, never on serialized text, because formatting and key order are no part of a contract"
+    class: practice
+  - id: R4
+    text: "Every new test must **fail because the behaviour is missing** (assertion failure, 404, missing module/symbol)."
+    class: practice
+  - id: R5
+    text: "never edit, skip or weaken an acceptance test to make a build pass, because the tests are the spec in executable form and the user decides about the spec"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 048, spec 165
+  - id: R6
+    text: "never the whole page, because a page-wide assertion also matches the template's header, footer and navigation"
+    class: experience
+    source: "#478"
+  - id: R7
+    text: "never in a `psql … pg_sleep(…)` subprocess, because killing the client leaves the server session and its lock alive and blocks later tests"
+    class: experience
+    source: "#499"
+  - id: R8
+    text: "never changes or deletes data it did not create, so that it is repeatable against a shared environment"
+    class: practice
+  - id: R9
+    text: "For every `(smoke)` criterion also write a read-only check where the behaviour can be observed without writing"
+    class: practice
+  - id: R10
+    text: "Write files with Write and Edit, never through the shell (`cat >`, heredocs, `tee`, `echo >`), because headless runs refuse those commands."
+    class: practice
+  - id: R11
+    text: "**Shell rule:** run every tool through `devbox run <script>`, never `pytest`, `coverage` or `bandit` directly, so that versions and flags match CI; add a missing recipe to `devbox.json` first."
+    class: practice
+  - id: R12
+    text: "read the summary first and open the full log when it is not enough, never rerun with full output, because a rerun floods the context again"
+    class: practice
+  - id: R13
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R14
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R15
+    text: "Never invoke `pytest` or `python -m pytest` directly."
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the shell rule, which already forbids calling pytest directly
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R16
+    text: "the order of keys in a JSON object is never part of a contract"
+    class: retired
+    retired: 2026-11-10
+    reason: the preceding sentence now states that key order is no part of a contract
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

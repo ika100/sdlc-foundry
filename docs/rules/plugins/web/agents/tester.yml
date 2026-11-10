@@ -1,0 +1,61 @@
+rules:
+  - id: R2
+    text: "Never start the app inside a test (no `next start`, no spawned server, no port helper), because the server comes from `playwright.config`'s `webServer`"
+    class: practice
+    source: spec 165
+  - id: R3
+    text: "**Do not fix implementation bugs yourself** — report them clearly (file, expected vs actual) so that the coder can fix them."
+    class: practice
+  - id: R4
+    text: "never internals that do not exist yet, because the coder designs those"
+    class: practice
+  - id: R5
+    text: "Assert on parsed values, never on serialized text, because the order of keys in a JSON object is never part of a contract"
+    class: practice
+  - id: R6
+    text: "Every new test must **fail because the behaviour is missing** (assertion failure, 404, missing module/symbol)."
+    class: practice
+  - id: R7
+    text: "commit only the test files, so that the frozen set is exactly the tests"
+    class: practice
+  - id: R8
+    text: "Committed tests must already be in the project's lint and format style, because a later `lint-fix` that rewrites them makes `cplat spec test-diff` stop the build."
+    class: practice
+  - id: R9
+    text: "never edit, skip or weaken them later to make a build pass, because a test bent to fit the code stops proving the spec"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 048, spec 165
+  - id: R10
+    text: "never the whole page, because a page-wide assertion"
+    class: experience
+    source: "#478"
+  - id: R11
+    text: "never changes or deletes data it did not create, and stays repeatable, because the environment is shared."
+    class: practice
+  - id: R12
+    text: "outside dev `SMOKE_READ_ONLY=1` leaves out every test marked as writing, so that only dev gets smoke data."
+    class: experience
+    source: "#474"
+  - id: R13
+    text: "also write a read-only check where the behaviour can be observed without writing"
+    class: practice
+    source: "#474"
+  - id: R14
+    text: "Write files with Write and Edit, never through the shell (`cat >`, heredocs, `tee`, `echo >`), because headless runs refuse those commands."
+    class: practice
+  - id: R15
+    text: "run every tool through `devbox run <script>`, never `vitest`, `playwright`, `pnpm` or `npx` directly, so that versions and flags match CI"
+    class: practice
+  - id: R16
+    text: "Read the summary first and open the full log when the summary is not enough, never rerun with full output, because a rerun pays for the failure twice."
+    class: practice
+    source: spec 108
+  - id: R17
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R18
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent

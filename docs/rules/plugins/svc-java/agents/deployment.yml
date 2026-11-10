@@ -1,0 +1,30 @@
+rules:
+  - id: R1
+    text: "never create `k8s/` or run `kubectl apply` here"
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R2
+    text: "run every tool through `devbox run <script>`, never `docker`, `trivy` or the language tools directly"
+    class: practice
+  - id: R3
+    text: "`USER` must be **numeric**"
+    class: practice
+  - id: R4
+    text: "never put plaintext secrets in the image, the repo or CI logs"
+    class: hard
+    hard: no-secrets-in-git
+  - id: R5
+    text: "do not invent others"
+    class: practice
+  - id: R6
+    text: "never file an issue without the user's OK"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R7
+    text: "Never `kubectl apply`."
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the first rule of this prompt, which now names kubectl apply as well
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

@@ -156,4 +156,5 @@ def test_build_phase_3_runs_ci_once_and_spawns_only_for_red():
     phase3 = build.split("## Phase 3", 1)[1].split("## Phase 4", 1)[0]
     assert "devbox run lint-fix` and `devbox run ci`" in phase3
     assert "spawn only the agent that owns the red gate" in phase3 and "Spawn all three" not in phase3
-    assert "only when the touched files add internals" in phase3 and "only when a Dockerfile changed" in phase3
+    # spec 168 states the purpose instead of a condition list
+    assert "so that every new internal has a unit test" in phase3 and "so that a changed Dockerfile is built and scanned" in phase3

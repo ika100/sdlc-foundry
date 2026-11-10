@@ -1,0 +1,13 @@
+rules:
+  - id: R1
+    text: "Never write a polling loop on `kubectl`, `gh` or `cplat`, because the wait already ends on the synced revision"
+    class: practice
+    source: spec 143
+  - id: R2
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R3
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"

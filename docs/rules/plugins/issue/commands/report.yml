@@ -1,0 +1,18 @@
+rules:
+  - id: R1
+    text: "Never include secrets, and user code only as far as it reproduces the problem, because the issue is public."
+    class: practice
+  - id: R2
+    text: "never submit without the user's yes, because the platform repository is public"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R3
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R4
+    text: "never paste secrets, tokens or private code"
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the rule of step 1 that no secrets go into the issue
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

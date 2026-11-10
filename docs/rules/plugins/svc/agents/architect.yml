@@ -1,0 +1,27 @@
+rules:
+  - id: R1
+    text: "Number them from `ADR_NEXT` in the prompt (counting up for more than one), never from the highest file you see, because other branches may hold the next numbers."
+    class: practice
+  - id: R2
+    text: "Do not list acceptance test files, because they exist before coding and coders do not edit them."
+    class: practice
+  - id: R3
+    text: "never plan Kubernetes manifests in a service repo, because the gitops-app repo owns them"
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R4
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R5
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R6
+    text: "Never design against code you haven't seen."
+    class: retired
+    retired: 2026-11-10
+    reason: step 1 already says to read the code before designing
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

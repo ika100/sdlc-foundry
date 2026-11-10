@@ -1,0 +1,27 @@
+rules:
+  - id: R1
+    text: "This command is **read-only**: do not fix violations, install packages or modify files, so that a check never changes what it checks."
+    class: practice
+  - id: R2
+    text: "If a tool is not installed, note it in the report as a gap but do not abort the other checks, so that one missing tool hides no other result."
+    class: practice
+  - id: R3
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R4
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R5
+    text: "Do not modify any files."
+    class: retired
+    retired: 2026-11-10
+    reason: the Rules section already says the command is read-only and gives the reason
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R6
+    text: "Do not modify any application code."
+    class: retired
+    retired: 2026-11-10
+    reason: the security agent prompt now says no edits apart from the scan report
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

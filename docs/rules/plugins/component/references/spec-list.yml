@@ -1,0 +1,8 @@
+rules:
+  - id: R1
+    text: "`git status --porcelain` must be empty so that the diff shows only the migration."
+    class: practice
+  - id: R2
+    text: "Never edit specs from these modes, since an edit needs a new approval; to change one, use `/component:spec --amend <id> <change>`."
+    class: practice
+    source: "ADR-026"

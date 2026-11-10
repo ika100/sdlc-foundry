@@ -1,0 +1,22 @@
+rules:
+  - id: R1
+    text: "The metadata must be exact because the orchestrator schedules coders from it"
+    class: practice
+    source: ADR-026
+    enforced_by: cplat spec check
+  - id: R2
+    text: "never write `done` yourself, because a hand-written flag makes a re-run skip work"
+    class: practice
+    source: ADR-026
+    enforced_by: cplat spec task-done
+  - id: R3
+    text: "a task never covers a withdrawn or unknown id, because an uncovered criterion is never built"
+    class: practice
+    source: ADR-026
+    enforced_by: cplat spec check
+  - id: R4
+    text: "Never remove in the same release that adds."
+    class: retired
+    retired: 2026-11-10
+    reason: repeats the two-release rule stated earlier in the same item
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

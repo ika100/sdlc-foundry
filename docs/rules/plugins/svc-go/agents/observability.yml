@@ -1,0 +1,26 @@
+rules:
+  - id: R1
+    text: "keep label cardinality bounded (never label by user id, raw path or error text, because every distinct value creates a new time series)"
+    class: practice
+  - id: R2
+    text: "never create `k8s/` in this repo, because the gitops-app repo owns cluster state"
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R3
+    text: "read endpoints/thresholds from env, never hardcode, so that they change without a rebuild"
+    class: practice
+  - id: R4
+    text: "Do not provision Prometheus, Grafana or collectors, because the cluster owns monitoring infrastructure"
+    class: practice
+  - id: R5
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R6
+    text: "Do not regenerate templated files unless one is genuinely missing."
+    class: retired
+    retired: 2026-11-10
+    reason: the role paragraph and the scaffolding step already say verify and extend, re-creating only a missing file
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

@@ -2,19 +2,21 @@
 description: "Check the code against a spec: every criterion traced to a test and reviewed; writes verification.md, changes no code. Usage: /component:verify [<spec-id>]"
 ---
 
-You are the **verification orchestrator** ([ADR-026](../../../docs/adr/026-feature-specs.md)). `/component:build` runs the same check as its Phase 4; use this command on its own after manual changes, before a review, or for a spec built earlier. You never change code or tests.
+You are the **verification orchestrator** (ADR-026). `/component:build` runs the same check as its Phase 4; use this command on its own for a spec built earlier or changed by hand. You never change code or tests, so that the verdict describes the code as it is.
+
+A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
 **Spec:** $ARGUMENTS (empty → the spec whose `feature/<spec_id>` branch is checked out; otherwise run `cplat spec list` and ask)
 
 ## cplat
 
-`cplat` is on the Bash PATH while the shared plugin is enabled and runs the platform script at the version your plugins were installed from (no fetch); one call per Bash invocation, its output read whole (never piped into `grep`, `head` or `tail`: its last lines carry the decisions and next steps; use `--json` where offered). First call:
+`cplat` is on the Bash PATH (the version your plugins were installed from); one call per Bash invocation. Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered. First call:
 
 ```bash
 cplat shape
 ```
 
-A repo without a shape works too (the reviewer is `svc:reviewer`). A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape.
+- A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. That file already declares it, since the user put it there.
 
 ## Steps
 
@@ -27,6 +29,6 @@ A repo without a shape works too (the reviewer is `svc:reviewer`). A `cplat shap
 
 ## Report
 
-Print the reviewer's `RESULT`, the `NOT MET` list and the path to `verification.md`. For `fail`, suggest the fitting next step: `/component:build <NNN>` (resumes a spec still `building`), `/component:fix "<criterion and reason>"` for a single defect, or `/component:spec --amend <NNN>` when the spec itself is wrong.
+Print the reviewer's `RESULT`, the `NOT MET` list and the `verification.md` path. For `fail`, suggest the fitting next step: `/component:build <NNN>`, `/component:fix "<criterion and reason>"` for a single defect, or `/component:spec --amend <NNN>` when the spec itself is wrong.
 
-> If a step fails because a platform template, script or command misbehaves (not because of the user's code), stop, summarize it in two lines and offer `/issue:report` so the user can file it. Never file anything without their OK (only a `platform` escalation is filed by the platform itself, ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).

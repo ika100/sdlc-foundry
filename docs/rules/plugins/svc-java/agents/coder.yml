@@ -1,0 +1,63 @@
+rules:
+  - id: R2
+    text: "never modify code you haven't seen"
+    class: practice
+  - id: R3
+    text: "constructor injection only"
+    class: practice
+  - id: R4
+    text: "Never put business logic in controllers"
+    class: practice
+  - id: R5
+    text: "change only what the task requires and do not refactor, rename or"
+    class: practice
+  - id: R6
+    text: "never change the parent version, plugin versions or the Java version without being asked"
+    class: practice
+  - id: R7
+    text: "never hardcode secrets"
+    class: hard
+    hard: no-secrets-in-git
+  - id: R8
+    text: "Never edit, skip or weaken them"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 160
+  - id: R9
+    text: "Write files with Write and Edit, never through the shell"
+    class: practice
+  - id: R10
+    text: "run every tool through `devbox run <script>`, never `mvn`, `java` or `javac` directly"
+    class: practice
+  - id: R11
+    text: "Run test, quality and lint recipes as `cplat quiet <script>`"
+    class: practice
+    source: spec 108
+  - id: R12
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`"
+    class: practice
+    source: "#476"
+  - id: R13
+    text: "never file an issue without the user's OK"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R14
+    text: "always read the relevant files before editing"
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the rule never to modify code you have not seen
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R15
+    text: "Do not hand-format."
+    class: retired
+    retired: 2026-11-10
+    reason: the CI quality job now rejects code that lint-fix would change
+    enforced_by: ci:quality
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R16
+    text: "You do not run the full verify for acceptance"
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the last item, which hands the verification to the tester
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

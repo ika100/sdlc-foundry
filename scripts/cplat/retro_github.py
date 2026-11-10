@@ -4,6 +4,7 @@ Everything goes through `gh()` and `tracker()`, so tests fake GitHub. Failures r
 """
 from __future__ import annotations
 
+import json
 import subprocess
 from typing import Protocol
 
@@ -29,6 +30,7 @@ class RetroTracker(Protocol):
     def auto_issues(self, repo: str, since: str) -> list[dict]: ...
     def open_issues(self, repo: str) -> list[dict]: ...
     def retro_issues(self, repo: str) -> list[dict]: ...
+    def issue_states(self, repo: str, numbers: list[int]) -> dict[int, dict]: ...
     def create(self, repo: str, title: str, body: str, labels: list[str]) -> str: ...
     def edit_body(self, repo: str, number: int, body: str) -> str: ...
     def comment(self, repo: str, number: int, body: str) -> None: ...
@@ -71,6 +73,21 @@ class GhRetroTracker:
         return [{"number": int(i["number"]), "title": str(i.get("title") or ""), "url": _url(i),
                  "state": str(i.get("state") or "open"), "labels": _labels(i)}
                 for i in self._issues(f"labels={LABEL}&state=all&per_page=100", repo)]
+
+    def issue_states(self, repo: str, numbers: list[int]) -> dict[int, dict]:
+        """{number: {"state", "body"}} of the readable issues; an unreadable number is left out, never raised."""
+        out: dict[int, dict] = {}
+        for n in sorted(set(numbers)):
+            code, text, _err = gh(["api", f"repos/{repo}/issues/{n}"])
+            if code != 0:
+                continue
+            try:
+                item = json.loads(text)
+            except ValueError:
+                continue
+            if isinstance(item, dict) and isinstance(item.get("state"), str):
+                out[n] = {"state": item["state"], "body": str(item.get("body") or "")}
+        return out
 
     def create(self, repo: str, title: str, body: str, labels: list[str]) -> str:
         args = ["issue", "create", "-R", repo, "--title", title, "--body-file", "-"]

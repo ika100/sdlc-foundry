@@ -1,0 +1,27 @@
+rules:
+  - id: R1
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R2
+    text: "do not retry with guesses, because a wrong guess creates the wrong repos."
+    class: practice
+  - id: R3
+    text: "never from a free-text request, because the plan carries the contract"
+    class: practice
+  - id: R4
+    text: "Never create public repos without `--public` or `visibility: public`, because making code public is the user's choice."
+    class: practice
+  - id: R5
+    text: "Never overwrite a non-empty directory, so that no user file is lost."
+    class: practice
+  - id: R6
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R7
+    text: "do not ask again unless the preview shows something they did not ask for."
+    class: retired
+    retired: 2026-11-10
+    reason: the sentence now says the user is asked once and a surprising preview goes back to them
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

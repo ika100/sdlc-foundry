@@ -110,6 +110,8 @@ jobs:
         run: bash scripts/test-detect-shape.sh
       - name: relative Markdown links resolve
         run: python3 scripts/check-links.py
+      - name: every prompt rule is classified, reasoned and marked (spec 168)
+        run: uv run scripts/cplat/cplat.py platform rules check
       - name: no "$$" in a string the e2e scripts send as a pod command (#323)
         run: python3 scripts/check-e2e-probes.py
       - name: every image and chart comes from the versions table

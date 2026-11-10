@@ -1,7 +1,7 @@
 ---
 spec_id: 168-agent-rules-state-their-reason-and-can
 title: Agent rules state their reason and can retire
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -62,3 +62,5 @@ As an agent running a build, I want to see which rules are hard and which are pr
 
 - 2026-11-09 created
 - 2026-11-09 approved
+- 2026-11-09 building
+- 2026-11-10 done

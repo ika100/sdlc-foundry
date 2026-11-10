@@ -1,0 +1,42 @@
+rules:
+  - id: R1
+    text: "never commit to main, never create the git tag, never move it and never force-push or amend published commits, because GitHub Free offers no branch protection, so nothing else refuses the push"
+    class: hard
+    hard: release-never-tags-or-commits-main
+    source: spec 138
+  - id: R2
+    text: "Never compute the version or pick a commit, because the orchestrator took them from `cplat component release target` and the release is the image staging tested"
+    class: practice
+  - id: R3
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"
+  - id: R4
+    text: "never file an issue without the user's OK, because the platform repository is public"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R5
+    text: "you never commit to main, never create the git tag and never choose the version or the commit"
+    class: retired
+    retired: 2026-11-10
+    reason: it repeats the hard rule and the version rule of the Rules section
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R6
+    text: "**Never commit to main** — all changes go on `release/vX.Y.Z`."
+    class: retired
+    retired: 2026-11-10
+    reason: the hard rule in the Rules section now covers it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R7
+    text: "**Never create the git tag** and never move it — the orchestrator tagged `TAG_COMMIT` before you started."
+    class: retired
+    retired: 2026-11-10
+    reason: the hard rule in the Rules section now covers it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R8
+    text: "**Never force-push** or amend published commits."
+    class: retired
+    retired: 2026-11-10
+    reason: the hard rule in the Rules section now covers it
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

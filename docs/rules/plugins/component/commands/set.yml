@@ -1,0 +1,24 @@
+rules:
+  - id: R1
+    text: "do not ask again, because the branch and PR are what the user asked for"
+    class: practice
+  - id: R2
+    text: "do not ask again, because that request already says so"
+    class: practice
+    source: spec 142
+  - id: R3
+    text: "Never write a polling loop on `kubectl`, `gh` or `cplat`, because the wait already ends on the synced revision"
+    class: practice
+    source: spec 143
+  - id: R4
+    text: "never `kubectl apply`, because the gitops repo and Argo CD own the cluster"
+    class: hard
+    hard: gitops-owns-the-cluster
+  - id: R5
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R6
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"

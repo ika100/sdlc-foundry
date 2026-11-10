@@ -1,0 +1,53 @@
+rules:
+  - id: R2
+    text: "never modify code you haven't seen, because an edit made blind breaks what it cannot see"
+    class: practice
+  - id: R3
+    text: "add `\"use client\"` only for state, effects or browser APIs, so that the client bundle stays small"
+    class: practice
+  - id: R4
+    text: "**Never** create a `pages/` directory, because the Pages Router is unsupported"
+    class: practice
+    source: ADR-004
+  - id: R5
+    text: "change only what the task requires and do not refactor, rename or \"improve\" surrounding code, so that the diff stays reviewable"
+    class: practice
+  - id: R6
+    text: "never use `dangerouslySetInnerHTML` with unsanitized content, because both open the app to injection"
+    class: practice
+  - id: R7
+    text: "never hardcode secrets or expose them through `NEXT_PUBLIC_*`, because a leaked secret cannot be recalled"
+    class: hard
+    hard: no-secrets-in-git
+  - id: R8
+    text: "Never edit, skip or weaken them, because a bent test stops proving the spec"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 160
+  - id: R9
+    text: "Write files with Write and Edit, never through the shell (`cat >`, heredocs, `tee`, `echo >`), because headless runs refuse those commands."
+    class: practice
+  - id: R10
+    text: "run every tool through `devbox run <script>`, never `pnpm`, `npm`, `npx`, `node`, `next`, `eslint`, `tsc` or `vitest` directly, so that versions and flags match CI"
+    class: practice
+  - id: R11
+    text: "Read the summary first and open the full log when the summary is not enough, never rerun with full output, because a rerun pays for the failure twice."
+    class: practice
+    source: spec 108
+  - id: R12
+    text: "| Add a dev-only dependency |"
+    class: not a rule
+  - id: R13
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R14
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R15
+    text: "You do not run the full test suite for verification, hand off to the tester agent. `test-fast` is only for inner-loop sanity checks."
+    class: retired
+    retired: 2026-11-10
+    reason: item 9 already leaves the verification to the tester agent
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

@@ -1,0 +1,144 @@
+rules:
+  - id: R1
+    text: "only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`"
+    class: not a rule
+    source: spec 131
+  - id: R2
+    text: "never ask for the shape."
+    class: practice
+  - id: R3
+    text: "`cplat spec check <id> --require approved` must pass and `docs/specs/<spec_id>/plan.md` exist"
+    class: practice
+    enforced_by: cplat spec check
+  - id: R4
+    text: "Do not wait for CI on `main`, because the build runs on the feature branch"
+    class: practice
+  - id: R5
+    text: "confirms they fail because the behaviour is missing, and commits only test files"
+    class: practice
+  - id: R6
+    text: "`cplat spec trace <id>` must pass; else the missing ids go back to the tester once"
+    class: practice
+    enforced_by: cplat spec trace
+  - id: R7
+    text: "a HEAD other than `$FEATURE_HEAD`"
+    class: experience
+    source: "#501"
+  - id: R8
+    text: "never tell the coder to read them, so that its context stays small"
+    class: practice
+  - id: R9
+    text: "never edit, skip or weaken the acceptance tests, because they are the approved criteria"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 160
+  - id: R10
+    text: "Parallel batch only (`FEATURE_HEAD` = HEAD before the batch)"
+    class: not a rule
+  - id: R11
+    text: "do not push or switch branches, because `cplat pr open` pushes after its checks"
+    class: hard
+    hard: push-only-through-pr-open
+  - id: R12
+    text: "never decide yourself that it is a false alarm, because a changed test is a changed spec"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 048
+  - id: R13
+    text: "(lint/type only;"
+    class: not a rule
+  - id: R14
+    text: "(only what this change can affect)"
+    class: not a rule
+  - id: R15
+    text: "agents only where it is red"
+    class: not a rule
+    source: spec 080
+  - id: R16
+    text: "then spawn only the agent that owns the red gate"
+    class: practice
+  - id: R17
+    text: "lint/type fixes only;"
+    class: not a rule
+  - id: R18
+    text: "A red gate after a bump never goes to a coder, because a dependency is at fault"
+    class: practice
+    source: spec 095
+  - id: R19
+    text: "**Green** → agents only where needed"
+    class: practice
+    source: spec 080
+  - id: R20
+    text: "`cplat spec trace <id> --json` must pass, so that every criterion has its test"
+    class: practice
+    enforced_by: cplat spec trace
+  - id: R21
+    text: "it never fails the build"
+    class: not a rule
+    source: spec 152
+  - id: R22
+    text: "never Kubernetes manifests, because the gitops repo owns the cluster"
+    class: hard
+    hard: gitops-owns-the-cluster
+    source: ADR-017
+  - id: R23
+    text: "say the `system.yaml` entry must change"
+    class: not a rule
+  - id: R24
+    text: "Ask for gitops changes only for wiring not in the spec's *Provided by the system* list"
+    class: practice
+    source: spec 052
+  - id: R25
+    text: "only approved specs are built, and only as planned, because approval is the user's consent"
+    class: hard
+    hard: only-approved-specs-built
+    source: ADR-026
+  - id: R26
+    text: "push only in Phase 7, through `cplat pr open`, because it runs every check first"
+    class: hard
+    hard: push-only-through-pr-open
+  - id: R27
+    text: "Never edit conflicting hunks: a merge conflict is re-planned once per task"
+    class: hard
+    hard: conflicts-not-resolved-by-hand
+    source: spec 094
+  - id: R28
+    text: "never poll for one in a shell loop, because such a loop can wait forever"
+    class: experience
+    source: "#496"
+  - id: R29
+    text: "run every tool through `devbox run <script>`, never `pytest`, `ruff` or `uv` directly"
+    class: practice
+  - id: R30
+    text: "never use `--no-verify` or `--no-gpg-sign`, because a skipped hook leaves no trace"
+    class: hard
+    hard: no-hook-bypass
+  - id: R31
+    text: "never file an issue without the user's OK, because the platform repository is public"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R32
+    text: "Never resolve a conflict yourself."
+    class: retired
+    retired: 2026-11-10
+    reason: repeats the rule against editing conflicting hunks in the Rules section
+    enforced_by: cplat component build merge
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R33
+    text: "The architect amends only the plan and the task reruns on the merged work, without asking."
+    class: retired
+    retired: 2026-11-10
+    reason: build-replan.md tells the architect to change only the plan
+    enforced_by: cplat component build replan-commit
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R34
+    text: "Only tightening one the reviewer found looser than its criterion is decided without the user (`build-tighten.md`)."
+    class: retired
+    retired: 2026-11-10
+    reason: repeats Phase 4 step 3 and build-tighten.md, which decide a tightening
+    enforced_by: cplat spec test-diff
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R35
+    text: "read-only-filesystem friendly"
+    class: not a rule

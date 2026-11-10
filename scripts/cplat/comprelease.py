@@ -172,7 +172,7 @@ def ci_wait(repo: Path, sha: str, timeout: float, interval: float = 10.0, grace:
     import ship
     import waits
     slug, s7 = ship.service_slug(repo), sha[:7]
-    begin, last = waits.now(), None
+    begin, last, known = waits.now(), None, False
     while True:
         out = ship.gh(["run", "list", "-R", slug, "--workflow", "ci", "--branch", "main", "--commit", sha, "--event", "push",
                        "--json", "databaseId,status,conclusion"], cwd=repo, check=False)
@@ -193,7 +193,15 @@ def ci_wait(repo: Path, sha: str, timeout: float, interval: float = 10.0, grace:
                                    *ship.run_logs(repo, [(slug, rid)])]
             if all(r.get("status") == "completed" for r in rs):
                 return waits.REACHED, [f"GREEN: main's ci run on {s7} passed; its image can be tagged"]
-        elif elapsed >= grace:
+        elif not known:                           # #614: a commit of another repo has no run here either
+            args = ["api", f"repos/{slug}/commits/{sha}", "--jq", ".sha"]
+            found = ship.gh(args, cwd=repo, check=False) or ""
+            if not found.strip().startswith(s7) and re.search(r"No commit found|HTTP 404|HTTP 422",
+                                                              ship.GH_ERRORS.get(" ".join(args[:2]), "")):
+                return waits.RED, [f"NO COMMIT: {s7} is not a commit of {slug}; run this in the repo that has it "
+                                   "(`--repo <clone>`); do not tag"]
+            known = found.strip().startswith(s7)       # a network error asks again on the next poll
+        if not rs and elapsed >= grace:
             return waits.RED, [f"NO RUN: no ci run on main for {s7} after {int(grace)}s (a commit that changes only Markdown "
                                "builds no image); do not tag"]
         left = timeout - elapsed

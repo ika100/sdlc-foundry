@@ -1,0 +1,11 @@
+rules:
+  - id: R1
+    text: "Your earlier attempt is a reference only."
+    class: practice
+  - id: R2
+    text: "Do not merge or cherry-pick it, so that the conflict does not return"
+    class: practice
+  - id: R3
+    text: "Change only `files`, `depends_on` and `parallel_safe` of tasks that are not done, so that merged work stays as it is"
+    class: practice
+    source: spec 094

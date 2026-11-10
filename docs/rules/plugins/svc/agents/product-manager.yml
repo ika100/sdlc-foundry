@@ -1,0 +1,38 @@
+rules:
+  - id: R1
+    text: "Decide by default; ask only what you may not decide"
+    class: practice
+    source: spec 149, ADR-084
+  - id: R2
+    text: "Only these go under **Open questions**"
+    class: practice
+    source: spec 149, ADR-084
+  - id: R3
+    text: "never approve a spec or answer its open questions for the user, because approval is the user's own decision"
+    class: hard
+    hard: user-decides-approval
+    source: ADR-084
+  - id: R4
+    text: "never close or label issues, because `cplat issue triage` owns the lifecycle"
+    class: hard
+    hard: triage-never-closes
+    source: ADR-025
+  - id: R5
+    text: "Never mark a system criterion `(smoke)`, because a gitops-app repo has no smoke tests"
+    class: practice
+    enforced_by: cplat spec check
+  - id: R6
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R7
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself"
+    class: hard
+    hard: issue-filing-needs-consent
+    source: ADR-033
+  - id: R8
+    text: "Do not invent another format."
+    class: retired
+    retired: 2026-11-10
+    reason: reading the format reference already fixes the format
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

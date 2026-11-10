@@ -34,6 +34,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat platform update [--migrate] [--data KEY=VALUE] [--dry-run]
   cplat platform fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release
   cplat platform release [--version X.Y.Z] [--dry-run] [--confirm merge|tag]   prepare, merge, tag and publish a platform release
+  cplat platform rules check [--only PATH …] [--json]   every prompt rule classified, reasoned and marked (spec 168)
   cplat platform runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost
   cplat system set --env ENV [--promote RULE] [--policy POLICY] [--host HOST]   one environment's promote rule, policy or host
   cplat runs [--json] [--since DAYS] [--repo OWNER/NAME] [--spec ID]   the run list (active and recent runs)
@@ -81,7 +82,7 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
     "issue": {"triage": ("triage", [])},
     "platform": {"doctor": ("doctor", []), "update": ("update", []), "versions": ("versions", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", []),
-                 "release": ("platrelease", []), "ui": ("ui", []), "pr-check": ("house_rules", []), "eval-gate": ("evalgate", [])},
+                 "release": ("platrelease", []), "ui": ("ui", []), "pr-check": ("house_rules", []), "eval-gate": ("evalgate", []), "rules": ("rulescheck", [])},
 }
 
 PLUMBING = {

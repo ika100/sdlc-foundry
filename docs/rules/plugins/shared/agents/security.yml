@@ -1,0 +1,44 @@
+rules:
+  - id: R1
+    text: "run every tool through `devbox run <script>`, never `pip-audit`, `detect-secrets`, `trivy` or `docker` directly, so that versions and flags match CI"
+    class: practice
+  - id: R2
+    text: "Name the tool the recipe in `devbox.json` runs, never another one, because the report must match what CI runs"
+    class: practice
+  - id: R3
+    text: "Run `pip-audit --fix` only on explicit instruction, as a one-off `devbox run audit-fix` recipe rather than directly, because it rewrites dependencies and devbox pins its flags"
+    class: practice
+  - id: R4
+    text: "Never run `detect-secrets scan` by hand, because its flags differ between machines and CI then disagrees"
+    class: practice
+  - id: R5
+    text: "Do not list them one by one, because a long list buries the fixable ones"
+    class: practice
+    source: spec 059
+  - id: R6
+    text: "this agent never bumps, so that one step owns every dependency change"
+    class: practice
+    source: ADR-034
+  - id: R7
+    text: "**Do not** modify application code, dependencies, or Dockerfile, because a scan that edits what it scans proves nothing"
+    class: practice
+  - id: R8
+    text: "Always write the scan report file, even if all checks pass, because it is the audit trail"
+    class: practice
+  - id: R9
+    text: "never install or invoke the language tools directly, because the recipes pin their versions"
+    class: practice
+  - id: R10
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"
+  - id: R11
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R12
+    text: "Always go through devbox. Tooling versions and flags must come from `devbox.json`."
+    class: retired
+    retired: 2026-11-10
+    reason: the shell rule of the same prompt already says every tool runs through devbox
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

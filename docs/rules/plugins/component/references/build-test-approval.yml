@@ -1,0 +1,6 @@
+rules:
+  - id: R1
+    text: "Only the user approves; never decide yourself that a change is fine, attended or not, because a changed test is a changed spec"
+    class: hard
+    hard: acceptance-tests-fixed
+    source: spec 048

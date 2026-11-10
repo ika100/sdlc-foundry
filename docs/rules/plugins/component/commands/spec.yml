@@ -1,0 +1,44 @@
+rules:
+  - id: R1
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R2
+    text: "`git status --porcelain` must be empty so that the commit holds only the spec; otherwise stop: commit or stash first."
+    class: practice
+  - id: R3
+    text: "A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape."
+    class: practice
+  - id: R4
+    text: "Only open questions are asked here, because assumptions are decided by default and shown at F."
+    class: practice
+    source: "ADR-084, spec 149"
+  - id: R5
+    text: "Change `status` only through `cplat spec`, because it checks each transition."
+    class: practice
+    source: "ADR-026"
+  - id: R6
+    text: "Never answer an open question on the user's behalf and never approve without the user's word, because approval exists only in the user's own words."
+    class: hard
+    hard: user-decides-approval
+  - id: R7
+    text: "the only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced, only `docs/specs/<id>/`), so that every check runs before a push."
+    class: hard
+    hard: push-only-through-pr-open
+  - id: R8
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R9
+    text: "Never write code, a plan, or tests."
+    class: retired
+    retired: 2026-11-10
+    reason: the role paragraph already says the command writes no code and no plan
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R10
+    text: "Print cplat output verbatim; never validate a spec yourself."
+    class: retired
+    retired: 2026-11-10
+    reason: cplat spec check validates every spec, so the agent has nothing to check by hand
+    enforced_by: cplat spec check
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

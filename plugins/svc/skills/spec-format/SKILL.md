@@ -26,17 +26,17 @@ draft ──approve──► approved ──► building ──► done
 ```
 
 - `draft`: being written. Open questions are allowed.
-- `approved`: the user reviewed it, with its assumptions (spec 149). Approval is refused while open questions remain or no criterion exists. Only an approved spec can be planned and built.
+- `approved`: the user reviewed it, with its assumptions. Approval is refused while open questions remain or no criterion exists. **Hard rule:** only an approved spec can be planned and built, because a build without approval overrides the user's consent.
 - `building`: the build started; tasks in `plan.md` are marked `done` as they merge, so a re-run resumes.
 - `done`: built, verified, PR opened.
 - Amending an approved, building or done spec moves it back to `draft`.
 
-Status is never edited by hand or by an agent: it changes through `cplat spec approve` and `cplat spec set-status`.
+Status is never edited by hand or by an agent, because the checks run in `cplat spec approve` and `cplat spec set-status`.
 
 ## Ids
 
 - Spec numbers continue the highest spec or legacy `STORY-NNN` id; the folder is `<NNN>-<slug>` and equals `spec_id`.
-- Criteria are `AC-<NNN>.<n>` with the spec's own number. An id is never reused or renumbered. A withdrawn criterion stays in place, struck through: `- ~~**AC-007.3**~~ withdrawn: <reason>`.
+- Criteria are `AC-<NNN>.<n>` with the spec's own number. An id is never reused or renumbered, because tests and plans cite it. A withdrawn criterion stays in place, struck through: `- ~~**AC-007.3**~~ withdrawn: <reason>`.
 
 ## Deterministic checks (`cplat spec`)
 
@@ -50,4 +50,4 @@ Status is never edited by hand or by an agent: it changes through `cplat spec ap
 | `trace <id>` | every active criterion is named by at least one test |
 | `list` / `index` | status overview with the next command / the table in `docs/backlog.md` |
 
-Agents never validate a spec in prose: the orchestrator runs `cplat spec check` and hands back the exact errors.
+Agents never validate a spec in prose, because only `cplat spec check` is exact: the orchestrator runs it and hands back its errors.

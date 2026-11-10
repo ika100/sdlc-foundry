@@ -1,0 +1,40 @@
+rules:
+  - id: R1
+    text: "never run it without the user's explicit yes, because a prod promotion changes what the users run"
+    class: hard
+    hard: prod-needs-explicit-confirm
+  - id: R2
+    text: "Never write a polling loop on `kubectl`, `gh` or `cplat`, because the wait already ends on the synced revision"
+    class: practice
+    source: spec 143
+  - id: R3
+    text: "never pass it without the user's explicit yes and reason, because it lets prod run an image that staging did not test"
+    class: hard
+    hard: prod-needs-explicit-confirm
+    source: spec 106
+  - id: R4
+    text: "never `kubectl apply`, because the gitops repo and Argo CD own the cluster"
+    class: hard
+    hard: gitops-owns-the-cluster
+  - id: R5
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R6
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"
+  - id: R7
+    text: "Prod must run what staging tested"
+    class: retired
+    retired: 2026-11-10
+    reason: the script refuses a promotion whose registry digests differ, so the sentence states a fact now
+    enforced_by: cplat instance promote
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R8
+    text: "Rules (enforced by the script; do not work around them)"
+    class: retired
+    retired: 2026-11-10
+    reason: the script enforces each rule itself so the warning only repeats that
+    enforced_by: cplat instance promote
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

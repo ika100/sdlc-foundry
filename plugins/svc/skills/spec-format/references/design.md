@@ -1,13 +1,13 @@
 # design.md (optional)
 
-The **how**, when the plan alone would not carry it. Write one when the feature adds or changes a public API, an event, a data model or a dependency, or when there is a real choice to make. Skip it for features that fit in three tasks without new interfaces; the plan's prose is enough.
+The **how**, when the plan alone would not carry it. Write one when the feature adds or changes a public API, an event, a data model or a dependency, or when there is a real choice to make. Skip it for features of three tasks without new interfaces.
 
 ```markdown
 # Design — 007 Price alerts
 
 ## Decisions
 
-- Alerts are evaluated in the tick consumer, not a separate service: one more consumer would double the per-tick latency. ADR: [docs/adr/012-alert-evaluation.md](../../adr/012-alert-evaluation.md) (only for decisions that outlive this feature).
+- Alerts are evaluated in the tick consumer, not a separate service: one more consumer would double the per-tick latency. ADR: [docs/adr/012-alert-evaluation.md](../../adr/012-alert-evaluation.md).
 
 ## Modules
 
@@ -26,10 +26,6 @@ Webhook: `POST <url>` body `{"rule_id": str, "symbol": str, "price": float, "at"
 ## Data
 
 Table `alert_rule` (id, owner, symbol, threshold, direction, webhook_url, last_state); migration in the plan's t1.
-
-## Risks
-
-- Tick bursts: evaluation is O(rules per symbol); index on `symbol`.
 ```
 
 ## Rules

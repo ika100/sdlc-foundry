@@ -1,0 +1,72 @@
+rules:
+  - id: R1
+    text: "Use these values throughout; never compute a version or pick another commit, because the tag, the gates and the staged image must name one commit."
+    class: practice
+    source: "spec 138"
+  - id: R2
+    text: "`git status --porcelain` must be empty so that the gates check only what is released"
+    class: practice
+  - id: R3
+    text: "Image findings are reported in the release summary, fixable and base-image ones apart; they do not stop the release, because most are base-image findings this repo cannot fix."
+    class: practice
+    source: "spec 059"
+  - id: R4
+    text: "`GREEN:` (exit 0) → tag. `RED:` or `NO RUN:` (exit 1; a Markdown change builds no image) → stop and report it; do not tag, since no image exists to re-tag. `TIMEOUT:` (exit 2) → run the same wait again, at most twice; after the third, stop and report an environment problem (cause `environment`); do not tag, since the run has not shown green."
+    class: practice
+    source: "spec 143"
+  - id: R5
+    text: "Never write a polling loop on `gh` or `cplat`, because `cplat component release wait` already waits and reruns."
+    class: practice
+    source: "spec 143"
+    enforced_by: cplat component release wait
+  - id: R6
+    text: "never tag, commit to main or force-push, because GitHub Free has no branch protection."
+    class: hard
+    hard: release-never-tags-or-commits-main
+  - id: R7
+    text: "Then `cplat pr wait <PR URL> --merge` (never a polling loop, since the wait reruns a stuck check)."
+    class: practice
+    source: "#496"
+    enforced_by: cplat pr wait
+  - id: R8
+    text: "Never auto-fix quality, test or security failures (report and stop), so that the released code is what passed the gates; never force-merge (a failed merge goes to the user), because it needs the user's decision."
+    class: practice
+  - id: R9
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
+    class: practice
+    source: "#476"
+  - id: R10
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R11
+    text: "Do not fix anything."
+    class: retired
+    retired: 2026-11-10
+    reason: the gate prompts now say no edits and the Rules section forbids auto-fixing failures
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R12
+    text: "Do not fix bugs."
+    class: retired
+    retired: 2026-11-10
+    reason: the test gate prompt now says no edits and the Rules section forbids auto-fixing failures
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R13
+    text: "all in the foreground (`run_in_background: false`; never polled, #496)"
+    class: retired
+    retired: 2026-11-10
+    reason: the foreground flag already returns each answer, so nothing is left to poll
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R14
+    text: "**The tag goes on `TAG_COMMIT` only**; never another commit, and no release PR merges before the tag."
+    class: retired
+    retired: 2026-11-10
+    reason: Phase 1 and Phase 5 already say the tag goes on TAG_COMMIT before any release PR merges
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R15
+    text: "**Phase 6 merges the follow-up PR after green CI** with `cplat pr wait --merge`; it is never tagged."
+    class: retired
+    retired: 2026-11-10
+    reason: Phase 6 already says the same and its follow-up commit stays untagged
+    enforced_by: cplat pr wait
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]

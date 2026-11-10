@@ -1,0 +1,33 @@
+rules:
+  - id: R1
+    text: "run every tool through `devbox run <script>`, never `ruff`, `mypy` or `uv` directly, so that versions and flags match CI"
+    class: practice
+  - id: R2
+    text: "read the summary first and open the full log if the summary is not enough, never rerun with full output, because the log already holds it"
+    class: practice
+  - id: R3
+    text: "**Do not** modify application logic, only `pyproject.toml` and `.pre-commit-config.yaml`, because behaviour changes belong to the coder"
+    class: practice
+  - id: R4
+    text: "If a tool errors with \"not found\", add it to `devbox.json` (packages or dev dependencies), never a global `pip install` or `uv add`, because an out-of-band install makes local results differ from CI"
+    class: practice
+  - id: R5
+    text: "Always reference violations by `file:line`, so that the coder agent can locate them immediately"
+    class: practice
+  - id: R6
+    text: "Do not add Python config (`pyproject.toml`, ruff, mypy) to a non-Python repo, because its own recipe already runs its tools"
+    class: practice
+  - id: R7
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"
+  - id: R8
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R10
+    text: "Always go through devbox. No `ruff …`, `mypy …`, or `uv run …` directly."
+    class: retired
+    retired: 2026-11-10
+    reason: the shell rule of the same prompt already says every tool runs through devbox
+    benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
