@@ -27,6 +27,9 @@ LABELS = {
     "wontfix": ("ffffff", "Out of scope, will not be done"),
     "auto-filed": ("c5def5", "Filed automatically by the platform (spec 088)"),
     "signal": ("5319e7", "Filed by an autonomy engine from a signal (spec 124)"),
+    "triaged": ("1d76db", "Routed by triage: ready for a fix or a spec (spec 167)"),
+    "needs-decision": ("e99695", "A decision of the user holds this issue (spec 167)"),
+    "stale-premise": ("bfdadc", "Closed: already resolved on main (spec 167)"),
 }
 DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix"}
 BODY_LIMIT = 4000
