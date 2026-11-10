@@ -103,6 +103,8 @@ class Gh:
             return w.view(rid).get("status", "") + "\n"
         if a[0] == "api" and a[1].endswith("/logs"):   # a failed job's own log (#399)
             return ""
+        if a[0] == "api" and "/compare/" in a[1]:   # spec 167: the merge lock asks whether the branch is behind
+            return "0\n"
         if a[0] == "api":   # the release PR's head with the merge commit's tree (#400)
             path = a[1].split("?")[0]
             commit = path.split("/commits/")[1].split("/")[0]

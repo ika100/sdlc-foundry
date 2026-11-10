@@ -102,26 +102,47 @@ class CatchUp:
     lines: list[str] = field(default_factory=list)
 
 
-def _behind(repo: Path, slug: str, url: str, head: str) -> tuple[int, str]:
-    """(commits the head is behind its base, the base branch); 0 when GitHub gives no readable answer, because an unreadable
-    answer is no reason to hold a merge (`--match-head-commit` still guards the head)."""
+BEHIND_TRIES = 4              # reads of the compare answer before the merge is refused
+
+
+class Unknown(PlatformError):
+    """GitHub gave no readable answer on whether the branch is behind its base: a merge on a guess is never done."""
+
+
+def _behind(repo: Path, slug: str, url: str, head: str) -> tuple[int | None, str]:
+    """(commits the head is behind its base, the base branch); None when GitHub gives no readable answer: that is unknown, not 0."""
     base = "main"
     try:
         base = json.loads(ship.gh(["pr", "view", url, "--json", "baseRefName"], cwd=repo, check=False) or "{}").get("baseRefName") or "main"
         out = ship.gh(["api", f"repos/{slug}/compare/{base}...{head}", "--jq", ".behind_by"], cwd=repo, check=False).strip()
-        return (int(out) if out.isdigit() else 0), base
     except Exception:  # noqa: BLE001
-        return 0, base
+        return None, base
+    return (int(out) if out.isdigit() else None), base
+
+
+def _known(repo: Path, url: str, watch: ship.CheckWatch, interval: float) -> tuple[int, str, str]:
+    """(behind, base, head): the head is read when it is not known yet, an unreadable answer is retried with a growing wait,
+    and `Unknown` is raised when it stays unreadable."""
+    backoff = max(interval, 1)
+    for attempt in range(BEHIND_TRIES):
+        head = watch.head or watch.head_sha()
+        if head:
+            behind, base = _behind(repo, slug_of(repo, url), url, head)
+            if behind is not None:
+                return behind, base, head
+        if attempt < BEHIND_TRIES - 1:
+            ship.say(f"  could not tell whether {url} is behind its base; retrying in {int(backoff)}s")
+            ship.sleep(backoff)
+            backoff = min(backoff * 2, 60)
+    raise Unknown(f"could not tell whether {url} is behind its base, so it is not merged",
+                  hint="run the merge again; no pull request merges on a guess")
 
 
 def catch_up(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interval: float) -> CatchUp:
     """Inside the lock, before the merge: a branch behind its base is updated (a merge commit on the branch, never a force
     push) and the checks of its new head are waited for; the first red one ends it. A conflict raises `Conflict`.
-    Without a watched head commit nothing is known about the branch, and nothing is changed."""
-    head = watch.head
-    if not head:
-        return CatchUp()
-    behind, base = _behind(repo, slug_of(repo, url), url, head)
+    A head that is not known yet is read; an unreadable answer raises `Unknown` and nothing merges."""
+    behind, base, head = _known(repo, url, watch, interval)
     if behind <= 0:
         return CatchUp()
     res = run(["gh", "pr", "update-branch", url], cwd=repo, check=False)

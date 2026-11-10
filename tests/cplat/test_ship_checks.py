@@ -30,7 +30,7 @@ class Gh(FakeGh):
             return seq.pop(0) if len(seq) > 1 else seq[0]
         if args[:2] in (["run", "rerun"], ["run", "cancel"], ["pr", "ready"]):
             return ""
-        if args[0] == "api":
+        if args[0] == "api" and "/compare/" not in args[1]:
             return "lan-shop-api\n"
         if args[:2] == ["pr", "create"] and "-R" in args:
             return f"https://github.com/{GITOPS}/pull/3\n"

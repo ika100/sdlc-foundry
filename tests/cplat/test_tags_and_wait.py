@@ -83,9 +83,9 @@ class Gh(FakeGh):
         if args[:2] == ["run", "rerun"]:
             self.calls.append(args)
             return ""
-        if args[:2] == ["pr", "view"] and "headRefOid" in args:
+        if args[:2] == ["pr", "view"] and "headRefOid" in args and self.heads:
             seq = self.heads
-            return json.dumps({"headRefOid": seq.pop(0) if len(seq) > 1 else seq[0]}) if seq else "{}"
+            return json.dumps({"headRefOid": seq.pop(0) if len(seq) > 1 else seq[0]})
         if args[:2] == ["run", "view"] and "headSha" in args:
             return json.dumps({"headSha": self.run_heads[args[2]]}) if args[2] in self.run_heads else "{}"
         return super().__call__(args, cwd=cwd, check=check)

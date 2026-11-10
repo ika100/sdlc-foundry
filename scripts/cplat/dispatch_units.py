@@ -622,6 +622,7 @@ def close_stale(repo: Path, slug: str, number: int, evidence: str, why: str) -> 
     gh(["issue", "comment", str(number), "--body", body], cwd=repo)
     gh(["issue", "close", str(number)], cwd=repo)
     ds.events_add(slug, "stale", None, f"#{number}", evidence)
+    ds.update(slug, lambda st: st.setdefault("stale_closed", []).append(number) if number not in st.get("stale_closed", []) else None)
     return [f"closed #{number} as stale: {evidence}"]
 
 

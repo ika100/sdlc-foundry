@@ -129,8 +129,11 @@ def _held(v: dispatch_ready.Verdict, reason: str, detail: str | None) -> dispatc
     return replace(v, verdict="held", reason=reason, detail=detail, approve=None)
 
 
-def _marker_seen(row: dict) -> bool:
-    """The issue carries the stale marker: it was closed as stale once and is open again, so it is never closed as stale again."""
+def _marker_seen(row: dict, state: dict | None = None) -> bool:
+    """The issue was closed as stale once and is open again, so it is never closed as stale again. Two sources: the number
+    in `state.json` (kept when the dispatcher closes it; survives a removed label) and the stale marker in its comments."""
+    if int(row.get("number") or 0) in ((state or {}).get("stale_closed") or []):
+        return True
     return any(du.STALE_MARK in str(c.get("body") or "") for c in row.get("comments") or [] if isinstance(c, dict))
 
 
@@ -163,7 +166,7 @@ def _schedule(repo: Path, slug: str, policy, snap, state: dict, units: list[dict
             continue                                        # nothing starts and no agent is asked
         if cand.kind == "fix":
             row = rows.get(int(cand.number))
-            if row is not None and not _marker_seen(row):
+            if row is not None and not _marker_seen(row, state):
                 res = dispatch_agent.premise(repo, row, snap.main_sha or "")
                 dispatch_budget.book_agent(slug, res.get("tokens"))
                 e.premise = res["verdict"]

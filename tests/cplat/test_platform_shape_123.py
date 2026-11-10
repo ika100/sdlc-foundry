@@ -525,7 +525,8 @@ def test_ac_123_20_land_waits_for_the_platform_checks_and_squash_merges(prepo, g
                  [check(n, "pass") for n in names] + [check("smoke-service", "skipping")]]
     ok, lines = ship.land(prepo, timeout=600, interval=10)
     assert ok
-    assert gh.merges == [["gh", "pr", "merge", "https://github.com/acme/shop-api/pull/7", "--squash", "--delete-branch"]]
+    assert gh.merges == [["gh", "pr", "merge", "https://github.com/acme/shop-api/pull/7", "--squash", "--delete-branch",
+                                 "--match-head-commit", "0123456789abcdef0123456789abcdef01234567"]]
     assert ship.load_state(prepo)["phase"] == "deploy"
 
 

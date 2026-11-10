@@ -32,3 +32,28 @@ def test_a_busy_lock_stops_the_land_before_a_merge_and_without_a_fix_round(repo,
             ship.land(repo, timeout=0, interval=0)
     assert gh.merges == []
     assert ship.load_state(repo).get("fix_rounds", 0) == 0
+
+
+def test_an_unreadable_compare_answer_merges_nothing(repo, gh, monkeypatch):
+    to_land(repo, gh)
+    gh.checks = [[check("test", "pass")]]
+    answer, asked = gh.__call__, []
+
+    def broken(args, *, cwd, check=True):
+        if args[:1] == ["api"] and "/compare/" in args[1]:
+            asked.append(args)
+            return ""
+        return answer(args, cwd=cwd, check=check)
+    monkeypatch.setattr(ship, "gh", broken)
+    with pytest.raises(merge_lock.Unknown, match="could not tell whether"):
+        ship.land(repo, timeout=600, interval=10)
+    assert gh.merges == []
+    assert len(asked) == merge_lock.BEHIND_TRIES
+
+
+def test_an_unknown_head_is_read_before_the_behind_check(repo, gh, monkeypatch):
+    to_land(repo, gh)
+    watch = ship.CheckWatch(repo, "7", 600)
+    assert watch.head is None
+    assert merge_lock.catch_up(repo, "https://github.com/acme/shop-api/pull/7", watch, 600, 10).updated is False
+    assert ["pr", "view", "7", "--json", "headRefOid"] in gh.calls
