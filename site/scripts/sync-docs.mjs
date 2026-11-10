@@ -15,6 +15,7 @@ const PAGES = [
   { src: 'docs/HOW-IT-WORKS.md', slug: 'guides/how-it-works', title: 'How it works', order: 2 },
   { src: 'docs/console.md', slug: 'guides/console', title: 'The local console', order: 3 },
   { src: 'docs/autonomy.md', slug: 'guides/autonomy', title: 'Autonomy per environment', order: 4 },
+  { src: 'docs/dispatch.md', slug: 'guides/dispatch', title: 'The dispatcher', order: 6 },
   { src: 'docs/unattended-delivery.md', slug: 'guides/unattended-delivery', title: 'Unattended delivery, run records and cost', label: 'Unattended delivery', order: 5 },
   { src: 'docs/ADOPTING.md', slug: 'guides/adopting', title: 'Adopting the platform and troubleshooting', label: 'Adopting and troubleshooting', order: 6 },
   { src: 'docs/UPGRADES.md', slug: 'guides/upgrades', title: 'Upgrades', order: 7 },
