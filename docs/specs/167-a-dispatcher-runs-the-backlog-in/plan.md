@@ -29,6 +29,7 @@ tasks:
     covers: [AC-167.3, AC-167.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: Triage adds the triaged label; labels needs-decision and stale-premise
     files: [scripts/cplat/triage.py, plugins/issue/commands/triage.md, plugins/issue/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
