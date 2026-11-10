@@ -65,8 +65,8 @@ def test_resume_allows_starts_again_and_restarts_paused_units_first_with_their_c
 
 
 def test_drain_lets_running_units_finish_and_starts_nothing_ac_167_11(world):  # AC-167.11
+    world.behave("issue-1.1", then="escalate")                                       # the fake reads it once, at start
     _running(world, honor_stop=True)
-    world.behave("issue-1.1", then="escalate")
     r = world.run("pause", "--drain")
     assert r.rc == 0, r
     r = world.run("start", "--once")
