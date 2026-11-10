@@ -46,6 +46,13 @@ def isolated_run_store(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def isolated_state_home(monkeypatch, tmp_path_factory):
+    """Spec 167: the repo merge lock lives under the state home; a test never takes the developer's real lock, and tests in
+    parallel never wait for each other's. Tests that need their own state home set XDG_STATE_HOME after this."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("state-home")))
+
+
+@pytest.fixture(autouse=True)
 def no_real_auto_issues(monkeypatch):
     """Spec 088: automatic issue filing never reaches GitHub in tests. Tests that need GitHub behaviour install their own
     tracker; the switches that move or stop filing are unset, whatever the developer's shell exports."""
