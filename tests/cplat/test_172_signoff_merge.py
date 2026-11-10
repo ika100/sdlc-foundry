@@ -3,10 +3,15 @@
 Seam: the spec 094 / #501 build fixtures (`repo`, `_feature`, `branch_from`, `build`) with the repo turned into a platform repo
 (`.platform-settings.yml` declares `shape: platform`, the `.copier-answers.yml` goes).
 """
+from pathlib import Path
+
 import replan
 from test_build_parallel_501 import _feature
 from test_replan import SPEC_ID, build, commit
 from test_ship import git, repo  # noqa: F401  (fixture)
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def as_platform(repo):
@@ -72,6 +77,14 @@ def test_after_the_rebase_the_merge_goes_through_ac_172_7(repo, tmp_path, capsys
     git(wt, "-c", "user.name=t", "-c", "user.email=t@t", "rebase", "--signoff", head[:7])
     rc, out, err = build(capsys, repo, "merge", "t1", "br-t1")
     assert rc == 0 and out.startswith("MERGED t1"), err
+
+
+def test_the_build_prompt_rebases_with_signoff_and_merges_again_without_asking_ac_172_7():  # AC-172.7
+    build = (ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
+    step = build.split("### 2.4 Run batches", 1)[1].split("### 2.4a", 1)[0]
+    line = next(ln for ln in step.splitlines() if "without `Signed-off-by`" in ln)
+    assert "Exit 1" in line and "git -C <worktree> rebase --signoff <sha>" in line
+    assert line.rstrip(".").split("rebase --signoff <sha>`, ")[1].startswith("merge again without asking")
 
 
 def test_a_merge_commit_without_sign_off_is_named_too_ac_172_7(repo, capsys):  # AC-172.7

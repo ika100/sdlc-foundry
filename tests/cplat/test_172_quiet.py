@@ -10,6 +10,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -188,6 +189,30 @@ def test_every_template_test_fast_recipe_ends_in_the_arguments_ac_172_3(template
     assert line.rstrip().rstrip(",").endswith('\\"$@\\""')
 
 
+@pytest.mark.parametrize("template", ["service-python", "library-python"])
+def test_a_python_template_test_fast_runs_only_the_given_file_or_k_expression_ac_172_3(template, tmp_path):  # AC-172.3
+    path = ROOT / "templates" / template / "devbox.json"
+    line = next(ln for ln in path.read_text().splitlines() if ln.strip().startswith('"test-fast"'))
+    recipe = line.strip().rstrip(",").split(":", 1)[1].strip()[1:-1].replace('\\"', '"')    # the template is not plain JSON
+    runner = recipe.split(" -- ", 1)[1]                      # the test runner's own command, after the gate script's `--`
+    runner = runner.replace("uv run python", sys.executable).replace("uv run pytest", f"{sys.executable} -m pytest")
+    runner = runner.replace("-p scripts.smoke_pytest", "").replace("-q", "-v")
+    assert '"$@"' in runner and "uv" not in runner.split()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_one.py").write_text("def test_alpha():\n    pass\n\n\ndef test_beta():\n    pass\n")
+    (tmp_path / "tests" / "test_two.py").write_text("def test_gamma():\n    pass\n")
+
+    def ran(*args):
+        p = subprocess.run(["sh", "-c", runner, "sh", *args], cwd=tmp_path, capture_output=True, text=True, check=False,
+                           env={**os.environ, "PYTHONPATH": ""})
+        assert p.returncode == 0, p.stdout + p.stderr
+        return sorted(ln.split()[0] for ln in p.stdout.splitlines() if " PASSED" in ln)
+
+    assert ran() == ["tests/test_one.py::test_alpha", "tests/test_one.py::test_beta", "tests/test_two.py::test_gamma"]
+    assert ran("tests/test_two.py") == ["tests/test_two.py::test_gamma"]
+    assert ran("-k", "alpha or gamma") == ["tests/test_one.py::test_alpha", "tests/test_two.py::test_gamma"]
+
+
 # ---------------- AC-172.5: --repeat ----------------
 
 @pytest.mark.parametrize("argv", [
@@ -262,4 +287,6 @@ def test_a_failure_that_names_no_test_exits_1_without_reruns_ac_172_5(world, mon
     assert repeat(monkeypatch, world, 2, "tests/test_x.py") == 1
     printed = capsys.readouterr().out
     assert "FAILED under load: a failure not attributable to named tests" in printed
+    assert "FAILED (exit 1): devbox run test-fast -- tests/test_x.py" in printed       # the failure summary is printed first
+    assert "RuntimeError: no tests ran" in printed
     assert world.files("calls-") == [] and world.added == []

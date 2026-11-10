@@ -185,6 +185,18 @@ def test_the_load_run_is_step_2_6_between_2_5_and_phase_3_ac_172_6():  # AC-172.
     assert "none:" in step and "tester" in step and "2 rounds" in step
 
 
+def test_step_2_6_sends_failing_tests_to_a_coder_and_repeats_after_the_tester_fix_ac_172_6():  # AC-172.6
+    build = BUILD.read_text()
+    step = _section(build, "### 2.6 Under load", "## Phase 3")
+    assert "Exit 1 → failing tests to a coder as in 2.5" in step
+    assert "coder of a task covering that criterion" in _section(build, "### 2.5", "### 2.6")
+    assert "Exit 3 → `${CLAUDE_PLUGIN_ROOT}/references/build-load-run.md` (the tester fixes the harness; 2 rounds, then escalate)" in step
+    ref = (ROOT / "plugins" / "component" / "references" / "build-load-run.md").read_text()
+    assert "Read from `/component:build` 2.6 on exit 3." in ref
+    assert "Run the repeated run again; after 2 rounds" in ref
+    assert ref.index("**tester**") < ref.index("cplat spec test-diff $RED") < ref.index("Run the repeated run again")
+
+
 def test_the_load_run_reference_tells_the_tester_to_fix_the_harness_only_ac_172_6():  # AC-172.6
     text = (ROOT / "plugins" / "component" / "references" / "build-load-run.md").read_text()
     assert "Harness mode" in text and "fixtures" in text and "helpers" in text and "fakes" in text and "process clean-up" in text
