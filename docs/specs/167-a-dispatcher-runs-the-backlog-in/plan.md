@@ -101,6 +101,7 @@ tasks:
     covers: [AC-167.4, AC-167.6, AC-167.7, AC-167.8, AC-167.9, AC-167.11]
     parallel_safe: true
     depends_on: [t2, t3, t4, t8, t12]
+    done: true
   - id: t15
     title: Dispatcher inbox, needs file, notification pass and daily digest
     files: [scripts/cplat/dispatch_notify.py]
