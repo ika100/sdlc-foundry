@@ -1,7 +1,7 @@
 ---
 spec_id: 182-logs-reach-loki
 title: Logs reach Loki
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [657]
@@ -61,3 +61,4 @@ As a platform maintainer, I want the cluster test to prove that a component's lo
 
 - 2026-11-10 created
 - 2026-11-10 amended: folded in the user's answers (access through the Kubernetes API limited to the namespace, AC-182.3; the component templates log `trace_id`/`span_id`, new AC-182.6).
+- 2026-11-10 approved
