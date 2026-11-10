@@ -23,6 +23,7 @@ tasks:
     covers: [AC-171.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: land_merge - merge, cleanup, head guard, regeneration, settle loop
     files: [scripts/cplat/land_merge.py, scripts/cplat/merge_lock.py]
