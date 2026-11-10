@@ -94,7 +94,8 @@ def test_no_merge_call_while_a_required_check_of_the_new_head_is_pending(world, 
     [attempt] = attempts(world)                        # one merge call, and no required check was pending when it came
     assert attempt["pending"] == []
     new_head_is_checked_before_it_merges(world, start)
-    assert {c["names"] == ["lint", "test"] for c in world.events("checks") if c["sha"] == attempt["head"]} == {True}
+    polls = [c for c in world.events("checks") if c["sha"] == attempt["head"]]
+    assert polls and polls[-1]["names"] == ["lint", "test"]     # the poll before the merge saw both (approved 2026-11-10)
 
 
 @pytest.mark.parametrize("entry, move", MOVES, ids=lambda v: v if isinstance(v, str) else v.__name__)

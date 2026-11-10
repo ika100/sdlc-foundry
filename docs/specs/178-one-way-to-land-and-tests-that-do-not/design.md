@@ -103,8 +103,11 @@ if kind in ("head-moved", "refused"):
 ```
 
 Expected checks after the land moved the head (AC-178.2). Before any change of the head made by the land
-(`merge_lock.catch_up` before `update-branch`, `regenerate` before its push, `ship.push_ahead` before its push) the land
-calls `watch.expect_from_current()`:
+(`merge_lock.catch_up` before `update-branch`, `regenerate` before its push) the land calls `watch.expect_from_current()`.
+`ship.push_ahead` is the exception (amended 2026-11-10, decided by the user's delegate): AC-171.5 forbids judging or
+reading the old head's checks, so it never calls `expect_from_current()`; its expectation is the base branch's required
+status checks from the branch protection (`gh api repos/<slug>/branches/<base>/protection/required_status_checks`,
+failure or none -> `{}`), set on the watch before the push, so no checks query of the old head is made:
 
 ```python
 class CheckWatch:
