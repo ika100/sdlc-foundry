@@ -107,6 +107,7 @@ tasks:
     covers: [AC-167.10, AC-167.12]
     parallel_safe: true
     depends_on: [t2, t6, t9, t12]
+    done: true
   - id: t16
     title: One cycle and its read-only evaluation for plan
     files: [scripts/cplat/dispatch_cycle.py]
