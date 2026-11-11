@@ -66,18 +66,21 @@ tasks:
     covers: [AC-184.6, AC-184.7]
     parallel_safe: true
     depends_on: [t6]
+    done: true
   - id: t10
     title: Unit mode pauses at the usage limit without stalls or counted sessions
     files: [scripts/cplat/supervisor.py, scripts/cplat/units.py]
     covers: [AC-184.1, AC-184.2, AC-184.3]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t11
     title: cplat headless takes a slot, pauses in the legacy loop, wires the new allowlist parts
     files: [scripts/cplat/headless.py]
     covers: [AC-184.1, AC-184.2, AC-184.3, AC-184.4, AC-184.8, AC-184.10]
     parallel_safe: true
     depends_on: [t1, t2, t3, t4, t5]
+    done: true
   - id: t12
     title: The dispatcher counts and shows manual slot holders
     files: [scripts/cplat/dispatch_cycle.py, scripts/cplat/dispatch_view.py]
