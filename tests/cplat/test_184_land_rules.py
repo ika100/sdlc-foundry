@@ -154,6 +154,35 @@ def test_a_conflict_in_another_file_as_well_stops_the_land_ac_184_7(world, capsy
 
 
 @pytest.mark.parametrize("entry", ENTRIES)
+def test_generated_block_adr_index_and_rule_register_rounds_share_one_limit_of_three_ac_184_7(tmp_path, monkeypatch, capsys, entry):  # AC-184.7
+    from land184_world import adr_file, base_adrs, row, with_rows
+    world = make_world(tmp_path, monkeypatch)
+    seed(world, {**base_adrs(), **base_files()})
+    world.feature_adds_spec(199)                                                          # the branch: a spec, an ADR, a rule
+    index = (world.repo / "docs" / "adr" / "README.md").read_text()
+    branch_adds(world, extra={"docs/adr/README.md": with_rows(index, row("005", "branch-thing", "Branch-thing")),
+                              "docs/adr/005-branch-thing.md": adr_file("005", "Branch-thing")})
+    world.other_adds_spec(108)                                                            # round 1: the backlog index conflicts
+    assert conflicts(world)
+    start = world.pr_head()
+
+    def main_adds_an_adr():                                                               # round 2: the ADR index
+        text = world.bare_git("show", "main:docs/adr/README.md")
+        on_main(world, {"docs/adr/README.md": with_rows(text, row("004", "main-thing", "Main-thing")),
+                        "docs/adr/004-main-thing.md": adr_file("004", "Main-thing")})
+
+    moves = iter([main_adds_an_adr, lambda: main_adds(world), lambda: world.other_adds_spec(110)])   # rounds 2, 3 (rule), 4 (backlog)
+    world.on_new_head_checks(lambda: next(moves)(), times=3)
+    tip = git(world.repo, "rev-parse", "HEAD")
+    rc, out, err = land(world, entry, capsys)
+    assert rc == 1 and world.events("merged") == []
+    assert "rebase is a human decision" in err
+    assert int(world.bare_git("rev-list", "--merges", "--count", f"{start}..{world.pr_head()}")) == 3     # three rounds of three kinds, no fourth
+    assert git(world.repo, "status", "--porcelain") == ""
+    assert git(world.repo, "rev-parse", "HEAD") == world.pr_head() != tip
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
 def test_a_result_the_rules_check_refuses_stops_the_land_naming_its_first_failure_ac_184_7(world, capsys, entry):  # AC-184.7
     on_branch(world, {YML: entries_text([*BASE, R_BRANCH])})          # an entry for a sentence the prompt does not have
     main_adds(world)

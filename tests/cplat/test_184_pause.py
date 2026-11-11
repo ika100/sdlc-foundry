@@ -29,14 +29,18 @@ class FakeTime:
         self.now = NOW
         self.sleeps = []
         self.run_clock = run_clock
+        self.count = lambda: 0           # how many sessions have started (a test sets it)
+        self.log = []                    # per sleep: (sessions started when it began, the time when it ended)
 
     def read(self):
         return self.now
 
     def sleep(self, seconds):
         self.sleeps.append(seconds)
+        started = self.count()
         self.now += dt.timedelta(seconds=seconds)
         self.run_clock.tick(seconds)
+        self.log.append((started, self.now))
 
 
 @pytest.fixture()
@@ -128,10 +132,12 @@ def invocations():
 def test_a_reset_time_pauses_the_unit_until_one_minute_after_it_and_starts_the_same_unit_again_ac_184_1(lw, T, capsys):  # AC-184.1
     reset = NOW + dt.timedelta(hours=4)
     lw.set({"task:t2": [limit_message(reset)]})
+    T.count = lambda: len(lw.sessions())
     assert lw.w.run() == 0
     lines = lines_of(capsys)
     assert "paused: usage limit, resumes at 2026-11-11 14:01" in lines
     assert T.sleeps == [4 * 3600 + 60] and T.now >= reset + dt.timedelta(minutes=1)
+    assert T.log == [(3, reset + dt.timedelta(minutes=1))]          # 3 sessions had started; the next one only after reset + 1 minute
     assert lw.units() == ["red-tests", "task:t1", "task:t2", "task:t2", "task:t3", "verification", "land"]
     assert lw.w.units_run() == FULL                                  # the real work is the same as without the pause
     assert not any("escalat" in ln or "needs you" in ln for ln in lines)
@@ -237,10 +243,12 @@ def test_the_legacy_loop_pauses_and_starts_the_same_prompt_again_ac_184_1(legacy
     reset = NOW + dt.timedelta(hours=2)
     ship.start(legacy_repo, "7", True)
     fake_claude(tmp_path, monkeypatch, legacy_script([limit_message(reset), "done"]))
+    T.count = lambda: legacy_runs(legacy_repo)
     assert headless.main(["/svc:ship 7", "--repo", str(legacy_repo), "--max-runs", "1"]) == 0   # the paused session is no run
     lines = lines_of(capsys)
     assert "paused: usage limit, resumes at 2026-11-11 12:01" in lines
     assert T.sleeps == [2 * 3600 + 60] and legacy_runs(legacy_repo) == 2
+    assert T.log == [(1, reset + dt.timedelta(minutes=1))]          # one session had started; the second only after reset + 1 minute
     assert any(ln.startswith("HEADLESS shop-api: shipped 007-price-alerts") for ln in lines)
     assert invocations() == 1                                                    # AC-184.3
 

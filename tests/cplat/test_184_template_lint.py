@@ -287,7 +287,6 @@ def test_the_local_ci_runs_the_changed_template_lint_before_the_cplat_tests_ac_1
     text = (ROOT / "scripts" / "ci-local.sh").read_text()
     assert "template-lint.py --changed" in text
     assert text.index("template-lint.py --changed") < text.index("pytest tests/cplat")
-    assert "(spec 184)" in text
 
 
 def test_the_smoke_jobs_call_the_script_instead_of_their_own_lint_lines_ac_184_5():  # AC-184.5

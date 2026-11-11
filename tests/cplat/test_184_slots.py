@@ -136,6 +136,12 @@ def test_every_worktree_and_clone_of_the_repo_shares_the_slots_ac_184_8(repo, ho
     with pytest.raises(run_slot.SlotBusy, match=re.escape(f"pid {holder.pid}")) as e:
         run_slot.held(other, "/component:ship 183", wait=False).__enter__()
     assert str(repo.resolve()) in str(e.value)
+    clone = tmp_path / "separate-clone"                                              # a clone with the same origin shares them too
+    subprocess.run(["git", "clone", "-q", str(repo), str(clone)], check=True)
+    subprocess.run(["git", "remote", "set-url", "origin", f"https://github.com/{SLUG}.git"], cwd=clone, check=True)
+    with pytest.raises(run_slot.SlotBusy, match=re.escape(f"pid {holder.pid}")) as e2:
+        run_slot.held(clone, "/component:ship 184", wait=False).__enter__()
+    assert str(repo.resolve()) in str(e2.value)
 
 
 def test_a_run_inside_a_run_takes_no_slot_and_prints_nothing_ac_184_8(repo, holders, monkeypatch):  # AC-184.8

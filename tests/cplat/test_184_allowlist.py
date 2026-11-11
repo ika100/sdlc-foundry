@@ -3,6 +3,7 @@
 Seams: `preflight.run_allowlist` / `refused_rules` / `matches` / `log_dir_rule` / `ci_log_dir` (design.md, Contract, "Land allowlist") and
 the allowlist block and the command line of `cplat headless --dry-run` (the fake world of spec 131).
 """
+import os
 from pathlib import Path
 
 import pytest
@@ -95,6 +96,17 @@ def w(tmp_path, monkeypatch):
     return World(tmp_path, monkeypatch, plan=True)
 
 
+def saved_logs_rule(repo):
+    """The Read rule of the folder `cplat quiet` saves its logs in, built from XDG_CACHE_HOME and `quiet._log_path` alone."""
+    import quiet
+    folder = quiet._log_path(repo, "test-fast").parent
+    assert folder == Path(os.environ["XDG_CACHE_HOME"]) / "sdlc-foundry" / "logs" / repo.name
+    try:
+        return f"Read(~/{folder.relative_to(Path.home())}/**)"
+    except ValueError:
+        return f"Read(//{str(folder).lstrip('/')}/**)"
+
+
 def block_of(out):
     return [ln[2:] for ln in out.splitlines() if ln.startswith("  ")]
 
@@ -102,7 +114,7 @@ def block_of(out):
 def test_the_dry_run_of_a_ship_shows_the_log_folder_and_the_view_rules_ac_184_4(w, capsys):  # AC-184.4
     assert w.run("--dry-run") == 0
     out = capsys.readouterr().out
-    folder = preflight.log_dir_rule(preflight.ci_log_dir(w.repo))
+    folder = saved_logs_rule(w.repo)
     assert folder.endswith("/sdlc-foundry/logs/shop-api/**)")
     block = block_of(out)
     assert folder in block and all(r in block for r in GH)
@@ -116,7 +128,7 @@ def test_the_dry_run_of_a_ship_shows_the_log_folder_and_the_view_rules_ac_184_4(
 
 def test_every_session_of_a_ship_is_granted_them_ac_184_4(w):  # AC-184.4
     assert w.run() == 0
-    folder = preflight.log_dir_rule(preflight.ci_log_dir(w.repo))
+    folder = saved_logs_rule(w.repo)
     for s in w.sessions():
         argv = s["argv"]
         granted = argv[argv.index("--allowedTools") + 1:argv.index("--disallowedTools")]
