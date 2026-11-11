@@ -22,6 +22,7 @@ import ship
 import spec as specmod
 from test_143_shipwait import Clock
 from test_appship_097 import GITOPS, SLUG, SPEC, World, git
+from waiting import fake_prelude, wait_process
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -203,10 +204,10 @@ def test_the_real_spawn_links_the_session_and_detaches_it_ac_155_3_ac_155_7(tmp_
 
 def test_alive_is_false_for_a_finished_child_and_true_for_a_running_headless_ac_155_5(tmp_path):  # AC-155.5
     done = subprocess.Popen([sys.executable, "-c", "pass"])
-    time.sleep(0.3)
+    wait_process(done)
     assert appship_proc.REAL_ALIVE(done.pid) is False
     script = tmp_path / "headless"
-    script.write_text("import time\ntime.sleep(5)\n")
+    script.write_text(fake_prelude() + "\nimport time\ntime.sleep(5)  # fake-delay: a headless that keeps running until the test kills it\n")
     live = subprocess.Popen([sys.executable, str(script)])
     try:
         assert appship_proc.REAL_ALIVE(live.pid) is True

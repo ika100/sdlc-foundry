@@ -2,8 +2,9 @@
 phase `pr`, and `ship pr` opened a second PR from a branch identical to main; its squash commit was empty, so CI built no
 image and deploy never got a dev pin. A start now resumes at deploy with the merged PR, and `ship pr` refuses an empty PR."""
 import json
+import datetime
 import subprocess
-import time
+import types
 
 import core
 import pytest
@@ -69,7 +70,14 @@ def test_the_duplicate_runs_empty_merge_is_skipped_for_the_real_one(merged, monk
     the earlier merge that built the image, not revive the duplicate."""
     monkeypatch.setattr(ship, "missing_gitops_token", lambda _repo: False)
     _archive_done_run(merged)                              # the real merge: SHA
-    time.sleep(1.1)                                        # archives are named by the second
+    later = datetime.timedelta(seconds=2)                  # archives are named by the second: the clock moves on, no sleep
+
+    class LaterDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return super().now(tz) + later
+
+    monkeypatch.setattr(ship, "dt", types.SimpleNamespace(**{**vars(datetime), "datetime": LaterDatetime}))
     git(merged, "switch", "-q", "main")
     git(merged, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "duplicate (#4)")
     empty = git(merged, "rev-parse", "HEAD")
