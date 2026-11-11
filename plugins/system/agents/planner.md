@@ -56,7 +56,7 @@ repos:
     criteria:                     # this repo's own, 3 to 8 (spec 147)
       - "Given <context>, when <action>, then <observable outcome> (system AC-<NNN>.1)"
     order: before-merge           # gitops-app entry only
-    arguments: |                  # optional: notes only this repo needs (a table to reuse, a library version)
+    arguments: |                  # optional: notes only this repo needs
       <short notes>
     depends_on: []
     done: false
