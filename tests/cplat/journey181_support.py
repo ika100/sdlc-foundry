@@ -11,6 +11,7 @@ import stat
 import pytest
 
 import runs
+from waiting import with_prelude
 
 BASE = dt.datetime(2026, 11, 10, 8, 0, 0, tzinfo=dt.timezone.utc)
 START, END = "2026-11-10T08:00:00Z", "2026-11-10T09:00:00Z"
@@ -76,7 +77,7 @@ class World:
         bindir = tmp_path / "bin"
         bindir.mkdir()
         gh = bindir / "gh"
-        gh.write_text(f'#!/bin/sh\nif [ "$1 $2" = "run list" ]; then cat "{self.gh_runs}"; else echo "[]"; fi\n')
+        gh.write_text(with_prelude(f'#!/bin/sh\nif [ "$1 $2" = "run list" ]; then cat "{self.gh_runs}"; else echo "[]"; fi\n'))
         gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
         monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
 
