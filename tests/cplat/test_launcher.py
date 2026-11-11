@@ -158,7 +158,7 @@ def test_output_to_a_pipe_arrives_line_by_line_335(tmp_path):
     probe.write_text(f"import sys, time\nsys.path.insert(0, {str(ROOT / 'scripts' / 'cplat')!r})\nimport cplat\n"
                      "cplat._resolve = lambda argv: ('probe_mod', [], 'probe')\n"
                      "sys.modules['probe_mod'] = type(sys)('probe_mod')\n"
-                     "sys.modules['probe_mod'].main = lambda rest: (print('first'), time.sleep(30), 0)[2]\n"
+                     "sys.modules['probe_mod'].main = lambda rest: (print('first'), time.sleep(30), 0)[2]  # fake-delay: a command that stays running\n"
                      "sys.exit(cplat.main([]))\n")
     env = {k: v for k, v in os.environ.items() if k != "PYTHONUNBUFFERED"}
     p = subprocess.Popen(["uv", "run", "--quiet", "--with", "pyyaml", "--with", "ruamel.yaml", "python", str(probe)],
