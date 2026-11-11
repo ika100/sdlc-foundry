@@ -28,7 +28,7 @@ FAKE = textwrap.dedent("""
 
     def main(argv):
         print("first line", flush=True)
-        time.sleep(1.5)
+        time.sleep(1.5)  # fake-delay: gives the parent time to close its read end before the fake writes again
         for i in range(2000):
             print("more output", i)
         return 0

@@ -3,13 +3,14 @@ import stat
 import subprocess
 
 import refscan
+import waiting
 
 
 def fake_gh(tmp_path, monkeypatch, body):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(parents=True)
     gh = bin_dir / "gh"
-    gh.write_text("#!/bin/sh\n" + body + "\n")
+    gh.write_text(waiting.with_prelude("#!/bin/sh\n" + body + "\n"))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
     repo = tmp_path / "repo"

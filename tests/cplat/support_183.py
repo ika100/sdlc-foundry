@@ -5,6 +5,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import waiting
+
 SPEC_TEXT = """---
 spec_id: {name}
 title: {title}
@@ -83,6 +85,6 @@ def fake_gh(tmp_path, monkeypatch, prs=None, fail=False):
     doc = [{"number": n, "headRefName": f"pr/{n}", "files": [{"path": p} for p in paths]} for n, paths in (prs or {}).items()]
     script = bin_dir / "gh"
     body = "#!/bin/sh\nexit 1\n" if fail else f"#!/bin/sh\ncat <<'EOF'\n{json.dumps(doc)}\nEOF\n"
-    script.write_text(body)
+    script.write_text(waiting.with_prelude(body))
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
