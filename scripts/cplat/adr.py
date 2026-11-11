@@ -6,18 +6,13 @@ adds that is already taken: twice in docs/adr, or by another branch.
 """
 from __future__ import annotations
 
-import json
 import re
-import subprocess
 from pathlib import Path
+
+import refscan
 
 ADR_DIR = "docs/adr"
 NUMBER = re.compile(r"^(\d{3,4})-.+\.md$")
-
-
-def _git(root: Path, *args: str) -> str:
-    p = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=False)
-    return p.stdout if p.returncode == 0 else ""
 
 
 def numbered(names: list[str]) -> dict[int, set[str]]:
@@ -36,35 +31,22 @@ def local(root: Path) -> dict[int, set[str]]:
 
 
 def at_ref(root: Path, ref: str) -> dict[int, set[str]]:
-    return numbered(_git(root, "ls-tree", "--name-only", f"{ref}:{ADR_DIR}").splitlines())
+    return numbered(refscan.entries_at(root, ref, ADR_DIR))
 
 
 def _base(root: Path) -> str | None:
-    for ref in ("origin/main", "main"):
-        if _git(root, "rev-parse", "--verify", "--quiet", ref).strip():
-            return ref
-    return None
+    return refscan.base(root)
 
 
 def other_branches(root: Path) -> dict[str, dict[int, set[str]]]:
     """The ADRs of every pushed branch except main and the branch checked out here (no network: the last fetch)."""
-    current = _git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
-    refs = _git(root, "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin").split()
-    skip = {"origin/main", "origin/HEAD", "origin", f"origin/{current}"}
-    return {ref: at_ref(root, ref) for ref in refs if ref not in skip}
+    return {ref: numbered(names) for ref, names in refscan.other_branches(root, ADR_DIR).items()}
 
 
 def open_prs(root: Path) -> dict[str, set[str]]:
     """ADR file names each open PR adds, by PR number (empty when `gh` cannot be asked)."""
-    try:
-        p = subprocess.run(["gh", "pr", "list", "--state", "open", "--limit", "100", "--json", "number,headRefName,files"],
-                           cwd=root, capture_output=True, text=True, timeout=60, check=False)
-        rows = json.loads(p.stdout) if p.returncode == 0 else []
-    except (OSError, subprocess.TimeoutExpired, ValueError):
-        return {}
-    current = _git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
-    return {f"#{r['number']}": {Path(f["path"]).name for f in r.get("files") or [] if f.get("path", "").startswith(ADR_DIR + "/")}
-            for r in rows if r.get("headRefName") != current}
+    prs = refscan.open_pr_paths(root) or {}
+    return {pr: {Path(p).name for p in paths if p.startswith(ADR_DIR + "/")} for pr, paths in prs.items()}
 
 
 def added_here(root: Path) -> dict[int, set[str]]:
