@@ -43,5 +43,10 @@ management:
 {%- endif %}
 
 logging:
+{%- if needs_observability %}
+  structured:
+    format:
+      console: logstash          # JSON lines; the OTel Java agent's MDC keys trace_id and span_id become top-level fields
+{%- endif %}
   level:
     root: ${LOG_LEVEL:INFO}
