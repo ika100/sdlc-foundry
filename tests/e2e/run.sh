@@ -481,10 +481,10 @@ echo "ok   traces and metrics arrive at the collector"
 step "Logs: e2e-api's line reaches Loki with its labels and trace id, Tempo has the trace, the collector's own lines are not collected (AC-182.1 to .5)"
 kubectl --context k3d-$cluster -n observability rollout status deploy/lgtm --timeout=300s || {
   kubectl --context k3d-$cluster -n observability describe pod -l app=lgtm | tail -30; fail "the lgtm stack in observability did not become ready"; }
-# Loki (3100) and Tempo (3200) are not in the lgtm Service: forward them from the pod (background PID, killed in cleanup)
-kubectl --context k3d-$cluster -n observability port-forward deploy/lgtm 13100:3100 13200:3200 >"$work/lgtm-port-forward.log" 2>&1 &
+# Loki (3100), Tempo (3200) and Grafana (3000) are not in the lgtm Service: forward them from the pod (background PID, killed in cleanup)
+kubectl --context k3d-$cluster -n observability port-forward deploy/lgtm 13100:3100 13200:3200 13000:3000 >"$work/lgtm-port-forward.log" 2>&1 &
 pf_pid=$!
-loki=http://127.0.0.1:13100 tempo=http://127.0.0.1:13200
+loki=http://127.0.0.1:13100 tempo=http://127.0.0.1:13200 grafana=http://127.0.0.1:13000
 for _ in $(seq 1 60); do
   kill -0 "$pf_pid" 2>/dev/null || { cat "$work/lgtm-port-forward.log"; fail "the port-forward to the lgtm pod ended"; }
   [ "$(curl -s -m 3 "$loki/ready" || true)" = ready ] && break; sleep 2
@@ -532,6 +532,28 @@ for _ in $(seq 1 20); do
 done
 [ "$tcode" = 200 ] && [ -s "$work/tempo-trace.json" ] || fail "Tempo has no trace $tid at /api/traces/$tid (HTTP $tcode): the spans of the request did not arrive"
 echo "ok   Tempo returned the trace $tid"
+# Grafana links the Loki entry to its Tempo trace and the trace to "logs for this span" (AC-182.2): read the provisioned data sources
+# (the otel-lgtm image allows anonymous Admin; admin:admin is its default login if that is off)
+gcode=000
+for _ in $(seq 1 20); do
+  gcode=$(curl -s -m 10 -u admin:admin -o "$work/grafana-datasources.json" -w '%{http_code}' "$grafana/api/datasources" || true)
+  [ "$gcode" = 200 ] && break; sleep 3
+done
+[ "$gcode" = 200 ] || fail "Grafana's /api/datasources answered HTTP $gcode (cannot check the Loki/Tempo links, AC-182.2)"
+python3 - "$work/grafana-datasources.json" <<'PY' || fail "Grafana data sources lack the trace/log link (AC-182.2); see the line above"
+import json, sys
+sources = json.load(open(sys.argv[1]))
+tempo = [s for s in sources if s.get("type") == "tempo"]
+loki = [s for s in sources if s.get("type") == "loki"]
+if not tempo or not loki:
+    sys.exit(f"Grafana has no {'Tempo' if not tempo else 'Loki'} data source")
+if not any((s.get("jsonData") or {}).get("tracesToLogsV2") for s in tempo):
+    sys.exit("the Tempo data source has no tracesToLogsV2 to Loki (the trace shows no 'logs for this span')")
+fields = [f for s in loki for f in (s.get("jsonData") or {}).get("derivedFields") or []]
+if not any("trace_id" in json.dumps(f) for f in fields):
+    sys.exit("the Loki data source has no derivedFields trace_id -> Tempo (the log entry does not link to its trace)")
+PY
+echo "ok   Grafana links Loki's trace_id to Tempo and Tempo's spans to Loki (tracesToLogsV2, derivedFields)"
 # the collector's own output is not collected (AC-182.4); Loki has the other lines by now, so an empty answer is meaningful
 own=$(loki_query '{service_name="otel-collector"}')
 case "$own" in *'"result":[]'*) echo "ok   no line of the collector itself in Loki";; *) fail "Loki holds lines of service_name=\"otel-collector\" (the collector collects its own output): $(cut -c1-300 <<< "$own")";; esac
