@@ -79,7 +79,7 @@ def fake_prelude(kind: str = "python") -> str:
     if kind == "python":
         return 'import os, time; time.sleep(float(os.environ.get("TEST_FAKE_DELAY", "0")))  # fake-delay: slows the fake by TEST_FAKE_DELAY'
     if kind == "sh":
-        return 'sleep "${TEST_FAKE_DELAY:-0}"  # fake-delay: slows the fake by TEST_FAKE_DELAY'
+        return '/bin/sleep "${TEST_FAKE_DELAY:-0}"  # fake-delay: slows the fake by TEST_FAKE_DELAY'
     raise ValueError(f"unknown kind {kind!r}: python or sh")
 
 
