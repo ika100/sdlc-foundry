@@ -52,12 +52,14 @@ tasks:
     covers: [AC-178.5]
     parallel_safe: true
     depends_on: [t4]
+    done: true
   - id: t7
     title: Remaining process and time tests on events and the fake clock
     files: [tests/cplat/test_appship_097.py, tests/cplat/test_ship_no_duplicate_pr_452.py, tests/cplat/test_155_repo_sessions.py, tests/cplat/test_109_chain_remote.py, tests/cplat/land171_world.py, tests/cplat/units131_support.py]
     covers: [AC-178.5]
     parallel_safe: true
     depends_on: [t4]
+    done: true
 ---
 
 # Plan — 178 One way to land and tests that do not race
