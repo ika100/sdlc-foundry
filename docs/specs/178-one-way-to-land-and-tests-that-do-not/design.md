@@ -211,3 +211,4 @@ The stress gate (A4) runs during the build's verification, not in CI:
   a stop during `cplat pr wait`).
 - The fake `gh` of the seam world answers `pr checks --required` and refuses `pr merge` the way GitHub does
   (`--match-head-commit` mismatch, a pending required check), so the same world serves the AC-178.4 scenarios.
+- `units.py`'s Stop-gate change was needed by AC-178.8.

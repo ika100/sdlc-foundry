@@ -2,7 +2,8 @@
 """Fail on every real sleep in tests/cplat (spec 178): a test waits for an event or a file, or uses the fake clock.
 
 A sleep inside a string literal (a fake program standing in for a slow process) is allowed on a line carrying
-`fake-delay: <reason>`. tests/cplat/waiting.py, the helper that polls, is exempt, and so are the FIXTURE_FILES.
+`fake-delay: <reason>`. tests/cplat/waiting.py, the helper that polls, is exempt; the FIXTURE_FILES are exempt
+only for sleep text inside string literals, a real sleep call in them is still flagged.
 
 Usage: check-test-sleeps.py [--root DIR]
 """
@@ -60,14 +61,15 @@ def main() -> int:
     base = root / "tests" / "cplat"
     lines = []
     for path in sorted(base.rglob("*.py")):
-        if path == base / "waiting.py" or path.name in FIXTURE_FILES:
+        if path == base / "waiting.py":
             continue
         try:
             tree = ast.parse(path.read_text(), filename=str(path))
         except SyntaxError:
             continue
         rel = path.relative_to(root).as_posix()
-        for lineno, text in sorted(set(code_sleeps(tree) + text_sleeps(tree))):
+        found = code_sleeps(tree) + ([] if path.name in FIXTURE_FILES else text_sleeps(tree))
+        for lineno, text in sorted(set(found)):
             lines.append(f"{rel}:{lineno}: {text} {HINT}")
     if lines:
         print("\n".join(lines))

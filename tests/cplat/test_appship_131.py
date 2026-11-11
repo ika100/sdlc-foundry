@@ -13,6 +13,7 @@ import stat
 import pytest
 
 import runs
+from waiting import fake_prelude
 from test_appship_097 import SPEC, GITOPS, w  # noqa: F401  (fixtures, constants)
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 
@@ -38,7 +39,7 @@ def pre(w, tmp_path, monkeypatch):  # noqa: F811
     wrapper_dir = tmp_path / "wrapper-bin"
     wrapper_dir.mkdir()
     gh = wrapper_dir / "gh"
-    gh.write_text(WRAPPER % {"real": w.bin / "gh"})
+    gh.write_text((WRAPPER % {"real": w.bin / "gh"}).replace("\n", "\n" + fake_prelude("sh") + "\n", 1))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{wrapper_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.delenv("FAKE_GH_AUTH", raising=False)

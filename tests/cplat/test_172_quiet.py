@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 import quiet
+from waiting import fake_prelude
 from failsum_support import sample
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -83,7 +84,7 @@ def world(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     fake = bindir / "devbox"
-    fake.write_text(FAKE_DEVBOX)
+    fake.write_text(FAKE_DEVBOX.replace("\n", "\n" + fake_prelude("sh") + "\n", 1))
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     work = tmp_path / "myrepo"
     work.mkdir()
