@@ -22,6 +22,17 @@ def test_children_working_during_the_wait_count_as_agents_ac_181_1(world, capsys
     assert w["person_min"] == 0 and w["wall_min"] == 60
 
 
+def test_a_coordinator_subagent_working_during_an_agent_call_is_coordinator_time_ac_181_1(world, capsys):  # AC-181.1
+    coord = Transcript().model(0).call(10, 50, "Agent", description="review").model(60)
+    sub = Transcript().bash(15, 45, "pytest -q")                # the coordinator's own subagent, not a repo session
+    code, out, _ = world.measure(capsys, world.coordinator(coord, subagent=sub))
+    assert code == 0
+    w = split_of(out["wall"])
+    assert w["agents"]["children"] == 0                         # only repo sessions and their subagents are children
+    assert abs(w["agents"]["coordinator"] - 50) <= 0.1          # own 20 min plus the subagent's 30 min
+    assert w["waiting_min"] <= 0.1 and w["person_min"] == 0
+
+
 def test_the_repo_session_is_never_named_on_the_command_line_ac_181_1(world, capsys):  # AC-181.1
     world.child("child1", Transcript().bash(15, 45, "devbox run test"))
     code, out, err = world.measure(capsys, world.coordinator(coordinator_waiting_40()))      # no run records at all

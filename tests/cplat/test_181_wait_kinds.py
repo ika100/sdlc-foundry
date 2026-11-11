@@ -1,7 +1,9 @@
 """Spec 181 AC-181.3: a waiting minute gets its kind from evidence, first match wins, never from a command name alone."""
+import json
+
 import pytest
 
-from journey181_support import KINDS, Transcript, run_record, split_of, world  # noqa: F401  (fixture)
+from journey181_support import KINDS, Transcript, at, run_record, split_of, system_ship, world  # noqa: F401  (fixture)
 
 CASES = [
     ("cplat pr wait 12", "ci"),
@@ -55,6 +57,28 @@ def test_an_actions_run_in_a_wait_without_a_kind_counts_as_ci_ac_181_3(world, ca
     assert code == 0
     w = split_of(out["wall"])
     assert w["waiting"]["ci"] == pytest.approx(4, abs=0.1) and w["waiting"]["unattributed"] == pytest.approx(6, abs=0.1)
+
+
+def test_a_kinded_wait_in_a_child_thread_counts_under_its_kind_ac_181_3(world, capsys):  # AC-181.3
+    world.child("child1", Transcript().bash(10, 30, "cplat pr wait 5"))
+    system_ship(world)
+    coord = Transcript().model(0).bash(10, 50, "cplat system ship next shop --wait").model(60)
+    code, out, _ = world.measure(capsys, world.coordinator(coord))
+    assert code == 0
+    w = split_of(out["wall"])
+    assert w["waiting"]["ci"] == pytest.approx(20, abs=0.1)     # the child waits for CI, nobody works
+    assert w["agents"]["children"] == 0
+    assert w["waiting"]["unattributed"] == pytest.approx(20, abs=0.1)
+
+
+def test_the_queued_time_of_an_actions_run_counts_as_ci_ac_181_3(world, capsys):  # AC-181.3
+    world.gh_runs.write_text(json.dumps([{"createdAt": at(2), "startedAt": at(5), "updatedAt": at(8), "conclusion": "success"}]))
+    t = Transcript().bash(0, 10, "gh run watch 99")
+    code, out, _ = world.measure(capsys, world.coordinator(t), start="2026-11-10T08:00:00Z", end="2026-11-10T08:10:00Z")
+    assert code == 0
+    w = split_of(out["wall"])
+    assert w["waiting"]["ci"] == pytest.approx(6, abs=0.1)      # queued 08:02-08:05 plus running 08:05-08:08
+    assert w["waiting"]["unattributed"] == pytest.approx(4, abs=0.1)
 
 
 def test_a_record_phase_wins_over_an_actions_run_ac_181_3(world, capsys):  # AC-181.3
