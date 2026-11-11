@@ -379,7 +379,11 @@ class World:
             except (OSError, ValueError, IndexError):
                 return False
 
-        return bool(wait_for(ended, budget(timeout), what=f"the fake headless of {unit} to end"))
+        ok = bool(wait_for(ended, budget(timeout), what=f"the fake headless of {unit} to end"))
+        # the fake writes `ended_at` and then exits: the dispatcher still sees a live unit until the process is gone
+        pid = self.calls_of(unit)[-1]["pid"]
+        wait_for(lambda: not self.alive(pid), budget(timeout), what=f"the fake headless of {unit} (pid {pid}) to exit")
+        return ok
 
     def wait_until(self, fn, timeout=30):
         return bool(wait_for(fn, budget(timeout), what="the condition"))
