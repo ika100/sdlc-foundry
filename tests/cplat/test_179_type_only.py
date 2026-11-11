@@ -152,7 +152,7 @@ def test_a_type_only_change_is_recorded_without_asking_and_listed_in_the_pr_ac_1
 
 def test_tightening_does_not_accept_an_assertion_change_as_type_only_ac_179_4(typed, capsys):  # AC-179.4
     root, t = typed
-    t.write_text(NEW_TYPED.replace("assert 1 == 1", "assert 1"))
+    t.write_text(NEW_TYPED.replace("assert 1 == 1", "pass"))                 # an assertion line changed: removed
     capsys.readouterr()
     spec.main(["--repo", str(root), "test-diff", "HEAD", "--tighten", FILE, "--task", "t2", "--reason", "x"])
     assert "type-only" not in capsys.readouterr().out
