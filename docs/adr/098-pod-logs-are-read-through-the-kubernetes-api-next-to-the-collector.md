@@ -1,4 +1,4 @@
-# ADR-096: Pod logs are read through the Kubernetes API, next to the environment's collector
+# ADR-098: Pod logs are read through the Kubernetes API, next to the environment's collector
 
 **Status:** Accepted (2026-11-10, spec 182)
 **Supersedes in part:** [ADR-021](021-observability-otel.md) ("Not included": stdout log collection)

@@ -6,7 +6,7 @@
   pod-log receiver, and every file-based one needs hostPath. The tailer is `render.LOG_TAILER_SCRIPT` (Python standard library,
   embedded in the renderer like `CREDENTIALS_SCRIPT`, spec 128) running on the already pinned `CREDENTIALS_IMAGE`: no new image, no
   new tool, and its whole mapping is testable in the platform suite against a fake API server. ADR:
-  [docs/adr/096-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md](../../adr/096-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md).
+  [docs/adr/098-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md](../../adr/098-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md).
 - **The tailer posts OTLP/JSON to the collector in its own pod** (`127.0.0.1:4318`): the collector's existing `logs` pipeline
   (`memory_limiter`, `resource`, `batch`, `debug` + backend) already sends logs wherever traces and metrics go (A2), so
   `collector_config()` does not change.

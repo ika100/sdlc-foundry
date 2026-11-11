@@ -64,7 +64,7 @@ tasks:
 
 # Plan — 182 Logs reach Loki
 
-Design: [design.md](design.md). ADR: [ADR-096](../../adr/096-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md).
+Design: [design.md](design.md). ADR: [ADR-098](../../adr/098-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md).
 Every render.py change is copied to `templates/cluster-gitops/scripts/system_render.py` with `uv run scripts/sync-template-copies.py`
 (never edited by hand); `tests/cplat/test_sync_template_copies.py::test_real_repo_is_in_sync` fails otherwise.
 
@@ -212,9 +212,9 @@ removed from the rendered collector.
 
 **Implementation notes:**
 - HOW-IT-WORKS "Observability": the collector also reads every pod's stdout in the namespace through the Kubernetes API (namespaced
-  read of pods and pod logs only), labels, trace link; link ADR-096.
-- ADR-021: "Not included" stdout entry marked superseded by ADR-096 (keep the rest); header line `Superseded in part by: ADR-096`.
-- `docs/adr/README.md`: row 096 (the ADR file exists).
+  read of pods and pod logs only), labels, trace link; link ADR-098.
+- ADR-021: "Not included" stdout entry marked superseded by ADR-098 (keep the rest); header line `Superseded in part by: ADR-098`.
+- `docs/adr/README.md`: row 098 (the ADR file exists).
 - gitops-app `CLAUDE.md.jinja`: one line on log collection in the observability notes.
 - Changelog fragment per `docs/changelog.d/README.md`; `uv run scripts/check-docs.py` and `check-links.py` pass.
 
