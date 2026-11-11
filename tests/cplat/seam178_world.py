@@ -25,7 +25,7 @@ from pathlib import Path
 import land171_world
 import land178_world
 import spec as specmod
-from waiting import fake_prelude
+from waiting import fake_prelude, with_prelude
 
 SPEC_ID = "007-price-alerts"
 BRANCH = f"feature/{SPEC_ID}"
@@ -264,7 +264,7 @@ if any(a.get("decision") == "block" for a in answers):
 
 def executable(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(with_prelude(text))
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return path
 

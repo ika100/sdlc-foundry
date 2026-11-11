@@ -81,3 +81,17 @@ def fake_prelude(kind: str = "python") -> str:
     if kind == "sh":
         return 'sleep "${TEST_FAKE_DELAY:-0}"  # fake-delay: slows the fake by TEST_FAKE_DELAY'
     raise ValueError(f"unknown kind {kind!r}: python or sh")
+
+
+def with_prelude(text: str) -> str:
+    """`text`, a fake program, with `fake_prelude()` inserted after its shebang line ("sh" unless the shebang names python).
+
+    A text that already holds a prelude is returned as it is, so a helper may apply this to what its callers pass."""
+    if fake_prelude("python") in text or fake_prelude("sh") in text:
+        return text
+    first, newline, rest = text.partition("\n")
+    if not first.startswith("#!"):
+        return fake_prelude("sh") + "\n" + text
+    interpreter = first[2:].split()
+    shell = interpreter and interpreter[-1].rsplit("/", 1)[-1] in ("sh", "bash", "zsh", "dash")
+    return first + newline + fake_prelude("sh" if shell else "python") + "\n" + rest

@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import stat
+from waiting import with_prelude
 import subprocess
 import sys
 from pathlib import Path
@@ -310,7 +311,7 @@ def run_up(tmp_path, env):
     bin_dir.mkdir()
     for tool, rc in (("k3d", 1), ("kubectl", 1), ("docker", 1), ("gh", 1), ("helm", 1)):
         p = bin_dir / tool
-        p.write_text(f'#!/bin/sh\necho "FAKE {tool} $*"\nexit {rc}\n')
+        p.write_text(with_prelude(f'#!/bin/sh\necho "FAKE {tool} $*"\nexit {rc}\n'))
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
     full = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "HOME": str(tmp_path), "WITH_ARGO": "0", "LOCAL_HTTP_PORT": "18088", **env}
     p = subprocess.run(["bash", "scripts/local-cluster.sh", "up"], cwd=root, capture_output=True, text=True, env=full, timeout=60)
@@ -670,7 +671,7 @@ def gate(tmp_path, runs, sha="abc1234", api=None):
     bin_dir = tmp_path / "ghbin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
-    gh.write_text(GH_CHECKS.replace("{python}", sys.executable))
+    gh.write_text(with_prelude(GH_CHECKS.replace("{python}", sys.executable)))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     data = tmp_path / "checkruns.json"
     data.write_text(json.dumps({"runs": {"total_count": len(runs), "check_runs": runs}, **(api or {})}))

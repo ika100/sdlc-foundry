@@ -10,6 +10,7 @@ import importlib
 import json
 import os
 import stat
+from waiting import with_prelude
 import subprocess
 import time
 from pathlib import Path
@@ -77,7 +78,7 @@ class FakeDevbox:
         self.dir = tmp / "fake-devbox"
         self.dir.mkdir()
         exe = self.dir / "devbox"
-        exe.write_text(
+        exe.write_text(with_prelude(
             "#!/bin/bash\n"
             f"d='{self.dir}'\n"
             "n=$(( $(cat \"$d/n\" 2>/dev/null || echo 0) + 1 )); echo $n > \"$d/n\"\n"
@@ -85,7 +86,7 @@ class FakeDevbox:
             "f=\"$d/attempt$n\"; [ -f \"$f.rc\" ] || f=\"$d/attempt_last\"\n"
             "cat \"$f.out\"\n"
             "[ -f \"$f.sleep\" ] && sleep \"$(cat \"$f.sleep\")\"  # fake-delay: a slow devbox the smoke timeout test kills\n"
-            "exit \"$(cat \"$f.rc\")\"\n")
+            "exit \"$(cat \"$f.rc\")\"\n"))
         exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
         monkeypatch.setenv("PATH", f"{self.dir}{os.pathsep}{os.environ['PATH']}")
         self.n_attempts = 0

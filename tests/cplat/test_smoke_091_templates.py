@@ -10,6 +10,7 @@ import re
 import shutil
 import socket
 import stat
+from waiting import with_prelude
 import subprocess
 import sys
 import threading
@@ -134,7 +135,7 @@ def test_smoke_without_a_base_url_runs_nothing_and_names_the_variable_ac_091_3(s
     bindir.mkdir()
     for tool in ("uv", "mvn", "go", "pnpm", "node", "java", "python", "python3"):
         shim = bindir / tool
-        shim.write_text(f"#!/bin/sh\necho {tool} >> '{tmp_path}/ran'\nexit 0\n")
+        shim.write_text(with_prelude(f"#!/bin/sh\necho {tool} >> '{tmp_path}/ran'\nexit 0\n"))
         shim.chmod(shim.stat().st_mode | stat.S_IEXEC)
     env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"
     res = subprocess.run(["bash", "scripts/smoke.sh"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
@@ -222,7 +223,7 @@ def run_python_smoke(tmp_path, tests: dict[str, str], url: str | None):
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     uv = bindir / "uv"
-    uv.write_text(UV_SHIM)
+    uv.write_text(with_prelude(UV_SHIM))
     uv.chmod(uv.stat().st_mode | stat.S_IEXEC)
     env = {k: v for k, v in os.environ.items() if k not in ("SMOKE_BASE_URL", "PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST")}
     env["PATH"] = f"{bindir}{os.pathsep}{env['PATH']}"

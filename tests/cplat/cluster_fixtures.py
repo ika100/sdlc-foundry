@@ -16,6 +16,7 @@ import yaml
 
 from resources_fixtures import comp, db, system
 from system_fixtures import ROOT, git, init_git, write_system
+from waiting import with_prelude
 
 TEMPLATE = ROOT / "templates" / "cluster-gitops"
 GITOPS_RENDER = ROOT / "templates" / "gitops-app" / "scripts" / "render.py"
@@ -258,7 +259,7 @@ def stubs(tmp_path: Path, monkeypatch, fixtures: Path | None = None, *, extra: t
 
     def put(name, body):
         p = bin_dir / name
-        p.write_text(body)
+        p.write_text(with_prelude(body))
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
 
     put("gh", GH.replace("{py}", sys.executable))

@@ -8,6 +8,7 @@ import stat
 import appship
 import core
 import pytest
+from waiting import with_prelude
 
 COMMIT_REFS = """To https://github.com/acme/taskboard-web.git
  ! [remote rejected] feature/001-task-page -> feature/001-task-page (fatal error in commit_refs_rules)
@@ -27,7 +28,7 @@ def fake_git(tmp_path, monkeypatch):
     bin_dir.mkdir()
     state.mkdir()
     script = bin_dir / "git"
-    script.write_text(f"""#!/bin/sh
+    script.write_text(with_prelude(f"""#!/bin/sh
 echo "$*" >> {state}/calls
 case " $* " in *" push "*) ;; *) exit 0 ;; esac
 n=$(cat {state}/fails 2>/dev/null || echo 0)
@@ -37,7 +38,7 @@ if [ "$n" -gt 0 ]; then
   exit 1
 fi
 echo pushed
-""")
+"""))
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     slept: list[float] = []

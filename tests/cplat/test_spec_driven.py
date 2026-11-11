@@ -3,6 +3,7 @@ import re
 
 import pytest
 import yaml
+from waiting import with_prelude
 
 import core
 import newapp
@@ -240,8 +241,8 @@ def _spec_check_offline(tmp_path, ref):
         (repo / ".platform-version").write_text(f"platform: 1.0.0\nshape: service-go\nref: {ref}\n")
     fake = tmp_path / "bin"
     fake.mkdir()
-    (fake / "git").write_text('#!/bin/sh\n# fake: init/remote/fetch/checkout succeed and leave an empty platform checkout\n'
-                              'if [ "$1" = -C ]; then mkdir -p "$2/scripts/cplat"; touch "$2/scripts/cplat/cplat.py"; mkdir -p "$2/.git"; fi\nexit 0\n')
+    (fake / "git").write_text(with_prelude('#!/bin/sh\n# fake: init/remote/fetch/checkout succeed and leave an empty platform checkout\n'
+                                           'if [ "$1" = -C ]; then mkdir -p "$2/scripts/cplat"; touch "$2/scripts/cplat/cplat.py"; mkdir -p "$2/.git"; fi\nexit 0\n'))
     (fake / "git").chmod(0o755)
     env = {k: v for k, v in os.environ.items() if not k.startswith("SPEC_CHECK")}
     env |= {"PATH": f"{fake}:{os.environ['PATH']}", "XDG_CACHE_HOME": str(tmp_path / "cache")}

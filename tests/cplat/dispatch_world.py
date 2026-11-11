@@ -35,7 +35,7 @@ import pytest
 import yaml
 
 import claim
-from waiting import budget, fake_prelude, wait_file, wait_for
+from waiting import budget, fake_prelude, wait_file, wait_for, with_prelude
 from dispatch_fake_gh import script as gh_script
 from units131_support import plan_for, spec_text
 
@@ -145,7 +145,7 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 def _exe(path: Path, text: str) -> Path:
-    path.write_text(text)
+    path.write_text(with_prelude(text))
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return path
 

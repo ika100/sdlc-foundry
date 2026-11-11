@@ -24,6 +24,7 @@ import runs
 import ship
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 from test_spec import make
+from waiting import with_prelude
 
 SLUG = "acme/shop-gitops"
 GITOPS = "shop-gitops"
@@ -232,7 +233,7 @@ class World:
         for name, body in (("gh", FAKE_GH % {"py": sys.executable, "sha": SHA}), ("kubectl", FAKE_KUBECTL % {"py": sys.executable}),
                            ("devbox", FAKE_DEVBOX % {"py": sys.executable})):
             f = self.bin / name
-            f.write_text(body)
+            f.write_text(with_prelude(body))
             f.chmod(f.stat().st_mode | stat.S_IEXEC)
         monkeypatch.setenv("PATH", f"{self.bin}{os.pathsep}{os.environ['PATH']}")
         monkeypatch.setenv("FAKE_CFG", str(self.cfg_path))

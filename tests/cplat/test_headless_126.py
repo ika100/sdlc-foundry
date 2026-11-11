@@ -18,6 +18,7 @@ import ship
 from test_headless import fake_claude, repo, runs, set_state  # noqa: F401  (fixtures, helpers)
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 from units131_support import GH_STUB, git
+from waiting import with_prelude
 
 SCRIPTS = str(core.PLATFORM_ROOT / "scripts" / "cplat")
 
@@ -36,7 +37,7 @@ def _isolated_preflight(repo, tmp_path, monkeypatch):
     stub = tmp_path / "gh-bin"
     stub.mkdir()
     gh = stub / "gh"
-    gh.write_text(GH_STUB)
+    gh.write_text(with_prelude(GH_STUB))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{stub}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("FAKE_GH_LOG", str(tmp_path / "gh.log"))

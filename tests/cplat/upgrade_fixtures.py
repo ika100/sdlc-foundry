@@ -9,6 +9,7 @@ import json
 import os
 import re
 import stat
+from waiting import with_prelude
 import subprocess
 import sys
 from pathlib import Path
@@ -154,7 +155,7 @@ def make_world(tmp_path: Path, monkeypatch, doc: dict) -> World:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
-    gh.write_text(GH_SCRIPT.format(python=sys.executable))
+    gh.write_text(with_prelude(GH_SCRIPT.format(python=sys.executable)))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     log = tmp_path / "gh.log"
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")

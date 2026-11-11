@@ -39,7 +39,7 @@ RELEASE_OBJ = need("promote", object={"type": "release", "spec": None, "componen
 
 
 def make_exe(path: Path, body: str) -> Path:
-    path.write_text("#!/bin/bash\n" + body + "\n")
+    path.write_text(waiting.with_prelude("#!/bin/bash\n" + body + "\n"))
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return path
 

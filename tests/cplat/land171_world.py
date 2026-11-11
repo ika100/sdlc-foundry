@@ -19,7 +19,7 @@ from pathlib import Path
 import ship
 import spec
 from test_spec import SPEC, make
-from waiting import fake_prelude
+from waiting import fake_prelude, with_prelude
 
 BRANCH = "feature/007-price-alerts"
 SLUG = "acme/shop-api"
@@ -365,7 +365,7 @@ class World:
         stub.write_text(STUB % {"py": sys.executable, "prelude": fake_prelude()})
         stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
         devbox = stub.parent / "devbox"
-        devbox.write_text(DEVBOX)
+        devbox.write_text(with_prelude(DEVBOX))
         devbox.chmod(devbox.stat().st_mode | stat.S_IEXEC)
         self.devbox_log = self.dir / "devbox.log"
         self.mp.setenv("PATH", f"{stub.parent}{os.pathsep}{os.environ['PATH']}")
