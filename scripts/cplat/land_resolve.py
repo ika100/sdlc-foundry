@@ -187,7 +187,7 @@ def _adr_index(repo: Path, path: str, ctx: Context, run) -> Outcome:
     block = "".join(v for _, v in ordered)
     first = merged.index(PLACEHOLDER)
     text = merged[:first] + block + merged[first + len(PLACEHOLDER):].replace(PLACEHOLDER, "")
-    (repo / path).write_text(text)
+    (repo / path).write_text(text if text.endswith("\n") else text + "\n")
     _note(out, path)
     return out
 
