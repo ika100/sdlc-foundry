@@ -9,6 +9,16 @@ from __future__ import annotations
 import logging
 
 import structlog
+from opentelemetry import trace
+
+
+def add_trace_ids(logger: object, method: str, event_dict: dict) -> dict:
+    """Add trace_id and span_id of the active span; nothing outside a span."""
+    ctx = trace.get_current_span().get_span_context()
+    if ctx.is_valid:
+        event_dict["trace_id"] = format(ctx.trace_id, "032x")
+        event_dict["span_id"] = format(ctx.span_id, "016x")
+    return event_dict
 
 
 def configure_logging(level: str = "INFO") -> None:
@@ -19,6 +29,7 @@ def configure_logging(level: str = "INFO") -> None:
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
+            add_trace_ids,
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelName(level)),
