@@ -24,6 +24,7 @@ import runs
 import ship
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 from test_spec import make
+from waiting import with_prelude
 
 SLUG = "acme/shop-gitops"
 GITOPS = "shop-gitops"
@@ -232,7 +233,7 @@ class World:
         for name, body in (("gh", FAKE_GH % {"py": sys.executable, "sha": SHA}), ("kubectl", FAKE_KUBECTL % {"py": sys.executable}),
                            ("devbox", FAKE_DEVBOX % {"py": sys.executable})):
             f = self.bin / name
-            f.write_text(body)
+            f.write_text(with_prelude(body))
             f.chmod(f.stat().st_mode | stat.S_IEXEC)
         monkeypatch.setenv("PATH", f"{self.bin}{os.pathsep}{os.environ['PATH']}")
         monkeypatch.setenv("FAKE_CFG", str(self.cfg_path))
@@ -691,7 +692,8 @@ def test_a_red_entry_escalates_with_the_failed_checks_and_merges_nothing(w):  # 
 
 def merge_mod(w, monkeypatch):
     mod = importlib.import_module("appship_merge")
-    monkeypatch.setattr(mod, "sleep", lambda s: time.sleep(0.01), raising=False)
+    slept: list[float] = []                                # the slot's wait is recorded, not slept
+    monkeypatch.setattr(mod, "sleep", slept.append, raising=False)
     return mod
 
 

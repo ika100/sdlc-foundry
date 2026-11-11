@@ -7,6 +7,7 @@ import json
 import os
 import re
 import stat
+from waiting import with_prelude
 import sys
 
 import cplat
@@ -57,7 +58,7 @@ def fleet_repo(tmp_path, monkeypatch):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     copier = bin_dir / "copier"
-    copier.write_text(COPIER.format(python=sys.executable, new=str(T / "scripts" / "render.py")))
+    copier.write_text(with_prelude(COPIER.format(python=sys.executable, new=str(T / "scripts" / "render.py"))))
     copier.chmod(copier.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setattr(update, "render_baseline", lambda *a, **k: None)

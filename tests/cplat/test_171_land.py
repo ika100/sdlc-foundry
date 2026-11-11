@@ -11,6 +11,7 @@ import pytest
 import ship
 from land171_world import BRANCH, PR_URL, git, make_world
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
+from waiting import with_prelude
 
 ENTRIES = ["ship", "pr"]
 
@@ -213,7 +214,7 @@ def test_a_refused_push_exits_1_naming_the_commits_and_the_fix_and_judges_no_che
     world.local_commit("a.txt")
     world.local_commit("b.txt")
     hook = world.bare / "hooks" / "pre-receive"
-    hook.write_text("#!/bin/sh\necho 'refused by the test hook' >&2\nexit 1\n")
+    hook.write_text(with_prelude("#!/bin/sh\necho 'refused by the test hook' >&2\nexit 1\n"))
     hook.chmod(0o755)
     rc, out, err = land(world, "ship", capsys)
     assert rc == 1

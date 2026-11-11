@@ -281,3 +281,37 @@ def test_a_repo_without_the_notes_file_gets_a_working_claude_md_and_an_empty_not
     assert "@.claude/project-notes.md" in (repo / "CLAUDE.md").read_text()
     assert notes.read_text() == (update.PLATFORM_ROOT / "templates" / "service-python" / ".claude" / "project-notes.md").read_text()
     assert out["lost"] == [] or all(e["file"] != ".claude/project-notes.md" for e in out["lost"])
+
+
+def _collector(replicas, tailer):
+    pod = {"containers": [{"name": "collector", "image": "otel:1"}], "volumes": [{"name": "conf"}]}
+    meta = {"annotations": {"checksum/config": "a"}}
+    if tailer:
+        pod["containers"].append({"name": "log-tailer", "image": "python:3.13"})
+        pod["volumes"].append({"name": "tailer"})
+        pod["serviceAccountName"] = "otel-collector"
+        meta["annotations"]["checksum/tailer"] = "b"
+    return json.dumps({"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "otel-collector"},
+                       "spec": {"replicas": replicas, "template": {"metadata": meta, "spec": pod}}})
+
+
+def _lost_collector(tmp_path, before, after):  # spec 182: the update overwrote `before` (committed) with `after`
+    path = "applications/shop/addons/dev/observability/collector.yaml"
+    repo = tmp_path / "gitops"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "scripts" / "render.py").write_text((update.PLATFORM_ROOT / "templates" / "gitops-app" / "scripts" / "render.py").read_text())
+    (repo / path).parent.mkdir(parents=True)
+    git(repo.parent, "init", "-q", str(repo))
+    (repo / path).write_text(before)
+    commit(repo)
+    (repo / path).write_text(after)
+    return update._lost(repo, [path], [], [], {"replaced": []}, None, "", [None, None])
+
+
+def test_only_the_tailer_added_to_the_collector_is_not_lost(tmp_path):  # spec 182
+    assert _lost_collector(tmp_path, _collector(1, False), _collector(1, True)) == []
+
+
+def test_a_local_change_to_the_observability_collector_is_still_lost(tmp_path):  # spec 182
+    lost = _lost_collector(tmp_path, _collector(3, False), _collector(1, True))   # replicas 3 was the repo's own, the update wrote 1
+    assert [e["file"] for e in lost] == ["applications/shop/addons/dev/observability/collector.yaml"]

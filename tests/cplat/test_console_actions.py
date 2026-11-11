@@ -15,16 +15,18 @@ from pathlib import Path
 import pytest
 import yaml
 
+import waiting
 from console_support import ROOT, need, parse, q, disabled
 
 STUB = r'''
 import os, sys, time
+time.sleep(float(os.environ.get("TEST_FAKE_DELAY", "0")))  # fake-delay: slows the fake by TEST_FAKE_DELAY
 print("=== step one: planning", flush=True)
 open(sys.argv[3], "w").write(str(os.getpid()))
-for _ in range(400):
+for _ in range(400 + int(20 * float(os.environ.get("TEST_FAKE_DELAY", "0")) / 0.05)):
     if os.path.exists(sys.argv[1]):
         break
-    time.sleep(0.05)
+    time.sleep(0.05)  # fake-delay: polls for the release file
 print("opened https://github.com/acme/shop-api/pull/42", flush=True)
 for i in range(30):
     print("line", i, flush=True)
@@ -37,7 +39,7 @@ RELEASE_OBJ = need("promote", object={"type": "release", "spec": None, "componen
 
 
 def make_exe(path: Path, body: str) -> Path:
-    path.write_text("#!/bin/bash\n" + body + "\n")
+    path.write_text(waiting.with_prelude("#!/bin/bash\n" + body + "\n"))
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     return path
 
@@ -286,11 +288,8 @@ def test_a_running_action_shows_command_step_and_the_indicator_ac_122_44(console
     stub_command(monkeypatch, ready)
     c = console()
     _, body = post_action(c)
-    for _ in range(100):
-        a = c.json("GET", f"/api/actions/{body['id']}")[1]
-        if a["step"]:
-            break
-        time.sleep(0.1)
+    a = waiting.wait_for(lambda: (lambda a: a if a["step"] else None)(c.json("GET", f"/api/actions/{body['id']}")[1]),
+                         what="the action to report a step")
     assert a["state"] == "running" and "planning" in a["step"] and a["ended_at"] is None and a["started_at"]
     assert c.json("GET", "/api/state")[1]["actions"] == {"running": 1, "failed": 0}
     for path in ("/inbox", "/board", "/system"):
@@ -392,21 +391,10 @@ def test_a_confirmed_stop_ends_the_actions_and_the_next_start_shows_them_stopped
     stub_command(monkeypatch, ready)
     c = console()
     _, a = post_action(c)
-    for _ in range(100):
-        if ready.pidfile.exists() and ready.pidfile.read_text():
-            break
-        time.sleep(0.1)
-    pid = int(ready.pidfile.read_text())
+    pid = int(waiting.wait_for(lambda: ready.pidfile.exists() and ready.pidfile.read_text(), what="the action's pid file"))
     st, _ = c.json("POST", "/api/shutdown", {"confirm": True})
     assert st == 202
-    for _ in range(150):
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            break
-        time.sleep(0.1)
-    else:
-        raise AssertionError("the action's process is still running")
+    waiting.wait_gone(pid)
     again = console(repo_dir=c.repo_dir)
     assert next(x for x in again.json("GET", "/api/actions")[1] if x["id"] == a["id"])["state"] == "stopped"
 

@@ -6,6 +6,7 @@ tag is not in the checkout); the 5.5 side is this checkout's renderer through a 
 import json
 import os
 import stat
+from waiting import with_prelude
 import subprocess
 import sys
 
@@ -71,7 +72,7 @@ def make_repo(tmp_path, monkeypatch, doc=None):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     copier = bin_dir / "copier"
-    copier.write_text(COPIER.format(python=sys.executable, new=str(T / "scripts" / "render.py")))
+    copier.write_text(with_prelude(COPIER.format(python=sys.executable, new=str(T / "scripts" / "render.py"))))
     copier.chmod(copier.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setattr(update, "render_baseline", lambda *a, **k: None)

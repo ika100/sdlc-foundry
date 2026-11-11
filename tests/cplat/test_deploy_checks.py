@@ -10,6 +10,7 @@ import json
 import os
 import re
 import stat
+from waiting import with_prelude
 import subprocess
 
 import pytest
@@ -95,7 +96,7 @@ def fake_kubectl(tmp_path, monkeypatch, pods):
     d.mkdir()
     (d / "pods.json").write_text(json.dumps({"items": pods}))
     exe = d / "kubectl"
-    exe.write_text(f"#!/bin/bash\necho \"$*\" >> '{d}/calls'\ncat '{d}/pods.json'\n")
+    exe.write_text(with_prelude(f"#!/bin/bash\necho \"$*\" >> '{d}/calls'\ncat '{d}/pods.json'\n"))
     exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{d}{os.pathsep}{os.environ['PATH']}")
     return d

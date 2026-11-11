@@ -34,6 +34,10 @@ rules:
     text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
     class: hard
     hard: issue-filing-needs-consent
+  - id: R14
+    text: "so that `cplat spec new --from-plan` marks the old one `superseded by` it and never leaves it counted"
+    class: practice
+    source: "#477"
   - id: R11
     text: "Do not clone."
     class: retired

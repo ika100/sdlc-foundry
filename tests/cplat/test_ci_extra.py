@@ -16,6 +16,7 @@ import gates
 import newsvc
 from test_ci_gates import recipe, workflow
 from test_gates import by_name
+from waiting import with_prelude
 from test_spec_driven import IDS, SHAPES, claude_md, template
 
 ROOT = core.PLATFORM_ROOT
@@ -32,7 +33,7 @@ def run_ci(shape, tmp_path, *, recipes, fail=None):
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     stub = bindir / "devbox"
-    stub.write_text('#!/bin/bash\necho "$2" >> "$STUB_LOG"\n[ "$2" = "$STUB_FAIL" ] && exit 1\nexit 0\n')
+    stub.write_text(with_prelude('#!/bin/bash\necho "$2" >> "$STUB_LOG"\n[ "$2" = "$STUB_FAIL" ] && exit 1\nexit 0\n'))
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
     work = tmp_path / "work"
     work.mkdir(exist_ok=True)

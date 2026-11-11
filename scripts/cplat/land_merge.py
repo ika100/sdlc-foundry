@@ -48,10 +48,43 @@ class MergeFailed(PlatformError):
     """GitHub refused the merge for a reason that is neither a conflict nor a moved head."""
 
 
+@dataclass(frozen=True)
+class Mode:
+    """What a land may do to the pull request's branch: follow its base (catch-up), or never touch it (release)."""
+    name: str
+    catch_up: bool
+
+
+CATCH_UP = Mode("catch-up", True)
+RELEASE = Mode("release", False)
+MAX_REFUSALS = 3
+REFUSED = re.compile(r"required status check|is expected|head branch was modified|base branch was modified|match-head-commit", re.I)
+
+
+class BaseMoved(PlatformError):
+    """RELEASE only: the branch is behind its base or conflicts with it, and the land does not change the branch."""
+
+    def __init__(self, url: str, base: str):
+        super().__init__(f"{url} is behind {base}: {base} moved",
+                         hint=f"update the branch of the pull request to {base} (and let its checks run), then run the land again")
+        self.base, self.url = base, url
+
+
+class MergeRefused(MergeFailed):
+    """GitHub refused the merge `MAX_REFUSALS` times in one land (a pending required check or a moved head)."""
+
+    def __init__(self, reason: str):
+        super().__init__(f"merge refused {MAX_REFUSALS} times: {reason}",
+                         hint="wait for the checks of the pull request, then run the land again")
+        self.reason = reason
+
+
 @dataclass
 class Rounds:
-    """Regeneration rounds used by one land invocation."""
+    """Regeneration rounds (AC-171.6) and refused merges (AC-178.3) used by one land invocation."""
     used: int = 0
+    refused: int = 0
+    reason: str = ""
 
 
 @dataclass
@@ -103,15 +136,35 @@ def await_head(watch: ship.CheckWatch, sha: str, polls: int = merge_lock.HEAD_PO
     return False
 
 
+def _base_moved(repo: Path, url: str) -> BaseMoved:
+    return BaseMoved(url, _view(repo, url, "baseRefName").get("baseRefName") or "main")
+
+
+def ensure_current(repo: Path, url: str) -> None:
+    """`BaseMoved` when the branch is behind its base or conflicts with it; `merge_lock.Unknown` when that is unreadable."""
+    base = _view(repo, url, "baseRefName").get("baseRefName") or "main"
+    if _view(repo, url, "mergeable").get("mergeable") == "CONFLICTING":
+        raise BaseMoved(url, base)
+    head = _view(repo, url, "headRefOid").get("headRefOid")
+    behind = merge_lock._behind(repo, merge_lock.slug_of(repo, url), url, head)[0] if head else None
+    if behind is None:
+        raise merge_lock.Unknown(f"could not tell whether {url} is behind its base, so it is not merged",
+                                 hint="run the land again; no pull request merges on a guess")
+    if behind > 0:
+        raise BaseMoved(url, base)
+
+
 def wait_green(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interval: float, rounds: Rounds,
-               run) -> tuple[str, list[dict], list[dict], list[str]]:
+               run, mode: Mode = CATCH_UP) -> tuple[str, list[dict], list[dict], list[str]]:
     """The checks of the head: again while a push moved the head during the last poll, and a conflict with the base
-    is regenerated (or stops as `Unresolvable`) before they are waited for again."""
+    is regenerated (or stops as `Unresolvable`) before they are waited for again; a RELEASE land stops as `BaseMoved`."""
     lines: list[str] = []
     while True:
         try:
             status, cs, failed = ship.wait_checks(watch, timeout, interval)
-        except ship.Conflicting:
+        except ship.Conflicting as e:
+            if not mode.catch_up:
+                raise _base_moved(repo, url) from e
             lines += regenerate(repo, url, watch, rounds, run)
             continue
         if status == "red" or not watch.head or watch.head_sha() in (None, watch.head):
@@ -119,7 +172,7 @@ def wait_green(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, int
 
 
 def merge(repo: Path, url: str, head: str | None, run) -> tuple[str, str]:
-    """("merged", merge commit) | ("head-moved", new head) | ("conflicting", ""); `MergeFailed` for any other refusal."""
+    """("merged", merge commit) | ("head-moved", new head) | ("refused", reason) | ("conflicting", ""); `MergeFailed` otherwise."""
     cmd = ["gh", "pr", "merge", url, "--squash"] + (["--match-head-commit", head] if head else [])
     res = run(cmd, cwd=repo, check=False)
     if res.returncode == 0:
@@ -133,6 +186,8 @@ def merge(repo: Path, url: str, head: str | None, run) -> tuple[str, str]:
         return "head-moved", new
     if view.get("mergeable") == "CONFLICTING":
         return "conflicting", ""
+    if REFUSED.search(detail):
+        return "refused", detail
     raise MergeFailed(f"merging {url} failed: {detail}", hint="read the error, then run the merge again")
 
 
@@ -311,6 +366,7 @@ def regenerate(repo: Path, url: str, watch: ship.CheckWatch, rounds: Rounds, run
         _abort(repo, run)
         raise
     new = _git(repo, run, "rev-parse", "HEAD", check=True).stdout.strip()
+    watch.expect_from_current()
     res = _git(repo, run, "push", "-q", "origin", head)
     if res.returncode != 0:
         _git(repo, run, "reset", "-q", "--hard", pre)
@@ -327,20 +383,25 @@ def regenerate(repo: Path, url: str, watch: ship.CheckWatch, rounds: Rounds, run
 # ---------------- the settle loop ----------------
 
 def settle(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interval: float, rounds: Rounds, run,
-           before_merge: Callable[[], tuple[bool, list[str]]] | None = None) -> Settled:
-    """Inside the merge lock, after the first green: catch up with the base, then merge on the head the checks were judged
-    on. A conflict in a generated file is regenerated, a head that moved is waited for, and nothing merges unchecked."""
+           before_merge: Callable[[], tuple[bool, list[str]]] | None = None, mode: Mode = CATCH_UP) -> Settled:
+    """Inside the merge lock, after the first green: catch up with the base (CATCH_UP) or stop as `BaseMoved` (RELEASE), then
+    merge on the head the checks were judged on. A conflict in a generated file is regenerated, a head that moved or a merge
+    GitHub refuses is waited for (`MAX_REFUSALS` in one land), and nothing merges unchecked."""
     lines: list[str] = []
     updated = False
     while True:
         try:
-            caught = merge_lock.catch_up(repo, url, watch, timeout, interval)
+            caught = merge_lock.catch_up(repo, url, watch, timeout, interval, allow=mode.catch_up)
+        except merge_lock.Behind as e:
+            raise BaseMoved(url, e.base) from e
         except Unresolvable:
             raise
         except merge_lock.Conflict:
+            if not mode.catch_up:
+                raise _base_moved(repo, url) from None
             lines += regenerate(repo, url, watch, rounds, run)
             updated = True
-            status, cs, failed, more = wait_green(repo, url, watch, timeout, interval, rounds, run)
+            status, cs, failed, more = wait_green(repo, url, watch, timeout, interval, rounds, run, mode=mode)
             lines += more
             if status == "red":
                 return Settled("red", lines, cs, failed, updated=updated)
@@ -354,16 +415,28 @@ def settle(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interva
             lines += more
             if not ok:
                 return Settled("red", lines, updated=updated)
+        watch.expected = {}                      # the green before this merge attempt met them
         kind, value = merge(repo, url, watch.head, run)
         if kind == "merged":
             return Settled("merged", lines + [f"merged {url} (squash)"] + cleanup(repo, url, run), sha=value, updated=updated)
-        if kind == "head-moved":
-            ship.say(f"  the head of {url} moved to {value[:7]} before the merge: waiting for its checks")
-            updated = True
+        if kind in ("head-moved", "refused"):
+            rounds.refused += 1
+            rounds.reason = value if kind == "refused" else f"the head moved to {value[:7]}"
+            if rounds.refused >= MAX_REFUSALS:
+                raise MergeRefused(rounds.reason)
+            if kind == "head-moved":      # the AC-171.4 line, now counted
+                ship.say(f"  the head of {url} moved to {value[:7]} before the merge: waiting for its checks "
+                         f"(refusal {rounds.refused}/{MAX_REFUSALS})")
+            else:
+                ship.say(f"  merge of {url} refused ({rounds.reason}): waiting for the checks of its head "
+                         f"(refusal {rounds.refused}/{MAX_REFUSALS})")
+            updated = updated or kind == "head-moved"
         else:
+            if not mode.catch_up:
+                raise _base_moved(repo, url)
             lines += regenerate(repo, url, watch, rounds, run)
             updated = True
-        status, cs, failed, more = wait_green(repo, url, watch, timeout, interval, rounds, run)
+        status, cs, failed, more = wait_green(repo, url, watch, timeout, interval, rounds, run, mode=mode)
         lines += more
         if status == "red":
             return Settled("red", lines, cs, failed, updated=updated)

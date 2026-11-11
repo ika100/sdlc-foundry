@@ -35,6 +35,7 @@ import pytest
 import yaml
 
 import claim
+from waiting import budget, fake_prelude, wait_file, wait_for, with_prelude
 from dispatch_fake_gh import script as gh_script
 from units131_support import plan_for, spec_text
 
@@ -43,6 +44,7 @@ SLUG = "acme/shop-api"
 BASE = "dispatch/acme__shop-api"
 
 FAKE_CLAUDE = r'''#!%(py)s
+%(pre)s
 import json, os, pathlib, sys
 W = pathlib.Path(os.environ["FAKE_DISPATCH_DIR"])
 args = sys.argv[1:]
@@ -66,6 +68,7 @@ print(json.dumps(out))
 '''
 
 FAKE_HEADLESS = r'''#!%(py)s
+%(pre)s
 import datetime, json, os, pathlib, re, subprocess, sys, time
 W = pathlib.Path(os.environ["FAKE_DISPATCH_DIR"])
 argv = sys.argv[1:]
@@ -101,7 +104,7 @@ def end(outcome, result, stop_reason, cause=None, code=0):
 
 
 if cfg.get("then") == "die":
-    time.sleep(cfg.get("die_after", 0.2))
+    time.sleep(cfg.get("die_after", 0.2))  # fake-delay: the unit dies die_after seconds after it started
     os._exit(1)
 if cfg.get("mode", "wait") == "wait":
     deadline = time.time() + 90
@@ -111,8 +114,8 @@ if cfg.get("mode", "wait") == "wait":
             break
         if cfg.get("honor_stop") and stop and stop.exists():
             end("abandoned", "paused at a checkpoint by cplat dispatch", "paused", code=1)
-        time.sleep(0.05)
-then = cfg.get("then", "done")
+        time.sleep(0.05)  # fake-delay: polls for the release or stop file the test writes
+then =cfg.get("then", "done")
 if then == "die-late":
     os._exit(1)
 if then == "escalate":
@@ -142,7 +145,7 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 def _exe(path: Path, text: str) -> Path:
-    path.write_text(text)
+    path.write_text(with_prelude(text))
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return path
 
@@ -185,8 +188,8 @@ class World:
             "default_checks": [[{"name": "ci", "bucket": "pass"}]]}))
         self._threads = set(threading.enumerate())      # threads of the test (not ours) are joined on close
         _exe(self.bin / "gh", gh_script())
-        _exe(self.bin / "claude", FAKE_CLAUDE % {"py": sys.executable})
-        _exe(self.bin / "fake-headless", FAKE_HEADLESS % {"py": sys.executable})
+        _exe(self.bin / "claude", FAKE_CLAUDE % {"py": sys.executable, "pre": fake_prelude()})
+        _exe(self.bin / "fake-headless", FAKE_HEADLESS % {"py": sys.executable, "pre": fake_prelude()})
         self.claude_cfg, self.behave_cfg = {}, {"default": {}, "units": {}}
         self._write_cfg()
         gitcfg = tmp_path / "gitconfig"
@@ -370,23 +373,20 @@ class World:
 
     def wait_ended(self, unit, timeout=20):
         assert self.calls_of(unit), f"the dispatcher never started {unit}"
-        end = time.time() + timeout
-        while time.time() < end:
+        def ended():
             try:
-                if self.result_of(unit).get("ended_at"):
-                    return True
+                return bool(self.result_of(unit).get("ended_at"))
             except (OSError, ValueError, IndexError):
-                pass
-            time.sleep(0.05)
-        raise AssertionError(f"the fake headless of {unit} did not end")
+                return False
+
+        ok = bool(wait_for(ended, budget(timeout), what=f"the fake headless of {unit} to end"))
+        # the fake writes `ended_at` and then exits: the dispatcher still sees a live unit until the process is gone
+        pid = self.calls_of(unit)[-1]["pid"]
+        wait_for(lambda: not self.alive(pid), budget(timeout), what=f"the fake headless of {unit} (pid {pid}) to exit")
+        return ok
 
     def wait_until(self, fn, timeout=30):
-        end = time.time() + timeout
-        while time.time() < end:
-            if fn():
-                return True
-            time.sleep(0.1)
-        raise AssertionError("condition not reached in time")
+        return bool(wait_for(fn, budget(timeout), what="the condition"))
 
     def alive(self, pid):
         try:
@@ -447,6 +447,8 @@ class World:
         self._patch_clock()
         out, err = io.StringIO(), io.StringIO()
         before = len(self.calls())
+        if argv and argv[0] in ("start", "resume"):
+            self._settle_lands()
         if cwd:
             self.mp.chdir(cwd)
         try:
@@ -459,13 +461,29 @@ class World:
             self._settle(before, res)
         return res
 
+    def _settle_lands(self):
+        """A land process writes its verdict into the unit file and then exits: the dispatcher must not look at it in between
+        (it would still count as landing and say nothing), so wait until every land process that has given its verdict is gone."""
+        listing = git(self.repo, "worktree", "list", "--porcelain")
+        for line in listing.splitlines():
+            if not line.startswith("worktree "):
+                continue
+            try:
+                gd = Path(git(Path(line[9:]), "rev-parse", "--absolute-git-dir", check=False).strip())
+                unit = json.loads((gd / "cplat-dispatch-unit.json").read_text())
+            except (OSError, ValueError):
+                continue
+            pid = unit.get("land_pid")
+            if pid and unit.get("landed"):
+                wait_for(lambda pid=pid: not self.alive(pid), budget(15), what=f"the land process {pid} to exit")
+
     def _settle(self, before, res):
         """The fake headless records its call when its interpreter is up: wait for the processes this command started."""
         expected = before + len([ln for ln in res.lines if ln.startswith(("started ", "restarted "))])
-        end = time.time() + 15
-        while len(self.calls()) < expected and time.time() < end:
-            time.sleep(0.05)
-        time.sleep(0.2)
+        wait_for(lambda: len(self.calls()) >= expected, budget(15), what=f"{expected} headless calls")
+        for call in self.calls()[before:expected]:      # the next thing a test reads is the result file the fake writes at start
+            if call["result_file"] != "None":
+                wait_file(call["result_file"], budget(15))
 
     def needs(self, *argv) -> Result:
         import cplat

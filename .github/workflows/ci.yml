@@ -120,6 +120,8 @@ jobs:
         run: uv run --with-requirements requirements-test.txt python scripts/check-docs.py
       - name: no "$$" in a string the e2e scripts send as a pod command (#323)
         run: python3 scripts/check-e2e-probes.py
+      - name: no fixed sleep in a cplat test (spec 178)
+        run: python3 scripts/check-test-sleeps.py
       - name: every image and chart comes from the versions table
         run: uv run --with-requirements requirements-test.txt python scripts/check-pins.py   # pyyaml from the pinned file (spec 127)
       - name: every file has license and copyright metadata (REUSE)

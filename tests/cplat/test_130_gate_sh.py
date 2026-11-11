@@ -9,6 +9,7 @@ import subprocess
 
 import pytest
 
+from waiting import with_prelude
 from gates130_support import (FIX_TESTS, GATE_SOURCE, TEMPLATES, clean_env, line, make_stubs, secrets_line,
                               no_tests_line)
 
@@ -220,21 +221,21 @@ def test_failsafe_reports_count_for_maven_ac_130_4(sandbox):  # AC-130.4
     stub_dir = d / "failsafe-reports"
     # a runner that only writes a failsafe report
     script = sandbox.repo / "writes-failsafe.sh"
-    script.write_text(f'#!/bin/sh\nmkdir -p "{stub_dir}"\nprintf \'<testsuite name="it" tests="1" errors="0" skipped="0" failures="0"></testsuite>\' > "{stub_dir}/TEST-it.xml"\n')
+    script.write_text(with_prelude(f'#!/bin/sh\nmkdir -p "{stub_dir}"\nprintf \'<testsuite name="it" tests="1" errors="0" skipped="0" failures="0"></testsuite>\' > "{stub_dir}/TEST-it.xml"\n'))
     p = sandbox.gate("tests", "test", "maven", "--", "sh", str(script))
     assert p.returncode == 0, p.stderr
 
 
 def test_a_cached_or_missing_vitest_report_counts_zero_ac_130_5(sandbox):  # AC-130.5
     script = sandbox.repo / "quiet.sh"
-    script.write_text("#!/bin/sh\nexit 0\n")      # exit 0 and no report at all
+    script.write_text(with_prelude("#!/bin/sh\nexit 0\n"))    # exit 0 and no report at all
     p = sandbox.gate("tests", "test", "vitest", "--", "sh", str(script))
     assert p.returncode == 1 and no_tests_line("test") in p.stderr.splitlines()
 
 
 def test_vitest_gets_a_fresh_report_path_in_its_environment_ac_130_5(sandbox):  # AC-130.5
     script = sandbox.repo / "env.sh"
-    script.write_text('#!/bin/sh\necho "REPORT=$VITEST_GATE_REPORT"\nexit 0\n')
+    script.write_text(with_prelude('#!/bin/sh\necho "REPORT=$VITEST_GATE_REPORT"\nexit 0\n'))
     p = sandbox.gate("tests", "test", "vitest", "--", "sh", str(script))
     assert "REPORT=/" in p.stdout and p.stdout.strip().endswith("vitest.json"), p.stdout
 

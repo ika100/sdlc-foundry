@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from waiting import with_prelude
 
 import appship_merge
 import appship_state
@@ -134,7 +135,7 @@ def test_hook_exit_behaviour(trio, tmp_path, key, state):
     (plugin / "bin").mkdir(parents=True)
     marker = tmp_path / "called"
     fake = plugin / "bin" / "cplat"
-    fake.write_text(f"#!/bin/sh\necho \"$@\" >> {marker}\nexit 0\n")
+    fake.write_text(with_prelude(f"#!/bin/sh\necho \"$@\" >> {marker}\nexit 0\n"))
     fake.chmod(0o755)
     cmd = hook_commands()[key]
     env = {k: v for k, v in os.environ.items() if k != "CPLAT_RUN_PARENT"} | {"CLAUDE_PLUGIN_ROOT": str(plugin)}

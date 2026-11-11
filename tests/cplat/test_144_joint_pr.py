@@ -22,6 +22,7 @@ import core
 import envwait
 import registry
 import ship
+from waiting import with_prelude
 import smoke
 import waits
 from test_appship_097 import FAKE_GH, GITOPS, REPO_SPEC, SHA, SLUG, SPEC, World, git, plan_text
@@ -84,8 +85,8 @@ class JointWorld(World):
     def __init__(self, tmp_path, monkeypatch, capsys, legacy=False, promote="after-dev-smoke"):
         self.legacy, self.promote = legacy, promote
         super().__init__(tmp_path, monkeypatch, capsys)
-        (self.bin / "gh").write_text(GH_144 % {"py": sys.executable, "sha": SHA})
-        (self.bin / "devbox").write_text(DEVBOX_144)
+        (self.bin / "gh").write_text(with_prelude(GH_144 % {"py": sys.executable, "sha": SHA}))
+        (self.bin / "devbox").write_text(with_prelude(DEVBOX_144))
         cfg = self.cfg()
         cfg["kube"]["contexts"]["kind-shop"] = ["shop-api-dev", "shop-web-dev"]
         self.cfg(kube=cfg["kube"], runs=[{"databaseId": 1, "status": "completed", "conclusion": "success"}])

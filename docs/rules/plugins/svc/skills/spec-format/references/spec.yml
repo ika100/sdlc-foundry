@@ -15,3 +15,8 @@ rules:
     text: "Change the text of an existing one only to clarify the same behaviour, because tests that cite the id keep proving it"
     class: practice
     source: ADR-026
+  - id: R5
+    text: "the old one is never left active but becomes"
+    class: practice
+    enforced_by: cplat spec check
+    source: "#477"

@@ -8,6 +8,7 @@ import pytest
 
 import core
 import quiet
+from waiting import with_prelude
 
 ROOT = core.PLATFORM_ROOT
 PLUGINS = ROOT / "plugins"
@@ -102,7 +103,7 @@ def repo(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     fake = bindir / "devbox"
-    fake.write_text("#!/bin/sh\ncat \"$FAKE_OUT\"\nexit ${FAKE_RC:-0}\n")
+    fake.write_text(with_prelude("#!/bin/sh\ncat \"$FAKE_OUT\"\nexit ${FAKE_RC:-0}\n"))
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     work = tmp_path / "myrepo"
     work.mkdir()

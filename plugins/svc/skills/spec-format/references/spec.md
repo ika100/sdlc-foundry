@@ -17,7 +17,7 @@ parent: acme/shop-gitops:012-checkout   # optional: the system spec this compone
 
 ## Problem
 
-Who has the problem, what it costs them today, why now. Two to five sentences.
+Who has the problem, what it costs today, why now. Two to five sentences.
 
 ## Stories
 
@@ -44,7 +44,6 @@ As a trader, I want an alert when a watched symbol crosses my threshold, so that
 ## Open questions
 
 - May a rule call a webhook outside the company network? (suggested: no, only allow-listed hosts; affects AC-007.4)
-- ~~Email provider?~~ Answered: the existing SMTP relay, see AC-007.1.
 
 ## Changelog
 
@@ -60,7 +59,7 @@ As a trader, I want an alert when a watched symbol crosses my threshold, so that
 - **Behaviour, not implementation:** "the price is stored" is untestable from outside; say what the user or caller can observe.
 - **Environment-neutral:** no host ports, local hostnames or machine paths (`:8088`, `todo-web.todo-dev.localhost`, `/Users/...`). Say what is observable wherever the system runs.
 - **Smoke marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL; after deploy `devbox run smoke` checks it in dev against `SMOKE_BASE_URL`. Use it for deployable shapes (not libraries) and for behaviour a test can check using nothing but the base URL, because the smoke run reaches nothing else.
-- **Small features have few criteria.** Three to eight is typical; more than twelve usually means two specs.
+- **Small features have few criteria:** three to eight; over twelve usually means two specs.
 
 ## Assumptions and open questions
 
@@ -73,4 +72,5 @@ A spec decides by default and asks only what may not be decided by default, so t
 ## Amending
 
 - Add new criteria with the next free number. Change the text of an existing one only to clarify the same behaviour, because tests that cite the id keep proving it; if behaviour changes, withdraw the old id and add a new one.
+- A criterion that changes behaviour an active criterion of another spec in this repo defines ends with `(replaces AC-<NNN>.<n>)`; in the same change the old one is never left active but becomes `- ~~**AC-<NNN>.<n>**~~ superseded by AC-<MMM>.<m> on <date>: <its old text>`, with one Changelog line in the old spec (status unchanged), because the old behaviour stops being counted. The old text keeps that spec's `spec_hash`; `cplat spec check` refuses an unstruck target.
 - Add a Changelog line for every amendment. The orchestrator moves an approved spec back to `draft`: it needs a new approval and, if criteria changed, a new plan (`spec_hash` drift).

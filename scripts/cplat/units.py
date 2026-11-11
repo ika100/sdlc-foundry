@@ -457,6 +457,13 @@ def gate(repo: Path, unit: str, hook_input: dict) -> dict | None:
     entry = _unit(data, unit)
     if entry is None:
         return None
+    import waits
+    waiting = waits.live(repo)
+    if waiting:                                    # a running cplat wait holds the stop: no hold, no count (AC-178.8)
+        return {"decision": "block",
+                "reason": (f"waiting: {', '.join(waiting)}\nUnit {unit} of {spec_id} is not finished; the wait above is still running.\n"
+                           "Next: read its result when it ends (a blocking read of its background task, never a polling loop), "
+                           "then go on from it.")}
     commit, why = _evaluate(repo, command, spec_id, unit)
     if commit:
         _update(repo, lambda d: _checkpoint(_unit(d, unit), commit) if _unit(d, unit) else None)

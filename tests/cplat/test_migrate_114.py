@@ -300,9 +300,11 @@ def test_the_rendered_tree_is_byte_identical_to_what_4_7_rendered_ac_114_40(migr
     after = {k: pin.sub(lambda m: m.group(3) or m.group(1) + m.group(2), v) for k, v in generated(migrated.repo).items()}  # spec 121: the collector digest is stripped too
     before = {k: pin.sub(lambda m: m.group(3) or m.group(1) + m.group(2), v) for k, v in migrated.before.items()}  # spec 121: the collector digest is stripped too
     after, before = update._without_credential_writers(after), update._without_credential_writers(before)   # spec 128: generated secrets are written by a credentials Job
+    files = len(after)
+    after, before = update._without_log_tailer(after), update._without_log_tailer(before)   # spec 182: observability gains a log tailer
     assert sorted(after) == sorted(before)
     assert next((k for k in sorted(after) if after[k] != before[k]), None) is None
-    assert len(after) > 50
+    assert files > 50
 
 
 def test_the_report_proves_the_identity_and_lists_the_deleted_files_ac_114_40(migrated):  # AC-114.40

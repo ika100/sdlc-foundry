@@ -4,6 +4,7 @@ import json
 import os
 import re
 import stat
+from waiting import with_prelude
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -108,8 +109,8 @@ def env(tmp_path, monkeypatch, store, clock):  # noqa: F811
     log = tmp_path / "devbox.log"
     log.write_text("")
     fake = bin_ / "devbox"
-    fake.write_text(f'#!/bin/sh\necho "$@" >> "{log}"\necho {LOGMARK}\n'
-                    'if [ -n "$DEVBOX_FAIL" ] && echo "$*" | grep -q "$DEVBOX_FAIL"; then exit 1; fi\nexit 0\n')
+    fake.write_text(with_prelude(f'#!/bin/sh\necho "$@" >> "{log}"\necho {LOGMARK}\n'
+                                 'if [ -n "$DEVBOX_FAIL" ] && echo "$*" | grep -q "$DEVBOX_FAIL"; then exit 1; fi\nexit 0\n'))
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.delenv("DEVBOX_FAIL", raising=False)

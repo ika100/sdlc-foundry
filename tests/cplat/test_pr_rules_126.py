@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from waiting import with_prelude
 
 import core
 
@@ -262,9 +263,9 @@ def fake_gh(tmp_path, pr):
     d = tmp_path / "bin"
     d.mkdir(exist_ok=True)
     exe = d / "gh"
-    exe.write_text(f"#!{sys.executable}\nimport json, sys\n"
-                   f"open({str(tmp_path / 'gh.log')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
-                   + ("sys.exit('no pull requests found for branch')\n" if pr is None else f"print(json.dumps({pr!r}))\n"))
+    exe.write_text(with_prelude(f"#!{sys.executable}\nimport json, sys\n"
+                                f"open({str(tmp_path / 'gh.log')!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                                + ("sys.exit('no pull requests found for branch')\n" if pr is None else f"print(json.dumps({pr!r}))\n")))
     exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
     return d
 

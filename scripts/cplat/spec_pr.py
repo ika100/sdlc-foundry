@@ -177,9 +177,10 @@ def land(root: Path, spec: specmod.Spec) -> tuple[bool, list[str]]:
         raise PlatformError(f"{spec.id}: marking spec PR #{number} ready failed (gh exit {rc})"
                             + (f": {_last_error}" if _last_error else ""),
                             hint=f"the PR is still a draft; run `cplat spec land {spec.id}` again once GitHub answers")
+    import land_merge
     import pr
     import ship
-    return pr.wait(root, number, True, 3600, 20, ship.QUEUE_TIMEOUT)
+    return pr.wait(root, number, True, 3600, 20, ship.QUEUE_TIMEOUT, mode=land_merge.CATCH_UP)
 
 
 def request_changes(root: Path, spec: specmod.Spec, body_file: Path) -> str:

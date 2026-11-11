@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from waiting import with_prelude
 
 PORTS = Path(__file__).resolve().parents[2] / "templates" / "gitops-app" / "scripts" / "ports.sh"
 
@@ -80,7 +81,7 @@ def test_cluster_up_refuses_a_busy_port_before_creating_anything(tmp_path, busy_
     log = tmp_path / "calls.log"
     for tool in ("k3d", "kubectl", "gh"):
         script = bin_dir / tool
-        script.write_text(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\n[ "{tool}" = k3d ] && [ "$1 $2" = "cluster list" ] && exit 1\nexit 0\n')
+        script.write_text(with_prelude(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\n[ "{tool}" = k3d ] && [ "$1 $2" = "cluster list" ] && exit 1\nexit 0\n'))
         script.chmod(0o755)
     import os
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "LOCAL_HTTP_PORT": str(busy_port), "GH_TOKEN": "x"}
@@ -104,8 +105,8 @@ def _skeleton(tmp_path):
     for tool in ("k3d", "kubectl", "gh", "helm"):
         script = bin_dir / tool
         # `cluster create` is recorded, then fails, so the script stops right after choosing the port
-        script.write_text(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\n[ "{tool}" = k3d ] && [ "$1 $2" = "cluster list" ] && exit 1\n'
-                          f'[ "{tool}" = k3d ] && [ "$1 $2" = "cluster create" ] && exit 1\nexit 0\n')
+        script.write_text(with_prelude(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\n[ "{tool}" = k3d ] && [ "$1 $2" = "cluster list" ] && exit 1\n'
+                                       f'[ "{tool}" = k3d ] && [ "$1 $2" = "cluster create" ] && exit 1\nexit 0\n'))
         script.chmod(0o755)
     return skeleton, bin_dir, log
 
@@ -139,12 +140,12 @@ def test_a_reused_cluster_prints_its_real_port_not_default(tmp_path):
     bin_dir.mkdir()
     for tool in ("k3d", "kubectl", "gh", "helm"):
         script = bin_dir / tool
-        script.write_text("#!/bin/sh\nexit 0\n")             # the cluster exists; every call succeeds
+        script.write_text(with_prelude("#!/bin/sh\nexit 0\n"))           # the cluster exists; every call succeeds
         script.chmod(0o755)
     # the metrics API reports Available at once, as on a running cluster (no 120 s wait)
-    (bin_dir / "kubectl").write_text('#!/bin/sh\ncase "$*" in *metrics.k8s.io*) echo True ;; esac\nexit 0\n')
+    (bin_dir / "kubectl").write_text(with_prelude('#!/bin/sh\ncase "$*" in *metrics.k8s.io*) echo True ;; esac\nexit 0\n'))
     docker = bin_dir / "docker"
-    docker.write_text('#!/bin/sh\n[ "$1" = port ] && echo "0.0.0.0:8123" && exit 0\nexit 0\n')
+    docker.write_text(with_prelude('#!/bin/sh\n[ "$1" = port ] && echo "0.0.0.0:8123" && exit 0\nexit 0\n'))
     docker.chmod(0o755)
     env = {k: v for k, v in os.environ.items() if k != "LOCAL_HTTP_PORT"}
     env |= {"PATH": f"{bin_dir}:{os.environ['PATH']}", "GH_TOKEN": "x", "WITH_ESO": "0", "WITH_CNPG": "0", "WITH_LGTM": "1"}

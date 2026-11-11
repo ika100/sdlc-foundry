@@ -2,6 +2,7 @@
 import json
 import os
 import stat
+from waiting import with_prelude
 import sys
 
 import pytest
@@ -25,7 +26,7 @@ def red_required_check(w):
     orig = w.bin / "gh-orig"
     (w.bin / "gh").rename(orig)
     gh = w.bin / "gh"
-    gh.write_text(GH_WRAP % {"py": sys.executable, "orig": str(orig)})
+    gh.write_text(with_prelude(GH_WRAP % {"py": sys.executable, "orig": str(orig)}))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
 
 
