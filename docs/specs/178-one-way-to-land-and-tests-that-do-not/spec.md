@@ -1,7 +1,7 @@
 ---
 spec_id: 178-one-way-to-land-and-tests-that-do-not
 title: One way to land and tests that do not race
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [648]
@@ -71,3 +71,4 @@ None.
 - 2026-11-10 created
 - 2026-11-10 approved
 - 2026-11-10 building
+- 2026-11-11 done
