@@ -52,6 +52,7 @@ tasks:
     covers: [AC-182.5, AC-182.1, AC-182.2, AC-182.3]
     parallel_safe: true
     depends_on: [t2, t5]
+    done: true
   - id: t8
     title: Docs - how it works, ADR-021 superseded in part, ADR index, gitops CLAUDE.md, changelog fragment
     files: [docs/HOW-IT-WORKS.md, docs/adr/021-observability-otel.md, docs/adr/README.md, templates/gitops-app/CLAUDE.md.jinja, docs/changelog.d/182-logs-reach-loki.added.md]
