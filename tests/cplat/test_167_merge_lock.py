@@ -62,9 +62,10 @@ def _manual(world, url=B):
     return Land(lambda: prmod.main(["wait", url, "--merge", "--interval", "0.05", "--timeout", "60", "--repo", str(world.repo)]))
 
 
-def _two(world, first, second, delay=0.6):
-    """Start `first`, wait until its merge is under way, start `second`, join both."""
-    world.edit_gh(lambda d: d.update(merge_delay=delay))
+def _two(world, first, second, delay=0.6, hold_for_checks_of=None):
+    """Start `first`, wait until its merge is under way, start `second`, join both. With `hold_for_checks_of` (a URL suffix) the
+    first merge stays under way until the second has asked for its checks, however slow the machine is."""
+    world.edit_gh(lambda d: d.update(merge_delay=delay, merge_hold_for_checks_of=hold_for_checks_of))
     first.start()
     world.wait_until(lambda: any(e["ev"] == "merge-start" and e["pr"] == 10 for e in world.events()), timeout=20)
     second.start()
@@ -153,7 +154,7 @@ def test_without_e2e_only_the_merge_is_serialized_ac_167_7(world):  # AC-167.7
     world.pr(10, "fix/a", checks=[PASS])
     world.pr(11, "fix/b", checks=[PASS], after_update=[PASS])
     unit, manual = _unit(world), _manual(world)
-    _two(world, unit, manual, delay=0.8)
+    _two(world, unit, manual, delay=0, hold_for_checks_of="/11")
     ev, t, calls = _times(world)
     first_checks_b = min(ts for ts, argv in calls if argv[:2] == ["pr", "checks"] and argv[2].endswith("/11"))
     assert first_checks_b < t[("merged", 10)]                         # the second watched its CI while the first merged

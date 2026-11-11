@@ -443,6 +443,8 @@ class World:
         self._patch_clock()
         out, err = io.StringIO(), io.StringIO()
         before = len(self.calls())
+        if argv and argv[0] in ("start", "resume"):
+            self._settle_lands()
         if cwd:
             self.mp.chdir(cwd)
         try:
@@ -454,6 +456,22 @@ class World:
         if argv and argv[0] in ("start", "resume"):
             self._settle(before, res)
         return res
+
+    def _settle_lands(self):
+        """A land process writes its verdict into the unit file and then exits: the dispatcher must not look at it in between
+        (it would still count as landing and say nothing), so wait until every land process that has given its verdict is gone."""
+        listing = git(self.repo, "worktree", "list", "--porcelain")
+        for line in listing.splitlines():
+            if not line.startswith("worktree "):
+                continue
+            try:
+                gd = Path(git(Path(line[9:]), "rev-parse", "--absolute-git-dir", check=False).strip())
+                unit = json.loads((gd / "cplat-dispatch-unit.json").read_text())
+            except (OSError, ValueError):
+                continue
+            pid = unit.get("land_pid")
+            if pid and unit.get("landed"):
+                wait_for(lambda pid=pid: not self.alive(pid), budget(15), what=f"the land process {pid} to exit")
 
     def _settle(self, before, res):
         """The fake headless records its call when its interpreter is up: wait for the processes this command started."""

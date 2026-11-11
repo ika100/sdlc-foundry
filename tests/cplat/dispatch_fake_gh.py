@@ -219,6 +219,11 @@ elif cmd == ["pr", "merge"]:
     S["events"].append({"ev": "merge-start", "pr": p["number"], "t": time.time()})
     unlock()
     time.sleep(S.get("merge_delay", 0))  # fake-delay: the merge takes merge_delay seconds with the lock released, so two merges overlap
+    hold = S.get("merge_hold_for_checks_of")
+    if hold:                              # the merge stays under way until the call named here has been logged (an event, not a timing)
+        end = time.time() + 60
+        while time.time() < end and not any(a["argv"][:2] == ["pr", "checks"] and a["argv"][2].endswith(hold) for a in load()["log"]):
+            time.sleep(0.02)  # fake-delay: polls the call log until the other pull request has asked for its checks
     relock()
     p = find_pr(args[2])
     if mh and mh != p["head"]:
