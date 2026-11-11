@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-10-07
 **Builds on:** ADR-020 (addons)
+**Superseded in part by:** ADR-098
 
 ## Context
 
@@ -19,4 +20,4 @@ Generated services already expose Prometheus metrics (and, per shape, some OpenT
 
 ## Not included
 
-Alerting and dashboards-as-code (no Prometheus Operator CRDs on purpose), stdout log collection (needs node access; logs arrive only if a service's SDK pushes them), OpenTelemetry in Go services (metrics are scraped; the Go SDK is a follow-up), tail sampling and HA/multi-tenant backends.
+Alerting and dashboards-as-code (no Prometheus Operator CRDs on purpose), stdout log collection (superseded by [ADR-098](098-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md): the collector's pod reads pod logs through the Kubernetes API, namespaced, with no node access), OpenTelemetry in Go services (metrics are scraped; the Go SDK is a follow-up), tail sampling and HA/multi-tenant backends.

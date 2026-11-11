@@ -5,7 +5,7 @@
 - **One land path, one mode per command.** The five commands already reach `land_merge` (four through `pr.wait`, ship
   land through `ship._merge_locked`), but none says how it treats a branch behind `main`, so the release took the
   catch-up of ADR-092. `land_merge.wait_green` and `land_merge.settle` get a `mode`; each caller passes its mode
-  explicitly. ADR: [docs/adr/096-every-merge-into-main-takes-one-land-path-with-a-stated-mode.md](../../adr/096-every-merge-into-main-takes-one-land-path-with-a-stated-mode.md).
+  explicitly. ADR: [docs/adr/100-every-merge-into-main-takes-one-land-path-with-a-stated-mode.md](../../adr/100-every-merge-into-main-takes-one-land-path-with-a-stated-mode.md).
 - **A release behind `main` stops; it is never rebuilt** (A1). `RELEASE` mode raises `BaseMoved` where `CATCH_UP`
   would update the branch or regenerate a conflict; `platrelease` turns it into the two lines of AC-178.1.
 - **After the land moved the head, the merge waits for the new head's expected checks** (AC-178.2): required checks

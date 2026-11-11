@@ -1,4 +1,4 @@
-# ADR-096: Every merge into main takes one land path with a stated mode
+# ADR-100: Every merge into main takes one land path with a stated mode
 
 **Status:** Accepted (2026-11-10, spec 178)
 **Builds on:** [ADR-092](092-a-land-settles-what-has-an-obvious-answer.md) (the landing rules), [ADR-089](089-every-merge-into-main-holds-the-repo-merge-lock.md) (the repo merge lock)

@@ -1,6 +1,8 @@
 package {{ package_name }};
 
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -8,6 +10,8 @@ import org.springframework.web.bind.annotation.RestController;
 /** Minimal example endpoint; replace with the service's real API. */
 @RestController
 public class InfoController {
+
+  private static final Logger LOG = LoggerFactory.getLogger(InfoController.class);
 
   private final String name;
 
@@ -18,6 +22,7 @@ public class InfoController {
   /** Returns the service name. */
   @GetMapping("/api/info")
   public Map<String, String> info() {
+    LOG.info("info requested");
     return Map.of("service", name);
   }
 }

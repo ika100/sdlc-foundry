@@ -109,7 +109,7 @@ occurrences that t5–t7 remove (it goes green once they are merged).
 **Goal:** say what a person sees when a release's base moved, that a refused merge is waited for, and how tests wait.
 
 **Implementation notes:**
-- `docs/adr/README.md`: rows for ADR-096 and ADR-097 (files exist), one sentence each in the table's style.
+- `docs/adr/README.md`: rows for ADR-100 and ADR-097 (files exist), one sentence each in the table's style.
 - `CONTRIBUTING.md`: Releases — a release whose branch fell behind `main` stops with `main moved: start the release again` (close the PR, delete the branch, run again); Checks — `python3 scripts/check-test-sleeps.py`; PR rules — tests wait through `tests/cplat/waiting.py`, never a fixed sleep (ADR-097).
 - `docs/unattended-delivery.md`: the landing section names the modes (release never catches up), the wait for the new head's checks after a catch-up and the 3 refused merges.
 - Fragment per `docs/changelog.d/README.md`, bold summary ending `(#648).`, relative links from that directory.

@@ -7,6 +7,7 @@ from __future__ import annotations
 {% endif %}from fastapi import FastAPI
 {%- if needs_observability %}
 from fastapi.responses import Response
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 {%- endif %}
 from pydantic import BaseModel
@@ -25,6 +26,8 @@ if tracing_enabled():
 app = FastAPI(title="{{ project_name }}", version=__version__)
 {%- if needs_observability %}
 app.add_middleware(MetricsMiddleware)
+if tracing_enabled():
+    FastAPIInstrumentor.instrument_app(app)
 {%- endif %}
 
 

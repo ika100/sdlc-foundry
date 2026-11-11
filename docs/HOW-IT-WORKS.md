@@ -122,7 +122,7 @@ Git holds only references. `system.yaml` `secrets:` becomes Secrets: `generate: 
 
 ### Observability (OpenTelemetry)
 
-Setting `observability` on an environment in `system.yaml` (`environments.<env>.observability`) puts an OpenTelemetry Collector next to your services in that environment and points them at it with the standard `OTEL_*` variables. The collector receives OTLP and scrapes each service's Prometheus endpoint. Where the data goes is your choice: `exportTo: <OTLP/HTTP endpoint>` for your own backend, or `ui: lgtm` for a local Grafana dev stack (`http://grafana.localhost:8088 (or the port cluster-up prints)`, installed by `cluster-up`). Details: ADR-021.
+Setting `observability` on an environment in `system.yaml` (`environments.<env>.observability`) puts an OpenTelemetry Collector next to your services in that environment and points them at it with the standard `OTEL_*` variables. The collector receives OTLP and scrapes each service's Prometheus endpoint. Where the data goes is your choice: `exportTo: <OTLP/HTTP endpoint>` for your own backend, or `ui: lgtm` for a local Grafana dev stack (`http://grafana.localhost:8088 (or the port cluster-up prints)`, installed by `cluster-up`). The collector's pod also carries a `log-tailer` container that reads every pod's stdout in the namespace through the Kubernetes API (a namespaced Role: read pods and pod logs only, no cluster role, no node access) and sends it to the collector with the labels `service_name`, `k8s_namespace_name`, `k8s_pod_name` and `deployment_environment` and the trace link (`trace_id`, `span_id`). Details: ADR-021, [ADR-098](adr/098-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md).
 
 ### Guard rails (Kyverno)
 

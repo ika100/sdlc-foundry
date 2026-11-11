@@ -718,8 +718,8 @@ def test_a_cache_name_clashing_with_its_password_object_fails_ac_118_22(tmp_path
 
 
 # byte-identical guarantee: digests of the trees the 5.x renderer wrote before spec 118 (full tree, sha256 of sorted path and content)
-BEFORE_118 = {"full5": ("42982079dcb98f909628c25289dacc529da7a4d3272bbfb27fa769f52733f68d", 67),   # spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
-              "rich5": ("b1e219872bc6af25b45074d6b173f5b4d8a480938ae4b04283ca31e679aa3aae", 67),   # spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
+BEFORE_118 = {"full5": ("3730affc78b57cf14061c4e92833c53e614ab7b652bf6775034b95d5689f3c89", 79),   # spec 182: the log tailer adds 12 files; spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
+              "rich5": ("f42760e4828c1738ac3b1578cc0a431940e0933f419744496420ac872dfc6522", 79),   # spec 182: the log tailer adds 12 files; spec 128: a generated component secret gets a credentials Job; #341: create.py is a literal block with the allowlist pragma
               "db-bucket": ("8f7dfe6d6e378ae4e30e2b0c8e444e2a4174f06bd3ea9d9cc2dbc3b356bc9519", 56)}   # spec 128: the credentials Job replaces the bucket's generators and ExternalSecret; #341: create.py is a literal block with the allowlist pragma; the bucket adopts an existing bucket (adoptExisting)
 
 

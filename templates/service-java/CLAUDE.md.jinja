@@ -94,6 +94,7 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 {%- endif %}
 {%- if needs_observability %}
 - **Observability:** Micrometer → `/actuator/prometheus` (every metric tagged `service`); the OpenTelemetry Java agent is baked into the image and **disabled** (`OTEL_SDK_DISABLED=true`) until you set it to `false` and provide `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- **Logging:** JSON on stdout (`logging.structured.format.console: logstash`); inside a traced request every line carries `trace_id` and `span_id` from the agent's MDC. Log through SLF4J, never `System.out`.
 {%- endif %}
 - **Tests:** JUnit 5 + Spring Boot Test in `src/test/java`; Testcontainers when integration tests need real dependencies; JaCoCo gate 80% lines (`Application.class` excluded).
 - **Docs:** feature specs in `docs/specs/` (index in `docs/backlog.md`), ADRs in `docs/adr/`.
