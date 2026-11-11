@@ -21,7 +21,7 @@ Print its output verbatim.
 ## 1. Pre-flight
 
 1. `git status --porcelain` must be empty so that the plan commit holds only the plan.
-2. Shape from the routing JSON (`SHAPE`, `agents`). `unsupported` → stop (gitops-app: `/system:plan`). No shape → continue; the plan records none. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since the user declared it.
+2. Shape from the routing JSON (`SHAPE`, `agents`). `unsupported` → stop (gitops-app: `/system:plan`). No shape → continue; the plan records none. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. That file already declares it, since the user put it there.
 3. `cplat spec check <id> --require approved`. If it fails, show the errors and the fix (`/component:spec approve <NNN>` or `/component:spec --amend …`) and stop.
 4. Switch to `feature/<spec_id>` (create it from `main` if it does not exist).
 5. If `plan.md` exists and any task has `done: true`, the spec is partly built: ask before re-planning (task progress is lost).

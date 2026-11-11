@@ -7,7 +7,7 @@ rules:
     text: "`git status --porcelain` must be empty so that the plan commit holds only the plan."
     class: practice
   - id: R3
-    text: "A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since the user declared it."
+    text: "A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape."
     class: practice
   - id: R4
     text: "plan only an approved spec, because approval is the user's gate before any plan or code."
