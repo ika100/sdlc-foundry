@@ -2,15 +2,16 @@
 
 Seam: small trees under tmp_path; `promptrefs.problems(root, rel, text)` and `rulescheck.check(root)` (failure kinds
 broken-link, broken-anchor, unknown-cplat, unknown-slash). The new modules are imported inside the tests."""
-from rules_support import GOOD_BODY, PROMPT, Lazy, check, fv, good_repo, of_kind, put
+from rules_support import GOOD_BODY, PROMPT, Lazy, check, fv, good_repo, of_kind, prompt_text, put
 
 promptrefs = Lazy("promptrefs")
 
 
 def tree(tmp_path, extra=""):
     root = good_repo(tmp_path)
-    put(root, "plugins/svc/commands/other.md", "---\ndescription: Other\n---\n# Other\n\n## First part\n\n## First part\n")
-    put(root, "plugins/svc/references/ref.md", "# Ref\n")
+    # every .md under commands/ and references/ is a prompt: it carries the statement so that only the targets decide the check
+    put(root, "plugins/svc/commands/other.md", prompt_text("# Other\n\n## First part\n\n## First part\n"))
+    put(root, "plugins/svc/references/ref.md", prompt_text("# Ref\n"))
     return root
 
 
@@ -108,7 +109,7 @@ def test_the_rules_check_reports_prompt_file_line_and_missing_target_ac_180_1(tm
 
 def test_only_limits_the_target_checks_to_the_prompts_in_scope_ac_180_1(tmp_path):  # AC-180.1
     root = tree(tmp_path)
-    put(root, "plugins/svc/commands/other.md", "---\ndescription: Other\n---\nSee [x](missing.md).\n")
+    put(root, "plugins/svc/commands/other.md", prompt_text("See [x](missing.md).\n"))
     assert of_kind(check(root, only=[PROMPT]), "broken-link") == []
     assert len(of_kind(check(root, only=["plugins/svc/commands/other.md"]), "broken-link")) == 1
     assert GOOD_BODY
