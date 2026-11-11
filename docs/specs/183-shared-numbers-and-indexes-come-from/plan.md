@@ -52,6 +52,7 @@ tasks:
     covers: [AC-183.4, AC-183.8]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 183 Shared numbers and indexes come from cplat

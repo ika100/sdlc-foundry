@@ -2,7 +2,7 @@
 
 Decisions that shape how the platform works, with the context and the alternatives that were rejected. Every ADR has a status line; superseded decisions keep their file and say which ADR replaced them.
 
-**Adding one:** copy the structure of a recent ADR (context, decision, consequences, what is not included), use the next free number, and list it in the table below (`scripts/shapes.py check` fails when an ADR file is missing here).
+**Adding one:** `cplat adr add <slug> --decision "<one line>"` writes the next free number from the template and appends its row to the table below; fill in the sections (`scripts/shapes.py check` fails when an ADR file is missing here).
 
 | ADR | Decision |
 |---|---|
@@ -96,3 +96,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [095](095-plugins-declare-dependencies-and-starter-bundles-the-set.md) | Live plugins depend on `shared` by bare name (no version ranges), the `starter` plugin's dependencies are the starter set (`shared`, `system`, `component`, `platform`), `check-plugin-deps.py` checks both, and `/platform:doctor` requires Claude Code 2.1.311 |
 | [096](096-journey-waiting-is-attributed-from-evidence.md) | A journey is measured by `cplat platform runs journey measure` (`scripts/journey/measure.py` forwards to it): each minute counts once, a person first, then agents when any thread works (coordinator, subagents, and the system ship's repo sessions found through its run records), then waiting; waiting is attributed to CI, deploy, promotion, restore, cluster or smoke only from evidence (Actions runs, run-store phases, wait records), otherwise `unattributed` (spec 181) |
 | [098](098-pod-logs-are-read-through-the-kubernetes-api-next-to-the-collector.md) | Pod stdout reaches the backend through the Kubernetes API: a `log-tailer` container in the environment's collector pod follows each pod's logs and posts OTLP/JSON to the collector in its own pod, with a namespaced Role (pods get/list/watch, pods/log get), no ClusterRole, DaemonSet or hostPath; it supersedes ADR-021's "Not included" stdout entry |
+| [099](099-shared-numbers-and-indexes-are-handed-out-by-cplat.md) | Shared numbers come from one scan of the tree, base, pushed branches and open PRs (`refscan`) for `cplat spec new` and `cplat spec check`; ADRs are created by `cplat adr add`, which appends exactly one index row; a replaced criterion is marked `(replaces AC-<NNN>.<n>)` and struck through as `superseded by`, counted as withdrawn; a closed stdout pipe exits 141 quietly (spec 183) |

@@ -1,6 +1,6 @@
 rules:
   - id: R1
-    text: "Number them from `ADR_NEXT` in the prompt (counting up for more than one), never from the highest file you see, because other branches may hold the next numbers."
+    text: "create each with `cplat adr add <slug> --decision \"<one line>\"`, never by hand, because other branches may hold the next numbers"
     class: practice
   - id: R2
     text: "Do not list acceptance test files, because they exist before coding and coders do not edit them."

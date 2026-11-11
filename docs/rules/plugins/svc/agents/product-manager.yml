@@ -30,6 +30,10 @@ rules:
     class: hard
     hard: issue-filing-needs-consent
     source: ADR-033
+  - id: R9
+    text: "never leaves the old one active: it is marked `superseded by` it (Amending in the format reference), because the old behaviour stops being counted"
+    class: practice
+    source: "#477"
   - id: R8
     text: "Do not invent another format."
     class: retired
