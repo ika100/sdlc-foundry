@@ -188,7 +188,7 @@ def test_component_set_resources_merges_into_system_yaml_and_renders_ac_179_1(gi
     assert run("component", "set", "todo-api", "--resources", "limits.memory=512Mi", "--repo-dir", gitops5) == 0
     res = sysdoc(gitops5)["components"]["todo-api"]["resources"]
     assert res["requests"] == {"cpu": "100m", "memory": "256Mi"} and res["limits"]["memory"] == "512Mi"   # earlier keys stay
-    assert _rendered_resources(gitops5, "todo-api") == {"requests": {"cpu": "100m", "memory": "256Mi"}, "limits": {"memory": "512Mi"}}
+    assert _rendered_resources(gitops5, "todo-api") == res                    # rendered as set; the seeded limits.cpu stays too
 
 
 @pytest.mark.parametrize("bad", ["requests.disk=1Gi", "cpu=100m", "requests.cpu=lots", "requests.cpu", "limits.cpu="])
