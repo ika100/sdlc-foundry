@@ -52,12 +52,14 @@ tasks:
     covers: [AC-184.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: Guide and changelog fragment
     files: [docs/unattended-delivery.md, docs/changelog.d/184-parallel-ships-do-not-stop-each-other.added.md]
     covers: [AC-184.2, AC-184.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: Land merge resolves ADR-index and rule-register conflicts
     files: [scripts/cplat/land_merge.py]
