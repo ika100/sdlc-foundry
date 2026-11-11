@@ -94,12 +94,14 @@ tasks:
     covers: [AC-179.5, AC-179.6]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t5
     title: PR block - unresolved test-review findings and tightened smoke tests
     files: [scripts/cplat/runs_built.py, scripts/cplat/runs_agents.py]
     covers: [AC-179.6, AC-179.9]
     parallel_safe: true
     depends_on: [t3]
+    done: true
 human_steps:
   - "Before the next platform release (ADR-085): t11 and t12 change component and svc prompts, so in a Claude session on the release candidate run `cplat platform runs benchmark quick-task --plugins plugins --reset-first` and `cplat platform runs benchmark build --plugins plugins --reset-first`; the eval gate of `cplat platform release` needs both."
 ---
