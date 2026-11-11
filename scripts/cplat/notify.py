@@ -176,7 +176,8 @@ def events_of(doc: dict, kinds: tuple[str, ...] = CONSOLE_KINDS) -> dict[str, di
         what = obj.get("spec") or obj.get("version") or obj.get("run_id") or ""
         out[it["id"]] = {"event": it["kind"], "title": f"{it['kind']}: {what}", "text": it.get("reason") or "",
                          "repo": obj.get("repo") or it.get("cwd_repo"), "number": None, "prod": False, "spec": what,
-                         "stage": it.get("stage") or "", "since": it.get("since") or ""}
+                         "stage": it.get("stage") or "", "since": it.get("since") or "",
+                         "shape": obj.get("shape") if it["kind"] == "escalation" else None}
     for i in doc.get("issues") or []:
         names = _label_names(i)
         event = next((ev for label, ev in {**ISSUE_LABELS, "retro": "retro"}.items() if label in names), None)
@@ -497,7 +498,7 @@ def process(cfg: notify_config.Config, doc: dict, path: Path, *, kinds: tuple[st
                 dropped[why] += 1
                 continue
             signed[sig] = key
-        for channel, value in cfg.events[ev["event"]].items():
+        for channel, value in notify_config.cells_for(cfg, ev["event"], ev.get("shape")).items():
             if value != "instant" or channel in rec["sent"]:
                 continue
             if quiet and not (ev["event"] in ("alert", "signal") and ev["prod"]):

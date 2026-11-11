@@ -2,6 +2,7 @@
 
 The file is `${XDG_CONFIG_HOME:-~/.config}/sdlc-foundry/notify.yaml`. Webhook URLs and SMTP passwords are never read from it:
 they come from the environment or the OS keychain (`secret`).
+An `escalation` of a `platform` repo goes to the desktop, not GitHub, unless the file sets that cell (`cells_for`, spec 179).
 """
 from __future__ import annotations
 
@@ -40,6 +41,10 @@ class Config:
     email: dict = field(default_factory=dict)
     digest: dict = field(default_factory=lambda: {"at": "09:00", "days": ["mon", "tue", "wed", "thu", "fri"]})
     quiet_hours: str | None = None
+    explicit: set[str] = field(default_factory=set)      # "<event>.<channel>" for every cell the user's file sets
+
+
+PLATFORM_ESCALATION = {"github": "off", "desktop": "instant"}
 
 
 def default_path() -> Path:
@@ -51,6 +56,16 @@ def recommended() -> dict[str, dict[str, str]]:
     """The preset that works with no setup (design.md, notify.yaml)."""
     return {e: {"github": "instant" if e in GITHUB_INSTANT else "off", "slack": "off", "email": "off",
                 "desktop": "instant" if e in DESKTOP_INSTANT else "off"} for e in EVENTS}
+
+
+def cells_for(cfg: Config, event: str, shape: str | None) -> dict[str, str]:
+    """cfg.events[event], with PLATFORM_ESCALATION applied to an `escalation` of a `platform` repo for every cell the user did not set."""
+    cells = dict(cfg.events[event])
+    if event == "escalation" and shape == "platform":
+        for channel, value in PLATFORM_ESCALATION.items():
+            if f"{event}.{channel}" not in cfg.explicit:
+                cells[channel] = value
+    return cells
 
 
 def _bad(key: str, why: str) -> PlatformError:
@@ -76,7 +91,7 @@ def _mapping(node, key: str) -> dict:
     return node
 
 
-def _apply_events(events: dict, node) -> None:
+def _apply_events(events: dict, node, explicit: set[str] | None = None) -> None:
     for event, cells in _mapping(node, "events").items():
         if event not in EVENTS:
             raise _bad(f"events.{event}", f"unknown event (one of {', '.join(EVENTS)})")
@@ -89,6 +104,8 @@ def _apply_events(events: dict, node) -> None:
             if value == "digest" and channel not in DIGEST_CHANNELS:
                 raise _bad(key, "'digest' is only for slack and email")
             events[event][channel] = value
+            if explicit is not None:
+                explicit.add(f"{event}.{channel}")
 
 
 def _digest(node) -> dict:
@@ -124,7 +141,7 @@ def load(path: Path | str | None = None) -> Config:
             raise _bad(str(k), f"unknown key (one of {', '.join(TOP_KEYS)})")
     if doc.get("preset", "recommended") != "recommended":
         raise _bad("preset", f"unknown preset {doc['preset']!r} (recommended)")
-    _apply_events(cfg.events, doc.get("events"))
+    _apply_events(cfg.events, doc.get("events"), cfg.explicit)
     slack = _mapping(doc.get("slack"), "slack")
     for k in slack:
         if k != "channels":
