@@ -10,6 +10,7 @@ tasks:
     covers: [AC-182.1, AC-182.2, AC-182.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: observability_files renders the tailer container, its ConfigMap and the namespaced RBAC; registries gain the tailer image
     files: [templates/gitops-app/scripts/render.py, templates/cluster-gitops/scripts/system_render.py]
@@ -22,12 +23,14 @@ tasks:
     covers: [AC-182.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: service-go reads traceparent and logs its trace and span id
     files: [templates/service-go/internal/server/tracelog.go, templates/service-go/internal/server/tracelog_test.go, templates/service-go/internal/server/server.go.jinja, "templates/service-go/cmd/{{ project_name }}/main.go.jinja", templates/service-go/copier.yml]
     covers: [AC-182.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: service-java logs JSON (logstash) with the agent's trace ids; /api/info logs one line
     files: [templates/service-java/src/main/resources/application.yml.jinja, "templates/service-java/src/main/java/{{ package_path }}/InfoController.java.jinja", "templates/service-java/src/test/java/{{ package_path }}/LogFormatTest.java.jinja", templates/service-java/copier.yml, templates/service-java/CLAUDE.md.jinja]
