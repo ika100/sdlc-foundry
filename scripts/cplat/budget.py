@@ -315,6 +315,23 @@ def find(run_id: str | None) -> tuple[Path, dict] | None:
     return None
 
 
+def add_pause(run_id: str | None, minutes: float) -> None:
+    """A usage-limit pause does not count against the `minutes` budget (AC-184.3). Never raises."""
+    try:
+        found = find(run_id)
+        if found is None or not found[1].get("current"):
+            return
+
+        def add(d: dict) -> None:
+            cur = d.get("current")
+            if cur:
+                cur["paused_minutes"] = round((cur.get("paused_minutes") or 0) + max(0.0, minutes), 3)
+
+        _modify(found[0], add)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _fold_previous(data: dict, now: str) -> None:
     """A continued ledger whose last root never closed: its minutes up to the stop (not the idle time since) and counters carry over."""
     prev = data.get("current")
@@ -324,7 +341,8 @@ def _fold_previous(data: dict, now: str) -> None:
     end = _when((data.get("stop") or {}).get("at")) or _when(now)
     c = data["carried"]
     if start and end:
-        c["minutes"] = round(c.get("minutes", 0) + max(0.0, (end - start).total_seconds() / 60), 1)
+        span = (end - start).total_seconds() / 60 - (prev.get("paused_minutes") or 0)
+        c["minutes"] = round(c.get("minutes", 0) + max(0.0, span), 1)
     for k in ("invocations", "reruns"):
         c[k] = c.get(k, 0) + data["used"].get(k, 0)
     data["used"] = {"invocations": 0, "reruns": 0}
@@ -444,7 +462,8 @@ def used_of(data: dict, *, cost: bool = True) -> dict:
     minutes = carried.get("minutes", 0)
     started = _when(cur.get("started_at"))
     if started is not None:
-        minutes += max(0.0, (runs.utcnow() - started).total_seconds() / 60)
+        live = (runs.utcnow() - started).total_seconds() / 60 - (cur.get("paused_minutes") or 0)
+        minutes += max(0.0, live)
     out = {"minutes": round(minutes, 1), "invocations": carried.get("invocations", 0) + used.get("invocations", 0),
            "reruns": carried.get("reruns", 0) + used.get("reruns", 0), "cost": None}
     if cost:
