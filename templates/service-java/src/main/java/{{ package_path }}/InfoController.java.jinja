@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class InfoController {
 
-  private static final Logger log = LoggerFactory.getLogger(InfoController.class);
+  private static final Logger LOG = LoggerFactory.getLogger(InfoController.class);
 
   private final String name;
 
@@ -22,7 +22,7 @@ public class InfoController {
   /** Returns the service name. */
   @GetMapping("/api/info")
   public Map<String, String> info() {
-    log.info("info requested");
+    LOG.info("info requested");
     return Map.of("service", name);
   }
 }
