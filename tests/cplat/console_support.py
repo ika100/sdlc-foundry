@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+import waiting
 from system_fixtures import ROOT, rich5, write_system
 
 STAGES = ("Issue", "Spec", "Plan", "Build", "Land", "Dev", "Staging", "Prod")
@@ -346,13 +347,11 @@ class Console:
         return self.page(f"/panel/{kind}/{urllib.parse.quote(ident, safe='')}")
 
     def wait_action(self, aid, states=("done", "failed", "stopped"), timeout=20):
-        end = time.time() + timeout
-        while time.time() < end:
+        def reached():
             st, a = self.json("GET", f"/api/actions/{aid}")
-            if st == 200 and a["state"] in states:
-                return a
-            time.sleep(0.1)
-        raise AssertionError(f"action {aid} did not reach {states}")
+            return a if st == 200 and a["state"] in states else None
+
+        return waiting.wait_for(reached, max(timeout, waiting.budget()), what=f"action {aid} to reach {states}")
 
 
 @pytest.fixture()
