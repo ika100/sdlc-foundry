@@ -116,6 +116,7 @@ def test_a_partly_done_batch_runs_again_for_the_rest_and_is_no_stall_ac_159_4(w)
     assert "session 1: no checkpoint" in lines[0] and "session 2: checkpoint" in lines[1]     # moved the head: no stall
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_a_batch_session_without_progress_stalls_as_any_unit_ac_159_4(w):  # AC-159.4
     w.behave({"batch:t1,t2": ["nothing", "nothing"]})
     assert w.run() != 0
