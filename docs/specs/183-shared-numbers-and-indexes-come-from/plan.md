@@ -10,6 +10,7 @@ tasks:
     covers: [AC-183.1, AC-183.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Spec numbers across branches and open PRs in spec new and spec check
     files: [scripts/cplat/specnumbers.py, scripts/cplat/spec.py]
@@ -22,6 +23,7 @@ tasks:
     covers: [AC-183.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: A closed stdout pipe exits 141 without a traceback or an issue
     files: [scripts/cplat/cplat.py]
@@ -34,6 +36,7 @@ tasks:
     covers: [AC-183.5, AC-183.6, AC-183.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: Prompts use cplat adr add and mark replaced criteria; ADR index row, versions, changelog
     files: [plugins/svc/agents/architect.md, plugins/component/commands/plan.md, plugins/svc/agents/product-manager.md,
