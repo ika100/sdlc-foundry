@@ -52,12 +52,14 @@ tasks:
     covers: [AC-179.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t10
     title: Notifier - explicit cells and the platform escalation preset per event
     files: [scripts/cplat/notify_config.py, scripts/cplat/notify.py]
     covers: [AC-179.7, AC-179.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t11
     title: Build prompts - test review before the freeze, type-only and smoke findings, git rm
     files: [plugins/component/commands/build.md, plugins/component/references/unit-mode.md, plugins/component/references/build-tighten.md, docs/rules/plugins/component/commands/build.yml, docs/rules/plugins/component/references/unit-mode.yml, docs/rules/plugins/component/references/build-tighten.yml]
