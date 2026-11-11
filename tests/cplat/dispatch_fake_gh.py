@@ -7,6 +7,8 @@ concurrent merges really overlap when nothing serializes them.
 """
 import sys
 
+from waiting import fake_prelude
+
 BODY = r'''
 import fcntl, json, os, re, subprocess, sys, time
 
@@ -216,7 +218,7 @@ elif cmd == ["pr", "merge"]:
     mh = opt("--match-head-commit")
     S["events"].append({"ev": "merge-start", "pr": p["number"], "t": time.time()})
     unlock()
-    time.sleep(S.get("merge_delay", 0))
+    time.sleep(S.get("merge_delay", 0))  # fake-delay: the merge takes merge_delay seconds with the lock released, so two merges overlap
     relock()
     p = find_pr(args[2])
     if mh and mh != p["head"]:
@@ -259,4 +261,4 @@ save()
 
 
 def script() -> str:
-    return f"#!{sys.executable}\n{BODY}"
+    return f"#!{sys.executable}\n{fake_prelude()}\n{BODY}"
