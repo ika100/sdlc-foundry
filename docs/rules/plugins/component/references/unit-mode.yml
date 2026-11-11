@@ -3,6 +3,10 @@ rules:
     text: "This file is the only place the per-unit rules are written."
     class: not a rule
   - id: R2
-    text: "Never start another unit, even when the time or the budget would allow it, because a unit is one short session"
+    text: "Never start another unit, because a unit is one short session"
     class: practice
     source: spec 131
+  - id: R3
+    text: "`git rm` of tracked files (never forced)"
+    class: not a rule
+    source: spec 179

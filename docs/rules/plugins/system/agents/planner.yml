@@ -10,7 +10,7 @@ rules:
     class: not a rule
     source: spec 154
   - id: R4
-    text: "Only `resource`, `uses`, `expose` and `env` exist"
+    text: "Only `resource`, `uses`, `expose`, `env`, `replicas` and `resources` exist"
     class: not a rule
     source: spec 045
   - id: R5
@@ -38,6 +38,10 @@ rules:
     text: "so that `cplat spec new --from-plan` marks the old one `superseded by` it and never leaves it counted"
     class: practice
     source: "#477"
+  - id: R15
+    text: "never a separate gitops PR or a question, because the approved spec decided the value and it ships in the one entry PR."
+    class: practice
+    source: spec 179
   - id: R11
     text: "Do not clone."
     class: retired

@@ -213,7 +213,8 @@ def _escalations(rows: list[dict]) -> list[dict]:
         items.append({
             "id": f"escalation:{r['run_id']}", "kind": "escalation", "stage": r.get("stage") or "Build",
             "object": _obj("run", r.get("repo"), spec=spec_id, run_id=r["run_id"], pr=pr.get("number"), url=pr.get("url"),
-                           **({"issue": issue["number"]} if issue else {})),
+                           **({"issue": issue["number"]} if issue else {}),
+                           **({"shape": r["shape"]} if r.get("shape") else {})),
             "since": r.get("ended_at") or r.get("started_at") or "", "reason": reason,
             "command": command, "cwd_repo": (issue.get("repo") if issue else None) or r.get("repo"),
             "consequence": {"branch": f"feature/{spec_id}" if spec_id else None, "pr": pr.get("number"), "deployed": False},

@@ -239,6 +239,7 @@ if unit == "red-tests":
     (repo / "tests").mkdir(exist_ok=True)
     (repo / "tests" / "test_alerts.py").write_text("def test_email_on_cross():  # AC-007.1\n    assert True\n")
     commit("test(007): acceptance tests for AC-007.1")
+    git("commit", "-q", "-s", "--allow-empty", "-m", "test(007): reviewed acceptance tests for " + SPEC)     # the test review of build Phase 1
     cplat("spec", "trace", SPEC)
 elif unit.startswith("task:"):
     on_branch()

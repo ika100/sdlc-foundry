@@ -163,6 +163,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [174-plugins-bring-what-they-need](specs/174-plugins-bring-what-they-need/spec.md) — Plugins bring what they need, and one plugin installs the starter set | P1 | done | 7 |  |
 | [175-a-spec-number-means-the-spec-and-ship](specs/175-a-spec-number-means-the-spec-and-ship/spec.md) — A spec number means the spec and ship PRs close their issues | P1 | done | 5 | #638, #645 |
 | [178-one-way-to-land-and-tests-that-do-not](specs/178-one-way-to-land-and-tests-that-do-not/spec.md) — One way to land and tests that do not race | P1 | done | 8 | #648 |
+| [179-unattended-runs-ask-less](specs/179-unattended-runs-ask-less/spec.md) — Unattended runs ask less | P1 | done | 9 | #616, #653, #654, #655 |
 | [181-journey-measurements-count-waiting](specs/181-journey-measurements-count-waiting/spec.md) — Journey measurements count waiting correctly | P1 | done | 7 |  |
 | [182-logs-reach-loki](specs/182-logs-reach-loki/spec.md) — Logs reach Loki | P1 | done | 6 | #657 |
 | [183-shared-numbers-and-indexes-come-from](specs/183-shared-numbers-and-indexes-come-from/spec.md) — Shared numbers and indexes come from cplat | P1 | done | 8 | #659, #660, #477, #577 |

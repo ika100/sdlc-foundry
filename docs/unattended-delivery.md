@@ -260,6 +260,16 @@ per-repo lock and re-checks a branch that fell behind `main`. See the [dispatche
 - **A refused merge is waited for.** When GitHub refuses the merge (a required check pending or the head moved), the land goes back to waiting for the checks of the current head, at most 3 times inside the merge lock, then stops with `merge refused 3 times: <reason>`.
 - **Everything else is a person's decision.** A conflict in any other file, a rebase or a force-push stops the run with "rebase is a human decision", and the merge attempt that stopped is aborted so the branch holds no half-merged state.
 
+## What a run no longer asks
+
+A run settles these itself instead of stopping for you:
+
+- **Instance settings.** Settings from the system plan (the gitops entry operations replicas, resources, host and env, in order `before-merge`) are applied as planned.
+- **Removing tracked files.** `git rm` is on the allowlist; a forced removal is still refused, and a removed frozen test is still flagged by `cplat spec test-diff`.
+- **Type-only test changes.** A change to a test's types alone is recorded with `--tighten` and does not wait for you.
+- **One test review.** The acceptance tests are reviewed once, before they freeze ([ADR-101](adr/101-acceptance-tests-are-reviewed-once-before-they-freeze.md)).
+- **Smoke-test findings.** The tester fixes them in the build.
+
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat component ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`) are the review. Use `/component:ship <NNN> --no-merge` to read the PR yourself first.

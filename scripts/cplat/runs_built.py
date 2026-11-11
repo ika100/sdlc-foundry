@@ -3,7 +3,8 @@
   cplat platform runs report --pr <run-id> [--dir D]     print the block (in-progress record, else the local buffer)
   pr_section(repo, spec) -> str | None                   the block for `cplat pr open`, or None without a run for the spec
 
-Only recorded facts: the run record and the local runs it resumes, the budget ledger, the spec's spec.md and verification.md.
+Only recorded facts: the run record and the local runs it resumes, the budget ledger, the spec's spec.md and verification.md,
+and the findings the test review left open in the reviewed commit (spec 179).
 Every value passes through the run records' redaction; no prompts, no diffs. Contract: docs/specs/133-*/design.md.
 """
 from __future__ import annotations
@@ -14,6 +15,7 @@ from pathlib import Path
 
 import feedback
 import runs
+import testreview
 from core import PlatformError
 
 START, END = "<!-- cplat:how-built -->", "<!-- /cplat:how-built -->"
@@ -270,6 +272,14 @@ def collect(rec: dict, repo: Path) -> dict:
             handbacks.append(f"merge conflict {ev.get('task')} with {ev.get('with') or 'unknown'}: {ev.get('outcome')}")
         elif kind == "re-plan":
             handbacks.append(f"re-plan {ev.get('task')} → {agent}")
+        elif kind == "smoke":
+            handbacks.append(f"smoke test tightened {ev.get('test')}: {ev.get('finding')}")
+    if spec_dir is not None:
+        try:
+            for item in testreview.unresolved(repo, spec_dir.name):
+                handbacks.append(f"test review left open: {item['test']} ({item['criterion']}): {item['what']}")
+        except Exception:  # noqa: BLE001  # reading git must never break the block
+            pass
 
     gates = _dict(rec.get("gates"))
     return {

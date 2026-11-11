@@ -160,6 +160,7 @@ elif unit == "red-tests":
     t.mkdir(exist_ok=True)
     (t / "test_alerts.py").write_text("# " + " ".join(cfg["acs"]) + "\n")
     commit_all("test(007): acceptance tests for " + cfg["acs"][0])
+    commit_all("test(007): reviewed acceptance tests for " + %(spec_id)r)
 elif unit.startswith("batch:"):              # spec 159: one session runs the batch's tasks ("first-only": just the first)
     ids = unit.split(":", 1)[1].split(",")
     for task in ids[:1] if how == "first-only" else ids:

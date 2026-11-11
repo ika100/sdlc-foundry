@@ -41,7 +41,7 @@ def run_allowlist(command: str, branches: list[str]) -> list[str]:
     rules: list[str] = []
     for b in branches:
         rules += [f"Bash(git switch {b})", f"Bash(git switch -c {b})"]
-    rules += ["Bash(git add *)", "Bash(git commit -s *)"]
+    rules += ["Bash(git add *)", "Bash(git commit -s *)", "Bash(git rm *)"]
     for b in branches:
         rules += [f"Bash(git push -u origin {b})", f"Bash(git push origin {b})"]
     rules.append("Bash(gh pr create *)")
@@ -57,8 +57,11 @@ def refused_rules(default_branch: str) -> list[str]:
     return [
         "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push * --force*)", "Bash(git push * -f*)",
         "Bash(git push * +*)", f"Bash(git push * {d})", f"Bash(git push * {d}:*{d}*)", f"Bash(git push * {d}:refs*)", f"Bash(git push * *:{d})",
-        f"Bash(git push * *:refs/heads/{d})", "Bash(gh pr merge*)", "Bash(gh api *merge*)",
+        f"Bash(git push * *:refs/heads/{d})",
+        "Bash(gh pr merge*)", "Bash(gh api *merge*)",
         "Bash(cplat pr wait *--merge*)",
+        "Bash(git rm -f*)", "Bash(git rm --force*)", "Bash(git rm -rf*)", "Bash(git rm -fr*)",
+        "Bash(git rm * -f*)", "Bash(git rm * --force*)", "Bash(git rm * -rf*)", "Bash(git rm * -fr*)",
     ]
 
 
