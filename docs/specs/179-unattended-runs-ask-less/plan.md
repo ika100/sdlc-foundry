@@ -38,6 +38,7 @@ tasks:
     covers: [AC-179.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: System ship entry applies the replicas and resources operations
     files: [scripts/cplat/appship.py]
