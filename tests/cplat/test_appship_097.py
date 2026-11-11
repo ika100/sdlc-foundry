@@ -691,7 +691,8 @@ def test_a_red_entry_escalates_with_the_failed_checks_and_merges_nothing(w):  # 
 
 def merge_mod(w, monkeypatch):
     mod = importlib.import_module("appship_merge")
-    monkeypatch.setattr(mod, "sleep", lambda s: time.sleep(0.01), raising=False)
+    slept: list[float] = []                                # the slot's wait is recorded, not slept
+    monkeypatch.setattr(mod, "sleep", slept.append, raising=False)
     return mod
 
 

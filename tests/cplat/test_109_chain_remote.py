@@ -5,6 +5,7 @@ remotes (AC-109.9), the tracked issues (AC-109.10) and read-only / time (AC-109.
 All remote reads go through the `gh` seam of `spec_chain_remote`, replaced by chain_support.FakeGh: no network. Fixture repos
 use the scratch spec 901. The new modules are imported inside the tests only."""
 import importlib
+import os
 import re
 import time
 
@@ -356,7 +357,11 @@ def test_the_chain_changes_no_file_ref_or_tag_and_makes_only_reads_ac_109_12(tmp
     refs_before = _refs(w)
     g_before = _fingerprint(g)
     assert refs_before[3] == ""            # the fixture is clean, so any later change shows
-    time.sleep(0.05)
+    for d in (w.root, g):                  # age every file, so a rewrite shows in the mtime without a sleep
+        for f in d.rglob("*"):
+            if ".git" not in f.relative_to(d).parts:
+                os.utime(f, ns=(f.stat().st_atime_ns - 10**9, f.stat().st_mtime_ns - 10**9))
+    before, g_before = _fingerprint(w.root, g), _fingerprint(g)
     if json_out:
         chain(capsys, w.root)
     else:

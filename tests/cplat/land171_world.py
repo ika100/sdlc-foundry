@@ -19,6 +19,7 @@ from pathlib import Path
 import ship
 import spec
 from test_spec import SPEC, make
+from waiting import fake_prelude
 
 BRANCH = "feature/007-price-alerts"
 SLUG = "acme/shop-api"
@@ -27,6 +28,7 @@ HEAD_TEXT = "# Backlog\n\nhand written head line one\nhand written head line two
 TAIL_TEXT = "\n## Not built\n\n- a hand written tail line\n"
 
 STUB = r'''#!%(py)s
+%(prelude)s
 import json, os, subprocess, sys
 
 W = os.environ["FAKE171"]
@@ -360,7 +362,7 @@ class World:
     def _install(self) -> None:
         stub = self.dir / "bin" / "gh"
         stub.parent.mkdir()
-        stub.write_text(STUB % {"py": sys.executable})
+        stub.write_text(STUB % {"py": sys.executable, "prelude": fake_prelude()})
         stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
         devbox = stub.parent / "devbox"
         devbox.write_text(DEVBOX)
