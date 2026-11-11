@@ -88,7 +88,7 @@ def test_allowed_registries_follow_the_images_and_addons(gitops_repo, gh):
     cfg(gitops_repo, {"dev": "audit"}, observability={}, registries=["registry.example.com/team/"])
     run_compose(gitops_repo, "add", "todo-api")
     regs = yaml.safe_load(policy(gitops_repo)["spec"]["variables"][1]["expression"])
-    assert regs == ["ghcr.io/acme/", "otel/", "registry.example.com/team/"]
+    assert regs == ["ghcr.io/acme/", "otel/", "python:3.13.18-alpine3.24", "registry.example.com/team/"]
 
 
 def test_switching_every_policy_off_prunes_the_files(gitops_repo, gh):

@@ -490,6 +490,35 @@ def _without_credential_writers(tree: dict) -> dict:
     return out
 
 
+_TAILER_IMAGE = re.compile(r"^python:[\w.\-]+$")
+LOG_TAILER_FILES = {"collector.yaml", "kustomization.yaml", "serviceaccount.yaml", "role.yaml", "rolebinding.yaml", "tailer-configmap.yaml"}
+
+
+def _without_log_tailer(tree: dict) -> dict:
+    """The migration proof ignores the log tailer (spec 182): an environment with observability gains it in 5.x, so the collector
+    Deployment, its kustomization and the tailer's files in `addons/<env>/observability/` differ from the 4.7 render by design.
+    Environments without observability are not touched, and the rest of the observability directory (ConfigMap, Service) is still compared.
+    The guard-rail policies are compared parsed, without the tailer's image (`python:<tag>`, the credentials image) among the allowed registries."""
+    out = {p: b for p, b in tree.items() if not (p.rpartition("/")[0].endswith("/observability") and p.rsplit("/", 1)[-1] in LOG_TAILER_FILES)}
+    for p in list(out):
+        if not (p.rsplit("/", 1)[-1] == "policy.yaml" and "/policies/" in p):
+            continue
+        try:
+            doc = yaml.safe_load(out[p])
+            for var in doc["spec"]["variables"]:
+                if var["name"] == "registries":
+                    var["expression"] = json.dumps([r for r in json.loads(var["expression"]) if not _TAILER_IMAGE.match(r)])
+            for rule in doc["spec"]["validations"]:
+                if rule["message"].startswith("images must come from an allowed registry: "):
+                    head, _, names = rule["message"].partition(": ")
+                    rule["message"] = head + ": " + ", ".join(n for n in names.split(", ") if not _TAILER_IMAGE.match(n))
+        except (yaml.YAMLError, KeyError, TypeError, ValueError):
+            continue
+        dumped = yaml.safe_dump(doc, sort_keys=True)
+        out[p] = dumped.encode() if isinstance(out[p], bytes) else dumped
+    return out
+
+
 def convert_systems(repo: Path) -> list[dict]:
     """Convert every 4.x application directory; any problem stops the migration before anything changes."""
     owner = _owner(repo)
@@ -535,8 +564,8 @@ def apply_systems(repo: Path, systems: list[dict], reference: dict[str, bytes]) 
             (repo / rel).unlink()
     gitops.render(repo)
     pins = _digested_refs(repo)
-    reference = _without_credential_writers(_normalised(reference))
-    after = _without_credential_writers(_normalised(_tree(repo), pins))
+    reference = _without_log_tailer(_without_credential_writers(_normalised(reference)))
+    after = _without_log_tailer(_without_credential_writers(_normalised(_tree(repo), pins)))
     diff =[f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
     diff += [f"{p} (missing)" for p in sorted(reference) if p not in after]
     diff += [f"{p} (extra)" for p in sorted(after) if p not in reference]
@@ -954,6 +983,8 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
                 pins = _digested_refs(repo)
                 if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}, pins):
                     continue
+                if was.returncode == 0 and _without_log_tailer({path: was.stdout.encode()}) == _without_log_tailer({path: (repo / path).read_bytes()}):
+                    continue   # spec 182: only the log tailer (observability files, its image among the allowed registries) was added
                 if path.endswith("/kustomization.yaml") and was.returncode == 0:   # spec 128: it lists the credentials files instead of the generators
                     folder = path.rpartition("/")[0]
                     names = run(["git", "ls-tree", "--name-only", "HEAD", folder + "/"], cwd=repo, check=False).stdout.splitlines()
