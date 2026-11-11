@@ -87,6 +87,7 @@ tasks:
     covers: [AC-184.9]
     parallel_safe: true
     depends_on: [t3]
+    done: true
 ---
 
 # Plan — 184 Parallel ships do not stop each other

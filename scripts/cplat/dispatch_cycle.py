@@ -21,6 +21,7 @@ import dispatch_backlog
 import dispatch_budget
 import dispatch_notify
 import dispatch_ready
+import run_slot
 import dispatch_state as ds
 import dispatch_units as du
 import dispatch_view
@@ -105,6 +106,11 @@ def _running(units: list[dict]) -> list[dict]:
     return [u for u in units if u.get("status") not in du.ENDED]
 
 
+def _manual(slug: str) -> list[dict]:
+    """Placeholder rows (no slot number) for the manual `cplat headless` runs that hold a slot of the pool (spec 184)."""
+    return [{} for h in run_slot.holders(slug) if h.unit is None]
+
+
 def _reached(slug: str, policy) -> bool:
     return dispatch_budget.reached(dispatch_budget.usage_today(slug), policy)
 
@@ -143,7 +149,7 @@ def _schedule(repo: Path, slug: str, policy, snap, state: dict, units: list[dict
               act: bool) -> Schedule:
     """Fill the free slots with the ready items in order. `act` False only records the decisions (`plan`)."""
     sched = Schedule([])
-    running = _running(units)
+    running = _running(units) + _manual(slug)
     free = free_numbers(running, effective_slots(state, policy))
     ship_unit = dispatch_ready.ship_busy_unit(units)
     ship_taken: str | None = None
@@ -293,7 +299,7 @@ def run_cycle(repo: Path | str, policy, *, max_age: int = 0, announce: bool | No
 def _record(slug: str, snap, units: list[dict], policy, out: CycleResult) -> None:
     """`last_cycle` (queue, held, slots) and the day's held items, for `status`, `wait`, `report` and the digest."""
     day = ds.today()
-    running = _running(units)
+    running = _running(units) + _manual(slug)
 
     def go(st: dict) -> None:
         total = effective_slots(st, policy)

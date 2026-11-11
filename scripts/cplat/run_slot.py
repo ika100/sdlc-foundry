@@ -18,6 +18,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+import core
 import dispatch_policy
 import dispatch_state
 from core import PlatformError
@@ -78,9 +79,16 @@ def total(repo: Path) -> int:
     if isinstance(override, int) and not isinstance(override, bool) and override >= 1:
         return override
     try:
-        return int(dispatch_policy.load(repo).values["slots"])
+        return int(dispatch_policy.load(_primary(repo)).values["slots"])
     except PlatformError:
         return 1
+
+
+def _primary(repo: Path) -> Path:
+    """The primary checkout of `repo` (the one the dispatcher reads its policy in), so every worktree sees the same pool size."""
+    common = core.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=repo, check=False).stdout.strip()
+    primary = Path(common).parent if common.endswith("/.git") else Path(repo)
+    return primary if (primary / dispatch_policy.FILE).is_file() else Path(repo)
 
 
 def holders(slug: str) -> list[Holder]:
