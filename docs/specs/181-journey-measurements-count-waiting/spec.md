@@ -1,7 +1,7 @@
 ---
 spec_id: 181-journey-measurements-count-waiting
 title: Journey measurements count waiting correctly
-status: building
+status: done
 priority: P1
 shape: platform
 ---
@@ -94,3 +94,4 @@ None.
 - 2026-11-10 created
 - 2026-11-10 approved
 - 2026-11-10 building
+- 2026-11-11 done

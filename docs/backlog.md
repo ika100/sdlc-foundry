@@ -162,6 +162,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [172-builds-catch-problems-before-the-pull](specs/172-builds-catch-problems-before-the-pull/spec.md) — Builds catch problems before the pull request | P1 | done | 8 | #628, #629, #630, #631, #632 |
 | [174-plugins-bring-what-they-need](specs/174-plugins-bring-what-they-need/spec.md) — Plugins bring what they need, and one plugin installs the starter set | P1 | done | 7 |  |
 | [175-a-spec-number-means-the-spec-and-ship](specs/175-a-spec-number-means-the-spec-and-ship/spec.md) — A spec number means the spec and ship PRs close their issues | P1 | done | 5 | #638, #645 |
+| [181-journey-measurements-count-waiting](specs/181-journey-measurements-count-waiting/spec.md) — Journey measurements count waiting correctly | P1 | done | 7 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
