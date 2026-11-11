@@ -1,7 +1,9 @@
 # Verification — 183 Shared numbers and indexes come from cplat
 
-**Result:** fail            <!-- every criterion is met; one deviation (D1) is not acceptable and blocks the PR -->
-**Commit:** 78e4b662 · **Base:** 70ff774 (judged: the spec 183 commits 1a9ba571..78e4b662 only) · **Trace:** 8/8 criteria named by tests
+**Result:** pass
+**Commit:** ff316304 · **Base:** 70ff774 (judged: the spec 183 commits 1a9ba571..ff316304 only) · **Trace:** 8/8 criteria named by tests
+
+Cycle 2: re-checked after `ff316304` (D1 fix). The fix changes only `plugins/system/agents/planner.md` (one line break); no code or test changed, so the verdicts of cycle 1 stand.
 
 | Criterion | Verdict | Tests | Implementation | Notes |
 |---|---|---|---|---|
@@ -20,8 +22,8 @@ No lock service or reservation file; no renumbering; `new_from_plan` strikes onl
 
 ## Deviations from the plan
 
-- **D1 (not acceptable)** `plugins/system/agents/planner.md:38`: when steps 6 and 7 were shortened, the newline between them was lost: `...they build in parallel.7. **Plan the pins.** ...`. Step 7 is no longer a list item and the workflow list reads 1–6, 8. This is a regression in a shared prompt. Fix: put `7. **Plan the pins.**` back on its own line (no byte cost). No test catches it.
-- **D2 (acceptable, worth a look)** To stay inside the byte budget, t6 removed guidance not related to ADRs or replaced criteria: product-manager "A tangential request does not belong in an existing spec." and "Contracts between repos belong to the planner's design, not to you."; planner "(a criterion that needs the API and the UI goes to both)", "Every question a repo would otherwise ask belongs here.", "No cosmetic ordering.", the inline YAML comments; architect re-plan "Read `plan.md` and the conflicts."; spec reference's struck-through answered-question example. No hard rule and no register entry was removed (`rules check` passes), and the plan allowed tightening wording in the same files. But A5 says the change "adds no other text", and these lines do more than tighten wording, so the maintainer should confirm them.
+- **D1 (fixed in ff316304)** `plugins/system/agents/planner.md:38-39`: step 7 had been joined onto the end of step 6 (`...they build in parallel.7. **Plan the pins.**`). Step 7 is back on its own line, and the workflow list reads 1–8 again. The fix adds one byte. The coordinator reports `cplat platform rules check` OK after it, and that check enforces the recorded prompt size. I could not recompute the byte total myself because git size queries were denied in this cycle.
+- **D2 (accepted by the coordinator)** To stay inside the byte budget, t6 removed guidance not related to ADRs or replaced criteria: product-manager "A tangential request does not belong in an existing spec." and "Contracts between repos belong to the planner's design, not to you."; planner "(a criterion that needs the API and the UI goes to both)", "Every question a repo would otherwise ask belongs here.", "No cosmetic ordering.", the inline YAML comments; architect re-plan "Read `plan.md` and the conflicts."; spec reference's struck-through answered-question example. No hard rule and no register entry was removed (`rules check` passes).
 - **D3 (acceptable)** `tests/cplat/test_refscan.py` and `tests/cplat/test_specnumbers.py` are in no task's `files`. They are the unit tests t1's done-when asks for.
 - **D4 (acceptable)** `docs/specs/183-…/plan.md` `done:` flags were changed by the build's task-done commits.
 - The register entry text for spec.yml R5 ("the old one is never left active but becomes") is a sentence fragment. `rules check` accepts it, so it is not a deviation, but it says little on its own.
@@ -30,3 +32,7 @@ No lock service or reservation file; no renumbering; `new_from_plan` strikes onl
 ## Contract
 
 Matches `design.md`: refscan's signatures and the `None`/`{}` tri-state (`refscan.py:138-150`); warning texts verbatim (`specnumbers.py:17-19`); clash error wording (`specnumbers.py:99`); `adr add` errors, row escaping and A4 index creation (`adrcmd.py:27-67`); marker and superseded regexes (`spec_replace.py:10-11`); trace line and JSON key; 141 with fd 1 sent to `/dev/null` (`cplat.py:168-171`). ✔
+
+## Mutation check (report only)
+
+Skipped: no mutation check for shape platform yet.
