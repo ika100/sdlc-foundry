@@ -35,8 +35,8 @@ Repo-local commands go through `devbox run <script>`. Reading other repos goes t
      - {resource: files, type: bucket}                      # a new resource names its type: database, bucket, cache, broker
      - {uses: postgres, component: todo-api}                # the component gets DATABASE_URL, PG*
      - {expose: todo-web, host: todo-web}                   # publish through the Gateway
-   - {replicas: 2, component: todo-api, instance: staging}  # instance: dev | staging, optional
-   - {resources: {requests: {cpu: 100m}, limits: {memory: 512Mi}}, component: todo-api}
+     - {replicas: 2, component: todo-api, instance: staging}  # instance: dev | staging
+     - {resources: {requests: {cpu: 100m}, limits: {memory: 512Mi}}, component: todo-api}
      - {env: {TODO_API_URL: 'http://todo-api'}, component: todo-web}
    ```
    Only `resource`, `uses`, `expose`, `env`, `replicas` and `resources` exist; a `uses` names a resource of `system.yaml` or an earlier `resource` operation; every component is in `system.yaml` or a repo of the plan. Quote values with `:`. A criterion stating an instance setting becomes its operation, named in `acs`, never a separate gitops PR or a question, because the approved spec decided the value and it ships in the one entry PR. `/system:ship` runs these with `cplat resource add` and `cplat component set`.
