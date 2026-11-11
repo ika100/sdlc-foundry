@@ -419,6 +419,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
         if unit_mode:
             log = log_dir(repo) / f"{clock():%Y-%m-%d_%H%M%S}.log"
             announced = set(envprefix.commands(repo, ids)[0]) if ids else set()
+            session_env = preflight.env(allow or [])
 
             def make_cmd(p: str) -> list[str]:        # a command the plan names later in the run is allowed from then on
                 if ids and allow is not None:
@@ -428,10 +429,11 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
                         if c not in announced:
                             announced.add(c)
                             print(f"run allowlist: added {c}", flush=True)
+                    session_env.update(preflight.env(allow))      # the session's CPLAT_RUN_ALLOWLIST names the added command too
                 return claude_cmd(p, model, dirs, allow, deny, rules=rules)
 
             return supervisor.drive(repo, command, ids, prompt, make_cmd,
-                                    preflight.env(allow or []), rid, ns, log, state)
+                                    session_env, rid, ns, log, state)
         return _drive(ns, repo, prompt, window, cmd, rid, state, preflight.env(allow) if allow else {})
     except BaseException as e:
         state["result"] = f"error: {e}"

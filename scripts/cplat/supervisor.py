@@ -130,9 +130,9 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
             units.start_session(repo, unit, sid)
             k = _session_count(repo, unit)
             before = units.feature_head(repo, spec)
+            cmd = make_cmd(f"{prompt} --unit {unit}") + ["--session-id", sid]      # before the run line: an added command is announced first
             print(f"run {sessions}: {spec} unit {unit} session {k}  (log: {log})", flush=True)
             start = log.stat().st_size if log.exists() else 0
-            cmd = make_cmd(f"{prompt} --unit {unit}") + ["--session-id", sid]
             began = h.clock()
             code = _run_session(h, cmd, repo, log, left, rid, sid, {**extra_env, "CPLAT_UNIT": unit})
             ended = h.clock()
