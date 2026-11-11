@@ -32,6 +32,8 @@ _exclude:
   - "copier.yml"
   - ".git"
   - "{% if not needs_observability %}internal/server/metrics.go{% endif %}"
+  - "{% if not needs_observability %}internal/server/tracelog.go{% endif %}"
+  - "{% if not needs_observability %}internal/server/tracelog_test.go{% endif %}"
 
 _tasks:
   - "git init -q -b main"

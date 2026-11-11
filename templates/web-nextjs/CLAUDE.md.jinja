@@ -95,6 +95,7 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 - **Probes:** `/api/health` (liveness) and `/api/ready` (readiness) must keep responding.
 {%- if needs_observability %}
 - **Observability:** `/api/metrics` (Prometheus), OpenTelemetry via `instrumentation.ts` when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+- **Logging:** log through `@/lib/logger` (`logger.info(msg, fields)`): one JSON line each, carrying `trace_id` and `span_id` inside an active span.
 {%- endif %}
 - **Tests:** Vitest + Testing Library in `tests/` (`*.test.ts[x]`); Playwright specs in `e2e/` (smoke tests carry `@smoke` in their title, and `@writes` too when they write data; see Smoke tests).
 - **Docs:** feature specs in `docs/specs/` (index in `docs/backlog.md`), ADRs in `docs/adr/`.

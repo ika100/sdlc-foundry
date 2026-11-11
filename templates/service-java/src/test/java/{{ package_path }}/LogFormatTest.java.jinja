@@ -1,0 +1,60 @@
+package {{ package_name }};
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+{%- if needs_database %}
+import org.springframework.context.annotation.Import;
+{%- endif %}
+
+/** Logs are JSON lines; the OTel agent's MDC keys become top-level trace_id and span_id fields. */
+@SpringBootTest
+{%- if needs_database %}
+@Import(TestcontainersConfiguration.class)
+{%- endif %}
+@ExtendWith(OutputCaptureExtension.class)
+class LogFormatTest {
+
+  private static final Logger LOG = LoggerFactory.getLogger(LogFormatTest.class);
+  private static final String TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
+  private static final String SPAN_ID = "b7ad6b7169203331";
+
+  @Test
+  void lineInsideASpanCarriesTraceAndSpanIds(CapturedOutput output) {
+    MDC.put("trace_id", TRACE_ID);
+    MDC.put("span_id", SPAN_ID);
+    try {
+      LOG.info("inside a span");
+    } finally {
+      MDC.clear();
+    }
+    String line = lineWith(output, "inside a span");
+    assertThat(line).contains("\"trace_id\":\"" + TRACE_ID + "\"");
+    assertThat(line).contains("\"span_id\":\"" + SPAN_ID + "\"");
+    assertThat(line).contains("\"level\":\"INFO\"");
+  }
+
+  @Test
+  void lineOutsideASpanCarriesNeither(CapturedOutput output) {
+    LOG.info("outside a span");
+    String line = lineWith(output, "outside a span");
+    assertThat(line).doesNotContain("trace_id").doesNotContain("span_id");
+    assertThat(line).contains("\"level\":\"INFO\"");
+  }
+
+  private static String lineWith(CapturedOutput output, String message) {
+    return output
+        .getOut()
+        .lines()
+        .filter(l -> l.contains("\"message\":\"" + message + "\""))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no JSON line for: " + message));
+  }
+}

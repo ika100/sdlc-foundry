@@ -47,19 +47,51 @@ def _entries(rec: dict, kind: str) -> dict:
     return {"journey": j.get("total")}
 
 
-def _row(done: list[dict], kind: str, key, budget: int) -> dict:
+WAIT_KINDS = ("ci", "deploy", "promotion", "restore", "cluster", "smoke", "unattributed", "no_transcript")
+
+
+def _splits(followups) -> dict:
+    """{journey run_id: split dict} from the latest `journey_split` follow-up of each run."""
+    latest: dict = {}
+    for f in sorted((f for f in followups or [] if isinstance(f, dict) and f.get("followup") == "journey_split"),
+                    key=lambda f: str(f.get("at", ""))):
+        if isinstance(f.get("split"), dict):
+            latest[f.get("run_id")] = f["split"]
+    return latest
+
+
+def _split_of(split: dict, kind: str, key):
+    if kind == "total":
+        v = split.get("total")
+    else:
+        sub = split.get(kind)
+        v = sub.get(key if kind == "stages" else str(key)) if isinstance(sub, dict) else None
+    return v if isinstance(v, dict) else None
+
+
+def _split_fields(done: list[dict], kind: str, key, splits: dict) -> dict:
+    found = [x for x in (_split_of(splits.get(r.get("run_id"), {}), kind, key) for r in done) if x]
+    waits = [x.get("waiting") if isinstance(x.get("waiting"), dict) else {} for x in found]
+    return {"split_runs": len(found),
+            "agents_median": _median([v for v in (_num(x.get("agents_min")) for x in found) if v is not None]),
+            "waiting_median": {k: _median([v for v in (_num(w.get(k)) for w in waits) if v is not None]) for k in WAIT_KINDS}}
+
+
+def _row(done: list[dict], kind: str, key, budget: int, splits: dict | None = None) -> dict:
     ran = [e for e in (_entries(r, kind).get(key) for r in done) if _ran(e)]
     row = {"runs": len(ran), **{name: _median([v for v in (_num(e.get(f)) for e in ran) if v is not None]) for name, f in FIELDS},
            "budget_minutes": budget}
     w = row["working_median"]
     row["overrun_minutes"] = None if w is None else (lambda o: int(o) if float(o).is_integer() else round(o, 1))(max(0, w - budget))
+    row.update(_split_fields(done, kind, key, splits or {}))
     return row
 
 
-def _group(done: list[dict]) -> dict:
-    stages = [{"id": sid, "part": part, **_row(done, "stages", sid, budget)} for sid, part, budget in runs_journey.STAGES]
-    parts = [{"part": n, **_row(done, "parts", n, b)} for n, b in runs_journey.PART_BUDGETS.items()]
-    total = _row(done, "total", "journey", runs_journey.JOURNEY_BUDGET)
+def _group(done: list[dict], splits: dict | None = None) -> dict:
+    stages = [{"id": sid, "part": part, **_row(done, "stages", sid, budget, splits)}
+              for sid, part, budget in runs_journey.STAGES]
+    parts = [{"part": n, **_row(done, "parts", n, b, splits)} for n, b in runs_journey.PART_BUDGETS.items()]
+    total = _row(done, "total", "journey", runs_journey.JOURNEY_BUDGET, splits)
     return {"stages": stages, "parts": parts, "total": total}
 
 
@@ -76,8 +108,9 @@ def _prev(row: dict | None) -> dict | None:
     return {"working_median": row["working_median"], "wall_median": row["wall_median"]}
 
 
-def aggregate(kept: list[dict]) -> dict:
+def aggregate(kept: list[dict], followups: list[dict] | None = None) -> dict:
     """`kept`: the records of the report window. Returns the value of the `journey` key."""
+    splits = _splits(followups)
     cells: dict[tuple[str, str], list[dict]] = {}
     for r in kept:
         if r.get("kind") != "journey":
@@ -90,7 +123,7 @@ def aggregate(kept: list[dict]) -> dict:
         done = [r for r in rs if r.get("outcome") == "done"]
         groups[(version, model)] = {"platform_version": version, "coordinator_model": model, "runs": len(rs), "done": len(done),
                                     "outcomes": runs_report._count_sorted(Counter(runs_report._text(r.get("outcome")) for r in rs)),
-                                    **_group(done)}
+                                    **_group(done, splits)}
     out: dict[str, dict] = {}
     for (version, model) in sorted(groups, key=lambda k: (_version_key(k[0]), k[0], k[1]), reverse=True):   # newest first
         g = groups[(version, model)]
@@ -112,6 +145,19 @@ def _f(x) -> str:
     return "-" if x is None else f"{x:g}"
 
 
+def _d(x) -> str:
+    return "–" if x is None else f"{x:g}"
+
+
+SPLIT_HEAD = f"{'agents':>7}{'CI':>6}{'deploy':>7}{'promo':>6}{'restore':>8}{'cluster':>8}{'smoke':>6}{'unattr':>7}{'no-tr':>6}"
+
+
+def _split_cells(r: dict) -> str:
+    w = r.get("waiting_median") or {}
+    widths = (6, 7, 6, 8, 8, 6, 7, 6)
+    return f"{_d(r.get('agents_median')):>7}" + "".join(f"{_d(w.get(k)):>{n}}" for k, n in zip(WAIT_KINDS, widths))
+
+
 def render_lines(journey: dict) -> list[str]:
     if not journey:
         return ["Journey: none"]
@@ -123,12 +169,13 @@ def render_lines(journey: dict) -> list[str]:
             lines.append("  no done run")
             continue
         prev = f"prev {g['previous_version']}" if g["previous_version"] else "prev"
-        lines.append(f"  {'stage':<16}{'working':>8}{'wall':>7}{'budget':>7}{'over':>6}{'person':>8}{'external':>9}{'PRs':>5}  {prev}")
+        lines.append(f"  {'stage':<16}{'working':>8}{'wall':>7}{'budget':>7}{'over':>6}{'person':>8}{'external':>9}{'PRs':>5}{SPLIT_HEAD}  {prev}")
         rows = [(s["id"], s) for s in g["stages"]] + [(f"part {p['part']}", p) for p in g["parts"]] + [("journey", g["total"])]
         for name, r in rows:
             pv = r.get("previous")
             lines.append(f"  {name:<16}{_f(r['working_median']):>8}{_f(r['wall_median']):>7}{r['budget_minutes']:>7}"
                          f"{_f(r['overrun_minutes']):>6}{_f(r['person_wait_median']):>8}{_f(r['external_wait_median']):>9}"
-                         f"{_f(r['prs_median']):>5}  " + (f"{_f(pv['working_median'])} / {_f(pv['wall_median'])}" if pv else "-"))
-    lines.append("Working time is wall clock minus person-wait; medians over done runs; stages ranked by overrun (spec 136).")
+                         f"{_f(r['prs_median']):>5}{_split_cells(r)}  " + (f"{_f(pv['working_median'])} / {_f(pv['wall_median'])}" if pv else "-"))
+    lines.append("Working time is wall clock minus person-wait; medians over done runs; stages ranked by overrun (spec 136); "
+                 "the agents and wait columns are median minutes from the measurement split, an en dash without one (spec 181).")
     return lines

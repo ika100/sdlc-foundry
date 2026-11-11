@@ -51,6 +51,8 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 9 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 88 (63 %): deploys and Argo 50, CI 21, promotions and restores 16, cluster and smoke 1 | 48 (34 %): model 36, commands, tests and platform calls 12 | 20 (plus 16 headless repo sessions) |
 | 10 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 91 (66 %): deploys and Argo 48, CI 25, promotions and restores 17, cluster and smoke 1 | 44 (32 %): model 33, commands, tests and platform calls 10 | 16 (plus 14 headless repo sessions) |
 
+**Corrected split for journeys 9 and 10** (`cplat platform runs journey measure`, spec 181): the rows above count the coordinator's wait on a building repo session as waiting. The split is re-measured from evidence instead, with the repo sessions (the coordinator's children) as agent work: journey 9 — a person 4, agents 72 (coordinator 49, repo sessions 23), waiting 64 (CI 23, deploys and Argo 24, restore 6, promotions 6, smoke and cluster 0.3, unattributed 5); journey 10 — a person 4, agents 70 (coordinator 46, repo sessions 24), waiting 65 (CI 23, deploys and Argo 23, restore 7, promotions 6, smoke and cluster 0.4, unattributed 6). Real waiting is about 46 % of the wall clock, CI and deploys about a third each of it.
+
 **CI on GitHub** (the demo repos' Actions runs within the journey):
 
 | # | Merged PRs | Actions runs | Failed runs | Run time | Queued | CI running during |
@@ -182,8 +184,8 @@ Do this for every full journey, and add its rows here in the same PR that update
 3. **After:** `cplat platform runs journey end --outcome done`, then measure:
 
    ```bash
-   python3 scripts/journey/measure.py ~/.claude/projects/<dir>/<session-id>[,<session-id>...] <start> <end> \
-     ika100-demo/<system>-gitops ika100-demo/<system>-api ika100-demo/<system>-web --steps <steps.tsv>
+   cplat platform runs journey measure ~/.claude/projects/<dir>/<session-id>[,<session-id>...] <start> <end> \
+     ika100-demo/<system>-gitops ika100-demo/<system>-api ika100-demo/<system>-web --steps <steps.tsv> --journey <run_id>
    ```
 
    Then, while the cluster still runs, take the screenshots of what the run built (web UI, API docs, Argo CD, Grafana,
@@ -193,5 +195,5 @@ Do this for every full journey, and add its rows here in the same PR that update
    uv run --with playwright python3 scripts/journey/shots.py <system>   # needs Chrome, tmux and k9s (--k9s PATH)
    ```
 
-   `measure.py` prints the wall-clock split (a person / waiting / agents), the tokens, the questions asked and the GitHub numbers used in the tables above; with `--steps` (one line `<ISO time UTC>\t<label>` per step start, written by the driver) also the split, tokens and calls per step. A journey with a fresh session per part names each session, comma-separated. Take the per-part times from `cplat platform runs journey show`, count criteria in the demo repos' specs, and file every defect as an issue.
+   `journey measure` prints the wall-clock split (a person / waiting / agents), the tokens, the questions asked and the GitHub numbers used in the tables above; with `--steps` (one line `<ISO time UTC>\t<label>` per step start, written by the driver) also a per-step table: the split, tokens and calls per step, with agents as coordinator plus children (the system ship's repo sessions and their subagents), waits by kind (CI, deploy, promotion, restore, cluster, smoke), `unattributed` for waiting no evidence explains, and `no-tr` for minutes with no readable transcript. The waits by kind in the tables above come from it; `--journey` also writes the split to the journey record, and `scripts/journey/measure.py` still works (it forwards). A journey with a fresh session per part names each session, comma-separated. Take the per-part times from `cplat platform runs journey show`, count criteria in the demo repos' specs, and file every defect as an issue.
 4. **Publish:** check the new screenshots (no secrets, no empty panels; captions in Watch a real run still true), cut the cast with `scripts/journey/cut_cast.py <cast> <markers> <inputs> <out> <host> 0.016 2.5 2.0` (waits capped, host name blanked; check the output for tokens), update Watch a real run, and add a row to each table here plus a paragraph under [What changed between the journeys](#what-changed-between-the-journeys) with the PRs and issues of the versions in between.
