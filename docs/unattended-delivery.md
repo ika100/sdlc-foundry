@@ -273,3 +273,13 @@ A run settles these itself instead of stopping for you:
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat component ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`) are the review. Use `/component:ship <NNN> --no-merge` to read the PR yourself first.
+
+## Several runs and the usage limit
+
+Several `cplat headless` runs in one repo, in worktrees or clones, and the usage limit of your account no longer stop each other.
+
+**Slots.** A run needs a slot before it starts a session. The repo allows `slots` runs at once (`slots` in `.platform/dispatch.yml`, else 1; `cplat dispatch slots N` overrides it). Every worktree and clone of the repo on the machine counts, and the dispatcher's units take slots from the same pool. When all slots are held, the run starts no session and prints `waiting for a slot: held by <command> (pid <pid>, since <time>, <checkout>)`. It starts within 60 seconds after a holder ends, and waiting costs no budget. With `--no-wait` it exits 1 with `slot busy: held by <command> …` instead. `--dry-run` takes no slot. A slot whose holder no longer runs is freed with `freed a stale slot of <command> (pid <pid> gone)`; nothing to do.
+
+**The usage limit.** A session that ends within 60 seconds with no output, or with the usage-limit message without a reset time, pauses the run for 5, 10, 20, 40, then 60 minutes between tries and prints `paused: usage limit, next try at <local time>`. With a given reset time the line is `paused: usage limit, resumes at <time>`, one minute after the reset. A pause counts neither as a stall, an invocation nor budget minutes. Once the pauses of one run would exceed 360 minutes in total, or a given reset time lies beyond that, the run starts no further session. It exits 1 with `environment pause: usage limit resets at <time or "unknown">` and is recorded as escalated with cause `environment`. Nothing is wrong with the work: run the same command again after the limit resets and it continues.
+
+**Renumbering in a land.** When another PR took the same ADR or rule number, the land renumbers yours and prints `renumbered ADR-<old> to ADR-<n> (<k> references)` or `renumbered R<old> to R<new> in <path> (<k> references)`. A conflict in any other part of the ADR index or the rule register stays a human decision.
