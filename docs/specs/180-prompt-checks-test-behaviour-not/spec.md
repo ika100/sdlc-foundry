@@ -1,7 +1,7 @@
 ---
 spec_id: 180-prompt-checks-test-behaviour-not
 title: Prompt checks test behaviour not sentences
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -55,3 +55,4 @@ As a platform maintainer, I want a check that refuses new sentence pins unless t
 
 - 2026-11-10 created
 - 2026-11-10 approved
+- 2026-11-11 building
