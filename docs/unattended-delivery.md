@@ -265,7 +265,7 @@ A run settles these itself instead of stopping for you:
 - **Instance settings.** Settings from the system plan (the gitops entry operations replicas, resources, host and env, in order `before-merge`) are applied as planned.
 - **Removing tracked files.** `git rm` is on the allowlist; a forced removal is still refused, and a removed frozen test is still flagged by `cplat spec test-diff`.
 - **Type-only test changes.** A change to a test's types alone is recorded with `--tighten` and does not wait for you.
-- **One test review.** The acceptance tests are reviewed once, before they freeze ([ADR-096](adr/096-acceptance-tests-are-reviewed-once-before-they-freeze.md)).
+- **One test review.** The acceptance tests are reviewed once, before they freeze ([ADR-099](adr/099-acceptance-tests-are-reviewed-once-before-they-freeze.md)).
 - **Smoke-test findings.** The tester fixes them in the build.
 
 ## Safety on the free plan

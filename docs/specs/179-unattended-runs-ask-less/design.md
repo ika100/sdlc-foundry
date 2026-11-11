@@ -19,7 +19,7 @@
   `--tighten` and goes on. The comparison is the line comparison of A4, nothing more (Non-goals).
 - **The pre-freeze review is the reviewer agent in test-review mode; the freeze point is a marker commit** written by a
   `cplat` command, so the red-tests unit cannot end without the review. ADR:
-  [096](../../adr/096-acceptance-tests-are-reviewed-once-before-they-freeze.md).
+  [099](../../adr/099-acceptance-tests-are-reviewed-once-before-they-freeze.md).
 - **Smoke findings are a separate reviewer line** (`SMOKE:`), handled by the tester in the existing verification fix
   round (A8); a finding on a frozen acceptance test stays `TEST LOOSER` (spec 165).
 - **The platform preset is applied per event**: a run record carries the shape of the repo it ran in; the notifier

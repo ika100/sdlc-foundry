@@ -109,7 +109,7 @@ human_steps:
 # Plan — 179 Unattended runs ask less
 
 Contract: [design.md](design.md); the decision that outlives the spec:
-[ADR-096](../../adr/096-acceptance-tests-are-reviewed-once-before-they-freeze.md) (review before the freeze).
+[ADR-099](../../adr/099-acceptance-tests-are-reviewed-once-before-they-freeze.md) (review before the freeze).
 Levels: t1, t2, t3, t6, t7, t8, t9, t10, t11, t12, t13, t14 → t4, t5 (both import `testreview`).
 
 Every prompt task keeps the total bytes of the prompt files it changes at or below what they had before (docs/rules
@@ -349,9 +349,9 @@ criterion in the entry's `acs` and `order: before-merge`, never a separate PR or
 - `docs/console.md` (Notifications): one paragraph: escalations of runs in the platform repo (`shape: platform`) go to
   the desktop, never to GitHub, unless `events.escalation.github` is set; auto-filed platform issues are unaffected.
 - `docs/unattended-delivery.md`: a short section "What a run no longer asks": instance settings from the system plan,
-  `git rm` of tracked files, type-only test changes, the one test review before the freeze (link ADR-096),
+  `git rm` of tracked files, type-only test changes, the one test review before the freeze (link ADR-099),
   smoke-test findings. Relative links only.
-- `docs/adr/README.md`: the ADR-096 row in the style of the 093–095 rows.
+- `docs/adr/README.md`: the ADR-099 row in the style of the 093–095 rows.
 - Fragment per `docs/changelog.d/README.md`: bold summary ending `(spec 179).`; name #616, #653, #654, #655, #642,
   #643; note that gitops-app repos get the new plan check with `/platform:update` and that plugins update with
   `/plugin marketplace update`.
