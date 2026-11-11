@@ -1,7 +1,7 @@
 ---
 spec_id: 183-shared-numbers-and-indexes-come-from
 title: Shared numbers and indexes come from cplat
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [659, 660, 477, 577]
@@ -64,3 +64,4 @@ As a user piping cplat output into `head`, I want the command to stop quietly, s
 - 2026-11-10 amended: AC-183.8, the spec writers mark a replaced criterion (#477, journey 2), A9
 - 2026-11-10 approved
 - 2026-11-11 building
+- 2026-11-11 done
