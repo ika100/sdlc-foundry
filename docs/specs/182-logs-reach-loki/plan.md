@@ -37,12 +37,14 @@ tasks:
     covers: [AC-182.6, AC-182.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: web-nextjs lib/logger.ts, a JSON logger with the active span's ids
     files: [templates/web-nextjs/lib/logger.ts, templates/web-nextjs/tests/logger.test.ts, templates/web-nextjs/copier.yml, templates/web-nextjs/CLAUDE.md.jinja]
     covers: [AC-182.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: Cluster test turns on ui lgtm in dev and finds a component's log line, its trace and the tailer's limits
     files: [tests/e2e/run.sh]
@@ -55,6 +57,7 @@ tasks:
     covers: [AC-182.3]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 182 Logs reach Loki
