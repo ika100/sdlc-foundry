@@ -428,7 +428,8 @@ def _run_check(root: Path, entry: dict) -> tuple[int, str, Path]:
     log = quiet._log_path(root, f"validate-{entry['name']}")
     try:
         with log.open("wb") as fh:
-            rc = subprocess.run(command(entry), cwd=root, stdout=fh, stderr=subprocess.STDOUT).returncode
+            rc = subprocess.run(command(entry), cwd=root, stdout=fh, stderr=subprocess.STDOUT,
+                                env=core.repo_env()).returncode
     except FileNotFoundError:
         raise PlatformError("`devbox` is not installed or not on PATH", hint=core.install_hint("devbox")) from None
     return rc, log.read_text(errors="replace"), log
@@ -508,7 +509,8 @@ def record_final_gate(root: Path) -> None:
             if c.get("decision") in ("skipped", "reused") and c.get("name") in scripts:
                 entry = _entry(scripts[c["name"]], "run", "final", "final gate")
                 try:
-                    rc = subprocess.run(command(entry), cwd=root, capture_output=True, timeout=FINAL_TIMEOUT).returncode
+                    rc = subprocess.run(command(entry), cwd=root, capture_output=True, timeout=FINAL_TIMEOUT,
+                                    env=core.repo_env()).returncode
                 except subprocess.TimeoutExpired:   # not a miss: nobody knows whether it is red
                     runs.mutate(rid, lambda rec, n=c["name"]: [x.__setitem__("final", "timed out")
                                                                for x in rec["validation"]["checks"] if x.get("name") == n])

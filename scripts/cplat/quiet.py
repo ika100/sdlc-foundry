@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 import failsum
-from core import PlatformError
+from core import PlatformError, repo_env
 
 TAIL = 40
 
@@ -44,7 +44,7 @@ def _flaky(cwd: Path, summary) -> bool:
         log = _log_path(cwd, "test-fast-rerun")
         with log.open("wb") as fh:
             rc = subprocess.run(["devbox", "run", "test-fast", "--", *flaky.rerun_args(tool, tests)], cwd=cwd, stdout=fh,
-                                stderr=subprocess.STDOUT).returncode
+                                stderr=subprocess.STDOUT, env=repo_env()).returncode
         if rc != 0:
             return False
         print(f"ok: devbox run test-fast (flaky: {len(tests)} test(s) failed, then passed when run again alone; log: {log})")
@@ -110,7 +110,7 @@ def main(argv: list[str]) -> int:
     cmd = ["devbox", "run", script] + (["--", *targs] if targs else [])
     log = _log_path(cwd, script)
     with log.open("wb") as fh:
-        rc = subprocess.run(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT).returncode
+        rc = subprocess.run(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT, env=repo_env()).returncode
     lines = log.read_text(errors="replace").splitlines()
     nonempty = [ln for ln in lines if ln.strip()]
     if rc == 0:

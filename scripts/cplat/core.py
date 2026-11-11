@@ -125,13 +125,20 @@ def _journey_wait(seconds: float, kind: str) -> None:
         pass
 
 
+def repo_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """os.environ without any CPLAT_* variable, then `extra` (which may set CPLAT_* on purpose, e.g. CPLAT_REPEAT_RUN).
+    A repository's own commands must not see the variables of the run that started them (spec 178)."""
+    return {**{k: v for k, v in os.environ.items() if not k.startswith("CPLAT_")}, **(extra or {})}
+
+
 def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, capture: bool = True,
-        env: dict[str, str] | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
+        env: dict[str, str] | None = None, timeout: float | None = None,
+        repo_command: bool = False) -> subprocess.CompletedProcess[str]:
     """Run a command; raise PlatformError with the command's stderr when it fails and `check` is set. A `gh` call that GitHub
     refuses for its rate limit waits for the reset and runs again (spec 137, #409); a `git push` the remote refuses for a
     transient reason backs off and pushes again for up to PUSH_RETRY_MAX_WAIT (#500); a `gh` or networked git call that
     failed on a dropped network runs again for up to NETWORK_RETRY_MAX_WAIT (spec 148)."""
-    full_env = {**os.environ, **(env or {})}
+    full_env = {**(repo_env() if repo_command else os.environ), **(env or {})}
     waited, backoff = 0.0, 60.0
     pushed, push_backoff = 0.0, 15.0
     offline, net_backoff = 0.0, 10.0

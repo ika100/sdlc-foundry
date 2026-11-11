@@ -499,7 +499,7 @@ def run_ci(repo: Path, env: dict[str, str] | None = None) -> None:
     if not f.is_file() or '"ci"' not in f.read_text():
         return
     say("running `devbox run ci` before pushing …")
-    res = run(["devbox", "run", "ci"], cwd=repo, check=False, timeout=3600, env=env)
+    res = run(["devbox", "run", "ci"], cwd=repo, check=False, timeout=3600, env=env, repo_command=True)
     if res.returncode != 0:
         try:
             import validate
@@ -1999,7 +1999,7 @@ def build_red(repo: Path, spec_id: str) -> tuple[list[str], bool]:
     if not (repo / "devbox.json").is_file():
         return out, red
     try:
-        t = run(["devbox", "run", "test-fast"], cwd=repo, check=False, timeout=900)
+        t = run(["devbox", "run", "test-fast"], cwd=repo, check=False, timeout=900, repo_command=True)
     except PlatformError as e:
         return out + [f"`devbox run test-fast` did not finish: {e}"], True
     if t.returncode != 0:
