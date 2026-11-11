@@ -31,6 +31,7 @@ tasks:
     covers: [AC-179.1, AC-179.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: component set --resources
     files: [scripts/cplat/compose.py, plugins/component/commands/set.md, docs/rules/plugins/component/commands/set.yml]
@@ -43,6 +44,7 @@ tasks:
     covers: [AC-179.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: Run records, run rows and escalation items carry the repo shape
     files: [scripts/cplat/runs.py, scripts/cplat/runlist.py, scripts/cplat/needs.py]

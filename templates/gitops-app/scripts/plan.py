@@ -141,7 +141,7 @@ def check_gitops(rid: str, ops, components: set[str]) -> list[str]:
             continue
         target = (op.get("component") or op.get("service")) if kind in {"uses", "env", "replicas", "resources"} else op.get("expose")
         if not target:
-            errs.append(f"repo {rid}: gitops operation {kind!r} needs a component")
+            errs.append(f"repo {rid}: needs a component (gitops operation {kind!r})")
         elif target not in components:
             errs.append(f"repo {rid}: unknown component '{target}' in gitops operation {kind!r}")
         if kind == "uses" and op["uses"] not in resources:
