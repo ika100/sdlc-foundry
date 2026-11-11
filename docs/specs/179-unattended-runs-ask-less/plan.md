@@ -73,18 +73,21 @@ tasks:
     covers: [AC-179.5, AC-179.6, AC-179.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t13
     title: System planner and ship-entry - instance settings become entry operations
     files: [plugins/system/agents/planner.md, plugins/system/references/ship-entry.md, docs/rules/plugins/system/agents/planner.yml, docs/rules/plugins/system/references/ship-entry.yml]
     covers: [AC-179.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t14
     title: Plugin versions, docs, ADR index and changelog fragment
     files: [plugins/component/.claude-plugin/plugin.json, plugins/svc/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/console.md, docs/unattended-delivery.md, docs/adr/README.md, docs/changelog.d/179-unattended-runs-ask-less.changed.md]
     covers: [AC-179.1, AC-179.3, AC-179.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: units - the red-tests unit needs the reviewed commit
     files: [scripts/cplat/units.py, tests/cplat/units131_support.py, tests/cplat/test_units_131.py]
