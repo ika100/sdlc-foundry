@@ -219,12 +219,9 @@ def find(root: Path, ref: str) -> Spec:
 
 
 def next_number(root: Path) -> int:
-    specs, bad = scan(root)
-    nums = [int(s.id.split("-", 1)[0]) for s in [*specs, *bad]]
-    backlog = root / BACKLOG
-    if backlog.is_file():  # continue after legacy STORY-NNN ids so old references stay unique
-        nums += [int(n) for n in re.findall(r"STORY-(\d+)", backlog.read_text())]
-    return max(nums, default=0) + 1
+    """The next free spec number over main, pushed branches and open PRs (spec 183)."""
+    import specnumbers
+    return specnumbers.next_number(root)[0]
 
 
 def slugify(text: str) -> str:
@@ -838,7 +835,11 @@ def skeleton(number: str, title: str) -> str:
 
 
 def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: list[int], parent: str | None) -> Spec:
-    number = f"{next_number(root):03d}"
+    import specnumbers
+    num, warning = specnumbers.next_number(root)
+    if warning:
+        print(warning, file=sys.stderr)
+    number = f"{num:03d}"
     sdir = specs_dir(root) / f"{number}-{slugify(title)}"
     if sdir.exists():
         raise PlatformError(f"{sdir} already exists")
@@ -1523,6 +1524,12 @@ def main(argv: list[str]) -> int:
         import adr
         if clash := adr.clashes(root):          # #337: an ADR number taken twice, here or on another branch
             results[adr.ADR_DIR] = clash
+        import specnumbers
+        spec_clash, spec_warning = specnumbers.clashes(root)   # spec 183: a number another branch or open PR uses
+        if spec_clash:
+            results["docs/specs"] = spec_clash
+        if spec_warning:
+            print(spec_warning)
         for s in specs:                          # spec 147 (AC-147.6): a warning, never an error
             if w := size_warning(s):
                 print(f"WARNING: {s.id}: {w}")
@@ -1578,8 +1585,8 @@ def main(argv: list[str]) -> int:
                 else:
                     print(f"{'ok  ' if found else 'MISS'} {ac}  {', '.join(found) or '(no test names it)'}")
             print(f"{len(result) - len(missing)}/{len(result)} criteria traced to tests")
-            for old, new in superseded.items():
-                print(f"superseded {old}  superseded by {new}")
+            for old, replacement in superseded.items():
+                print(f"superseded {old}  superseded by {replacement}")
         return 1 if missing else 0
     if ns.cmd == "index":
         print(write_index(root).relative_to(root))
