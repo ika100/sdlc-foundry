@@ -17,6 +17,7 @@ from pathlib import Path
 import core
 import runs
 import spec as specmod
+import testreview
 import yaml
 from core import PlatformError, run
 
@@ -259,6 +260,9 @@ def _evaluate(repo: Path, command: str, spec_id: str, unit: str) -> tuple[str | 
             return None, f"`cplat spec trace {spec_id}` reports criteria without a test"
         if not _acceptance_commit(repo, head):
             return None, f"no commit 'acceptance tests for ...' on feature/{spec_id}"
+        if testreview.reviewed_commit(repo, spec_id, head) is None:
+            return None, (f"no commit 'reviewed acceptance tests for {spec_id}' on feature/{spec_id} "
+                          "(the test review of build Phase 1)")
         return head, ""
     if tasks := tasks_of(unit):
         open_ = [task for task in tasks if not _done_in(sp, task)]
@@ -298,7 +302,8 @@ def next_step(unit: str, spec_id: str) -> str:
         return f"follow /component:plan {spec_id}, commit docs/specs/{spec_id}/plan.md"
     if unit == "red-tests":
         return (f"write the acceptance tests for every criterion of {spec_id} and commit them as "
-                f"'test: acceptance tests for ...' (`cplat spec trace {spec_id}` must pass)")
+                f"'test: acceptance tests for ...' (`cplat spec trace {spec_id}` must pass), "
+                f"then run the test review of build Phase 1 and commit it with `cplat component build reviewed {spec_id}`")
     if unit.startswith("batch:"):
         tasks = tasks_of(unit)
         return (f"implement tasks {', '.join(tasks)} of the plan at once, as build Phase 2's parallel batch (coders in worktrees, "
