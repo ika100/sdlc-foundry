@@ -17,6 +17,7 @@ tasks:
     covers: [AC-182.1, AC-182.3, AC-182.4]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: service-python logs trace_id and span_id of the active span (FastAPI instrumented)
     files: ["templates/service-python/src/{{ module_name }}/logging_config.py", "templates/service-python/src/{{ module_name }}/main.py", templates/service-python/tests/test_log_trace.py, templates/service-python/copier.yml]
