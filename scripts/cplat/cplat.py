@@ -157,13 +157,18 @@ def main(argv: list[str]) -> int:
     for stream in (sys.stdout, sys.stderr):      # #335: a file or a pipe gets each line at once, not all of it at exit
         with contextlib.suppress(AttributeError, ValueError):
             stream.reconfigure(line_buffering=True)
-    resolved = _resolve(argv)
-    if isinstance(resolved, int):
-        return resolved
-    modname, rest, label = resolved
-    module = __import__(modname)
+    label = " ".join(argv[:1])
     try:
+        resolved = _resolve(argv)
+        if isinstance(resolved, int):
+            return resolved
+        modname, rest, label = resolved
+        module = __import__(modname)
         return module.main(rest)
+    except BrokenPipeError:     # the reader of stdout went away: quiet exit 141, no crash report
+        with contextlib.suppress(OSError, ValueError):
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 141
     except core.PlatformError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         if e.hint:
