@@ -167,6 +167,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [181-journey-measurements-count-waiting](specs/181-journey-measurements-count-waiting/spec.md) — Journey measurements count waiting correctly | P1 | done | 7 |  |
 | [182-logs-reach-loki](specs/182-logs-reach-loki/spec.md) — Logs reach Loki | P1 | done | 6 | #657 |
 | [183-shared-numbers-and-indexes-come-from](specs/183-shared-numbers-and-indexes-come-from/spec.md) — Shared numbers and indexes come from cplat | P1 | done | 8 | #659, #660, #477, #577 |
+| [184-parallel-ships-do-not-stop-each-other](specs/184-parallel-ships-do-not-stop-each-other/spec.md) — Parallel ships do not stop each other | P1 | done | 10 | #663, #666, #670, #671 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

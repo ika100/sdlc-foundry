@@ -1,7 +1,7 @@
 ---
 spec_id: 184-parallel-ships-do-not-stop-each-other
 title: Parallel ships do not stop each other
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [663, 666, 670, 671]
@@ -85,3 +85,4 @@ Verification commands with an environment prefix.
 - 2026-11-11 amended: open question answered; the refused environment-prefix names are folded into AC-184.10
 - 2026-11-11 approved
 - 2026-11-11 building
+- 2026-11-11 done
