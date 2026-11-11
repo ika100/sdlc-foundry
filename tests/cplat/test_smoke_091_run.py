@@ -84,7 +84,7 @@ class FakeDevbox:
             "echo \"$*|$SMOKE_BASE_URL|$PWD\" >> \"$d/calls\"\n"
             "f=\"$d/attempt$n\"; [ -f \"$f.rc\" ] || f=\"$d/attempt_last\"\n"
             "cat \"$f.out\"\n"
-            "[ -f \"$f.sleep\" ] && sleep \"$(cat \"$f.sleep\")\"\n"
+            "[ -f \"$f.sleep\" ] && sleep \"$(cat \"$f.sleep\")\"  # fake-delay: a slow devbox the smoke timeout test kills\n"
             "exit \"$(cat \"$f.rc\")\"\n")
         exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
         monkeypatch.setenv("PATH", f"{self.dir}{os.pathsep}{os.environ['PATH']}")

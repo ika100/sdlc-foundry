@@ -25,6 +25,7 @@ from pathlib import Path
 import land171_world
 import land178_world
 import spec as specmod
+from waiting import fake_prelude
 
 SPEC_ID = "007-price-alerts"
 BRANCH = f"feature/{SPEC_ID}"
@@ -273,7 +274,7 @@ def stub_text() -> str:
     for old, new in ((PR_LIST_OLD, PR_LIST_NEW), (API_OLD, API_NEW), (CHECKS_OLD, CHECKS_NEW)):
         assert text.count(old) == 1, f"the gh stub changed: {old[:40]!r}"
         text = text.replace(old, new)
-    return text % {"py": sys.executable}
+    return text % {"py": sys.executable, "prelude": fake_prelude()}
 
 
 def git(repo: Path, *args: str, env: dict | None = None) -> str:

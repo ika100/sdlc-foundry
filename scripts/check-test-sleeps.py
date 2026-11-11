@@ -2,7 +2,7 @@
 """Fail on every real sleep in tests/cplat (spec 178): a test waits for an event or a file, or uses the fake clock.
 
 A sleep inside a string literal (a fake program standing in for a slow process) is allowed on a line carrying
-`fake-delay: <reason>`. tests/cplat/waiting.py, the helper that polls, is exempt.
+`fake-delay: <reason>`. tests/cplat/waiting.py, the helper that polls, is exempt, and so are the FIXTURE_FILES.
 
 Usage: check-test-sleeps.py [--root DIR]
 """
@@ -16,6 +16,9 @@ HINT = ('waits a fixed time: wait for an event or a file (waiting.wait_for, wait
         'a fake program marks its delay "fake-delay: <reason>"')
 SLEEP_MODULES = {"time", "asyncio"}
 TEXT_SLEEP = re.compile(r"""\b(?:time|asyncio)\.sleep\(|(?:^|[;|]|&&)\s*sleep\s+[\w$"'{]""")
+# Tests whose string literals hold sleeps as sample input for a detector (never run as sleeps): this check's own tests and the
+# polling-loop detector of spec 143 over documentation text.
+FIXTURE_FILES = {"test_178_sleeps_check.py", "test_143_waits_docs.py"}
 MARKER = re.compile(r"fake-delay:\s*\S")
 
 
@@ -57,7 +60,7 @@ def main() -> int:
     base = root / "tests" / "cplat"
     lines = []
     for path in sorted(base.rglob("*.py")):
-        if path == base / "waiting.py":
+        if path == base / "waiting.py" or path.name in FIXTURE_FILES:
             continue
         try:
             tree = ast.parse(path.read_text(), filename=str(path))
