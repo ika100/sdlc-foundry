@@ -494,12 +494,38 @@ _TAILER_IMAGE = re.compile(r"^python:[\w.\-]+$")
 LOG_TAILER_FILES = {"collector.yaml", "kustomization.yaml", "serviceaccount.yaml", "role.yaml", "rolebinding.yaml", "tailer-configmap.yaml"}
 
 
-def _without_log_tailer(tree: dict) -> dict:
+def _tailer_parts_out(doc: dict) -> None:
+    """Remove from a parsed collector.yaml (Deployment) or kustomization.yaml only what the tailer adds; anything else stays."""
+    if doc.get("kind") == "Kustomization" and isinstance(doc.get("resources"), list):
+        doc["resources"] = sorted(r for r in doc["resources"] if r not in LOG_TAILER_FILES - {"collector.yaml", "kustomization.yaml"})   # 4.7 listed them in another order
+    if doc.get("kind") == "Deployment":
+        tpl = doc["spec"]["template"]
+        (tpl.get("metadata") or {}).get("annotations", {}).pop("checksum/tailer", None)
+        pod = tpl["spec"]
+        for key in ("serviceAccountName", "automountServiceAccountToken"):
+            pod.pop(key, None)
+        pod["containers"] = [c for c in pod["containers"] if c.get("name") != "log-tailer"]
+        pod["volumes"] = [v for v in pod.get("volumes", []) if v.get("name") not in ("tailer", "sa-token")]
+
+
+def _without_log_tailer(tree: dict, only_added_parts: bool = False) -> dict:
     """The migration proof ignores the log tailer (spec 182): an environment with observability gains it in 5.x, so the collector
     Deployment, its kustomization and the tailer's files in `addons/<env>/observability/` differ from the 4.7 render by design.
     Environments without observability are not touched, and the rest of the observability directory (ConfigMap, Service) is still compared.
     The guard-rail policies are compared parsed, without the tailer's image (`python:<tag>`, the credentials image) among the allowed registries."""
-    out = {p: b for p, b in tree.items() if not (p.rpartition("/")[0].endswith("/observability") and p.rsplit("/", 1)[-1] in LOG_TAILER_FILES)}
+    in_obs = lambda p: p.rpartition("/")[0].endswith("/observability") and p.rsplit("/", 1)[-1] in LOG_TAILER_FILES  # noqa: E731
+    # only_added_parts (the lost check, every update): collector.yaml and kustomization.yaml stay, minus what the tailer adds,
+    # so a local change to them is still compared; the migration proof drops both files whole
+    out = {p: b for p, b in tree.items() if not (in_obs(p) and not (only_added_parts and p.rsplit("/", 1)[-1] in ("collector.yaml", "kustomization.yaml")))}
+    for p in list(out):
+        if only_added_parts and in_obs(p):
+            try:
+                doc = yaml.safe_load(out[p])
+                _tailer_parts_out(doc)
+            except (yaml.YAMLError, KeyError, TypeError, AttributeError):
+                continue
+            dumped = yaml.safe_dump(doc, sort_keys=True)
+            out[p] = dumped.encode() if isinstance(out[p], bytes) else dumped
     for p in list(out):
         if not (p.rsplit("/", 1)[-1] == "policy.yaml" and "/policies/" in p):
             continue
@@ -983,7 +1009,7 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
                 pins = _digested_refs(repo)
                 if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}, pins):
                     continue
-                if was.returncode == 0 and _without_log_tailer({path: was.stdout.encode()}) == _without_log_tailer({path: (repo / path).read_bytes()}):
+                if was.returncode == 0 and _without_log_tailer(_normalised({path: was.stdout.encode()}, pins), True) == _without_log_tailer(_normalised({path: (repo / path).read_bytes()}, pins), True):
                     continue   # spec 182: only the log tailer (observability files, its image among the allowed registries) was added
                 if path.endswith("/kustomization.yaml") and was.returncode == 0:   # spec 128: it lists the credentials files instead of the generators
                     folder = path.rpartition("/")[0]
