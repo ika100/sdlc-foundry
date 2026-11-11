@@ -10,18 +10,21 @@ tasks:
     covers: [AC-179.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: spec.py - type-only test-diff line and provided-by-system settings
     files: [scripts/cplat/spec.py]
     covers: [AC-179.4, AC-179.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: testreview - the reviewed marker commit and cplat component build reviewed
     files: [scripts/cplat/testreview.py, scripts/cplat/buildcmd.py]
     covers: [AC-179.5, AC-179.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: gitops-app plan.py - replicas and resources operations, entry order, instance-setting check
     files: [templates/gitops-app/scripts/plan.py]
