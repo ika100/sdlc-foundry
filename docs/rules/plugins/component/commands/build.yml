@@ -142,3 +142,40 @@ rules:
   - id: R35
     text: "read-only-filesystem friendly"
     class: not a rule
+  - id: R36
+    text: "skip if the commit `reviewed acceptance tests for` exists, since the tests are frozen then"
+    class: practice
+    source: spec 179
+  - id: R37
+    text: "Resolve only these test-review findings, changing only the tests named, so that nothing else moves"
+    class: practice
+    source: spec 179
+  - id: R38
+    text: "`cplat spec trace <id>` must pass after it, else `git revert --no-edit HEAD` and all count as unresolved, since a broken trace leaves a criterion untested"
+    class: practice
+    enforced_by: cplat spec trace
+    source: spec 179
+  - id: R39
+    text: "A type-only change the type check needs (a type annotation, cast or import; no assertion line touched) is allowed, since the build records it."
+    class: practice
+    source: spec 179
+  - id: R40
+    text: "A `SMOKE: <file> — <finding>` line is no `NOT MET`: in the same round the tester (normal mode) gets"
+    class: practice
+    source: spec 179
+  - id: R41
+    text: "Change no other test, so that frozen tests stay fixed.\"; never ask, because a smoke test is no acceptance test."
+    class: practice
+    source: spec 179
+  - id: R42
+    text: "failing → the tester once more, since it must pass"
+    class: practice
+    source: spec 179
+  - id: R43
+    text: "Only `SMOKE` items with `RESULT: pass` need no further cycle, because none is a `NOT MET`"
+    class: practice
+    source: spec 179
+  - id: R44
+    text: "`git rm` of a tracked file is allowed, never `git rm -f`, because the run allowlist refuses it."
+    class: practice
+    source: spec 179
