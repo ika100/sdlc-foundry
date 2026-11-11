@@ -9,6 +9,8 @@ import sys
 
 import pytest
 
+import waiting
+
 from console_support import Console, doctor_json, needs_json, parse, q, status_json
 
 
@@ -106,12 +108,8 @@ def test_a_change_in_a_source_bumps_the_version_and_shows_on_the_next_load_ac_12
     doc["items"] = doc["items"][:2]
     c.set("needs", doc, read=False)
     assert c.request("POST", "/api/sources/needs/retry")[0] == 202
-    for _ in range(100):
-        _, after = c.json("GET", "/api/state")
-        if after["version"] != before["version"]:
-            break
-        import time
-        time.sleep(0.1)
+    after = waiting.wait_for(lambda: (lambda s: s if s["version"] != before["version"] else None)(c.json("GET", "/api/state")[1]),
+                             what="the state version to change")
     assert after["version"] != before["version"] and after["badge"] == 2
 
 
@@ -188,7 +186,7 @@ def test_a_source_that_prints_no_json_is_unavailable_ac_122_42(tmp_path):  # AC-
 def test_a_source_that_hangs_does_not_block_the_server_ac_122_42(console):  # AC-122.42
     from console import sources
     c = console()
-    c.sources["runs"] = sources.Source("runs", [sys.executable, "-c", "import time; time.sleep(4)"])
+    c.sources["runs"] = sources.Source("runs", [sys.executable, "-c", "import time\n" + waiting.fake_prelude() + "\ntime.sleep(4)  # fake-delay: a source that hangs"])
     c.sources["runs"].timeout = 1
     c.sources["runs"].read()
     assert c.sources["runs"].error
@@ -242,11 +240,8 @@ def test_retry_now_reads_the_source_again_and_clears_the_marks_ac_122_42(console
     assert not c.json("GET", "/api/state")[1]["sources"]["status"]["ok"]
     c.set("status", status_json(), read=False)
     assert c.request("POST", "/api/sources/status/retry")[0] == 202
-    for _ in range(100):
-        s = c.json("GET", "/api/state")[1]["sources"]["status"]
-        if s["ok"]:
-            break
-        time.sleep(0.1)
+    s = waiting.wait_for(lambda: (lambda s: s if s["ok"] else None)(c.json("GET", "/api/state")[1]["sources"]["status"]),
+                         what="the status source to be ok")
     assert s["ok"] and s["unavailable_since"] is None
     root, _ = c.page("/system")
     assert not q(root, "section", data_source="status", data_unavailable_since=True)

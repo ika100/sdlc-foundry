@@ -6,6 +6,7 @@ import subprocess
 import core
 import gitops
 import pytest
+from waiting import with_prelude
 
 
 def git(cwd, *args):
@@ -26,7 +27,7 @@ def clone(tmp_path, monkeypatch):
     git(repo, "add", "-A"); git(repo, "commit", "-qm", "init"); git(repo, "push", "-q", "origin", "main")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "gh").write_text('#!/bin/sh\nif [ "$GH_FAIL" = 1 ]; then echo "HTTP 502" >&2; exit 1; fi\necho https://github.com/acme/shop-gitops/pull/9\n')
+    (bin_dir / "gh").write_text(with_prelude('#!/bin/sh\nif [ "$GH_FAIL" = 1 ]; then echo "HTTP 502" >&2; exit 1; fi\necho https://github.com/acme/shop-gitops/pull/9\n'))
     (bin_dir / "gh").chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
     return repo

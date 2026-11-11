@@ -11,6 +11,7 @@ from pathlib import Path
 
 import failsum
 import flaky
+from core import repo_env
 
 MAX_LOAD_TESTS = 20   # more failing tests than this under load is not a flake
 
@@ -27,7 +28,7 @@ def run(cwd: Path, n: int, args: list[str], *, raw: bool, on: bool) -> int:
     fhs = [lg.open("wb") for lg in logs]
     try:
         procs = [subprocess.Popen(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT,
-                                  env={**os.environ, "CPLAT_REPEAT_RUN": str(i)}) for i, fh in enumerate(fhs, 1)]
+                                  env=repo_env({"CPLAT_REPEAT_RUN": str(i)})) for i, fh in enumerate(fhs, 1)]
         rcs = [p.wait() for p in procs]
     finally:
         for fh in fhs:
@@ -63,7 +64,7 @@ def run(cwd: Path, n: int, args: list[str], *, raw: bool, on: bool) -> int:
         log = quiet._log_path(cwd, f"test-fast-alone-{j}")
         with log.open("wb") as fh:
             rc = subprocess.run(["devbox", "run", "test-fast", "--", *rargs], cwd=cwd, stdout=fh,
-                                stderr=subprocess.STDOUT).returncode
+                                stderr=subprocess.STDOUT, env=repo_env()).returncode
         if rc == 0:
             flaky_n += 1
             print(f"flaky under load: {t} (failed in {counts[t]} of {n} runs)")

@@ -63,4 +63,5 @@ def test_the_plan_hands_the_architect_a_free_number_337():
     import core
     plan = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "plan.md").read_text()
     architect = (core.PLATFORM_ROOT / "plugins" / "svc" / "agents" / "architect.md").read_text()
-    assert "cplat spec adr-next" in plan and "ADR_NEXT" in plan and "ADR_NEXT" in architect
+    assert "cplat adr add" in plan and "cplat adr add" in architect    # a free number is the command's (spec 183)
+    assert "ADR_NEXT" not in plan and "ADR_NEXT" not in architect

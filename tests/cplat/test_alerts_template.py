@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from test_gitops import gh, gitops_repo  # noqa: F401  (fixtures)
+from waiting import with_prelude
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "gitops-app"
 WORKFLOW = TEMPLATE / ".github" / "workflows" / "alerts.yml"
@@ -123,7 +124,7 @@ def sh(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     uv = bin_dir / "uv"
-    uv.write_text('#!/bin/sh\nprintf "%s\\n" "$*" > "$UV_LOG"\n')
+    uv.write_text(with_prelude('#!/bin/sh\nprintf "%s\\n" "$*" > "$UV_LOG"\n'))
     uv.chmod(uv.stat().st_mode | stat.S_IEXEC)
     work = tmp_path / "repo"
     work.mkdir()

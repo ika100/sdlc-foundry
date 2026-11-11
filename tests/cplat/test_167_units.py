@@ -8,11 +8,11 @@ is `world.restart()` (every dispatcher module is imported afresh) plus a new `st
 import os
 import re
 import signal
-import time
 
 import pytest
 
 from dispatch_world import git, world  # noqa: F401  (fixture)
+from waiting import wait_for
 
 
 def _fix_issues(world, n=3, bugs=2):
@@ -208,11 +208,14 @@ def test_a_finished_fix_unit_lands_merges_releases_its_claim_and_frees_the_slot_
     assert r.rc == 0 and re.search(r"^landing issue-1\.1: https://github.com/acme/shop-api/pull/\d+", r.out, re.M), r
     world.wait_until(lambda: any(e["ev"] == "merged" for e in world.events()))
     assert [e["green"] for e in world.events() if e["ev"] == "merged"] == [True]
-    for _ in range(4):
-        r = world.run("start", "--once")
-        if re.search(r"^done issue-1\.1: ", r.out, re.M):
-            break
-        time.sleep(0.5)
+    seen = []
+
+    def finished():
+        seen.append(world.run("start", "--once"))
+        return re.search(r"^done issue-1\.1: ", seen[-1].out, re.M)
+
+    wait_for(finished, what="the land phase to report done issue-1.1")
+    r = seen[-1]
     assert re.search(r"^done issue-1\.1: .*pull/\d+", r.out, re.M), r
     assert "in-progress" not in world.labels_of(1)
     assert any("<!-- cplat-release -->" in c for c in world.comments_of(1))

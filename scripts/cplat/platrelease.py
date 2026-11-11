@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import core
+import land_merge
 import platrelease_changelog as changelog
 import platrelease_state as st
 import pr as prmod
@@ -135,7 +136,10 @@ def _prepare(repo: Path, state: st.State, version: str, skip_eval: str | None = 
 # ---------------- CI and merge ----------------
 
 def _wait_pr(repo: Path, url: str, o: Opts, merge: bool, slug: str) -> None:
-    ok, lines = prmod.wait(repo, url, merge, o.timeout, o.interval, ship.QUEUE_TIMEOUT, slug)
+    try:
+        ok, lines = prmod.wait(repo, url, merge, o.timeout, o.interval, ship.QUEUE_TIMEOUT, slug, mode=land_merge.RELEASE)
+    except ship.Conflicting as e:
+        raise land_merge._base_moved(repo, url) from e
     if not ok:
         print("\n".join(lines))
         raise core.PlatformError(f"CI is red on {url}: not merged")
@@ -163,6 +167,7 @@ def _wait_e2e(repo: Path, url: str, o: Opts) -> None:
 def _ci_and_merge(repo: Path, url: str, version: str, o: Opts) -> tuple[bool, str | None]:
     """Wait for CI on the PR. (False, None) at the merge stop; (True, sha) once merged."""
     slug = ship.service_slug(repo)
+    land_merge.ensure_current(repo, url)
     _wait_e2e(repo, url, o)
     _wait_pr(repo, url, o, False, slug)
     cs = ship.checks(repo, url)
@@ -177,11 +182,6 @@ def _ci_and_merge(repo: Path, url: str, version: str, o: Opts) -> tuple[bool, st
     _wait_pr(repo, url, o, True, slug)
     sha = ship.gh(["pr", "view", url, "--json", "mergeCommit", "-q", ".mergeCommit.oid"], cwd=repo).strip()
     _git(repo, "fetch", "origin", "main")
-    for args in (("switch", "main"), ("merge", "--ff-only", "origin/main")):
-        p = core.run(["git", *args], cwd=repo, check=False)
-        if p.returncode != 0:
-            ship.say(f"note: local main not updated (git {' '.join(args)}): {(p.stderr or p.stdout).strip()}")
-            break
     return True, sha
 
 
@@ -254,7 +254,14 @@ def main(argv: list[str]) -> int:
         url = state.pr["url"]
     else:
         return _publish(repo, state, version, sha, o)
-    merged, sha = _ci_and_merge(repo, url, version, o)
+    try:
+        merged, sha = _ci_and_merge(repo, url, version, o)
+    except land_merge.BaseMoved:
+        print("main moved: start the release again\n"
+              f"  fix: close the release PR (gh pr close {url}), delete the release branch "
+              f"(git push origin --delete release/{version}; git branch -D release/{version}), "
+              "run cplat platform release", file=sys.stderr)
+        return 1
     if not merged:
         return STOP_EXIT
     state.phase = st.MERGED

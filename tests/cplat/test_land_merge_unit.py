@@ -5,6 +5,7 @@ import land_merge
 import merge_lock
 import ship
 from core import run
+from waiting import with_prelude
 from land171_world import BRANCH, PR_URL, git, make_world
 
 
@@ -124,7 +125,7 @@ def test_a_refused_push_resets_the_branch_to_where_it_was(world):
     world.feature_adds_spec(199)
     world.other_adds_spec(108)
     hook = world.bare / "hooks" / "pre-receive"
-    hook.write_text("#!/bin/sh\necho 'refused by the test hook' >&2\nexit 1\n")
+    hook.write_text(with_prelude("#!/bin/sh\necho 'refused by the test hook' >&2\nexit 1\n"))
     hook.chmod(0o755)
     tip = git(world.repo, "rev-parse", "HEAD")
     with pytest.raises(land_merge.PlatformError, match="pushing the regenerated merge"):

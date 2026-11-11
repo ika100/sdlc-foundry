@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 import cplat
+import waiting
 from console_support import CPLAT, ROOT, STATIC
 from system_fixtures import rich5, write_system
 
@@ -100,22 +101,19 @@ def test_ui_takes_a_free_port_each_time_ac_122_1(ui):  # AC-122.1
 def test_ui_opens_the_url_in_the_default_browser_ac_122_1(tmp_path, ui):  # AC-122.1
     opener = tmp_path / "opener.sh"
     seen = tmp_path / "opened.txt"
-    opener.write_text(f"#!/bin/sh\necho \"$1\" >> {seen}\n")
+    opener.write_text(waiting.with_prelude(f"#!/bin/sh\necho \"$1\" >> {seen}\n"))
     opener.chmod(opener.stat().st_mode | stat.S_IEXEC)
     u = ui(BROWSER=f"{opener} %s")
-    end = time.time() + 15
-    while time.time() < end and not seen.exists():
-        time.sleep(0.2)
-    assert seen.exists() and f"127.0.0.1:{u.port}" in seen.read_text()
+    assert f"127.0.0.1:{u.port}" in waiting.wait_file(seen, contains=f"127.0.0.1:{u.port}")
 
 
 def test_no_open_skips_the_browser_ac_122_1(tmp_path, ui):  # AC-122.1
     opener = tmp_path / "opener.sh"
     seen = tmp_path / "opened.txt"
-    opener.write_text(f"#!/bin/sh\necho \"$1\" >> {seen}\n")
+    opener.write_text(waiting.with_prelude(f"#!/bin/sh\necho \"$1\" >> {seen}\n"))
     opener.chmod(opener.stat().st_mode | stat.S_IEXEC)
-    ui("--no-open", BROWSER=f"{opener} %s")
-    time.sleep(2)
+    u = ui("--no-open", BROWSER=f"{opener} %s")
+    assert u.get("/inbox")[0] == 200  # the server is up and had its chance to open the browser
     assert not seen.exists()
 
 

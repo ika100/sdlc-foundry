@@ -1,4 +1,4 @@
-# ADR-099: Acceptance tests are reviewed once against their criteria and the contract before they freeze
+# ADR-101: Acceptance tests are reviewed once against their criteria and the contract before they freeze
 
 **Status:** Accepted (2026-11-10, spec 179)
 **Builds on:** [ADR-026](026-feature-specs.md) (failing acceptance tests first), spec 165 (a test problem does not stop an

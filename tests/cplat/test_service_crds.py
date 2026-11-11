@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from waiting import with_prelude
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "gitops-app"
 SCRIPT = TEMPLATE / "scripts" / "check-service-crds.py"
@@ -602,7 +603,7 @@ def kubeconform_args(tmp_path, skip):
     bin_ = tmp_path / "bin"
     bin_.mkdir(exist_ok=True)
     fake = bin_ / "kubeconform"
-    fake.write_text('#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a"; done\n')
+    fake.write_text(with_prelude('#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a"; done\n'))
     fake.chmod(0o755)
     env = {k: v for k, v in os.environ.items() if k != "SERVICE_CRD_SKIP"}
     env["PATH"] = f"{bin_}:{env['PATH']}"

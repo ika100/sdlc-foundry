@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from waiting import with_prelude
 
 ROOT = Path(__file__).resolve().parents[2]
 T = ROOT / "templates" / "gitops-app" / "scripts"
@@ -54,7 +55,7 @@ def cluster(tmp_path):
                                 "gateways.gateway.networking.k8s.io  \n")
     (state / "count-externalsecrets.external-secrets.io").write_text("dev a\nprod b\n")
     (state / "count-clustersecretstores.external-secrets.io").write_text(" platform-secrets\n")
-    (bin_dir / "kubectl").write_text(FAKE_KUBECTL)
+    (bin_dir / "kubectl").write_text(with_prelude(FAKE_KUBECTL))
     (bin_dir / "kubectl").chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "KUBE_CONTEXT": "k3d-x-local", "STATE": str(state)}
 

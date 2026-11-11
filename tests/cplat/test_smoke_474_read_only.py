@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import stat
+from waiting import with_prelude
 import subprocess
 from pathlib import Path
 
@@ -38,8 +39,8 @@ class Devbox:
         self.dir = tmp / "fake-devbox"
         self.dir.mkdir()
         exe = self.dir / "devbox"
-        exe.write_text(f"#!/bin/bash\necho \"$SMOKE_ENV|$SMOKE_READ_ONLY|$SMOKE_BASE_URL\" >> '{self.dir}/calls'\n"
-                       f"cat '{self.dir}/out'\nexit 0\n")
+        exe.write_text(with_prelude(f"#!/bin/bash\necho \"$SMOKE_ENV|$SMOKE_READ_ONLY|$SMOKE_BASE_URL\" >> '{self.dir}/calls'\n"
+                                    f"cat '{self.dir}/out'\nexit 0\n"))
         exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
         monkeypatch.setenv("PATH", f"{self.dir}{os.pathsep}{os.environ['PATH']}")
         monkeypatch.setenv("SMOKE_READ_ONLY", "1")       # a stray value in the caller's shell never reaches dev
@@ -183,7 +184,7 @@ def run_template_smoke(tmp_path, url, **env_extra):
     (tmp_path / "tests" / "test_smoke_tasks.py").write_text(WRITING)
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
-    (bindir / "uv").write_text(UV_SHIM)
+    (bindir / "uv").write_text(with_prelude(UV_SHIM))
     (bindir / "uv").chmod(0o755)
     env = {k: v for k, v in os.environ.items()
            if k not in ("SMOKE_BASE_URL", "SMOKE_ENV", "SMOKE_READ_ONLY", "PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST")}

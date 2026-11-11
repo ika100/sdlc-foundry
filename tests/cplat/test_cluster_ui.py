@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from waiting import with_prelude
+
 TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "gitops-app"
 
 
@@ -18,8 +20,8 @@ def skeleton(tmp_path, cluster_running: bool):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     log = tmp_path / "calls.log"
-    (bin_dir / "kubectl").write_text(f'#!/bin/sh\necho "kubectl $*" >> "{log}"\nexit {0 if cluster_running else 1}\n')
-    (bin_dir / "k9s").write_text(f'#!/bin/sh\necho "k9s $*" >> "{log}"\n')
+    (bin_dir / "kubectl").write_text(with_prelude(f'#!/bin/sh\necho "kubectl $*" >> "{log}"\nexit {0 if cluster_running else 1}\n'))
+    (bin_dir / "k9s").write_text(with_prelude(f'#!/bin/sh\necho "k9s $*" >> "{log}"\n'))
     for t in bin_dir.iterdir():
         t.chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}

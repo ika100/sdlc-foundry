@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import stat
+from waiting import with_prelude
 import subprocess
 import sys
 from pathlib import Path
@@ -66,10 +67,10 @@ def stub_tools(tmp_path):
     marker = tmp_path / "tool-called"
     for tool in ("uv", "pnpm", "go", "java", "npm", "pip-audit"):
         f = bindir / tool
-        f.write_text(f'#!/bin/bash\necho "{tool} $*" >> "{marker}"\necho "stub {tool} must not run" >&2\nexit 99\n')
+        f.write_text(with_prelude(f'#!/bin/bash\necho "{tool} $*" >> "{marker}"\necho "stub {tool} must not run" >&2\nexit 99\n'))
         f.chmod(f.stat().st_mode | stat.S_IEXEC)
     mvn = bindir / "mvn"  # `dependency:tree` lists nothing: the artifact is not a dependency
-    mvn.write_text('#!/bin/bash\nexit 0\n')
+    mvn.write_text(with_prelude('#!/bin/bash\nexit 0\n'))
     mvn.chmod(mvn.stat().st_mode | stat.S_IEXEC)
     return bindir, marker
 

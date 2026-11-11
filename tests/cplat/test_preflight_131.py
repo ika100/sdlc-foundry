@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from waiting import with_prelude
 from units131_support import GH_STUB, SPEC_ID, git, make_repo, snapshot_settings
 
 B = f"feature/{SPEC_ID}"
@@ -33,7 +34,7 @@ def world(tmp_path, monkeypatch):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
-    gh.write_text(GH_STUB)
+    gh.write_text(with_prelude(GH_STUB))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     log = tmp_path / "gh.log"
     log.write_text("")

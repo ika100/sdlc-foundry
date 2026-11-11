@@ -10,6 +10,7 @@ import core
 import headless
 import ship
 from test_spec import make
+from waiting import fake_prelude
 
 
 @pytest.fixture()
@@ -28,7 +29,7 @@ def repo(tmp_path, monkeypatch):
 def fake_claude(tmp_path, monkeypatch, script: str):
     """A stand-in for `claude` that runs `script` (bash) in the repo; it counts its runs in runs.txt."""
     exe = tmp_path / "claude"
-    exe.write_text("#!/bin/bash\necho run >> runs.txt\n" + script + "\n")
+    exe.write_text("#!/bin/bash\n" + fake_prelude("sh") + "\necho run >> runs.txt\n" + script + "\n")
     exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("CPLAT_CLAUDE", str(exe))
 

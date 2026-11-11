@@ -17,6 +17,7 @@ import runs_store
 from retro_world import (CONSUMER_SPEC, MONDAY, PLATFORM, SECRET, SHOP, STORE, WEBUI, WEEK, FakeRetroTracker, Lazy, fill,
                          tracker)  # noqa: F401  (fixture)
 from test_runs import clock, mem, store  # noqa: F401  (fixtures)
+from waiting import with_prelude
 
 autoissue = Lazy("autoissue")
 COD = "agents.svc:coder|service-python|sonnet"
@@ -347,7 +348,7 @@ def fake_claude(tmp_path, monkeypatch):
     """A script standing in for `claude`: logs how it was called, then writes (or does not write) proposals.json in its cwd."""
     script = tmp_path / "bin" / "claude"
     script.parent.mkdir()
-    script.write_text(f"""#!{sys.executable}
+    script.write_text(with_prelude(f"""#!{sys.executable}
 import json, os, sys
 from pathlib import Path
 Path(os.environ["FAKE_CLAUDE_LOG"]).write_text(json.dumps({{"argv": sys.argv[1:], "cwd": os.path.realpath(os.getcwd()),
@@ -360,7 +361,7 @@ if mode == "ok":
     Path("proposals.json").write_text(os.environ["FAKE_PROPOSALS"])
 if mode == "bad":
     Path("proposals.json").write_text("[1, 2")
-""")
+"""))
     script.chmod(0o755)
     log = tmp_path / "claude.log"
     monkeypatch.setenv("CPLAT_CLAUDE", str(script))

@@ -16,6 +16,7 @@ import runs_built
 import spec
 from failsum_support import sample
 from test_160_lint_suppressions import built, g  # noqa: F401  (fixture)
+from waiting import with_prelude
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -168,8 +169,8 @@ def flaky_repo(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     fake = bindir / "devbox"
-    fake.write_text('#!/bin/sh\nif [ "$3" = "--" ]; then echo "$@" > "$ARGS_OUT"; echo "1 passed"; exit ${RERUN_RC:-0}; fi\n'
-                    'cat "$FAKE_OUT"\nexit 1\n')
+    fake.write_text(with_prelude('#!/bin/sh\nif [ "$3" = "--" ]; then echo "$@" > "$ARGS_OUT"; echo "1 passed"; exit ${RERUN_RC:-0}; fi\n'
+                                 'cat "$FAKE_OUT"\nexit 1\n'))
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     work = tmp_path / "myrepo"
     work.mkdir()

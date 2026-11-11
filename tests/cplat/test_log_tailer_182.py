@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import waiting
+
 import pytest
 
 from system_fixtures import RENDER5
@@ -151,12 +153,14 @@ def run_tailer(tmp_path, pods, logs, want, *, own_pod="otel-collector-7c9d-xyz",
            "PYTHONDONTWRITEBYTECODE": "1"}
     proc = subprocess.Popen([sys.executable, str(script)], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        end = time.time() + timeout
-        while time.time() < end and not (len(fake.records()) >= want and settle(fake)):
-            if proc.poll() is not None:
-                break
-            time.sleep(0.1)
-        time.sleep(0.5)   # a duplicate or an extra record would arrive in this time
+        try:
+            waiting.wait_for(lambda: proc.poll() is not None or (len(fake.records()) >= want and settle(fake)), timeout=timeout)
+        except AssertionError:
+            pass
+        try:   # a duplicate or an extra record would arrive in this time; an early exit ends the wait
+            waiting.wait_for(lambda: proc.poll() is not None, timeout=0.5)
+        except AssertionError:
+            pass
         alive = proc.poll() is None
     finally:
         if proc.poll() is None:
