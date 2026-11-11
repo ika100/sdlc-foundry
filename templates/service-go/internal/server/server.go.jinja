@@ -22,6 +22,9 @@ func New(logger *slog.Logger, version string) http.Handler {
 {%- if needs_observability %}
 	r.Use(instrument)
 {%- endif %}
+{%- if needs_observability %}
+	r.Use(TraceContext)
+{%- endif %}
 	r.Use(requestLogger(logger))
 
 	r.Get("/health", writeJSON(map[string]string{"status": "ok", "version": version}))
@@ -45,7 +48,7 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			ww := middleware.NewWrapResponseWriter(w, req.ProtoMajor)
 			next.ServeHTTP(ww, req)
-			logger.Info("request",
+			logger.InfoContext(req.Context(), "request",
 				"method", req.Method,
 				"path", req.URL.Path,
 				"status", ww.Status(),
