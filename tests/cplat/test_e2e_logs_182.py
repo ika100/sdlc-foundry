@@ -45,6 +45,14 @@ def test_the_script_checks_pod_and_environment_labels_and_the_trace_id_in_loki_a
     assert "/api/traces/" in run_sh, "Tempo returns the trace of the request (AC-182.2)"
 
 
+def test_the_script_checks_the_grafana_link_between_trace_and_logs_ac_182_2(run_sh):  # AC-182.2
+    # Grafana links a log entry to its trace and the trace to "logs for this span" through the provisioned Tempo/Loki data sources
+    assert "/api/datasources" in run_sh, "the script reads the Grafana data sources"
+    assert "tracesToLogsV2" in run_sh, "the Tempo data source links its spans to Loki (logs for this span)"
+    assert "derivedFields" in run_sh and "trace_id" in run_sh[run_sh.index("derivedFields"):], (
+        "the Loki data source links a log entry's trace_id to Tempo")
+
+
 def test_the_collectors_own_lines_never_reach_loki_ac_182_4(run_sh):  # AC-182.4
     assert 'service_name="otel-collector"' in run_sh.replace("\\\"", '"').replace("'", "")
 
