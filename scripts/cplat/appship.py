@@ -138,6 +138,12 @@ def entry_ops(op: dict) -> list[str] | None:
         return ["resource", "add", str(op["resource"]), *(["--type", str(op["type"])] if op.get("type") else [])]
     if "uses" in op and "component" in op:
         return ["component", "set", str(op["component"]), "--uses", str(op["uses"])]
+    if "replicas" in op and "component" in op:
+        inst = ["--instance", str(op["instance"])] if op.get("instance") else []
+        return ["component", "set", str(op["component"]), *inst, "--replicas", str(op["replicas"])]
+    if isinstance(op.get("resources"), dict) and "component" in op:
+        flat = [f"{sect}.{k}={v}" for sect, vals in op["resources"].items() for k, v in (vals or {}).items()]
+        return ["component", "set", str(op["component"]), *[a for f in flat for a in ("--resources", f)]]
     if "expose" in op:
         return ["component", "set", str(op["expose"]), "--expose", *([str(op["host"])] if op.get("host") else [])]
     if isinstance(op.get("env"), dict) and "component" in op:
