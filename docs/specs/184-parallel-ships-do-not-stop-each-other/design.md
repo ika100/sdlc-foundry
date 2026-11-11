@@ -353,3 +353,9 @@ python3 scripts/template-lint.py <template> <rendered dir> lint one rendered pro
 - Frozen-test fixes approved: AC-184.7's `untouched.md` is created on `main` (not a branch file); AC-184.6's round-limit test
   puts the branch's ADR last so every move of `main` conflicts (a clean catch-up is not a resolution round); AC-184.1/2's
   escalation check compares `reason` and `cause` and allows `cause_source`.
+- 2026-11-11 23:30: the full suite hung for over an hour on older tests whose silent fake now paused (the opt-in fixture was not
+  used by 16 of them). `silent_sessions_are_not_pauses` is now autouse for every test except spec 184's own. Left for the
+  verification fix round: `test_headless_131.py::test_every_session_gets_exactly_the_run_allowlist_and_the_refused_rules`
+  (it must expect the CI-log read rules of AC-184.4 the way headless computes them) and
+  `test_184_envprefix.py::test_a_command_the_plan_unit_commits_is_allowed_from_the_next_unit_on_and_announced_once_ac_184_10`
+  (a command committed by the plan unit is not yet granted to the next units: a code fix).
