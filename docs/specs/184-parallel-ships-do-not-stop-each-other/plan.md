@@ -10,18 +10,21 @@ tasks:
     covers: [AC-184.1, AC-184.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Pause minutes leave the budget ledger
     files: [scripts/cplat/budget.py]
     covers: [AC-184.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Repo slots as flock files beside the merge lock (run_slot)
     files: [scripts/cplat/run_slot.py]
     covers: [AC-184.8, AC-184.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Environment-prefixed devbox commands from the spec folder (envprefix)
     files: [scripts/cplat/envprefix.py]
