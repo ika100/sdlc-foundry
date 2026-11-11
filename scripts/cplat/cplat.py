@@ -47,6 +47,7 @@ Plumbing keeps its name:
   cplat feedback --title T [--what …] [--details-file F] [--submit]   draft (and file) a platform issue, secrets removed
   cplat model show [--json] [--app APP] [--repo-dir DIR]   the declared domain model of a gitops-app
   cplat spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
+  cplat adr add <slug> --decision "<one line>" [--offline]   the next ADR from the template and its index row
   cplat pr wait|open …   wait <number|url> [-R owner/repo] [--merge]: CI watch; open --title T: commit -s, push, PR in one step
   cplat dispatch start|plan|status|wait|report|inbox|pause|resume|slots|prioritize|skip ...   run the backlog in slots (spec 167)
   cplat quiet [--raw] <script> | test-fast [--repeat N] -- <test args>  run it with output in a log: one line on success, the failure summary and log path on failure (--raw: the tail)
@@ -89,7 +90,7 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
 PLUMBING = {
     "shape": "shapecmd", "feedback": "feedback", "model": "modelcmd", "spec": "spec", "pr": "pr", "quiet": "quiet", "validate": "validate",
     "headless": "headless", "deps": "deps", "alerts": "alerts", "budget": "budget", "adopt": "adopt",
-    "needs": "needs", "ui": "ui", "dispatch": "dispatch",
+    "needs": "needs", "ui": "ui", "dispatch": "dispatch", "adr": "adrcmd",
 }
 
 # 4.x top-level name -> its 5.0 form (exit 2, the module is not imported)
