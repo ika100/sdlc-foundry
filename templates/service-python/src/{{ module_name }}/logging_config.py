@@ -7,12 +7,14 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import structlog
 from opentelemetry import trace
+from structlog.typing import EventDict
 
 
-def add_trace_ids(logger: object, method: str, event_dict: dict) -> dict:
+def add_trace_ids(logger: Any, method: str, event_dict: EventDict) -> EventDict:
     """Add trace_id and span_id of the active span; nothing outside a span."""
     ctx = trace.get_current_span().get_span_context()
     if ctx.is_valid:
