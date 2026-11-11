@@ -66,6 +66,7 @@ tasks:
     covers: [AC-179.3, AC-179.4, AC-179.5, AC-179.6, AC-179.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t12
     title: Reviewer - test-review mode, SMOKE line, TEST REVIEW input
     files: [plugins/svc/agents/reviewer.md, docs/rules/plugins/svc/agents/reviewer.yml]
