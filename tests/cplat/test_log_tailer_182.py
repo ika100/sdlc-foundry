@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -386,3 +387,15 @@ def test_workload_names_follow_the_controller_the_replica_set_hash_and_the_label
     assert workload(pod("p-3", owner=("StatefulSet", "db"))) == "db"
     assert workload(pod("p-4", labels={"app.kubernetes.io/name": "tool"})) == "tool"
     assert workload(pod("p-5")) == "p-5"
+
+
+def test_the_shipped_timing_defaults_deliver_a_line_well_within_60_seconds_ac_182_1():  # AC-182.1
+    ns = functions()
+    # a line waits at most one pod poll (a new container is found on the next poll), one reconnect pause and one flush interval
+    worst = ns["POLL_SECONDS"] + ns["RECONNECT_SECONDS"] + ns["FLUSH_SECONDS"]
+    assert ns["POLL_SECONDS"] <= 10 and ns["FLUSH_SECONDS"] <= 5 and ns["RECONNECT_SECONDS"] <= 10
+    assert worst <= 30, f"poll+reconnect+flush = {worst} s leaves too little of the 60 s limit"
+    assert ns["LOOKBACK_SECONDS"] >= 60, "a container that started before the tailer is still read from at least 60 s back"
+    # the rendered container does not override the defaults with slower values
+    source = Path(RENDER5).read_text()
+    assert '"name": "TAILER_POLL_SECONDS"' not in source and '"name": "TAILER_FLUSH_SECONDS"' not in source
