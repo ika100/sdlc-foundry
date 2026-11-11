@@ -8,6 +8,7 @@
   cplat.py build resolved <spec> <task>
   cplat.py build reset <sha>     a coder moves its fresh agent worktree to the feature head
   cplat.py build tests ...       the build's test-running steps (buildtests.main)
+  cplat.py build reviewed ...    the reviewed marker commit that freezes the acceptance tests (testreview.main)
 """
 from __future__ import annotations
 
@@ -236,6 +237,9 @@ def main(argv: list[str]) -> int:
     if argv and argv[0] == "tests":
         import buildtests
         return buildtests.main(argv[1:])
+    if argv and argv[0] == "reviewed":
+        import testreview
+        return testreview.main(argv[1:])
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--repo", default=".")
     common.add_argument("spec")
