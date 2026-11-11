@@ -12,7 +12,9 @@ rules:
     enforced_by: cplat spec check
   - id: R4
     text: "Do not wait for CI on `main`, because the build runs on the feature branch"
-    class: practice
+    class: retired
+    retired: 2026-11-11
+    reason: the build never waits for main's CI, since it works on the feature branch
   - id: R5
     text: "confirms they fail because the behaviour is missing, and commits only test files"
     class: practice
@@ -26,7 +28,9 @@ rules:
     source: "#501"
   - id: R8
     text: "never tell the coder to read them, so that its context stays small"
-    class: practice
+    class: retired
+    retired: 2026-11-11
+    reason: the brief says it is copied, so no coder is told to read the spec files
   - id: R9
     text: "never edit, skip or weaken the acceptance tests, because they are the approved criteria"
     class: hard
@@ -49,7 +53,10 @@ rules:
     class: not a rule
   - id: R14
     text: "(only what this change can affect)"
-    class: not a rule
+    class: retired
+    retired: 2026-11-11
+    reason: cplat validate run already limits itself to what the change affects
+    enforced_by: cplat validate run
   - id: R15
     text: "agents only where it is red"
     class: not a rule
@@ -83,7 +90,9 @@ rules:
     source: ADR-017
   - id: R23
     text: "say the `system.yaml` entry must change"
-    class: not a rule
+    class: retired
+    retired: 2026-11-11
+    reason: the deployment agent reports a changed port, probe path or user itself
   - id: R24
     text: "Ask for gitops changes only for wiring not in the spec's *Provided by the system* list"
     class: practice
@@ -141,4 +150,26 @@ rules:
     benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
   - id: R35
     text: "read-only-filesystem friendly"
-    class: not a rule
+    class: retired
+    retired: 2026-11-11
+    reason: the deployment agent's own brief states the image properties
+  - id: R36
+    text: "skip if `reviewed acceptance tests for` is committed, since the tests are frozen"
+    class: practice
+    source: spec 179
+  - id: R37
+    text: "Resolve only these test-review findings, changing only the tests named, so that nothing else moves"
+    class: practice
+    source: spec 179
+  - id: R39
+    text: "A type-only change the type check needs (type annotation, cast or import; no assertion line touched) is allowed, since the build records it."
+    class: practice
+    source: spec 179
+  - id: R40
+    text: "A `SMOKE: <file> — <finding>` line is no `NOT MET`: the tester gets it in the same round without asking"
+    class: practice
+    source: spec 179
+  - id: R44
+    text: "`git rm` of tracked files is allowed (never `-f`), because the allowlist refuses it."
+    class: practice
+    source: spec 179
