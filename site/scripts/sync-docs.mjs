@@ -14,6 +14,7 @@ const PAGES = [
   { src: 'docs/QUICKSTART.md', slug: 'get-started', title: 'Quickstart: from an empty folder to a shipped feature', label: 'Quickstart', order: 0 },
   { src: 'docs/USER-JOURNEY.md', slug: 'guides/user-journey', title: 'User journey: from empty folder to a running system', label: 'User journey', order: 1 },
   { src: 'docs/HOW-IT-WORKS.md', slug: 'guides/how-it-works', title: 'How it works', order: 2 },
+  { src: 'docs/REVIEWING-A-SPEC.md', slug: 'guides/reviewing-a-spec', title: 'Reviewing a spec before you approve it', label: 'Reviewing a spec', order: 2 },
   { src: 'docs/console.md', slug: 'guides/console', title: 'The local console', order: 3 },
   { src: 'docs/autonomy.md', slug: 'guides/autonomy', title: 'Autonomy per environment', order: 4 },
   { src: 'docs/dispatch.md', slug: 'guides/dispatch', title: 'The dispatcher', order: 6 },

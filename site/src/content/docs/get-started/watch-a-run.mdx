@@ -19,6 +19,7 @@ Taken right after the restore drill, from the local cluster the run created (`sc
   <figure class="map"><a href="/sdlc-foundry/demo/shots/api-docs.png"><img src="/sdlc-foundry/demo/shots/api-docs.png" alt="The OpenAPI page of taskboard6-api 0.1.0 with GET and POST /tasks, health, ready, ping and metrics" loading="lazy" width="1440" height="900" /></a><figcaption>The API in prod: version 0.1.0 from the release, the task endpoints from the spec and the template's health, ready and metrics endpoints.</figcaption></figure>
   <figure class="map"><a href="/sdlc-foundry/demo/shots/argocd.png"><img src="/sdlc-foundry/demo/shots/argocd.png" alt="Argo CD listing taskboard6-api and taskboard6-web in dev, staging and prod, all Healthy and Synced" loading="lazy" width="1440" height="900" /></a><figcaption>Argo CD: both components in dev, staging and prod, all Synced and Healthy, each from the gitops repo's <code>main</code>.</figcaption></figure>
   <figure class="map"><a href="/sdlc-foundry/demo/shots/grafana.png"><img src="/sdlc-foundry/demo/shots/grafana.png" alt="Grafana Explore showing the request rate of taskboard6-api over three hours" loading="lazy" width="1440" height="900" /></a><figcaption>Grafana in dev: the API's requests per second since step 8 turned on the observability stack.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/tempo.png"><img src="/sdlc-foundry/demo/shots/tempo.png" alt="Grafana Explore with a Tempo trace of taskboard10-api: GET /tasks, 200, 25 ms, four spans" loading="lazy" width="1440" height="900" /></a><figcaption>Tracing in dev (taken from journey 10's cluster): one <code>GET /tasks</code> request of the API in Tempo, with its spans, sent by the OpenTelemetry collector the observability setting deploys. Logs in Loki are not shown yet: the collector receives only OpenTelemetry logs, and nothing ships the pods' stdout logs (<a href="https://github.com/ika100/sdlc-foundry/issues/657">a fix is planned</a>).</figcaption></figure>
   <figure class="map"><a href="/sdlc-foundry/demo/shots/k9s.png"><img src="/sdlc-foundry/demo/shots/k9s.png" alt="k9s listing the cluster's pods: Argo CD, operators, the observability stack and taskboard6 in dev, staging and prod, all Running" loading="lazy" /></a><figcaption>k9s on the local cluster: the operators, the observability stack, Postgres and both components in every environment, all Running.</figcaption></figure>
 </div>
 
@@ -55,17 +56,19 @@ For comparison and discussion; all journeys side by side are in [Performance mea
 
 **Per part**, against the budgets of spec 136 and the earlier runs:
 
-| Part | Budget | Journey 1 | Journey 2 | Journey 3 | Journey 4 | Journey 5 | Journey 6 |
-|---|---|---|---|---|---|---|---|
-| 1 — system, cluster, spec, ship | 20 | ≈ 100 | ≈ 70 (+ 20 blocked) | 70 | 31 | 64 (+ 65 blocked) | 37 |
-| 2 — web UI, system spec, ship | 30 | ≈ 62 | ≈ 85 | 102 | 77 | 56 | 68 |
-| 3 — staging, release, prod, restore | 10 | ≈ 80 | ≈ 60 | 81 | 56 (+ 88 blocked) | 46 | 60 |
-| Journey | 60 (interim 90) | ≈ 240 | ≈ 215 (+ 20 blocked) | 256 | 164 (+ 88 blocked) | 166 (+ 65 blocked) | 164 |
-| Tokens | – | 88 M | 84 M | 91 M | 77 M | 46 M | 40 M |
-| Questions | – | – | 8 | 17 | 19 | 20 | 3 |
-| A person's time | – | – | 46 | 5 | 2 | 2 | 4 |
-| Stops for a platform defect | 0 | 6 | 1 | 3 | 3 | 5 | 0 |
-| Pull requests | – | – | 34 | 27 | 29 | 28 | 26 |
+| Part | Budget | Journey 1 | Journey 2 | Journey 3 | Journey 4 | Journey 5 | Journey 6 | Journey 7 | Journey 8 | Journey 9 | Journey 10 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 — system, cluster, spec, ship | 20 | ≈ 100 | ≈ 70 (+ 20 blocked) | 70 | 31 | 64 (+ 65 blocked) | 37 | 30 | 29 | 29 | 30 |
+| 2 — web UI, system spec, ship | 30 | ≈ 62 | ≈ 85 | 102 | 77 | 56 | 68 | 38 (+ 121 blocked) | 73 | 61 | 60 |
+| 3 — staging, release, prod, restore | 10 | ≈ 80 | ≈ 60 | 81 | 56 (+ 88 blocked) | 46 | 60 | 90 | 54 | 50 | 48 |
+| Journey | 60 (interim 90) | ≈ 240 | ≈ 215 (+ 20 blocked) | 256 | 164 (+ 88 blocked) | 166 (+ 65 blocked) | 164 | 158 (+ 121 blocked) | 156 | 140 | 138 |
+| Tokens | – | 88 M | 84 M | 91 M | 77 M | 46 M | 40 M | 54 M | 42 M | 45 M | 43 M |
+| Questions | – | – | 8 | 17 | 19 | 20 | 3 | 7 | 5 | 3 | 7 |
+| A person's time | – | – | 46 | 5 | 2 | 2 | 4 | 5 | 2 | 4 | 4 |
+| Stops for a platform defect | 0 | 6 | 1 | 3 | 3 | 5 | 0 | 2 | 1 | 1 | 0 |
+| Pull requests | – | – | 34 | 27 | 29 | 28 | 26 | 32 | 26 | 27 | 27 |
+
+**Since the recording:** journeys 7 to 10 ran on 5.14 to 5.17 with the same twelve sentences; they are recorded but not published, so the video stays on journey 6. Journey 10 (5.17.0, [taskboard10-*](https://github.com/ika100-demo/taskboard10-gitops)) is the fastest so far: 138 minutes with nothing blocked and no stop for a platform defect, 43 M tokens, 4 minutes of a person. Each repo of the system ship now runs in its own session, and the platform's own specs ship unattended. About two thirds of journey 10's wall clock is counted as waiting; most of that is the coordinator waiting on the repo sessions while they build, which the next platform round measures separately from real waits for CI, deploys and promotions. Journeys 7 to 10 in detail: [Performance measurements](/sdlc-foundry/reference/performance/).
 
 **Where the wall clock went** (each minute counted once, from the session transcripts; agent work counts first):
 
