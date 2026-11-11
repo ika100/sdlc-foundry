@@ -129,6 +129,7 @@ def main() -> int:
     ap.add_argument("--env", default="prod")
     ap.add_argument("--out", default="site/public/demo/shots")
     ap.add_argument("--port", type=int, default=8088)
+    ap.add_argument("--obs-env", default="dev", help="the environment with the observability stack (logs, traces)")
     ap.add_argument("--k9s", default=shutil.which("k9s") or "")
     a = ap.parse_args()
     context, gw = f"k3d-{a.system}-local", f"http://%s.localhost:{a.port}"
@@ -160,6 +161,32 @@ def main() -> int:
             shoot(page, gw % "grafana" + "/explore?schemaVersion=1&orgId=1&panes="
                   + urllib.parse.quote(json.dumps(panes)), path, 8)
         attempt("grafana", grafana)
+
+        def explore(ds_type: str, query: dict) -> str:
+            ds = [d["uid"] for d in get_json(gw % "grafana" + "/api/datasources") if d["type"] == ds_type][0]
+            query = {"refId": "A", "datasource": {"type": ds_type, "uid": ds}, **query}
+            panes = {"a": {"datasource": ds, "queries": [query], "range": {"from": "now-1h", "to": "now"}}}
+            return gw % "grafana" + "/explore?schemaVersion=1&orgId=1&panes=" + urllib.parse.quote(json.dumps(panes))
+
+        obs = f"{a.system}-{a.obs_env}"
+
+        def tempo(path: str) -> None:
+            # one real request trace of the API (its database spans included), not the health probes
+            proxy = gw % "grafana" + "/api/datasources/proxy/uid/tempo/api/search"
+            ql = (f'{{ resource.service.name = "{a.system}-api" && span.http.route != nil'
+                  f' && span.http.route !~ "/(health|ready|metrics)" }}')   # probes outnumber requests
+            traces = get_json(f"{proxy}?" + urllib.parse.urlencode({"q": ql, "limit": 20}))["traces"]
+            if not traces:
+                raise RuntimeError(f"no request trace of {a.system}-api in Tempo")
+            shoot(page, explore("tempo", {"queryType": "traceql", "query": traces[0]["traceID"]}), path, 8)
+        attempt("tempo", tempo)
+
+        def loki(path: str) -> None:
+            proxy = gw % "grafana" + "/api/datasources/proxy/uid/loki/loki/api/v1/labels"
+            if not get_json(proxy).get("data"):
+                raise RuntimeError("Loki holds no logs (nothing ships the pods' logs to it)")
+            shoot(page, explore("loki", {"expr": f'{{namespace="{obs}"}}', "queryType": "range"}), path, 8)
+        attempt("loki", loki)
 
         def argocd(path: str) -> None:
             pw = subprocess.run(["kubectl", "--context", context, "-n", "argocd", "get", "secret",

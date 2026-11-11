@@ -9,7 +9,7 @@ import re
 
 import pytest
 import yaml
-from update import _without_credential_writers
+from update import _without_credential_writers, _without_log_tailer
 
 from resources_fixtures import (APP, ENVS, KEYS, LABELS, PIN_RE, SEMVER, TYPES_LINE, VARS, addon_names, cluster, comp, contract_vars, db, env_list,
                                 external_secret, external_secret_path, fails, kustomization, ok, platform_render_module, render_50, secret_vars,
@@ -153,6 +153,7 @@ def test_a_5_0_system_renders_as_5_0_did_except_the_pinned_image_ac_115_6(tmp_pa
     from system_fixtures import generated
     new = _without_credential_writers(generated(tmp_path / "new"))   # spec 128: generated secrets are written by a credentials Job
     old = _without_credential_writers(old)
+    new, old = _without_log_tailer(new), _without_log_tailer(old)   # spec 182: observability gains a log tailer
     assert sorted(old) == sorted(new), f"files differ: {sorted(set(old) ^ set(new))}"
     unpinned = unpin(new)   # spec 121: the designed engine references mapped back to what 5.0 rendered
     for k in old:

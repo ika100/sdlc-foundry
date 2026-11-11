@@ -151,7 +151,8 @@ def test_observability_renders_a_collector_scraping_every_service_with_a_metrics
     obs(gitops_repo)
     run_compose(gitops_repo, "add", "todo-api")
     d, cfg = collector(gitops_repo)
-    assert {p.name for p in d.iterdir()} == {"configmap.yaml", "collector.yaml", "service.yaml", "kustomization.yaml"}
+    assert {p.name for p in d.iterdir()} == {"configmap.yaml", "collector.yaml", "service.yaml", "kustomization.yaml",
+                                              "serviceaccount.yaml", "role.yaml", "rolebinding.yaml", "tailer-configmap.yaml"}   # spec 182: the log tailer
     jobs = cfg["receivers"]["prometheus"]["config"]["scrape_configs"]
     assert jobs == [{"job_name": "todo-api", "scrape_interval": "30s", "metrics_path": "/actuator/prometheus", "static_configs": [{"targets": ["todo-api.todo-dev.svc:80"]}]}]
     assert list(cfg["exporters"]) == ["debug"] and cfg["service"]["pipelines"]["traces"]["exporters"] == ["debug"]

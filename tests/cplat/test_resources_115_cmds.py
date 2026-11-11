@@ -423,8 +423,8 @@ def test_migrate_writes_the_same_system_yaml_as_5_0_ac_115_6(migrated):  # AC-11
 
 def test_migrate_renders_the_4_7_tree_except_the_pinned_image_ac_115_6(migrated):  # AC-115.6
     assert migrated.rc == 0, migrated.err
-    after = update._without_credential_writers(generated(migrated.repo))   # spec 128: generated secrets are written by a credentials Job
-    before = update._without_credential_writers(migrated.before)
+    after = update._without_log_tailer(update._without_credential_writers(generated(migrated.repo)))   # spec 128: generated secrets are written by a credentials Job; spec 182: log tailer
+    before = update._without_log_tailer(update._without_credential_writers(migrated.before))
     assert sorted(after) == sorted(before)
     diff = [k for k in sorted(after) if after[k] != before[k]]
     assert diff, "the database image moves from the major-only tag to the pin (AC-115.17)"

@@ -28,7 +28,11 @@ func main() {
 
 func run() error {
 	cfg := config.Load()
+{%- if needs_observability %}
+	logger := slog.New(server.NewTraceHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})))
+{%- else %}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
+{%- endif %}
 	slog.SetDefault(logger)
 
 	srv := &http.Server{
