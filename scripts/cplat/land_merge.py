@@ -142,11 +142,10 @@ def _base_moved(repo: Path, url: str) -> BaseMoved:
 
 def ensure_current(repo: Path, url: str) -> None:
     """`BaseMoved` when the branch is behind its base or conflicts with it; `merge_lock.Unknown` when that is unreadable."""
-    view = _view(repo, url, "baseRefName,headRefOid,mergeable")
-    base = view.get("baseRefName") or "main"
-    if view.get("mergeable") == "CONFLICTING":
+    base = _view(repo, url, "baseRefName").get("baseRefName") or "main"
+    if _view(repo, url, "mergeable").get("mergeable") == "CONFLICTING":
         raise BaseMoved(url, base)
-    head = view.get("headRefOid")
+    head = _view(repo, url, "headRefOid").get("headRefOid")
     behind = merge_lock._behind(repo, merge_lock.slug_of(repo, url), url, head)[0] if head else None
     if behind is None:
         raise merge_lock.Unknown(f"could not tell whether {url} is behind its base, so it is not merged",
