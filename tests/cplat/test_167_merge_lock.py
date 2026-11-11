@@ -8,12 +8,12 @@ checks, a merge takes `merge_delay` seconds with the fake's own lock released, a
 """
 import importlib
 import threading
-import time
 
 import pytest
 
 import core
 import pr as prmod
+from waiting import budget, wait_for
 from dispatch_world import world  # noqa: F401  (fixture)
 
 A = "https://github.com/acme/shop-api/pull/10"
@@ -24,12 +24,18 @@ FAIL = [{"name": "ci", "bucket": "fail"}]
 
 
 @pytest.fixture(autouse=True)
-def quick_lock_polling(monkeypatch):
+def quick_lock_polling(monkeypatch, world):
     try:
         lock = importlib.import_module("merge_lock")
     except ImportError:
         return
-    monkeypatch.setattr(lock, "sleep", lambda s: time.sleep(min(s, 0.05)), raising=False)
+    info = world.state_home / "sdlc-foundry" / "locks" / "acme__shop-api.merge.json"
+
+    def contended_sleep(seconds):
+        """A waiter's pause lasts until the holder's info file is gone (the lock is released); it never sleeps for real."""
+        wait_for(lambda: not info.exists(), what="the merge lock holder to release")
+
+    monkeypatch.setattr(lock, "sleep", contended_sleep, raising=False)
 
 
 class Land(threading.Thread):
@@ -62,8 +68,8 @@ def _two(world, first, second, delay=0.6):
     first.start()
     world.wait_until(lambda: any(e["ev"] == "merge-start" and e["pr"] == 10 for e in world.events()), timeout=20)
     second.start()
-    first.join(60)
-    second.join(60)
+    first.join(budget(60))
+    second.join(budget(60))
     assert not first.is_alive() and not second.is_alive()
 
 
