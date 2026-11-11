@@ -169,7 +169,7 @@ def test_a_conflict_in_another_file_as_well_stops_the_land_ac_184_6(world, capsy
 
 @pytest.mark.parametrize("entry", ENTRIES)
 def test_the_index_rounds_share_the_limit_of_three_per_land_ac_184_6(world, capsys, entry):  # AC-184.6
-    branch_adds(world, "005", "branch-thing")
+    branch_adds(world, "020", "branch-thing")                       # last in the table: every row main adds conflicts with it
     main_adds(world, "004", "main-thing")
     start = world.pr_head()
     numbers = iter(["010", "011", "012"])

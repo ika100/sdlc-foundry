@@ -63,9 +63,9 @@ def rules_check_passes(world, head, tmp_path):
 
 @pytest.mark.parametrize("entry", ENTRIES)
 def test_an_id_both_sides_added_is_renumbered_with_its_references_and_the_check_passes_ac_184_7(world, capsys, entry, tmp_path):  # AC-184.7
-    branch_adds(world, extra={"docs/notes.md": NOTES, "docs/untouched.md": "R3 is not ours here\n"})
+    branch_adds(world, extra={"docs/notes.md": NOTES})
     main_adds(world)
-    on_main(world, {"docs/main-notes.md": "R3 is the rule of main.\n"})
+    on_main(world, {"docs/main-notes.md": "R3 is the rule of main.\n", "docs/untouched.md": "R3 is not ours here\n"})  # not a branch file
     assert conflicts(world), "the setup is a real conflict of the register file"
     before = world.pr_head()
     rc, out, err = land(world, entry, capsys)

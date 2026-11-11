@@ -341,3 +341,15 @@ python3 scripts/template-lint.py <template> <rendered dir> lint one rendered pro
 - `scripts/ci-local.sh` runs `--changed` as its own step before the cplat tests. The CI smoke jobs call it in place of
   their ruff, `mvn -q … checkstyle:check` and `pnpm lint` lines; the `changes` filter of each smoke job includes the
   script.
+
+## Decisions taken during the ship (2026-11-11, by the user's delegate)
+
+- Existing tests whose fake `claude` ends at once without output (`test_headless.py`, `test_budget.py`, `test_headless_167.py`,
+  `test_ship_escalate_rules.py`, `test_supervisor_131.py`, `test_units_131.py` and any other the full suite shows) now meet
+  AC-184.2's pause. Their fakes print one line, as a real session always does; no test sleeps real time for a pause (the
+  pause tests fake the clock and the sleep).
+- The coders' exemption stays: a silent short session that moved the feature head, reached a checkpoint or changed the ship
+  state is not a usage-limit pause.
+- Frozen-test fixes approved: AC-184.7's `untouched.md` is created on `main` (not a branch file); AC-184.6's round-limit test
+  puts the branch's ADR last so every move of `main` conflicts (a clean catch-up is not a resolution round); AC-184.1/2's
+  escalation check compares `reason` and `cause` and allows `cause_source`.

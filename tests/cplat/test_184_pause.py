@@ -185,7 +185,7 @@ def test_pauses_beyond_360_minutes_stop_the_run_as_an_environment_pause_and_the_
     assert f"HEADLESS shop-api: {stop}" in out
     assert lw.units().count("task:t2") == 9 and "task:t3" not in lw.units()      # no session after the stop
     rec = [r for r in stored(store) if r["kind"] == "headless"][-1]
-    assert rec["outcome"] == "escalated" and rec["escalation"] == {"reason": stop, "cause": "environment"}
+    assert rec["outcome"] == "escalated" and {k: rec["escalation"].get(k) for k in ("reason", "cause")} == {"reason": stop, "cause": "environment"}
     assert not ship.load_state(lw.w.repo).get("escalated")                       # the ship is not escalated
     assert not (lw.w.units_file() or {}).get("escalated")
     lw.set({})                                                                   # the limit is over: the same command goes on
@@ -288,7 +288,7 @@ def test_the_legacy_loop_stops_as_an_environment_pause_beyond_the_cap_ac_184_2(l
     assert f"HEADLESS shop-api: {stop}" in lines_of(capsys)
     assert T.sleeps == [] and legacy_runs(legacy_repo) == 1
     rec = [r for r in stored(store) if r["kind"] == "headless"][-1]
-    assert rec["outcome"] == "escalated" and rec["escalation"] == {"reason": stop, "cause": "environment"}
+    assert rec["outcome"] == "escalated" and {k: rec["escalation"].get(k) for k in ("reason", "cause")} == {"reason": stop, "cause": "environment"}
     done = json.loads(result_file.read_text())
     assert done["cause"] == "environment" and done["stop_reason"] == "escalated" and done["result"] == stop
     assert not ship.load_state(legacy_repo).get("escalated")
