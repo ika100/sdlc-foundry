@@ -30,6 +30,7 @@ tasks:
     covers: [AC-183.7]
     parallel_safe: false
     depends_on: []
+    done: true
   - id: t5
     title: Replaced criteria checked, counted as withdrawn, traced, struck by --from-plan
     files: [scripts/cplat/spec_replace.py, scripts/cplat/spec.py]
