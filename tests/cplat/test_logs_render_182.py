@@ -91,7 +91,10 @@ def test_no_cluster_wide_role_no_daemon_set_no_host_path_ac_182_3(on):  # AC-182
         for doc in yaml.safe_load_all(text):
             kind = (doc or {}).get("kind")
             assert kind not in ("ClusterRole", "ClusterRoleBinding", "DaemonSet"), f"{path} renders a {kind}"
-        assert "hostPath" not in text, path
+            pod = (doc or {}).get("spec", {})                    # no workload mounts a host path (the policy text may name it)
+            pod = pod.get("jobTemplate", {}).get("spec", pod).get("template", {}).get("spec", pod) if isinstance(pod, dict) else {}
+            vols = pod.get("volumes", []) if isinstance(pod, dict) else []
+            assert not [v for v in vols or [] if isinstance(v, dict) and "hostPath" in v], f"{path} mounts a host path"
 
 
 def test_the_collector_pod_uses_the_service_account_and_mounts_no_default_token_ac_182_3(on):  # AC-182.3

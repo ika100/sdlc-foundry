@@ -159,3 +159,11 @@ dev gets `observability: {ui: lgtm}` (cluster-up then installs the stack). After
 ## Data
 
 None persisted. The tailer keeps its followers and last timestamps in memory only.
+
+## Decisions taken during the ship (2026-11-11, by the user's delegate)
+
+- AC-182.3's test checks that no workload mounts a host path (volumes of every pod spec), not that the text `hostPath`
+  is absent from every rendered file: the unchanged guard-rail policy names `hostPath` in its message and CEL rule.
+- Older tests that list the rendered observability files or registries of an environment (for example
+  `tests/cplat/test_addons.py`, `tests/cplat/test_system_render_114.py`, `tests/cplat/test_policies.py`) may be updated to
+  the new file set (the ServiceAccount, Role and RoleBinding of the namespaced log access); no other assertion changes.
