@@ -36,6 +36,8 @@ _exclude:
   - "{% if not needs_observability %}app/api/metrics{% endif %}"
   - "{% if not needs_observability %}tests/metrics.test.ts{% endif %}"
   - "{% if not needs_observability %}instrumentation.ts{% endif %}"
+  - "{% if not needs_observability %}lib/logger.ts{% endif %}"
+  - "{% if not needs_observability %}tests/logger.test.ts{% endif %}"
 
 _tasks:
   - "git init -q -b main"
