@@ -262,7 +262,7 @@ NATS_IMAGES = {           # no bare minor, no latest
     "2.15": "nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5",
 }
 VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa"   # matches the Velero chart's appVersion line (1.14 <-> 1.18)
-CREDENTIALS_IMAGE = "python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8"   # runs the credentials Job (spec 128): stdlib python only
+CREDENTIALS_IMAGE = "python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8"   # runs the credentials Job (spec 128) and the log tailer (spec 182): stdlib python only
 SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8"     # every in-cluster bucket runs its own SeaweedFS of this image
 COLLECTOR_IMAGE = "otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6"
 LGTM_IMAGE = "grafana/otel-lgtm:0.35.0@sha256:2de1094c593c671cbfca878a28ffcd7e46ff5e32f2ce966c0cf33003f6cf4266"
@@ -1850,6 +1850,7 @@ def allowed_registries(services: list[dict], cfg: dict, env: str) -> list[str]:
     prefixes = {s["image"].rsplit("/", 1)[0] + "/" for s in services}
     if env in cfg["observability"]:
         prefixes.add(ADDONS["observability"]["image"].split("/", 1)[0] + "/")
+        prefixes.add(CREDENTIALS_IMAGE.split("@")[0])
     prefixes |= set(cfg["registries"])
     return sorted(prefixes)
 
@@ -3352,21 +3353,52 @@ def observability_files(app: str, env: str, conf: dict, services: list[dict]) ->
     }
     if conf.get("headersSecret"):
         container["envFrom"] = [{"secretRef": {"name": conf["headersSecret"]}}]
+    tailer: dict = {
+        "name": "log-tailer", "image": CREDENTIALS_IMAGE, "command": ["python3", "/tailer/tail.py"],
+        "env": [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
+                {"name": "TAILER_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+                {"name": "TAILER_POD", "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}}},
+                {"name": "TAILER_ENVIRONMENT", "value": env}, {"name": "TAILER_SYSTEM", "value": app},
+                {"name": "TAILER_OTLP_URL", "value": "http://127.0.0.1:4318/v1/logs"}],
+        "resources": {"requests": {"cpu": "20m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}},
+        "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,
+                            "capabilities": {"drop": ["ALL"]}},
+        "volumeMounts": [{"name": "tailer", "mountPath": "/tailer", "readOnly": True},
+                         {"name": "sa-token", "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount", "readOnly": True}],
+    }
+    volumes = [{"name": "conf", "configMap": {"name": "otel-collector"}},
+               {"name": "tailer", "configMap": {"name": "otel-collector-tailer"}},
+               {"name": "sa-token", "projected": {"sources": [
+                   {"serviceAccountToken": {"path": "token", "expirationSeconds": 3600}},
+                   {"configMap": {"name": "kube-root-ca.crt", "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+                   {"downwardAPI": {"items": [{"path": "namespace", "fieldRef": {"fieldPath": "metadata.namespace"}}]}}]}}]
     deploy = {
         "apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "otel-collector", "labels": labels},
         "spec": {"replicas": 1, "selector": {"matchLabels": {"app": "otel-collector"}},
                  "template": {"metadata": {"labels": {**labels, "app": "otel-collector"},
-                                           "annotations": {"checksum/config": hashlib.sha256(config.encode()).hexdigest()[:16]}},
-                              "spec": {"securityContext": {"runAsNonRoot": True, "seccompProfile": {"type": "RuntimeDefault"}},
-                                       "containers": [container], "volumes": [{"name": "conf", "configMap": {"name": "otel-collector"}}]}}},
+                                           "annotations": {"checksum/config": hashlib.sha256(config.encode()).hexdigest()[:16],
+                                                           "checksum/tailer": hashlib.sha256(LOG_TAILER_SCRIPT.encode()).hexdigest()[:16]}},
+                              "spec": {"serviceAccountName": "otel-collector", "automountServiceAccountToken": False,
+                                       "securityContext": {"runAsNonRoot": True, "seccompProfile": {"type": "RuntimeDefault"}},
+                                       "containers": [container, tailer], "volumes": volumes}}},
     }
+    meta = lambda name: {"name": name, "labels": dict(labels)}  # noqa: E731
     return {
         "configmap.yaml": {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "otel-collector", "labels": labels}, "data": {"config.yaml": config}},
         "collector.yaml": deploy,
+        "serviceaccount.yaml": {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": meta("otel-collector"), "automountServiceAccountToken": False},
+        "role.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role", "metadata": meta("otel-collector-logs"),
+                      "rules": [{"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "watch"]},
+                                {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]}]},
+        "rolebinding.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "RoleBinding", "metadata": meta("otel-collector-logs"),
+                             "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": "otel-collector-logs"},
+                             "subjects": [{"kind": "ServiceAccount", "name": "otel-collector", "namespace": f"{app}-{env}"}]},
+        "tailer-configmap.yaml": {"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta("otel-collector-tailer"),
+                                  "data": {"tail.py": Literal(LOG_TAILER_SCRIPT)}},
         "service.yaml": {"apiVersion": "v1", "kind": "Service", "metadata": {"name": "otel-collector", "labels": labels},
                          "spec": {"type": "ClusterIP", "selector": {"app": "otel-collector"},
                                   "ports": [{"name": "otlp-grpc", "port": 4317, "targetPort": "otlp-grpc"}, {"name": "otlp-http", "port": 4318, "targetPort": "otlp-http"}]}},
-        "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["configmap.yaml", "collector.yaml", "service.yaml"]},
+        "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["collector.yaml", "configmap.yaml", "role.yaml", "rolebinding.yaml", "service.yaml", "serviceaccount.yaml", "tailer-configmap.yaml"]},
     }
 
 
