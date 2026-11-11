@@ -551,6 +551,7 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         hit = None if quiet_end or ended.startswith(("needs you", "shipped")) else \
             usagelimit.detect(message, (clock() - started).total_seconds(), clock())
         if hit is not None:                             # spec 184: a pause is neither a run nor a stop without progress
+            budget.count_invocation(rid, -1)            # also when the pause ends the run: a rerun must not carry it
             pause = pauser.pause(hit, clock())
             if pause.stop:
                 result = pause.stop
@@ -558,7 +559,6 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
                 return finish(repo, log, result, EXIT_STOPPED)
             print(pause.line, flush=True)
             runs -= 1
-            budget.count_invocation(rid, -1)
             sleep(pause.seconds)
             begin += dt.timedelta(seconds=pause.seconds)
             budget.add_pause(rid, pause.seconds / 60)

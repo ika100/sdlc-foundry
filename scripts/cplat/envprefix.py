@@ -19,7 +19,7 @@ _SPAN = re.compile(r"`([^`\n]+)`")
 _FIRST = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _ASSIGN = re.compile(r"^([^=\s]+)=")
 _NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
-_CHAINING = (";", "&&", "||", "|", "$(", "`", "\n")
+_CHAINING = (";", "&&", "||", "|", "&", ">", "<", "$(", "`", "\n")
 
 
 def candidates(text: str) -> list[str]:
