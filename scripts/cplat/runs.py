@@ -288,7 +288,7 @@ def pending_count() -> int:
 
 def start(kind: str, *, repo: str | None = None, spec: str | None = None, mode: str | None = None,
           resumes: str | None = None, parent: str | None = None, run_id: str | None = None,
-          started_at: str | None = None) -> str | None:
+          started_at: str | None = None, shape: str | None = None) -> str | None:
     """Create <dir>/active/<run_id>.json and return the run_id (None only if even that failed).
 
     mode defaults to "headless" when $CPLAT_HEADLESS is set, else "interactive"; parent defaults to $CPLAT_RUN_PARENT.
@@ -306,6 +306,9 @@ def start(kind: str, *, repo: str | None = None, spec: str | None = None, mode: 
             "escalation": None, "filed": [], "outcome": None, "resumes": resumes,
             "parent": parent or os.environ.get("CPLAT_RUN_PARENT") or None,
         }
+        shape = shape or _cwd_shape()
+        if shape:
+            rec["shape"] = shape
         if os.environ.get("CPLAT_BENCHMARK"):
             rec["benchmark_of"] = os.environ["CPLAT_BENCHMARK"]
         with _locked():
@@ -316,6 +319,16 @@ def start(kind: str, *, repo: str | None = None, spec: str | None = None, mode: 
     link_parent(run_id)
     _register_claim(kind, run_id, rec["started_at"])
     return run_id
+
+
+def _cwd_shape() -> str | None:
+    """The shape of the repo the current directory is in; None when unknown."""
+    try:
+        import spec
+        top = core.run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd(), check=False).stdout.strip()
+        return spec.repo_shape(Path(top)) if top else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _register_claim(kind: str, run_id: str, started_at: str) -> None:
