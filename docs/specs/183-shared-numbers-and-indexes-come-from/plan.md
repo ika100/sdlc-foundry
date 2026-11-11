@@ -17,6 +17,7 @@ tasks:
     covers: [AC-183.1, AC-183.2]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: cplat adr add writes the ADR and appends its index row
     files: [scripts/cplat/adrcmd.py, scripts/cplat/assets/adr-template.md, scripts/cplat/cplat.py]
