@@ -31,18 +31,21 @@ tasks:
     covers: [AC-184.10]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: Land allowlist reads the saved CI logs and gh run view --log-failed
     files: [scripts/cplat/preflight.py]
     covers: [AC-184.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: ADR index and rule register resolvers with renumbering (land_resolve)
     files: [scripts/cplat/land_resolve.py]
     covers: [AC-184.6, AC-184.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: Lint the templates a branch changes, locally and in the smoke jobs
     files: [scripts/template-lint.py, scripts/ci-local.sh, .github/workflows/ci.yml, devbox.json]
