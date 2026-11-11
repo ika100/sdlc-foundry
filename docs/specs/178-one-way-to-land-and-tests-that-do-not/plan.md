@@ -31,18 +31,21 @@ tasks:
     covers: [AC-178.1, AC-178.4]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: Repository commands run without the outer run's CPLAT_* variables
     files: [scripts/cplat/core.py, scripts/cplat/quiet.py, scripts/cplat/quiet_repeat.py, scripts/cplat/validate.py, scripts/cplat/mutation.py, scripts/cplat/ship.py]
     covers: [AC-178.7, AC-178.8]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: Dispatcher and merge-lock tests wait for events
     files: [tests/cplat/dispatch_world.py, tests/cplat/dispatch_fake_gh.py, tests/cplat/test_dispatch_units.py, tests/cplat/test_167_units.py, tests/cplat/test_167_merge_lock.py]
     covers: [AC-178.5]
     parallel_safe: true
     depends_on: [t4]
+    done: true
   - id: t6
     title: Console, ui and launcher tests wait for events
     files: [tests/cplat/console_support.py, tests/cplat/test_console_server.py, tests/cplat/test_console_actions.py, tests/cplat/test_ui_cli.py, tests/cplat/test_launcher.py]
