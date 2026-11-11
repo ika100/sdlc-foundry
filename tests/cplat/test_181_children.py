@@ -30,7 +30,7 @@ def test_a_coordinator_subagent_working_during_an_agent_call_is_coordinator_time
     w = split_of(out["wall"])
     assert w["agents"]["children"] == 0                         # only repo sessions and their subagents are children
     assert abs(w["agents"]["coordinator"] - 50) <= 0.1          # own 20 min plus the subagent's 30 min
-    assert w["waiting_min"] <= 0.1 and w["person_min"] == 0
+    assert abs(w["waiting_min"] - 10) <= 0.1 and w["person_min"] == 0   # 10-15 and 45-50: the call is open, nothing works
 
 
 def test_the_repo_session_is_never_named_on_the_command_line_ac_181_1(world, capsys):  # AC-181.1

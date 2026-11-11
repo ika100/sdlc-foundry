@@ -249,7 +249,7 @@ def main(argv: list[str]) -> int:
     for s in sessions:
         threads.append(journey_timeline.read_thread(s + ".jsonl", role="coordinator", main=True))
         for p in _subagents(s):
-            threads.append(journey_timeline.read_thread(p, role="child", main=False))
+            threads.append(journey_timeline.read_thread(p, role="coordinator", main=False))
             paths.append(p)
             n_sub += 1
     no_tr = []
