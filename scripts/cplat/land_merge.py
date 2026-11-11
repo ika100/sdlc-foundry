@@ -19,9 +19,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import adr
 import core
 import dispatch_state
+import land_resolve
 import merge_lock
+import rulescheck
 import ship
 import spec
 from core import PlatformError
@@ -341,6 +344,8 @@ def regenerate(repo: Path, url: str, watch: ship.CheckWatch, rounds: Rounds, run
     pre = _git(repo, run, "rev-parse", "HEAD", check=True).stdout.strip()
 
     paths: list[str] = []
+    extra: list[str] = []
+    mbase = _git(repo, run, "merge-base", "HEAD", f"origin/{base}").stdout.strip()
     try:
         res = _git(repo, run, "merge", "--no-ff", "--no-commit", f"origin/{base}")
         merging = _git(repo, run, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0
@@ -349,16 +354,37 @@ def regenerate(repo: Path, url: str, watch: ship.CheckWatch, rounds: Rounds, run
             raise _human(url, base, f"git merge failed: {_last_line(res)}")
         if not merging:
             raise _human(url, base, f"{head} already contains {base}")
-        others = [p for p in unmerged if p not in GENERATED]
+        others = [p for p in unmerged if p not in GENERATED and not land_resolve.handles(p)]
         if others:
             raise Unresolvable(f"{url} conflicts with {base} in {', '.join(others)}: rebase is a human decision",
                                hint="resolve the conflict on the branch, then run the land again")
+        ctx = land_resolve.Context(
+            base=mbase, ours=pre, theirs=f"origin/{base}",
+            changed=[p for p in _git(repo, run, "diff", "--name-only", mbase, pre).stdout.splitlines() if p],
+            next_adr=lambda: adr.next_number(repo))
+        resolved_rules = False
         for p in unmerged:
-            why = _regenerate_file(repo, url, p, GENERATED[p], run)
-            if why:
-                raise Unresolvable(f"{url} conflicts with {base} in {why}: rebase is a human decision",
-                                   hint="resolve the conflict on the branch, then run the land again")
+            if p in GENERATED:
+                why = _regenerate_file(repo, url, p, GENERATED[p], run)
+                if why:
+                    raise Unresolvable(f"{url} conflicts with {base} in {why}: rebase is a human decision",
+                                       hint="resolve the conflict on the branch, then run the land again")
+            else:
+                try:
+                    out = land_resolve.resolve(repo, p, ctx, run)
+                except land_resolve.Refused as e:
+                    raise Unresolvable(f"{url} conflicts with {base} in {e}: rebase is a human decision",
+                                       hint="resolve the conflict on the branch, then run the land again") from e
+                for w in out.written:
+                    _git(repo, run, "add", w, check=True)
+                extra += out.lines
+                resolved_rules = resolved_rules or p.startswith(land_resolve.RULES_DIR)
             paths.append(p)
+        if resolved_rules:
+            checked = rulescheck.check(repo)
+            if not checked.ok:
+                raise Unresolvable(f"{url} conflicts with {base} in the rule register: {checked.failures[0].message}: rebase is a human decision",
+                                   hint="resolve the conflict on the branch, then run the land again")
         res = run(["git", *core.git_identity(repo), "commit", "-q", "-s", "--no-edit"], cwd=repo, check=False)
         if res.returncode != 0:
             raise PlatformError(f"committing the merge of {base} into {head} failed: {_last_line(res)}")
@@ -376,7 +402,7 @@ def regenerate(repo: Path, url: str, watch: ship.CheckWatch, rounds: Rounds, run
         raise PlatformError(f"GitHub does not show the pushed head {new[:7]} of {url} yet", hint="run the land again")
     n = f"round {rounds.used}/{MAX_REGEN_ROUNDS}"
     if paths:
-        return [f"regenerated {', '.join(paths)} after merging {base} into {head} ({n})"]
+        return [f"regenerated {', '.join(paths)} after merging {base} into {head} ({n})"] + extra
     return [f"merged {base} into {head} without a conflict ({n})"]
 
 
