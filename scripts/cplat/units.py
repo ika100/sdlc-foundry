@@ -390,8 +390,8 @@ def start_session(repo: Path, unit: str, session_id: str | None = None) -> None:
     _update(repo, mutate)
 
 
-def end_session(repo: Path, command: str, spec_id: str, unit: str, before: str) -> dict:
-    """Detect the checkpoint after a session. Returns {"checkpoint": sha, "stalls": 0} or {"checkpoint": None, "stalls": n}."""
+def end_session(repo: Path, command: str, spec_id: str, unit: str, before: str, paused: bool = False) -> dict:
+    """Detect the checkpoint after a session. A `paused` session (usage limit, spec 184) without a checkpoint is no stall. Returns {"checkpoint": sha, "stalls": 0} or {"checkpoint": None, "stalls": n}."""
     commit = detect(repo, command, spec_id, unit)
     moved = feature_head(repo, spec_id) != before
     result: dict = {}
@@ -402,6 +402,8 @@ def end_session(repo: Path, command: str, spec_id: str, unit: str, before: str) 
             return
         if commit:
             _checkpoint(u, commit)
+        elif paused:
+            u.update(status="open", hold=None)
         else:
             u.update(status="open", hold=None, stalls=0 if moved else int(u.get("stalls", 0)) + 1)
         result.update(checkpoint=commit, stalls=u["stalls"])
