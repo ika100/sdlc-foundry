@@ -58,10 +58,10 @@ def refused_rules(default_branch: str) -> list[str]:
         "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push * --force*)", "Bash(git push * -f*)",
         "Bash(git push * +*)", f"Bash(git push * {d})", f"Bash(git push * {d}:*{d}*)", f"Bash(git push * {d}:refs*)", f"Bash(git push * *:{d})",
         f"Bash(git push * *:refs/heads/{d})",
-        "Bash(git rm -f*)", "Bash(git rm --force*)", "Bash(git rm -rf*)", "Bash(git rm -fr*)",
-        "Bash(git rm * -f*)", "Bash(git rm * --force*)", "Bash(git rm * -rf*)", "Bash(git rm * -fr*)",
         "Bash(gh pr merge*)", "Bash(gh api *merge*)",
         "Bash(cplat pr wait *--merge*)",
+        "Bash(git rm -f*)", "Bash(git rm --force*)", "Bash(git rm -rf*)", "Bash(git rm -fr*)",
+        "Bash(git rm * -f*)", "Bash(git rm * --force*)", "Bash(git rm * -rf*)", "Bash(git rm * -fr*)",
     ]
 
 
