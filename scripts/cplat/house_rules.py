@@ -21,13 +21,14 @@ import platrelease_changelog as fragments
 import pr_rules
 import promptrules
 import rulescheck
+import rules_baseline
 import rules_retire
 import core
 from core import PlatformError
 
 KINDS_WITH_ENTRY = ("feat", "fix", "perf")   # a change users can notice; docs/chore/ci/test/refactor need no fragment
 SIGNED = re.compile(r"^Signed-off-by: .+ <.+>$", re.M)
-RULES = ("pr-title", "spec-required", "fragment", "validate", "dco", "links", "rules", "rules-retired")
+RULES = ("pr-title", "spec-required", "fragment", "validate", "dco", "links", "rules", "rules-retired", "rules-baseline")
 PR_OPEN_RULES = ("fragment", "validate")   # `cplat pr open` checks title and spec itself and commits with a sign-off
 
 
@@ -118,6 +119,8 @@ def check(repo: Path, *, title: str, body: str, labels: list[str], base: str, fi
             problems.extend(rule_problems(repo))
         if "rules-retired" in rules:
             problems.extend(rules_retire.check(repo, base, fix=fix, notes=notes))
+        if "rules-baseline" in rules:
+            problems.extend(rules_baseline.check(repo, base, notes if notes is not None else []))
     return title, problems
 
 
@@ -153,7 +156,7 @@ def main(argv: list[str]) -> int:
     notes: list[str] = []
     title, problems = check(repo, title=ns.title, body=body, labels=ns.label, base=ns.base, fix=ns.fix, notes=notes)
     if ns.json:
-        print(json.dumps({"title": title, "ok": not problems, "problems": problems}, indent=2))
+        print(json.dumps({"title": title, "ok": not problems, "problems": problems, "notes": notes}, indent=2))
     else:
         if ns.fix or title != ns.title:
             print(f"TITLE: {title}")
@@ -163,5 +166,5 @@ def main(argv: list[str]) -> int:
             print(f"ERROR: {p}")
         if not problems:
             print("OK: the house rules pass (pr-title, spec-required, changelog fragment, validate, dco, links, rules, "
-                  "rules-retired)")
+                  "rules-retired, rules-baseline)")
     return 1 if problems else 0

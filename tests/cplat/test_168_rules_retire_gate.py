@@ -228,7 +228,7 @@ def test_pr_check_passes_a_clean_branch_and_names_the_two_new_rules_ac_168_7(rep
     commit(repo)
     rc = house_rules.main(["--repo", str(repo), "--base", "main", "--title", "feat(cplat): a change"])
     assert capsys.readouterr().out == ("OK: the house rules pass (pr-title, spec-required, changelog fragment, validate, dco, links, "
-                                       "rules, rules-retired)\n")
+                                       "rules, rules-retired, rules-baseline)\n")
     assert rc == 0
 
 
