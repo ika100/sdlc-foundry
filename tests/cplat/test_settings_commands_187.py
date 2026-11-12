@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 import gitops
+from core import PlatformError
 from backup_fixtures import APP, bdoc, bucket, kube, make_repo  # noqa: F401  (kube is a fixture)
 from resources_fixtures import db
 from system_fixtures import ROOT, files, git, tiny
@@ -242,15 +243,17 @@ def test_off_with_another_option_is_refused_ac_187_6(tmp_path, capsys):  # AC-18
     refused(backup_repo(tmp_path, dbb={"dev": DEFAULTS}), capsys, "--off", "--retention", "7d", names=("--off",))
 
 
-def test_a_failed_render_restores_the_files_ac_187_6(tmp_path, capsys):  # AC-187.6
-    # a bucket without an instance in dev is a valid target for the check but the render refuses it
-    doc = bdoc(bucket_kw={"instances": {"staging": {}}})
-    repo = make_repo(tmp_path, doc)
+def test_a_failed_render_restores_the_files_ac_187_6(tmp_path, monkeypatch, capsys):  # AC-187.6
+    repo = backup_repo(tmp_path)
     before = files(repo)
+
+    def broken(_repo):
+        raise PlatformError("render failed: boom")
+
+    monkeypatch.setattr(gitops, "render", broken)
     rc, _, err = run("resource", "backup", "orders-db", "--env", "dev", "--to", "backups", "--repo-dir", repo, capsys=capsys)
-    if rc == 0:
-        pytest.skip("the render accepts this system; the restore path needs another failing render")
-    assert rc == 1 and files(repo) == before
+    assert rc == 1 and "render failed: boom" in err
+    assert files(repo) == before
 
 
 # ---------------- AC-187.7: no setting option, on-demand backup ----------------
@@ -278,7 +281,6 @@ def front(path):
 
 def test_resource_backup_usage_line_names_the_setting_options_ac_187_8():  # AC-187.8
     desc, text = front("plugins/resource/commands/backup.md")
-    # interface: the usage line is the command contract
     for opt in ("--to <bucket>", "--schedule <cron>", "--retention", "--off"):
         assert opt in desc, opt
     assert len(desc) <= 300 and "$ARGUMENTS" in text
