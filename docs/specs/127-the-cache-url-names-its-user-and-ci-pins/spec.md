@@ -29,7 +29,7 @@ Two loose ends from the 5.x resources round, decided by the user on 2026-10-28.
 - **AC-127.3** Given the e2e cluster test, when it probes a cache with `valkey-cli -u "$<NAME>_REDIS_URL"`, then the probe uses the component's variable unchanged (the rewrite to `redis://default:` is removed from `tests/e2e/run.sh`; `tests/e2e/upgrade.sh` keeps it only for a cache created by the previous release).
 
 ### Pinned test tools
-- **AC-127.4** Given the repository, then `requirements-test.txt` at the root pins every package the cplat suite needs (pytest, pytest-xdist, pyyaml, ruamel.yaml and each of their dependencies) to an exact version, compiled from `requirements-test.in` by `uv pip compile`.
+- ~~**AC-127.4**~~ superseded by AC-185.2 on 2026-11-12: Given the repository, then `requirements-test.txt` at the root pins every package the cplat suite needs (pytest, pytest-xdist, pyyaml, ruamel.yaml and each of their dependencies) to an exact version, compiled from `requirements-test.in` by `uv pip compile`.
 - **AC-127.5** Given the cplat test step of `.github/workflows/ci.yml`, `scripts/ci-local.sh` and the `test-fast` script of `devbox.json`, when they run the suite, then they install the tools only from `requirements-test.txt` (`uv run --with-requirements requirements-test.txt …`); a check in CI fails when any of them installs pytest, pytest-xdist, pyyaml or ruamel.yaml without that file.
 - **AC-127.6** Given `.github/dependabot.yml`, then a `pip` entry for `/` updates `requirements-test.txt` monthly in one grouped PR, which runs the full CI like any other PR.
 
@@ -51,3 +51,4 @@ Two loose ends from the 5.x resources round, decided by the user on 2026-10-28.
 - 2026-10-28 AC-127.2 amended at plan time: the cache ExternalSecret is `refreshPolicy: CreatedOnce`, so an existing Secret keeps its url (rewriting it would regenerate the password); new caches get the new form
 - 2026-10-28 building
 - 2026-10-28 done
+- 2026-11-12 AC-127.4 superseded by AC-185.2 (pytest-timeout is the fifth pinned top-level package)
