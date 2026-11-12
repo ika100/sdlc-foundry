@@ -21,8 +21,8 @@ from system_fixtures import ALLOWED_TOP, ROOT
 PLUGINS = ROOT / "plugins"
 NOUNS = ["system", "component", "api", "resource", "instance", "issue", "platform"]
 WORKING = {
-    "system": ["new", "status", "spec", "plan", "ship", "set", "restore", "autonomy"],  # spec 117: system restore; spec 124: system autonomy
-    "component": ["new", "add", "set", "remove", "spec", "plan", "build", "verify", "check", "ship", "fix", "release"],
+    "system": ["new", "status", "spec", "plan", "ship", "set", "restore", "autonomy", "explore"],  # spec 117: system restore; spec 124: system autonomy
+    "component": ["new", "add", "set", "remove", "spec", "plan", "build", "verify", "check", "ship", "fix", "release", "explore"],
     "api": ["list"], "resource": ["add", "remove", "backup", "restore", "upgrade"],  # spec 117: resource backup, restore; spec 121: resource upgrade
     "instance": ["promote", "secret", "verify"], "issue": ["triage", "report"],
     "platform": ["doctor", "update", "fleet", "runs", "retro", "ui", "release"],  # spec 129: platform release
@@ -80,7 +80,7 @@ def test_exactly_the_33_working_commands_exist_ac_114_59():  # AC-114.59  (spec 
             if "moved-to" not in fm:
                 found.setdefault(plugin, []).append(f.stem)
     assert {k: sorted(v) for k, v in found.items()} == {k: sorted(v) for k, v in WORKING.items()}
-    assert sum(len(v) for v in found.values()) == 41   # spec 129: plus /platform:release; spec 121: plus /resource:upgrade; 32 (5.0 plus /platform:ui and /system:set), plus /cluster:new|add|remove (spec 125), plus /resource:backup|restore and /system:restore (spec 117), plus /system:autonomy (spec 124)
+    assert sum(len(v) for v in found.values()) == 43   # spec 188: plus /component:explore and /system:explore; spec 129: plus /platform:release; spec 121: plus /resource:upgrade; 32 (5.0 plus /platform:ui and /system:set), plus /cluster:new|add|remove (spec 125), plus /resource:backup|restore and /system:restore (spec 117), plus /system:autonomy (spec 124)
     assert not (PLUGINS / "api" / "commands" / "check.md").exists()
 
 

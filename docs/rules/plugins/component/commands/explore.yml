@@ -18,3 +18,7 @@ rules:
     text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
     class: hard
     hard: issue-filing-needs-consent
+  - id: R6
+    text: "Run `cplat explore context \"<topic>\" --json` once and read its output whole, never through `grep`, `head` or `tail`. `shape` of `gitops-app` → point to `/system:explore <topic>` and stop, since that repo's features are system features."
+    class: practice
+    source: "#476"
