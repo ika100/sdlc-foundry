@@ -7,6 +7,7 @@ import yaml
 
 import core
 import ship
+import smoke
 import spec
 from test_ship import SHA, FakeGh, check, git, repo, to_land  # noqa: F401  (repo is a fixture)
 
@@ -387,6 +388,7 @@ def _to_deploy(repo, gh, **kw):
 def test_deploy_merges_after_release_prs_and_waits_for_every_named_app(repo, gh, monkeypatch):
     """AC-076.4 AC-076.5: after the pin: merge the after-release PR, check every app, end with the human steps."""
     _to_deploy(repo, gh, apps=["shop-config"], human=["delete the old push token"])
+    monkeypatch.setattr(smoke, "sleep", lambda seconds: None)   # spec 185: the smoke retry delay is not waited for
     argo(monkeypatch, {"shop-api-dev": HEALTHY, "shop-config": HEALTHY})
     ok, lines = ship.deploy(repo, timeout=600, interval=10, context="lan")
     assert ok and gh.merges == [f"https://github.com/{GITOPS}/pull/3"]
