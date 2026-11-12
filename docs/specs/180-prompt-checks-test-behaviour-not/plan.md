@@ -52,18 +52,21 @@ tasks:
     covers: [AC-180.4]
     parallel_safe: true
     depends_on: [t5, t6]
+    done: true
   - id: t8
     title: Rewrite sentence pins in test files a to l
     files: ["tests/cplat/test_[a-l]*.py"]
     covers: [AC-180.4]
     parallel_safe: true
     depends_on: [t5]
+    done: true
   - id: t9
     title: Rewrite sentence pins in test files m to z, support modules and e2e
     files: ["tests/cplat/test_[m-z]*.py", tests/cplat/*_support.py, tests/cplat/*_fixtures.py, tests/cplat/*_world.py, tests/cplat/*_fakes.py, tests/cplat/conftest.py, tests/cplat/sharding.py, tests/cplat/shared_render.py, tests/e2e/]
     covers: [AC-180.4]
     parallel_safe: true
     depends_on: [t5]
+    done: true
   - id: t10
     title: Fix prompt targets the structural check reports
     files: [plugins/, docs/rules/plugins/, .claude-plugin/marketplace.json]
