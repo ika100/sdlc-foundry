@@ -1,7 +1,7 @@
 ---
 spec_id: 186-the-journey-waits-less
 title: The journey waits less
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [681, 684]
@@ -80,3 +80,4 @@ The release reuses the tagged commit's green CI.
 
 - 2026-11-12 created
 - 2026-11-12 approved
+- 2026-11-12 building
