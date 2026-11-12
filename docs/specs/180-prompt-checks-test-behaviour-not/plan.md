@@ -31,6 +31,7 @@ tasks:
     covers: [AC-180.4, AC-180.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: Wire targets, pins and rebaseline into cplat platform rules
     files: [scripts/cplat/rulescheck.py, scripts/cplat/cplat.py, tests/cplat/rules_support.py, tests/cplat/test_168_rules_check.py, tests/cplat/test_168_rules_retired_register.py, tests/cplat/test_172_hidden_rules.py]

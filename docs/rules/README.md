@@ -8,8 +8,8 @@ and `cplat platform rules check` validates it on every run of CI.
 
 ## Where entries live
 
-- `register.yml`: `baseline` (the commit and the total prompt bytes before the sweep; the prompts may never grow past
-  it) and `hard:` (at most 20 distinct hard rules, each with an `enforced_by` command or CI job, or an
+- `register.yml`: `baseline` (the commit and the total prompt bytes; the prompts may never grow past it, and it rises
+  only through `cplat platform rules rebaseline`, which records each raise in `baseline.history`) and `hard:` (at most 20 distinct hard rules, each with an `enforced_by` command or CI job, or an
   `intentional_prose_rule` of at least 3 words saying why no tool can enforce it).
 - `plugins/<p>/<kind>/<path>.yml`: one file per prompt `plugins/<p>/<kind>/<path>.md`, with an entry for every rule
   sentence (`id`, `text`, `class`, and the keys of that class). The `text` is a quote of the prompt sentence.
@@ -31,16 +31,41 @@ and `cplat platform rules check` validates it on every run of CI.
    of at least 3 words.
 2. A practice or experience never keeps `only when`, `only if`, `unless` or `except`; state the purpose instead.
 3. Issue, spec and ADR references go to the entry's `source`; references alone are no reason.
-4. Phrases that existing tests pin stay verbatim; add the reason around them.
+4. A phrase that code depends on is marked in its test with `# interface: <reason>` and stays verbatim; no other phrase
+   is pinned, so reword freely and add the reason around it.
 5. An instruction with a condition (`only when`, `only if`, `unless`, `except`) is never classed `not a rule`: class it
    `practice` and state its purpose, or reword it as a statement.
-6. A prompt never grows: the files of a change total at most the bytes they had before it.
+6. A prompt never grows: the files of a change total at most the bytes they had before it, and the prompts in all stay
+   within `baseline.prompt_bytes` (see Raise the baseline).
 
 ## Add a rule
 
 Write the sentence in the prompt with its reason, then add an entry to the prompt's register file (next free `R<n>`,
 the class and `source`). A new hard rule also needs a `hard:` key with its enforcement or its reason. Check with
 `cplat platform rules check --only <prompt file>`.
+
+## Raise the baseline
+
+When a needed sentence takes the prompts past `baseline.prompt_bytes`, commit the change, run both benchmarks the eval
+gate asks for (`cplat platform runs benchmark <workflow> --plugins plugins --reset-first` for `quick-task` and
+`build`), then run `cplat platform rules rebaseline --reason "<why>"`. It refuses a dirty tree, a reason under 3 words
+and a failing gate (it prints the failures with the benchmark command to run) and leaves the register unchanged. It
+does nothing when the prompts are not larger than the baseline, and never lowers it. On success it writes the new
+commit and total and a `history` entry (date, old and new bytes, reason, benchmark run ids); commit
+`docs/rules/register.yml`. `cplat platform pr-check` (rule `rules-baseline`) shows the raise with its reason and run
+ids, and fails a raise without its history entry, so a hand edit is caught.
+
+## Test a prompt
+
+A test checks structure, not sentences: that the prompt points to the reference, command, slash command or heading it
+needs. `tests/cplat/structure.py` offers `refs`, `points_to` and `headings` for this, for example
+`points_to(BUILD, "plugins/component/references/build-pr.md")`. Behaviour is left to the eval gate. A string literal
+of 4 or more words that occurs verbatim in a prompt fails `cplat platform rules check` (`sentence-pin`); where code
+depends on that exact literal (a `cplat` output line a prompt quotes, the `**Hard rule:**` marker), keep it and add
+`# interface: <reason of 3 or more words>` on its line or the line above. A marker that covers no such literal, or whose
+reason is too short, fails too. The check also fails a link, anchor, plugin-root path, `cplat <noun> <verb>` or
+`/<plugin>:<command>` in a prompt that does not resolve. Decision:
+[ADR-103](../adr/103-prompt-tests-check-structure-not-wording.md).
 
 ## Retire a rule
 
