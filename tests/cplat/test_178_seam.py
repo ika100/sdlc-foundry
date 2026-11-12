@@ -69,7 +69,9 @@ def test_a_cplat_variable_of_the_outer_run_does_not_reach_the_test_command(seam)
     res = seam.headless()
     assert res.returncode == 0, res.stdout + res.stderr
     runs = seam.devbox_runs()
-    assert {r["args"][1] for r in runs} >= {"ci", "test-fast"}, runs
+    scripts = {next(a for i, a in enumerate(r["args"][1:], 1) if a not in ("-e", "--env") and r["args"][i - 1] not in ("-e", "--env"))
+               for r in runs}   # the script after `devbox run`, past spec 185's `-e KEY=VALUE` pairs
+    assert scripts >= {"ci", "test-fast"}, runs
     leaked = sorted({name for r in runs for name in r["cplat"]})
     assert leaked == [], f"the test command of the unit sees {leaked} of the outer run"
 

@@ -6,7 +6,7 @@
 - **The sleep guard replaces `time.sleep` and `asyncio.sleep` before any `cplat` module is imported.** Several modules bind the function at import (`core.sleep = time.sleep`, `engine.sleep`, `dispatch.sleep`, `dispatch_view.wait_result(sleep=time.sleep)`), so a monkeypatch per test would miss them. `tests/cplat/conftest.py` calls `sleepguard.install()` as its first statement after the `sys.path` line, before it imports `console_support` and `sharding`. Outside a test the guard passes every call through (AC-185.3).
 - **Only sleeps called from repository code count.** The guard looks at the caller's frame: a call from a file under the repository root counts, a call from the standard library or site-packages does not (`subprocess.Popen.wait(timeout=…)` polls with `time.sleep`, execnet sleeps in its I/O thread), and `tests/cplat/waiting.py` is exempt, because its poll is the sanctioned wait for an event or a file (spec 178). Fake programs run as separate processes and never load the guard (A3).
 - **A crossing sleep raises `pytest.fail.Exception`** (a `BaseException`), so an `except Exception` in the code under test cannot swallow it, and the guard also records it, so a sleep in a thread the test started, or one caught by `except BaseException`, still fails the test in its report.
-- **`cplat quiet test-fast` learns which tests run through an injected pytest plugin**, not by parsing output, because the output is quiet (`-q`) and buffered. quiet sets `PYTHONPATH` to a directory that holds only `cplat_test_progress.py` (so no `cplat` module shadows a repo's own), adds `-p cplat_test_progress` to `PYTEST_ADDOPTS` and names a progress file. The plugin works in every repo whose test-fast runs pytest, with no change to that repo. **devbox resets `PYTHONPATH`** in its environment (found when t3 ran under a real `devbox run test-fast`, decided 2026-11-12 on the build escalation): quiet passes the three variables as `devbox run -e KEY=VALUE … <script>` instead of only through its own environment; the command after the `-e` pairs is unchanged, and spec 172's tests compare the argv without the `-e` pairs. A progress file that was never created means the runner is not pytest (AC-185.5), so quiet needs no guess from `devbox.json`.
+- **`cplat quiet test-fast` learns which tests run through an injected pytest plugin**, not by parsing output, because the output is quiet (`-q`) and buffered. quiet sets `PYTHONPATH` to a directory that holds only `cplat_test_progress.py` (so no `cplat` module shadows a repo's own), adds `-p cplat_test_progress` to `PYTEST_ADDOPTS` and names a progress file. The plugin works in every repo whose test-fast runs pytest, with no change to that repo. **devbox resets `PYTHONPATH`** in its environment (found when t3 ran under a real `devbox run test-fast`, decided 2026-11-12 on the build escalation): quiet passes the three variables as `devbox run -e KEY=VALUE … <script>` instead of only through its own environment; the command after the `-e` pairs is unchanged, and spec 172's tests compare the argv without the `-e` pairs. The progress file's variable has **no `CPLAT_` prefix** (`PYTEST_PROGRESS_FILE`): spec 178's seam test (AC-178.8) keeps every `CPLAT_*` variable away from the test command, and quiet's own variable must not look like one of the outer run's (decided 2026-11-12 on the t4 escalation). A progress file that was never created means the runner is not pytest (AC-185.5), so quiet needs no guess from `devbox.json`.
 - **The run starts in its own session** (`start_new_session=True`), so quiet stops `devbox`, `uv`, pytest and the xdist workers together with `killpg`: SIGTERM, then SIGKILL after 5 s.
 - **The give-up text always says `9 min`.** `quiet_limit.GIVE_UP_SECONDS = 540` is the seam that tests lower; the printed label is the constant `GIVE_UP_LABEL = "9 min"`, so a test with a 1-second limit checks the real line.
 - **Suite time comes from the shard reports.** `tests/cplat/sharding.py` adds the wall time and the 15 slowest tests to the report it already writes. `scripts/check-shards.py` sums them, prints them and writes `suite-time.json`, which the coverage job uploads on pushes to `main` (AC-185.7).
@@ -85,12 +85,12 @@ GIVE_UP_SECONDS = 540             # seam: tests lower it
 GIVE_UP_LABEL = "9 min"
 MAX_LISTED = 20
 STOP_GRACE_SECONDS = 5
-PROGRESS_ENV = "CPLAT_TEST_PROGRESS_FILE"
+PROGRESS_ENV = "PYTEST_PROGRESS_FILE"
 PLUGIN_DIR: Path                  # scripts/cplat/test_progress
 
 def progress_env(log: Path) -> tuple[dict[str, str], Path]
     # env additions: PYTHONPATH=<PLUGIN_DIR>[:<old>], PYTEST_ADDOPTS=<old> -p cplat_test_progress,
-    # CPLAT_TEST_PROGRESS_FILE=<log>.progress; and that path
+    # PYTEST_PROGRESS_FILE=<log>.progress; and that path
 def start(cmd, *, cwd, out, env) -> subprocess.Popen          # start_new_session=True
 def wait_until(proc, deadline: float) -> int | None           # exit code, or None at the deadline (monotonic)
 def stop(proc) -> None                                        # killpg SIGTERM, grace, killpg SIGKILL; reaps
@@ -107,7 +107,7 @@ end tests/cplat/test_a.py::test_one
 start tests/cplat/test_b.py::test_two
 ```
 
-The plugin creates the file at `pytest_configure` of the controller (not of an xdist worker), appends `start <nodeid>` at `pytest_runtest_logstart` and `end <nodeid>` at `pytest_runtest_logfinish` (in the controller xdist relays both), and removes `CPLAT_TEST_PROGRESS_FILE` and its `-p` from `os.environ`, so a pytest started by a test does not write to it. "Still running" = started and not ended, in start order.
+The plugin creates the file at `pytest_configure` of the controller (not of an xdist worker), appends `start <nodeid>` at `pytest_runtest_logstart` and `end <nodeid>` at `pytest_runtest_logfinish` (in the controller xdist relays both), and removes `PYTEST_PROGRESS_FILE` and its `-p` from `os.environ`, so a pytest started by a test does not write to it. "Still running" = started and not ended, in start order.
 
 Output and exit when the deadline passes (whole block, nothing else):
 

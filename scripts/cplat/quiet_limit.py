@@ -11,7 +11,7 @@ GIVE_UP_SECONDS = 540             # seam: tests lower it
 GIVE_UP_LABEL = "9 min"
 MAX_LISTED = 20
 STOP_GRACE_SECONDS = 5
-PROGRESS_ENV = "CPLAT_TEST_PROGRESS_FILE"
+PROGRESS_ENV = "PYTEST_PROGRESS_FILE"
 PLUGIN_DIR = Path(__file__).resolve().parent / "test_progress"
 NOT_REPORTED = "not reported by this test runner"
 

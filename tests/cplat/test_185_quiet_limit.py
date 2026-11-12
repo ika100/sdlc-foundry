@@ -1,7 +1,7 @@
 """Spec 185 acceptance tests: `cplat quiet test-fast` gives up after 9 minutes and names what still runs (AC-185.4, AC-185.5).
 
 Seam: `quiet.main(argv)` with a fake `devbox` on PATH and `quiet_limit.GIVE_UP_SECONDS` lowered to 1 s plus 20 times the fake delay. The fake copies the files
-`progress` (or `progress-<i>` of a `--repeat` run) into the progress file quiet names in $CPLAT_TEST_PROGRESS_FILE (design.md,
+`progress` (or `progress-<i>` of a `--repeat` run) into the progress file quiet names in $PYTEST_PROGRESS_FILE (design.md,
 "quiet gives up"), prints `out` when present, then hangs with a child of its own, unless the file `quick` holds an exit code.
 """
 import os
@@ -28,7 +28,7 @@ env > "$d/env-$$"
 run="${CPLAT_REPEAT_RUN:-0}"
 p="$d/progress"
 [ -f "$d/progress-$run" ] && p="$d/progress-$run"
-if [ -n "$CPLAT_TEST_PROGRESS_FILE" ] && [ -f "$p" ]; then cp "$p" "$CPLAT_TEST_PROGRESS_FILE"; fi
+if [ -n "$PYTEST_PROGRESS_FILE" ] && [ -f "$p" ]; then cp "$p" "$PYTEST_PROGRESS_FILE"; fi
 [ -f "$d/out" ] && cat "$d/out"
 if [ -f "$d/quick" ]; then echo "1 passed"; exit "$(cat "$d/quick")"; fi
 echo "$$" > "$d/pid-$run"
@@ -167,7 +167,7 @@ def test_quiet_names_the_progress_plugin_and_file_to_the_run_ac_185_4(world):  #
     import quiet_limit
     assert str(quiet_limit.PLUGIN_DIR) in env["PYTHONPATH"].split(os.pathsep)
     assert "-p cplat_test_progress" in env["PYTEST_ADDOPTS"]
-    assert env["CPLAT_TEST_PROGRESS_FILE"].endswith(".progress")
+    assert env["PYTEST_PROGRESS_FILE"].endswith(".progress")
 
 
 def test_a_run_that_ends_in_time_prints_and_exits_as_before_ac_185_4(world, capsys):  # AC-185.4
@@ -192,7 +192,7 @@ def test_the_progress_plugin_writes_start_and_end_lines_and_hides_its_file_ac_18
     env_add, progress = quiet_limit.progress_env(tmp_path / "x.log")
     (tmp_path / "test_p.py").write_text(
         "import os\n\ndef test_one():\n    assert True\n\n"
-        "def test_two():\n    assert 'CPLAT_TEST_PROGRESS_FILE' not in os.environ\n")
+        "def test_two():\n    assert 'PYTEST_PROGRESS_FILE' not in os.environ\n")
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
     env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
     env.update(env_add)

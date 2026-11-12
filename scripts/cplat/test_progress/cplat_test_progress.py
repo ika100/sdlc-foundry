@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 
-ENV = "CPLAT_TEST_PROGRESS_FILE"
+ENV = "PYTEST_PROGRESS_FILE"
 _path: str | None = None
 
 
