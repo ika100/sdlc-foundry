@@ -17,6 +17,7 @@ tasks:
     covers: [AC-186.1, AC-186.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: The answer action, hold and resume in the system ship scheduler
     files: [scripts/cplat/appship_sched.py, scripts/cplat/appship_proc.py, scripts/cplat/appship_state.py]
