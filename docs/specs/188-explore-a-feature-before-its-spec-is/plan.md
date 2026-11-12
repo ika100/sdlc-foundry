@@ -31,6 +31,7 @@ tasks:
     covers: [AC-188.1, AC-188.3, AC-188.4, AC-188.11, AC-188.12]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: Spec commands take a DECIDED block and recommend explore for ambiguity
     files: [plugins/component/commands/spec.md, plugins/system/commands/spec.md, docs/rules/plugins/component/commands/spec.yml, docs/rules/plugins/system/commands/spec.yml]
