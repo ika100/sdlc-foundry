@@ -61,7 +61,7 @@ Escalate on build's stop rules: a `cplat component build merge` escalation, a ch
 
 ## Finish
 
-`cplat component ship status`, then `cplat component ship finish`, then print the report in `${CLAUDE_PLUGIN_ROOT}/references/ship-finish.md` (rows from deploy's lines, `cplat deps report`'s bumps, the plan's `human_steps`).
+`cplat component ship status`, `cplat component ship finish`, then print the report in `${CLAUDE_PLUGIN_ROOT}/references/ship-finish.md` (rows from deploy's lines, `cplat deps report`'s bumps, the plan's `human_steps`). A warning about a buffered run record is not an error.
 
 ## Escalate
 
