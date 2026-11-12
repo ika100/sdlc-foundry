@@ -77,3 +77,4 @@ Moved to spec 177 (unclear issues from other people, closing what needs no work)
 - 2026-11-10 approved
 - 2026-11-12 amended: the table adds a one-line summary, a status from the batch's status facts and the next step in the delivery process (AC-176.1, AC-176.2)
 - 2026-11-12 amended: the table becomes a grouped overview (needs your decision, clear, already handled) with questions as choices, one confirmation and a closing next step (AC-176.2, AC-176.3, new AC-176.15); replaces the columns added earlier today
+- 2026-11-12 approved again by the user with today's amendments (grouped overview, choices, closing next step)
