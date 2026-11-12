@@ -38,6 +38,7 @@ tasks:
     covers: [AC-188.4, AC-188.6, AC-188.7, AC-188.9, AC-188.12]
     parallel_safe: true
     depends_on: [t1, t2, t4]
+    done: true
   - id: t6
     title: Product-manager and spec format turn DECIDED lines into criteria, assumptions, notes or questions
     files: [plugins/svc/agents/product-manager.md, plugins/svc/skills/spec-format/references/spec.md, docs/rules/plugins/svc/agents/product-manager.yml, docs/rules/plugins/svc/skills/spec-format/references/spec.yml]
