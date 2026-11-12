@@ -43,12 +43,14 @@ tasks:
     covers: [AC-188.5, AC-188.6, AC-188.7, AC-188.9, AC-188.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: Architect names each departure from a note for the architect
     files: [plugins/svc/agents/architect.md, plugins/svc/skills/spec-format/references/design.md, docs/rules/plugins/svc/agents/architect.yml, docs/rules/plugins/svc/skills/spec-format/references/design.yml]
     covers: [AC-188.5, AC-188.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: Triage route "needs exploring"
     files: [plugins/issue/commands/triage.md, docs/rules/plugins/issue/commands/triage.yml]
@@ -67,6 +69,7 @@ tasks:
     covers: []
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t11
     title: Rules check green and prompt baseline raised with a reason
     files: [docs/rules/register.yml]
