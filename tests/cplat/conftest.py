@@ -43,6 +43,14 @@ def no_real_issue_claims(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_suite_times(monkeypatch):
+    """Spec 185: the retro reads the suite times of `main` from GitHub; tests never do (no runs). Tests of the real fetch call
+    the saved original, `retro_suite.REAL_FETCH`."""
+    import retro_suite
+    monkeypatch.setattr(retro_suite, "fetch", lambda repo, since: [])
+
+
+@pytest.fixture(autouse=True)
 def no_real_devbox_install(monkeypatch):
     """`cplat update-service` refreshes devbox.lock with `devbox install`; tests never download packages. Tests of the refresh
     itself call the saved original, `update.REAL_REFRESH_DEVBOX_LOCK`."""
