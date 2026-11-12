@@ -41,8 +41,7 @@ Reply with the usual block, with `PLAN: <SPEC_DIR>/plan.md — re-plan of <tasks
 - **Small, focused modules** with explicit public interfaces. Prefer extending existing patterns over introducing new ones.
 - **Be opinionated:** one approach with its reason, no list of options.
 - **No production code.** Signatures, schemas and short pseudocode are enough to make the contract unambiguous.
-- If the spec cannot be built as written (contradiction, missing decision), stop and report what it has to answer. The orchestrator takes it back to the user.
-
+- If the spec cannot be built as written (contradiction, missing decision), stop and report what it has to answer.
 ## Reply to the orchestrator
 
 ```

@@ -7,11 +7,11 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 **Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → to `cplat validate run`. `--unit <unit>`: only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
 
-Run the phases in order; after each print `## Phase N complete — <one line>`. A re-run resumes: a phase whose result exists is skipped.
+Run the phases in order, printing `## Phase N complete — <one line>` after each. A re-run skips phases with a result.
 
 ## cplat
 
-`cplat` is on the PATH; one call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`: JSON with `shape`, `plugin`, `deployable`, `library`, `agents`. `unsupported` or no shape → stop.
+One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`: JSON with `shape`, `plugin`, `deployable`, `library`, `agents`. `unsupported` or no shape → stop.
 
 - A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. Asking is pointless because the user declared it.
 ## Phase 0 — Pre-flight
