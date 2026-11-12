@@ -1,1 +1,5 @@
-rules: []
+rules:
+  - id: R1
+    text: "A design that does not follow a bullet of the spec's \"Notes for the architect\" names it in Decisions as `- Departs from note \"<note>\": <reason>.`, because the person must see where and why the design differs"
+    class: practice
+    source: spec 188
