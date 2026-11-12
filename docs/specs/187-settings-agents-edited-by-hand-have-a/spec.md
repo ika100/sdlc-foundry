@@ -1,7 +1,7 @@
 ---
 spec_id: 187-settings-agents-edited-by-hand-have-a
 title: Settings agents edited by hand have a command
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -100,3 +100,4 @@ None.
 
 - 2026-11-12 created
 - 2026-11-12 approved
+- 2026-11-12 building
