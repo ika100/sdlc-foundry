@@ -31,6 +31,7 @@ tasks:
     covers: [AC-185.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: Ship prompts turn an escalation decision into a plan task
     files: [plugins/component/commands/ship.md, plugins/system/commands/ship.md, docs/rules/plugins/component/commands/ship.yml, docs/rules/plugins/system/commands/ship.yml]
