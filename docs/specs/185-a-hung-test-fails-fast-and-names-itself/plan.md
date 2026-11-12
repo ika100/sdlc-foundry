@@ -37,6 +37,7 @@ tasks:
     covers: [AC-185.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: Weekly retro section "Test suite time"
     files: [scripts/cplat/retro_suite.py, scripts/cplat/retro.py, scripts/cplat/retro_report.py, tests/cplat/conftest.py]
@@ -49,6 +50,7 @@ tasks:
     covers: [AC-185.1, AC-185.3, AC-185.4, AC-185.6]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 185 A hung test fails fast and names itself
