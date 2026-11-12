@@ -69,7 +69,18 @@ class World:
         (self.d / name).write_text(text)
 
     def args(self, name):
-        return (self.d / name).read_text().splitlines()
+        """The fake devbox's argv without `-e KEY=VALUE` pairs: since spec 185, `cplat quiet` passes the progress plugin's
+        directory with `devbox run -e PYTHONPATH=…`, because devbox resets PYTHONPATH; the command itself is unchanged."""
+        argv, out = (self.d / name).read_text().splitlines(), []
+        skip = False
+        for a in argv:
+            if skip:
+                skip = False
+            elif a in ("-e", "--env"):
+                skip = True
+            else:
+                out.append(a)
+        return out
 
     def files(self, prefix):
         return sorted(p.name for p in self.d.iterdir() if p.name.startswith(prefix))
