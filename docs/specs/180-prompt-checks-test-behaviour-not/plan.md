@@ -10,18 +10,21 @@ tasks:
     covers: [AC-180.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: promptpins module for sentence pins and interface markers
     files: [scripts/cplat/promptpins.py]
     covers: [AC-180.2, AC-180.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Register baseline history and the rebaseline logic
     files: [scripts/cplat/promptrules.py, scripts/cplat/rules_rebaseline.py]
     covers: [AC-180.5, AC-180.6, AC-180.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Docs, ADR and changelog fragment
     files: [docs/rules/README.md, docs/AGENTS.md, CLAUDE.md, docs/changelog.d/180-prompt-checks-test-structure.changed.md, docs/adr/, docs/adr/README.md]
