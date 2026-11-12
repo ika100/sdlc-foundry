@@ -693,7 +693,7 @@ class GhError(PlatformError):
 def checks(repo: Path, pr: str) -> list[dict]:
     """The PR's checks; [] when it has none. A `gh` failure is a GhError, never "no checks" (#356)."""
     GH_ERRORS.pop("pr checks", None)
-    out = gh(["pr", "checks", pr, "--json", "name,state,bucket,link"], cwd=repo, check=False)
+    out = gh(["pr", "checks", pr, "--json", "name,state,bucket,link,startedAt"], cwd=repo, check=False)
     with contextlib.suppress(ValueError):
         if out.strip():
             return json.loads(out)
@@ -1098,9 +1098,22 @@ def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str
                                 "Merging without any check is never done automatically")
         if waited > timeout:
             pending = [c["name"] for c in cs if c.get("bucket") == "pending"] + watch.missing or ["a workflow run that reports no checks yet (queued)"]
-            raise ChecksPending(f"checks on {watch.pr} still pending after {int(timeout)}s: {', '.join(pending)}",
-                                hint="run the command again later; a runner may be busy or offline", checks=pending)
+            shown = [f"{c['name']}{_running_for(c)}" for c in cs if c.get("bucket") == "pending"] + watch.missing or pending
+            raise ChecksPending(f"checks on {watch.pr} still pending after {int(timeout)}s: {', '.join(shown)}",
+                                hint="a running check is not stuck, whatever its start time looks like (GitHub times are UTC): "
+                                     "cplat itself reruns a run whose jobs only queue; run the command again later", checks=pending)
         sleep(interval)
+
+
+def _running_for(check: dict) -> str:
+    """` (running 17m)` from the check's `startedAt` (UTC, from the API), so no session compares clocks and time zones itself."""
+    try:
+        began = dt.datetime.fromisoformat(str(check["startedAt"]).replace("Z", "+00:00"))
+    except (KeyError, ValueError):
+        return ""
+    if began.tzinfo is None or began.year < 2000:     # gh prints 0001-01-01 for a check that has not started
+        return ""
+    return f" (running {max(0, int((dt.datetime.now(dt.timezone.utc) - began).total_seconds() // 60))}m)"
 
 
 def _conflicting(watch: CheckWatch) -> Conflicting:
