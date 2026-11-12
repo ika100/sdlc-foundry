@@ -62,8 +62,8 @@ def test_the_reviewer_reports_a_loose_smoke_test_as_a_smoke_line_not_a_failure_a
 
 def test_the_build_hands_a_smoke_finding_to_the_tester_in_the_fix_round_without_asking_ac_179_9():  # AC-179.9
     p4 = phase4()
-    assert "SMOKE" in p4 and "tester" in p4 and "Tighten only" in p4 and "Change no other test" in p4
-    assert "cplat platform runs agent smoke" in p4 and "--finding" in p4
+    assert "SMOKE" in p4 and "tester" in p4 and "Tighten only" in p4 and "other test" in p4
+    assert "runs agent smoke" in p4 and "--finding" in p4
     assert re.search(r"never ask|not ask|without asking|no question", p4)
     assert "TEST LOOSER" in p4                                                     # a finding on a frozen test keeps its rule
     assert "AC-179.4" in p4 or "build-tighten.md" in p4

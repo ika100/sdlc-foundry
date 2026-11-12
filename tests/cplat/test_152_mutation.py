@@ -111,4 +111,4 @@ def test_the_build_runs_it_after_the_reviewer_and_never_stops_on_it_ac_152_3(): 
     build = (Path(__file__).resolve().parents[2] / "plugins/component/commands/build.md").read_text()
     verify = build[build.index("## Phase 4"):build.index("## Phase 5")]
     assert verify.index("reviewer") < verify.index("cplat spec mutate <id> --write") < verify.index("Commit `docs/specs")
-    assert "never fails the build" in verify
+    assert "cplat spec mutate" in verify

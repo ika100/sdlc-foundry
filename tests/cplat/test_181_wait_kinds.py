@@ -8,7 +8,7 @@ from journey181_support import KINDS, Transcript, at, run_record, split_of, syst
 CASES = [
     ("cplat pr wait 12", "ci"),
     ("cplat system wait shop", "deploy"),
-    ("cplat component ship deploy", "deploy"),
+    ("cplat component ship deploy", "deploy"),  # interface: command line the classifier reads
     ("cplat instance promote shop staging", "promotion"),
     ("cplat resource restore db", "restore"),
     ("cplat resource backup db", "restore"),
@@ -19,7 +19,7 @@ CASES = [
     ("cplat instance verify shop prod", "smoke"),
     ("cplat system ship next shop --wait", "wait"),
     ("cplat system ship land shop", "wait"),
-    ("cplat component ship wait", "wait"),
+    ("cplat component ship wait", "wait"),  # interface: command line the classifier reads
     ("cplat spec land 012", "wait"),
     ("gh run watch 12", "wait"),
     ("gh pr checks 3 --watch", "wait"),

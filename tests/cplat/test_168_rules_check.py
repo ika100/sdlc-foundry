@@ -335,7 +335,7 @@ def hard_tree(tmp_path, table, entry_hard="the-key"):
     return good_repo(tmp_path, items=items, hard=table)
 
 
-@pytest.mark.parametrize("by", ["cplat spec test-diff", "cplat component build merge", "cplat issue triage", "cplat resource restore",
+@pytest.mark.parametrize("by", ["cplat spec test-diff", "cplat component build merge", "cplat issue triage", "cplat resource restore",  # interface: enforcement keys the rules check resolves
                                 "cplat platform pr-check", "cplat platform rules check", "cplat pr open", "ci:security", "ci:dco",
                                 "ci:tmpl-build"])
 def test_a_cplat_command_or_ci_job_is_an_enforcement_ac_168_4(tmp_path, by):  # AC-168.4
@@ -398,7 +398,7 @@ def test_a_hard_rule_without_the_marker_fails_ac_168_5(tmp_path):  # AC-168.5
     body = GOOD_BODY.replace("**Hard rule:** ", "")
     root = good_repo(tmp_path, body)
     f = only(check(root), "no-marker")
-    assert fv(f, "file") == PROMPT and fv(f, "line") == line_of(root, PROMPT, "never file an issue")
+    assert fv(f, "file") == PROMPT and fv(f, "line") == line_of(root, PROMPT, "never file an issue")  # interface: fixture rule text the check locates
 
 
 def test_a_marker_on_a_rule_that_is_not_hard_fails_ac_168_5(tmp_path):  # AC-168.5

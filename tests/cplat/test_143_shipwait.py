@@ -199,4 +199,4 @@ def test_next_wait_counts_toward_the_system_ship_run_ac_143_10(sw, tick):  # AC-
     tick.script = [lambda: sw.ship_state("shop-api")]
     assert next_wait(sw).rc == 0
     rec = runs.active(st["run_id"])
-    assert rec["waiting_s"] > 0 and rec["waits"][-1]["wait"] == "system ship next --wait"
+    assert rec["waiting_s"] > 0 and rec["waits"][-1]["wait"] == "system ship next --wait"  # interface: wait name recorded in the run

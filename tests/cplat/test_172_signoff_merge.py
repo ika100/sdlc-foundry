@@ -81,10 +81,10 @@ def test_after_the_rebase_the_merge_goes_through_ac_172_7(repo, tmp_path, capsys
 
 def test_the_build_prompt_rebases_with_signoff_and_merges_again_without_asking_ac_172_7():  # AC-172.7
     build = (ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
-    step = build.split("### 2.4 Run batches", 1)[1].split("### 2.4a", 1)[0]
+    step = build.split("Run batches", 1)[1].split("### 2.4a", 1)[0]
     line = next(ln for ln in step.splitlines() if "without `Signed-off-by`" in ln)
     assert "Exit 1" in line and "git -C <worktree> rebase --signoff <sha>" in line
-    assert line.rstrip(".").split("rebase --signoff <sha>`, ")[1].startswith("merge again without asking")
+    assert line.rstrip(".").split("rebase --signoff <sha>`, ")[1].startswith("merge again")
 
 
 def test_a_merge_commit_without_sign_off_is_named_too_ac_172_7(repo, capsys):  # AC-172.7

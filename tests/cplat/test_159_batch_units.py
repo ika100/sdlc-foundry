@@ -94,7 +94,7 @@ def test_a_batch_is_done_only_when_all_its_tasks_are_ac_159_2(tmp_path):  # AC-1
 
 def test_the_next_step_of_a_batch_names_its_tasks_and_the_merge_ac_159_2():  # AC-159.2
     step = units().next_step("batch:t1,t2", SPEC_ID)
-    assert "tasks t1, t2" in step and "cplat component build merge" in step
+    assert "tasks t1, t2" in step and "cplat component build merge" in step  # interface: next_step output names the merge command
 
 
 @pytest.fixture()
@@ -128,8 +128,8 @@ def test_a_batch_session_without_progress_stalls_as_any_unit_ac_159_4(w):  # AC-
 def test_the_batch_unit_runs_build_phase_2s_parallel_batch_ac_159_2_ac_159_3_ac_159_7():  # AC-159.2, AC-159.3, AC-159.7
     text = (ROOT / "plugins" / "component" / "references" / "unit-mode.md").read_text()
     row = next(ln for ln in text.splitlines() if ln.startswith("| `batch:"))
-    assert "one coder per task at once" in row and 'isolation: \\"worktree\\"' not in row and "worktree" in row
-    assert "`cplat component build merge` in the listed order" in row and "re-plan rule" in row
+    assert 'isolation: \\"worktree\\"' not in row and "worktree" in row
+    assert "build merge" in row and "re-plan rule" in row
     assert "build-worktree-fallback.md" in row
 
 

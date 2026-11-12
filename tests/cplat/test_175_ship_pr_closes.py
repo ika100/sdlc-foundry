@@ -54,7 +54,7 @@ def nothing_done(w):
 
 def test_the_placeholder_becomes_the_tracked_and_commit_issues_ascending_ac_175_4(world, fake):  # AC-175.4
     tracks(world, "[30, 12]")
-    world.body.write_text("## Related issues\n\n{{CLOSES}}\n")
+    world.body.write_text("## Related issues\n\n{{CLOSES}}\n")  # interface: PR body placeholder cplat fills
     assert world.pr() == 0
     body = sent_body(world)
     assert "{{CLOSES}}" not in body
@@ -78,7 +78,7 @@ def test_the_lines_are_those_pr_open_writes_for_the_branch_ac_175_4(world, fake,
 def test_no_open_issue_gives_na_ac_175_4(world, fake):  # AC-175.4
     fake.open_issues = set()
     tracks(world, "[30, 12]")
-    world.body.write_text("## Related issues\n\n{{CLOSES}}\n")
+    world.body.write_text("## Related issues\n\n{{CLOSES}}\n")  # interface: PR body placeholder cplat fills
     assert world.pr() == 0
     body = sent_body(world)
     assert "{{CLOSES}}" not in body and closes_lines(body) == [] and re.search(r"^N/A$", body, re.M)
