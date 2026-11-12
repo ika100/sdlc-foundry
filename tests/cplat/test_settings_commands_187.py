@@ -39,7 +39,9 @@ def fake_pr(monkeypatch):
 
 
 def committed_files(repo):
-    return [ln for ln in git(repo, "show", "--name-only", "--format=", "HEAD").splitlines() if ln]
+    """The files the PR's commit holds: with `gitops.open_pr` faked nothing is committed, so these are the working-tree
+    changes `open_pr` would stage (it commits every change under the generated folders and refuses any other)."""
+    return [ln[3:] for ln in git(repo, "status", "--porcelain", "--untracked-files=all").splitlines() if ln]
 
 
 # ---------------- AC-187.1: system set --observability lgtm ----------------
@@ -73,7 +75,7 @@ def test_pr_opens_one_pull_request_with_only_generated_changes_ac_187_1(tmp_path
     assert run("system", "set", "--env", "dev", "--observability", "lgtm", "--pr", "--repo-dir", repo) == 0
     assert len(seen) == 1 and seen[0][0] == "system/set-dev"
     changed = committed_files(repo)
-    assert f"{APP}/system.yaml" in changed and all(f.startswith(f"{APP}/") for f in changed)
+    assert f"{APP}/system.yaml" in changed and all(f.split("/")[0] in gitops.GENERATED for f in changed)
 
 
 # ---------------- AC-187.2: none and off ----------------
@@ -168,7 +170,7 @@ def test_backup_pr_opens_one_pull_request_with_only_generated_changes_ac_187_4(t
     assert backup(repo, "--to", "backups", "--pr") == 0
     assert len(seen) == 1 and seen[0][0].startswith("resource/backup-")
     changed = committed_files(repo)
-    assert f"{APP}/system.yaml" in changed and all(f.startswith(f"{APP}/") for f in changed)
+    assert f"{APP}/system.yaml" in changed and all(f.split("/")[0] in gitops.GENERATED for f in changed)
 
 
 # ---------------- AC-187.5: change some values, turn off ----------------
@@ -177,6 +179,7 @@ def test_only_the_given_values_change_ac_187_5(tmp_path):  # AC-187.5
     repo = backup_repo(tmp_path, dbb={"dev": {"to": "backups", "schedule": "30 2 * * *", "retention": "8w"}})
     assert backup(repo, "--retention", "14d") == 0
     assert bk(repo) == {"to": "backups", "schedule": "30 2 * * *", "retention": "14d"}
+    git(repo, "commit", "-qam", "retention")          # the first change is reviewed and merged: the clone is clean again
     assert backup(repo, "--schedule", "0 4 * * *") == 0
     assert bk(repo) == {"to": "backups", "schedule": "0 4 * * *", "retention": "14d"}
 
