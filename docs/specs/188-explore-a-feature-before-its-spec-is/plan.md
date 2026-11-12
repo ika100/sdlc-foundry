@@ -59,6 +59,7 @@ tasks:
     covers: [AC-188.10, AC-188.12]
     parallel_safe: true
     depends_on: [t4]
+    done: true
   - id: t9
     title: Docs, changelog fragment and plugin versions
     files: [plugins/component/README.md, plugins/system/README.md, plugins/issue/README.md, docs/AGENTS.md, docs/changelog.d/662-explore-before-the-spec.added.md, .claude-plugin/marketplace.json, plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, plugins/svc/.claude-plugin/plugin.json, plugins/issue/.claude-plugin/plugin.json]
