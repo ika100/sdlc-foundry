@@ -34,6 +34,10 @@ rules:
     text: "never leaves the old one active: it is marked `superseded by` it (Amending in the format reference), because the old behaviour stops being counted"
     class: practice
     source: "#477"
+  - id: R12
+    text: "and write no criterion or assumption for it, because the user must rule between the two first"
+    class: practice
+    source: spec 188
   - id: R8
     text: "Do not invent another format."
     class: retired
