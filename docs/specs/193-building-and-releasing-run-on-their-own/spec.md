@@ -1,7 +1,7 @@
 ---
 spec_id: 193-building-and-releasing-run-on-their-own
 title: Building and releasing run on their own and interrupt only to ask
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -77,3 +77,4 @@ None.
 
 - 2026-11-12 created
 - 2026-11-12 open questions answered by the user: an answer re-approves when it only adds the asked point; a reached budget may be raised for today after confirmation
+- 2026-11-12 approved
