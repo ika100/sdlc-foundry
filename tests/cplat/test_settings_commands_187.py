@@ -117,6 +117,7 @@ def test_lgtm_with_export_to_is_refused_ac_187_3(tmp_path, capsys):  # AC-187.3
     before = files(repo)
     rc, _, err = run("system", "set", "--env", "dev", "--observability", "lgtm", "--repo-dir", repo, capsys=capsys)
     assert rc == 1 and "environments.dev.observability.exportTo" in err
+    assert "ui lgtm and exportTo exclude each other" in err
     assert files(repo) == before
 
 
@@ -194,56 +195,61 @@ def test_off_removes_the_backup_and_says_the_bucket_keeps_the_backups_ac_187_5(t
 
 # ---------------- AC-187.6: refusals ----------------
 
-def refused(repo, capsys, *args, env="dev", db_name="orders-db", names=()):
+BK = "resources.orders-db.instances.dev.backup"
+
+
+def refused(repo, capsys, *args, env="dev", db_name="orders-db", names=(), key=None):
     before = files(repo)
     rc, _, err = run("resource", "backup", db_name, "--env", env, "--repo-dir", repo, *args, capsys=capsys)
     assert rc == 1 and "fix:" in err
+    if key:
+        assert key in err, key
     for n in names:
         assert n in err, n
     assert files(repo) == before
 
 
 def test_a_target_that_is_not_a_bucket_lists_the_buckets_ac_187_6(tmp_path, capsys):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--to", "orders-db", names=("backups",))
+    refused(backup_repo(tmp_path), capsys, "--to", "orders-db", names=("backups",), key=BK + ".to")
 
 
 def test_an_unknown_bucket_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--to", "nope", names=("nope", "backups"))
+    refused(backup_repo(tmp_path), capsys, "--to", "nope", names=("nope", "backups"), key=BK + ".to")
 
 
 def test_a_resource_that_is_not_a_database_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--to", "backups", db_name="backups", names=("backups", "database"))
+    refused(backup_repo(tmp_path), capsys, "--to", "backups", db_name="backups", names=("backups", "database"), key="resources.backups")
 
 
 def test_an_external_database_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
     repo = backup_repo(tmp_path, db_kw={"instances": {"prod": {"external": True}}})
-    refused(repo, capsys, "--to", "backups", env="prod", names=("provider",))
+    refused(repo, capsys, "--to", "backups", env="prod", names=("provider",), key="resources.orders-db.instances.prod")
 
 
 def test_an_unknown_environment_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--to", "backups", env="qa", names=("qa", "dev"))
+    refused(backup_repo(tmp_path), capsys, "--to", "backups", env="qa", names=("qa", "dev"), key="environments.qa")
 
 
 @pytest.mark.parametrize("cron", ["0 3 * *", "every day", "0 3 * * * *"])
 def test_a_schedule_that_is_not_five_field_cron_is_refused_ac_187_6(tmp_path, capsys, cron):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--to", "backups", "--schedule", cron, names=("schedule",))
+    refused(backup_repo(tmp_path), capsys, "--to", "backups", "--schedule", cron, names=("schedule",), key=BK + ".schedule")
 
 
 @pytest.mark.parametrize("ret", ["0d", "30", "3m", "-1d", "d"])
 def test_a_retention_that_is_not_n_days_or_weeks_is_refused_ac_187_6(tmp_path, capsys, ret):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--to", "backups", "--retention", ret, names=("retention",))
+    refused(backup_repo(tmp_path), capsys, "--to", "backups", "--retention", ret, names=("retention",), key=BK + ".retention")
 
 
 def test_schedule_without_to_on_an_instance_without_backup_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--schedule", "0 4 * * *", names=("--to",))
+    refused(backup_repo(tmp_path), capsys, "--schedule", "0 4 * * *", names=("--to",), key=BK)
 
 
 def test_off_without_a_backup_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--off", names=("backup",))
+    refused(backup_repo(tmp_path), capsys, "--off", names=("backup",), key=BK)
 
 
 def test_off_with_another_option_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
-    refused(backup_repo(tmp_path, dbb={"dev": DEFAULTS}), capsys, "--off", "--retention", "7d", names=("--off",))
+    refused(backup_repo(tmp_path, dbb={"dev": DEFAULTS}), capsys, "--off", "--retention", "7d", names=("--off",), key=BK)
 
 
 def test_a_failed_render_restores_the_files_ac_187_6(tmp_path, monkeypatch, capsys):  # AC-187.6
@@ -251,11 +257,12 @@ def test_a_failed_render_restores_the_files_ac_187_6(tmp_path, monkeypatch, caps
     before = files(repo)
 
     def broken(_repo):
-        raise PlatformError("render failed: boom")
+        raise PlatformError(f"render failed: {BK}: boom")  # the render names the key; the command passes it on
 
     monkeypatch.setattr(gitops, "render", broken)
     rc, _, err = run("resource", "backup", "orders-db", "--env", "dev", "--to", "backups", "--repo-dir", repo, capsys=capsys)
-    assert rc == 1 and "render failed: boom" in err
+    assert rc == 1 and f"render failed: {BK}: boom" in err and "fix:" in err
+    assert BK in err
     assert files(repo) == before
 
 
@@ -297,4 +304,5 @@ def test_system_set_usage_line_names_the_observability_option_ac_187_8():  # AC-
 def test_resource_add_points_to_resource_backup_ac_187_8():  # AC-187.8
     _, text = front("plugins/resource/commands/add.md")
     assert "/resource:backup" in text and "--to <bucket>" in text
-    assert not re.search(r"(?i)backups? (is|are) not provided", text)
+    assert re.search(r"(?i)PITR and pooling are not provided", text)
+    assert not re.search(r"(?i)\bno backups\b|backups? (is|are) not provided", text)
