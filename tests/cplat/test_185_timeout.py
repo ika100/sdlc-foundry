@@ -58,8 +58,8 @@ def test_a_test_over_the_limit_fails_with_id_limit_and_stack_and_the_others_run_
     assert re.search(r"FAILED test_hang\.py::test_hang\b", out), out
     assert re.search(r"Timeout \(>1\.0s\)", out), out                  # the limit it was stopped at
     assert "test_hang.py:" in out and "ev.wait(" in out, out           # the stack where it was stopped
-    assert re.search(r"test_hang\.py::test_ok_before\s+PASSED|test_ok_before\s+PASSED", out), out
-    assert re.search(r"test_ok_after\s+PASSED", out), out              # the other tests still ran and reported
+    assert re.search(r"test_hang\.py::test_ok_before\s+PASSED|test_ok_before\s+PASSED|PASSED\s+test_hang\.py::test_ok_before", out), out   # serial or xdist -v
+    assert re.search(r"test_ok_after\s+PASSED|PASSED\s+test_hang\.py::test_ok_after", out), out   # the other tests still ran and reported
     assert "2 passed, 1 failed" in out or "1 failed, 2 passed" in out, out
 
 
