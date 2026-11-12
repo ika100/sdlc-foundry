@@ -550,6 +550,7 @@ def test_a_bad_env_is_refused_ac_121_9(fake, capsys):  # AC-121.9
 def test_a_dirty_tree_is_refused_with_the_clean_tree_text_ac_121_9(fake, capsys):  # AC-121.9
     backed_up(fake.kube)
     (fake.repo / "notes.txt").write_text("x")
+    # interface: the refusal text cplat prints
     err = refused(fake, capsys, args(fake, "orders-db", "--to", "17"), "the working tree has uncommitted changes")
     assert fake.prs() == []
 

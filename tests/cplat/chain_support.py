@@ -81,6 +81,7 @@ def verification_text(rows, *, commit, result="pass", cols=5, header=True) -> st
         head = "| Criterion | Verdict | Evidence |\n|---|---|---|\n"
         body = "".join(f"| {c} | {v} | `tests/test_demo.py` |\n" for c, v in rows)
     else:
+        # interface: the verification table header code writes and reads
         head = "| Criterion | Verdict | Tests | Implementation | Notes |\n|---|---|---|---|---|\n"
         body = "".join(f"| {c} | {v} | `tests/test_demo.py` | `src/feature.py` | note |\n" for c, v in rows)
     return f"# Verification — 901\n\n**Result:** {result}\n**Commit:** {commit} · **Base:** 0000000\n\n{head if header else ''}{body}"

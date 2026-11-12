@@ -101,6 +101,7 @@ REFUSED = [
 FINE = [
     f"git push -u origin {B}", f"git push origin {B}", "git push origin feature/x-fix", "git push origin feature/domain",
     "git push origin feature/main-page", "git commit -s -m 'fix: x'", "gh pr create --base main --head feature/x --title t --body-file .pr-body.md",
+    # interface: a command the guard must allow
     "cplat component ship land", "git switch -c feature/x-force-field",
 ]
 

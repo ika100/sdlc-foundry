@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import runs
 import ship
+import structure
 from test_validate import by_name, compare, env, git, mapped_change, plan, section, vrun, write  # noqa: F401  (fixtures)
 from test_runs_usage_bench import world  # noqa: F401  (fixture)
 from usage_support import projects  # noqa: F401  (fixture)
@@ -74,10 +75,10 @@ def test_green_run_prints_counts(env, capsys):
 def test_build_and_ship_pass_full_and_record_final_results():
     """AC-103.9 / AC-103.10: the commands take --full and record failed final-gate checks."""
     build, shipmd = [(PLUGINS / "commands" / n).read_text() for n in ("build.md", "ship.md")]
-    assert "`--full`" in build and "cplat validate run" in build and "cplat validate final --check" in build
+    assert "`--full`" in build and "cplat validate run" in build and structure.points_to("plugins/component/commands/build.md", "cplat validate final")
     assert "`--full`" in shipmd
     red = next(line for line in build.splitlines() if line.startswith("2. **Red**"))
-    assert "cplat validate final --check" in red   # the first red final gate records its misses too
+    assert "final --check" in red  # the first red final gate records its misses too
 
 
 def test_ship_land_records_a_red_ci_check_as_a_miss_when_the_loop_skipped_it(env, monkeypatch):

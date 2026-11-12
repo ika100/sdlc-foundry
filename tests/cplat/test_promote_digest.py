@@ -251,6 +251,7 @@ def test_staging_promotion_makes_no_digest_check(gitops_repo, gh, reg, ev, capsy
     """AC-106.6: dev to staging is unchanged, no digest lookup."""
     composed(gitops_repo, "todo-api")
     rc, out = attempt(["todo-api", "--to", "staging", "--repo-dir", str(gitops_repo)], capsys)
+    # interface: the warning line promote prints
     assert rc == 0 and reg.calls == [] and "image identity not verified" not in out
 
 

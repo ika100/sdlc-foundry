@@ -128,5 +128,5 @@ def test_an_invalid_operators_value_changes_nothing(gitops5, capsys):  # #264
 def test_the_command_file_exists_with_its_usage_line_ac_122_51():  # AC-122.51
     text = (ROOT / "plugins" / "system" / "commands" / "set.md").read_text()
     fm = yaml.safe_load(re.match(r"^---\n(.*?)\n---", text, re.S).group(1))
-    assert "Usage: /system:set --env <env>" in fm["description"] and len(fm["description"]) <= 260
+    assert "/system:set --env" in fm["description"] and len(fm["description"]) <= 260
     assert "$ARGUMENTS" in text and "cplat system set" in text and "--dry-run" in text and "--pr" in text

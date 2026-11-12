@@ -271,6 +271,7 @@ class Fake2(Fake):
 @pytest.fixture()
 def pro(tmp_path, monkeypatch):
     (tmp_path / ".git").mkdir()
+    # interface: the PR body template cplat fills in
     (tmp_path / ".git" / "PR_BODY.md").write_text("## Related issues\n\n{{CLOSES}}\n")
     (tmp_path / ".platform-settings.yml").write_text("shape: platform\n")
     fake = Fake2(tmp_path)

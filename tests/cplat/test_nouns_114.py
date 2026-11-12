@@ -453,6 +453,7 @@ def test_doctor_warns_while_the_old_plugins_are_enabled_ac_114_39(tmp_path, monk
     checks = doctor_checks(repo, monkeypatch, tmp_path / "home")
     c = checks["plugins (4.x)"]
     assert c["status"] == "warn" and "app@sdlc-foundry" in c["detail"] and "gitops@sdlc-foundry" in c["detail"] and "tombstones" in c["detail"]
+    # interface: the fix hint doctor prints
     assert c["fix"] == "cplat platform update --migrate"
 
 
@@ -460,6 +461,7 @@ def test_doctor_warns_while_the_old_files_exist_ac_114_39(tmp_path, monkeypatch)
     write_old(tmp_path / "r")
     checks = doctor_checks(tmp_path / "r", monkeypatch, tmp_path / "home")
     c = checks["system.yaml"]
+    # interface: the fix hint doctor prints
     assert c["status"] == "warn" and "app.yaml" in c["detail"] and "services.yaml" in c["detail"] and c["fix"] == "cplat platform update --migrate"
 
 

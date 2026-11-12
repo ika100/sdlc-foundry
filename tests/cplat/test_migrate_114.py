@@ -379,6 +379,7 @@ def test_update_without_migrate_refuses_naming_the_flag_ac_114_44(old_base, tmp_
     before, head = files(repo), git(repo, "rev-parse", "HEAD")
     rc, out, err = run_cplat("platform", "update", "--repo", str(repo), "--skip-tasks")
     assert rc == 1 and out == ""
+    # interface: the refusal text cplat prints names the flag
     assert "this repo is on platform 4.7.0: 5.0 changes its files and plugins" in err and "cplat platform update --migrate" in err
     assert files(repo) == before and git(repo, "rev-parse", "HEAD") == head
 

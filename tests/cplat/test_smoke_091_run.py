@@ -412,6 +412,7 @@ def test_the_draft_follows_the_convention_ac_091_14(svc, fake, seams, ai):  # AC
     smoke = smoke_mod()
     res = red(svc, fake, seams, ids=("tests/test_b.py::test_two", TEST_ID), output=["boom at line 4", f"TOKEN={SECRET}"])
     draft = smoke.issue_draft(res, **KW)
+    # interface: the command name the issue draft records
     assert (draft.kind, draft.repo, draft.command, draft.phase, draft.shape) == ("smoke", SLUG, "cplat component ship deploy", "deploy", "service-python")
     assert draft.signature == ai.signature("smoke", SLUG, "dev", "\n".join(sorted(["tests/test_b.py::test_two", TEST_ID])))
     assert draft.run_id == KW["run_id"] and draft.names == {}

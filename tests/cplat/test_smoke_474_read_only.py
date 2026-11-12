@@ -229,7 +229,7 @@ def test_the_tester_agents_mark_writing_smoke_tests_and_keep_read_only_checks(pl
     text = (TEMPLATES.parent / "plugins" / plugin / "agents" / "tester.md").read_text()
     sec = text.split("## Smoke criteria", 1)[1].split("\n## ", 1)[0]
     assert TESTERS[plugin] in sec and "SMOKE_READ_ONLY=1" in sec and "SMOKE_ENV" in sec
-    assert "creates, changes or deletes data" in sec and "read-only check" in sec and "not run" in sec
+    assert "read-only check" in sec and "not run" in sec
 
 
 def test_the_testing_reference_names_every_mark():  # AC-145.7

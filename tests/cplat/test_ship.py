@@ -121,6 +121,7 @@ def test_start_resumes_and_refuses_unapproved_specs(repo):
     assert ship.state_path(repo).parent.name == ".git"                              # local, never committed
     ship.finish(repo)
     spec.set_status(spec.find(repo, "7"), "draft", "amend")
+    # interface: the refusal message ship start raises
     with pytest.raises(core.PlatformError, match="only an approved spec"):
         ship.start(repo, "7", True)
 
@@ -240,6 +241,7 @@ def test_an_unfinished_run_blocks_with_the_next_step(repo, monkeypatch):
     ship.start(repo, "7", True)
     ship.set_phase(repo, "land")
     ans = ship.gate(repo, {"session_id": "A", "stop_hook_active": True}, run_tests=False)
+    # interface: the next steps the stop gate prints
     assert ans["decision"] == "block" and "cplat component ship land" in ans["reason"] and "cplat component ship escalate" in ans["reason"]
 
 

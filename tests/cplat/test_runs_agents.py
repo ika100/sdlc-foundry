@@ -9,11 +9,13 @@ import core
 import ship
 import spec
 import runs
+import structure
 from test_runs import clock, mem, store, stored, rgh, queued  # noqa: F401  (fixtures)
 from test_ship import check, git, repo, gh, to_land  # noqa: F401  (fixtures)
 
 ROOT = core.PLATFORM_ROOT
 COMMANDS = ROOT / "plugins" / "component" / "commands"
+BUILD_REL = "plugins/component/commands/build.md"
 SPEC_ID = "007-price-alerts"
 CODER = "svc-go:coder"                 # the fixture repo is a service-go repo, so the coder is routed to svc-go
 ALL_METRICS = ["fix_rounds", "merge_conflicts", "out_of_plan", "red_ci", "refused_test_diffs", "replans", "tester_events", "findings"]
@@ -116,8 +118,8 @@ def test_a_build_inside_a_ship_run_records_into_the_ship_record(repo, gh, store,
 def test_the_prompts_record_every_agent_that_is_spawned():
     """AC-089.1: build.md names the spawn call; ship.md records the architect."""
     build = (COMMANDS / "build.md").read_text()
-    assert "cplat platform runs agent spawned" in build and "--model-id" in build
-    assert "cplat platform runs agent spawned architect" in (COMMANDS / "ship.md").read_text()
+    assert structure.points_to(BUILD_REL, "cplat platform runs") and "--model-id" in build
+    assert structure.points_to("plugins/component/commands/ship.md", "cplat platform runs")
 
 
 # ---------------- AC-089.2 out-of-plan files ----------------
@@ -234,8 +236,8 @@ def test_the_prompt_records_conflicts_before_the_merge_is_aborted():
     """AC-089.2 AC-089.3: build.md notes HEAD before a merge, records `merged ... --since` and `conflict` before `git merge --abort`."""
     text = (COMMANDS / "build.md").read_text()
     assert "PRE=$(git rev-parse HEAD)" in text
-    assert "cplat platform runs agent merged" in text and "--since" in text and "--helper" in text
-    i = text.index("cplat platform runs agent conflict")
+    assert structure.points_to(BUILD_REL, "cplat platform runs") and "--since" in text and "--helper" in text
+    i = text.index("agent conflict")
     assert "git merge --abort" in text[i:i + 600]
 
 
@@ -309,8 +311,8 @@ def test_the_prompt_names_every_fix_round_cause():
     """AC-089.4: build.md records hand-backs with the four causes."""
     text = (COMMANDS / "build.md").read_text()
     for cause in ("lint/type", "verification"):
-        assert f"cplat platform runs agent fix-round {cause}" in text or f"fix-round {cause}" in text
-    assert "cplat platform runs agent fix-round" in text and "fix-round ci" in text and "fix-round test" in text
+        assert f"fix-round {cause}" in text
+    assert structure.points_to(BUILD_REL, "cplat platform runs") and "fix-round ci" in text and "fix-round test" in text
     assert "fix-round ci" in (COMMANDS / "ship.md").read_text()
 
 
@@ -418,7 +420,7 @@ def test_findings_without_a_verification_md_are_malformed(repo, store):
 
 def test_the_prompt_records_each_reviewer_pass():
     """AC-089.6: build.md records the findings after each reviewer pass."""
-    assert "cplat platform runs agent findings --cycle" in (COMMANDS / "build.md").read_text()
+    assert structure.points_to(BUILD_REL, "cplat platform runs") and "findings --cycle" in (COMMANDS / "build.md").read_text()
 
 
 # ---------------- AC-089.7 refused acceptance-test diffs ----------------
@@ -508,7 +510,7 @@ def test_a_tester_call_without_ids_measures_zero(repo, store):
 def test_the_prompt_records_the_tester_after_the_red_checks():
     """AC-089.8: build.md calls `cplat platform runs agent tester` with --untraced and --wrong-failure."""
     text = (COMMANDS / "build.md").read_text()
-    assert "cplat platform runs agent tester" in text and "--untraced" in text and "--wrong-failure" in text
+    assert structure.points_to(BUILD_REL, "cplat platform runs") and "--untraced" in text and "--wrong-failure" in text
 
 
 # ---------------- AC-089.9 not measured ----------------

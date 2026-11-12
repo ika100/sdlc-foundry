@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 # The statement of AC-168.5, verbatim from the contract (design.md, `STATEMENT`).
+# interface: the statement promptrules checks verbatim
 STATEMENT = ("A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated "
              "purpose does not apply, depart from it and name each departure and its reason in one line of your report.")
 MARKER = "**Hard rule:**"
@@ -19,6 +20,7 @@ REGISTER = "docs/rules/register.yml"
 
 R1 = "Always run the tests first, because a red suite hides every later failure."
 R2 = "Never skip the lint step, since the CI lint job refuses it otherwise."
+# interface: the hard rule marker sentence the check detects
 R3 = "**Hard rule:** never file an issue without the user's OK, because the platform repository is public."
 GOOD_BODY = f"{R1}\n\n- {R2}\n\n{R3}\n"
 PROSE = "consent exists only in the user's own words, which no tool can see"
