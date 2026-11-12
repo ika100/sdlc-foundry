@@ -15,7 +15,10 @@ pygments==2.21.0
 pytest==9.2.0
     # via
     #   -r requirements-test.in
+    #   pytest-timeout
     #   pytest-xdist
+pytest-timeout==2.4.0
+    # via -r requirements-test.in
 pytest-xdist==3.8.0
     # via -r requirements-test.in
 pyyaml==6.0.3
