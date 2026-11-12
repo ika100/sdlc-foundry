@@ -110,6 +110,24 @@ def project_owned_patterns(template: str) -> list[str]:
 # repo-owned once they exist, but the skeleton needs them: added when missing, never replaced (CLAUDE.md imports the notes, #239)
 SEEDS = {".secrets.baseline.json", ".claude/project-notes.md"}
 
+# #678: the #420 exclude-lines pattern before it covered the log tailer's `checksum/tailer` (spec 182)
+OLD_GENERATED_LINES = "(checksum/config: "
+NEW_GENERATED_LINES = "(checksum/(config|tailer): "
+
+
+def widen_generated_lines(repo: Path) -> bool:
+    """The repo-owned secrets baseline keeps the #420 pattern of the repo's first render; widen exactly that pattern so the
+    generated `checksum/tailer` line passes the scan too. Nothing else in the file changes. Returns True when it changed."""
+    p = repo / ".secrets.baseline.json"
+    try:
+        text = p.read_text()
+    except OSError:
+        return False
+    if OLD_GENERATED_LINES not in text:
+        return False
+    p.write_text(text.replace(OLD_GENERATED_LINES, NEW_GENERATED_LINES))
+    return True
+
 
 def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
     """copier creates files that do not exist yet even inside `_skip_if_exists` paths. For an update that is wrong: a repo that
@@ -1065,6 +1083,8 @@ def execute(req: dict) -> Report:
         dropped = [d for d in dropped if d not in written]
         if dropped:
             r.did.append(f"left out {len(dropped)} new starter file(s) in project-owned paths (app code, tests, docs): {', '.join(dropped[:4])}{' ...' if len(dropped) > 4 else ''}")
+        if widen_generated_lines(repo):
+            r.did.append("widened the secrets baseline's generated-lines pattern to the log tailer's checksum/tailer (#678)")
         answers = repo / ".copier-answers.yml"
         answers.write_text(re.sub(r"^_src_path:.*$", f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}", answers.read_text(), flags=re.M))
         core.write_stamp(repo, req["shape"], req["ref"])
