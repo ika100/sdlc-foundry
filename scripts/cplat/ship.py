@@ -193,7 +193,7 @@ def describe(st: dict, repo: Path | None = None) -> str:
         lines.append(f"  answer from the system ship: {st['answers'][-1]['text']}")
     if repo is not None:
         lines += units.describe_lines(repo)
-    lines.append(f"next:{next_step(st)}")
+    lines.append(f"next: {next_step(st)}")
     return "\n".join(lines)
 
 
