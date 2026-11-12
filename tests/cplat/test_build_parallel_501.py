@@ -47,7 +47,7 @@ def test_a_task_branch_from_main_is_refused_and_one_from_the_feature_head_merges
 
 def test_a_probe_off_the_feature_head_no_longer_means_sequential():
     text = BUILD.read_text()
-    probe = text.split("### 2.2 Worktree probe", 1)[1].split("### 2.3", 1)[0]
+    probe = text.split("2.2 Worktree", 1)[1].split("### 2.3", 1)[0]
     assert "is fine (#501)" in probe
     assert "cplat component build reset <FEATURE_HEAD>" in text.split("### 2.3", 1)[1].split("### 2.4", 1)[0]
 

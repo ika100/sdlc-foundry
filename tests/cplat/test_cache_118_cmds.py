@@ -484,6 +484,7 @@ def test_the_user_journey_and_the_site_describe_the_cache_ac_118_21():  # AC-118
 def test_the_resource_plugin_docs_describe_the_cache_ac_118_21():  # AC-118.21
     add = (ROOT / "plugins/resource/commands/add.md").read_text()
     assert "--type database|bucket|cache" in add and "Valkey" in add and "SESSIONS_REDIS_URL" in add and "REDIS_URL" in add
+    # interface: the key list the application reads
     assert "url, host, port, password" in add.replace("`", "") or "`url`, `host`, `port`, `password`" in add
     assert "cache" in (ROOT / "plugins/resource/commands/remove.md").read_text()
     readme = (ROOT / "plugins/resource/README.md").read_text()

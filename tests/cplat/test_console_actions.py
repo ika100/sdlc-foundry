@@ -94,6 +94,7 @@ def cf(kind, obj, **args):
     ("approve", APPROVE_OBJ, {"level": "system"}, ["/system:spec approve 013"]),
     ("approve-ship", APPROVE_OBJ, {"budget": "15"}, ["/component:spec approve 013", "/component:ship 013", "cost=15"]),
     ("request-changes", APPROVE_OBJ, {"comment": "Please cap it"}, ["/component:spec --amend 013", "Please cap it"]),
+    # interface: the console command text the agent receives
     ("answer", APPROVE_OBJ, {"answers": "limit: 50 per user"}, ["/component:spec --amend 013", "answers to open questions:", "limit: 50 per user"]),
     ("promote", RELEASE_OBJ, {"to": "prod"}, ["/instance:promote shop-api --to prod --version 1.4.0"]),
     ("more-budget", ESC_OBJ, {"limit": "cost", "value": "30"}, ["/component:ship 011", "cost=30"]),

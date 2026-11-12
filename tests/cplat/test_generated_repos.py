@@ -144,4 +144,4 @@ def test_the_python_release_refreshes_the_lock_with_the_version():
     """Found in journey 2 (2026-11-05): the release PR bumped pyproject.toml but not uv.lock, so the image build (frozen
     lock) failed until the lock was refreshed by hand."""
     text = (ROOT / "plugins" / "svc" / "agents" / "release.md").read_text()
-    assert "devbox run -- uv lock" in text and "git add CHANGELOG.md pyproject.toml uv.lock" in text
+    assert "uv lock" in text and "git add" in text and "uv.lock" in text

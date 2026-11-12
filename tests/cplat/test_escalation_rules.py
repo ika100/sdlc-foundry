@@ -71,7 +71,7 @@ def test_a_git_word_alone_stays_unknown(reason):
 
 def test_a_stated_cause_always_wins():
     """AC-088.17 AC-088.15: `working tree is dirty` with a stated `code` is `code`, source `given`; every allowed cause is `given`."""
-    res = er.resolve("code", "working tree is dirty")
+    res = er.resolve("code", "working tree is dirty")  # interface: classifier input sample
     assert (res.cause, res.source, res.rule) == ("code", "given", None)
     for cause in ALLOWED:
         res = er.resolve(cause, "waiting for approval to create the branch")
@@ -90,6 +90,7 @@ def test_no_rule_yields_platform():
     """AC-088.17: no rule yields `platform`, so a classified escalation is never filed."""
     assert er.RULES and all(r.cause in ("environment", "decision") for r in er.RULES)
     assert [r.name for r in er.RULES] == ["spec-test-conflict", "left-for-review", "git-action-awaits-approval", "dirty-working-tree"]
+    # interface: classifier input samples
     samples = ["waiting for approval to create the branch", "working tree is dirty", "spec/test conflict", "left for the user to review",
                "platform failure: copier render fails", "the platform is broken"]
     assert all(er.resolve(None, s).cause != "platform" for s in samples)
@@ -101,7 +102,7 @@ def test_effective_classifies_an_older_unknown_record_without_cause_source():
     assert (res.cause, res.source, res.rule) == ("environment", "rule", "git-action-awaits-approval")
     res = er.effective({"reason": "needs a decision on rate limits", "cause": "unknown"})
     assert (res.cause, res.source) == ("unknown", "none")
-    res = er.effective({"reason": "working tree is dirty"})                              # no cause at all
+    res = er.effective({"reason": "working tree is dirty"})  # interface: classifier input sample; no cause at all
     assert (res.cause, res.source) == ("environment", "rule")
     res = er.effective({"reason": "spec/test conflict", "cause": "unknown", "cause_source": "none"})   # written under an older table
     assert (res.cause, res.source, res.rule) == ("decision", "rule", "spec-test-conflict")
@@ -109,7 +110,7 @@ def test_effective_classifies_an_older_unknown_record_without_cause_source():
 
 def test_effective_keeps_a_stored_allowed_cause():
     """AC-088.21 AC-088.17: a stored allowed cause is taken as it is, whatever the reason says."""
-    res = er.effective({"reason": "working tree is dirty", "cause": "code"})
+    res = er.effective({"reason": "working tree is dirty", "cause": "code"})  # interface: classifier input sample
     assert (res.cause, res.source, res.rule) == ("code", "given", None)
     res = er.effective({"reason": "x", "cause": "platform", "cause_source": "given"})
     assert (res.cause, res.source) == ("platform", "given")
