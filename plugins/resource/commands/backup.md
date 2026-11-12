@@ -10,7 +10,8 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 cplat resource backup <ARGS>
 ```
 
-1. **Setting option** (`--to`, `--schedule`, `--retention` or `--off`): preview with `--dry-run` and show it verbatim, then run with `--pr` (one PR); do not ask again, because the user asked for it.2. **No option**: run it and relay the output verbatim. It creates one backup now from the cluster of `<env>` and changes nothing in git. Check backups with `/system:status`.
+1. **Setting option** (`--to`, `--schedule`, `--retention` or `--off`): preview with `--dry-run` and show it verbatim, then run with `--pr` (one PR); do not ask again, because the user asked for it.
+2. **No option**: run it and relay the output verbatim. It creates one backup now from the cluster of `<env>` and changes nothing in git. Check backups with `/system:status`.
 
 Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
 
