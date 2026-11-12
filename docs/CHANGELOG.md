@@ -6,6 +6,16 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.19.0] - 2026-11-12
+
+### Changed
+
+**Prompt tests check structure, not sentences, and the prompt size cap has a sanctioned way up (spec 180).** About 67 test files pinned exact sentences of the plugin prompts, so every prompt change broke unrelated tests, and the byte baseline of the rule register could not be raised without a hand edit. `cplat platform rules check` now resolves every link, heading anchor, plugin-root path, `cplat <noun> <verb>` name and slash command a prompt names, and fails a test literal of 4 or more words that occurs in a prompt unless it is marked `# interface: <reason>`; its report counts the targets and the interface pins. The tests assert what a prompt points to (`tests/cplat/structure.py`) and leave behaviour to the eval gate. `cplat platform rules rebaseline --reason "<why>"` raises `baseline.prompt_bytes` only when the eval gate passes for a clean tree and records the raise in `baseline.history`; `cplat platform pr-check` shows it and refuses a raise without its history entry. See [ADR-103](adr/103-prompt-tests-check-structure-not-wording.md) and [the register guide](rules/README.md).
+
+### Fixed
+
+**Turning on observability no longer fails the gitops repo's secrets scan on the log tailer's checksum (#678).** Since 5.18.0 the generated collector carries a `checksum/tailer` annotation for the log tailer, and the secrets scan flagged its 16 hex digits as a secret, because the baseline skipped only `checksum/config`. The baseline's generated-lines pattern now covers both checksums, and `/platform:update` widens exactly that pattern in an existing repo's `.secrets.baseline.json` (the file stays repo-owned; nothing else in it changes). **Action:** run `/platform:update` in each gitops repo that has observability on.
+
 ## [5.18.0] - 2026-11-12
 
 ### Added
