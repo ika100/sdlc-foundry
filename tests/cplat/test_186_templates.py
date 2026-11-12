@@ -52,8 +52,8 @@ def test_a_pull_request_pushes_no_image_ac_186_6(template):  # AC-186.6
     publish = wf["env"]["PUBLISH"]
     assert "github.event_name == 'push'" in publish and "pull_request" not in publish      # a PR run never publishes
     assert needs(wf["jobs"]["docker"]) == []
-    text = (TEMPLATES / template / ".github" / "workflows" / "ci.yml").read_text()
-    assert re.search(r"push-by-digest=true[^\n]*push=\$\{\{ '\{\{' \}\} env\.PUBLISH \{\{ '\}\}' \}\}", text)
+    outs = [str(st["with"]["outputs"]) for st in wf["jobs"]["docker"]["steps"] if "push-by-digest=true" in str(st.get("with", {}).get("outputs", ""))]
+    assert outs and all("push=${{ env.PUBLISH }}" in o for o in outs)
 
 
 # ---------------- AC-186.7: the tags come after every gate ----------------
