@@ -10,18 +10,21 @@ tasks:
     covers: [AC-188.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: explored marker, spec discard, Notes section accepted by spec check
     files: [scripts/cplat/spec.py, scripts/cplat/spec_discard.py]
     covers: [AC-188.5, AC-188.7, AC-188.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Retro section comparing explored and other specs, with the kill rule
     files: [scripts/cplat/retro_explore.py, scripts/cplat/retro.py, scripts/cplat/retro_report.py]
     covers: [AC-188.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: /component:explore and /system:explore commands
     files: [plugins/component/commands/explore.md, plugins/system/commands/explore.md, docs/rules/plugins/component/commands/explore.yml, docs/rules/plugins/system/commands/explore.yml]
