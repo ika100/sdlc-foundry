@@ -31,18 +31,21 @@ tasks:
     covers: [AC-186.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: Unit mode reads a task gone from the plan as merged
     files: [scripts/cplat/units.py]
     covers: [AC-186.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: Restore and discard ask Argo CD for one refresh after the merge
     files: [scripts/cplat/dbrestore.py]
     covers: [AC-186.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: Local Argo CD polls git every 30 seconds
     files: [templates/gitops-app/scripts/local-cluster.sh, templates/cluster-gitops/scripts/local-cluster.sh]
