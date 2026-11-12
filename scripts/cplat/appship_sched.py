@@ -1,6 +1,7 @@
 """`cplat system ship` scheduling (spec 097): which repos start, gate classes and gate evaluation, repo start/result/escalate."""
 from __future__ import annotations
 
+import datetime as dt
 import re
 from pathlib import Path
 
@@ -36,6 +37,7 @@ def next_action(gitops_dir: Path, st: dict) -> dict:
     stopped = bool(st.get("escalated")) or any(_state_of(st, r["id"]) == "escalated" for r in plan)
     running = [r["id"] for r in plan if _state_of(st, r["id"]) == "running"]
     escalated = [r["id"] for r in plan if _state_of(st, r["id"]) == "escalated"]
+    held = [i for i in escalated if st["repos"][i].get("held")]
     room = int(st.get("max") or state.DEFAULT_MAX) - len(running)
     start: list[dict] = []
     blocked: list[dict] = []
@@ -50,8 +52,15 @@ def next_action(gitops_dir: Path, st: dict) -> dict:
             start.append({"id": r["id"], "shape": r.get("shape"), "entry": entry,
                           "clone": str(entry_path(gitops_dir, st["spec"]) if entry else clone_path(gitops_dir, r["id"]))})
             room -= 1
+    answer = None
+    if st["phase"] != "done" and not st.get("escalated"):
+        pick = next((i for i in escalated if i not in held), None)
+        if pick is not None:
+            answer = _answer_object(st["repos"][pick], pick)
     if st["phase"] == "done":
         action = "done"
+    elif answer is not None:
+        action = "answer"
     elif running:
         action = "wait"
     elif start:
@@ -64,7 +73,29 @@ def next_action(gitops_dir: Path, st: dict) -> dict:
         action = "escalate"
     else:
         action = "wait" if not plan else "escalate"
-    return {"phase": st["phase"], "start": start, "running": running, "blocked": blocked, "escalated": escalated, "action": action}
+    out = {"phase": st["phase"], "start": start, "running": running, "blocked": blocked, "escalated": escalated,
+           "held": held, "action": action}
+    if answer is not None:
+        out["answer"] = answer
+    return out
+
+
+def questions_of(reason: str, stored: list | None) -> list[dict]:
+    """Spec 186: the questions of an escalation: the stored ones, else the one a reason ending in `(suggested: ...)` asks."""
+    if isinstance(stored, list) and stored:
+        return stored
+    if re.search(r"\(suggested:[^)]*\)\s*$", reason or ""):
+        q = specmod._question(reason)
+        return [{"text": q["text"], "suggested": q["options"][0] if q["options"] else None}]
+    return []
+
+
+def _answer_object(entry: dict, repo_id: str) -> dict:
+    reason = entry.get("reason") or ""
+    return {"id": repo_id, "cause": entry.get("cause"), "reason": reason,
+            "questions": questions_of(reason, entry.get("questions")),
+            "resume": f"cplat system ship repo resume {repo_id} --answer '<text>'",
+            "hold": f"cplat system ship repo hold {repo_id}"}
 
 
 # ---------------- gate classes ----------------
@@ -194,13 +225,14 @@ def repo_spec_of(gitops_dir: Path, st: dict, repo_id: str, clone: Path) -> str:
     return sp.id
 
 
-def launch(gitops_dir: Path, repo_id: str, starts: int = 1) -> dict:
+def launch(gitops_dir: Path, repo_id: str, starts: int = 1, answer: str | None = None) -> dict:
     """AC-155.1: start the repo's headless `/component:ship` and keep its process in the state (cause environment on failure)."""
     import appship_proc
     st = state.require_state(gitops_dir)
     e = st["repos"][repo_id]
     try:
-        proc = appship_proc.spawn(Path(e["clone"]), e["spec"], gitops_dir, st.get("run_id"), starts)
+        extra = {"answer": answer} if answer is not None else {}
+        proc = appship_proc.spawn(Path(e["clone"]), e["spec"], gitops_dir, st.get("run_id"), starts, **extra)
     except OSError as err:
         escalate_repo(gitops_dir, repo_id, f"the ship session of {repo_id} could not start: {err}", "environment")
         raise PlatformError(f"{repo_id}: the ship session could not start: {err}") from None
@@ -239,13 +271,56 @@ def _session_runs(entry: dict) -> bool:
     return bool((entry.get("proc") or {}).get("pid")) and appship_proc.alive(entry["proc"]["pid"])
 
 
-def escalate_repo(gitops_dir: Path, repo_id: str, reason: str, cause: str | None) -> dict:
+def escalate_repo(gitops_dir: Path, repo_id: str, reason: str, cause: str | None, questions: list[str] | None = None) -> dict:
     final = ship._coerce_cause(cause)[0]
+    parsed = []
+    for text in questions or []:
+        q = specmod._question(text)
+        parsed.append({"text": q["text"], "suggested": q["options"][0] if q["options"] else None})
 
     def change(s: dict) -> None:
         e = s["repos"].setdefault(repo_id, {})
         e.update(state="escalated", reason=reason, cause=final)
+        e.pop("questions", None)
+        if parsed:
+            e["questions"] = parsed
     return state.update(gitops_dir, change)
+
+
+def _escalated_repo(gitops_dir: Path, repo_id: str, what: str, check_run: bool = False) -> None:
+    st = state.require_state(gitops_dir)
+    if not any(r["id"] == repo_id for r in state.plan_repos(gitops_dir, st["spec"])):
+        raise PlatformError(f"'{repo_id}' is not a repo of the plan of {st['spec']}")
+    if check_run and st.get("escalated"):
+        raise PlatformError(f"the run of {st['spec']} is escalated: resume it with /system:ship {st['spec']}")
+    cur = _state_of(st, repo_id)
+    if cur != "escalated":
+        raise PlatformError(f"{repo_id} is {cur}, not escalated: nothing to {what}")
+
+
+def hold_repo(gitops_dir: Path, repo_id: str) -> str:
+    """Spec 186 (AC-186.3): keep the escalated repo for the user; the run escalates once nothing runs."""
+    _escalated_repo(gitops_dir, repo_id, "hold")
+
+    def change(s: dict) -> None:
+        s["repos"][repo_id]["held"] = True
+    st = state.update(gitops_dir, change)
+    return f"{repo_id}: held for you ({st['repos'][repo_id].get('reason')}); the run escalates once nothing runs"
+
+
+def resume_repo(gitops_dir: Path, repo_id: str, answer: str) -> dict:
+    """Spec 186 (AC-186.2): start the escalated repo's ship again in its own session with the user's answer."""
+    _escalated_repo(gitops_dir, repo_id, "resume", check_run=True)
+
+    def change(s: dict) -> None:
+        e = s["repos"][repo_id]
+        e.setdefault("answers", []).append({"at": dt.datetime.now().isoformat(timespec="seconds"), "text": answer,
+                                            "cause": e.get("cause"), "reason": e.get("reason"), "questions": e.get("questions")})
+        e["state"] = "running"
+        for k in ("reason", "cause", "questions", "held"):
+            e.pop(k, None)
+    state.update(gitops_dir, change)
+    return launch(gitops_dir, repo_id, 1, answer=answer)
 
 
 def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, list[str]]:
@@ -307,10 +382,14 @@ def result(gitops_dir: Path, repo_id: str, context: str | None) -> tuple[bool, l
         e.update(gate=gate, spec=sh["spec"], pr=sh.get("pr"), fix_rounds=sh.get("fix_rounds", 0), deployed=sh.get("deployed"),
                  argo=argo, smoke_row=smoke.get("row"), human_steps=list(steps), run_id=sh.get("run_id"),
                  decisions=specmod.decisions(repo_spec.body))          # spec 141: answers taken for the user
+        e.pop("questions", None)
+        e.pop("held", None)
         if outcome[0] == "passed":
             e["state"] = "passed"
         elif sh.get("escalated"):
             e.update(state="escalated", reason=sh["escalated"], cause=sh.get("cause") or "unknown")
+            if sh.get("questions"):
+                e["questions"] = sh["questions"]
         else:
             e.update(state="escalated", reason=outcome[1], cause="environment" if gate != "library" else "decision")
         if sh.get("run_id") and sh["run_id"] not in s.setdefault("ships", []):

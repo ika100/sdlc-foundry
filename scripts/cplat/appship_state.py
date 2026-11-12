@@ -241,6 +241,8 @@ def start(repo: Path, ref: str, max_: int | None = None, context: str | None = N
                 r["state"] = "ready"
                 r.pop("reason", None)
                 r.pop("cause", None)
+                r.pop("held", None)
+                r.pop("questions", None)
         refresh_repos(repo, st)
         if "joint" not in st:
             import appship_joint
@@ -315,7 +317,7 @@ def next_step(st: dict) -> str:
         "plan": f"plan the product unattended (/system:plan {sid}), then `cplat system ship phase publish`",
         "publish": "publish the spec and plan: `cplat system ship publish`",
         "repos": "`cplat system ship next --json`, then start the repos it lists (`cplat system ship repo start <id>`) "
-                 "and read each result (`cplat system ship repo result <id>`); when it answers `land`: `cplat system ship land`",
+                 "and read each result (`cplat system ship repo result <id>`); when it answers `answer`: `cplat system ship repo resume <id> --answer '<text>'` or `repo hold <id>`; when it answers `land`: `cplat system ship land`",
         "complete": "`cplat system ship complete`, print its report, then `cplat system ship finish`",
         "done": "nothing: the run is finished (`cplat system ship finish`)",
     }[st["phase"]]
