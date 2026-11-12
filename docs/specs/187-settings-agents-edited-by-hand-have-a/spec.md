@@ -1,7 +1,7 @@
 ---
 spec_id: 187-settings-agents-edited-by-hand-have-a
 title: Settings agents edited by hand have a command
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -99,3 +99,4 @@ None.
 ## Changelog
 
 - 2026-11-12 created
+- 2026-11-12 approved
