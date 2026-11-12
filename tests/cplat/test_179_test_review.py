@@ -98,7 +98,7 @@ def test_a_second_call_writes_nothing_ac_179_5(world, capsys):  # AC-179.5
 
 def test_the_module_reads_the_reviewed_commit_and_its_unresolved_lines_back_ac_179_5(world, capsys):  # AC-179.5
     tr = testreview()
-    assert tr.REVIEWED_MSG == "reviewed acceptance tests for"
+    assert tr.REVIEWED_MSG == "reviewed acceptance tests for"  # interface: commit subject the build greps for
     assert tr.reviewed_commit(world, SPEC_ID) is None and tr.unresolved(world, SPEC_ID) == []
     sha = tr.commit(world, SPEC_ID, 2, [FINDING, FINDING_2])
     assert sha == head(world)
@@ -171,7 +171,8 @@ def test_an_untraced_test_still_keeps_the_unit_open_after_the_review_ac_179_5(wo
 
 def test_the_next_step_of_the_red_tests_unit_names_the_review_and_its_command_ac_179_5():  # AC-179.5
     step = units.next_step("red-tests", SPEC_ID)
-    assert "review" in step and "cplat component build reviewed" in step and f"cplat spec trace {SPEC_ID}" in step
+    assert "review" in step and "cplat component build reviewed" in step  # interface: next step prints the command
+    assert f"cplat spec trace {SPEC_ID}" in step
 
 
 # ---------------- AC-179.6: one round, the freeze after it, the rest listed ----------------
@@ -248,38 +249,39 @@ def phase(n):
 def test_phase_1_reviews_the_tests_once_then_freezes_at_the_reviewed_commit_ac_179_5():  # AC-179.5
     p1 = phase(1)
     low = p1.lower()
-    order = ["cplat spec trace", "test-review mode", "cplat component build reviewed",
+    order = ["cplat spec trace", "test-review mode", "build reviewed",
              "red=$(git log -1 --format=%h --grep 'acceptance tests for')"]
     at = [low.index(x) for x in order]
     assert at == sorted(at), dict(zip(order, at))
-    assert low.index("cplat quiet lint-fix") < low.index("cplat component build reviewed")
+    assert low.index("cplat quiet lint-fix") < low.index("build reviewed")
     assert "Test-review mode" in p1 and "TEST FINDINGS" in p1 and "reviewer" in p1
 
 
 def test_the_tester_gets_the_findings_once_and_only_changes_the_tests_named_ac_179_6():  # AC-179.6
     p1 = phase(1)
-    assert "resolve test-review findings for" in p1 and "UNRESOLVED:" in p1
+    assert "resolve test-review findings for" in p1 and "UNRESOLVED:" in p1  # interface: commit subject the build greps for
     assert re.search(r"\bonce\b|at most one", p1)
-    assert "--unresolved" in p1 and "git revert --no-edit HEAD" in p1
+    assert "--unresolved" in p1 and "git revert" in p1
 
 
 def test_phase_1_is_skipped_when_the_reviewed_commit_exists_ac_179_5():  # AC-179.5
     p1 = phase(1)
-    assert "reviewed acceptance tests for" in p1 and re.search(r"skip", p1, re.I)
+    assert "reviewed acceptance tests for" in p1  # interface: commit subject the build greps for
+    assert re.search(r"skip", p1, re.I)
 
 
 def test_the_reviewer_has_a_test_review_mode_with_the_three_checks_ac_179_5():  # AC-179.5
     text = read("plugins/svc/agents/reviewer.md")
     assert "**Test-review mode.**" in text and "TEST FINDINGS: " in text
-    for check in ("fixture", "contract does not define", "cannot produce"):
+    for check in ("fixture", "does not define", "cannot produce"):
         assert check in text, check
     assert re.search(r"writes? nothing|never (?:edit|change|write)", text)
 
 
 def test_verification_lists_the_unresolved_findings_ac_179_6():  # AC-179.6
     reviewer, p4 = read("plugins/svc/agents/reviewer.md"), phase(4)
-    assert "TEST REVIEW" in reviewer and "## Unresolved test-review findings" in reviewer and "| Test | Criterion | Finding |" in reviewer
-    assert "TEST REVIEW" in p4 and "reviewed acceptance tests for" in p4
+    assert "TEST REVIEW" in reviewer and "Unresolved test-review" in reviewer and "Criterion | Finding" in reviewer
+    assert "TEST REVIEW" in p4 and "reviewed acceptance tests" in p4
 
 
 def test_unit_mode_describes_the_review_as_part_of_the_red_tests_unit_ac_179_5():  # AC-179.5

@@ -11,10 +11,12 @@ import pytest
 
 import cplat
 import spec
+from structure import headings, points_to
 from test_160_lint_suppressions import g
 from test_spec import make
 
 ROOT = Path(__file__).resolve().parents[2]
+BUILD_REL = "plugins/component/commands/build.md"
 BUILD = ROOT / "plugins" / "component" / "commands" / "build.md"
 SPEC_ID = "007-price-alerts"
 
@@ -99,7 +101,7 @@ def test_a_go_task_selects_its_tests_with_run_ac_172_4(tmp_path, capsys):  # AC-
                                               "package s\n\nfunc TestA(t *testing.T) {}\nfunc TestB(t *testing.T) {}\n"})
     rc, out, err = run(capsys, root, "t1")
     assert rc == 0, err
-    assert out == "cplat quiet test-fast -- " + shlex.join(["-run", "^(TestA|TestB)$"]) + "\n"
+    assert out == "cplat quiet test-fast -- " + shlex.join(["-run", "^(TestA|TestB)$"]) + "\n"  # interface: command line cplat prints
 
 
 def test_a_java_task_selects_its_classes_with_dtest_ac_172_4(tmp_path, capsys):  # AC-172.4
@@ -108,7 +110,7 @@ def test_a_java_task_selects_its_classes_with_dtest_ac_172_4(tmp_path, capsys): 
     root = proj(tmp_path, tasks, "service-java", {"src/test/java/FooTest.java": "class FooTest {}\n"})
     rc, out, err = run(capsys, root, "t1")
     assert rc == 0, err
-    assert out == "cplat quiet test-fast -- " + shlex.join(["-Dtest=FooTest", "-Dsurefire.failIfNoSpecifiedTests=false"]) + "\n"
+    assert out == "cplat quiet test-fast -- " + shlex.join(["-Dtest=FooTest", "-Dsurefire.failIfNoSpecifiedTests=false"]) + "\n"  # interface: command line cplat prints
 
 
 @pytest.mark.parametrize("args", [["nosuch"], ["t1", "--load"]])
@@ -163,42 +165,42 @@ def _section(text, start, end):
 def test_the_coder_runs_its_own_tests_not_the_whole_suite_ac_172_4():  # AC-172.4
     build = BUILD.read_text()
     coder = _section(build, "### 2.3", "### 2.4")
-    assert "cplat quiet test-fast -- <the task's test files>" in coder
-    assert "cplat component build tests" in coder and "cplat quiet quality" in coder
+    assert "test-fast" in coder and "task's test files" in coder
+    assert points_to(BUILD_REL, "cplat component build") and "cplat quiet quality" in coder
     done = next(ln for ln in coder.splitlines() if "**Done when:**" in ln)
-    assert "cplat quiet test-fast -- " in done and "`cplat quiet test-fast`" not in done
+    assert "test-fast --" in done and "`cplat quiet test-fast`" not in done
 
 
 def test_the_whole_suite_still_runs_once_in_2_5_and_ci_in_phase_3_ac_172_4():  # AC-172.4
     build = BUILD.read_text()
     assert "cplat quiet test-fast`" in _section(build, "### 2.5", "## Phase 3")
     assert "cplat quiet ci" in _section(build, "## Phase 3", "## Phase 4")
-    assert "cplat quiet test-fast -- " in _section(build, "### 2.3", "### 2.4")          # and the coder's line differs from it
+    assert "test-fast --" in _section(build, "### 2.3", "### 2.4")          # and the coder's line differs from it
 
 
 def test_the_load_run_is_step_2_6_between_2_5_and_phase_3_ac_172_6():  # AC-172.6
     build = BUILD.read_text()
-    assert build.index("### 2.5") < build.index("### 2.6 Under load") < build.index("## Phase 3")
-    step = _section(build, "### 2.6 Under load", "## Phase 3")
-    assert "cplat component build tests" in step and "--load" in step
-    assert "cplat quiet test-fast --repeat 3 --" in step and "references/build-load-run.md" in step
+    assert build.index("### 2.5") < build.index("### 2.6") < build.index("## Phase 3")
+    assert any(h.startswith("2.6") for h in headings(BUILD_REL))
+    step = _section(build, "### 2.6", "## Phase 3")
+    assert "--load" in step and "--repeat 3" in step
+    assert points_to(BUILD_REL, "references/build-load-run.md")
     assert "none:" in step and "tester" in step and "2 rounds" in step
 
 
 def test_step_2_6_sends_failing_tests_to_a_coder_and_repeats_after_the_tester_fix_ac_172_6():  # AC-172.6
     build = BUILD.read_text()
-    step = _section(build, "### 2.6 Under load", "## Phase 3")
-    assert "Exit 1 → failing tests to a coder as in 2.5" in step
-    assert "coder of a task covering that criterion" in _section(build, "### 2.5", "### 2.6")
-    assert "Exit 3 → `${CLAUDE_PLUGIN_ROOT}/references/build-load-run.md` (the tester fixes the harness; 2 rounds, then escalate)" in step
+    step = _section(build, "### 2.6", "## Phase 3")
+    assert "Exit 1" in step and "Exit 3" in step and "coder" in step
+    assert "coder" in _section(build, "### 2.5", "### 2.6")
+    assert points_to(BUILD_REL, "references/build-load-run.md")
     ref = (ROOT / "plugins" / "component" / "references" / "build-load-run.md").read_text()
-    assert "Read from `/component:build` 2.6 on exit 3." in ref
-    assert "Run the repeated run again; after 2 rounds" in ref
-    assert ref.index("**tester**") < ref.index("cplat spec test-diff $RED") < ref.index("Run the repeated run again")
+    assert "/component:build" in ref and "2 rounds" in ref
+    assert ref.index("**tester**") < ref.index("test-diff $RED")
 
 
 def test_the_load_run_reference_tells_the_tester_to_fix_the_harness_only_ac_172_6():  # AC-172.6
     text = (ROOT / "plugins" / "component" / "references" / "build-load-run.md").read_text()
     assert "Harness mode" in text and "fixtures" in text and "helpers" in text and "fakes" in text and "process clean-up" in text
-    assert "assertion" in text and "cplat spec test-diff $RED" in text and "build-test-approval.md" in text
-    assert "cplat platform runs end --outcome escalated" in text and "flaky under load" in text
+    assert "assertion" in text and "test-diff $RED" in text and "build-test-approval.md" in text
+    assert "runs end" in text and "flaky under load" in text

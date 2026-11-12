@@ -226,7 +226,7 @@ def test_a_gitops_app_with_the_new_pin_dev_runs_joint_ac_144_1(j):  # AC-144.1
     r = j.app("start", SPEC, "--context", "kind-shop")
     assert r.rc == 0, r.out
     assert j.state()["joint"] is True
-    assert "one dev PR per component" not in r.out
+    assert "one dev PR per component" not in r.out  # interface: cplat output line the joint run must not print
 
 
 def test_an_older_gitops_app_keeps_one_pr_per_component_with_one_line_ac_144_1(legacy):  # AC-144.1
@@ -437,6 +437,7 @@ def test_a_red_dev_smoke_escalates_naming_the_component_ac_144_4(j):  # AC-144.4
     assert r.rc == 1
     assert ("shop-api", "dev", "https://shop-api.dev.example.test") in j.smoked       # every component is smoked and reported
     st = j.state()
+    # interface: reason text recorded in the run state
     assert st["repos"]["shop-web"]["state"] == "escalated" and "smoke red in dev" in st["repos"]["shop-web"]["reason"]
     assert st["escalated"].startswith("shop-web") and st["cause"] == "code"
     assert ("acme/shop-web", "dev") in j.filed

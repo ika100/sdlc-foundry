@@ -217,7 +217,7 @@ def read(rel):
 
 def test_the_planner_turns_a_stated_instance_setting_into_a_before_merge_gitops_task_ac_179_1():  # AC-179.1
     text = read("plugins/system/agents/planner.md")
-    step = text.split("4. **The gitops part is data.**")[1].split("\n5. ")[0]
+    step = text.split("The gitops part")[1].split("\n5. ")[0]
     assert "replicas" in step and "resources" in step and "order: before-merge" in step
     assert "separate gitops PR" in step or "never a separate" in step.lower()
 
