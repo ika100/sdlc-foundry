@@ -66,6 +66,7 @@ tasks:
     covers: [AC-188.8]
     parallel_safe: true
     depends_on: [t4]
+    done: true
   - id: t10
     title: ADR for the explore handoff
     files: [docs/adr/README.md, docs/adr/104-explore-hands-its-decisions-to-the-spec-inline.md]
