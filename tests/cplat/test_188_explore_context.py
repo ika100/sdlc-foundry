@@ -10,6 +10,7 @@ import pytest
 
 import cplat
 import waiting
+from system_fixtures import write_system
 
 SPEC = """---
 spec_id: {name}
@@ -168,12 +169,12 @@ def test_context_without_json_prints_sections_ac_188_2(repo, capsys):  # AC-188.
 
 def gitops(root, systems=("shop",)):
     for name in systems:
-        d = root / "applications" / name
-        d.mkdir(parents=True)
+        doc = {"system": name, "owner": "acme", "environments": {"dev": {}},
+               "components": {"api": {"type": "service", "lang": "python", "provides": ["orders"]},
+                              "web": {"type": "website", "lang": "typescript", "consumes": ["orders"]}},
+               "resources": {"db": {"type": "database"}}, "apis": {"orders": {"type": "rest"}}}
+        d = write_system(root, doc, name)
         (d / "applicationset.yaml").write_text("kind: ApplicationSet\n")
-        (d / "system.yaml").write_text(
-            f"system: {name}\nowner: acme\nenvironments: {{dev: {{}}}}\ncomponents:\n  api: {{type: service, lang: python}}\n"
-            "resources:\n  db: {type: postgres}\napis:\n  orders: {type: rest, provider: api, consumers: [web]}\n")
 
 
 def test_a_gitops_app_repo_adds_components_resources_and_apis_ac_188_2(tmp_path, monkeypatch, capsys):  # AC-188.2
@@ -183,8 +184,9 @@ def test_a_gitops_app_repo_adds_components_resources_and_apis_ac_188_2(tmp_path,
     fake_gh(tmp_path, monkeypatch, issues=[])
     data = ok(capsys, root, "zebra")
     assert data["shape"] == "gitops-app" and data["system"] == "shop"
-    assert data["components"] == [{"name": "api", "type": "service", "lang": "python"}]
-    assert data["resources"] == [{"name": "db", "type": "postgres"}]
+    assert data["components"] == [{"name": "api", "type": "service", "lang": "python"},
+                                  {"name": "web", "type": "website", "lang": "typescript"}]
+    assert data["resources"] == [{"name": "db", "type": "database"}]
     assert data["apis"] == [{"name": "orders", "type": "rest", "provider": "api", "consumers": ["web"]}]
 
 

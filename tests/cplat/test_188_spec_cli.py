@@ -80,7 +80,7 @@ def test_check_rejects_an_explored_that_is_not_a_boolean_ac_188_7(repo, capsys):
     assert run(repo, capsys, "check", "177-odd")[0] == 0
 
 
-def test_discard_removes_a_never_committed_draft_ac_188_7(repo, capsys):  # AC-188.7
+def test_discard_removes_a_never_committed_draft_ac_188_9(repo, capsys):  # AC-188.9
     run(repo, capsys, "new", "--no-shape", "--explored", "Fresh feature")
     folder = repo / "docs" / "specs" / "176-fresh-feature"
     assert folder.is_dir()
@@ -89,7 +89,17 @@ def test_discard_removes_a_never_committed_draft_ac_188_7(repo, capsys):  # AC-1
     assert out.strip() == "176-fresh-feature: discarded" and not folder.exists()
 
 
-def test_discard_refuses_a_committed_or_a_non_draft_spec_ac_188_7(repo, capsys):  # AC-188.7
+def test_discard_releases_the_claims_on_the_tracked_issues_ac_188_9(repo, capsys, monkeypatch):  # AC-188.9
+    import claim
+    run(repo, capsys, "new", "--no-shape", "--explored", "--tracks", "5", "Fresh feature")
+    calls = []
+    monkeypatch.setattr(claim, "release", lambda root, issues, reason: calls.append((list(issues), reason)))
+    rc, _, err = run(repo, capsys, "discard", "176-fresh-feature")
+    assert rc == 0, err
+    assert calls == [([5], "discarded: explore first")]
+
+
+def test_discard_refuses_a_committed_or_a_non_draft_spec_ac_188_9(repo, capsys):  # AC-188.9
     rc, out, err = run(repo, capsys, "discard", "175-base")          # a draft, but committed
     assert rc == 1 and (err + out).startswith("ERROR:") and "fix:" in err + out
     assert (repo / "docs" / "specs" / "175-base").is_dir()

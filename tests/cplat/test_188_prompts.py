@@ -91,7 +91,8 @@ def test_the_product_manager_maps_each_decision_kind_ac_188_5():  # AC-188.5
     body = text(PM)
     for pin in ("DECIDED:", "(decided in explore)", "Notes for the architect"):   # interface: the mapping of the contract
         assert pin in body, pin
-    assert "Notes for the architect" in structure.headings(PM) or "Notes for the architect" in body
+    for kind in ("behaviour", "constraint", "hint"):                                # interface: the three decision kinds
+        assert kind in body, kind
 
 
 def test_the_spec_format_and_the_architect_know_notes_and_departures_ac_188_5():  # AC-188.5
@@ -126,7 +127,8 @@ def test_triage_offers_needs_exploring_next_to_spec_fix_and_reply_ac_188_10():  
     body = text(TRIAGE)
     assert "needs exploring" in body or "needs-exploring" in body           # interface: the class name in the table
     assert structure.points_to(TRIAGE, "/component:explore") and structure.points_to(TRIAGE, "/system:explore")
-    assert "#<n>" in body or "#N" in body
+    assert "/component:explore #<n>" in body and "/system:explore #<n>" in body    # interface: the handed-over issue
+    assert "#<n>" in body
     assert "keeps" in body or "stays in the queue" in body                   # interface: it says the issue stays in the queue
 
 
