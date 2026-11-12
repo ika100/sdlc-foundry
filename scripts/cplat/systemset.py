@@ -1,10 +1,11 @@
-"""`system set --env ENV`: change one environment's promote rule, policy, host or operators in system.yaml and render the manifests."""
+"""`system set --env ENV`: change one environment's promote rule, policy, host, operators or observability UI in system.yaml and render the manifests."""
 from __future__ import annotations
 
 import argparse
 import string
 from pathlib import Path
 
+from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 import gitops
@@ -12,6 +13,7 @@ from core import PlatformError, Report
 
 POLICIES = ("audit", "enforce", "off")
 STAGING_PROMOTE = ("after-dev-smoke", "manual")
+OBSERVABILITY = ("lgtm", "none", "off")   # off removes the observability block
 OPERATORS = ("owner", "install")   # owner: the cluster repo installs them (the key is set); install: the system does (no key)
 PLACEHOLDERS = ("component", "system", "env")
 TREES = ("applications", "bootstrap")
@@ -24,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--policy", metavar="POLICY", help="audit|enforce|off")
     p.add_argument("--host", metavar="HOST", help="host template with {component}, {system}, {env}")
     p.add_argument("--operators", metavar="WHO", help="owner (a cluster repo installs the operators) | install (the system does)")
+    p.add_argument("--observability", metavar="VALUE", help="lgtm|none (sets observability.ui) | off (removes the observability block)")
     p.add_argument("--system", help="system name when the repo has several")
     p.add_argument("--repo-dir", default=".", help="the gitops-app repo (default: current directory)")
     p.add_argument("--pr", action="store_true", help="create branch, commit, push and open a pull request")
@@ -50,6 +53,19 @@ def check_policy(env: str, value: str) -> None:
 def check_operators(env: str, value: str) -> None:
     if value not in OPERATORS:
         raise PlatformError(f"environments.{env}.operators: '{value}' is not allowed", hint="allowed: " + ", ".join(OPERATORS))
+
+
+def check_observability(env: str, value: str, block) -> None:
+    key = f"environments.{env}.observability"
+    block = block or {}
+    if value not in OBSERVABILITY:
+        raise PlatformError(f"{key}.ui: '{value}' is not allowed", hint="allowed: " + ", ".join(OBSERVABILITY))
+    if value == "lgtm" and block.get("exportTo"):
+        raise PlatformError(f"{key}.exportTo: ui lgtm and exportTo exclude each other (exportTo is {block['exportTo']})",
+                            hint="remove exportTo from system.yaml first, or keep it with --observability none")
+    others = [str(k) for k in block if k != "ui"]
+    if value == "off" and others:
+        raise PlatformError(f"{key}: off would remove {', '.join(others)}", hint="--observability none (keeps the collector without a UI)")
 
 
 def check_host(env: str, value: str) -> None:
@@ -102,9 +118,9 @@ def main(argv: list[str]) -> int:
     envs = data.get("environments") or {}
     if ns.env not in envs:
         raise PlatformError(f"no environment '{ns.env}' in {app_dir.name}", hint="environments: " + ", ".join(envs))
-    wanted = {k: v for k, v in (("promote", ns.promote), ("policy", ns.policy), ("host", ns.host), ("operators", ns.operators)) if v is not None}
+    wanted = {k: v for k, v in (("promote", ns.promote), ("policy", ns.policy), ("host", ns.host), ("operators", ns.operators), ("observability", ns.observability)) if v is not None}
     if not wanted:
-        raise PlatformError("nothing to change", hint="pass at least one of --promote, --policy, --host, --operators")
+        raise PlatformError("nothing to change", hint="pass at least one of --promote, --policy, --host, --operators, --observability")
     if "promote" in wanted:
         check_promote(ns.env, wanted["promote"])
     if "policy" in wanted:
@@ -113,12 +129,29 @@ def main(argv: list[str]) -> int:
         check_host(ns.env, wanted["host"])
     if "operators" in wanted:
         check_operators(ns.env, wanted["operators"])
+    noop = None
+    if "observability" in wanted:
+        env_conf = envs[ns.env] or {}
+        check_observability(ns.env, wanted["observability"], env_conf.get("observability"))
+        if wanted["observability"] == "off" and "observability" not in env_conf:
+            noop = f"environments.{ns.env}.observability is not set; nothing to remove"
+            del wanted["observability"]
+    if not wanted:
+        r = Report(title=f"system set: {ns.env} ({app_dir.name})")
+        r.did.append(noop or "nothing to change")
+        r.data = {"changed": [], "pr": None}
+        r.emit(ns.dry_run, ns.json)
+        return 0
     if not ns.dry_run:
         gitops.require_clean(repo)
 
     r = Report(title=f"system set: {ns.env} ({app_dir.name})")
+    if noop:
+        r.will_do.append(noop)
     for k, v in wanted.items():
         r.will_do.append(f"remove environments.{ns.env}.operators (the system installs its operators)" if (k, v) == ("operators", "install")
+                         else f"remove environments.{ns.env}.observability" if (k, v) == ("observability", "off")
+                         else f"set environments.{ns.env}.observability.ui to {v}" if k == "observability"
                          else f"set environments.{ns.env}.{k} to {v}")
     r.will_do.append("regenerate ApplicationSets and manifests (render.py)")
     if ns.pr:
@@ -136,6 +169,14 @@ def main(argv: list[str]) -> int:
         if (k, v) == ("operators", "install"):
             conf.pop("operators", None)
             continue
+        if k == "observability":
+            if v == "off":
+                conf.pop("observability", None)
+                continue
+            if conf.get("observability") is None:
+                add_key(conf, "observability", CommentedMap())
+            add_key(conf["observability"], "ui", v)
+            continue
         add_key(conf, k, DoubleQuotedScalarString(v) if k == "policy" and v == "off" else v)    # a bare off is false in YAML 1.1
     gitops.save(app_dir, y, data)
     try:
@@ -144,6 +185,7 @@ def main(argv: list[str]) -> int:
         restore(repo, before)
         raise
     changed = gitops.rendered_changes(repo)
+    r.did.extend(r.will_do[1 if noop else 0:][:len(wanted)])
     r.did.append(f"updated system.yaml and regenerated {len(changed)} file(s)")
     url = None
     if ns.pr:
