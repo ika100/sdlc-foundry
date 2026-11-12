@@ -10,12 +10,14 @@ tasks:
     covers: [AC-185.1, AC-185.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Real-sleep guard for the cplat suite
     files: [tests/cplat/sleepguard.py, tests/cplat/conftest.py, "tests/cplat/test_*.py"]
     covers: [AC-185.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: cplat quiet test-fast gives up after 9 minutes and names running tests
     files: [scripts/cplat/quiet_limit.py, scripts/cplat/test_progress/cplat_test_progress.py, scripts/cplat/quiet.py, scripts/cplat/quiet_repeat.py]
