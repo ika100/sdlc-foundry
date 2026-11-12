@@ -73,18 +73,21 @@ tasks:
     covers: [AC-186.1, AC-186.2, AC-186.3]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t11
     title: Component ship prompt passes questions and applies the system ship's answer
     files: [plugins/component/commands/ship.md, docs/rules/plugins/component/commands/ship.yml]
     covers: [AC-186.1, AC-186.2]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t12
     title: Build merges a task that cannot pass alone; the architect plans them as one
     files: [plugins/component/commands/build.md, plugins/svc/agents/architect.md, docs/rules/plugins/component/commands/build.yml, docs/rules/plugins/svc/agents/architect.yml]
     covers: [AC-186.5]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t13
     title: Release prompt reuses the green CI run through cplat
     files: [plugins/component/commands/release.md, docs/rules/plugins/component/commands/release.yml]
