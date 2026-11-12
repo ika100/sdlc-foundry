@@ -38,12 +38,14 @@ tasks:
     covers: [AC-180.1, AC-180.2, AC-180.3, AC-180.4, AC-180.5, AC-180.6]
     parallel_safe: true
     depends_on: [t1, t2, t3]
+    done: true
   - id: t6
     title: pr-check rule rules-baseline
     files: [scripts/cplat/rules_baseline.py, scripts/cplat/house_rules.py, tests/cplat/test_168_rules_retire_gate.py]
     covers: [AC-180.7]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t7
     title: Rewrite sentence pins in the numbered test files
     files: ["tests/cplat/test_[0-9]*.py"]
