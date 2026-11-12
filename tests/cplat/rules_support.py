@@ -104,6 +104,7 @@ def good_repo(root, body=GOOD_BODY, items=None, hard=HARD, baseline_bytes=10_000
     root.mkdir(parents=True, exist_ok=True)
     add_prompt(root, PROMPT, body, GOOD_ENTRIES if items is None else items)
     put(root, REGISTER, register_text(hard, baseline_bytes))
+    put(root, "docs/a/b/c.md", "# Guide\n")      # the link target some fixture reasons point to
     put(root, ".github/workflows/ci.yml",
         "name: ci\njobs:\n  security:\n    name: security\n    runs-on: ubuntu-latest\n  dco:\n    name: DCO sign-off\n    runs-on: ubuntu-latest\n")
     put(root, "templates/service-python/.github/workflows/ci.yml.jinja",
