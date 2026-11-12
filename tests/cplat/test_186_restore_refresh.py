@@ -29,12 +29,15 @@ def merged_pr(monkeypatch, kube):
     return seen
 
 
+ARGO_KIND = "applications.argoproj.io"   # a kubectl resource kind, compared as a whole argument
+
+
 def annotations(kube):
     return [(i, args) for i, (args, _, _) in enumerate(kube.calls) if "annotate" in args and REFRESH in args]
 
 
 def app_reads(kube, after):
-    return [i for i, (args, _, _) in enumerate(kube.calls) if i > after and args[:1] == ["get"] and "applications.argoproj.io" in " ".join(args)]
+    return [i for i, (args, _, _) in enumerate(kube.calls) if i > after and args[:1] == ["get"] and args.count(ARGO_KIND) > 0]
 
 
 def restore_world(repo, kube, monkeypatch):
@@ -52,7 +55,7 @@ def test_a_restore_asks_argo_cd_once_for_a_refresh_right_after_the_merge_ac_186_
     asked = annotations(kube)
     assert len(asked) == 1, [a for _, a in asked]
     i, args = asked[0]
-    assert APP in args and "applications.argoproj.io" in args and REFRESH in args and "--overwrite" in args and "argocd" in args
+    assert APP in args and args.count(ARGO_KIND) == 1 and REFRESH in args and "--overwrite" in args and "argocd" in args
     assert "hard" not in " ".join(args)                                    # a normal refresh, not a hard one
     assert i >= seen["calls_at_merge"]                                     # after the PR merged, never before
     assert app_reads(kube, i), "the wait for the app's revision goes on after the request"
