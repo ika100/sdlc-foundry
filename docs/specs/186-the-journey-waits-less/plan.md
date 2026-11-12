@@ -108,6 +108,7 @@ tasks:
     covers: [AC-186.2, AC-186.5, AC-186.10]
     parallel_safe: true
     depends_on: [t11, t12, t13, t14]
+    done: true
 ---
 
 # Plan — 186 The journey waits less
