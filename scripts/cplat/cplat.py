@@ -16,7 +16,8 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat component add|set|remove <component…> [--type T] [--lang L] [--expose] [--env K=V] [--instance ENV --replicas N] [--from-k8s] [--pr]
   cplat component ship start|status|phase|pr|land|deploy|wait|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
   cplat component build schedule|merge|tests|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
-  cplat component release target [--json] | wait --commit SHA   /component:release: the commit to tag and the version; main's ci run on it
+  cplat component release target|wait|gates ...   /component:release: the commit to tag and the version; main's ci run on it; the gates
+  cplat plan merge <tN> <tM> [--spec ID] [--reason R]   fold task tN into the later task tM that depends on it (spec 186)
   cplat cluster new <name> [--org O] [--public] | add <owner>/<repo> [--name S] | remove <system>   the cluster repo and the systems it installs
   cplat cluster wait [--refresh] [--timeout S] [--context C]   until the cluster's root applications run main's head (spec 143)
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
@@ -90,7 +91,7 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
 PLUMBING = {
     "shape": "shapecmd", "feedback": "feedback", "model": "modelcmd", "spec": "spec", "pr": "pr", "quiet": "quiet", "validate": "validate",
     "headless": "headless", "deps": "deps", "alerts": "alerts", "budget": "budget", "adopt": "adopt",
-    "needs": "needs", "ui": "ui", "dispatch": "dispatch", "adr": "adrcmd",
+    "needs": "needs", "ui": "ui", "dispatch": "dispatch", "adr": "adrcmd", "plan": "plancmd",
 }
 
 # 4.x top-level name -> its 5.0 form (exit 2, the module is not imported)
