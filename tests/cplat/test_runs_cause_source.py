@@ -48,12 +48,15 @@ def test_a_git_word_alone_is_not_classified(store):
 @pytest.mark.parametrize("cause", ["platform", "code", "decision", "environment"])
 def test_a_stated_cause_has_cause_source_given(store, cause):
     """AC-088.15 AC-088.17: a stated allowed cause is recorded as stated with `cause_source` `given`, even when a rule would match."""
+    # interface: an escalation reason the cause rules match
     esc = escalated(store, "working tree is dirty", cause)
+    # interface: an escalation reason the cause rules match
     assert esc == {"reason": "working tree is dirty", "cause": cause, "cause_source": "given"}
 
 
 def test_a_stated_code_cause_beats_the_dirty_tree_rule(store):
     """AC-088.17: reason `working tree is dirty` with `--cause code` is recorded as `code` with `cause_source` `given`."""
+    # interface: an escalation reason the cause rules match
     esc = escalated(store, "working tree is dirty", "code")
     assert (esc["cause"], esc["cause_source"]) == ("code", "given") and "rule" not in esc
 
@@ -77,6 +80,7 @@ def test_ship_escalate_without_cause_records_the_classified_cause(repo, store):
     assert ship.load_state(repo)["cause"] == "unknown"
 
 
+# interface: escalation reasons the cause rules match
 @pytest.mark.parametrize("reason", ["waiting for approval to create the branch", "working tree is dirty", "spec/test conflict",
                                     "build left open for review"])
 def test_a_classified_escalation_is_never_filed(repo, tr, store, reason):

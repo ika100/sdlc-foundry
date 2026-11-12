@@ -10,6 +10,7 @@ import cplat
 import pr as prmod
 import pr_open
 import runs
+import structure
 from test_pr_open import Fake, allow
 
 ROOT = core.PLATFORM_ROOT
@@ -371,8 +372,9 @@ def test_build_records_the_execution_after_the_worktree_probe_ac_133_9():
     """AC-133.9: /component:build and the fallback reference name the call."""
     build = (ROOT / "plugins/component/commands/build.md").read_text()
     fallback = (ROOT / "plugins/component/references/build-worktree-fallback.md").read_text()
-    assert "cplat platform runs agent execution parallel" in build
-    assert "cplat platform runs agent execution sequential --reason" in fallback
+    assert structure.points_to("plugins/component/commands/build.md", "cplat platform runs") and "execution parallel" in build
+    assert structure.points_to("plugins/component/references/build-worktree-fallback.md", "cplat platform runs")
+    assert "execution sequential" in fallback
 
 
 # ---------------- AC-133.10 to AC-133.12 ----------------

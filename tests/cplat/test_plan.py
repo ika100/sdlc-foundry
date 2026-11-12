@@ -190,6 +190,7 @@ def test_invalid_gitops_operations_are_rejected(spec_repo, ops, msg):
 
 def test_a_new_typed_resource_can_be_declared_and_used_414(spec_repo):
     """#414: a bucket, cache or broker resource passes plan-check when it carries its type."""
+    # interface: the plan op syntax plan-check parses
     ops = ["{resource: files, type: bucket}", "{uses: files, service: shop-api}", "{resource: jobs, type: broker}",
            "{uses: jobs, service: shop-api}"]
     out = check(spec_repo, _with_gitops(ops))

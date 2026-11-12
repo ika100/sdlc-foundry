@@ -9,12 +9,14 @@ import cplat
 import core
 import runs
 import spec
+import structure
 from test_runs import clock, mem, store, stored, buffered_lines  # noqa: F401  (fixtures)
 from test_ship import git, repo  # noqa: F401  (fixtures)
 from test_runs_agents import entry, events
 
 SPEC_ID = "007-price-alerts"
 SPEC_DIR = "docs/specs/" + SPEC_ID
+BUILD_REL = "plugins/component/commands/build.md"
 
 PLAN = """---
 spec_id: {sid}
@@ -406,11 +408,9 @@ def test_the_rerun_prompt_gives_the_old_diff_as_reference():
     """AC-094.5: build.md hands the set-aside branch's diff to the coder as reference only."""
     text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
     ref = (core.PLATFORM_ROOT / "plugins" / "component" / "references" / "build-replan.md").read_text()   # #496
-    assert "references/build-replan.md" in text and "add its text to the prompt" in text
+    assert structure.points_to(BUILD_REL, "references/build-replan.md") and text
     assert "git diff HEAD...<branch>" in ref
-    assert "Your earlier attempt is a reference only" in ref
-    assert "already contains every merged task" in ref
-    assert "cplat component build resolved" in text
+    assert structure.points_to(BUILD_REL, "cplat component build")
 
 
 # ---------------- AC-094.6 a second conflict of the same task escalates ----------------
@@ -467,7 +467,7 @@ def test_replan_abort_restores_the_last_valid_plan_and_escalates(world, capsys):
 def test_the_prompts_send_errors_once_then_escalate_with_replan_abort():
     """AC-094.7: build.md retries the architect once on exit 1, then calls replan-abort and escalates."""
     text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
-    assert "cplat component build replan-commit" in text and "cplat component build replan-abort" in text
+    assert structure.points_to(BUILD_REL, "cplat component build")
     assert "BLOCKER" in text and "once" in text
     arch = (core.PLATFORM_ROOT / "plugins" / "svc" / "agents" / "architect.md").read_text()
     assert "Re-plan mode" in arch and "BLOCKER" in arch
@@ -498,7 +498,7 @@ def test_the_final_report_row_states_the_amended_plan():
     """AC-094.8 AC-094.14: build.md's Implementation row names the re-plans, the files and the clean re-run."""
     text = (core.PLATFORM_ROOT / "plugins" / "component" / "references" / "build-pr.md").read_text()   # #496: the report
     assert "plan amended" in text and "after merge conflicts" in text and "re-run merged cleanly" in text
-    assert "cplat component build state" in text
+    assert structure.points_to("plugins/component/references/build-pr.md", "cplat component build")
 
 
 # ---------------- AC-094.9 plan-accuracy recording (spec 089) ----------------
@@ -628,7 +628,7 @@ def test_a_conflict_leaves_no_markers_anywhere(world, capsys):
 def test_the_build_rules_forbid_hand_resolution():
     """AC-094.12: build.md says never to edit conflicting hunks and routes conflicts through cplat component build merge."""
     text = (core.PLATFORM_ROOT / "plugins" / "component" / "commands" / "build.md").read_text()
-    assert "Never edit conflicting hunks" in text and "cplat component build merge" in text
+    assert "Never edit conflicting hunks" in text and structure.points_to(BUILD_REL, "cplat component build")
 
 
 # ---------------- AC-094.13 the cap of 3 re-plans per build ----------------

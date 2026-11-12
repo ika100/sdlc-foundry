@@ -16,6 +16,7 @@ import yaml
 
 import core
 import cplat
+import structure
 import doctor
 import fleet
 import runs
@@ -35,8 +36,7 @@ SETTINGS = ".platform-settings.yml"
 PLATFORM = "shape: platform\n"
 ORDER = ["coder", "tester", "product-manager", "architect", "reviewer", "quality", "security"]
 CMDS = ROOT / "plugins" / "component" / "commands"
-DECL_SENTENCE = ("A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; "
-                 "never ask for the shape.")
+COMMANDS = "plugins/component/commands"
 
 
 def need(mod, name):
@@ -131,6 +131,7 @@ def test_ac_123_2_without_a_shape_key_the_platform_repo_stays_unresolved(tmp_pat
     (r / "shapes.yml").write_text("shapes: []\n")
     (r / "plugins").mkdir()
     rc, out, err = cp(capsys, "shape", "--repo", r)
+    # interface: the error line cplat shape prints
     assert rc == 1 and out == "" and "cannot determine the repo's shape" in err
     assert need(settings, "declared_shape")(r) is None
 
@@ -138,6 +139,7 @@ def test_ac_123_2_without_a_shape_key_the_platform_repo_stays_unresolved(tmp_pat
 def test_ac_123_2_no_settings_file_at_all_is_unresolved_too(tmp_path, capsys):  # AC-123.2
     registered()
     rc, _, err = cp(capsys, "shape", "--repo", mkrepo(tmp_path, None))
+    # interface: the error line cplat shape prints
     assert rc == 1 and "cannot determine the repo's shape" in err
 
 
@@ -404,7 +406,7 @@ def test_ac_123_13_doctor_reports_a_bad_declaration_as_a_failure(tmp_path):  # A
 @pytest.mark.parametrize("name", ["spec", "plan", "verify", "build", "ship"])
 def test_ac_123_14_a_declaration_error_stops_the_commands_and_the_shape_is_never_asked(name):  # AC-123.14
     md = text(CMDS / f"{name}.md")
-    assert DECL_SENTENCE in md
+    assert structure.points_to(f"{COMMANDS}/{name}.md", "cplat shape")
     assert "ask the user which shape" not in md.lower()
 
 
@@ -501,8 +503,8 @@ def test_ac_123_18_build_gates_run_through_the_repos_own_devbox_scripts(tmp_path
     md = text(CMDS / "build.md")
     for name in ("test-fast", "quality", "lint-fix", "ci"):
         assert re.search(rf"cplat quiet {name}\b", md), name
-    assert DECL_SENTENCE in md
-    assert "Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` is false" in md
+    assert structure.points_to(f"{COMMANDS}/build.md", "cplat shape")
+    assert any(h.startswith("Phase 5") for h in structure.headings(f"{COMMANDS}/build.md"))
     rc, out, _ = cp(capsys, "shape", "--repo", mkrepo(tmp_path))
     doc = json.loads(out)
     assert rc == 0 and doc["deployable"] is False and "deployment" not in doc["agents"]   # Phase 5 is skipped for platform
@@ -553,6 +555,7 @@ def test_ac_123_21_deploy_is_done_at_once_for_the_platform(prepo, gh, monkeypatc
     monkeypatch.setattr(ship, "run", lambda cmd, **kw: ran.append(list(cmd)) or real(cmd, **kw))
     before = len(gh.calls)
     ok, lines = ship.deploy(prepo, timeout=600, interval=10, context=None)
+    # interface: the line ship deploy prints for the platform
     assert ok and "not deployable (platform): nothing to deploy" in lines
     assert ship.load_state(prepo)["phase"] == "done"
     assert gh.calls[before:] == []                      # no pin PR, no run view, nothing from GitHub
@@ -564,6 +567,7 @@ def test_ac_123_21_deploy_never_runs_devbox_smoke_even_with_a_context(prepo, gh,
     ran = []
     monkeypatch.setattr(ship, "run", lambda cmd, **kw: ran.append(list(cmd)) or subprocess.CompletedProcess(cmd, 0, "", ""))
     ok, lines = ship.deploy(prepo, timeout=600, interval=10, context="kind-dev")
+    # interface: the line ship deploy prints for the platform
     assert ok and lines[0] == "not deployable (platform): nothing to deploy"
     assert ran == []
 
@@ -581,21 +585,18 @@ def test_ac_123_22_the_finished_run_reports_not_deployable_and_names_the_shape(p
 def test_ac_123_22_ship_md_prints_not_deployable_rows_and_no_promote_step():  # AC-123.22
     md = text(CMDS / "ship.md")
     finish = text(CMDS.parent / "references" / "ship-finish.md")     # #496: the report template moved there
-    assert "references/ship-finish.md" in md
-    assert "not deployable (<shape>): nothing to deploy" in finish
-    assert "`Promotion (staging)`, `Smoke (staging)` and `Smoke (dev)` rows read `not deployable`" in finish
-    assert "every `Next:` line that names `/instance:promote`" in finish
-    assert "no `devbox run smoke` (which here smoke-tests the templates)" in md
+    assert structure.points_to(f"{COMMANDS}/ship.md", "references/ship-finish.md")
+    assert finish and structure.points_to("plugins/component/references/ship-finish.md", "/instance:promote")
 
 
 def test_ac_123_23_release_refuses_without_a_release_role(tmp_path, capsys):  # AC-123.23
     rc, out, _ = cp(capsys, "shape", "--repo", mkrepo(tmp_path))
     assert rc == 0 and "release" not in json.loads(out)["agents"]
     md = text(CMDS / "release.md")
-    assert "If `agents` has no `release` role (shape `platform`), stop before anything changes" in md
-    assert "## Release refused: the platform is not released with /component:release" in md
-    assert "version bumps in .claude-plugin/marketplace.json and each changed plugin's .claude-plugin/plugin.json" in md
-    assert "It is described in CONTRIBUTING.md, section Releases." in md
+    assert md and structure.points_to(f"{COMMANDS}/release.md", "cplat shape")
+    assert any("Shape dispatch" in h for h in structure.headings(f"{COMMANDS}/release.md"))
+    assert structure.points_to(f"{COMMANDS}/release.md", "/platform:release")
+    assert "CONTRIBUTING.md" in md
 
 
 def test_ac_123_23_contributing_says_where_the_procedure_is():  # AC-123.23

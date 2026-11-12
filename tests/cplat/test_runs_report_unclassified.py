@@ -115,6 +115,7 @@ def test_older_unknown_records_are_counted_under_the_rules_cause():
     old = [erec("o1", {"reason": "waiting for approval to create the branch", "cause": "unknown"}),
            erec("o2", {"reason": "stopped: working tree is dirty"}),
            erec("o3", {"reason": "who knows", "cause": "unknown"}),
+           # interface: an escalation reason the cause rules match
            erec("o4", {"reason": "working tree is dirty", "cause": "code"})]
     agg = agg_of(old)
     assert agg["causes"] == {"environment": 2, "unknown": 1, "code": 1}

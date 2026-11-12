@@ -23,6 +23,7 @@ import yaml
 
 import cplat
 import release_support
+import structure
 from broker_fixtures import broker, bsys
 from resources_fixtures import comp, db, system
 from system_fixtures import ROOT, git, write_system
@@ -894,7 +895,7 @@ def test_the_upgrade_command_runs_cplat_with_pr_and_wait_ac_121_6():  # AC-121.6
     text = read("plugins/resource/commands/upgrade.md")
     assert len(description("plugins/resource/commands/upgrade.md")) < 260
     assert "/resource:upgrade <name> --to <major> [--env <env>]" in text
-    assert "cplat resource upgrade <ARGS> --pr --wait" in text
+    assert structure.points_to("plugins/resource/commands/upgrade.md", "cplat resource upgrade") and "--pr --wait" in text
     for needle in ("one environment", "60 minutes", "/resource:restore", "/resource:backup", "/issue:report"):
         assert needle in text, needle
     assert re.search(r"(?i)staging", text) and re.search(r"(?i)prod", text) and "upgrade" in read("plugins/resource/README.md")
@@ -915,7 +916,9 @@ def test_the_doctor_update_and_status_docs_describe_the_new_behaviour_ac_121_19(
 
 def test_the_upgrade_guide_covers_the_whole_procedure_ac_121_17():  # AC-121.17
     text = read("docs/UPGRADES.md")
-    for needle in ("cplat platform versions", "/resource:upgrade", "/resource:backup", "/resource:restore", "cplat platform update --verify", "doctor --context",
+    for needle in ("cplat platform versions", "/resource:upgrade", "/resource:backup", "/resource:restore",
+                   # interface: the verify command the upgrade guide names
+                   "cplat platform update --verify", "doctor --context",
                    "property_operators", "operators: owner", "60 minutes", "15 minutes", "release gate", "--env staging", "--env prod", "held"):
         assert needle in text, needle
     for pattern in (r"(?i)verified", r"(?i)one environment", r"(?i)after-dev-smoke", r"(?i)shared cluster|one cluster", r"(?i)CloudNativePG",

@@ -82,6 +82,7 @@ class Fake:
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     (tmp_path / ".git").mkdir()
+    # interface: the PR body template cplat fills in
     (tmp_path / ".git" / "PR_BODY.md").write_text("## Related issues\n\n{{CLOSES}}\n")
     fake = Fake(tmp_path)
     monkeypatch.setattr(pr_open, "run", fake)

@@ -158,6 +158,7 @@ def test_ac_126_4_the_first_stop_of_the_owner_is_blocked_with_a_zero_count(repo,
     ans = stop(repo)
     assert ans["decision"] == "block"
     assert ans["reason"].splitlines()[0] == FIRST
+    # interface: the next step the stop gate prints
     assert "Next: " in ans["reason"] and "cplat component ship escalate" in ans["reason"]
     assert ship.load_state(repo)["stop_gate"]["no_progress"] == 0
     assert "blocks" not in ship.load_state(repo)

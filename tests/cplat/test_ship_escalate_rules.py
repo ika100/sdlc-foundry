@@ -57,10 +57,12 @@ def test_escalate_with_a_stated_cause_prints_no_rule_line_and_records_given(repo
     """AC-088.17 AC-088.15: `working tree is dirty` with `--cause code`: no extra line, cause `code`, `cause_source` `given`."""
     ship.start(repo, "7", True)
     capsys.readouterr()
+    # interface: an escalation reason the cause rules match
     assert escalate(repo, "working tree is dirty", "--cause", "code") == 0
     out = capsys.readouterr().out
     assert "classified as" not in out and "cause missing" not in out
     (r,) = stored(store)
+    # interface: an escalation reason the cause rules match
     assert r["escalation"] == {"reason": "working tree is dirty", "cause": "code", "cause_source": "given"}
 
 

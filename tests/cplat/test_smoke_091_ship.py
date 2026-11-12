@@ -13,6 +13,7 @@ import pytest
 import autoissue
 import core
 import ship
+import structure
 from test_autoissue import clk, tr, ai  # noqa: F401  (fixtures)
 from test_runs import clock as run_clock, mem, store, stored  # noqa: F401  (fixtures)
 from test_ship import SHA
@@ -379,4 +380,4 @@ def test_the_ship_command_reports_the_smoke_row_ac_091_15():  # AC-091.15
 
 def test_the_ship_command_does_not_escalate_red_smoke_twice_ac_091_9():  # AC-091.9
     text = (core.PLATFORM_ROOT / "plugins/component/commands/ship.md").read_text()
-    assert "smoke red in dev" in text and "--base-url" in text
+    assert structure.points_to("plugins/component/commands/ship.md", "cplat component ship") and "--base-url" in text

@@ -241,6 +241,7 @@ def test_transitions(tmp_path):
     assert spec.read(s.dir).status == "draft"
 
 
+# interface: a verification file as the spec check reads it
 PASSING = "# Verification — 007 Price alerts\n\n**Result:** pass\n"
 
 
