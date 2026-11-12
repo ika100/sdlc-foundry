@@ -132,6 +132,8 @@ The `/component:release` pipeline adds a second safety net: **Phase 7** scans al
 
 ## Overview
 
+Before the spec, a person can run `/component:explore <topic | #issue>` (`/system:explore` in a gitops-app repo): an optional, read-only conversation with no agent and no unattended caller. It ends in a DECIDED block that `/component:spec` takes as the starting point; nothing is written until the spec.
+
 ```
 /component:spec   ──►  product-manager  ──►  your answers to its open questions  ──►  your approval
                     │
