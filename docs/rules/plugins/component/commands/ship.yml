@@ -31,3 +31,7 @@ rules:
     text: "(always pass the cause, since it decides whether cplat files an issue:"
     class: practice
     source: spec 088
+  - id: R10
+    text: "A decision taken on an escalation that needs code, test or document work becomes a task in the spec's plan before the ship goes on, so that it is carried out and not only recorded."
+    class: practice
+    source: spec 185
