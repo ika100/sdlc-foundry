@@ -129,7 +129,7 @@ def test_a_notes_for_the_architect_section_passes_check_ac_188_5(repo, capsys): 
 
 def test_notes_bullets_are_no_criteria_and_outside_the_hash_ac_188_5(repo):  # AC-188.5
     with_notes = spec_of(repo, NOTES.format(name="177-notes", num="177", title="Notes"))
-    plain = spec.Spec(with_notes.dir, with_notes.meta, with_notes.body.split("## Notes for the architect")[0] + "## Non-goals"
+    plain = spec.Spec(with_notes.dir, with_notes.meta, with_notes.body.split("## Notes for the architect")[0] + "## Non-goals"  # interface: the section heading cplat spec splits on
                       + with_notes.body.split("## Non-goals", 1)[1])
     assert with_notes.active_acs() == ["AC-177.1"] == plain.active_acs()
     assert with_notes.ac_hash() == plain.ac_hash()

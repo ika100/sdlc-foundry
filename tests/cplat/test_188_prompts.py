@@ -45,7 +45,7 @@ def test_the_explore_commands_allow_read_tools_and_read_only_git_only_ac_188_1(r
 @pytest.mark.parametrize("rel", EXPLORE)
 def test_the_explore_commands_say_they_write_nothing_ac_188_1(rel):  # AC-188.1
     body = text(rel).lower()
-    for word in ("write", "edit", "commit"):    # interface: the prompt states the read-only rule in these words
+    for word in ("write", "edit", "commit"):
         assert word in body, word
     assert "nothing" in body
 
@@ -65,25 +65,24 @@ def test_the_decline_rule_names_the_command_that_does_it_ac_188_3(rel, targets):
 @pytest.mark.parametrize("rel", EXPLORE)
 def test_the_running_list_and_the_three_ways_out_ac_188_3(rel):  # AC-188.3
     body = text(rel)
-    # interface: the list format and the three option labels are what the person sees
     for pin in ("Decisions so far (", "Still open:", "[behaviour]", "AskUserQuestion", "spec it", "keep exploring", "stop"):
         assert pin in body, pin
-    assert re.search(r"every 3rd turn", body)   # interface: the cadence of the list
+    assert re.search(r"every 3rd turn", body)
 
 
 @pytest.mark.parametrize("rel,spec_cmd", [(COMPONENT, "/component:spec"), (SYSTEM, "/system:spec")])
 def test_spec_it_hands_over_labelled_decisions_in_a_decided_block_ac_188_4(rel, spec_cmd):  # AC-188.4
     body = text(rel)
     assert structure.points_to(rel, spec_cmd)
-    for pin in ("DECIDED:", "behaviour", "constraint", "hint"):   # interface: the block format is the contract with the spec command
+    for pin in ("DECIDED:", "behaviour", "constraint", "hint"):
         assert pin in body, pin
-    assert "decisions file" in body.lower()     # interface: it says no decisions file is written
+    assert "decisions file" in body.lower()
 
 
 @pytest.mark.parametrize("rel", SPEC_COMMANDS)
 def test_the_spec_commands_read_a_decided_block_and_create_an_explored_spec_ac_188_4(rel):  # AC-188.4
     body = text(rel)
-    for pin in ("DECIDED:", "--explored", "cplat explore context"):   # interface: the mode-B contract
+    for pin in ("DECIDED:", "--explored", "cplat explore context"):
         assert pin in body, pin
 
 
@@ -91,50 +90,50 @@ def test_the_product_manager_maps_each_decision_kind_ac_188_5():  # AC-188.5
     body = text(PM)
     for pin in ("DECIDED:", "(decided in explore)", "Notes for the architect"):   # interface: the mapping of the contract
         assert pin in body, pin
-    for kind in ("behaviour", "constraint", "hint"):                                # interface: the three decision kinds
+    for kind in ("behaviour", "constraint", "hint"):
         assert kind in body, kind
 
 
 def test_the_spec_format_and_the_architect_know_notes_and_departures_ac_188_5():  # AC-188.5
     assert "## Notes for the architect" in text(SPEC_REF)                       # interface: the section heading of the format
     assert "Notes for the architect" in text(ARCHITECT)
-    assert "Departs from note" in text(ARCHITECT) and "Departs from note" in text(DESIGN_REF)   # interface: the design line
+    assert "Departs from note" in text(ARCHITECT) and "Departs from note" in text(DESIGN_REF)
 
 
 def test_a_contradicting_decision_becomes_an_open_question_ac_188_6():  # AC-188.6
     body = text(PM)
-    assert "contradicts" in body and "open question" in body.lower()      # interface: the open-question form of the contract
+    assert "contradicts" in body and "open question" in body.lower()
     assert re.search(r"ADR-<NNN>|accepted ADR", body, re.I) and "AC-<MMM>" in body
     for rel in SPEC_COMMANDS:
-        assert "specs" in text(rel) and "adrs" in text(rel)               # interface: they pass specs + adrs of the context along
+        assert "specs" in text(rel) and "adrs" in text(rel)
 
 
 @pytest.mark.parametrize("rel,cmd", [(SPEC_COMMANDS[0], "/component:explore <topic>"), (SPEC_COMMANDS[1], "/system:explore <topic>")])
 def test_too_ambiguous_a_request_recommends_explore_ac_188_9(rel, cmd):  # AC-188.9
     body = text(rel)
-    assert "explore first" in body and cmd in body and "(Recommended)" in body    # interface: suggested answer and its mapping
+    assert "explore first" in body and cmd in body and "(Recommended)" in body
     assert "cplat spec discard" in body
-    assert "explore first" in text(PM)                                             # interface: the PM's suggested answer
+    assert "explore first" in text(PM)
 
 
 @pytest.mark.parametrize("rel", (PM, ARCHITECT))
 def test_the_unattended_agents_never_name_explore_ac_188_11(rel):  # AC-188.11
-    assert "Notes for the architect" in text(rel)      # the explore change reached this agent (so that this cannot pass before it)
+    assert "Notes for the architect" in text(rel)      # interface: the explore change reached this agent (so that this cannot pass before it)
     assert not NAMES.search(text(rel))
 
 
 def test_triage_offers_needs_exploring_next_to_spec_fix_and_reply_ac_188_10():  # AC-188.10
     body = text(TRIAGE)
-    assert "needs exploring" in body or "needs-exploring" in body           # interface: the class name in the table
+    assert "needs exploring" in body or "needs-exploring" in body
     assert structure.points_to(TRIAGE, "/component:explore") and structure.points_to(TRIAGE, "/system:explore")
-    assert "/component:explore #<n>" in body and "/system:explore #<n>" in body    # interface: the handed-over issue
+    assert "/component:explore #<n>" in body and "/system:explore #<n>" in body
     assert "#<n>" in body
     assert "keeps" in body or "stays in the queue" in body                   # interface: it says the issue stays in the queue
 
 
 @pytest.mark.parametrize("rel", EXPLORE)
 def test_the_explore_commands_say_only_a_person_starts_them_ac_188_11(rel):  # AC-188.11
-    assert "person" in text(rel).lower() and "unattended" in text(rel).lower()   # interface: the person-only statement
+    assert "person" in text(rel).lower() and "unattended" in text(rel).lower()
 
 
 UNATTENDED = ["plugins/component/commands/ship.md", "plugins/component/commands/build.md", "plugins/component/commands/fix.md",
