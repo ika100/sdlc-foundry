@@ -68,6 +68,7 @@ def test_a_unit_that_is_already_complete_is_skipped(planned):  # AC-131.1
     assert planned.units_run() == SEVEN[1:]
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_a_session_that_ends_without_checkpoint_is_named_so_in_the_summary(w):  # AC-131.1
     w.behave({"task:t2": ["die", "ok"]})
     w.run()
@@ -88,12 +89,14 @@ def test_every_unit_gets_its_own_fresh_session_with_its_unit_in_the_environment(
 
 # ---------------- AC-131.3 ----------------
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_a_unit_that_ends_early_is_started_again_from_its_checkpoint_and_done_units_never_repeat(w):  # AC-131.3
     w.behave({"task:t2": ["nothing", "ok"], "red-tests": ["partial", "ok"]})
     assert w.run() == 0
     assert w.units_run() == ["plan", "red-tests", "red-tests", "task:t1", "task:t2", "task:t2", "task:t3", "verification", "land"]
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_a_session_killed_without_a_commit_leaves_the_checkpoints_of_earlier_units(w):  # AC-131.3
     w.behave({"task:t3": ["die", "ok"]})
     w.run()
@@ -103,6 +106,7 @@ def test_a_session_killed_without_a_commit_leaves_the_checkpoints_of_earlier_uni
 
 # ---------------- AC-131.5 ----------------
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_two_sessions_without_a_commit_escalate_instead_of_a_third(w, store, capsys):  # AC-131.5
     w.behave({"task:t2": ["nothing", "nothing", "ok"]})
     assert w.run() == 1
@@ -122,18 +126,21 @@ def test_the_cause_of_the_stall_is_chosen_as_in_126_7(w):  # AC-131.5
     assert st["cause"] == "environment" and st["escalated"].startswith("no progress: unit task:t1 after 2 sessions without a commit")
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_a_cause_without_a_rule_is_a_decision_or_code_never_environment(w):  # AC-131.5
     w.behave({"task:t1": ["nothing", "nothing"]})
     w.run()
     assert ship.load_state(w.repo)["cause"] in {"code", "decision"}
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_sessions_that_add_commits_reset_the_count_and_are_bounded_only_by_the_budget(w):  # AC-131.5
     w.behave({"task:t2": ["partial", "partial", "partial", "partial", "nothing", "ok"]})
     assert w.run() == 0
     assert w.units_run().count("task:t2") == 6
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_a_commit_between_two_idle_sessions_prevents_the_escalation(w):  # AC-131.5
     w.behave({"task:t2": ["nothing", "partial", "nothing", "ok"]})
     assert w.run() == 0

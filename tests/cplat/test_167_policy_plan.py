@@ -121,7 +121,7 @@ def test_plan_lists_every_candidate_once_in_order_with_kind_verdict_mode_and_slo
     assert [c["slot"] for c in ready] == [1, 2, None]               # two slots: the third queues
     held = world.cand(doc, "#4")
     assert held["verdict"] == "held" and held["reason"] == "blocked" and held["slot"] is None
-    assert doc["slots"] == {"total": 2, "running": 0, "free": 2}
+    assert doc["slots"] == {"total": 2, "running": 0, "free": 2, "manual": []}
     assert doc["starts"]["allowed"] is True
     lines = world.run("plan").out.splitlines()
     rows = [re.split(r"\s{2,}", ln.strip()) for ln in lines[next(i for i, ln in enumerate(lines) if ln.startswith("candidates (")) + 1:]

@@ -1,6 +1,8 @@
 """Spec 088 (amendment 2026-10-26): `ship escalate` prints the rule; the stop gate and headless `no progress` name `environment` (AC-088.15, .17, .18)."""
 import subprocess
 
+import pytest
+
 import headless
 import ship
 from test_autoissue import clk, tr, ai  # noqa: F401  (fixtures)
@@ -85,6 +87,7 @@ def test_the_stop_gate_giving_up_records_decision_given(repo, store, monkeypatch
     assert r["filed"] == []
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_headless_no_progress_records_the_rule_cause_given(hl_repo, tmp_path, monkeypatch, store, capsys):
     """AC-126.7: `cplat headless` stopping on `no progress` records the ship escalation and its own with the rule's cause (here `code`: the spec has criteria without a test), `given`."""
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"], cwd=hl_repo, check=True)

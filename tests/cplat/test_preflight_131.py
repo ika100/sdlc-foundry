@@ -64,7 +64,7 @@ def install(w):
 def test_the_run_allowlist_of_a_ship_names_the_branch_commit_push_pr_and_land():  # AC-131.8
     assert pf().run_allowlist("/component:ship", [B]) == [
         f"Bash(git switch {B})", f"Bash(git switch -c {B})", "Bash(git add *)", "Bash(git commit -s *)",
-        f"Bash(git push -u origin {B})", f"Bash(git push origin {B})", "Bash(gh pr create *)",
+        "Bash(git rm *)", f"Bash(git push -u origin {B})", f"Bash(git push origin {B})", "Bash(gh pr create *)",
         "Bash(cplat component ship land)", "Bash(cplat component ship land *)"]
 
 

@@ -633,6 +633,40 @@ def tightening(old: str, new: str, name: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _assert_lines(text: str) -> list[str]:
+    """The trimmed assertion statements' lines: each `_ASSERTS` line plus the lines continuing it until its brackets balance."""
+    out: list[str] = []
+    depth = 0
+    for line in text.splitlines():
+        if depth <= 0 and not _ASSERTS.search(line):
+            continue
+        if depth <= 0:
+            depth = 0
+        out.append(line.strip())
+        depth += sum(line.count(c) for c in "([{") - sum(line.count(c) for c in ")]}")
+    return out
+
+
+def _def_texts(text: str) -> list[str]:
+    return [m.group(0).strip() for rx in _TEST_DEFS for m in rx.finditer(text)]
+
+
+def type_only(old: str, new: str, name: str) -> tuple[bool, str]:
+    """Spec 179 (AC-179.4): only lines that are no test definition, assertion or criterion id differ (annotations, casts, imports)."""
+    from collections import Counter
+    if Counter(AC_ANY.findall(old)) != Counter(AC_ANY.findall(new)):
+        return False, "criterion ids changed"
+    if Counter(_def_texts(old)) != Counter(_def_texts(new)):
+        return False, "test definitions changed"
+    if len(_SKIPS.findall(new)) > len(_SKIPS.findall(old)):
+        return False, "adds a skip"
+    if Counter(_assert_lines(old)) != Counter(_assert_lines(new)):
+        return False, "assertion lines changed"
+    if old == new:
+        return False, "unchanged"
+    return True, ""
+
+
 def frozen_base(root: Path, base: str) -> str:
     """Spec 169: in a unit-mode run the acceptance tests freeze when the `red-tests` unit ends, not at its first
     'acceptance tests for' commit. When `<git dir>/cplat-units.json` records that unit done at a commit that `base` is an
@@ -711,6 +745,8 @@ def test_diff(root: Path, base: str, files: list[str], *, red: str | None = None
     for f, (ok, why) in out.items():          # spec 171 (AC-171.7): a refused file that defines no test is a helper
         if not ok and f in texts and not _test_names(texts[f][0]) and not _test_names(texts[f][1]):
             out[f] = (False, "test helper (defines no test): " + why)
+        elif not ok and f in texts and not why.startswith("adds a ") and type_only(*texts[f], f)[0]:   # spec 179 (AC-179.4)
+            out[f] = (False, "type-only (test definitions, assertion lines and criterion ids unchanged)")
     return out
 
 
@@ -907,6 +943,12 @@ def provided_by_system(app_root: Path, repos: list[dict], repo_id: str) -> list[
                 lines.append(f"- resource `{op['uses']}`" + (f": env {', '.join(f'`{n}`' for n in names)}" if names else ""))
             elif isinstance(op.get("env"), dict) and target == repo_id:
                 lines += [f"- env `{k}={v}`" for k, v in op["env"].items()]
+            elif op.get("replicas") is not None and target == repo_id:       # spec 179
+                lines.append(f"- replicas `{op['replicas']}`" + (f" in `{op['instance']}`" if op.get("instance") else ""))
+            elif isinstance(op.get("resources"), dict) and target == repo_id:
+                pairs = [f"{side}.{k}={v}" for side, vals in op["resources"].items() if isinstance(vals, dict)
+                         for k, v in vals.items()]
+                lines.append(f"- resources `{', '.join(pairs)}`")
             elif op.get("expose") == repo_id:
                 lines.append(f"- exposed through the Gateway at host `{op.get('host') or repo_id}`")
     return lines

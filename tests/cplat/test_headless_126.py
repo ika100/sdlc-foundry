@@ -68,6 +68,7 @@ def sessions(repo):
     return [(sid, rest) for sid, rest in rows]
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_ac_126_2_each_session_gets_cplat_session_id_equal_to_its_session_id_argument(repo, tmp_path, monkeypatch):  # AC-126.2
     ship.start(repo, "7", True)
     fake_claude(tmp_path, monkeypatch, 'echo "$CPLAT_SESSION_ID $*" >> sessions.txt')
@@ -146,6 +147,7 @@ def test_ac_126_7_without_a_rule_or_red_evidence_the_cause_is_a_decision_never_e
     assert "no progress" in st["escalated"] and st["cause"] == "decision"
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_ac_126_7_a_session_that_printed_nothing_has_no_excerpt_and_still_a_cause(repo, tmp_path, monkeypatch):  # AC-126.7
     ship.start(repo, "7", True)
     set_state(repo, phase="pr")

@@ -67,7 +67,7 @@ def test_the_allowlist_is_printed_before_the_first_session(w, capsys):  # AC-131
 
 def test_every_session_gets_exactly_the_run_allowlist_and_the_refused_rules(w):  # AC-131.8 AC-131.10
     assert w.run() == 0
-    rules = pf().run_allowlist("/component:ship", [BRANCH])
+    rules = pf().run_allowlist("/component:ship", [BRANCH], [pf().ci_log_dir(w.repo)])     # spec 184: the saved CI logs are readable
     refused = pf().refused_rules("main")
     assert len(w.sessions()) >= 6
     for s in w.sessions():

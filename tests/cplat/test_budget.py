@@ -666,6 +666,7 @@ def test_an_app_ship_escalation_writes_a_snapshot(w, budget):
     assert "a repo spec asks a question" in snapshot_of(w.gitops)["excerpt"]
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_headless_stops_write_a_snapshot(hl_repo, tmp_path, monkeypatch):
     """AC-102.10: budget, max-runs, max-minutes and no-progress stops of headless each leave the snapshot."""
     gitdir = hl_repo / ".git" / "cplat-recovery.json"

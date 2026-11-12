@@ -57,8 +57,10 @@ def test_rendered_python_templates_pass_ruff_and_mypy(template, tmp_path):
 def test_platform_ci_lints_types_and_tests_the_python_templates():
     """AC-043.3: the platform PR fails when a rendered Python template does not pass ruff, mypy or pytest."""
     job = CI.read_text().split("  smoke-test-templates:", 1)[1].split("\n  smoke-test-gitops-app:", 1)[0]
-    for step in ("uv sync --all-extras", "uv run ruff check .", "uv run ruff format --check .", "uv run mypy src", "uv run pytest -q"):
+    for step in ("uv sync --all-extras", "uv run mypy src", "uv run pytest -q"):
         assert step in job, f"smoke-test-templates does not run `{step}`"
+    # spec 184: ruff check and ruff format --check run through the template lint script (file, line and rule per violation)
+    assert "scripts/template-lint.py" in job, "smoke-test-templates does not lint the rendered template"
 
 
 # ---------------- spec 059: the secrets scan scans ----------------

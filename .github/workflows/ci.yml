@@ -51,9 +51,9 @@ jobs:
           # Markdown too (changelog, specs, ADRs, guides), so a release or docs-only PR still runs them
           code=$(grep -Evq '^(docs/img/|LICENSE$|NOTICE$|\.github/(ISSUE_TEMPLATE/|CODEOWNERS|PULL_REQUEST_TEMPLATE|dependabot))' <<< "$files" && echo true || echo false)
           # the smokes depend on only these repository scripts: detect-shape.sh (run by them), sync-template-copies.py
-          # (the template copies they render) and test-plan.sh (gitops only); cplat and the other checks under scripts/
-          # are covered by the cplat tests and the e2e (#407)
-          shared=$(has '^(scripts/(detect-shape\.sh|sync-template-copies\.py)$|shapes\.yml$|\.github/workflows/ci\.yml$|tests/fixtures/)')
+          # (the template copies they render), scripts/template-lint.py (their lint) and test-plan.sh (gitops only); cplat and
+          # the other checks under scripts/ are covered by the cplat tests and the e2e (#407)
+          shared=$(has '^(scripts/(detect-shape\.sh|sync-template-copies\.py|template-lint\.py)$|shapes\.yml$|\.github/workflows/ci\.yml$|tests/fixtures/)')
           t() { if [ "$shared" = true ] || [ "$(has "$1")" = true ]; then echo true; else echo false; fi; }
           {
             echo "code=$code"
@@ -260,8 +260,7 @@ jobs:
         working-directory: /tmp/test-${{ matrix.template }}
         run: |
           uv sync --all-extras
-          uv run ruff check .
-          uv run ruff format --check .
+          python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" ${{ matrix.template }} .   # spec 184: file, line and rule of a violation
           uv run mypy src
           if [ "${{ matrix.template }}" = "service-python" ]; then
             SMOKE_BASE_URL='' uv run python -m pytest tests/ -p scripts.smoke_pytest -q -rs | tee /tmp/pytest.out
@@ -437,7 +436,7 @@ jobs:
         working-directory: /tmp/test-web
         run: |
           npx -y pnpm@11.22.0 install
-          npx -y pnpm@11.22.0 lint
+          python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" web-nextjs .   # spec 184: file, line and rule of a violation
           npx -y pnpm@11.22.0 typecheck
           npm install -g pnpm@11.22.0 >/dev/null   # the test recipe calls pnpm, as devbox provides it in a repo
           sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"
@@ -601,7 +600,7 @@ jobs:
         run: test "$(bash scripts/detect-shape.sh /tmp/test-java)" = "service-java"
       - name: spotless + checkstyle (lint)
         working-directory: /tmp/test-java
-        run: mvn -B -q spotless:check checkstyle:check
+        run: python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" service-java .   # spec 184: file, line and rule of a violation
       - name: verify (tests + JaCoCo 80% gate)
         working-directory: /tmp/test-java
         run: sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"   # spec 130: gate.sh around mvn -B verify

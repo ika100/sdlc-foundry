@@ -125,6 +125,100 @@
       "last_modified": "2026-05-15T18:21:44Z",
       "resolved": "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb?lastModified=1778869304"
     },
+    "go@1.26": {
+      "last_modified": "2026-11-06T15:06:19Z",
+      "resolved": "github:NixOS/nixpkgs/4fe25e12eb9f4c744966dd3de5a05246cf098601#go",
+      "source": "devbox-search",
+      "version": "1.26.10",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/zm3sm3zv21c2jz90bh16jc7rgqfcnivs-go-1.26.10",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/zm3sm3zv21c2jz90bh16jc7rgqfcnivs-go-1.26.10"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/k2vfr5rajk1gjpsdzgqdfz1gkadrc7v7-go-1.26.10",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/k2vfr5rajk1gjpsdzgqdfz1gkadrc7v7-go-1.26.10"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/fkz7zn1a0yiryf9kri2yh1s12k1sv557-go-1.26.10",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/fkz7zn1a0yiryf9kri2yh1s12k1sv557-go-1.26.10"
+        }
+      }
+    },
+    "golangci-lint@latest": {
+      "last_modified": "2026-11-06T15:06:19Z",
+      "resolved": "github:NixOS/nixpkgs/4fe25e12eb9f4c744966dd3de5a05246cf098601#golangci-lint",
+      "source": "devbox-search",
+      "version": "2.15.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/858pfyzissfrlcspn1whpcvlcyhcdrn3-golangci-lint-2.15.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/858pfyzissfrlcspn1whpcvlcyhcdrn3-golangci-lint-2.15.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/6jczr694l11llm2szd2arikq3b4mg5lp-golangci-lint-2.15.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/6jczr694l11llm2szd2arikq3b4mg5lp-golangci-lint-2.15.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4ifdzaja36bkb7x7za9lz9z7nckv80wj-golangci-lint-2.15.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4ifdzaja36bkb7x7za9lz9z7nckv80wj-golangci-lint-2.15.0"
+        }
+      }
+    },
+    "jdk@21": {
+      "last_modified": "2026-10-17T03:39:59Z",
+      "resolved": "github:NixOS/nixpkgs/7a6522c868711d06e3a520bbcdfafe9806f4337f#jdk",
+      "source": "devbox-search",
+      "version": "21.0.11",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xr0h7rmm6a91nnsrsyp9xa5wnsb9qh70-zulu-ca-jdk-21.0.11",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/xr0h7rmm6a91nnsrsyp9xa5wnsb9qh70-zulu-ca-jdk-21.0.11"
+        }
+      }
+    },
     "jq@latest": {
       "last_modified": "2026-05-15T18:21:44Z",
       "resolved": "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb#jq",
@@ -238,6 +332,44 @@
             }
           ],
           "store_path": "/nix/store/v5c3inhfq6xshmwg1c254vfbcy4jp3k9-jq-1.8.1-bin"
+        }
+      }
+    },
+    "maven@latest": {
+      "last_modified": "2026-11-06T15:06:19Z",
+      "resolved": "github:NixOS/nixpkgs/4fe25e12eb9f4c744966dd3de5a05246cf098601#maven",
+      "source": "devbox-search",
+      "version": "3.10.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/a9n0m81rg4hfr78pr7s94fhbdpr3hgi9-maven-3.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/a9n0m81rg4hfr78pr7s94fhbdpr3hgi9-maven-3.10.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jafzza8dyvwwf35bya0jkrbndp2kszrw-maven-3.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jafzza8dyvwwf35bya0jkrbndp2kszrw-maven-3.10.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/n7s3qz30dd48md7blc87f9ww8ycbnwap-maven-3.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/n7s3qz30dd48md7blc87f9ww8ycbnwap-maven-3.10.0"
         }
       }
     },

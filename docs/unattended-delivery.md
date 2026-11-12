@@ -260,6 +260,26 @@ per-repo lock and re-checks a branch that fell behind `main`. See the [dispatche
 - **A refused merge is waited for.** When GitHub refuses the merge (a required check pending or the head moved), the land goes back to waiting for the checks of the current head, at most 3 times inside the merge lock, then stops with `merge refused 3 times: <reason>`.
 - **Everything else is a person's decision.** A conflict in any other file, a rebase or a force-push stops the run with "rebase is a human decision", and the merge attempt that stopped is aborted so the branch holds no half-merged state.
 
+## What a run no longer asks
+
+A run settles these itself instead of stopping for you:
+
+- **Instance settings.** Settings from the system plan (the gitops entry operations replicas, resources, host and env, in order `before-merge`) are applied as planned.
+- **Removing tracked files.** `git rm` is on the allowlist; a forced removal is still refused, and a removed frozen test is still flagged by `cplat spec test-diff`.
+- **Type-only test changes.** A change to a test's types alone is recorded with `--tighten` and does not wait for you.
+- **One test review.** The acceptance tests are reviewed once, before they freeze ([ADR-101](adr/101-acceptance-tests-are-reviewed-once-before-they-freeze.md)).
+- **Smoke-test findings.** The tester fixes them in the build.
+
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat component ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`) are the review. Use `/component:ship <NNN> --no-merge` to read the PR yourself first.
+
+## Several runs and the usage limit
+
+Several `cplat headless` runs in one repo, in worktrees or clones, and the usage limit of your account no longer stop each other.
+
+**Slots.** A run needs a slot before it starts a session. The repo allows `slots` runs at once (`slots` in `.platform/dispatch.yml`, else 1; `cplat dispatch slots N` overrides it). Every worktree and clone of the repo on the machine counts, and the dispatcher's units take slots from the same pool. When all slots are held, the run starts no session and prints `waiting for a slot: held by <command> (pid <pid>, since <time>, <checkout>)`. It starts within 60 seconds after a holder ends, and waiting costs no budget. With `--no-wait` it exits 1 with `slot busy: held by <command> …` instead. `--dry-run` takes no slot. A slot whose holder no longer runs is freed with `freed a stale slot of <command> (pid <pid> gone)`; nothing to do.
+
+**The usage limit.** A session that ends within 60 seconds with no output, or with the usage-limit message without a reset time, pauses the run for 5, 10, 20, 40, then 60 minutes between tries and prints `paused: usage limit, next try at <local time>`. With a given reset time the line is `paused: usage limit, resumes at <time>`, one minute after the reset. A pause counts neither as a stall, an invocation nor budget minutes. Once the pauses of one run would exceed 360 minutes in total, or a given reset time lies beyond that, the run starts no further session. It exits 1 with `environment pause: usage limit resets at <time or "unknown">` and is recorded as escalated with cause `environment`. Nothing is wrong with the work: run the same command again after the limit resets and it continues.
+
+**Renumbering in a land.** When another PR took the same ADR or rule number, the land renumbers yours and prints `renumbered ADR-<old> to ADR-<n> (<k> references)` or `renumbered R<old> to R<new> in <path> (<k> references)`. A conflict in any other part of the ADR index or the rule register stays a human decision.

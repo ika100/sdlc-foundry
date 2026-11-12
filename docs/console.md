@@ -123,6 +123,8 @@ quiet_hours: "22:00-07:00"
 
 Values are `off`, `instant` or `digest` (`digest` for Slack and email only). Each event is sent once per channel. Quiet hours hold instant sends, except an alert on prod; held events go into the next digest. When someone resolves an event anywhere, its card leaves the Inbox, the notification issue is closed, and the next digest marks it done.
 
+Escalations of runs in the platform repo (`shape: platform`) go to the desktop, never to GitHub, unless you set `events.escalation.github` yourself; the issues a platform run files by itself are unaffected. Other shapes are unchanged.
+
 Secrets never go in the file (it refuses `webhook`, `url`, `password`, `token`). Set `CPLAT_SLACK_WEBHOOK_<CHANNEL>` (`#shop-dev` becomes `SHOP_DEV`) and `CPLAT_SMTP_PASSWORD` in the environment, or store them in the OS keychain under service `sdlc-foundry` (accounts `slack-webhook:#shop-dev`, `smtp:<user>@<host>`).
 
 ## Troubleshooting

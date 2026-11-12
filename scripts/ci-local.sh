@@ -52,6 +52,9 @@ uvx --quiet --from "reuse[charset-normalizer]" reuse lint | tail -3
 step "pull request title and spec rule (skipped without a pull request)"
 python3 scripts/check-pr-local.py
 
+step "lint of the templates this branch changes (spec 184)"
+uv run scripts/template-lint.py --changed
+
 step "cplat tests (Kyverno CLI tests skip without the kyverno binary)"
 uv run --with-requirements requirements-test.txt pytest tests/cplat -q -n auto
 

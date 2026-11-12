@@ -20,6 +20,7 @@ import dispatch_budget
 import dispatch_policy
 import dispatch_state as ds
 import dispatch_units
+import run_slot
 
 SCHEMA = 1
 WAIT_EVENTS = ("escalated", "red", "stuck")      # a stuck unit is an escalated one that also needs the user: a wait must not miss it
@@ -88,11 +89,22 @@ def _running(slug: str) -> list[dict]:
     return [u for u in ds.all_units(slug) if u.get("status") not in dispatch_units.ENDED]
 
 
+def manual_rows(slug: str) -> list[dict]:
+    """The slots a manual `cplat headless` run holds (a holder with a unit is a dispatcher unit, counted by its unit file)."""
+    return [{"command": h.command, "pid": h.pid, "since": h.since, "checkout": h.checkout}
+            for h in run_slot.holders(slug) if h.unit is None]
+
+
+def _held_line(row: dict) -> str:
+    return f"  held by {row['command']} (manual)  pid {row['pid']}  since {row['since']}  {row['checkout']}"
+
+
 def slots_doc(slug: str, policy, st: dict | None = None) -> dict:
     st = st or ds.load(slug)
     total = int(st["steering"].get("slots") or policy.values["slots"])
-    running = len(_running(slug))
-    return {"total": total, "running": running, "free": max(total - running, 0)}
+    manual = manual_rows(slug)
+    running = len(_running(slug)) + len(manual)
+    return {"total": total, "running": running, "free": max(total - running, 0), "manual": manual}
 
 
 def plan_doc(repo: Path | str, slug: str, policy, candidates: list[dict], *, read_at: str | None = None,
@@ -126,7 +138,8 @@ def status_doc(repo: Path | str, slug: str, policy) -> dict:
     running = ds.loop_alive(slug)
     return {"schema": SCHEMA, "repo": slug, "loop": {"running": running, "pid": ds.loop_pid(slug) if running else None},
             "paused": st["steering"].get("paused"),
-            "slots": {"total": int(st["steering"].get("slots") or policy.values["slots"]), "units": rows},
+            "slots": {"total": int(st["steering"].get("slots") or policy.values["slots"]), "units": rows,
+                      "manual": manual_rows(slug)},
             "queue": [dict(q) for q in cycle.get("queue") or []], "held": [dict(h) for h in cycle.get("held") or []],
             "tokens": tokens_doc(slug, policy, st), "last_cycle": cycle.get("at")}
 
@@ -136,11 +149,12 @@ def render_status(doc: dict) -> str:
     head = f"dispatcher: {'running (pid ' + str(loop['pid']) + ')' if loop['running'] else 'not running'}"
     if doc["paused"]:
         head += f"  [{doc['paused']}]"
-    lines = [head, f"slots: {len(doc['slots']['units'])} of {doc['slots']['total']} in use"]
+    lines = [head, f"slots: {len(doc['slots']['units']) + len(doc['slots']['manual'])} of {doc['slots']['total']} in use"]
     for u in doc["slots"]["units"]:
         pr = f"  {u['pr']}" if u.get("pr") else ""
         lines.append(f"  slot {u['slot']}  {u['unit']}  {u['item']}  {u['kind']}  {u['mode']}  {u['phase']}  since {_hhmm(u['since'])}"
                      f"  tokens {_n(u['tokens'])}  pid {u['pid']}  log: {u['log']}{pr}")
+    lines += [_held_line(m) for m in doc["slots"]["manual"]]
     lines.append(f"queue ({len(doc['queue'])}):")
     lines += [f"  {q.get('item')}  {q.get('kind')}  {q.get('mode')}" for q in doc["queue"]]
     lines.append(f"held ({len(doc['held'])}):")
@@ -199,6 +213,7 @@ def render_plan(doc: dict) -> str:
     line = no_starts_line(doc["starts"]["why_not"], t.get("unknown"))
     if line:
         lines.append(line)
+    lines += [_held_line(m) for m in doc["slots"]["manual"]]
     lines.append(f"candidates ({len(doc['candidates'])}):")
     for c in doc["candidates"]:
         if c["verdict"] == "ready":

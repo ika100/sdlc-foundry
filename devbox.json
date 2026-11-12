@@ -6,7 +6,11 @@
     "nodejs@24",
     "uv@latest",
     "git@latest",
-    "gh@latest"
+    "gh@latest",
+    "go@1.26",
+    "golangci-lint@latest",
+    "jdk@21",
+    "maven@latest"
   ],
   "shell": {
     "init_hook": [
