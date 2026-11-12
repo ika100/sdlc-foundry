@@ -61,7 +61,8 @@ Escalate on build's stop rules: a `cplat component build merge` escalation, a ch
 
 ## Finish
 
-`cplat component ship status`, then `cplat component ship finish`, then print the report in `${CLAUDE_PLUGIN_ROOT}/references/ship-finish.md` (rows from deploy's lines, the bumps, the plan's `human_steps`).
+`cplat component ship status`, then `cplat component ship finish`, then print the report in `${CLAUDE_PLUGIN_ROOT}/references/ship-finish.md` (rows from deploy's lines, `cplat deps report`'s bumps, the plan's `human_steps`).
+
 ## Escalate
 
 `cplat component ship escalate '<one line: what needs the user and where>' --cause platform|code|decision|environment` (always pass the cause, since it decides whether cplat files an issue: `platform` = a platform template, script or command misbehaved, `code` = the user's code or tests, `decision` = the spec or a rule needs the user, `environment` = runner, cluster, network, a missing secret or login). For `platform` also pass `--command '<the failing command>'` and the output through `--evidence-file -` (stdin) or a file; report the `issue: <url> new|+1` line it prints. Then print the reason, `cplat component ship status` and what the user decides. A stop or pause request → escalate with `paused by the user`.

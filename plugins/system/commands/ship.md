@@ -29,7 +29,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow its sections 1-2 unatte
 
 ## Phase `publish`
 
-`cplat system ship publish`: merges spec and plan to `main` through a PR on green checks. Exit 1 (a red check) → print its output and stop.
+`cplat system ship publish`: when the spec and plan are not on `main`, it merges them through a PR on green checks. Exit 1 (a red check) → print its output and stop.
 
 ## Phase `repos`
 
