@@ -1,7 +1,7 @@
 ---
 spec_id: 190-promotion-respects-an-environment-limit
 title: Promotion respects an environment limit in the spec
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [688]
@@ -90,3 +90,4 @@ None.
 ## Changelog
 
 - 2026-11-12 created
+- 2026-11-12 approved
