@@ -244,6 +244,7 @@ def test_ac_125_7_add_needs_a_clean_tree(world, tmp_path, capsys):  # AC-125.7
     repo = committed(world, tmp_path, base())
     (repo / "scratch.txt").write_text("x")
     rc, out, err = run("add", TODO, "--repo-dir", repo, capsys=capsys)
+    # interface: cplat prints this refusal line
     assert rc == 1 and "the working tree has uncommitted changes" in err
 
 

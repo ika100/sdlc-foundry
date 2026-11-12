@@ -420,6 +420,7 @@ def test_refuses_a_second_unfinished_run_for_another_spec(w):  # AC-097.1
     other.mkdir()
     (other / "spec.md").write_text(PRODUCT_SPEC.format(status="approved").replace("012-shop", "013-other").replace("AC-012", "AC-013"))
     r = w.app("start", "013-other", "--context", "kind-shop")
+    # interface: cplat prints this refusal line
     assert r.rc == 1 and "cplat system ship finish" in r.out
     assert w.state()["spec"] == SPEC
 

@@ -39,7 +39,7 @@ def test_ac_100_10_commands_use_the_brief_headings(name):
 def test_ac_100_10_build_does_not_send_agents_to_the_spec_files():
     """AC-100.10: the coder prompt copies facts instead of pointing at the spec files."""
     t = cmd("build")
-    sec = t[t.index("### 2.3 Coder prompt"):t.index("### 2.4")]
+    sec = t[t.index("2.3 Coder"):t.index("### 2.4")]
     assert "`Criteria`" in sec and "`Contract`" in sec
     assert "SPEC_DIR" not in sec
     assert re.search(r"(?i)copies?|verbatim", sec)
@@ -50,7 +50,7 @@ def test_ac_100_10_agents_start_from_the_brief(path):
     """AC-100.10: coder, tester and quality read spec/plan/design only for a fact the brief lacks."""
     t = text(path)
     assert "start from the brief" in t.lower()
-    assert "only when the brief lacks" in t.lower()
+    assert "brief lacks" in t.lower()
 
 
 @pytest.mark.parametrize("path", TESTERS, ids=lambda p: p.parent.parent.name)

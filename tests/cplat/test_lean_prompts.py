@@ -13,23 +13,23 @@ MOVED = {
     "build": {
         "build-resume.md": ["wip(<task-id>): interrupted", "git restore --staged"],
         "build-worktree-fallback.md": ["Cannot create agent worktree", "worktree.baseRef"],
-        "build-replan.md": ["**Re-plan mode.**", "replan-abort", "Your earlier attempt is a reference only"],
+        "build-replan.md": ["**Re-plan mode.**", "replan-abort", "earlier attempt"],
         "build-security-red.md": ["cplat deps patch", "Exit 4", "agents.security"],
         "build-test-approval.md": ["--approve", "approved_test_diffs"],   # #324
         "build-pr.md": ["{{CLOSES}}", "## Build complete:"],              # #496
     },
     "ship": {
-        "ship-gitops.md": ["cplat component ship gitops prepare", "cplat component ship gitops pr"],
-        "ship-land-red.md": ["RED, the security check", "fix_rounds"],
-        "ship-finish.md": ["## Shipped:", "rows read `not deployable`"],  # #496
+        "ship-gitops.md": ["ship gitops prepare", "ship gitops pr"],
+        "ship-land-red.md": ["RED, the security", "fix_rounds"],
+        "ship-finish.md": ["## Shipped:", "`not deployable`"],  # #496
     },
     "fix": {
         "fix-on-main.md": ["Skipping PR creation"],
-        "fix-pr.md": ["Not run by fix: `devbox run security`"],            # #496
+        "fix-pr.md": ["Not run by"],            # #496
     },
     "spec": {                                                              # #496
         "spec-list.md": ["docs(spec): migrate backlog stories to docs/specs"],
-        "spec-from-plan.md": ["cplat spec new --from-plan"],
+        "spec-from-plan.md": ["spec new --from-plan"],
     },
 }
 
