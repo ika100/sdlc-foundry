@@ -94,6 +94,7 @@ tasks:
     covers: [AC-186.10, AC-186.11]
     parallel_safe: true
     depends_on: [t9]
+    done: true
   - id: t14
     title: System ship prompt answers or holds an escalated repo
     files: [plugins/system/commands/ship.md, docs/rules/plugins/system/commands/ship.yml]

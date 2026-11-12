@@ -39,6 +39,11 @@ rules:
     text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
     class: hard
     hard: issue-filing-needs-consent
+  - id: R16
+    text: "Run `cplat component release gates --commit <TAG_COMMIT>`, print its line; on exit 0 never run Phases 2–4, because CI already passed them on this commit."
+    class: practice
+    source: "spec 186"
+    enforced_by: cplat component release gates
   - id: R11
     text: "Do not fix anything."
     class: retired
