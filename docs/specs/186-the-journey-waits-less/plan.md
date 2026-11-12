@@ -24,6 +24,7 @@ tasks:
     covers: [AC-186.1, AC-186.2, AC-186.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Run allowlist allows cplat plan merge
     files: [scripts/cplat/preflight.py]
