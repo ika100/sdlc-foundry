@@ -44,7 +44,7 @@ def _smoke(rid: str, repo: dict) -> str:
 
 def decision_count(st: dict) -> int:
     """How many answers the run took for the user across its repo specs (spec 141, for the run record)."""
-    return sum(len(r.get("decisions") or []) for r in (st.get("repos") or {}).values())
+    return sum(len(r.get("decisions") or []) + len(r.get("answers") or []) for r in (st.get("repos") or {}).values())
 
 
 def final_report(st: dict, title: str, product_steps: list[str] | None = None) -> list[str]:
@@ -72,9 +72,11 @@ def final_report(st: dict, title: str, product_steps: list[str] | None = None) -
         out += [f"| {rid} | {repo['staging_row']} | {(repo.get('staging_smoke') or {}).get('row') or '-'} |" for rid, repo in staged]
     steps += [s for s in product_steps or [] if s not in steps]
     taken = [(rid, repo.get("spec"), d) for rid, repo in ordered(st) for d in repo.get("decisions") or []]
-    if taken:                                  # spec 141 (AC-141.3): what the run decided for the user, to correct later
+    given = [(rid, a) for rid, repo in ordered(st) for a in repo.get("answers") or []]
+    if taken or given:                                # spec 141 (AC-141.3): what the run decided for the user, to correct later
         out += ["", "Decisions taken for you (suggested answers of the repo specs; change one with `/component:spec --amend`):",
-                *(f"- {rid} ({sid}): {d}" for rid, sid, d in taken)]
+                *(f"- {rid} ({sid}): {d}" for rid, sid, d in taken),
+                *(f"- {rid}: answered \"{a.get('text')}\" ({a.get('cause')}: {a.get('reason')})" for rid, a in given)]
     if steps:
         out += ["", "Human steps (the run cannot do these):", *(f"- [ ] {s}" for s in steps)]
     if st.get("staging_pr"):
