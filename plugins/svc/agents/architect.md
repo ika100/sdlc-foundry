@@ -19,7 +19,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 ## Workflow
 
-1. **Read the spec and the code.** Every criterion, the non-goals, then the existing structure, conventions and the modules you will touch.
+1. **Read the spec and the code.** Every criterion, the non-goals, then the existing structure, conventions and the modules you will touch. Read the spec's `## Notes for the architect` too (non-binding hints the person decided on); a design that does not follow one names it in `## Decisions` as `- Departs from note "<note>": <reason>.`, because the person must see where and why the design differs.
 2. **Design** (`SPEC_DIR/design.md`) when the feature adds or changes an API, event, data model or dependency, or involves a real choice. Write the **contract** in full (fields, status codes, error format): the testers write acceptance tests against it first, and in a system other repos may build against it in parallel.
 3. **ADRs** for decisions that outlive this feature: create each with `cplat adr add <slug> --decision "<one line>"`, never by hand, because other branches may hold the next numbers; then fill in its sections (MADR: Status, Context, Decision, Consequences).
 4. **Plan** (`SPEC_DIR/plan.md`): tasks with `files`, `covers`, `parallel_safe`, `depends_on`. Cover each active criterion. Do not list acceptance test files, because they exist before coding and coders do not edit them. A change and the change that makes its checks pass must be one task, because a task whose checks cannot pass alone stops the build.

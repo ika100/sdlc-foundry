@@ -31,5 +31,6 @@ Table `alert_rule` (id, owner, symbol, threshold, direction, webhook_url, last_s
 ## Rules
 
 - **The contract is binding.** Testers write acceptance tests against it before code exists, and other repos may build against it in parallel. Name every field, status code and error format a caller sees. For a larger API, put an OpenAPI file next to it (`contract.openapi.yaml`) and link it.
+- A design that does not follow a bullet of the spec's "Notes for the architect" names it in Decisions as `- Departs from note "<note>": <reason>.`, because the person must see where and why the design differs.
 - Reference criteria ids where a design element exists because of one.
 - Decisions that outlive the feature (a new technology, a cross-cutting pattern) also get an ADR, created with `cplat adr add`, not written into `docs/adr/` by hand. Feature-local choices stay here.

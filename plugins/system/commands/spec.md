@@ -30,8 +30,8 @@ For A, B and C start from an empty `git status --porcelain`, so that the spec br
 ## B. New system spec
 
 0. **One repo is enough?** (spec 140) When the description names exactly one component of `system.yaml` and asks for no resource, exposure or environment change, ask once with AskUserQuestion: "This changes only `<component>`: specify and ship it there with `/component:spec` and `/component:ship`?", options "Component route (Recommended)" and "System spec". On the component route, find the component's clone (the sibling directory of its repo, else `gh repo clone <repo>`), run `/component:spec <the description>` (Skill tool) with every Bash call in that clone (`cd <clone> && …`), and finish with its next step `/component:ship <id>` there: no system spec, plan or plan PR. Two or more components, or any resource, exposure or environment change: continue below without asking.
-1. `cplat spec new "<short title>"`, then `git checkout -b docs/spec-<spec_id>`.
-2. **product-manager** (`svc:product-manager`): `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the component list, and "this is a system spec: criteria describe what users of the system observe; each story names the repos that take part (`**Repos:** …`); no criterion is marked `(smoke)`, smoke criteria belong in the component specs".
+1. `cplat spec new "<short title>"` (plus `--explored` when the description ends in a `DECIDED:` block from `/system:explore`; no decisions file exists), then `git checkout -b docs/spec-<spec_id>`.
+2. **product-manager** (`svc:product-manager`): `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the component list, with a `DECIDED:` block also `cplat explore context "<title>" --json`: the block verbatim and that output's `specs` and `adrs` (a contradicted criterion or ADR becomes an open question), and "this is a system spec: criteria describe what users of the system observe; each story names the repos that take part (`**Repos:** …`); no criterion is marked `(smoke)`, smoke criteria belong in the component specs".
 3. `cplat spec check <spec_id>`; errors go back once.
 4. Q, commit `docs(spec): <spec_id> — <title>`, `cplat spec publish <spec_id>` (draft PR), F.
 
@@ -41,7 +41,7 @@ First `cplat spec review <id> --comments --json` (pass the comments to the produ
 
 ## Q. Questions loop
 
-Only open questions are asked here, because the product-manager decides the rest by default and lists them under Assumptions, shown at F (spec 149). While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds): **AskUserQuestion** (up to 4 per call; suggested answer first, marked "(Recommended)"; the user can type their own), answers back (`MODE: amend`, "answers to open questions: …"), `cplat spec check`, commit the answers, `cplat spec publish <spec_id>`. Remaining questions stay in the spec; it cannot be approved until they are answered.
+Only open questions are asked here, because the product-manager decides the rest by default and lists them under Assumptions, shown at F (spec 149). While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds): **AskUserQuestion** (up to 4 per call; suggested answer first, marked "(Recommended)"; the user can type their own; a suggested answer `explore first` becomes the option `/system:explore <topic>` (Recommended): chosen → `cplat spec discard <spec_id>`, `git switch main`, `git branch -d docs/spec-<spec_id>`, print that command and stop), answers back (`MODE: amend`, "answers to open questions: …"), `cplat spec check`, commit the answers, `cplat spec publish <spec_id>`. Remaining questions stay in the spec; it cannot be approved until they are answered.
 
 ## F. Finish
 

@@ -20,6 +20,7 @@ import core
 import doctor
 import retro_github
 import retro_proposals
+import retro_explore
 import retro_report
 import retro_rules
 import runs
@@ -85,8 +86,11 @@ def build_report(week: str) -> dict:
               "tracks": list(s.meta.get("tracks") or [])}
              for s in good if s.status.lower() not in ("done", "superseded")]
     rules = retro_rules.section(core.PLATFORM_ROOT, records, week=week, issues=lambda ns: tracker.issue_states(repo, ns))
+    until = retro_report.week_bounds(week)[1].date() - datetime.timedelta(days=1)
+    changelog = core.PLATFORM_ROOT / "docs" / "CHANGELOG.md"
+    explore = retro_explore.section(good, changelog.read_text(encoding="utf-8") if changelog.is_file() else "", until)
     return retro_report.build(records, auto_issues=autos, open_issues=opens, specs=specs, week=week, store=slug,
-                              generated_at=_now(), malformed=malformed, rules_to_retire=rules)
+                              generated_at=_now(), malformed=malformed, rules_to_retire=rules, explore=explore)
 
 
 # ---------------- report ----------------

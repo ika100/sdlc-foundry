@@ -30,6 +30,7 @@ Run `show <n> --json`. Propose exactly one class with a one-line reason:
 | `question` | a usage question | answer in a comment |
 | `duplicate` | same root cause as an open issue | comment with the link |
 | `wontfix` | out of scope per the specs' non-goals or the platform vision | comment with the reason |
+| `needs-exploring` | new behaviour too unclear to spec yet | `/component:explore #<n>` (`/system:explore #<n>` in a gitops-app repo) |
 | `needs-info` | not decidable from what is written | questions, see 3 |
 
 An urgent bug is still a `bug`; after the fix PR is merged, suggest `/component:release` for a patch version, without starting it.
@@ -47,6 +48,8 @@ Show one table for the run: issue, class, planned action (labels, comment, story
 - **Labels and comments:** write comment text to a temp file and run `apply <n> --add L --remove triage --comment-file F` (labels: `bug`, `enhancement`, `question`, `duplicate`, `wontfix`, `needs-info`, `tracked`, `triaged`; remove `triage`, and `needs-info` when the reporter answered).
 - **feature:** use the **product-manager** agent (`svc:product-manager`, `MODE: fold`) to decide between an existing spec (it adds `#N` to that spec's `tracks:`) and a new one. For a new one run `cplat spec new "<title>" --tracks N`, then the product-manager in `MODE: new` on that folder; its open questions go to the user as in `/component:spec`, or stay in the spec as a `draft`. Commit on a `docs/` branch from a clean tree, then `apply <n> --add tracked --add enhancement --add triaged --remove triage --comment-file F` where the comment is `Tracked as spec <spec_id>` (shown to the user first). Point the user to `/component:spec approve <NNN>` and `/component:plan <NNN>`.
 - **bug / small-change:** run `cplat shape` first. In a component repo hand the issue to `/component:fix`, one at a time, each from a clean `main`, with this task text: `Issue #N: <title>. <redacted summary and the user's answers>. The PR description must say "Closes #N".` Then `apply <n> --add bug --add triaged --remove triage`. In a gitops-app repo or the platform repo describe the fix and offer a manual branch/PR instead.
+
+- **needs-exploring:** run `cplat shape`, show the explore command as the next step and run no `apply`. Do not label it, because a label would hide it from the next triage while it stays in the queue until it is explored and specced.
 
 ## 6. Summary
 
