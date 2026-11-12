@@ -5,8 +5,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "cplat"))
 
+import sleepguard
+
+sleepguard.install()  # spec 185: before any cplat module binds time.sleep
+
 import pytest
 from console_support import console  # noqa: F401  (spec 122: the running-console fixture)
+from sleepguard import pytest_runtest_makereport, pytest_runtest_protocol  # noqa: F401  (spec 185: the real-sleep guard)
 from sharding import (  # noqa: F401  (spec 112: --shard / --shard-report)
     pytest_addoption,
     pytest_collection_modifyitems,
