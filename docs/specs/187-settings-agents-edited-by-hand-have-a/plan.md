@@ -10,18 +10,21 @@ tasks:
     covers: [AC-187.1, AC-187.2, AC-187.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "`cplat resource backup` sets, changes and removes a database instance's backup"
     files: [scripts/cplat/dbbackupset.py, scripts/cplat/dbbackup.py]
     covers: [AC-187.4, AC-187.5, AC-187.6, AC-187.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Commands, usage lines, docs, versions and changelog
     files: [plugins/resource/commands/add.md, plugins/resource/commands/backup.md, plugins/system/commands/set.md, docs/rules/plugins/resource/commands/add.yml, docs/rules/plugins/resource/commands/backup.yml, docs/rules/plugins/system/commands/set.yml, scripts/cplat/cplat.py, plugins/resource/README.md, plugins/system/README.md, docs/BACKUP-AND-RESTORE.md, docs/USER-JOURNEY.md, plugins/resource/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/changelog.d/187-settings-commands.added.md]
     covers: [AC-187.8]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 187 Settings agents edited by hand have a command
