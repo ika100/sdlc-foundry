@@ -73,6 +73,7 @@ tasks:
     covers: [AC-180.1, AC-180.4]
     parallel_safe: true
     depends_on: [t5]
+    done: true
 ---
 
 # Plan — 180 Prompt checks test behaviour not sentences
