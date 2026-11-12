@@ -10,6 +10,7 @@ tasks:
     covers: [AC-186.4, AC-186.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Ship escalations carry questions; a resumed ship records and shows the answer
     files: [scripts/cplat/ship.py]
