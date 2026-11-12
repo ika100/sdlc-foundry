@@ -392,7 +392,7 @@ def previous_index(report: dict) -> dict:
 
 
 def build(records: list[dict], *, auto_issues: list[dict], open_issues: list[dict], specs: list[dict], week: str, store: str,
-          generated_at: str, malformed: int = 0, rules_to_retire: dict | None = None) -> dict:
+          generated_at: str, malformed: int = 0, rules_to_retire: dict | None = None, explore: dict | None = None) -> dict:
     cur, prev = _split(records, week)
     start, end = week_bounds(week)
     by_shape, repo_list = _repos(cur, prev)
@@ -413,6 +413,8 @@ def build(records: list[dict], *, auto_issues: list[dict], open_issues: list[dic
     }
     if rules_to_retire is not None:
         rep["rules_to_retire"] = rules_to_retire
+    if explore is not None:
+        rep["explore"] = explore
     rep["evidence"] = _evidence(rep)
     return rep
 
@@ -502,6 +504,9 @@ def _render(report: dict, proposals_md: str | None, public: bool) -> str:
     if r.get("rules_to_retire") is not None:      # a report.json from before spec 168 has none
         import retro_rules     # retro_rules reads the week helpers of this module
         out.append(retro_rules.render(r["rules_to_retire"]).rstrip("\n"))
+    if r.get("explore") is not None:              # spec 188; older report.json files have none
+        import retro_explore
+        out.append(retro_explore.render(r["explore"]).rstrip("\n"))
 
     out.append("## Phases (median / longest)")
     if "runs" in nd or not r["phases"]:
