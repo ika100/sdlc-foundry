@@ -81,6 +81,15 @@ def test_a_slow_setup_or_teardown_is_stopped_too_ac_185_1(tmp_path):  # AC-185.1
     assert len(re.findall(r"Timeout \(>1\.0s\)", out)) >= 2, out
 
 
+@pytest.mark.parametrize("rel", ["devbox.json", "scripts/ci-local.sh", ".github/workflows/ci.yml", "scripts/test-fast.sh"])
+def test_no_suite_command_overrides_the_ini_limit_ac_185_1(rel):  # AC-185.1
+    lines = [ln for ln in (ROOT / rel).read_text().splitlines() if "pytest" in ln and "uv run" in ln]
+    assert lines, rel
+    for ln in lines:
+        assert not re.search(r"(^|\s)(-c|--config-file|--timeout\S*|-o|--override-ini)(\s|=)", ln), ln
+        assert "no:timeout" not in ln and "timeout=" not in ln and "-p no:" not in ln, ln
+
+
 def test_a_run_without_the_timeout_plugin_fails_at_once_ac_185_1(tmp_path):  # AC-185.1
     (tmp_path / "pytest.ini").write_text("[pytest]\nrequired_plugins = pytest-no-such-plugin-185\n")
     (tmp_path / "test_a.py").write_text("def test_a():\n    assert True\n")
@@ -152,6 +161,17 @@ def test_the_guard_module_has_the_documented_seam_ac_185_3():  # AC-185.3
     assert "sleepguard.install()" in (TESTS / "conftest.py").read_text()
 
 
+@pytest.mark.parametrize("module", ["core", "engine", "dispatch"])
+def test_the_modules_that_bind_sleep_at_import_hold_the_guard_not_the_original_ac_185_3(module):  # AC-185.3
+    """The guard is installed before any `cplat` module is imported, so `core.sleep = time.sleep` bound the wrapper."""
+    import time
+    mod = importlib.import_module(module)
+    for fn in (mod.sleep, time.sleep):
+        code = getattr(fn, "__code__", None)
+        assert code is not None and Path(code.co_filename).name == "sleepguard.py", f"{module}.sleep is the builtin, not the guard"
+    assert mod.sleep is time.sleep
+
+
 def test_a_sleep_over_one_second_fails_at_once_even_if_the_assertions_pass_ac_185_3(tmp_path):  # AC-185.3
     marker = tmp_path / "after-sleep"
     body = ("import time\n\ndef test_slept():\n"
@@ -185,11 +205,29 @@ def test_setup_counts_towards_the_budget_of_the_test_ac_185_3(tmp_path):  # AC-1
     assert rc == 1 and re.search(MSG.format(s="0.7"), out), out
 
 
-def test_the_fake_clock_and_a_replaced_sleep_do_not_count_ac_185_3(tmp_path):  # AC-185.3
+def test_a_total_of_exactly_one_second_passes_ac_185_3(tmp_path):  # AC-185.3
     body = ("import time\n\n"
-            "def test_fake_clock(monkeypatch):\n    monkeypatch.setattr(time, 'sleep', lambda s: None)\n    time.sleep(500)  # fake-delay: replaced\n")
+            "def test_exact():\n    time.sleep(0.5)  # fake-delay: half of the budget\n    time.sleep(0.5)  # fake-delay: reaches 1.0 s, not over\n")
     rc, out = guarded(tmp_path, body)
-    assert rc == 0, out
+    assert rc == 0 and "test_a.py::test_exact PASSED" in out, out
+
+
+def test_a_sleep_called_by_the_standard_library_is_not_counted_ac_185_3(tmp_path):  # AC-185.3
+    body = ("import subprocess\nimport sys\n\n"
+            "def test_popen_wait():\n"
+            "    code = 'import time; time.sleep(1.5)'  # fake-delay: a fake program in its own process\n"
+            "    p = subprocess.Popen([sys.executable, '-c', code])\n"
+            "    assert p.wait(timeout=60) == 0\n")            # Popen.wait(timeout=) polls with time.sleep from the standard library
+    rc, out = guarded(tmp_path, body)
+    assert rc == 0 and "test_a.py::test_popen_wait PASSED" in out, out
+
+
+def test_the_waiting_helper_is_exempt_ac_185_3(tmp_path):  # AC-185.3
+    shutil.copy(TESTS / "waiting.py", tmp_path / "waiting.py")
+    body = ("import pytest\nimport waiting\n\n"
+            "def test_poll():\n    with pytest.raises(AssertionError):\n        waiting.wait_for(lambda: False, timeout=1.5, what='nothing')\n")
+    rc, out = guarded(tmp_path, body)
+    assert rc == 0 and "test_a.py::test_poll PASSED" in out, out
 
 
 def test_a_sleep_in_a_thread_of_the_test_fails_the_test_ac_185_3(tmp_path):  # AC-185.3

@@ -1,6 +1,6 @@
 """Spec 185 acceptance tests: `cplat quiet test-fast` gives up after 9 minutes and names what still runs (AC-185.4, AC-185.5).
 
-Seam: `quiet.main(argv)` with a fake `devbox` on PATH and `quiet_limit.GIVE_UP_SECONDS` lowered to 1. The fake copies the files
+Seam: `quiet.main(argv)` with a fake `devbox` on PATH and `quiet_limit.GIVE_UP_SECONDS` lowered to 1 s plus 20 times the fake delay. The fake copies the files
 `progress` (or `progress-<i>` of a `--repeat` run) into the progress file quiet names in $CPLAT_TEST_PROGRESS_FILE (design.md,
 "quiet gives up"), prints `out` when present, then hangs with a child of its own, unless the file `quick` holds an exit code.
 """
@@ -16,7 +16,7 @@ import json
 
 import quiet
 from test_172_quiet import pytest_out
-from waiting import fake_prelude, wait_file, wait_gone
+from waiting import DELAY, fake_prelude, wait_file, wait_gone
 
 ROOT = Path(__file__).resolve().parents[2]
 GAVE_UP = "FAILED (gave up after 9 min): devbox run test-fast (log: "
@@ -81,7 +81,10 @@ def world(tmp_path, monkeypatch):
     monkeypatch.delenv("CPLAT_REPEAT_RUN", raising=False)
     monkeypatch.setattr(runs, "current_run", lambda r: "run-1")
     monkeypatch.setattr(runs, "add_to", lambda rid, name, item, **k: None)
-    monkeypatch.setattr(quiet_limit, "GIVE_UP_SECONDS", 1)
+    # The fake first sleeps TEST_FAKE_DELAY (its prelude), so the limit grows with it, as `waiting.budget()` does: 1 s + 20 * delay.
+    # quiet runs in this process under the sleep guard (spec 185, AC-185.3) with a deadline of about 1 s: `quiet_limit` must wait
+    # with Popen.wait(timeout=) or an event, never with a repo-code time.sleep, or the guard fails these tests (design.md).
+    monkeypatch.setattr(quiet_limit, "GIVE_UP_SECONDS", 1 + 20 * DELAY)
     return World(d, tmp_path / "cache")
 
 
@@ -197,6 +200,26 @@ def test_the_progress_plugin_writes_start_and_end_lines_and_hides_its_file_ac_18
     assert p.returncode == 0, p.stdout + p.stderr
     assert progress.read_text().splitlines() == ["# cplat test progress", "start test_p.py::test_one", "end test_p.py::test_one",
                                                   "start test_p.py::test_two", "end test_p.py::test_two"]
+    assert quiet_limit.still_running(progress) == []
+
+
+def test_under_xdist_only_the_controller_writes_each_start_and_end_once_ac_185_4(tmp_path):  # AC-185.4
+    import quiet_limit
+    env_add, progress = quiet_limit.progress_env(tmp_path / "x.log")
+    (tmp_path / "test_p.py").write_text("".join(f"def test_{i}():\n    assert True\n\n" for i in range(6)))
+    (tmp_path / "pytest.ini").write_text("[pytest]\n")
+    env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
+    env.update(env_add)
+    p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-n", "2", "-p", "no:cacheprovider"], cwd=tmp_path, env=env,
+                       capture_output=True, text=True)
+    assert p.returncode == 0, p.stdout + p.stderr
+    lines = progress.read_text().splitlines()
+    assert lines[0] == "# cplat test progress"
+    for i in range(6):
+        node = f"test_p.py::test_{i}"
+        assert lines.count(f"start {node}") == 1 and lines.count(f"end {node}") == 1, lines
+        assert lines.index(f"start {node}") < lines.index(f"end {node}")
+    assert len(lines) == 1 + 12, lines
     assert quiet_limit.still_running(progress) == []
 
 

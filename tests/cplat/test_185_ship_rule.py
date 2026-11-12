@@ -40,6 +40,9 @@ def test_the_rule_names_a_task_in_the_plan_and_gives_a_reason_ac_185_6(plugin): 
     (entry,) = entry_of(plugin)
     text = entry["text"].lower()
     assert "task" in text and "plan" in text and "decision" in text, text
+    assert "escalation" in text, text
+    # interface: the spec names the point in time at which the decision must be a task
+    assert "before the ship goes on" in text, text
     assert re.search(r"\b(so that|because|since)\b", text), "no reason clause"
 
 

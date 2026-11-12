@@ -40,6 +40,26 @@ def test_a_shard_report_holds_the_wall_time_and_the_slowest_tests_ac_185_7(tmp_p
     assert all(round(s["s"], 2) == s["s"] for s in slowest) and round(data["wall_s"], 2) == data["wall_s"]
 
 
+BUSY = ("import time\nimport pytest\n\n"
+        "def busy(seconds):\n    end = time.monotonic() + seconds\n    while time.monotonic() < end:\n        pass\n\n"
+        "@pytest.fixture()\ndef slow_both():\n    busy(0.3)\n    yield\n    busy(0.3)\n\n"
+        "def test_quick():\n    assert True\n\n"
+        "def test_setup_and_teardown(slow_both):\n    assert True\n")
+
+
+def test_a_tests_seconds_are_setup_call_and_teardown_together_ac_185_7(tmp_path):  # AC-185.7
+    (tmp_path / "pytest.ini").write_text("[pytest]\n")
+    (tmp_path / "conftest.py").write_text('pytest_plugins = ["sharding"]\n')
+    (tmp_path / "test_busy.py").write_text(BUSY)
+    r, report = shard_run(tmp_path, 1, 1)
+    assert r.returncode == 0, r.stdout + r.stderr
+    data = json.loads(report.read_text())
+    first, second = data["slowest"]
+    assert first["id"] == "test_busy.py::test_setup_and_teardown" and first["s"] >= 0.55, data      # 0.3 setup + 0.3 teardown, call ~0
+    assert second["id"] == "test_busy.py::test_quick" and second["s"] < 0.3, data
+    assert data["wall_s"] >= first["s"]
+
+
 def test_a_shard_with_few_tests_lists_them_all_ac_185_7(tmp_path):  # AC-185.7
     project = make_project(tmp_path, files=1, per_file=3)
     _, report = shard_run(project, 1, 1)
@@ -207,6 +227,56 @@ def test_unreadable_data_is_not_available_with_the_reason_ac_185_8():  # AC-185.
 def test_no_test_reaches_github_through_fetch_ac_185_8():  # AC-185.8
     assert retro_suite.fetch("ika100/sdlc-foundry", dt.date(2026, 9, 28)) == []     # the conftest fake: "no runs"
     assert retro_suite.ARTIFACT == "cplat-suite-time" and retro_suite.TOP == 15
+
+
+def artifact(run_id, created, branch="main", expired=False):
+    return {"id": int(run_id) * 10, "name": "cplat-suite-time", "expired": expired, "created_at": created,
+            "workflow_run": {"id": int(run_id), "head_branch": branch}}
+
+
+def fake_gh(monkeypatch, artifacts, *, fail=None):
+    """Replaces `retro_github.gh`: the artifact list as one `gh api --paginate` page, and a `suite-time.json` per `run download`."""
+    import retro_github
+    calls = []
+
+    def gh(args, *, input=None, timeout=30.0):
+        calls.append(list(args))
+        if fail:
+            return 1, "", fail
+        if args[0] == "api":
+            assert "cplat-suite-time" in " ".join(args)
+            return 0, json.dumps({"total_count": len(artifacts), "artifacts": artifacts}), ""
+        assert args[:2] == ["run", "download"]
+        run_id = args[2]
+        target = Path(args[args.index("-D") + 1])
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "suite-time.json").write_text(json.dumps(suite_run(run_id, "x", 1.0, 1.0, [])["data"]))
+        return 0, "", ""
+
+    monkeypatch.setattr(retro_github, "gh", gh)
+    return calls
+
+
+def test_fetch_keeps_only_non_expired_main_artifacts_since_the_date_ac_185_8(monkeypatch):  # AC-185.8
+    calls = fake_gh(monkeypatch, [
+        artifact("11", "2026-10-20T08:00:00Z"),
+        artifact("12", "2026-10-21T08:00:00Z", branch="feature/x"),
+        artifact("13", "2026-10-22T08:00:00Z", expired=True),
+        artifact("14", "2026-09-27T23:59:59Z"),                      # the day before `since`
+        artifact("15", "2026-09-28T00:00:00Z"),                      # on `since`
+    ])
+    got = retro_suite.REAL_FETCH("ika100/sdlc-foundry", dt.date(2026, 9, 28))
+    assert sorted(g["run_id"] for g in got) == ["11", "15"]
+    by_id = {g["run_id"]: g for g in got}
+    assert by_id["11"]["created_at"] == "2026-10-20T08:00:00Z" and by_id["11"]["data"]["run_id"] == "11"
+    assert [c[2] for c in calls if c[:2] == ["run", "download"]] in (["11", "15"], ["15", "11"])
+    assert all("-R" in c and "ika100/sdlc-foundry" in c for c in calls if c[:2] == ["run", "download"])
+
+
+def test_fetch_raises_with_the_reason_when_github_fails_ac_185_8(monkeypatch):  # AC-185.8
+    fake_gh(monkeypatch, [], fail="HTTP 403: rate limited")
+    with pytest.raises(retro_suite.SuiteTimeError, match="rate limited"):
+        retro_suite.REAL_FETCH("ika100/sdlc-foundry", dt.date(2026, 9, 28))
 
 
 def retro_json(capsys, *argv):
