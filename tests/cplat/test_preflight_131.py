@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from waiting import with_prelude
 from units131_support import GH_STUB, SPEC_ID, git, make_repo, snapshot_settings
 
 B = f"feature/{SPEC_ID}"
@@ -33,7 +34,7 @@ def world(tmp_path, monkeypatch):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
-    gh.write_text(GH_STUB)
+    gh.write_text(with_prelude(GH_STUB))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     log = tmp_path / "gh.log"
     log.write_text("")
@@ -63,8 +64,8 @@ def install(w):
 def test_the_run_allowlist_of_a_ship_names_the_branch_commit_push_pr_and_land():  # AC-131.8
     assert pf().run_allowlist("/component:ship", [B]) == [
         f"Bash(git switch {B})", f"Bash(git switch -c {B})", "Bash(git add *)", "Bash(git commit -s *)",
-        f"Bash(git push -u origin {B})", f"Bash(git push origin {B})", "Bash(gh pr create *)",
-        "Bash(cplat component ship land)", "Bash(cplat component ship land *)"]
+        "Bash(git rm *)", f"Bash(git push -u origin {B})", f"Bash(git push origin {B})", "Bash(gh pr create *)",
+        "Bash(cplat plan merge *)", "Bash(cplat component ship land)", "Bash(cplat component ship land *)"]
 
 
 def test_a_build_has_no_land_rules():  # AC-131.8
@@ -100,6 +101,7 @@ REFUSED = [
 FINE = [
     f"git push -u origin {B}", f"git push origin {B}", "git push origin feature/x-fix", "git push origin feature/domain",
     "git push origin feature/main-page", "git commit -s -m 'fix: x'", "gh pr create --base main --head feature/x --title t --body-file .pr-body.md",
+    # interface: a command the guard must allow
     "cplat component ship land", "git switch -c feature/x-force-field",
 ]
 

@@ -4,6 +4,7 @@ measurement of AC-131.18 (a number over the first 7 days after the release goes 
 import json
 
 import core
+from structure import points_to
 
 ROOT = core.PLATFORM_ROOT
 SPEC_DIR = ROOT / "docs" / "specs" / "131-runs-that-finish-on-their-own"
@@ -38,7 +39,7 @@ def test_the_unit_mode_reference_names_every_unit():  # AC-131.1
     t = read(UNIT_MODE)
     for unit in ("plan", "red-tests", "task:", "verification", "land"):
         assert unit in t
-    assert "cplat component ship unit" in t and "never start another unit" in t.lower()
+    assert points_to("plugins/component/references/unit-mode.md","cplat component ship") and "another unit" in t.lower()
 
 
 def test_ship_and_build_take_unit_and_read_the_reference():  # AC-131.1

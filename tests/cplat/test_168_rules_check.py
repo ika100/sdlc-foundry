@@ -101,7 +101,7 @@ def test_headings_rows_quotes_and_items_are_scanned_ac_168_1(tmp_path, line):  #
 
 def test_words_that_only_contain_a_rule_word_and_masked_code_are_no_rule_ac_168_1(tmp_path):  # AC-168.1
     body = GOOD_BODY + ("\nNevertheless the mustard stays; alwaysish and exceptional things are fine.\n\nRun `never` now.\n"
-                        "\n- Run `git push --force` and `cplat x` today.\n")
+                        "\n- Run `git push --force` and `cplat spec check` today.\n")
     assert check(good_repo(tmp_path, body)).ok
 
 
@@ -183,7 +183,7 @@ def test_unreadable_yaml_and_a_register_file_without_a_prompt_path_are_bad_entri
 def test_the_text_output_has_one_line_per_failure_and_an_ok_line_ac_168_1(tmp_path, capsys):  # AC-168.1
     root = good_repo(tmp_path)
     rc, out, _ = cli(capsys, root)
-    assert rc == 0 and re.fullmatch(r"OK: 3 rule sentences classified, 1 hard rules; prompts \d+ bytes \(baseline 10000000\)\n", out), out
+    assert rc == 0 and re.fullmatch(r"OK: 3 rule sentences classified, 1 hard rules; \d+ prompt targets resolve; \d+ interface pins; prompts \d+ bytes \(baseline 10000000\)\n", out), out
     root2 = with_extra(tmp_path / "b", "Never merge on a red build, because the base then breaks.\n")
     rc, out, _ = cli(capsys, root2)
     line = line_of(root2, PROMPT, "Never merge on a red build")
@@ -260,8 +260,8 @@ def test_each_reason_word_introduces_a_reason_ac_168_2(tmp_path, word):  # AC-16
 
 
 @pytest.mark.parametrize("clause", ["because it fails.", "because #496 and spec 048 ADR-017.", "so that ADR-017 spec 048 #496.",
-                                    "because of #496.", "since it works.", "because it fails (#496).", "because [x](docs/a/b/c.md).",
-                                    "because [the guide](docs/a/b/c.md)."])
+                                    "because of #496.", "since it works.", "because it fails (#496).", "because [x](../../../docs/a/b/c.md).",
+                                    "because [the guide](../../../docs/a/b/c.md)."])
 def test_a_reason_of_fewer_than_three_words_besides_references_is_short_ac_168_2(tmp_path, clause):  # AC-168.2
     root, res = reasoned(tmp_path, f"Never reuse a branch, {clause}")
     f = only(res, "short-reason")
@@ -335,7 +335,7 @@ def hard_tree(tmp_path, table, entry_hard="the-key"):
     return good_repo(tmp_path, items=items, hard=table)
 
 
-@pytest.mark.parametrize("by", ["cplat spec test-diff", "cplat component build merge", "cplat issue triage", "cplat resource restore",
+@pytest.mark.parametrize("by", ["cplat spec test-diff", "cplat component build merge", "cplat issue triage", "cplat resource restore",  # interface: enforcement keys the rules check resolves
                                 "cplat platform pr-check", "cplat platform rules check", "cplat pr open", "ci:security", "ci:dco",
                                 "ci:tmpl-build"])
 def test_a_cplat_command_or_ci_job_is_an_enforcement_ac_168_4(tmp_path, by):  # AC-168.4
@@ -398,7 +398,7 @@ def test_a_hard_rule_without_the_marker_fails_ac_168_5(tmp_path):  # AC-168.5
     body = GOOD_BODY.replace("**Hard rule:** ", "")
     root = good_repo(tmp_path, body)
     f = only(check(root), "no-marker")
-    assert fv(f, "file") == PROMPT and fv(f, "line") == line_of(root, PROMPT, "never file an issue")
+    assert fv(f, "file") == PROMPT and fv(f, "line") == line_of(root, PROMPT, "never file an issue")  # interface: fixture rule text the check locates
 
 
 def test_a_marker_on_a_rule_that_is_not_hard_fails_ac_168_5(tmp_path):  # AC-168.5

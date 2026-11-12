@@ -49,8 +49,8 @@ WAITS = {
     "system/commands/set.md": ["cplat system wait"],
     "resource/commands/add.md": ["cplat system wait"],
     "cluster/commands/add.md": ["cplat cluster wait"],
-    "system/commands/ship.md": ["cplat system ship next --wait", "cplat component ship wait"],
-    "component/commands/release.md": ["cplat component release wait", "cplat pr wait"],
+    "system/commands/ship.md": ["cplat system ship next --wait", "cplat component ship wait"],  # interface: wait command names the prompt carries
+    "component/commands/release.md": ["cplat component release wait", "cplat pr wait"],  # interface: wait command names the prompt carries
 }
 
 
@@ -69,6 +69,7 @@ def test_each_command_names_its_wait_and_what_to_do_on_a_timeout_ac_143_11(rel):
 def test_the_release_waits_for_mains_ci_with_cplat_before_the_tag_ac_143_11():  # AC-143.11
     text = (PLUGINS / "component/commands/release.md").read_text()
     phase = text[text.index("## Phase 5"):text.index("## Phase 6")]
+    # interface: the wait must come before the tag command
     assert phase.index("cplat component release wait --commit") < phase.index("git tag -a vX.Y.Z")
     assert "gh run watch" not in phase and "do not tag" in phase
 

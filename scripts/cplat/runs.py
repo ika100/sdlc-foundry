@@ -5,6 +5,7 @@ Public API for the callers (ship, pr wait, headless, doctor) and for later specs
   start(kind, repo=, spec=, mode=, resumes=, parent=) -> run_id     an in-progress record, local only
   phase / ci_round / rerun / event / set_section / add_to / filed    change it in place (never raise, print nothing)
   finish(run_id, outcome, escalation=, fields=)                      redact, buffer, flush; at most one stderr line
+  followup(run_id, kind, data) -> warning | None                     a follow-up line of a finished run (spec 181)
   flush(budget=, strict=) -> FlushResult                             buffer (and pending filings) -> store
   store_status() / buffered_count() / pending_count()                for `cplat platform doctor`
   attach_point(repo) / link_parent(run_id)                           nested runs and headless parents
@@ -287,7 +288,7 @@ def pending_count() -> int:
 
 def start(kind: str, *, repo: str | None = None, spec: str | None = None, mode: str | None = None,
           resumes: str | None = None, parent: str | None = None, run_id: str | None = None,
-          started_at: str | None = None) -> str | None:
+          started_at: str | None = None, shape: str | None = None) -> str | None:
     """Create <dir>/active/<run_id>.json and return the run_id (None only if even that failed).
 
     mode defaults to "headless" when $CPLAT_HEADLESS is set, else "interactive"; parent defaults to $CPLAT_RUN_PARENT.
@@ -305,6 +306,9 @@ def start(kind: str, *, repo: str | None = None, spec: str | None = None, mode: 
             "escalation": None, "filed": [], "outcome": None, "resumes": resumes,
             "parent": parent or os.environ.get("CPLAT_RUN_PARENT") or None,
         }
+        shape = shape or _cwd_shape()
+        if shape:
+            rec["shape"] = shape
         if os.environ.get("CPLAT_BENCHMARK"):
             rec["benchmark_of"] = os.environ["CPLAT_BENCHMARK"]
         with _locked():
@@ -315,6 +319,16 @@ def start(kind: str, *, repo: str | None = None, spec: str | None = None, mode: 
     link_parent(run_id)
     _register_claim(kind, run_id, rec["started_at"])
     return run_id
+
+
+def _cwd_shape() -> str | None:
+    """The shape of the repo the current directory is in; None when unknown."""
+    try:
+        import spec
+        top = core.run(["git", "rev-parse", "--show-toplevel"], cwd=Path.cwd(), check=False).stdout.strip()
+        return spec.repo_shape(Path(top)) if top else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _register_claim(kind: str, run_id: str, started_at: str) -> None:
@@ -579,6 +593,27 @@ def _scrub(value, chain: tuple[str, ...] = ()):
 def _warning(why: str, buffered: int, dropped: int) -> str:
     extra = f"; {dropped} oldest dropped (the buffer keeps {BUFFER_CAP})" if dropped else ""
     return f"WARNING: run record buffered locally ({why}); {buffered} record(s) buffered{extra}"
+
+
+def followup(run_id: str, kind: str, data: dict) -> str | None:
+    """Buffer a follow-up line of `kind` for `run_id` (signature = kind; a re-write replaces it) and flush.
+
+    Returns the warning line when it stays buffered, else None. Never raises."""
+    item = {"schema": SCHEMA, "followup": kind, "signature": kind, "run_id": run_id, "at": _iso(utcnow()), **data}
+    dropped = 0
+    t0 = monotonic()
+    try:
+        with _locked():
+            dropped = _buffer_add(item)
+    except Exception as e:  # noqa: BLE001
+        return _emit(_warning(f"recording failed: {type(e).__name__}: {e}", buffered_count(), dropped))
+    try:
+        why = flush(budget=max(0.0, BUDGET_SECONDS - (monotonic() - t0))).detail
+    except Exception as e:  # noqa: BLE001
+        why = f"recording failed: {type(e).__name__}: {e}"
+    if any(_key(i) == _key(item) for i in _safe_buffer()) or dropped:
+        return _emit(_warning(why or "recording failed: record not written", buffered_count(), dropped))
+    return None
 
 
 def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, fields: dict | None = None) -> str | None:
@@ -900,7 +935,7 @@ def _report(ns: argparse.Namespace) -> int:
     if ns.benchmarks:
         import runs_usage_report
         agg = runs_usage_report.aggregate_benchmarks(records, since_days=ns.since, repo=ns.repo, store=slug, now=now,
-                                                     malformed=malformed)
+                                                     malformed=malformed, followups=follows)
         print(json.dumps(agg, indent=2) if ns.json else runs_usage_report.render_benchmarks_text(agg))
         return 0
     if ns.agents:

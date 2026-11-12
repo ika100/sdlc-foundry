@@ -215,6 +215,7 @@ def test_promote_to_staging_pins_sha_tag_and_adds_the_environment(gitops_repo, g
 
 def test_promote_refuses_an_image_that_does_not_exist(gitops_repo, gh):
     composed(gitops_repo, "todo-web")
+    # interface: the refusal message promote prints
     with pytest.raises(core.PlatformError, match="does not exist yet"):
         promote.main(["todo-web", "--to", "staging", "--sha", "b" * 40, "--repo-dir", str(gitops_repo)])
 

@@ -43,11 +43,17 @@ uv run --with-requirements requirements-test.txt python scripts/check-docs.py
 step "no \"\$\$\" in a pod command of the e2e scripts (#323)"
 python3 scripts/check-e2e-probes.py
 
+step "no fixed sleep in a cplat test (spec 178)"
+python3 scripts/check-test-sleeps.py
+
 step "license and copyright metadata (REUSE)"
 uvx --quiet --from "reuse[charset-normalizer]" reuse lint | tail -3
 
 step "pull request title and spec rule (skipped without a pull request)"
 python3 scripts/check-pr-local.py
+
+step "lint of the templates this branch changes (spec 184)"
+uv run scripts/template-lint.py --changed
 
 step "cplat tests (Kyverno CLI tests skip without the kyverno binary)"
 uv run --with-requirements requirements-test.txt pytest tests/cplat -q -n auto

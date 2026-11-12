@@ -8,3 +8,7 @@ rules:
     class: hard
     hard: acceptance-tests-fixed
     source: spec 165
+  - id: R3
+    text: "**A test helper or type-only line**"
+    class: practice
+    source: spec 179

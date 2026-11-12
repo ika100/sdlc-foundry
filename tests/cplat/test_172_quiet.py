@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 import quiet
+from waiting import fake_prelude, with_prelude
 from failsum_support import sample
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -83,7 +84,7 @@ def world(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     fake = bindir / "devbox"
-    fake.write_text(FAKE_DEVBOX)
+    fake.write_text(FAKE_DEVBOX.replace("\n", "\n" + fake_prelude("sh") + "\n", 1))
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     work = tmp_path / "myrepo"
     work.mkdir()
@@ -171,7 +172,7 @@ def test_the_platform_test_fast_runs_only_the_given_tests_ac_172_3(tmp_path, arg
     bindir = tmp_path / "bin"
     bindir.mkdir()
     uv = bindir / "uv"
-    uv.write_text('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$UV_OUT"\n')
+    uv.write_text(with_prelude('#!/bin/sh\nprintf \'%s\\n\' "$@" > "$UV_OUT"\n'))
     uv.chmod(uv.stat().st_mode | stat.S_IEXEC)
     out = tmp_path / "uv-args.txt"
     env = {**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}", "UV_OUT": str(out)}

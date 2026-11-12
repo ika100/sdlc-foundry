@@ -104,7 +104,15 @@ class CatchUp:
     lines: list[str] = field(default_factory=list)
 
 
-BEHIND_TRIES = 4              # reads of the compare answer before the merge is refused
+class Behind(PlatformError):
+    """A land that may not change the branch found it behind its base (spec 178, RELEASE)."""
+
+    def __init__(self, base: str, behind: int):
+        super().__init__(f"the branch is {behind} commit(s) behind {base}", hint="update the branch, then run the land again")
+        self.base, self.behind = base, behind
+
+
+BEHIND_TRIES = 4             # reads of the compare answer before the merge is refused
 
 
 class Unknown(PlatformError):
@@ -142,23 +150,32 @@ def _known(repo: Path, url: str, watch: ship.CheckWatch, interval: float) -> tup
                   hint="run the merge again; no pull request merges on a guess")
 
 
-def catch_up(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interval: float) -> CatchUp:
+def await_change(watch: ship.CheckWatch, old: str, timeout: float, interval: float) -> None:
+    """Poll until the head of the pull request differs from `old`, bounded by the wait timeout."""
+    begin = ship.now()
+    while watch.head_sha() in (None, old):
+        if ship.now() - begin > timeout:
+            raise PlatformError(f"GitHub does not show the updated head of {watch.pr}", hint="run the land again")
+        ship.sleep(interval)
+
+
+def catch_up(repo: Path, url: str, watch: ship.CheckWatch, timeout: float, interval: float, allow: bool = True) -> CatchUp:
     """Inside the lock, before the merge: a branch behind its base is updated (a merge commit on the branch, never a force
     push) and the checks of its new head are waited for; the first red one ends it. A conflict raises `Conflict`.
     A head that is not known yet is read; an unreadable answer raises `Unknown` and nothing merges."""
     behind, base, head = _known(repo, url, watch, interval)
     if behind <= 0:
         return CatchUp()
+    if not allow:
+        raise Behind(base, behind)
+    watch.expect_from_current()
     res = run(["gh", "pr", "update-branch", url], cwd=repo, check=False)
     if res.returncode != 0:
         detail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["unknown error"]
         raise Conflict(f"{url} conflicts with {base}: a human decision ({detail[0]})",
                        hint="resolve the conflict on the branch, then run the merge again")
     out = CatchUp(updated=True, lines=[f"{url} was behind {base}: updated, waiting for its checks again"])
-    for _ in range(HEAD_POLLS):       # the update is visible as a new head commit
-        if watch.head_sha() not in (None, head):
-            break
-        ship.sleep(2)
+    await_change(watch, head, timeout, interval)      # the update is visible as a new head commit
     while True:
         out.status, out.cs, out.failed = ship.wait_checks(watch, timeout, interval)
         if out.status == "red" or watch.head_sha() in (None, watch.head):

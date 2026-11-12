@@ -32,6 +32,7 @@ _skip_if_exists:
 _exclude:
   - "{% if not needs_database %}**/TestcontainersConfiguration.java{% endif %}"
   - "{% if not needs_database %}src/main/resources/db{% endif %}"
+  - "{% if not needs_observability %}**/LogFormatTest.java{% endif %}"
   - "copier.yml"
   - ".git"
 

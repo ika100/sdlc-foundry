@@ -39,18 +39,21 @@ FRONT = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 AC_LINE = re.compile(r"^\s*[-*]\s+(~~)?\*\*(AC-\d{3,}\.\d+)\*\*")
 
 
-def spec_criteria(spec_id: str) -> tuple[set[str], set[str]] | None:
-    """(active, withdrawn) criterion ids of docs/specs/<spec_id>/spec.md, or None when the spec is missing."""
+def spec_criteria(spec_id: str) -> tuple[dict[str, str], set[str]] | None:
+    """(active id -> text, withdrawn ids) of docs/specs/<spec_id>/spec.md, or None when the spec is missing."""
     path = SPEC_DIR / spec_id / "spec.md"
     if not path.is_file():
         return None
     body = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.S)
     m = re.search(r"^## +Acceptance criteria\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
-    active, withdrawn = set(), set()
+    active: dict[str, str] = {}
+    withdrawn: set[str] = set()
     for ln in (m.group(1) if m else "").splitlines():
         hit = AC_LINE.match(ln)
-        if hit:
-            (withdrawn if hit.group(1) else active).add(hit.group(2))
+        if hit and hit.group(1):
+            withdrawn.add(hit.group(2))
+        elif hit:
+            active[hit.group(2)] = ln[hit.end():]
     return active, withdrawn
 
 
@@ -90,7 +93,9 @@ def topo_levels(repos: list[dict]) -> list[list[str]]:
     return levels
 
 
-GITOPS_OPS = {"addon", "resource", "uses", "expose", "env"}     # `resource` is the 5.0 word for `addon`
+GITOPS_OPS = {"addon", "resource", "uses", "expose", "env", "replicas", "resources"}   # `resource` is the 5.0 word for `addon`
+QUANTITY = re.compile(r"\d+(\.\d+)?(m|k|M|G|T|Ki|Mi|Gi|Ti)?")
+SETTING_KEY = re.compile(r"\b(replicas|host|resources|env)\b", re.I)
 KNOWN_RESOURCES = {"postgres"}                                  # `resource add postgres` needs no --type
 RESOURCE_TYPES = {"database", "bucket", "cache", "broker"}
 RESOURCE_NAME = re.compile(r"[a-z][a-z0-9-]{0,40}")
@@ -116,7 +121,7 @@ def known_resources() -> set[str]:
 def check_gitops(rid: str, ops, components: set[str]) -> list[str]:
     """Spec 045: the gitops-app entry lists operations /app:build runs with cplat resource / cplat component set."""
     if not isinstance(ops, list) or not ops:
-        return [f"repo {rid}: a gitops-app entry needs a `gitops:` list of operations (resource, uses, expose, env)"]
+        return [f"repo {rid}: a gitops-app entry needs a `gitops:` list of operations (resource, uses, expose, env, replicas, resources)"]
     errs, resources = [], known_resources()
     for op in ops:
         kind = next((k for k in (op or {}) if k in GITOPS_OPS), None) if isinstance(op, dict) else None
@@ -134,9 +139,9 @@ def check_gitops(rid: str, ops, components: set[str]) -> list[str]:
             else:
                 resources = resources | {name}
             continue
-        target = (op.get("component") or op.get("service")) if kind in {"uses", "env"} else op.get("expose")
+        target = (op.get("component") or op.get("service")) if kind in {"uses", "env", "replicas", "resources"} else op.get("expose")
         if not target:
-            errs.append(f"repo {rid}: gitops operation {kind!r} needs a component")
+            errs.append(f"repo {rid}: needs a component (gitops operation {kind!r})")
         elif target not in components:
             errs.append(f"repo {rid}: unknown component '{target}' in gitops operation {kind!r}")
         if kind == "uses" and op["uses"] not in resources:
@@ -144,6 +149,40 @@ def check_gitops(rid: str, ops, components: set[str]) -> list[str]:
                         f"or it must be in system.yaml)")
         if kind == "env" and not isinstance(op.get("env"), dict):
             errs.append(f"repo {rid}: gitops operation 'env' needs a mapping of variables")
+        if kind == "replicas":
+            n = op["replicas"]
+            if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+                errs.append(f"repo {rid}: gitops operation 'replicas' needs a whole number of at least 1")
+            if op.get("instance", "dev") not in {"dev", "staging"}:
+                errs.append(f"repo {rid}: gitops operation 'replicas': instance must be dev or staging "
+                            "(prod changes go through its promotion)")
+        if kind == "resources" and not _resources_ok(op["resources"]):
+            errs.append(f"repo {rid}: gitops operation 'resources' takes requests/limits of cpu and memory as quantities "
+                        "(e.g. {requests: {cpu: 100m}})")
+    return errs
+
+
+def _resources_ok(res) -> bool:
+    if not isinstance(res, dict) or not res:
+        return False
+    for group, vals in res.items():
+        if group not in {"requests", "limits"} or not isinstance(vals, dict) or not vals:
+            return False
+        if any(k not in {"cpu", "memory"} or isinstance(v, bool) or not QUANTITY.fullmatch(str(v)) for k, v in vals.items()):
+            return False
+    return True
+
+
+def check_settings(repos: list[dict], active: dict[str, str]) -> list[str]:
+    """Spec 179 (AC-179.2): a criterion that names an instance setting needs a gitops-app entry listing it in acs."""
+    covered = {a for r in repos if r.get("shape") == "gitops-app" for a in r.get("acs") or []}
+    errs = []
+    for cid, text in active.items():
+        keys = list(dict.fromkeys(k.lower() for k in SETTING_KEY.findall(text)))
+        if keys and cid not in covered:
+            names = ", ".join(f"`{k}`" for k in keys)
+            errs.append(f"{cid} names the instance setting {names} but no gitops-app entry lists it in acs: add the operation "
+                        f"to the gitops entry and {cid} to its acs (spec 179)")
     return errs
 
 
@@ -246,6 +285,9 @@ def check_all(path: Path) -> tuple[list[str], list[str]]:
         if not isinstance(r.get("done"), bool):
             errs.append(f"repo {rid}: done must be true/false")
         if r.get("shape") == "gitops-app":
+            if "order" in r and r["order"] != "before-merge":
+                errs.append(f"repo {rid}: order must be before-merge (/system:ship applies the gitops entry before the "
+                            "components merge)")
             late += check_gitops(rid, r.get("gitops"), known_components() | set(ids))
     for p in meta.get("gitops_pin") or []:
         if p.get("service") not in ids:
@@ -269,8 +311,9 @@ def check_all(path: Path) -> tuple[list[str], list[str]]:
                     elif a not in active:
                         errs.append(f"repo {r.get('id')}: unknown criterion '{a}'")
                 assigned |= set(r.get("acs") or [])
-            for a in sorted(active - assigned):
+            for a in sorted(set(active) - assigned):
                 errs.append(f"{a} is not assigned to any repo")
+            late += check_settings(repos, active)
             if any(r.get("criteria") for r in repos):
                 errs += check_criteria(repos)
     if not errs:
@@ -284,7 +327,7 @@ def check_all(path: Path) -> tuple[list[str], list[str]]:
     if meta["status"] in FINISHED:
         if not late:
             return errs, []
-        missing = (["no `gitops:` list"] if any("gitops" in m for m in late) else []) + \
+        missing = (["no `gitops:` list"] if any("gitops" in m and "(spec 179)" not in m for m in late) else []) + \
             [f"no `### {h}`" for h in ("Errors", "Timeouts") if any(f"### {h}" in m for m in late)] + \
             (["no `## Contract`"] if any("needs a contract" in m for m in late) else [])
         return errs, [f"{meta['status']} before specs 045/053 — {', '.join(missing) or '; '.join(late)} (nothing to do)"]

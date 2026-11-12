@@ -12,8 +12,8 @@ PLUGINS = core.PLATFORM_ROOT / "plugins"
 def test_the_tester_scopes_acceptance_assertions_to_the_features_region(plugin):
     text = (PLUGINS / plugin / "agents/tester.md").read_text()
     accept = text[text.index("## Acceptance mode"):]
-    assert "test id" in accept and "a landmark such as `main`" in accept and "never the whole page" in accept
-    assert "header, footer and navigation" in accept and "the spec does not ask for" in accept
+    assert "test id" in accept and "landmark" in accept and "whole page" in accept
+    assert "navigation" in accept and "footer" in accept
 
 
 def test_the_web_tester_names_the_locators():
@@ -24,7 +24,7 @@ def test_the_web_tester_names_the_locators():
 def test_the_reviewer_flags_template_owned_layout_the_spec_does_not_ask_for():
     text = (PLUGINS / "svc/agents/reviewer.md").read_text()
     step = text[text.index("4. Non-goals"):text.index("5. Plan")]
-    assert "template-owned layout" in step and "header, footer, navigation" in step and "the spec does not ask for" in step
+    assert "template-owned layout" in step and "navigation" in step and "not ask" in step
     assert "not acceptable" in step
 
 

@@ -150,6 +150,13 @@ def _publish(repo: Path, app_dir: Path, ns: argparse.Namespace, title: str, acti
         core.run(["git", "checkout", "-q", branch if branch != "HEAD" else "main"], cwd=repo)
         core.run(["git", "pull", "-q"], cwd=repo, check=False)
         head = core.run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+        rc, _out, err = backupstate.kubectl(["-n", "argocd", "annotate", "applications.argoproj.io", app,
+                                             "argocd.argoproj.io/refresh=normal", "--overwrite"], ctx)
+        if rc == 0:
+            r.did.append(f"asked Argo CD to refresh {app} now")
+        else:
+            why = (err or "").strip().splitlines()[-1:] or ["no reason given"]
+            r.did.append(f"could not ask Argo CD to refresh {app} ({why[0]}); waiting for its poll")
         deadline = time.monotonic() + ARGO_TIMEOUT_S
         while True:
             try:

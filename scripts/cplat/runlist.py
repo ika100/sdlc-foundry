@@ -332,6 +332,16 @@ def _engine_keys(rec: dict) -> dict:
             "fix": {k: rec.get(k) for k in _FIX_KEYS}}
 
 
+def _dir_shape(repo_dir: str | None) -> str | None:
+    try:
+        if repo_dir and Path(repo_dir).is_dir():
+            import spec
+            return spec.repo_shape(Path(repo_dir))
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def row(rec: dict, active: bool) -> dict:
     """One row of the run list from a run record (active, buffered or stored)."""
     phase, stopped_in = _derive(rec)
@@ -339,6 +349,7 @@ def row(rec: dict, active: bool) -> dict:
     esc = _escalation(rec)
     session, repo_dir = _session(rec["run_id"])
     pr = _pr(rec, repo_dir, phase)
+    shape = rec.get("shape") or _dir_shape(repo_dir)
     return {
         "run_id": rec["run_id"], "kind": rec.get("kind"), "level": "system" if rec.get("kind") == "product-ship" else "component",
         "spec": rec.get("spec"), "repo": rec.get("repo"), "parent": rec.get("parent"), "children": _children(rec),
@@ -348,6 +359,7 @@ def row(rec: dict, active: bool) -> dict:
         "activity": _activity(rec, esc), "session_id": session, "repo_dir": repo_dir,
         "pr": pr, "ci_url": rec.get("ci_url") or (f"{pr['url']}/checks" if pr and pr.get("url") else None),
         "image": _image(rec), "smoke": _smoke(rec), **_engine_keys(rec),
+        **({"shape": shape} if shape else {}),
     }
 
 

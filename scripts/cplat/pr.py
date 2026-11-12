@@ -61,13 +61,13 @@ def _failure_section(e: BaseException) -> dict:
 
 
 def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float,
-         slug: str | None = None) -> tuple[bool, list[str]]:
+         slug: str | None = None, mode: land_merge.Mode = land_merge.CATCH_UP) -> tuple[bool, list[str]]:
     """Spec 087: counts toward the repo's unfinished ship run, else records its own `pr-wait` run with a `pr_wait`
     section saying why the wait ended."""
     rid = runs.attach_point(repo)
     own = None if rid else runs.start("pr-wait", repo=slug or runs.repo_slug(repo))
     try:
-        ok, lines, section = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own)
+        ok, lines, section = _wait(repo, pr, merge, timeout, interval, queue_timeout, rid or own, mode)
     except BaseException as e:
         if own:
             runs.finish(own, "failed", fields={"pr_wait": _failure_section(e)})
@@ -78,7 +78,7 @@ def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queu
 
 
 def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queue_timeout: float,
-          run_id: str | None) -> tuple[bool, list[str], dict]:
+          run_id: str | None, mode: land_merge.Mode = land_merge.CATCH_UP) -> tuple[bool, list[str], dict]:
     view = json.loads(ship.gh(["pr", "view", pr, "--json", "state,url"], cwd=repo) or "{}")
     url = view.get("url") or pr
     if view.get("state") == "MERGED":
@@ -88,7 +88,7 @@ def _wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, que
     slug, who = merge_lock.slug_of(repo, url), merge_lock.who_of(url)
     whole = merge and "e2e" in dispatch_policy.serialize(repo)   # spec 167: with e2e the lock covers the whole land phase
     with merge_lock.held(slug, who, timeout, min(interval, 5)) if whole else contextlib.nullcontext():
-        return _watch(repo, url, merge, timeout, interval, queue_timeout, run_id, (slug, who, whole))
+        return _watch(repo, url, merge, timeout, interval, queue_timeout, run_id, (slug, who, whole), mode)
 
 
 def _red(repo: Path, url: str, watch: ship.CheckWatch, cs: list[dict], failed: list[dict], run_id: str | None) -> tuple[bool, list[str], dict]:
@@ -104,12 +104,12 @@ def _red(repo: Path, url: str, watch: ship.CheckWatch, cs: list[dict], failed: l
 
 
 def _watch(repo: Path, url: str, merge: bool, timeout: float, interval: float, queue_timeout: float, run_id: str | None,
-           lock: tuple[str, str, bool]) -> tuple[bool, list[str], dict]:
+           lock: tuple[str, str, bool], mode: land_merge.Mode = land_merge.CATCH_UP) -> tuple[bool, list[str], dict]:
     watch = ship.CheckWatch(repo, url, queue_timeout, run_id)
     rounds = land_merge.Rounds()
     try:
         if merge:    # only a land regenerates a conflict in a generated file; a plain wait leaves the branch alone
-            status, cs, failed, lines = land_merge.wait_green(repo, url, watch, timeout, interval, rounds, run)
+            status, cs, failed, lines = land_merge.wait_green(repo, url, watch, timeout, interval, rounds, run, mode=mode)
         else:
             (status, cs, failed), lines = ship.wait_checks(watch, timeout, interval), []
         if status == "red":
@@ -118,7 +118,7 @@ def _watch(repo: Path, url: str, merge: bool, timeout: float, interval: float, q
         if merge:
             slug, who, whole = lock
             with contextlib.nullcontext() if whole else merge_lock.held(slug, who, timeout, min(interval, 5)):
-                settled = land_merge.settle(repo, url, watch, timeout, interval, rounds, run)
+                settled = land_merge.settle(repo, url, watch, timeout, interval, rounds, run, mode=mode)
             lines += settled.lines
             if settled.status == "red":
                 return _red(repo, url, watch, settled.cs, settled.failed, run_id)
@@ -154,7 +154,7 @@ def main(argv: list[str]) -> int:
         return _open(ns)
     command = f"cplat pr wait {ns.pr}{' --merge' if ns.merge else ''}"
     with waits.running(command, Path.cwd()):
-        ok, lines = wait(Path(ns.repo).resolve(), url_of(ns.pr, ns.slug), ns.merge, ns.timeout, ns.interval, ns.queue_timeout, ns.slug)
+        ok, lines = wait(Path(ns.repo).resolve(), url_of(ns.pr, ns.slug), ns.merge, ns.timeout, ns.interval, ns.queue_timeout, ns.slug, mode=land_merge.CATCH_UP)
     print("\n".join(lines))
     return 0 if ok else 1
 

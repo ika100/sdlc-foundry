@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from waiting import with_prelude
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -35,7 +36,7 @@ def behind(tmp_path):
     git(other, "add", "-A"); git(other, "commit", "-qm", "operators"); git(other, "push", "-q", "origin", "main")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "kubectl").write_text(f'#!/bin/sh\necho "$@" >> {tmp_path}/kubectl.log\nexit 0\n')
+    (bin_dir / "kubectl").write_text(with_prelude(f'#!/bin/sh\necho "$@" >> {tmp_path}/kubectl.log\nexit 0\n'))
     (bin_dir / "kubectl").chmod(0o755)
     return repo, {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "KUBE_CONTEXT": "k3d-x-local"}, tmp_path
 

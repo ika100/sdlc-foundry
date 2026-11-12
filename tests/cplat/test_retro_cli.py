@@ -17,6 +17,7 @@ import runs_store
 from retro_world import (CONSUMER_SPEC, MONDAY, PLATFORM, SECRET, SHOP, STORE, WEBUI, WEEK, FakeRetroTracker, Lazy, fill,
                          tracker)  # noqa: F401  (fixture)
 from test_runs import clock, mem, store  # noqa: F401  (fixtures)
+from waiting import with_prelude
 
 autoissue = Lazy("autoissue")
 COD = "agents.svc:coder|service-python|sonnet"
@@ -337,6 +338,7 @@ def test_a_store_that_cannot_be_updated_is_reported_after_the_issue_is_posted(wo
     assert cli("post") == 1
     err = capsys.readouterr().err
     assert f"retro posted as https://github.com/{PLATFORM}/issues/201, but the run store could not be updated" in err
+    # interface: the retry hint cplat prints
     assert "fix: cplat platform retro post --dir" in err or "cplat platform retro post" in err
 
 
@@ -347,7 +349,7 @@ def fake_claude(tmp_path, monkeypatch):
     """A script standing in for `claude`: logs how it was called, then writes (or does not write) proposals.json in its cwd."""
     script = tmp_path / "bin" / "claude"
     script.parent.mkdir()
-    script.write_text(f"""#!{sys.executable}
+    script.write_text(with_prelude(f"""#!{sys.executable}
 import json, os, sys
 from pathlib import Path
 Path(os.environ["FAKE_CLAUDE_LOG"]).write_text(json.dumps({{"argv": sys.argv[1:], "cwd": os.path.realpath(os.getcwd()),
@@ -360,7 +362,7 @@ if mode == "ok":
     Path("proposals.json").write_text(os.environ["FAKE_PROPOSALS"])
 if mode == "bad":
     Path("proposals.json").write_text("[1, 2")
-""")
+"""))
     script.chmod(0o755)
     log = tmp_path / "claude.log"
     monkeypatch.setenv("CPLAT_CLAUDE", str(script))

@@ -19,6 +19,22 @@ def gh(args: list[str]) -> str:
     return run(["gh", *args]).stdout
 
 
+RESOURCE_KEYS = ("requests.cpu", "requests.memory", "limits.cpu", "limits.memory")
+QUANTITY = re.compile(r"^\d+(\.\d+)?(m|k|M|G|T|Ki|Mi|Gi|Ti)?$")
+
+
+def parse_resources(items: list[str]) -> list[tuple[str, str]]:
+    out = []
+    for kv in items:
+        k, _, v = kv.partition("=")
+        if k not in RESOURCE_KEYS:
+            raise PlatformError(f"--resources key '{k}' is not one of {', '.join(RESOURCE_KEYS)}", hint="--resources requests.cpu=100m")
+        if not QUANTITY.match(v):
+            raise PlatformError(f"--resources value '{v}' for {k} is not a quantity like 100m, 0.5 or 256Mi", hint="--resources requests.cpu=100m")
+        out.append((k, v))
+    return out
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cplat component", description=__doc__)
     p.add_argument("action", choices=["add", "set", "remove"], help="set: change env, exposure, resource use or replicas of a component")
@@ -34,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--provides", action="append", default=[], metavar="NAME[:TYPE]", help="API the component provides (TYPE: openapi, grpc, graphql, events; default openapi; single component only)")
     p.add_argument("--consumes", action="append", default=[], metavar="NAME", help="API the component consumes; somebody must provide it (single component only)")
     p.add_argument("--replicas", type=int)
+    p.add_argument("--resources", action="append", default=[], metavar="KEY=VALUE", help="with set: container requests/limits, KEY one of requests.cpu, requests.memory, limits.cpu, limits.memory (repeatable)")
     p.add_argument("--instance", metavar="ENV", help="with set: change this instance only (with --replicas)")
     p.add_argument("--port", type=int, help="override the port (default: the service's template answer, else the shape default)")
     p.add_argument("--from-k8s", action="store_true", help="seed port/probes/env/replicas/resources from the service's existing k8s/base/deployment.yaml (v1 → v2 migration)")
@@ -208,14 +225,17 @@ def main(argv: list[str]) -> int:
     registry_ns = ans.get("docker_registry", f"ghcr.io/{org}")
     if ns.action == "set" and len(ns.services) != 1:
         raise PlatformError("component set changes exactly one component", hint="run it once per component")
-    if ns.action == "set" and not (ns.env or ns.expose or ns.uses or ns.replicas or ns.provides or ns.consumes):
-        raise PlatformError("nothing to change", hint="pass --env KEY=VALUE, --expose [HOST], --uses RESOURCE, --replicas N, --provides NAME[:TYPE] or --consumes NAME")
+    if ns.action == "set" and not (ns.env or ns.expose or ns.uses or ns.replicas or ns.resources or ns.provides or ns.consumes):
+        raise PlatformError("nothing to change", hint="pass --env KEY=VALUE, --expose [HOST], --uses RESOURCE, --replicas N, --resources requests.cpu=100m, --provides NAME[:TYPE] or --consumes NAME")
     if (ns.provides or ns.consumes) and (len(ns.services) != 1 or ns.instance):
         raise PlatformError("--provides and --consumes apply to exactly one component and not to an --instance", hint="run it once per component")
     provides = parse_provides(ns.provides)
+    resources = parse_resources(ns.resources)
+    if resources and ns.action != "set":
+        raise PlatformError("--resources applies to component set only", hint="cplat component set <name> --resources requests.cpu=100m")
     if ns.instance and ns.action != "set":
         raise PlatformError("--instance applies to component set only")
-    if ns.instance and (ns.env or ns.expose or ns.uses or not ns.replicas):
+    if ns.instance and (ns.env or ns.expose or ns.uses or resources or not ns.replicas):
         raise PlatformError("--instance changes replicas only", hint="component set <name> --instance ENV --replicas N")
     if (ns.env or ns.generate or ns.secret or ns.uses or ns.secret_ref) and len(ns.services) != 1:
         raise PlatformError("--env, --generate, --secret, --secret-ref and --uses apply to exactly one component")
@@ -291,6 +311,7 @@ def main(argv: list[str]) -> int:
             changes.append("uses " + ", ".join(ns.uses))
         if ns.replicas:
             changes.append(f"replicas {ns.replicas}" + (f" in {ns.instance}" if ns.instance else ""))
+        changes += [f"resources {k}={v}" for k, v in resources]
         changes += [f"provides {pn} (api {pk})" for pn, pk in provides] + [f"consumes {cn}" for cn in ns.consumes]
         names.append(name)
         r.will_do.append(f"set {name}: " + "; ".join(changes))
@@ -315,6 +336,14 @@ def main(argv: list[str]) -> int:
                 entry["expose"] = {"host": name if ns.expose is True else ns.expose}
             if ns.uses:
                 entry["uses"] = list(dict.fromkeys([*(entry.get("uses") or []), *ns.uses]))
+            for k, v in resources:
+                a, _, b = k.partition(".")
+                res = entry.get("resources")
+                if not isinstance(res, dict):
+                    res = entry["resources"] = {}
+                if not isinstance(res.get(a), dict):
+                    res[a] = {}
+                res[a][b] = v
             apply_apis(data, entry, provides, ns.consumes)
             if ns.replicas and ns.instance:
                 inst = entry["instances"]

@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 import core
+from waiting import with_prelude
 
 WORKFLOW = core.PLATFORM_ROOT / "templates" / "gitops-app" / ".github" / "workflows" / "pin-dev.yml"
 SHA = "0123456789abcdef0123456789abcdef01234567"
@@ -64,7 +65,7 @@ def gitops(tmp_path):
     b = tmp_path / "bin"
     b.mkdir()
     for name, body in (("uv", FAKE_UV), ("gh", FAKE_GH)):
-        (b / name).write_text(body)
+        (b / name).write_text(with_prelude(body))
         (b / name).chmod((b / name).stat().st_mode | stat.S_IEXEC)
     return {"dir": g, "origin": origin, "bin": b, "log": tmp_path / "gh.log", "out": tmp_path / "out.txt"}
 

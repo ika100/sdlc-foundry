@@ -17,6 +17,7 @@ from pathlib import Path
 import core
 import runs
 import spec as specmod
+import testreview
 import yaml
 from core import PlatformError, run
 
@@ -221,6 +222,14 @@ def _done_in(sp: specmod.Spec | None, task: str) -> bool:
     return any(str(t["id"]) == task and t.get("done") is True for t in _plan_tasks(sp))
 
 
+def _finished(sp: specmod.Spec | None, task: str) -> bool:
+    """Done in the committed plan, or gone from it (merged into another task)."""
+    tasks = _plan_tasks(sp)
+    if not tasks:
+        return False
+    return _done_in(sp, task) or task not in {str(t["id"]) for t in tasks}
+
+
 def _verified(repo: Path, spec_id: str, head: str, sp: specmod.Spec | None) -> bool:
     if sp is None or sp.status != "done":
         return False
@@ -259,9 +268,12 @@ def _evaluate(repo: Path, command: str, spec_id: str, unit: str) -> tuple[str | 
             return None, f"`cplat spec trace {spec_id}` reports criteria without a test"
         if not _acceptance_commit(repo, head):
             return None, f"no commit 'acceptance tests for ...' on feature/{spec_id}"
+        if testreview.reviewed_commit(repo, spec_id, head) is None:
+            return None, (f"no commit 'reviewed acceptance tests for {spec_id}' on feature/{spec_id} "
+                          "(the test review of build Phase 1)")
         return head, ""
     if tasks := tasks_of(unit):
-        open_ = [task for task in tasks if not _done_in(sp, task)]
+        open_ = [task for task in tasks if not _finished(sp, task)]
         if open_:
             return None, f"plan.md does not have `done: true` for {', '.join(open_)} in a commit"
         return head, ""
@@ -298,7 +310,8 @@ def next_step(unit: str, spec_id: str) -> str:
         return f"follow /component:plan {spec_id}, commit docs/specs/{spec_id}/plan.md"
     if unit == "red-tests":
         return (f"write the acceptance tests for every criterion of {spec_id} and commit them as "
-                f"'test: acceptance tests for ...' (`cplat spec trace {spec_id}` must pass)")
+                f"'test: acceptance tests for ...' (`cplat spec trace {spec_id}` must pass), "
+                f"then run the test review of build Phase 1 and commit it with `cplat component build reviewed {spec_id}`")
     if unit.startswith("batch:"):
         tasks = tasks_of(unit)
         return (f"implement tasks {', '.join(tasks)} of the plan at once, as build Phase 2's parallel batch (coders in worktrees, "
@@ -321,9 +334,8 @@ def _derive(repo: Path, spec_id: str, entries: dict[str, dict], head: str, sp: s
 
     if phase == "build":
         mark("plan")
-        done = {str(t["id"]) for t in _plan_tasks(sp) if t.get("done") is True}
         for unit in entries:
-            if tasks_of(unit) and set(tasks_of(unit)) <= done:
+            if tasks_of(unit) and all(_finished(sp, t) for t in tasks_of(unit)):
                 mark(unit)
     elif phase in SHIP_PHASES_AFTER_BUILD:
         for unit in entries:
@@ -385,8 +397,8 @@ def start_session(repo: Path, unit: str, session_id: str | None = None) -> None:
     _update(repo, mutate)
 
 
-def end_session(repo: Path, command: str, spec_id: str, unit: str, before: str) -> dict:
-    """Detect the checkpoint after a session. Returns {"checkpoint": sha, "stalls": 0} or {"checkpoint": None, "stalls": n}."""
+def end_session(repo: Path, command: str, spec_id: str, unit: str, before: str, paused: bool = False) -> dict:
+    """Detect the checkpoint after a session. A `paused` session (usage limit, spec 184) without a checkpoint is no stall. Returns {"checkpoint": sha, "stalls": 0} or {"checkpoint": None, "stalls": n}."""
     commit = detect(repo, command, spec_id, unit)
     moved = feature_head(repo, spec_id) != before
     result: dict = {}
@@ -397,6 +409,8 @@ def end_session(repo: Path, command: str, spec_id: str, unit: str, before: str) 
             return
         if commit:
             _checkpoint(u, commit)
+        elif paused:
+            u.update(status="open", hold=None)
         else:
             u.update(status="open", hold=None, stalls=0 if moved else int(u.get("stalls", 0)) + 1)
         result.update(checkpoint=commit, stalls=u["stalls"])
@@ -457,6 +471,13 @@ def gate(repo: Path, unit: str, hook_input: dict) -> dict | None:
     entry = _unit(data, unit)
     if entry is None:
         return None
+    import waits
+    waiting = waits.live(repo)
+    if waiting:                                    # a running cplat wait holds the stop: no hold, no count (AC-178.8)
+        return {"decision": "block",
+                "reason": (f"waiting: {', '.join(waiting)}\nUnit {unit} of {spec_id} is not finished; the wait above is still running.\n"
+                           "Next: read its result when it ends (a blocking read of its background task, never a polling loop), "
+                           "then go on from it.")}
     commit, why = _evaluate(repo, command, spec_id, unit)
     if commit:
         _update(repo, lambda d: _checkpoint(_unit(d, unit), commit) if _unit(d, unit) else None)

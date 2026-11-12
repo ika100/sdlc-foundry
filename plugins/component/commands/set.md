@@ -1,5 +1,5 @@
 ---
-description: "Change a component of the system in a gitops-app repo (one PR). Usage: /component:set <component> [--env K=V] [--expose [HOST]] [--uses postgres] [--replicas N] [--provides NAME[:TYPE]] [--consumes NAME] [--instance <env> --replicas N]"
+description: "Change a component of the system in a gitops-app repo (one PR). Usage: /component:set <component> [--env K=V] [--expose [HOST]] [--uses postgres] [--replicas N] [--resources K=V] [--provides NAME[:TYPE]] [--consumes NAME] [--instance <env> --replicas N]"
 ---
 
 Run in the gitops-app repo. **Request:** $ARGUMENTS
@@ -20,7 +20,7 @@ Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its
 4. **Wait** once the PR is merged (spec 143): `cplat system wait --env <env> <component> --refresh` for each environment the change touches, `--refresh` right after a merge you made (without it when the user merged). It ends `READY:` (exit 0), `RED:` (exit 1: a sync error, failed sync or `Degraded` at the new revision; show its lines and stop, nothing is retried) or `TIMEOUT:` (exit 2: run the same wait again, the command it prints, at most twice; then escalate with cause `environment`: `cplat component ship escalate '<the TIMEOUT line>' --cause environment` inside a ship run, otherwise report the `TIMEOUT:` lines to the user as an environment problem). Never write a polling loop on `kubectl`, `gh` or `cplat`, because the wait already ends on the synced revision.
 5. **Report** the script's output, and for an exposure the URL once the wait is `READY:`.
 
-`set <component>` with `--env K=V`, `--expose [HOST]`, `--uses postgres` or `--replicas N` merges into the component's existing entry and re-renders. One component per `set`. `--instance <env> --replicas N` changes just that instance and writes `instances.<env>.replicas`; the component needs an instance in `<env>` already, and `--instance` takes nothing but `--replicas`. `--replicas` is refused on a component or instance that has a `scale`: the error names the key to remove. `scale` is edited in `system.yaml`; there are no scale flags. `--uses postgres` needs `/resource:add postgres` first.
+`set <component>` with `--env K=V`, `--expose [HOST]`, `--uses postgres`, `--replicas N` or `--resources requests.cpu=100m` merges into the component's existing entry and re-renders. One component per `set`. `--instance <env> --replicas N` changes just that instance and writes `instances.<env>.replicas`; the component needs an instance in `<env>` already, and `--instance` takes nothing but `--replicas`. `--replicas` is refused where a `scale` exists: the error names the key to remove. Edit `scale` in `system.yaml`. `--uses postgres` needs `/resource:add postgres` first.
 
 The script changes `applications/` and `bootstrap/` alone. **Hard rule:** never `kubectl apply`, because the gitops repo and Argo CD own the cluster.
 

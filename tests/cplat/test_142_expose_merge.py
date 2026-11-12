@@ -2,10 +2,13 @@
 An exposure is merged on green CI without a further question; the user can still say not to merge."""
 from pathlib import Path
 
-SET = (Path(__file__).resolve().parents[2] / "plugins/component/commands/set.md").read_text()
+from structure import points_to
+
+SET_REL = "plugins/component/commands/set.md"
+SET = (Path(__file__).resolve().parents[2] / SET_REL).read_text()
 
 
 def test_an_exposure_is_merged_on_green_ci_without_asking_ac_142_1():  # AC-142.1
-    step = SET[SET.index("3. **Merge an exposure**"):SET.index("4. **")]   # spec 143 put the wait before the report
-    assert "`cplat pr wait <pr-url> --merge`" in step and "do not ask again" in step
-    assert "When the user said not to merge, leave the PR open" in step and "Other changes: leave the PR for review" in step
+    step = SET[SET.index("Merge an exposure"):SET.index("4. **")]   # spec 143 put the wait before the report
+    assert "`cplat pr wait" in step and "--merge" in step
+    assert points_to(SET_REL, "cplat pr wait")

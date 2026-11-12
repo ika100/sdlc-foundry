@@ -20,6 +20,16 @@ from sharding import (  # noqa: F401  (spec 112: --shard / --shard-report)
 
 
 @pytest.fixture(autouse=True)
+def silent_sessions_are_not_pauses(request, monkeypatch):
+    """Spec 184: a fake `claude` that ends silent and fast reads as a usage-limit pause and the run sleeps 5+ minutes. Every
+    test but spec 184's own counts a silent session as one that ran long, so no test waits for a pause by accident."""
+    if request.node.path.name.startswith("test_184_"):
+        return
+    import usagelimit
+    monkeypatch.setattr(usagelimit, "QUICK_SECONDS", 0)
+
+
+@pytest.fixture(autouse=True)
 def no_real_issue_claims(monkeypatch):
     """Spec 082: claims call GitHub; tests never do. Tracked issues look closed (nothing to claim) unless a test
     replaces `claim.gh` itself."""

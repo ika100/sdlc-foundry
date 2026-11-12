@@ -5,7 +5,6 @@ The cycle and the CLI call these functions; here the tests call them directly (t
 import os
 import re
 import signal
-import time
 
 import pytest
 
@@ -15,6 +14,7 @@ import dispatch_policy
 import dispatch_state as ds
 import dispatch_units as du
 from dispatch_world import git, world  # noqa: F401  (fixture)
+from waiting import budget, wait_for
 
 SLUG = "acme/shop-api"
 
@@ -142,13 +142,13 @@ def test_adopt_finds_live_units_from_their_files_and_pause_flags_them(env):
     assert du.adopted_lines(live) == [f"adopted issue-1.1 (pid {res.unit['pid']})"]
     assert du.pause_flags(live) == ["issue-1.1"] and ds.stop_path(res.unit["worktree"]).exists()
     env.wait_ended("issue-1.1")
-    deadline = time.monotonic() + 15                     # the process may outlive its result file by a moment
-    while True:
+
+    def settled():                                       # the process may outlive its result file by a moment
         assert du.advance(env.repo, SLUG, live[0], policy(env)).lines == []
-        unit = ds.read_unit(res.unit["worktree"])
-        if unit["status"] != "running" or time.monotonic() > deadline:
-            break
-        time.sleep(0.2)
+        return ds.read_unit(res.unit["worktree"])["status"] != "running"
+
+    wait_for(settled, budget(15), what="the paused unit to settle")
+    unit = ds.read_unit(res.unit["worktree"])
     assert unit["status"] == "paused"
     env.behave(mode="wait", honor_stop=False)
     step = du.resume_paused(env.repo, SLUG, unit, policy(env))

@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import stat
+from waiting import with_prelude
 import subprocess
 import sys
 from pathlib import Path
@@ -549,6 +550,7 @@ def test_a_bad_env_is_refused_ac_121_9(fake, capsys):  # AC-121.9
 def test_a_dirty_tree_is_refused_with_the_clean_tree_text_ac_121_9(fake, capsys):  # AC-121.9
     backed_up(fake.kube)
     (fake.repo / "notes.txt").write_text("x")
+    # interface: the refusal text cplat prints
     err = refused(fake, capsys, args(fake, "orders-db", "--to", "17"), "the working tree has uncommitted changes")
     assert fake.prs() == []
 
@@ -1229,7 +1231,7 @@ def uworld(tmp_path, monkeypatch):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     copier = bin_dir / "copier"
-    copier.write_text(COPIER.format(python=sys.executable, new=str(T / "scripts" / "render.py")))
+    copier.write_text(with_prelude(COPIER.format(python=sys.executable, new=str(T / "scripts" / "render.py"))))
     copier.chmod(copier.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     return repo

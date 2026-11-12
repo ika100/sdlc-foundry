@@ -11,6 +11,7 @@ import pytest
 import ship
 from land171_world import BRANCH, PR_URL, git, make_world
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
+from waiting import with_prelude
 
 ENTRIES = ["ship", "pr"]
 
@@ -124,7 +125,7 @@ def test_a_merge_refused_for_another_reason_says_so_and_never_blames_a_conflict(
     assert "merging" in err and "the base branch policy prohibits the merge" in err
     no_conflict_talk(out + err)
     if entry == "ship":
-        assert "cplat component ship land" in err.split("fix:", 1)[1]
+        assert "cplat component ship land" in err.split("fix:", 1)[1]  # interface: fix line printed by cplat
 
 
 # ---------------- AC-171.4: the merge carries the head the checks were judged on ----------------
@@ -213,12 +214,12 @@ def test_a_refused_push_exits_1_naming_the_commits_and_the_fix_and_judges_no_che
     world.local_commit("a.txt")
     world.local_commit("b.txt")
     hook = world.bare / "hooks" / "pre-receive"
-    hook.write_text("#!/bin/sh\necho 'refused by the test hook' >&2\nexit 1\n")
+    hook.write_text(with_prelude("#!/bin/sh\necho 'refused by the test hook' >&2\nexit 1\n"))
     hook.chmod(0o755)
     rc, out, err = land(world, "ship", capsys)
     assert rc == 1
     assert "ERROR: local commits not pushed: 2 commit(s) ahead of the PR head" in err
-    assert "fix:" in err and "cplat component ship pr" in err.split("fix:", 1)[1]
+    assert "fix:" in err and "cplat component ship pr" in err.split("fix:", 1)[1]  # interface: fix line printed by cplat
     assert f"push of {BRANCH} failed" in out + err
     assert world.events("checks") == [] and world.events("merged") == [] and world.pr_head() == world.pre
 

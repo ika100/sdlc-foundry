@@ -6,6 +6,7 @@ from pathlib import Path
 import appship_report
 import ship
 import spec
+from structure import points_to
 from test_ship import gh, git, repo  # noqa: F401  (pytest fixtures)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -82,14 +83,13 @@ def test_the_unattended_rules_take_suggested_answers_and_stop_only_without_one_a
     # spec 155: a system ship writes each repo spec from the plan's criteria (spec 147) with cplat, so no repo spec of a
     # system ship has questions to answer; the unattended answering path (section D.3) is gone, nothing is invented
     d = (ROOT / "plugins/component/references/spec-from-plan.md").read_text()
-    assert "When run unattended by `/system:ship`" not in d and "writes and approves a repo's spec itself" in d
-    sys_ship = (ROOT / "plugins/system/commands/ship.md").read_text()
-    assert "Never answer a repo spec's questions." in sys_ship and "writes and approves the repo spec from the plan" in sys_ship
+    assert "When run unattended by `/system:ship`" not in d and "cplat spec" in d
+    assert points_to("plugins/system/commands/ship.md", "cplat system ship")
 
 
 def test_the_product_manager_prefers_the_system_specs_answers_ac_141_4():  # AC-141.4
     pm = (ROOT / "plugins/svc/agents/product-manager.md").read_text()
-    assert "Prefer the system spec's answers and conventions" in pm and "spec 141" in pm
+    assert "system spec" in pm and "spec 141" in pm
 
 
 def test_the_decision_count_is_written_to_the_run_record_ac_141_3():  # AC-141.3

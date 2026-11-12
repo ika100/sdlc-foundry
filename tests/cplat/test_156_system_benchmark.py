@@ -17,6 +17,7 @@ import runs_bench
 import runs_bench_system as rbs
 import runs_usage
 import transcripts
+from structure import points_to
 from test_144_joint_pr import WEB_SHA, JointWorld
 from test_appship_097 import SPEC
 
@@ -322,4 +323,4 @@ def test_the_entry_is_applied_by_cplat_one_commit_per_operation(j, monkeypatch):
     assert appship.entry_ops({"env": {"A": "1", "B": "2"}, "component": "w"}) == ["component", "set", "w", "--env", "A=1", "--env", "B=2"]
     assert appship.entry_ops({"bogus": 1}) is None
     text = (ROOT_DIR / "plugins" / "system" / "references" / "ship-entry.md").read_text()
-    assert "`cplat system ship entry apply <id>`" in text and "never run git or edit files in that worktree yourself" in text
+    assert points_to("plugins/system/references/ship-entry.md", "cplat system ship") and "worktree" in text

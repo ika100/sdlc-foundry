@@ -767,6 +767,7 @@ def test_the_backup_guide_states_what_each_kind_of_backup_covers_ac_117_25():  #
     assert re.search(r"environment backup is not a consistent database backup", flat)
     assert "/resource:restore" in text and re.search(r"databases? (is|are) restored only with `?/resource:restore", flat)
     assert re.search(r"external databases? (is|are) backed up by (its|their) provider", flat)
+    # interface: the guide must state the cache limit
     assert re.search(r"cache data is not backed up", flat)
     for needle in ("Velero", "Barman", "emptyDir", "remote.s3", "--confirm prod", "/system:restore", "/resource:backup", "point in time"):
         assert needle.lower() in flat, needle.lower()
@@ -798,6 +799,7 @@ def front(path):
 def test_the_resource_plugin_is_1_3_0_and_has_backup_and_restore_commands_ac_117_31():  # AC-117.31
     release_support.assert_bumped("resource", "1.3.0")   # spec 117 shipped 1.3.0; later specs only raise it (spec 132: >=)
     meta, body = front("plugins/resource/commands/backup.md")
+    # interface: the usage line is the command contract
     assert len(meta["description"]) < 260 and "Usage: /resource:backup <db> --env <env>" in meta["description"]
     assert "cplat resource backup" in body and "$ARGUMENTS" in body
 

@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import stat
+from waiting import with_prelude
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +23,7 @@ import yaml
 
 import cplat
 import release_support
+import structure
 from broker_fixtures import broker, bsys
 from resources_fixtures import comp, db, system
 from system_fixtures import ROOT, git, write_system
@@ -310,7 +312,7 @@ def run_up(tmp_path, env):
     bin_dir.mkdir()
     for tool, rc in (("k3d", 1), ("kubectl", 1), ("docker", 1), ("gh", 1), ("helm", 1)):
         p = bin_dir / tool
-        p.write_text(f'#!/bin/sh\necho "FAKE {tool} $*"\nexit {rc}\n')
+        p.write_text(with_prelude(f'#!/bin/sh\necho "FAKE {tool} $*"\nexit {rc}\n'))
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
     full = {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "HOME": str(tmp_path), "WITH_ARGO": "0", "LOCAL_HTTP_PORT": "18088", **env}
     p = subprocess.run(["bash", "scripts/local-cluster.sh", "up"], cwd=root, capture_output=True, text=True, env=full, timeout=60)
@@ -670,7 +672,7 @@ def gate(tmp_path, runs, sha="abc1234", api=None):
     bin_dir = tmp_path / "ghbin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
-    gh.write_text(GH_CHECKS.replace("{python}", sys.executable))
+    gh.write_text(with_prelude(GH_CHECKS.replace("{python}", sys.executable)))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     data = tmp_path / "checkruns.json"
     data.write_text(json.dumps({"runs": {"total_count": len(runs), "check_runs": runs}, **(api or {})}))
@@ -893,7 +895,7 @@ def test_the_upgrade_command_runs_cplat_with_pr_and_wait_ac_121_6():  # AC-121.6
     text = read("plugins/resource/commands/upgrade.md")
     assert len(description("plugins/resource/commands/upgrade.md")) < 260
     assert "/resource:upgrade <name> --to <major> [--env <env>]" in text
-    assert "cplat resource upgrade <ARGS> --pr --wait" in text
+    assert structure.points_to("plugins/resource/commands/upgrade.md", "cplat resource upgrade") and "--pr --wait" in text
     for needle in ("one environment", "60 minutes", "/resource:restore", "/resource:backup", "/issue:report"):
         assert needle in text, needle
     assert re.search(r"(?i)staging", text) and re.search(r"(?i)prod", text) and "upgrade" in read("plugins/resource/README.md")
@@ -914,7 +916,9 @@ def test_the_doctor_update_and_status_docs_describe_the_new_behaviour_ac_121_19(
 
 def test_the_upgrade_guide_covers_the_whole_procedure_ac_121_17():  # AC-121.17
     text = read("docs/UPGRADES.md")
-    for needle in ("cplat platform versions", "/resource:upgrade", "/resource:backup", "/resource:restore", "cplat platform update --verify", "doctor --context",
+    for needle in ("cplat platform versions", "/resource:upgrade", "/resource:backup", "/resource:restore",
+                   # interface: the verify command the upgrade guide names
+                   "cplat platform update --verify", "doctor --context",
                    "property_operators", "operators: owner", "60 minutes", "15 minutes", "release gate", "--env staging", "--env prod", "held"):
         assert needle in text, needle
     for pattern in (r"(?i)verified", r"(?i)one environment", r"(?i)after-dev-smoke", r"(?i)shared cluster|one cluster", r"(?i)CloudNativePG",

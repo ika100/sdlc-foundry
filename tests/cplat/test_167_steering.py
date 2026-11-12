@@ -110,11 +110,10 @@ def test_a_lower_slot_count_stops_no_unit_and_blocks_starts_until_running_is_bel
     world.behave("issue-2.1", then="escalate")
     world.release("issue-2.1")
     world.wait_ended("issue-2.1")
-    for _ in range(3):
+    def started():                                                                    # a pass starts it once 2.1 is reaped
         world.run("start", "--once")
-        if world.calls_of("issue-3.1"):
-            break
-    assert world.calls_of("issue-3.1")
+        return world.calls_of("issue-3.1")
+    assert world.wait_until(started)
 
 
 def test_a_higher_slot_count_fills_the_new_slots_in_the_next_cycle_ac_167_11(world):  # AC-167.11

@@ -49,6 +49,12 @@
 # OTel, Kyverno, the external database and bucket, the caches), then `core` the bucket checks, the broker and the ship steps, `scaling` the
 # broker with the scaling steps inside it, `backups` the backup and restore steps. A block a part leaves out prints `==> skip [<part>] ...`.
 #
+# Dev runs `observability: {ui: lgtm}` (spec 182): cluster-up installs the Grafana stack, the collector tails the namespace's pod logs.
+# Right after the OpenTelemetry step, e2e-api is called with a traceparent; within 120 s Loki returns its line "info requested" by
+# service_name and k8s_namespace_name, by pod and environment and by trace_id, Tempo returns the trace, the collector's own lines are not
+# collected, and `kubectl auth can-i` shows the collector reads pod logs in e2e-dev only; no DaemonSet carries the system's label (AC-182.1 to .5).
+# The checks run in every part (shared setup) and take at most 3 minutes once the stack is up.
+#
 # Needs: docker (running), k3d, kubectl, uv, curl, copier (or uv). Env: E2E_KEEP=1 keeps the cluster, E2E_PORT, E2E_WORK, E2E_PART.
 set -euo pipefail
 
@@ -97,6 +103,7 @@ step() { echo; echo "==> $*"; }
 
 cleanup() {
   rc=$?
+  if [ -n "${pf_pid:-}" ]; then kill "$pf_pid" 2>/dev/null || true; wait "$pf_pid" 2>/dev/null || true; fi   # the port-forward to the lgtm pod
   if [ "${E2E_KEEP:-0}" != 1 ]; then
     (cd "$work/e2e-gitops" 2>/dev/null && LOCAL_CLUSTER=$cluster WITH_ARGO=0 REGISTRY_PORT=$regport bash scripts/local-cluster.sh down) >/dev/null 2>&1 || true
   fi
@@ -158,7 +165,7 @@ $cplat resource add ext-files --type bucket --external --repo-dir "$gitops_repo"
 commit "ext-files"
 # no component uses a bucket yet: nothing asks for the SeaweedFS operator (cluster-up gets WITH_SEAWEEDFS=1 below)
 [ ! -e "$gitops_repo/operators" ] || fail "render wrote operators/ although no component uses an in-cluster database or bucket yet"
-step "Describe the environments in system.yaml: the OpenTelemetry collector and enforced Kyverno guard rails in dev, a staging host"
+step "Describe the environments in system.yaml: the OpenTelemetry collector with the lgtm stack and enforced Kyverno guard rails in dev, a staging host"
 (cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" "$port" <<'PY'
 import sys
 root, port = sys.argv[1], sys.argv[2]
@@ -169,7 +176,7 @@ app_dir = gitops.find_app(Path("."))
 y, data = gitops.load(app_dir)
 envs = data["environments"]
 envs["dev"]["policy"] = "enforce"          # cluster-up installs Kyverno
-envs["dev"]["observability"] = {}          # the collector only, no UI stack
+envs["dev"]["observability"] = {"ui": "lgtm"}   # the collector and the Grafana stack (Loki, Tempo): cluster-up installs it (spec 182)
 envs["dev"]["url"] = "http://{host}:" + port
 envs["staging"]["host"] = "{component}.{system}-staging.localhost"
 envs["staging"]["url"] = "http://{host}:" + port
@@ -470,6 +477,98 @@ collector_has 'info	Traces' || fail "the pushed trace never reached the collecto
 for _ in $(seq 1 40); do collector_has 'info	Metrics' && break; sleep 3; done
 collector_has 'info	Metrics' || fail "no metrics reached the collector (scrape of e2e-api or OTLP push)"
 echo "ok   traces and metrics arrive at the collector"
+
+step "Logs: e2e-api's line reaches Loki with its labels and trace id, Tempo has the trace, the collector's own lines are not collected (AC-182.1 to .5)"
+kubectl --context k3d-$cluster -n observability rollout status deploy/lgtm --timeout=300s || {
+  kubectl --context k3d-$cluster -n observability describe pod -l app=lgtm | tail -30; fail "the lgtm stack in observability did not become ready"; }
+# Loki (3100), Tempo (3200) and Grafana (3000) are not in the lgtm Service: forward them from the pod (background PID, killed in cleanup)
+kubectl --context k3d-$cluster -n observability port-forward deploy/lgtm 13100:3100 13200:3200 13000:3000 >"$work/lgtm-port-forward.log" 2>&1 &
+pf_pid=$!
+loki=http://127.0.0.1:13100 tempo=http://127.0.0.1:13200 grafana=http://127.0.0.1:13000
+for _ in $(seq 1 60); do
+  kill -0 "$pf_pid" 2>/dev/null || { cat "$work/lgtm-port-forward.log"; fail "the port-forward to the lgtm pod ended"; }
+  [ "$(curl -s -m 3 "$loki/ready" || true)" = ready ] && break; sleep 2
+done
+[ "$(curl -s -m 3 "$loki/ready" || true)" = ready ] || fail "Loki in the lgtm pod did not become ready"
+# a request with a fresh trace id: the line it makes must carry that id (a W3C traceparent: version-trace id-parent id-flags)
+tid=$(python3 -c 'import secrets; print(secrets.token_hex(16))'); sid=$(python3 -c 'import secrets; print(secrets.token_hex(8))')
+for _ in $(seq 1 20); do
+  out=$(curl -s -m 5 -H "traceparent: 00-$tid-$sid-01" "http://e2e-api.e2e-dev.localhost:$port/api/info" || true)
+  case "$out" in *'"service":"e2e-api"'*) break;; esac; sleep 3
+done
+case "$out" in *'"service":"e2e-api"'*) ;; *) fail "e2e-api did not answer /api/info through the Gateway (got: ${out:-nothing})";; esac
+loki_query() { curl -s -m 10 -G "$loki/loki/api/v1/query_range" --data-urlencode "query=$1" --data-urlencode "limit=100" || true; }   # LogQL; the last hour
+loki_wait() { # seconds query: polls until a line "info requested" comes back; the body is in LOKI_OUT
+  local end=$((SECONDS + $1))
+  while :; do
+    LOKI_OUT=$(loki_query "$2")
+    case "$LOKI_OUT" in *"info requested"*) return 0;; esac
+    [ $SECONDS -ge $end ] && return 1
+    sleep 3
+  done
+}
+sel='{service_name="e2e-api", k8s_namespace_name="e2e-dev"}'
+loki_wait 120 "$sel" || {
+  case "$LOKI_OUT" in
+    *'"stream"'*) fail "Loki has a stream for service_name=e2e-api but no line 'info requested' within 120 s (stdout collection is broken)";;
+    *) kc logs deploy/otel-collector --tail=20 || true; fail "Loki has no stream for service_name=e2e-api and k8s_namespace_name=e2e-dev: stdout collection is absent (no line 'info requested' within 120 s)";;
+  esac; }
+for lbl in k8s_namespace_name service_name; do
+  case "$LOKI_OUT" in *"\"$lbl\":\"e2e-"*) ;; *) fail "the stream of e2e-api has no label $lbl (got: $(cut -c1-300 <<< "$LOKI_OUT"))";; esac
+done
+echo "ok   Loki returned the line 'info requested' of service_name=e2e-api in k8s_namespace_name=e2e-dev"
+api_pods_re=$(kc get pods -l app=e2e-api --no-headers | awk '$3=="Running"{print $1}' | paste -sd'|' -)
+[ -n "$api_pods_re" ] || fail "no running e2e-api pod to name in k8s_pod_name"
+# k8s_pod_name and deployment_environment are labels or structured metadata: both filter in the same pipeline
+loki_wait 60 "$sel | k8s_pod_name=~\"$api_pods_re\" | deployment_environment=\"dev\"" \
+  || fail "no line 'info requested' with k8s_pod_name=$api_pods_re and deployment_environment=dev within 60 s (the label or the metadata is missing)"
+loki_wait 60 "$sel | trace_id=\"$tid\"" \
+  || fail "no line 'info requested' with trace_id=$tid within 60 s (the line does not carry the request's trace id, AC-182.2)"
+echo "ok   the line carries k8s_pod_name ($api_pods_re), deployment_environment=dev and trace_id $tid"
+tcode=000
+for _ in $(seq 1 20); do
+  tcode=$(curl -s -m 10 -o "$work/tempo-trace.json" -w '%{http_code}' "$tempo/api/traces/$tid" || true)
+  [ "$tcode" = 200 ] && break; sleep 3
+done
+[ "$tcode" = 200 ] && [ -s "$work/tempo-trace.json" ] || fail "Tempo has no trace $tid at /api/traces/$tid (HTTP $tcode): the spans of the request did not arrive"
+echo "ok   Tempo returned the trace $tid"
+# Grafana links the Loki entry to its Tempo trace and the trace to "logs for this span" (AC-182.2): read the provisioned data sources
+# (the otel-lgtm image allows anonymous Admin; admin:admin is its default login if that is off)
+gcode=000
+for _ in $(seq 1 20); do
+  gcode=$(curl -s -m 10 -u admin:admin -o "$work/grafana-datasources.json" -w '%{http_code}' "$grafana/api/datasources" || true)
+  [ "$gcode" = 200 ] && break; sleep 3
+done
+[ "$gcode" = 200 ] || fail "Grafana's /api/datasources answered HTTP $gcode (cannot check the Loki/Tempo links, AC-182.2)"
+python3 - "$work/grafana-datasources.json" <<'PY' || fail "Grafana data sources lack the trace/log link (AC-182.2); see the line above"
+import json, sys
+sources = json.load(open(sys.argv[1]))
+tempo = [s for s in sources if s.get("type") == "tempo"]
+loki = [s for s in sources if s.get("type") == "loki"]
+if not tempo or not loki:
+    sys.exit(f"Grafana has no {'Tempo' if not tempo else 'Loki'} data source")
+if not any((s.get("jsonData") or {}).get("tracesToLogsV2") for s in tempo):
+    sys.exit("the Tempo data source has no tracesToLogsV2 to Loki (the trace shows no 'logs for this span')")
+fields = [f for s in loki for f in (s.get("jsonData") or {}).get("derivedFields") or []]
+if not any("trace_id" in json.dumps(f) for f in fields):
+    sys.exit("the Loki data source has no derivedFields trace_id -> Tempo (the log entry does not link to its trace)")
+PY
+echo "ok   Grafana links Loki's trace_id to Tempo and Tempo's spans to Loki (tracesToLogsV2, derivedFields)"
+# the collector's own output is not collected (AC-182.4); Loki has the other lines by now, so an empty answer is meaningful
+own=$(loki_query '{service_name="otel-collector"}')
+case "$own" in *'"result":[]'*) echo "ok   no line of the collector itself in Loki";; *) fail "Loki holds lines of service_name=\"otel-collector\" (the collector collects its own output): $(cut -c1-300 <<< "$own")";; esac
+# the collector's permission is limited to pods and pod logs of its own namespace, and no node-level collector exists (AC-182.3)
+sa=system:serviceaccount:e2e-dev:otel-collector
+can() { kubectl --context k3d-$cluster auth can-i "$@" --as=$sa 2>/dev/null || true; }
+[ "$(can get pods/log -n e2e-dev)" = yes ] || fail "the collector may not get pods/log in e2e-dev"
+[ "$(can get pods -n e2e-dev)" = yes ] || fail "the collector may not get pods in e2e-dev"
+for other in e2e-staging kube-system; do
+  [ "$(can get pods/log -n $other)" = no ] || fail "the collector may get pods/log in $other (its permission must stay in e2e-dev)"
+done
+[ "$(can get pods/log --all-namespaces)" = no ] && [ "$(can get nodes)" = no ] || fail "the collector has cluster-wide permissions"
+ds=$(kubectl --context k3d-$cluster get daemonset --all-namespaces -l app.kubernetes.io/part-of=e2e -o name)
+[ -z "$ds" ] || fail "a DaemonSet carries app.kubernetes.io/part-of=e2e (no node-level collector): $ds"
+echo "ok   the collector reads pod logs in e2e-dev only; no DaemonSet of the system"
 
 step "Kyverno: the platform's own workloads were admitted under Enforce, a violating one is denied"
 kc get deploy e2e-api e2e-web otel-collector >/dev/null || fail "a platform workload is missing"

@@ -85,7 +85,7 @@ def test_a_running_wait_blocks_the_stop_holds_the_count_and_names_itself(repo, m
         answer = stop(repo)
         assert first_line(answer) == "waiting: cplat pr wait 7 --merge; stops without progress: 1/2"
         assert f"The ship run of {SPEC} is not finished" in answer["reason"]
-        assert "cplat component ship escalate" in answer["reason"]          # the keep-going sentence stays
+        assert "cplat component ship escalate" in answer["reason"]          # interface: the hook reason names the escalate command
         assert no_progress(repo) == 1 and not ship.load_state(repo).get("escalated")
     mark.unlink()                                                    # the wait ended: stops count again
     answer = stop(repo, message="I do not know how to go on")
@@ -95,9 +95,9 @@ def test_a_running_wait_blocks_the_stop_holds_the_count_and_names_itself(repo, m
 def test_several_running_waits_are_named_together(repo, monkeypatch):  # AC-171.8
     begin(repo, monkeypatch)
     put_mark(repo, "cplat pr wait 7")
-    put_mark(repo, "cplat component ship wait", pid=os.getppid())
+    put_mark(repo, "cplat component ship wait", pid=os.getppid())  # interface: wait mark command name
     line = first_line(stop(repo))
-    assert line.startswith("waiting: ") and "cplat pr wait 7" in line and "cplat component ship wait" in line
+    assert line.startswith("waiting: ") and "cplat pr wait 7" in line and "cplat component ship wait" in line  # interface: hook line names the wait
     assert line.endswith("; stops without progress: 0/2")
 
 
@@ -168,8 +168,9 @@ def test_a_recorded_wait_is_marked_while_its_body_runs(repo, monkeypatch):  # AC
     def body():
         seen.append(waits.live(repo))
         return waits.REACHED, "reached"
-    assert waits.record(repo, "system ship next --wait", body) == waits.REACHED
-    assert seen == [["cplat system ship next --wait"]] and waits.live(repo) == []
+    assert waits.record(repo, "system ship next --wait", body) == waits.REACHED  # interface: recorded wait name
+    assert seen == [["cplat system ship next --wait"]]  # interface: recorded wait name
+    assert waits.live(repo) == []
 
 
 @pytest.mark.parametrize("merge", [False, True])
@@ -188,7 +189,8 @@ def test_ship_land_marks_itself_while_it_runs(repo, monkeypatch):  # AC-171.8
     seen = []
     monkeypatch.setattr(ship, "land", lambda *a, **k: (seen.append(waits.live(repo)), (True, ["ok"]))[1])
     assert ship.main(["--repo", str(repo), "land"]) == 0
-    assert seen == [["cplat component ship land"]] and waits.live(repo) == []
+    assert seen == [["cplat component ship land"]]  # interface: recorded wait name
+    assert waits.live(repo) == []
 
 
 # ---------------- AC-171.8: the system ship's hook ----------------
@@ -207,7 +209,7 @@ def test_a_running_wait_holds_the_product_ship_too(w, monkeypatch):  # AC-171.8
     w.started()
     sys_stop(w)
     assert "stops without progress: 1/2" in sys_first_line(sys_stop(w))
-    put_mark(w.gitops, "cplat system ship next --wait")
+    put_mark(w.gitops, "cplat system ship next --wait")  # interface: wait mark command name
     for _ in range(3):
         answer = sys_stop(w)
         assert sys_first_line(answer) == "waiting: cplat system ship next --wait; stops without progress: 1/2"

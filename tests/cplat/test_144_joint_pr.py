@@ -22,6 +22,7 @@ import core
 import envwait
 import registry
 import ship
+from waiting import with_prelude
 import smoke
 import waits
 from test_appship_097 import FAKE_GH, GITOPS, REPO_SPEC, SHA, SLUG, SPEC, World, git, plan_text
@@ -84,8 +85,8 @@ class JointWorld(World):
     def __init__(self, tmp_path, monkeypatch, capsys, legacy=False, promote="after-dev-smoke"):
         self.legacy, self.promote = legacy, promote
         super().__init__(tmp_path, monkeypatch, capsys)
-        (self.bin / "gh").write_text(GH_144 % {"py": sys.executable, "sha": SHA})
-        (self.bin / "devbox").write_text(DEVBOX_144)
+        (self.bin / "gh").write_text(with_prelude(GH_144 % {"py": sys.executable, "sha": SHA}))
+        (self.bin / "devbox").write_text(with_prelude(DEVBOX_144))
         cfg = self.cfg()
         cfg["kube"]["contexts"]["kind-shop"] = ["shop-api-dev", "shop-web-dev"]
         self.cfg(kube=cfg["kube"], runs=[{"databaseId": 1, "status": "completed", "conclusion": "success"}])
@@ -225,7 +226,7 @@ def test_a_gitops_app_with_the_new_pin_dev_runs_joint_ac_144_1(j):  # AC-144.1
     r = j.app("start", SPEC, "--context", "kind-shop")
     assert r.rc == 0, r.out
     assert j.state()["joint"] is True
-    assert "one dev PR per component" not in r.out
+    assert "one dev PR per component" not in r.out  # interface: cplat output line the joint run must not print
 
 
 def test_an_older_gitops_app_keeps_one_pr_per_component_with_one_line_ac_144_1(legacy):  # AC-144.1
@@ -436,6 +437,7 @@ def test_a_red_dev_smoke_escalates_naming_the_component_ac_144_4(j):  # AC-144.4
     assert r.rc == 1
     assert ("shop-api", "dev", "https://shop-api.dev.example.test") in j.smoked       # every component is smoked and reported
     st = j.state()
+    # interface: reason text recorded in the run state
     assert st["repos"]["shop-web"]["state"] == "escalated" and "smoke red in dev" in st["repos"]["shop-web"]["reason"]
     assert st["escalated"].startswith("shop-web") and st["cause"] == "code"
     assert ("acme/shop-web", "dev") in j.filed
@@ -451,6 +453,7 @@ def test_a_failed_component_keeps_the_joint_pr_open_and_escalates_ac_144_5(j):  
     assert j.app("repo", "start", "shop-web").rc == 0
     j.ship_state("shop-web", phase="build", merge_sha=None, deployed=None, smoke=None, escalated="CI red after 3 rounds", cause="code")
     assert j.app("repo", "result", "shop-web").rc == 1
+    assert j.app("repo", "hold", "shop-web").rc == 0      # spec 186: an escalated repo is first offered as `answer`
     nxt = j.app("next", "--json").json
     assert nxt["action"] == "escalate" and nxt["escalated"] == ["shop-web"]
     r = j.app("escalate", "CI red after 3 rounds")

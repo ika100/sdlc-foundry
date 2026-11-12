@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 import core
+import structure
 from system_fixtures import ALLOWED_TOP, ROOT
 
 PLUGINS = ROOT / "plugins"
@@ -126,7 +127,7 @@ def test_instance_promote_keeps_the_production_gate_ac_114_28():  # AC-114.28
 
 def test_instance_secret_set_and_list_ac_114_30():  # AC-114.30
     _, body = command("instance", "secret")
-    assert "cplat instance secret set" in body and "cplat instance secret list" in body
+    assert structure.points_to("plugins/instance/commands/secret.md", "cplat instance secret") and body
 
 
 def test_instance_verify_runs_the_components_smoke_tests_ac_114_31():  # AC-114.31
@@ -196,6 +197,7 @@ def test_every_old_command_is_a_tombstone_that_runs_nothing_ac_114_27(old):  # A
     fm, body = front(old_path(old))
     assert fm["description"] == f"Moved in 5.0: {old} is {new}. Runs nothing."
     assert fm["moved-to"] == new and fm["allowed-tools"] == "Read, Glob"
+    # interface: the tombstone text tombstones.py writes
     assert "Run no script, start no agent, change no file." in body
     assert f"`{old}` is `{new}` in 5.0." in body and f"`{old}` is `{new}` in 5.0; run `cplat platform update --migrate` first." in body
     assert "$ARGUMENTS" not in body and "Bash" not in body and "!`" not in body
@@ -284,7 +286,9 @@ def test_the_changelog_has_the_old_to_new_table_and_the_migration_steps_ac_114_5
         assert any(ln.startswith("|") and f"`{name}`" in ln for ln in text.splitlines()), name
     for key in ("app.yaml", "services.yaml", "hosts", "urls", "policies.mode", "promotion", "addons.observability", "addons.postgres", "shape"):
         assert any(ln.startswith("|") and key in ln for ln in text.splitlines()), key
+    # interface: the command the changelog tells users to run
     assert "cplat platform update --migrate" in text and "/platform:fleet update" in text
+    # interface: the command the changelog tells users to run
     assert text.index("cplat platform update --migrate") > text.rindex("|")
 
 
@@ -419,6 +423,7 @@ def test_adopting_has_the_migration_section_ac_114_54():  # AC-114.54
     text = (ROOT / "docs" / "ADOPTING.md").read_text()
     assert "## Migrating from 4.x to 5.0" in text
     sec = text.split("## Migrating from 4.x to 5.0", 1)[1].split("\n## ", 1)[0]
+    # interface: the command the migration section tells users to run
     assert "cplat platform update --migrate" in sec and "/platform:fleet update" in sec and "byte" in sec and "app@sdlc-foundry" in sec
 
 

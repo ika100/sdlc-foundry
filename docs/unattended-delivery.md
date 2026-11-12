@@ -181,6 +181,21 @@ In a unit session the Stop hook also runs when `CPLAT_UNIT` is set, not only whe
 
 Before the first session, `cplat headless` and `cplat system ship repo start` run a preflight and print `preflight failed: <category>: <detail>` on a failure. The run is then escalated with cause `environment` and no session, branch, commit or PR is started. In a system ship only that repo is escalated.
 
+### A system ship answers or holds an escalated repo
+
+`cplat system ship next --json` returns the action `answer` for an escalated repo, even while other repos still run, with the repo id, the cause, the reason and the questions with their suggested answers; `next --wait` returns it at the first poll. The system ship then decides per repo:
+
+- **Answer:** an escalation with cause `decision` that has a suggested answer is resumed with it: `cplat system ship repo resume <repo> --answer '<text>'` restarts that repo's ship in its own session with the answer. The resume is recorded in the run, the repo shows `running` and the next `next` is `wait`.
+- **Hold:** every other escalation (cause `code`, `environment`, `platform`, `unknown`, or a decision without a suggested answer) is held with `cplat system ship repo hold <repo>`. The repo stays escalated and `next` stops returning `answer` for it. Running repos finish and nothing that depends on the held repo starts. Once nothing runs or can start, `next` returns `escalate` and the run ends escalated with the repo table.
+
+### Merging two tasks when the checks need both
+
+When a build task's checks fail only because a later task that depends on it has not landed yet, the session runs `cplat plan merge <task> <later task> --reason '<why>'` and goes on without escalating. The later task keeps its id and takes the union of the files, criteria and dependencies, tasks that depended on either are rewritten, and the spec hash stays the same. The PR body names both tasks. The architect plans such a pair as one task from the start.
+
+### The release reuses the CI run
+
+`/component:release` runs `cplat component release gates --commit <sha>` first. When `main`'s `ci` run on that commit passed (its latest attempt, every gate including the image build and scan when the repo has a Dockerfile, finished at most 7 days ago), it prints `gates: reused CI run <url> on <short sha>` and runs no gate locally. Otherwise it prints `gates: run locally (<reason>)` and the gates run as before. A run still in progress is waited for. For this, component CI in the service and web templates builds the image next to the gates and tags it only after every gate passed; repos get that through `/platform:update`.
+
 | Category | What to do |
 |---|---|
 | `no-repo-allowlist` | `.claude/settings.json` is missing: run `/platform:update` or `cplat adopt` |
@@ -256,8 +271,30 @@ per-repo lock and re-checks a branch that fell behind `main`. See the [dispatche
 - **The head guard.** The merge is made only if the PR head is still the commit whose checks were judged; a commit pushed in between means no merge and a wait for the checks of the new head.
 - **Local commits go first.** Commits of the feature branch that the PR's head lacks are pushed the way `cplat component ship pr` does (local checks, no force), and only the checks of the pushed commit count. A refused push stops with `local commits not pushed` and the command to run.
 - **Generated-file conflicts.** A conflict only in the backlog index (`docs/backlog.md`, written by `cplat spec index`) is settled by merging `main`, regenerating the file, committing with sign-off and pushing; the land then waits for the new checks. This happens at most 3 times per land.
+- **Stated modes.** Every merge into `main` takes one land path ([ADR-100](adr/100-every-merge-into-main-takes-one-land-path-with-a-stated-mode.md)). A release never catches up: when `main` moved it pushes and merges nothing and stops with `main moved: start the release again` (close the release PR, delete the release branch, run `cplat platform release`). The other commands update a branch that fell behind and wait for the required checks of the new head (and the checks that passed before) before they merge.
+- **A refused merge is waited for.** When GitHub refuses the merge (a required check pending or the head moved), the land goes back to waiting for the checks of the current head, at most 3 times inside the merge lock, then stops with `merge refused 3 times: <reason>`.
 - **Everything else is a person's decision.** A conflict in any other file, a rebase or a force-push stops the run with "rebase is a human decision", and the merge attempt that stopped is aborted so the branch holds no half-merged state.
+
+## What a run no longer asks
+
+A run settles these itself instead of stopping for you:
+
+- **Instance settings.** Settings from the system plan (the gitops entry operations replicas, resources, host and env, in order `before-merge`) are applied as planned.
+- **Removing tracked files.** `git rm` is on the allowlist; a forced removal is still refused, and a removed frozen test is still flagged by `cplat spec test-diff`.
+- **Type-only test changes.** A change to a test's types alone is recorded with `--tighten` and does not wait for you.
+- **One test review.** The acceptance tests are reviewed once, before they freeze ([ADR-101](adr/101-acceptance-tests-are-reviewed-once-before-they-freeze.md)).
+- **Smoke-test findings.** The tester fixes them in the build.
 
 ## Safety on the free plan
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat component ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`) are the review. Use `/component:ship <NNN> --no-merge` to read the PR yourself first.
+
+## Several runs and the usage limit
+
+Several `cplat headless` runs in one repo, in worktrees or clones, and the usage limit of your account no longer stop each other.
+
+**Slots.** A run needs a slot before it starts a session. The repo allows `slots` runs at once (`slots` in `.platform/dispatch.yml`, else 1; `cplat dispatch slots N` overrides it). Every worktree and clone of the repo on the machine counts, and the dispatcher's units take slots from the same pool. When all slots are held, the run starts no session and prints `waiting for a slot: held by <command> (pid <pid>, since <time>, <checkout>)`. It starts within 60 seconds after a holder ends, and waiting costs no budget. With `--no-wait` it exits 1 with `slot busy: held by <command> …` instead. `--dry-run` takes no slot. A slot whose holder no longer runs is freed with `freed a stale slot of <command> (pid <pid> gone)`; nothing to do.
+
+**The usage limit.** A session that ends within 60 seconds with no output, or with the usage-limit message without a reset time, pauses the run for 5, 10, 20, 40, then 60 minutes between tries and prints `paused: usage limit, next try at <local time>`. With a given reset time the line is `paused: usage limit, resumes at <time>`, one minute after the reset. A pause counts neither as a stall, an invocation nor budget minutes. Once the pauses of one run would exceed 360 minutes in total, or a given reset time lies beyond that, the run starts no further session. It exits 1 with `environment pause: usage limit resets at <time or "unknown">` and is recorded as escalated with cause `environment`. Nothing is wrong with the work: run the same command again after the limit resets and it continues.
+
+**Renumbering in a land.** When another PR took the same ADR or rule number, the land renumbers yours and prints `renumbered ADR-<old> to ADR-<n> (<k> references)` or `renumbered R<old> to R<new> in <path> (<k> references)`. A conflict in any other part of the ADR index or the rule register stays a human decision.

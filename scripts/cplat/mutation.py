@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import spec as specmod
-from core import PlatformError
+from core import PlatformError, repo_env
 
 SHAPES = ("service-python", "library-python")
 MAX_MUTANTS = 20
@@ -114,7 +114,7 @@ def run_tests(root: Path, files: list[str]) -> bool:   # tests replace this
     """True when the tests pass."""
     try:
         p = subprocess.run(["devbox", "run", "test-fast", "--", *files, "-x", "-q", "-p", "no:cacheprovider"], cwd=root,
-                           capture_output=True, text=True, timeout=TIMEOUT, check=False)
+                           capture_output=True, text=True, timeout=TIMEOUT, check=False, env=repo_env())
     except subprocess.TimeoutExpired:
         return False                     # a mutant that hangs the tests is caught
     return p.returncode == 0

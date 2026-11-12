@@ -110,6 +110,24 @@ def project_owned_patterns(template: str) -> list[str]:
 # repo-owned once they exist, but the skeleton needs them: added when missing, never replaced (CLAUDE.md imports the notes, #239)
 SEEDS = {".secrets.baseline.json", ".claude/project-notes.md"}
 
+# #678: the #420 exclude-lines pattern before it covered the log tailer's `checksum/tailer` (spec 182)
+OLD_GENERATED_LINES = "(checksum/config: "
+NEW_GENERATED_LINES = "(checksum/(config|tailer): "
+
+
+def widen_generated_lines(repo: Path) -> bool:
+    """The repo-owned secrets baseline keeps the #420 pattern of the repo's first render; widen exactly that pattern so the
+    generated `checksum/tailer` line passes the scan too. Nothing else in the file changes. Returns True when it changed."""
+    p = repo / ".secrets.baseline.json"
+    try:
+        text = p.read_text()
+    except OSError:
+        return False
+    if OLD_GENERATED_LINES not in text:
+        return False
+    p.write_text(text.replace(OLD_GENERATED_LINES, NEW_GENERATED_LINES))
+    return True
+
 
 def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
     """copier creates files that do not exist yet even inside `_skip_if_exists` paths. For an update that is wrong: a repo that
@@ -490,6 +508,61 @@ def _without_credential_writers(tree: dict) -> dict:
     return out
 
 
+_TAILER_IMAGE = re.compile(r"^python:[\w.\-]+$")
+LOG_TAILER_FILES = {"collector.yaml", "kustomization.yaml", "serviceaccount.yaml", "role.yaml", "rolebinding.yaml", "tailer-configmap.yaml"}
+
+
+def _tailer_parts_out(doc: dict) -> None:
+    """Remove from a parsed collector.yaml (Deployment) or kustomization.yaml only what the tailer adds; anything else stays."""
+    if doc.get("kind") == "Kustomization" and isinstance(doc.get("resources"), list):
+        doc["resources"] = sorted(r for r in doc["resources"] if r not in LOG_TAILER_FILES - {"collector.yaml", "kustomization.yaml"})   # 4.7 listed them in another order
+    if doc.get("kind") == "Deployment":
+        tpl = doc["spec"]["template"]
+        (tpl.get("metadata") or {}).get("annotations", {}).pop("checksum/tailer", None)
+        pod = tpl["spec"]
+        for key in ("serviceAccountName", "automountServiceAccountToken"):
+            pod.pop(key, None)
+        pod["containers"] = [c for c in pod["containers"] if c.get("name") != "log-tailer"]
+        pod["volumes"] = [v for v in pod.get("volumes", []) if v.get("name") not in ("tailer", "sa-token")]
+
+
+def _without_log_tailer(tree: dict, only_added_parts: bool = False) -> dict:
+    """The migration proof ignores the log tailer (spec 182): an environment with observability gains it in 5.x, so the collector
+    Deployment, its kustomization and the tailer's files in `addons/<env>/observability/` differ from the 4.7 render by design.
+    Environments without observability are not touched, and the rest of the observability directory (ConfigMap, Service) is still compared.
+    The guard-rail policies are compared parsed, without the tailer's image (`python:<tag>`, the credentials image) among the allowed registries."""
+    in_obs = lambda p: p.rpartition("/")[0].endswith("/observability") and p.rsplit("/", 1)[-1] in LOG_TAILER_FILES  # noqa: E731
+    # only_added_parts (the lost check, every update): collector.yaml and kustomization.yaml stay, minus what the tailer adds,
+    # so a local change to them is still compared; the migration proof drops both files whole
+    out = {p: b for p, b in tree.items() if not (in_obs(p) and not (only_added_parts and p.rsplit("/", 1)[-1] in ("collector.yaml", "kustomization.yaml")))}
+    for p in list(out):
+        if only_added_parts and in_obs(p):
+            try:
+                doc = yaml.safe_load(out[p])
+                _tailer_parts_out(doc)
+            except (yaml.YAMLError, KeyError, TypeError, AttributeError):
+                continue
+            dumped = yaml.safe_dump(doc, sort_keys=True)
+            out[p] = dumped.encode() if isinstance(out[p], bytes) else dumped
+    for p in list(out):
+        if not (p.rsplit("/", 1)[-1] == "policy.yaml" and "/policies/" in p):
+            continue
+        try:
+            doc = yaml.safe_load(out[p])
+            for var in doc["spec"]["variables"]:
+                if var["name"] == "registries":
+                    var["expression"] = json.dumps([r for r in json.loads(var["expression"]) if not _TAILER_IMAGE.match(r)])
+            for rule in doc["spec"]["validations"]:
+                if rule["message"].startswith("images must come from an allowed registry: "):
+                    head, _, names = rule["message"].partition(": ")
+                    rule["message"] = head + ": " + ", ".join(n for n in names.split(", ") if not _TAILER_IMAGE.match(n))
+        except (yaml.YAMLError, KeyError, TypeError, ValueError):
+            continue
+        dumped = yaml.safe_dump(doc, sort_keys=True)
+        out[p] = dumped.encode() if isinstance(out[p], bytes) else dumped
+    return out
+
+
 def convert_systems(repo: Path) -> list[dict]:
     """Convert every 4.x application directory; any problem stops the migration before anything changes."""
     owner = _owner(repo)
@@ -535,8 +608,8 @@ def apply_systems(repo: Path, systems: list[dict], reference: dict[str, bytes]) 
             (repo / rel).unlink()
     gitops.render(repo)
     pins = _digested_refs(repo)
-    reference = _without_credential_writers(_normalised(reference))
-    after = _without_credential_writers(_normalised(_tree(repo), pins))
+    reference = _without_log_tailer(_without_credential_writers(_normalised(reference)))
+    after = _without_log_tailer(_without_credential_writers(_normalised(_tree(repo), pins)))
     diff =[f"{p} (changed)" for p in sorted(reference) if p in after and after[p] != reference[p]]
     diff += [f"{p} (missing)" for p in sorted(reference) if p not in after]
     diff += [f"{p} (extra)" for p in sorted(after) if p not in reference]
@@ -954,6 +1027,8 @@ def _lost(repo: Path, modified: list[str], replaced: list[tuple[str, str]], drop
                 pins = _digested_refs(repo)
                 if was.returncode == 0 and _normalised({path: was.stdout.encode()}) == _normalised({path: (repo / path).read_bytes()}, pins):
                     continue
+                if was.returncode == 0 and _without_log_tailer(_normalised({path: was.stdout.encode()}, pins), True) == _without_log_tailer(_normalised({path: (repo / path).read_bytes()}, pins), True):
+                    continue   # spec 182: only the log tailer (observability files, its image among the allowed registries) was added
                 if path.endswith("/kustomization.yaml") and was.returncode == 0:   # spec 128: it lists the credentials files instead of the generators
                     folder = path.rpartition("/")[0]
                     names = run(["git", "ls-tree", "--name-only", "HEAD", folder + "/"], cwd=repo, check=False).stdout.splitlines()
@@ -1008,6 +1083,8 @@ def execute(req: dict) -> Report:
         dropped = [d for d in dropped if d not in written]
         if dropped:
             r.did.append(f"left out {len(dropped)} new starter file(s) in project-owned paths (app code, tests, docs): {', '.join(dropped[:4])}{' ...' if len(dropped) > 4 else ''}")
+        if widen_generated_lines(repo):
+            r.did.append("widened the secrets baseline's generated-lines pattern to the log tailer's checksum/tailer (#678)")
         answers = repo / ".copier-answers.yml"
         answers.write_text(re.sub(r"^_src_path:.*$", f"_src_path: gh:ika100/sdlc-foundry/templates/{req['template']}", answers.read_text(), flags=re.M))
         core.write_stamp(repo, req["shape"], req["ref"])

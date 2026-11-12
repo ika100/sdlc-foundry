@@ -94,6 +94,7 @@ def test_the_stop_flag_ends_a_legacy_run_before_its_next_session(repo, tmp_path,
     assert "paused at a checkpoint" in capsys.readouterr().out
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_the_stop_flag_written_during_a_session_stops_the_next_one(repo, tmp_path, monkeypatch, store):
     from test_headless import set_state
     import ship

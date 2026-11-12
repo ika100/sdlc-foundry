@@ -31,3 +31,11 @@ rules:
     text: "(always pass the cause, since it decides whether cplat files an issue:"
     class: practice
     source: spec 088
+  - id: R10
+    text: "For `decision` always pass each question as `--question '<question> (suggested: <answer>)'`, because the system ship can then answer it while other repos build."
+    class: practice
+    source: "#684"
+  - id: R11
+    text: "An `answer from the system ship:` line printed by `cplat component ship start` is the user's decision for the escalation that stopped the run: always apply it and go on, since the coordinator answered in the user's place."
+    class: practice
+    source: "#684"

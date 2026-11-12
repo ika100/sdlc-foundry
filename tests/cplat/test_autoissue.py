@@ -207,6 +207,7 @@ def test_a_crash_signature_is_command_exception_type_and_innermost_platform_fram
     d1 = ai.crash_draft(["component", "ship", "land", "--repo", "/x/a"], boom("ship.py", "land", ValueError("one 12")), "r1", tmp_path)
     d2 = ai.crash_draft(["component", "ship", "land", "--repo", "/y/b"], boom("ship.py", "land", ValueError("two 99")), "r2", tmp_path)
     assert d1.signature == d2.signature and SIG_LINE.fullmatch("Signature: " + d1.signature)
+    # interface: the signature carries the command text
     assert d1.signature == ai.raw_signature("platform", "cplat component ship land", "ValueError", "ship.py:land")
     others = [
         ai.crash_draft(["component", "ship", "land"], boom("ship.py", "land", KeyError("one")), "r", tmp_path),
@@ -220,6 +221,7 @@ def test_a_crash_signature_is_command_exception_type_and_innermost_platform_fram
 def test_a_crash_command_names_the_group_subcommand_but_not_option_values(ai, tmp_path):
     """AC-088.5: `cplat <argv[0]>`, plus the first later word of a subcommand group that is not an option's value."""
     e = boom("ship.py", "land", ValueError("x"))
+    # interface: the crash draft names the cplat command
     assert ai.crash_draft(["component", "ship", "--repo", "land", "escalate", "why"], e, "r", tmp_path).command == "cplat component ship escalate"
     assert ai.crash_draft(["system", "status"], e, "r", tmp_path).command == "cplat system status"
     assert ai.crash_draft(["system", "status", "extra"], e, "r", tmp_path).command == "cplat system status"

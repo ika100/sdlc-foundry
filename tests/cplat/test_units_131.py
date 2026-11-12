@@ -119,6 +119,17 @@ def test_a_task_unit_counts_only_the_committed_done_flag(repo):  # AC-131.3
     assert u.detect(repo, "ship", SPEC_ID, "task:t2") is None
 
 
+def test_a_task_merged_away_counts_as_finished_in_its_unit(tmp_path):  # spec 186 t5, not an acceptance test
+    r = make_repo(tmp_path, plan=False)
+    lines = plan_text(r, tasks=3, acs=3).splitlines(True)
+    (r / "docs" / "specs" / SPEC_ID / "plan.md").write_text("".join(ln for ln in lines if not ln.startswith("  - {id: t2,")))
+    git(r, "add", "-A")
+    git(r, "commit", "-qm", "plan t2 merged into t3")
+    u = units()
+    assert u.detect(r, "build", SPEC_ID, "task:t2") == head(r)
+    assert u.detect(r, "build", SPEC_ID, "task:t3") is None
+
+
 def test_the_red_tests_unit_needs_a_traced_acceptance_test_commit(repo):  # AC-131.3
     u = units()
     assert u.detect(repo, "ship", SPEC_ID, "red-tests") is None
@@ -129,6 +140,7 @@ def test_the_red_tests_unit_needs_a_traced_acceptance_test_commit(repo):  # AC-1
     assert u.detect(repo, "ship", SPEC_ID, "red-tests") is None
     git(repo, "checkout", "-qb", BRANCH)
     commit(repo, "more.txt", "test(007): acceptance tests for AC-007.1-AC-007.2")
+    git(repo, "commit", "-q", "--allow-empty", "-m", f"test(007): reviewed acceptance tests for {SPEC_ID}")
     assert u.detect(repo, "ship", SPEC_ID, "red-tests") == head(repo)
 
 
@@ -321,6 +333,7 @@ def test_only_verification_left_without_a_units_file_reads_the_ship_phase_and_th
     (repo / "tests" / "test_alerts.py").write_text("# AC-007.1 AC-007.2\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "test(007): acceptance tests for AC-007.1-AC-007.2")
+    git(repo, "commit", "-q", "--allow-empty", "-m", f"test(007): reviewed acceptance tests for {SPEC_ID}")
     assert u.only_verification_left(repo) is True
 
 

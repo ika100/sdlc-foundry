@@ -32,6 +32,7 @@ _exclude:
   - "{% if not needs_observability %}src/{{ module_name }}/metrics.py{% endif %}"
   - "{% if not needs_observability %}tests/test_metrics.py{% endif %}"
   - "{% if not needs_observability %}tests/test_smoke_metrics.py{% endif %}"
+  - "{% if not needs_observability %}tests/test_log_trace.py{% endif %}"
   - "{% if not needs_migrations %}alembic.ini{% endif %}"
   - "{% if not needs_migrations %}migrations{% endif %}"
 

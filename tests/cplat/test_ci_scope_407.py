@@ -5,6 +5,7 @@ A pull request that changes only `scripts/cplat/` (or another check under `scrip
 import os
 import re
 import stat
+from waiting import with_prelude
 import subprocess
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def detect(tmp_path: Path, files: list[str] | None) -> dict[str, bool]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     git = bin_dir / "git"
-    git.write_text("#!/usr/bin/env bash\nprintf '%s\\n' " + " ".join(f"'{f}'" for f in files or []) + "\n")
+    git.write_text(with_prelude("#!/usr/bin/env bash\nprintf '%s\\n' " + " ".join(f"'{f}'" for f in files or []) + "\n"))
     git.chmod(git.stat().st_mode | stat.S_IEXEC)
     out = tmp_path / "out"
     out.write_text("")

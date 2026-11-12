@@ -24,6 +24,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from waiting import with_prelude
+
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES = ROOT / "templates"
 GATE_SOURCE = TEMPLATES / "gitops-app" / "scripts" / "gate.sh"
@@ -208,7 +210,7 @@ def make_stubs(dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     for name, text in STUBS.items():
         f = dest / name
-        f.write_text(text.replace("@PY@", sys.executable))
+        f.write_text(with_prelude(text.replace("@PY@", sys.executable)))
         f.chmod(f.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     (dest / "render_empty.py").write_text(RENDER_EMPTY)
     return dest

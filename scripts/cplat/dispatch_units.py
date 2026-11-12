@@ -33,6 +33,7 @@ import dispatch_budget
 import dispatch_notify
 import dispatch_policy
 import dispatch_state as ds
+import land_merge
 import merge_lock
 import pr as prmod
 import runs
@@ -456,7 +457,7 @@ def land(repo: Path, slug: str, unit_id: str) -> int:
     if not unit or unit.get("unit") != unit_id or not unit.get("pr"):
         raise PlatformError(f"no unit {unit_id} with a pull request in {wt}", "`cplat dispatch status` lists the units")
     try:
-        ok, lines = prmod.wait(wt, str(unit["pr"]), True, LAND_TIMEOUT, LAND_INTERVAL, ship.QUEUE_TIMEOUT, slug)
+        ok, lines = prmod.wait(wt, str(unit["pr"]), True, LAND_TIMEOUT, LAND_INTERVAL, ship.QUEUE_TIMEOUT, slug, mode=land_merge.CATCH_UP)
         landed, lines = ("merged" if ok else "red"), list(lines)
     except prmod.Closed as e:
         landed, lines = "closed", [str(e)]

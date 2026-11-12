@@ -37,18 +37,42 @@ def branches_of(command: str, specs: list[str]) -> list[str]:
     return [f"feature/{s}" for s in specs] or ["feature/x"]
 
 
-def run_allowlist(command: str, branches: list[str]) -> list[str]:
+GH_RUN_VIEW = ("Bash(gh run view * --log-failed)", "Bash(gh run view * --log-failed -R *)",
+               "Bash(gh run view * -R * --log-failed)")
+
+
+def ci_log_dir(repo: Path) -> Path:
+    """The folder `quiet._log_path` writes the saved CI logs of `repo` to (not created here)."""
+    base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    return base / "sdlc-foundry" / "logs" / Path(repo).name
+
+
+def log_dir_rule(path: Path) -> str:
+    """The `Read` rule for a log folder: `~/...` under the home, else `//<absolute path>`."""
+    path = Path(path)
+    try:
+        return f"Read(~/{path.relative_to(Path.home()).as_posix()}/**)"
+    except ValueError:
+        return f"Read(/{path.as_posix()}/**)"
+
+
+def run_allowlist(command: str, branches: list[str], log_dirs: tuple[Path, ...] | list[Path] = ()) -> list[str]:
     rules: list[str] = []
     for b in branches:
         rules += [f"Bash(git switch {b})", f"Bash(git switch -c {b})"]
-    rules += ["Bash(git add *)", "Bash(git commit -s *)"]
+    rules += ["Bash(git add *)", "Bash(git commit -s *)", "Bash(git rm *)"]
     for b in branches:
         rules += [f"Bash(git push -u origin {b})", f"Bash(git push origin {b})"]
     rules.append("Bash(gh pr create *)")
+    if command in ("/component:build", "/component:ship", "/system:ship"):
+        rules.append("Bash(cplat plan merge *)")
     if command in LAND_COMMANDS:
         rules += ["Bash(cplat component ship land)", "Bash(cplat component ship land *)"]
     if command == "/system:ship":
         rules.append("Bash(cplat system ship entry land *)")
+    if command in LAND_COMMANDS and log_dirs:       # the tests read `before` (no log dirs) as the plain land list
+        rules += [log_dir_rule(d) for d in log_dirs]
+        rules += GH_RUN_VIEW
     return list(dict.fromkeys(rules))
 
 
@@ -57,8 +81,11 @@ def refused_rules(default_branch: str) -> list[str]:
     return [
         "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push * --force*)", "Bash(git push * -f*)",
         "Bash(git push * +*)", f"Bash(git push * {d})", f"Bash(git push * {d}:*{d}*)", f"Bash(git push * {d}:refs*)", f"Bash(git push * *:{d})",
-        f"Bash(git push * *:refs/heads/{d})", "Bash(gh pr merge*)", "Bash(gh api *merge*)",
+        f"Bash(git push * *:refs/heads/{d})",
+        "Bash(gh pr merge*)", "Bash(gh api *merge*)",
         "Bash(cplat pr wait *--merge*)",
+        "Bash(git rm -f*)", "Bash(git rm --force*)", "Bash(git rm -rf*)", "Bash(git rm -fr*)",
+        "Bash(git rm * -f*)", "Bash(git rm * --force*)", "Bash(git rm * -rf*)", "Bash(git rm * -fr*)",
     ]
 
 
@@ -97,10 +124,13 @@ def read_matches(rule: str, path: str) -> bool:
 def _self_check() -> None:
     for command in ("/component:build", "/component:ship", "/system:ship"):
         for branches in (["feature/*"], ["feature/001-x"]):
-            allow = run_allowlist(command, branches)
+            allow = run_allowlist(command, branches, [Path.home() / ".cache" / "sdlc-foundry" / "logs" / "x"])
             refused = refused_rules("main")
             assert not set(allow) & set(refused)
+            assert not any(matches(r, "cplat plan merge t2 t3") for r in refused)
             for rule in allow:
+                if not rule.startswith("Bash("):
+                    continue
                 sample = rule[5:-1].replace("*", "x")
                 assert not any(matches(r, sample) for r in refused), (rule, sample)
 

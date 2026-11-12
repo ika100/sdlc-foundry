@@ -1,6 +1,8 @@
 """Spec 088 (amendment 2026-10-26): `ship escalate` prints the rule; the stop gate and headless `no progress` name `environment` (AC-088.15, .17, .18)."""
 import subprocess
 
+import pytest
+
 import headless
 import ship
 from test_autoissue import clk, tr, ai  # noqa: F401  (fixtures)
@@ -55,10 +57,12 @@ def test_escalate_with_a_stated_cause_prints_no_rule_line_and_records_given(repo
     """AC-088.17 AC-088.15: `working tree is dirty` with `--cause code`: no extra line, cause `code`, `cause_source` `given`."""
     ship.start(repo, "7", True)
     capsys.readouterr()
+    # interface: an escalation reason the cause rules match
     assert escalate(repo, "working tree is dirty", "--cause", "code") == 0
     out = capsys.readouterr().out
     assert "classified as" not in out and "cause missing" not in out
     (r,) = stored(store)
+    # interface: an escalation reason the cause rules match
     assert r["escalation"] == {"reason": "working tree is dirty", "cause": "code", "cause_source": "given"}
 
 
@@ -85,6 +89,7 @@ def test_the_stop_gate_giving_up_records_decision_given(repo, store, monkeypatch
     assert r["filed"] == []
 
 
+@pytest.mark.usefixtures("silent_sessions_are_not_pauses")
 def test_headless_no_progress_records_the_rule_cause_given(hl_repo, tmp_path, monkeypatch, store, capsys):
     """AC-126.7: `cplat headless` stopping on `no progress` records the ship escalation and its own with the rule's cause (here `code`: the spec has criteria without a test), `given`."""
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"], cwd=hl_repo, check=True)

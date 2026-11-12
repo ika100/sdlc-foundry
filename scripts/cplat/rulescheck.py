@@ -3,10 +3,13 @@
 Every rule sentence of the plugin prompts has exactly one register entry (docs/rules/plugins/...) classed hard, practice,
 experience or not a rule; hard, practice and experience sentences state a reason of at least 3 words; practices do not hide
 behind a bare condition and an instruction with a condition is never classed not a rule (`hidden-rule`, spec 172); hard rules are marked and enforced (or an intentional prose rule); every agent and command prompt
-carries the statement once; retired entries are valid and gone from the prompt; the prompts stay within the baseline bytes.
+carries the statement once; retired entries are valid and gone from the prompt; the prompts stay within the baseline bytes. Spec 180 adds: every link, anchor, `cplat` command and slash command a prompt
+names resolves (`broken-link`, `broken-anchor`, `unknown-cplat`, `unknown-slash`), and no test pins prompt wording
+(`sentence-pin`, `short-interface`, `stray-interface`) unless marked `# interface: <reason>`.
+`cplat platform rules rebaseline --reason "<why>"` raises the byte baseline (rules_rebaseline).
 
-`--only` limits the per-file checks to prompt files equal to or under PATH and their register files, and skips the two global
-checks (hard-rule ceiling, bytes). Exit 0 pass, 1 a failure, 2 usage. The contract is
+`--only` limits the per-file checks to prompt files equal to or under PATH and their register files, and skips the global
+checks (hard-rule ceiling, bytes, test pins). Exit 0 pass, 1 a failure, 2 usage. The contract is
 docs/specs/168-agent-rules-state-their-reason-and-can/design.md, `cplat platform rules check`.
 """
 from __future__ import annotations
@@ -19,6 +22,8 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import promptpins
+import promptrefs
 import promptrules as pr
 from promptrules import CLASSES, MARKER, REGISTER, STATEMENT
 
@@ -140,6 +145,10 @@ def _check_prompt(rel: str, root: Path, reg: pr.Register, fails: list[Failure], 
     matched: set[int] = set()
     hard_lines: set[int] = set()
     rules = 0
+    if exists:
+        counts["targets"] += len(promptrefs.targets(root, rel, text))
+        for kind, line, raw, message in promptrefs.problems(root, rel, text):
+            fails.append(Failure(kind, rel, line, raw, message))
     for s in found:
         hits = [e for e, t in live if t in s.text and s.rule]
         matched.update(id(e) for e in hits)
@@ -213,7 +222,8 @@ def check(root: Path, only: list[str] | None = None) -> Result:
     root = Path(root)
     only = _normalize(root, only) if only else None
     fails: list[Failure] = []
-    counts: dict = {"rule_sentences": 0, "hard_rules": 0, "entries": dict.fromkeys(CLASSES, 0)}
+    counts: dict = {"rule_sentences": 0, "hard_rules": 0, "entries": dict.fromkeys(CLASSES, 0),
+                    "targets": 0, "interface_pins": 0}
     result = Result(fails, counts, pr.prompt_bytes(root) if (root / "plugins").is_dir() else 0, 0)
     reg = _load_register(root, fails)
     if reg is None:
@@ -230,6 +240,10 @@ def check(root: Path, only: list[str] | None = None) -> Result:
         if _in_scope(rel, only):
             counts["rule_sentences"] += _check_prompt(rel, root, reg, fails, counts)
     if only is None:
+        scan = promptpins.scan(root)
+        counts["interface_pins"] = scan.interface_pins
+        for kind, file, line, text, message in scan.failures:
+            fails.append(Failure(kind, file, line, text, message))
         if len(reg.hard) > MAX_HARD:
             fails.append(Failure("too-many-hard", REGISTER, reg.hard_line, "",
                                  f"{len(reg.hard)} distinct hard rules, at most {MAX_HARD} are allowed"))
@@ -243,6 +257,7 @@ def check(root: Path, only: list[str] | None = None) -> Result:
 def render(result: Result) -> list[str]:
     if result.ok:
         return [f"OK: {result.counts['rule_sentences']} rule sentences classified, {result.counts['hard_rules']} hard rules; "
+                f"{result.counts['targets']} prompt targets resolve; {result.counts['interface_pins']} interface pins; "
                 f"prompts {result.prompt_bytes} bytes (baseline {result.baseline_bytes})"]
     lines = [f"FAIL {f.kind} {f.file}:{f.line}: {f.message}" + (f': "{f.text}"' if f.text else "") for f in result.failures]
     return [*lines, f"{len(result.failures)} failure(s); {_ABOUT}"]
@@ -255,6 +270,10 @@ def main(argv: list[str]) -> int:
     cp.add_argument("--only", action="append", metavar="PATH", help="only this prompt file or directory (repeatable)")
     cp.add_argument("--json", action="store_true")
     cp.add_argument("--repo", default=".")
+    sub.add_parser("rebaseline", help="raise the prompt byte baseline (eval gate, clean tree, reason)", add_help=False)
+    if argv[:1] == ["rebaseline"]:
+        import rules_rebaseline
+        return rules_rebaseline.main(argv[1:])
     ns = ap.parse_args(argv)
     result = check(Path(ns.repo).resolve(), ns.only)
     if ns.json:

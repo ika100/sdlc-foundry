@@ -15,6 +15,7 @@ from pathlib import Path
 import core
 import spec
 from test_spec import PLAN, SPEC, make
+from waiting import fake_prelude
 
 SPEC_ID = "007-price-alerts"
 BRANCH = f"feature/{SPEC_ID}"
@@ -96,6 +97,7 @@ def plan_text(repo, tasks=None, acs=None) -> str:
 
 
 FAKE_CLAUDE = r'''#!%(py)s
+%(prelude)s
 import json, os, pathlib, subprocess, sys
 sys.path.insert(0, %(scripts)r)
 W = pathlib.Path(%(world)r)
@@ -158,6 +160,7 @@ elif unit == "red-tests":
     t.mkdir(exist_ok=True)
     (t / "test_alerts.py").write_text("# " + " ".join(cfg["acs"]) + "\n")
     commit_all("test(007): acceptance tests for " + cfg["acs"][0])
+    commit_all("test(007): reviewed acceptance tests for " + %(spec_id)r)
 elif unit.startswith("batch:"):              # spec 159: one session runs the batch's tasks ("first-only": just the first)
     ids = unit.split(":", 1)[1].split(",")
     for task in ids[:1] if how == "first-only" else ids:
@@ -230,12 +233,12 @@ class World:
         self.write_cfg()
         exe = self.dir / "claude"
         exe.write_text(FAKE_CLAUDE % {"py": sys.executable, "scripts": SCRIPTS, "world": str(self.dir), "branch": BRANCH,
-                                      "spec_id": SPEC_ID, "sha": SHA})
+                                      "spec_id": SPEC_ID, "sha": SHA, "prelude": fake_prelude()})
         exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
         self.bin = self.dir / "bin"
         self.bin.mkdir()
         gh = self.bin / "gh"
-        gh.write_text(GH_STUB)
+        gh.write_text(GH_STUB.replace("\n", "\n" + fake_prelude("sh") + "\n", 1))
         gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
         self.gh_log = self.dir / "gh.log"
         self.gh_log.write_text("")

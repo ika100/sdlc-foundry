@@ -262,7 +262,7 @@ NATS_IMAGES = {           # no bare minor, no latest
     "2.15": "nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5",
 }
 VELERO_AWS_PLUGIN_IMAGE = "velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa"   # matches the Velero chart's appVersion line (1.14 <-> 1.18)
-CREDENTIALS_IMAGE = "python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8"   # runs the credentials Job (spec 128): stdlib python only
+CREDENTIALS_IMAGE = "python:3.13.18-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8"   # runs the credentials Job (spec 128) and the log tailer (spec 182): stdlib python only
 SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8"     # every in-cluster bucket runs its own SeaweedFS of this image
 COLLECTOR_IMAGE = "otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6"
 LGTM_IMAGE = "grafana/otel-lgtm:0.35.0@sha256:2de1094c593c671cbfca878a28ffcd7e46ff5e32f2ce966c0cf33003f6cf4266"
@@ -1850,6 +1850,7 @@ def allowed_registries(services: list[dict], cfg: dict, env: str) -> list[str]:
     prefixes = {s["image"].rsplit("/", 1)[0] + "/" for s in services}
     if env in cfg["observability"]:
         prefixes.add(ADDONS["observability"]["image"].split("/", 1)[0] + "/")
+        prefixes.add(CREDENTIALS_IMAGE.split("@")[0])
     prefixes |= set(cfg["registries"])
     return sorted(prefixes)
 
@@ -2848,6 +2849,283 @@ except Fail as failure:
 '''
 
 
+LOG_TAILER_SCRIPT = r'''# The log tailer (spec 182): follows every running container of its namespace through pods/log and posts each line as an
+# OTLP/JSON log record to the collector in its own pod. Standard library only. Prints status lines, never log content.
+import http.client
+import json
+import os
+import queue
+import re
+import ssl
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+
+SA_DIR = os.environ.get("TAILER_SA_DIR", "/var/run/secrets/kubernetes.io/serviceaccount")
+API = os.environ.get("TAILER_API_URL") or "https://%s:%s" % (
+    os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc"), os.environ.get("KUBERNETES_SERVICE_PORT", "443"))
+NAMESPACE = os.environ.get("TAILER_NAMESPACE", "")
+OWN_POD = os.environ.get("TAILER_POD", "")
+ENVIRONMENT = os.environ.get("TAILER_ENVIRONMENT", "")
+SYSTEM = os.environ.get("TAILER_SYSTEM", "")
+OTLP_URL = os.environ.get("TAILER_OTLP_URL") or "http://127.0.0.1:4318/v1/logs"
+POLL_SECONDS = float(os.environ.get("TAILER_POLL_SECONDS") or 5)
+FLUSH_SECONDS = float(os.environ.get("TAILER_FLUSH_SECONDS") or 1)
+BATCH = 500
+QUEUE_SIZE = 10000
+RECONNECT_SECONDS = 2
+LOOKBACK_SECONDS = 60
+SEVERITY = {"trace": 1, "debug": 5, "info": 9, "warn": 13, "warning": 13, "error": 17, "fatal": 21, "critical": 21, "panic": 21}
+TRACE_ID = re.compile(r"^[0-9a-fA-F]{32}$")
+SPAN_ID = re.compile(r"^[0-9a-fA-F]{16}$")
+STAMP = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$")
+
+QUEUE = queue.Queue(QUEUE_SIZE)
+DROPPED = [0]
+STARTED = time.time()
+
+
+def status(message):
+    print("log-tailer: " + message, file=sys.stderr, flush=True)
+
+
+def to_nanos(stamp):
+    """RFC3339(Nano) text to integer nanoseconds since the epoch, or None."""
+    found = STAMP.match(stamp or "")
+    if not found:
+        return None
+    base, fraction, zone = found.groups()
+    when = datetime.strptime(base, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+    seconds = int(when.timestamp())
+    if zone != "Z":
+        offset = (int(zone[1:3]) * 3600 + int(zone[4:6]) * 60) * (1 if zone[0] == "+" else -1)
+        seconds -= offset
+    return seconds * 1000000000 + int(((fraction or "") + "000000000")[:9])
+
+
+def rfc3339(seconds):
+    return datetime.fromtimestamp(seconds, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def to_record(line, ts):
+    """One log line (the text after the kubelet timestamp) and its RFC3339Nano timestamp to an OTLP logRecord."""
+    record = {"timeUnixNano": str(to_nanos(ts) or int(time.time() * 1000000000)),
+              "observedTimeUnixNano": str(int(time.time() * 1000000000)), "body": {"stringValue": line}}
+    if not line.lstrip().startswith("{"):
+        return record
+    try:
+        data = json.loads(line)
+    except ValueError:
+        return record
+    if not isinstance(data, dict):
+        return record
+    level = data.get("level")
+    if isinstance(level, str):
+        record["severityText"] = level.upper()
+        record["severityNumber"] = SEVERITY.get(level.lower(), 0)
+    trace = data.get("trace_id")
+    if isinstance(trace, str) and TRACE_ID.match(trace) and int(trace, 16) != 0:
+        record["traceId"] = trace.lower()
+        span = data.get("span_id")
+        if isinstance(span, str) and SPAN_ID.match(span) and int(span, 16) != 0:
+            record["spanId"] = span.lower()
+    return record
+
+
+def workload(pod):
+    """The name of the workload a pod belongs to: its controller (a Deployment for a ReplicaSet), else its name label, else the pod."""
+    meta = pod.get("metadata") or {}
+    labels = meta.get("labels") or {}
+    for owner in meta.get("ownerReferences") or []:
+        if owner.get("controller"):
+            name = owner.get("name") or ""
+            suffix = "-" + (labels.get("pod-template-hash") or "")
+            if owner.get("kind") == "ReplicaSet" and len(suffix) > 1 and name.endswith(suffix) and len(name) > len(suffix):
+                return name[:-len(suffix)]
+            if name:
+                return name
+    return labels.get("app.kubernetes.io/name") or meta.get("name") or ""
+
+
+def token():
+    with open(os.path.join(SA_DIR, "token")) as handle:
+        return handle.read().strip()
+
+
+def context():
+    if API.startswith("https://"):
+        return ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+    return None
+
+
+def api_open(path, timeout):
+    request = urllib.request.Request(API + path)
+    request.add_header("Authorization", "Bearer " + token())
+    request.add_header("Accept", "application/json")
+    return urllib.request.urlopen(request, timeout=timeout, context=context())
+
+
+def enqueue(item):
+    while True:
+        try:
+            QUEUE.put_nowait(item)
+            return
+        except queue.Full:
+            try:
+                QUEUE.get_nowait()
+                DROPPED[0] += 1
+                if DROPPED[0] % 1000 == 1:
+                    status("queue full, %d records dropped so far" % DROPPED[0])
+            except queue.Empty:
+                pass
+
+
+def follow(key, pod_name, container, resource, since, stop):
+    """Streams one container until `stop` is set; reconnects from the last timestamp, dropping lines at or before it."""
+    last_nanos, last_text = None, None
+    first = True
+    while not stop.is_set():
+        start = since if last_text is None else last_text
+        path = "/api/v1/namespaces/%s/pods/%s/log?container=%s&follow=true&timestamps=true&sinceTime=%s" % (
+            NAMESPACE, pod_name, container, start)
+        try:
+            with api_open(path, 90) as response:
+                for raw in response:
+                    if stop.is_set():
+                        break
+                    text = raw.decode("utf-8", "replace").rstrip("\r\n")
+                    stamp, _, body = text.partition(" ")
+                    nanos = to_nanos(stamp)
+                    if nanos is None:
+                        continue
+                    if last_nanos is not None and nanos <= last_nanos:
+                        continue
+                    last_nanos, last_text = nanos, stamp
+                    enqueue((pod_name, container, resource, to_record(body, stamp)))
+        except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError) as error:
+            if first:
+                status("following %s/%s: %s" % (pod_name, container, type(error).__name__))
+        first = False
+        stop.wait(RECONNECT_SECONDS)
+
+
+def attributes(pod, container):
+    meta = pod["metadata"]
+    pairs = [("service.name", workload(pod)), ("k8s.namespace.name", NAMESPACE), ("k8s.pod.name", meta.get("name", "")),
+             ("k8s.container.name", container), ("deployment.environment", ENVIRONMENT), ("service.namespace", SYSTEM)]
+    return [{"key": key, "value": {"stringValue": value}} for key, value in pairs]
+
+
+def wanted(pods):
+    """{(uid, container, restartCount): (pod, container, startedAt)} for the running containers of the pods to collect."""
+    found = {}
+    for pod in pods:
+        meta = pod.get("metadata") or {}
+        if (meta.get("labels") or {}).get("app.kubernetes.io/name") == "otel-collector" or meta.get("name") == OWN_POD:
+            continue
+        for state in (pod.get("status") or {}).get("containerStatuses") or []:
+            running = (state.get("state") or {}).get("running")
+            if running is not None:
+                found[(meta.get("uid"), state.get("name"), state.get("restartCount", 0))] = (pod, state["name"], running.get("startedAt"))
+    return found
+
+
+def since_for(started_at):
+    began = to_nanos(started_at)
+    if began is None:
+        return rfc3339(STARTED - LOOKBACK_SECONDS)
+    if began / 1e9 > STARTED:
+        return started_at
+    return started_at if began / 1e9 >= STARTED - LOOKBACK_SECONDS else rfc3339(STARTED - LOOKBACK_SECONDS)
+
+
+def poll(followers):
+    try:
+        with api_open("/api/v1/namespaces/%s/pods" % NAMESPACE, 30) as response:
+            pods = json.loads(response.read()).get("items") or []
+    except urllib.error.HTTPError as error:
+        status("listing pods: status %d" % error.code)
+        return
+    except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError) as error:
+        status("listing pods: %s" % type(error).__name__)
+        return
+    keys = wanted(pods)
+    for key in list(followers):
+        if key not in keys:
+            followers.pop(key)[0].set()
+    for key, (pod, container, started_at) in keys.items():
+        if key not in followers:
+            stop = threading.Event()
+            thread = threading.Thread(target=follow, daemon=True, args=(
+                key, pod["metadata"]["name"], container, attributes(pod, container), since_for(started_at), stop))
+            followers[key] = (stop, thread)
+            thread.start()
+
+
+def post(body):
+    for delay in (1, 2, 4, None):
+        failure = None
+        try:
+            request = urllib.request.Request(OTLP_URL, data=body, method="POST")
+            request.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(request, timeout=10) as response:
+                response.read()
+            return
+        except urllib.error.HTTPError as error:
+            failure = "status %d" % error.code
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
+            failure = type(error).__name__
+        if delay is None:
+            status("collector refused a batch (%s), batch dropped" % failure)
+            return
+        time.sleep(delay)
+
+
+def send(batch):
+    groups = {}
+    for pod_name, container, resource, record in batch:
+        groups.setdefault((pod_name, container), (resource, []))[1].append(record)
+    logs = [{"resource": {"attributes": resource}, "scopeLogs": [{"scope": {"name": "log-tailer"}, "logRecords": records}]}
+            for resource, records in groups.values()]
+    post(json.dumps({"resourceLogs": logs}).encode())
+
+
+def sender():
+    while True:
+        batch = []
+        deadline = time.time() + FLUSH_SECONDS
+        while len(batch) < BATCH:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            try:
+                batch.append(QUEUE.get(timeout=remaining))
+            except queue.Empty:
+                break
+        if batch:
+            send(batch)
+
+
+def main():
+    status("following namespace %s" % NAMESPACE)
+    threading.Thread(target=sender, daemon=True).start()
+    followers = {}
+    while True:
+        try:
+            poll(followers)
+        except Exception as error:  # never exit on an error
+            status("poll failed: %s" % type(error).__name__)
+        time.sleep(POLL_SECONDS)
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
 def credentials_pod_labels(owner: str, labels: dict) -> dict:
     """The labels of a credentials Job's pod: part-of and managed-by of the owner, and its own name and component. None of the owner's
     selector labels (app, app.kubernetes.io/name), so no Service, Deployment or StatefulSet of the owner selects the Job's pod."""
@@ -3075,21 +3353,52 @@ def observability_files(app: str, env: str, conf: dict, services: list[dict]) ->
     }
     if conf.get("headersSecret"):
         container["envFrom"] = [{"secretRef": {"name": conf["headersSecret"]}}]
+    tailer: dict = {
+        "name": "log-tailer", "image": CREDENTIALS_IMAGE, "command": ["python3", "/tailer/tail.py"],
+        "env": [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
+                {"name": "TAILER_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+                {"name": "TAILER_POD", "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}}},
+                {"name": "TAILER_ENVIRONMENT", "value": env}, {"name": "TAILER_SYSTEM", "value": app},
+                {"name": "TAILER_OTLP_URL", "value": "http://127.0.0.1:4318/v1/logs"}],
+        "resources": {"requests": {"cpu": "20m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}},
+        "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "allowPrivilegeEscalation": False, "readOnlyRootFilesystem": True,
+                            "capabilities": {"drop": ["ALL"]}},
+        "volumeMounts": [{"name": "tailer", "mountPath": "/tailer", "readOnly": True},
+                         {"name": "sa-token", "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount", "readOnly": True}],
+    }
+    volumes = [{"name": "conf", "configMap": {"name": "otel-collector"}},
+               {"name": "tailer", "configMap": {"name": "otel-collector-tailer"}},
+               {"name": "sa-token", "projected": {"sources": [
+                   {"serviceAccountToken": {"path": "token", "expirationSeconds": 3600}},
+                   {"configMap": {"name": "kube-root-ca.crt", "items": [{"key": "ca.crt", "path": "ca.crt"}]}},
+                   {"downwardAPI": {"items": [{"path": "namespace", "fieldRef": {"fieldPath": "metadata.namespace"}}]}}]}}]
     deploy = {
         "apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "otel-collector", "labels": labels},
         "spec": {"replicas": 1, "selector": {"matchLabels": {"app": "otel-collector"}},
                  "template": {"metadata": {"labels": {**labels, "app": "otel-collector"},
-                                           "annotations": {"checksum/config": hashlib.sha256(config.encode()).hexdigest()[:16]}},
-                              "spec": {"securityContext": {"runAsNonRoot": True, "seccompProfile": {"type": "RuntimeDefault"}},
-                                       "containers": [container], "volumes": [{"name": "conf", "configMap": {"name": "otel-collector"}}]}}},
+                                           "annotations": {"checksum/config": hashlib.sha256(config.encode()).hexdigest()[:16],
+                                                           "checksum/tailer": hashlib.sha256(LOG_TAILER_SCRIPT.encode()).hexdigest()[:16]}},
+                              "spec": {"serviceAccountName": "otel-collector", "automountServiceAccountToken": False,
+                                       "securityContext": {"runAsNonRoot": True, "seccompProfile": {"type": "RuntimeDefault"}},
+                                       "containers": [container, tailer], "volumes": volumes}}},
     }
+    meta = lambda name: {"name": name, "labels": dict(labels)}  # noqa: E731
     return {
         "configmap.yaml": {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "otel-collector", "labels": labels}, "data": {"config.yaml": config}},
         "collector.yaml": deploy,
+        "serviceaccount.yaml": {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": meta("otel-collector"), "automountServiceAccountToken": False},
+        "role.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role", "metadata": meta("otel-collector-logs"),
+                      "rules": [{"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "watch"]},
+                                {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]}]},
+        "rolebinding.yaml": {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "RoleBinding", "metadata": meta("otel-collector-logs"),
+                             "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": "otel-collector-logs"},
+                             "subjects": [{"kind": "ServiceAccount", "name": "otel-collector", "namespace": f"{app}-{env}"}]},
+        "tailer-configmap.yaml": {"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta("otel-collector-tailer"),
+                                  "data": {"tail.py": Literal(LOG_TAILER_SCRIPT)}},
         "service.yaml": {"apiVersion": "v1", "kind": "Service", "metadata": {"name": "otel-collector", "labels": labels},
                          "spec": {"type": "ClusterIP", "selector": {"app": "otel-collector"},
                                   "ports": [{"name": "otlp-grpc", "port": 4317, "targetPort": "otlp-grpc"}, {"name": "otlp-http", "port": 4318, "targetPort": "otlp-http"}]}},
-        "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["configmap.yaml", "collector.yaml", "service.yaml"]},
+        "kustomization.yaml": {"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization", "resources": ["collector.yaml", "configmap.yaml", "role.yaml", "rolebinding.yaml", "service.yaml", "serviceaccount.yaml", "tailer-configmap.yaml"]},
     }
 
 

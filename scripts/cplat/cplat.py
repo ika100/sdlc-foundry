@@ -16,7 +16,8 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat component add|set|remove <component…> [--type T] [--lang L] [--expose] [--env K=V] [--instance ENV --replicas N] [--from-k8s] [--pr]
   cplat component ship start|status|phase|pr|land|deploy|wait|escalate|finish|gate ...   /component:ship: spec → merged PR → dev
   cplat component build schedule|merge|tests|state|replan-commit|replan-abort|resolved ...   /component:build Phase 2
-  cplat component release target [--json] | wait --commit SHA   /component:release: the commit to tag and the version; main's ci run on it
+  cplat component release target|wait|gates ...   /component:release: the commit to tag and the version; main's ci run on it; the gates
+  cplat plan merge <tN> <tM> [--spec ID] [--reason R]   fold task tN into the later task tM that depends on it (spec 186)
   cplat cluster new <name> [--org O] [--public] | add <owner>/<repo> [--name S] | remove <system>   the cluster repo and the systems it installs
   cplat cluster wait [--refresh] [--timeout S] [--context C]   until the cluster's root applications run main's head (spec 143)
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
@@ -34,7 +35,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat platform update [--migrate] [--data KEY=VALUE] [--dry-run]
   cplat platform fleet update [--owner O] [--only owner/name] [--ref TAG] [--dry-run] [--json]   bring every platform repo to this release
   cplat platform release [--version X.Y.Z] [--dry-run] [--confirm merge|tag]   prepare, merge, tag and publish a platform release
-  cplat platform rules check [--only PATH …] [--json]   every prompt rule classified, reasoned and marked (spec 168)
+  cplat platform rules check|rebaseline [--only PATH …] [--json] [--reason WHY] every prompt rule classified, reasoned and marked (spec 168)
   cplat platform runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost
   cplat system set --env ENV [--promote RULE] [--policy POLICY] [--host HOST]   one environment's promote rule, policy or host
   cplat runs [--json] [--since DAYS] [--repo OWNER/NAME] [--spec ID]   the run list (active and recent runs)
@@ -47,6 +48,7 @@ Plumbing keeps its name:
   cplat feedback --title T [--what …] [--details-file F] [--submit]   draft (and file) a platform issue, secrets removed
   cplat model show [--json] [--app APP] [--repo-dir DIR]   the declared domain model of a gitops-app
   cplat spec new|check|approve|set-status|task-done|hash|trace|index|list|migrate ...   feature specs in docs/specs/ (ADR-026)
+  cplat adr add <slug> --decision "<one line>" [--offline]   the next ADR from the template and its index row
   cplat pr wait|open …   wait <number|url> [-R owner/repo] [--merge]: CI watch; open --title T: commit -s, push, PR in one step
   cplat dispatch start|plan|status|wait|report|inbox|pause|resume|slots|prioritize|skip ...   run the backlog in slots (spec 167)
   cplat quiet [--raw] <script> | test-fast [--repeat N] -- <test args>  run it with output in a log: one line on success, the failure summary and log path on failure (--raw: the tail)
@@ -89,7 +91,7 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
 PLUMBING = {
     "shape": "shapecmd", "feedback": "feedback", "model": "modelcmd", "spec": "spec", "pr": "pr", "quiet": "quiet", "validate": "validate",
     "headless": "headless", "deps": "deps", "alerts": "alerts", "budget": "budget", "adopt": "adopt",
-    "needs": "needs", "ui": "ui", "dispatch": "dispatch",
+    "needs": "needs", "ui": "ui", "dispatch": "dispatch", "adr": "adrcmd", "plan": "plancmd",
 }
 
 # 4.x top-level name -> its 5.0 form (exit 2, the module is not imported)
@@ -156,13 +158,18 @@ def main(argv: list[str]) -> int:
     for stream in (sys.stdout, sys.stderr):      # #335: a file or a pipe gets each line at once, not all of it at exit
         with contextlib.suppress(AttributeError, ValueError):
             stream.reconfigure(line_buffering=True)
-    resolved = _resolve(argv)
-    if isinstance(resolved, int):
-        return resolved
-    modname, rest, label = resolved
-    module = __import__(modname)
+    label = " ".join(argv[:1])
     try:
+        resolved = _resolve(argv)
+        if isinstance(resolved, int):
+            return resolved
+        modname, rest, label = resolved
+        module = __import__(modname)
         return module.main(rest)
+    except BrokenPipeError:     # the reader of stdout went away: quiet exit 141, no crash report
+        with contextlib.suppress(OSError, ValueError):
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 141
     except core.PlatformError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         if e.hint:

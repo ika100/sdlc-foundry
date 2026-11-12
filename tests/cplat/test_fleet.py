@@ -14,6 +14,7 @@ import core
 import cplat
 import runs
 import update
+from structure import points_to
 from fleet_world import LABEL, OLD, TARGET, git, row, seed, world  # noqa: F401  (fixtures)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,7 +89,7 @@ def test_a_failing_repo_list_is_an_error(world):  # AC-096.1
 def test_the_command_is_registered_and_has_a_slash_command():  # AC-096.1
     assert cplat.NOUNS["platform"]["fleet"] == ("fleet", [])
     cmd = (ROOT / "plugins" / "platform" / "commands" / "fleet.md").read_text()
-    assert "cplat platform fleet update" in cmd and "$ARGUMENTS" in cmd
+    assert points_to("plugins/platform/commands/fleet.md", "cplat platform fleet") and "$ARGUMENTS" in cmd
 
 
 def test_fleet_takes_only_the_update_subcommand(world):  # AC-096.1

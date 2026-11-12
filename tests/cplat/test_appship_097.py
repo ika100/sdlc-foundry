@@ -24,6 +24,7 @@ import runs
 import ship
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 from test_spec import make
+from waiting import with_prelude
 
 SLUG = "acme/shop-gitops"
 GITOPS = "shop-gitops"
@@ -232,7 +233,7 @@ class World:
         for name, body in (("gh", FAKE_GH % {"py": sys.executable, "sha": SHA}), ("kubectl", FAKE_KUBECTL % {"py": sys.executable}),
                            ("devbox", FAKE_DEVBOX % {"py": sys.executable})):
             f = self.bin / name
-            f.write_text(body)
+            f.write_text(with_prelude(body))
             f.chmod(f.stat().st_mode | stat.S_IEXEC)
         monkeypatch.setenv("PATH", f"{self.bin}{os.pathsep}{os.environ['PATH']}")
         monkeypatch.setenv("FAKE_CFG", str(self.cfg_path))
@@ -419,6 +420,7 @@ def test_refuses_a_second_unfinished_run_for_another_spec(w):  # AC-097.1
     other.mkdir()
     (other / "spec.md").write_text(PRODUCT_SPEC.format(status="approved").replace("012-shop", "013-other").replace("AC-012", "AC-013"))
     r = w.app("start", "013-other", "--context", "kind-shop")
+    # interface: cplat prints this refusal line
     assert r.rc == 1 and "cplat system ship finish" in r.out
     assert w.state()["spec"] == SPEC
 
@@ -691,7 +693,8 @@ def test_a_red_entry_escalates_with_the_failed_checks_and_merges_nothing(w):  # 
 
 def merge_mod(w, monkeypatch):
     mod = importlib.import_module("appship_merge")
-    monkeypatch.setattr(mod, "sleep", lambda s: time.sleep(0.01), raising=False)
+    slept: list[float] = []                                # the slot's wait is recorded, not slept
+    monkeypatch.setattr(mod, "sleep", slept.append, raising=False)
     return mod
 
 
@@ -763,6 +766,9 @@ def test_an_escalated_repo_stops_dependents_while_running_repos_finish(w):  # AC
     assert w.app("repo", "result", "shop-api").rc == 1
     st = w.state()["repos"]["shop-api"]
     assert st["state"] == "escalated" and "CI red after 3 rounds" in st["reason"] and st["cause"] == "code"
+    nxt = w.app("next", "--json").json
+    assert nxt["start"] == [] and nxt["running"] == ["shop-worker"] and nxt["action"] == "answer"  # AC-186.1
+    importlib.import_module("appship_sched").hold_repo(w.gitops, "shop-api")  # held: the user decides (AC-186.3)
     nxt = w.app("next", "--json").json
     assert nxt["start"] == [] and nxt["running"] == ["shop-worker"] and nxt["action"] == "wait"
     assert {"id": "shop-web", "waits_for": ["shop-api"]} in nxt["blocked"]

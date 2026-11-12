@@ -7,6 +7,7 @@ import subprocess
 import core
 import gitops
 import pytest
+from waiting import with_prelude
 
 
 def git(cwd, *args):
@@ -28,12 +29,12 @@ def clone(tmp_path, monkeypatch):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     # GH_ANSWERS: one word per call, "ok" or an error text; the calls are counted in a file
-    (bin_dir / "gh").write_text(f'''#!/bin/sh
+    (bin_dir / "gh").write_text(with_prelude(f'''#!/bin/sh
 n=$(cat {tmp_path}/n 2>/dev/null || echo 0); n=$((n+1)); echo $n > {tmp_path}/n
 a=$(echo "$GH_ANSWERS" | cut -d, -f$n)
 if [ "$a" = ok ]; then echo https://github.com/acme/shop-gitops/pull/9; exit 0; fi
 echo "$a" >&2; exit 1
-''')
+'''))
     (bin_dir / "gh").chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
     slept = []

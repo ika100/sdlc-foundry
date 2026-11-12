@@ -391,6 +391,21 @@ def replan(run_id: str | None, repo: Path, task: str, *, model_id: str | None = 
     _guard(run_id, go)
 
 
+def task_merge(run_id: str | None, repo: Path, task: str, into: str, reason: str) -> None:
+    """Spec 186: `cplat plan merge` folded `task` into `into`. Never raises."""
+    if not _live(run_id):
+        return
+
+    def go() -> None:
+        tid, target, why = _text(task, "task"), _text(into, "task"), _text(reason, "reason")
+        ident = identity(repo, "architect", None)
+
+        def fn(rec: dict) -> None:
+            _event(rec, _entry(rec, ident), "task-merge", {"task": tid, "into": target, "reason": why})
+        _change(run_id, fn)
+    _guard(run_id, go)
+
+
 def fix_round(run_id: str | None, repo: Path, cause: str, *, task: str | None = None) -> None:
     if not _live(run_id):
         return
@@ -504,6 +519,21 @@ def tester(run_id: str | None, repo: Path, *, untraced: Sequence[str] = (), wron
     _guard(run_id, go)
 
 
+def smoke(run_id: str | None, repo: Path, file: str, finding: str) -> None:
+    """Spec 179: the build tightened a smoke test after a reviewer finding."""
+    if not _live(run_id):
+        return
+
+    def go() -> None:
+        name, why = _text(file, "smoke file"), _text(finding, "smoke finding")
+        ident = identity(repo, "tester")
+
+        def fn(rec: dict) -> None:
+            _event(rec, _entry(rec, ident), "smoke", {"test": name, "finding": why})
+        _change(run_id, fn, "tester_events")
+    _guard(run_id, go)
+
+
 def refused_test_diff(run_id: str | None, repo: Path, files: Sequence[tuple[str, str]], *, by: str = "coder",
                       task: str | None = None) -> None:
     if not _live(run_id):
@@ -595,6 +625,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("tester")
     s.add_argument("--untraced", action="append", default=[])
     s.add_argument("--wrong-failure", action="append", default=[])
+    s = add("smoke")
+    s.add_argument("file")
+    s.add_argument("--finding", required=True)
     s = add("execution")
     s.add_argument("mode")
     s.add_argument("--reason")
@@ -634,6 +667,8 @@ def _dispatch(ns: argparse.Namespace, rid: str | None) -> None:
         findings(rid, repo, cycle, deviations=ns.deviation, spec=ns.spec)
     elif c == "tester":
         tester(rid, repo, untraced=ns.untraced, wrong_failures=ns.wrong_failure)
+    elif c == "smoke":
+        smoke(rid, repo, ns.file, ns.finding)
     elif c == "execution":
         execution(rid, repo, ns.mode, reason=ns.reason)
 

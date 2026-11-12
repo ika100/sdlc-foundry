@@ -6,6 +6,7 @@ It imports `headless` lazily, because headless imports this module.
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import uuid
 from pathlib import Path
@@ -15,6 +16,7 @@ import budget
 import ship
 import stopgate
 import units
+import usagelimit
 from core import PlatformError
 
 NO_CAP_MINUTES = 100000.0   # the timeout of one session when --max-minutes is not given
@@ -71,6 +73,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
     last_line = budget.limits_line(rid)
     sessions = int(state.get("sessions") or 0)
     done: list[str] = []
+    pauser = usagelimit.Pauser()
 
     def end(result: str, code: int) -> int:
         state.update(result=result, code=code, sessions=sessions)
@@ -127,17 +130,25 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
             units.start_session(repo, unit, sid)
             k = _session_count(repo, unit)
             before = units.feature_head(repo, spec)
+            cmd = make_cmd(f"{prompt} --unit {unit}") + ["--session-id", sid]      # before the run line: an added command is announced first
             print(f"run {sessions}: {spec} unit {unit} session {k}  (log: {log})", flush=True)
             start = log.stat().st_size if log.exists() else 0
-            cmd = make_cmd(f"{prompt} --unit {unit}") + ["--session-id", sid]
+            began = h.clock()
             code = _run_session(h, cmd, repo, log, left, rid, sid, {**extra_env, "CPLAT_UNIT": unit})
-            ending = units.end_session(repo, kind, spec, unit, before)
+            ended = h.clock()
+            said = h.last_message(log, start)
+            hit = usagelimit.detect(said, (ended - began).total_seconds(), ended)
+            if hit is not None and not said and (units.feature_head(repo, spec) != before or units.detect(repo, kind, spec, unit)):
+                hit = None   # a short silent session that committed or reached its checkpoint is no limit: it made progress
+            ending = units.end_session(repo, kind, spec, unit, before, paused=hit is not None)
             commit = ending.get("checkpoint")
             reason = _escalated(repo)
             if commit:
                 what = f"checkpoint {str(commit)[:7]}"
             elif reason:
                 what = f"escalated: {reason}"
+            elif hit is not None:
+                what = "paused: usage limit"
             elif code == 124:
                 what = f"no checkpoint (timed out after {left:.0f} min)"
             else:
@@ -150,6 +161,20 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
                 units.prepare(repo, kind, spec)   # the plan is committed: the task units appear now
             elif commit and unit == "verification":
                 budget.end_grace(rid)
+            if hit is not None:
+                budget.count_invocation(rid, -1)
+                sessions -= 1
+                state["sessions"] = sessions
+                pause = pauser.pause(hit, h.clock())
+                if pause.stop:
+                    return end(pause.stop, h.EXIT_STOPPED)
+                print(pause.line, flush=True)
+                h.sleep(pause.seconds)
+                budget.add_pause(rid, pause.seconds / 60)
+                if max_minutes is not None:
+                    begin += datetime.timedelta(seconds=pause.seconds)
+                continue
+            pauser.resumed()
             if not commit and int(ending.get("stalls", 0)) >= units.STALL_LIMIT:
                 text = f"no progress: unit {unit} after {units.STALL_LIMIT} sessions without a commit"
                 msg = h.last_message(log, start)

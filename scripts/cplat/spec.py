@@ -118,6 +118,7 @@ class AC:
     spec_no: str
     withdrawn: bool
     smoke: bool = False
+    superseded_by: str | None = None
 
 
 @dataclass
@@ -142,7 +143,9 @@ class Spec:
 
     def acs(self) -> list[AC]:
         text = sections(self.body).get("acceptance criteria", "")
-        return [AC(m.group(2), m.group(3), bool(m.group(1)), bool(SMOKE_MARK.search(ln)))
+        import spec_replace
+        return [AC(m.group(2), m.group(3), bool(m.group(1)), bool(SMOKE_MARK.search(ln)),
+                   s.group(2) if (s := spec_replace.SUPERSEDED.match(ln)) else None)
                 for ln in text.splitlines() if (m := AC_LINE.match(ln))]
 
     def active_acs(self) -> list[str]:
@@ -166,7 +169,8 @@ class Spec:
         return [i for i in items if not i.startswith("~~") and i.rstrip(".").lower() not in {"none", "n/a"}]
 
     def ac_hash(self) -> str:
-        text = sections(self.body).get("acceptance criteria", "")
+        import spec_replace
+        text = spec_replace.hash_text(sections(self.body).get("acceptance criteria", ""))
         return hashlib.sha256(" ".join(text.split()).encode()).hexdigest()[:12]
 
 
@@ -215,12 +219,9 @@ def find(root: Path, ref: str) -> Spec:
 
 
 def next_number(root: Path) -> int:
-    specs, bad = scan(root)
-    nums = [int(s.id.split("-", 1)[0]) for s in [*specs, *bad]]
-    backlog = root / BACKLOG
-    if backlog.is_file():  # continue after legacy STORY-NNN ids so old references stay unique
-        nums += [int(n) for n in re.findall(r"STORY-(\d+)", backlog.read_text())]
-    return max(nums, default=0) + 1
+    """The next free spec number over main, pushed branches and open PRs (spec 183)."""
+    import specnumbers
+    return specnumbers.next_number(root)[0]
 
 
 def slugify(text: str) -> str:
@@ -300,8 +301,12 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
                     + (f" — approve it with `/component:spec approve {spec.number}`" if require == "approved" else ""))
     if spec.status == "superseded":
         return errs
+    import spec_replace
+    if spec_replace.markers(spec):   # spec 183: scan the repo only when a criterion says it replaces another
+        by_number = {s.number: s for s in all_specs(spec.dir.parents[2])}
+        errs += spec_replace.errors(spec, by_number)
     if rank >= RANK["approved"]:
-        if not spec.active_acs():
+        if not spec.active_acs() and not any(a.superseded_by for a in spec.acs()):   # all replaced is fine (spec 183)
             errs.append("an approved spec needs at least one acceptance criterion (AC-<NNN>.<n>)")
         if spec.open_questions():
             errs.append(f"{len(spec.open_questions())} open question(s) left; answer them before approving")
@@ -340,6 +345,7 @@ def check_plan(spec: Spec, meta: dict, _body: str) -> list[str]:
     if len(tids) != len(set(tids)):
         errs.append("duplicate task ids")
     active, all_ids = set(spec.active_acs()), {a.id for a in spec.acs()}
+    superseded = {a.id for a in spec.acs() if a.superseded_by}
     covered: set[str] = set()
     for t in tasks:
         tid = t.get("id", "<no id>")
@@ -352,7 +358,7 @@ def check_plan(spec: Spec, meta: dict, _body: str) -> list[str]:
         for c in t.get("covers") or []:
             if c not in all_ids:
                 errs.append(f"task {tid}: covers unknown criterion '{c}'")
-            elif c not in active:
+            elif c not in active and c not in superseded:
                 errs.append(f"task {tid}: covers withdrawn criterion '{c}'")
         covered |= set(t.get("covers") or [])
         if "done" in t and not isinstance(t["done"], bool):
@@ -627,6 +633,40 @@ def tightening(old: str, new: str, name: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _assert_lines(text: str) -> list[str]:
+    """The trimmed assertion statements' lines: each `_ASSERTS` line plus the lines continuing it until its brackets balance."""
+    out: list[str] = []
+    depth = 0
+    for line in text.splitlines():
+        if depth <= 0 and not _ASSERTS.search(line):
+            continue
+        if depth <= 0:
+            depth = 0
+        out.append(line.strip())
+        depth += sum(line.count(c) for c in "([{") - sum(line.count(c) for c in ")]}")
+    return out
+
+
+def _def_texts(text: str) -> list[str]:
+    return [m.group(0).strip() for rx in _TEST_DEFS for m in rx.finditer(text)]
+
+
+def type_only(old: str, new: str, name: str) -> tuple[bool, str]:
+    """Spec 179 (AC-179.4): only lines that are no test definition, assertion or criterion id differ (annotations, casts, imports)."""
+    from collections import Counter
+    if Counter(AC_ANY.findall(old)) != Counter(AC_ANY.findall(new)):
+        return False, "criterion ids changed"
+    if Counter(_def_texts(old)) != Counter(_def_texts(new)):
+        return False, "test definitions changed"
+    if len(_SKIPS.findall(new)) > len(_SKIPS.findall(old)):
+        return False, "adds a skip"
+    if Counter(_assert_lines(old)) != Counter(_assert_lines(new)):
+        return False, "assertion lines changed"
+    if old == new:
+        return False, "unchanged"
+    return True, ""
+
+
 def frozen_base(root: Path, base: str) -> str:
     """Spec 169: in a unit-mode run the acceptance tests freeze when the `red-tests` unit ends, not at its first
     'acceptance tests for' commit. When `<git dir>/cplat-units.json` records that unit done at a commit that `base` is an
@@ -705,6 +745,8 @@ def test_diff(root: Path, base: str, files: list[str], *, red: str | None = None
     for f, (ok, why) in out.items():          # spec 171 (AC-171.7): a refused file that defines no test is a helper
         if not ok and f in texts and not _test_names(texts[f][0]) and not _test_names(texts[f][1]):
             out[f] = (False, "test helper (defines no test): " + why)
+        elif not ok and f in texts and not why.startswith("adds a ") and type_only(*texts[f], f)[0]:   # spec 179 (AC-179.4)
+            out[f] = (False, "type-only (test definitions, assertion lines and criterion ids unchanged)")
     return out
 
 
@@ -829,7 +871,11 @@ def skeleton(number: str, title: str) -> str:
 
 
 def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: list[int], parent: str | None) -> Spec:
-    number = f"{next_number(root):03d}"
+    import specnumbers
+    num, warning = specnumbers.next_number(root)
+    if warning:
+        print(warning, file=sys.stderr)
+    number = f"{num:03d}"
     sdir = specs_dir(root) / f"{number}-{slugify(title)}"
     if sdir.exists():
         raise PlatformError(f"{sdir} already exists")
@@ -897,6 +943,12 @@ def provided_by_system(app_root: Path, repos: list[dict], repo_id: str) -> list[
                 lines.append(f"- resource `{op['uses']}`" + (f": env {', '.join(f'`{n}`' for n in names)}" if names else ""))
             elif isinstance(op.get("env"), dict) and target == repo_id:
                 lines += [f"- env `{k}={v}`" for k, v in op["env"].items()]
+            elif op.get("replicas") is not None and target == repo_id:       # spec 179
+                lines.append(f"- replicas `{op['replicas']}`" + (f" in `{op['instance']}`" if op.get("instance") else ""))
+            elif isinstance(op.get("resources"), dict) and target == repo_id:
+                pairs = [f"{side}.{k}={v}" for side, vals in op["resources"].items() if isinstance(vals, dict)
+                         for k, v in vals.items()]
+                lines.append(f"- resources `{', '.join(pairs)}`")
             elif op.get("expose") == repo_id:
                 lines.append(f"- exposed through the Gateway at host `{op.get('host') or repo_id}`")
     return lines
@@ -958,7 +1010,14 @@ def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | Non
         body = re.sub(r"(## Acceptance criteria\n\n)<!--.*?-->", lambda m: m.group(1) + lines, body, count=1, flags=re.S)
         body = body.replace("- " + today() + " created", f"- {today()} created from the system plan, with its criteria (spec 147)", 1)
     save(spec.dir / "spec.md", spec.meta, body)
-    return read(spec.dir)
+    import spec_replace
+    new_spec = read(spec.dir)
+    by_number = {s.number: s for s in all_specs(root)}
+    for new_id, old_id in spec_replace.markers(new_spec):
+        target = by_number.get(old_id.split("-", 1)[1].split(".", 1)[0])
+        if target:
+            spec_replace.strike(target.dir, old_id, new_id)
+    return new_spec
 
 
 def approve(spec: Spec, shape: str | None, by: str | None = None) -> str | None:
@@ -1507,6 +1566,12 @@ def main(argv: list[str]) -> int:
         import adr
         if clash := adr.clashes(root):          # #337: an ADR number taken twice, here or on another branch
             results[adr.ADR_DIR] = clash
+        import specnumbers
+        spec_clash, spec_warning = specnumbers.clashes(root)   # spec 183: a number another branch or open PR uses
+        if spec_clash:
+            results["docs/specs"] = spec_clash
+        if spec_warning:
+            print(spec_warning)
         for s in specs:                          # spec 147 (AC-147.6): a warning, never an error
             if w := size_warning(s):
                 print(f"WARNING: {s.id}: {w}")
@@ -1547,8 +1612,11 @@ def main(argv: list[str]) -> int:
         result = trace(root, spec, test_globs(own_shape))
         smoke = _smoke_traced(root, spec, own_shape)
         missing = [a for a, f in result.items() if not f or (a in smoke and not smoke[a])]
+        superseded = {a.id: a.superseded_by for a in spec.acs() if a.superseded_by}
         if ns.json:
             doc = {"spec": spec.id, "criteria": result, "missing": missing}
+            if superseded:
+                doc["superseded"] = superseded
             if smoke:
                 doc["smoke"] = smoke
             print(json.dumps(doc, indent=2))
@@ -1559,6 +1627,8 @@ def main(argv: list[str]) -> int:
                 else:
                     print(f"{'ok  ' if found else 'MISS'} {ac}  {', '.join(found) or '(no test names it)'}")
             print(f"{len(result) - len(missing)}/{len(result)} criteria traced to tests")
+            for old, replacement in superseded.items():
+                print(f"superseded {old}  superseded by {replacement}")
         return 1 if missing else 0
     if ns.cmd == "index":
         print(write_index(root).relative_to(root))

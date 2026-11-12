@@ -29,11 +29,23 @@ Run allowlist (spec 131): for a ship, build or system ship the git, `gh pr creat
 branch are printed and passed to every session as `--allowedTools` (refused rules such as force pushes, pushes to the
 default branch and merges as `--disallowedTools`) and in `CPLAT_RUN_ALLOWLIST`; no settings file is written. Before any
 session a preflight checks the settings layers, git identity, gh login and push access: `preflight failed: <category>: <detail>`,
-exit 1, nothing started.
+exit 1, nothing started. For a ship or build, a command the committed plan.md/design.md names as
+`NAME=value devbox run <script>` is allowed verbatim (the others are listed as `not allowed: <command>`), and the ship
+reads the CI logs cplat saved (spec 184).
+
+Usage limit (spec 184): a session that ends with the usage-limit message (or silent and short) is a pause, not a stop:
+`paused: usage limit, resumes at <time>` (or `next try at <time>`, backing off 5, 10, 20, 40, 60 min), then the same
+prompt starts again. A pause is no invocation, no stop without progress and no budget minutes. Pauses beyond 360 min
+stop the run: `environment pause: usage limit resets at <time>`, exit 1, escalated with cause `environment`.
+
+Slot (spec 184): every run holds one of the repo's `slots` (counted over every worktree and clone of the machine). When
+none is free the run starts no session and prints `waiting for a slot: held by <command> (pid, since, checkout)`; it starts
+within a minute after the holder ends. `--dry-run` takes no slot.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import json
 import os
@@ -48,14 +60,17 @@ from pathlib import Path
 
 import budget
 import core
+import envprefix
 import escalation_rules
 import preflight
+import run_slot
 import runs as runlog
 import settings
 import ship
 import stopgate
 import supervisor
 import telemetry
+import usagelimit
 from core import PlatformError
 
 EXIT_DONE, EXIT_STOPPED, EXIT_QUIET = 0, 1, 3
@@ -219,9 +234,9 @@ def system_clones(repo: Path, ids: list[str]) -> list[str]:
             if r.get("shape") != "gitops-app"]
 
 
-def allowlist_block(allow: list[str], deny: list[str]) -> str:
+def allowlist_block(allow: list[str], deny: list[str], not_allowed: list[str] | tuple[str, ...] = ()) -> str:
     lines = ["run allowlist (this run's sessions only; no settings file is changed):", *(f"  {r}" for r in allow),
-             "refused: " + ", ".join(deny)]
+             "refused: " + ", ".join(deny), *(f"not allowed: {c}" for c in not_allowed)]
     return "\n".join(lines)
 
 
@@ -307,6 +322,15 @@ def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str 
 
 
 def main(argv: list[str]) -> int:
+    with contextlib.ExitStack() as stack:
+        try:
+            return _main(argv, stack)
+        except run_slot.SlotBusy as e:       # spec 184: no run record, no session
+            print(e, flush=True)
+            return EXIT_STOPPED
+
+
+def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
     ap = argparse.ArgumentParser(prog="cplat headless", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("prompt", nargs="+", help="the prompt, usually a slash command such as /component:ship 012")
     ap.add_argument("--repo", default=".")
@@ -314,7 +338,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--max-minutes", type=float, default=None,
                     help="wall-clock budget for all sessions together, from the first start (default: no cap in unit mode, 240 otherwise)")
     ap.add_argument("--quiet", help="HH:MM-HH:MM: never start a session inside this window")
-    ap.add_argument("--no-wait", action="store_true", help="inside the quiet window: exit (code 3) instead of waiting")
+    ap.add_argument("--no-wait", action="store_true", help="instead of waiting: exit 3 inside the quiet window, exit 1 (`slot busy: held by <command> ...`) when "
+                    "every slot of the repo is held (spec 184)")
     ap.add_argument("--model", help="coordinator model: sonnet (default), opus or haiku; else the settings files")
     ap.add_argument("--plugin-dir", action="append", default=[], help="load a plugin from this folder (repeatable)")
     ap.add_argument("--parallel", type=int, default=None, metavar="N",
@@ -346,18 +371,26 @@ def main(argv: list[str]) -> int:
         os.environ["CPLAT_PLUGIN_DIRS"] = os.pathsep.join(dirs)
     allow = deny = None
     ids: list[str] = []
+    not_allowed: list[str] = []
     if covered:
         ids = spec_ids(repo, refs)
-        allow = preflight.run_allowlist(command, preflight.branches_of(command, ids))
+        logs = [preflight.ci_log_dir(repo)]
+        if command == "/system:ship":
+            logs += [preflight.ci_log_dir(Path(c)) for c in system_clones(repo, ids)]
+        allow = preflight.run_allowlist(command, preflight.branches_of(command, ids), logs)
         deny = preflight.refused_rules(preflight.default_branch(repo))
+        if command in UNIT_COMMANDS and ids:
+            extra, not_allowed = envprefix.commands(repo, ids)
+            allow += [f"Bash({c})" for c in extra]
     rules = repo_rules(repo)
     cmd = claude_cmd(prompt, model, dirs, allow, deny, system_clones(repo, ids) if command == "/system:ship" else None, rules)
     if ns.dry_run:
         print(shlex.join(cmd))
         if allow is not None:
-            print(allowlist_block(allow, deny or []))
+            print(allowlist_block(allow, deny or [], not_allowed))
         print(f"coordinator: {model} ({source})")
         return 0
+    stack.enter_context(run_slot.held(repo, prompt, wait=not ns.no_wait))   # spec 184: before the run record and the ledger
     print(f"coordinator: {model} ({source})", flush=True)
     state_fields = {"coordinator_model": model, "coordinator_model_source": source}
     options = budget.parse_options(ns.budget)
@@ -376,7 +409,7 @@ def main(argv: list[str]) -> int:
     state = {"sessions": 0, "result": "", "code": EXIT_STOPPED}
     try:
         if allow is not None:
-            print(allowlist_block(allow, deny or []), flush=True)
+            print(allowlist_block(allow, deny or [], not_allowed), flush=True)
             targets = plan_targets(repo, ids) if command == "/system:ship" else None
             failure = preflight.check(repo, command, ids, targets)
             if failure:
@@ -385,8 +418,22 @@ def main(argv: list[str]) -> int:
                 return finish(repo, log_dir(repo) / f"{clock():%Y-%m-%d_%H%M%S}.log", failure.reason(), EXIT_STOPPED)
         if unit_mode:
             log = log_dir(repo) / f"{clock():%Y-%m-%d_%H%M%S}.log"
-            return supervisor.drive(repo, command, ids, prompt, lambda p: claude_cmd(p, model, dirs, allow, deny, rules=rules),
-                                    preflight.env(allow or []), rid, ns, log, state)
+            announced = set(envprefix.commands(repo, ids)[0]) if ids else set()
+            session_env = preflight.env(allow or [])
+
+            def make_cmd(p: str) -> list[str]:        # a command the plan names later in the run is allowed from then on
+                if ids and allow is not None:
+                    for c in envprefix.commands(repo, ids)[0]:
+                        if f"Bash({c})" not in allow:
+                            allow.append(f"Bash({c})")
+                        if c not in announced:
+                            announced.add(c)
+                            print(f"run allowlist: added {c}", flush=True)
+                    session_env.update(preflight.env(allow))      # the session's CPLAT_RUN_ALLOWLIST names the added command too
+                return claude_cmd(p, model, dirs, allow, deny, rules=rules)
+
+            return supervisor.drive(repo, command, ids, prompt, make_cmd,
+                                    session_env, rid, ns, log, state)
         return _drive(ns, repo, prompt, window, cmd, rid, state, preflight.env(allow) if allow else {})
     except BaseException as e:
         state["result"] = f"error: {e}"
@@ -399,7 +446,7 @@ def main(argv: list[str]) -> int:
         esc = None
         if rid:
             esc = {"reason": state["result"], "cause": "decision"} if reason == "budget" else None
-            if reason == "preflight":
+            if reason == "preflight" or state["result"].startswith("environment pause:"):
                 esc = {"reason": state["result"], "cause": "environment"}
             if reason == "escalated" and state["result"].startswith("no progress"):   # AC-088.18, AC-126.7
                 esc = {"reason": state["result"], "cause": state.get("cause") or "decision"}
@@ -422,6 +469,8 @@ def stop_of(result: str, code: int) -> tuple[str, str]:
         return "done", "done"
     if result.startswith("preflight failed"):
         return "preflight", "escalated"
+    if result.startswith("environment pause:"):       # spec 184: the usage limit outlasted the run's pauses
+        return "escalated", "escalated"
     if "budget exhausted:" in result:
         return "budget", "escalated"
     if result.startswith("needs you") or result.startswith("no progress"):
@@ -445,6 +494,7 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
     snapped = False                    # spec 102: a stop that already wrote the recovery snapshot
     last: tuple | None = None
     result = "finished"
+    pauser = usagelimit.Pauser()
     while runs < max_runs:
         wait = seconds_left_in_window(window, clock())
         if wait:
@@ -482,6 +532,9 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         before = log.stat().st_size if log.exists() else 0
         saved = {k: os.environ.get(k) for k in extra_env or {}}
         os.environ.update(extra_env or {})
+        started = clock()
+        open_before = unfinished(repo)
+        key_before = progress_key(repo, open_before) if open_before else None
         try:
             code = run_once(cmd + ["--session-id", sid], repo, log, left, rid, sid)
         finally:
@@ -491,8 +544,28 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
                 else:
                     os.environ[k] = v
         st = unfinished(repo)
+        ended = describe_end(repo, code) if st is None else ""
+        message = last_message(log, before)
+        # a silent session that changed something (or a silent exit 0 with no ship run open) did its work: no limit
+        quiet_end = not message and (code == 0 and st is None or st is not None and progress_key(repo, st) != key_before)
+        hit = None if quiet_end or ended.startswith(("needs you", "shipped")) else \
+            usagelimit.detect(message, (clock() - started).total_seconds(), clock())
+        if hit is not None:                             # spec 184: a pause is neither a run nor a stop without progress
+            budget.count_invocation(rid, -1)            # also when the pause ends the run: a rerun must not carry it
+            pause = pauser.pause(hit, clock())
+            if pause.stop:
+                result = pause.stop
+                state.update(result=result, code=EXIT_STOPPED)
+                return finish(repo, log, result, EXIT_STOPPED)
+            print(pause.line, flush=True)
+            runs -= 1
+            sleep(pause.seconds)
+            begin += dt.timedelta(seconds=pause.seconds)
+            budget.add_pause(rid, pause.seconds / 60)
+            continue
+        pauser.resumed()
         if st is None:
-            result = describe_end(repo, code)
+            result = ended
             break
         key = progress_key(repo, st)
         if key == last:

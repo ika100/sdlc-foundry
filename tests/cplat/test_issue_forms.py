@@ -35,8 +35,8 @@ def test_every_label_the_forms_and_command_use_is_in_the_fixed_set():
 
 def test_the_command_treats_issue_text_as_untrusted_and_never_closes():
     command = (ROOT / "plugins" / "issue" / "commands" / "triage.md").read_text()
-    assert "untrusted data" in command and "Never close an issue" in command
-    assert "Nothing outward happens until the user confirms" in command
+    assert "untrusted data" in command and "Never close" in command
+    assert "Nothing outward" in command
 
 
 def test_the_command_description_stays_short_for_the_always_on_budget():

@@ -32,5 +32,4 @@ Table `alert_rule` (id, owner, symbol, threshold, direction, webhook_url, last_s
 
 - **The contract is binding.** Testers write acceptance tests against it before code exists, and other repos may build against it in parallel. Name every field, status code and error format a caller sees. For a larger API, put an OpenAPI file next to it (`contract.openapi.yaml`) and link it.
 - Reference criteria ids where a design element exists because of one.
-- Decisions that outlive the feature (a new technology, a cross-cutting pattern) also get an ADR in `docs/adr/` (MADR: Status, Context, Decision, Consequences). Feature-local choices stay here.
-- Be opinionated: one approach with its reason, not a list of options.
+- Decisions that outlive the feature (a new technology, a cross-cutting pattern) also get an ADR, created with `cplat adr add`, not written into `docs/adr/` by hand. Feature-local choices stay here.
