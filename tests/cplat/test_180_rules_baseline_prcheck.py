@@ -8,7 +8,7 @@ import subprocess
 import pytest
 
 import house_rules
-from rules_support import REGISTER, Lazy, good_repo, put
+from rules_support import HARD, REGISTER, Lazy, good_repo, put, register_text
 
 rules_baseline = Lazy("rules_baseline")
 
@@ -23,7 +23,7 @@ def git(repo, *args):
 
 def commit(repo, msg="change"):
     git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-s", "-m", msg)
+    git(repo, "commit", "-q", "-s", "--allow-empty", "-m", msg)
 
 
 def reg(baseline, history=None, hard_tail=True):
@@ -32,7 +32,9 @@ def reg(baseline, history=None, hard_tail=True):
         hist = "  history:\n" + "".join(
             f'    - date: "{h["date"]}"\n      old: {h["old"]}\n      new: {h["new"]}\n      reason: "{h["reason"]}"\n'
             f'      benchmark_runs: [{", ".join(h["benchmark_runs"])}]\n' for h in history)
-    return f'schema: 1\nbaseline:\n  commit: abc1234\n  prompt_bytes: {baseline}\n{hist}hard: {{}}\n'
+    full = register_text(HARD if hard_tail else {}, baseline)
+    hard = full[full.index("hard:"):]
+    return f'schema: 1\nbaseline:\n  commit: abc1234\n  prompt_bytes: {baseline}\n{hist}{hard}'
 
 
 def entry(old=OLD, new=NEW, reason=REASON, runs=RUNS):
