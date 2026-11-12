@@ -1,5 +1,6 @@
-"""`cplat component release target|wait`: the commit a component release tags (spec 138, #426), and the wait for `main`'s
-`ci` run on it before the tag (spec 143).
+"""`cplat component release target|wait|gates`: the commit a component release tags (spec 138, #426), the wait for `main`'s
+`ci` run on it before the tag (spec 143), and the decision whether that green run stands in for the release gates (`gates`,
+spec 186: exit 0 reuse, 1 run them locally, 2 still running).
 
 A release tag never rebuilds: CI gives the `sha-<40>` image of the tagged commit its `X.Y.Z` tags, and prod is refused unless
 that digest is the one staging runs (spec 106). So the release tags the commit staging runs; a component without staging (a
@@ -12,6 +13,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from core import PlatformError, run
@@ -211,6 +213,91 @@ def ci_wait(repo: Path, sha: str, timeout: float, interval: float = 10.0, grace:
         waits.sleep(min(interval, left))
 
 
+# ---------------- gates: reuse main's green ci run or run the gates locally (spec 186) ----------------
+
+MAX_AGE_DAYS = 7
+GATES = ("quality", "test", "security")
+
+
+def _gh_json(repo: Path, args: list[str]) -> object:
+    import ship
+    key = " ".join(args[:2])
+    ship.GH_ERRORS.pop(key, None)
+    out = ship.gh(args, cwd=repo, check=False)
+    err = ship.GH_ERRORS.get(key, "")
+    if err or not out:
+        raise PlatformError((err or "no answer from gh").splitlines()[-1])
+    try:
+        return json.loads(out)
+    except ValueError as e:
+        raise PlatformError(f"unreadable answer from gh: {e}") from e
+
+
+def _decision(reuse: bool, reason: str | None, run: dict | None = None, jobs: list[dict] | None = None,
+              line: str | None = None) -> dict:
+    return {"reuse": reuse, "line": line or f"gates: run locally ({reason})", "reason": reason, "run": run,
+            "jobs": jobs or []}
+
+
+def gates(repo: Path, sha: str, timeout: float, interval: float = 10.0, now: datetime | None = None) -> tuple[int, dict]:
+    """Decide whether `main`'s `ci` run on `sha` stands in for the release gates: (0, reuse), (1, run locally), (2, timeout)."""
+    import ship
+    import waits
+    slug, s7 = ship.service_slug(repo), sha[:7]
+    begin = waits.now()
+    try:
+        while True:
+            runs = _gh_json(repo, ["run", "list", "-R", slug, "--workflow", "ci", "--branch", "main", "--commit", sha,
+                                   "--event", "push", "--json", "databaseId,status,conclusion,attempt,updatedAt,url"])
+            if not isinstance(runs, list) or not runs:
+                return 1, _decision(False, f"no ci run on main for {s7}")
+            latest = max(runs, key=lambda r: r.get("databaseId") or 0)
+            if latest.get("status") == "completed":
+                break
+            left = timeout - (waits.now() - begin)
+            if left <= 0:
+                return 2, {"timeout": [f"TIMEOUT: main's ci run on {s7} is still running after {int(timeout)}s",
+                                       "run the same call again"]}
+            waits.sleep(min(interval, left))
+        rid = latest["databaseId"]
+        view = _gh_json(repo, ["run", "view", str(rid), "-R", slug, "--json",
+                               "databaseId,attempt,conclusion,updatedAt,url,jobs"])
+        if not isinstance(view, dict):
+            raise PlatformError("unreadable run view")
+        finished = view.get("updatedAt") or latest.get("updatedAt") or ""
+        info = {"id": rid, "url": view.get("url") or latest.get("url"), "attempt": view.get("attempt"),
+                "conclusion": view.get("conclusion"), "finished_at": finished}
+        jobs = [{"name": j.get("name", ""), "conclusion": j.get("conclusion")} for j in view.get("jobs") or []]
+    except (PlatformError, KeyError, TypeError, ValueError) as e:
+        return 1, _decision(False, f"cannot read the ci runs: {e}")
+
+    def local(reason: str) -> tuple[int, dict]:
+        return 1, _decision(False, reason, info, jobs)
+    if info["conclusion"] != "success":
+        return local(f"ci run {rid} {info['conclusion']} on attempt {info['attempt']}")
+    try:
+        age = (now or datetime.now(timezone.utc)) - datetime.fromisoformat(finished.replace("Z", "+00:00"))
+    except ValueError:
+        return local(f"cannot read the ci runs: bad finish time {finished!r}")
+    if age > timedelta(days=MAX_AGE_DAYS):
+        return local(f"ci run {rid} finished {age.days} days ago (more than {MAX_AGE_DAYS})")
+    wanted = list(GATES)
+    if run(["git", "cat-file", "-e", f"{sha}:Dockerfile"], cwd=repo, check=False).returncode == 0:
+        wanted.append("docker")
+    used: list[str] = []
+    for g in wanted:
+        mine = [j for j in jobs if j["name"] == g or j["name"].startswith(g + " ")]
+        if not mine:
+            return local(f"gate {g} has no job in ci run {rid}")
+        for j in mine:
+            if j["conclusion"] != "success":
+                return local(f"gate job {j['name']} {j['conclusion']} in ci run {rid}")
+        used += [j["name"] for j in mine]
+    order = [j["name"] for j in jobs if j["name"] in used]
+    line = f"gates: reused CI run {info['url']} on {s7} ({', '.join(order)})"
+    return 0, _decision(True, None, info, jobs, line)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat component release", description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -222,7 +309,25 @@ def main(argv: list[str]) -> int:
     p.add_argument("--timeout", type=float, default=540.0)
     p.add_argument("--interval", type=float, default=10.0, help=argparse.SUPPRESS)
     p.add_argument("--repo", default=".")
+    p = sub.add_parser("gates", help="reuse main's green ci run on the commit as the release gates, or run them locally (spec 186)")
+    p.add_argument("--commit", required=True)
+    p.add_argument("--timeout", type=float, default=540.0)
+    p.add_argument("--interval", type=float, default=10.0, help=argparse.SUPPRESS)
+    p.add_argument("--repo", default=".")
+    p.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv)
+    if ns.cmd == "gates":
+        import waits
+        repo = Path(ns.repo).resolve()
+
+        def decide() -> tuple[int, str]:
+            code, d = gates(repo, ns.commit, ns.timeout, ns.interval)
+            if code == 2:
+                print("\n".join(d["timeout"]), flush=True)
+            else:
+                print(json.dumps(d, indent=2) if ns.json else d["line"], flush=True)
+            return code, "timeout" if code == 2 else ("reached" if code == 0 else "red")
+        return waits.record(repo, "component release gates", decide)
     if ns.cmd == "wait":
         import waits
         repo = Path(ns.repo).resolve()

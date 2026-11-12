@@ -25,13 +25,17 @@ def command(spec_id: str) -> list[str]:
     return [sys.executable, str(CPLAT), "headless", *[a for d in dirs for a in ("--plugin-dir", d)], f"/component:ship {spec_id}"]
 
 
-def spawn(clone: Path, spec_id: str, gitops: Path, parent_run: str | None, starts: int = 1) -> dict:
+def spawn(clone: Path, spec_id: str, gitops: Path, parent_run: str | None, starts: int = 1,
+          answer: str | None = None) -> dict:
     """Start the repo's headless ship detached from this process; returns its state entry. Raises OSError."""
     import headless
     log = headless.log_dir(clone) / f"{dt.datetime.now():%Y-%m-%d_%H%M%S}-system-ship.log"
     env = {**os.environ, "CPLAT_SYSTEM_DIR": str(gitops)}
     if parent_run:
         env["CPLAT_RUN_PARENT"] = parent_run
+    env.pop("CPLAT_SHIP_ANSWER", None)
+    if answer is not None:
+        env["CPLAT_SHIP_ANSWER"] = answer
     with open(log, "ab") as out:
         p = subprocess.Popen(command(spec_id), cwd=clone, env=env, stdin=subprocess.DEVNULL, stdout=out,
                              stderr=subprocess.STDOUT, start_new_session=True)

@@ -189,6 +189,8 @@ def describe(st: dict, repo: Path | None = None) -> str:
         lines.append(row)
     if st.get("fix_rounds"):
         lines.append(f"  CI fix rounds: {st['fix_rounds']}")
+    if st.get("answers"):
+        lines.append(f"  answer from the system ship: {st['answers'][-1]['text']}")
     if repo is not None:
         lines += units.describe_lines(repo)
     lines.append(f"next: {next_step(st)}")
@@ -250,6 +252,12 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
             st["product"] = link
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
         st.pop("cause", None)
+        st.pop("questions", None)
+        if answer := (os.environ.get("CPLAT_SHIP_ANSWER") or "").strip():
+            answers = st.setdefault("answers", [])
+            if not answers or answers[-1].get("text") != answer:
+                answers.append({"at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "text": answer})
+                say(f"answer from the system ship: {answer}")
         stopgate.claim(st, stopgate.session_of_env())
         if shape:
             st["shape"] = shape
@@ -428,7 +436,8 @@ def _file_platform_failure(repo: Path, st: dict, reason: str, command: str | Non
 
 
 def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str | None = None, evidence: str = "",
-             report: list[str] | None = None, stage: str | None = None, summary: str | None = None) -> dict:
+             report: list[str] | None = None, stage: str | None = None, summary: str | None = None,
+             questions: list[str] | None = None) -> dict:
     st = require_state(repo)
     report = report if report is not None else []
     cause, message = _coerce_cause(cause)
@@ -440,6 +449,11 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
             report.append(classified)
     st["escalated"] = reason
     st["cause"] = cause
+    if questions:
+        st["questions"] = [{"text": q["text"], "suggested": (q["options"] or [None])[0]}
+                           for q in map(specmod._question, questions)]
+    else:
+        st.pop("questions", None)
     if cause == "platform":
         _file_platform_failure(repo, st, reason, command, evidence, report)
     budget.snapshot(repo, stage or st.get("phase") or "none", evidence or reason, [], summary=summary)   # spec 102: local only
@@ -2109,6 +2123,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--cause", default=None, help=f"who must act: {_ALLOWED} (run record; `platform` is filed as an issue, spec 088)")
     p.add_argument("--command", default=None, help="the failing command (cause platform; default /component:ship)")
     p.add_argument("--evidence-file", default=None, help="failing output for the issue (cause platform); - reads stdin")
+    p.add_argument("--question", action="append", default=None,
+                   help="a question the user must answer, `Q? (suggested: A)`; repeatable")
     sub.add_parser("finish")
     sub.add_parser("gate")
     p = sub.add_parser("unit")
@@ -2186,7 +2202,8 @@ def main(argv: list[str]) -> int:
             except (OSError, ValueError):
                 evidence = ""
         report: list[str] = []
-        st = escalate(repo, " ".join(ns.reason), ns.cause, command=ns.command, evidence=evidence, report=report)
+        st = escalate(repo, " ".join(ns.reason), ns.cause, command=ns.command, evidence=evidence, report=report,
+                      questions=ns.question)
         shown = st["escalated"]
         if st.get("cause") == "platform":     # the output goes where the issue goes: no repo, spec, branch or secret
             shown = autoissue.scrub(shown, autoissue.private_names(runs.repo_slug(repo), st.get("spec"), st.get("branch")))

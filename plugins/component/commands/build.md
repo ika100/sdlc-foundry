@@ -7,11 +7,11 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 **Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → to `cplat validate run`. `--unit <unit>`: only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
 
-Run the phases in order; after each print `## Phase N complete — <one line>`. A re-run resumes: a phase whose result exists is skipped.
+Run the phases in order, printing `## Phase N complete — <one line>` after each. A re-run skips phases with a result.
 
 ## cplat
 
-`cplat` is on the PATH; one call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`: JSON with `shape`, `plugin`, `deployable`, `library`, `agents`. `unsupported` or no shape → stop.
+One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`: JSON with `shape`, `plugin`, `deployable`, `library`, `agents`. `unsupported` or no shape → stop.
 
 - A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. Asking is pointless because the user declared it.
 ## Phase 0 — Pre-flight
@@ -20,7 +20,7 @@ Run the phases in order; after each print `## Phase N complete — <one line>`. 
 1. `git status --porcelain`: dirty on a spec whose status is not `building` → stop: commit or stash first (clean tree). Dirty on a `building` spec → read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (`git restore --staged`; `wip(<task-id>): interrupted`).
 2. `cplat spec check <id> --require approved` must pass and `docs/specs/<spec_id>/plan.md` exist; otherwise stop with the fix.
 3. Switch to `feature/<spec_id>` (create it from `main` if missing) = `$FEATURE_BRANCH`. `BASE_REF=$(git merge-base main HEAD)`.
-4. `<project-map>` = `ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`, prepended to every subagent prompt.
+4. `<project-map>` = `ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`, heading every subagent prompt.
 5. `approved` → `cplat spec set-status <id> building`, commit `docs(spec): start building <spec_id>`.
 
 ## Phase 1 — Acceptance tests (red)
@@ -41,16 +41,16 @@ Run the phases in order; after each print `## Phase N complete — <one line>`. 
 `cplat platform runs phase build:implement`
 ### 2.1 Schedule
 
-**skip tasks with `done: true`**. Print `cplat component build schedule <id>` verbatim and run its batches in order.
+**skip tasks with `done: true`**. Run the batches `cplat component build schedule <id>` prints.
 
 ### 2.2 Worktree probe
 
-Before the first parallel batch, a probe Agent with `isolation: "worktree"` reports `git rev-parse HEAD`. It errors → `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md`. Else `cplat platform runs agent execution parallel`; a HEAD other than `$FEATURE_HEAD` (no `worktree.baseRef: "head"`) is fine (#501): coders reset to it, so that a merge brings only that task's commits.
+Before the first parallel batch, a probe Agent (`isolation: "worktree"`) reports `git rev-parse HEAD`. Error → `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md`. Else `cplat platform runs agent execution parallel`; a HEAD other than `$FEATURE_HEAD` (no `worktree.baseRef: "head"`) is fine (#501): coders reset to it, so that a merge brings only that task's commits.
 
 ### 2.3 Coder prompt (every task)
 
 - `<project-map>` and the **brief**, copied from `spec.md`, `plan.md` and `design.md`: `Criteria` (id and full text of each criterion in the task's `covers`), `Task` (`id`, prose section verbatim, `files`; touch nothing else, and report any new test helper), `Contract` (the `design.md` sections it touches, verbatim, or `none`), `Tests` (from `TRACE`), `Commands` (the line `cplat component build tests <id> <task>` prints, `cplat quiet quality`).
-- **Done when:** the acceptance tests of its `covers` criteria pass (`cplat quiet test-fast -- <the task's test files>`, not the whole suite).
+- **Done when:** the acceptance tests of its `covers` criteria pass (`cplat quiet test-fast -- <the task's test files>`).
 - "**Hard rule:** never edit, skip or weaken the acceptance tests, because they are the approved criteria. A linter false positive in one gets the linter's line suppression naming the rule, nothing else (spec 160); name the suppressed rules in the commit." A type-only change the type check needs (type annotation, cast or import; no assertion line touched) is allowed, since the build records it.
 - `git rm` of tracked files is allowed (never `-f`), because the allowlist refuses it.
 - A re-planned task (`replans[].tasks[]` in `cplat component build state <id> --json`, unmerged) → read `${CLAUDE_PLUGIN_ROOT}/references/build-replan.md` and add its text to the prompt.
@@ -59,9 +59,9 @@ Before the first parallel batch, a probe Agent with `isolation: "worktree"` repo
 ### 2.4 Run batches
 
 **Parallel batch (≥ 2 tasks):** one coder per task **in a single message**, each `isolation: "worktree"`. For each `(branch, worktree_path)` that changed something:
-1. `cplat component build merge <id> <task> <branch> [--helper <path>]...`. Exit 0 → step 2. Exit 1 naming commits without `Signed-off-by` → run the printed `git -C <worktree> rebase --signoff <sha>`, merge again without asking. Exit 3 → set aside (`cplat platform runs agent conflict <task>`, `git merge --abort`). Exit 4 → `cplat platform runs end --outcome escalated --reason '<the ESCALATE line>'` and stop.
+1. `cplat component build merge <id> <task> <branch> [--helper <path>]...`. Exit 0 → step 2. Exit 1 naming commits without `Signed-off-by` → run the printed `git -C <worktree> rebase --signoff <sha>`, merge again unasked. Exit 3 → set aside (`cplat platform runs agent conflict <task>`, `git merge --abort`). Exit 4 → `cplat platform runs end --outcome escalated --reason '<the ESCALATE line>'` and stop.
 2. `cplat quiet lint-fix`, stage; `cplat spec test-diff $RED --task <task>`: exit 1 means a test was weakened or changed: stop and show the user the file and the reason (a `test helper` or `type-only` line: `build-tighten.md` instead). **Hard rule:** never decide yourself that it is a false alarm, because a changed test is a changed spec. The user approves it → read `${CLAUDE_PLUGIN_ROOT}/references/build-test-approval.md`. Then `cplat quiet quality`; failures go back to that coder (lint/type only; `cplat platform runs agent fix-round lint/type --task <task>`).
-3. `cplat validate run`; failures go back to the coder (`cplat platform runs agent fix-round test --task <task>`).
+3. `cplat validate run`; failures go back to the coder (`cplat platform runs agent fix-round test --task <task>`); failing only because a later task tM depending on it has not landed → `cplat plan merge <task> tM --reason '<why>'`, go on with tM without asking or escalating, because the plan's split was a mistake, not a decision.
 4. `git worktree remove <path>`; `git branch -d <branch>`.
 
 **Sequential task:** `PRE=$(git rev-parse HEAD)`, one coder without isolation on `$FEATURE_BRANCH`; then `cplat platform runs agent merged <task> --since $PRE [--helper <path>]...`; then as above.
@@ -91,7 +91,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
    - tests → the **coder** of the task whose files are involved (acceptance tests stay fixed; `cplat platform runs agent fix-round ci --task <task>`);
    - security → `cplat deps patch` first, then read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → step 3; exit 3 → escalate with its `ESCALATE` reason and `--cause <CAUSE>`, via `cplat component ship escalate` in a ship, else `cplat platform runs end --outcome escalated`; exit 4 → **security** agent). A red gate after a bump never goes to a coder, because a dependency is at fault.
 
-   Between fix rounds: `cplat validate run`, then `cplat quiet ci`; at most 2 rounds, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`; record gates with `cplat budget stage <name> passed|failed`. `cplat quiet ci` green → `cplat platform runs gate security passed`; stays red → `... gate security failed`.
+   Between fix rounds: `cplat validate run`, `cplat quiet ci`; 2 rounds at most, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`; record gates with `cplat budget stage <name> passed|failed`. `cplat quiet ci` green → `cplat platform runs gate security passed`; stays red → `... gate security failed`.
 3. **Green** → agents only where needed: **tester** (`agents.tester`) so that every new internal has a unit test; **security** so that a changed Dockerfile is built and scanned.
 4. `cplat spec test-diff $RED` again (`--by quality` after the quality agent); exit 1 stops as in Phase 2. Commit changes.
 
@@ -106,15 +106,15 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 
 ## Phase 5 — Container image
 
-`cplat platform runs phase build:image`. Skip with `## Phase 5 skipped — <shape> is not deployable` when `deployable` is false. Otherwise **deployment** (`agents.deployment`) with `<project-map>` + `<touched-files>`: the image. **Hard rule:** never Kubernetes manifests, because the gitops repo owns the cluster (ADR-017). `devbox run image-build`. Ask for gitops changes only for wiring not in the spec's *Provided by the system* list, since the system already provides that.
+`cplat platform runs phase build:image`. `deployable` false → `## Phase 5 skipped — <shape> is not deployable`. Else **deployment** (`agents.deployment`), `<project-map>`, `<touched-files>`: the image. **Hard rule:** never Kubernetes manifests, because the gitops repo owns the cluster (ADR-017). `devbox run image-build`. Ask for gitops changes only for wiring not in the spec's *Provided by the system* list, since the system already provides that.
 
 ## Phase 6 — Close the spec
 
-`cplat platform runs phase build:close`; `cplat spec set-status <id> done`; `cplat spec index`; commit `docs(spec): <spec_id> done`.
+`cplat platform runs phase build:close`; `cplat spec set-status <id> done`, `cplat spec index`, commit `docs(spec): <spec_id> done`.
 
 ## Phase 7 — Pull request
 
-`cplat platform runs phase build:pr`; read `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md` and follow it: `.pr-body.md`, one `cplat pr open --spec <spec_id>` call ("How this was built" block), the Final Report.
+`cplat platform runs phase build:pr`; follow `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`: `.pr-body.md`, one `cplat pr open --spec <spec_id>` call ("How this was built" block), the Final Report.
 
 ## Rules
 

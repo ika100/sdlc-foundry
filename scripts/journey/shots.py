@@ -185,7 +185,8 @@ def main() -> int:
             proxy = gw % "grafana" + "/api/datasources/proxy/uid/loki/loki/api/v1/labels"
             if not get_json(proxy).get("data"):
                 raise RuntimeError("Loki holds no logs (nothing ships the pods' logs to it)")
-            shoot(page, explore("loki", {"expr": f'{{namespace="{obs}"}}', "queryType": "range"}), path, 8)
+            # the log tailer (spec 182) labels by the OpenTelemetry resource: k8s_namespace_name, service_name, ...
+            shoot(page, explore("loki", {"expr": f'{{k8s_namespace_name="{obs}", service_name="{a.system}-api"}}', "queryType": "range"}), path, 8)
         attempt("loki", loki)
 
         def argocd(path: str) -> None:

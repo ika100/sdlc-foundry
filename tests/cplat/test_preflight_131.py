@@ -65,7 +65,7 @@ def test_the_run_allowlist_of_a_ship_names_the_branch_commit_push_pr_and_land():
     assert pf().run_allowlist("/component:ship", [B]) == [
         f"Bash(git switch {B})", f"Bash(git switch -c {B})", "Bash(git add *)", "Bash(git commit -s *)",
         "Bash(git rm *)", f"Bash(git push -u origin {B})", f"Bash(git push origin {B})", "Bash(gh pr create *)",
-        "Bash(cplat component ship land)", "Bash(cplat component ship land *)"]
+        "Bash(cplat plan merge *)", "Bash(cplat component ship land)", "Bash(cplat component ship land *)"]
 
 
 def test_a_build_has_no_land_rules():  # AC-131.8

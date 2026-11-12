@@ -173,3 +173,7 @@ rules:
     text: "`git rm` of tracked files is allowed (never `-f`), because the allowlist refuses it."
     class: practice
     source: spec 179
+  - id: R45
+    text: "`cplat plan merge <task> tM --reason '<why>'`, go on with tM without asking or escalating, because the plan's split was a mistake, not a decision."
+    class: experience
+    source: "#681"

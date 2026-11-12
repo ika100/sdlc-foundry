@@ -272,6 +272,8 @@ def collect(rec: dict, repo: Path) -> dict:
             handbacks.append(f"merge conflict {ev.get('task')} with {ev.get('with') or 'unknown'}: {ev.get('outcome')}")
         elif kind == "re-plan":
             handbacks.append(f"re-plan {ev.get('task')} → {agent}")
+        elif kind == "task-merge":
+            handbacks.append(f"merged task {ev.get('task')} into {ev.get('into')}: {ev.get('reason')}")
         elif kind == "smoke":
             handbacks.append(f"smoke test tightened {ev.get('test')}: {ev.get('finding')}")
     if spec_dir is not None:

@@ -6,78 +6,63 @@ tableOfContents: false
 
 import DemoWalkthrough from '../../../components/DemoWalkthrough.astro';
 
-One system, recorded in one run from an empty folder to prod. **Part 1** (steps 1–4) creates the repos and a local cluster and ships a first endpoint to dev. **Part 2** (steps 5–7) adds a Postgres database and a Next.js web UI with one system spec shipped across three repos. **Part 3** (steps 8–12) adds staging, observability, a release from the tested builds, prod with daily backups, and a restore drill. Each part runs in a fresh Claude Code session (`/clear`): every command keeps its state in the repos. Every step is one sentence in Claude Code: say what you want in your own words and Claude runs the matching slash command, or type the command yourself. Each step shows both. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real pull requests in the public demo repos [taskboard6-api](https://github.com/ika100-demo/taskboard6-api), [taskboard6-web](https://github.com/ika100-demo/taskboard6-web) and [taskboard6-gitops](https://github.com/ika100-demo/taskboard6-gitops), so you can check every claim.
+One system, recorded in one run from an empty folder to prod. **Part 1** (steps 1–4) creates the repos and a local cluster and ships a first endpoint to dev. **Part 2** (steps 5–7) adds a Postgres database and a Next.js web UI with one system spec shipped across three repos. **Part 3** (steps 8–12) adds staging, observability, a release from the tested builds, prod with daily backups, and a restore drill. Each part runs in a fresh Claude Code session (`/clear`): every command keeps its state in the repos. Every step is one sentence in Claude Code: say what you want in your own words and Claude runs the matching slash command, or type the command yourself. Each step shows both. Open a step to jump the recording there and see what was typed, what Claude asked, what it did and the result. Each step links to the real pull requests in the public demo repos [taskboard11-api](https://github.com/ika100-demo/taskboard11-api), [taskboard11-web](https://github.com/ika100-demo/taskboard11-web) and [taskboard11-gitops](https://github.com/ika100-demo/taskboard11-gitops), so you can check every claim.
 
 <DemoWalkthrough />
 
 ## What the run built
 
-Taken right after the restore drill, from the local cluster the run created (`scripts/journey/shots.py`). Select a picture to see it full size.
+Taken right after the run, from the local cluster it created (`scripts/journey/shots.py`). Select a picture to see it full size.
 
 <div class="shots">
-  <figure class="map"><a href="/sdlc-foundry/demo/shots/web.png"><img src="/sdlc-foundry/demo/shots/web.png" alt="The taskboard6 web UI in prod: a form with title and due date, and the task Prod check below it" loading="lazy" width="1440" height="900" /></a><figcaption>The Next.js web UI in prod, with the "Prod check" task that step 11 created and the restore drill found in its copy.</figcaption></figure>
-  <figure class="map"><a href="/sdlc-foundry/demo/shots/api-docs.png"><img src="/sdlc-foundry/demo/shots/api-docs.png" alt="The OpenAPI page of taskboard6-api 0.1.0 with GET and POST /tasks, health, ready, ping and metrics" loading="lazy" width="1440" height="900" /></a><figcaption>The API in prod: version 0.1.0 from the release, the task endpoints from the spec and the template's health, ready and metrics endpoints.</figcaption></figure>
-  <figure class="map"><a href="/sdlc-foundry/demo/shots/argocd.png"><img src="/sdlc-foundry/demo/shots/argocd.png" alt="Argo CD listing taskboard6-api and taskboard6-web in dev, staging and prod, all Healthy and Synced" loading="lazy" width="1440" height="900" /></a><figcaption>Argo CD: both components in dev, staging and prod, all Synced and Healthy, each from the gitops repo's <code>main</code>.</figcaption></figure>
-  <figure class="map"><a href="/sdlc-foundry/demo/shots/grafana.png"><img src="/sdlc-foundry/demo/shots/grafana.png" alt="Grafana Explore showing the request rate of taskboard6-api over three hours" loading="lazy" width="1440" height="900" /></a><figcaption>Grafana in dev: the API's requests per second since step 8 turned on the observability stack.</figcaption></figure>
-  <figure class="map"><a href="/sdlc-foundry/demo/shots/tempo.png"><img src="/sdlc-foundry/demo/shots/tempo.png" alt="Grafana Explore with a Tempo trace of taskboard10-api: GET /tasks, 200, 25 ms, four spans" loading="lazy" width="1440" height="900" /></a><figcaption>Tracing in dev (taken from journey 10's cluster): one <code>GET /tasks</code> request of the API in Tempo, with its spans, sent by the OpenTelemetry collector the observability setting deploys. Logs in Loki are not shown yet: the collector receives only OpenTelemetry logs, and nothing ships the pods' stdout logs (<a href="https://github.com/ika100/sdlc-foundry/issues/657">a fix is planned</a>).</figcaption></figure>
-  <figure class="map"><a href="/sdlc-foundry/demo/shots/k9s.png"><img src="/sdlc-foundry/demo/shots/k9s.png" alt="k9s listing the cluster's pods: Argo CD, operators, the observability stack and taskboard6 in dev, staging and prod, all Running" loading="lazy" /></a><figcaption>k9s on the local cluster: the operators, the observability stack, Postgres and both components in every environment, all Running.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/web.png"><img src="/sdlc-foundry/demo/shots/web.png" alt="The taskboard11 web UI in prod: a form with title and due date, and the task Prod check below it" loading="lazy" width="1440" height="900" /></a><figcaption>The Next.js web UI in prod, with the "Prod check" task that step 11 created and the restore drill found in its copy.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/api-docs.png"><img src="/sdlc-foundry/demo/shots/api-docs.png" alt="The OpenAPI page of taskboard11-api 0.1.0 with GET and POST /tasks, health, ready, ping and metrics" loading="lazy" width="1440" height="900" /></a><figcaption>The API in prod: version 0.1.0 from the release, the task endpoints from the spec and the template's health, ready and metrics endpoints.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/argocd.png"><img src="/sdlc-foundry/demo/shots/argocd.png" alt="Argo CD listing taskboard11-api and taskboard11-web in dev, staging and prod, all Healthy and Synced" loading="lazy" width="1440" height="900" /></a><figcaption>Argo CD: both components in dev, staging and prod, all Synced and Healthy, each from the gitops repo's <code>main</code>.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/grafana.png"><img src="/sdlc-foundry/demo/shots/grafana.png" alt="Grafana Explore showing the request rate of taskboard11-api" loading="lazy" width="1440" height="900" /></a><figcaption>Grafana in dev: the API's requests per second since the observability stack was turned on.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/tempo.png"><img src="/sdlc-foundry/demo/shots/tempo.png" alt="Grafana Explore with a Tempo trace of taskboard11-api: GET /tasks and its spans" loading="lazy" width="1440" height="900" /></a><figcaption>Tracing in dev: one <code>GET /tasks</code> request of the API in Tempo, with its spans, sent by the OpenTelemetry collector the observability setting deploys.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/loki.png"><img src="/sdlc-foundry/demo/shots/loki.png" alt="Grafana Explore with Loki: the stdout log lines of taskboard11-api in dev" loading="lazy" width="1440" height="900" /></a><figcaption>Logs in dev: the API pod's stdout lines in Loki, followed by the collector's log tailer (new in 5.18.0) with the service, namespace and pod as labels.</figcaption></figure>
+  <figure class="map"><a href="/sdlc-foundry/demo/shots/k9s.png"><img src="/sdlc-foundry/demo/shots/k9s.png" alt="k9s listing the cluster's pods: Argo CD, operators, the observability stack and taskboard11 in dev, staging and prod, all Running" loading="lazy" /></a><figcaption>k9s on the local cluster: the operators, the observability stack, Postgres and both components in every environment, all Running.</figcaption></figure>
 </div>
 
 ## About the timing
 
-Every time on this page is wall-clock time with CI rounds included. Nobody watched this run: Claude Code typed the sentences and took the suggested answer to the three questions the run asked, so a person's time is the 4 minutes those answers and the gaps until the next sentence took. **Part 1 took about 37 minutes, part 2 about 68 and part 3 about 60**, 164 in all; the recording shows them in under 5 minutes. Every measured journey, with its time, tokens and a person's share, is in [Performance measurements](/sdlc-foundry/reference/performance/).
+Every time on this page is wall-clock time with CI rounds included. Nobody watched this run: Claude Code typed the sentences and took the suggested answer to the three questions the run asked and to its one stop, so a person's time is the 4 minutes those answers and the gaps until the next sentence took. **Part 1 took 28 minutes, part 2 59 and part 3 43**, 130 in all; the recording shows them in under 5 minutes. Earlier runs, and what changed in the platform between them, are in [Performance measurements](/sdlc-foundry/reference/performance/).
 
-**What was edited:** waiting is cut and the host name in the status bar is blanked. Nothing else is changed. The journey was recorded with [asciinema](https://asciinema.org) on 2026-11-07 with sdlc-foundry 5.13.0, in the public demo organisation [ika100-demo](https://github.com/ika100-demo); Claude Code typed the sentences on the user's behalf in the same recorded terminal.
+**What was edited:** waiting is cut and the host name in the status bar is blanked. Nothing else is changed. The journey was recorded with [asciinema](https://asciinema.org) on 2026-11-12 with sdlc-foundry 5.18.0, in the public demo organisation [ika100-demo](https://github.com/ika100-demo); Claude Code typed the sentences on the user's behalf in the same recorded terminal. The observability PR, which a platform defect held back, was finished after the run on 5.19.0 and is not in the recording.
 
 ## Background: timing in detail
 
-Nothing was blocked: for the first time no step stopped for a platform problem, and the wall clock (164) equals the working time, against 230 in journey 5. The run used 40 M tokens, 13 % fewer than journey 5. The specs now decide their defaults themselves and show them at approval (spec 149), so the run asked 3 questions instead of 20. Part 1 halved (37 minutes instead of 64): GitHub and git calls that hit a dropped network run again by themselves (spec 148). Parts 2 and 3 were slower than in journey 5: the web repo spec came out at 14 criteria, the API build's coders ran one after the other, and the prod database and a missing restore point each cost a second round. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/489)); this is the sixth measured run. Every journey, with its time, tokens, a person's share, its quality and what changed in the platform since the one before, is tracked in [Performance measurements](/sdlc-foundry/reference/performance/).
+All times are minutes, measured from the recording, the journey record (`cplat platform runs journey`), the session transcripts and the GitHub Actions runs of the demo repos. The platform's goal is a journey of 60 minutes ([spec 136](https://github.com/ika100/sdlc-foundry/pull/489)).
 
-Five things are worth fixing, each named in its step; none stopped the run. They are filed for the next round (see Performance measurements).
+**Per step:**
 
-For comparison and discussion; all journeys side by side are in [Performance measurements](/sdlc-foundry/reference/performance/). All times are minutes, measured from the recording, the journey record (`cplat platform runs journey`), the session transcripts and the GitHub Actions runs of the demo repos.
+| # | Step | Minutes | Agents working | Waiting | Tokens | What takes the time |
+|---|---|---|---|---|---|---|
+| 1 | Create the system | 1.5 | 1.3 | 0 | 0.3 M | two repos from their templates |
+| 2 | Merge, cluster and expose | 5.4 | 1.1 | 3.9 | 0.7 M | the cluster, two CI rounds, the first deploy |
+| 3 | Write and approve the spec | 4.3 | 2.0 | 2.0 | 0.9 M | the approval with 8 assumptions, one CI round |
+| 4 | Ship the spec | 16.7 | 10.2 | 6.5 | 5.7 M | plan, acceptance tests, coders, a mutation check, one PR, deploy and smoke |
+| 5 | Add a web UI | 6.0 | 1.9 | 3.9 | 0.7 M | a new repo from its template, one CI round, a deploy |
+| 6 | One spec for the whole system | 5.3 | 2.9 | 1.8 | 1.4 M | one open question (a login), the approval, one CI round |
+| 7 | Plan and ship it to dev | 47.7 | 29.0 | 17.9 | 16.8 M | two repo sessions building in parallel, the stop for the plan decision, one landing, deploy and smoke |
+| 8 | Hosts, observability and staging | 8.9 | 2.6 | 6.1 | 1.9 M | four PRs, staging promotion and smoke |
+| 9 | Release | 7.7 | 3.6 | 3.8 | 2.9 M | gates and image scans in two repos, tags on the staging commit, two follow-up PRs |
+| 10 | Backups and the prod PR | 5.5 | 1.7 | 3.6 | 1.9 M | the backups bucket, one prod PR for both components |
+| 11 | Prod | 7.4 | 0.5 | 6.6 | 0.7 M | the merge, Argo CD rolling out a three-instance Postgres, smoke, the "Prod check" task |
+| 12 | Restore drill | 13.9 | 2.1 | 11.5 | 1.3 M | the restored copy (9.5 minutes of waiting for it), the check, the discard |
 
-**Per step** (journey 6, 5.13.0, against journey 5, 5.12.0):
-
-| # | Step | Journey 6 | Journey 5 | What takes the time in journey 6 |
-|---|---|---|---|---|
-| 1 | Create the system | 3 | 7 | two repos from their templates; a timed-out GitHub call retried by itself |
-| 2 | Merge, cluster and expose | 7 | 10 | the cluster, two CI rounds, one Argo CD refresh asked by the wait |
-| 3 | Write and approve the spec | 6 | 13 | one question (authentication) and the approval with 6 assumptions |
-| 4 | Ship the spec | 21 | 33 (+ 65 blocked) | plan, acceptance tests, two coders, a mutation check, one PR, deploy and smoke |
-| 5 | Add a web UI | 13 | 7 | a new repo from its template, one CI round, a second deploy wait |
-| 6 | One spec for the whole system | 4 | 6 | the approval with 9 assumptions, one CI round |
-| 7 | Plan and ship it to dev | 51 | 43 | two builds in parallel (21 repo criteria), PRs and CI, one landing, deploy and smoke |
-| 8 | Hosts, observability and staging | 14 | 11 | four PRs, the Grafana stack, staging smoke |
-| 9 | Release | 10 | 7 | gates and image scans in two repos, tags on the staging commit, two follow-up PRs |
-| 10 | Backups and the prod PR | 7 | 6 | the backups bucket, one prod PR for both components |
-| 11 | Prod | 13 | 7 | one merge, a three-instance Postgres, two Argo waits, smoke, the "Prod check" task |
-| 12 | Restore drill | 16 | 14 | a refused restore, an on-demand backup, the restored copy, the check, the discard |
-
-**Per part**, against the budgets of spec 136 and the earlier runs:
-
-| Part | Budget | Journey 1 | Journey 2 | Journey 3 | Journey 4 | Journey 5 | Journey 6 | Journey 7 | Journey 8 | Journey 9 | Journey 10 |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 — system, cluster, spec, ship | 20 | ≈ 100 | ≈ 70 (+ 20 blocked) | 70 | 31 | 64 (+ 65 blocked) | 37 | 30 | 29 | 29 | 30 |
-| 2 — web UI, system spec, ship | 30 | ≈ 62 | ≈ 85 | 102 | 77 | 56 | 68 | 38 (+ 121 blocked) | 73 | 61 | 60 |
-| 3 — staging, release, prod, restore | 10 | ≈ 80 | ≈ 60 | 81 | 56 (+ 88 blocked) | 46 | 60 | 90 | 54 | 50 | 48 |
-| Journey | 60 (interim 90) | ≈ 240 | ≈ 215 (+ 20 blocked) | 256 | 164 (+ 88 blocked) | 166 (+ 65 blocked) | 164 | 158 (+ 121 blocked) | 156 | 140 | 138 |
-| Tokens | – | 88 M | 84 M | 91 M | 77 M | 46 M | 40 M | 54 M | 42 M | 45 M | 43 M |
-| Questions | – | – | 8 | 17 | 19 | 20 | 3 | 7 | 5 | 3 | 7 |
-| A person's time | – | – | 46 | 5 | 2 | 2 | 4 | 5 | 2 | 4 | 4 |
-| Stops for a platform defect | 0 | 6 | 1 | 3 | 3 | 5 | 0 | 2 | 1 | 1 | 0 |
-| Pull requests | – | – | 34 | 27 | 29 | 28 | 26 | 32 | 26 | 27 | 27 |
-
-**Since the recording:** journeys 7 to 10 ran on 5.14 to 5.17 with the same twelve sentences; they are recorded but not published, so the video stays on journey 6. Journey 10 (5.17.0, [taskboard10-*](https://github.com/ika100-demo/taskboard10-gitops)) is the fastest so far: 138 minutes with nothing blocked and no stop for a platform defect, 43 M tokens, 4 minutes of a person. Each repo of the system ship now runs in its own session, and the platform's own specs ship unattended. About two thirds of journey 10's wall clock is counted as waiting; most of that is the coordinator waiting on the repo sessions while they build, which the next platform round measures separately from real waits for CI, deploys and promotions. Journeys 7 to 10 in detail: [Performance measurements](/sdlc-foundry/reference/performance/).
+Tokens per step count every session of the run: the three sessions that typed the sentences, their subagents and the repo sessions of the system ship.
 
 **Where the wall clock went** (each minute counted once, from the session transcripts; agent work counts first):
 
-| Share | Journey 6 (164 min, 39 subagents) | Journey 5 (230 min, 37 subagents) |
-|---|---|---|
-| Waiting for a person or a fix | 4 (3 %): the answers and the gap until the next sentence | 75 (32 %): 65 while two platform fixes were made, 10 for the answers and the gaps |
-| Waiting, no agent working | 68 (42 %): promotions and restores 23, CI checks and merges 21, deploy and Argo waits 21, cluster 3 | 74 (32 %): CI checks and merges 27, deploy and Argo waits 25, promotions and restores 16, cluster 5 |
-| Agents working | 92 (56 %): model work 76, local commands, tests and platform calls 16 | 81 (35 %): model work 71, local commands and tests 10 |
+| Share | Minutes |
+|---|---|
+| A person | 4 (3 %): the answers to three questions and one stop, and the gaps until the next sentence |
+| Waiting, no agent working | 68 (52 %): CI checks and merges 26, deploys and Argo CD 21, restores 9.5, promotions 4.4, the cluster 2.3, unexplained 4 |
+| Agents working | 59 (45 %): the sessions that typed the sentences 39, the system ship's repo sessions and subagents 20 |
 
-**CI, as GitHub measured it:** journey 6 had 144 Actions runs (none failed), 108 minutes of run time summed and 6 minutes in queues; CI was running during 54 of the 164 minutes. Journey 5 had 154 runs (1 failed), 107 minutes and 6 in queues.
+**CI, as GitHub measured it:** 159 Actions runs (2 failed), 131 minutes of run time summed and 6 minutes in queues; CI was running during 54 of the 130 minutes.
 
-**Tokens:** 40 M instead of 46 M, in 605 API calls. The step "Plan and ship it to dev" used 22 M of them (21 M in journey 5), the first ship 6.5 M; the spec steps together used 2.4 M, against the long question rounds of journey 5.
+**Tokens:** 35 M in 639 API calls: 34.7 M read (95 % of them from the cache) and 0.29 M written by the models; about $17 at Claude API list prices. "Plan and ship it to dev" used almost half of them.
+
+**What the run found:** the plan check let a task through that could not pass before the next one ([#681](https://github.com/ika100/sdlc-foundry/issues/681), the run's one stop); the generated log-tailer checksum failed the gitops repo's secrets scan ([#678](https://github.com/ika100/sdlc-foundry/issues/678), fixed in 5.19.0); the system ship reported a repo's stop about ten minutes late ([#684](https://github.com/ika100/sdlc-foundry/issues/684)); the web template's base image carries a critical zlib CVE ([#682](https://github.com/ika100/sdlc-foundry/issues/682)); and checking a restored copy needed a direct `kubectl` query ([#683](https://github.com/ika100/sdlc-foundry/issues/683)).

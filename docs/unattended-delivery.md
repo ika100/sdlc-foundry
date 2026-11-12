@@ -181,6 +181,21 @@ In a unit session the Stop hook also runs when `CPLAT_UNIT` is set, not only whe
 
 Before the first session, `cplat headless` and `cplat system ship repo start` run a preflight and print `preflight failed: <category>: <detail>` on a failure. The run is then escalated with cause `environment` and no session, branch, commit or PR is started. In a system ship only that repo is escalated.
 
+### A system ship answers or holds an escalated repo
+
+`cplat system ship next --json` returns the action `answer` for an escalated repo, even while other repos still run, with the repo id, the cause, the reason and the questions with their suggested answers; `next --wait` returns it at the first poll. The system ship then decides per repo:
+
+- **Answer:** an escalation with cause `decision` that has a suggested answer is resumed with it: `cplat system ship repo resume <repo> --answer '<text>'` restarts that repo's ship in its own session with the answer. The resume is recorded in the run, the repo shows `running` and the next `next` is `wait`.
+- **Hold:** every other escalation (cause `code`, `environment`, `platform`, `unknown`, or a decision without a suggested answer) is held with `cplat system ship repo hold <repo>`. The repo stays escalated and `next` stops returning `answer` for it. Running repos finish and nothing that depends on the held repo starts. Once nothing runs or can start, `next` returns `escalate` and the run ends escalated with the repo table.
+
+### Merging two tasks when the checks need both
+
+When a build task's checks fail only because a later task that depends on it has not landed yet, the session runs `cplat plan merge <task> <later task> --reason '<why>'` and goes on without escalating. The later task keeps its id and takes the union of the files, criteria and dependencies, tasks that depended on either are rewritten, and the spec hash stays the same. The PR body names both tasks. The architect plans such a pair as one task from the start.
+
+### The release reuses the CI run
+
+`/component:release` runs `cplat component release gates --commit <sha>` first. When `main`'s `ci` run on that commit passed (its latest attempt, every gate including the image build and scan when the repo has a Dockerfile, finished at most 7 days ago), it prints `gates: reused CI run <url> on <short sha>` and runs no gate locally. Otherwise it prints `gates: run locally (<reason>)` and the gates run as before. A run still in progress is waited for. For this, component CI in the service and web templates builds the image next to the gates and tags it only after every gate passed; repos get that through `/platform:update`.
+
 | Category | What to do |
 |---|---|
 | `no-repo-allowlist` | `.claude/settings.json` is missing: run `/platform:update` or `cplat adopt` |

@@ -767,6 +767,9 @@ def test_an_escalated_repo_stops_dependents_while_running_repos_finish(w):  # AC
     st = w.state()["repos"]["shop-api"]
     assert st["state"] == "escalated" and "CI red after 3 rounds" in st["reason"] and st["cause"] == "code"
     nxt = w.app("next", "--json").json
+    assert nxt["start"] == [] and nxt["running"] == ["shop-worker"] and nxt["action"] == "answer"  # AC-186.1
+    importlib.import_module("appship_sched").hold_repo(w.gitops, "shop-api")  # held: the user decides (AC-186.3)
+    nxt = w.app("next", "--json").json
     assert nxt["start"] == [] and nxt["running"] == ["shop-worker"] and nxt["action"] == "wait"
     assert {"id": "shop-web", "waits_for": ["shop-api"]} in nxt["blocked"]
     w.ship_state("shop-worker")
