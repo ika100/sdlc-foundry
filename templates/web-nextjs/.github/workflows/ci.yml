@@ -124,7 +124,6 @@ jobs:
     name: docker (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     if: github.ref_type != 'tag'   # spec 106: a release tag re-tags the tested sha image (release-image), it never rebuilds
-    needs: [quality, test]
     permissions:
       contents: read
       packages: write
@@ -262,8 +261,8 @@ jobs:
 
   docker-publish:
     name: docker (publish multi-arch manifest)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: docker
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, test, security, ci-extra, docker]
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read

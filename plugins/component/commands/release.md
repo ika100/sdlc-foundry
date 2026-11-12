@@ -1,18 +1,18 @@
 ---
-description: "Release: tags the commit staging runs (main's head without staging) after quality, test and security gates on it, then the CHANGELOG and the next development version in a follow-up PR, and closes linked issues. Usage: /component:release"
+description: "Release: tags the commit staging runs (main's head without staging) after its gates, then the CHANGELOG and the next development version in a follow-up PR, and closes linked issues. Usage: /component:release"
 ---
 
-You are the **release orchestrator**: release target, quality, test and security gates, tag, follow-up PR, issues, in sequence. Fail fast: a failed gate stops the release.
+You are the **release orchestrator**: target, gates, tag, follow-up PR, issues, in sequence. Fail fast: a failed gate stops the release.
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
-**What is tagged (spec 138):** the commit staging runs (CI re-tags its `sha-<40>` image `X.Y.Z` without a rebuild, spec 106); without staging (a library, or no gitops-app link) `main`'s head. The CHANGELOG entry and the next development version follow in a PR after the tag.
+**What is tagged (spec 138):** the commit staging runs (CI re-tags its `sha-<40>` image `X.Y.Z` without a rebuild, spec 106); without staging (a library, or no gitops-app link) `main`'s head.
 
 **Arguments:** $ARGUMENTS (none expected; ignore any).
 
 ## Phase 0 — Shape dispatch
 
-`cplat shape`: JSON with `shape`, `plugin`, `deployable`, `library`, `agents` (spawn each role with exactly that type; roles missing from it are skipped). `unsupported` → stop and show it. If `agents` has no `release` role (shape `platform`), stop before anything changes and print:
+`cplat shape`: JSON with `shape`, `plugin`, `deployable`, `library`, `agents` (spawn each role with that type; skip a missing one). `unsupported` → stop and show it. If `agents` has no `release` role (shape `platform`), stop before anything changes and print:
 
 ```
 ## Release refused: the platform is not released with /component:release
@@ -31,6 +31,8 @@ Agents: tester `agents.tester`, release `agents.release` (ADR-012), all in the f
 `git status --porcelain` must be empty so that the gates check only what is released (else stop: "Working tree has uncommitted changes — commit or stash before releasing."). Then `git switch --detach <TAG_COMMIT>`.
 
 Print `## Phase 1 complete — releasing <VERSION> on <TAG_COMMIT> (<the commit staging runs | main's head>)`.
+
+Run `cplat component release gates --commit <TAG_COMMIT>`, print its line; on exit 0 never run Phases 2–4, because CI already passed them on this commit. Exit 1 → Phases 2–4. Exit 2 → repeat at most twice, then Phases 2–4.
 
 ## Phase 2 — Quality gate
 
@@ -68,11 +70,11 @@ Print `## Phase 5 complete — tag vX.Y.Z pushed on <TAG_COMMIT>`.
 
 **release agent**: "Write the follow-up of the tagged release. VERSION=<VERSION>, PREVIOUS=<PREVIOUS>, TAG_COMMIT=<TAG_COMMIT>, VERSION_FILE=<VERSION_FILE>, NEXT_DEV=<NEXT_DEV>. Start from `origin/main`, add the CHANGELOG.md entry for VERSION (the commits `PREVIOUS..VERSION`), set NEXT_DEV in VERSION_FILE (skip when `none`), commit on `release/VERSION`, push it and open the PR. **Hard rule:** never tag, commit to main or force-push, because GitHub Free has no branch protection."
 
-Then `cplat pr wait <PR URL> --merge` (never a polling loop, since the wait reruns a stuck check). The follow-up commit stays untagged (a later release ignores `chore(release): …`). If the agent or the merge fails, the release stays tagged: report the failure and the PR, keep the tag. Print `## Phase 6 complete — follow-up PR merged: <URL>`.
+Then `cplat pr wait <PR URL> --merge` (never a polling loop, since the wait reruns a stuck check). The follow-up commit stays untagged (a later release ignores `chore(release): …`). If either fails, the release stays tagged: report it and the PR. Print `## Phase 6 complete — follow-up PR merged: <URL>`.
 
 ## Phase 7 — Close linked GitHub issues
 
-Collect every `#NNN` (deduplicated) from the commit messages `git log "$PREV_TAG"..vX.Y.Z --format='%B'` (`PREV_TAG=$(git describe --tags --abbrev=0 vX.Y.Z^ 2>/dev/null)`; empty → `git log vX.Y.Z --format='%B'`), the PR bodies (`gh pr list --state merged --limit 50 --json number,body`) and the CHANGELOG entry. For each: `gh issue view <NNN> --json state,number -q '"\(.number) \(.state)"'`; `OPEN` → `gh issue close <NNN> --comment "Closed by release vX.Y.Z — see [CHANGELOG.md](../blob/main/CHANGELOG.md) for details."`; `CLOSED` → skip.
+Collect each `#NNN` from the commit messages `git log "$PREV_TAG"..vX.Y.Z --format='%B'` (`PREV_TAG=$(git describe --tags --abbrev=0 vX.Y.Z^ 2>/dev/null)`; empty → `git log vX.Y.Z --format='%B'`), the PR bodies (`gh pr list --state merged --limit 50 --json number,body`) and the CHANGELOG entry. For each: `gh issue view <NNN> --json state,number -q '"\(.number) \(.state)"'`; `OPEN` → `gh issue close <NNN> --comment "Closed by release vX.Y.Z — see [CHANGELOG.md](../blob/main/CHANGELOG.md) for details."`; `CLOSED` → skip.
 
 Print `## Phase 7 complete — issues closed: #42, #7 (2 closed, 1 already closed)` or `— no linked issues found`.
 
@@ -81,20 +83,20 @@ Print `## Phase 7 complete — issues closed: #42, #7 (2 closed, 1 already close
 ```
 ## Release Pipeline Complete
 
-Release target: vX.Y.Z on <commit> · Quality, Test (X% coverage), Security gates: PASS
+Release target: vX.Y.Z on <commit> · Quality, Test (X% coverage), Security gates: PASS (or `Gates: reused CI run <url>`)
 Tag: vX.Y.Z pushed to origin on <commit>
 Follow-up PR: <URL>: CHANGELOG entry, <VERSION_FILE> → <NEXT_DEV> (or "CHANGELOG only"), merged
 Issues closed: #42, #7 (or "none")
 
 Tagged commit: <commit> — the commit staging runs (sha-<commit>): CI re-tags that image X.Y.Z without a rebuild, so prod gets the digest staging tested (spec 106).
-   (without staging: <commit> — main's head: <why from the target>, tagged after main's ci run on it passed.)
+   (without staging: <commit> — main's head: <why from the target>, tagged after its ci run passed.)
 Version: the tagged commit's version file shows the previous development version; the release version is the tag vX.Y.Z. main now carries <NEXT_DEV> from the follow-up PR.
 ```
 
 ## Rules
 
 - **Fail fast**; after Phase 1 a stop runs `git switch main` first, so the checkout is left on `main`.
-- `git push origin v*` is pre-approved. **Phase 7 closes issues via `gh issue close`** (an `ask` permission: the user is prompted once before the closes).
+- `git push origin v*` is pre-approved. **Phase 7 closes issues via `gh issue close`** (an `ask` permission).
 - Never auto-fix quality, test or security failures (report and stop), so that the released code is what passed the gates; never force-merge (a failed merge goes to the user), because it needs the user's decision.
 
 Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.

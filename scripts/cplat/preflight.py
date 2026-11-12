@@ -64,6 +64,8 @@ def run_allowlist(command: str, branches: list[str], log_dirs: tuple[Path, ...] 
     for b in branches:
         rules += [f"Bash(git push -u origin {b})", f"Bash(git push origin {b})"]
     rules.append("Bash(gh pr create *)")
+    if command in ("/component:build", "/component:ship", "/system:ship"):
+        rules.append("Bash(cplat plan merge *)")
     if command in LAND_COMMANDS:
         rules += ["Bash(cplat component ship land)", "Bash(cplat component ship land *)"]
     if command == "/system:ship":
@@ -125,6 +127,7 @@ def _self_check() -> None:
             allow = run_allowlist(command, branches, [Path.home() / ".cache" / "sdlc-foundry" / "logs" / "x"])
             refused = refused_rules("main")
             assert not set(allow) & set(refused)
+            assert not any(matches(r, "cplat plan merge t2 t3") for r in refused)
             for rule in allow:
                 if not rule.startswith("Bash("):
                     continue

@@ -5,6 +5,10 @@ rules:
   - id: R2
     text: "Do not list acceptance test files, because they exist before coding and coders do not edit them."
     class: practice
+  - id: R7
+    text: "A change and the change that makes its checks pass must be one task, because a task whose checks cannot pass alone stops the build."
+    class: experience
+    source: "#681"
   - id: R3
     text: "never plan Kubernetes manifests in a service repo, because the gitops-app repo owns them"
     class: hard
