@@ -25,6 +25,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
 | [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | approved | 10 |  |
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
+| [185-a-hung-test-fails-fast-and-names-itself](specs/185-a-hung-test-fails-fast-and-names-itself/spec.md) — A hung test fails fast and names itself | P1 | approved | 8 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [173-the-guides-read-without-spec-numbers](specs/173-the-guides-read-without-spec-numbers/spec.md) — The guides read without spec numbers | P2 | approved | 3 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
@@ -164,6 +165,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [175-a-spec-number-means-the-spec-and-ship](specs/175-a-spec-number-means-the-spec-and-ship/spec.md) — A spec number means the spec and ship PRs close their issues | P1 | done | 5 | #638, #645 |
 | [178-one-way-to-land-and-tests-that-do-not](specs/178-one-way-to-land-and-tests-that-do-not/spec.md) — One way to land and tests that do not race | P1 | done | 8 | #648 |
 | [179-unattended-runs-ask-less](specs/179-unattended-runs-ask-less/spec.md) — Unattended runs ask less | P1 | done | 9 | #616, #653, #654, #655 |
+| [180-prompt-checks-test-behaviour-not](specs/180-prompt-checks-test-behaviour-not/spec.md) — Prompt checks test behaviour not sentences | P1 | done | 7 |  |
 | [181-journey-measurements-count-waiting](specs/181-journey-measurements-count-waiting/spec.md) — Journey measurements count waiting correctly | P1 | done | 7 |  |
 | [182-logs-reach-loki](specs/182-logs-reach-loki/spec.md) — Logs reach Loki | P1 | done | 6 | #657 |
 | [183-shared-numbers-and-indexes-come-from](specs/183-shared-numbers-and-indexes-come-from/spec.md) — Shared numbers and indexes come from cplat | P1 | done | 8 | #659, #660, #477, #577 |
@@ -186,7 +188,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | done | 13 | #164 |
 | [122-a-local-console-shows-the-system-and-what](specs/122-a-local-console-shows-the-system-and-what/spec.md) — A local console shows the system, its process and what needs you | P2 | done | 52 |  |
 | [124-autonomy-is-declared-per-environment-and](specs/124-autonomy-is-declared-per-environment-and/spec.md) — Autonomy is declared per environment and supervised in the console | P2 | done | 22 |  |
-| [127-the-cache-url-names-its-user-and-ci-pins](specs/127-the-cache-url-names-its-user-and-ci-pins/spec.md) — the cache URL names its user and CI pins its test tools | P2 | done | 6 |  |
+| [127-the-cache-url-names-its-user-and-ci-pins](specs/127-the-cache-url-names-its-user-and-ci-pins/spec.md) — the cache URL names its user and CI pins its test tools | P2 | done | 5 |  |
 | [132-changelog-fragments-that-the-release](specs/132-changelog-fragments-that-the-release/spec.md) — Changelog fragments that the release assembles | P2 | done | 13 | #321 |
 | [133-build-prs-show-how-they-were-built](specs/133-build-prs-show-how-they-were-built/spec.md) — Build PRs show how they were built | P2 | done | 13 | #338 |
 | [150-the-house-rules-run-before-the-pr](specs/150-the-house-rules-run-before-the-pr/spec.md) — The house rules run before the PR | P2 | done | 5 |  |
