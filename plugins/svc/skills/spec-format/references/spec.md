@@ -11,6 +11,7 @@ priority: P1                       # P0 | P1 | P2
 shape: service-python              # the repo's shape (omitted in a repo without one)
 tracks: [42]                       # optional: GitHub issues this spec answers
 parent: acme/shop-gitops:012-checkout   # optional: the system spec this component's spec is a slice of
+explored: true                     # optional: set by `cplat spec new --explored`, never by hand, because it records a real exploration
 ---
 
 # 007 — Price alerts
@@ -41,6 +42,10 @@ As a trader, I want an alert when a watched symbol crosses my threshold, so that
 - **A1** A rule fires again only after the price crossed back below its threshold (other option: once per hour; affects AC-007.3).
 - ~~**A2** Alerts go by email only.~~ Revised 2026-10-09: webhooks too, AC-007.4.
 
+## Notes for the architect
+
+- Keep the rule history in one table.
+
 ## Open questions
 
 - May a rule call a webhook outside the company network? (suggested: no, only allow-listed hosts; affects AC-007.4)
@@ -67,6 +72,7 @@ A spec decides by default and asks only what may not be decided by default, so t
 
 - **Assumptions:** every decision with a sensible default (a limit, a format, an order, a status code, a wording, a small scope call) is taken, written into the criteria and listed as `- **A<n>** <decision> (other option: <…>; affects AC-…)`. The user approves them together with the spec. A changed assumption is struck through with the date and the new decision, never deleted, because the user approved the old one.
 - **Open questions** are only: (a) security, access or secrets; (b) money: paid services, quotas, cost limits; (c) deleting, migrating or exposing existing data; (d) a request so ambiguous that the default may build the wrong feature. Write each with a **suggested answer** and what it affects, so that the user can answer in one word.
+- **Notes for the architect** (optional section, after Assumptions): non-binding hints from an exploration. They are no criteria, are not in the hash and bind nobody, because they are advice and not a contract. An assumption decided in an exploration ends with `(decided in explore)`.
 - Answered questions are struck through, with the answer folded into a criterion or a non-goal. `cplat spec approve` refuses while any unstruck question remains; assumptions block nothing.
 
 ## Amending

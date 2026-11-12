@@ -18,6 +18,9 @@ rules:
     text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
     class: hard
     hard: issue-filing-needs-consent
+  - id: R7
+    text: "Do not label it, because a label would hide it from the next triage while it stays in the queue until it is explored and specced."
+    class: practice
   - id: R6
     text: "do not start a second pipeline before the first PR is open"
     class: retired

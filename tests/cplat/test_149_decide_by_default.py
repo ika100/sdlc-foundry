@@ -34,7 +34,7 @@ def test_the_product_manager_decides_by_default_and_asks_four_kinds_ac_149_1(): 
     assert "Decide by default; ask only what you may not decide" in pm and "Don't guess. Ask." not in pm
     for kind in ("secrets", "money", "existing data", "so ambiguous"):
         assert kind in pm
-    assert "- **A<n>** <the decision> (other option: <…>; affects AC-…)" in pm and "ASSUMPTIONS:" in pm
+    assert "- **A<n>** <the decision> (other option: <…>; affects AC-…)" in pm and "ASSUMPTIONS:" in pm  # interface: the assumption bullet format cplat spec parses
     ref = (ROOT / "plugins/svc/skills/spec-format/references/spec.md").read_text()
     assert "## Assumptions" in ref and "Never answer your own questions by assumption" not in ref
     assert (ROOT / "docs/adr/084-a-spec-decides-by-default.md").is_file()

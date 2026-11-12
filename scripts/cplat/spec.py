@@ -4,12 +4,14 @@ A spec folder holds spec.md (what: stories, acceptance criteria AC-<NNN>.<n>, no
 design.md (how, contract) and plan.md (tasks with `covers: [AC-…]`). The slash commands do the judgement; every
 check and every state change of a spec goes through this module so it is deterministic and tested.
 `trace --chain` shows the chain from issue to environment (spec 109); `ci` warns about tests naming withdrawn or unknown criteria.
+`new --explored` marks a spec made from an explore handoff and `discard` drops such a draft before it is committed (spec 188).
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import hashlib
+import itertools
 import json
 import re
 import sys
@@ -280,6 +282,8 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
         errs.append(f"spec.md: status must be one of {STATUSES}")
     if meta.get("priority") not in PRIORITIES:
         errs.append(f"spec.md: priority must be one of {sorted(PRIORITIES)}")
+    if "explored" in meta and not isinstance(meta["explored"], bool):
+        errs.append("spec.md: explored must be true or false")
     known = {s["id"] for s in core.registry.load_all()}
     if meta.get("shape") and meta["shape"] not in known:
         errs.append(f"spec.md: unknown shape '{meta['shape']}' (valid: {', '.join(sorted(known))})")
@@ -870,7 +874,8 @@ def skeleton(number: str, title: str) -> str:
 """
 
 
-def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: list[int], parent: str | None) -> Spec:
+def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: list[int], parent: str | None,
+        explored: bool = False) -> Spec:
     import specnumbers
     num, warning = specnumbers.next_number(root)
     if warning:
@@ -885,6 +890,8 @@ def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: lis
         meta["shape"] = shape
     if tracks:
         meta["tracks"] = tracks
+    if explored:
+        meta["explored"] = True
     if parent:
         meta["parent"] = parent
     save(sdir / "spec.md", meta, skeleton(number, title))
@@ -1155,7 +1162,7 @@ def summary(root: Path, spec: Spec) -> dict:
             "priority": spec.meta.get("priority", ""), "acs": len(spec.active_acs()),
             "open_questions": len(spec.open_questions()), "assumptions": len(spec.assumptions()), "tasks": len(tasks),
             "tasks_done": sum(1 for t in tasks if t.get("done")), "tracks": spec.meta.get("tracks") or [],
-            "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
+            "explored": spec.meta.get("explored") is True, "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
 
 
 VERDICT_ROW = re.compile(r"^\|\s*(AC-\d{3,}\.\d+)\s*\|\s*([^|]*?)\s*\|")
@@ -1244,7 +1251,7 @@ def detail(root: Path, spec: Spec, shape: str | None) -> dict:
 
 def broken_summary(root: Path, b: BrokenSpec) -> dict:
     return {"id": b.id, "title": "", "status": "broken", "priority": "", "acs": 0, "open_questions": 0,
-            "tasks": 0, "tasks_done": 0, "tracks": [], "next": f"fix {b.rel} line {b.line}: {b.hint}",
+            "tasks": 0, "tasks_done": 0, "tracks": [], "explored": False, "next": f"fix {b.rel} line {b.line}: {b.hint}",
             "path": str(b.dir.relative_to(root))}
 
 
@@ -1479,10 +1486,13 @@ def main(argv: list[str]) -> int:
     p.add_argument("--from-plan", nargs=2, metavar=("PLAN", "REPO_ID"),
                    help="this repo's slice of a product plan (docs/plan/<id>.md in the gitops-app repo)")
     p.add_argument("--priority", default="P1", choices=sorted(PRIORITIES))
-    p.add_argument("--tracks", type=int, nargs="*", action="extend", default=None)
+    p.add_argument("--tracks", nargs="*", action="extend", default=None, help="issue numbers; words after them are the title")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this spec (spec 082)")
     p.add_argument("--parent")
     p.add_argument("--no-shape", action="store_true", help="do not record the repo's shape")
+    p.add_argument("--explored", action="store_true", help="the spec comes from an explore handoff (spec 188)")
+    p = sub.add_parser("discard", help="remove a never-committed draft spec and release its claims (spec 188)")
+    p.add_argument("id")
     p = sub.add_parser("check", help="validate specs and plans (all if none given)")
     p.add_argument("ids", nargs="*")
     p.add_argument("--require", choices=list(RANK))
@@ -1538,16 +1548,22 @@ def main(argv: list[str]) -> int:
     p = sub.add_parser("migrate", help="convert STORY-NNN stories in docs/backlog.md into spec folders")
     p.add_argument("--write", action="store_true", help="without it, only show what would happen")
     ns = ap.parse_args(argv)
+    if ns.cmd == "new" and ns.explored and ns.from_plan:
+        ap.error("--explored cannot be combined with --from-plan")
     root = Path(ns.repo).resolve()
 
     if ns.cmd == "new":
         shape = None if ns.no_shape else repo_shape(root)
+        issues = [int(t) for t in itertools.takewhile(str.isdigit, ns.tracks or [])]   # `--tracks 5 Title words`: the rest is the title
+        ns.title = [*(ns.tracks or [])[len(issues):], *ns.title]
+        ns.tracks = issues
         if ns.from_plan:
             spec = new_from_plan(root, Path(ns.from_plan[0]).expanduser(), ns.from_plan[1], shape=shape)
         elif not ns.title:
             raise PlatformError("a title or --from-plan PLAN REPO_ID is required")
         else:
-            spec = new(root, " ".join(ns.title), shape=shape, priority=ns.priority, tracks=list(dict.fromkeys(ns.tracks or [])), parent=ns.parent)
+            spec = new(root, " ".join(ns.title), shape=shape, priority=ns.priority, tracks=list(dict.fromkeys(ns.tracks or [])), parent=ns.parent,
+                       explored=ns.explored)
         print(spec.dir.relative_to(root) / "spec.md")
         if spec.meta.get("tracks"):
             import claim
@@ -1579,6 +1595,15 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "adr-next":
         import adr
         print(f"{adr.next_number(root, with_prs=not ns.offline):03d}")
+        return 0
+    if ns.cmd == "discard":
+        import spec_discard
+        try:
+            print(f"{spec_discard.discard(root, find(root, ns.id))}: discarded")
+        except PlatformError as e:      # a refusal reads like any cplat error, as `check` prints its own
+            print(f"ERROR: {e}", file=sys.stderr)
+            print(f"  fix: {e.hint}", file=sys.stderr)
+            return 1
         return 0
     if ns.cmd == "approve":
         spec = find(root, ns.id)

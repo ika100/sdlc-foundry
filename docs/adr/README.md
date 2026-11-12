@@ -105,3 +105,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [104](104-a-system-ship-answers-an-escalated-repo-while-others-run.md) | next returns answer for an escalated repo while others run; the coordinator resumes decision escalations with a suggested answer and holds the rest |
 | [105](105-an-image-is-tagged-only-after-every-gate-passed.md) | Component CI builds and pushes images by digest alongside the gates; tags and the dev pin follow only after every gate passed |
 | [106](106-a-release-reuses-the-green-ci-run-of-its-commit.md) | /component:release skips its local gates when main's ci run on the tagged commit passed every gate within 7 days |
+| [107](107-explore-hands-its-decisions-to-the-spec-inline.md) | Exploration is read-only and person-started, and hands its decisions to the spec inline as behaviour, constraint or hint. |
