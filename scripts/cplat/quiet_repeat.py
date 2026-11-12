@@ -33,8 +33,8 @@ def run(cwd: Path, n: int, args: list[str], *, raw: bool, on: bool) -> int:
     try:
         deadline = time.monotonic() + quiet_limit.GIVE_UP_SECONDS
         for i, fh in enumerate(fhs, 1):
-            procs.append(quiet_limit.start(cmd, cwd=cwd, out=fh,
-                                           env=repo_env({**adds[i - 1][0], "CPLAT_REPEAT_RUN": str(i)})))
+            add = {**adds[i - 1][0], "CPLAT_REPEAT_RUN": str(i)}
+            procs.append(quiet_limit.start(quiet_limit.with_env(cmd, add), cwd=cwd, out=fh, env=repo_env(add)))
         codes = [quiet_limit.wait_until(p, deadline) for p in procs]
     finally:
         for p in procs:

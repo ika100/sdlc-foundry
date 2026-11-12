@@ -28,6 +28,11 @@ def progress_env(log: Path) -> tuple[dict[str, str], Path]:
     }, progress
 
 
+def with_env(cmd: list[str], add: dict[str, str]) -> list[str]:
+    """`devbox run <script> …` as `devbox run -e KEY=VALUE … <script> …`: devbox resets PYTHONPATH in its own environment."""
+    return cmd[:2] + [a for k, v in add.items() for a in ("-e", f"{k}={v}")] + cmd[2:]
+
+
 def start(cmd: list[str], *, cwd: Path, out, env: dict[str, str]) -> subprocess.Popen:
     """Start `cmd` in its own session, so `stop` reaches every process it starts."""
     return subprocess.Popen(cmd, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=env, start_new_session=True)

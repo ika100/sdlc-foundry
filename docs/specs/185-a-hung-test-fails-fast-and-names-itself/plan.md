@@ -24,6 +24,7 @@ tasks:
     covers: [AC-185.4, AC-185.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Shard reports carry wall time and slowest tests; coverage job prints and keeps them
     files: [tests/cplat/sharding.py, scripts/check-shards.py, .github/workflows/ci.yml]

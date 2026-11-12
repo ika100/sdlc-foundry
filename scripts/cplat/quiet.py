@@ -115,7 +115,7 @@ def main(argv: list[str]) -> int:
         add, progress = quiet_limit.progress_env(log)
         deadline = time.monotonic() + quiet_limit.GIVE_UP_SECONDS
         with log.open("wb") as fh:
-            proc = quiet_limit.start(cmd, cwd=cwd, out=fh, env=repo_env(add))
+            proc = quiet_limit.start(quiet_limit.with_env(cmd, add), cwd=cwd, out=fh, env=repo_env(add))
             try:
                 code = quiet_limit.wait_until(proc, deadline)
             finally:
