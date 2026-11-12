@@ -109,6 +109,20 @@ class HardRule:
 
 
 @dataclass
+class BaselineRaise:
+    """One entry of `baseline.history` (spec 180): a raise of the prompt baseline."""
+    date: str
+    old: int
+    new: int
+    reason: str
+    benchmark_runs: list[str]
+    line: int = 0
+
+
+HISTORY_KEYS = ("date", "old", "new", "reason", "benchmark_runs")
+
+
+@dataclass
 class Register:
     hard: dict[str, HardRule]
     hard_line: int                              # line of the `hard:` key (0 when absent)
@@ -118,6 +132,8 @@ class Register:
     entries: dict[str, list[Entry]]             # prompt path -> entries of its register file
     bad_files: list[tuple[str, int, str]]       # entries files mirroring no prompt path: (file, line, message)
     problems: list[tuple[int, str]] = field(default_factory=list)   # (line, message) of register.yml itself
+    baseline_history: list[BaselineRaise] = field(default_factory=list)
+    baseline_bytes_line: int = 0                # line of `prompt_bytes:` (0 when absent)
 
 
 # ---------------------------------------------------------------- prompt scanning
@@ -432,6 +448,74 @@ def _hard_table(table: object, node: yaml.Node | None) -> dict[str, HardRule]:
     return rules
 
 
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _raise(item: object, line: int) -> tuple[BaselineRaise | None, list[str]]:
+    if not isinstance(item, dict):
+        return None, ["a history entry is a mapping with date, old, new, reason and benchmark_runs"]
+    bad = [f"unknown history key `{k}`" for k in item if k not in HISTORY_KEYS]
+    bad += [f"history entry lacks `{k}`" for k in HISTORY_KEYS if k not in item]
+    date = item.get("date")
+    if isinstance(date, (datetime.date, datetime.datetime)):
+        date = date.isoformat()[:10]
+    if "date" in item and not (isinstance(date, str) and _DATE.fullmatch(date)):
+        bad.append("history `date` is an ISO date")
+    old, new, reason, runs = item.get("old"), item.get("new"), item.get("reason"), item.get("benchmark_runs")
+    if "old" in item and "new" in item:
+        if not (_is_int(old) and _is_int(new)):
+            bad.append("history `old` and `new` are byte counts")
+        elif old >= new:
+            bad.append("history `old` is below `new`")
+    if "reason" in item and not (isinstance(reason, str) and len(_WORD.findall(reason)) >= MIN_REASON_WORDS):
+        bad.append("history `reason` says in at least 3 words why the baseline was raised")
+    if "benchmark_runs" in item and not (isinstance(runs, list) and runs and all(isinstance(r, str) and r for r in runs)):
+        bad.append("history `benchmark_runs` is a non-empty list of run ids")
+    if bad:
+        return None, bad
+    return BaselineRaise(str(date), old, new, reason, list(runs), line), []
+
+
+def _baseline_info(data: dict, node: yaml.Node | None) -> tuple[list[BaselineRaise], list[tuple[int, str]], int]:
+    """(history, problems, line of `prompt_bytes:`) of the `baseline` mapping."""
+    base_node = None
+    if isinstance(node, yaml.MappingNode):
+        base_node = next((v for k, v in node.value if k.value == "baseline"), None)
+    keys = {k.value: (k.start_mark.line + 1, v) for k, v in base_node.value} if isinstance(base_node, yaml.MappingNode) else {}
+    baseline = data.get("baseline") if isinstance(data.get("baseline"), dict) else {}
+    history: list[BaselineRaise] = []
+    problems: list[tuple[int, str]] = []
+    raw = baseline.get("history")
+    if "history" in baseline:
+        top = keys.get("history", (1, None))
+        if not isinstance(raw, list):
+            problems.append((top[0], "`baseline.history` is a list of raises"))
+            raw = []
+        lines = [n.start_mark.line + 1 for n in top[1].value] if isinstance(top[1], yaml.SequenceNode) else []
+        for i, item in enumerate(raw):
+            line = lines[i] if i < len(lines) else top[0]
+            entry, bad = _raise(item, line)
+            problems += [(line, m) for m in bad]
+            if entry:
+                history.append(entry)
+    return history, problems, keys.get("prompt_bytes", (0,))[0]
+
+
+def parse_baseline(text: str) -> tuple[int | None, list[BaselineRaise], int]:
+    """(`prompt_bytes`, history, line of `prompt_bytes:`) of a register text; unreadable or malformed parts read as absent."""
+    try:
+        data, node = _load(REGISTER, text)
+    except RegisterError:
+        return None, [], 0
+    if not isinstance(data, dict):
+        return None, [], 0
+    history, _, line = _baseline_info(data, node)
+    baseline = data.get("baseline") if isinstance(data.get("baseline"), dict) else {}
+    size = baseline.get("prompt_bytes")
+    return (size if _is_int(size) else None), history, line
+
+
 def load_register(root: Path) -> Register:
     base = Path(root)
     path = base / REGISTER
@@ -448,6 +532,8 @@ def load_register(root: Path) -> Register:
     size = baseline.get("prompt_bytes")
     if not isinstance(baseline.get("commit"), (str, int)) or isinstance(size, bool) or not isinstance(size, int):
         problems.append((top.get("baseline", (1,))[0], "`baseline` has `commit` and `prompt_bytes`"))
+    history, hist_problems, bytes_line = _baseline_info(data, node)
+    problems += hist_problems
     hard_node = top["hard"][1] if "hard" in top else None
     if not isinstance(data.get("hard"), dict):
         problems.append((top.get("hard", (1,))[0], "`hard` is a mapping of the distinct hard rules"))
@@ -462,7 +548,7 @@ def load_register(root: Path) -> Register:
         entries[prompt] = load_entries(rel, file.read_text(encoding="utf-8"))
     return Register(_hard_table(data.get("hard"), hard_node), top.get("hard", (0,))[0], str(baseline.get("commit", "")),
                     size if isinstance(size, int) and not isinstance(size, bool) else None, top.get("baseline", (0,))[0],
-                    entries, bad_files, problems)
+                    entries, bad_files, problems, history, bytes_line)
 
 
 # ---------------------------------------------------------------- enforcement
