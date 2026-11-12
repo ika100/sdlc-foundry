@@ -1,7 +1,7 @@
 ---
 spec_id: 188-explore-a-feature-before-its-spec-is
 title: Explore a feature before its spec is written
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [662]
@@ -72,3 +72,4 @@ As the platform owner, I want to see whether explored specs need fewer revisions
 
 - 2026-11-12 created
 - 2026-11-12 approved
+- 2026-11-12 building
