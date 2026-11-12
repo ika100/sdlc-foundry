@@ -20,9 +20,13 @@ rules:
     class: hard
     hard: push-only-through-pr-open
   - id: R7
-    text: "Never answer a repo spec's questions."
+    text: "Never answer a repo spec's questions, because `repo start` writes the spec from the plan and none arise."
     class: practice
     source: spec 141
+  - id: R14
+    text: "one repo's decision need not wait for another's build, and only a suggested answer is one the user approved with the spec."
+    class: experience
+    source: "#684"
   - id: R8
     text: "Never wait with a shell loop on a file, git HEAD or an image, because `cplat system ship next --wait` blocks until a repo finishes."
     class: experience

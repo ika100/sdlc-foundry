@@ -101,6 +101,7 @@ tasks:
     covers: [AC-186.2, AC-186.3]
     parallel_safe: true
     depends_on: [t10]
+    done: true
   - id: t15
     title: Guides, changelog fragment and plugin versions
     files: [docs/unattended-delivery.md, docs/AGENTS.md, docs/changelog.d/186-the-journey-waits-less.changed.md, .claude-plugin/marketplace.json, plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, plugins/svc/.claude-plugin/plugin.json]
