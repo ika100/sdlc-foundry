@@ -7,7 +7,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 **Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → to `cplat validate run`. `--unit <unit>`: only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
 
-Run the phases in order, printing after each `## Phase N complete — <one line>`. A re-run skips a phase whose result exists.
+Run the phases in order, printing `## Phase N complete — <one line>` after each. A re-run skips phases with a result.
 
 ## cplat
 
@@ -17,7 +17,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 ## Phase 0 — Pre-flight
 
 0. `cplat platform runs begin build --spec <id>`. Every stop that needs the user or fails first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`failed` on failure); the end `--outcome done`. After every subagent: `cplat platform runs agent spawned <role> [--model-id <id>]`.
-1. `git status --porcelain`: dirty on a spec whose status is not `building` → stop: commit first. Dirty on a `building` spec → read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (`git restore --staged`; `wip(<task-id>): interrupted`).
+1. `git status --porcelain`: dirty on a spec whose status is not `building` → stop: commit or stash first (clean tree). Dirty on a `building` spec → read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (`git restore --staged`; `wip(<task-id>): interrupted`).
 2. `cplat spec check <id> --require approved` must pass and `docs/specs/<spec_id>/plan.md` exist; otherwise stop with the fix.
 3. Switch to `feature/<spec_id>` (create it from `main` if missing) = `$FEATURE_BRANCH`. `BASE_REF=$(git merge-base main HEAD)`.
 4. `<project-map>` = `ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`, heading every subagent prompt.
@@ -85,8 +85,8 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 ## Phase 3 — QA: one CI gate, agents only where it is red
 
 `cplat platform runs phase build:qa`
-1. Stage the tree, then `cplat quiet lint-fix` and `cplat quiet ci`: the CI gates.
-2. **Red** → `cplat validate final --check <name> failed` per failed check, then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the summary and log path `cplat quiet` printed, so that no green gate is touched:
+1. Stage the tree, then `devbox run lint-fix` and `devbox run ci` as `cplat quiet lint-fix` and `cplat quiet ci`: the CI gates.
+2. **Red** → `cplat validate final --check <name> failed` per failed check, then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the summary and log path `cplat quiet` printed (the log when the summary is not enough), so that no green gate is touched:
    - lint or type → **quality** (`agents.quality`), lint/type fixes only;
    - tests → the **coder** of the task whose files are involved (acceptance tests stay fixed; `cplat platform runs agent fix-round ci --task <task>`);
    - security → `cplat deps patch` first, then read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → step 3; exit 3 → escalate with its `ESCALATE` reason and `--cause <CAUSE>`, via `cplat component ship escalate` in a ship, else `cplat platform runs end --outcome escalated`; exit 4 → **security** agent). A red gate after a bump never goes to a coder, because a dependency is at fault.

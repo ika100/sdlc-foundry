@@ -14,8 +14,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 - `unsupported` or no shape → stop (gitops-app repos use `/system:ship`).
 - A `cplat shape` error that names `.platform-settings.yml` → stop and show it; never ask for the shape. Since the user fixes it, a guess hides it.
-- When `ship start` refuses (an unapproved spec, a tracked issue another branch claimed, a missing `GITOPS_TOKEN`), show its hint and stop; `--take-over` is the user's call, since it takes over another branch's claim. A re-run **resumes** at the printed phase.
-
+- When `ship start` refuses (an unapproved spec, a tracked issue another branch claimed, a missing `GITOPS_TOKEN`), show its hint and stop; `--take-over` is the user's call, since it takes over another branch's claim.
 **While the run is not finished, the Stop hook holds the session** with the next step; two stops without a new commit or phase change escalate the run, so commit each task. Run subagents in the foreground (`run_in_background: false`), never polling in a shell loop, because a loop can match itself and never end. Stop earlier through `cplat component ship escalate '<reason>'`.
 
 ## Unattended rules
@@ -50,17 +49,17 @@ Escalate on build's stop rules: a `cplat component build merge` escalation, a ch
 
 ## Phase `deploy`
 
-`cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: the context when the user named one or `kubectl config current-context` points at the system's cluster; `--base-url` is the user's to name, since a guess could hit the wrong host. It waits for the pin PR and Argo CD, merges the `after-release` gitops PRs, runs `devbox run smoke` on dev for every `(smoke)` criterion and, with `promotion.staging: auto`, promotes and smokes staging. Print its `Smoke (dev)`, `Promotion (staging)`, `Smoke (staging)` lines.
+`cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: the context when the user named one or `kubectl config current-context` points at the system's cluster; `--base-url` is the user's to name, since a guess could hit the wrong host. It waits for the pin PR and Argo CD, merges the `after-release` gitops PRs, runs `devbox run smoke` on dev for every `(smoke)` criterion and, with `promotion.staging: auto`, promotes and smokes staging. Print its `Smoke`/`Promotion` lines.
 
-- Red smoke (`smoke red in dev: …`, or in staging) or a failed staging pin: since deploy escalates by itself and files the `smoke-failure` issue, never call `cplat component ship escalate` for it; report its lines and stop. A resume reruns just smoke.
-- Smoke that could not run is "not run": the run ends `done`, criteria unchecked.
+- Red smoke (`smoke red in dev: …`, or in staging) or a failed staging pin: since deploy escalates by itself and files the `smoke-failure` issue, never call `cplat component ship escalate` for it; report its lines and stop.
+- Smoke that could not run is "not run": the run ends `done`.
 - Shape `platform`: deploy ends at once with `not deployable (platform): nothing to deploy`: no pin, Argo, smoke, staging or `devbox run smoke` (it tests the templates here).
 - In a joint `/system:ship` it ends once main's CI built the image: `pinned in the system ship's dev PR`.
 - A closed pin PR, red pin CI or unhealthy app → escalate with the hint.
 
 ## Finish
 
-`cplat component ship status`, `cplat component ship finish`, then print the report in `${CLAUDE_PLUGIN_ROOT}/references/ship-finish.md` (rows from deploy's lines, the dependency bumps, the plan's `human_steps`). A buffered-record warning is no error.
+`cplat component ship status`, `cplat component ship finish`, then print the report in `${CLAUDE_PLUGIN_ROOT}/references/ship-finish.md` (rows from deploy's lines, `cplat deps report`'s bumps, the plan's `human_steps`). A buffered-record warning is no error.
 
 ## Escalate
 

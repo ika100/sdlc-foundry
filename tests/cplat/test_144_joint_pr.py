@@ -453,6 +453,7 @@ def test_a_failed_component_keeps_the_joint_pr_open_and_escalates_ac_144_5(j):  
     assert j.app("repo", "start", "shop-web").rc == 0
     j.ship_state("shop-web", phase="build", merge_sha=None, deployed=None, smoke=None, escalated="CI red after 3 rounds", cause="code")
     assert j.app("repo", "result", "shop-web").rc == 1
+    assert j.app("repo", "hold", "shop-web").rc == 0      # spec 186: an escalated repo is first offered as `answer`
     nxt = j.app("next", "--json").json
     assert nxt["action"] == "escalate" and nxt["escalated"] == ["shop-web"]
     r = j.app("escalate", "CI red after 3 rounds")

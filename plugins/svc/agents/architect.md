@@ -29,7 +29,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 A prompt that starts with `**Re-plan mode.**` comes from `/component:build` after a merge conflict. You get the pending conflicts (task, colliding task, paths). Then:
 
-- Change `files`, `depends_on` and `parallel_safe` of tasks that are not `done`, and nothing else. Typically the conflicting task gets a `depends_on` on the task it collided with, or the missing file joins its `files`, and it is no longer `parallel_safe` with it.
+- Change `files`, `depends_on` and `parallel_safe` of tasks that are not `done`, and nothing else. Typically the conflicting task gets a `depends_on` on its collider, or the missing file joins its `files`, and it stops being `parallel_safe` with it.
 - Write nothing but `plan.md`.
 - Report a BLOCKER when the fix needs any other change: a new task, other `covers`, a change to the spec or the design.
 
