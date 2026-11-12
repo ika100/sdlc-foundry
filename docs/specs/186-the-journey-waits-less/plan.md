@@ -52,18 +52,21 @@ tasks:
     covers: [AC-186.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: Component CI builds the image alongside the gates and tags it after them
     files: [templates/service-python/.github/workflows/ci.yml, templates/service-java/.github/workflows/ci.yml, templates/service-go/.github/workflows/ci.yml, templates/web-nextjs/.github/workflows/ci.yml]
     covers: [AC-186.6, AC-186.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: cplat component release gates decides reuse or local gates
     files: [scripts/cplat/comprelease.py]
     covers: [AC-186.10, AC-186.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t10
     title: System ship CLI for answer, hold, resume and escalation questions
     files: [scripts/cplat/appship.py, scripts/cplat/appship_report.py]
