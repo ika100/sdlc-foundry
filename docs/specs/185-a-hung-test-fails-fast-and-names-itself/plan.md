@@ -45,6 +45,7 @@ tasks:
     covers: [AC-185.8]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t7
     title: ADR, contributor guide, changelog fragment and plugin versions
     files: [docs/adr/, docs/adr/README.md, CONTRIBUTING.md, docs/changelog.d/185-a-hung-test-fails-fast.added.md, .claude-plugin/marketplace.json, plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json]
