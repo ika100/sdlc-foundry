@@ -28,12 +28,12 @@ LIMIT = 2
 
 # ---------------- AC-197.6: the pytest plugin ----------------
 
-def nested(tmp_path, files, *args, extra_env=None, shim_extra=""):
+def nested(tmp_path, files, *args, extra_env=None, shim_extra="", ini=""):
     """A scratch pytest project with the plugin loaded and LIMIT_S shortened to LIMIT seconds."""
     assert PLUGIN.is_file(), f"{PLUGIN.relative_to(ROOT)} does not exist"
     for name, text in files.items():
         (tmp_path / name).write_text(text)
-    (tmp_path / "pytest.ini").write_text("[pytest]\nmarkers =\n    timeout: a per-test limit of some other tool\n")
+    (tmp_path / "pytest.ini").write_text("[pytest]\nmarkers =\n    timeout: a per-test limit of some other tool\n" + ini)
     (tmp_path / "short_limit.py").write_text(f"import platform_test_limit\nplatform_test_limit.LIMIT_S = {LIMIT}\n{shim_extra}")
     env = {k: v for k, v in os.environ.items() if k not in ("PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_TIMEOUT")}
     env["PYTHONPATH"] = os.pathsep.join([str(PLUGIN.parent), str(tmp_path)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
@@ -108,6 +108,14 @@ def test_a_hung_test_fails_with_id_and_limit_and_the_others_run_ac_197_6(tmp_pat
         assert f"per-test limit of {LIMIT} s" in text, (name, text)
 
 
+def test_the_shipped_limit_is_120_seconds_ac_197_6():  # AC-197.6
+    assert PLUGIN.is_file(), f"{PLUGIN.relative_to(ROOT)} does not exist"
+    spec = importlib.util.spec_from_file_location("platform_test_limit_shipped", PLUGIN)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.LIMIT_S == 120
+
+
 def test_a_suite_without_a_hung_test_is_unchanged_ac_197_6(tmp_path):  # AC-197.6
     ok = "import threading\n\n\ndef test_a():\n    threading.Event().wait(0.2)\n\n\ndef test_b():\n    assert 1 + 1 == 2\n"
     p, results, _ = nested(tmp_path, {"test_ok.py": ok}, "-q")
@@ -139,9 +147,12 @@ def test_a_handler_another_tool_owns_is_left_alone_ac_197_8(tmp_path):  # AC-197
 
 
 @pytest.mark.skipif(importlib.util.find_spec("pytest_timeout") is None, reason="pytest-timeout is not installed here")
-def test_a_repo_with_pytest_timeout_configured_keeps_it_ac_197_8(tmp_path):  # AC-197.8
+@pytest.mark.parametrize("how", ["env", "ini", "option"])
+def test_a_repo_with_pytest_timeout_configured_keeps_it_ac_197_8(tmp_path, how):  # AC-197.8
     slow = f"import threading\n\n\ndef test_slow_but_inside_the_repos_limit():\n    threading.Event().wait({LIMIT + 2})\n"
-    p, results, _ = nested(tmp_path, {"test_slow.py": slow}, "-q", extra_env={"PYTEST_TIMEOUT": "60"})
+    kw = {"env": {"extra_env": {"PYTEST_TIMEOUT": "60"}}, "ini": {"ini": "timeout = 60\n"}, "option": {}}[how]
+    args = ["--timeout=60"] if how == "option" else []
+    p, results, _ = nested(tmp_path, {"test_slow.py": slow}, "-q", *args, **kw)
     assert p.returncode == 0 and results["test_slow_but_inside_the_repos_limit"][0] == "passed", p.stdout + p.stderr
 
 

@@ -20,11 +20,11 @@ NEXT_DEV = "0.3.1-dev.0"
 
 
 def documented_step() -> list[str]:
-    """The `pnpm version <NEXT_DEV> ...` line of step 3's code block, as an argv."""
+    """The single `devbox run -- ...` line of step 3's code block, as an argv (`pnpm version` or the `pnpm pkg set` fallback)."""
     text = PROMPT.read_text()
     step = re.split(r"^### 3\..*$", text, flags=re.M)[1].split("\n### ", 1)[0]
     block = re.search(r"```bash\n(.*?)```", step, re.S).group(1)
-    (line,) = [ln for ln in block.splitlines() if "pnpm version" in ln]
+    (line,) = [ln for ln in block.splitlines() if ln.startswith("devbox run --")]
     return shlex.split(line.replace("<NEXT_DEV>", NEXT_DEV))
 
 
