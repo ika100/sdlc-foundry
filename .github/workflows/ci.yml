@@ -494,7 +494,7 @@ jobs:
           node_major=$(sed -n 's|^FROM gcr.io/distroless/nodejs\([0-9]*\)-.*|\1|p' Dockerfile)
           running=$(docker exec smoke /nodejs/bin/node -p process.versions.node | cut -d. -f1)
           test -n "$node_major" && test "$running" = "$node_major" || { echo "node major $running, pinned $node_major"; exit 1; }
-          test "$(docker exec smoke /nodejs/bin/node -p process.getuid())" = 1000 || { echo "not running as UID 1000"; exit 1; }
+          test "$(docker exec smoke /nodejs/bin/node -p 'process.getuid()')" = 1000 || { echo "not running as UID 1000"; exit 1; }
           # spec 091: the browser smoke tests against the running image (smoke.sh calls pnpm, as devbox provides it in a repo)
           npm install -g pnpm@11.22.0 >/dev/null
           SMOKE_BASE_URL=http://localhost:3000 bash scripts/smoke.sh | tee /tmp/smoke.out
