@@ -8,6 +8,7 @@
 #                                              runner: pytest | maven | go | vitest
 #
 # The line: `<gate>: checked nothing: <what> - <fix>`. There is no setting, variable or argument that skips the decision.
+# `tests` also bounds one test: pytest 120 s (plugin), maven 120 s (JUnit property), go 5 m (-timeout), unless the repo sets its own.
 # Same file in every template (scripts/sync-template-copies.py keeps the copies equal); keep it free of Jinja syntax.
 
 usage() {
@@ -58,6 +59,28 @@ cmd_tests() {
 
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/gate.XXXXXX") || exit 1
   trap 'rm -rf "$tmp"' EXIT
+
+  # Per-test limits (spec 197); the command's argv stays as given.
+  case "$runner" in
+    pytest)
+      if [ -f scripts/pytest_limit/platform_test_limit.py ]; then
+        export PYTHONPATH="$PWD/scripts/pytest_limit${PYTHONPATH:+:$PYTHONPATH}"
+        export PYTEST_ADDOPTS="${PYTEST_ADDOPTS:+$PYTEST_ADDOPTS }-p platform_test_limit"
+      fi
+      ;;
+    maven)
+      if ! grep -qs 'junit.jupiter.execution.timeout.default' pom.xml src/test/resources/junit-platform.properties &&
+        ! printf '%s\n' "$*" "${MAVEN_ARGS:-}" "${MAVEN_OPTS:-}" | grep -qs 'junit.jupiter.execution.timeout.default'; then
+        export MAVEN_ARGS="${MAVEN_ARGS:+$MAVEN_ARGS }-Djunit.jupiter.execution.timeout.default=120s"
+      fi
+      ;;
+    go)
+      case " ${GOFLAGS:-} " in
+        *" -timeout"*) ;;
+        *) export GOFLAGS="${GOFLAGS:+$GOFLAGS }-timeout=5m" ;;
+      esac
+      ;;
+  esac
 
   case "$runner" in
     pytest)

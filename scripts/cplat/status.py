@@ -294,9 +294,14 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
         if by:
             resources.append({"resource": r.name, "cells": {
                 env: (res_cell(env, by[env].argo_application, by[env].external) if env in by else None) for env in envs}})
-    obs = {e.name: e.observability.argo_application for e in m.environments if e.observability and m.instances_in(e.name)}
+    obs = {e.name: e for e in m.environments if e.observability and (m.instances_in(e.name) or e.observability.ui == "lgtm")}
     if obs:
-        resources.append({"resource": "observability", "cells": {env: (res_cell(env, obs[env]) if env in obs else None) for env in envs}})
+        def obs_cell(e) -> dict:
+            cell = res_cell(e.name, e.observability.argo_application)
+            if e.observability.ui == "lgtm":
+                cell["grafana_url"] = model.grafana_url(e.host)
+            return cell
+        resources.append({"resource": "observability", "cells": {env: (obs_cell(obs[env]) if env in obs else None) for env in envs}})
     versions = []
     renderer = _table_pins(repo)
     for r in m.resources:
@@ -411,6 +416,8 @@ def _cell(c: dict | None) -> str:
     if c is None:
         return "-"
     if "tag" not in c:
+        if "grafana_url" in c:
+            return f"argo {c['argo']}  Grafana {c['grafana_url'] or model.GRAFANA_ELSEWHERE}"
         return f"argo {c['argo']}"
     out = f"{c['state'] + ' ' if c.get('state') else ''}{c['tag']} ci {c['ci']} argo {c['argo']}"
     out += f"  pin PR {c['pin_pr']}" if c.get("pin_pr") else ""

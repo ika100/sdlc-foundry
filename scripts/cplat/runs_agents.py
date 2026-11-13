@@ -459,6 +459,25 @@ def _verdicts(path: Path) -> list[tuple[str, str]]:
     return rows
 
 
+def _merged_into(rec: dict) -> dict[str, str]:
+    """`task` -> `into` of every task-merge event of the run record."""
+    out: dict[str, str] = {}
+    for entry in rec.get(SECTION) or []:
+        for ev in entry.get("events") or []:
+            if ev.get("kind") == "task-merge" and ev.get("task") and ev.get("into"):
+                out[str(ev["task"])] = str(ev["into"])
+    return out
+
+
+def _resolve(merges: dict[str, str], tid: str) -> str | None:
+    """End of the merge chain from `tid`, or None when `tid` was never merged away."""
+    seen, cur = {tid}, merges.get(tid)
+    while cur is not None and cur in merges and merges[cur] not in seen:
+        seen.add(cur)
+        cur = merges[cur]
+    return cur
+
+
 def findings(run_id: str | None, repo: Path, cycle: int, *, deviations: Sequence[str] = (),
              spec: str | None = None) -> None:
     rec0 = _live(run_id)
@@ -477,6 +496,7 @@ def findings(run_id: str | None, repo: Path, cycle: int, *, deviations: Sequence
 
         pas = "first" if cycle == 1 else "after fix"
         events, bad = [], []
+        merges = _merged_into(rec0)
         for ac, verdict in rows:
             if verdict in ("not met", "partial"):
                 events.append({"criterion": ac, "task": None, "severity": verdict, "pass": pas, "cycle": cycle,
@@ -488,6 +508,9 @@ def findings(run_id: str | None, repo: Path, cycle: int, *, deviations: Sequence
             elif d in ids:
                 events.append({"criterion": None, "task": d, "severity": "deviation", "pass": pas, "cycle": cycle,
                                "tasks": [d]})
+            elif (end := _resolve(merges, str(d))) in ids:
+                events.append({"criterion": None, "task": end, "severity": "deviation", "pass": pas, "cycle": cycle,
+                               "tasks": [end], "note": f"named as {d} (merged into {end})"})
             else:
                 bad.append(d)
         ident = identity(repo, "coder")
