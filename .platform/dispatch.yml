@@ -1,5 +1,5 @@
-# The dispatcher's policy for this repo (docs/dispatch.md). Start: fixes only, two at a time; specs follow once the fixes ran well.
+# The dispatcher's policy for this repo (docs/dispatch.md): triaged issues and approved specs, two at a time; specs are approved by a person.
 slots: 2
 budget:
   tokens_per_day: 60000000
-sources: [issues]
+sources: [issues, specs]

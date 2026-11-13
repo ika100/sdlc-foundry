@@ -292,41 +292,6 @@ def test_land_stops_when_the_pr_cannot_be_marked_ready_ac_148_6(tmp_path, monkey
     assert "still a draft" in e.value.hint and not sw.waits
 
 
-# ---------------- AC-148.7 ----------------
-
-@pytest.fixture()
-def sw(tmp_path, monkeypatch, capsys):
-    world = World(tmp_path, monkeypatch, capsys)
-    monkeypatch.setattr(ship, "argo_health", lambda *a, **k: "Synced/Healthy")
-    return world
-
-
-def test_progress_extends_the_wait_beyond_its_timeout_ac_148_7(sw, tick):  # AC-148.7
-    sw.started(states={GITOPS: "passed", "shop-lib": "passed", "shop-api": "running", "shop-worker": "passed"})
-    running(sw, "shop-api", "build")
-    noop = lambda: None  # noqa: E731
-    tick.script = [noop] * 4 + [lambda: running(sw, "shop-api", "verify")] + [noop] * 4 + \
-                  [lambda: running(sw, "shop-api", "land")] + [noop] * 3 + [lambda: sw.ship_state("shop-api")]
-    r = sw.app("next", "--wait", "--timeout", "60")
-    assert r.rc == 0 and "action: start" in r.out and tick.slept > 60
-
-
-def test_a_timeout_says_no_repo_made_progress_ac_148_7(sw, tick):  # AC-148.7
-    sw.started(states={GITOPS: "passed", "shop-lib": "passed", "shop-api": "running", "shop-worker": "passed"})
-    running(sw, "shop-api", "build")
-    r = sw.app("next", "--wait", "--timeout", "60")
-    first = next(ln for ln in r.out.splitlines() if ln.startswith("TIMEOUT:"))
-    assert r.rc == 2 and "no repo made progress for 60s" in first and tick.slept == 60
-
-
-def test_progress_cannot_extend_one_wait_forever_ac_148_7(sw, tick):  # AC-148.7
-    sw.started(states={GITOPS: "passed", "shop-lib": "passed", "shop-api": "running", "shop-worker": "passed"})
-    running(sw, "shop-api", "p0")
-    tick.script = [(lambda k=k: running(sw, "shop-api", f"p{k}")) for k in range(1, 200)]
-    r = sw.app("next", "--wait", "--timeout", "60")
-    assert r.rc == 2 and tick.slept <= 7 * 60
-
-
 # ---------------- AC-148.8 ----------------
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -19,6 +19,7 @@ Add a row to every table below for each new journey (see [Recording a journey](#
 | 9 | 2026-11-10 | 5.16.0 (no change during the run) | [taskboard9-*](https://github.com/ika100-demo/taskboard9-gitops) | unattended, a fresh session per part, each repo of the system ship in its own headless session; one reply to a stop | recorded, not published: Watch a real run keeps journey 6 |
 | 10 | 2026-11-10 | 5.17.0 (no change during the run) | [taskboard10-*](https://github.com/ika100-demo/taskboard10-gitops) | unattended, a fresh session per part, each repo of the system ship in its own headless session; one reply (a confirmation) | recorded, not published: Watch a real run keeps journey 6 |
 | 11 | 2026-11-12 | 5.18.0 (no change during the run; the observability PR was finished after it on 5.19.0) | [taskboard11-*](https://github.com/ika100-demo/taskboard11-gitops) | unattended, a fresh session per part, each repo of the system ship in its own session; one reply (a plan decision) | one cast, shown on Watch a real run |
+| 12 | 2026-11-13 | 5.20.0 (no change during the run) | [taskboard12-*](https://github.com/ika100-demo/taskboard12-gitops) | unattended, a fresh session per part, each repo of the system ship in its own session; no reply; the sessions that typed the sentences ran on Claude Fable 5.2 (journey 11: Opus 5.5) | one cast, shown on Watch a real run |
 
 ## Time
 
@@ -37,6 +38,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 9 | 29 | 61 | 50 | 140 | 140 |
 | 10 | 30 | 60 | 48 | 138 | 138 |
 | 11 | 28 | 59 | 43 | 130 | 130 |
+| 12 | 35 | 37 | 38 | 109 | 109 |
 
 **Where the wall clock went**, each minute counted once, agent work first (`scripts/journey/measure.py`):
 
@@ -53,6 +55,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 9 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 88 (63 %): deploys and Argo 50, CI 21, promotions and restores 16, cluster and smoke 1 | 48 (34 %): model 36, commands, tests and platform calls 12 | 20 (plus 16 headless repo sessions) |
 | 10 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 91 (66 %): deploys and Argo 48, CI 25, promotions and restores 17, cluster and smoke 1 | 44 (32 %): model 33, commands, tests and platform calls 10 | 16 (plus 14 headless repo sessions) |
 | 11 | 4 (3 %): answers, the gaps until the next sentence and one reply; nothing blocked | 68 (52 %): CI 26, deploys and Argo 21, restores 9.5, promotions 4.4, cluster and smoke 3, unexplained 4 | 59 (45 %): the sessions that typed the sentences 39, the repo sessions and their subagents 20 | 33 (plus 14 headless repo sessions) |
+| 12 | 3 (3 %): answers and the gaps until the next sentence; nothing blocked | 58 (53 %): CI 21, deploys and Argo 14.5, cluster 8.5 (a Docker Desktop restart on the laptop, about 6), restores 8.4, promotions 3.1, unexplained 3 | 49 (44 %): the sessions that typed the sentences 39, the repo sessions and their subagents 10 | 25 (plus 12 headless repo sessions) |
 
 **Corrected split for journeys 9 and 10** (`cplat platform runs journey measure`, spec 181): the rows above count the coordinator's wait on a building repo session as waiting. The split is re-measured from evidence instead, with the repo sessions (the coordinator's children) as agent work: journey 9 — a person 4, agents 72 (coordinator 49, repo sessions 23), waiting 64 (CI 23, deploys and Argo 24, restore 6, promotions 6, smoke and cluster 0.3, unattributed 5); journey 10 — a person 4, agents 70 (coordinator 46, repo sessions 24), waiting 65 (CI 23, deploys and Argo 23, restore 7, promotions 6, smoke and cluster 0.4, unattributed 6). Real waiting is about 46 % of the wall clock, CI and deploys about a third each of it.
 
@@ -71,6 +74,7 @@ Minutes. *Working* is the wall clock minus pauses in which the platform itself w
 | 9 | 27 | 157 | 1 | 119 | 6 | 53 of 139 min |
 | 10 | 27 | 155 | 1 | 134 | 5 | 52 of 138 min |
 | 11 | 25 (26 with the observability PR after the run) | 159 | 2 | 131 | 6 | 54 of 130 min |
+| 12 | 27 | 163 | 1 | 105 | 6 | 44 of 109 min |
 
 ## Tokens
 
@@ -89,6 +93,7 @@ Summed over every API message of the recorded session, main thread and subagents
 | 9 | 45.0 M (coordinator 29.8, repo sessions 15.2) | 42.7 M | 1.95 M | 361 k | 221 k / 140 k / – | 723 |
 | 10 | 43.4 M (coordinator 28.5, repo sessions 14.9) | 41.2 M | 1.86 M | 365 k | 228 k / 136 k / – | 721 |
 | 11 | 35.0 M (sessions that typed the sentences 22.7, repo sessions 12.2) | 33.0 M | 1.64 M | 289 k | 159 k / 130 k / – | 639 |
+| 12 | 33.3 M (sessions that typed the sentences 20.8, repo sessions 12.5) | 31.6 M | 1.45 M | 273 k | 96 k / 112 k / – (plus Fable 5.2: 64 k) | 579 |
 
 About 97 % of the tokens are cache reads: the context the agents read again on every turn. The number of turns, not the size of the answers, drives the usage.
 
@@ -109,6 +114,7 @@ Where the tokens went (main session / slice coordinators of `/system:ship` / spe
 | 9 | 13 (12 sentences, 1 reply) | 3 in 3 rounds (spec approvals), all with the suggested answer, plus one approval of a test-helper fix the platform should settle itself ([#624](https://github.com/ika100/sdlc-foundry/issues/624)) | 1 (a Linux-only test-helper fix read as a changed acceptance test) | 4 |
 | 10 | 13 (12 sentences, 1 reply) | 7 in 7 rounds, all with the suggested answer; two of them the platform should settle itself ([#654](https://github.com/ika100/sdlc-foundry/issues/654) template files a headless session may not delete, [#655](https://github.com/ika100/sdlc-foundry/issues/655) a type-only change to a frozen test) | 0 | 4 |
 | 11 | 13 (12 sentences, 1 reply) | 3 in 3 rounds, all with the suggested answer; one stop for a plan decision the plan check should have caught ([#681](https://github.com/ika100/sdlc-foundry/issues/681)) | 1 ([#681](https://github.com/ika100/sdlc-foundry/issues/681)) | 4 |
+| 12 | 12 (12 sentences, no reply) | 4 in 4 rounds, all with the suggested answer | 0 | 3 |
 
 ## Quality
 
@@ -125,6 +131,7 @@ Where the tokens went (main session / slice coordinators of `/system:ship` / spe
 | 9 | 3, filed as [#624](https://github.com/ika100/sdlc-foundry/issues/624)–[#626](https://github.com/ika100/sdlc-foundry/issues/626); one stopped the run once | 34 in 4 specs (repo specs written by the system plan: 20) | green in dev, staging (API 4/5 with the writing test skipped, web 2/2) and prod (the "Prod check" task created) | clean, no warning; same digests as staging | passed from the daily backup's first full backup; the copy was discarded and live prod was not touched |
 | 10 | 3, filed as [#653](https://github.com/ika100/sdlc-foundry/issues/653)–[#655](https://github.com/ika100/sdlc-foundry/issues/655); none stopped the run | 37 in 4 specs (repo specs written by the system plan: 22) | green in dev, staging and prod (the "Prod check" task created) | clean, no warning | passed from the daily backup; the copy was discarded and live prod was not touched |
 | 11 | 6, filed as [#678](https://github.com/ika100/sdlc-foundry/issues/678) (held the observability PR back; fixed in 5.19.0), [#681](https://github.com/ika100/sdlc-foundry/issues/681)–[#684](https://github.com/ika100/sdlc-foundry/issues/684) and [#688](https://github.com/ika100/sdlc-foundry/issues/688); one stopped the run | 31 in 4 specs, 2 more replaced by later criteria (repo specs written by the system plan: 18) | green in dev, staging and prod (the "Prod check" task created) | clean, no warning (one critical base-image CVE reported, [#682](https://github.com/ika100/sdlc-foundry/issues/682)) | passed from the latest point, change log replayed; the copy was discarded and live prod was not touched |
+| 12 | 2: a system ship wait past the 10-minute command limit, then waited on with a self-matching loop (fixed by spec 194), and [#683](https://github.com/ika100/sdlc-foundry/issues/683) (known); neither stopped the run | 33 in 4 specs, 2 more replaced by later criteria (repo specs written by the system plan: 20) | green in dev, staging and prod (the "Prod check" task created) | clean, no warning | passed from the latest point after an extra on-demand backup; the copy was discarded and live prod was not touched |
 
 ## What changed between the journeys
 
@@ -187,6 +194,12 @@ Effect on journey 10: **about the same as journey 9**: 138 minutes against 140, 
 Effect on journey 11: **the fastest run so far, with the fewest tokens of any journey**: 130 minutes against 138, 35.0 M tokens against 43.4 M (−19 %), 3 questions against 7, every PR green on its first CI round. Part 1 took 28 minutes, part 3 43 (48 in journey 10). Part 2 stayed at 59: "Plan and ship it to dev" took 48 minutes, with one stop for a plan decision ([#681](https://github.com/ika100/sdlc-foundry/issues/681)), a repo's stop surfacing about ten minutes late ([#684](https://github.com/ika100/sdlc-foundry/issues/684)) and 18 minutes of CI and deploy waits. The waiting share (52 % against 66 %) is not comparable with journey 10: since spec 181 the coordinator's time with repo sessions building counts as agent work. One defect of this round's own spec 182 held back the observability PR (the generated log-tailer checksum failed the secrets scan, [#678](https://github.com/ika100/sdlc-foundry/issues/678), fixed in 5.19.0 and finished after the run).
 
 **Open after journey 11:** [#681](https://github.com/ika100/sdlc-foundry/issues/681) a plan task that cannot pass before the next one, [#684](https://github.com/ika100/sdlc-foundry/issues/684) the late stop, [#682](https://github.com/ika100/sdlc-foundry/issues/682) the web base image's CVE, [#683](https://github.com/ika100/sdlc-foundry/issues/683) a restore check without `kubectl`, [#688](https://github.com/ika100/sdlc-foundry/issues/688) a "no login, dev only" spec does not stop promotion; from the round itself [#673](https://github.com/ika100/sdlc-foundry/issues/673) and [#676](https://github.com/ika100/sdlc-foundry/issues/676).
+
+**Journey 11 → journey 12 — 5.19.0 and 5.20.0**: prompt checks test behaviour, not sentences, and the prompt size limit is raised only through `cplat platform rules rebaseline` after the benchmark (spec 180, [#677](https://github.com/ika100/sdlc-foundry/pull/677)); the generated log-tailer checksum no longer fails a gitops repo's secrets scan ([#679](https://github.com/ika100/sdlc-foundry/pull/679)); the journey waits less: the system ship answers an escalated repo while the others build, component images are tagged only after every gate passed, and a release reuses the green CI run of its commit (spec 186, [#685](https://github.com/ika100/sdlc-foundry/pull/685)); `/system:set` and `/resource:backup` turn on observability per environment and the database backup, which agents used to edit by hand (spec 187, [#686](https://github.com/ika100/sdlc-foundry/pull/686)); `/component:explore` before a spec (spec 188, [#687](https://github.com/ika100/sdlc-foundry/pull/687)); a killed run's idle time no longer counts against its minutes ([#697](https://github.com/ika100/sdlc-foundry/pull/697)).
+
+Effect on journey 12: **the fastest run so far, with no stop, like journey 10**: 109 minutes against 130 (−16 %), 33.3 M tokens against 35.0 M (−5 %), 4 questions, 3 minutes of a person. Part 2 fell from 59 to 37 minutes: "One spec for the whole system" planned and shipped the system spec in the same step, and every repo built on its first try. Part 1 rose from 28 to 35, but 6 of those minutes were Docker Desktop restarting on the laptop. Part 3 took 38 (43). One method change: the sessions that typed the sentences ran on Claude Fable 5.2, the default model that day, instead of Opus 5.5, so the API list-price cost rose (about $21 against $17) while the tokens fell.
+
+**Open after journey 12:** the self-matching wait loop (spec 194, being built), [#683](https://github.com/ika100/sdlc-foundry/issues/683) a restore check without `kubectl` (spec 195), [#698](https://github.com/ika100/sdlc-foundry/issues/698) a hang after the last test, [#703](https://github.com/ika100/sdlc-foundry/issues/703) `--no-merge` on a running ship; [#682](https://github.com/ika100/sdlc-foundry/issues/682), [#688](https://github.com/ika100/sdlc-foundry/issues/688) and [#673](https://github.com/ika100/sdlc-foundry/issues/673) from before.
 
 ## Recording a journey
 

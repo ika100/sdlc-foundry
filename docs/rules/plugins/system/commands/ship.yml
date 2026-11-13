@@ -49,6 +49,10 @@ rules:
     text: "An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done."
     class: practice
     source: spec 185
+  - id: R16
+    text: "On exit 0 (`WAIT:`) or exit 2 (`TIMEOUT:`) run the same wait again; escalate only after three `TIMEOUT:` in a row (a `WAIT:` resets the count): `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, stop, because a stuck repo means runner or cluster."
+    class: practice
+    source: spec 194
   - id: R13
     text: "The shape must be `gitops-app`."
     class: retired

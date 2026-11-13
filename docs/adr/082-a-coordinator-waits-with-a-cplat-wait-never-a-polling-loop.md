@@ -2,6 +2,8 @@
 
 **Status:** Accepted (2026-11-05, spec 143)
 
+**Amended by:** [spec 194](../specs/194-a-system-ship-wait-returns-before-the/design.md) (`system ship next --wait` ends within its timeout: progress returns `WAIT:` with exit 0, the coordinator escalates after three `TIMEOUT:` in a row)
+
 ## Context
 
 In the journeys of 2026-11-05 the coordinator wrote its own polling loops whenever a command left it to wait: on

@@ -142,5 +142,5 @@ def record(repo: Path, name: str, body: Callable[[], tuple[int, str]], about: Pa
         if rid:
             runs.mutate(rid, lambda rec: _add_wait(rec, name, result, secs))
         elif own:
-            runs.finish(own, "done" if result == "reached" else "failed",
+            runs.finish(own, "done" if result in ("reached", "progress") else "failed",
                         fields={"wait": {"command": name, "result": result, "seconds": round(secs)}, "waiting_s": secs})

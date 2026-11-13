@@ -27,7 +27,7 @@ As someone running a journey unattended, I want a dropped network, a slow repo-s
 - **AC-148.4** Given a system manifest without `org:` whose `owner:` names a GitHub organisation, when `cplat system new` resolves where the repos go, then they go to that organisation; an explicit `--org` or `org:` still wins.
 - **AC-148.5** Given `cplat system wait --env E`, when an app is still behind the wanted revision, not generated yet, or the system's root app (`<system>-root`) shows a ComparisonError 45 seconds into the wait, then the wait asks Argo CD once for a hard refresh of those apps and of the root app, says so, and keeps waiting.
 - **AC-148.6** Given `cplat spec land`, when marking the draft spec PR ready fails, then it stops with an error that names the draft PR and the GitHub error and does not try the merge.
-- **AC-148.7** Given `cplat system ship next --wait`, when a running repo's ship reaches a new phase or a new commit, then the wait's timeout starts again (for at most six timeouts in all), and a `TIMEOUT:` line says that no repo made progress for the whole wait.
+- ~~**AC-148.7**~~ superseded by AC-194.1 on 2026-11-13: Given `cplat system ship next --wait`, when a running repo's ship reaches a new phase or a new commit, then the wait's timeout starts again (for at most six timeouts in all), and a `TIMEOUT:` line says that no repo made progress for the whole wait.
 - **AC-148.8** Given `/component:release`, when its security gate runs, then the security agent names the audit tool the repo's `audit` recipe runs, and runs the image scan when the repo has a `Dockerfile` or reports it as skipped; image findings are reported, not a stop.
 
 ## Non-goals
@@ -46,3 +46,4 @@ As someone running a journey unattended, I want a dropped network, a slow repo-s
 - 2026-11-07 created from the journey 5 findings #539–#545 (strategy round 5.13, item "one retry rule"); approved with the recommended answers, as the user asked for this round.
 - 2026-11-07 building
 - 2026-11-07 done
+- 2026-11-13 AC-148.7 superseded by AC-194.1 (spec 194): one `next --wait` call ends within its timeout; progress returns the `wait` action instead of extending the wait
