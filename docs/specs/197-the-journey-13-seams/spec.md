@@ -1,7 +1,7 @@
 ---
 spec_id: 197-the-journey-13-seams
 title: The journey 13 seams
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -122,3 +122,4 @@ that one stuck test costs minutes, not the whole wall limit.
 
 - 2026-11-13 created
 - 2026-11-13 amended: J13-5, a hung test in a generated repo fails after a fixed limit (AC-197.6 to AC-197.8, A7 to A10)
+- 2026-11-13 approved
