@@ -5,15 +5,19 @@ sleep) and the clone's ship state written with `ship.save_state`. The CLI is cal
 apart (`--json` keeps stdout to the action). The prompt rule is tested by structure (spec 168): the prompt names the command and the
 register entry of source `spec 194` quotes it.
 """
+import importlib
 import json
 import re
 
 import pytest
 
 import appship
+import appship_proc
 import ship
 from prompts186_support import ROOT, collapsed, prompt, sourced
 from test_143_shipwait import GITOPS, World, running, tick  # noqa: F401  (fixtures)
+from test_155_repo_sessions import running as running_session, started_api
+from test_appship_097 import git
 
 T = 60
 WAIT_LINE = f"WAIT: repos still running, progress in the last {T}s; run the same wait again"
@@ -69,9 +73,14 @@ def test_a_repo_that_ends_is_recorded_at_the_first_poll_after_its_result_ac_194_
     sw.started(states=STATES)
     running(sw, "shop-api", "p0")
     noop = lambda: None  # noqa: E731
-    tick.script = [noop] * 3 + [lambda: sw.ship_state("shop-api")]
+    seen = []
+
+    def ends():
+        sw.ship_state("shop-api")
+        seen.append(tick.slept)
+    tick.script = [noop] * 3 + [ends]
     rc, out, _ = call(sw, capsys, "--wait", "--timeout", str(T))
-    assert rc == 0 and "action: start" in out and tick.slept <= T + 10
+    assert rc == 0 and "action: start" in out and tick.slept == seen[0] == 40      # recorded at the next poll, not at the deadline
     assert sw.state()["repos"]["shop-api"]["state"] == "passed"
 
 
@@ -110,6 +119,33 @@ def test_the_wait_line_names_the_timeout_as_a_whole_number_ac_194_2(sw, tick, ca
     assert rc == 0 and out[-1] == "WAIT: repos still running, progress in the last 30s; run the same wait again"
 
 
+@pytest.fixture()
+def ws(tmp_path, monkeypatch, capsys):
+    world = World(tmp_path, monkeypatch, capsys)
+    monkeypatch.setattr(importlib.import_module("preflight"), "check_repo", lambda *a, **k: None)
+    monkeypatch.setattr(ship, "argo_health", lambda *a, **k: "Synced/Healthy")
+    return world
+
+
+def test_a_new_commit_in_the_clone_is_progress_ac_194_2(ws, tick, capsys):  # AC-194.2
+    started_api(ws)
+    running_session(ws, "shop-api", "build")                            # the phase stays the same, only HEAD moves
+    tick.script = [lambda: None, lambda: git(ws.clone("shop-api"), "commit", "--allow-empty", "-q", "-m", "work")]
+    rc, out, _ = call(ws, capsys, "--wait", "--timeout", str(T))
+    assert rc == 0 and out[-1] == WAIT_LINE and T <= tick.slept <= T + 10
+
+
+def test_a_session_started_again_is_progress_ac_194_2(ws, tick, capsys, monkeypatch):  # AC-194.2 (AC-155.5)
+    started_api(ws)
+    running_session(ws, "shop-api", "build")
+    up = {"alive": True}
+    monkeypatch.setattr(appship_proc, "alive", lambda pid: up["alive"])
+    tick.script = [lambda: up.update(alive=False), lambda: up.update(alive=True)]   # the session ends once, is started again
+    rc, out, err = call(ws, capsys, "--wait", "--timeout", str(T))
+    assert "shop-api: ship session started again" in "\n".join(out + err)
+    assert rc == 0 and out[-1] == WAIT_LINE and T <= tick.slept <= T + 10
+
+
 # ---------------- AC-194.3: no progress -> TIMEOUT, exit 2 ----------------
 
 def test_no_progress_for_the_whole_call_keeps_the_timeout_lines_and_exit_2_ac_194_3(sw, tick, capsys):  # AC-194.3
@@ -119,7 +155,7 @@ def test_no_progress_for_the_whole_call_keeps_the_timeout_lines_and_exit_2_ac_19
     lines = out + err
     first = next(ln for ln in lines if ln.startswith("TIMEOUT:"))
     assert rc == 2 and first == f"TIMEOUT: action still wait, no repo made progress for {T}s; running: shop-api (build)"
-    assert "run the same wait again" in lines
+    assert lines[lines.index(first) + 1].startswith("run the same")  # interface: cplat's second TIMEOUT line, found by its position
     assert not any(ln.startswith("WAIT:") for ln in lines)
 
 
