@@ -17,6 +17,7 @@ tasks:
     covers: [AC-176.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cplat issue triage batch, list --waiting reply state, show duplicates, priority labels
     files: [scripts/cplat/triage_batch.py, scripts/cplat/triage.py]
