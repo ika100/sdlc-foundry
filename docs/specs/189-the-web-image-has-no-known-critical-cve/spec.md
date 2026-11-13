@@ -51,6 +51,7 @@ As a platform maintainer, I want an accepted "won't fix" finding to need a writt
 - **A7** The scan uses the same scanner and version the templates already pin for their own image scan (trivy), so that the platform and the generated repos agree on findings (other option: a second scanner; affects AC-189.3).
 - **A8** The build adds a changelog fragment `682-web-image-distroless.fixed.md` that names the distroless runtime and the new platform scan. A web repo picks up the change with `/platform:update` (other option: `changed` section; affects no criterion).
 - Decided by the user (2026-11-12): a critical "won't fix" finding in the service-python, service-java or service-go image is accepted on the list with a reason and a review-by date, and one follow-up issue is opened per template; switching those base images is a non-goal of this spec.
+- Decided by the user (2026-11-13, PR #708 escalation): the three fixable CRITICAL findings in the service-java image (CVE-2026-111497 libbrotli1, fixed in Debian but not yet in the distroless base; CVE-2026-47884 and CVE-2026-47890 spring-webmvc 6.2.19, fixed only in Spring 7 / Spring Boot 4) are accepted on the list as well, each with a reason and a review-by date 30 days after it was added (2026-12-13); CVE-2023-45853 (zlib) is accepted under the 2026-11-12 decision. One follow-up issue for service-java covers the Spring Boot 4 upgrade and the base-image refresh; upgrading Spring Boot is a non-goal of this spec.
 
 ## Open questions
 
