@@ -242,7 +242,7 @@ def test_missing_accepted_list_is_a_usage_error(tmp_path):  # AC-189.6
     assert proc.returncode == 2
 
 
-def test_evaluate_function_is_importable_with_the_planned_signature(scan):  # AC-189.5
+def test_script_exposes_the_planned_pure_functions(scan):
     assert callable(scan.evaluate) and callable(scan.select_templates)
 
 
@@ -282,9 +282,10 @@ def test_workflow_decide_job_selects_templates_with_the_script():  # AC-189.3
     wf = _workflow()
     decide = wf["jobs"]["decide"]
     assert decide["timeout-minutes"] == 2
-    text = yaml.safe_dump(decide)
-    assert "fetch-depth: 0" in text.replace("'", "") or decide["steps"][0]["with"]["fetch-depth"] == 0
-    assert "template-image-scan.py select" in text and "GITHUB_OUTPUT" in text
+    steps = decide["steps"]
+    assert any(str((s.get("with") or {}).get("fetch-depth")) == "0" for s in steps)
+    runs = "\n".join(str(s.get("run", "")) for s in steps)
+    assert "template-image-scan.py select" in runs and "GITHUB_OUTPUT" in runs
 
 
 def test_workflow_scan_job_is_a_matrix_over_the_four_templates():  # AC-189.3

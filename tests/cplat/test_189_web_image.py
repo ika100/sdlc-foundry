@@ -68,8 +68,9 @@ def test_healthcheck_is_exec_form_with_the_distroless_node(web):  # AC-189.2
     """AC-189.2: the image has no shell, so the health check is exec form with /nodejs/bin/node on the app port and /api/health."""
     text = (web / "Dockerfile").read_text()
     runtime = _stages(text)["runtime"]
-    idx = next(i for i, ln in enumerate(runtime) if ln.startswith("HEALTHCHECK"))
-    cmd = next(ln for ln in runtime[idx:] if ln.strip().startswith("CMD"))
-    assert cmd.strip().startswith('CMD ["/nodejs/bin/node", "-e", "')
-    assert "http://localhost:3000/api/health" in cmd
-    assert "PORT=3000" in "\n".join(runtime) and "EXPOSE 3000" in runtime
+    joined = re.sub(r"\\\s*\n\s*", " ", "\n".join(runtime))
+    health = next(ln for ln in joined.splitlines() if ln.startswith("HEALTHCHECK"))
+    m = re.search(r'\bCMD (\["/nodejs/bin/node", "-e", ".*)$', health)
+    assert m, health
+    assert "http://localhost:3000/api/health" in m.group(1)
+    assert "PORT=3000" in joined and "EXPOSE 3000" in joined
