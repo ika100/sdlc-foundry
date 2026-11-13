@@ -10,12 +10,14 @@ tasks:
     covers: [AC-194.1, AC-194.2, AC-194.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "`/system:ship` reruns on `WAIT:` and escalates after three `TIMEOUT:` in a row"
     files: [plugins/system/commands/ship.md, docs/rules/plugins/system/commands/ship.yml, docs/adr/082-a-coordinator-waits-with-a-cplat-wait-never-a-polling-loop.md, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
     covers: [AC-194.4]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 194 A system ship wait returns before the Bash limit
@@ -64,9 +66,8 @@ AC-148.7 extension), and `cplat spec check` passes.
 - The file must not grow (rule 6): drop the descriptive spec-155 sentence and the `(spec 148)` reference to pay for it.
 - Register: add `R15` to `docs/rules/plugins/system/commands/ship.yml`, `text` a verbatim quote of the new rule sentence,
   `class: practice`, `source: spec 194`.
-- ADR-082: add under the Status line `**Amended by:** [spec 194](../specs/194-a-system-ship-wait-returns-before-the/design.md)
-  (`system ship next --wait` ends within its timeout: progress returns `WAIT:` with exit 0, the coordinator escalates after
-  three `TIMEOUT:` in a row)`.
+- ADR-082: add under the Status line an `**Amended by:**` line linking spec 194's design.md (`system ship next --wait`
+  ends within its timeout: progress returns `WAIT:` with exit 0, the coordinator escalates after three `TIMEOUT:` in a row).
 - Bump the system plugin 1.18.0 → 1.18.1 in its `plugin.json` and in `.claude-plugin/marketplace.json`.
 
 **Done when:** the acceptance test for AC-194.4 passes, `cplat platform rules check` passes (register entry, no growth),
