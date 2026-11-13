@@ -25,6 +25,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat resource upgrade <resource> --to MAJOR --env ENV [--context C] [--wait] [--json]   one environment's major upgrade, as a PR
   cplat resource backup <db> --env ENV [--to BUCKET] [--schedule CRON] [--retention Nd|Nw] [--off] [--dry-run] [--pr] [--context C] [--json]   set a database's scheduled backup, or one base backup now
   cplat resource restore <db> --env ENV (--to TIME|latest | --switch | --discard) [--confirm prod] [--context C] [--dry-run] [--json]   restore a database
+  cplat resource query <db> --env ENV [--copy gN] "<sql>" [--json] [--app APP] [--repo-dir DIR] [--context C]   read one statement, read-only
   cplat system restore <env> [--backup NAME or latest] [--replace] [--confirm prod] [--context C] [--json]   restore an environment from its Velero backup
   cplat instance promote <component…|--all> --to <env> [--version V] [--sha S] [--pr]
   cplat instance secret set <component>/<env> <secret> <KEY> | list [--env dev]   remote secrets of the local cluster (values never go to git)
@@ -82,7 +83,7 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
                 "wait": ("envwait", ["cluster"])},
     "api": {"list": ("apilist", [])},
     "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"]),
-                 "backup": ("dbbackup", []), "restore": ("dbrestore", []), "upgrade": ("upgrade", [])},
+                 "backup": ("dbbackup", []), "restore": ("dbrestore", []), "query": ("dbquery", []), "upgrade": ("upgrade", [])},
     "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
     "issue": {"triage": ("triage", [])},
     "platform": {"doctor": ("doctor", []), "update": ("update", []), "versions": ("versions", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", []),
