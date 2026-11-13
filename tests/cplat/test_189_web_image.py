@@ -98,7 +98,7 @@ def test_ci_smoke_job_runs_the_image_read_only_and_answers_health_within_60s(): 
     """AC-189.2: read-only root fs, /api/health polled for 60 s, browser smoke result checked."""
     job = _web_smoke_job()
     assert re.search(r"docker run\b[^\n]*--read-only[^\n]*smoke:web\s*$", job, re.M)
-    assert re.search(r"seq 1 30\b", job) and "sleep 2" in job and "localhost:3000/api/health" in job
+    assert re.search(r"seq 1 30\b", job) and re.search(r"sleep[ ]2\b", job) and "localhost:3000/api/health" in job
     assert "smoke: 1 passed, 0 failed, 0 skipped" in job
 
 
