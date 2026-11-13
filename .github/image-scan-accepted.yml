@@ -1,0 +1,12 @@
+# Accepted CRITICAL findings of the platform's template image scan (spec 189). Each entry needs a reason and a review-by
+# date at most 90 days after it was added; it covers only the template it names.
+#
+# Entry shape (template: service-python, service-java, service-go or web-nextjs; cve: the trivy VulnerabilityID):
+#   - template: service-java
+#     cve: CVE-2023-45853
+#     reason: "zlib1g in distroless debian12, Debian: won't fix; follow-up issue to be opened"
+#     added: 2026-11-13
+#     review_by: 2027-02-10
+#
+# Empty at the start: no local trivy run was available, so the first `scan <template>` CI logs name the findings.
+findings: []
