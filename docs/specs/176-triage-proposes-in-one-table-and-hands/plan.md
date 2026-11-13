@@ -24,6 +24,7 @@ tasks:
     covers: [AC-176.1, AC-176.5, AC-176.6, AC-176.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: Grouped overview, question pages, confirmation plan and per-row actions
     files: [scripts/cplat/triage_view.py, scripts/cplat/triage.py]
