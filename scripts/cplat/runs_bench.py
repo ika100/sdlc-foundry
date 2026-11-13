@@ -77,19 +77,38 @@ def _newest_pr(repo: str) -> int:
         if isinstance(prs, list) else 0
 
 
+def _head(clone: Path) -> str:
+    return run(["git", "rev-parse", "HEAD"], cwd=clone)[1].strip()
+
+
 def snapshot(repo: str, clone: Path) -> dict:
-    """The PRs, branches and tags that exist before a run: the reset after the run leaves them alone."""
+    """The PRs, branches and tags that exist before a run: the reset after the run leaves them alone; and the clone's HEAD."""
     url = f"https://github.com/{repo}"
     return {"prs": set(_open_prs(repo)), "refs": set(_refs(url, "heads", clone)) | set(_refs(url, "tags", clone)),
-            "newest_pr": _newest_pr(repo)}
+            "newest_pr": _newest_pr(repo), "head": _head(clone)}
 
 
-EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged", "fix-rounds": "open"}
+EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged", "fix-rounds": "open", "explore-stop": "unchanged"}
 
 
-def result(workflow: str, repo: str, keep: dict) -> str | None:
-    """Why the run did not deliver, or None when it did: quick-task and build end at a new open PR, ship at a new merged one."""
+def unchanged(repo: str, keep: dict, clone: Path) -> str | None:
+    """explore-stop (spec 188, AC-188.1): the session wrote, committed and opened nothing, although its prompt asked it to."""
+    code, status, err = run(["git", "status", "--porcelain"], cwd=clone)
+    if code != 0:
+        return f"could not check the result: {_why(status, err)}"[:200]
+    if status.strip():
+        return f"explore changed the working tree: {status.split(chr(10))[0].strip()}"[:200]
+    if _head(clone) != keep.get("head"):
+        return "explore made a commit"
+    return "explore opened a PR" if _newest_pr(repo) > keep.get("newest_pr", 0) else None
+
+
+def result(workflow: str, repo: str, keep: dict, clone: Path | None = None) -> str | None:
+    """Why the run did not deliver, or None when it did: quick-task and build end at a new open PR, ship at a new merged one,
+    explore-stop with the clone and the repo as they were."""
     state = EXPECTED[workflow]
+    if state == "unchanged":
+        return unchanged(repo, keep, clone)
     try:
         prs = json.loads(_ok(["gh", "pr", "list", "--repo", repo, "--state", state, "--json", "number", "--limit", "20"]) or "[]")
     except (ValueError, RuntimeError) as e:
@@ -386,7 +405,7 @@ def main(argv: list[str]) -> int:
         import runs_bench_system
         return runs_bench_system.main(argv[1:])
     ap = argparse.ArgumentParser(prog="cplat platform runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds"])
+    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds", "explore-stop"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
     ap.add_argument("--model", help="coordinator model for the run (sonnet, opus, haiku); else the settings files, else sonnet")
     ap.add_argument("--plugins", metavar="DIR", help="run with the plugins in DIR (this worktree's plugins/) instead of the installed ones")
@@ -457,7 +476,7 @@ def main(argv: list[str]) -> int:
                                      "--max-minutes", str(task["max_minutes"]), *model_flags, *plugin_flags, prompt], rid, platform)
                 if out != "done":
                     return out, f"step {name} did not finish"
-            missing = result(ns.workflow, repo, keep)
+            missing = result(ns.workflow, repo, keep, clone)
             if missing:
                 return "failed", missing
             if ns.recall and out == "done":   # spec 107: the full suite after the session, in every pass
