@@ -59,6 +59,15 @@ jobs:
           if [ "$TEMPLATE" = service-python ]; then extra=(--data module_name=scan_svc); fi
           uvx copier copy "./templates/$TEMPLATE" /tmp/img --defaults --trust --skip-tasks \
             --data "project_name=scan-$TEMPLATE" "${extra[@]}"
+      # --skip-tasks leaves out the bootstrap that writes the lock the image build installs from (--locked, --frozen-lockfile).
+      - name: Lock the dependencies
+        env:
+          TEMPLATE: ${{ matrix.template }}
+        run: |
+          case "$TEMPLATE" in
+            service-python) (cd /tmp/img && uv lock) ;;
+            web-nextjs) (cd /tmp/img && npx -y pnpm@11.22.0 install --lockfile-only) ;;
+          esac
       - name: Build the image
         env:
           TEMPLATE: ${{ matrix.template }}
