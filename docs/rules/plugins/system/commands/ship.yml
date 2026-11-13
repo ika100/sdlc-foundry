@@ -45,6 +45,10 @@ rules:
     text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
     class: hard
     hard: issue-filing-needs-consent
+  - id: R15
+    text: "On exit 0 (`WAIT:`) or exit 2 (`TIMEOUT:`) run the same wait again, never escalating before three `TIMEOUT:` in a row (a `WAIT:` between them resets the count): `cplat system ship escalate '<the TIMEOUT line>' --cause environment`, stop, because a stuck repo means runner or cluster."
+    class: practice
+    source: spec 194
   - id: R13
     text: "The shape must be `gitops-app`."
     class: retired
