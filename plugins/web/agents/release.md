@@ -34,7 +34,7 @@ The entry covers exactly the tagged release, not what `main` gained after the ta
 git log "$PREVIOUS..$VERSION" --pretty=format:"%h %s" --no-merges   # first release: git log "$VERSION" ...
 ```
 
-Write a new entry at the top of `CHANGELOG.md` (create if absent; prepend above the previous entry):
+Write a new entry at the top of `CHANGELOG.md` (create if absent):
 
 ```markdown
 ## [X.Y.Z] — YYYY-MM-DD
@@ -58,13 +58,13 @@ Leave out empty sections and commits whose subject starts with `chore(release)`.
 
 ### 3. Set the next development version in package.json
 
-Set the `version` field to `NEXT_DEV` (a semver pre-release, e.g. `0.3.1-dev.0`: every build of `main` until the next release reads as a development build) **without creating a git tag or commit**:
+Set the `version` field to `NEXT_DEV` (e.g. `0.3.1-dev.0`; `main` builds read as development builds) **without creating a git tag or commit**:
 
 ```bash
-devbox run -- pnpm version <NEXT_DEV> --no-git-tag-version
+devbox run -- pnpm version <NEXT_DEV> --no-git-tag-version --no-git-checks
 ```
 
-If no `devbox run` recipe covers this one-off, run the command through `devbox run --` exactly as shown (never bare `pnpm`, so that versions match CI). Verify `package.json` now reads `"version": "<NEXT_DEV>"` (pnpm's lock file does not record it).
+The command must carry `--no-git-checks`, because pnpm refuses a tree holding the new, uncommitted CHANGELOG.md. Then run the command through `devbox run --` exactly as shown (never bare `pnpm`, so that versions match CI). Verify `package.json` reads `"version": "<NEXT_DEV>"`.
 
 ### 4. Commit, push and open the PR
 
