@@ -45,6 +45,7 @@ tasks:
     covers: [AC-176.2, AC-176.3, AC-176.4, AC-176.8, AC-176.15]
     parallel_safe: true
     depends_on: [t4, t5]
+    done: true
 ---
 
 # Plan — 176 Triage proposes in one table and hands off to the dispatcher
