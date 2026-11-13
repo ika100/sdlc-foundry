@@ -10,6 +10,7 @@ tasks:
     covers: [AC-176.1, AC-176.5, AC-176.6, AC-176.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: The dispatcher's fix run takes its task from a writer's Triage comment
     files: [scripts/cplat/triage_task.py, scripts/cplat/dispatch_units.py]
