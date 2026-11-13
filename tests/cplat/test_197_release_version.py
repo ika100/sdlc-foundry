@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from waiting import with_prelude
 
 ROOT = Path(__file__).resolve().parents[2]
 PROMPT = ROOT / "plugins" / "web" / "agents" / "release.md"
@@ -33,7 +34,7 @@ def pinned_pnpm() -> str:
 
 
 def shim(path: Path, body: str) -> None:
-    path.write_text("#!/bin/sh\n" + body)
+    path.write_text(with_prelude("#!/bin/sh\n" + body))
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
 
 
