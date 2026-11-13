@@ -24,12 +24,14 @@ tasks:
     covers: [AC-195.1]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: The e2e restore drill checks the copy with `cplat resource query`
     files: [tests/e2e/run.sh]
     covers: [AC-195.2, AC-195.3, AC-195.5]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
 ---
 
 # Plan — 195 A restored copy is checked without kubectl
