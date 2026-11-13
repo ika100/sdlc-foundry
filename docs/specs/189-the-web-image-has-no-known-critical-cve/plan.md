@@ -10,18 +10,21 @@ tasks:
     covers: [AC-189.1, AC-189.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Template image scan workflow, evaluator script and accepted-finding list
     files: [scripts/template-image-scan.py, .github/image-scan-accepted.yml, .github/workflows/template-image-scan.yml, docs/adr/README.md]
     covers: [AC-189.3, AC-189.4, AC-189.5, AC-189.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Dependabot header names the template image scan; changelog fragment
     files: [.github/dependabot.yml, docs/changelog.d/682-web-image-distroless.fixed.md]
     covers: [AC-189.7]
     parallel_safe: true
     depends_on: []
+    done: true
 human_steps:
   - For each service template that gets an accepted-finding entry in t2, open one follow-up issue (decided 2026-11-12) and put its number in the entry's reason
 ---
