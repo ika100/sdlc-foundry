@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 import core
@@ -31,6 +32,21 @@ def _range(repo: Path, head: str) -> str:
 def _find(repo: Path, spec_id: str, msg: str, head: str) -> list[str]:
     code, out = _git(repo, "log", f"--grep={msg} {spec_id}", "--format=%H", _range(repo, head))
     return out.split() if code == 0 and out else []
+
+
+def _acceptance(repo: Path, sp, head: str = "HEAD") -> list[str]:
+    code, out = _git(repo, "log", "--no-merges", "--format=%H%x09%s", _range(repo, head))
+    if code != 0 or not out:
+        return []
+    ac = re.compile(rf"(?<![\w-])AC-{re.escape(str(sp.number))}\.")
+    found = []
+    for line in out.splitlines():
+        sha, _, subject = line.partition("\t")
+        if ACCEPTANCE_MSG not in subject or REVIEWED_MSG in subject:
+            continue
+        if sp.id in subject or ac.search(subject):
+            found.append(sha)
+    return found
 
 
 def reviewed_commit(repo: Path, spec_id: str, head: str = "HEAD") -> str | None:
@@ -69,7 +85,7 @@ def commit(repo: Path, spec_ref: str, findings: int, unresolved: list[str]) -> s
     code, out = _git(repo, "status", "--porcelain", "--untracked-files=no")
     if out:
         raise PlatformError("tracked files have uncommitted changes", hint="commit the tests first")
-    if not _find(repo, sp.id, ACCEPTANCE_MSG, "HEAD"):
+    if not _acceptance(repo, sp):
         raise PlatformError(f"no commit '{ACCEPTANCE_MSG} {sp.id}' on this branch",
                             hint="run the red-tests step and commit the acceptance tests first")
     lines = [f"findings: {findings}"] + [f"unresolved: {_parse(v, sp.active_acs())}" for v in unresolved]
