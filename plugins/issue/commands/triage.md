@@ -1,5 +1,5 @@
 ---
-description: "Read new GitHub issues, discuss gaps with you, and route each to a spec, a fix or a reply. Usage: /issue:triage [<issue-number> | --new | --waiting]"
+description: "Read new GitHub issues, show one table, ask only what is open and hand fixes to the dispatcher. Usage: /issue:triage [<issue-number> | --new | --waiting]"
 ---
 
 Triage the repo's open issues. **Request:** $ARGUMENTS
@@ -14,45 +14,30 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 cplat issue triage <ARGS>
 ```
 
-## 1. Queue
+## 1. Batch
 
-Run `list --json` (add `--new` to include issues filed without a form, `--waiting` for issues parked as `needs-info`; with an issue number skip the list). If the labels are missing, run `setup-labels` after the user agrees. An empty queue ends the run. Print the queue as a short table (number, title, author, age).
+Run `batch --json` (add `--new` for issues filed without a form). An empty queue ends the run. If `missing_labels` is not empty, run `setup-labels` after the user agrees. With an issue number skip the batch: run `show <n> --json`, classify it as below, and `apply <n> --add L --remove triage --comment-file F` after the user confirms.
 
-## 2. Classify each issue
+## 2. Propose
 
-Run `show <n> --json`. Propose exactly one class with a one-line reason:
+Write one proposals file: a row per issue that is not handled, with `number`, `summary`, `class`, `priority` (P0, P1 or P2; bug, small-change, feature), `priority_reason`, `expected`, `comment`, `question` (`text`, `options`), `spec`. An engine row may omit the class. Classes: `bug` (a reproducible defect), `small-change` (one pass, no new API, schema or module), `feature` (new behaviour, schema change, several modules or business decisions), `question`, `duplicate` (with `duplicate_of`), `wontfix` (out of scope per the non-goals), `needs-exploring` (too unclear to spec), `needs-info` (not decidable from what is written; draft the comment). Do not guess requirements, because a wrong guess becomes a wrong fix.
 
-| Class | When | Path |
-|---|---|---|
-| `bug` | a reproducible defect or an error message | `/component:fix` |
-| `small-change` | one pass, well scoped: no new API, schema or module | `/component:fix` |
-| `feature` | new behaviour, endpoint or screen, schema change, several modules, business decisions | a spec in `docs/specs/` (new, or `tracks:` on an existing one), then `/component:spec --amend` / `/component:plan` |
-| `question` | a usage question | answer in a comment |
-| `duplicate` | same root cause as an open issue | comment with the link |
-| `wontfix` | out of scope per the specs' non-goals or the platform vision | comment with the reason |
-| `needs-exploring` | new behaviour too unclear to spec yet | `/component:explore #<n>` (`/system:explore #<n>` in a gitops-app repo) |
-| `needs-info` | not decidable from what is written | questions, see 3 |
+## 3. Overview and questions
 
-An urgent bug is still a `bug`; after the fix PR is merged, suggest `/component:release` for a patch version, without starting it.
-
-## 3. Discuss
-
-If information is missing, ask the user at most three focused questions per issue and wait for the answers. Anything the user cannot answer becomes a comment to the reporter: draft it, show it, and propose the `needs-info` label. Do not guess requirements, because a wrong guess becomes a wrong fix.
+Run `overview --proposals F --json` and print `screen` verbatim. Then ask each of `pages` with AskUserQuestion, at most 4 questions per screen titled `<n> of <m>`, the first option Recommended. Store the answers in the rows.
 
 ## 4. Confirm
 
-Show one table for the run: issue, class, planned action (labels, comment, story, hand-off). Nothing outward happens until the user confirms, issue by issue or all at once. **Hard rule:** Never close an issue, because a closed issue leaves the queue unseen.
+Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change one` or `Cancel`. A typed answer ("ok", "all ok, 560 feature") is accepted: update the proposals file and ask again about the rows it leaves unclear, because each extra question costs the user a turn. On request show the exact actions with `confirm --proposals F --show <n>`. Nothing outward happens before OK. **Hard rule:** Never close an issue, because a closed issue leaves the queue unseen.
 
-## 5. Act (after confirmation)
+## 5. Act
 
-- **Labels and comments:** write comment text to a temp file and run `apply <n> --add L --remove triage --comment-file F` (labels: `bug`, `enhancement`, `question`, `duplicate`, `wontfix`, `needs-info`, `tracked`, `triaged`; remove `triage`, and `needs-info` when the reporter answered).
-- **feature:** use the **product-manager** agent (`svc:product-manager`, `MODE: fold`) to decide between an existing spec (it adds `#N` to that spec's `tracks:`) and a new one. For a new one run `cplat spec new "<title>" --tracks N`, then the product-manager in `MODE: new` on that folder; its open questions go to the user as in `/component:spec`, or stay in the spec as a `draft`. Commit on a `docs/` branch from a clean tree, then `apply <n> --add tracked --add enhancement --add triaged --remove triage --comment-file F` where the comment is `Tracked as spec <spec_id>` (shown to the user first). Point the user to `/component:spec approve <NNN>` and `/component:plan <NNN>`.
-- **bug / small-change:** run `cplat shape` first. In a component repo hand the issue to `/component:fix`, one at a time, each from a clean `main`, with this task text: `Issue #N: <title>. <redacted summary and the user's answers>. The PR description must say "Closes #N".` Then `apply <n> --add bug --add triaged --remove triage`. In a gitops-app repo or the platform repo describe the fix and offer a manual branch/PR instead.
+- **feature:** the **product-manager** agent (`svc:product-manager`, `MODE: fold`) decides between an existing spec and a new one. For a new one, on a single `docs/triage-<date>` branch from a clean tree, run `cplat spec new "<title>" --tracks N --priority <P>`, then the product-manager in `MODE: new` on that folder (open questions go to the user or stay as a `draft`). Then `publish-specs <spec-id>...`, and set `spec` (and `new_spec: true`) in the row.
+- Run `act --proposals F --rows <n>,<n>` naming exactly the confirmed issues. It labels, posts the `Triage:` comment and leaves each fix to the dispatcher; start no fix in this session.
+- **needs-exploring:** show `/component:explore #<n>` (`/system:explore #<n>` in a gitops-app repo) as the next step. Do not label it, because a label would hide it from the next triage while it stays in the queue until it is explored and specced.
 
-- **needs-exploring:** run `cplat shape`, show the explore command as the next step and run no `apply`. Do not label it, because a label would hide it from the next triage while it stays in the queue until it is explored and specced.
+## 6. Hand over
 
-## 6. Summary
-
-End with a table: issue, decision, action taken, link (PR, story id or comment), and name issues left in `needs-info`. Triage can be scheduled with `/loop` or `/schedule`; it proposes until the user confirms, so an unattended run is safe.
+Print the output of `act`, then ask its choice with AskUserQuestion. `cplat dispatch status` and the console Board show the fix runs. Triage can be scheduled with `/loop`; it proposes until the user confirms.
 
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
