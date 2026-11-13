@@ -56,7 +56,10 @@ def test_triage_applies_only_confirmed_rows_and_can_show_a_row_before_ac_176_3()
 
 
 def test_triage_accepts_a_typed_answer_in_place_of_a_choice_ac_176_3():  # AC-176.3
-    assert "typed" in text().lower()
+    body = text()
+    typed = body.lower().find("typed")
+    assert typed != -1 and 0 < first("confirm") < typed < first("act")     # the typed-answer path sits in the confirmation step
+    assert "--rows" in body and "--show" in body
 
 
 def test_triage_publishes_new_specs_on_one_branch_before_act_ac_176_4():  # AC-176.4

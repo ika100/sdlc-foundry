@@ -6,7 +6,7 @@ import json
 import pytest
 
 import core
-from support_176 import FORBIDDEN, SLUG, load, overview_world, row, world  # noqa: F401  (fixture)
+from support_176 import FORBIDDEN, SLUG, ago, comment, load, overview_world, row, world  # noqa: F401  (fixture)
 
 
 def acted(w):
@@ -17,8 +17,7 @@ def acted(w):
         if r["number"] == 563:
             r.update(spec="201-new-thing", new_spec=True)
         if r["number"] == 571:
-            r.update(spec="176-triage-x")
-            r.pop("question")
+            r.update(spec="176-triage-x")        # keeps its question, so #571 stays under "Needs your decision"
     w.batch()
     w.set_specs_pr()
     return rows
@@ -62,9 +61,11 @@ def test_a_small_change_is_labelled_enhancement_and_triaged_ac_176_8(world):  # 
 
 def test_a_fix_is_never_started_and_nothing_is_closed_ac_176_8(world):  # AC-176.8
     rows = acted(world)
+    n = len(world.calls)                                     # the batch read is not part of the act
     act(world, rows)
-    assert {tuple(c[:2]) for c in world.calls} <= {("issue", "view"), ("label", "list"), ("issue", "edit"), ("issue", "comment")}
-    assert not any("close" in c for c in world.calls)
+    after = world.calls[n:]
+    assert {tuple(c[:2]) for c in after} <= {("issue", "view"), ("label", "list"), ("issue", "edit"), ("issue", "comment")}
+    assert not any("close" in c for c in after)
 
 
 def test_only_real_label_changes_are_made_and_another_priority_is_replaced_ac_176_8(world):  # AC-176.8
@@ -76,7 +77,11 @@ def test_only_real_label_changes_are_made_and_another_priority_is_replaced_ac_17
 
 def test_question_duplicate_wontfix_and_needs_info_label_and_comment_ac_176_3(world):  # AC-176.3
     for n in (1, 2, 3, 4):
-        world.issue(n, labels=("triage", "needs-info") if n == 1 else ("triage",))
+        if n == 1:           # parked as needs-info and answered by the reporter, so it is queued again
+            world.issue(n, labels=("triage", "needs-info"), author="rep", created=ago(days=9),
+                        comments=[comment("me", "Which version?", "OWNER", ago(days=4)), comment("rep", "2.1", "NONE", ago(days=1))])
+        else:
+            world.issue(n, labels=("triage",))
     world.batch()
     extra = {"priority": None, "expected": None, "comment": "the text"}
     rows = [row(1, **{"class": "question", **extra}), row(2, **{"class": "duplicate", "duplicate_of": 9, **extra}),
@@ -235,7 +240,7 @@ def test_a_question_to_the_reporter_is_waiting_for_the_reporter_ac_176_15(world)
 class Seams:
     """The git and gh seams of `triage_act`: they answer like a repo on a docs branch and record every call."""
 
-    def __init__(self, branch="docs/triage-2026-11-13", existing=()):
+    def __init__(self, branch="docs/triage-2031-05-17", existing=()):      # a date that is not today: the title takes it from the branch
         self.branch, self.existing, self.git_calls, self.gh_calls, self.bodies = branch, list(existing), [], [], []
         self.url = f"https://github.com/{SLUG}/pull/640"
 
@@ -252,7 +257,8 @@ class Seams:
     def gh(self, args, cwd=None):
         self.gh_calls.append(list(args))
         if args[:2] == ["pr", "list"]:
-            return 0, json.dumps(self.existing)
+            head = self.flag(args, "--head", "-H")           # a build may filter on the server or match on the client
+            return 0, json.dumps([p for p in self.existing if head is None or p["headRefName"] == head])
         if args[:2] == ["pr", "create"]:
             self.bodies.append(self.flag(args, "--body", "-b", file=("--body-file", "-F")))
             return 0, self.url + "\n"
@@ -301,11 +307,11 @@ def test_new_specs_go_out_as_one_draft_pr_on_one_docs_branch_ac_176_4(world, sea
     assert res.out.strip() == f"specs 201, 202: {seams.url}"
     [create] = seams.calls("gh", ["pr", "create"])
     assert "--draft" in create
-    assert seams.flag(create, "--title") == "docs(spec): triage 2026-11-13 — specs 201, 202"
+    assert seams.flag(create, "--title") == "docs(spec): triage 2031-05-17 — specs 201, 202"
     body = seams.bodies[0]
     assert "- 201-new-thing: Dark mode" in body and "- 202-other: Other thing" in body
     assert body.rstrip().endswith("<!-- cplat:triage-specs -->") and "<!-- cplat:spec " not in body
-    assert seams.flag(create, "--head", "-H") in (None, "docs/triage-2026-11-13")
+    assert seams.flag(create, "--head", "-H") in (None, seams.branch)
 
 
 def test_each_spec_is_committed_signed_off_and_pushed_without_force_ac_176_4(world, seams):  # AC-176.4
@@ -320,14 +326,14 @@ def test_each_spec_is_committed_signed_off_and_pushed_without_force_ac_176_4(wor
 
 def test_the_pr_is_written_into_the_batch_and_printed_as_json_ac_176_4(world, seams):  # AC-176.4
     data = world.run("publish-specs", "201-new-thing", "202-other", "--json").json()
-    assert data == {"pr": 640, "url": seams.url, "branch": "docs/triage-2026-11-13", "specs": ["201-new-thing", "202-other"]}
+    assert data == {"pr": 640, "url": seams.url, "branch": seams.branch, "specs": ["201-new-thing", "202-other"]}
     saved = json.loads(world.batch_path().read_text())
-    assert saved["specs_pr"] == {"number": 640, "url": seams.url, "branch": "docs/triage-2026-11-13", "specs": ["201-new-thing", "202-other"]}
+    assert saved["specs_pr"] == {"number": 640, "url": seams.url, "branch": seams.branch, "specs": ["201-new-thing", "202-other"]}
 
 
 def test_an_existing_triage_pr_is_found_by_its_marker_and_branch_and_updated_ac_176_4(world, seams):  # AC-176.4
     seams.existing = [{"number": 12, "url": "u12", "headRefName": "docs/other", "body": "x\n<!-- cplat:triage-specs -->", "title": "t"},
-                      {"number": 640, "url": seams.url, "headRefName": "docs/triage-2026-11-13", "body": "old\n<!-- cplat:triage-specs -->",
+                      {"number": 640, "url": seams.url, "headRefName": seams.branch, "body": "old\n<!-- cplat:triage-specs -->",
                        "title": "t"}]
     data = world.run("publish-specs", "201-new-thing", "--json").json()
     assert data["pr"] == 640 and seams.calls("gh", ["pr", "create"]) == []
