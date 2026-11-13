@@ -16,7 +16,7 @@ cplat issue triage <ARGS>
 
 ## 1. Batch
 
-Run `batch --json` (add `--new` for issues filed without a form). An empty queue ends the run. If `missing_labels` is not empty, run `setup-labels` after the user agrees. With an issue number skip the batch: run `show <n> --json`, classify it as below, and `apply <n> --add L --remove triage --comment-file F` after the user confirms.
+Run `batch --json` (add `--new` for issues filed without a form). An empty queue ends the run. If `missing_labels` is not empty, ask after the overview, then run `setup-labels`. With an issue number skip the batch: run `show <n> --json`, classify it as below, and `apply <n> --add L --remove triage --comment-file F` after the user confirms.
 
 ## 2. Propose
 
@@ -28,7 +28,7 @@ Run `overview --proposals F --json` and print `screen` verbatim. Then ask each o
 
 ## 4. Confirm
 
-Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change one` or `Cancel`. A typed answer ("ok", "all ok, 560 feature") is accepted: update the proposals file and ask again about the rows it leaves unclear, because each extra question costs the user a turn. On request show the exact actions with `confirm --proposals F --show <n>`. Nothing outward happens before OK. **Hard rule:** Never close an issue, because a closed issue leaves the queue unseen.
+Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change one` (the user picks a row and its class or action; run `confirm` again) or `Cancel`. A typed answer ("ok", "all ok, 560 feature") is accepted: update the proposals file and ask again about the rows it leaves unclear, because each extra question costs the user a turn. On request show the exact actions with `confirm --proposals F --show <n>`. Nothing outward happens before OK. **Hard rule:** Never close an issue, because a closed issue leaves the queue unseen.
 
 ## 5. Act
 
@@ -38,6 +38,5 @@ Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change 
 
 ## 6. Hand over
 
-Print the output of `act`, then ask its choice with AskUserQuestion. `cplat dispatch status` and the console Board show the fix runs. Triage can be scheduled with `/loop`; it proposes until the user confirms.
-
+Print the output of `act`, then ask its choice with AskUserQuestion. `cplat dispatch status` and the console Board show the fix runs.
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).

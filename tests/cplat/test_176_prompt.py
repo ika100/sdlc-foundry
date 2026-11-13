@@ -47,6 +47,9 @@ def test_triage_asks_questions_as_choices_in_pages_and_confirms_with_three_choic
     assert "Recommended" in body and "<n> of <m>" in body
     for choice in ("OK, do it", "Change one", "Cancel"):
         assert choice in body, choice
+    # `Change one` picks a row and its class or action, then the confirmation is shown again (the confirm step re-runs)
+    after = body[body.index("Change one"):]
+    assert "confirm" in after[:after.index("Cancel")] and "row" in after[:after.index("Cancel")]
 
 
 def test_triage_applies_only_confirmed_rows_and_can_show_a_row_before_ac_176_3():  # AC-176.3
