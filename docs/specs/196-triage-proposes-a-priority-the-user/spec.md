@@ -1,7 +1,7 @@
 ---
 spec_id: 196-triage-proposes-a-priority-the-user
 title: Triage and new specs propose a priority the user confirms
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -92,3 +92,4 @@ New specs outside triage.
 - 2026-11-13 approved
 - 2026-11-13 draft: amend: a spec started without an issue also gets a proposed priority the user confirms
 - 2026-11-13 amended: new specs from `/component:spec` and `/system:spec` propose a priority shown in the finish block (AC-196.10 to AC-196.12, A7 to A11); title, Problem and Stories widened; existing criteria unchanged
+- 2026-11-13 approved
