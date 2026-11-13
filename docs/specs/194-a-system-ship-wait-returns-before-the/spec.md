@@ -1,7 +1,7 @@
 ---
 spec_id: 194-a-system-ship-wait-returns-before-the
 title: A system ship wait returns before the Bash limit
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -48,3 +48,4 @@ As someone running a system ship unattended, I want a run whose repos keep makin
 
 - 2026-11-13 created
 - 2026-11-13 approved
+- 2026-11-13 building
