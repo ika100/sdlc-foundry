@@ -1,6 +1,8 @@
 # Monthly, grouped dependency PRs (security updates still arrive immediately and separately): the language ecosystem, the platform's
 # own test tools (requirements-test.txt, spec 127), the
-# GitHub Actions used by CI (pinned by commit SHA; Dependabot updates the SHA and the version comment), and Docker base images.
+# GitHub Actions used by CI (pinned by commit SHA; Dependabot updates the SHA and the version comment).
+# Dependabot cannot read the templates' Jinja Dockerfiles, so their base images are checked by the template image scan
+# (.github/workflows/template-image-scan.yml, spec 189).
 version: 2
 updates:
   - package-ecosystem: github-actions
