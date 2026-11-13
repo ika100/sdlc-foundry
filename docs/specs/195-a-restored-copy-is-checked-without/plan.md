@@ -10,12 +10,14 @@ tasks:
     covers: [AC-195.1, AC-195.2, AC-195.3, AC-195.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "`/resource:restore --to` prints the query command as its check step"
     files: [scripts/cplat/dbrestore.py, tests/cplat/test_backup_117_restore.py]
     covers: [AC-195.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: "`/resource:query` command, register entry, docs, versions and changelog"
     files: [plugins/resource/commands/query.md, docs/rules/plugins/resource/commands/query.yml, plugins/resource/commands/restore.md, docs/rules/plugins/resource/commands/restore.yml, docs/rules/register.yml, plugins/resource/README.md, plugins/resource/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/BACKUP-AND-RESTORE.md, templates/gitops-app/CLAUDE.md.jinja, tests/cplat/test_plugins_114.py, docs/changelog.d/195-resource-query.added.md]
