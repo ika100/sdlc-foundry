@@ -31,18 +31,21 @@ tasks:
     covers: [AC-197.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: Per-test limits for generated Python, Java and Go repos through gate.sh
     files: [templates/gitops-app/scripts/gate.sh, templates/cluster-gitops/scripts/gate.sh, templates/service-python/scripts/gate.sh, templates/library-python/scripts/gate.sh, templates/service-go/scripts/gate.sh, templates/service-java/scripts/gate.sh, templates/web-nextjs/scripts/gate.sh, templates/service-python/scripts/pytest_limit/platform_test_limit.py, templates/library-python/scripts/pytest_limit/platform_test_limit.py, scripts/sync-template-copies.py]
     covers: [AC-197.6, AC-197.7, AC-197.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: ADR, changelog fragment and web plugin version
     files: [docs/adr/, docs/adr/README.md, docs/changelog.d/197-the-journey-13-seams.fixed.md, .claude-plugin/marketplace.json, plugins/web/.claude-plugin/plugin.json]
     covers: [AC-197.5, AC-197.6, AC-197.7, AC-197.8]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 197 The journey 13 seams
