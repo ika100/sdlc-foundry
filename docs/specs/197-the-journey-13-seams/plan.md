@@ -10,18 +10,21 @@ tasks:
     covers: [AC-197.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: A deviation naming a merged-away task is recorded on its final task
     files: [scripts/cplat/runs_agents.py]
     covers: [AC-197.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: system set and system status name where Grafana answers
     files: [scripts/cplat/model.py, scripts/cplat/systemset.py, scripts/cplat/status.py]
     covers: [AC-197.3, AC-197.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Web release version step works with the uncommitted changelog
     files: [plugins/web/agents/release.md, docs/rules/plugins/web/agents/release.yml]
