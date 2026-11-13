@@ -1,7 +1,7 @@
 ---
 spec_id: 189-the-web-image-has-no-known-critical-cve
 title: The web image has no known critical CVE and the platform scans template images
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [682]
@@ -60,3 +60,4 @@ None.
 
 - 2026-11-12 created
 - 2026-11-12 approved
+- 2026-11-13 building
