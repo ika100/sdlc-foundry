@@ -1,5 +1,5 @@
 ---
-description: "Run a read-only SQL statement against a database of the system, on the active instance or a restored copy. Usage: /resource:query <db> --env <env> [--copy g<N>] \"<sql>\" [--json]"
+description: "Run one read-only SQL statement on a database: its active instance or a restored copy. Usage: /resource:query <db> --env <env> [--copy g<N>] \"<sql>\" [--json]"
 ---
 
 Run in the gitops-app repo. **Request:** $ARGUMENTS
