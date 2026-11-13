@@ -1,7 +1,7 @@
 ---
 spec_id: 195-a-restored-copy-is-checked-without
 title: A restored copy is checked without kubectl
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [683]
@@ -50,3 +50,4 @@ As an operator of a system, I want to run a read-only query against a database o
 
 - 2026-11-13 created
 - 2026-11-13 amended: prod-without-`--confirm` question answered (yes), recorded as A7; AC-195.3 unchanged
+- 2026-11-13 approved
