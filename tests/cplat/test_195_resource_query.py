@@ -203,7 +203,8 @@ def test_without_copy_the_active_generation_is_queried_after_a_switch_ac_195_2(r
 
 def test_copy_of_a_previous_generation_is_labelled_previous_ac_195_2(repo, kube, capsys):  # AC-195.2
     state = {"next": 3, "clusters": [
-        {"name": "shop-orders-db-g1", "role": "previous", "until": "2026-10-27T12:02:13Z"},
+        {"name": "shop-orders-db-g1", "role": "previous", "until": "2026-10-27T12:02:13Z",
+         "from": {"server": "shop-orders-db", "to": "latest"}},
         {"name": "shop-orders-db-g2", "role": "active", "from": {"server": "shop-orders-db-g1", "to": "latest"}}]}
     write_state(repo, state)
     pod = world(kube, names=("shop-orders-db-g1", "shop-orders-db-g2"))
