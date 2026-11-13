@@ -203,15 +203,16 @@ def test_the_progress_plugin_writes_start_and_end_lines_and_hides_its_file_ac_18
     assert quiet_limit.still_running(progress) == []
 
 
+@pytest.mark.timeout(300)   # starts two xdist workers of its own; a loaded machine needs more than 120 s (#711)
 def test_under_xdist_only_the_controller_writes_each_start_and_end_once_ac_185_4(tmp_path):  # AC-185.4
     import quiet_limit
     env_add, progress = quiet_limit.progress_env(tmp_path / "x.log")
     (tmp_path / "test_p.py").write_text("".join(f"def test_{i}():\n    assert True\n\n" for i in range(6)))
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
-    env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER")}
     env.update(env_add)
     p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-n", "2", "-p", "no:cacheprovider"], cwd=tmp_path, env=env,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, timeout=240)
     assert p.returncode == 0, p.stdout + p.stderr
     lines = progress.read_text().splitlines()
     assert lines[0] == "# cplat test progress"
