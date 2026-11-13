@@ -6,6 +6,20 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.21.0] - 2026-11-13
+
+### Added
+
+**A hung test now fails fast and names itself (spec 185).** Spec 184's verification hung for 2.5 hours because older tests slept through the usage-limit pause. Now a `cplat` test stops after 120 s with its id, the limit and the stack; a test whose real sleeps pass 1 s fails at the crossing sleep, which does not sleep; and `cplat quiet test-fast` gives up after 9 minutes, stops every process it started, lists the tests `still running` and exits 124 without a flaky rerun ([ADR-108](adr/108-test-time-is-bounded.md)). A decision taken on an escalation that needs code, test or document work becomes a task in the spec's plan before the ship goes on (component and system ship prompts), and the suite time is measured in CI and in the weekly retro. Update the plugins (`/plugin marketplace update`).
+
+**`/resource:query` reads a database, so a restore drill needs no kubectl (spec 195).** `/resource:query <db> --env <env> [--copy g<N>] "<sql>" [--json]` runs a read-only statement on the active instance or a restored copy and prints a plain table (at most 1000 rows) or JSON; `cplat resource restore --to` and the backup guide point to it. Update the plugins (`/plugin marketplace update`).
+
+`cplat platform runs benchmark explore-stop`: a real `/component:explore` session is asked to write and commit a decisions file, then to stop; it passes only when the working tree, HEAD and the sample repo's PRs are as they were (spec 188, AC-188.1).
+
+### Changed
+
+**`cplat system ship next --wait` now ends within its timeout plus one poll interval (#194).** Progress of a running repo used to restart the timeout, so one call could run up to about 54 minutes, past the 10-minute Bash limit, and Claude Code moved it to the background. The deadline is now fixed: when it runs out with the action still `wait` and a repo made progress, the call prints the `wait` action and `WAIT: repos still running, progress in the last <T>s; run the same wait again` and exits 0 (with `--json`, stdout holds only the action and the `WAIT:` line goes to stderr); when no repo made progress it still prints `TIMEOUT:` and exits 2.
+
 ## [5.20.0] - 2026-11-12
 
 ### Added
