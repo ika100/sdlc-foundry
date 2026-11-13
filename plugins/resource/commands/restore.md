@@ -12,7 +12,7 @@ cplat resource restore <ARGS>
 
 1. **Preview** with `--dry-run` and show it verbatim; errors carry a `fix:` line.
 2. **Run** it. `--to <time|latest>` recovers a new copy next to the running database, which keeps serving, and needs no confirmation in any environment; `--switch` makes the restored copy the active database; `--discard` removes it. **Hard rule:** in `prod`, never run `--switch` or `--discard` without `--confirm prod` and the user's explicit yes, because they change which database serves or delete a copy.
-3. **Relay** the next steps `cplat` prints and check progress with `/system:status`.
+3. **Relay** the next steps `cplat` prints; check a copy with `/resource:query`, progress with `/system:status`.
 
 Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
 

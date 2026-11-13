@@ -86,6 +86,7 @@ Plugins enabled in `.claude/settings.json`: `system` (system specs and planning)
 | Add components to the system | `/component:add <component...> [--expose] [--env KEY=VALUE]` |
 | Remove components | `/component:remove <component...>` |
 | Declare the database | `/resource:add postgres` |
+| Read a database (read-only) | `/resource:query <db> --env <env> [--copy g<N>] "<sql>"` |
 | Promote versions | `/instance:promote <component...> --to <env> [--version vX.Y.Z]` |
 | Local secret values | `/instance:secret set\|list` |
 | Write a system spec (first step) | `/system:spec <description>` |
