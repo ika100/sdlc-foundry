@@ -230,7 +230,8 @@ def test_restore_prints_the_name_and_the_switch_command_ac_117_8(repo, kube, cap
     rc, out = restore(repo, capsys, "--to", "2026-10-27T09:59:00Z")
     lines = [ln for ln in out.splitlines() if ln.strip()]
     assert "restored orders-db/dev to 2026-10-27T09:59:00Z as shop-orders-db-g1; components still use shop-orders-db" in lines
-    assert "check it: kubectl -n shop-dev exec -it shop-orders-db-g1-1 -- psql shop" in lines
+    # spec 195: AC-195.5 replaces the kubectl check step
+    assert 'check it: /resource:query orders-db --env dev --copy g1 "SELECT …"' in lines
     assert "switch to it: /resource:restore orders-db --env dev --switch" in lines
 
 

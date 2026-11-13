@@ -327,7 +327,7 @@ def main(argv: list[str]) -> int:
         title = f"chore(restore): restore {db}/{env} to {when}"
         action = "restore"
         r.will_do += [f"add the restored instance {name} (from {server}, to {when}) to restore-state.yaml and regenerate manifests (render.py)",
-                      f"commit '{title}' and bring it to {kns} (Argo CD pull request if addon-{db}-{env} exists, else kubectl apply -k)",
+                      f"commit '{title}' and bring it to {kns} (Argo CD pull request if addon-{db}-{env} exists, else applied directly)",
                       f"wait up to 30 minutes for {name} to be ready"]
         old_major = _major_before_upgrade(base_state, server)
     elif ns.switch:
@@ -395,9 +395,8 @@ def main(argv: list[str]) -> int:
 
     if ns.to:
         _wait_ready(name, kns, ctx, db, env)
-        dbname = system.replace("-", "_")
         lines = [f"restored {db}/{env} to {when} as {name}; components still use {roles['active']}",
-                 f"check it: kubectl -n {kns} exec -it {name}-1 -- psql {dbname}",
+                 f"check it: /resource:query {db} --env {env} --copy g{base_state['next']} \"SELECT …\"",
                  f"switch to it: /resource:restore {db} --env {env} --switch"]
         if old_major:
             lines.insert(1, f"the restored instance runs {db} {old_major[0]} (the data from before the upgrade to {old_major[1]})")

@@ -3,14 +3,19 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "e4c0678d48993d666c892e91fbe1f56b156a01c4"
-  prompt_bytes: 355920
+  commit: "44aadaef87c87d251520ac261b96b1069edef1ae"
+  prompt_bytes: 357001
   history:                       # newest last; written only by `cplat platform rules rebaseline`
     - date: "2026-11-12"
       old: 345859
       new: 355920
       reason: "explore commands (spec 188), person-only prompts"
       benchmark_runs: [20261112T160725Z-5831cfbf, 20261112T160911Z-f6bbf07b]
+    - date: "2026-11-13"
+      old: 355920
+      new: 357001
+      reason: "resource query command (spec 195): /resource:query doc, +1081 bytes; build and quick-task benchmarks done on this plugins tree (3.20 M / 446 k tokens)"
+      benchmark_runs: [20261113T104050Z-a325c6d8, 20261113T102603Z-749b1631]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff

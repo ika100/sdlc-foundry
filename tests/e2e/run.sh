@@ -2331,6 +2331,23 @@ l=$(status_field backup.latest)
 if ! out=$($cplat resource restore postgres --env dev --to "$T" "${rargs[@]}" 2>&1); then bfail "restore to $T failed: $out"; fi
 case "$out" in *"restored postgres/dev to $T as e2e-postgres-g1"*) ;; *) bfail "restore did not report the second instance e2e-postgres-g1: $out";; esac
 echo "ok   point-in-time restore to $T: $(echo "$out" | head -1)"
+case "$out" in *'/resource:query postgres --env dev --copy g1'*) ;; *) bfail "the restore output does not name the check '/resource:query postgres --env dev --copy g1' (AC-195.5): $out";; esac
+case "$out" in *kubectl*) bfail "the restore output still names kubectl (AC-195.5): $out";; esac
+
+bstep "Database query: cplat resource query reads the restored copy and the active instance, and refuses writes (AC-195.2, AC-195.3)"
+qjson() { # prints "<instance>|<rows as JSON>" of the JSON a query printed on stdin
+  python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["instance"]+"|"+json.dumps(d["rows"],separators=(",",":")))'
+}
+if ! out=$($cplat resource query postgres --env dev --copy g1 "select v from e2e_rows order by v" --json "${rargs[@]}" 2>&1); then bfail "query on the copy g1 failed: $out"; fi
+[ "$(printf '%s' "$out" | qjson)" = 'e2e-postgres-g1|[["A"]]' ] || bfail "query --copy g1 must read row A on e2e-postgres-g1: $out"
+if ! out=$($cplat resource query postgres --env dev "select v from e2e_rows order by v" --json "${rargs[@]}" 2>&1); then bfail "query on the active instance failed: $out"; fi
+[ "$(printf '%s' "$out" | qjson)" = 'e2e-postgres|[["A"],["B"]]' ] || bfail "query without --copy must read A and B on the active instance: $out"
+if ! out=$($cplat resource query postgres --env dev "select null::text as n" --json "${rargs[@]}" 2>&1); then bfail "NULL query failed: $out"; fi
+[ "$(printf '%s' "$out" | qjson | cut -d'|' -f2)" = '[[null]]' ] || bfail "a NULL must come back as null in the JSON: $out"
+if out=$($cplat resource query postgres --env dev "insert into e2e_rows values ('C')" "${rargs[@]}" 2>&1); then bfail "a write through resource query succeeded: $out"; fi
+case "$out" in *read-only*) ;; *) bfail "the refused write does not say read-only: $out";; esac
+[ "$(pg "select string_agg(v, ',' order by v) from e2e_rows")" = "A,B" ] || bfail "the refused write changed the table"
+echo "ok   resource query: copy g1 holds A, the active instance A and B, NULL is null, a write is refused and changes nothing"
 
 # a probe pod (not a Deployment: the guard rails do not cover it) with e2e-api's own database variables
 db_rows() { # reads the table e2e_rows with e2e-api's database variables; the rows in DB_OUT, one line
