@@ -27,6 +27,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
 | [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | approved | 11 |  |
 | [185-a-hung-test-fails-fast-and-names-itself](specs/185-a-hung-test-fails-fast-and-names-itself/spec.md) — A hung test fails fast and names itself | P1 | approved | 8 |  |
+| [188-explore-a-feature-before-its-spec-is](specs/188-explore-a-feature-before-its-spec-is/spec.md) — Explore a feature before its spec is written | P1 | building | 12 | #662 |
 | [189-the-web-image-has-no-known-critical-cve](specs/189-the-web-image-has-no-known-critical-cve/spec.md) — The web image has no known critical CVE and the platform scans template images | P1 | approved | 7 | #682 |
 | [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | approved | 7 | #688 |
 | [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | approved | 8 | #400 |
@@ -151,7 +152,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [145-smoke-tests-that-write-run-only-in-dev](specs/145-smoke-tests-that-write-run-only-in-dev/spec.md) — Smoke tests that write run only in dev | P1 | done | 7 | #474 |
 | [146-one-owner-per-operator-on-the-local-cluster](specs/146-one-owner-per-operator-on-the-local-cluster/spec.md) — One owner per operator on the local cluster | P1 | done | 5 | #425 |
 | [147-the-system-plan-writes-the-repo-specs](specs/147-the-system-plan-writes-the-repo-specs/spec.md) — The system plan writes the repo specs | P1 | done | 7 |  |
-| [148-transient-errors-never-stop-a-run](specs/148-transient-errors-never-stop-a-run/spec.md) — Transient errors and slow progress never stop a run | P1 | done | 8 | #539, #540, #541, #542, #543, #544, #545 |
+| [148-transient-errors-never-stop-a-run](specs/148-transient-errors-never-stop-a-run/spec.md) — Transient errors and slow progress never stop a run | P1 | done | 7 | #539, #540, #541, #542, #543, #544, #545 |
 | [149-a-spec-decides-by-default](specs/149-a-spec-decides-by-default/spec.md) — A spec decides by default | P1 | done | 6 |  |
 | [151-prompt-changes-pass-the-benchmark](specs/151-prompt-changes-pass-the-benchmark/spec.md) — Prompt changes pass the benchmark before a release | P1 | done | 4 |  |
 | [155-each-repo-of-a-system-ship-runs-in-its-own-session](specs/155-each-repo-of-a-system-ship-runs-in-its-own-session/spec.md) — Each repo of a system ship runs in its own session | P1 | done | 10 | #560 |
@@ -178,6 +179,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [184-parallel-ships-do-not-stop-each-other](specs/184-parallel-ships-do-not-stop-each-other/spec.md) — Parallel ships do not stop each other | P1 | done | 10 | #663, #666, #670, #671 |
 | [186-the-journey-waits-less](specs/186-the-journey-waits-less/spec.md) — The journey waits less | P1 | done | 11 | #681, #684 |
 | [187-settings-agents-edited-by-hand-have-a](specs/187-settings-agents-edited-by-hand-have-a/spec.md) — Settings agents edited by hand have a command | P1 | done | 8 |  |
+| [194-a-system-ship-wait-returns-before-the](specs/194-a-system-ship-wait-returns-before-the/spec.md) — A system ship wait returns before the Bash limit | P1 | done | 4 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
