@@ -23,7 +23,7 @@
     {
       "name": "web",
       "source": "./plugins/web",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "description": "Agents for Next.js (App Router, pnpm, TypeScript) web repos: coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
