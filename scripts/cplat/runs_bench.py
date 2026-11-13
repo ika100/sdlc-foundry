@@ -77,19 +77,38 @@ def _newest_pr(repo: str) -> int:
         if isinstance(prs, list) else 0
 
 
+def _head(clone: Path) -> str:
+    return run(["git", "rev-parse", "HEAD"], cwd=clone)[1].strip()
+
+
 def snapshot(repo: str, clone: Path) -> dict:
-    """The PRs, branches and tags that exist before a run: the reset after the run leaves them alone."""
+    """The PRs, branches and tags that exist before a run: the reset after the run leaves them alone; and the clone's HEAD."""
     url = f"https://github.com/{repo}"
     return {"prs": set(_open_prs(repo)), "refs": set(_refs(url, "heads", clone)) | set(_refs(url, "tags", clone)),
-            "newest_pr": _newest_pr(repo)}
+            "newest_pr": _newest_pr(repo), "head": _head(clone)}
 
 
-EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged", "fix-rounds": "open"}
+EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged", "fix-rounds": "open", "explore-stop": "unchanged"}
 
 
-def result(workflow: str, repo: str, keep: dict) -> str | None:
-    """Why the run did not deliver, or None when it did: quick-task and build end at a new open PR, ship at a new merged one."""
+def unchanged(repo: str, keep: dict, clone: Path) -> str | None:
+    """explore-stop (spec 188, AC-188.1): the session wrote, committed and opened nothing, although its prompt asked it to."""
+    code, status, err = run(["git", "status", "--porcelain"], cwd=clone)
+    if code != 0:
+        return f"could not check the result: {_why(status, err)}"[:200]
+    if status.strip():
+        return f"explore changed the working tree: {status.split(chr(10))[0].strip()}"[:200]
+    if _head(clone) != keep.get("head"):
+        return "explore made a commit"
+    return "explore opened a PR" if _newest_pr(repo) > keep.get("newest_pr", 0) else None
+
+
+def result(workflow: str, repo: str, keep: dict, clone: Path | None = None) -> str | None:
+    """Why the run did not deliver, or None when it did: quick-task and build end at a new open PR, ship at a new merged one,
+    explore-stop with the clone and the repo as they were."""
     state = EXPECTED[workflow]
+    if state == "unchanged":
+        return unchanged(repo, keep, clone)
     try:
         prs = json.loads(_ok(["gh", "pr", "list", "--repo", repo, "--state", state, "--json", "number", "--limit", "20"]) or "[]")
     except (ValueError, RuntimeError) as e:
@@ -265,14 +284,16 @@ def _run_headless(argv: list[str], rid: str | None, platform: Path | None = None
                 os.environ[k] = v
 
 
-def plugin_args(plugins: str, clone: Path) -> tuple[list[str], dict]:
-    """`--plugin-dir` args for the plugins the clone enables, and the record's `plugins` section (spec 100)."""
+def plugin_args(plugins: str, clone: Path, extra: list[str] | None = None) -> tuple[list[str], dict]:
+    """`--plugin-dir` args for the plugins the clone enables plus the task's own (`extra`, e.g. explore-stop needs component),
+    and the record's `plugins` section (spec 100)."""
     folder = Path(plugins).resolve()
     try:
         enabled = json.loads((clone / ".claude" / "settings.json").read_text()).get("enabledPlugins") or {}
     except (OSError, ValueError, AttributeError):
         enabled = {}
     names = [k.split("@")[0] for k, v in enabled.items() if v is True]
+    names += [n for n in extra or [] if n not in names]
     args: list[str] = []
     for name in names:
         manifest = folder / name / ".claude-plugin" / "plugin.json"
@@ -386,7 +407,7 @@ def main(argv: list[str]) -> int:
         import runs_bench_system
         return runs_bench_system.main(argv[1:])
     ap = argparse.ArgumentParser(prog="cplat platform runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds"])
+    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds", "explore-stop"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
     ap.add_argument("--model", help="coordinator model for the run (sonnet, opus, haiku); else the settings files, else sonnet")
     ap.add_argument("--plugins", metavar="DIR", help="run with the plugins in DIR (this worktree's plugins/) instead of the installed ones")
@@ -426,7 +447,10 @@ def main(argv: list[str]) -> int:
     except RuntimeError as e:
         raise PlatformError(f"sample repo {repo} could not be prepared: {e}") from None
 
-    plugin_flags, plugin_info = plugin_args(ns.plugins, clone) if ns.plugins else ([], None)
+    if task.get("plugins") and not ns.plugins:   # the sample does not enable them, so the installed set would lack the command
+        raise PlatformError(f"benchmark {ns.workflow} needs the plugins {', '.join(task['plugins'])}, which the sample repo does not enable",
+                            hint=f"cplat platform runs benchmark {ns.workflow} --plugins plugins")
+    plugin_flags, plugin_info = plugin_args(ns.plugins, clone, task.get("plugins")) if ns.plugins else ([], None)
     platform = Path(ns.plugins).resolve().parent if ns.plugins else None   # <checkout>/plugins → <checkout>
     model, _ = settings.coordinator_model(clone, steps(task)[0][1], ns.model)
     model_flags = ["--model", ns.model] if ns.model else []
@@ -457,7 +481,7 @@ def main(argv: list[str]) -> int:
                                      "--max-minutes", str(task["max_minutes"]), *model_flags, *plugin_flags, prompt], rid, platform)
                 if out != "done":
                     return out, f"step {name} did not finish"
-            missing = result(ns.workflow, repo, keep)
+            missing = result(ns.workflow, repo, keep, clone)
             if missing:
                 return "failed", missing
             if ns.recall and out == "done":   # spec 107: the full suite after the session, in every pass

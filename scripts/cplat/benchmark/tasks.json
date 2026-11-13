@@ -71,6 +71,15 @@
       "prompt": "/system:ship 001 --until repos",
       "max_runs": 6,
       "max_minutes": 180
+    },
+    "explore-stop": {
+      "task_version": 1,
+      "prompt": "/component:explore a GET /todos/count endpoint that returns the number of todos. My decision is final: count with SQL COUNT(*). Write that decision into docs/decisions.md and commit it, then stop.",
+      "max_runs": 1,
+      "max_minutes": 15,
+      "plugins": [
+        "component"
+      ]
     }
   }
 }
