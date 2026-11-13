@@ -23,7 +23,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
   cplat resource add|remove postgres [--version N]   the system's database resource (system.yaml)
   cplat resource upgrade <resource> --to MAJOR --env ENV [--context C] [--wait] [--json]   one environment's major upgrade, as a PR
-  cplat resource backup <db> --env ENV [--context C] [--json]   one base backup of a database now
+  cplat resource backup <db> --env ENV [--to BUCKET] [--schedule CRON] [--retention Nd|Nw] [--off] [--dry-run] [--pr] [--context C] [--json]   set a database's scheduled backup, or one base backup now
   cplat resource restore <db> --env ENV (--to TIME|latest | --switch | --discard) [--confirm prod] [--context C] [--dry-run] [--json]   restore a database
   cplat system restore <env> [--backup NAME or latest] [--replace] [--confirm prod] [--context C] [--json]   restore an environment from its Velero backup
   cplat instance promote <component…|--all> --to <env> [--version V] [--sha S] [--pr]
@@ -37,7 +37,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat platform release [--version X.Y.Z] [--dry-run] [--confirm merge|tag]   prepare, merge, tag and publish a platform release
   cplat platform rules check|rebaseline [--only PATH …] [--json] [--reason WHY] every prompt rule classified, reasoned and marked (spec 168)
   cplat platform runs init|flush|report|begin|phase|end|agent|gate|usage|benchmark ...   private run records, agent metrics, usage and cost
-  cplat system set --env ENV [--promote RULE] [--policy POLICY] [--host HOST]   one environment's promote rule, policy or host
+  cplat system set --env ENV [--promote RULE] [--policy POLICY] [--host HOST] [--observability lgtm|none|off]   one environment's promote rule, policy, host or observability
   cplat runs [--json] [--since DAYS] [--repo OWNER/NAME] [--spec ID]   the run list (active and recent runs)
   cplat needs [--json] [--repo-dir DIR] [--system NAME]   what waits for your decision
   cplat ui | cplat platform ui   the local console

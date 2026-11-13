@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 import backupstate
+import dbbackupset
 import gitops
 import model
 from core import PlatformError
@@ -27,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--context", help="kube context (default: the current one)")
+    p.add_argument("--to", metavar="BUCKET", help="set the scheduled backup: the bucket resource that receives it")
+    p.add_argument("--schedule", metavar="CRON", help="set the scheduled backup: five-field cron in UTC (default \"0 3 * * *\")")
+    p.add_argument("--retention", metavar="N", help="set the scheduled backup: <n>d or <n>w (default 30d)")
+    p.add_argument("--off", action="store_true", help="remove the scheduled backup (the backups in the bucket are kept)")
+    p.add_argument("--dry-run", action="store_true", help="with a setting option: print the change, write nothing")
+    p.add_argument("--pr", action="store_true", help="with a setting option: open a pull request")
     p.add_argument("--json", action="store_true")
     return p
 
@@ -51,6 +58,11 @@ def check(ns: argparse.Namespace, m: model.Model) -> None:
 
 def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
+    if ns.to is not None or ns.schedule is not None or ns.retention is not None or ns.off:
+        return dbbackupset.run(ns)
+    if ns.dry_run or ns.pr:
+        raise PlatformError("--dry-run and --pr belong to --to, --schedule, --retention and --off",
+                            hint="an on-demand backup changes nothing in git: run it without --dry-run and --pr")
     app_dir = gitops.find_app(Path(ns.repo_dir).resolve(), ns.app)
     m = model.load_dir(app_dir)
     check(ns, m)

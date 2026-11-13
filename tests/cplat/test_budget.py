@@ -716,6 +716,18 @@ def test_idle_time_between_a_stop_and_the_resume_is_not_counted(here, gh, budget
     assert 30 <= budget.used_of(budget.find(new)[1], cost=False)["minutes"] < 31
 
 
+def test_a_root_killed_without_a_stop_counts_only_up_to_its_last_activity(here, gh, budget, clock, usage):
+    """The idle night after a run ended by its process is not counted at the resume (#676)."""
+    rid = start_ship(here)
+    key = budget.find(rid)[1]["key"]
+    clock.tick(30 * 60)
+    budget.count_invocation(rid)           # the last ledger write of the killed root
+    clock.tick(600 * 60)
+    new = runs.start("ship", repo="x")
+    budget.open_root(new, key)
+    assert 30 <= budget.used_of(budget.find(new)[1], cost=False)["minutes"] < 31
+
+
 def test_durations_do_not_make_failures_differ(budget):
     """AC-102.9: `in 3.21s` and `in 4.07s` are the same pytest summary."""
     assert budget.normalise("== 1 failed, 5 passed in 3.21s ==") == budget.normalise("== 1 failed, 5 passed in 4.07s ==")

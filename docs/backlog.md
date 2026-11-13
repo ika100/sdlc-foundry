@@ -25,7 +25,13 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
 | [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | approved | 10 |  |
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
-| [185-a-hung-test-fails-fast-and-names-itself](specs/185-a-hung-test-fails-fast-and-names-itself/spec.md) — A hung test fails fast and names itself | P1 | approved | 8 |  |
+| [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | approved | 11 |  |
+| [188-explore-a-feature-before-its-spec-is](specs/188-explore-a-feature-before-its-spec-is/spec.md) — Explore a feature before its spec is written | P1 | building | 12 | #662 |
+| [189-the-web-image-has-no-known-critical-cve](specs/189-the-web-image-has-no-known-critical-cve/spec.md) — The web image has no known critical CVE and the platform scans template images | P1 | approved | 7 | #682 |
+| [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | approved | 7 | #688 |
+| [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | approved | 8 | #400 |
+| [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | approved | 10 |  |
+| [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [173-the-guides-read-without-spec-numbers](specs/173-the-guides-read-without-spec-numbers/spec.md) — The guides read without spec numbers | P2 | approved | 3 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
@@ -129,7 +135,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [118-a-cache-resource-compatible-with-redis](specs/118-a-cache-resource-compatible-with-redis/spec.md) — A cache resource compatible with Redis | P1 | done | 19 |  |
 | [119-a-message-broker-resource-behind-events](specs/119-a-message-broker-resource-behind-events/spec.md) — A message broker resource behind events APIs | P1 | done | 24 |  |
 | [120-instances-scale-on-load-and-queue-depth](specs/120-instances-scale-on-load-and-queue-depth/spec.md) — Instances scale on load and queue depth | P1 | done | 28 |  |
-| [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | done | 27 |  |
+| [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | done | 26 |  |
 | [123-the-platform-repo-declares-its-own-shape](specs/123-the-platform-repo-declares-its-own-shape/spec.md) — The platform repo declares its own shape | P1 | done | 24 |  |
 | [125-a-cluster-repo-hosts-several-systems](specs/125-a-cluster-repo-hosts-several-systems/spec.md) — A cluster repo hosts several systems on shared operators | P1 | done | 18 |  |
 | [126-unattended-runs-stop-wasting-turns-and](specs/126-unattended-runs-stop-wasting-turns-and/spec.md) — Unattended runs stop wasting turns and CI rounds | P1 | done | 15 |  |
@@ -170,7 +176,9 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [182-logs-reach-loki](specs/182-logs-reach-loki/spec.md) — Logs reach Loki | P1 | done | 6 | #657 |
 | [183-shared-numbers-and-indexes-come-from](specs/183-shared-numbers-and-indexes-come-from/spec.md) — Shared numbers and indexes come from cplat | P1 | done | 8 | #659, #660, #477, #577 |
 | [184-parallel-ships-do-not-stop-each-other](specs/184-parallel-ships-do-not-stop-each-other/spec.md) — Parallel ships do not stop each other | P1 | done | 10 | #663, #666, #670, #671 |
+| [185-a-hung-test-fails-fast-and-names-itself](specs/185-a-hung-test-fails-fast-and-names-itself/spec.md) — A hung test fails fast and names itself | P1 | done | 8 |  |
 | [186-the-journey-waits-less](specs/186-the-journey-waits-less/spec.md) — The journey waits less | P1 | done | 11 | #681, #684 |
+| [187-settings-agents-edited-by-hand-have-a](specs/187-settings-agents-edited-by-hand-have-a/spec.md) — Settings agents edited by hand have a command | P1 | done | 8 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

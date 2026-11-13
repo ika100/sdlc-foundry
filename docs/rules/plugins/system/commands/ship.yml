@@ -45,6 +45,10 @@ rules:
     text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
     class: hard
     hard: issue-filing-needs-consent
+  - id: R15
+    text: "An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done."
+    class: practice
+    source: spec 185
   - id: R13
     text: "The shape must be `gitops-app`."
     class: retired

@@ -17,7 +17,7 @@ Spec-driven features across a system's components, run in its **`gitops-app`** r
 | `/system:new <manifest>` | Create a system from a manifest: the gitops-app repo with its `system.yaml` plus every component repo |
 | `/system:status [--context C]` | One row per component, one column per environment: pinned version, CI state, Argo sync/health (a scaled instance shows `replicas <n> (<min>–<max>)`, `?` when the cluster cannot be read), then a Backups section and a Resource versions section (pin, major and upgrade state per resource and environment) |
 | `/system:autonomy show \| set <env> <level> [flags] \| pause \| resume \| undo <event> \| approve <repo>#<n>` | Optional, off by default: show and change what an engine may do per environment (`cplat system autonomy`); lowering and pausing act at once, a higher level after the pull request merges. See [autonomy.md](../../docs/autonomy.md) |
-| `/system:set --env <name> …` | Change a system-wide setting such as an environment (`cplat system set`); one PR |
+| `/system:set --env <name> …` | Change a system-wide setting such as an environment, including `--observability lgtm|none|off` (`cplat system set`); one PR |
 | `/system:restore <env> [--backup <name\|latest>] [--replace] [--confirm prod]` | Restore an environment from a Velero backup |
 | `/system:explore <topic \| #issue>` | Optional, read-only conversation before the system spec: it ends in a DECIDED block that `/system:spec` takes; writes nothing |
 | `/system:spec <desc>` · `approve <id>` · `--amend <id> <change>` | System spec in `docs/specs/<NNN>-<slug>/spec.md`; asks you its open questions and for approval |

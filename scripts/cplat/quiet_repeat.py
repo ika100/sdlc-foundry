@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -26,13 +27,27 @@ def run(cwd: Path, n: int, args: list[str], *, raw: bool, on: bool) -> int:
     cmd = ["devbox", "run", "test-fast", "--", *args]
     logs = [quiet._log_path(cwd, f"test-fast-repeat-{i}") for i in range(1, n + 1)]
     fhs = [lg.open("wb") for lg in logs]
+    import quiet_limit
+    adds = [quiet_limit.progress_env(lg) for lg in logs]
+    procs: list[subprocess.Popen] = []
     try:
-        procs = [subprocess.Popen(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT,
-                                  env=repo_env({"CPLAT_REPEAT_RUN": str(i)})) for i, fh in enumerate(fhs, 1)]
-        rcs = [p.wait() for p in procs]
+        deadline = time.monotonic() + quiet_limit.GIVE_UP_SECONDS
+        for i, fh in enumerate(fhs, 1):
+            add = {**adds[i - 1][0], "CPLAT_REPEAT_RUN": str(i)}
+            procs.append(quiet_limit.start(quiet_limit.with_env(cmd, add), cwd=cwd, out=fh, env=repo_env(add)))
+        codes = [quiet_limit.wait_until(p, deadline) for p in procs]
     finally:
+        for p in procs:
+            if p.poll() is None:
+                quiet_limit.stop(p)
         for fh in fhs:
             fh.close()
+    if any(c is None for c in codes):
+        for lg, (_, progress), c in zip(logs, adds, codes):
+            if c is None:
+                print("\n".join(quiet_limit.gave_up_lines("test-fast", lg, progress)))
+        return 124
+    rcs = codes
     if not any(rcs):
         print(f"ok: {n} runs at once of devbox run test-fast passed (logs: {' '.join(str(lg) for lg in logs)})")
         return 0

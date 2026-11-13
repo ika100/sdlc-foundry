@@ -259,7 +259,7 @@ def check_scripts(rows: list[dict]) -> None:
 
 
 SUITE_FILES = [".github/workflows/ci.yml", "scripts/ci-local.sh", "devbox.json"]
-TEST_TOOLS = ["pytest", "pytest-xdist", "pyyaml", "ruamel.yaml"]
+TEST_TOOLS = ["pytest", "pytest-timeout", "pytest-xdist", "pyyaml", "ruamel.yaml"]
 REQ_FILE = "requirements-test.txt"
 PINNED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*==[^\s;=]+(\s*;\s*.+)?$")
 
