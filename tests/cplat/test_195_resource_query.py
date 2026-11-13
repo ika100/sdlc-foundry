@@ -138,8 +138,12 @@ def test_the_statement_goes_into_the_pod_in_one_exec_with_the_password_on_stdin_
     assert args[:9] == ["exec", "-i", "-n", "shop-dev", "shop-orders-db-1", "-c", "postgres", "--", "sh"]
     assert args[-4:] == ["sh", "shop_user", "shop", "SELECT id FROM t WHERE x = 'a;b'"]
     assert stdin == PW + "\n" and not any(PW in a for a in args)
+    from dbquery import POD_SCRIPT
     script = args[10]
+    assert script == POD_SCRIPT
     assert "BEGIN TRANSACTION READ ONLY" in script and "statement_timeout" in script and "ON_ERROR_STOP=1" in script
+    order = [script.index(p) for p in ("SET statement_timeout", "BEGIN TRANSACTION READ ONLY", '-c "$3"', "ROLLBACK")]
+    assert order == sorted(order)
     assert kube.writes() == []
 
 
@@ -199,17 +203,14 @@ def test_without_copy_the_active_generation_is_queried_after_a_switch_ac_195_2(r
 
 def test_copy_of_a_previous_generation_is_labelled_previous_ac_195_2(repo, kube, capsys):  # AC-195.2
     state = {"next": 3, "clusters": [
-        {"name": "shop-orders-db", "role": "previous", "until": "2026-10-27T11:02:13Z"},
-        {"name": "shop-orders-db-g1", "role": "previous", "until": "2026-10-27T12:02:13Z", "from": {"server": "shop-orders-db", "to": "latest"}},
+        {"name": "shop-orders-db-g1", "role": "previous", "until": "2026-10-27T12:02:13Z"},
         {"name": "shop-orders-db-g2", "role": "active", "from": {"server": "shop-orders-db-g1", "to": "latest"}}]}
     write_state(repo, state)
-    pod = world(kube, names=("shop-orders-db", "shop-orders-db-g1", "shop-orders-db-g2"))
+    pod = world(kube, names=("shop-orders-db-g1", "shop-orders-db-g2"))
     pod.csv(["id"], [["1"]])
     rc, out, err = query(repo, capsys, "SELECT id FROM t", "--copy", "g1")
-    if rc == 0:
-        assert out.splitlines()[0] == "on shop-orders-db-g1 (previous) in dev"
-    else:
-        assert "g1" in err, err  # an invalid hand-built state is reported, never silently ignored
+    assert rc == 0, err
+    assert out.splitlines()[0] == "on shop-orders-db-g1 (previous) in dev"
 
 
 # ======================= AC-195.3: read-only, enforced by the database =======================
@@ -222,7 +223,8 @@ def test_a_write_is_refused_by_the_database_and_exits_1_with_its_error_ac_195_3(
     assert rc == 1 and out == ""
     assert "ERROR:  cannot execute INSERT in a read-only transaction" in err
     assert "psql:cplat:1:" not in err
-    assert "fix:" in err
+    assert "the database refused the statement (the session is read-only; nothing was changed)" in err
+    assert "fix: /resource:query only reads; change data through a component or a migration" in err
     assert tree_state(repo) == before and kube.writes() == []
 
 
@@ -411,8 +413,11 @@ def test_an_invalid_state_file_is_reported_not_ignored_ac_195_4(repo, kube, caps
     p = write_state(repo, {"next": 2, "clusters": "broken"})
     assert p.is_file()
     pod = world(kube)
-    err = refused(repo, kube, capsys, "SELECT 1", "--copy", "g1", pod=pod)
+    before = tree_state(repo)
+    rc, out, err = query(repo, capsys, "SELECT 1", "--copy", "g1")
+    assert rc == 1 and out == "" and "ERROR:" in err  # the Contract defines no fix: for a StateError
     assert "restore-state.yaml" in err
+    assert tree_state(repo) == before and kube.writes() == [] and pod.execs == []
 
 
 # ======================= AC-195.5: restore prints a query as its check step =======================
