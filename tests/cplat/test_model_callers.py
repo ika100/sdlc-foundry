@@ -93,7 +93,9 @@ def legacy(rows):
 
 STATUS_RESOURCES = [
     {"resource": "postgres", "cells": {"dev": {"argo": "Synced/Progressing"}, "staging": {"argo": "missing"}, "prod": None}},
-    {"resource": "observability", "cells": {"dev": {"argo": "missing"}, "staging": {"argo": "missing"}, "prod": None}},
+    {"resource": "observability", "cells": {  # spec 197: the cell names where Grafana answers (AC-197.4)
+        "dev": {"argo": "missing", "grafana_url": "http://grafana.localhost:8088/"},
+        "staging": {"argo": "missing", "grafana_url": None}, "prod": {"argo": "missing", "grafana_url": None}}},
 ]
 
 

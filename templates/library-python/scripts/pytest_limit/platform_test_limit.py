@@ -1,11 +1,14 @@
 """Per-test time limit for the generated test runs (spec 197).
 
-scripts/gate.sh loads this plugin (`-p platform_test_limit`) when the file exists. A test that runs past LIMIT_S seconds in its setup,
-body or teardown is failed with its test id and the limit; the run goes on with the next test. Stdlib and pytest only.
+scripts/gate.sh loads this plugin (`-p platform_test_limit`) when the file exists.
+A test that runs past LIMIT_S seconds in its setup, body or teardown is failed with
+its test id and the limit; the run goes on with the next test. Stdlib and pytest only.
 
-It steps aside (arms nothing) when pytest-timeout is active, for a test with a `timeout` marker, and where SIGALRM is missing,
-the thread is not the main one or another tool already owns SIGALRM.
+It steps aside (arms nothing) when pytest-timeout is active, for a test with a
+`timeout` marker, and where SIGALRM is missing, the thread is not the main one or
+another tool already owns SIGALRM.
 """
+
 import os
 import signal
 import threading
@@ -55,7 +58,8 @@ def pytest_runtest_protocol(item, nextitem):
 
     def on_alarm(signum, frame):
         signal.setitimer(signal.ITIMER_REAL, LIMIT_S)  # a teardown that also blocks is stopped too
-        raise pytest.fail.Exception(f"Timeout (>{LIMIT_S}s): {item.nodeid} ran past the per-test limit of {LIMIT_S} s", pytrace=False)
+        message = f"Timeout (>{LIMIT_S}s): {item.nodeid} ran past the per-test limit of {LIMIT_S} s"
+        raise pytest.fail.Exception(message, pytrace=False)
 
     previous = signal.signal(signal.SIGALRM, on_alarm)
     signal.setitimer(signal.ITIMER_REAL, LIMIT_S)
