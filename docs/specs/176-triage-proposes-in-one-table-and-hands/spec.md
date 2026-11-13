@@ -1,7 +1,7 @@
 ---
 spec_id: 176-triage-proposes-in-one-table-and-hands
 title: Triage proposes in one table and hands off to the dispatcher
-status: building
+status: done
 priority: P1
 shape: platform
 ---
@@ -80,3 +80,4 @@ Moved to spec 177 (unclear issues from other people, closing what needs no work)
 - 2026-11-12 approved again by the user with today's amendments (grouped overview, choices, closing next step)
 - 2026-11-13 AC-176.10 superseded by AC-196.8 (priority labels `p0`/`p1`/`p2`); A4 revised
 - 2026-11-13 building
+- 2026-11-13 done

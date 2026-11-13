@@ -25,12 +25,12 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
 | [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | approved | 10 |  |
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
-| [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | approved | 11 |  |
 | [189-the-web-image-has-no-known-critical-cve](specs/189-the-web-image-has-no-known-critical-cve/spec.md) — The web image has no known critical CVE and the platform scans template images | P1 | approved | 7 | #682 |
 | [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | approved | 7 | #688 |
 | [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | approved | 8 | #400 |
 | [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | approved | 10 |  |
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
+| [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | approved | 12 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
 | [173-the-guides-read-without-spec-numbers](specs/173-the-guides-read-without-spec-numbers/spec.md) — The guides read without spec numbers | P2 | approved | 3 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
@@ -161,13 +161,14 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [163-a-resumed-unit-run-drops-the-escalation-of](specs/163-a-resumed-unit-run-drops-the-escalation-of/spec.md) — A resumed unit run drops the escalation of the run before | P1 | done | 2 | #591 |
 | [165-a-test-problem-does-not-stop-an-unattended-run](specs/165-a-test-problem-does-not-stop-an-unattended-run/spec.md) — A test problem does not stop an unattended run | P1 | done | 7 | #595, #582, #583 |
 | [166-the-dev-pr-of-a-system-ship-lands-on-the](specs/166-the-dev-pr-of-a-system-ship-lands-on-the/spec.md) — The dev PR of a system ship lands on the current main | P1 | done | 4 | #597 |
-| [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | done | 12 |  |
+| [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | done | 11 |  |
 | [168-agent-rules-state-their-reason-and-can](specs/168-agent-rules-state-their-reason-and-can/spec.md) — Agent rules state their reason and can retire | P1 | done | 8 |  |
 | [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | done | 4 |  |
 | [171-unattended-runs-settle-their-own-small](specs/171-unattended-runs-settle-their-own-small/spec.md) — Unattended runs settle their own small problems | P1 | done | 10 | #613, #621, #622, #623, #624, #625, #626, #633 |
 | [172-builds-catch-problems-before-the-pull](specs/172-builds-catch-problems-before-the-pull/spec.md) — Builds catch problems before the pull request | P1 | done | 8 | #628, #629, #630, #631, #632 |
 | [174-plugins-bring-what-they-need](specs/174-plugins-bring-what-they-need/spec.md) — Plugins bring what they need, and one plugin installs the starter set | P1 | done | 7 |  |
 | [175-a-spec-number-means-the-spec-and-ship](specs/175-a-spec-number-means-the-spec-and-ship/spec.md) — A spec number means the spec and ship PRs close their issues | P1 | done | 5 | #638, #645 |
+| [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | done | 10 |  |
 | [178-one-way-to-land-and-tests-that-do-not](specs/178-one-way-to-land-and-tests-that-do-not/spec.md) — One way to land and tests that do not race | P1 | done | 8 | #648 |
 | [179-unattended-runs-ask-less](specs/179-unattended-runs-ask-less/spec.md) — Unattended runs ask less | P1 | done | 9 | #616, #653, #654, #655 |
 | [180-prompt-checks-test-behaviour-not](specs/180-prompt-checks-test-behaviour-not/spec.md) — Prompt checks test behaviour not sentences | P1 | done | 7 |  |
