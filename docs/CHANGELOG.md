@@ -6,6 +6,18 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.22.0] - 2026-11-13
+
+### Fixed
+
+**Five seams found in journey 13 are closed (spec 197).** `cplat component build reviewed` finds the tester's acceptance-test commit by the AC id in its subject; `cplat platform runs agent findings --deviation <id>` of a merged-away task is recorded on its final task with a note; `cplat system set --observability lgtm` and `cplat system status` name where Grafana answers; the web release agent's next-dev-version step uses `--no-git-checks`, so it works with the uncommitted changelog; and generated Python, Java and Go repos fail a hung test after 120 s (Go: stop a package after 5 min) through `scripts/gate.sh`, so `/platform:update` carries the limits and a repo's own limit wins ([ADR-110](adr/110-generated-repos-bound-test-time.md)). Update the plugins (`/plugin marketplace update`).
+
+**The `web-nextjs` image runs on a distroless Node runtime and the platform scans its template images (#682).** The web image shipped a Node base with a shell and npm, which carried CVE-2023-45853 (zlib in the base image). The runtime stage is now distroless: no shell, no npm, and the CVE is gone. A new template image scan (`.github/workflows/template-image-scan.yml`, [spec 189](specs/189-the-web-image-has-no-known-critical-cve/spec.md)) checks every template's base images for critical CVEs; accepted findings sit in a list whose entries expire. **Action:** existing repos pick up the new image with `/platform:update`.
+
+**The inbox no longer lists escalations of work that is already finished (#730).** `cplat needs`, `cplat dispatch inbox` and the console Inbox kept the escalation of a spec that was finished by hand (merged and set to `done`) for the whole 30-day run window, which buried the real items. An escalation is now hidden when its spec is `done`, its `feature/<spec>` pull request or the run's own pull request is merged, or, for a run for an issue, the issue is closed. When GitHub cannot answer, the escalation stays listed.
+
+**The build benchmark runs on a refreshed sample again (#736).** Its pinned sample `ika100/todo-api` predated the template's `docs/` ruff exclude and recipe arguments, so with ruff 0.17 (which formats Markdown code blocks) `lint-fix` touched the architect's `design.md` and a new OpenTelemetry advisory sent verification to a `cplat deps patch` the old recipe could not run; both stopped the benchmark, not the prompts under test. The sample now excludes `docs/`, passes recipe arguments and pins OpenTelemetry 1.45.2, and `benchmark/tasks.json` pins that revision.
+
 ## [5.21.0] - 2026-11-13
 
 ### Added
