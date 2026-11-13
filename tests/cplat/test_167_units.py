@@ -284,5 +284,5 @@ def test_a_second_start_while_the_units_still_run_starts_nothing_twice_ac_167_9(
         world.restart()
         r = world.run("start", "--once")
         assert r.rc == 0 and not re.search(r"^started ", r.out, re.M) and len(re.findall(r"^adopted ", r.out, re.M)) == 2, r
-    assert [c["unit"] for c in world.calls()] == ["issue-1.1", "issue-2.1"]
+    assert sorted(c["unit"] for c in world.calls()) == ["issue-1.1", "issue-2.1"]
     assert [len(_claims(world, n)) for n in (1, 2)] == [1, 1]

@@ -34,7 +34,7 @@ def test_pause_stops_starts_and_flags_running_units_for_their_next_checkpoint_ac
     r = world.run("start", "--once")
     assert r.rc == 0 and "no starts: paused" in r.out, r
     assert _flag(world, "issue-1").exists() and _flag(world, "issue-2").exists()
-    assert [c["unit"] for c in world.calls()] == ["issue-1.1", "issue-2.1"]          # nothing new started
+    assert sorted(c["unit"] for c in world.calls()) == ["issue-1.1", "issue-2.1"]    # nothing new started (one pass starts both, in any order)
     assert world.run("status", "--json").json()["paused"] == "pause"
     world.wait_ended("issue-1.1")                                                  # the units stopped at their checkpoint
     world.wait_ended("issue-2.1")
@@ -121,7 +121,7 @@ def test_a_higher_slot_count_fills_the_new_slots_in_the_next_cycle_ac_167_11(wor
     assert [c["unit"] for c in world.calls()] == ["issue-1.1"]
     assert world.run("slots", "3").rc == 0
     world.run("start", "--once")
-    assert [c["unit"] for c in world.calls()] == ["issue-1.1", "issue-2.1", "issue-3.1"]
+    assert sorted(c["unit"] for c in world.calls()) == ["issue-1.1", "issue-2.1", "issue-3.1"]
 
 
 def test_slots_outside_1_to_10_is_refused_ac_167_11(world):  # AC-167.11
