@@ -5,7 +5,8 @@
       deploy, done; default done), 1 ESCALATED, 2 TIMEOUT; a clone without a ship run exits 1 at once
   cplat system ship next --wait [--timeout S] [--json]
       while the action is `wait`: a line per phase change of each running repo; a repo whose ship ended is recorded as
-      `cplat system ship repo result <id>` does; then the next action, printed as `next` prints it; exit 2 TIMEOUT
+      `cplat system ship repo result <id>` does; then the next action, printed as `next` prints it; when the timeout runs out with the action still `wait`:
+      exit 0 with the action and a `WAIT:` line if a repo made progress, exit 2 TIMEOUT if none did (spec 194)
 """
 from __future__ import annotations
 
@@ -72,9 +73,6 @@ def ship_wait(repo: Path, phase: str | None, timeout: float, interval: float = S
         waits.sleep(min(interval, left))
 
 
-PROGRESS_CAP = 6   # spec 148: progress extends one wait to at most this many timeouts in all
-
-
 def _head(clone: Path) -> str:
     p = core.run(["git", "rev-parse", "-q", "HEAD"], cwd=clone, check=False) if clone.is_dir() else None
     return (p.stdout.strip() if p and p.returncode == 0 else "")
@@ -95,7 +93,8 @@ def _before_start(sh: dict, entry: dict) -> bool:
 def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEXT_INTERVAL) -> tuple[int, dict | None, list[str]]:
     """(exit code, the action when it is no longer `wait`, the TIMEOUT lines)."""
     out = sys.stderr if as_json else sys.stdout
-    begin = first = waits.now()
+    begin = waits.now()
+    progressed = False
     seen: dict[str, str] = {}
     marks: dict[str, str] = {}
     while True:
@@ -116,15 +115,15 @@ def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEX
             if seen.get(rid) != text:
                 print(f"{waits.clock()} {rid}: phase {text}", file=out, flush=True)
                 seen[rid] = text
-            mark = f"{text} {_head(clone)}"   # spec 148 (#544): a new phase or commit is progress, and the wait goes on
-            if marks.get(rid) not in (None, mark) and waits.now() - first < PROGRESS_CAP * timeout:
-                begin = waits.now()
+            mark = f"{text} {_head(clone)}"   # spec 194: a new phase or commit is progress; the deadline stays fixed
+            if marks.get(rid) not in (None, mark):
+                progressed = True
             marks[rid] = mark
             if sh and (sh.get("escalated") or sh.get("phase") == "done"):
                 ended.append(rid)
             elif line := sched.check_session(gitops, rid, sh):        # spec 155 (AC-155.5)
                 print(f"{waits.clock()} {line}", file=out, flush=True)
-                begin = waits.now()
+                progressed = True
         for rid in ended:                         # the step /system:ship takes next: record the repo's result
             _, lines = sched.result(gitops, rid, st.get("context"))
             print("\n".join(lines), file=out, flush=True)
@@ -132,7 +131,9 @@ def next_wait(gitops: Path, timeout: float, as_json: bool, interval: float = NEX
             continue
         left = timeout - (waits.now() - begin)
         if left <= 0:
-            running = ", ".join(f"{rid} ({seen.get(rid, '?')})" for rid in action["running"]) or "none"
+            if progressed:
+                return waits.REACHED, action, [f"WAIT: repos still running, progress in the last {int(timeout)}s; run the same wait again"]
+            running =", ".join(f"{rid} ({seen.get(rid, '?')})" for rid in action["running"]) or "none"
             return waits.TIMEOUT, None, [f"TIMEOUT: action still wait, no repo made progress for {int(timeout)}s; running: {running}",
                                          "run the same wait again"]
         waits.sleep(min(interval, left))

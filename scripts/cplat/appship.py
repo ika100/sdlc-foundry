@@ -362,9 +362,11 @@ def _next_wait(repo: Path, ns: argparse.Namespace) -> int:
         code, action, lines = shipwait.next_wait(repo, ns.timeout, ns.json, ns.interval)
         if action is not None:
             show_next(action, ns.json)
+            if lines:
+                print("\n".join(lines), file=sys.stderr if ns.json else sys.stdout, flush=True)
         else:
             say(lines)
-        return code, waits.RESULTS[code]
+        return code, "progress" if action is not None and action["action"] == "wait" else waits.RESULTS[code]
     return waits.record(repo, "system ship next --wait", body)
 
 
