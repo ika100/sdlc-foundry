@@ -12,7 +12,7 @@ How does the `web-nextjs` template handle Node versioning? Options: pin one LTS,
 The template **pins one Node major version** (the current Active LTS at template release time) in:
 - `package.json` `engines.node`
 - `devbox.json` package list (`nodejs@<major>`)
-- Dockerfile base image (`node:<major>-slim`)
+- Dockerfile base image (build stages `node:<major>-slim`, runtime `gcr.io/distroless/nodejs<major>-debian13`, spec 189)
 - CI workflow `actions/setup-node` `node-version` input
 
 Bumps happen as platform PRs that change these four locations together; consumers pull bumps via `copier update`.

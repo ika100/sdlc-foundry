@@ -11,7 +11,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 **Shell rule:** run every tool through `devbox run <script>`, never `docker`, `trivy` or the language tools directly, so that versions and flags match CI; add a missing recipe to `devbox.json` first.
 
-The template already ships: `Dockerfile` (deps → builder → runtime on `node:<major>-slim`), `.github/workflows/ci.yml` (quality, test, security, pr-title, branch-name and a **docker (build + push)** job that publishes `linux/amd64,linux/arm64`), and the recipes `image-build` / `image-scan`.
+The template already ships: `Dockerfile` (deps → builder → runtime: distroless `nodejs<major>`), `.github/workflows/ci.yml` (quality, test, security, pr-title, branch-name and a **docker (build + push)** job that publishes `linux/amd64,linux/arm64`), and the recipes `image-build` / `image-scan`.
 
 ## Workflow
 

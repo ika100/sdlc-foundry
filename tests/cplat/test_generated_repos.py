@@ -75,21 +75,30 @@ def test_web_dockerfile_installs_strictly(web):  # AC-104.2
     assert "pnpm-lock.yaml" in copy and "pnpm-lock.yaml*" not in copy
 
 
-def test_web_runtime_image_ships_no_npm(web):
-    """#421: npm (with its bundled undici) is removed from the runtime stage, so the release image scan does not stop on it;
-    the server needs only `node`."""
-    text = (web / "Dockerfile").read_text()
+def _runtime_code(text: str) -> str:
+    """The runtime stage of a Dockerfile without comment lines."""
     runtime = text[text.index("AS runtime"):]
-    assert "rm -rf /usr/local/lib/node_modules/npm" in runtime and "/usr/local/bin/npx" in runtime and "corepack" in runtime
-    assert runtime.index("rm -rf /usr/local/lib/node_modules/npm") < runtime.index('CMD ["node", "server.js"]')
+    return "\n".join(ln for ln in runtime.splitlines() if not ln.lstrip().startswith("#"))
 
 
-def test_slim_runtime_images_take_the_debian_security_updates(web):
-    """Found in the 2026-11-05 journey: node:24-slim shipped apt 2.6.1 with a fixable HIGH CVE, so the web release image
-    scan failed and a rebuild did not help. Both Debian-slim runtime stages upgrade their packages at build time."""
-    for text in ((web / "Dockerfile").read_text(), (TEMPLATES / "service-python" / "Dockerfile").read_text()):
-        runtime = text[text.index("AS runtime"):]
-        assert "apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*" in runtime
+def test_web_runtime_image_ships_no_npm(web):  # AC-189.1
+    """#421 and spec 189: the runtime stage is distroless Node, so there is no shell, apt, npm or corepack to ship (npm's
+    bundled undici blocked the release image scan in #421; zlib CVE-2023-45853 in journey 11). It has no RUN at all."""
+    text = (web / "Dockerfile").read_text()
+    assert re.search(r"^FROM gcr\.io/distroless/nodejs24-debian13 AS runtime$", text, re.M)
+    runtime = _runtime_code(text)
+    assert not re.search(r"^\s*RUN\b", runtime, re.M)
+    for banned in ("apt-get", "npm", "corepack", "/bin/sh"):
+        assert banned not in runtime, banned
+
+
+def test_slim_runtime_images_take_the_debian_security_updates():
+    """Found in the 2026-11-05 journey: node:24-slim shipped apt 2.6.1 with a fixable HIGH CVE, so the release image scan
+    failed and a rebuild did not help. The service-python Debian-slim runtime stage upgrades its packages at build time
+    (the web runtime is distroless since spec 189 and has no apt)."""
+    text = (TEMPLATES / "service-python" / "Dockerfile").read_text()
+    runtime = text[text.index("AS runtime"):]
+    assert "apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*" in runtime
 
 
 @pytest.mark.parametrize("template", ["service-python", "web-nextjs"])
