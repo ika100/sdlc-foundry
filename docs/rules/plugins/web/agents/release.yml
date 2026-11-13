@@ -10,6 +10,10 @@ rules:
   - id: R3
     text: "run the command through `devbox run --` exactly as shown (never bare `pnpm`, so that versions match CI)"
     class: practice
+  - id: R10
+    text: "The command must carry `--no-git-checks`, because pnpm refuses a tree holding the new, uncommitted CHANGELOG.md."
+    class: practice
+    source: spec 197
   - id: R4
     text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered."
     class: practice
