@@ -9,6 +9,7 @@ from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 import gitops
+import model
 from core import PlatformError, Report
 
 POLICIES = ("audit", "enforce", "off")
@@ -130,6 +131,15 @@ def main(argv: list[str]) -> int:
     if "operators" in wanted:
         check_operators(ns.env, wanted["operators"])
     noop = None
+    obs_value = wanted.get("observability")
+    host = ns.host or (envs[ns.env] or {}).get("host")
+    grafana = {"grafana_url": model.grafana_url(host) if obs_value == "lgtm" else None} if obs_value is not None else {}
+
+    def emit(r: Report, dry_run: bool) -> None:
+        r.emit(dry_run, ns.json)
+        if obs_value == "lgtm" and not ns.json:
+            print(f"\nGrafana: {model.grafana_location(host)}")
+
     if "observability" in wanted:
         env_conf = envs[ns.env] or {}
         check_observability(ns.env, wanted["observability"], env_conf.get("observability"))
@@ -139,8 +149,8 @@ def main(argv: list[str]) -> int:
     if not wanted:
         r = Report(title=f"system set: {ns.env} ({app_dir.name})")
         r.did.append(noop or "nothing to change")
-        r.data = {"changed": [], "pr": None}
-        r.emit(ns.dry_run, ns.json)
+        r.data = {"changed": [], "pr": None, **grafana}
+        emit(r, ns.dry_run)
         return 0
     if not ns.dry_run:
         gitops.require_clean(repo)
@@ -157,8 +167,8 @@ def main(argv: list[str]) -> int:
     if ns.pr:
         r.will_do.append("[outward] open a pull request (branch system/set-…)")
     if ns.dry_run:
-        r.data = {"pr": None}
-        r.emit(True, ns.json)
+        r.data = {"pr": None, **grafana}
+        emit(r, True)
         return 0
 
     before = snapshot(repo)
@@ -196,6 +206,6 @@ def main(argv: list[str]) -> int:
     else:
         r.next_steps.append("review the diff, run `devbox run validate`, then commit (or re-run with --pr)")
     r.undo.append("discard the working-tree changes under applications and bootstrap")
-    r.data = {"changed": changed, "pr": url}
-    r.emit(False, ns.json)
+    r.data = {"changed": changed, "pr": url, **grafana}
+    emit(r, False)
     return 0
