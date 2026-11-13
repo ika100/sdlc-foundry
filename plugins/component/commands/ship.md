@@ -20,7 +20,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 ## Unattended rules
 
 - Never ask the user, because the spec's approval was the decision. Where `/component:plan` or `/component:build` say "ask", take the unattended choice they name; where they name none, escalate.
-- An escalation decision that needs work becomes a plan task before the ship goes on, so that it is done.
+- An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done.
 - Interrupted build: commit leftovers as `wip(<task-id>): interrupted` (build Phase 0).
 - `cplat component ship start` puts you on the feature branch; never create, reset or switch branches yourself, so that the run stays on its branch.
 - **Hard rule:** never run `git push` or `gh pr create`, because `cplat component ship pr` runs the whole CI before it pushes.
@@ -28,7 +28,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 ## Phase `plan`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after the architect, `cplat platform runs agent spawned architect [--model-id <id>]`. Architect `BLOCKERS` → escalate with them. A plan with `done` tasks is not re-planned (escalate), except after a merge conflict (build.md 2.4a). Then `cplat component ship phase build`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after the architect, `cplat platform runs agent spawned architect [--model-id <id>]`. Architect `BLOCKERS` → escalate with them. A plan with `done` tasks is not re-planned (escalate); a merge-conflict re-plan (build.md 2.4a) is the exception. Then `cplat component ship phase build`.
 
 ## Phase `build`
 
@@ -50,7 +50,7 @@ Escalate on build's stop rules: a `cplat component build merge` escalation, a ch
 
 ## Phase `deploy`
 
-`cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: the context when the user named one or `kubectl config current-context` points at the system's cluster; `--base-url` is the user's to name, since a guess could hit the wrong host. It waits for the pin PR and Argo CD, merges the `after-release` gitops PRs, runs `devbox run smoke` on dev for every `(smoke)` criterion and, with `promotion.staging: auto`, promotes and smokes staging. Print its `Smoke`/`Promotion` lines.
+`cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: the user's context, or `kubectl config current-context` if it is the system's cluster; `--base-url` is the user's to name, since a guess may hit the wrong host. It waits for the pin PR and Argo CD, merges `after-release` gitops PRs, runs `devbox run smoke` on dev for every `(smoke)` criterion and, with `promotion.staging: auto`, promotes and smokes staging. Print its `Smoke`/`Promotion` lines.
 
 - Red smoke (`smoke red in dev: …`, or in staging) or a failed staging pin: since deploy escalates by itself and files the `smoke-failure` issue, never call `cplat component ship escalate` for it; report its lines and stop.
 - Smoke that could not run is "not run": the run ends `done`.

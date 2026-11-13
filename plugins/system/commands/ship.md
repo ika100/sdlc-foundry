@@ -52,8 +52,8 @@ Loop on `cplat system ship next --json`, one call per action, never a shell loop
 
 `cplat system ship escalate '<what needs the user and where>' --cause platform|code|decision|environment` (`code` = the user's code or tests, `decision` = a spec or rule needs the user, `environment` = runner, cluster, network, secret or login, `platform` = a platform fault). Print the reason, the repo table and what the user decides.
 
-An escalation decision that needs work becomes a plan task before the ship goes on, so that it is done.
+An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done.
 
-When the user's answer changes a repo's acceptance test, change it in that repo's clone and record it as their approval at once, so its build does not stop on it again (#596): in the clone, `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`, commit the test, then `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (`references/build-test-approval.md` of the component plugin). Then `/system:ship <spec>` resumes.
+When the user's answer changes a repo's acceptance test, change it in that repo's clone and record it as their approval at once, so its build does not stop on it again (#596): in the clone, `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`, commit the test, then `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (the component plugin's `references/build-test-approval.md`). `/system:ship <spec>` then resumes.
 
 > If a platform template, script or command fails (not the user's code), stop, sum it up in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).

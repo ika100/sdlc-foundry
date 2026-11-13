@@ -40,6 +40,6 @@ rules:
     class: practice
     source: "#684"
   - id: R12
-    text: "A decision taken on an escalation that needs code, test or document work becomes a task in the spec's plan before the ship goes on, so that it is carried out and not only recorded."
+    text: "An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done."
     class: practice
     source: spec 185
