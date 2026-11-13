@@ -62,9 +62,17 @@ A restore never touches the running database. It creates a new instance next to 
 /resource:restore orders-db --env staging --discard                   # remove the restored (or the previous) instance
 ```
 
-1. `--to` restores a point in time from the backups into a new instance `<system>-<db>-g<n>` and prints how to look at it. Components still use the active one.
+1. `--to` restores a point in time from the backups into a new instance `<system>-<db>-g<n>` and prints the check to run: `/resource:query <db> --env <env> --copy g<n> "<sql>"`. Components still use the active one.
 2. `--switch` makes the restored instance the active one and restarts the pods of the components that use the database. The old one stays as `previous` until you discard it.
 3. `--discard` removes the restored or previous instance and its volumes. The backups in the bucket stay.
+
+### Check a copy
+
+Read the restored copy before you switch, without kubectl:
+
+```
+/resource:query orders-db --env staging --copy g2 "select count(*) from orders"
+```
 
 The commands change git and the cluster in one step: with Argo CD they open a PR, wait for CI and merge it; without Argo CD they commit and apply. The working tree must be clean.
 
