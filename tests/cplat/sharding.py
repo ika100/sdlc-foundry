@@ -4,6 +4,7 @@ collected and ran, so `scripts/check-shards.py` can prove the shards together ar
 Without `--shard` every hook does nothing. Test k (0-based, in node-id sort order) belongs to shard k % N + 1.
 """
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -52,7 +53,7 @@ def pytest_configure(config):
         if not path.is_absolute():
             path = Path(config.invocation_params.dir) / path
     config.stash[_STATE] = {"index": index, "total": total, "path": path, "collected": None, "kept": None,
-                            "ran": set(), "worker_lists": [], "bad": False}
+                            "ran": set(), "worker_lists": [], "bad": False, "start": None, "seconds": {}}
 
 
 @pytest.hookimpl(trylast=True)
@@ -86,6 +87,7 @@ def pytest_runtest_logreport(report):
     st = _state(config)
     if st is not None:
         st["ran"].add(report.nodeid)
+        st["seconds"][report.nodeid] = st["seconds"].get(report.nodeid, 0.0) + report.duration
 
 
 _CONFIG: dict = {}
@@ -94,6 +96,9 @@ _CONFIG: dict = {}
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session):
     _CONFIG["config"] = session.config
+    st = _state(session.config)
+    if st is not None:
+        st["start"] = time.monotonic()
 
 
 @pytest.hookimpl(optionalhook=True)
@@ -126,5 +131,9 @@ def pytest_sessionfinish(session, exitstatus):
             collected = first
     if st["path"] is not None:
         data = {"shard": st["index"], "total": st["total"], "collected": collected, "ran": sorted(st["ran"])}
+        if st["start"] is not None:
+            slowest = sorted(((round(v, 2), k) for k, v in st["seconds"].items()), key=lambda t: (-t[0], t[1]))[:15]
+            data["wall_s"] = round(time.monotonic() - st["start"], 2)
+            data["slowest"] = [{"id": k, "s": v} for v, k in slowest]
         st["path"].parent.mkdir(parents=True, exist_ok=True)
         st["path"].write_text(json.dumps(data), encoding="utf-8")

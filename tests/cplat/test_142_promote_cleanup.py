@@ -43,6 +43,7 @@ def test_a_stale_local_branch_of_a_merged_pr_is_replaced(clone):
 
 def test_a_failed_pr_leaves_the_clone_on_main_with_nothing_changed(clone, monkeypatch):
     monkeypatch.setenv("GH_FAIL", "1")
+    monkeypatch.setattr(core, "sleep", lambda seconds: None)   # spec 185: the PR retry waits (5 s, 15 s) are not slept
     (clone / "applications/shop/system.yaml").write_text("pin: sha-2\n")
     (clone / "applications/shop/new-overlay.yaml").write_text("x: 1\n")
     with pytest.raises(core.PlatformError) as e:

@@ -106,3 +106,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [105](105-an-image-is-tagged-only-after-every-gate-passed.md) | Component CI builds and pushes images by digest alongside the gates; tags and the dev pin follow only after every gate passed |
 | [106](106-a-release-reuses-the-green-ci-run-of-its-commit.md) | /component:release skips its local gates when main's ci run on the tagged commit passed every gate within 7 days |
 | [107](107-explore-hands-its-decisions-to-the-spec-inline.md) | Exploration is read-only and person-started, and hands its decisions to the spec inline as behaviour, constraint or hint. |
+| [108](108-test-time-is-bounded.md) | The cplat suite stops a test after 120 s or when its real sleeps pass 1 s, and cplat quiet test-fast gives up after 9 min in every shape, naming the tests still running |

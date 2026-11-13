@@ -1,7 +1,7 @@
 ---
 spec_id: 185-a-hung-test-fails-fast-and-names-itself
 title: A hung test fails fast and names itself
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -71,3 +71,5 @@ None.
 
 - 2026-11-12 created
 - 2026-11-12 approved
+- 2026-11-12 building
+- 2026-11-12 done

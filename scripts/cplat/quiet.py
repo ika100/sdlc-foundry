@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -109,8 +110,24 @@ def main(argv: list[str]) -> int:
         return quiet_repeat.run(cwd, repeat, targs, raw=raw, on=on)
     cmd = ["devbox", "run", script] + (["--", *targs] if targs else [])
     log = _log_path(cwd, script)
-    with log.open("wb") as fh:
-        rc = subprocess.run(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT, env=repo_env()).returncode
+    if script == "test-fast":
+        import quiet_limit
+        add, progress = quiet_limit.progress_env(log)
+        deadline = time.monotonic() + quiet_limit.GIVE_UP_SECONDS
+        with log.open("wb") as fh:
+            proc = quiet_limit.start(quiet_limit.with_env(cmd, add), cwd=cwd, out=fh, env=repo_env(add))
+            try:
+                code = quiet_limit.wait_until(proc, deadline)
+            finally:
+                if proc.poll() is None:
+                    quiet_limit.stop(proc)
+        if code is None:
+            print("\n".join(quiet_limit.gave_up_lines(script, log, progress)))
+            return 124
+        rc = code
+    else:
+        with log.open("wb") as fh:
+            rc = subprocess.run(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT, env=repo_env()).returncode
     lines = log.read_text(errors="replace").splitlines()
     nonempty = [ln for ln in lines if ln.strip()]
     if rc == 0:

@@ -567,7 +567,7 @@ def test_ci_checks_shard_coverage_in_every_run_ac_112_10():  # AC-112.10
     assert down["with"]["pattern"] == "cplat-shard-*"
     assert down["with"]["merge-multiple"] is True
     assert down["with"]["path"] == "shards"
-    assert "python3 scripts/check-shards.py shards/*.json" in steps_text(job)
+    assert "python3 scripts/check-shards.py --timing-out suite-time.json shards/*.json" in steps_text(job)   # AC-185.7 adds the timing file
 
 
 def test_ci_success_needs_every_shard_result_ac_112_14():  # AC-112.14

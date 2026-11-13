@@ -33,10 +33,11 @@ def requirement_lines(path) -> list[str]:
 # ---------------- AC-127.4 ----------------
 
 def test_requirements_test_in_lists_the_four_top_level_packages_unpinned_ac_127_4():  # AC-127.4
+    # Spec 185 (AC-185.2) replaces AC-127.4: the file lists the four packages of spec 127 and pytest-timeout.
     p = ROOT / "requirements-test.in"
     assert p.is_file(), "requirements-test.in is missing"
     lines = [ln.strip() for ln in p.read_text().splitlines() if ln.strip() and not ln.strip().startswith("#")]
-    assert sorted(lines) == sorted(PACKAGES), lines
+    assert sorted(lines) == sorted([*PACKAGES, "pytest-timeout"]), lines
 
 
 def test_requirements_test_txt_is_uv_compiled_from_the_in_file_ac_127_4():  # AC-127.4

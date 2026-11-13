@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Spec 112: check the shard reports of one run. Every collected test must have run in exactly one shard.
 
-Usage: check-shards.py REPORT...   (exit 0 OK, 1 findings, 2 unreadable input)
+Usage: check-shards.py [--timing-out PATH] REPORT...   (exit 0 OK, 1 findings, 2 unreadable input)
 """
 import json
+import os
 import sys
 
 
@@ -17,6 +18,13 @@ def load(path: str) -> dict:
           and isinstance(data.get("ran"), list) and all(isinstance(x, str) for x in data["ran"])
           and (data.get("collected") is None
                or (isinstance(data["collected"], list) and all(isinstance(x, str) for x in data["collected"]))))
+    if ok and "wall_s" in data:
+        ok = isinstance(data["wall_s"], (int, float)) and not isinstance(data["wall_s"], bool)
+    if ok and "slowest" in data:
+        sl = data["slowest"]
+        ok = isinstance(sl, list) and all(
+            isinstance(t, dict) and isinstance(t.get("id"), str) and isinstance(t.get("s"), (int, float))
+            and not isinstance(t["s"], bool) for t in sl)
     if not ok:
         raise SystemExit(_bad(path, "not a shard report"))
     return data
@@ -28,7 +36,33 @@ def _bad(path: str, why: str) -> int:
     return 2
 
 
+def _timing(reports: list[dict], timing_out: str | None) -> None:
+    missing = sorted(r["shard"] for r in reports if "wall_s" not in r or "slowest" not in r)
+    if len(missing) == len(reports):
+        return
+    if missing:
+        print(f"suite time: not available: shard {missing[0]} has no timing")
+        return
+    walls = {r["shard"]: r["wall_s"] for r in reports}
+    suite = round(sum(walls.values()), 1)
+    slowest_shard = round(max(walls.values()), 1)
+    tests = sorted((t for r in reports for t in r["slowest"]), key=lambda t: (-t["s"], t["id"]))[:15]
+    print(f"suite time: {suite:.1f} s over {len(reports)} shards (slowest shard {slowest_shard:.1f} s)")
+    print("slowest tests:")
+    for t in tests:
+        print(f"  {t['s']:.1f} s  {t['id']}")
+    if timing_out:
+        doc = {"schema": 1, "suite_s": suite, "slowest_shard_s": slowest_shard,
+               "shards": {str(k): v for k, v in sorted(walls.items())}, "slowest": tests,
+               "sha": os.environ.get("GITHUB_SHA"), "run_id": os.environ.get("GITHUB_RUN_ID")}
+        with open(timing_out, "w", encoding="utf-8") as fh:
+            json.dump(doc, fh)
+
+
 def main(argv: list[str]) -> int:
+    timing_out = None
+    if argv[:1] == ["--timing-out"] and len(argv) >= 2:
+        timing_out, argv = argv[1], argv[2:]
     if not argv:
         print("usage: check-shards.py REPORT...")
         print("usage: check-shards.py REPORT...", file=sys.stderr)
@@ -73,8 +107,10 @@ def main(argv: list[str]) -> int:
         for line in findings:
             print(line)
         print(f"ERROR: {len(findings)} finding(s)")
+        _timing(reports, timing_out)
         return 1
     print(f"OK: {len(collected)} tests ran in exactly one of {total} shards")
+    _timing(reports, timing_out)
     return 0
 
 

@@ -26,7 +26,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | approved | 10 |  |
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
 | [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | approved | 11 |  |
-| [185-a-hung-test-fails-fast-and-names-itself](specs/185-a-hung-test-fails-fast-and-names-itself/spec.md) — A hung test fails fast and names itself | P1 | approved | 8 |  |
 | [188-explore-a-feature-before-its-spec-is](specs/188-explore-a-feature-before-its-spec-is/spec.md) — Explore a feature before its spec is written | P1 | building | 12 | #662 |
 | [189-the-web-image-has-no-known-critical-cve](specs/189-the-web-image-has-no-known-critical-cve/spec.md) — The web image has no known critical CVE and the platform scans template images | P1 | approved | 7 | #682 |
 | [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | approved | 7 | #688 |
@@ -177,6 +176,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [182-logs-reach-loki](specs/182-logs-reach-loki/spec.md) — Logs reach Loki | P1 | done | 6 | #657 |
 | [183-shared-numbers-and-indexes-come-from](specs/183-shared-numbers-and-indexes-come-from/spec.md) — Shared numbers and indexes come from cplat | P1 | done | 8 | #659, #660, #477, #577 |
 | [184-parallel-ships-do-not-stop-each-other](specs/184-parallel-ships-do-not-stop-each-other/spec.md) — Parallel ships do not stop each other | P1 | done | 10 | #663, #666, #670, #671 |
+| [185-a-hung-test-fails-fast-and-names-itself](specs/185-a-hung-test-fails-fast-and-names-itself/spec.md) — A hung test fails fast and names itself | P1 | done | 8 |  |
 | [186-the-journey-waits-less](specs/186-the-journey-waits-less/spec.md) — The journey waits less | P1 | done | 11 | #681, #684 |
 | [187-settings-agents-edited-by-hand-have-a](specs/187-settings-agents-edited-by-hand-have-a/spec.md) — Settings agents edited by hand have a command | P1 | done | 8 |  |
 | [194-a-system-ship-wait-returns-before-the](specs/194-a-system-ship-wait-returns-before-the/spec.md) — A system ship wait returns before the Bash limit | P1 | done | 4 |  |
