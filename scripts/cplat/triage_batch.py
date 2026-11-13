@@ -137,7 +137,7 @@ def save(batch: dict) -> Path:
 def load(slug: str, max_age: int = MAX_AGE, now: datetime | None = None) -> dict:
     """The saved batch of the repo; a missing or old one is refused."""
     target = path(slug)
-    hint = "run `cplat issue triage batch` again"
+    hint = "run cplat issue triage batch again"
     if not target.is_file():
         raise PlatformError("no triage batch saved", hint=hint)
     batch = json.loads(target.read_text())

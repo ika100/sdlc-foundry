@@ -58,6 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     ba = sub.add_parser("batch", help="every queued issue with its facts, read in one request and saved for the next steps")
     ba.add_argument("--new", action="store_true", help="also issues that carry none of the triage labels")
     ba.add_argument("--json", action="store_true")
+    ov = sub.add_parser("overview", help="the grouped overview and the question pages of the proposals, from the saved batch")
+    ov.add_argument("--proposals", required=True, metavar="FILE")
+    ov.add_argument("--json", action="store_true")
+    co = sub.add_parser("confirm", help="the plan of the proposals, one line per action; --show N prints the exact labels and comment")
+    co.add_argument("--proposals", required=True, metavar="FILE")
+    co.add_argument("--show", type=int, metavar="N")
+    co.add_argument("--json", action="store_true")
     sh = sub.add_parser("show", help="one issue with its comments, redacted and fenced as untrusted text")
     sh.add_argument("number", type=int)
     sh.add_argument("--json", action="store_true")
@@ -157,8 +164,16 @@ def show(ns: argparse.Namespace) -> dict:
     }
 
 
+def _rargs(repo: str | None) -> list[str]:
+    return ["-R", repo] if repo else []
+
+
+def _repo_labels(repo: str | None) -> set[str]:
+    return {x["name"] for x in json.loads(gh(["label", "list", *_rargs(repo), "--limit", "200", "--json", "name"]) or "[]")}
+
+
 def repo_labels(ns: argparse.Namespace) -> set[str]:
-    return {x["name"] for x in json.loads(gh(["label", "list", *_repo_args(ns), "--limit", "200", "--json", "name"]) or "[]")}
+    return _repo_labels(ns.repo)
 
 
 def setup_labels(ns: argparse.Namespace) -> Report:
@@ -175,40 +190,45 @@ def setup_labels(ns: argparse.Namespace) -> Report:
 
 
 def apply(ns: argparse.Namespace) -> Report:
-    unknown = [x for x in ns.add + ns.remove if x not in LABELS]
-    if unknown:
-        raise PlatformError(f"unknown label(s): {', '.join(unknown)}", hint="allowed: " + ", ".join(LABELS))
     comment = ""
     if ns.comment_file:
         comment = (sys.stdin.read() if ns.comment_file == "-" else Path(ns.comment_file).read_text()).strip()
         if not comment:
             raise PlatformError("the comment is empty")
-    if not (ns.add or ns.remove or comment):
+    return apply_one(ns.repo, ns.number, ns.add, ns.remove, comment, ns.dry_run)
+
+
+def apply_one(repo: str | None, number: int, want_add: list[str], want_remove: list[str], comment: str, dry_run: bool) -> Report:
+    """Labels and a comment on one issue, only real changes. `repo` None = the repo of the current directory."""
+    unknown = [x for x in want_add + want_remove if x not in LABELS]
+    if unknown:
+        raise PlatformError(f"unknown label(s): {', '.join(unknown)}", hint="allowed: " + ", ".join(LABELS))
+    if not (want_add or want_remove or comment):
         raise PlatformError("nothing to do", hint="pass --add/--remove LABEL and/or --comment-file FILE")
-    r = Report(title=f"triage #{ns.number}" + ("  (dry run)" if ns.dry_run else ""))
+    r = Report(title=f"triage #{number}" + ("  (dry run)" if dry_run else ""))
     # Only real changes: gh fails on removing a label the repo lacks, and the undo must not add back what was never there.
-    add, remove = ns.add, ns.remove
+    add, remove = want_add, want_remove
     if add or remove:
-        have = _labels(json.loads(gh(["issue", "view", str(ns.number), *_repo_args(ns), "--json", "labels"]) or "{}") or {})
+        have = _labels(json.loads(gh(["issue", "view", str(number), *_rargs(repo), "--json", "labels"]) or "{}") or {})
         add, remove = [x for x in add if x not in have], [x for x in remove if x in have]
-        missing = sorted(set(add) - repo_labels(ns))
+        missing = sorted(set(add) - _repo_labels(repo))
         if missing:
             raise PlatformError(f"label(s) missing in the repo: {', '.join(missing)}", hint="run `cplat issue triage setup-labels` first")
-        unchanged = [f"+{x}" for x in ns.add if x not in add] + [f"-{x}" for x in ns.remove if x not in remove]
+        unchanged = [f"+{x}" for x in want_add if x not in add] + [f"-{x}" for x in want_remove if x not in remove]
         if unchanged:
-            (r.will_do if ns.dry_run else r.did).append("labels already as asked: " + ", ".join(unchanged))
+            (r.will_do if dry_run else r.did).append("labels already as asked: " + ", ".join(unchanged))
     steps = []
     if add or remove:
         steps.append(("labels", "[outward] labels: " + ", ".join([f"+{x}" for x in add] + [f"-{x}" for x in remove])))
     if comment:
         steps.append(("comment", f"[outward] comment ({len(comment)} characters)"))
-    if ns.dry_run:
+    if dry_run:
         r.will_do += [s for _, s in steps]
         if comment:
             r.will_do.append("comment text:\n" + comment)
         return r
     if add or remove:
-        args = ["issue", "edit", str(ns.number), *_repo_args(ns)]
+        args = ["issue", "edit", str(number), *_rargs(repo)]
         for x in add:
             args += ["--add-label", x]
         for x in remove:
@@ -216,10 +236,10 @@ def apply(ns: argparse.Namespace) -> Report:
         gh(args)
         r.did.append(steps[0][1].replace("[outward] ", ""))
     if comment:
-        gh(["issue", "comment", str(ns.number), *_repo_args(ns), "--body", comment])
+        gh(["issue", "comment", str(number), *_rargs(repo), "--body", comment])
         r.did.append("posted the comment")
     if add or remove:
-        r.undo.append(f"gh issue edit {ns.number} " + " ".join([f"--remove-label {x}" for x in add] + [f"--add-label {x}" for x in remove]))
+        r.undo.append(f"gh issue edit {number} " + " ".join([f"--remove-label {x}" for x in add] + [f"--add-label {x}" for x in remove]))
     if comment:
         r.undo.append("delete the comment in the browser (issue comments cannot be removed with gh)")
     return r
@@ -236,6 +256,10 @@ def main(argv: list[str]) -> int:
                 hint = (i["handled"] or {}).get("line") or (i["engine"] or {}).get("class") or ""
                 print(f"#{i['number']}  {i['title']}  ({i['role']}{', ' + hint if hint else ''})")
             print(f"batch: {data['batch_file']}")
+        return 0
+    if ns.action in ("overview", "confirm"):
+        import triage_view
+        print(triage_view.run(_slug(ns), ns.proposals, show_number=getattr(ns, "show", None), as_json=ns.json, what=ns.action))
         return 0
     if ns.action == "list":
         fields = "number,title,body,labels,author,createdAt" + (",comments" if ns.waiting else "")

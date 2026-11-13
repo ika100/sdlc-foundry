@@ -31,6 +31,7 @@ tasks:
     covers: [AC-176.2, AC-176.3, AC-176.8]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t4
     title: act applies confirmed rows with the hand-over summary; publish-specs opens one docs PR
     files: [scripts/cplat/triage_act.py, scripts/cplat/triage.py]
