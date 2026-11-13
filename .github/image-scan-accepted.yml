@@ -7,6 +7,24 @@
 #     reason: "zlib1g in distroless debian12, Debian: won't fix; follow-up issue to be opened"
 #     added: 2026-11-13
 #     review_by: 2027-02-10
-#
-# Empty at the start: no local trivy run was available, so the first `scan <template>` CI logs name the findings.
-findings: []
+findings:
+  - template: service-java
+    cve: CVE-2023-45853
+    reason: "zlib1g in the distroless debian12 base: Debian will not fix it; accepted for service images by the 2026-11-12 decision of spec 189"
+    added: 2026-11-13
+    review_by: 2027-02-10
+  - template: service-java
+    cve: CVE-2026-111497
+    reason: "libbrotli1 is fixed in Debian (1.0.9-2+deb12u1) but not yet in the distroless base image; revisit with the base-image refresh"
+    added: 2026-11-13
+    review_by: 2026-12-13
+  - template: service-java
+    cve: CVE-2026-47884
+    reason: "spring-webmvc 6.2.19 is fixed only in Spring Framework 7 / Spring Boot 4; revisit with the Spring Boot 4 upgrade"
+    added: 2026-11-13
+    review_by: 2026-12-13
+  - template: service-java
+    cve: CVE-2026-47890
+    reason: "spring-webmvc 6.2.19 is fixed only in Spring Framework 7 / Spring Boot 4; revisit with the Spring Boot 4 upgrade"
+    added: 2026-11-13
+    review_by: 2026-12-13
