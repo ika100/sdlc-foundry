@@ -133,6 +133,65 @@ def test_a_newer_done_run_clears_the_escalation_ac_122_4(world, capsys):  # AC-1
     assert items(needs_json(world, capsys), "escalation") == []
 
 
+def _escalate(spec=SPEC_ID, **fields):
+    rid = runs.start("ship", repo="acme/shop-api", spec=spec)
+    runs.phase(rid, "build")
+    runs.finish(rid, "escalated", escalation={"reason": "stuck", "cause": "code"}, fields=fields or None)
+    return rid
+
+
+def test_an_escalation_of_a_spec_that_is_done_is_not_a_need(world, capsys):
+    _escalate()
+    world.gh.specs["acme/shop-api"] = {SPEC_ID: SPEC.format(status="done", questions="None.")}
+    assert items(needs_json(world, capsys), "escalation") == []
+
+
+def test_an_escalation_of_a_spec_that_is_not_done_stays(world, capsys):
+    rid = _escalate()
+    world.gh.specs["acme/shop-api"] = {SPEC_ID: SPEC.format(status="approved", questions="None.")}
+    [i] = items(needs_json(world, capsys), "escalation")
+    assert i["object"]["run_id"] == rid
+
+
+def test_an_escalation_with_a_merged_feature_pull_request_is_not_a_need(world, capsys):
+    _escalate()
+    plain = world.gh
+
+    def merged(args):
+        if args[:2] == ["pr", "list"] and "--head" in args and "--state" in args:
+            assert args[args.index("--head") + 1] == f"feature/{SPEC_ID}" and args[args.index("--state") + 1] == "merged"
+            return json.dumps([{"state": "MERGED"}])
+        return plain(args)
+
+    world.monkeypatch.setattr("needs.gh", merged)
+    assert items(needs_json(world, capsys), "escalation") == []
+
+
+def test_an_escalation_whose_own_pull_request_is_merged_is_not_a_need(world, capsys):
+    _escalate(pr={"repo": "acme/shop-api", "number": 41, "url": "https://github.com/acme/shop-api/pull/41"})
+    plain = world.gh
+
+    def merged(args):
+        return json.dumps({"state": "MERGED"}) if args[:3] == ["pr", "view", "41"] else plain(args)
+
+    world.monkeypatch.setattr("needs.gh", merged)
+    assert items(needs_json(world, capsys), "escalation") == []
+
+
+def test_an_escalation_stays_when_github_cannot_say_whether_it_is_finished(world, capsys):
+    rid = _escalate()
+    plain = world.gh
+
+    def failing(args):
+        if args[:2] == ["pr", "list"] or "contents/docs/specs/" in " ".join(args):
+            raise RuntimeError("gh: network unreachable")
+        return plain(args)
+
+    world.monkeypatch.setattr("needs.gh", failing)
+    [i] = items(needs_json(world, capsys), "escalation")
+    assert i["object"]["run_id"] == rid
+
+
 def test_a_release_verified_in_staging_and_not_in_prod_is_a_promote_item_ac_122_4(world, capsys):  # AC-122.4
     world.monkeypatch.setattr(world.status, "collect", lambda *a, **k: status_rows(staging="verified"))
     [i] = items(needs_json(world, capsys), "promote")
