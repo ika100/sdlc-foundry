@@ -391,6 +391,21 @@ def replan(run_id: str | None, repo: Path, task: str, *, model_id: str | None = 
     _guard(run_id, go)
 
 
+def task_merge(run_id: str | None, repo: Path, task: str, into: str, reason: str) -> None:
+    """Spec 186: `cplat plan merge` folded `task` into `into`. Never raises."""
+    if not _live(run_id):
+        return
+
+    def go() -> None:
+        tid, target, why = _text(task, "task"), _text(into, "task"), _text(reason, "reason")
+        ident = identity(repo, "architect", None)
+
+        def fn(rec: dict) -> None:
+            _event(rec, _entry(rec, ident), "task-merge", {"task": tid, "into": target, "reason": why})
+        _change(run_id, fn)
+    _guard(run_id, go)
+
+
 def fix_round(run_id: str | None, repo: Path, cause: str, *, task: str | None = None) -> None:
     if not _live(run_id):
         return

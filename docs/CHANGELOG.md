@@ -6,6 +6,24 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.20.0] - 2026-11-12
+
+### Added
+
+**Backups and the observability UI are set by command, not by editing `system.yaml` (#187).** `/resource:backup <db> --env <env> --to <bucket> [--schedule <cron>] [--retention <n>d|<n>w] [--off]` sets a database's scheduled backup in one PR (without an option it still takes one backup now), and `/system:set --env <env> --observability lgtm|none|off` sets the environment's observability block; `/resource:add` points to both. Update the plugins (`/plugin marketplace update`).
+
+**`/component:explore` and `/system:explore` let you decide a feature in conversation before its spec is written (#662).** Both commands are read-only: they read the code, specs and issues, ask about behaviour and constraints one point at a time and end in a DECIDED block that `/component:spec` or `/system:spec` takes as its starting point. `/issue:triage` has a new route, "needs exploring", for issues too open to spec. The weekly `/platform:retro` shows explored specs next to the others since this release. Update the plugins (`/plugin marketplace update`).
+
+### Changed
+
+**A journey waits less: a system ship answers escalations while other repos run, a task pair that needs each other is merged instead of escalated, and the release reuses the CI run (#186).** `cplat system ship next` returns the new action `answer` for an escalated repo even while others run; the system ship resumes a `decision` escalation that has a suggested answer with `cplat system ship repo resume <repo> --answer '<text>'` and holds every other one with `cplat system ship repo hold <repo>`, so running repos finish, nothing that depends on the held repo starts, and the run ends escalated with the repo table once nothing can go on. When a build task's checks fail only because a later task that depends on it has not landed, the session runs `cplat plan merge <task> <later task> --reason '<why>'` and goes on, and the architect plans such a pair as one task. `/component:release` runs `cplat component release gates --commit <sha>` and prints `gates: reused CI run <url> on <short sha>` when `main`'s `ci` run on that commit passed within 7 days, else `gates: run locally (<reason>)`; for this, component CI in the service-python, service-java, service-go and web-nextjs templates builds the image alongside the gates and tags it only after every gate passed. The local Argo CD scripts of the gitops-app and cluster-gitops templates poll git every 30 s, and restore and discard ask Argo CD for one refresh. Update the plugins (`/plugin marketplace update`) and run `/platform:update` in your repos to get the template changes.
+
+### Fixed
+
+**A land session no longer calls a running check stuck by misreading time zones (#673).** When `cplat pr wait` and `cplat component ship land` ended with checks still pending, the session was left to judge from raw timestamps, and spec 179's land session mixed local time with UTC and escalated an e2e job that had run for 17 minutes. The message now names each pending check with how long it has run (from the API's `startedAt`, in UTC), and its hint says a running check is not stuck, because cplat itself reruns runs whose jobs only queue.
+
+**A killed run's idle time no longer counts against the `minutes` budget on resume (#676).** When a ship run ended without writing a stop (its process was ended on purpose), the resume carried its minutes up to the resume, so an idle night used the whole budget and `cplat headless` stopped at once with `budget exhausted: minutes`. The ledger now records each root's last sign of life, and the resume carries the minutes only up to it.
+
 ## [5.19.0] - 2026-11-12
 
 ### Changed

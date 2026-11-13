@@ -265,6 +265,8 @@ def _read(path: Path) -> dict | None:
 
 
 def _write(path: Path, data: dict) -> None:
+    if data.get("current"):
+        data["current"]["seen_at"] = _iso(runs.utcnow())     # the last sign of life of a root that may never close
     runs._atomic_write(path, json.dumps(data, indent=1) + "\n")
 
 
@@ -333,12 +335,19 @@ def add_pause(run_id: str | None, minutes: float) -> None:
 
 
 def _fold_previous(data: dict, now: str) -> None:
-    """A continued ledger whose last root never closed: its minutes up to the stop (not the idle time since) and counters carry over."""
+    """A continued ledger whose last root never closed: its minutes up to the stop, or without one up to its last activity
+    (never the idle time since), and counters carry over."""
     prev = data.get("current")
     if not prev:
         return
     start = _when(prev.get("started_at"))
-    end = _when((data.get("stop") or {}).get("at")) or _when(now)
+    end = _when((data.get("stop") or {}).get("at"))
+    if end is None:
+        seen = [_when(prev.get("seen_at"))]
+        for p in (runs.active(prev.get("run_id")) or {}).get("phases") or []:
+            seen += [_when(p.get("started_at")), _when(p.get("ended_at"))]
+        seen = [w for w in seen if w]
+        end = max(seen) if seen else _when(now)
     c = data["carried"]
     if start and end:
         span = (end - start).total_seconds() / 60 - (prev.get("paused_minutes") or 0)

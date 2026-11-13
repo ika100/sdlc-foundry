@@ -1,5 +1,5 @@
 ---
-description: "Take an on-demand backup of a database now. Usage: /resource:backup <db> --env <env>"
+description: "Set a database's scheduled backup or take one now. Usage: /resource:backup <db> --env <env> [--to <bucket>] [--schedule <cron>] [--retention <n>d|<n>w] [--off]"
 ---
 
 Run in the gitops-app repo. **Request:** $ARGUMENTS
@@ -10,8 +10,8 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 cplat resource backup <ARGS>
 ```
 
-1. **Run** it and relay the output verbatim; errors carry a `fix:` line. It reads the cluster of `<env>` and creates one backup of the database; it changes nothing in git.
-2. **Say** that the scheduled backups and the continuous archiving come from `backup:` on the database instance in `system.yaml`; this command adds one backup now. Check it with `/system:status`.
+1. **Setting option** (`--to`, `--schedule`, `--retention` or `--off`): preview with `--dry-run` and show it verbatim, then run with `--pr` (one PR); do not ask again, because the user asked for it.
+2. **No option**: run it and relay the output verbatim. It creates one backup now from the cluster of `<env>` and changes nothing in git. Check backups with `/system:status`.
 
 Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
 

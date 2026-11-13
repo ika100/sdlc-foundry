@@ -46,7 +46,10 @@ def base_total():
 
 def rules_pass_and_size_holds():
     assert cplat.main(["platform", "rules", "check", "--repo", str(ROOT)]) == 0
-    assert promptrules.prompt_bytes(ROOT) <= base_total()
+    # a gated `rules rebaseline` (spec 168, ADR-103) is the one way the prompts may grow on a branch
+    import yaml
+    raised = yaml.safe_load((ROOT / "docs/rules/register.yml").read_text())["baseline"]["prompt_bytes"]
+    assert promptrules.prompt_bytes(ROOT) <= max(base_total(), raised)
 
 
 def test_architect_and_plan_use_cplat_adr_add_ac_183_4():  # AC-183.4

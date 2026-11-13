@@ -14,7 +14,9 @@ Run in the gitops-app repo (`--repo DIR`, default `.`). State: <git dir>/cplat-a
                                                            `/component:ship` session (spec 155)
   cplat system ship repo result <id>                       read the clone's finished ship, evaluate the gate (exit 1: escalated)
   cplat system ship repo escalate <id> <reason> --cause C  a repo that escalated before its ship existed (open questions)
-  cplat system ship entry apply <id>                       the plan's gitops operations in the entry worktree, a commit each, validate
+  cplat system ship repo resume <id> --answer TEXT         spec 186: the escalated repo's ship again in its own session, with your answer
+  cplat system ship repo hold <id>                         spec 186: keep the escalated repo for the user; the run escalates once nothing runs
+  cplat system ship entry apply <id>                    the plan's gitops operations in the entry worktree, a commit each, validate
   cplat system ship entry pr <id> --title T [--body-file F]  push the entry's branch and open (or reuse) its PR
                                                            (no file: a body from the plan's gitops operations)
   cplat system ship entry land <id> [--timeout S]          wait for all checks, merge through the merge slot
@@ -339,10 +341,16 @@ def show_next(action: dict, as_json: bool) -> None:
     if as_json:
         print(json.dumps(action, indent=2))
         return
-    say([f"action: {action['action']}"] + [f"start {s['id']} ({s['shape']}) in {s['clone']}" for s in action["start"]]
+    ans = action.get("answer")
+    answer_lines = []
+    if ans:
+        answer_lines = [f"answer {ans['id']} (cause {ans['cause']}): {ans['reason']}"] + [
+            f"  question: {q['text']}" + (f" (suggested: {q['suggested']})" if q.get("suggested") else "")
+            for q in ans["questions"]]
+    say([f"action: {action['action']}"] + answer_lines + [f"start {s['id']} ({s['shape']}) in {s['clone']}" for s in action["start"]]
         + [f"running {i}" for i in action["running"]] + [f"blocked {b['id']} (waits for {', '.join(b['waits_for'])})"
                                                            for b in action["blocked"]]
-        + [f"escalated {i}" for i in action["escalated"]])
+        + [f"escalated {i}" for i in action["escalated"]] + [f"held {i}" for i in action.get("held") or []])
 
 
 def _next_wait(repo: Path, ns: argparse.Namespace) -> int:
@@ -392,6 +400,12 @@ def main(argv: list[str]) -> int:
     p.add_argument("id")
     p.add_argument("reason")
     p.add_argument("--cause", default=None)
+    p.add_argument("--question", action="append", default=None)
+    p = r.add_parser("resume")
+    p.add_argument("id")
+    p.add_argument("--answer", required=True)
+    p = r.add_parser("hold")
+    p.add_argument("id")
     e = sub.add_parser("entry").add_subparsers(dest="ecmd", required=True)
     p = e.add_parser("apply", help="apply the plan's gitops operations in the entry worktree, one commit each, and validate")
     p.add_argument("id")
@@ -462,8 +476,15 @@ def main(argv: list[str]) -> int:
                 print(f"{ns.id}: ship session started (pid {proc['pid']}, log {proc['log']}); next: cplat system ship next --wait")
             return 0
         if ns.rcmd == "escalate":
-            appship_sched.escalate_repo(repo, ns.id, ns.reason, ns.cause)
+            appship_sched.escalate_repo(repo, ns.id, ns.reason, ns.cause, ns.question)
             print(f"{ns.id}: escalated ({ns.reason})")
+            return 0
+        if ns.rcmd == "hold":
+            print(appship_sched.hold_repo(repo, ns.id))
+            return 0
+        if ns.rcmd == "resume":
+            proc = appship_sched.resume_repo(repo, ns.id, ns.answer)
+            print(f"{ns.id}: resumed with your answer (pid {proc['pid']}, log {proc['log']}); next: cplat system ship next --wait")
             return 0
         st = state.require_state(repo)
         ok, lines = appship_sched.result(repo, ns.id, st.get("context"))

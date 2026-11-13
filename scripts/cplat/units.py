@@ -222,6 +222,14 @@ def _done_in(sp: specmod.Spec | None, task: str) -> bool:
     return any(str(t["id"]) == task and t.get("done") is True for t in _plan_tasks(sp))
 
 
+def _finished(sp: specmod.Spec | None, task: str) -> bool:
+    """Done in the committed plan, or gone from it (merged into another task)."""
+    tasks = _plan_tasks(sp)
+    if not tasks:
+        return False
+    return _done_in(sp, task) or task not in {str(t["id"]) for t in tasks}
+
+
 def _verified(repo: Path, spec_id: str, head: str, sp: specmod.Spec | None) -> bool:
     if sp is None or sp.status != "done":
         return False
@@ -265,7 +273,7 @@ def _evaluate(repo: Path, command: str, spec_id: str, unit: str) -> tuple[str | 
                           "(the test review of build Phase 1)")
         return head, ""
     if tasks := tasks_of(unit):
-        open_ = [task for task in tasks if not _done_in(sp, task)]
+        open_ = [task for task in tasks if not _finished(sp, task)]
         if open_:
             return None, f"plan.md does not have `done: true` for {', '.join(open_)} in a commit"
         return head, ""
@@ -326,9 +334,8 @@ def _derive(repo: Path, spec_id: str, entries: dict[str, dict], head: str, sp: s
 
     if phase == "build":
         mark("plan")
-        done = {str(t["id"]) for t in _plan_tasks(sp) if t.get("done") is True}
         for unit in entries:
-            if tasks_of(unit) and set(tasks_of(unit)) <= done:
+            if tasks_of(unit) and all(_finished(sp, t) for t in tasks_of(unit)):
                 mark(unit)
     elif phase in SHIP_PHASES_AFTER_BUILD:
         for unit in entries:

@@ -20,6 +20,7 @@ import core
 import doctor
 import retro_github
 import retro_proposals
+import retro_explore
 import retro_report
 import retro_rules
 import retro_suite
@@ -86,12 +87,16 @@ def build_report(week: str) -> dict:
               "tracks": list(s.meta.get("tracks") or [])}
              for s in good if s.status.lower() not in ("done", "superseded")]
     rules = retro_rules.section(core.PLATFORM_ROOT, records, week=week, issues=lambda ns: tracker.issue_states(repo, ns))
+    until = retro_report.week_bounds(week)[1].date() - datetime.timedelta(days=1)
+    changelog = core.PLATFORM_ROOT / "docs" / "CHANGELOG.md"
+    explore = retro_explore.section(good, changelog.read_text(encoding="utf-8") if changelog.is_file() else "", until)
     try:
         suite_time = retro_suite.section(week, retro_suite.fetch(repo, window_start))
     except Exception as e:  # noqa: BLE001  (spec 185: missing timing data never fails the retro)
         suite_time = retro_suite.unavailable(str(e) or type(e).__name__)
     return retro_report.build(records, auto_issues=autos, open_issues=opens, specs=specs, week=week, store=slug,
-                              generated_at=_now(), malformed=malformed, rules_to_retire=rules, suite_time=suite_time)
+                              generated_at=_now(), malformed=malformed, rules_to_retire=rules, explore=explore,
+                              suite_time=suite_time)
 
 
 # ---------------- report ----------------

@@ -3,8 +3,14 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "55b0eb699ef73bcc3f3c8b13e214f3f675215c0e"
-  prompt_bytes: 345859
+  commit: "e4c0678d48993d666c892e91fbe1f56b156a01c4"
+  prompt_bytes: 355920
+  history:                       # newest last; written only by `cplat platform rules rebaseline`
+    - date: "2026-11-12"
+      old: 345859
+      new: 355920
+      reason: "explore commands (spec 188), person-only prompts"
+      benchmark_runs: [20261112T160725Z-5831cfbf, 20261112T160911Z-f6bbf07b]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff

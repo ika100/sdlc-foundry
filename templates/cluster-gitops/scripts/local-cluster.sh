@@ -673,6 +673,13 @@ YAML
       for d in argocd-repo-server argocd-applicationset-controller argocd-server; do
         k -n argocd rollout status "deploy/$d" --timeout=300s
       done
+      cur=$(k -n argocd get configmap argocd-cm -o jsonpath='{.data.timeout\.reconciliation}' 2>/dev/null || true)
+      if [ "$cur" != 30s ]; then
+        k -n argocd patch configmap argocd-cm --type merge -p '{"data":{"timeout.reconciliation":"30s"}}' >/dev/null
+        k -n argocd rollout restart statefulset/argocd-application-controller >/dev/null
+        k -n argocd rollout status statefulset/argocd-application-controller --timeout=300s
+      fi
+      echo "Argo CD polls git every 30s (timeout.reconciliation)"
 
       echo "Wiring credentials (GitHub org ${org})"
       # Argo reads this (private) GitOps repo with the token; services no longer need any repo access (ADR-017).
