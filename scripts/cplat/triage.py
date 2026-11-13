@@ -65,6 +65,14 @@ def build_parser() -> argparse.ArgumentParser:
     co.add_argument("--proposals", required=True, metavar="FILE")
     co.add_argument("--show", type=int, metavar="N")
     co.add_argument("--json", action="store_true")
+    ac = sub.add_parser("act", help="apply exactly the confirmed rows of the proposals and print the hand-over summary; never closes")
+    ac.add_argument("--proposals", required=True, metavar="FILE")
+    ac.add_argument("--rows", required=True, metavar="all|N,N", help="`all` or the issue numbers the user confirmed")
+    ac.add_argument("--dry-run", action="store_true")
+    ac.add_argument("--json", action="store_true")
+    ps = sub.add_parser("publish-specs", help="commit the new specs of the run on the docs/triage-<date> branch and open one draft PR")
+    ps.add_argument("specs", nargs="+", metavar="SPEC_ID")
+    ps.add_argument("--json", action="store_true")
     sh = sub.add_parser("show", help="one issue with its comments, redacted and fenced as untrusted text")
     sh.add_argument("number", type=int)
     sh.add_argument("--json", action="store_true")
@@ -260,6 +268,14 @@ def main(argv: list[str]) -> int:
     if ns.action in ("overview", "confirm"):
         import triage_view
         print(triage_view.run(_slug(ns), ns.proposals, show_number=getattr(ns, "show", None), as_json=ns.json, what=ns.action))
+        return 0
+    if ns.action == "act":
+        import triage_act
+        print(triage_act.run_act(_slug(ns), ns.proposals, ns.rows, ns.dry_run, ns.json))
+        return 0
+    if ns.action == "publish-specs":
+        import triage_act
+        print(triage_act.run_publish(_slug(ns), ns.specs, ns.json))
         return 0
     if ns.action == "list":
         fields = "number,title,body,labels,author,createdAt" + (",comments" if ns.waiting else "")
