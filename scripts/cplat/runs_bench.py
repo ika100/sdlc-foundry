@@ -284,14 +284,16 @@ def _run_headless(argv: list[str], rid: str | None, platform: Path | None = None
                 os.environ[k] = v
 
 
-def plugin_args(plugins: str, clone: Path) -> tuple[list[str], dict]:
-    """`--plugin-dir` args for the plugins the clone enables, and the record's `plugins` section (spec 100)."""
+def plugin_args(plugins: str, clone: Path, extra: list[str] | None = None) -> tuple[list[str], dict]:
+    """`--plugin-dir` args for the plugins the clone enables plus the task's own (`extra`, e.g. explore-stop needs component),
+    and the record's `plugins` section (spec 100)."""
     folder = Path(plugins).resolve()
     try:
         enabled = json.loads((clone / ".claude" / "settings.json").read_text()).get("enabledPlugins") or {}
     except (OSError, ValueError, AttributeError):
         enabled = {}
     names = [k.split("@")[0] for k, v in enabled.items() if v is True]
+    names += [n for n in extra or [] if n not in names]
     args: list[str] = []
     for name in names:
         manifest = folder / name / ".claude-plugin" / "plugin.json"
@@ -445,7 +447,10 @@ def main(argv: list[str]) -> int:
     except RuntimeError as e:
         raise PlatformError(f"sample repo {repo} could not be prepared: {e}") from None
 
-    plugin_flags, plugin_info = plugin_args(ns.plugins, clone) if ns.plugins else ([], None)
+    if task.get("plugins") and not ns.plugins:   # the sample does not enable them, so the installed set would lack the command
+        raise PlatformError(f"benchmark {ns.workflow} needs the plugins {', '.join(task['plugins'])}, which the sample repo does not enable",
+                            hint=f"cplat platform runs benchmark {ns.workflow} --plugins plugins")
+    plugin_flags, plugin_info = plugin_args(ns.plugins, clone, task.get("plugins")) if ns.plugins else ([], None)
     platform = Path(ns.plugins).resolve().parent if ns.plugins else None   # <checkout>/plugins → <checkout>
     model, _ = settings.coordinator_model(clone, steps(task)[0][1], ns.model)
     model_flags = ["--model", ns.model] if ns.model else []
