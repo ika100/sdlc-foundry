@@ -1,7 +1,7 @@
 ---
 spec_id: 196-triage-proposes-a-priority-the-user
 title: Triage proposes a priority the user confirms
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -72,3 +72,4 @@ Priority levels of an incoming issue, decided by the user on 2026-11-13; triage 
 - 2026-11-13 created
 - 2026-11-13 priority level definitions decided by the user (P0/P1/P2, P1 fallback); assumptions on P0 triggers and class fallbacks removed
 - 2026-11-13 amended: open question answered (`label:p0` first in the default dispatcher rules); new AC-196.9 replaces AC-167.5; non-goal on ordering narrowed
+- 2026-11-13 approved
