@@ -155,7 +155,7 @@ def test_no_progress_for_the_whole_call_keeps_the_timeout_lines_and_exit_2_ac_19
     lines = out + err
     first = next(ln for ln in lines if ln.startswith("TIMEOUT:"))
     assert rc == 2 and first == f"TIMEOUT: action still wait, no repo made progress for {T}s; running: shop-api (build)"
-    assert lines[lines.index(first) + 1].startswith("run the same")  # interface: cplat's second TIMEOUT line, found by its position
+    assert lines[lines.index(first) + 1].startswith("run the same")
     assert not any(ln.startswith("WAIT:") for ln in lines)
 
 
