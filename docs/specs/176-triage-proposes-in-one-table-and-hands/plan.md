@@ -38,6 +38,7 @@ tasks:
     covers: [AC-176.3, AC-176.4, AC-176.8, AC-176.15]
     parallel_safe: true
     depends_on: [t3]
+    done: true
   - id: t6
     title: /issue:triage runs the new flow; register, docs, ADR, versions, changelog
     files: [plugins/issue/commands/triage.md, docs/rules/plugins/issue/commands/triage.yml, plugins/issue/README.md, plugins/issue/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/dispatch.md, docs/adr/README.md, docs/changelog.d/176-triage-proposes-in-one-table.changed.md]
