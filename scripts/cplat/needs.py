@@ -184,11 +184,44 @@ def _issue_of(r: dict) -> dict | None:
     return issue if isinstance(issue, dict) and (r.get("engine") or r.get("kind") == "dispatch") and issue.get("number") else None
 
 
+def _finished(r: dict, issue: dict | None, cache: dict) -> bool:
+    """True when the work of an escalated run is already finished: its issue is closed, its spec is `done`, or its
+    `feature/<spec>` pull request or the run's own is merged. A GitHub failure counts as not finished (the item stays)."""
+    repo, spec_id, pr = r.get("repo"), r.get("spec"), r.get("pr") or {}
+    if not repo:
+        return False
+
+    def ask(key: tuple, check) -> bool:
+        if key not in cache:
+            try:
+                cache[key] = bool(check())
+            except Exception:  # noqa: BLE001
+                cache[key] = False
+        return cache[key]
+
+    def merged(call: list[str]) -> bool:
+        found = _json(call) or []
+        return any(str(p.get("state") or "").upper() == "MERGED" for p in (found if isinstance(found, list) else [found]))
+
+    if issue:
+        slug = issue.get("repo") or repo
+        return ask(("issue", slug, issue["number"]),
+                   lambda: (_json(["issue", "view", str(issue["number"]), "-R", slug, "--json", "state"]) or {}).get("state") == "CLOSED")
+    if spec_id and ask(("spec", repo, spec_id), lambda: getattr(_parse(spec_id, _spec_text(repo, spec_id) or ""), "status", None) == "done"):
+        return True
+    if spec_id and ask(("branch", repo, spec_id), lambda: merged(["pr", "list", "-R", repo, "--head", f"feature/{spec_id}", "--state", "merged",
+                                                                 "--json", "state", "--limit", "1"])):
+        return True
+    return bool(pr.get("number")) and ask(("pr", repo, pr["number"]), lambda: merged(["pr", "view", str(pr["number"]), "-R", repo, "--json", "state"]))
+
+
 def _escalations(rows: list[dict]) -> list[dict]:
-    """Escalated runs with no newer active or done run of the same repo and spec (of a run for an issue: the same issue);
-    a dispatcher unit whose `escalation.run` names another escalated run is left to that run's item."""
+    """Escalated runs with no newer active or done run of the same repo and spec (of a run for an issue: the same issue)
+    and whose work is not already finished (`_finished`); a dispatcher unit whose `escalation.run` names another
+    escalated run is left to that run's item."""
     items = []
     escalated = {r["run_id"] for r in rows if r.get("phase") == "escalated"}
+    cache: dict = {}
     for r in rows:
         if r.get("phase") != "escalated":
             continue
@@ -198,7 +231,7 @@ def _escalations(rows: list[dict]) -> list[dict]:
         newer = [o for o in rows if o is not r and o.get("repo") == r.get("repo") and o.get("spec") == r.get("spec")
                  and (not issue or (_issue_of(o) or {}).get("number") == issue["number"])
                  and (o.get("active") or o.get("phase") == "done") and str(o.get("started_at") or "") >= str(r.get("ended_at") or r.get("started_at") or "")]
-        if newer:
+        if newer or _finished(r, issue, cache):
             continue
         spec_id, pr = r.get("spec"), r.get("pr") or {}
         number = (spec_id or "").split("-", 1)[0]

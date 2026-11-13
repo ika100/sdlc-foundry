@@ -425,9 +425,27 @@ def _url(system: str, c: Component, e: Environment) -> str | None:
     except (KeyError, IndexError, ValueError):
         return None
     if host.endswith(".localhost"):
-        port = os.environ.get("LOCAL_HTTP_PORT", "")
-        return f"http://{host}:{port if port.isdigit() else DEFAULT_LOCAL_PORT}"
+        return f"http://{host}:{local_port()}"
     return f"https://{host}"
+
+
+GRAFANA_HOST = "grafana.localhost"
+GRAFANA_ELSEWHERE = "answers only at grafana.localhost on that cluster's Gateway (no public URL)"
+
+
+def local_port() -> int:
+    """The local Gateway port: LOCAL_HTTP_PORT when all digits, else DEFAULT_LOCAL_PORT."""
+    port = os.environ.get("LOCAL_HTTP_PORT", "")
+    return int(port) if port.isdigit() else DEFAULT_LOCAL_PORT
+
+
+def grafana_url(host: str | None) -> str | None:
+    """Where the dev Grafana answers for a local environment host template, else None."""
+    return f"http://{GRAFANA_HOST}:{local_port()}/" if host and host.endswith(".localhost") else None
+
+
+def grafana_location(host: str | None) -> str:
+    return grafana_url(host) or GRAFANA_ELSEWHERE
 
 
 def _secret_entries(entry: dict) -> list[dict]:

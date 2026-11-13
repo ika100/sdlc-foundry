@@ -40,7 +40,7 @@ The hand-off.
 
 - **AC-176.8** Given a confirmed `bug` or `small-change` in any repo shape, the platform repo included, when the command acts, then it adds `triaged` and the confirmed priority label, posts a comment that begins `Triage:` and holds the task in the triager's words (summary, the user's answers, the expected result), and starts no fix in the session. This holds whatever the author's role: the user's confirmation is the gate for an issue from outside the repository too. The summary points to `cplat dispatch status` and the console Board.
 - **AC-176.9** Given a triaged issue with a `Triage:` comment, when the dispatcher starts its fix run, then the run's task is the newest `Triage:` comment written by a user with write access, and the reporter's text reaches the run only fenced as untrusted data. A `Triage:` comment by someone without write access is ignored.
-- **AC-176.10** Given the label set, when `setup-labels` runs, then `p1`, `p2` and `p3` exist, and a dispatcher policy with the documented default priority rules orders a `p1` issue before an older `p2` issue.
+- ~~**AC-176.10**~~ superseded by AC-196.8 on 2026-11-13: Given the label set, when `setup-labels` runs, then `p1`, `p2` and `p3` exist, and a dispatcher policy with the documented default priority rules orders a `p1` issue before an older `p2` issue.
 
 Moved to spec 177 (unclear issues from other people, closing what needs no work).
 
@@ -62,7 +62,7 @@ Moved to spec 177 (unclear issues from other people, closing what needs no work)
 - **A1** One answer message confirms the whole plan; rows can still be changed one by one (other option: per-issue confirmation only; affects AC-176.3).
 - **A2** All new specs of one run go into one docs PR (other option: one PR per spec; affects AC-176.4).
 - **A3** The engine confidence threshold for `sure` is 0.7 (other option: always `check` for engine issues; affects AC-176.6).
-- **A4** Priority labels are `p1`/`p2`/`p3`, matching the dispatcher's documented `label:p1` rule (other option: `urgent` only; affects AC-176.10).
+- ~~**A4** Priority labels are `p1`/`p2`/`p3`, matching the dispatcher's documented `label:p1` rule (other option: `urgent` only; affects AC-176.10).~~ Revised 2026-11-13: `p0`/`p1`/`p2`, the spec priorities; spec 196, AC-196.8.
 - ~~**A5** The hard rule "never close an issue" becomes "never close an issue without the user's confirmation" (other option: keep issues open; affects AC-176.13, AC-176.14).~~ Moved to spec 177.
 - ~~**A6** A silent `needs-info` issue is proposed for closing after 14 days, configurable per repository (other option: 30 days; affects AC-176.14).~~ Moved to spec 177.
 
@@ -78,3 +78,4 @@ Moved to spec 177 (unclear issues from other people, closing what needs no work)
 - 2026-11-12 amended: the table adds a one-line summary, a status from the batch's status facts and the next step in the delivery process (AC-176.1, AC-176.2)
 - 2026-11-12 amended: the table becomes a grouped overview (needs your decision, clear, already handled) with questions as choices, one confirmation and a closing next step (AC-176.2, AC-176.3, new AC-176.15); replaces the columns added earlier today
 - 2026-11-12 approved again by the user with today's amendments (grouped overview, choices, closing next step)
+- 2026-11-13 AC-176.10 superseded by AC-196.8 (priority labels `p0`/`p1`/`p2`); A4 revised

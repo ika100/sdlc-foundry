@@ -45,7 +45,7 @@ Readiness and order.
 
   A held candidate gets no label, comment or claim from the dispatcher.
 - **AC-167.4** Given a ready issue about to take a slot, when the short premise check finds it already resolved on `main`, then `start` comments on the issue with the commit or pull request that resolved it, labels it `stale-premise`, closes it and starts no unit. `plan` only shows `held: stale`. An issue that was reopened after such a close is never closed as stale again.
-- **AC-167.5** Given ready candidates, when a cycle orders them, then it applies the policy's `priority` rules in order and moves to the next rule only to break a tie. The default order is `label:bug`, `label:p1`, `spec-order`, `oldest`. Given `cplat dispatch prioritize <item>`, then that item comes first until it starts. Given `cplat dispatch skip <item> --reason <text>`, then it is held as `skipped: <text>` until `cplat dispatch resume <item>`. Both survive a restart of the dispatcher.
+- ~~**AC-167.5**~~ superseded by AC-196.9 on 2026-11-13: Given ready candidates, when a cycle orders them, then it applies the policy's `priority` rules in order and moves to the next rule only to break a tie. The default order is `label:bug`, `label:p1`, `spec-order`, `oldest`. Given `cplat dispatch prioritize <item>`, then that item comes first until it starts. Given `cplat dispatch skip <item> --reason <text>`, then it is held as `skipped: <text>` until `cplat dispatch resume <item>`. Both survive a restart of the dispatcher.
 
 Running units.
 
@@ -103,3 +103,4 @@ Budget, steering and seeing it.
 - 2026-11-09 approved
 - 2026-11-10 building
 - 2026-11-10 done
+- 2026-11-13 AC-167.5 superseded by AC-196.9 (the default priority rules start with `label:p0`)

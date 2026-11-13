@@ -8,6 +8,7 @@ import os
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ import json
 
 import quiet
 from test_172_quiet import pytest_out
-from waiting import DELAY, fake_prelude, wait_file, wait_gone
+from waiting import DELAY, fake_prelude, wait_file, wait_for, wait_gone
 
 ROOT = Path(__file__).resolve().parents[2]
 GAVE_UP = "FAILED (gave up after 9 min): devbox run test-fast (log: "
@@ -34,6 +35,7 @@ if [ -f "$d/quick" ]; then echo "1 passed"; exit "$(cat "$d/quick")"; fi
 echo "$$" > "$d/pid-$run"
 sleep 600 &  # fake-delay: a hung test run, stopped by quiet
 echo "$!" > "$d/child-$run"
+: > "$d/ready-$run-$$"
 wait
 """
 
@@ -85,6 +87,25 @@ def world(tmp_path, monkeypatch):
     # quiet runs in this process under the sleep guard (spec 185, AC-185.3) with a deadline of about 1 s: `quiet_limit` must wait
     # with Popen.wait(timeout=) or an event, never with a repo-code time.sleep, or the guard fails these tests (design.md).
     monkeypatch.setattr(quiet_limit, "GIVE_UP_SECONDS", 1 + 20 * DELAY)
+    # The limit counts from the moment the fake hangs, not from quiet's start: a loaded machine may take longer than the
+    # limit to start the fake, and quiet would then give up before the fake wrote its progress and pid files (#711).
+    wait_until = quiet_limit.wait_until
+
+    def wait_until_hung(proc, deadline):
+        t0 = time.monotonic()
+        wait_for(lambda: proc.poll() is not None or len(list(d.glob("ready-*"))) > ready_before)
+        return wait_until(proc, deadline + time.monotonic() - t0)
+
+    ready_before = 0
+
+    def start(*a, **k):
+        nonlocal ready_before
+        ready_before = len(list(d.glob("ready-*")))
+        return start_real(*a, **k)
+
+    start_real = quiet_limit.start
+    monkeypatch.setattr(quiet_limit, "start", start)
+    monkeypatch.setattr(quiet_limit, "wait_until", wait_until_hung)
     return World(d, tmp_path / "cache")
 
 
@@ -203,15 +224,16 @@ def test_the_progress_plugin_writes_start_and_end_lines_and_hides_its_file_ac_18
     assert quiet_limit.still_running(progress) == []
 
 
+@pytest.mark.timeout(300)   # starts two xdist workers of its own; a loaded machine needs more than 120 s (#711)
 def test_under_xdist_only_the_controller_writes_each_start_and_end_once_ac_185_4(tmp_path):  # AC-185.4
     import quiet_limit
     env_add, progress = quiet_limit.progress_env(tmp_path / "x.log")
     (tmp_path / "test_p.py").write_text("".join(f"def test_{i}():\n    assert True\n\n" for i in range(6)))
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
-    env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER")}
     env.update(env_add)
     p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-n", "2", "-p", "no:cacheprovider"], cwd=tmp_path, env=env,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, timeout=240)
     assert p.returncode == 0, p.stdout + p.stderr
     lines = progress.read_text().splitlines()
     assert lines[0] == "# cplat test progress"
