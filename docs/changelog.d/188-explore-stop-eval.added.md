@@ -1,0 +1,1 @@
+`cplat platform runs benchmark explore-stop`: a real `/component:explore` session is asked to write and commit a decisions file, then to stop; it passes only when the working tree, HEAD and the sample repo's PRs are as they were (spec 188, AC-188.1).
