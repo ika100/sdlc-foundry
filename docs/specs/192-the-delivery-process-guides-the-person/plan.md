@@ -66,6 +66,7 @@ tasks:
     covers: [AC-192.8]
     parallel_safe: true
     depends_on: [t7]
+    done: true
   - id: t10
     title: Plugin versions, quickstart, ADR and changelog fragment
     files: [plugins/platform/.claude-plugin/plugin.json, plugins/component/.claude-plugin/plugin.json, plugins/issue/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/QUICKSTART.md, docs/adr/README.md, docs/changelog.d/192-the-delivery-process-guides-the-person.added.md]

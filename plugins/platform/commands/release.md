@@ -6,11 +6,12 @@ Release the platform. **Request:** $ARGUMENTS
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
-`cplat` is on the Bash PATH; make one call per Bash invocation and read its output whole (never piped into `grep`, `head` or `tail`, because its last lines carry the decisions and next steps; use `--json` where offered). The command keeps no state file and continues at the first step not done, so running it again resumes an interrupted release. CI waits can outlast one Bash call: start it in the background and read its output until it ends.
+`cplat` is on the Bash PATH; make one call per Bash invocation and read its output whole (never piped into `grep`, `head` or `tail`, because its last lines carry the decisions and next steps; use `--json` where offered). Running it again resumes an interrupted release. CI waits can outlast one Bash call: start it in the background and read its output until it ends.
 
-1. **Run** `cplat platform release $ARGUMENTS`. Show the output verbatim. Exit 0: a dry run was printed or the release finished (`RELEASED:`).
+1. **Run** `cplat platform release $ARGUMENTS`. Show the output verbatim. Exit 0: a dry run or `RELEASED:`.
 2. **Exit 3** is a stop at a confirmation: the output ends with a `CONFIRM: merge` or `CONFIRM: tag` block. Show the block and ask the user whether to go on. Once the user agrees in this conversation, run the command again with the same `--version` (if one was given) plus `--confirm merge` or `--confirm tag`, matching the stop. If the user declines, stop; running `/platform:release` again resumes here.
 3. **Exit 1**: report the `ERROR:` line (and its `fix:` line, if any) and stop. Exit 2 is a usage error: show it and stop.
+4. After `RELEASED:`, end with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 
 Never merge, tag, push or create a release by hand, because the command checks each step first. Never pass `--confirm` without the user's yes, because a merge or a tag cannot be undone.
 

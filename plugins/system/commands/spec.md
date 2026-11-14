@@ -25,8 +25,7 @@ For A, B and C start from an empty `git status --porcelain`, so that the spec br
 
 ## A. approve <id>
 
-`cplat spec approve <id>`; on refusal show the reasons and the fix. Commit `docs(spec): approve <spec_id>`, then `cplat spec land <spec_id>` (approves the review, merges on green CI); show its output. Next: `/system:plan <NNN>`.
-
+`cplat spec approve <id>`; on refusal show the reasons and the fix. Commit `docs(spec): approve <spec_id>`, then `cplat spec land <spec_id>` (approves the review, merges on green CI); show its output.
 ## B. New system spec
 
 0. **One repo is enough?** (spec 140) When the description names exactly one component of `system.yaml` and asks for no resource, exposure or environment change, ask once with AskUserQuestion: "This changes only `<component>`: specify and ship it there with `/component:spec` and `/component:ship`?", options "Component route (Recommended)" and "System spec". On the component route, find the component's clone (the sibling directory of its repo, else `gh repo clone <repo>`), run `/component:spec <the description>` (Skill tool) with every Bash call in that clone (`cd <clone> && …`), and finish with its next step `/component:ship <id>` there: no system spec, plan or plan PR. Two or more components, or any resource, exposure or environment change: continue below without asking.
@@ -45,11 +44,11 @@ Only open questions are asked here, because the product-manager decides the rest
 
 ## F. Finish
 
-Print the spec id, title, status, each criterion on one line, the repos, the assumptions (one line each) and the open questions. No open questions → one AskUserQuestion "Approve with these <n> assumptions (Recommended)" / "Change an assumption" / "I'll review the file first"; approve → A; change → ask which one and the new decision, then C with it and F again. Otherwise print `/system:spec approve <NNN>` and `/system:spec --amend <NNN> <change>`.
-
+Print the spec id, title, status, each criterion on one line, the repos, the assumptions (one line each) and the open questions. No open questions → one AskUserQuestion "Approve with these <n> assumptions (Recommended)" / "Change an assumption" / "I'll review the file first"; approve → A; change → ask which one and the new decision, then C with it and F again.
 ## Rules
 
 - **Hard rule:** never answer an open question for the user or approve without their word, because the approval is the one human decision a system ship runs on. Assumptions are the product-manager's to take (ADR-084); the approval shows them.
+- End A and F with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 - Never touch `system.yaml`, overlays or component repos, because this command changes the spec alone. **Hard rule:** push only through `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced), because a push from the shell reaches GitHub before any check runs.
 
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
