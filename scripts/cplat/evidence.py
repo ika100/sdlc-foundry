@@ -151,7 +151,7 @@ def _stamp(at: str | None) -> str | None:
 def _entry(sec: dict, path: str, store: str, fallback: str | None) -> dict:
     at = sec.get("at") or fallback
     return {"outcome": sec.get("outcome"), "text": _word(sec), "at": at, "at_text": _stamp(at), "reason": sec.get("reason"),
-            "digest": sec.get("digest"), "path": path, "rank": "", "link": f"https://github.com/{store}/blob/HEAD/{path}"}
+            "base_url": sec.get("base_url"), "digest": sec.get("digest"), "path": path, "rank": "", "link": f"https://github.com/{store}/blob/HEAD/{path}"}
 
 
 def _records(svc_repo: str, shas: set[str], days: int) -> tuple[dict | None, dict | None, str | None]:

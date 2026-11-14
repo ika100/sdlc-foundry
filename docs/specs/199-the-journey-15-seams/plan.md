@@ -17,18 +17,27 @@ tasks:
     covers: [AC-199.1, AC-199.2, AC-199.5]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: system set and system status pass the system to the Grafana URL
     files: [scripts/cplat/status.py, scripts/cplat/systemset.py]
     covers: [AC-199.3]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: Docs and changelog fragment
     files: [docs/unattended-delivery.md, site/src/content/docs/get-started/local-cluster.md, docs/changelog.d/199-the-journey-15-seams.fixed.md]
     covers: [AC-199.4]
     parallel_safe: true
     depends_on: []
+    done: true
+  - id: t5
+    title: Evidence entries carry the smoke's base URL
+    files: [scripts/cplat/evidence.py]
+    covers: [AC-199.2]
+    parallel_safe: true
+    depends_on: [t2]
     done: true
 ---
 
@@ -111,3 +120,14 @@ system-ship smoke tests stay green.
 
 **Done when:** `cplat platform pr-check` reports no fragment or link error and `python3 scripts/check-docs.py` (if the
 repo's docs check covers these files) passes.
+
+## t5 — Evidence entries carry the smoke's base URL
+
+**Files:** scripts/cplat/evidence.py
+**Covers:** AC-199.2
+**Goal:** the prod evidence summary's staging and dev entries carry the `base_url` the smoke recorded, so the evidence shows the cluster's port (found while building t2: the AC-199.2 evidence test reads it).
+
+**Implementation notes:**
+- `evidence._entry` adds `"base_url": sec.get("base_url")`; nothing else changes.
+
+**Done when:** `tests/cplat/test_199_system_ship.py` passes and the spec 093 evidence tests stay green.
