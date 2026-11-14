@@ -20,6 +20,7 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat plan merge <tN> <tM> [--spec ID] [--reason R]   fold task tN into the later task tM that depends on it (spec 186)
   cplat cluster new <name> [--org O] [--public] | add <owner>/<repo> [--name S] | remove <system>   the cluster repo and the systems it installs
   cplat cluster wait [--refresh] [--timeout S] [--context C]   until the cluster's root applications run main's head (spec 143)
+  cplat next [--json] [--ascii] [--later ITEM]... | next answer --shown-at ISO --option ID [--item REF]...   where you are in the delivery process and what waits for you (spec 192)
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
   cplat resource add|remove postgres [--version N]   the system's database resource (system.yaml)
   cplat resource upgrade <resource> --to MAJOR --env ENV [--context C] [--wait] [--json]   one environment's major upgrade, as a PR
@@ -94,7 +95,7 @@ PLUMBING = {
     "shape": "shapecmd", "feedback": "feedback", "model": "modelcmd", "spec": "spec", "pr": "pr", "quiet": "quiet", "validate": "validate",
     "headless": "headless", "deps": "deps", "alerts": "alerts", "budget": "budget", "adopt": "adopt",
     "needs": "needs", "ui": "ui", "dispatch": "dispatch", "adr": "adrcmd", "plan": "plancmd",
-    "explore": "explore",
+    "explore": "explore", "next": "nextcmd",
 }
 
 # 4.x top-level name -> its 5.0 form (exit 2, the module is not imported)

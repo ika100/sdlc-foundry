@@ -20,7 +20,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | approved | 10 |  |
 | [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | approved | 7 | #688 |
 | [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | approved | 8 | #400 |
-| [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | approved | 10 |  |
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
 | [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | approved | 12 |  |
 | [198-a-platform-release-holds-main-through](specs/198-a-platform-release-holds-main-through/spec.md) — A platform release holds main through the merge lock | P1 | approved | 9 |  |
@@ -180,6 +179,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [187-settings-agents-edited-by-hand-have-a](specs/187-settings-agents-edited-by-hand-have-a/spec.md) — Settings agents edited by hand have a command | P1 | done | 8 |  |
 | [188-explore-a-feature-before-its-spec-is](specs/188-explore-a-feature-before-its-spec-is/spec.md) — Explore a feature before its spec is written | P1 | done | 12 | #662 |
 | [189-the-web-image-has-no-known-critical-cve](specs/189-the-web-image-has-no-known-critical-cve/spec.md) — The web image has no known critical CVE and the platform scans template images | P1 | done | 7 | #682 |
+| [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | done | 10 |  |
 | [194-a-system-ship-wait-returns-before-the](specs/194-a-system-ship-wait-returns-before-the/spec.md) — A system ship wait returns before the Bash limit | P1 | done | 4 |  |
 | [195-a-restored-copy-is-checked-without](specs/195-a-restored-copy-is-checked-without/spec.md) — A restored copy is checked without kubectl | P1 | done | 5 | #683 |
 | [197-the-journey-13-seams](specs/197-the-journey-13-seams/spec.md) — The journey 13 seams | P1 | done | 8 |  |
