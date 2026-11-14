@@ -17,6 +17,7 @@ tasks:
     covers: [AC-192.1, AC-192.3, AC-192.4, AC-192.5, AC-192.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: Person answers as run-store follow-ups and the report's person time
     files: [scripts/cplat/runs.py, scripts/cplat/runs_report.py]
