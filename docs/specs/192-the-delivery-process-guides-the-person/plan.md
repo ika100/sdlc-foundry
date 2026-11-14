@@ -45,6 +45,7 @@ tasks:
     covers: [AC-192.1, AC-192.6, AC-192.7, AC-192.8, AC-192.10]
     parallel_safe: true
     depends_on: [t3, t4, t5]
+    done: true
   - id: t7
     title: The /platform:next command
     files: [plugins/platform/commands/next.md, docs/rules/plugins/platform/commands/next.yml, plugins/platform/README.md]

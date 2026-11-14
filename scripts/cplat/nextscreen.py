@@ -39,6 +39,7 @@ _ALSO = {"escalation": ("stopped run", "stopped runs"), "stuck": ("stuck run", "
          "promote": ("release to promote", "releases to promote"), "review": ("fix to review", "fixes to review")}
 _KIND_STAGE = {"answer": "Spec", "approve": "Spec", "triage": "Issue", "release": "Release", "promote": "Prod", "review": "Build"}
 _CHANNEL_WORDS = {"desktop": "on the desktop", "github": "on GitHub", "slack": "in Slack", "email": "by e-mail"}
+_KEEP = (*_CHANNEL_WORDS.values(), "look here again")     # phrases wrap() never breaks
 _ASCII = {"…": "...", "–": "-", "—": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "✓": "x", "●": ">"}
 
 
@@ -59,8 +60,12 @@ def age(minutes: int) -> str:
 def wrap(line: str, indent: int = 0) -> list[str]:
     """Break `line` at spaces so none is wider than 80 columns; continuation lines get `indent` spaces."""
     lead = " " * (len(line) - len(line.lstrip(" ")))
-    return textwrap.wrap(line.strip(" "), WIDTH, initial_indent=lead, subsequent_indent=" " * max(indent, len(lead)),
-                         break_long_words=True, break_on_hyphens=False) or [""]
+    text = line.strip(" ")
+    for phrase in _KEEP:
+        text = text.replace(phrase, phrase.replace(" ", "\xa0"))
+    lines = textwrap.wrap(text, WIDTH, initial_indent=lead, subsequent_indent=" " * max(indent, len(lead)),
+                          break_long_words=True, break_on_hyphens=False)
+    return [ln.replace("\xa0", " ") for ln in lines] or [""]
 
 
 class _Lines:
