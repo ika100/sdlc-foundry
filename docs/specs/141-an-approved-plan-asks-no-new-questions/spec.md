@@ -1,7 +1,7 @@
 ---
 spec_id: 141-an-approved-plan-asks-no-new-questions
 title: An approved system plan asks no new questions
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -54,3 +54,5 @@ had approved the system spec and its plan; the stop cost a round and up to 15 mi
 - 2026-11-05 created (found in the journey runs of 2026-11-05)
 - 2026-11-05 open question answered by the user (recommended answer)
 - 2026-11-05 approved
+- 2026-11-14 building: built in #463
+- 2026-11-14 done: unverified: built in #463 (checked 2026-11-14); no verification.md

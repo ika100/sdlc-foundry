@@ -1,0 +1,91 @@
+name: template-image-scan
+
+# Spec 189: build the image of each image template's default render and scan it with trivy (CRITICAL and HIGH, fixed and unfixed).
+# An unaccepted CRITICAL, or an accepted-finding entry that is wrong or stale, fails the job (scripts/template-image-scan.py,
+# .github/image-scan-accepted.yml). The decide job picks the templates a pull request changed; the daily run scans all four.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+  # No paths filter: a pull request always gets the check, and the decide job limits the scan to what it changed.
+  pull_request:
+
+# Least privilege by default.
+permissions:
+  contents: read
+
+# A newer push to the same pull request cancels the older run (the daily run always completes).
+concurrency:
+  group: template-image-scan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  decide:
+    name: which template images to scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      templates: ${{ steps.select.outputs.templates }}
+      any: ${{ steps.select.outputs.any }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the base of the comparison
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: uv run scripts/template-image-scan.py select --event "$EVENT" --base "$BASE" | tee -a "$GITHUB_OUTPUT"
+
+  scan:
+    name: scan ${{ matrix.template }}
+    needs: decide
+    if: needs.decide.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false   # one red template must not hide the others' result
+      matrix:
+        template: ${{ fromJSON(needs.decide.outputs.templates) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Render the default
+        env:
+          TEMPLATE: ${{ matrix.template }}
+        run: |
+          extra=()
+          if [ "$TEMPLATE" = service-python ]; then extra=(--data module_name=scan_svc); fi
+          uvx copier copy "./templates/$TEMPLATE" /tmp/img --defaults --trust --skip-tasks \
+            --data "project_name=scan-$TEMPLATE" "${extra[@]}"
+      # --skip-tasks leaves out the bootstrap that writes the lock the image build installs from (--locked, --frozen-lockfile).
+      - name: Lock the dependencies
+        env:
+          TEMPLATE: ${{ matrix.template }}
+        run: |
+          case "$TEMPLATE" in
+            service-python) (cd /tmp/img && uv lock) ;;
+            web-nextjs) (cd /tmp/img && npx -y pnpm@11.22.0 install --lockfile-only) ;;
+          esac
+      - name: Build the image
+        env:
+          TEMPLATE: ${{ matrix.template }}
+        run: |
+          args=()
+          if [ "$TEMPLATE" = service-go ]; then args=(--build-arg VERSION=v0.0.0); fi
+          docker build "${args[@]}" -t "scan:$TEMPLATE" /tmp/img
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: scan:${{ matrix.template }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: false
+          format: json
+          output: trivy-${{ matrix.template }}.json
+          exit-code: 0
+      - name: Evaluate the findings against the accepted list
+        env:
+          TEMPLATE: ${{ matrix.template }}
+        run: uv run scripts/template-image-scan.py evaluate --template "$TEMPLATE" --report "trivy-$TEMPLATE.json"

@@ -269,7 +269,7 @@ jobs:
         run: |
           uv sync --all-extras
           python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" ${{ matrix.template }} .   # spec 184: file, line and rule of a violation
-          uv run mypy src
+          uv run mypy .   # the same scope as the repo's own `typecheck` recipe (a script outside src/ broke it, journey 14)
           if [ "${{ matrix.template }}" = "service-python" ]; then
             SMOKE_BASE_URL='' uv run python -m pytest tests/ -p scripts.smoke_pytest -q -rs | tee /tmp/pytest.out
             grep -q "SMOKE_BASE_URL is not set" /tmp/pytest.out   # spec 091: the example smoke test is skipped here
@@ -477,10 +477,24 @@ jobs:
         working-directory: /tmp/test-web
         run: |
           docker build -t smoke:web .
+          # spec 189: the runtime image is distroless, so `sh` as the command must fail (node cannot run `sh`)
+          if docker run --rm smoke:web sh >/dev/null 2>&1; then echo "the web image has a shell"; exit 1; fi
           docker run -d --name smoke --read-only --tmpfs /tmp --tmpfs /app/.next/cache -p 3000:3000 smoke:web
           up=false
           for _ in $(seq 1 30); do curl -sf localhost:3000/api/health && { up=true; break; }; sleep 2; done
           $up || { docker logs smoke; exit 1; }
+          # spec 189: the image's own health check reports healthy within 60 s
+          healthy=false
+          for _ in $(seq 1 30); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' smoke)" = healthy ] && { healthy=true; break; }
+            sleep 2
+          done
+          $healthy || { docker inspect --format '{{.State.Health.Status}}' smoke; docker logs smoke; echo "the web image never became healthy"; exit 1; }
+          # spec 189 / ADR-005: the running Node's major is the pinned node_major of the Dockerfile
+          node_major=$(sed -n 's|^FROM gcr.io/distroless/nodejs\([0-9]*\)-.*|\1|p' Dockerfile)
+          running=$(docker exec smoke /nodejs/bin/node -p process.versions.node | cut -d. -f1)
+          test -n "$node_major" && test "$running" = "$node_major" || { echo "node major $running, pinned $node_major"; exit 1; }
+          test "$(docker exec smoke /nodejs/bin/node -p 'process.getuid()')" = 1000 || { echo "not running as UID 1000"; exit 1; }
           # spec 091: the browser smoke tests against the running image (smoke.sh calls pnpm, as devbox provides it in a repo)
           npm install -g pnpm@11.22.0 >/dev/null
           SMOKE_BASE_URL=http://localhost:3000 bash scripts/smoke.sh | tee /tmp/smoke.out
