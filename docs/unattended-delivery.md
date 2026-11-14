@@ -149,7 +149,7 @@ After dev is healthy, `cplat component ship deploy` checks the spec in dev ([ADR
 - **Not run:** no `--context`, a service not exposed in dev, an unreachable URL, a repo without the recipe or without a gitops-app link. Deploy finishes `done`, never reports "passed", and lists the unchecked `(smoke)` criteria.
 - **The record:** the run record has a `smoke` section (outcome, counts, duration, retry, per-criterion result, failing tests, filed issue).
 - **By hand:** `cplat instance verify [dev] [--base-url URL] [--spec SPEC] [--json]` in a service repo (exit 0 passed, 1 red, 3 not run); it files no issue.
-- **The dev URL** comes from the linked gitops-app: the service must have `expose:` and a `hosts.dev` template in `system.yaml`. An optional `urls.dev` in `system.yaml` overrides it (`{host}` is the host from `hosts`). For `*.localhost` hosts the port is `LOCAL_HTTP_PORT`, default 8088.
+- **The dev URL** comes from the linked gitops-app: the service must have `expose:` and a `hosts.dev` template in `system.yaml`. An optional `urls.dev` in `system.yaml` overrides it (`{host}` is the host from `hosts`). For `*.localhost` hosts the port is `LOCAL_HTTP_PORT` when it is a number, else the port the k3d cluster's Gateway listens on (cluster `LOCAL_CLUSTER`, a configured `k3d-<name>` context, else `<system>-local`), else 8088.
 
 ## Deploy gate
 

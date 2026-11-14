@@ -9,6 +9,7 @@ from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 import gitops
+import localport
 import model
 from core import PlatformError, Report
 
@@ -115,6 +116,7 @@ def main(argv: list[str]) -> int:
     ns = build_parser().parse_args(argv)
     repo = Path(ns.repo_dir).resolve()
     app_dir = gitops.find_app(repo, ns.system)
+    localport.use_repo(repo)
     y, data = gitops.load(app_dir)
     envs = data.get("environments") or {}
     if ns.env not in envs:
@@ -133,12 +135,12 @@ def main(argv: list[str]) -> int:
     noop = None
     obs_value = wanted.get("observability")
     host = ns.host or (envs[ns.env] or {}).get("host")
-    grafana = {"grafana_url": model.grafana_url(host) if obs_value == "lgtm" else None} if obs_value is not None else {}
+    grafana = {"grafana_url": model.grafana_url(host, app_dir.name) if obs_value == "lgtm" else None} if obs_value is not None else {}
 
     def emit(r: Report, dry_run: bool) -> None:
         r.emit(dry_run, ns.json)
         if obs_value == "lgtm" and not ns.json:
-            print(f"\nGrafana: {model.grafana_location(host)}")
+            print(f"\nGrafana: {model.grafana_location(host, app_dir.name)}")
 
     if "observability" in wanted:
         env_conf = envs[ns.env] or {}

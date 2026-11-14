@@ -71,6 +71,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import core  # noqa: E402
+import localport  # noqa: E402
 
 # noun -> verb -> (module, argv prefix put before the remaining args)
 NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
@@ -158,6 +159,7 @@ def _resolve(argv: list[str]) -> tuple[str, list[str], str] | int:
 
 
 def main(argv: list[str]) -> int:
+    localport.reset()       # spec 199: one invocation asks docker at most once per cluster
     for stream in (sys.stdout, sys.stderr):      # #335: a file or a pipe gets each line at once, not all of it at exit
         with contextlib.suppress(AttributeError, ValueError):
             stream.reconfigure(line_buffering=True)
