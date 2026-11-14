@@ -24,6 +24,7 @@ tasks:
     covers: [AC-192.10]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: nextscreen - the three parts, ASCII, width and list cuts
     files: [scripts/cplat/nextscreen.py]
