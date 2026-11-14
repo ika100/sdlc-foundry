@@ -159,8 +159,8 @@ class World:
                               "active": True, "started_at": iso(NOW - datetime.timedelta(minutes=20)), "ended_at": None, "outcome": None,
                               "escalation": None, "failure": None, "budget": None, "activity": None, "pr": None})
 
-    def done_run(self, spec_id, minutes, kind="ship"):
-        self.run_rows.append({"run_id": f"d-{spec_id}", "kind": kind, "level": "component", "spec": spec_id, "repo": self.slug,
+    def done_run(self, spec_id, minutes, kind="ship", repo=None):
+        self.run_rows.append({"run_id": f"d-{spec_id}", "kind": kind, "level": "component", "spec": spec_id, "repo": repo or self.slug,
                               "phase": "done", "active": False, "outcome": "done", "escalation": None, "children": [],
                               "started_at": iso(NOW - datetime.timedelta(hours=5)), "ended_at": iso(NOW - datetime.timedelta(hours=4)),
                               "budget": {"used": {"minutes": minutes}}})

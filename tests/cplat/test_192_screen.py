@@ -106,6 +106,9 @@ def test_bar_in_a_platform_repo(world, capsys):  # AC-192.2
     assert "③ Build" in bar_lines[0] and "④ Release" in bar_lines[0]
     assert "Issue ✓" in bar_lines[0] and "Spec ●" in bar_lines[0]
     assert "you are here" in bar_lines[1]
+    # the label sits under the marked step: its first column lies inside that step's text
+    seg = "② Spec ●"
+    assert bar_lines[1].index("you are here") in range(bar_lines[0].index(seg), bar_lines[0].index(seg) + len(seg))
 
 
 def test_bar_in_a_service_repo(tmp_path, monkeypatch, capsys):  # AC-192.2
@@ -121,7 +124,11 @@ def test_running_work_marks_its_step_as_running_on_its_own(world, capsys):  # AC
     doc = world.doc(capsys)
     assert [x["state"] for x in doc["bar"]["steps"]] == ["done", "done", "running", "todo"]
     assert doc["bar"]["label"] == "running on its own"
-    assert "running on its own" in parts(doc["screen"])[0]
+    bar_lines = parts(doc["screen"])[0].splitlines()
+    assert "running on its own" in bar_lines[1]
+    assert "Build ●" in bar_lines[0] and bar_lines[0].count("●") == 1
+    seg = "③ Build ●"
+    assert bar_lines[1].index("running on its own") in range(bar_lines[0].index(seg), bar_lines[0].index(seg) + len(seg))
 
 
 def test_nothing_waiting_has_no_marked_step(world, capsys):  # AC-192.2
@@ -227,8 +234,14 @@ def test_nothing_waits_nothing_runs(world, capsys, monkeypatch):  # AC-192.4
     monkeypatch.setattr(dispatch_state, "load", load)
     screen = world.screen(capsys)
     assert "Nothing is waiting for you." in screen
-    assert "2 parked" in screen
+    assert "2 parked items." in screen
     assert "New issues will show up here." in screen
+
+
+def test_zero_parked_items_are_still_counted(world, capsys):  # AC-192.4
+    screen = world.screen(capsys)
+    assert "Nothing is waiting for you." in screen
+    assert "0 parked items." in screen
 
 
 def test_runs_going_nothing_waiting(world, capsys):  # AC-192.4
@@ -260,6 +273,7 @@ def test_unreadable_source_is_named_and_never_nothing(world, capsys):  # AC-192.
     doc = world.doc(capsys)
     assert "Nothing is waiting" not in doc["screen"]
     assert "GitHub" in doc["screen"] and "Could not read" in doc["screen"]
+    assert "may be missing" in doc["screen"] and "login" in doc["screen"]
     assert doc["unavailable"][0]["source"] == "github"
     assert doc["questions"][-1]["options"][0]["label"] == "Try again"
     assert world.next(capsys)[0] == 0
@@ -269,6 +283,7 @@ def test_bad_notification_file_is_a_named_source(world, capsys):  # AC-192.4
     world.notify_yaml("bogus: 1\n")
     doc = world.doc(capsys)
     assert "notification" in doc["screen"].lower()
+    assert "Could not read" in doc["screen"] and "may be missing" in doc["screen"] and "notify.yaml" in doc["screen"]
     assert [u["source"] for u in doc["unavailable"]] == ["notifications"]
     assert "Nothing is waiting" not in doc["screen"]
 
@@ -334,6 +349,31 @@ def test_size_has_no_number_with_two_runs(world, capsys):  # AC-192.5
         world.done_run(sid, minutes)
     size_line = next(ln for ln in world.screen(capsys).splitlines() if ln.strip().startswith("Size:"))
     assert "about" not in size_line and not re.search(r"\d", size_line)
+
+
+def other_size_and_repo_runs(world):
+    for i in range(3):                                              # medium, this repo: another size
+        world.local_spec(f"11{i}-medium", f"Medium {i}", 6)
+        world.done_run(f"11{i}-medium", 600)
+    for i in range(3):                                              # small, another repo
+        world.local_spec(f"12{i}-elsewhere", f"Elsewhere {i}", 2)
+        world.done_run(f"12{i}-elsewhere", 900, repo="other/repo")
+
+
+def test_time_counts_only_runs_of_the_same_size_and_repo(world, capsys):  # AC-192.5
+    world.add_draft("189-x", "Some change", pr=690, criteria=3)
+    for i, minutes in enumerate((40, 45, 50)):                      # small, this repo: the estimate
+        world.local_spec(f"10{i}-old", f"Old {i}", 2)
+        world.done_run(f"10{i}-old", minutes)
+    other_size_and_repo_runs(world)
+    assert re.search(r"Size:\s+small, about 45 min", world.screen(capsys))
+
+
+def test_runs_of_another_size_or_repo_give_no_time(world, capsys):  # AC-192.5
+    world.add_draft("189-x", "Some change", pr=690, criteria=3)
+    other_size_and_repo_runs(world)
+    size_line = next(ln for ln in world.screen(capsys).splitlines() if ln.strip().startswith("Size:"))
+    assert re.search(r"Size:\s+small\s*$", size_line)
 
 
 # ---------------- AC-192.9 ----------------
