@@ -333,8 +333,7 @@ def render(state: dict, *, ascii: bool = False, later=(), judgement: dict | None
             _group_lines(out, group, shown, judgement, ascii)
         elif not state.get("unavailable") and not state.get("running"):
             out.add("Nothing is waiting for you.")
-            if state.get("parked"):
-                out.add(f"{_n(state['parked'], 'parked item', 'parked items')}.")
+            out.add(f"{_n(state.get('parked') or 0, 'parked item', 'parked items')}.")
         if group is None and state.get("running"):
             _running_lines(out, state)
         _unavailable_lines(out, state)
