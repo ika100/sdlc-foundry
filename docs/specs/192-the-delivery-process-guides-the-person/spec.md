@@ -1,7 +1,7 @@
 ---
 spec_id: 192-the-delivery-process-guides-the-person
 title: The delivery process guides the person from triage to release
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -167,3 +167,4 @@ None.
 
 - 2026-11-12 created
 - 2026-11-12 approved
+- 2026-11-14 building
