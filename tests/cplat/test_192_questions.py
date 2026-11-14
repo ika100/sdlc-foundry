@@ -109,7 +109,13 @@ def test_later_puts_an_item_off(world, capsys):  # AC-192.6
     assert doc["waiting"]["later"] == 1
     assert doc["waiting"]["items"] == ["approve:o/n:190-second"]
     assert "1 put off for later" in doc["screen"]
-    assert "189-web-image" not in str(doc["questions"])
+    # `then` of "Later" repeats `--later <id>` on purpose, so look at what the person reads and at what is recorded
+    assert all("189-web-image" not in q["question"] and "189" not in " ".join(o["label"] for o in q["options"]) for q in doc["questions"])
+    for q in doc["questions"]:
+        for o in q["options"]:
+            rec = o.get("record") or []
+            assert "spec:o/n:189-web-image" not in [rec[i + 1] for i, a in enumerate(rec) if a == "--item"]
+            assert not any("189" in step for step in o.get("steps") or [])
     assert labels(question(doc, "approve"))[0] == "Approve"
 
 
@@ -135,6 +141,13 @@ def test_how_tells_the_session_what_to_do(world, capsys):  # AC-192.6
     how = world.doc(capsys)["how"]
     for word in ("screen", "questions", "record", "steps", "undo"):
         assert word in how
+    # the order: the person chooses first; record and steps only after; undo lines printed afterwards
+    chose = how.index("chose")
+    assert how.index("record") > chose
+    assert how.index("steps", chose) > chose
+    assert how.index("undo", how.index("steps", chose)) > how.index("steps", chose)
+    assert how.index("screen") < how.index("questions") < chose
+    assert re.search(r"nothing in `?steps`? runs before the person chose", how, re.I)
 
 
 # ---------------- AC-192.7 ----------------
@@ -158,7 +171,9 @@ def test_nothing_outward_runs_before_the_choice(world, capsys):  # AC-192.7
     world.stuck(500)
     world.doc(capsys)
     world.doc(capsys, "--show", "assumptions")
-    assert world.writes() == []
+    world.screen(capsys)
+    world.screen(capsys, "--choose", "approve")
+    assert world.writes() == []  # sees `needs.gh`, `core.run(["gh", ...])`, `claim.gh` and claims
 
 
 def test_show_details_option_on_every_outward_question(world, capsys):  # AC-192.7

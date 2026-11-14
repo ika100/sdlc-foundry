@@ -58,6 +58,30 @@ class World:
         monkeypatch.setattr(runs, "utcnow", lambda: NOW)
         monkeypatch.setattr(notify, "now", lambda: NOW)
         monkeypatch.setattr(runlist, "collect", lambda *a, **k: {"schema": 1, "runs": self.run_rows, "store": {}})
+        self.claims: list[str] = []
+        self._fake_other_gh_wrappers()
+
+    def _fake_other_gh_wrappers(self):
+        """Record every other way to reach GitHub (`core.run(["gh", ...])`, any `gh` subprocess, `claim.gh`, `claim.claim`,
+        `claim.release`) so that `writes()` sees a writing verb or a claim wherever it is made."""
+        import claim
+
+        real = subprocess.run
+
+        def run(cmd, *a, **k):
+            if isinstance(cmd, (list, tuple)) and cmd and cmd[0] == "gh":
+                self.gh_calls.append([str(c) for c in cmd[1:]])
+                return subprocess.CompletedProcess(cmd, 0, "[]", "")
+            return real(cmd, *a, **k)
+
+        def claim_gh(args, *, cwd):
+            self.gh_calls.append([str(c) for c in args])
+            return 0, "[]"
+
+        self.mp.setattr(subprocess, "run", run)
+        self.mp.setattr(claim, "gh", claim_gh)
+        self.mp.setattr(claim, "claim", lambda *a, **k: self.claims.append("claim") or [])
+        self.mp.setattr(claim, "release", lambda *a, **k: self.claims.append("release"))
 
     def _git(self, *args):
         subprocess.run(["git", "-C", str(self.repo), *args], check=True, capture_output=True)
@@ -82,8 +106,10 @@ class World:
         return "null"
 
     def writes(self) -> list[list[str]]:
-        return [c for c in self.gh_calls if (len(c) > 1 and c[0] in ("pr", "issue", "release", "label") and c[1] in WRITE_VERBS)
-                or ("-X" in c and c[c.index("-X") + 1] != "GET") or "--method" in c]
+        """Every writing `gh` call made through any wrapper, and every claim or release of a claim."""
+        calls = [c for c in self.gh_calls if (len(c) > 1 and c[0] in ("pr", "issue", "release", "label") and c[1] in WRITE_VERBS)
+                 or ("-X" in c and c[c.index("-X") + 1] != "GET") or "--method" in c]
+        return calls + [[c] for c in self.claims]
 
     def add_draft(self, spec_id, title, *, issue=None, pr=None, created="2026-11-10", criteria=3, **kw):
         self.specs[spec_id] = spec_text(spec_id, title, tracks=[issue] if issue else [], criteria=criteria, created=created, **kw)

@@ -61,9 +61,14 @@ def test_prompt_ends_with_the_hand_over(rel):  # AC-192.8
 
 
 @pytest.mark.parametrize("rel", HAND_OVER)
-def test_hand_over_sentence_is_in_the_last_half_of_the_prompt(rel):  # AC-192.8
+def test_hand_over_sentence_ends_the_prompt(rel):  # AC-192.8
     text = read(ROOT / rel)
-    assert text.rfind("cplat next --json") > len(text) * 0.4
+    at = text.rfind("cplat next --json")
+    assert at >= 0
+    last_heading = max((m.start() for m in re.finditer(r"^(#{1,6} |\d+\. )", text, re.M)), default=0)
+    in_last_section = at > last_heading and not text[at:].count("\n\n") > 3
+    in_last_15_percent = len(text) - at <= len(text) * 0.15
+    assert in_last_section or in_last_15_percent, "the hand-over must be in the final step or section, not in the middle"
 
 
 def test_the_procedure_is_not_copied_into_the_prompts():  # AC-192.8

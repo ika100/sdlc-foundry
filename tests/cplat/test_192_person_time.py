@@ -66,10 +66,6 @@ def test_a_bad_timestamp_exits_2_and_records_nothing(capsys):  # AC-192.10
     assert rc == 2 and person_lines() == []
 
 
-def test_the_store_function_exists():  # AC-192.10
-    assert callable(runs.person_answer)
-
-
 def delivered(run_id, spec=None, issue=None, kind="ship"):
     rec = {"schema": 1, "run_id": run_id, "kind": kind, "repo": "o/n", "outcome": "done",
            "started_at": "2026-11-13T08:00:00Z", "ended_at": "2026-11-13T09:00:00Z", "phases": []}

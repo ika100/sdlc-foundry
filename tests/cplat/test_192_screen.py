@@ -68,6 +68,20 @@ def test_same_screen_in_a_fresh_session_and_another_worktree(world, capsys, monk
     assert world.screen(capsys, repo=other) == first
 
 
+def test_same_screen_after_an_interrupted_session(world, capsys):  # AC-192.1
+    import dispatch_state
+    two_drafts(world)
+    first = world.screen(capsys)
+    state_dir = dispatch_state.needs_path(world.slug).parent
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "needs.json.tmp").write_text('{"items": [{"id": "stuck:o/n:9", "kind": ')   # a write cut short
+    (state_dir / "unit-189.partial").write_text("")
+    (world.repo / "notes.txt").write_text("left over from the session that was cut off\n")        # untracked
+    (world.repo / ".platform-settings.yml").write_text("shape: platform\n# half-edited\n")         # modified
+    assert world.screen(capsys) == first
+    assert world.doc(capsys)["waiting"]["items"] == ["approve:o/n:189-web-image", "approve:o/n:190-second"]
+
+
 def test_headless_has_no_questions_but_the_same_screen(world, capsys, monkeypatch):  # AC-192.1
     two_drafts(world)
     attended = world.doc(capsys)
@@ -127,7 +141,28 @@ def test_stopped_run_comes_before_specs_and_issues(world, capsys):  # AC-192.3
     assert doc["waiting"]["also"] == {"approve": 2, "triage": 1}
     last = parts(doc["screen"])[1].splitlines()[-1]
     assert last.startswith("Also waiting:")
-    assert "2" in last and "1" in last
+    assert "Also waiting: 2 specs to approve, 1 new issue" in last
+
+
+def test_group_order_of_the_also_waiting_line(tmp_path, monkeypatch, capsys):  # AC-192.3
+    w = World(tmp_path, monkeypatch, shape="gitops-app")
+    w.stuck(500)
+    w.dispatch_item({"id": "escalation:o/n:501", "kind": "escalation", "stage": "Build", "since": "2026-11-13T09:00:00Z",
+                     "reason": "the run for #501 needs a decision", "command": "cplat dispatch resume 501",
+                     "object": {"type": "issue", "repo": "o/n", "issue": 501, "spec": None, "run_id": None, "component": None,
+                                "version": None, "pr": None, "url": None}, "cwd_repo": "o/n", "consequence": None, "way_back": None})
+    w.dispatch_item({"id": "promote:o/n:web:1.2.0", "kind": "promote", "stage": "Prod", "since": "2026-11-13T10:00:00Z",
+                     "reason": "web 1.2.0 is verified in staging", "command": "cplat promote web",
+                     "object": {"type": "component", "repo": "o/n", "issue": None, "spec": None, "run_id": None, "component": "web",
+                                "version": "1.2.0", "pr": None, "url": None}, "cwd_repo": "o/n", "consequence": None,
+                     "way_back": {"command": "cplat promote web --back", "warning": None}})
+    w.add_issue(700, "An issue")
+    doc = w.doc(capsys)
+    assert doc["waiting"]["group"] == "stopped"
+    assert len(doc["waiting"]["items"]) == 2
+    assert list(doc["waiting"]["also"]) == ["triage", "promote"]
+    last = parts(doc["screen"])[1].splitlines()[-1]
+    assert last.index("new issue") < last.index("to promote")
 
 
 def test_daily_budget_is_in_the_first_group(world, capsys):  # AC-192.3
@@ -187,7 +222,7 @@ def test_nothing_waits_nothing_runs(world, capsys, monkeypatch):  # AC-192.4
 
     def load(slug):
         d = orig(slug)
-        d["steering"]["skipped"] = ["x1", "x2"]
+        d["steering"]["skipped"] = {"x1": {"at": "2026-11-13T08:00:00Z"}, "x2": {"at": "2026-11-13T08:00:00Z"}}
         return d
     monkeypatch.setattr(dispatch_state, "load", load)
     screen = world.screen(capsys)
@@ -197,6 +232,7 @@ def test_nothing_waits_nothing_runs(world, capsys, monkeypatch):  # AC-192.4
 
 
 def test_runs_going_nothing_waiting(world, capsys):  # AC-192.4
+    world.local_spec("189-x", "A web image without the finding", 3)
     world.running("189-x", "build")
     screen = world.screen(capsys)
     assert "189" in parts(screen)[1]
@@ -322,6 +358,52 @@ def test_width_of_the_issue_and_release_screens(world, capsys):  # AC-192.9
     for n in range(701, 708):
         world.add_issue(n, f"Issue number {n} " + "with words " * 10)
     assert all(len(ln) <= 80 for ln in world.screen(capsys).splitlines())
+
+
+def test_width_of_a_release_screen(world, capsys):  # AC-192.9
+    d = world.repo / "docs" / "changelog.d"
+    d.mkdir(parents=True)
+    for n in range(1, 8):
+        (d / f"{n}-{'very-long-name-' * 6}.added.md").write_text(f"**{'A long change ' * 12}** (spec {n}).\n")
+    world._git("add", "-A")
+    world._git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "fragments")
+    doc = world.doc(capsys)
+    assert doc["waiting"]["group"] == "release"
+    for args in ((), ("--ascii",)):
+        screen = world.screen(capsys, *args)
+        assert "A release is ready" in screen
+        assert all(len(ln) <= 80 for ln in screen.splitlines())
+
+
+def test_no_colour_codes(world, capsys, monkeypatch):  # AC-192.9
+    busy(world)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    for args in ((), ("--ascii",)):
+        assert "\x1b" not in world.screen(capsys, *args)
+    assert "\x1b" not in world.doc(capsys)["screen"]
+
+
+def test_every_state_symbol_comes_with_a_word(world, capsys):  # AC-192.9
+    busy(world)
+    utf8 = parts(world.screen(capsys))[0].splitlines()[0]
+    for mark in ("✓", "●"):
+        assert re.search(rf"[A-Za-z]{{3,}} {mark}", utf8)
+    plain = world.screen(capsys, "--ascii")
+    bar = parts(plain)[0].splitlines()[0]
+    for mark in ("[x]", "[>]"):
+        assert re.search(rf"[A-Za-z]{{3,}} {re.escape(mark)}", bar)
+    assert any(re.search(r"\[!\] \w+", ln) for ln in plain.splitlines())
+    assert any(re.search(r"^\s*! \w+", ln) for ln in world.screen(capsys).splitlines())
+
+
+def test_ascii_step_numbers_on_a_six_step_bar(tmp_path, monkeypatch, capsys):  # AC-192.9
+    w = World(tmp_path, monkeypatch, shape="service-python")
+    w.add_issue(700, "An issue")
+    bar = parts(w.screen(capsys, "--ascii"))[0].splitlines()[0]
+    for num, name in ((1, "Issue"), (2, "Spec"), (3, "Build"), (4, "Dev"), (5, "Staging"), (6, "Prod")):
+        assert f"{num}. {name}" in bar
+    assert " -- " in bar and all(ord(c) < 128 for c in bar) and len(bar) <= 80
 
 
 def test_ascii_mode_has_no_symbols(world, capsys):  # AC-192.9
