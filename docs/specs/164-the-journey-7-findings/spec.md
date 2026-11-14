@@ -1,7 +1,7 @@
 ---
 spec_id: 164-the-journey-7-findings
 title: The journey 7 findings
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [596, 598, 599, 600]
@@ -41,3 +41,5 @@ None.
 ## Changelog
 
 - 2026-11-09 created from the journey 7 findings; approved with the recommended answers, as the user asked for this round ("do it autonomous").
+- 2026-11-14 building: built in #602
+- 2026-11-14 done: unverified: built in #602 (checked 2026-11-14); no verification.md

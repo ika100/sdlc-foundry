@@ -1,7 +1,7 @@
 ---
 spec_id: 161-a-tested-quickstart-and-leaner-user-docs
 title: A tested quickstart and leaner user docs
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: []
@@ -60,3 +60,5 @@ As a reader of the README or the site, I want the current story without history 
 
 - 2026-11-09 drafted from the documentation review of 2026-11-08; the user asked to write the spec and start the implementation, so it is approved with the assumptions above as defaults.
 - 2026-11-09 amended during the build: flags come from the whole command file (usage lines are incomplete, e.g. `--type` of `/component:add`), install blocks count only in fenced code, 4.x sections may name tombstones, and the 4.x tables go to the existing migration section of `ADOPTING.md` instead of `UPGRADES.md`.
+- 2026-11-14 building: built in #587
+- 2026-11-14 done: unverified: built in #587 (checked 2026-11-14); no verification.md
