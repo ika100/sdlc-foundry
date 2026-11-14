@@ -19,6 +19,7 @@ import appship_state as state
 import cluster
 import core
 import envwait
+import localport
 import model
 import registry
 import runs
@@ -336,6 +337,7 @@ def _smoke(gitops: Path, st: dict, rid: str, e: dict, m: model.Model, env: str) 
     except PlatformError:
         sp = None
     acs = sp.smoke_acs() if sp else []
+    localport.use_repo(gitops)
     url, why = m.url(comp, env)
     if not url:
         return smoke.not_run(env, f"{comp} has no {env} URL ({why})", acs)
