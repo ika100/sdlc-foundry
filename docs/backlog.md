@@ -17,7 +17,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
 | [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | approved | 7 | #568 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
-| [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | approved | 10 |  |
 | [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | approved | 7 | #688 |
 | [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | approved | 8 | #400 |
 | [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | approved | 10 |  |
@@ -168,6 +167,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [172-builds-catch-problems-before-the-pull](specs/172-builds-catch-problems-before-the-pull/spec.md) — Builds catch problems before the pull request | P1 | done | 8 | #628, #629, #630, #631, #632 |
 | [174-plugins-bring-what-they-need](specs/174-plugins-bring-what-they-need/spec.md) — Plugins bring what they need, and one plugin installs the starter set | P1 | done | 7 |  |
 | [175-a-spec-number-means-the-spec-and-ship](specs/175-a-spec-number-means-the-spec-and-ship/spec.md) — A spec number means the spec and ship PRs close their issues | P1 | done | 5 | #638, #645 |
+| [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | done | 10 |  |
 | [178-one-way-to-land-and-tests-that-do-not](specs/178-one-way-to-land-and-tests-that-do-not/spec.md) — One way to land and tests that do not race | P1 | done | 8 | #648 |
 | [179-unattended-runs-ask-less](specs/179-unattended-runs-ask-less/spec.md) — Unattended runs ask less | P1 | done | 9 | #616, #653, #654, #655 |
 | [180-prompt-checks-test-behaviour-not](specs/180-prompt-checks-test-behaviour-not/spec.md) — Prompt checks test behaviour not sentences | P1 | done | 7 |  |
