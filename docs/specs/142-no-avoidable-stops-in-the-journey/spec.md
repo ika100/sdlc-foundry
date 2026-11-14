@@ -1,7 +1,7 @@
 ---
 spec_id: 142-no-avoidable-stops-in-the-journey
 title: No avoidable stops in the journey
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -62,3 +62,5 @@ platform could have acted itself:
 - 2026-11-05 created (found in the journey runs of 2026-11-05)
 - 2026-11-05 open question answered by the user (recommended answer)
 - 2026-11-05 approved
+- 2026-11-14 building: built in #466
+- 2026-11-14 done: unverified: built in #466 (checked 2026-11-14); no verification.md
