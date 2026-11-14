@@ -10,6 +10,7 @@ tasks:
     covers: [AC-199.1, AC-199.2, AC-199.3, AC-199.4, AC-199.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Smoke paths read the settings of their repo
     files: [scripts/cplat/smoke.py, scripts/cplat/appship_joint.py]
@@ -28,6 +29,7 @@ tasks:
     covers: [AC-199.4]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 199 The journey 15 seams
