@@ -1,7 +1,7 @@
 ---
 spec_id: 140-one-repo-feature-takes-the-component-route
 title: A one-repo feature takes the component route
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -54,3 +54,5 @@ and `/component:ship` took 17 minutes on 2026-11-03; through the system route it
 - 2026-11-05 created (found in the journey runs of 2026-11-05)
 - 2026-11-05 open question answered by the user (recommended answer)
 - 2026-11-05 approved
+- 2026-11-14 building: built in #465
+- 2026-11-14 done: unverified: built in #465 (checked 2026-11-14); no verification.md

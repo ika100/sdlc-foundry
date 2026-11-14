@@ -1,7 +1,7 @@
 ---
 spec_id: 138-release-tags-the-staging-build
 title: A component release tags the build staging tested
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [426]
@@ -81,3 +81,5 @@ Tracks #426.
 - 2026-11-05 created (tracks #426); draft, waiting for the answer to the open question
 - 2026-11-05 amended: open question answered by the user: (b)
 - 2026-11-05 approved
+- 2026-11-14 building: built in #486
+- 2026-11-14 done: built in #486 (checked 2026-11-14)

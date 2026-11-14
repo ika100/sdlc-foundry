@@ -15,24 +15,16 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [137-cplat-waits-out-github-s-rate-limit](specs/137-cplat-waits-out-github-s-rate-limit/spec.md) — cplat waits out GitHub's rate limit | P1 | approved | 7 |  |
-| [138-release-tags-the-staging-build](specs/138-release-tags-the-staging-build/spec.md) — A component release tags the build staging tested | P1 | approved | 7 | #426 |
-| [140-one-repo-feature-takes-the-component-route](specs/140-one-repo-feature-takes-the-component-route/spec.md) — A one-repo feature takes the component route | P1 | approved | 4 |  |
-| [141-an-approved-plan-asks-no-new-questions](specs/141-an-approved-plan-asks-no-new-questions/spec.md) — An approved system plan asks no new questions | P1 | approved | 5 |  |
-| [142-no-avoidable-stops-in-the-journey](specs/142-no-avoidable-stops-in-the-journey/spec.md) — No avoidable stops in the journey | P1 | approved | 5 |  |
-| [154-the-journey-6-findings](specs/154-the-journey-6-findings/spec.md) — The journey 6 findings | P1 | approved | 4 | #557, #558, #559, #560 |
 | [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | approved | 7 | #568 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
-| [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | approved | 10 |  |
-| [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | approved | 4 | #596, #598, #599, #600 |
 | [176-triage-proposes-in-one-table-and-hands](specs/176-triage-proposes-in-one-table-and-hands/spec.md) — Triage proposes in one table and hands off to the dispatcher | P1 | approved | 10 |  |
 | [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | approved | 7 | #688 |
 | [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | approved | 8 | #400 |
 | [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | approved | 10 |  |
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
 | [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | approved | 12 |  |
+| [198-a-platform-release-holds-main-through](specs/198-a-platform-release-holds-main-through/spec.md) — A platform release holds main through the merge lock | P1 | approved | 9 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
-| [173-the-guides-read-without-spec-numbers](specs/173-the-guides-read-without-spec-numbers/spec.md) — The guides read without spec numbers | P2 | approved | 3 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -144,7 +136,12 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [131-runs-that-finish-on-their-own](specs/131-runs-that-finish-on-their-own/spec.md) — Runs that finish on their own | P1 | done | 19 | #324 |
 | [134-a-pr-runs-only-the-e2e-it-needs](specs/134-a-pr-runs-only-the-e2e-it-needs/spec.md) — A pull request runs only the e2e it needs, and that e2e runs in parallel parts | P1 | done | 9 | #281 |
 | [136-the-whole-journey-fits-a-time-budget](specs/136-the-whole-journey-fits-a-time-budget/spec.md) — The whole journey fits a time budget | P1 | done | 4 |  |
+| [137-cplat-waits-out-github-s-rate-limit](specs/137-cplat-waits-out-github-s-rate-limit/spec.md) — cplat waits out GitHub's rate limit | P1 | done | 7 |  |
+| [138-release-tags-the-staging-build](specs/138-release-tags-the-staging-build/spec.md) — A component release tags the build staging tested | P1 | done | 7 | #426 |
 | [139-a-backup-bucket-without-a-using-component](specs/139-a-backup-bucket-without-a-using-component/spec.md) — A backup bucket without a using component | P1 | done | 5 | #418 |
+| [140-one-repo-feature-takes-the-component-route](specs/140-one-repo-feature-takes-the-component-route/spec.md) — A one-repo feature takes the component route | P1 | done | 4 |  |
+| [141-an-approved-plan-asks-no-new-questions](specs/141-an-approved-plan-asks-no-new-questions/spec.md) — An approved system plan asks no new questions | P1 | done | 5 |  |
+| [142-no-avoidable-stops-in-the-journey](specs/142-no-avoidable-stops-in-the-journey/spec.md) — No avoidable stops in the journey | P1 | done | 5 |  |
 | [143-the-coordinator-waits-with-cplat](specs/143-the-coordinator-waits-with-cplat/spec.md) — The coordinator waits with cplat, not hand-written loops | P1 | done | 11 | #475 |
 | [144-one-gitops-pr-per-environment-for-a](specs/144-one-gitops-pr-per-environment-for-a/spec.md) — One gitops PR per environment for a system ship | P1 | done | 8 |  |
 | [145-smoke-tests-that-write-run-only-in-dev](specs/145-smoke-tests-that-write-run-only-in-dev/spec.md) — Smoke tests that write run only in dev | P1 | done | 7 | #474 |
@@ -153,12 +150,15 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [148-transient-errors-never-stop-a-run](specs/148-transient-errors-never-stop-a-run/spec.md) — Transient errors and slow progress never stop a run | P1 | done | 7 | #539, #540, #541, #542, #543, #544, #545 |
 | [149-a-spec-decides-by-default](specs/149-a-spec-decides-by-default/spec.md) — A spec decides by default | P1 | done | 6 |  |
 | [151-prompt-changes-pass-the-benchmark](specs/151-prompt-changes-pass-the-benchmark/spec.md) — Prompt changes pass the benchmark before a release | P1 | done | 4 |  |
+| [154-the-journey-6-findings](specs/154-the-journey-6-findings/spec.md) — The journey 6 findings | P1 | done | 4 | #557, #558, #559, #560 |
 | [155-each-repo-of-a-system-ship-runs-in-its-own-session](specs/155-each-repo-of-a-system-ship-runs-in-its-own-session/spec.md) — Each repo of a system ship runs in its own session | P1 | done | 10 | #560 |
 | [156-a-system-ship-benchmark](specs/156-a-system-ship-benchmark/spec.md) — A system ship benchmark | P1 | done | 7 | #560 |
 | [159-unit-mode-runs-independent-tasks-at-once](specs/159-unit-mode-runs-independent-tasks-at-once/spec.md) — Unit mode runs independent tasks at once | P1 | done | 8 | #560 |
 | [160-a-lint-suppression-in-an-acceptance-test-is-not-a](specs/160-a-lint-suppression-in-an-acceptance-test-is-not-a/spec.md) — A lint suppression in an acceptance test is not a changed test | P1 | done | 4 | #570 |
+| [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | done | 10 |  |
 | [162-repo-sessions-apply-the-repo-s-rules-in-an](specs/162-repo-sessions-apply-the-repo-s-rules-in-an/spec.md) — Repo sessions apply the repo's rules in an untrusted clone | P1 | done | 3 | #588 |
 | [163-a-resumed-unit-run-drops-the-escalation-of](specs/163-a-resumed-unit-run-drops-the-escalation-of/spec.md) — A resumed unit run drops the escalation of the run before | P1 | done | 2 | #591 |
+| [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | done | 4 | #596, #598, #599, #600 |
 | [165-a-test-problem-does-not-stop-an-unattended-run](specs/165-a-test-problem-does-not-stop-an-unattended-run/spec.md) — A test problem does not stop an unattended run | P1 | done | 7 | #595, #582, #583 |
 | [166-the-dev-pr-of-a-system-ship-lands-on-the](specs/166-the-dev-pr-of-a-system-ship-lands-on-the/spec.md) — The dev PR of a system ship lands on the current main | P1 | done | 4 | #597 |
 | [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | done | 11 |  |
@@ -208,6 +208,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [152-a-mutation-check-reports-test-strength](specs/152-a-mutation-check-reports-test-strength/spec.md) — A mutation check reports how strong the acceptance tests are | P2 | done | 3 |  |
 | [153-fewer-waits-after-a-merge](specs/153-fewer-waits-after-a-merge/spec.md) — Fewer waits after a merge | P2 | done | 2 |  |
 | [170-release-wait-names-a-commit-of-another-repo](specs/170-release-wait-names-a-commit-of-another-repo/spec.md) — Release wait names a commit of another repo | P2 | done | 2 | #614 |
+| [173-the-guides-read-without-spec-numbers](specs/173-the-guides-read-without-spec-numbers/spec.md) — The guides read without spec numbers | P2 | done | 3 |  |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)
