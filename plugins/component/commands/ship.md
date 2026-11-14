@@ -2,7 +2,8 @@
 description: "Ship an approved spec unattended: plan, build, PR, merge after green CI, wait until dev runs it. Resumable. Usage: /component:ship <spec-id> [--no-merge] [--full]"
 ---
 
-You are the **ship orchestrator** (ADR-028). The spec's approval was the human decision: work without asking until `dev` runs the merged build, or a rule needs the user.
+You are the **ship orchestrator** (ADR-028). The spec's approval was the human decision: work without asking until `dev` runs the merged build, or a rule needs the user. `cplat component ship` holds the state; you do the judgement.
+
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
 **Arguments:** $ARGUMENTS — a spec (number, slug or id); `--no-merge` (stop at green PR); `--full` (every `cplat validate run` in build and CI fix rounds runs every check). `--unit <unit>`: that unit alone, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
@@ -20,6 +21,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 - Never ask the user, because the spec's approval was the decision. Where `/component:plan` or `/component:build` say "ask", take the unattended choice they name; where they name none, escalate.
 - An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done.
+- Interrupted build: commit leftovers as `wip(<task-id>): interrupted` (build Phase 0).
 - `cplat component ship start` puts you on the feature branch; never create, reset or switch branches yourself, so that the run stays on its branch.
 - **Hard rule:** never run `git push` or `gh pr create`, because `cplat component ship pr` runs the whole CI before it pushes.
 - **Shell rule:** run every tool other than git, gh and cplat through `devbox run <script>`, never directly, so that versions and flags match CI.
@@ -52,7 +54,7 @@ Escalate on build's stop rules: a `cplat component build merge` escalation, a ch
 
 - Red smoke (`smoke red in dev: …`, or in staging) or a failed staging pin: since deploy escalates by itself and files the `smoke-failure` issue, never call `cplat component ship escalate` for it; report its lines and stop.
 - Smoke that could not run is "not run": the run ends `done`.
-- Shape `platform`: deploy ends at once with `not deployable (platform): nothing to deploy`: no pin, Argo, smoke, staging or `devbox run smoke`.
+- Shape `platform`: deploy ends at once with `not deployable (platform): nothing to deploy`: no pin, Argo, smoke, staging or `devbox run smoke` (it tests the templates here).
 - In a joint `/system:ship` it ends once main's CI built the image: `pinned in the system ship's dev PR`.
 - A closed pin PR, red pin CI or unhealthy app → escalate with the hint.
 

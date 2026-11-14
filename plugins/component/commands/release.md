@@ -6,7 +6,7 @@ You are the **release orchestrator**: target, gates, tag, follow-up PR, issues, 
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
-**What is tagged (spec 138):** the commit staging runs; without staging (a library, or no gitops-app link) `main`'s head.
+**What is tagged (spec 138):** the commit staging runs (CI re-tags its `sha-<40>` image `X.Y.Z` without a rebuild, spec 106); without staging (a library, or no gitops-app link) `main`'s head.
 
 **Arguments:** $ARGUMENTS (none expected; ignore any).
 
@@ -88,9 +88,9 @@ Tag: vX.Y.Z pushed to origin on <commit>
 Follow-up PR: <URL>: CHANGELOG entry, <VERSION_FILE> → <NEXT_DEV> (or "CHANGELOG only"), merged
 Issues closed: #42, #7 (or "none")
 
-Tagged commit: <commit>, the one staging runs (sha-<commit>): CI re-tags that image X.Y.Z without a rebuild, so prod gets the digest staging tested.
-   (without staging: main's head, <why from the target>, tagged after its ci run passed.)
-Version: release = tag vX.Y.Z (the tagged commit still shows the old dev version); main now carries <NEXT_DEV>.
+Tagged commit: <commit> — the commit staging runs (sha-<commit>): CI re-tags that image X.Y.Z without a rebuild, so prod gets the digest staging tested (spec 106).
+   (without staging: <commit> — main's head: <why from the target>, tagged after its ci run passed.)
+Version: the tagged commit's version file shows the previous development version; the release version is the tag vX.Y.Z. main now carries <NEXT_DEV> from the follow-up PR.
 ```
 
 ## Rules

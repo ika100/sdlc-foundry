@@ -32,22 +32,22 @@ def test_next_command_exists_with_a_description():  # AC-192.1
     assert m
     meta = yaml.safe_load(m.group(1))
     assert meta["description"] and len(meta["description"]) <= 260
-    assert "/platform:next" in meta["description"]  # interface: the usage line names the command
+    assert "/platform:next" in meta["description"]
 
 
 def test_next_command_runs_cplat_next_json_and_follows_how():  # AC-192.6
     text = read(NEXT)
-    assert "cplat next --json" in text  # interface: the command the prompt must run
-    assert "`how`" in text  # interface: the field the prompt follows
+    assert "cplat next --json" in text
+    assert "`how`" in text
     assert "$ARGUMENTS" in text
 
 
 def test_next_command_never_chooses_for_the_person():  # AC-192.7
     text = read(NEXT)
-    assert "Hard rule" in text or "hard rule" in text.lower()  # interface: the legend of hard rules
+    assert "Hard rule" in text or "hard rule" in text.lower()
     register = ROOT / "docs" / "rules" / "plugins" / "platform" / "commands" / "next.yml"
     rules = yaml.safe_load(read(register))
-    assert "user-decides-approval" in str(rules)  # interface: the hard-rule id of the person's approval
+    assert "user-decides-approval" in str(rules)
 
 
 def test_next_command_is_listed_in_the_plugin_readme():  # AC-192.1
@@ -57,7 +57,7 @@ def test_next_command_is_listed_in_the_plugin_readme():  # AC-192.1
 @pytest.mark.parametrize("rel", HAND_OVER)
 def test_prompt_ends_with_the_hand_over(rel):  # AC-192.8
     text = read(ROOT / rel)
-    assert "cplat next --json" in text  # interface: the hand-over runs the command that prints the next step
+    assert "cplat next --json" in text
 
 
 @pytest.mark.parametrize("rel", HAND_OVER)

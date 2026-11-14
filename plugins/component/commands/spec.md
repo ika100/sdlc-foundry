@@ -8,7 +8,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 **Request:** $ARGUMENTS
 
-First argument: no argument, `--all`, `index` or `migrate` → read `${CLAUDE_PLUGIN_ROOT}/references/spec-list.md` and follow it. Anything else → the pre-flight below.
+**Dispatch on the first argument.** No argument, `--all`, `index` or `migrate` → read `${CLAUDE_PLUGIN_ROOT}/references/spec-list.md` and follow it. Anything else → the pre-flight below.
 
 ## cplat
 
@@ -17,7 +17,7 @@ First argument: no argument, `--all`, `index` or `migrate` → read `${CLAUDE_PL
 ## 0. Pre-flight
 
 1. **Mode:** `approve <id>` → A. `--amend <id> <change>` → C. `--from-plan <plan> [<repo-id>]` → D. Otherwise → B (new spec).
-2. **Route small work away** (new spec): a typo, rename, one-file tweak, an error message or "X is broken" → recommend `/component:fix` and stop; the user may still insist.
+2. **Route small work away** (for a new spec): a typo, rename, one-file tweak, an error message or "X is broken" → recommend `/component:fix` and stop; the user may still insist.
 3. `git status --porcelain` must be empty so that the commit holds only the spec; otherwise stop: commit or stash first.
 4. **Shape:** `unsupported` (a gitops-app repo) → stop and point to `/system:spec`. "cannot determine the repo's shape" → continue with `--no-shape` on `spec new` (`/component:build` needs a shape). A repo with a shape (the platform repo too, `shape: platform`) records it: no `--no-shape`. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. That file already declares it, since the user put it there.
 5. **Branch:** every step of one spec happens on `feature/<spec_id>` (one PR for everything). On another branch than `main`, ask before switching.
