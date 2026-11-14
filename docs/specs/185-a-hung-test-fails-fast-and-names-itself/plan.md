@@ -1,7 +1,7 @@
 ---
 spec_id: 185-a-hung-test-fails-fast-and-names-itself
 shape: platform
-spec_hash: "cb3176ccd495"
+spec_hash: "8b923961a546"
 summary: 120 s per-test limit (pinned pytest-timeout), 1 s real-sleep guard, cplat quiet test-fast gives up after 9 min naming running tests, decision-becomes-task rule in the ship prompts, suite time in CI and the weekly retro
 tasks:
   - id: t1
