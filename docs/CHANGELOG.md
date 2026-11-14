@@ -6,6 +6,16 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.22.1] - 2026-11-14
+
+### Changed
+
+**`/issue:triage` proposes in one table and hands fixes to the dispatcher (spec 176).** Triage used to ask issue by issue and start each `/component:fix` in your session. Now `cplat issue triage batch` reads the whole queue once, you see one overview (needs your decision, clear, already handled), answer the open questions as choices, confirm once (`OK, do it` / `Change one` / `Cancel`), and `act` labels the issues and posts a `Triage:` comment. New specs of a run share one `docs/triage-<date>` branch and one draft PR. No fix starts in the session: the dispatcher reads the newest `Triage:` comment of a user with write access as the fix run's task, with the reporter's text fenced ([ADR-111](adr/111-triage-hands-off-through-a-writer-comment.md)). Update the plugins (`/plugin marketplace update`).
+
+### Fixed
+
+**Smoke, promotion evidence and Grafana links follow the port the local cluster's Gateway got (#199).** When 8088 was taken, `cluster-up` mapped the Gateway to another port, but smoke, the promotion evidence and the Grafana URL still used `LOCAL_HTTP_PORT` or 8088 and reached nothing or another cluster. For `*.localhost` hosts cplat now uses `LOCAL_HTTP_PORT` when it is a number, else the port the k3d cluster's Gateway listens on, else 8088 (see [Smoke in dev](unattended-delivery.md#smoke-in-dev)).
+
 ## [5.22.0] - 2026-11-14
 
 ### Fixed
