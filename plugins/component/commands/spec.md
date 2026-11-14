@@ -8,7 +8,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 **Request:** $ARGUMENTS
 
-**Dispatch on the first argument.** No argument, `--all`, `index` or `migrate` → read `${CLAUDE_PLUGIN_ROOT}/references/spec-list.md` and follow it. Anything else → the pre-flight below.
+First argument: no argument, `--all`, `index` or `migrate` → read `${CLAUDE_PLUGIN_ROOT}/references/spec-list.md` and follow it. Anything else → the pre-flight below.
 
 ## cplat
 
@@ -17,7 +17,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 ## 0. Pre-flight
 
 1. **Mode:** `approve <id>` → A. `--amend <id> <change>` → C. `--from-plan <plan> [<repo-id>]` → D. Otherwise → B (new spec).
-2. **Route small work away** (for a new spec): a typo, rename, one-file tweak, an error message or "X is broken" → recommend `/component:fix` and stop; the user may still insist.
+2. **Route small work away** (new spec): a typo, rename, one-file tweak, an error message or "X is broken" → recommend `/component:fix` and stop; the user may still insist.
 3. `git status --porcelain` must be empty so that the commit holds only the spec; otherwise stop: commit or stash first.
 4. **Shape:** `unsupported` (a gitops-app repo) → stop and point to `/system:spec`. "cannot determine the repo's shape" → continue with `--no-shape` on `spec new` (`/component:build` needs a shape). A repo with a shape (the platform repo too, `shape: platform`) records it: no `--no-shape`. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. That file already declares it, since the user put it there.
 5. **Branch:** every step of one spec happens on `feature/<spec_id>` (one PR for everything). On another branch than `main`, ask before switching.
@@ -27,7 +27,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 1. `cplat spec approve <id>`. Refused → show the reasons and the fix (usually `/component:spec --amend <id> …`). It set the plan aside (criteria changed) → tell the user the spec needs a new plan.
 2. Switch to `feature/<spec_id>` if it exists; commit `docs/specs/<spec_id>/`: `docs(spec): approve <spec_id>`.
 3. `cplat spec land <spec_id>` (merges the PR on green CI); show its output, stop on a failure.
-4. Next step: `/component:plan <NNN>`.
+4. End with F's hand-over.
 
 ## B. New spec
 
@@ -71,7 +71,7 @@ Open questions: <n or none> · Non-goals: <short list>
 File: docs/specs/<spec_id>/spec.md · Branch: feature/<spec_id>
 ```
 
-No open questions → one AskUserQuestion: "Approve with these <n> assumptions (Recommended)" / "Change an assumption" / "I'll review the file first". Approve → A. Change → ask which one and the new decision (the user types it), then C with that change and F again. Otherwise the next step: `/component:spec approve <NNN>` after review, or `/component:spec --amend <NNN> <change>`.
+No open questions → one AskUserQuestion: "Approve with these <n> assumptions (Recommended)" / "Change an assumption" / "I'll review the file first". Approve → A. Change → ask which one and the new decision (the user types it), then C with that change and F again. Otherwise end with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 
 ## Rules
 

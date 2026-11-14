@@ -59,6 +59,7 @@ tasks:
     covers: [AC-192.8]
     parallel_safe: true
     depends_on: [t7]
+    done: true
   - id: t9
     title: Hand-over at the end of triage, platform release, system spec approval and system ship
     files: [plugins/issue/commands/triage.md, plugins/platform/commands/release.md, plugins/system/commands/spec.md, plugins/system/commands/ship.md, docs/rules/plugins/issue/commands/triage.yml, docs/rules/plugins/platform/commands/release.yml, docs/rules/plugins/system/commands/spec.yml, docs/rules/plugins/system/commands/ship.yml]

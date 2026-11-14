@@ -6,7 +6,7 @@ You are the **release orchestrator**: target, gates, tag, follow-up PR, issues, 
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
-**What is tagged (spec 138):** the commit staging runs (CI re-tags its `sha-<40>` image `X.Y.Z` without a rebuild, spec 106); without staging (a library, or no gitops-app link) `main`'s head.
+**What is tagged (spec 138):** the commit staging runs; without staging (a library, or no gitops-app link) `main`'s head.
 
 **Arguments:** $ARGUMENTS (none expected; ignore any).
 
@@ -88,13 +88,14 @@ Tag: vX.Y.Z pushed to origin on <commit>
 Follow-up PR: <URL>: CHANGELOG entry, <VERSION_FILE> → <NEXT_DEV> (or "CHANGELOG only"), merged
 Issues closed: #42, #7 (or "none")
 
-Tagged commit: <commit> — the commit staging runs (sha-<commit>): CI re-tags that image X.Y.Z without a rebuild, so prod gets the digest staging tested (spec 106).
-   (without staging: <commit> — main's head: <why from the target>, tagged after its ci run passed.)
-Version: the tagged commit's version file shows the previous development version; the release version is the tag vX.Y.Z. main now carries <NEXT_DEV> from the follow-up PR.
+Tagged commit: <commit>, the one staging runs (sha-<commit>): CI re-tags that image X.Y.Z without a rebuild, so prod gets the digest staging tested.
+   (without staging: main's head, <why from the target>, tagged after its ci run passed.)
+Version: release = tag vX.Y.Z (the tagged commit still shows the old dev version); main now carries <NEXT_DEV>.
 ```
 
 ## Rules
 
+- After the summary, end with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 - **Fail fast**; after Phase 1 a stop runs `git switch main` first, so the checkout is left on `main`.
 - `git push origin v*` is pre-approved. **Phase 7 closes issues via `gh issue close`** (an `ask` permission).
 - Never auto-fix quality, test or security failures (report and stop), so that the released code is what passed the gates; never force-merge (a failed merge goes to the user), because it needs the user's decision.
