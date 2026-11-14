@@ -1,7 +1,7 @@
 ---
 spec_id: 199-the-journey-15-seams
 title: The journey 15 seams
-status: building
+status: done
 priority: P1
 shape: platform
 ---
@@ -78,3 +78,4 @@ so that I can trust them without checking the port myself.
 - 2026-11-14 created
 - 2026-11-14 approved
 - 2026-11-14 building
+- 2026-11-14 done
