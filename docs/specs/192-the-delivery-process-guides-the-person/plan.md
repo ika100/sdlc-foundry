@@ -52,6 +52,7 @@ tasks:
     covers: [AC-192.1, AC-192.6, AC-192.7]
     parallel_safe: true
     depends_on: [t6]
+    done: true
   - id: t8
     title: Hand-over at the end of component spec approval, build, ship and release
     files: [plugins/component/commands/spec.md, plugins/component/commands/build.md, plugins/component/commands/ship.md, plugins/component/commands/release.md, docs/rules/plugins/component/commands/spec.yml, docs/rules/plugins/component/commands/build.yml, docs/rules/plugins/component/commands/ship.yml, docs/rules/plugins/component/commands/release.yml]
