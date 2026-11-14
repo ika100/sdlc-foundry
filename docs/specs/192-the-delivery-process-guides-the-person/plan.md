@@ -31,6 +31,7 @@ tasks:
     covers: [AC-192.1, AC-192.2, AC-192.3, AC-192.4, AC-192.5, AC-192.9]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t4
     title: nextquestions - options, outward actions, undo, pages and record argv
     files: [scripts/cplat/nextquestions.py]
