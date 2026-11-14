@@ -63,7 +63,7 @@ default timeout is 540 s, so one wait fits in one tool call.
 
 **The ship wait.**
 
-- **AC-143.8** Given a ship run in a clone, when `cplat component ship wait [--repo DIR] [--phase P] [--timeout S]` runs,
+- ~~**AC-143.8**~~ superseded by AC-200.3 on 2026-11-14: Given a ship run in a clone, when `cplat component ship wait [--repo DIR] [--phase P] [--timeout S]` runs,
   then it prints one line with the time each time the run's phase changes, and exits 0 when the run reaches phase `P` or a
   later one (in the order plan, build, pr, land, deploy, done), or `done` when no phase is given. It exits 1 with a first
   line starting with `ESCALATED:`, the reason and the cause when the run is escalated, and 2 with `TIMEOUT:`, the phase and
@@ -125,3 +125,4 @@ default timeout is 540 s, so one wait fits in one tool call.
 - 2026-11-05 approved by the user
 - 2026-11-05 building
 - 2026-11-05 done
+- 2026-11-14 AC-143.8 superseded by AC-200.3 (spec 200): one `component ship wait` call ends within its timeout; progress exits 0 with a `WAIT:` line
