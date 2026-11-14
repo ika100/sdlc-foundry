@@ -10,6 +10,7 @@ tasks:
     covers: [AC-192.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: nextstate - every source read-only, grouping, item descriptions and plain words
     files: [scripts/cplat/nextstate.py, scripts/cplat/needs.py]

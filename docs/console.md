@@ -82,6 +82,8 @@ Every page has a one-line answer under its title and a **Help** button (or `?`).
 
 ![How it works: the eight stages, the three where you decide, and every term by topic](img/console/how-it-works.jpg)
 
+Four terms of the terminal screen are explained there too: **Release** (the last step of the process bar in a platform or library repo, where Dev, Staging and Prod are one step), **Runs on its own**, **Two at a time** and **Needs you**, under *Delivering in a repo*. The terminal entry point prints that process bar in the terminal, with what is happening and what waits for you as choices; it uses the same texts as the console (`scripts/cplat/stages.py`).
+
 ## Stages
 
 | Stage | What happens | You decide |
