@@ -1,7 +1,7 @@
 ---
 spec_id: 199-the-journey-15-seams
 title: The journey 15 seams
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -76,3 +76,4 @@ so that I can trust them without checking the port myself.
 ## Changelog
 
 - 2026-11-14 created
+- 2026-11-14 approved
