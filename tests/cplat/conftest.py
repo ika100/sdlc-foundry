@@ -35,6 +35,17 @@ def silent_sessions_are_not_pauses(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_docker_port(request, monkeypatch):
+    """Spec 199: the local Gateway port is asked of docker; tests never ask the developer's. Every test starts with no
+    LOCAL_CLUSTER and an empty cache; all but spec 199's own (which fake `docker` on PATH) get "no answer" (port 8088)."""
+    import localport
+    monkeypatch.delenv("LOCAL_CLUSTER", raising=False)
+    localport.reset()
+    if not request.node.path.name.startswith("test_199_"):
+        monkeypatch.setattr(localport, "docker_port", lambda cluster: None)
+
+
+@pytest.fixture(autouse=True)
 def no_real_issue_claims(monkeypatch):
     """Spec 082: claims call GitHub; tests never do. Tracked issues look closed (nothing to claim) unless a test
     replaces `claim.gh` itself."""
