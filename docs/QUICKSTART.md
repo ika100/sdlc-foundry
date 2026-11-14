@@ -143,6 +143,7 @@ flowchart LR
 - Add a database: `/resource:add postgres --type database`, then `/component:set taskboard-api --uses postgres`. See [Add-ons, secrets and observability](https://ika100.github.io/sdlc-foundry/scenarios/addons-secrets-observability/).
 - Add a web UI and ship one spec across both repos: [User journey](USER-JOURNEY.md), chapters 2 to 4.
 - Promote to staging and prod: [Promote safely](https://ika100.github.io/sdlc-foundry/scenarios/promote-safely/).
+- Lost track? `/platform:next` shows where you are in the process and what waits for you, as choices.
 - See what waits for you in a browser: `/platform:ui` ([the local console](console.md)).
 - Watch the whole path recorded, from an empty folder to prod: [Watch a real run](https://ika100.github.io/sdlc-foundry/get-started/watch-a-run/).
 

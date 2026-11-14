@@ -73,6 +73,7 @@ tasks:
     covers: [AC-192.1, AC-192.8]
     parallel_safe: true
     depends_on: [t7]
+    done: true
 human_steps:
   - "Before the PR merges: t7-t9 add /platform:next and eight hand-over sentences, so the prompts pass `baseline.prompt_bytes`. In a Claude session on the branch run `cplat platform runs benchmark quick-task --plugins plugins --reset-first` and `cplat platform runs benchmark build --plugins plugins --reset-first`, then `cplat platform rules rebaseline --reason \"/platform:next and the hand-over (spec 192)\"` and commit docs/rules/register.yml."
 ---
