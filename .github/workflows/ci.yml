@@ -269,7 +269,7 @@ jobs:
         run: |
           uv sync --all-extras
           python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" ${{ matrix.template }} .   # spec 184: file, line and rule of a violation
-          uv run mypy src
+          uv run mypy .   # the same scope as the repo's own `typecheck` recipe (a script outside src/ broke it, journey 14)
           if [ "${{ matrix.template }}" = "service-python" ]; then
             SMOKE_BASE_URL='' uv run python -m pytest tests/ -p scripts.smoke_pytest -q -rs | tee /tmp/pytest.out
             grep -q "SMOKE_BASE_URL is not set" /tmp/pytest.out   # spec 091: the example smoke test is skipped here
