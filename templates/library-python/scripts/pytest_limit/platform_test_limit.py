@@ -12,13 +12,15 @@ another tool already owns SIGALRM.
 import os
 import signal
 import threading
+from collections.abc import Generator
+from types import FrameType
 
 import pytest
 
 LIMIT_S = 120
 
 
-def _pytest_timeout_active(config):
+def _pytest_timeout_active(config: pytest.Config) -> bool:
     """True when pytest-timeout is set to a limit above 0 by option, ini value or PYTEST_TIMEOUT."""
     candidates = [os.environ.get("PYTEST_TIMEOUT")]
     try:
@@ -38,7 +40,7 @@ def _pytest_timeout_active(config):
     return False
 
 
-def _can_arm(item):
+def _can_arm(item: pytest.Item) -> bool:
     if not hasattr(signal, "SIGALRM") or not hasattr(signal, "setitimer"):
         return False
     if threading.current_thread() is not threading.main_thread():
@@ -51,12 +53,14 @@ def _can_arm(item):
 
 
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_protocol(item, nextitem):
+def pytest_runtest_protocol(
+    item: pytest.Item, nextitem: pytest.Item | None
+) -> Generator[None, None, None]:
     if not _can_arm(item):
         yield
         return
 
-    def on_alarm(signum, frame):
+    def on_alarm(signum: int, frame: FrameType | None) -> None:
         signal.setitimer(signal.ITIMER_REAL, LIMIT_S)  # a teardown that also blocks is stopped too
         message = f"Timeout (>{LIMIT_S}s): {item.nodeid} ran past the per-test limit of {LIMIT_S} s"
         raise pytest.fail.Exception(message, pytrace=False)
