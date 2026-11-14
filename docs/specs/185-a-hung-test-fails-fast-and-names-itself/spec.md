@@ -26,7 +26,7 @@ As the platform maintainer, I want each CI run to record the suite time and the 
 
 A hung test fails and names itself.
 
-- **AC-185.1** Given a test of the `cplat` suite whose setup, call or teardown runs longer than 120 seconds, when the suite runs (`devbox run test-fast`, `pytest tests/cplat` with or without `-n auto` as in AC-112.15, a CI shard, or `scripts/ci-local.sh`), then that test is reported failed with its test id, the limit of 120 seconds and the stack where it was stopped. The other tests still run and report, and the run exits non-zero.
+- **AC-185.1** Given a test of the `cplat` suite whose setup, call or teardown runs longer than 120 seconds, when the suite runs (`devbox run test-fast`, `pytest tests/cplat` with or without `-n auto` as in AC-112.15, a CI shard, or `scripts/ci-local.sh`), then that test is reported failed with its test id, the limit of 120 seconds and the stack where it was stopped. The other tests still run and report, and the run exits non-zero. A test marked with its own limit (A1) is stopped at that limit instead.
 - **AC-185.2** Given the repository, then `requirements-test.in` lists exactly the five top-level packages pytest, pytest-xdist, pytest-timeout, pyyaml and ruamel.yaml, unpinned, and `requirements-test.txt` pins each of them and each of their dependencies to an exact version, compiled from it by `uv pip compile`. The check of AC-127.5 fails on pytest-timeout installed without that file, as it does for the other four. (replaces AC-127.4)
 - **AC-185.3** Given a test of the `cplat` suite whose own process (the test, its fixtures and the threads they start) calls a real sleep that would take that test's total real sleep time over 1 second, when the sleep is called, then it does not sleep. The test fails at once with `real sleep of <s> s at <file>:<line> takes this test over 1 s; wait for an event or a file, or use the fake clock`, even if its assertions would pass. Sleeps of at most 1 second in total, sleeps on the fake clock, and sleeps inside fake programs that run as separate processes (the marked ones of AC-178.6) do not fail a test.
 - **AC-185.4** Given `cplat quiet test-fast` (with or without test arguments, and each run of `--repeat`) in a repo whose test-fast runs pytest, when the run has not ended 9 minutes after it started, then `cplat quiet` stops it and every process it started. It prints `FAILED (gave up after 9 min): devbox run test-fast (log: <path>)`, then one line `still running: <test id>` for each test that started and did not finish (at most 20, then `... and <n> more`), and exits 124. It does not run the flaky rerun of AC-165.7. A run that ends within 9 minutes prints and exits as before.
@@ -52,7 +52,7 @@ The suite's time is measured.
 
 ## Assumptions
 
-- **A1** The per-test limit is 120 seconds for every test, with no per-test override, because the slowest shard takes at most 75 seconds (AC-112.12) and the seam test at most 120 (AC-178.7) (other option: a marker that raises one test's limit with a reason; affects AC-185.1).
+- **A1** The per-test limit is 120 seconds for every test, because the slowest shard takes at most 75 seconds (AC-112.12) and the seam test at most 120 (AC-178.7). A test may raise its own limit with `@pytest.mark.timeout(<seconds>)` and a comment that gives the reason; the 120 seconds stay the default for every other test. (Amended 2026-11-14: the xdist test of AC-185.4 starts two pytest workers of its own and needs more than 120 seconds on a loaded machine, so it carries a marked limit of 300 seconds, [#712](https://github.com/ika100/sdlc-foundry/pull/712). The earlier text allowed no override.)
 - **A2** The sleep limit counts the total real sleep time of one test, not a single call, and fails at the sleep call that would cross it, so that a 5-minute pause fails at once (other option: fail only a single sleep over 1 s, judged after the test; affects AC-185.3).
 - **A3** Real sleeps inside fake programs that run as separate processes are not counted, because AC-178.6 already allows them with a marker (other option: count them too; affects AC-185.3).
 - **A4** `cplat quiet test-fast` gives up after a fixed 9 minutes, below the about 10 minutes after which a session's background command is cut, with no setting per repo (other option: 20 minutes, or a repo setting; affects AC-185.4, AC-185.5).
@@ -73,3 +73,4 @@ None.
 - 2026-11-12 approved
 - 2026-11-12 building
 - 2026-11-12 done
+- 2026-11-14 amended (A1: a marked per-test limit with a reason)
