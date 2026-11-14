@@ -38,6 +38,7 @@ tasks:
     covers: [AC-192.5, AC-192.6, AC-192.7, AC-192.10]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t6
     title: cplat next and cplat next answer
     files: [scripts/cplat/nextcmd.py, scripts/cplat/cplat.py]
