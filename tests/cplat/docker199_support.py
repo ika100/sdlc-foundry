@@ -18,17 +18,26 @@ import json, os, sys
 d = os.environ["FAKE_DOCKER_DIR"]
 cfg = json.load(open(d + "/cfg.json"))
 open(d + "/calls", "a").write(json.dumps(sys.argv[1:]) + "\\n")
-if cfg.get("exit"):
-    sys.exit(cfg["exit"])
 if sys.argv[1:2] == ["port"] and len(sys.argv) >= 4:
     out = cfg["ports"].get(sys.argv[2])
+    if cfg.get("exit"):
+        sys.stdout.write(out or "")
+        sys.exit(cfg["exit"])
     if out is None:
         sys.stderr.write("Error response from daemon: No such container: " + sys.argv[2] + "\\n")
         sys.exit(1)
     sys.stdout.write(out)
     sys.exit(0)
-sys.exit(1)
+sys.exit(cfg.get("exit") or 1)
 '''
+
+
+def isolate(tmp_path: Path, monkeypatch) -> None:
+    """No personal settings file and no settings file of the current directory can change the cluster."""
+    (tmp_path / "xdg-isolated").mkdir(exist_ok=True)
+    (tmp_path / "cwd-isolated").mkdir(exist_ok=True)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-isolated"))
+    monkeypatch.chdir(tmp_path / "cwd-isolated")
 
 
 class FakeDocker:
@@ -46,6 +55,7 @@ class FakeDocker:
         monkeypatch.delenv("LOCAL_HTTP_PORT", raising=False)
         monkeypatch.delenv("LOCAL_CLUSTER", raising=False)
         monkeypatch.delenv("CPLAT_KUBE_CONTEXT", raising=False)
+        isolate(tmp_path, monkeypatch)
 
     def _save(self):
         (self.dir / "cfg.json").write_text(json.dumps(self.cfg))
@@ -85,4 +95,5 @@ def no_docker(tmp_path: Path, monkeypatch) -> Path:
     monkeypatch.delenv("LOCAL_HTTP_PORT", raising=False)
     monkeypatch.delenv("LOCAL_CLUSTER", raising=False)
     monkeypatch.delenv("CPLAT_KUBE_CONTEXT", raising=False)
+    isolate(tmp_path, monkeypatch)
     return empty

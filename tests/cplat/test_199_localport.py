@@ -95,7 +95,7 @@ def test_a_url_template_never_asks_docker_ac_199_4(docker):  # AC-199.4
 
 
 def test_docker_port_parses_the_first_line_ac_199_4(docker):  # AC-199.4
-    docker.reports("shop-local", 8123)
+    docker.says("shop-local", "0.0.0.0:8123\n[::]:9999\n")
     assert lp().docker_port("shop-local") == 8123
     assert lp().docker_port("other") is None
 
@@ -136,6 +136,15 @@ def test_the_kube_context_of_the_settings_file_names_the_cluster_ac_199_5(docker
     assert lp().cluster("shop") == "fromfile"
     lp().reset()
     assert lp().cluster("shop") == "shop-local"            # reset forgets the repo
+
+
+def test_the_kube_context_of_the_user_file_names_the_cluster_ac_199_5(docker, tmp_path, monkeypatch):  # AC-199.5
+    user = tmp_path / "xdg-isolated" / "sdlc-foundry"
+    user.mkdir(parents=True)
+    (user / "settings.yml").write_text("kube_context: k3d-fromuser\n")
+    docker.reports("fromuser", 8004)
+    assert lp().cluster("shop") == "fromuser"
+    assert model.local_port("shop") == 8004
 
 
 @pytest.mark.parametrize("context", ["kind-shop", "k3d-", "minikube"])
