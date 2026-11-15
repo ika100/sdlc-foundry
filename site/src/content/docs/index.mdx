@@ -172,13 +172,13 @@ From that file the platform renders, per environment: Deployments with numeric n
 ## Measured, not promised
 
 <ul class="stats">
-  <li><strong>12</strong><span>defects found by running the real chain end to end, each now a regression test or contract check</span></li>
-  <li><strong>9 → 3 min</strong><span>multi-arch Next.js image build (native runners instead of QEMU)</span></li>
-  <li><strong>−28 %</strong><span>always-on prompt tokens after tightening agent descriptions</span></li>
-  <li><strong>≈ 1m40s</strong><span>from no cluster at all to a local one with ArgoCD and every app healthy</span></li>
+  <li><strong>104 min</strong><span>from an empty folder to an API, Postgres and a web UI in prod, with daily backups and a passed restore drill (256 min in the first unattended run)</span></li>
+  <li><strong>3 min</strong><span>of a person's time in that run: 12 sentences typed, 0 stops for a platform defect</span></li>
+  <li><strong>39</strong><span>acceptance criteria, each traced to a test; prod runs the same image digest that staging tested</span></li>
+  <li><strong>−61 %</strong><span>tokens per run (90.5 M → 34.9 M) since the first unattended journey</span></li>
 </ul>
 
-The numbers come from the platform's own test application and are listed with their method on the [baselines page](/sdlc-foundry/reference/baselines/). Limits are stated plainly on the [client value page](/sdlc-foundry/value/#honest-limits).
+All four come from one journey that is recorded the same way each time, on a demo system: one run, not an average over many systems. The time, tokens, a person's minutes and the quality of every journey are in the [performance record](/sdlc-foundry/reference/performance/), and you can [watch the latest run](/sdlc-foundry/get-started/watch-a-run/). The goal is 60 minutes and is not reached yet: about half of today's time is waiting for CI and deploys. Older measurements (image builds, cluster start) are on the [baselines page](/sdlc-foundry/reference/baselines/), and limits are stated plainly on the [client value page](/sdlc-foundry/value/#honest-limits).
 
 ## Pick a scenario
 
