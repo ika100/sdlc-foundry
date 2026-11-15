@@ -16,7 +16,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 - `unsupported` or no shape → stop (gitops-app repos use `/system:ship`).
 - A `cplat shape` error that names `.platform-settings.yml` → stop and show it; never ask for the shape. Since the user fixes it, a guess hides it.
 - When `ship start` refuses, show its hint and stop; `--take-over` is the user's call, since it takes over another branch's claim.
-**The Stop hook holds the session until the run is finished**; a stop during a `cplat` wait of yours is let through, so always stop there: its result (notification or start lines) decides the next step as the phase says. Two stops without a commit or phase change escalate, so commit each task. Run subagents in the foreground (`run_in_background: false`), never polling in a shell loop, because a loop can match itself and never end.
+**The Stop hook holds the session until the run is finished**; a stop during a background `cplat` wait of yours is let through, so always stop there: its exit code and output (notification or start lines) decide the next step as the phase says. Two stops without a commit or phase change escalate, so commit each task. Run subagents in the foreground (`run_in_background: false`), never polling in a shell loop, because a loop can match itself and never end.
 
 ## Unattended rules
 
