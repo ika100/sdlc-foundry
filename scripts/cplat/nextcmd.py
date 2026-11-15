@@ -11,7 +11,11 @@ fails. `CPLAT_HEADLESS=1` (an unattended run) leaves out the questions. ASCII mo
 locale that is not UTF-8. `cplat next answer` records the person's answer as one run-store follow-up per `--item`
 (`spec:<repo>:<spec id>` or `issue:<repo>:<number>`) and prints `recorded: <n> item(s), <m> min`.
 
-Public API: `main(argv) -> int`, `HOW` (the procedure the session follows), `ascii_mode(environ)`.
+`cplat next` returns within 60 s whatever a source does (20 s per source, `nextstate`; spec 203): before it reads, fd 0
+points at /dev/null and `GIT_TERMINAL_PROMPT=0`, `GH_PROMPT_DISABLED=1` and (when unset) `GIT_SSH_COMMAND=ssh -o
+BatchMode=yes` keep every program it calls from asking; when a source was abandoned it ends with `hard_exit(0)`.
+
+Public API: `main(argv) -> int`, `hard_exit(code)`, `HOW` (the procedure the session follows), `ascii_mode(environ)`.
 """
 from __future__ import annotations
 
@@ -110,9 +114,36 @@ def _repeated(ns: argparse.Namespace) -> list[str]:
     return args
 
 
+def hard_exit(code: int) -> None:
+    """End the process at once (flushed output): an abandoned source's thread may still hold it. The test seam."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
+
+
+def _no_input() -> None:
+    """No program `cplat next` calls may wait for input, a password or a confirmation (spec 203)."""
+    fd = os.open(os.devnull, os.O_RDONLY)
+    try:
+        os.dup2(fd, 0)
+    finally:
+        os.close(fd)
+    os.environ["GIT_TERMINAL_PROMPT"] = "0"
+    os.environ["GH_PROMPT_DISABLED"] = "1"
+    os.environ.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
+
+
 def _next(argv: list[str]) -> int:
     ns = _next_parser().parse_args(argv)
+    _no_input()
     state = nextstate.collect(ns.repo_dir)
+    code = _print(ns, state)
+    if state.get("abandoned"):
+        hard_exit(code)
+    return code
+
+
+def _print(ns: argparse.Namespace, state: dict) -> int:
     shown_at = _stamp(runs.utcnow())
     attended = os.environ.get("CPLAT_HEADLESS") != "1"
     judgement, unreadable = _judgement(ns.judgement)
