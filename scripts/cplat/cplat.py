@@ -19,7 +19,8 @@ and run it for real. Everything that can be code is code (and has tests in tests
   cplat component release target|wait|gates ...   /component:release: the commit to tag and the version; main's ci run on it; the gates
   cplat plan merge <tN> <tM> [--spec ID] [--reason R]   fold task tN into the later task tM that depends on it (spec 186)
   cplat cluster new <name> [--org O] [--public] | add <owner>/<repo> [--name S] | remove <system>   the cluster repo and the systems it installs
-  cplat cluster wait [--refresh] [--timeout S] [--context C]   until the cluster's root applications run main's head (spec 143)
+  cplat cluster promote <cluster> [--context C] [--component-dir NAME=DIR]... [--dry-run] [--json]   one PR: the cluster runs what the one before it runs (spec 201)
+  cplat cluster wait [<cluster>] [--refresh] [--timeout S] [--context C]   until the cluster's root applications run main's head (spec 143)
   cplat next [--json] [--ascii] [--later ITEM]... | next answer --shown-at ISO --option ID [--item REF]...   where you are in the delivery process and what waits for you (spec 192)
   cplat api list [--system NAME] [--repo-dir DIR] [--json]   the system's APIs with type, provider and consumers
   cplat resource add|remove postgres [--version N]   the system's database resource (system.yaml)
@@ -82,7 +83,7 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "component": {"new": ("newsvc", []), "add": ("compose", ["add"]), "set": ("compose", ["set"]), "remove": ("compose", ["remove"]),
                   "ship": ("ship", []), "build": ("buildcmd", []), "release": ("comprelease", [])},
     "cluster": {"new": ("clusterrepo", ["new"]), "add": ("clusterrepo", ["add"]), "remove": ("clusterrepo", ["remove"]),
-                "wait": ("envwait", ["cluster"])},
+                "promote": ("clusterpromote", ["promote"]), "wait": ("envwait", ["cluster"])},
     "api": {"list": ("apilist", [])},
     "resource": {"add": ("addon", ["add"]), "remove": ("addon", ["remove"]),
                  "backup": ("dbbackup", []), "restore": ("dbrestore", []), "query": ("dbquery", []), "upgrade": ("upgrade", [])},
