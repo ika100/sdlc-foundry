@@ -649,6 +649,8 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     if not open_pr_ and nothing_to_merge(repo):
         raise PlatformError(f"{branch} changes nothing on origin/main: a pull request would merge an empty commit (#452)",
                             hint=f"the spec's code is already on main; resume at deploy: cplat component ship start {st['spec']}")
+    original_body = body
+    body = _built_block(repo, st, body, body_file)
     run_ci(repo, {"PR_TITLE": title, "PR_BODY": body, "PR_LABELS": ",".join(labels)})
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
     if open_pr_:
@@ -658,6 +660,8 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
             say(f"marked {st['pr']} ready for review (it was the spec's draft PR)")
         if open_pr_.get("title") != title:
             gh(["pr", "edit", st["pr"], "--title", title], cwd=repo)
+        if body != original_body:
+            gh(["pr", "edit", st["pr"], "--body-file", str(body_file)], cwd=repo, check=False)
         if no_spec and pr_rules.NO_SPEC not in [lb["name"] for lb in open_pr_.get("labels", [])]:
             gh(["pr", "edit", st["pr"], "--add-label", pr_rules.NO_SPEC], cwd=repo)
     else:
@@ -671,6 +675,22 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     st["phase"] = "land"
     save_state(repo, st)
     return st
+
+
+def _built_block(repo: Path, st: dict, body: str, body_file: Path) -> str:
+    """Spec 200: the run's "How this was built" block goes into the PR body; a failure is a note, never a failure."""
+    try:
+        import runs_built
+        rec = runs_built.find(runs.current_run(repo)) or {}
+        section = runs_built.pr_section(repo, st["spec"]) if rec.get("approved_test_diffs") else None   # only a recorded change of an approved test needs the PR to say so
+        if section:
+            new = runs_built.apply(body, section)
+            if new != body:
+                body_file.write_text(new)
+            return new
+    except Exception as e:  # noqa: BLE001
+        say(f"note: the 'How this was built' block was not written: {e}")
+    return body
 
 
 def _post_decisions(repo: Path, st: dict) -> None:
@@ -1311,6 +1331,7 @@ def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_
     lines = [*regenerated, f"GREEN: all {len(cs)} check(s) passed on {pr}"]
     if not st.get("merge", True):
         st["phase"] = "done"
+        st["deploy_lines"] = []
         save_state(repo, st)
         return True, lines + ["not merged (--no-merge): merge the PR (and its gitops PRs) yourself, then run `/component:ship` "
                               "again to wait for dev"]
@@ -1943,6 +1964,7 @@ def _ahead(slug: str, base: str, rev: str) -> bool:
 
 def _done(repo: Path, st: dict, lines: list[str]) -> tuple[bool, list[str]]:
     st["phase"] = "done"
+    st["deploy_lines"] = list(lines)
     save_state(repo, st)
     steps = plan_meta(repo, st).get("human_steps") or []
     if steps:
@@ -1988,6 +2010,10 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
     if not st or st.get("escalated") or st["phase"] == "done":
         return None
     session = hook_input.get("session_id") or None
+    if st.get("headless"):
+        import ship_handoff
+        if session and session == ship_handoff.read_file(repo).get("by"):
+            return ship_handoff.gate(repo, st, hook_input)
     mark = {"head": _head(repo, st["branch"]), "phase": st["phase"]}
     running = stopgate.running_agents(hook_input)
     import waits
@@ -2092,7 +2118,9 @@ def _wait_command(target: Path, ns: argparse.Namespace) -> int:
     def body() -> tuple[int, str]:
         code, lines = shipwait.ship_wait(target, ns.phase, ns.timeout, ns.interval)
         print("\n".join(lines), flush=True)
-        return code, {waits.REACHED: "reached", waits.RED: "escalated", waits.TIMEOUT: "timeout"}[code]
+        word = (lines[-1].split(None, 1) or [""])[0].rstrip(":") if lines else ""
+        known = {"REACHED": "reached", "ESCALATED": "escalated", "ENDED": "ended", "WAIT": "progress", "TIMEOUT": "timeout"}
+        return code, known.get(word) or {waits.REACHED: "reached", waits.RED: "escalated", waits.TIMEOUT: "timeout"}[code]
     return waits.record(Path.cwd(), "component ship wait", body, about=target)
 
 
@@ -2200,9 +2228,15 @@ def main(argv: list[str]) -> int:
         st = require_state(repo)
         if ns.json:
             extra = {"units": rs} if (rs := units.rows(repo)) else {}
+            if st["phase"] == "done":
+                import ship_report
+                extra["report"] = ship_report.data(repo, st)
             print(json.dumps({**st, "next": next_step(st), **extra}, indent=2))
         else:
             print(describe(st, repo))
+            if st["phase"] == "done":
+                import ship_report
+                print("\n".join(ship_report.lines(ship_report.data(repo, st))))
         return 0
     if ns.cmd == "phase":
         print(describe(set_phase(repo, ns.phase), repo))

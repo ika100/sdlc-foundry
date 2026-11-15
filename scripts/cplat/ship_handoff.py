@@ -85,6 +85,38 @@ def write_by(repo: Path, spec_id: str, session: str | None) -> None:
     _file(repo).write_text(json.dumps({"spec": spec_id, "by": session, "gate": gate}, indent=2) + "\n")
 
 
+# ---------------- the Stop hook of the shipping session (AC-200.6) ----------------
+
+def gate(repo: Path, st: dict, hook_input: dict) -> dict | None:
+    """Hold the shipping session while the headless run is unfinished; its counter lives in the handoff file only."""
+    import units
+    import waits
+    data = read_file(repo)
+    prev = data.get("gate") if isinstance(data.get("gate"), dict) else {}
+    mark = {"phase": st["phase"], "head": ship._head(repo, st["branch"]),
+            "units_done": sum(1 for u in units.rows(repo) if u["status"] == "done")}
+    progress = not prev or any(prev.get(k) != v for k, v in mark.items())
+    waiting = waits.live(repo)
+    h = st["headless"]
+    n = 0 if progress else int(prev.get("no_progress", 0))
+    if not waiting:
+        n = 0 if progress else n + 1
+    data = {"spec": st["spec"], "by": data.get("by"), "gate": {**mark, "no_progress": n}}
+    _file(repo).write_text(json.dumps(data, indent=2) + "\n")
+    if waiting:
+        return {"decision": "block", "reason": "\n".join([
+            f"waiting: {', '.join(waiting)}; stops without progress: {n}/{stopgate.NO_PROGRESS_LIMIT}",
+            f"The ship run of {st['spec']} runs in its own headless session (pid {h.get('pid')}, log {h.get('log')}), "
+            f"phase {st['phase']}; the wait above is still running."])}
+    if n >= stopgate.NO_PROGRESS_LIMIT:
+        return {"systemMessage": f"ship {st['spec']} runs headless (pid {h.get('pid')}, log {h.get('log')}); "
+                                 "check it with cplat component ship wait"}
+    return {"decision": "block", "reason": "\n".join([
+        f"The ship run of {st['spec']} runs in its own headless session (pid {h.get('pid')}, log {h.get('log')}), "
+        f"phase {st['phase']}.",
+        "Next: cplat component ship wait, then act on its result (/component:ship, hand-off)."])}
+
+
 # ---------------- output ----------------
 
 def escalated_lines(st: dict) -> list[str]:
