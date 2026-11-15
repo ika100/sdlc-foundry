@@ -143,7 +143,7 @@ resources:
 | Where | Allowed keys |
 |---|---|
 | top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries`, `autonomy` (only `paused`) |
-| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `backup`, `autonomy` |
+| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `backup`, `autonomy`, `cluster` |
 | service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances`, `scale` |
 | external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote` and `autonomy`) |
 | library component | `type`, `lang`, `repo`, `provides`, `consumes` |
