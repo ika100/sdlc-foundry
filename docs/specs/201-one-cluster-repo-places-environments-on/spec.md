@@ -1,7 +1,7 @@
 ---
 spec_id: 201-one-cluster-repo-places-environments-on
 title: One cluster repo places environments on several clusters
-status: draft
+status: approved
 priority: P1
 shape: platform
 explored: true
@@ -94,3 +94,4 @@ A cluster owner who wants dev and staging on a cluster that runs all the time on
 
 - 2026-11-15 created
 - 2026-11-15 amended: open question on moving data answered (no data moves; old data stays on the old cluster until a person deletes it, AC-201.5); non-goal now also excludes a manual data-copy procedure in the guide; criteria unchanged
+- 2026-11-15 approved
