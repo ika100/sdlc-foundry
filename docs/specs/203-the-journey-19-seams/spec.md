@@ -1,7 +1,7 @@
 ---
 spec_id: 203-the-journey-19-seams
 title: The journey 19 seams
-status: building
+status: done
 priority: P1
 shape: platform
 ---
@@ -116,3 +116,4 @@ A changed plan reschedules the build (J19-2).
 - 2026-11-15 created
 - 2026-11-15 approved
 - 2026-11-15 building
+- 2026-11-15 done
