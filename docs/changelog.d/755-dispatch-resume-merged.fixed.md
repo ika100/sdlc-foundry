@@ -1,0 +1,1 @@
+**A resumed dispatcher unit whose pull request merged while it was paused is finished, not started again (#755).** `cplat dispatch resume` used to start a paused unit's session again even when its pull request had merged meanwhile, so the unit kept its slot and held every other ship as `ship-busy`; it is now marked done and frees its slot.
