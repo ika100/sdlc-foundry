@@ -10,6 +10,7 @@ tasks:
     covers: [AC-190.1, AC-190.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: instance promote refuses a limited target, dry-run REFUSED lines, --accept-environment-limit
     files: [scripts/cplat/promote.py]
