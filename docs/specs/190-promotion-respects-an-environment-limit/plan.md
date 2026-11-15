@@ -29,6 +29,7 @@ tasks:
     covers: [AC-190.5, AC-190.6, AC-190.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: Benchmark workflow spec-environments
     files: [scripts/cplat/runs_bench.py, scripts/cplat/benchmark/tasks.json, scripts/cplat/runs.py]
