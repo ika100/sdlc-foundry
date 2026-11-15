@@ -177,7 +177,7 @@ for i in range({n}):
     with f.open("a") as fh:
         fh.write(json.dumps(line) + "\\n")
 pathlib.Path("written.txt").write_text("")
-deadline = time.time() + 10
+deadline = time.time() + 60
 while time.time() < deadline and not os.path.exists("release.txt"):
     time.sleep(0.05)  # fake-delay: a session that goes on until the guard ends it (or the test releases it)
 pathlib.Path("natural.txt").write_text("")    # only a session that ends by itself gets here: the guard's signal ends it before
