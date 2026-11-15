@@ -158,6 +158,20 @@ def test_adopt_finds_live_units_from_their_files_and_pause_flags_them(env):
     os.kill(resumed["pid"], signal.SIGKILL)
 
 
+def test_resume_finishes_a_paused_unit_whose_pull_request_merged_meanwhile(env):
+    env.behave(mode="wait", honor_stop=True)
+    res = begin(env)
+    du.pause_flags([res.unit])
+    env.wait_ended("issue-1.1")
+    wait_for(lambda: (du.advance(env.repo, SLUG, ds.read_unit(res.unit["worktree"]), policy(env)),
+                      ds.read_unit(res.unit["worktree"])["status"] == "paused")[1], budget(15), what="the unit to pause")
+    env.pr(7, "fix/issue-1", closes=(1,), state="MERGED")
+    calls = len(env.calls())
+    step = du.resume_paused(env.repo, SLUG, ds.read_unit(res.unit["worktree"]), policy(env))
+    assert step.lines == ["done issue-1.1: https://github.com/acme/shop-api/pull/7"]
+    assert ds.read_unit(res.unit["worktree"])["status"] == "done" and len(env.calls()) == calls       # no session started again
+
+
 def test_close_stale_comments_labels_and_closes(env):
     env.issue(1)
     assert du.close_stale(env.repo, SLUG, 1, "abc1234", "rounded since") == ["closed #1 as stale: abc1234"]

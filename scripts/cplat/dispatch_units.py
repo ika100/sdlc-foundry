@@ -610,18 +610,17 @@ def clear_flags(units: list[dict]) -> None:
 
 
 def resume_paused(repo: Path, slug: str, unit: dict, policy) -> Step:
-    """Resume a paused unit (claims kept, no restart counted): a fix whose session had ended with an open pull request lands, any
-    other unit starts its process again."""
+    """Resume a paused unit (claims kept, no restart counted): a unit whose pull request merged while it was paused is done, a fix
+    whose session had ended with an open pull request lands, any other unit starts its process again."""
     repo = Path(repo)
     ds.clear_stop(unit["worktree"])
+    pr = unit_pr(repo, unit["branch"])
+    if pr and pr["state"] == "MERGED":
+        return Step(finish_done(repo, slug, unit, pr["url"]))
     if unit["kind"] == "fix":
         res = ds.read_result(unit["worktree"]) or {}
-        if res.get("ended_at") and res.get("outcome") == "done":
-            pr = unit_pr(repo, unit["branch"])
-            if pr and pr["state"] == "OPEN":
-                return Step(_start_land(repo, unit, pr["url"]))
-            if pr and pr["state"] == "MERGED":
-                return Step(finish_done(repo, slug, unit, pr["url"]))
+        if res.get("ended_at") and res.get("outcome") == "done" and pr and pr["state"] == "OPEN":
+            return Step(_start_land(repo, unit, pr["url"]))
     return Step(restart(repo, slug, unit, policy, count=False))
 
 

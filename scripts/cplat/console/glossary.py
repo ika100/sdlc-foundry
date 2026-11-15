@@ -171,6 +171,11 @@ TERMS: dict[str, tuple[str, str]] = {
         "An action needs something that is not set up: Claude Code, a GitHub login or a kube context. The banner names the "
         "fix; /platform:doctor checks everything.",
     ),
+    # ---- delivering in a repo (spec 192): the texts live in `stages`, so the terminal and the console show one text
+    "release": ("Release", stages.explain("Release")["what"]),
+    "runs_on_its_own": stages.PLAIN["runs_on_its_own"],
+    "two_at_a_time": stages.PLAIN["two_at_a_time"],
+    "needs_you": stages.PLAIN["needs_you"],
     # ---- autonomy
     "autonomy_level": (
         "Autonomy level",
@@ -202,6 +207,8 @@ SECTIONS = (
       "release_candidate", "model")),
     ("actions", "Actions and the data", "The console only reads; every change is a slash command that ends in a pull request.",
      ("command", "way_back", "actions", "read_at", "stale", "unavailable", "missing_piece")),
+    ("delivering", "Delivering in a repo", "/platform:next shows the same process in the terminal.",
+     ("release", "runs_on_its_own", "two_at_a_time", "needs_you")),
     ("autonomy", "Autonomy", "Optional and off by default: every environment observes until system.yaml declares more.",
      ("autonomy_level", "guardrails", "engine", "pause")),
 )
@@ -248,6 +255,8 @@ def _process() -> str:
         decide = f'<span class="step-decide"><strong>You decide:</strong> {esc(e["decision"])}</span>' if e["decision"] else ""
         steps.append(f'<li{" data-decision" if e["decision"] else ""}>{stage_badge(name)}<span>{esc(e["what"])}</span>'
                      f'{agents}{decide}</li>')
+    steps.append(f'<li><span>In a platform or library repo, Dev, Staging and Prod are one step, Release: '
+                 f'{esc(stages.explain("Release")["what"])}</span></li>')
     return f'<ol class="steps">{"".join(steps)}</ol>'
 
 

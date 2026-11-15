@@ -38,6 +38,7 @@ CREATED = re.compile(r"^\s*[-*]\s+(\d{4}-\d{2}-\d{2})\b", re.MULTILINE)
 UNATTENDED = ["Plan", "Build", "Land", "Dev", "Staging"]
 TRIAGE_LABELS = {"alert", "smoke-failure", "signal"}
 MIN_COMPARABLE = 3
+_PARSED: dict[tuple[str, str], specmod.Spec] = {}   # the drafts `_drafts` parsed, read through `draft_spec`
 
 
 def gh(args: list[str]) -> str:
@@ -136,7 +137,14 @@ def _drafts(slug: str) -> list[dict]:
         if parsed and parsed.status == "draft":
             found[m.group(1)] = {"spec": parsed, "repo": slug, "since": pr.get("createdAt") or _created(parsed),
                                  "pr": pr.get("number"), "url": pr.get("url")}
+    for sid, d in found.items():
+        _PARSED[(slug, sid)] = d["spec"]
     return list(found.values())
+
+
+def draft_spec(slug: str, spec_id: str) -> specmod.Spec | None:
+    """The parse of a draft `_drafts` found (the pull request wins, as in the list); None when it was not listed."""
+    return _PARSED.get((slug, spec_id))
 
 
 def _obj(type_: str, repo: str | None = None, **kw) -> dict:

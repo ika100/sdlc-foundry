@@ -2,11 +2,37 @@
 
 One pure module names every item's stage and explains each stage, so no other module maps a status or a phase.
 Standard library only, no I/O.
+
+  bar(shape) -> tuple[str, ...]        the steps of the delivery bar `cplat next` prints (spec 192, AC-192.2)
+  bar_step(stage, shape) -> str        the bar step a console stage belongs to
+  explain("Release")                   the text of the bar's last step in a platform or library repo
+  PLAIN                                plain titles and texts of three terms, shared with the console glossary
 """
 from __future__ import annotations
 
 STAGES = ("Issue", "Spec", "Plan", "Build", "Land", "Dev", "Staging", "Prod")
 DECISION = frozenset({"Spec", "Build", "Prod"})
+
+_RELEASE_BAR = ("Issue", "Spec", "Build", "Release")
+_SERVICE_BAR = ("Issue", "Spec", "Build", "Dev", "Staging", "Prod")
+_SERVICE_SHAPES = frozenset({"service-python", "service-java", "service-go", "web-nextjs", "gitops-app"})
+_BAR_FOLD = {"Plan": "Build", "Land": "Build"}
+
+# key -> (title, text): plain terms the terminal screen and the console glossary show with one text.
+PLAIN: dict[str, tuple[str, str]] = {
+    "runs_on_its_own": (
+        "Runs on its own",
+        "The step needs nothing from you: agents and CI do the work, and a question reaches you only when a rule needs a person.",
+    ),
+    "two_at_a_time": (
+        "Two at a time",
+        "Work on several items goes on in parallel; how many run at once is a setting of the repo, and the others wait their turn.",
+    ),
+    "needs_you": (
+        "Needs you",
+        "Nothing goes on before you answer, approve or decide; the process shows where, and what each choice does.",
+    ),
+}
 
 _PHASE_STAGE = {
     "plan": "Plan",
@@ -68,7 +94,24 @@ _EXPLAIN: dict[str, dict] = {
         "commands": ["/instance:promote <component> --to prod"],
         "decision": "Promote the release to prod, or hold it back.",
     },
+    "Release": {
+        "what": "The release tags main and publishes it with its changelog; the changes collected since the last release go out together.",
+        "agents": [],
+        "commands": ["/component:release", "/platform:release"],
+        "decision": "Release now, or collect more changes first.",
+    },
 }
+
+
+def bar(shape: str | None) -> tuple[str, ...]:
+    """Return the bar steps of a repo shape: Dev, Staging and Prod for deployable shapes, else Release."""
+    return _SERVICE_BAR if shape in _SERVICE_SHAPES else _RELEASE_BAR
+
+
+def bar_step(stage: str, shape: str | None) -> str:
+    """Return the bar step of a stage: Plan, Build and Land are Build; a stage the bar lacks is Release."""
+    step = _BAR_FOLD.get(stage, stage)
+    return step if step in bar(shape) else "Release"
 
 
 def earliest(stages) -> str | None:
@@ -116,9 +159,9 @@ def stage_of_release(release: dict) -> str | None:
 
 
 def explain(stage: str) -> dict:
-    """Return `{"what", "agents", "commands", "decision"}` for a stage; `decision` only for decision columns."""
+    """Return `{"what", "agents", "commands", "decision"}` for a stage or `Release`; `decision` only for decision columns."""
     if stage not in _EXPLAIN:
         raise ValueError(f"unknown stage: {stage!r}")
     e = _EXPLAIN[stage]
     return {"what": e["what"], "agents": list(e["agents"]), "commands": list(e["commands"]),
-            "decision": e["decision"] if stage in DECISION else None}
+            "decision": e["decision"] if stage in DECISION or stage == "Release" else None}

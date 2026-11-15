@@ -97,6 +97,8 @@ def _apply_events(events: dict, node, explicit: set[str] | None = None) -> None:
             raise _bad(f"events.{event}", f"unknown event (one of {', '.join(EVENTS)})")
         for channel, value in _mapping(cells, f"events.{event}").items():
             key = f"events.{event}.{channel}"
+            if value is False:      # YAML 1.1 reads an unquoted `off` as false
+                value = "off"
             if channel not in CHANNELS:
                 raise _bad(key, f"unknown channel (one of {', '.join(CHANNELS)}; the console is always on)")
             if value not in VALUES:

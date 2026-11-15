@@ -8,6 +8,7 @@ The `platform` noun: the platform itself, as installed in your repos.
 | `/platform:update` | Pull the current platform skeleton into this repo; `--migrate` converts a 4.x repo to 5.0 (`cplat platform update`); prints the versions that change per environment and `--verify` checks the operators and environments after the merge; `cplat platform versions` shows the versions table |
 | `/platform:fleet` | Bring every repo built from the platform up to the current release (`cplat platform fleet update`) |
 | `/platform:runs` | Run records, agent metrics, usage and cost (`cplat platform runs report`) |
+| `/platform:next` | Where you are in the process and what waits for you, as choices (`cplat next`; your answers are recorded as run-store follow-ups) |
 | `/platform:ui` | Start the local console: Inbox, Board and System in the browser (`cplat platform ui`; see [docs/console.md](../../docs/console.md)) |
 | `/platform:retro` | The weekly platform retro (`cplat platform retro`) |
 | `/platform:release` | Release the platform: release PR, CI, merge, tag and GitHub release, resumable, asking before the merge and the tag (`cplat platform release`) |

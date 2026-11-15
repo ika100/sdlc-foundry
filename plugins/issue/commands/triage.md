@@ -38,5 +38,5 @@ Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change 
 
 ## 6. Hand over
 
-Print the output of `act`, then ask its choice with AskUserQuestion. `cplat dispatch status` and the console Board show the fix runs.
+Print the output of `act`, then ask its choice with AskUserQuestion; when it offers none, run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command. `cplat dispatch status` and the console Board show the fix runs.
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).

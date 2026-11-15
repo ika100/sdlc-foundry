@@ -3,8 +3,8 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "44aadaef87c87d251520ac261b96b1069edef1ae"
-  prompt_bytes: 357001
+  commit: "bec4fbbaf4d6204b1d195960c947dde3e5401a58"
+  prompt_bytes: 359241
   history:                       # newest last; written only by `cplat platform rules rebaseline`
     - date: "2026-11-12"
       old: 345859
@@ -16,6 +16,11 @@ baseline:
       new: 357001
       reason: "resource query command (spec 195): /resource:query doc, +1081 bytes; build and quick-task benchmarks done on this plugins tree (3.20 M / 446 k tokens)"
       benchmark_runs: [20261113T104050Z-a325c6d8, 20261113T102603Z-749b1631]
+    - date: "2026-11-14"
+      old: 357001
+      new: 359241
+      reason: "/platform:next and the hand-over (spec 192)"
+      benchmark_runs: [20261114T094959Z-7626785d, 20261114T100130Z-5ba97394]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff
