@@ -10,18 +10,21 @@ tasks:
     covers: [AC-202.1, AC-202.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "Detached waits under cplat headless and `cplat waits handover`"
     files: [scripts/cplat/waitdetach.py, scripts/cplat/cplat.py, plugins/shared/hooks/hooks.json]
     covers: [AC-202.2, AC-202.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: "Loop guard: idle calls and progress of one session from its transcript"
     files: [scripts/cplat/loopguard.py]
     covers: [AC-202.4, AC-202.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: "Dispatcher: guard policy keys, --loop-guard per unit, escalated and paused units in status, cause in needs"
     files: [scripts/cplat/dispatch_policy.py, scripts/cplat/dispatch_units.py, scripts/cplat/dispatch_view.py, scripts/cplat/dispatch.py, scripts/cplat/needs.py, tests/cplat/test_167_policy_plan.py]
