@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import core
@@ -31,7 +32,8 @@ class Detached:
         d.mkdir(parents=True, exist_ok=True)
         self.hold = d / f"{ident}.release"
         self.proc = subprocess.Popen([sys.executable, "-c", SLEEPER, str(self.hold)], start_new_session=True)
-        self.log = d / f"{ident}.log"
+        threading.Thread(target=self.proc.wait, daemon=True).start()   # reaps it at once: a stopped wait is no zombie that looks alive
+        self.log =d / f"{ident}.log"
         self.log.write_text("")
         (d / f"{ident}.json").write_text(json.dumps({
             "id": ident, "pid": self.proc.pid, "command": command, "argv": command.split()[1:], "session": session,

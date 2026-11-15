@@ -170,18 +170,21 @@ with open("runs.txt", "a") as fh:
 pathlib.Path("pid.txt").write_text(str(os.getpid()))
 f = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "proj" / (sid + ".jsonl")
 f.parent.mkdir(parents=True, exist_ok=True)
+pathlib.Path("sid.txt").write_text(sid)
 for i in range({n}):
     block = {{"type": "tool_use", "id": "t%d" % i, "name": "Bash", "input": {{}}}} if {tools} else {{"type": "text", "text": "Still waiting for the land to finish. token=ghp_abcdefghijklmnopqrstuvwxyz0123456789"}}
     line = {{"type": "assistant", "message": {{"id": "m%d" % i, "role": "assistant", "content": [block]}}}}
     with f.open("a") as fh:
         fh.write(json.dumps(line) + "\\n")
+pathlib.Path("written.txt").write_text("")
+deadline = time.time() + 10
+while time.time() < deadline and not os.path.exists("release.txt"):
+    time.sleep(0.05)  # fake-delay: a session that goes on until the guard ends it (or the test releases it)
+pathlib.Path("natural.txt").write_text("")    # only a session that ends by itself gets here: the guard's signal ends it before
 if {finish}:
     st = os.popen("git rev-parse --git-common-dir").read().strip() + "/cplat-ship.json"
     d = json.load(open(st)); d["phase"] = "done"; json.dump(d, open(st, "w"))
     sys.exit(0)
-deadline = time.time() + 10
-while time.time() < deadline:
-    time.sleep(0.05)  # fake-delay: a session that goes on until the guard ends it
 """
 
 
@@ -212,10 +215,17 @@ def test_a_looping_session_is_ended_after_its_10th_idle_call_and_the_run_escalat
     ship.start(repo, "7", True)
     phase = ship.load_state(repo)["phase"]
     looping_claude(tmp_path, monkeypatch, 10)
+    seen = {}
+
+    def on_sleep(n, now):                                     # the fake session would end by itself 6 minutes after its 10th call
+        if (repo / "written.txt").exists():
+            if now - seen.setdefault("at", now) >= dt.timedelta(minutes=6):
+                (repo / "release.txt").write_text("")
+    fake_time.on_sleep = on_sleep
     assert headless.main(["/svc:ship 7", "--repo", str(repo), "--max-runs", "3"]) == 1
     assert runs(repo) == 1                                    # no new session
-    pid = int((repo / "pid.txt").read_text())
-    assert not alive(pid) or os.waitpid(pid, os.WNOHANG) is not None
+    assert not (repo / "natural.txt").exists()                # the guard ended it (by signal) before it could end by itself
+    assert not alive(int((repo / "pid.txt").read_text()))
     out = capsys.readouterr().out
     reason = f"looping: 10 model calls in 5 min without progress in phase {phase}"
     [line] = [ln for ln in out.splitlines() if ln.startswith(f"HEADLESS shop-api: {reason}")]
@@ -225,11 +235,25 @@ def test_a_looping_session_is_ended_after_its_10th_idle_call_and_the_run_escalat
     assert st["escalated"].startswith(reason) and st["cause"] == "platform"
 
 
-def test_a_session_that_runs_a_tool_in_every_call_is_never_stopped_by_the_guard(repo, tmp_path, monkeypatch, fake_time):  # AC-202.4
+def test_a_session_that_runs_a_tool_in_every_call_is_never_stopped_by_the_guard(repo, tmp_path, monkeypatch, capsys, fake_time):  # AC-202.4
     ship.start(repo, "7", True)
-    looping_claude(tmp_path, monkeypatch, 40, tools=True, finish=True)
+    looping_claude(tmp_path, monkeypatch, 0, finish=True)     # the session lives for 15 fake minutes and ends by itself, done
+    seen = {}
+
+    def on_sleep(n, now):                                     # one model call per poll, each with a text block and then its tool_use
+        if not (repo / "sid.txt").exists():
+            return
+        started = seen.setdefault("at", now)
+        f = tmp_path / "claude-config" / "projects" / "proj" / f"{(repo / 'sid.txt').read_text()}.jsonl"
+        put(f, f"m{n}", "text", at=now)
+        put(f, f"m{n}", "tool", at=now)
+        seen["calls"] = seen.get("calls", 0) + 1
+        if now - started >= dt.timedelta(minutes=15):
+            (repo / "release.txt").write_text("")
+    fake_time.on_sleep = on_sleep
     assert headless.main(["/svc:ship 7", "--repo", str(repo)]) == 0
-    assert runs(repo) == 1
+    assert runs(repo) == 1 and (repo / "release.txt").exists() and seen["calls"] >= 15
+    assert "looping:" not in capsys.readouterr().out
 
 
 def test_the_loop_guard_option_sets_the_threshold_of_a_run_started_by_hand(repo, tmp_path, monkeypatch, capsys, fake_time):  # AC-202.5

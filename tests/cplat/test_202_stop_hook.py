@@ -12,6 +12,12 @@ import pytest
 
 import ship
 import stopgate
+import units
+import units131_support as units131
+from ship200_support import SPEC as HANDOFF_SPEC
+from ship200_support import WAIT_COMMAND, handoff_file, procs  # noqa: F401  (fixture)
+from test_200_gate import hand_off  # noqa: F401  (fixture)
+from test_200_gate import stop as handoff_stop
 from test_171_stop_hook import SPEC, begin, no_progress, put_mark, stop, sys_stop  # noqa: F401
 from test_appship_097 import SPEC as SYSTEM_SPEC
 from test_appship_097 import w  # noqa: F401  (fixture)
@@ -155,3 +161,63 @@ def test_the_flag_comes_before_a_wait(repo, monkeypatch):  # AC-202.7
     put_mark(repo, "cplat pr wait 7")
     set_flag(repo)
     assert "paused by cplat dispatch" in lets_stop(stop(repo))
+
+
+# ---------------- AC-202.1, AC-202.7: the gates of a handed-off run and of a unit session ----------------
+
+def test_a_running_wait_lets_the_shipping_session_of_a_handed_off_run_stop_and_counts_nothing(repo, hand_off):  # AC-202.1
+    hand_off()
+    handoff_stop(repo)                                                              # the first stop is progress
+    handoff_stop(repo)                                                              # a stop without a wait counts
+    before = json.loads(handoff_file(repo).read_text())["gate"]["no_progress"]
+    assert before == 1
+    put_mark(repo, WAIT_COMMAND)
+    for _ in range(stopgate.NO_PROGRESS_LIMIT + 3):
+        line = lets_stop(handoff_stop(repo))
+        assert line == f"ship {HANDOFF_SPEC}: waiting for {WAIT_COMMAND} in phase {phase(repo)}"
+    assert json.loads(handoff_file(repo).read_text())["gate"]["no_progress"] == before
+    assert not ship.load_state(repo).get("escalated")
+
+
+def unit_session(repo, monkeypatch, command, unit):
+    """A unit session of `cplat headless` (`CPLAT_UNIT`): the units file of spec 131 holds the unit."""
+    monkeypatch.setenv("CPLAT_PARALLEL_TASKS", "1")
+    if command == "ship":
+        ship.start(repo, "7", True)
+    units131.git(repo, "checkout", "-qb", units131.BRANCH)
+    units.prepare(repo, command, units131.SPEC_ID)
+    monkeypatch.setenv("CPLAT_UNIT", unit)
+
+
+def unit_stop(repo):
+    return ship.gate(repo, {"session_id": "S", "cwd": str(repo)}, run_tests=False)
+
+
+def test_a_running_wait_lets_a_ship_unit_session_stop_and_counts_nothing(repo, monkeypatch):  # AC-202.1
+    unit_session(repo, monkeypatch, "ship", "task:t1")
+    before = units._read(repo)
+    put_mark(repo, "cplat component ship land")  # interface: wait command name
+    for _ in range(3):
+        line = lets_stop(unit_stop(repo))
+        assert line == f"ship {units131.SPEC_ID}: waiting for cplat component ship land in phase {phase(repo)}"
+    assert units._read(repo) == before and not ship.load_state(repo).get("escalated")
+
+
+def test_a_running_wait_lets_a_build_unit_session_stop_and_counts_nothing(repo, monkeypatch):  # AC-202.1
+    unit_session(repo, monkeypatch, "build", "task:t1")
+    before = units._read(repo)
+    put_mark(repo, "cplat pr wait 7")
+    for _ in range(3):
+        line = lets_stop(unit_stop(repo))
+        assert line == f"build {units131.SPEC_ID}: waiting for cplat pr wait 7 in unit task:t1"
+    assert units._read(repo) == before
+
+
+def test_a_paused_build_unit_session_is_let_stop_and_nothing_is_counted(repo, monkeypatch):  # AC-202.7
+    unit_session(repo, monkeypatch, "build", "task:t1")
+    before = units._read(repo)
+    set_flag(repo)
+    for _ in range(3):
+        line = lets_stop(unit_stop(repo))
+        assert line == f"build {units131.SPEC_ID}: paused by cplat dispatch in unit task:t1; cplat dispatch resume continues it"
+    assert units._read(repo) == before

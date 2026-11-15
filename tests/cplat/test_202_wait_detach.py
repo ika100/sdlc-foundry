@@ -244,6 +244,16 @@ def end_wait(repo, code=0, tail=("merged",)):
                                                                   "tail": list(tail), "ended_at": "2026-11-15T10:30:00"}))
 
 
+def stop_wait(repo):
+    """Release and kill the wait `SPAWN` started, if any (it is in no process tree of the test)."""
+    record = detached_dir(repo) / "w1.json"
+    if not record.is_file():
+        return
+    (detached_dir(repo) / "w1.release").write_text("")
+    with contextlib.suppress(OSError, ValueError, KeyError):
+        os.killpg(json.loads(record.read_text())["pid"], signal.SIGKILL)
+
+
 def test_no_session_starts_while_a_wait_of_the_ended_session_runs_and_the_next_one_gets_its_result(repo, tmp_path, monkeypatch, capsys, T):  # AC-202.3
     import wait202_support as s
     ship.start(repo, "7", True)
@@ -257,9 +267,13 @@ if [ "$n" -ge 2 ]; then {FINISH} else {sys.executable} {spawn} {repo}; fi''')
         seen.append(runs(repo))                                    # no session starts while the wait runs
         if n == 3:
             end_wait(repo)
-    T(on_sleep)
-    assert headless.main(["/svc:ship 7", "--repo", str(repo)]) == 0
+    t = T(on_sleep)
+    try:
+        assert headless.main(["/svc:ship 7", "--repo", str(repo)]) == 0
+    finally:                                                       # the wait is reparented to init: never leave it polling
+        stop_wait(repo)
     assert seen and set(seen) == {1} and runs(repo) == 2
+    assert sum(t.sleeps[3:]) <= 30                                 # the next session starts within 30 seconds of the wait's end
     out = capsys.readouterr().out
     assert "waiting for cplat pr wait 7 (pid " in out and "no session starts until it ends" in out
     assert "wait cplat pr wait 7 ended: exit 0" in out

@@ -4,6 +4,7 @@ Contract: design.md ".platform/dispatch.yml `guard`", "`cplat dispatch status`",
 The units are the fake headless of `dispatch_world`; a unit "escalated by the guard" is the fake that ends the way `cplat headless` does
 when the guard trips (cause `platform`, a `looping: ...` reason, stop reason `escalated`).
 """
+import json
 import re
 
 import pytest
@@ -176,6 +177,12 @@ def test_a_paused_unit_shows_its_phase_and_last_checkpoint_in_status_ac_202_7(wo
     _issues(world, 1)
     world.behave(mode="wait", honor_stop=True)
     world.run("start", "--once")
+    _, gitdir = world.unit_file("issue-1")
+    sha = "abc1234def5678abc1234def5678abc1234def56"                               # the unit is in phase review; its last done unit is red-tests
+    (gitdir / "cplat-ship.json").write_text(json.dumps({"spec": "007-price-alerts", "phase": "review"}))
+    (gitdir / "cplat-units.json").write_text(json.dumps({"version": 1, "command": "ship", "spec": "007-price-alerts", "units": [
+        {"id": "red-tests", "status": "done", "sessions": 1, "commit": sha},
+        {"id": "task:t1", "status": "open", "sessions": 0, "commit": None}]}))
     world.run("pause")
     world.run("start", "--once")                                                    # the cycle that flags the running units
     world.wait_ended("issue-1.1")
@@ -183,5 +190,5 @@ def test_a_paused_unit_shows_its_phase_and_last_checkpoint_in_status_ac_202_7(wo
     doc = world.run("status", "--json").json()
     [u] = doc["slots"]["units"]
     assert u["phase"] == "paused"                                                   # AC-167.11's readers keep it
-    assert set(u["paused_at"]) == {"phase", "checkpoint"}
-    assert re.search(r"paused \(phase \S+, checkpoint \S+\)", world.run("status").out)
+    assert u["paused_at"] == {"phase": "review", "checkpoint": sha}
+    assert "paused (phase review, checkpoint abc1234)" in world.run("status").out
