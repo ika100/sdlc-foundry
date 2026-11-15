@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 import backupstate
+import envcluster
 import gitops
 import model
 from core import PlatformError
@@ -39,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
-    p.add_argument("--context", help="kube context (default: the current one)")
+    p.add_argument("--context", help="kube context (default: the environment's cluster for a system spread over clusters, else the current one)")
     return p
 
 
@@ -197,6 +198,7 @@ def main(argv: list[str]) -> int:
     app_dir = gitops.find_app(repo, ns.app)
     m = model.load_dir(app_dir)
     check_args(ns, m)
+    ns.context = envcluster.env_context(repo, m, ns.env, ns.context)
     system, db, env, ctx = app_dir.name, ns.name, ns.env, ns.context
     try:
         state = backupstate.restore_state(app_dir, env, db)
