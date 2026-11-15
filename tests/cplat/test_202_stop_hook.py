@@ -146,13 +146,13 @@ def test_a_looping_session_ends_at_its_next_stop_after_the_pause(repo, monkeypat
     stop(repo)
     attempts, ended = 0, False
     for attempts in range(1, 7):
-        if attempts == 3:
-            set_flag(repo)                                          # `cplat dispatch pause` while the session loops
+        if attempts == 1:
+            set_flag(repo)                                          # `cplat dispatch pause` while the session loops, before AC-126.5 escalates
         answer = stop(repo)
         if answer is not None and "decision" not in answer:
             ended = True
             break
-    assert ended and attempts == 3
+    assert ended and attempts == 1
     assert not ship.load_state(repo).get("escalated")
 
 
