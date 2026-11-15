@@ -173,7 +173,7 @@ def next_step(st: dict) -> str:
     }[phase]
 
 
-def describe(st: dict, repo: Path | None = None) -> str:
+def describe(st: dict, repo: Path | None = None, next: bool = True) -> str:  # noqa: A002  (the contract names the keyword)
     lines = [f"ship {st['spec']}: phase {st['phase']}" + (f" — ESCALATED: {st['escalated']}" if st.get("escalated") else "")]
     lines.append(f"  session: {st['owner']}" if st.get("owner")
                  else f"  session: none (resume with /component:ship {st['spec']} to own the run)")
@@ -189,11 +189,14 @@ def describe(st: dict, repo: Path | None = None) -> str:
         lines.append(row)
     if st.get("fix_rounds"):
         lines.append(f"  CI fix rounds: {st['fix_rounds']}")
+    if st.get("headless"):
+        lines.append(f"  headless: pid {st['headless'].get('pid')}, log {st['headless'].get('log')}")
     if st.get("answers"):
-        lines.append(f"  answer from the system ship: {st['answers'][-1]['text']}")
+        lines.append(f"  answer from the {st['answers'][-1].get('from') or 'system ship'}: {st['answers'][-1]['text']}")
     if repo is not None:
         lines += units.describe_lines(repo)
-    lines.append(f"next: {next_step(st)}")
+    if next:
+        lines.append(f"next: {next_step(st)}")
     return "\n".join(lines)
 
 
@@ -211,9 +214,10 @@ def product_link(product: Path) -> dict:
     return link
 
 
-def _open_budget(repo: Path, st: dict, options: dict) -> None:
+def _open_budget(repo: Path, st: dict, options: dict, session_invocation: bool = True) -> None:
     """Spec 102: a ship run is a root (one budget per run tree) unless it runs under headless or a product ship."""
-    budget.open_root(st.get("run_id"), budget.work_key(repo, st["spec"], st["spec"]), options=options, repo=repo)
+    budget.open_root(st.get("run_id"), budget.work_key(repo, st["spec"], st["spec"]), options=options, repo=repo,
+                     session_invocation=session_invocation)
 
 
 def _record_shape(st: dict) -> None:
@@ -223,7 +227,7 @@ def _record_shape(st: dict) -> None:
 
 
 def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: Path | None = None,
-          budget_options: list[str] | dict | None = None) -> dict:
+          budget_options: list[str] | dict | None = None, *, detach: bool = False) -> dict:
     import shapecmd
     shape = shapecmd.resolve(repo)             # spec 123: a declaration error stops here, before any state changes
     options = budget.parse_options(budget_options)
@@ -253,18 +257,21 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
         st.pop("cause", None)
         st.pop("questions", None)
-        if answer := (os.environ.get("CPLAT_SHIP_ANSWER") or "").strip():
+        if not detach and (answer := (os.environ.get("CPLAT_SHIP_ANSWER") or "").strip()):
             answers = st.setdefault("answers", [])
             if not answers or answers[-1].get("text") != answer:
-                answers.append({"at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "text": answer})
-                say(f"answer from the system ship: {answer}")
-        stopgate.claim(st, stopgate.session_of_env())
+                source = (os.environ.get("CPLAT_SHIP_ANSWER_FROM") or "").strip() or "system ship"
+                answers.append({"at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "text": answer,
+                                "from": source})
+                say(f"answer from the {source}: {answer}")
+        stopgate.claim(st, None if detach else stopgate.session_of_env())
         if shape:
             st["shape"] = shape
         save_state(repo, st)
         _record_shape(st)
-        runs.link_parent(st.get("run_id"))
-        _open_budget(repo, st, options)
+        if not (st.get("headless") and os.environ.get("CPLAT_HEADLESS")):   # spec 200: the ship run stays the parent of its headless run
+            runs.link_parent(st.get("run_id"))
+        _open_budget(repo, st, options, session_invocation=not detach)
         return st
     if sp.status in {"draft", "superseded"}:
         raise PlatformError(f"{sp.id} is '{sp.status}'; only an approved spec is shipped",
@@ -288,7 +295,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     if merged:
         st.update({k: merged[k] for k in ("pr", "merge_sha", "deployed") if merged.get(k)})
         say(f"{sp.id} is merged ({merged['pr']}, {str(merged['merge_sha'])[:7]}): resuming at deploy")
-    stopgate.claim(st, stopgate.session_of_env())
+    stopgate.claim(st, None if detach else stopgate.session_of_env())
     if link:
         st["product"] = link
     if shape:
@@ -296,7 +303,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     save_state(repo, st)
     _record_shape(st)
     runs.link_parent(st.get("run_id"))
-    _open_budget(repo, st, options)
+    _open_budget(repo, st, options, session_invocation=not detach)
     return st
 
 
@@ -499,6 +506,7 @@ def finish(repo: Path) -> Path:
         runs.finish(st.get("run_id"), "abandoned")
     done = f.with_name(f"cplat-ship-{st['spec']}-{dt.datetime.now():%Y%m%d%H%M%S}.json")
     f.rename(done)
+    f.with_name("cplat-ship-handoff.json").unlink(missing_ok=True)
     uf = units._path(repo)
     if uf.is_file():
         uf.rename(uf.with_name(f"cplat-units-{st['spec']}-{dt.datetime.now():%Y%m%d%H%M%S}.json"))
@@ -2088,6 +2096,17 @@ def _wait_command(target: Path, ns: argparse.Namespace) -> int:
     return waits.record(Path.cwd(), "component ship wait", body, about=target)
 
 
+def start_plain(repo: Path, ns: argparse.Namespace) -> int:
+    """`ship start` without the hand-off: begin or resume the run in this session."""
+    st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
+    if st["phase"] in ("plan", "build", "pr"):
+        say(on_branch(repo, st["branch"]))
+    print(describe(st))
+    if line := budget.limits_line(st.get("run_id")):
+        print(line)
+    return 0
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="cplat component ship", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".")
@@ -2096,6 +2115,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("spec")
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
+    p.add_argument("--detach", action="store_true", help="hand the run to its own `cplat headless` process (spec 200)")
+    p.add_argument("--full", action="store_true", help="pass --full to the headless ship (with --detach; no effect without)")
+    p.add_argument("--answer", default=None, help="with --detach: the answer the headless session gets to the escalated question")
     p.add_argument("--system-dir", default=os.environ.get("CPLAT_SYSTEM_DIR") or None,
                    help="the gitops-app clone of the system ship this run belongs to (/system:ship only, spec 097; "
                         "default $CPLAT_SYSTEM_DIR, which the system ship sets for the repo's session, spec 155)")
@@ -2157,13 +2179,13 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
-        if st["phase"] in ("plan", "build", "pr"):
-            say(on_branch(repo, st["branch"]))
-        print(describe(st))
-        if line := budget.limits_line(st.get("run_id")):
-            print(line)
-        return 0
+        if ns.answer is not None and not ns.detach:
+            print("ERROR: --answer needs --detach", file=sys.stderr)
+            return 2
+        if ns.detach:
+            import ship_handoff
+            return ship_handoff.detach(repo, ns)
+        return start_plain(repo, ns)
     if ns.cmd == "unit":
         return unit_command(repo, ns.json)
     if ns.cmd == "wait":
