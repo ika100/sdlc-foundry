@@ -140,7 +140,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [140-one-repo-feature-takes-the-component-route](specs/140-one-repo-feature-takes-the-component-route/spec.md) — A one-repo feature takes the component route | P1 | done | 4 |  |
 | [141-an-approved-plan-asks-no-new-questions](specs/141-an-approved-plan-asks-no-new-questions/spec.md) — An approved system plan asks no new questions | P1 | done | 5 |  |
 | [142-no-avoidable-stops-in-the-journey](specs/142-no-avoidable-stops-in-the-journey/spec.md) — No avoidable stops in the journey | P1 | done | 5 |  |
-| [143-the-coordinator-waits-with-cplat](specs/143-the-coordinator-waits-with-cplat/spec.md) — The coordinator waits with cplat, not hand-written loops | P1 | done | 11 | #475 |
+| [143-the-coordinator-waits-with-cplat](specs/143-the-coordinator-waits-with-cplat/spec.md) — The coordinator waits with cplat, not hand-written loops | P1 | done | 10 | #475 |
 | [144-one-gitops-pr-per-environment-for-a](specs/144-one-gitops-pr-per-environment-for-a/spec.md) — One gitops PR per environment for a system ship | P1 | done | 8 |  |
 | [145-smoke-tests-that-write-run-only-in-dev](specs/145-smoke-tests-that-write-run-only-in-dev/spec.md) — Smoke tests that write run only in dev | P1 | done | 7 | #474 |
 | [146-one-owner-per-operator-on-the-local-cluster](specs/146-one-owner-per-operator-on-the-local-cluster/spec.md) — One owner per operator on the local cluster | P1 | done | 5 | #425 |
@@ -184,6 +184,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [195-a-restored-copy-is-checked-without](specs/195-a-restored-copy-is-checked-without/spec.md) — A restored copy is checked without kubectl | P1 | done | 5 | #683 |
 | [197-the-journey-13-seams](specs/197-the-journey-13-seams/spec.md) — The journey 13 seams | P1 | done | 8 |  |
 | [199-the-journey-15-seams](specs/199-the-journey-15-seams/spec.md) — The journey 15 seams | P1 | done | 5 |  |
+| [200-a-component-ship-runs-in-its-own-session](specs/200-a-component-ship-runs-in-its-own-session/spec.md) — A component ship runs in its own session | P1 | done | 7 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

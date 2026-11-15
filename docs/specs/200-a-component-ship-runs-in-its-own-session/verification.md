@@ -1,0 +1,51 @@
+# Verification — 200 A component ship runs in its own session
+
+**Result:** pass
+**Commit:** 3906781e · **Base:** b511f485 · **Trace:** 7/7 criteria named by tests
+
+| Criterion | Verdict | Tests | Implementation | Notes |
+|---|---|---|---|---|
+| AC-200.1 | met | `tests/cplat/test_200_handoff.py::test_detach_starts_the_headless_ship_as_its_own_process_ac_200_1`, `::test_detach_passes_no_merge_and_full_through_ac_200_1`, `::test_detach_counts_no_invocation_for_the_interactive_session_ac_200_1`, `::test_a_refusal_starts_nothing_and_prints_the_same_hint_ac_200_1` (unapproved, missing token, claimed issue), `::test_a_process_that_cannot_start_is_an_error_and_leaves_no_headless_entry_ac_200_1`, `::test_the_real_branch_of_the_repo_is_the_feature_branch_after_a_detach_ac_200_1`; `tests/cplat/test_200_prompts.py::test_ship_hands_off_unless_here_or_unit_ac_200_1` | `scripts/cplat/ship_handoff.py:142` (`detach`), `:42` (`spawn`: argv, `start_new_session`, dropped vars, `CPLAT_RUN_PARENT`), `:35` (`command`); `scripts/cplat/ship.py:2215`, `:274`/`:306` (`session_invocation=not detach`); `scripts/cplat/budget.py` `open_root`; `plugins/component/references/ship-handoff.md` (no subagent, no phase step) | The once-only token count rests on the child-run link (asserted: `CPLAT_RUN_PARENT == run_id`) and spec 155's existing run-tree accounting. |
+| AC-200.2 | met | `test_200_handoff.py::test_a_live_process_is_reused_and_no_second_one_starts_ac_200_2`, `::test_a_headless_or_unit_session_hands_off_nothing_ac_200_2`, `::test_a_fake_headless_session_never_starts_another_process_ac_200_2`, `::test_a_headless_ship_start_does_not_make_the_ship_run_a_child_of_its_own_child_ac_200_2`, `::test_answer_without_detach_is_a_usage_error_ac_200_2`; `test_200_prompts.py::test_ship_reads_the_hand_off_reference_on_a_headless_pid_line_ac_200_2` | `scripts/cplat/ship_handoff.py:143` (headless/unit never hand off), `:149` (live process reused, no state write); `scripts/cplat/ship.py:272` (no re-parenting under headless), `:2211`; `plugins/component/commands/ship.md` `## cplat` (`--detach` except `--here`/`--unit`) | |
+| AC-200.3 | met | `tests/cplat/test_200_wait.py::test_a_new_phase_during_the_call_ends_it_with_wait_and_exit_0_ac_200_3`, `::test_a_new_unit_checkpoint_is_progress_and_prints_a_unit_line_ac_200_3`, `::test_a_new_commit_on_the_feature_branch_is_progress_ac_200_3`, `::test_nothing_new_is_a_timeout_with_exit_2_and_the_log_ac_200_3`, `::test_an_escalated_run_lists_each_question_with_its_suggestion_and_the_log_ac_200_3`, `::test_a_phase_line_per_change_and_a_unit_line_per_unit_ac_200_3`, `::test_the_wait_result_words_are_recorded_as_progress_and_ended_ac_200_3`; the kept AC-143.8 tests in `tests/cplat/test_143_shipwait.py` (`--phase`, later phase, default 540, archived run, no ship run) | `scripts/cplat/shipwait.py:84` (unit progress), `:91` (branch progress), `:96` (`ESCALATED:` lines from `scripts/cplat/ship_handoff.py:122`), `:112` (`WAIT:` exit 0), TIMEOUT with `log:`; `scripts/cplat/ship.py` `_wait_command` result words | `--phase P`, the 540 s default and the "no ship run" exit are proven by the AC-143.8 tests this criterion replaces, which still run green. |
+| AC-200.4 | met | `test_200_wait.py::test_a_dead_process_of_an_unfinished_run_is_ended_with_the_phase_and_the_log_ac_200_4`, `::test_a_live_process_is_not_ended_ac_200_4`, `::test_a_process_that_finished_the_run_before_it_ended_is_reached_not_ended_ac_200_4`, `::test_the_second_end_of_a_run_escalates_it_as_environment_naming_the_log_ac_200_4`; `test_200_handoff.py::test_an_ended_process_is_resumed_once_in_a_new_process_ac_200_4`, `::test_a_third_start_of_the_same_run_escalates_it_as_environment_ac_200_4` | `scripts/cplat/shipwait.py:105` (`ENDED:`), second end escalates `environment`; `scripts/cplat/ship_handoff.py:169` (`starts`, `MAX_STARTS`) | |
+| AC-200.5 | met | `test_200_handoff.py::test_detach_with_an_answer_hands_it_to_the_headless_session_in_its_environment_ac_200_5`, `::test_a_process_started_without_an_answer_gets_none_ac_200_5`, `::test_the_headless_start_prints_and_records_the_answer_from_the_shipping_session_ac_200_5`, `::test_an_answer_without_a_source_is_still_from_the_system_ship_ac_200_5`; `test_200_prompts.py::test_ship_applies_an_answer_from_the_shipping_session_ac_200_5`, `::test_the_reference_covers_every_result_of_the_wait_ac_200_5`, `::test_the_reference_resumes_with_an_answer_and_reports_other_causes_ac_200_5`, `::test_the_reference_has_register_entries_that_quote_it_ac_200_5`, `::test_the_ship_register_holds_the_shipping_session_rule_ac_200_5` | `scripts/cplat/ship_handoff.py:50` (`CPLAT_SHIP_ANSWER[_FROM]`); `scripts/cplat/ship.py:263` (`answer from the <from>:`); `plugins/component/references/ship-handoff.md` (decision/suggested/ask word for word/other causes not resumed); `docs/rules/plugins/component/references/ship-handoff.yml`, `docs/rules/plugins/component/commands/ship.yml` R11, R13 | The size limit is checked by `cplat platform rules check` inside `devbox run ci` (green in Phase 3), not by a spec-200 test. |
+| AC-200.6 | met | `tests/cplat/test_200_report.py::test_the_in_session_path_and_the_hand_off_path_give_the_report_the_same_data_ac_200_6`, `::test_status_of_a_finished_run_prints_the_report_rows_ac_200_6`, `::test_status_json_carries_the_report_object_ac_200_6`, `::test_a_run_that_is_green_but_not_merged_says_so_ac_200_6`, `::test_deploy_keeps_its_result_lines_in_the_state_for_the_report_ac_200_6`; `tests/cplat/test_200_gate.py` (all 7, incl. `::test_the_hook_holds_the_shipping_session_with_the_wait_as_next_step_ac_200_6`, `::test_a_running_wait_holds_the_count_and_is_named_ac_200_6`); `test_200_prompts.py::test_the_report_comes_from_ship_status_ac_200_6` | `scripts/cplat/ship_report.py:28` (`data`), `:56` (`lines`); `scripts/cplat/ship.py:2233`, `:2239` (status report), `:1967` (`deploy_lines`), `:2016` (gate delegates); `scripts/cplat/ship_handoff.py:90` (`gate`); `scripts/cplat/supervisor.py:202` (no archive of a handed-off run); `plugins/component/references/ship-finish.md` | |
+| AC-200.7 | met | `tests/cplat/test_200_helper_fix.py` (pr and land fix rounds): `::test_a_helper_only_fix_in_a_ci_round_is_named_a_helper_by_the_check_ac_200_7`, `::test_the_helper_fix_is_recorded_without_escalating_and_then_accepted_ac_200_7`, `::test_a_changed_assertion_is_refused_and_escalates_as_a_changed_test_ac_200_7`, `::test_a_changed_definition_or_criterion_id_is_not_a_tightening_ac_200_7`, `::test_a_new_helper_file_is_accepted_only_when_it_defines_no_test_and_no_criterion_ac_200_7`, `::test_ship_pr_writes_the_how_this_was_built_block_with_the_tightening_ac_200_7`, `::test_ship_pr_updates_the_body_of_a_reused_pr_with_the_block_ac_200_7`; `test_200_prompts.py::test_every_fix_round_runs_the_test_diff_and_settles_a_helper_without_asking_ac_200_7`, `::test_the_land_red_reference_escalates_a_changed_test_as_a_decision_ac_200_7`, `::test_the_verification_fix_rounds_of_the_build_run_the_test_diff_ac_200_7` | `scripts/cplat/spec.py:694` (`judged_specs`: the unfinished ship run's spec), `:809` (new helper accepted by `--tighten`); `scripts/cplat/ship.py:653` (`_built_block`); `plugins/component/references/ship-land-red.md`, `plugins/component/commands/ship.md` phase `pr`, `plugins/component/commands/build.md` Phase 4 step 3 | |
+
+## Non-goals
+
+- No other command is handed off; `/system:ship`, `system ship next --wait` and the budget size are unchanged. ✔
+- No answers for causes other than `decision` (`ship-handoff.md`, last bullet). ✔
+- **Trims in `plugins/component/commands/ship.md` reach the units (non-goal "Changing what any unit does").** To pay for `ship-handoff.md` (plan t5, "No growth") the build removed guidance the headless ship itself follows:
+  - Phase `deploy`: "the user's context, or `kubectl config current-context` if it is the system's cluster" is gone, so the deploy unit no longer knows which `--context` to pass, and without one `ship deploy` does not wait for Argo CD. **Not acceptable:** this changes the deploy step.
+  - Phase `plan`: the exception "a merge-conflict re-plan (build.md 2.4a) is the exception" is gone, so "A plan with `done` tasks is not re-planned (escalate)" now reads as overriding build.md 2.4a. **Not acceptable as written:** it can turn a re-plan into an escalation.
+  - Phase `build`'s list of stop rules, "Smoke that could not run is not run: the run ends `done`", the joint `/system:ship` line and the `wip(<task-id>)` line are gone. Acceptable: build.md and `cplat component ship deploy` carry the same behaviour.
+- No template-owned layout changes. ✔
+
+## Deviations from the plan
+
+- t4 lists `scripts/cplat/testdiff_select.py`, which was not changed: `spec.judged_specs` passes the set into `frozen_files`. Acceptable.
+- t5 lists `docs/rules/.../ship-finish.yml` and `docs/rules/.../commands/build.yml`, which were not created or changed. Acceptable: `cplat platform rules check` passes.
+- The ADR is number 113, not 112, as the plan allows.
+- `docs/specs/143-the-coordinator-waits-with-cplat/spec.md` is in no task's `files` (it marks AC-143.8 superseded by AC-200.3). Acceptable: the spec requires it ("replaces AC-143.8").
+- `tests/cplat/ship200_support.py` and `tests/cplat/test_200_*.py` are the acceptance tests (red commit `2fcd9370`, review `13780ecb`).
+- Every task is `done: true`.
+
+## Contract
+
+Matches `design.md`, with two small differences, both acceptable:
+- `scripts/cplat/shipwait.py` gives the second early end the reason `headless session ended a second time in phase …`. The contract says `ended twice` (as `ship_handoff.py:171` does). The cause and the log path are as specified.
+- `ship.py` `_built_block` writes the "How this was built" block only when the run recorded `approved_test_diffs`. The contract says before every push.
+
+## Trace
+
+`cplat spec trace` also counts `tests/cplat/test_179_plan.py` for AC-200.1–AC-200.4. Those matches come from a fixture spec `200-shop` in that file, not from tests of this spec. Each criterion still has its own spec-200 tests (above), so coverage has no gap.
+
+## Unresolved test-review findings
+
+None. The review commit `13780ecb` reads `findings: 8` and has no `unresolved:` lines; `03dd3c27` resolved them.
+
+## Mutation check (report only)
+
+Skipped: no mutation check for shape platform yet.

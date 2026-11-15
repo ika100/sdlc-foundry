@@ -199,7 +199,8 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
                 st = None
             deployed = (st or {}).get("deployed")
             if st is not None and not st.get("product"):   # spec 155: a system ship records and archives a linked run
-                ship.finish(repo)
+                if not st.get("headless"):             # spec 200: the shipping session archives a handed-off run
+                    ship.finish(repo)
             done.append(f"shipped {spec}" + (f" ({deployed} in dev)" if deployed else ""))
         else:
             done.append("finished")
