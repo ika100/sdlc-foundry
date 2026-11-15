@@ -1,7 +1,7 @@
 ---
 spec_id: 200-a-component-ship-runs-in-its-own-session
 title: A component ship runs in its own session
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -68,3 +68,4 @@ A test-helper fix needs no stop (J16-1).
 ## Changelog
 
 - 2026-11-14 created
+- 2026-11-15 approved
