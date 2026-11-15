@@ -276,3 +276,18 @@ def test_the_real_branch_of_the_repo_is_the_feature_branch_after_a_detach_ac_200
     assert detach(capsys, repo)[0] == 0
     head = subprocess.run(["git", "branch", "--show-current"], cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
     assert head == BRANCH                                   # `start` and its branch switch stay as they are (A1)
+
+
+def test_a_session_of_the_detached_run_never_sees_the_hand_off_line(repo, procs, monkeypatch, capsys):  # AC-200.1, #757
+    p = procs()
+    interactive(monkeypatch)
+    rc, out, err = detach(capsys, repo)
+    assert rc == 0, out + err and len(p.spawned) == 1
+    rc, out, err = cli(capsys, repo, "status")                                    # the interactive session: no hand-off cue either
+    assert rc == 0, err
+    assert not any("headless: pid" in ln for ln in out.splitlines())
+    monkeypatch.setenv("CPLAT_HEADLESS", "1")                                     # the run's own unit session (journey 17)
+    monkeypatch.setenv("CPLAT_UNIT", "red-tests")
+    rc, out, err = cli(capsys, repo, "start", "7")
+    assert not any("headless: pid" in ln for ln in out.splitlines()), out
+    assert len(p.spawned) == 1                                                    # it starts nothing and hands nothing off

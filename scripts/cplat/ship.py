@@ -189,8 +189,8 @@ def describe(st: dict, repo: Path | None = None, next: bool = True) -> str:  # n
         lines.append(row)
     if st.get("fix_rounds"):
         lines.append(f"  CI fix rounds: {st['fix_rounds']}")
-    if st.get("headless"):
-        lines.append(f"  headless: pid {st['headless'].get('pid')}, log {st['headless'].get('log')}")
+    if st.get("headless") and os.environ.get("CPLAT_HEADLESS") != "1":   # a session of the run itself never hands off (#757)
+        lines.append(f"  run process: pid {st['headless'].get('pid')}, log {st['headless'].get('log')}")
     if st.get("answers"):
         lines.append(f"  answer from the {st['answers'][-1].get('from') or 'system ship'}: {st['answers'][-1]['text']}")
     if repo is not None:
