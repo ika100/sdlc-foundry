@@ -6,6 +6,20 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.23.0] - 2026-11-15
+
+### Added
+
+**`/platform:next` shows where you are in the delivery process and what waits for you, as choices (spec 192).** `cplat next` prints one screen: the process bar from triage to release, what is happening now, and your part, with the questions as options you pick instead of commands you type; your answers are recorded as follow-ups and appear as person time in `cplat platform runs report`. Triage, spec approval, build, ship and release now end by handing over to it ([ADR-112](adr/112-delivery-screens-are-printed-by-cplat.md)). Update the plugins (`/plugin marketplace update`).
+
+### Changed
+
+**An interactive `/component:ship` hands its run to its own headless session and only waits, relays questions and reports (#200).** "Ship the spec" ran plan, build, PR, land and deploy in the session you typed it in, which took 5.7 to 8.6 M tokens of that main session, and in journey 16 (J16-1) a CI fix that only touched a test helper stopped the run with a question nobody could answer. Now `/component:ship` starts `cplat component ship start <spec> --detach`, which runs one `cplat headless` process for the run; your session runs `cplat component ship wait`, asks you each question the shipping session escalates (or resumes with suggested answers you said to take) and prints the final report from `cplat component ship status`. Every fix round runs `cplat spec test-diff` after the fix and settles a test-helper or type-only change without a stop. Pass `--here` to keep the run in your session as before. See [ADR-113](adr/113-an-interactive-component-ship-runs-in-its-own-headless-session.md). Update the plugins (`/plugin marketplace update`).
+
+### Fixed
+
+**A resumed dispatcher unit whose pull request merged while it was paused is finished, not started again (#755).** `cplat dispatch resume` used to start a paused unit's session again even when its pull request had merged meanwhile, so the unit kept its slot and held every other ship as `ship-busy`; it is now marked done and frees its slot.
+
 ## [5.22.1] - 2026-11-14
 
 ### Changed
