@@ -257,6 +257,7 @@ def _escalations(rows: list[dict]) -> list[dict]:
                            **({"issue": issue["number"]} if issue else {}),
                            **({"shape": r["shape"]} if r.get("shape") else {})),
             "since": r.get("ended_at") or r.get("started_at") or "", "reason": reason,
+            "cause": (r.get("escalation") or {}).get("cause"),
             "command": command, "cwd_repo": (issue.get("repo") if issue else None) or r.get("repo"),
             "consequence": {"branch": f"feature/{spec_id}" if spec_id else None, "pr": pr.get("number"), "deployed": False},
             "way_back": {"text": f"Stopping keeps the branch and{ref}; nothing was deployed."}})
@@ -591,7 +592,8 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
 
 def render(doc: dict) -> str:
     """One line per item, then the count."""
-    lines = [f"{i['kind']:<10} {i['stage']:<8} {i['reason']}  [{i['command']}]" for i in doc["items"]]
+    lines = [f"{i['kind']:<10} {i['stage']:<8} {i['reason']}" + (f" (cause {i['cause']})" if i.get("cause") else "")
+             + f"  [{i['command']}]" for i in doc["items"]]
     lines.append(f"{len(doc['items'])} item{'s' if len(doc['items']) != 1 else ''} need you")
     lines += [f"unavailable: {u['source']}: {u['error']} (hides {', '.join(u['kinds'])})" for u in doc["unavailable"]]
     return "\n".join(lines)
