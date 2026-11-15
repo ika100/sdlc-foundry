@@ -17,6 +17,7 @@ import ship
 import stopgate
 import units
 import usagelimit
+import waitdetach
 from core import PlatformError
 
 NO_CAP_MINUTES = 100000.0   # the timeout of one session when --max-minutes is not given
@@ -47,11 +48,12 @@ def _summary(h, log: Path, repo: Path, spec: str, unit: str, k: int, end: str) -
         fh.write(line)
 
 
-def _run_session(h, cmd: list[str], repo: Path, log: Path, minutes: float, rid: str | None, sid: str, env: dict[str, str]) -> int:
+def _run_session(h, cmd: list[str], repo: Path, log: Path, minutes: float, rid: str | None, sid: str, env: dict[str, str],
+                 guard=None) -> int:
     saved = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
     try:
-        return h.run_once(cmd, repo, log, minutes, rid, sid)
+        return h.run_once(cmd, repo, log, minutes, rid, sid, guard=guard)
     finally:
         for k, v in saved.items():
             if v is None:
@@ -74,6 +76,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
     sessions = int(state.get("sessions") or 0)
     done: list[str] = []
     pauser = usagelimit.Pauser()
+    waits = h.Waits()
 
     def end(result: str, code: int) -> int:
         state.update(result=result, code=code, sessions=sessions)
@@ -95,6 +98,8 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
                 h.sleep(wait)
             if h.stop_requested(repo):   # spec 167: a pause stops the run before its next session
                 return end(h.PAUSED_RESULT, h.EXIT_STOPPED)
+            if stopped := waits.hold(repo, state):   # spec 202: no session while a detached wait runs
+                return end(stopped, h.EXIT_STOPPED)
             begin = begin or h.clock()
             left = NO_CAP_MINUTES
             if max_minutes is not None:
@@ -134,13 +139,20 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
             print(f"run {sessions}: {spec} unit {unit} session {k}  (log: {log})", flush=True)
             start = log.stat().st_size if log.exists() else 0
             began = h.clock()
-            code = _run_session(h, cmd, repo, log, left, rid, sid, {**extra_env, "CPLAT_UNIT": unit})
+            guard = h.make_guard(ns, repo, sid, command, unit)
+            code = _run_session(h, cmd, repo, log, left, rid, sid, {**extra_env, "CPLAT_UNIT": unit}, guard)
+            waited = bool(waitdetach.alive(repo))   # spec 202: it ended while its wait runs: no limit, no stall
             ended = h.clock()
+            if code == h.LOOPED:
+                units.end_session(repo, kind, spec, unit, before, paused=True)
+                reason = waits.looped(repo, guard, state)
+                _summary(h, log, repo, spec, unit, k, f"escalated: {reason}")
+                return end(reason, h.EXIT_STOPPED)
             said = h.last_message(log, start)
-            hit = usagelimit.detect(said, (ended - began).total_seconds(), ended)
+            hit = None if waited else usagelimit.detect(said, (ended - began).total_seconds(), ended)
             if hit is not None and not said and (units.feature_head(repo, spec) != before or units.detect(repo, kind, spec, unit)):
                 hit = None   # a short silent session that committed or reached its checkpoint is no limit: it made progress
-            ending = units.end_session(repo, kind, spec, unit, before, paused=hit is not None)
+            ending = units.end_session(repo, kind, spec, unit, before, paused=hit is not None or waited)
             commit = ending.get("checkpoint")
             reason = _escalated(repo)
             if commit:
@@ -149,6 +161,8 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
                 what = f"escalated: {reason}"
             elif hit is not None:
                 what = "paused: usage limit"
+            elif waited:
+                what = "no checkpoint (a wait is still running)"
             elif code == 124:
                 what = f"no checkpoint (timed out after {left:.0f} min)"
             else:
