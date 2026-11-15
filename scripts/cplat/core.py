@@ -125,6 +125,14 @@ def _journey_wait(seconds: float, kind: str) -> None:
         pass
 
 
+def run_renderer(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """`uv run scripts/render.py` in a cluster repo that never reads a stale bytecode cache: a renderer written within the same second
+    and with the same size as the one that wrote `scripts/__pycache__` passes Python's mtime+size check and would render the old pins."""
+    for cache in [repo / "scripts" / "__pycache__", *(repo / ".platform" / "releases").glob("*/__pycache__")]:
+        shutil.rmtree(cache, ignore_errors=True)
+    return run(["uv", "run", "scripts/render.py", *args], cwd=repo, check=False, env={"PYTHONDONTWRITEBYTECODE": "1"})
+
+
 def repo_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """os.environ without any CPLAT_* variable, then `extra` (which may set CPLAT_* on purpose, e.g. CPLAT_REPEAT_RUN).
     A repository's own commands must not see the variables of the run that started them (spec 178)."""

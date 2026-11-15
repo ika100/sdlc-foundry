@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _render(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return run(["uv", "run", "scripts/render.py", *args], cwd=repo, check=False)
+    return core.run_renderer(repo, *args)
 
 
 def _last(res: subprocess.CompletedProcess[str]) -> str:

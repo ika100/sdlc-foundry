@@ -244,9 +244,14 @@ def _load_module(name: str, path: Path):
     mod = importlib.util.module_from_spec(spec)
     added = str(path.parent)
     sys.path.insert(0, added)
+    sys.modules.pop("system_render", None)   # the renderer imports its sibling by name: never one of another repo or release
+    keep, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    shutil.rmtree(path.parent / "__pycache__", ignore_errors=True)   # nor a stale bytecode cache of it
     try:
         spec.loader.exec_module(mod)
     finally:
+        sys.dont_write_bytecode = keep
+        sys.modules.pop("system_render", None)
         if added in sys.path:
             sys.path.remove(added)
     return mod
