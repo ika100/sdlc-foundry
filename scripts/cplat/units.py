@@ -474,11 +474,16 @@ def gate(repo: Path, unit: str, hook_input: dict) -> dict | None:
     import waits
     import stopgate
     waiting = waits.live(repo, (hook_input or {}).get("session_id") or stopgate.session_of_env())
-    if waiting:                                    # this session's running cplat wait holds the stop: no hold, no count (AC-178.8)
-        return {"decision": "block",
-                "reason": (f"waiting: {', '.join(waiting)}\nUnit {unit} of {spec_id} is not finished; the wait above is still running.\n"
-                           "Next: read its result when it ends (a blocking read of its background task, never a polling loop), "
-                           "then go on from it.")}
+    paused = stopgate.pause_requested(repo)
+    if paused or waiting:                          # AC-202.7, AC-202.1: let the session stop; no hold, no count
+        if command == "ship":
+            st = _ship_state(repo) or {}
+            where, label = f"in phase {st.get('phase') or '-'}", f"ship {spec_id}"
+        else:
+            where, label = f"in unit {unit}", f"build {spec_id}"
+        if paused:
+            return {"systemMessage": f"{label}: paused by cplat dispatch {where}; cplat dispatch resume continues it"}
+        return stopgate.waiting_message(label, waiting, where)
     commit, why = _evaluate(repo, command, spec_id, unit)
     if commit:
         _update(repo, lambda d: _checkpoint(_unit(d, unit), commit) if _unit(d, unit) else None)

@@ -74,13 +74,13 @@ def test_progress_of_the_run_resets_the_count_ac_200_6(repo, hand_off):  # AC-20
     assert stop(repo)["decision"] == "block"
 
 
-def test_a_running_wait_holds_the_count_and_is_named_ac_200_6(repo, hand_off):  # AC-200.6
+def test_a_running_wait_lets_the_stop_through_and_is_named_ac_200_6(repo, hand_off):  # AC-200.6, AC-202.1
     hand_off()
     stop(repo)
     mark = put_mark(repo, WAIT_COMMAND)
     for _ in range(LIMIT + 3):                                           # more stops than would end the hold
         answer = stop(repo)
-        assert answer["decision"] == "block" and "waiting:" in answer["reason"] and WAIT_COMMAND in answer["reason"]
+        assert "decision" not in answer and WAIT_COMMAND in answer["systemMessage"]
     assert not ship.load_state(repo).get("escalated")
     mark.unlink()                                                        # the wait ended: stops count again
     later = [stop(repo) for _ in range(LIMIT + 2)]

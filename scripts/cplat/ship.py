@@ -2017,12 +2017,19 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
     mark = {"head": _head(repo, st["branch"]), "phase": st["phase"]}
     running = stopgate.running_agents(hook_input)
     import waits
-    verdict = stopgate.check(st, session, mark, running, waits.live(repo))   # spec 171: a running cplat wait holds the count
+    if st.get("owner") and session == st["owner"] and stopgate.pause_requested(repo):   # AC-202.7: let it stop, count nothing
+        return {"systemMessage": f"ship {st['spec']}: paused by cplat dispatch in phase {st['phase']}; cplat dispatch resume continues it"}
+    verdict = stopgate.check(st, session, mark, running, waits.live(repo))   # AC-202.1: a running cplat wait lets the stop through
     command = f"/component:ship {st['spec']}"
     if verdict.action == "silent":
         return None
     if verdict.action == "notice":
         return {"systemMessage": f"ship {st['spec']}: unfinished in phase {st['phase']}, no session owns it; resume it with {command}"}
+    if verdict.action == "waiting":                # the count stays as it was; a fresh run's missing count is written as 0
+        if "no_progress" not in (st.get("stop_gate") or {}):
+            st["stop_gate"] = {**(st.get("stop_gate") or {}), "no_progress": 0}
+            save_state(repo, st)
+        return stopgate.waiting_message(f"ship {st['spec']}", verdict.waiting.split(", "), f"in phase {st['phase']}")
     save_state(repo, st)
     if verdict.action == "wait":                   # #496: a background agent at work is progress; its notification resumes us
         return {"systemMessage": f"ship {st['spec']}: waiting for {running} background agent(s) in phase {st['phase']}"}
@@ -2033,16 +2040,11 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             escalate(repo, why, cause)
         return {"systemMessage": f"ship {st['spec']}: escalated ({why}); resume it with {command}"}
-    if verdict.waiting:
-        reason = [stopgate.wait_line(verdict),
-                  f"The ship run of {st['spec']} is not finished (phase {st['phase']}); the wait above is still running.",
-                  "Next: read its result when it ends (a blocking read of its background task, never a polling loop), then go on from it."]
-    else:
-        reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
-                  f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
-                  f"Next: {next_step(st)}."]
-        if st["phase"] == "build" and run_tests:
-            reason += build_status(repo, st["spec"])
+    reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
+              f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
+              f"Next: {next_step(st)}."]
+    if st["phase"] == "build" and run_tests:
+        reason += build_status(repo, st["spec"])
     reason.append("Keep going. Only if a rule needs the user (a merge conflict after its re-plan, a changed acceptance test, a CRITICAL finding, "
                   "a decision the spec does not answer) or the user asked you to stop: run "
                   "`cplat component ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop.")

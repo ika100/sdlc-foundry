@@ -16,7 +16,6 @@ import pr as prmod
 import ship
 import stopgate
 import waits
-from test_appship_097 import SPEC as SYSTEM_SPEC
 from test_appship_097 import w  # noqa: F401  (fixture)
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 from test_ship import git, repo  # noqa: F401  (fixtures, helpers)
@@ -76,30 +75,7 @@ def no_progress(repo):
 
 # ---------------- AC-171.8: the component hook ----------------
 
-def test_a_running_wait_blocks_the_stop_holds_the_count_and_names_itself(repo, monkeypatch):  # AC-171.8
-    begin(repo, monkeypatch)
-    stop(repo)                                                       # the first stop is progress: 0
-    assert "stops without progress: 1/2" in first_line(stop(repo))   # a stop without a wait counts as in AC-126.4
-    mark = put_mark(repo, "cplat pr wait 7 --merge")
-    for _ in range(4):                                               # more stops than would escalate at 2
-        answer = stop(repo)
-        assert first_line(answer) == "waiting: cplat pr wait 7 --merge; stops without progress: 1/2"
-        assert f"The ship run of {SPEC} is not finished" in answer["reason"]
-        assert "cplat component ship escalate" in answer["reason"]          # interface: the hook reason names the escalate command
-        assert no_progress(repo) == 1 and not ship.load_state(repo).get("escalated")
-    mark.unlink()                                                    # the wait ended: stops count again
-    answer = stop(repo, message="I do not know how to go on")
-    assert "escalated" in answer["systemMessage"] and ship.load_state(repo)["escalated"].startswith("no progress: 2 stops")
-
-
-def test_several_running_waits_are_named_together(repo, monkeypatch):  # AC-171.8
-    begin(repo, monkeypatch)
-    put_mark(repo, "cplat pr wait 7")
-    put_mark(repo, "cplat component ship wait", pid=os.getppid())  # interface: wait mark command name
-    line = first_line(stop(repo))
-    assert line.startswith("waiting: ") and "cplat pr wait 7" in line and "cplat component ship wait" in line  # interface: hook line names the wait
-    assert line.endswith("; stops without progress: 0/2")
-
+# The block of a running wait (AC-171.8) is replaced by AC-202.1: see test_202_stop_hook.py.
 
 def test_a_mark_of_a_process_that_is_gone_is_no_running_wait(repo, monkeypatch):  # AC-171.8
     begin(repo, monkeypatch)
@@ -119,18 +95,6 @@ def test_a_wait_of_another_checkout_does_not_hold_this_run(repo, tmp_path, monke
     put_mark(other, "cplat pr wait 9")
     stop(repo)
     assert "waiting:" not in stop(repo)["reason"] and no_progress(repo) == 1
-
-
-def test_the_verdict_of_a_running_wait_is_a_block_that_keeps_the_count():  # AC-171.8
-    st = {"owner": "A", "stop_gate": {"head": "h", "phase": "land", "no_progress": 1}}
-    v = stopgate.check(st, "A", {"head": "h", "phase": "land"}, 0, ["cplat pr wait 7"])
-    assert (v.action, v.no_progress, v.waiting) == ("block", 1, "cplat pr wait 7")
-    assert st["stop_gate"] == {"head": "h", "phase": "land", "no_progress": 1}
-    assert stopgate.wait_line(v) == "waiting: cplat pr wait 7; stops without progress: 1/2"
-    again = stopgate.check(st, "A", {"head": "h", "phase": "land"}, 0, ["cplat pr wait 7"])
-    assert again.action == "block" and again.no_progress == 1          # never 2: a wait does not escalate
-    moved = stopgate.check(st, "A", {"head": "h2", "phase": "land"}, 0, ["cplat pr wait 7"])
-    assert moved.no_progress == 0                                      # a new commit is progress as ever
 
 
 def test_without_a_wait_the_verdict_counts_as_before():  # AC-171.8
@@ -197,24 +161,6 @@ def test_ship_land_marks_itself_while_it_runs(repo, monkeypatch):  # AC-171.8
 
 def sys_stop(w, session="A"):
     return w.app("gate", stdin=json.dumps({"session_id": session, "cwd": str(w.gitops)}))
-
-
-def sys_first_line(r):
-    assert r.rc == 0 and r.json["decision"] == "block", r.out
-    return r.json["reason"].splitlines()[0]
-
-
-def test_a_running_wait_holds_the_product_ship_too(w, monkeypatch):  # AC-171.8
-    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "A")
-    w.started()
-    sys_stop(w)
-    assert "stops without progress: 1/2" in sys_first_line(sys_stop(w))
-    put_mark(w.gitops, "cplat system ship next --wait")  # interface: wait mark command name
-    for _ in range(3):
-        answer = sys_stop(w)
-        assert sys_first_line(answer) == "waiting: cplat system ship next --wait; stops without progress: 1/2"
-        assert f"The product ship of {SYSTEM_SPEC} is not finished" in answer.json["reason"]
-        assert w.state()["stop_gate"]["no_progress"] == 1 and not w.state().get("escalated")
 
 
 def test_a_wait_of_another_session_in_this_checkout_does_not_hold_a_session_765(repo, monkeypatch):  # AC-171.8, #765
