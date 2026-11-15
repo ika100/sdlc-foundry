@@ -87,6 +87,7 @@ tasks:
     covers: [AC-201.11]
     parallel_safe: true
     depends_on: [t1, t2, t4]
+    done: true
   - id: t13
     title: cluster plugin — /cluster:promote, /cluster:add waits per cluster, rules entry, version 1.5.0 in manifest and marketplace
     files: [plugins/cluster/commands/promote.md, plugins/cluster/commands/add.md, plugins/cluster/README.md, plugins/cluster/.claude-plugin/plugin.json, docs/rules/plugins/cluster/commands/promote.yml, .claude-plugin/marketplace.json]
