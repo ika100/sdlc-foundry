@@ -45,6 +45,7 @@ tasks:
     covers: [AC-202.3, AC-202.4, AC-202.5, AC-202.6, AC-202.7]
     parallel_safe: true
     depends_on: [t2, t3]
+    done: true
   - id: t7
     title: "Docs, ADR, changelog fragment and plugin versions"
     files: [docs/dispatch.md, docs/unattended-delivery.md, docs/adr/README.md, docs/changelog.d/750-waiting-session-makes-no-model-calls.fixed.md, .claude-plugin/marketplace.json, plugins/shared/.claude-plugin/plugin.json, plugins/component/.claude-plugin/plugin.json]
