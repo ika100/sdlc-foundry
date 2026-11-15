@@ -192,11 +192,16 @@ diagnose() {
     kk "$c" -n argocd logs deploy/argocd-repo-server --tail=60 2>&1 || true
     echo "--- [$c] coredns-custom"
     kk "$c" -n kube-system get configmap coredns-custom -o yaml 2>&1 || true
+    echo "--- [$c] coredns log (current and previous container)"
+    kk "$c" -n kube-system logs deploy/coredns --tail=30 2>&1 || true
+    kk "$c" -n kube-system logs deploy/coredns --previous --tail=30 2>&1 || true
   done
   echo "--- git server log (tail)"
   docker logs --tail 30 "$git_name" 2>&1 || true
 }
 
+# The github.com override is a separate server block (a .server key of coredns-custom): k3s's Corefile already has a hosts plugin
+# in its main block, and CoreDNS refuses a second one there ("plugin/hosts: this plugin can only be used once per Server Block").
 # wire <cluster>: once the cluster's Docker network, DNS and Argo CD namespace exist, put the git server in reach and
 # mark the org credential (and both repositories) insecure, so Argo CD pulls from it as if it were github.com
 wire() {
@@ -212,10 +217,11 @@ wire() {
     "kind: ConfigMap" \
     "metadata: {name: coredns-custom, namespace: kube-system}" \
     "data:" \
-    "  github.override: |" \
-    "    hosts {" \
-    "      $ip github.com" \
-    "      fallthrough" \
+    "  github.server: |" \
+    "    github.com:53 {" \
+    "      hosts {" \
+    "        $ip github.com" \
+    "      }" \
     "    }" | kk "$c" apply -f - >/dev/null
   kk "$c" -n kube-system rollout restart deploy/coredns >/dev/null
   for _ in $(seq 1 240); do kk "$c" get namespace argocd >/dev/null 2>&1 && break; sleep 5; done
