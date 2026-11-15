@@ -10,12 +10,14 @@ tasks:
     covers: [AC-201.3, AC-201.4, AC-201.5, AC-201.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cluster renderer — clusters, cluster directories and exceptions, environment assignment, one tree per cluster, kept renderers, EXCEPTION/BEHIND/MOVED lines, new flags
     files: [templates/cluster-gitops/scripts/render.py]
     covers: [AC-201.1, AC-201.2, AC-201.3, AC-201.4, AC-201.5, AC-201.6, AC-201.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: cluster check — operators per cluster, assignment checks, release gate for split systems, exception and behind lines
     files: [templates/cluster-gitops/scripts/check.py]
@@ -40,6 +42,7 @@ tasks:
     covers: [AC-201.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: system wait, cluster wait <cluster> and system status read each environment from its cluster
     files: [scripts/cplat/envwait.py, scripts/cplat/status.py]
@@ -82,12 +85,14 @@ tasks:
     covers: [AC-201.8, AC-201.12]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t14
     title: docs — domain model, cluster guide (second cluster, assigning, promoting, moving), ADR-060 and ADR-068 status lines, changelog fragment
     files: [docs/DOMAIN-MODEL.md, docs/CLUSTERS.md, docs/adr/060-a-cluster-repo-owns-shared-services.md, docs/adr/068-resource-and-operator-upgrades-roll-through-environments-in-verified-steps.md, docs/changelog.d/201-one-cluster-repo-several-clusters.added.md]
     covers: [AC-201.12]
     parallel_safe: true
     depends_on: []
+    done: true
 human_steps:
   - "After the release: /plugin marketplace update sdlc-foundry (cluster 1.5.0 brings /cluster:promote)."
   - "todo, the first user, in this order (docs/CLUSTERS.md): /platform:update in the cluster repo and in todo-gitops; in todo-gitops set environments.dev/staging.cluster: local and environments.prod.cluster: home, render, merge; in the cluster repo add clusters: [local, home], clusters/local/cluster.yaml and clusters/home/cluster.yaml, systems.todo.environments {dev: local, staging: local, prod: home}, render, merge."
