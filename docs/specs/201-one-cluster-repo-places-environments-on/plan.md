@@ -24,18 +24,21 @@ tasks:
     covers: [AC-201.2, AC-201.3, AC-201.4, AC-201.7]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t4
     title: cluster template — bootstrap and cluster-up per cluster with the identity guard, cluster-down, validate per tree, skeleton docs
     files: [templates/cluster-gitops/scripts/bootstrap.sh, templates/cluster-gitops/scripts/cluster-up.sh, templates/cluster-gitops/scripts/cluster-down.sh, templates/cluster-gitops/devbox.json, templates/cluster-gitops/cluster.yaml.jinja, templates/cluster-gitops/copier.yml, templates/cluster-gitops/CLAUDE.md.jinja, templates/cluster-gitops/README.md.jinja]
     covers: [AC-201.1, AC-201.4, AC-201.6]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t5
     title: /platform:update in a cluster repo keeps later clusters at their release
     files: [scripts/cplat/update.py]
     covers: [AC-201.7]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t6
     title: kube_contexts setting and envcluster (cluster of an environment, its context, reachability)
     files: [scripts/cplat/settings.py, scripts/cplat/envcluster.py]
@@ -49,30 +52,35 @@ tasks:
     covers: [AC-201.4, AC-201.9]
     parallel_safe: true
     depends_on: [t1, t6]
+    done: true
   - id: t8
     title: component ship deploy and instance verify use the environment's cluster
     files: [scripts/cplat/ship.py, scripts/cplat/smoke.py]
     covers: [AC-201.4, AC-201.9]
     parallel_safe: true
     depends_on: [t1, t6]
+    done: true
   - id: t9
     title: resource backup, restore, query, upgrade and system restore use the environment's cluster
     files: [scripts/cplat/dbbackup.py, scripts/cplat/dbrestore.py, scripts/cplat/dbquery.py, scripts/cplat/upgrade.py, scripts/cplat/envrestore.py]
     covers: [AC-201.4, AC-201.9]
     parallel_safe: true
     depends_on: [t1, t6]
+    done: true
   - id: t10
     title: doctor in a cluster repo with clusters — per-cluster rows and the Kubernetes, Argo CD and gateway comparison
     files: [scripts/cplat/doctor.py]
     covers: [AC-201.4, AC-201.10]
     parallel_safe: true
     depends_on: [t2, t6]
+    done: true
   - id: t11
     title: cplat cluster promote — gates on the cluster before, one PR moving the cluster to its release
     files: [scripts/cplat/clusterpromote.py, scripts/cplat/cplat.py]
     covers: [AC-201.8]
     parallel_safe: true
     depends_on: [t1, t2, t6]
+    done: true
   - id: t12
     title: end-to-end — one cluster repo, two k3d clusters, todo's dev and staging on one and prod on two
     files: [tests/e2e/clusters.sh, .github/workflows/e2e.yml, scripts/e2e-scope.py]
