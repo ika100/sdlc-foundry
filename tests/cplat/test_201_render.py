@@ -59,8 +59,10 @@ def test_ac_201_1_operators_and_the_secret_store_appear_the_same_in_each_tree(re
     render_clusters(repo, multi(operators=OPS, secretStore=SHARED_STORE))
     files = rendered(repo)
     a, b = relative(tree_of(files, LOCAL), LOCAL), relative(tree_of(files, HOME), HOME)
-    for name in ("operators/cloudnative-pg.yaml", "operators/external-secrets.yaml", "operators/secret-store.yaml", "operators-root.yaml"):
+    for name in ("operators/cloudnative-pg.yaml", "operators/external-secrets.yaml", "operators/secret-store.yaml"):
         assert a[name] == b[name], name
+    assert a["operators-root.yaml"] == b["operators-root.yaml"].replace(f"cluster/{HOME}/", f"cluster/{LOCAL}/"), "the roots differ only in the tree path"
+    assert f"cluster/{LOCAL}/operators" in a["operators-root.yaml"] and f"cluster/{HOME}/" not in a["operators-root.yaml"]
     store = docs_of(a["operators/secret-store.yaml"])[-1]
     assert store["kind"] == "ClusterSecretStore" and store["metadata"]["name"] == "shared-store"
 
