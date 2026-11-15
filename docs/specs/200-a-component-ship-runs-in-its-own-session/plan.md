@@ -31,12 +31,14 @@ tasks:
     covers: [AC-200.3, AC-200.4]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: "Stop hook holds the shipping session; `ship status` report; `ship pr` writes the How-this-was-built block"
     files: [scripts/cplat/ship.py, scripts/cplat/ship_handoff.py, scripts/cplat/ship_report.py]
     covers: [AC-200.6, AC-200.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
 ---
 
 # Plan — 200 A component ship runs in its own session

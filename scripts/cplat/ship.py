@@ -2118,9 +2118,9 @@ def _wait_command(target: Path, ns: argparse.Namespace) -> int:
     def body() -> tuple[int, str]:
         code, lines = shipwait.ship_wait(target, ns.phase, ns.timeout, ns.interval)
         print("\n".join(lines), flush=True)
-        word = (lines[-1].split(None, 1) or [""])[0].rstrip(":") if lines else ""
         known = {"REACHED": "reached", "ESCALATED": "escalated", "ENDED": "ended", "WAIT": "progress", "TIMEOUT": "timeout"}
-        return code, known.get(word) or {waits.REACHED: "reached", waits.RED: "escalated", waits.TIMEOUT: "timeout"}[code]
+        words = [known[w] for ln in lines if (w := (ln.split(None, 1) or [""])[0].rstrip(":")) in known]
+        return code, (words[0] if words else {waits.REACHED: "reached", waits.RED: "escalated", waits.TIMEOUT: "timeout"}[code])
     return waits.record(Path.cwd(), "component ship wait", body, about=target)
 
 
