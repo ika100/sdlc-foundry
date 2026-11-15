@@ -36,10 +36,14 @@ rules:
     class: practice
     source: "#684"
   - id: R11
-    text: "An `answer from the system ship:` line printed by `cplat component ship start` is the user's decision for the escalation that stopped the run: always apply it and go on, since the coordinator answered in the user's place."
+    text: "An `answer from the system ship:` or `answer from the shipping session:` line printed by `cplat component ship start` is the user's decision for the escalation that stopped the run: always apply it and go on, since the coordinator answered in the user's place."
     class: practice
-    source: "#684"
+    source: "#684, spec 200"
   - id: R12
     text: "An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done."
     class: practice
     source: spec 185
+  - id: R13
+    text: "A `headless: pid` line → read `${CLAUDE_PLUGIN_ROOT}/references/ship-handoff.md` and follow it; only Finish and Escalate here apply, because the headless session does every phase."
+    class: practice
+    source: spec 200
