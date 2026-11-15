@@ -1,8 +1,10 @@
 """`component ship wait` and `system ship next --wait` (spec 143): block on a ship run instead of polling its status.
 
   cplat component ship wait [--repo DIR] [--phase P] [--timeout S]
-      one line with the time per phase change of the clone's ship run; exit 0 at phase P or later (plan, build, pr, land,
-      deploy, done; default done), 1 ESCALATED, 2 TIMEOUT; a clone without a ship run exits 1 at once
+      one line with the time per phase change and per finished unit of the clone's ship run; exit 0 at phase P or later
+      (plan, build, pr, land, deploy, done; default done), 1 ESCALATED (questions and log) or ENDED (a handed-off process
+      died; the second end escalates as `environment`), 2 TIMEOUT (with the log); at the fixed deadline with progress
+      (a phase, a unit or the feature branch moved) exit 0 with a `WAIT:` line (spec 200); a clone without a ship run exits 1 at once
   cplat system ship next --wait [--timeout S] [--json]
       while the action is `wait`: a line per phase change of each running repo; a repo whose ship ended is recorded as
       `cplat system ship repo result <id>` does; then the next action, printed as `next` prints it; when the timeout runs out with the action still `wait`:
@@ -20,6 +22,8 @@ import appship_state as state
 import core
 import runs
 import ship
+import ship_handoff
+import units
 import waits
 from core import PlatformError
 
@@ -48,6 +52,18 @@ def _phase_start(st: dict) -> float | None:
     return None
 
 
+def _done_units(repo: Path) -> list[str]:
+    data = units._read(repo) or {}
+    return [u["id"] for u in data.get("units") or [] if u.get("status") == "done"]
+
+
+def _branch_head(repo: Path, branch: str | None) -> str:
+    if not branch or not repo.is_dir():
+        return ""
+    p = core.run(["git", "rev-parse", "-q", "--verify", f"refs/heads/{branch}"], cwd=repo, check=False)
+    return p.stdout.strip() if p.returncode == 0 else ""
+
+
 def ship_wait(repo: Path, phase: str | None, timeout: float, interval: float = SHIP_INTERVAL) -> tuple[int, list[str]]:
     st = ship.load_state(repo)
     if not st:
@@ -55,21 +71,50 @@ def ship_wait(repo: Path, phase: str | None, timeout: float, interval: float = S
     spec, target = st["spec"], ship.PHASES.index(phase or "done")
     begin = waits.now()
     seen, since = None, begin
+    known: set[str] | None = None
+    head: str | None = None
+    progressed = False
     while True:
         st = ship.load_state(repo) or _archived(repo, spec) or st
         cur = st.get("phase") or "plan"
         if cur != seen:
             ship.say(f"{waits.clock()} ship {spec}: phase {cur}")
+            progressed = progressed or seen is not None
             seen, since = cur, _phase_start(st) or waits.now()
+        done = _done_units(repo)
+        if known is not None:
+            for u in done:
+                if u not in known:
+                    ship.say(f"{waits.clock()} ship {spec}: unit {u} done")
+                    progressed = True
+        known = set(done) | (known or set())
+        now_head = _branch_head(repo, st.get("branch"))
+        if head is not None and now_head != head:
+            progressed = True
+        head = now_head
         if st.get("escalated"):
-            return waits.RED, [f"ESCALATED: ship {spec}: {st['escalated']} (cause {st.get('cause') or 'unknown'})",
-                               f"resume it with /component:ship {spec}"]
+            return waits.RED, ship_handoff.escalated_lines(st)
         if cur in ship.PHASES and ship.PHASES.index(cur) >= target:
             return waits.REACHED, [f"REACHED: ship {spec} is in phase {cur}"]
+        hand = st.get("headless")
+        log = (hand or {}).get("log")
+        if hand and not ship_handoff.alive(hand.get("pid")):
+            st = ship.load_state(repo) or st
+            if not st.get("escalated") and st.get("phase") != "done":
+                if int(hand.get("starts") or 1) < ship_handoff.MAX_STARTS:
+                    return waits.RED, [f"ENDED: headless session ended in phase {cur}; log {log}",
+                                       f"resume it with cplat component ship start {spec} --detach"]
+                ship.escalate(repo, f"headless session ended a second time in phase {cur}; log {log}", "environment")
+                return waits.RED, ship_handoff.escalated_lines(ship.load_state(repo) or st)
         left = timeout - (waits.now() - begin)
         if left <= 0:
-            return waits.TIMEOUT, [f"TIMEOUT: ship {spec} is still in phase {cur} after {int(timeout)}s of waiting "
-                                   f"(in it for {waits.duration(waits.now() - since)})", "run the same wait again"]
+            if progressed:
+                return waits.REACHED, [f"WAIT: run still going, progress in the last {int(timeout)}s; run the same wait again"]
+            lines = [f"TIMEOUT: ship {spec} is still in phase {cur} after {int(timeout)}s of waiting "
+                     f"(in it for {waits.duration(waits.now() - since)})"]
+            if log:
+                lines.append(f"log: {log}")
+            return waits.TIMEOUT, [*lines, "run the same wait again"]
         waits.sleep(min(interval, left))
 
 
