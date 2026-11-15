@@ -8,6 +8,7 @@ import json
 import subprocess
 
 import pytest
+import yaml
 
 import gitops
 import spec
@@ -85,11 +86,12 @@ def test_an_unknown_environment_is_an_error_naming_spec_and_value(tmp_path, caps
     assert rc == 1 and "007-price-alerts" in out and bad in out and "environments" in out
 
 
-@pytest.mark.parametrize("field", ["environments: []", "environments:", "environments: dev"])
-def test_an_empty_or_malformed_list_is_an_error_naming_the_spec(tmp_path, capsys, field):  # AC-190.1
+@pytest.mark.parametrize("field,got", [("environments: []", "[]"), ("environments:", "null"), ("environments: dev", "dev")])
+def test_an_empty_or_malformed_list_is_an_error_naming_the_spec(tmp_path, capsys, field, got):  # AC-190.1
     with_field(tmp_path, field)
     rc, out = check(tmp_path, capsys)
-    assert rc == 1 and "007-price-alerts" in out and "environments" in out
+    assert rc == 1 and "007-price-alerts" in out
+    assert "environments must be a non-empty list out of dev, staging, prod" in out and f"(got {got})" in out
 
 
 @pytest.mark.parametrize("status", ["draft", "building", "done"])
@@ -256,8 +258,16 @@ def test_the_dry_run_json_lists_the_limits_and_exits_1(limited, capsys):  # AC-1
 
 
 def test_a_dev_rollback_is_never_refused(limited, capsys):  # AC-190.2
-    rc, out = attempt(to(limited, "dev", "--version", "v1.0.0", "--dry-run"), capsys)
-    assert "environment limit" not in out and "REFUSED" not in out
+    """The spec allows staging only, so dev is outside its list; a rollback to a real previous dev pin still goes through."""
+    write_spec(limited, field="environments: [staging]\n")
+    for tag in ("1.2.0", "1.3.0"):
+        k = limited / "applications/todo/overlays/dev/todo-api/kustomization.yaml"
+        data = yaml.safe_load(k.read_text())
+        data["images"][0]["newTag"] = tag
+        k.write_text(yaml.safe_dump(data, sort_keys=False))
+        commit(limited, f"pin dev {tag}")
+    rc, out = attempt(to(limited, "dev", "--version", "1.2.0", "--dry-run"), capsys)
+    assert rc == 0 and "environment limit" not in out and "REFUSED" not in out
 
 
 # ---------------- AC-190.3: the override ----------------
@@ -285,11 +295,12 @@ def test_the_override_in_a_dry_run_shows_the_accepted_line_and_exits_0(limited, 
 
 
 def test_one_flag_covers_every_limiting_spec(limited, capsys):  # AC-190.3
-    write_spec(limited, "051-no-export", "No export", field="environments: [dev, staging]\n")
+    write_spec(limited, "051-no-export", "No export", field="environments: [dev, prod]\n")
     commit(limited, "second")
-    rc, out = attempt(to(limited, "prod", "--dry-run", "--accept-environment-limit", REASON), capsys)
+    rc, out = attempt(to(limited, "staging", "--dry-run", "--accept-environment-limit", REASON), capsys)
+    assert rc == 0
     assert f"environment limit accepted: {SPEC_ID} (dev): {REASON}" in out
-    assert f"environment limit accepted: 051-no-export (dev, staging): {REASON}" in out
+    assert f"environment limit accepted: 051-no-export (dev, prod): {REASON}" in out
 
 
 @pytest.mark.parametrize("reason", ["", "ok", "no full stop here", "two words."])

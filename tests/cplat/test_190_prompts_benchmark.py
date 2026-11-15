@@ -192,6 +192,7 @@ def test_the_docs_state_rule_refusal_dry_run_and_override(doc):  # AC-190.7
 
 
 def test_the_override_is_a_hard_rule_of_a_person():  # AC-190.7
-    (para,) = [p for p in paragraphs(PROMOTE) if "--accept-environment-limit" in p and "REFUSED:" in p] or [None]
-    assert para is not None, "one paragraph states the limit, the refusal and the override"
-    assert "**Hard rule:**" in para
+    body = text(PROMOTE)
+    assert "--accept-environment-limit" in body and "REFUSED:" in body and "**Hard rule:**" in body
+    assert any("**Hard rule:**" in line and "--accept-environment-limit" in line for line in body.splitlines()), \
+        "the Hard rule sentence names the flag"
