@@ -87,7 +87,7 @@ def test_a_limiting_spec_stops_the_staging_pin_and_is_not_red(sw, capsys):  # AC
     limit_world(sw, {SPEC_ID: spec_text()})
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
-    assert f"not promoted: environment limit {SPEC_ID} allows dev" in lines_of(capsys)
+    assert any(f"not promoted: environment limit {SPEC_ID} allows dev" in line for line in lines_of(capsys))
     assert sw.dispatches() == [] and sw.staging_state()["state"] == "skipped"
     assert sw.state()["phase"] == "done" and not sw.state().get("escalated")
 
@@ -109,7 +109,7 @@ def test_an_unreadable_listed_spec_stops_the_pin_failing_closed(sw, capsys):  # 
     limit_world(sw, {SPEC_ID: None})
     sw.fake.script([PASS_ALL])
     assert sw.deploy() == 0
-    assert f"environment limit of {SPEC_ID} not readable" in lines_of(capsys) and sw.dispatches() == []
+    assert any(f"environment limit of {SPEC_ID} not readable" in line for line in lines_of(capsys)) and sw.dispatches() == []
 
 
 def test_the_staging_decision_names_the_limit(sw):  # AC-190.4

@@ -322,6 +322,7 @@ def test_a_short_reason_with_a_limit_changes_nothing(limited, capsys):  # AC-190
 
 def test_the_flag_without_a_limit_changes_nothing(gitops_repo, gh, capsys):  # AC-190.3  # noqa: F811
     composed(gitops_repo, "todo-api")
+    capsys.readouterr()                                   # composed() printed to the same capture
     rc, out = attempt(to(gitops_repo, "staging", "--dry-run", "--json", "--accept-environment-limit", REASON), capsys)
     assert rc == 0 and json.loads(out)["environment_limits"] == [] and "environment limit" not in out
 
