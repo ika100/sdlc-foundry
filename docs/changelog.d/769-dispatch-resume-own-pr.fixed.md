@@ -1,1 +1,0 @@
-**A resumed dispatcher unit is finished only when its own pull request merged (#767).** Since #755 a paused ship unit was marked done on resume when any pull request of its branch had merged, so a spec whose approval PR used the same branch was ended mid-build and its worktree removed; a merged pull request now counts only when it holds the unit's current commit.

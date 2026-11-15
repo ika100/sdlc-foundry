@@ -6,6 +6,18 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.23.2] - 2026-11-15
+
+### Fixed
+
+**The ship hand-off passes the kube context, so the dev smoke runs (J19-1, spec 203).** `cplat component ship start <spec> --detach` started the headless run without a kube context when the interactive session had none in `CPLAT_KUBE_CONTEXT`, so its `ship deploy` recorded the dev smoke as "not run". The hand-off now resolves one context (`--context C`, the run's recorded one, `CPLAT_KUBE_CONTEXT`, `KUBE_CONTEXT`, `kube_context:` in the settings, the local `k3d-<system>-local` cluster), refuses a `--context` the kubeconfig does not have, records it in the ship state, gives it to the process and prints `context: <name> (<where it came from>)` after the `headless:` line; a restart keeps it. Without any context it prints `context: none (dev is not checked; pass --context <kube-context>)`. Update the plugins (`/plugin marketplace update`).
+
+**A changed committed plan reschedules the units before the next unit (J19-2, spec 203).** A plan committed after the units were scheduled left the run building the old units. The ship run now reschedules the units from the changed plan before it starts the next unit.
+
+**`cplat next` stops waiting on a slow source (J19-3, spec 203).** One slow or hanging source held `cplat next` indefinitely. Each source now gets 20 seconds and the whole command 60 seconds, and no source can read input.
+
+**A resumed dispatcher unit is finished only when its own pull request merged (#767).** Since #755 a paused ship unit was marked done on resume when any pull request of its branch had merged, so a spec whose approval PR used the same branch was ended mid-build and its worktree removed; a merged pull request now counts only when it holds the unit's current commit.
+
 ## [5.23.1] - 2026-11-15
 
 ### Fixed
