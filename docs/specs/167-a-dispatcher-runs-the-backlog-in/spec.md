@@ -57,7 +57,7 @@ Running units.
 Budget, steering and seeing it.
 
 - **AC-167.10** Given `budget.tokens_per_day` (required to start, AC-167.1), when a cycle runs, then it adds up the tokens of every unit and of the dispatcher's own agent calls since local midnight. Once the limit is reached, no unit starts and no agent call is made. Running units continue within their own budgets (spec 102). `cplat needs` gets one `budget` entry per day, and starts continue after midnight on their own. While a running or finished unit's usage is unknown, no new unit starts, and `status` names that unit.
-- **AC-167.11** Steering takes effect within one cycle and is recorded in the dispatcher's state, so it survives a restart:
+- ~~**AC-167.11**~~ superseded by AC-202.7 on 2026-11-15: Steering takes effect within one cycle and is recorded in the dispatcher's state, so it survives a restart:
   - `cplat dispatch pause`: no unit starts, and running units stop at their next checkpoint (spec 131), ready to resume.
   - `pause --drain`: no unit starts, and running units finish.
   - `cplat dispatch resume`: starts are allowed again.
@@ -104,3 +104,4 @@ Budget, steering and seeing it.
 - 2026-11-10 building
 - 2026-11-10 done
 - 2026-11-13 AC-167.5 superseded by AC-196.9 (the default priority rules start with `label:p0`)
+- 2026-11-15 AC-167.11 superseded by AC-202.7 (spec 202): pause reaches a unit session at its next stop attempt, not only at a checkpoint (#750)
