@@ -23,7 +23,6 @@ import pr_rules
 import upgradeverify
 from core import PlatformError, Report, run
 
-ENVS = ("dev", "staging", "prod")
 RELEASE_HEADER = "# Written by /platform:update and /cluster:promote: the platform release this cluster's tree is rendered with.\n"
 
 
@@ -102,7 +101,7 @@ def _smoke_failures(prev: dict, dirs: dict[str, str]) -> list[str]:
             except (PlatformError, model.NotMigrated, OSError) as e:
                 out.append(f"cannot load {s['name']} from {s['repo']}: {e}")
                 continue
-            envs = s["environments"] if s["environments"] is not None else list(ENVS)
+            envs = s["environments"] if s["environments"] is not None else list(model.ENVIRONMENTS)
             seen: set[tuple[str, str]] = set()
             for inst in m.instances:
                 comp = m.component(inst.component)
