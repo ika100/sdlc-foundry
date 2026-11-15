@@ -19,13 +19,19 @@ HOME_CTX = "k3d-home"
 APPS_OK = {"operator-cloudnative-pg": "Synced Healthy"}
 
 
-def keep(repo, release):
+KEPT_QUIET = KEPT.replace(
+    'with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "stdin.json"), "w") as f:\n    json.dump(spec, f)\n', "")
+assert "stdin.json" not in KEPT_QUIET
+
+
+def keep(repo, release, quiet=False):
+    """A kept renderer for `release`; `quiet` records nothing inside the repo, so a promote's renders leave no stray file."""
     d = repo / ".platform" / "releases" / release
     d.mkdir(parents=True, exist_ok=True)
-    (d / "render.py").write_text(KEPT)
+    (d / "render.py").write_text(KEPT_QUIET if quiet else KEPT)
 
 
-def world(shared_renders, tmp_path, monkeypatch, *, clusters=(LOCAL, HOME), later=None, apps=None, smoke=(True, "3 passed")):
+def world(shared_renders, tmp_path, monkeypatch, *, clusters=(LOCAL, HOME), later=None, apps=None, smoke=(True, "3 passed"), quiet=False):
     """Cluster repo on release 5.1.0; `later` maps a later cluster to the release it is pinned to (a renderer is kept for each)."""
     monkeypatch.delenv("CPLAT_HEADLESS", raising=False)
     monkeypatch.delenv("CPLAT_UNIT", raising=False)
@@ -40,7 +46,7 @@ def world(shared_renders, tmp_path, monkeypatch, *, clusters=(LOCAL, HOME), late
     (repo / ".platform-version").write_text("platform: 5.1.0\n")
     for cluster, release in (later or {}).items():
         (repo / "clusters" / cluster / "release.yaml").write_text(f"platform: {release}\n")
-        keep(repo, release)
+        keep(repo, release, quiet)
     p = subprocess.run(["uv", "run", "scripts/render.py"], cwd=repo, capture_output=True, text=True)
     assert p.returncode == 0, p.stdout + p.stderr
     git_repo(repo, tmp_path)
@@ -83,6 +89,14 @@ def test_ac_201_8_promote_opens_one_pr_that_moves_the_cluster_to_what_the_cluste
     assert "clusters/home/release.yaml" in files, "the cluster pins no release any more: it runs this repo's"
     assert any(f.startswith("cluster/home/") for f in files) and any(f.startswith(".platform/releases/4.12.0/") for f in files)
     assert all(f == "clusters/home/release.yaml" or f.startswith(("cluster/home/", ".platform/releases/4.12.0/")) for f in files), files
+    git(repo, "checkout", "-q", branch)
+    check = subprocess.run(["uv", "run", "scripts/render.py", "--check"], cwd=repo, capture_output=True, text=True)
+    assert check.returncode == 0 and "OK: up to date" in check.stdout, check.stdout + check.stderr
+    import yaml
+    home_op, local_op = (yaml.safe_load((repo / f"cluster/{c}/operators/cloudnative-pg.yaml").read_text()) for c in (HOME, LOCAL))
+    assert home_op["spec"].get("source") or home_op["spec"].get("sources"), "home holds this release's pin of the operator"
+    assert (home_op["spec"].get("source"), home_op["spec"].get("sources")) == (local_op["spec"].get("source"), local_op["spec"].get("sources"))
+    git(repo, "checkout", "-q", "main")
     msg = git(repo, "log", "-1", "--format=%B", branch)
     assert msg.splitlines()[0] == "feat(cluster): promote home to platform 5.1.0 (what local runs)" and "Signed-off-by:" in msg
 
@@ -111,7 +125,7 @@ def test_ac_201_8_the_gates_read_the_cluster_before_in_its_own_context(shared_re
 
 
 def test_ac_201_8_with_three_clusters_the_third_is_promoted_to_what_the_second_runs(shared_renders, tmp_path, monkeypatch, capsys):  # AC-201.8
-    repo, s, _, calls = world(shared_renders, tmp_path, monkeypatch, clusters=(LOCAL, HOME, EDGE), later={HOME: "4.12.0", EDGE: "4.0.0"})
+    repo, s, _, calls = world(shared_renders, tmp_path, monkeypatch, clusters=(LOCAL, HOME, EDGE), later={HOME: "4.12.0", EDGE: "4.0.0"}, quiet=True)
     user_settings(tmp_path, monkeypatch, f"kube_contexts: {{local: {LOCAL_CTX}, home: {HOME_CTX}, edge: k3d-edge}}\n")
     code, out, err = promote(repo, capsys, EDGE, "--component-dir", f"api={tmp_path}")
     assert code == 0, out + err

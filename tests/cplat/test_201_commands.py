@@ -16,7 +16,7 @@ from core import PlatformError
 from cluster_fixtures import base, cluster_repo, git_repo, render_ok, soft, stubs
 from backup_fixtures import bdoc, clock, make_repo  # noqa: F401  (clock: a fixture, no real sleeps)
 from support_201 import HOME, LOCAL, kube_calls, kube_stub, multi, setup, user_settings
-from system_fixtures import ROOT, git
+from system_fixtures import git
 
 LOCAL_CTX, HOME_CTX = "ctx-local", "ctx-home"
 BOTH = f"kube_contexts: {{local: {LOCAL_CTX}, home: {HOME_CTX}}}\n"
@@ -360,12 +360,96 @@ def test_ac_201_9_an_explicit_context_wins_in_every_command(world, capsys, tmp_p
 
 # ---------------- the two commands that run inside a component repo ----------------
 
-@pytest.mark.parametrize("module, needle", [("ship", "env_context"), ("smoke", "env_context")])
-def test_ac_201_9_ship_deploy_and_instance_verify_resolve_the_cluster_through_envcluster(module, needle):  # AC-201.9
-    """`component ship deploy` (dev) and `instance verify <env>` run in a component repo whose gitops system is cloned from GitHub, so
-    the behaviour is covered by the resolver tests above; here only that both commands ask the one resolver, not the current context."""
-    source = (ROOT / "scripts" / "cplat" / f"{module}.py").read_text()
-    assert "envcluster" in source and needle in source, f"{module}.py asks envcluster.env_context for the environment's context"
+def component_world(tmp_path, monkeypatch, contexts=BOTH):
+    """A clone of component `acme/api` linked to the gitops system `todo` (dev and staging on local, prod on home), read through the
+    `gh` stub; kubectl answers per context and logs every call."""
+    from support_201 import split_doc, split_repo
+    s = stubs(tmp_path, monkeypatch)
+    split_repo(s["fixtures"], split_doc())
+    log = kube_stub(tmp_path, monkeypatch, reachable=(LOCAL_CTX, HOME_CTX))
+    user_settings(tmp_path, monkeypatch, contexts)
+    repo = tmp_path / "api"
+    repo.mkdir()
+    (repo / ".platform-app.yml").write_text("gitops:\n  - acme/todo-gitops\n")
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "remote", "add", "origin", "https://github.com/acme/api.git")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "init")
+    return repo, log
+
+
+def verify_prod(repo, capsys, monkeypatch):
+    class Red:
+        outcome, ok, env, base_url, digest, tests = "not-run", False, "prod", None, None, []
+
+        def section(self):
+            return {"env": "prod", "outcome": "not-run"}
+
+        def lines(self):
+            return ["smoke: not run"]
+
+    monkeypatch.setattr("smoke.run_smoke", lambda *a, **kw: Red())
+    monkeypatch.setattr("smoke.record", lambda *a, **kw: None)
+    return run(["instance", "verify", "prod", "--repo", str(repo)], capsys)
+
+
+def test_ac_201_9_instance_verify_uses_the_context_of_the_environments_cluster(tmp_path, monkeypatch, capsys):  # AC-201.9
+    repo, log = component_world(tmp_path, monkeypatch)
+    verify_prod(repo, capsys, monkeypatch)
+    seen = contexts_of(log)
+    assert seen, "verifying prod reached the cluster that runs it"
+    assert set(seen) == {HOME_CTX}, seen
+    assert never_current(log)
+
+
+def test_ac_201_9_instance_verify_stops_before_any_kubectl_call_when_no_context_is_known(tmp_path, monkeypatch, capsys):  # AC-201.9
+    repo, log = component_world(tmp_path, monkeypatch, contexts=f"kube_contexts: {{local: {LOCAL_CTX}}}\n")
+    code, out, err = verify_prod(repo, capsys, monkeypatch)
+    assert code != 0 and "runs on cluster home, and no kube context is known for it" in out + err, out + err
+    assert kube_calls(log) == []
+
+
+def deploy_world(tmp_path, monkeypatch, contexts=BOTH):
+    """`component ship deploy` of a landed ship: the pin PR is merged, main CI is green, Argo CD answers from the stub."""
+    import json
+    import ship
+    repo, log = component_world(tmp_path, monkeypatch, contexts)
+    sha = "a" * 40
+    ship.save_state(repo, {"spec": "001-x", "phase": "deploy", "merge": True, "branch": "feature/001-x", "started": "2026-11-05T08:00:00",
+                           "recorded": False, "run_id": "r1", "shape": "service", "merge_sha": sha})
+    t = {"now": 1000.0}
+
+    def now():
+        t["now"] += 30
+        return t["now"]
+    monkeypatch.setattr(ship, "now", now)
+    monkeypatch.setattr(ship, "sleep", lambda s: None)
+    monkeypatch.setattr(ship, "main_ci", lambda repo, sha: ("green", []))
+    monkeypatch.setattr(ship, "merge_gitops", lambda *a, **kw: (True, []))
+    monkeypatch.setattr(ship, "_smoke_step", lambda *a, **kw: (True, ["smoke stubbed"]))
+    monkeypatch.setattr(ship, "_smoke_not_run", lambda *a, **kw: (True, ["smoke stubbed"]))
+    real_gh = ship.gh
+    merged = json.dumps([{"number": 3, "state": "MERGED", "url": "https://github.com/acme/todo-gitops/pull/3"}])
+    monkeypatch.setattr(ship, "gh", lambda args, **kw: merged if args[:2] == ["pr", "list"] else real_gh(args, **kw))
+    import shapecmd
+    monkeypatch.setattr(shapecmd, "route", lambda repo: {"deployable": True, "shape": "service"})
+    return repo, log
+
+
+def test_ac_201_9_ship_deploy_waits_on_the_cluster_that_runs_dev(tmp_path, monkeypatch, capsys):  # AC-201.9
+    repo, log = deploy_world(tmp_path, monkeypatch)
+    run(["component", "ship", "--repo", str(repo), "deploy", "--timeout", "60"], capsys)
+    seen = contexts_of(log)
+    assert seen, "the deploy wait asked the cluster that runs dev"
+    assert set(seen) == {LOCAL_CTX}, seen
+    assert never_current(log)
+
+
+def test_ac_201_9_ship_deploy_stops_before_any_kubectl_call_when_no_context_is_known(tmp_path, monkeypatch, capsys):  # AC-201.9
+    repo, log = deploy_world(tmp_path, monkeypatch, contexts=f"kube_contexts: {{home: {HOME_CTX}}}\n")
+    code, out, err = run(["component", "ship", "--repo", str(repo), "deploy", "--timeout", "60"], capsys)
+    assert code != 0 and "runs on cluster local, and no kube context is known for it" in out + err, out + err
+    assert kube_calls(log) == []
 
 
 def test_ac_201_9_the_module_exists_with_the_contract_functions():  # AC-201.9

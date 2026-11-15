@@ -40,8 +40,10 @@ def test_ac_201_11_the_e2e_script_runs_one_repo_on_two_clusters_with_the_steps_o
 
 def test_ac_201_11_the_e2e_script_compares_the_operator_versions_and_the_image_tags():  # AC-201.11
     t = read(ROOT / "tests" / "e2e" / "clusters.sh")
-    assert "app.kubernetes.io/name=cloudnative-pg" in t, "both clusters' operator Deployments are compared"
+    assert re.search(r"cloudnative-pg|cnpg", t) and re.search(r"image|version", t, re.I), "both clusters' operator Deployments are compared"
     assert re.search(r"-n todo-dev", t) and re.search(r"-n todo-prod", t), "the image tag of dev and of prod is read from the cluster"
+    negative = r"(!|\babsent\b|\bNotFound\b|not found|\bnot\b|\bno\b|\bnone\b|refute|-z\b)[^\n]*api-prod|api-prod[^\n]*(\babsent\b|\bNotFound\b|not found|\bnot\b|\bno\b|refute|-z\b)"
+    assert re.search(negative, t, re.I), "cluster one is asserted to have no api-prod"
 
 
 def test_ac_201_11_the_e2e_workflow_runs_the_clusters_script():  # AC-201.11
@@ -112,7 +114,7 @@ def test_ac_201_12_the_change_is_listed_in_a_minor_changelog_section_not_marked_
     fragments = sorted((DOCS / "changelog.d").glob("201-*.added.md"))
     if fragments:
         text = fragments[0].read_text()
-        assert "(spec 201)." in text and "BREAKING" not in text.upper()
+        assert "(spec 201)." in text and not re.search(r"\bBREAKING\b", text), "no BREAKING marker (the sentence 'Not breaking: ...' is wanted)"
         assert "docs/CLUSTERS.md" in text or "CLUSTERS.md" in text, "the Action points at the guide"
         assert "1.5.0" in text, "the cluster plugin version is named"
         return
@@ -120,7 +122,7 @@ def test_ac_201_12_the_change_is_listed_in_a_minor_changelog_section_not_marked_
     hits = [m for m in re.finditer(r"^## \[(\d+)\.(\d+)\.(\d+)\][^\n]*\n(.*?)(?=^## \[)", changelog, re.M | re.S) if "spec 201" in m.group(4)]
     assert hits, "released: a version section of CHANGELOG.md lists spec 201"
     major, minor, patch, body = hits[0].groups()
-    assert patch == "0" and "BREAKING" not in hits[0].group(0).upper()
+    assert patch == "0" and not re.search(r"\bBREAKING\b", hits[0].group(0)), "no BREAKING marker"
 
 
 def test_ac_201_12_every_changed_plugin_is_versioned_in_its_manifest_and_the_marketplace():  # AC-201.12

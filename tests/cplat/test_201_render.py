@@ -131,8 +131,11 @@ def test_ac_201_1_a_cluster_directory_that_is_not_listed_fails(repo):  # AC-201.
 def test_ac_201_1_a_cluster_directory_in_a_repo_without_clusters_fails(repo):  # AC-201.1
     (repo / "clusters" / "edge").mkdir(parents=True)
     (repo / "clusters" / "edge" / "cluster.yaml").write_text("")
+    before = rendered(repo)
     p = render(repo, base())
-    assert p.returncode == 1 and "clusters/edge/ belongs to no cluster in clusters (listed: none)" in p.stderr
+    assert p.returncode == 1 and rendered(repo) == before
+    lines = p.stderr.strip().splitlines()
+    assert len(lines) == 1 and re.fullmatch(r"ERROR: \S+: clusters/edge/ belongs to no cluster in clusters \(listed: none\)", lines[0]), p.stderr
 
 
 def test_ac_201_1_the_template_documents_clusters_and_changes_no_default_render(repo):  # AC-201.1
