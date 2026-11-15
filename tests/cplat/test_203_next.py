@@ -31,6 +31,18 @@ def world(tmp_path, monkeypatch):
     return World(tmp_path, monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def isolated_process_state(monkeypatch):
+    """`cplat next` points fd 0 at /dev/null and sets prompt variables in this process: restore both after each test."""
+    for name in ("GIT_TERMINAL_PROMPT", "GH_PROMPT_DISABLED", "GIT_SSH_COMMAND"):
+        monkeypatch.setenv(name, "x")          # registers the variable with monkeypatch: undone at teardown
+        monkeypatch.delenv(name)
+    saved = os.dup(0)
+    yield
+    os.dup2(saved, 0)
+    os.close(saved)
+
+
 @pytest.fixture
 def gate():
     event = threading.Event()
@@ -43,7 +55,7 @@ def exits(monkeypatch):
     """`nextcmd.hard_exit` replaced; the codes it was asked to end the process with."""
     import nextcmd
     calls = []
-    monkeypatch.setattr(nextcmd, "hard_exit", calls.append, raising=False)     # the seam may not exist yet: the test then fails below
+    monkeypatch.setattr(nextcmd, "hard_exit", lambda c: calls.append(c) or c, raising=False)     # the seam may not exist yet: the test then fails below
     return calls
 
 
@@ -63,12 +75,12 @@ def test_the_limits_are_20_seconds_per_source_and_60_in_total_ac_203_5():  # AC-
 
 
 def silent(monkeypatch, gate, module, name):
-    """`module.name` waits for HANG seconds before it answers as it did."""
-    real = getattr(module, name)
+    """`module.name` waits for HANG seconds (or the teardown), then returns a fixed value: an abandoned thread never calls the real source."""
+    getattr(module, name)
 
     def slow(*a, **k):
         gate.wait(HANG)
-        return real(*a, **k)
+        return None
     monkeypatch.setattr(module, name, slow)
 
 
@@ -162,8 +174,14 @@ def test_every_source_silent_at_once_still_returns_within_the_total_ac_203_5(wor
 
 
 def test_a_state_lock_another_process_holds_does_not_hold_next_ac_203_5(world, capsys, monkeypatch, gate, short, exits):  # AC-203.5
+    import dispatch_view
     import runs
     held, release = threading.Event(), threading.Event()
+
+    def waits_for_the_lock(*a, **k):                                            # the dispatcher source takes the state lock
+        with runs._locked():
+            return None
+    monkeypatch.setattr(dispatch_view, "status_doc", waits_for_the_lock)
 
     def holder():
         with runs._locked():
@@ -177,7 +195,7 @@ def test_a_state_lock_another_process_holds_does_not_hold_next_ac_203_5(world, c
     finally:
         release.set()
     assert rc == 0 and elapsed < LIMIT, f"{elapsed:.1f} s"
-    json.loads(out)
+    assert "dispatcher" in [u["source"] for u in json.loads(out)["unavailable"]]
 
 
 def test_a_run_whose_sources_all_answer_ends_the_ordinary_way_ac_203_5(world, capsys, monkeypatch, short, exits):  # AC-203.5
@@ -189,9 +207,6 @@ def test_a_run_whose_sources_all_answer_ends_the_ordinary_way_ac_203_5(world, ca
 # ---------------- AC-203.6: no input, no prompts ----------------
 
 def test_next_points_its_input_at_devnull_and_turns_prompts_off_ac_203_6(world, capsys, monkeypatch, exits):  # AC-203.6
-    for name in ("GIT_TERMINAL_PROMPT", "GH_PROMPT_DISABLED", "GIT_SSH_COMMAND"):
-        monkeypatch.setenv(name, "x")
-        monkeypatch.delenv(name)
     pipe_r, pipe_w = os.pipe()
     saved = os.dup(0)
     os.dup2(pipe_r, 0)                                                          # an open input nobody writes to

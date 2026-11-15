@@ -7,7 +7,7 @@ context names; replaced here, nothing calls `kubectl`), `ship_handoff.spawn(...,
 import pytest
 
 import ship
-from ship200_support import detach, headless_line, interactive, procs  # noqa: F401
+from ship200_support import detach, headless_line, interactive, procs, wait_cli  # noqa: F401
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 from test_ship import repo  # noqa: F401  (fixture)
 
@@ -160,6 +160,35 @@ def test_a_restart_gets_the_recorded_context_without_being_told_ac_203_2(repo, p
     assert ship.load_state(repo)["context"]["name"] == "lan"
 
 
+def test_the_resume_after_ended_gets_the_recorded_context_ac_203_2(repo, procs, world, capsys):  # AC-203.2
+    p = procs()
+    world("lan", "other")
+    assert detach(capsys, repo, "--context", "lan")[0] == 0
+    p.live.clear()                                          # the headless process died
+    rc, out, _ = wait_cli(capsys, repo)
+    assert rc == 1 and any(ln.startswith("ENDED:") for ln in out)
+    rc, out, err = detach(capsys, repo)                     # the resume the ENDED line asks for
+    assert rc == 0, out + err
+    assert len(p.spawned) == 2
+    assert p.last["env"]["CPLAT_KUBE_CONTEXT"] == "lan"
+    assert ship.load_state(repo)["context"]["name"] == "lan"
+
+
+def test_detach_with_an_answer_gets_the_recorded_context_ac_203_2(repo, procs, world, capsys):  # AC-203.2
+    p = procs()
+    world("lan", "other")
+    assert detach(capsys, repo, "--context", "lan")[0] == 0
+    p.live.clear()                                          # the headless session ended by escalating
+    assert ship.main(["--repo", str(repo), "escalate", "which store holds the alerts", "--cause", "decision",
+                      "--question", "Which store? (suggested: redis)"]) == 0
+    rc, out, err = detach(capsys, repo, "--answer", "use redis")
+    assert rc == 0, out + err
+    assert len(p.spawned) == 2
+    assert p.last["env"]["CPLAT_SHIP_ANSWER"] == "use redis"
+    assert p.last["env"]["CPLAT_KUBE_CONTEXT"] == "lan"
+    assert ship.load_state(repo)["context"]["name"] == "lan"
+
+
 def test_a_restart_with_another_explicit_context_replaces_it_ac_203_2(repo, procs, world, capsys):  # AC-203.2
     p = procs()
     world("lan", "other")
@@ -179,7 +208,7 @@ def test_a_live_process_is_reused_and_the_line_still_names_the_context_ac_203_2(
     rc, out, err = detach(capsys, repo)
     assert rc == 0, out + err
     assert len(p.spawned) == 1
-    assert lines_after_headless(out) == "context: lan (recorded at the hand-off)"
+    assert lines_after_headless(out) == "context: lan (--context)"              # a reuse is no respawn: the stored source is printed
 
 
 def test_without_any_context_the_hand_off_starts_and_says_so_ac_203_2(repo, procs, world, capsys):  # AC-203.2
