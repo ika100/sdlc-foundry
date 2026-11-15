@@ -42,6 +42,7 @@ tasks:
     covers: [AC-190.7]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 190 Promotion respects an environment limit in the spec
