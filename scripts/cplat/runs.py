@@ -6,6 +6,7 @@ Public API for the callers (ship, pr wait, headless, doctor) and for later specs
   phase / ci_round / rerun / event / set_section / add_to / filed    change it in place (never raise, print nothing)
   finish(run_id, outcome, escalation=, fields=)                      redact, buffer, flush; at most one stderr line
   followup(run_id, kind, data) -> warning | None                     a follow-up line of a finished run (spec 181)
+  person_answer(shown_at=, answered_at=, option=, refs=, minutes_total=)  one `person` follow-up per item answered (spec 192)
   flush(budget=, strict=) -> FlushResult                             buffer (and pending filings) -> store
   store_status() / buffered_count() / pending_count()                for `cplat platform doctor`
   attach_point(repo) / link_parent(run_id)                           nested runs and headless parents
@@ -595,25 +596,47 @@ def _warning(why: str, buffered: int, dropped: int) -> str:
     return f"WARNING: run record buffered locally ({why}); {buffered} record(s) buffered{extra}"
 
 
-def followup(run_id: str, kind: str, data: dict) -> str | None:
-    """Buffer a follow-up line of `kind` for `run_id` (signature = kind; a re-write replaces it) and flush.
-
-    Returns the warning line when it stays buffered, else None. Never raises."""
-    item = {"schema": SCHEMA, "followup": kind, "signature": kind, "run_id": run_id, "at": _iso(utcnow()), **data}
+def _buffer_followups(items: list[dict]) -> str | None:
     dropped = 0
     t0 = monotonic()
     try:
         with _locked():
-            dropped = _buffer_add(item)
+            for item in items:
+                dropped += _buffer_add(item)
     except Exception as e:  # noqa: BLE001
         return _emit(_warning(f"recording failed: {type(e).__name__}: {e}", buffered_count(), dropped))
     try:
         why = flush(budget=max(0.0, BUDGET_SECONDS - (monotonic() - t0))).detail
     except Exception as e:  # noqa: BLE001
         why = f"recording failed: {type(e).__name__}: {e}"
-    if any(_key(i) == _key(item) for i in _safe_buffer()) or dropped:
+    keys = {_key(i) for i in items}
+    if any(_key(i) in keys for i in _safe_buffer()) or dropped:
         return _emit(_warning(why or "recording failed: record not written", buffered_count(), dropped))
     return None
+
+
+def followup(run_id: str, kind: str, data: dict) -> str | None:
+    """Buffer a follow-up line of `kind` for `run_id` (signature = kind; a re-write replaces it) and flush.
+
+    Returns the warning line when it stays buffered, else None. Never raises."""
+    return _buffer_followups([{"schema": SCHEMA, "followup": kind, "signature": kind, "run_id": run_id, "at": _iso(utcnow()), **data}])
+
+
+PERSON_MAX_MINUTES = 10.0
+
+
+def person_answer(*, shown_at: str, answered_at: str, option: str, refs: list[tuple[str, str, str]],
+                  minutes_total: float) -> str | None:
+    """One `person` follow-up per ref `(kind, repo, id)` (kind `spec` or `issue`): one question, an even share of the
+    minutes (the total capped at 10), each with a fresh run_id (spec 192, AC-192.10). Same warning contract as `followup`."""
+    if not refs:
+        return None
+    each = round(min(max(float(minutes_total), 0.0), PERSON_MAX_MINUTES) / len(refs), 2)
+    items = [{"schema": SCHEMA, "followup": "person", "signature": "person", "run_id": f"person-{secrets.token_hex(6)}",
+              "at": answered_at, "shown_at": shown_at, "repo": repo, "spec": ident if kind == "spec" else None,
+              "issue": int(ident) if kind == "issue" else None, "option": option, "questions": 1, "minutes": each}
+             for kind, repo, ident in refs]
+    return _buffer_followups(items)
 
 
 def finish(run_id: str | None, outcome: str, *, escalation: dict | None = None, fields: dict | None = None) -> str | None:

@@ -114,7 +114,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 
 ## Phase 7 — Pull request
 
-`cplat platform runs phase build:pr`; follow `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`: `.pr-body.md`, one `cplat pr open --spec <spec_id>` call ("How this was built" block), the Final Report.
+`cplat platform runs phase build:pr`; follow `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`: `.pr-body.md`, `cplat pr open --spec <spec_id>` ("How this was built" block), the Final Report. End with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 
 ## Rules
 

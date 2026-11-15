@@ -95,6 +95,7 @@ Version: the tagged commit's version file shows the previous development version
 
 ## Rules
 
+- After the summary, end with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 - **Fail fast**; after Phase 1 a stop runs `git switch main` first, so the checkout is left on `main`.
 - `git push origin v*` is pre-approved. **Phase 7 closes issues via `gh issue close`** (an `ask` permission).
 - Never auto-fix quality, test or security failures (report and stop), so that the released code is what passed the gates; never force-merge (a failed merge goes to the user), because it needs the user's decision.

@@ -1,5 +1,7 @@
 """Reading the run store (spec 087, ADR-032): parse store lines, dedupe, merge follow-ups, aggregate, render.
 
+Person time (spec 192): `person` follow-ups are summed per delivered item in `aggregate_person`.
+
 Pure functions without I/O. Tolerant of older schemas, unknown kinds and fields, and malformed lines: whatever is
 missing counts as "unknown".
 """
@@ -224,6 +226,7 @@ def aggregate(records: list[dict], followups: list[dict], *, malformed: int, buf
         "unclassified": aggregate_unclassified(kept),
     }
     out["unattended_ships"] = aggregate_unattended(kept)
+    out["person"] = aggregate_person(followups, kept)
     validation = aggregate_validation(kept)
     if validation["rules"]:   # spec 103: only when a run recorded a validation section
         out["validation"] = validation
@@ -239,6 +242,51 @@ def _approval_reason(reason) -> bool:
     rule = escalation_rules.classify(reason)
     return (rule is not None and rule.name == "git-action-awaits-approval") or (
         isinstance(reason, str) and reason.startswith("preflight failed: blocked-by-settings"))
+
+
+DELIVERED_KINDS = ("ship", "product-ship", "fix", "dispatch")
+
+
+def aggregate_person(followups: list[dict], kept: list[dict]) -> dict:
+    """Per delivered item (a done run with a spec or an issue): the person's questions and minutes, None without lines."""
+    sums: dict[tuple, list] = {}
+    for f in followups:
+        if f.get("followup") != "person":
+            continue
+        issue = f.get("issue")
+        key = ("issue", f.get("repo"), str(issue)) if issue is not None else ("spec", f.get("repo"), _text(f.get("spec")))
+        acc = sums.setdefault(key, [0, 0.0])
+        acc[0] += int(f.get("questions") or 0)
+        acc[1] += float(f.get("minutes") or 0)
+    rows: dict[tuple, dict] = {}
+    for r in kept:
+        if r.get("outcome") != "done" or r.get("kind") not in DELIVERED_KINDS:
+            continue
+        issue = r.get("issue")
+        if r.get("spec"):
+            key = ("spec", r.get("repo"), _text(r["spec"]))
+        elif isinstance(issue, dict) and issue.get("number") is not None:
+            key = ("issue", r.get("repo"), str(issue["number"]))
+        else:
+            continue
+        acc = sums.get(key)
+        rows[key] = {"kind": key[0], "repo": key[1], "id": key[2], "questions": acc[0] if acc else None,
+                     "minutes": round(acc[1], 2) if acc else None}
+    items = sorted(rows.values(), key=lambda x: (x["kind"], str(x["repo"]), x["id"]))
+    return {"items": items, "questions": sum(i["questions"] or 0 for i in items),
+            "minutes": round(sum(i["minutes"] or 0 for i in items), 2)}
+
+
+def _person_lines(person: dict) -> list[str]:
+    if not person["items"]:
+        return ["Person time per delivered item: none"]
+    lines = ["Person time per delivered item:"]
+    for i in person["items"]:
+        name = f"spec {i['id']}" if i["kind"] == "spec" else f"issue {i['repo']}#{i['id']}"
+        q = "–" if i["questions"] is None else i["questions"]
+        m = "–" if i["minutes"] is None else f"{i['minutes']:g} min"
+        lines.append(f"  {name}  questions {q}  person {m}")
+    return lines
 
 
 def aggregate_unattended(kept: list[dict]) -> dict:
@@ -358,6 +406,8 @@ def render_text(agg: dict) -> str:
         lines.append("Validation checks per rule: " + "; ".join(
             f"{rule} " + ", ".join(f"{d} {n}" for d, n in counts.items()) for rule, counts in validation["rules"].items()))
         lines.append(f"Validation misses per rule: {_pairs(validation['misses'])}")
+    if "person" in agg:
+        lines += _person_lines(agg["person"])
     lines.append(f"Buffered locally, not included: {agg['buffered']} record(s) (cplat platform runs flush)")
     return "\n".join(lines)
 
