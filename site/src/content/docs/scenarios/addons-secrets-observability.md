@@ -3,7 +3,7 @@ title: "Add databases, caches, brokers and buckets"
 description: "Give components a database, a cache, a message broker, file storage, secrets and telemetry by declaring them in system.yaml."
 ---
 
-**Situation.** `shop-api` needs a Postgres database for orders, a cache for sessions, a bucket for product images, a signing key and a payment-provider key. It publishes order events that `shop-mailer` reads. You want neither a project for each nor a credential in git.
+**Situation.** `shop-api` needs a Postgres database for orders, a cache for sessions, a bucket for catalog images, a signing key and a payment-provider key. It publishes order events that `shop-mailer` reads. You want neither a project for each nor a credential in git.
 
 ## Steps
 
