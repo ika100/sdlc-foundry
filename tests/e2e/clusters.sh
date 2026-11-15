@@ -130,7 +130,7 @@ echo "ok   cluster/one runs todo dev and staging, cluster/two runs todo prod; bo
 step "Start the git server: an HTTPS smart-git server for github.com/e2e/*, serving both repos"
 for r in todo-gitops e2e-clusters; do
   (cd "$work/$r" && git init -q -b main && git add -A && gitc commit -q -m "e2e render" && mkdir -p "$work/git/e2e" \
-    && git clone -q --bare . "$work/git/e2e/$r.git" && git remote add origin "$work/git/e2e/$r.git" && git fetch -q origin main \
+    && git clone -q --bare . "$work/git/e2e/$r" && git remote add origin "$work/git/e2e/$r" && git fetch -q origin main \
     && git branch -q --set-upstream-to=origin/main main)
 done
 ctx_dir="$work/gitserver"
@@ -175,6 +175,28 @@ docker cp "$work/git/." "$git_name:/srv/git/"
 docker start "$git_name" >/dev/null
 echo "ok   git server $git_name serves e2e/todo-gitops and e2e/e2e-clusters"
 
+# The repositories are served without a .git suffix: Argo CD clones the repoURL as written (https://github.com/e2e/<repo>).
+# Each repository secret carries its own credential and insecure flag, because cluster-up's bootstrap re-applies github-creds
+# (a client-side apply drops the insecure key that wire added).
+
+# diagnose: the state needed to find why a cluster did not converge (Argo CD applications with conditions, pods, repo-server log)
+diagnose() {
+  for c in one two; do
+    echo "--- [$c] applications (sync, health)"
+    kk "$c" -n argocd get applications -o wide 2>&1 || true
+    echo "--- [$c] application conditions and operation messages"
+    kk "$c" -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.status.conditions[*].message}{" | "}{.status.operationState.message}{"\n"}{end}' 2>&1 || true
+    echo "--- [$c] pods"
+    kk "$c" get pods -A 2>&1 || true
+    echo "--- [$c] argocd-repo-server log (tail)"
+    kk "$c" -n argocd logs deploy/argocd-repo-server --tail=60 2>&1 || true
+    echo "--- [$c] coredns-custom"
+    kk "$c" -n kube-system get configmap coredns-custom -o yaml 2>&1 || true
+  done
+  echo "--- git server log (tail)"
+  docker logs --tail 30 "$git_name" 2>&1 || true
+}
+
 # wire <cluster>: once the cluster's Docker network, DNS and Argo CD namespace exist, put the git server in reach and
 # mark the org credential (and both repositories) insecure, so Argo CD pulls from it as if it were github.com
 wire() {
@@ -203,7 +225,8 @@ wire() {
   kk "$c" -n argocd label secret github-creds argocd.argoproj.io/secret-type=repo-creds --overwrite >/dev/null
   for r in todo-gitops e2e-clusters; do
     kk "$c" -n argocd create secret generic "repo-$r" --from-literal=type=git --from-literal=url="https://github.com/e2e/$r" \
-      --from-literal=insecure=true --dry-run=client -o yaml | kk "$c" apply -f - >/dev/null
+      --from-literal=username=e2e --from-literal=password=e2e-token --from-literal=insecure=true --dry-run=client -o yaml \
+      | kk "$c" apply -f - >/dev/null
     kk "$c" -n argocd label secret "repo-$r" argocd.argoproj.io/secret-type=repository --overwrite >/dev/null
   done
   echo "ok   $(of lc $c): github.com resolves to the git server ($ip), the credential is insecure"
@@ -217,7 +240,7 @@ for c in one two; do
   pids+=($!)
 done
 for p in "${pids[@]}"; do
-  wait "$p" || { for c in one two; do echo "--- cluster-up $c (tail)"; tail -25 "$work/cluster-up-$c.log" || true; done; fail "a cluster-up or its wiring failed"; }
+  wait "$p" || { for c in one two; do echo "--- cluster-up $c (tail)"; tail -25 "$work/cluster-up-$c.log" || true; done; diagnose; fail "a cluster-up or its wiring failed"; }
 done
 pids=()
 grep -q "Bootstrapped k3d-$lc_one" "$work/cluster-up-one.log" || fail "cluster-up one did not bootstrap"
@@ -231,7 +254,7 @@ synced() { [ "$(kk "$1" -n argocd get application "$2" -o jsonpath='{.status.syn
 wait_for() { # <description> <command...>: poll for 10 minutes
   local what=$1; shift
   for _ in $(seq 1 120); do "$@" && return 0; sleep 5; done
-  for c in one two; do echo "--- applications on $c"; kk "$c" -n argocd get applications 2>&1 || true; done
+  diagnose
   fail "$what"
 }
 wait_for "cluster one has no Application api-dev" has_app one api-dev
