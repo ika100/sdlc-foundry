@@ -6,6 +6,10 @@ rules:
     text: "Never start another unit, because a unit is one short session"
     class: practice
     source: spec 131
+  - id: R4
+    text: "`wait <command> ended: …` start lines are the result of the wait the previous session started; act on them as your phase says, never restart the wait, because it already ended."
+    class: practice
+    source: spec 202
   - id: R3
     text: "`git rm` of tracked files (never forced)"
     class: not a rule

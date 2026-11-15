@@ -47,3 +47,7 @@ rules:
     text: "A `headless: pid` line → read `${CLAUDE_PLUGIN_ROOT}/references/ship-handoff.md` and follow it; only Finish and Escalate here apply, because the headless session does every phase."
     class: practice
     source: spec 200
+  - id: R14
+    text: "a stop during a `cplat` wait of yours is let through, so always stop there: its result (notification or start lines) decides the next step as the phase says."
+    class: practice
+    source: spec 202
