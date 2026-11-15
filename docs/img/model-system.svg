@@ -26,12 +26,14 @@
       <text x="220" y="242" text-anchor="middle" class="src">service·website·library</text>
 
       <rect x="410" y="200" width="180" height="54" rx="8" class="node"/>
-      <text x="500" y="223" text-anchor="middle" class="name">API</text>
-      <text x="500" y="242" text-anchor="middle" class="src">openapi</text>
+      <text x="500" y="220" text-anchor="middle" class="name">API</text>
+      <text x="500" y="237" text-anchor="middle" class="src">openapi · grpc</text>
+      <text x="500" y="249" text-anchor="middle" class="src">graphql · events</text>
 
       <rect x="690" y="200" width="180" height="54" rx="8" class="node"/>
-      <text x="780" y="223" text-anchor="middle" class="name">Resource</text>
-      <text x="780" y="242" text-anchor="middle" class="src">database · bucket</text>
+      <text x="780" y="220" text-anchor="middle" class="name">Resource</text>
+      <text x="780" y="237" text-anchor="middle" class="src">database · bucket</text>
+      <text x="780" y="249" text-anchor="middle" class="src">cache · broker</text>
 
       <line x1="250" y1="200" x2="428" y2="106" class="edge" marker-end="url(#s)"/>
       <text x="330" y="146" text-anchor="end" class="lbl">part of</text>

@@ -5,10 +5,15 @@ batch of `parallel_safe` tasks that may run at once (spec 159), `verification` a
 Each unit is complete when its rule holds in the **committed** tree of the feature head (`git show B:<path>`), never in the
 working tree. The state lives in `<git dir>/cplat-units.json` (local, never committed): one entry per unit with its status,
 sessions, stalls and checkpoint commit. The supervisor in headless.py starts one session per open unit.
+
+Spec 203: the file also stores `plan_key`, a hash of the committed plan's task ids, files and dependencies. `reschedule`
+compares it with the committed plan before each unit: when it changed, the units are derived again (`prepare`), done
+units keep their checkpoint and changed ones start fresh; a plan that no longer checks starts nothing.
 """
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import re
 import sys
@@ -126,20 +131,32 @@ def tasks_of(unit: str) -> list[str]:
     return [rest] if kind == "task" else [t for t in rest.split(",") if t] if kind == "batch" else []
 
 
-def _ids_from(sp: specmod.Spec | None) -> list[str]:
+def plan_key(sp: specmod.Spec | None) -> str | None:
+    """Spec 203: a hash of the committed plan's task ids, files and dependencies; None without a plan."""
+    if sp is None or sp.plan is None:
+        return None
+    rows = sorted([str(t["id"]), sorted(map(str, t.get("files") or [])), sorted(map(str, t.get("depends_on") or []))]
+                  for t in _plan_tasks(sp))
+    return hashlib.sha256(json.dumps(rows, separators=(",", ":")).encode()).hexdigest()[:12]
+
+
+def _ids_from(sp: specmod.Spec | None, keep: list[str] | tuple[str, ...] = ()) -> list[str]:
+    """`plan`, `red-tests`, the `keep` units (done ones of an earlier derivation), the units of the other tasks, `verification`, `land`."""
     tasks = _plan_tasks(sp)
     order: list[str] = []
     if tasks:
-        by_id = {str(t["id"]): t for t in tasks}
+        kept = {t for u in keep for t in tasks_of(u)}
+        by_id = {str(t["id"]): {**t, "id": str(t["id"]), "depends_on": [str(d) for d in t.get("depends_on") or [] if str(d) not in kept]}
+                 for t in tasks if str(t["id"]) not in kept}
         try:
-            levels = specmod.topo_levels([{**t, "id": str(t["id"])} for t in tasks])
+            levels = specmod.topo_levels(list(by_id.values()))
         except PlatformError:
-            levels = [[str(t["id"]) for t in tasks]]
-        plan_pos = {str(t["id"]): i for i, t in enumerate(tasks)}
+            levels = [list(by_id)]
+        plan_pos = {i: n for n, i in enumerate(by_id)}
         cap = parallel()
         for level in levels:
             order += _task_units(by_id, sorted((i for i in level if i in by_id), key=lambda i: plan_pos[i]), cap)
-    return ["plan", "red-tests", *order, "verification", "land"]
+    return ["plan", "red-tests", *keep, *order, "verification", "land"]
 
 
 def unit_ids(repo: Path, spec_id: str) -> list[str]:
@@ -347,10 +364,12 @@ def prepare(repo: Path, command: str, spec_id: str) -> dict:
     """Load or create the units file and bring it up to date; returns the data."""
     head = feature_head(repo, spec_id)
     sp = _committed(repo, spec_id, head)
-    ids = _ids_from(sp)
     existing = _read(repo)
     fresh = existing is None or existing.get("spec") != spec_id
     stored = {} if fresh else {u["id"]: u for u in existing["units"]}
+    in_plan = {str(t["id"]) for t in _plan_tasks(sp)}
+    keep = [i for i, u in stored.items() if tasks_of(i) and u.get("status") == "done" and set(tasks_of(i)) <= in_plan]
+    ids = _ids_from(sp, keep)
     entries = {i: {**_entry(i), **{k: v for k, v in stored.get(i, {}).items() if k in _entry(i)}, "id": i} for i in ids}
     derived = None if fresh else existing.get("derived")
     escalated = None if fresh else existing.get("escalated")
@@ -376,10 +395,33 @@ def prepare(repo: Path, command: str, spec_id: str) -> dict:
             if commit:
                 _checkpoint(u, commit)
     data = {"version": VERSION, "command": command, "spec": spec_id, "derived": derived, "escalated": escalated,
-            "units": [entries[i] for i in ids]}
+            "plan_key": plan_key(sp), "units": [entries[i] for i in ids]}
     with runs._locked():
         _write(repo, data)
     return data
+
+
+def reschedule(repo: Path, command: str, spec_id: str) -> dict | None:
+    """Spec 203: derive the units again when the committed plan changed since the last `prepare`.
+    None: nothing to do (or the key was only stored); {"error": first plan error}; {"old": [ids], "new": [ids]}."""
+    data = _read(repo)
+    if data is None or data.get("spec") != spec_id:
+        return None
+    if not any(u["id"] == "plan" and u.get("status") == "done" for u in data["units"]):
+        return None
+    sp = _committed(repo, spec_id, feature_head(repo, spec_id))
+    key = plan_key(sp)
+    if key is None or key == data.get("plan_key"):
+        return None
+    if data.get("plan_key") is None:
+        prepare(repo, command, spec_id)
+        return None
+    errs = specmod.check_plan(sp, *sp.plan)
+    if errs:
+        return {"error": errs[0]}
+    old = [u["id"] for u in data["units"]]
+    new = [u["id"] for u in prepare(repo, command, spec_id)["units"]]
+    return {"old": old, "new": new} if old != new else None
 
 
 def next_open(data: dict) -> str | None:

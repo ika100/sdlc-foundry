@@ -6,6 +6,14 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.23.1] - 2026-11-15
+
+### Fixed
+
+**A detached component ship's own unit sessions do their unit again instead of waiting on the run (#757).** Since 5.23.0 an interactive `/component:ship` hands its run to `cplat headless`; the run's status block then showed `headless: pid …`, and a unit session that printed it (through a plain `cplat component ship start`) followed the hand-off procedure and waited on its own run forever. The status block now names the process `run process: pid …`, and a session running under `cplat headless` never shows it, so only the interactive session that handed the run off waits. Update the plugins (`/plugin marketplace update`).
+
+**A detached component ship's unit sessions can finish while the shipping session waits (#765).** Since 5.23.0 the interactive `/component:ship` waits on its detached run with `cplat component ship wait` in the same checkout, and a unit session's Stop hook counted every running cplat wait of the checkout as its own, so the plan unit was held as "not finished" and escalated although it was done. A wait now records the session that runs it, and a unit session's Stop hook is held only by its own waits (a mark without a session, from an older version, still counts for every session).
+
 ## [5.23.0] - 2026-11-15
 
 ### Added

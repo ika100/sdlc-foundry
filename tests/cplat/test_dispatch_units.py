@@ -165,9 +165,19 @@ def test_resume_finishes_a_paused_unit_whose_pull_request_merged_meanwhile(env):
     env.wait_ended("issue-1.1")
     wait_for(lambda: (du.advance(env.repo, SLUG, ds.read_unit(res.unit["worktree"]), policy(env)),
                       ds.read_unit(res.unit["worktree"])["status"] == "paused")[1], budget(15), what="the unit to pause")
-    env.pr(7, "fix/issue-1", closes=(1,), state="MERGED")
-    calls = len(env.calls())
+    env.pr(6, "fix/issue-1", state="MERGED")                     # an earlier pull request of the branch, such as the spec's own
+    env.behave(mode="wait", honor_stop=False)
     step = du.resume_paused(env.repo, SLUG, ds.read_unit(res.unit["worktree"]), policy(env))
+    assert step.lines == ["restarted issue-1.1 (resumed)"]
+    os.kill(ds.read_unit(res.unit["worktree"])["pid"], signal.SIGKILL)
+
+    head = git(res.unit["worktree"], "rev-parse", "HEAD")
+    env.pr(7, "fix/issue-1", closes=(1,), state="MERGED")
+    env.edit_gh(lambda d: d["prs"]["7"].__setitem__("head", head))
+    env.edit_gh(lambda d: d["prs"].pop("6"))
+    unit = ds.read_unit(res.unit["worktree"])
+    calls = len(env.calls())
+    step = du.resume_paused(env.repo, SLUG, unit, policy(env))
     assert step.lines == ["done issue-1.1: https://github.com/acme/shop-api/pull/7"]
     assert ds.read_unit(res.unit["worktree"])["status"] == "done" and len(env.calls()) == calls       # no session started again
 

@@ -22,7 +22,8 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
 | [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | approved | 12 |  |
 | [198-a-platform-release-holds-main-through](specs/198-a-platform-release-holds-main-through/spec.md) — A platform release holds main through the merge lock | P1 | approved | 9 |  |
-| [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | draft | 11 | #143 |
+| [202-a-waiting-session-makes-no-model-calls](specs/202-a-waiting-session-makes-no-model-calls/spec.md) — A waiting session makes no model calls | P1 | approved | 7 | #750 |
+| [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | approved | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -159,10 +160,10 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | done | 4 | #596, #598, #599, #600 |
 | [165-a-test-problem-does-not-stop-an-unattended-run](specs/165-a-test-problem-does-not-stop-an-unattended-run/spec.md) — A test problem does not stop an unattended run | P1 | done | 7 | #595, #582, #583 |
 | [166-the-dev-pr-of-a-system-ship-lands-on-the](specs/166-the-dev-pr-of-a-system-ship-lands-on-the/spec.md) — The dev PR of a system ship lands on the current main | P1 | done | 4 | #597 |
-| [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | done | 11 |  |
+| [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | done | 10 |  |
 | [168-agent-rules-state-their-reason-and-can](specs/168-agent-rules-state-their-reason-and-can/spec.md) — Agent rules state their reason and can retire | P1 | done | 8 |  |
 | [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | done | 4 |  |
-| [171-unattended-runs-settle-their-own-small](specs/171-unattended-runs-settle-their-own-small/spec.md) — Unattended runs settle their own small problems | P1 | done | 10 | #613, #621, #622, #623, #624, #625, #626, #633 |
+| [171-unattended-runs-settle-their-own-small](specs/171-unattended-runs-settle-their-own-small/spec.md) — Unattended runs settle their own small problems | P1 | done | 9 | #613, #621, #622, #623, #624, #625, #626, #633 |
 | [172-builds-catch-problems-before-the-pull](specs/172-builds-catch-problems-before-the-pull/spec.md) — Builds catch problems before the pull request | P1 | done | 8 | #628, #629, #630, #631, #632 |
 | [174-plugins-bring-what-they-need](specs/174-plugins-bring-what-they-need/spec.md) — Plugins bring what they need, and one plugin installs the starter set | P1 | done | 7 |  |
 | [175-a-spec-number-means-the-spec-and-ship](specs/175-a-spec-number-means-the-spec-and-ship/spec.md) — A spec number means the spec and ship PRs close their issues | P1 | done | 5 | #638, #645 |
@@ -186,6 +187,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [199-the-journey-15-seams](specs/199-the-journey-15-seams/spec.md) — The journey 15 seams | P1 | done | 5 |  |
 | [200-a-component-ship-runs-in-its-own-session](specs/200-a-component-ship-runs-in-its-own-session/spec.md) — A component ship runs in its own session | P1 | done | 7 |  |
 | [201-one-cluster-repo-places-environments-on](specs/201-one-cluster-repo-places-environments-on/spec.md) — One cluster repo places environments on several clusters | P1 | done | 12 |  |
+| [203-the-journey-19-seams](specs/203-the-journey-19-seams/spec.md) — The journey 19 seams | P1 | done | 6 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
