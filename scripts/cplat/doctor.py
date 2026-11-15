@@ -212,7 +212,7 @@ def check_repo(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]
         out += check_backups(repo)
         out += check_policies(repo)
         if declared == "cluster-gitops":
-            out += check_cluster(repo)
+            out += check_cluster(repo, contexts)
         return out
     det = run(["bash", str(PLATFORM_ROOT / "scripts" / "detect-shape.sh"), str(repo)], check=False)
     shape = det.stdout.strip()
@@ -233,14 +233,160 @@ def check_repo(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]
     out += check_backups(repo)
     out += check_policies(repo)
     if shape == "cluster-gitops":
-        out += check_cluster(repo)
+        out += check_cluster(repo, contexts)
     return out
 
 
-def check_cluster(repo: Path) -> list[dict]:
+def _load_module(name: str, path: Path):
+    import importlib.util
+    import sys
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    added = str(path.parent)
+    sys.path.insert(0, added)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        if added in sys.path:
+            sys.path.remove(added)
+    return mod
+
+
+def _effective_clusters(repo: Path) -> dict | None:
+    """`effective()` of the repo's scripts/render.py when cluster.yaml lists `clusters`, else None (today's rows)."""
+    import yaml
+    try:
+        if not (yaml.safe_load((repo / "cluster.yaml").read_text()) or {}).get("clusters"):
+            return None
+        eff = _load_module("cplat_doctor_cluster_render", repo / "scripts" / "render.py").effective()
+    except Exception:  # noqa: BLE001  (an unreadable or invalid cluster.yaml: today's rows report it)
+        return None
+    return eff if str(eff["clusters"][0]["tree"]).startswith("cluster/") else None
+
+
+CLUSTER_ITEM_FIX = "upgrade it outside the platform (a cluster prerequisite)"
+
+
+def _kubectl_out(ctx: str, args: list[str]) -> str:
+    p = run(["kubectl", "--context", ctx, *args], check=False, timeout=20)
+    return (p.stdout or "").strip() if p.returncode == 0 else ""
+
+
+def _cluster_facts(ctx: str) -> tuple[dict | None, str]:
+    """(facts, "") of the cluster behind `ctx`, or (None, the first line of kubectl's error)."""
+    p = run(["kubectl", "--context", ctx, "version", "-o", "json"], check=False, timeout=20)
+    if p.returncode != 0:
+        lines = ((p.stderr or "") or (p.stdout or "")).strip().splitlines()
+        return None, lines[0].strip() if lines else f"kubectl exited {p.returncode}"
+    try:
+        kube = str(json.loads(p.stdout)["serverVersion"]["gitVersion"]).removeprefix("v").split("+")[0]
+    except (ValueError, KeyError, TypeError):
+        kube = "unknown"
+    image = _kubectl_out(ctx, ["-n", "argocd", "get", "deploy", "argocd-server", "-o", "jsonpath={.spec.template.spec.containers[0].image}"])
+    tail = image.split("@")[0].rsplit("/", 1)[-1]
+    argo = tail.rsplit(":", 1)[-1].removeprefix("v") if ":" in tail else "unknown"
+    ctrl = sorted(x for x in re.split(r"[\s,]+", _kubectl_out(
+        ctx, ["get", "gatewayclass", "-o", "jsonpath={.items[*].spec.controllerName}"])) if x)
+    bundle = _kubectl_out(ctx, ["get", "crd", "gateways.gateway.networking.k8s.io", "-o",
+                                r"jsonpath={.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}"])
+    gateway = f"{', '.join(ctrl) or 'none'} (Gateway API {bundle})" if bundle else (", ".join(ctrl) or "none")
+    return {"kubernetes": kube, "argo cd": argo, "gateway": gateway}, ""
+
+
+def _expected_operators(repo: Path, release: str, repo_release: str) -> dict:
+    """The operator versions of a cluster's release: the platform's table, or the kept renderer's when the cluster is behind."""
+    if release == repo_release:
+        return _operators()
+    kept = repo / ".platform" / "releases" / release / "system_render.py"
+    return _load_module("cplat_doctor_kept_render", kept).OPERATORS
+
+
+def _cluster_operator_rows(c: dict, table: dict, ctx: str, bootstrap: str) -> list[dict]:
+    out = []
+    for op_name in c["operators"]:
+        op = table[op_name]
+        want = op["operator_version"]
+        selector = op.get("selector") or f"app.kubernetes.io/name={op['chart']}"
+        images = _kubectl_out(ctx, ["get", "deploy", "-A", "-l", selector, "-o",
+                                    "jsonpath={.items[*].spec.template.spec.containers[*].image}"]).split()
+        ref = images[0].split("@")[0] if images else ""
+        have = ref.rsplit(":", 1)[-1].removeprefix("v") if ":" in ref.rsplit("/", 1)[-1] else None
+        name = f"operator {op_name} ({c['name']})"
+        if have == want:
+            out.append(check(OK, name, f"installed {have}, expected {want} (cluster.yaml)"))
+        elif have is None:
+            out.append(check(WARN, name, f"not installed in the context {ctx}, expected {want} (cluster.yaml)", bootstrap))
+        else:
+            out.append(check(WARN, name, f"installed {have}, expected {want} (cluster.yaml)", f"sync operator-{op_name} in Argo CD"))
+    return out
+
+
+def _cluster_system_rows(c: dict, ctx: str, bootstrap: str) -> list[dict]:
+    out = []
+    for s in (x["name"] for x in c["systems"]):
+        p = run(["kubectl", "--context", ctx, "-n", "argocd", "get", "application", f"system-{s}", "-o",
+                 "jsonpath={.status.sync.status} {.status.health.status}"], check=False)
+        name = f"system {s} ({c['name']})"
+        if p.returncode != 0:
+            out.append(check(WARN, name, f"system-{s}: no such application in the context {ctx}", bootstrap))
+            continue
+        sync, _, health = (p.stdout or "").strip().partition(" ")
+        if (sync, health) == ("Synced", "Healthy"):
+            out.append(check(OK, name, f"system-{s}: Synced, Healthy"))
+        else:
+            out.append(check(WARN, name, f"system-{s}: {sync or '?'}, {health or '?'}",
+                             f"kubectl --context {ctx} -n argocd get application system-{s} -o yaml"))
+    return out
+
+
+def check_clusters(repo: Path, eff: dict, contexts: dict[str, str] | None) -> list[dict]:
+    """AC-201.10: per cluster its Kubernetes, Argo CD, gateway, operator and system rows, then one warning per differing item."""
+    known: dict[str, str] = {}
+    try:
+        known = settings.kube_contexts(repo)
+    except core.PlatformError:
+        pass
+    out: list[dict] = []
+    facts: dict[str, dict] = {}
+    for c in eff["clusters"]:
+        name = c["name"]
+        ctx = (contexts or {}).get(name) or known.get(name)
+        fix = f"add kube_contexts: {{{name}: <ctx>}} to {settings.user_file()}, or pass --context {name}=<ctx>"
+        if not ctx:
+            out.append(check(WARN, f"cluster {name}", f"no kube context known for cluster {name}", fix))
+            continue
+        got, err = _cluster_facts(ctx)
+        if got is None:
+            out.append(check(WARN, f"cluster {name}", f"cannot reach cluster {name} through context {ctx}: {err}", fix))
+            continue
+        facts[name] = got
+        out.append(check(OK, f"kubernetes ({name})", got["kubernetes"]))
+        out.append(check(OK, f"argo cd ({name})", got["argo cd"]))
+        out.append(check(OK, f"gateway ({name})", got["gateway"]))
+        bootstrap = f"KUBE_CONTEXT={ctx} devbox run bootstrap {name}"
+        try:
+            table = _expected_operators(repo, c["release"], eff["release"])
+            out += _cluster_operator_rows(c, table, ctx, bootstrap)
+        except (OSError, KeyError, AttributeError, SyntaxError, ImportError):
+            out.append(check(WARN, f"operators ({name})", f"the versions of platform release {c['release']} are unreadable",
+                             "devbox run render"))
+        out += _cluster_system_rows(c, ctx, bootstrap)
+    if len(facts) >= 2:
+        for item in ("kubernetes", "argo cd", "gateway"):
+            key = (lambda v: ".".join(v.split(".")[:2])) if item != "gateway" else (lambda v: v)
+            if len({key(f[item]) for f in facts.values()}) > 1:
+                out.append(check(WARN, f"clusters differ: {item}", ", ".join(f"{n} {f[item]}" for n, f in facts.items()),
+                                 CLUSTER_ITEM_FIX))
+    return out
+
+
+def check_cluster(repo: Path, contexts: dict[str, str] | None = None) -> list[dict]:
     """AC-125.13: per listed operator installed vs expected version, per registered system its application's sync and health."""
     if not shutil.which("kubectl"):
         return []
+    eff = _effective_clusters(repo)
+    if eff is not None:
+        return check_clusters(repo, eff, contexts)
     import yaml
     try:
         data = yaml.safe_load((repo / "cluster.yaml").read_text()) or {}
@@ -823,11 +969,11 @@ def parse_contexts(values: list[str]) -> dict[str, str]:
     """`--context [ENV=]CTX` values -> environment -> context; a plain CTX covers every environment, ENV=CTX overrides it."""
     import model
     out: dict[str, str] = {}
-    for v in [x for x in values if x.partition("=")[0] not in model.ENVIRONMENTS or "=" not in x]:
+    for v in [x for x in values if "=" not in x]:
         out.update({e: v for e in model.ENVIRONMENTS})
     for v in values:
         env, eq, ctx = v.partition("=")
-        if eq and env in model.ENVIRONMENTS and ctx:
+        if eq and env and ctx:
             out[env] = ctx
     return out
 
