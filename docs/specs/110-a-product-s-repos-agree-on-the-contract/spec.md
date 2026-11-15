@@ -1,7 +1,7 @@
 ---
 spec_id: 110-a-product-s-repos-agree-on-the-contract
 title: A product's repos agree on the contract between them
-status: draft
+status: approved
 priority: P2
 tracks: [143]
 ---
@@ -61,3 +61,4 @@ None.
 
 - 2026-10-25 created
 - 2026-11-15 open questions answered by the user; command names updated to 5.x
+- 2026-11-15 approved
