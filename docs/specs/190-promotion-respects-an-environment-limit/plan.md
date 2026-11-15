@@ -35,6 +35,7 @@ tasks:
     covers: [AC-190.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: Promotion guide and changelog fragment
     files: [site/src/content/docs/scenarios/promote-safely.md, docs/unattended-delivery.md, docs/changelog.d/190-promotion-respects-an-environment-limit.added.md]
