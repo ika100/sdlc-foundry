@@ -374,9 +374,9 @@ def _ship_state(worktree: str) -> dict | None:
 
 
 def unit_pr(repo: Path, branch: str) -> dict | None:
-    """The unit branch's pull request `{number, url, state}`: the open one, else the newest."""
+    """The unit branch's pull request `{number, url, state, headRefOid}`: the open one, else the newest."""
     try:
-        rows = json.loads(gh(["pr", "list", "--head", branch, "--state", "all", "--limit", "10", "--json", "number,url,state"], cwd=repo) or "[]")
+        rows = json.loads(gh(["pr", "list", "--head", branch, "--state", "all", "--limit", "10", "--json", "number,url,state,headRefOid"], cwd=repo) or "[]")
     except ValueError:
         return None
     rows = [r for r in rows if isinstance(r, dict) and r.get("url")]
@@ -610,12 +610,13 @@ def clear_flags(units: list[dict]) -> None:
 
 
 def resume_paused(repo: Path, slug: str, unit: dict, policy) -> Step:
-    """Resume a paused unit (claims kept, no restart counted): a unit whose pull request merged while it was paused is done, a fix
+    """Resume a paused unit (claims kept, no restart counted): a unit whose pull request merged its head while it was paused is done
+    (an earlier merged pull request of the branch, such as the spec's own, does not count), a fix
     whose session had ended with an open pull request lands, any other unit starts its process again."""
     repo = Path(repo)
     ds.clear_stop(unit["worktree"])
     pr = unit_pr(repo, unit["branch"])
-    if pr and pr["state"] == "MERGED":
+    if pr and pr["state"] == "MERGED" and pr.get("headRefOid") == git(["rev-parse", "HEAD"], cwd=unit["worktree"], check=False):
         return Step(finish_done(repo, slug, unit, pr["url"]))
     if unit["kind"] == "fix":
         res = ds.read_result(unit["worktree"]) or {}
