@@ -1681,6 +1681,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
         return _done(repo, st, ["not deployable (platform): nothing to deploy", "Smoke (dev): not deployable",
                                 "Promotion (staging): not deployable"])
     context = context or (st.get("product") or {}).get("context")
+    context = smoke.env_context_for(repo, gitops_apps(repo), service_name(repo), "dev", context) or context  # spec 201
     if not context:                            # headless coordinators rarely pass --context: take the configured one
         import settings
         context, source = settings.kube_context(repo)
