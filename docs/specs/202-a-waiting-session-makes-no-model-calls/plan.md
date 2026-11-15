@@ -31,12 +31,14 @@ tasks:
     covers: [AC-202.5, AC-202.6, AC-202.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: "Ship and unit instructions: stop while a background wait runs, act on its result"
     files: [plugins/component/commands/ship.md, plugins/component/references/unit-mode.md, docs/rules/plugins/component/commands/ship.yml, docs/rules/plugins/component/references/unit-mode.yml]
     covers: [AC-202.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: "cplat headless: --loop-guard, hold for detached waits, guard in run_once, new stop reasons"
     files: [scripts/cplat/headless.py, scripts/cplat/supervisor.py]
