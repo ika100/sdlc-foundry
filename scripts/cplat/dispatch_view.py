@@ -21,6 +21,7 @@ import dispatch_policy
 import dispatch_state as ds
 import dispatch_units
 import run_slot
+import units as unitsmod
 
 SCHEMA = 1
 WAIT_EVENTS = ("escalated", "red", "stuck")      # a stuck unit is an escalated one that also needs the user: a wait must not miss it
@@ -127,13 +128,41 @@ def _phase(unit: dict) -> str:
     return status
 
 
+def _paused_at(unit: dict) -> dict:
+    """The phase a paused unit stands in (the ship phase, else the next open unit) and the commit of its last done unit."""
+    wt = unit.get("worktree") or ""
+    phase = (dispatch_units._ship_state(wt) or {}).get("phase") if wt else None
+    try:
+        rows = unitsmod.rows(Path(wt)) if wt else []
+    except Exception:  # noqa: BLE001  (a broken units file must not break status)
+        rows = []
+    if not phase or phase == "done":
+        phase = next((r["id"] for r in rows if r["status"] != "done"), None)
+    checkpoint = next((r["commit"] for r in reversed(rows) if r["status"] == "done" and r.get("commit")), None)
+    return {"phase": phase, "checkpoint": checkpoint}
+
+
+def _escalated_today(slug: str) -> list[dict]:
+    day = ds.today()
+    out = []
+    for u in sorted(ds.all_units(slug), key=lambda u: str(u.get("ended_at") or "")):
+        if u.get("status") not in ("escalated", "stuck") or str(u.get("ended_at") or "")[:10] != day:
+            continue
+        reason, cause = str(u.get("reason") or ""), u.get("cause")
+        label = "escalated: looping" if reason.startswith("looping:") else f"escalated: {cause or 'unknown'}"
+        out.append({"unit": u.get("unit"), "item": u.get("item"), "kind": u.get("kind"), "label": label, "cause": cause,
+                    "reason": reason, "ended_at": u.get("ended_at"), "log": u.get("log")})
+    return out
+
+
 def status_doc(repo: Path | str, slug: str, policy) -> dict:
     st = ds.load(slug)
     counted = st.get("counted") or {}
     units = sorted(_running(slug), key=lambda u: (int(u.get("slot") or 0), str(u.get("unit"))))
     rows = [{"slot": u.get("slot"), "unit": u.get("unit"), "item": u.get("item"), "kind": u.get("kind"), "mode": u.get("mode"),
              "phase": _phase(u), "since": u.get("started_at"), "tokens": counted.get(u.get("unit")), "pid": u.get("pid"),
-             "log": u.get("log"), "pr": u.get("pr")} for u in units]
+             "log": u.get("log"), "pr": u.get("pr"),
+             **({"paused_at": _paused_at(u)} if _phase(u) == "paused" else {})} for u in units]
     cycle = st.get("last_cycle") or {}
     running = ds.loop_alive(slug)
     return {"schema": SCHEMA, "repo": slug, "loop": {"running": running, "pid": ds.loop_pid(slug) if running else None},
@@ -141,7 +170,7 @@ def status_doc(repo: Path | str, slug: str, policy) -> dict:
             "slots": {"total": int(st["steering"].get("slots") or policy.values["slots"]), "units": rows,
                       "manual": manual_rows(slug)},
             "queue": [dict(q) for q in cycle.get("queue") or []], "held": [dict(h) for h in cycle.get("held") or []],
-            "tokens": tokens_doc(slug, policy, st), "last_cycle": cycle.get("at")}
+            "escalated": _escalated_today(slug), "tokens": tokens_doc(slug, policy, st), "last_cycle": cycle.get("at")}
 
 
 def render_status(doc: dict) -> str:
@@ -152,13 +181,19 @@ def render_status(doc: dict) -> str:
     lines = [head, f"slots: {len(doc['slots']['units']) + len(doc['slots']['manual'])} of {doc['slots']['total']} in use"]
     for u in doc["slots"]["units"]:
         pr = f"  {u['pr']}" if u.get("pr") else ""
-        lines.append(f"  slot {u['slot']}  {u['unit']}  {u['item']}  {u['kind']}  {u['mode']}  {u['phase']}  since {_hhmm(u['since'])}"
+        phase = u["phase"]
+        if u.get("paused_at"):
+            phase = f"paused (phase {u['paused_at']['phase']}, checkpoint {(u['paused_at']['checkpoint'] or '-')[:7]})"
+        lines.append(f"  slot {u['slot']}  {u['unit']}  {u['item']}  {u['kind']}  {u['mode']}  {phase}  since {_hhmm(u['since'])}"
                      f"  tokens {_n(u['tokens'])}  pid {u['pid']}  log: {u['log']}{pr}")
     lines += [_held_line(m) for m in doc["slots"]["manual"]]
     lines.append(f"queue ({len(doc['queue'])}):")
     lines += [f"  {q.get('item')}  {q.get('kind')}  {q.get('mode')}" for q in doc["queue"]]
     lines.append(f"held ({len(doc['held'])}):")
     lines += [f"  {h.get('item')}  {h.get('reason')}" + (f" ({h['detail']})" if h.get("detail") else "") for h in doc["held"]]
+    escalated = doc.get("escalated") or []
+    lines.append(f"escalated today ({len(escalated)}):")
+    lines += [f"  {e['unit']}  {e['item']}  {e['label']}  {_one_line(e['reason'])}" for e in escalated]
     t = doc["tokens"]
     lines.append(f"tokens today ({t['day']}): {_n(t['used'])} of {_n(t['limit']) if t['limit'] is not None else 'no limit set'}")
     if t["unknown"]:
@@ -173,7 +208,7 @@ def _flat(values: dict) -> list[tuple[str, object]]:
     """The leaf keys of the policy in file order (`budget.per_unit` is one leaf)."""
     out: list[tuple[str, object]] = []
     for key, value in values.items():
-        if key in ("ready", "gates"):
+        if key in ("ready", "gates", "guard"):
             out += [(f"{key}.{k}", v) for k, v in value.items()]
         elif key == "budget":
             out += [("budget.tokens_per_day", value.get("tokens_per_day")), ("budget.per_unit", value.get("per_unit"))]
