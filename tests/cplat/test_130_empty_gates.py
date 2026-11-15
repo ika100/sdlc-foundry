@@ -578,7 +578,7 @@ def test_gitops_app_recipes_follow_the_contract_ac_130_7():  # AC-130.7, AC-130.
 def test_cluster_gitops_recipes_follow_the_contract_ac_130_8():  # AC-130.8, AC-130.9
     validate = _template_recipe("cluster-gitops", "validate")
     assert validate.startswith("GATE_NAME=validate uv run scripts/render.py --check")
-    assert 'kustomize build cluster > "$dir/cluster.yaml"' in validate
+    assert 'kustomize build "$t" || exit 1' in validate and 'done > "$dir/cluster.yaml"' in validate  # spec 201: one build per cluster tree
     assert "bash scripts/gate.sh nothing validate '0 resources'" in validate
     assert "validate: kubeconform checked 0 resources" not in validate
     assert _template_recipe("cluster-gitops", "test") == "devbox run validate"
