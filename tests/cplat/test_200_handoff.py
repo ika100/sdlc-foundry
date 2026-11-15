@@ -80,7 +80,16 @@ def _refuse_token(repo, monkeypatch):
     monkeypatch.setattr(ship, "gh", lambda args, *, cwd, check=True: "[]")
 
 
-@pytest.mark.parametrize("setup", [_refuse_unapproved, _refuse_token], ids=["unapproved-spec", "missing-gitops-token"])
+def _refuse_claimed(repo, monkeypatch):
+    """Spec 007 tracks issue #42, which another branch has claimed."""
+    import claim
+    issue = {"state": "OPEN", "labels": [{"name": claim.LABEL}],
+             "comments": [{"body": f"{claim.MARK}\nClaimed for branch `feature/other-work`."}]}
+    monkeypatch.setattr(claim, "gh", lambda args, *, cwd: (0, json.dumps(issue)) if args[:2] == ["issue", "view"] else (0, ""))
+
+
+@pytest.mark.parametrize("setup", [_refuse_unapproved, _refuse_token, _refuse_claimed],
+                         ids=["unapproved-spec", "missing-gitops-token", "claimed-issue"])
 def test_a_refusal_starts_nothing_and_prints_the_same_hint_ac_200_1(repo, procs, monkeypatch, capsys, setup):  # AC-200.1
     p = procs()
     interactive(monkeypatch)

@@ -44,9 +44,10 @@ def result(lines, first):
 
 # ---------------- AC-200.3: progress is exit 0 with one WAIT line, nothing new is exit 2 ----------------
 
-def test_a_new_phase_during_the_call_ends_it_with_wait_and_exit_0_ac_200_3(repo, tick, capsys):  # AC-200.3
+def test_a_new_phase_during_the_call_ends_it_with_wait_and_exit_0_ac_200_3(repo, tick, capsys, procs):  # AC-200.3
+    procs().live.add(4242)
     ship.save_state(repo, state("build", **headless()))
-    tick.script = [lambda: None, lambda: ship.save_state(repo, state("pr", **headless()))]
+    tick.script = [lambda: None,lambda: ship.save_state(repo, state("pr", **headless()))]
     rc, out, _ = wait_cli(capsys, repo, "--timeout", "30")
     assert rc == 0
     assert [ln for ln in out if ln.startswith("WAIT:")] == [WAIT.format(t=30)]
@@ -54,7 +55,8 @@ def test_a_new_phase_during_the_call_ends_it_with_wait_and_exit_0_ac_200_3(repo,
     assert tick.slept <= 40                                                 # no later than T + 10 s after it started
 
 
-def test_a_new_unit_checkpoint_is_progress_and_prints_a_unit_line_ac_200_3(repo, tick, capsys):  # AC-200.3
+def test_a_new_unit_checkpoint_is_progress_and_prints_a_unit_line_ac_200_3(repo, tick, capsys, procs):  # AC-200.3
+    procs().live.add(4242)
     ship.save_state(repo, state("build", **headless()))
     put_units(repo, "u1")
     tick.script = [lambda: put_units(repo, "u1", "u2")]
@@ -64,7 +66,8 @@ def test_a_new_unit_checkpoint_is_progress_and_prints_a_unit_line_ac_200_3(repo,
     assert not any("unit u1 done" in ln for ln in out)                       # done before the call: not news
 
 
-def test_a_new_commit_on_the_feature_branch_is_progress_ac_200_3(repo, tick, capsys):  # AC-200.3
+def test_a_new_commit_on_the_feature_branch_is_progress_ac_200_3(repo, tick, capsys, procs):  # AC-200.3
+    procs().live.add(4242)
     git(repo, "checkout", "-qb", BRANCH)
     ship.save_state(repo, state("build", **headless()))
 
@@ -75,7 +78,8 @@ def test_a_new_commit_on_the_feature_branch_is_progress_ac_200_3(repo, tick, cap
     assert rc == 0 and [ln for ln in out if ln.startswith("WAIT:")] == [WAIT.format(t=20)]
 
 
-def test_nothing_new_is_a_timeout_with_exit_2_and_the_log_ac_200_3(repo, tick, capsys):  # AC-200.3
+def test_nothing_new_is_a_timeout_with_exit_2_and_the_log_ac_200_3(repo, tick, capsys, procs):  # AC-200.3
+    procs().live.add(4242)
     ship.save_state(repo, state("build", **headless()))
     put_units(repo, "u1")
     rc, out, _ = wait_cli(capsys, repo, "--timeout", "30")
@@ -87,7 +91,8 @@ def test_nothing_new_is_a_timeout_with_exit_2_and_the_log_ac_200_3(repo, tick, c
     assert tick.slept <= 40
 
 
-def test_a_wait_without_a_handed_off_run_has_no_log_line_ac_200_3(repo, tick, capsys):  # AC-200.3
+def test_a_wait_without_a_handed_off_run_has_no_log_line_ac_200_3(repo, tick, capsys, procs):  # AC-200.3
+    procs().live.add(4242)
     ship.save_state(repo, state("build"))
     rc, out, _ = wait_cli(capsys, repo, "--timeout", "30")
     assert rc == 2 and not [ln for ln in out if ln.startswith("log:")]
@@ -96,7 +101,8 @@ def test_a_wait_without_a_handed_off_run_has_no_log_line_ac_200_3(repo, tick, ca
     assert wait_cli(capsys, repo, "--timeout", "30")[0] == 0
 
 
-def test_an_escalated_run_lists_each_question_with_its_suggestion_and_the_log_ac_200_3(repo, tick, capsys):  # AC-200.3
+def test_an_escalated_run_lists_each_question_with_its_suggestion_and_the_log_ac_200_3(repo, tick, capsys, procs):  # AC-200.3
+    procs().live.add(4242)
     ship.save_state(repo, state("land", **headless()))
     questions = [{"text": "Which store?", "suggested": "redis"}, {"text": "How long?", "suggested": None}]
     tick.script = [lambda: ship.save_state(repo, state("land", **headless(), escalated="needs a store", cause="decision",
@@ -109,7 +115,8 @@ def test_an_escalated_run_lists_each_question_with_its_suggestion_and_the_log_ac
     assert f"log: {LOG}" in lines and f"resume it with /component:ship {SPEC}" in lines
 
 
-def test_a_phase_line_per_change_and_a_unit_line_per_unit_ac_200_3(repo, tick, capsys):  # AC-200.3
+def test_a_phase_line_per_change_and_a_unit_line_per_unit_ac_200_3(repo, tick, capsys, procs):  # AC-200.3
+    procs().live.add(4242)
     ship.save_state(repo, state("build", **headless()))
     put_units(repo)
     tick.script = [lambda: put_units(repo, "u1"), lambda: ship.save_state(repo, state("pr", **headless())),
