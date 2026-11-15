@@ -224,6 +224,8 @@ def test_a_looping_session_is_ended_after_its_10th_idle_call_and_the_run_escalat
     fake_time.on_sleep = on_sleep
     assert headless.main(["/svc:ship 7", "--repo", str(repo), "--max-runs", "3"]) == 1
     assert runs(repo) == 1                                    # no new session
+    assert "at" in seen                                       # the 10th idle call was written and seen
+    assert fake_time.now - seen["at"] <= dt.timedelta(seconds=30)   # ended within 30 s of the trip, not after a 5-minute poll
     assert not (repo / "natural.txt").exists()                # the guard ended it (by signal) before it could end by itself
     assert not alive(int((repo / "pid.txt").read_text()))
     out = capsys.readouterr().out
