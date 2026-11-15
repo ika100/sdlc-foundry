@@ -218,13 +218,13 @@ def test_a_running_wait_holds_the_product_ship_too(w, monkeypatch):  # AC-171.8
 
 
 def test_a_wait_of_another_session_in_this_checkout_does_not_hold_a_session_765(repo, monkeypatch):  # AC-171.8, #765
-    other = put_mark(repo, "cplat component ship wait", pid=os.getppid())     # the shipping session's wait on its detached run
+    other = put_mark(repo, "cplat component ship wait", pid=os.getppid())     # interface: wait mark command name (the shipping session's wait)
     other.write_text(json.dumps({**json.loads(other.read_text()), "session": "SHIPPING"}))
     own = put_mark(repo, "cplat pr wait 7")
     own.write_text(json.dumps({**json.loads(own.read_text()), "session": "UNIT"}))
     assert waits.live(repo, "UNIT") == ["cplat pr wait 7"]                   # a unit session sees only its own wait
-    assert waits.live(repo, "SHIPPING") == ["cplat component ship wait"]
-    assert sorted(waits.live(repo)) == ["cplat component ship wait", "cplat pr wait 7"]   # without a session: every wait, as before
+    assert waits.live(repo, "SHIPPING") == ["cplat component ship wait"]   # interface: wait mark command name
+    assert sorted(waits.live(repo)) == ["cplat component ship wait", "cplat pr wait 7"]   # interface: wait mark command names; no session: every wait
     own.unlink()
     assert waits.live(repo, "UNIT") == []
 
