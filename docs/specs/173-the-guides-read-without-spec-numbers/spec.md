@@ -1,7 +1,7 @@
 ---
 spec_id: 173-the-guides-read-without-spec-numbers
 title: The guides read without spec numbers
-status: approved
+status: done
 priority: P2
 shape: platform
 tracks: []
@@ -39,3 +39,5 @@ As the maintainer, I want the docs check to keep it that way for every guide, so
 ## Changelog
 
 - 2026-11-10 drafted and approved: the user asked to improve the documentation further; this is spec 161's open follow-up.
+- 2026-11-14 building: built in #636
+- 2026-11-14 done: unverified: built in #636 (checked 2026-11-14); no verification.md

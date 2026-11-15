@@ -69,7 +69,7 @@ nothing is started. Every verb that reads the file checks it; only `start` and `
 ## What is ready
 
 A candidate is an open issue labelled `triaged` (`/issue:triage` adds it when it routes an issue to a fix or a spec), or a spec on `main`
-with status `approved` or `building`, or a draft. A spec and the issues it tracks are one candidate: the spec. The verdict is `ready` or
+with status `approved` or `building`, or a draft. A spec and the issues it tracks are one candidate: the spec. A fix run's task is the newest `Triage:` comment by a user with write access (the reporter's text is added fenced); without one it is `/component:fix #<n>`. The verdict is `ready` or
 `held` with the first reason that applies; a held item gets no label, comment or claim.
 
 | Held reason | Meaning and what to do |

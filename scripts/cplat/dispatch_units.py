@@ -39,6 +39,7 @@ import pr as prmod
 import runs
 import ship
 import spec as specmod
+import triage_task
 from core import PlatformError
 
 CPLAT = Path(__file__).resolve().with_name("cplat.py")
@@ -139,8 +140,33 @@ def headless_cmd(unit: dict, policy) -> list[str]:
     if unit["kind"] == "ship":
         cmd += ["--parallel", "3" if unit.get("mode") == "team" else "1", f"/component:ship {unit['spec']}"]
     else:
-        cmd.append(f"/component:fix {unit['item']}")
+        cmd.append(f"/component:fix {unit.get('task') or unit['item']}")
     return cmd
+
+
+def _can_write(slug: str, repo: Path) -> Callable[[str], bool]:
+    """Write access of a login (`admin`/`write` permission, or `admin`/`maintain`/`write` role); a failed call is no access."""
+    cache: dict[str, bool] = {}
+
+    def check(login: str) -> bool:
+        if login not in cache:
+            try:
+                data = json.loads(gh(["api", f"repos/{slug}/collaborators/{login}/permission"], cwd=repo) or "{}")
+            except ValueError:
+                data = {}
+            data = data if isinstance(data, dict) else {}
+            cache[login] = any(data.get(k) in ("admin", "maintain", "write") for k in ("permission", "role_name"))
+        return cache[login]
+    return check
+
+
+def _fix_task(repo: Path, slug: str, number: int | None) -> str | None:
+    """The task of a fix unit from the issue's writer `Triage:` comment (AC-176.9); None keeps `/component:fix #N`."""
+    try:
+        issue = json.loads(gh(["issue", "view", str(number), "--json", "number,title,body,comments"], cwd=repo) or "null")
+    except ValueError:
+        return None
+    return triage_task.task_for(issue, _can_write(slug, repo)) if isinstance(issue, dict) else None
 
 
 def spawn(unit: dict, policy) -> int:   # tests replace this
@@ -321,6 +347,8 @@ def start(repo: Path, slug: str, cand, mode: str, slot: int, policy) -> Start:
             "slot": slot, "pid": None, "land_pid": None, "log": str(ds.log_path(slug, unit_id)), "starts": 1, "run_id": run_id,
             "status": "starting", "pr": None, "started_at": ds.stamp(), "ended_at": None, "reason": None, "tokens": None,
             "spec": cand.spec_id, "tracks": list(cand.tracks), "draft_pr": draft_pr}
+    if kind == "fix" and (task := _fix_task(repo, slug, cand.number)):
+        unit["task"] = task
     ds.write_unit(path, unit)
     ds.unpin(slug, cand.key)
     try:
@@ -330,7 +358,9 @@ def start(repo: Path, slug: str, cand, mode: str, slot: int, policy) -> Start:
         return Start(unit=ds.read_unit(path), lines=[*lines, *step.lines])
     unit = update_unit(path, lambda u: u.update(pid=pid, status="running"))
     ds.events_add(slug, "started", unit_id, cand.item)
-    lines.append(f"started {unit_id} ({kind}, {mode}, slot {slot}): {shlex.join(headless_cmd(unit, policy))}  log: {unit['log']}")
+    shown = headless_cmd(unit, policy)
+    shown[-1] = shown[-1].split("\n", 1)[0]       # the reporter's text never reaches the dispatcher's own output
+    lines.append(f"started {unit_id} ({kind}, {mode}, slot {slot}): {shlex.join(shown)}  log: {unit['log']}")
     return Start(unit=unit, lines=lines)
 
 

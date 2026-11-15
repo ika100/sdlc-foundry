@@ -1,7 +1,7 @@
 ---
 spec_id: 154-the-journey-6-findings
 title: The journey 6 findings
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [557, 558, 559, 560]
@@ -35,3 +35,5 @@ As someone running a journey unattended, I want each of these to resolve itself 
 ## Changelog
 
 - 2026-11-07 created from the journey 6 findings; approved with the recommended answers, as the user asked for this round.
+- 2026-11-14 building: built in #562
+- 2026-11-14 done: unverified: built in #562 (checked 2026-11-14); no verification.md

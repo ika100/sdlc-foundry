@@ -9,6 +9,7 @@ from pathlib import Path
 import backupstate
 import core
 import gitops
+import localport
 import model
 from core import PlatformError, run
 
@@ -232,6 +233,7 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
                 loaded: tuple[Path, model.Model] | None = None) -> dict:
     """Everything `system status --json` reports except `backups`; `collect` is its 4-tuple view."""
     app_dir, m = loaded or load(repo, app)
+    localport.use_repo(repo)
     envs = [e.name for e in m.environments]
     if isinstance(contexts, str):
         contexts = [contexts]
@@ -299,7 +301,7 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
         def obs_cell(e) -> dict:
             cell = res_cell(e.name, e.observability.argo_application)
             if e.observability.ui == "lgtm":
-                cell["grafana_url"] = model.grafana_url(e.host)
+                cell["grafana_url"] = model.grafana_url(e.host, m.system)
             return cell
         resources.append({"resource": "observability", "cells": {env: (obs_cell(obs[env]) if env in obs else None) for env in envs}})
     versions = []

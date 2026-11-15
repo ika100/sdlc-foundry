@@ -1,7 +1,7 @@
 ---
 spec_id: 137-cplat-waits-out-github-s-rate-limit
 title: cplat waits out GitHub's rate limit
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -64,3 +64,5 @@ demo without adding features.
 
 - 2026-11-04 created (tracks #409)
 - 2026-11-04 approved
+- 2026-11-14 building: built in #436
+- 2026-11-14 done: unverified: built in #436 (checked 2026-11-14); no verification.md

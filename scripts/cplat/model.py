@@ -2,7 +2,8 @@
 
 One place owns the nouns (System, Environment, Component, Instance, Resource, Resource instance, API) and every rule about "a component
 in an environment". It reads only declared state (`system.yaml`, the overlay pins and the shape registry) and makes no
-subprocess, network or socket call. Commands keep their own I/O and ask the model for the answers.
+subprocess, network or socket call, except the one observed value `local_port` asks `localport` for (the local Gateway
+port, spec 199; the `docker` call lives there). Commands keep their own I/O and ask the model for the answers.
 
 Public API:
 
@@ -23,6 +24,7 @@ from pathlib import Path
 
 import yaml
 import autonomy as _autonomy
+import localport as _localport
 from core import PlatformError
 from core import registry as _registry
 
@@ -193,7 +195,7 @@ class Instance:
 
     @property
     def url(self) -> str | None:
-        """The URL, computed on access (LOCAL_HTTP_PORT is read then)."""
+        """The URL, computed on access (LOCAL_HTTP_PORT, or the cluster's Gateway port from `localport`, is read then)."""
         return _url(*self._rule) if self._rule else None
 
     @property
@@ -425,7 +427,7 @@ def _url(system: str, c: Component, e: Environment) -> str | None:
     except (KeyError, IndexError, ValueError):
         return None
     if host.endswith(".localhost"):
-        return f"http://{host}:{local_port()}"
+        return f"http://{host}:{local_port(system)}"
     return f"https://{host}"
 
 
@@ -433,19 +435,22 @@ GRAFANA_HOST = "grafana.localhost"
 GRAFANA_ELSEWHERE = "answers only at grafana.localhost on that cluster's Gateway (no public URL)"
 
 
-def local_port() -> int:
-    """The local Gateway port: LOCAL_HTTP_PORT when all digits, else DEFAULT_LOCAL_PORT."""
+def local_port(system: str | None = None) -> int:
+    """The local Gateway port: LOCAL_HTTP_PORT when all digits, else the port docker reports for the system's cluster
+    (spec 199), else DEFAULT_LOCAL_PORT."""
     port = os.environ.get("LOCAL_HTTP_PORT", "")
-    return int(port) if port.isdigit() else DEFAULT_LOCAL_PORT
+    if port.isdigit():
+        return int(port)
+    return _localport.lookup(system) or DEFAULT_LOCAL_PORT
 
 
-def grafana_url(host: str | None) -> str | None:
+def grafana_url(host: str | None, system: str | None = None) -> str | None:
     """Where the dev Grafana answers for a local environment host template, else None."""
-    return f"http://{GRAFANA_HOST}:{local_port()}/" if host and host.endswith(".localhost") else None
+    return f"http://{GRAFANA_HOST}:{local_port(system)}/" if host and host.endswith(".localhost") else None
 
 
-def grafana_location(host: str | None) -> str:
-    return grafana_url(host) or GRAFANA_ELSEWHERE
+def grafana_location(host: str | None, system: str | None = None) -> str:
+    return grafana_url(host, system) or GRAFANA_ELSEWHERE
 
 
 def _secret_entries(entry: dict) -> list[dict]:

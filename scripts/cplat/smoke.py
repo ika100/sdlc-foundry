@@ -33,6 +33,7 @@ import yaml
 import autoissue
 import core
 import feedback
+import localport
 import model
 import runs
 import spec as specmod
@@ -433,6 +434,7 @@ def follow_staging(repo: Path, apps: list[str], service: str, res: SmokeResult, 
 def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> tuple[str | None, str | None]:
     """(url, None) or (None, reason): the URL the linked gitops-app publishes for the service (same values as the HTTPRoute)."""
     me = _slug(repo)
+    localport.use_repo(repo)
     unread: list[str] = []
     for slug in apps:
         dirs, why = _app_dirs(slug, repo)
