@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 repo_cluster=$(uv run --quiet scripts/render.py --name)
-first=$(uv run --quiet scripts/render.py --clusters | head -1)
+first=$(uv run --quiet scripts/render.py --clusters | sed -n 1p)
 want="${1:-$first}"
 suffix=local
 if [ -n "$first" ]; then

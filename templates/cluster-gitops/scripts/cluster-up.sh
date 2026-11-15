@@ -11,9 +11,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 repo_cluster=$(uv run --quiet scripts/render.py --name)
-want="${1:-$(uv run --quiet scripts/render.py --clusters | head -1)}"
+want="${1:-$(uv run --quiet scripts/render.py --clusters | sed -n 1p)}"
 want="${want:-$repo_cluster}"
-has_clusters=$(uv run --quiet scripts/render.py --clusters | head -1)
+has_clusters=$(uv run --quiet scripts/render.py --clusters | sed -n 1p)
 suffix=local
 [ -z "$has_clusters" ] || suffix="$want"
 name="${LOCAL_CLUSTER:-${repo_cluster}-${suffix}}"
