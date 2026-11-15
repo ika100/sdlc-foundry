@@ -129,15 +129,16 @@ def widen_generated_lines(repo: Path) -> bool:
     return True
 
 
-def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
+def drop_new_project_owned_files(repo: Path, patterns: list[str], keep: tuple[str, ...] = ()) -> list[str]:
     """copier creates files that do not exist yet even inside `_skip_if_exists` paths. For an update that is wrong: a repo that
-    evolved its own app code or tests must not receive new starter files (and tests that assert the starter UI). Remove them."""
+    evolved its own app code or tests must not receive new starter files (and tests that assert the starter UI). Remove them.
+    Paths under `keep` (what the update itself wrote before copier ran, spec 201) stay."""
     dropped = []
     for line in run(["git", "status", "--porcelain", "-uall"], cwd=repo).stdout.splitlines():
         if not line.startswith("??"):
             continue
         path = line[3:]
-        if path not in SEEDS and any(fnmatch.fnmatch(path, pattern) for pattern in patterns):
+        if path not in SEEDS and not path.startswith(keep) and any(fnmatch.fnmatch(path, pattern) for pattern in patterns):
             (repo / path).unlink()
             dropped.append(path)
     for directory in sorted({str(Path(d).parent) for d in dropped}, key=len, reverse=True):   # tidy empty directories
@@ -1171,7 +1172,8 @@ def execute(req: dict) -> Report:
         if later:
             frozen = keep_later_clusters(repo, req["old"], later)
         run(cmd, cwd=repo)
-        dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
+        kept_paths = tuple(f"clusters/{c}/release.yaml" for c in later) + (".platform/releases/",) if later else ()
+        dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]), kept_paths)
         written = {f"{s['dir'].as_posix()}/system.yaml" for s in systems}   # the migration writes these next, not left out (#238)
         dropped = [d for d in dropped if d not in written]
         if dropped:
