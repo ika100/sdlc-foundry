@@ -360,10 +360,10 @@ def _read(slug: str, path: str, repo: Path) -> dict | None:
 READ_RETRY_S = 5   # one retry of the gitops-app listing: a failed `gh` call is often transient (#369)
 
 
-def _app_dirs(slug: str, repo: Path) -> tuple[list[str] | None, str]:
+def _app_dirs(slug: str, repo: Path, retry: bool = True) -> tuple[list[str] | None, str]:
     """(app dirs, "") or (None, why): the gitops-app's applications/ folders; a failed call is retried once."""
     why = ""
-    for attempt in range(2):
+    for attempt in range(2 if retry else 1):
         if attempt:
             sleep(READ_RETRY_S)
         try:
@@ -453,6 +453,21 @@ def dev_url(repo: Path, apps: list[str], service: str, *, env: str = "dev") -> t
     return None, f"{service} has no {env} URL (not in the linked gitops-app)"
 
 
+def env_context_for(repo: Path, apps: list[str], service: str, env: str, explicit: str | None) -> str | None:
+    """Spec 201: the kube context of the cluster that runs `env` of the linked system (None: one cluster, keep today's choice).
+    A PlatformError stops the caller before it acts. An unreadable gitops-app leaves the choice as it was."""
+    import envcluster
+    if explicit:
+        return explicit
+    me = _slug(repo)
+    for slug in apps:
+        for a in _app_dirs(slug, repo, retry=False)[0] or []:
+            m = model.load_remote(a, lambda p, slug=slug: _read(slug, p, repo))
+            if m.find_component(me, service) is not None:
+                return envcluster.env_context(repo, m, env, None)
+    return None
+
+
 def liveness_probe(repo: Path) -> str | None:
     """The shape's liveness path from shapes.yml, for the reachability check."""
     try:
@@ -509,8 +524,9 @@ def main(argv: list[str]) -> int:
     sp = specmod.find(repo, ns.spec) if ns.spec else None
     acs = sp.smoke_acs() if sp else []
     url, why = ns.base_url, None
+    import ship
+    env_context_for(repo, ship.gitops_apps(repo), ship.service_name(repo), ns.env, None)  # spec 201: stops before any call
     if not url:
-        import ship
         apps = ship.gitops_apps(repo)
         url, why = dev_url(repo, apps, ship.service_name(repo), env=ns.env) if apps else (None, "the repo is not linked to a gitops-app")
     if url:
