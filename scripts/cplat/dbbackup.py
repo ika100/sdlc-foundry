@@ -12,6 +12,7 @@ from pathlib import Path
 
 import backupstate
 import dbbackupset
+import envcluster
 import gitops
 import model
 from core import PlatformError
@@ -27,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--env", required=True)
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
-    p.add_argument("--context", help="kube context (default: the current one)")
+    p.add_argument("--context", help="kube context (default: the environment's cluster for a system spread over clusters, else the current one)")
     p.add_argument("--to", metavar="BUCKET", help="set the scheduled backup: the bucket resource that receives it")
     p.add_argument("--schedule", metavar="CRON", help="set the scheduled backup: five-field cron in UTC (default \"0 3 * * *\")")
     p.add_argument("--retention", metavar="N", help="set the scheduled backup: <n>d or <n>w (default 30d)")
@@ -67,6 +68,7 @@ def main(argv: list[str]) -> int:
     m = model.load_dir(app_dir)
     check(ns, m)
     system, db, env = app_dir.name, ns.name, ns.env
+    ns.context = envcluster.env_context(Path(ns.repo_dir).resolve(), m, env, ns.context)
     try:
         roles = backupstate.cluster_roles(system, db, backupstate.restore_state(app_dir, env, db))
     except backupstate.StateError as e:
