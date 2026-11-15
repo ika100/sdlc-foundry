@@ -58,4 +58,6 @@ To run the whole thing unattended, ship the approved spec:
 
 `/platform:doctor` reports missing tools or `gh` scopes with a fix for each. If something fails because a template or script misbehaves, `/issue:report` drafts an issue for you.
 
+See the whole path recorded, from an empty folder to prod: [Watch a real run](/sdlc-foundry/get-started/watch-a-run/).
+
 Next: [Promote to production safely](/sdlc-foundry/scenarios/promote-safely/).

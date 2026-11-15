@@ -3,7 +3,9 @@
 Public API:
 - `collect(repo_dir) -> state`: the `needs` items of the repo or system, release items, running work, the parked count,
   the notification channels, the notified age of each item and the size estimates. Each source is read in its own `try`;
-  a failing one is listed under `state["unavailable"]` (`{source, error, kinds}`), never raised. Nothing here writes: no
+  a failing one, or one without an answer within `SOURCE_SECONDS` (20 s; `TOTAL_SECONDS` = 60 s for all, spec 203; then
+  `state["abandoned"]` is true and the caller ends the process with its `hard_exit`), is listed under
+  `state["unavailable"]` (`{source, error, kinds}`), never raised. Nothing here writes: no
   `gh` writing verb, no state file, no run record, no claim.
 - `groups(state, later) -> (group, shown, also, later_count)`: the group that is shown (`stopped`, `specs`, `issues`,
   `release` or None), its items oldest first, the count per kind of every other waiting item not put off (in group
@@ -23,6 +25,8 @@ import datetime
 import json
 import re
 import statistics
+import threading
+import time
 from pathlib import Path
 
 import comprelease
@@ -40,6 +44,8 @@ import spec as specmod
 import stages
 from core import run
 
+SOURCE_SECONDS = 20
+TOTAL_SECONDS = 60
 GROUPS = ("stopped", "specs", "issues", "release")
 GROUP_OF = {"escalation": "stopped", "stuck": "stopped", "budget": "stopped", "answer": "specs", "approve": "specs",
             "triage": "issues", "release": "release", "promote": "release", "review": "release"}
@@ -210,9 +216,10 @@ def _release_items(repo_dir: Path, slug: str, shape: str | None) -> list[dict]:
              "command": command, "cwd_repo": slug, "consequence": {"changes": changes, "since_tag": tag}, "way_back": None}]
 
 
-def _running(repo_dir: Path, slug: str, rows: list[dict], shape: str | None, titles: dict[str, str],
-             src: needs._Sources) -> tuple[list[dict], int | None]:
-    """The running work, one entry per spec or issue (dispatcher units first, then active run rows), and the places total."""
+def _running(slug: str, rows: list[dict], shape: str | None, titles: dict[str, str],
+             doc: dict | None) -> tuple[list[dict], int | None]:
+    """The running work, one entry per spec or issue (dispatcher units first, then active run rows), and the places total.
+    In memory: `doc` is the dispatcher status document (None when it was not read)."""
     found: dict[str, dict] = {}
     slots = None
 
@@ -222,8 +229,7 @@ def _running(repo_dir: Path, slug: str, rows: list[dict], shape: str | None, tit
         stage = _STAGE.get(phase, "Build")
         found[key] = {"what": _title_of(spec_id, titles) if spec_id else f"a fix for #{issue}", "step": _STEP.get(phase, phase),
                       "bar_step": stages.bar_step(stage, shape), "spec": spec_id, "issue": issue}
-    try:
-        doc = dispatch_view.status_doc(repo_dir, slug, dispatch_policy.load(repo_dir))
+    if doc:
         slots = int((doc.get("slots") or {}).get("total") or 0) or None
         for u in (doc.get("slots") or {}).get("units") or []:
             item = str(u.get("item") or "")
@@ -235,8 +241,6 @@ def _running(repo_dir: Path, slug: str, rows: list[dict], shape: str | None, tit
             else:
                 sid = next((s for s in titles if s.split("-", 1)[0].lstrip("0") == m.group(2).lstrip("0")), None)
                 add(f"spec-{int(m.group(2))}", str(u.get("phase") or ""), sid, None)
-    except Exception as e:  # noqa: BLE001
-        src.fail("dispatcher", e, ["budget", "stuck"])
     for r in rows:
         if r.get("repo") != slug or not r.get("active") or r.get("stopped"):
             continue
@@ -267,64 +271,124 @@ def _notified(state_files: list[Path], items: list[dict]) -> None:
             item["waiting_minutes"] = max(0, int((now - at).total_seconds() // 60))
 
 
-def _channels(shape: str | None, src: needs._Sources) -> list[str] | None:
-    """The channels a stopped run reaches the person on, desktop first; None when the settings cannot be read."""
-    try:
-        cells = notify_config.cells_for(notify_config.load(), "escalation", shape)
-    except Exception as e:  # noqa: BLE001
-        src.fail("notifications", e, [])
-        return None
+def _channels(config: dict, shape: str | None) -> list[str]:
+    """The channels a stopped run reaches the person on, desktop first (in memory, from the loaded settings)."""
+    cells = notify_config.cells_for(config, "escalation", shape)
     return [c for c in CHANNELS if cells.get(c, "off") != "off"]
 
 
+class _Task:
+    """One source read in a daemon thread, started at once; `wait` joins it within its own and the total deadline."""
+
+    def __init__(self, fn):
+        self.box: dict = {}
+        self.started = time.monotonic()
+
+        def work() -> None:
+            try:
+                self.box["value"] = fn()
+            except BaseException as e:  # noqa: BLE001 - handed to the main thread
+                self.box["error"] = e
+        self.thread = threading.Thread(target=work, daemon=True)
+        self.thread.start()
+
+    def wait(self, name: str, kinds: list[str], default, deadline: float, src: needs._Sources, flags: dict):
+        left = min(SOURCE_SECONDS - (time.monotonic() - self.started), deadline - time.monotonic())
+        self.thread.join(max(0.0, left))
+        if self.thread.is_alive():
+            flags["abandoned"] = True
+            src.fail(name, f"no answer within {SOURCE_SECONDS} s", kinds)
+            return default
+        if "error" in self.box:
+            src.fail(name, self.box["error"], kinds)
+            return default
+        return self.box.get("value", default)
+
+
+def _within(name: str, kinds: list[str], fn, default, deadline: float, src: needs._Sources, flags: dict):
+    """Read one source in a daemon thread for at most SOURCE_SECONDS (and until `deadline`, a `time.monotonic` time);
+    no answer or an exception lists the source under `src` and gives `default`."""
+    return _Task(fn).wait(name, kinds, default, deadline, src, flags)
+
+
 def collect(repo_dir: Path | str) -> dict:
-    """The state of one repo (see the module docstring); read-only, exits through `unavailable` rather than raising."""
+    """The state of one repo (see the module docstring); read-only, exits through `unavailable` rather than raising.
+    Group 1 (repo, runs, github, release, dispatcher, notification settings) is read at once, group 2 (notifier state
+    files, then the in-memory steps) after it."""
     repo_dir = Path(repo_dir)
+    deadline = time.monotonic() + TOTAL_SECONDS
     slug = dispatch_state.slug_of(repo_dir)
     src = needs._Sources()
-    try:
-        shape = shapecmd.resolve(repo_dir)
-    except Exception:  # noqa: BLE001 - an unreadable shape gets the release bar
-        shape = None
-    try:
-        local = {s.id: s for s in specmod.scan(repo_dir)[0]}
-    except Exception:  # noqa: BLE001
-        local = {}
+    flags: dict = {"abandoned": False}
+
+    def repo_part() -> tuple[str | None, dict]:
+        try:
+            shape = shapecmd.resolve(repo_dir)
+        except Exception:  # noqa: BLE001 - an unreadable shape gets the release bar
+            shape = None
+        try:
+            local = {s.id: s for s in specmod.scan(repo_dir)[0]}
+        except Exception:  # noqa: BLE001
+            local = {}
+        return shape, local
+
+    def github_part() -> dict:
+        return needs.collect(repo_dir) if any(repo_dir.glob("applications/*/system.yaml")) else needs.collect_repo(repo_dir)
+
+    def release_part() -> list[dict]:
+        try:
+            shape = shapecmd.resolve(repo_dir)
+        except Exception:  # noqa: BLE001
+            shape = None
+        return _release_items(repo_dir, slug, shape)
+
+    def dispatcher_part() -> tuple[dict | None, int, list[Exception]]:
+        errors: list[Exception] = []
+        doc, parked = None, 0
+        try:
+            doc = dispatch_view.status_doc(repo_dir, slug, dispatch_policy.load(repo_dir))
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+        try:
+            parked = len(dispatch_state.load(slug)["steering"]["skipped"])
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+        return doc, parked, errors
+
+    tasks = {"repo": _Task(repo_part), "runs": _Task(lambda: runlist.collect(30)["runs"]), "github": _Task(github_part),
+             "release": _Task(release_part), "dispatcher": _Task(dispatcher_part), "notifications": _Task(notify_config.load)}
+
+    def wait(key: str, name: str, kinds: list[str], default):
+        return tasks[key].wait(name, kinds, default, deadline, src, flags)
+    shape, local = wait("repo", "repo", [], (None, {}))
+    rows = wait("runs", "runs", ["escalation"], [])
+    doc = wait("github", "github", ["approve", "answer", "triage"], {"system": slug.rsplit("/", 1)[-1], "items": [], "unavailable": []})
+    released = wait("release", "github", ["release"], [])
+    dispatch_doc, parked, errors = wait("dispatcher", "dispatcher", ["budget", "stuck"], (None, 0, []))
+    for e in errors:
+        src.fail("dispatcher", e, ["budget", "stuck"])
+    config = wait("notifications", "notifications", [], None)
+
     titles = {sid: str(s.meta.get("title") or "") for sid, s in local.items() if s.meta.get("title")}
-    try:
-        rows = runlist.collect(30)["runs"]
-    except Exception as e:  # noqa: BLE001
-        rows = []
-        src.fail("runs", e, ["escalation"])
     estimates = _estimates(slug, rows, local)
-    system = False
-    try:
-        system = any(repo_dir.glob("applications/*/system.yaml"))
-        doc = needs.collect(repo_dir) if system else needs.collect_repo(repo_dir)
-    except Exception as e:  # noqa: BLE001
-        doc = {"system": slug.rsplit("/", 1)[-1], "items": [], "unavailable": []}
-        src.fail("github", e, ["approve", "answer", "triage"])
-    items = [dict(i) for i in doc.get("items") or []]
-    try:
-        items += _release_items(repo_dir, slug, shape)
-    except Exception as e:  # noqa: BLE001
-        src.fail("github", e, ["release"])
+    items = [dict(i) for i in doc.get("items") or []] + list(released)
+    channels = None
+    if config is not None:
+        try:
+            channels = _channels(config, shape)
+        except Exception as e:  # noqa: BLE001
+            src.fail("notifications", e, [])
+    state_files = [notify.state_path(str(doc.get("system") or slug.rsplit("/", 1)[-1])), dispatch_notify.notify_path(slug)]
+    _within("notifications", [], lambda: _notified(state_files, items), None, deadline, src, flags)
     for item in items:
         item["group"] = GROUP_OF.get(item.get("kind"), "release")
         if item.get("kind") in ("answer", "approve"):
             _draft(item, local, estimates)
         item["what"] = what(item, titles)
-    running, slots = _running(repo_dir, slug, rows, shape, titles, src)
-    try:
-        parked = len(dispatch_state.load(slug)["steering"]["skipped"])
-    except Exception as e:  # noqa: BLE001
-        parked = 0
-        src.fail("dispatcher", e, ["budget", "stuck"])
-    _notified([notify.state_path(str(doc.get("system") or slug.rsplit("/", 1)[-1])), dispatch_notify.notify_path(slug)], items)
-    channels = _channels(shape, src)
+    running, slots = _running(slug, rows, shape, titles, dispatch_doc)
     items.sort(key=lambda i: i.get("since") or "")
     return {"repo": slug, "shape": shape, "system": doc.get("system"), "items": items, "running": running, "slots": slots,
-            "parked": parked, "channels": channels, "estimates": estimates,
+            "parked": parked, "channels": channels, "estimates": estimates, "abandoned": flags["abandoned"],
             "unavailable": [*doc.get("unavailable", []), *src.listing()]}
 
 
