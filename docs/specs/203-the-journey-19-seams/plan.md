@@ -10,18 +10,21 @@ tasks:
     covers: [AC-203.5, AC-203.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "A changed committed plan reschedules the units before the next unit"
     files: [scripts/cplat/units.py, scripts/cplat/supervisor.py]
     covers: [AC-203.3, AC-203.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: "The ship hand-off resolves, records and passes the kube context"
     files: [scripts/cplat/shipcontext.py, scripts/cplat/ship_handoff.py, scripts/cplat/ship.py, docs/changelog.d/203-the-journey-19-seams.fixed.md]
     covers: [AC-203.1, AC-203.2]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 203 The journey 19 seams
