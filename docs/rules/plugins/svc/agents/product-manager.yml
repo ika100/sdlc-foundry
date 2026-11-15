@@ -38,6 +38,10 @@ rules:
     text: "and write no criterion or assumption for it, because the user must rule between the two first"
     class: practice
     source: spec 188
+  - id: R13
+    text: "A suggested answer or assumption never keeps the feature out of an environment the request asked for (such as \"reachable in every environment\"), because promotion refuses what `environments:` leaves out"
+    class: experience
+    source: "#688"
   - id: R8
     text: "Do not invent another format."
     class: retired
