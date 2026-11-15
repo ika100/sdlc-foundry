@@ -1,7 +1,7 @@
 ---
 spec_id: 202-a-waiting-session-makes-no-model-calls
 title: A waiting session makes no model calls
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [750]
@@ -75,3 +75,4 @@ Pause reaches a running session.
 - 2026-11-15 created
 - 2026-11-15 approved
 - 2026-11-15 building
+- 2026-11-15 done
