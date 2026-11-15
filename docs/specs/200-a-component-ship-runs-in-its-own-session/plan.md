@@ -10,18 +10,21 @@ tasks:
     covers: [AC-200.1, AC-200.2, AC-200.4, AC-200.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: "`cplat spec test-diff` judges the ship run's spec and accepts a new helper with `--tighten`"
     files: [scripts/cplat/spec.py, scripts/cplat/testdiff_select.py]
     covers: [AC-200.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: "Ship instructions: hand-off, report from `ship status`, helper rule in every fix round"
     files: [plugins/component/commands/ship.md, plugins/component/references/ship-handoff.md, plugins/component/references/ship-finish.md, plugins/component/references/ship-land-red.md, plugins/component/commands/build.md, docs/rules/plugins/component/commands/ship.yml, docs/rules/plugins/component/references/ship-handoff.yml, docs/rules/plugins/component/references/ship-finish.yml, docs/rules/plugins/component/references/ship-land-red.yml, docs/rules/plugins/component/commands/build.yml, plugins/component/README.md, plugins/component/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/AGENTS.md, docs/adr/README.md, docs/adr/112-an-interactive-component-ship-runs-in-its-own-headless-session.md, docs/changelog.d/200-component-ship-own-session.changed.md]
     covers: [AC-200.1, AC-200.2, AC-200.5, AC-200.6, AC-200.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "`ship wait` reports units, `WAIT:` on progress, `ENDED:`, questions and the log"
     files: [scripts/cplat/shipwait.py]
