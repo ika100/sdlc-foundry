@@ -147,12 +147,14 @@ printf '%s\n' \
 printf '%s\n' \
   "events {}" \
   "http {" \
+  "  access_log /dev/stdout;" \
+  "  error_log /dev/stderr info;" \
   "  server {" \
   "    listen 443 ssl;" \
   "    ssl_certificate /etc/ssl/git.crt;" \
   "    ssl_certificate_key /etc/ssl/git.key;" \
   "    client_max_body_size 0;" \
-  "    location / {" \
+  "    location /e2e/ {" \
   "      include fastcgi_params;" \
   "      fastcgi_param SCRIPT_FILENAME /usr/libexec/git-core/git-http-backend;" \
   "      fastcgi_param GIT_HTTP_EXPORT_ALL \"\";" \
@@ -160,6 +162,14 @@ printf '%s\n' \
   "      fastcgi_param GIT_PROTOCOL \$http_git_protocol;" \
   "      fastcgi_param PATH_INFO \$uri;" \
   "      fastcgi_pass unix:/run/fcgiwrap.sock;" \
+  "    }" \
+  "    location / {" \
+  "      proxy_pass https://github.com;" \
+  "      proxy_ssl_server_name on;" \
+  "      proxy_set_header Host github.com;" \
+  "      proxy_buffer_size 64k;" \
+  "      proxy_buffers 8 64k;" \
+  "      proxy_busy_buffers_size 128k;" \
   "    }" \
   "  }" \
   "}" > "$ctx_dir/nginx.conf"
@@ -175,6 +185,9 @@ docker cp "$work/git/." "$git_name:/srv/git/"
 docker start "$git_name" >/dev/null
 echo "ok   git server $git_name serves e2e/todo-gitops and e2e/e2e-clusters"
 
+# Everything except /e2e/ is passed on to the real github.com: the CloudNativePG chart index lives on cloudnative-pg.github.io (resolved
+# normally) but names its tarball on https://github.com/cloudnative-pg/charts/releases/download/..., and the cluster's DNS sends github.com
+# here. The tarball is requested over TLS with the git server's self-signed certificate, so the chart repository is marked insecure too.
 # The repositories are served without a .git suffix: Argo CD clones the repoURL as written (https://github.com/e2e/<repo>).
 # Each repository secret carries its own credential and insecure flag, because cluster-up's bootstrap re-applies github-creds
 # (a client-side apply drops the insecure key that wire added).
@@ -235,6 +248,10 @@ wire() {
       | kk "$c" apply -f - >/dev/null
     kk "$c" -n argocd label secret "repo-$r" argocd.argoproj.io/secret-type=repository --overwrite >/dev/null
   done
+  kk "$c" -n argocd create secret generic repo-cloudnative-pg-charts --from-literal=type=helm --from-literal=name=cloudnative-pg \
+    --from-literal=url=https://cloudnative-pg.github.io/charts --from-literal=insecure=true --dry-run=client -o yaml \
+    | kk "$c" apply -f - >/dev/null
+  kk "$c" -n argocd label secret repo-cloudnative-pg-charts argocd.argoproj.io/secret-type=repository --overwrite >/dev/null
   echo "ok   $(of lc $c): github.com resolves to the git server ($ip), the credential is insecure"
 }
 
