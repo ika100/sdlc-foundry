@@ -57,6 +57,10 @@ The order matters: a cluster that lists environments the system repo does not ye
 
 ### Promote an upgrade
 
+![A platform update reaches the first cluster; a later cluster stays behind until /cluster:promote, gated on healthy operators and green smoke tests on the cluster before it](img/promotion-clusters.svg)
+
+This promotion moves the platform release (operator pins and the rendered cluster infrastructure) from one cluster to the next. Component versions move through environments separately, with `/instance:promote` ([How it works](HOW-IT-WORKS.md#4-promote--instancepromote)).
+
 The first cluster takes every `/platform:update`. A later cluster stays on the platform release it had, and `devbox run render` prints `BEHIND: cluster <c> runs platform <x>, cluster <first> runs <y>; promote it with /cluster:promote <c>`.
 
 Run `/cluster:promote <name>` when the cluster before it has proven the release. It checks that every operator application of that cluster is `Synced Healthy` and that the smoke tests of every component in its environments pass (`--component-dir <component>=<dir>` names the checkouts). If a gate fails it prints `NOT PROMOTED:` and the reasons, and opens nothing. Otherwise it opens a pull request that pins the later cluster to the same release; `--dry-run` shows the result without opening it. After you merge, Argo CD on that cluster runs what the earlier one runs.

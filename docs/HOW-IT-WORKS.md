@@ -96,6 +96,10 @@ A feature built across the system with `/system:ship` carries this wiring as dat
 
 ## 4. Promote — `/instance:promote`
 
+![A version moves right through the environments: into dev on every merge, into staging after a green dev smoke, into prod only through a reviewed promotion; the database has one instance per environment and is not promoted](img/promotion-environments.svg)
+
+Each row is a part of the system, each column an environment, each cell an instance. In the example dev and staging run on one cluster and prod on another ([several clusters](CLUSTERS.md#several-clusters)); promotion works the same either way, because prod pins the release image only when its digest matches the image staging tested.
+
 `dev` follows `main`: after each merge the service's CI asks the gitops-app to pin `dev` to the new `sha-<40>` (the full commit sha, ADR-030); the gitops-app's `pin-dev` workflow opens that pin PR and merges it once CI passes ([ADR-027](adr/027-dev-follows-main-through-pin-prs.md)). The one manual step per service is the `GITOPS_TOKEN` secret that `/component:new` names; without it `dev` stays on its last pin. `promote … --to staging` adds a `staging` instance to the component and pins `sha-<40>` of a build of the service's `main`; `promote … --to prod` pins the release image `X.Y.Z` (the `vX.Y.Z` git tag without the `v`). Before opening the PR the script checks the tag exists in GHCR, so a promotion can never point at an image CI has not finished. One PR per invocation; rollback = revert. Staging follows a green dev smoke too ([ADR-041](adr/041-staging-follows-green-dev-smoke.md)): when `promote: after-dev-smoke` is set on the `staging` environment in `system.yaml` (new gitops-apps have it), `cplat component ship deploy` dispatches the gitops-app's `pin-staging` workflow, which opens a self-merging PR that runs CI and pins staging, then smokes staging. Switch it off with `promote: manual` on the `staging` environment in `system.yaml`, or per component on its `staging` instance. Prod is never automatic: `promote … --to prod` prints an evidence summary first and its PR is reviewed.
 
 ## 5. Run it and reach it
