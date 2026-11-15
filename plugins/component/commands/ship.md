@@ -28,7 +28,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 ## Phase `plan`
 
-Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after the architect, `cplat platform runs agent spawned architect [--model-id <id>]`. Architect `BLOCKERS` → escalate with them. A plan with `done` tasks is not re-planned (escalate). Then `cplat component ship phase build`.
+Read `${CLAUDE_PLUGIN_ROOT}/commands/plan.md` and follow it for this spec; after the architect, `cplat platform runs agent spawned architect [--model-id <id>]`. Architect `BLOCKERS` → escalate with them. A plan with `done` tasks is not re-planned (escalate); a merge-conflict re-plan (build.md 2.4a) is the exception. Then `cplat component ship phase build`.
 
 ## Phase `build`
 
@@ -50,7 +50,7 @@ Escalate on build's stop rules. Then `cplat component ship phase pr`.
 
 ## Phase `deploy`
 
-`cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: `--base-url` is the user's to name, since a guess may hit the wrong host. Print its lines.
+`cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: the user's context, or `kubectl config current-context` if it is the system's cluster; `--base-url` is the user's to name, since a guess may hit the wrong host. Print its lines.
 
 - Red smoke (`smoke red in dev: …`, or in staging) or a failed staging pin: since deploy escalates by itself and files the `smoke-failure` issue, never call `cplat component ship escalate` for it; report its lines and stop.
 - Shape `platform`: deploy ends at once with `not deployable (platform): nothing to deploy`: no pin, Argo, smoke or staging.
