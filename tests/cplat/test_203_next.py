@@ -20,6 +20,7 @@ import pytest
 
 import core
 from support_192 import World
+from waiting import with_prelude
 
 HANG = 5
 SOURCE, TOTAL = 1, 2
@@ -249,7 +250,7 @@ def test_a_program_that_reads_its_input_does_not_hold_next_ac_203_6(tmp_path):  
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
-    gh.write_text(READING_GH)
+    gh.write_text(with_prelude(READING_GH))
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
     env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "HOME": str(tmp_path / "home"),
            "XDG_STATE_HOME": str(tmp_path / "state"), "XDG_CONFIG_HOME": str(tmp_path / "config"),
