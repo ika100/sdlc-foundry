@@ -52,6 +52,7 @@ tasks:
     covers: [AC-202.1, AC-202.5]
     parallel_safe: true
     depends_on: [t4, t5]
+    done: true
 ---
 
 # Plan — 202 A waiting session makes no model calls
