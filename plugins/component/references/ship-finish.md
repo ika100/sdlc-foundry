@@ -1,8 +1,8 @@
 # Ship: the final report
 
-Read from `/component:ship` Finish.
+The rows come from the `report:` block of `cplat component ship status`, on both paths.
 
-When deploy printed `not deployable (<shape>): nothing to deploy`, the `dev`, `Promotion (staging)`, `Smoke (staging)` and `Smoke (dev)` rows read `not deployable`; leave out the Unchecked line and every `Next:` line that names `/instance:promote`.
+For `not deployable (<shape>): nothing to deploy` the `dev`, `Promotion (staging)`, `Smoke (staging)` and `Smoke (dev)` rows read `not deployable`; leave out the Unchecked line and the `Next:` line.
 
 ```
 ## Shipped: <spec_id> — <title>
@@ -10,20 +10,18 @@ When deploy printed `not deployable (<shape>): nothing to deploy`, the `dev`, `P
 | Step | Result |
 |---|---|
 | Plan | <n> tasks |
-| Build | <m>/<m> criteria met (verification.md) |
+| Build | <m>/<m> criteria met |
 | PR | <url> — merged after <k> CI round(s) |
 | dev | <service>:sha-<40> (pin PR <url>) · Argo <state> | not linked |
-| Promotion (staging) | <the `Promotion (staging):` line from deploy: `sha-<40> (<pin PR url>)`, or `not promoted: <reason>` (spec 093)> |
-| Smoke (staging) | <the `Smoke (staging):` value, or `-` when nothing was promoted> |
-| Smoke (dev) | <the `Smoke (dev):` value from deploy: `<p>/<total> passed`, `passed on retry` or `not run: <reason>`> |
+| Promotion (staging) | <sha-<40> (<pin PR url>), or `not promoted: <reason>`> |
+| Smoke (staging) | <value, or `-` when nothing was promoted> |
+| Smoke (dev) | <`<p>/<total> passed`, `passed on retry` or `not run: <reason>`> |
 
-Dependency patches: the bumps of `cplat deps report` (package, from → to, CVE), a major bump marked "major bump"; leave out when none.
+Dependency patches: the bumps of `cplat deps report`, a major bump marked "major bump"; leave out when none.
 
-Human steps: the `human_steps` checklist from deploy's last lines; leave out when none.
+Human steps: the checklist; leave out when none.
 
-Unchecked (smoke) criteria: <ids>   (only when smoke did not run; "none" otherwise)
+Unchecked (smoke) criteria: <ids>, or "none"
 
-Next: check staging, then promote with /instance:promote <component> --to prod in the gitops-app repo.     (staging promoted)
-Next: promote with /instance:promote <component> --to staging in the gitops-app repo.     (smoke passed, staging not promoted)
-Next: check the unchecked criteria in dev by hand; then promote with /instance:promote <component> --to staging.     (smoke did not run)
+Next: after checking staging, /instance:promote <component> --to prod in the gitops-app repo (staging promoted); `--to staging` instead (staging not promoted), after checking the unchecked criteria in dev by hand (smoke did not run).
 ```

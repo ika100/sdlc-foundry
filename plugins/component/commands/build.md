@@ -11,13 +11,13 @@ Run the phases in order, printing `## Phase N complete — <one line>` after eac
 
 ## cplat
 
-One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`: JSON with `shape`, `plugin`, `deployable`, `library`, `agents`. `unsupported` or no shape → stop.
+One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`. `unsupported` or no shape → stop.
 
 - A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. Asking is pointless because the user declared it.
 ## Phase 0 — Pre-flight
 
-0. `cplat platform runs begin build --spec <id>`. Every stop that needs the user or fails first runs `cplat platform runs end --outcome escalated --reason '<why>'` (`failed` on failure); the end `--outcome done`. After every subagent: `cplat platform runs agent spawned <role> [--model-id <id>]`.
-1. `git status --porcelain`: dirty on a spec whose status is not `building` → stop: commit or stash first (clean tree). Dirty on a `building` spec → read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (`git restore --staged`; `wip(<task-id>): interrupted`).
+0. `cplat platform runs begin build --spec <id>`. A stop that needs the user runs `cplat platform runs end --outcome escalated --reason '<why>'` first (`failed` on failure); the end `--outcome done`. After every subagent: `cplat platform runs agent spawned <role> [--model-id <id>]`.
+1. `git status --porcelain`: dirty on a spec whose status is not `building` → stop: commit or stash first (clean tree). Dirty on a `building` spec → read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it.
 2. `cplat spec check <id> --require approved` must pass and `docs/specs/<spec_id>/plan.md` exist; otherwise stop with the fix.
 3. Switch to `feature/<spec_id>` (create it from `main` if missing) = `$FEATURE_BRANCH`. `BASE_REF=$(git merge-base main HEAD)`.
 4. `<project-map>` = `ls -d */` without `.devbox`, `.venv`, `.git`, `node_modules`, heading every subagent prompt.
@@ -80,7 +80,7 @@ Merge exit 3 or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references
 
 ### 2.6 Under load
 
-Run the line `cplat component build tests <id> --load` prints (`cplat quiet test-fast --repeat 3 -- …`); `none: …` → skip, say so in the report. Exit 1 → failing tests to a coder as in 2.5. Exit 3 → `${CLAUDE_PLUGIN_ROOT}/references/build-load-run.md` (the tester fixes the harness; 2 rounds, then escalate).
+Run the line `cplat component build tests <id> --load` prints; `none: …` → skip, say so in the report. Exit 1 → failing tests to a coder as in 2.5. Exit 3 → `${CLAUDE_PLUGIN_ROOT}/references/build-load-run.md` (the tester fixes the harness; 2 rounds, then escalate).
 
 ## Phase 3 — QA: one CI gate, agents only where it is red
 
@@ -100,14 +100,13 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 `cplat platform runs phase build:verify`
 1. `cplat spec trace <id> --json` must pass, so that every criterion has its test.
 2. **reviewer** (`agents.reviewer`): `SPEC_DIR`, `BASE_REF`, `<touched-files>`, the trace JSON, the Phase 3 summary, and `SUPPRESSIONS`: the `lint suppression only` lines of the last test diff (Phase 3, step 4), or `none`, `TIGHTENED` (`build-tighten.md`) or `none`, and `TEST REVIEW`: the `unresolved:` lines of `git log -1 --format=%b --grep 'reviewed acceptance tests for'`, or `none`. After each pass (cycle `<n>`): `cplat platform runs agent findings --cycle <n> [--deviation <AC or task>]...`.
-3. A `NOT MET` item marked `TEST LOOSER` → read `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` and follow it. `RESULT: fail` → each other `NOT MET` item to a coder of a covering task (`cplat platform runs agent fix-round verification --task <task>`), then `cplat quiet test-fast` and the reviewer; at most 2 cycles, then escalate. A `SMOKE: <file> — <finding>` line is no `NOT MET`: the tester gets it in the same round without asking: "Tighten only `<file>` so that it fails without the feature: `<finding>`. Change no other test."; then `cplat platform runs agent smoke <file> --finding '<finding>'` and run it (`cplat quiet test-fast -- <file>`, else `cplat quiet e2e`); a failure goes back once. `SMOKE` items alone with `RESULT: pass` need no new cycle, since none is `NOT MET`.
+3. A `NOT MET` item marked `TEST LOOSER` → read `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` and follow it. `RESULT: fail` → each other `NOT MET` item to a coder of a covering task (`cplat platform runs agent fix-round verification --task <task>`), then `cplat spec test-diff $RED --task <task>` (a `test helper` line: `build-tighten.md`), `cplat quiet test-fast` and the reviewer; at most 2 cycles, then escalate. A `SMOKE: <file> — <finding>` line is no `NOT MET`: the tester gets it in the same round without asking: "Tighten only `<file>` so that it fails without the feature: `<finding>`. Change no other test."; then `cplat platform runs agent smoke <file> --finding '<finding>'` and run it (`cplat quiet test-fast -- <file>`, else `cplat quiet e2e`); a failure goes back once. `SMOKE` items alone need no new cycle.
 4. `cplat spec mutate <id> --write` (report only; it never fails the build).
 5. Commit `docs/specs/<spec_id>/verification.md`: `docs(spec): verify <spec_id>`.
 
 ## Phase 5 — Container image
 
 `cplat platform runs phase build:image`. `deployable` false → `## Phase 5 skipped — <shape> is not deployable`. Else **deployment** (`agents.deployment`), `<project-map>`, `<touched-files>`: the image. **Hard rule:** never Kubernetes manifests, because the gitops repo owns the cluster (ADR-017). `devbox run image-build`. Ask for gitops changes only for wiring not in the spec's *Provided by the system* list, since the system already provides that.
-
 ## Phase 6 — Close the spec
 
 `cplat platform runs phase build:close`; `cplat spec set-status <id> done`, `cplat spec index`, commit `docs(spec): <spec_id> done`.

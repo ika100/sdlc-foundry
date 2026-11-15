@@ -153,6 +153,7 @@ Before the spec, a person can run `/component:explore <topic | #issue>` (`/syste
                                                                          │  red: logs → coder → push │  pin PR merged,
                                                                          │  (max 3 rounds)           │  Argo healthy
                                                                          └── merge only when every check passed (no branch protection needed)
+                 Interactive: `ship start --detach` hands the run to one `cplat headless` process; the session only runs `ship wait`, relays questions and prints `ship status`'s report (`--here` keeps the run in the session)
                  Stop hook: no stop until done or `cplat component ship escalate`; `cplat headless` resumes it in fresh sessions
 
 /component:fix       ──►  coder (diagnose) ──►  coder (fix) ──►  tester (verify)

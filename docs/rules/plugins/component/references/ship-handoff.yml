@@ -1,0 +1,21 @@
+rules:
+  - id: R1
+    text: "Never start a subagent or a step of plan, build, PR, land or deploy, because their context would fill this session."
+    class: practice
+    source: spec 200
+  - id: R2
+    text: "Always run `cplat component ship wait` in the foreground and act on its result, because the run goes on in its own process:"
+    class: practice
+    source: spec 200
+  - id: R3
+    text: "after three `TIMEOUT:` in a row never wait again: show their lines and stop, since the run goes on."
+    class: practice
+    source: spec 200
+  - id: R4
+    text: "otherwise always ask the person each question word for word and resume with their answer, because the person decides what the spec left open."
+    class: practice
+    source: spec 200
+  - id: R5
+    text: "the Escalate report of `ship.md` (reason, status, decision), never a resume, since an answer cannot fix it."
+    class: practice
+    source: spec 200
