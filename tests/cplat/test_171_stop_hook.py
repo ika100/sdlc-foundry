@@ -215,3 +215,28 @@ def test_a_running_wait_holds_the_product_ship_too(w, monkeypatch):  # AC-171.8
         assert sys_first_line(answer) == "waiting: cplat system ship next --wait; stops without progress: 1/2"
         assert f"The product ship of {SYSTEM_SPEC} is not finished" in answer.json["reason"]
         assert w.state()["stop_gate"]["no_progress"] == 1 and not w.state().get("escalated")
+
+
+def test_a_wait_of_another_session_in_this_checkout_does_not_hold_a_session_765(repo, monkeypatch):  # AC-171.8, #765
+    other = put_mark(repo, "cplat component ship wait", pid=os.getppid())     # the shipping session's wait on its detached run
+    other.write_text(json.dumps({**json.loads(other.read_text()), "session": "SHIPPING"}))
+    own = put_mark(repo, "cplat pr wait 7")
+    own.write_text(json.dumps({**json.loads(own.read_text()), "session": "UNIT"}))
+    assert waits.live(repo, "UNIT") == ["cplat pr wait 7"]                   # a unit session sees only its own wait
+    assert waits.live(repo, "SHIPPING") == ["cplat component ship wait"]
+    assert sorted(waits.live(repo)) == ["cplat component ship wait", "cplat pr wait 7"]   # without a session: every wait, as before
+    own.unlink()
+    assert waits.live(repo, "UNIT") == []
+
+
+def test_a_mark_names_the_session_that_runs_the_wait_765(repo, monkeypatch):  # AC-171.8, #765
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "S9")
+    with waits.running("cplat pr wait 7", repo):
+        (f,) = list(mark_file(repo, os.getpid()).parent.glob("*.json"))
+        assert json.loads(f.read_text())["session"] == "S9"
+        assert waits.live(repo, "S9") == ["cplat pr wait 7"] and waits.live(repo, "OTHER") == []
+
+
+def test_a_mark_without_a_session_still_holds_every_session_765(repo):  # AC-171.8, #765: marks of older versions
+    put_mark(repo, "cplat pr wait 7")
+    assert waits.live(repo, "ANY") == ["cplat pr wait 7"]
