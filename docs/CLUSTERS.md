@@ -53,7 +53,7 @@ A system's environments run on the cluster it assigns them to. Do it in this ord
 1. In the system repo, run `/platform:update`, set `environments.<env>.cluster` for all three environments of `system.yaml` (for example `dev: local`, `staging: local`, `prod: home`), render and merge. The render then writes one `ApplicationSet` per environment and `bootstrap/environments/<system>-<env>.yaml`, so a cluster can pick the environments it runs.
 2. In the cluster repo, set `systems.<s>.environments` (`{dev: local, staging: local, prod: home}`), render and merge. Each cluster then runs only the applications of the environments assigned to it.
 
-The order matters: a cluster that lists environments the system repo does not yet offer would select nothing. The render fails with a message when the two repos disagree, or when only some environments carry a `cluster` key. A system without `environments` stays on the first cluster as before.
+The order matters: a cluster that lists environments the system repo does not yet offer would select nothing. `devbox run check` in the cluster repo fails with a message when the two repos disagree, and the system repo's render fails when only some environments carry a `cluster` key. A system without `environments` stays on the first cluster as before.
 
 ### Promote an upgrade
 
