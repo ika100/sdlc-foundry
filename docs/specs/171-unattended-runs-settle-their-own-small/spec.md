@@ -41,7 +41,7 @@ Frozen tests.
 
 The Stop hook.
 
-- **AC-171.8** Given the owning session of an unfinished ship run (`/component:ship` or `/system:ship`) that tries to stop while a `cplat` wait it started in the run's checkout is still running (`cplat pr wait`, `cplat system ship next --wait`, `cplat dispatch wait` or another wait of ADR-082), when the Stop hook judges the stop, then it blocks the stop as today, leaves the count of stops without progress unchanged, and the block reason names the running wait (`waiting: <command>; stops without progress: <n>/2`); once no such wait runs, stops count as in AC-126.4 and AC-126.5.
+- ~~**AC-171.8**~~ superseded by AC-202.1 on 2026-11-15: Given the owning session of an unfinished ship run (`/component:ship` or `/system:ship`) that tries to stop while a `cplat` wait it started in the run's checkout is still running (`cplat pr wait`, `cplat system ship next --wait`, `cplat dispatch wait` or another wait of ADR-082), when the Stop hook judges the stop, then it blocks the stop as today, leaves the count of stops without progress unchanged, and the block reason names the running wait (`waiting: <command>; stops without progress: <n>/2`); once no such wait runs, stops count as in AC-126.4 and AC-126.5.
 
 pr-check.
 
@@ -82,3 +82,4 @@ None.
 - 2026-11-10 approved
 - 2026-11-10 building
 - 2026-11-10 done
+- 2026-11-15 AC-171.8 superseded by AC-202.1 (spec 202): a session may stop while a cplat wait it started still runs, so it makes no model calls while waiting (#750)
