@@ -1,7 +1,7 @@
 ---
 spec_id: 193-building-and-releasing-run-on-their-own
 title: Building and releasing run on their own and interrupt only to ask
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -81,3 +81,4 @@ None.
 - 2026-11-12 approved
 - 2026-11-15 draft: amend: deployable repo with manual staging promotes to staging before the release (architect blocker on AC-193.7)
 - 2026-11-15 amended: AC-193.7 orders Promote to Staging before the release in a deployable repo with manual staging (architect blocker)
+- 2026-11-15 approved; the old plan is plan.v1.md
