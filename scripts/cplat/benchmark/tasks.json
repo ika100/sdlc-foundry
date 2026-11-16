@@ -80,6 +80,15 @@
       "plugins": [
         "component"
       ]
+    },
+    "spec-environments": {
+      "task_version": 1,
+      "prompt": "/component:spec Let a signed-in user share a todo list read-only with one other user by email. The change must work in dev, staging and prod, so write the spec for all three environments.",
+      "max_runs": 2,
+      "max_minutes": 20,
+      "plugins": [
+        "component"
+      ]
     }
   }
 }

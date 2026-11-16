@@ -11,6 +11,7 @@ priority: P1                       # P0 | P1 | P2
 shape: service-python              # the repo's shape (omitted in a repo without one)
 tracks: [42]                       # optional: GitHub issues this spec answers
 parent: acme/shop-gitops:012-checkout   # optional: the system spec this component's spec is a slice of
+environments: [dev]                # optional: promotion refuses other environments
 explored: true                     # optional: set by `cplat spec new --explored`, never by hand, because it records a real exploration
 ---
 
@@ -59,12 +60,12 @@ As a trader, I want an alert when a watched symbol crosses my threshold, so that
 ## Writing good criteria
 
 - **One observable behaviour each**, in Given / when / then, so that a tester can write a test from the line alone.
-- **Concrete:** numbers, limits, field names the user sees, error responses. "Fast" and "user-friendly" are not criteria.
+- **Concrete:** numbers, limits, field names the user sees, error responses; "fast" is no criterion.
 - **Cover the unhappy paths:** invalid input, missing permission, a dependency down, limits reached.
-- **Behaviour, not implementation:** "the price is stored" is untestable from outside; say what the user or caller can observe.
+- **Behaviour, not implementation:** "the price is stored" is untestable from outside; say what a caller can observe.
 - **Environment-neutral:** no host ports, local hostnames or machine paths (`:8088`, `todo-web.todo-dev.localhost`, `/Users/...`). Say what is observable wherever the system runs.
-- **Smoke marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL; after deploy `devbox run smoke` checks it in dev against `SMOKE_BASE_URL`. Use it for deployable shapes (not libraries) and for behaviour a test can check using nothing but the base URL, because the smoke run reaches nothing else.
-- **Small features have few criteria:** three to eight; over twelve usually means two specs.
+- **Smoke marker:** end a criterion line with `(smoke)` when its behaviour is observable through the service's public URL; after deploy `devbox run smoke` checks it in dev against `SMOKE_BASE_URL`. Use it for deployable shapes and for behaviour a test can check using the base URL alone, because the smoke run reaches nothing else.
+- **Small features have few criteria:** three to eight; over twelve means two specs.
 
 ## Assumptions and open questions
 
@@ -72,11 +73,11 @@ A spec decides by default and asks only what may not be decided by default, so t
 
 - **Assumptions:** every decision with a sensible default (a limit, a format, an order, a status code, a wording, a small scope call) is taken, written into the criteria and listed as `- **A<n>** <decision> (other option: <…>; affects AC-…)`. The user approves them together with the spec. A changed assumption is struck through with the date and the new decision, never deleted, because the user approved the old one.
 - **Open questions** are only: (a) security, access or secrets; (b) money: paid services, quotas, cost limits; (c) deleting, migrating or exposing existing data; (d) a request so ambiguous that the default may build the wrong feature. Write each with a **suggested answer** and what it affects, so that the user can answer in one word.
-- **Notes for the architect** (optional section, after Assumptions): non-binding hints from an exploration. They are no criteria, are not in the hash and bind nobody, because they are advice and not a contract. An assumption decided in an exploration ends with `(decided in explore)`.
-- Answered questions are struck through, with the answer folded into a criterion or a non-goal. `cplat spec approve` refuses while any unstruck question remains; assumptions block nothing.
+- **Notes for the architect** (optional section, after Assumptions): non-binding hints from an exploration, no criteria and not in the hash, because they are advice and not a contract. An assumption decided in an exploration ends with `(decided in explore)`.
+- Answered questions are struck through, the answer folded into a criterion or non-goal. `cplat spec approve` refuses while an unstruck question remains; assumptions block nothing.
 
 ## Amending
 
-- Add new criteria with the next free number. Change the text of an existing one only to clarify the same behaviour, because tests that cite the id keep proving it; if behaviour changes, withdraw the old id and add a new one.
+- Add new criteria with the next free number. Change the text of an existing one only to clarify the same behaviour, because tests that cite the id keep proving it; a changed behaviour withdraws the old id and adds a new one.
 - A criterion that changes behaviour an active criterion of another spec in this repo defines ends with `(replaces AC-<NNN>.<n>)`; in the same change the old one is never left active but becomes `- ~~**AC-<NNN>.<n>**~~ superseded by AC-<MMM>.<m> on <date>: <its old text>`, with one Changelog line in the old spec (status unchanged), because the old behaviour stops being counted. The old text keeps that spec's `spec_hash`; `cplat spec check` refuses an unstruck target.
 - Add a Changelog line for every amendment. The orchestrator moves an approved spec back to `draft`: it needs a new approval and, if criteria changed, a new plan (`spec_hash` drift).

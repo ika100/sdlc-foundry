@@ -165,6 +165,8 @@ A deploy counts only after every step below. Each step is enforced by `code` (a 
 | digest match | code | staging is pinned only while the registry digest of the tag equals the smoked digest | `test_a_changed_digest_pins_nothing_and_says_so_ac_105_2` |
 | promotion | code | a smoke that was not run is reported `NOT VERIFIED` and promotes nothing | `test_a_not_run_smoke_reports_not_verified_and_promotes_nothing_ac_105_6`, `test_a_dev_smoke_that_was_not_run_promotes_nothing_ac_093_3` |
 
+A spec that is `building` or `done` and lists `environments:` without staging skips the staging pin with `not promoted: environment limit <spec_id> allows <envs>`; the step is not red, and the person widens the spec to lift it.
+
 A replay of `cplat component ship deploy` skips the dev smoke only when the record holds a pass for the digest dev runs now (`test_a_replay_with_the_same_digest_does_not_smoke_dev_again_ac_105_7`). `cplat instance promote … --to prod` prints the checked digest and flags `digest differs from what staging runs`.
 
 ### Prod runs what staging tested
