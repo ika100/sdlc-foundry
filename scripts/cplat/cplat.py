@@ -188,7 +188,7 @@ def _main(argv: list[str]) -> int:
     try:
         resolved = _resolve(argv)
         if isinstance(resolved, int):
-            return resolved
+            return int(resolved)          # a plain exit code: CodeQL otherwise follows the tuple branch into the wait record
         modname, rest, label = resolved
         module = __import__(modname)
         return module.main(rest)
