@@ -17,12 +17,14 @@ tasks:
     covers: [AC-190.2, AC-190.3]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: Automatic staging promotion skips on an environment limit
     files: [scripts/cplat/staging.py, scripts/cplat/appship_joint.py]
     covers: [AC-190.4]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: Prompts - product-manager limit rule, spec-format field, approval summaries, /instance:promote rule
     files: [plugins/svc/agents/product-manager.md, plugins/svc/skills/spec-format/references/spec.md, plugins/component/commands/spec.md, plugins/system/commands/spec.md, plugins/instance/commands/promote.md, docs/rules/plugins/svc/agents/product-manager.yml, docs/rules/plugins/svc/skills/spec-format/references/spec.yml, docs/rules/plugins/component/commands/spec.yml, docs/rules/plugins/system/commands/spec.yml, docs/rules/plugins/instance/commands/promote.yml, plugins/svc/.claude-plugin/plugin.json, plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, plugins/instance/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
