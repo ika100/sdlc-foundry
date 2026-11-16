@@ -10,6 +10,7 @@ tasks:
     covers: [AC-198.2, AC-198.3, AC-198.6, AC-198.7, AC-198.8, AC-198.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "Merges wait for a foreign hold outside the merge lock; the release sets its hold"
     files: [scripts/cplat/merge_lock.py, docs/dispatch.md]
