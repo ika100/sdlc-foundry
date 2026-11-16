@@ -395,19 +395,16 @@ def gate(repo: Path, hook_input: dict) -> dict | None:
     verdict = box["verdict"]
     if verdict.action == "wait":                   # #496: a background agent at work is progress
         return {"systemMessage": f"product ship {spec_id}: waiting for {running} background agent(s) in phase {phase}"}
+    if verdict.action == "waiting":                # AC-202.1
+        return stopgate.waiting_message(f"ship {spec_id}", verdict.waiting.split(", "), f"in phase {phase}")
     if verdict.action == "escalate":
         message = stopgate.last_message(hook_input)
         reason = stopgate.no_progress_reason(phase, message)
         with contextlib.redirect_stderr(io.StringIO()):     # the hook's output is its answer only
             escalate(repo, reason, stopgate.cause(message, _code_red(repo)), keep_cause=True)
         return {"systemMessage": f"product ship {spec_id}: escalated ({reason}); resume it with {command}"}
-    if verdict.waiting:
-        text = [stopgate.wait_line(verdict),
-                f"The product ship of {spec_id} is not finished (phase {phase}); the wait above is still running.",
-                "Next: read its result when it ends (a blocking read of its background task, never a polling loop), then go on from it."]
-    else:
-        text = [f"The product ship of {spec_id} is not finished (phase {phase}, stops without progress: {verdict.no_progress}/2).",
-                f"Next: {next_step(st)}."]
+    text = [f"The product ship of {spec_id} is not finished (phase {phase}, stops without progress: {verdict.no_progress}/2).",
+            f"Next: {next_step(st)}."]
     text += ["Keep going. Only if a rule needs the user (a question of a repo spec, a conflict, a decision the spec does not answer) "
             "or the user asked you to stop: run `cplat system ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop."]
     return {"decision": "block", "reason": "\n".join(text)}

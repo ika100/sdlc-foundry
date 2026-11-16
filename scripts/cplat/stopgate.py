@@ -37,7 +37,7 @@ def claim(st: dict, session: str | None) -> None:
 
 @dataclass(frozen=True)
 class Verdict:
-    action: str  # "silent" | "notice" | "wait" | "block" | "escalate"
+    action: str  # "silent" | "notice" | "wait" | "waiting" | "block" | "escalate"
     no_progress: int
     waiting: str | None = None
 
@@ -63,13 +63,23 @@ def running_agents(hook_input: dict, now: float | None = None) -> int:
     return n
 
 
-def wait_line(v: Verdict) -> str:
-    return f"waiting: {v.waiting}; stops without progress: {v.no_progress}/{NO_PROGRESS_LIMIT}"
+def waiting_message(label: str, waiting: list[str], where: str) -> dict:
+    """AC-202.1: the one line of a stop let through while the session's own `cplat` wait runs."""
+    return {"systemMessage": f"{label}: waiting for {', '.join(waiting)} {where}"}
+
+
+def pause_requested(repo: Path) -> bool:
+    """AC-202.7: the dispatcher's stop flag stands in this checkout. Never raises."""
+    try:
+        import dispatch_state
+        return dispatch_state.stop_path(repo).exists()
+    except Exception:  # noqa: BLE001 - a gate must always answer
+        return False
 
 
 def check(st: dict, session: str | None, mark: dict, running: int = 0, waiting: list[str] | None = None) -> Verdict:
     """`running` background agents of the session count as progress: the session waits for their notification (#496).
-    A running `cplat` wait (`waiting`, spec 171) blocks the stop and holds the count where it is (AC-171.8)."""
+    A running `cplat` wait (`waiting`) lets the stop through and writes nothing, so the count stays (AC-202.1)."""
     owner = st.get("owner")
     if not owner:
         return Verdict("notice", 0)
@@ -80,11 +90,9 @@ def check(st: dict, session: str | None, mark: dict, running: int = 0, waiting: 
     if running:
         st["stop_gate"] = {"head": head, "phase": phase, "no_progress": 0}
         return Verdict("wait", 0)
-    progress = not prev or prev.get("head") != head or prev.get("phase") != phase
     if waiting:
-        held = 0 if progress else int(prev.get("no_progress", 0))
-        st["stop_gate"] = {"head": head, "phase": phase, "no_progress": held}
-        return Verdict("block", held, ", ".join(waiting))
+        return Verdict("waiting", int(prev.get("no_progress", 0)), ", ".join(waiting))
+    progress = not prev or prev.get("head") != head or prev.get("phase") != phase
     n = 0 if progress else int(prev.get("no_progress", 0)) + 1
     st["stop_gate"] = {"head": head, "phase": phase, "no_progress": n}
     return Verdict("escalate" if n >= NO_PROGRESS_LIMIT else "block", n)

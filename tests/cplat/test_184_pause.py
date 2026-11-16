@@ -36,6 +36,8 @@ class FakeTime:
         return self.now
 
     def sleep(self, seconds):
+        if seconds == headless.GUARD_POLL:   # the loop guard's look at a running session (spec 202) is no pause
+            return
         self.sleeps.append(seconds)
         started = self.count()
         self.now += dt.timedelta(seconds=seconds)

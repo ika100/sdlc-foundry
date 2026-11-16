@@ -66,14 +66,19 @@ import preflight
 import run_slot
 import runs as runlog
 import settings
+import loopguard
 import ship
 import stopgate
 import supervisor
 import telemetry
 import usagelimit
+import waitdetach
 from core import PlatformError
 
 EXIT_DONE, EXIT_STOPPED, EXIT_QUIET = 0, 1, 3
+LOOPED = 125                  # spec 202: the code of a session the loop guard ended
+GUARD_POLL = 10               # seconds between two looks of the guard at the session's transcript
+WAIT_LIMIT_MIN = 120          # spec 202: a detached wait still running after this long is stopped and escalated
 PAUSED_RESULT = "paused at a checkpoint by cplat dispatch"   # spec 167: the dispatcher's stop flag ended the run
 STOP_FLAG = "cplat-dispatch-stop"
 
@@ -303,7 +308,8 @@ def last_message(log: Path, start: int) -> str:
     return "\n".join(ln for ln in text.splitlines() if not ln.startswith("===")).strip()
 
 
-def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str | None = None, session_id: str | None = None) -> int:
+def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str | None = None, session_id: str | None = None,
+             guard: loopguard.Guard | None = None) -> int:
     session_id = session_id or session_of(cmd)
     session_env = {"CPLAT_SESSION_ID": session_id} if session_id else {}
     prompt = cmd[cmd.index("-p") + 1] if "-p" in cmd[:-1] else ""
@@ -311,14 +317,105 @@ def run_once(cmd: list[str], repo: Path, log: Path, minutes: float, run_id: str 
         fh.write(f"\n=== {clock():%Y-%m-%d %H:%M:%S} {shlex.join(cmd)}\n")
         fh.flush()
         try:
-            p = subprocess.run(cmd, cwd=repo, stdout=fh, stderr=subprocess.STDOUT, timeout=minutes * 60,
-                               env=telemetry.merge_env({**os.environ, "CPLAT_HEADLESS": "1", **session_env, **({"CPLAT_RUN_PARENT": run_id} if run_id else {})}, otel))
-            return p.returncode
-        except subprocess.TimeoutExpired:
-            fh.write(f"\n=== timed out after {minutes:.0f} min\n")
-            return 124
+            p = subprocess.Popen(cmd, cwd=repo, stdout=fh, stderr=subprocess.STDOUT,
+                                 env=telemetry.merge_env({**os.environ, "CPLAT_HEADLESS": "1", **session_env, **({"CPLAT_RUN_PARENT": run_id} if run_id else {})}, otel))
         except FileNotFoundError:
             raise PlatformError(f"`{cmd[0]}` is not installed or not on PATH", hint="install Claude Code, or set CPLAT_CLAUDE") from None
+        try:
+            return watch(p, minutes, guard)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.wait()
+            fh.write(f"\n=== timed out after {minutes:.0f} min\n")
+            return 124
+        except BaseException:
+            p.kill()
+            p.wait()
+            raise
+
+
+def watch(p: subprocess.Popen, minutes: float, guard: loopguard.Guard | None) -> int:
+    """Wait for the session; with a guard look at its transcript every GUARD_POLL s and end it on a trip (SIGTERM, SIGKILL after 10 s)."""
+    deadline = time.monotonic() + minutes * 60
+    if guard is not None:                 # a session that ends within a second has made no loop: no look, no poll interval
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            return p.wait(timeout=1)
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise subprocess.TimeoutExpired(p.args, minutes * 60)
+        if guard is None:
+            return p.wait(timeout=left)
+        if p.poll() is not None:
+            return p.returncode
+        if guard.observe(clock()):
+            p.terminate()
+            try:
+                p.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
+            return LOOPED
+        sleep(GUARD_POLL)
+
+
+def phase_of(repo: Path, command: str, unit: str | None = None) -> str:
+    """The phase named in a loop reason: the open ship run's, else the unit's, else the command's last word."""
+    st = unfinished(repo)
+    if st and st.get("phase"):
+        return str(st["phase"])
+    return unit or os.environ.get("CPLAT_UNIT") or command.rsplit(":", 1)[-1].strip("/") or "headless"
+
+
+def make_guard(ns: argparse.Namespace, repo: Path, sid: str, command: str, unit: str | None = None) -> loopguard.Guard:
+    calls, minutes = getattr(ns, "guard", None) or loopguard.DEFAULT
+    return loopguard.Guard(calls, minutes, repo, sid, lambda: phase_of(repo, command, unit))
+
+
+def escalate(repo: Path, reason: str, cause: str) -> None:
+    """Escalate the open ship run, else the units file."""
+    if unfinished(repo) is not None:
+        ship.escalate(repo, reason, cause)
+    else:
+        import units
+        units.escalate(repo, reason, cause)
+
+
+class Waits:
+    """Spec 202: before a session, wait while a detached wait of the checkout runs; no model call is made meanwhile."""
+
+    def __init__(self) -> None:
+        self.reported: set[str] = set()
+
+    def hold(self, repo: Path, state: dict) -> str | None:
+        """None when a session may start, else the result line of the run that stopped it."""
+        if running := waitdetach.alive(repo):
+            w = running[0]
+            try:
+                since = f"{dt.datetime.fromisoformat(w.started_at):%H:%M:%S}"
+            except ValueError:
+                since = w.started_at or "?"
+            print(f"waiting for {w.command} (pid {w.pid}, since {since}): no session starts until it ends", flush=True)
+        held = waitdetach.hold(repo, limit_min=WAIT_LIMIT_MIN, clock=clock, sleep=sleep)
+        if not held.done:
+            result = f"wait {held.command} still running after {WAIT_LIMIT_MIN} min"
+            escalate(repo, result, "environment")
+            state["cause"] = "environment"
+            return result
+        for e in waitdetach.ended(repo):
+            if e.id not in self.reported:
+                self.reported.add(e.id)
+                print(f"wait {e.command} ended: exit {e.code}" if e.result is not None and e.code is not None
+                      else f"wait {e.command} ended without a result", flush=True)
+        return None
+
+    @staticmethod
+    def looped(repo: Path, guard: loopguard.Guard, state: dict) -> str:
+        """A session the guard ended: escalate with cause platform; the reason is the run's result."""
+        reason = guard.observe(clock()) or "looping"
+        escalate(repo, reason, "platform")
+        state["cause"] = "platform"
+        return reason
 
 
 def main(argv: list[str]) -> int:
@@ -346,8 +443,11 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
                     help="unit mode: independent tasks run at once, at most N per batch (default 3; 1 runs one task per session; spec 159)")
     ap.add_argument("--budget", action="append", default=[], metavar="KEY=VALUE",
                     help="replace a limit of the run's budget: minutes, invocations, reruns, cost (a number or off; spec 102)")
+    ap.add_argument("--loop-guard", metavar="CALLS/MINUTES", default=None,
+                    help="end a session that makes CALLS model calls in MINUTES without progress, and escalate (default 10/5; spec 202)")
     ap.add_argument("--dry-run", action="store_true")
     ns = ap.parse_args(argv)
+    ns.guard = loopguard.parse(ns.loop_guard) if ns.loop_guard is not None else loopguard.DEFAULT   # before anything starts
     repo = Path(ns.repo).resolve()
     if not (repo / ".git").exists():
         raise PlatformError(f"{repo} is not a git repository")
@@ -448,7 +548,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
             esc = {"reason": state["result"], "cause": "decision"} if reason == "budget" else None
             if reason == "preflight" or state["result"].startswith("environment pause:"):
                 esc = {"reason": state["result"], "cause": "environment"}
-            if reason == "escalated" and state["result"].startswith("no progress"):   # AC-088.18, AC-126.7
+            if reason == "escalated" and state["result"].startswith(("no progress", "looping:", "wait ")):   # AC-088.18, AC-126.7, AC-202.3
                 esc = {"reason": state["result"], "cause": state.get("cause") or "decision"}
             if os.environ.get("CPLAT_DISPATCH_RESULT"):
                 tokens = run_tokens(rid)        # before runlog.finish removes the active record
@@ -473,7 +573,7 @@ def stop_of(result: str, code: int) -> tuple[str, str]:
         return "escalated", "escalated"
     if "budget exhausted:" in result:
         return "budget", "escalated"
-    if result.startswith("needs you") or result.startswith("no progress"):
+    if result.startswith(("needs you", "no progress", "looping:")) or (result.startswith("wait ") and "still running after" in result):
         return "escalated", "escalated"
     if result.startswith("stopped after") or "time budget" in result:
         return "out of runs", "failed"
@@ -495,6 +595,7 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
     last: tuple | None = None
     result = "finished"
     pauser = usagelimit.Pauser()
+    waits = Waits()
     while runs < max_runs:
         wait = seconds_left_in_window(window, clock())
         if wait:
@@ -507,6 +608,9 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         if stop_requested(repo):                        # spec 167: a pause stops the run before its next session
             state.update(result=PAUSED_RESULT, code=EXIT_STOPPED)
             return finish(repo, log, PAUSED_RESULT, EXIT_STOPPED)
+        if stopped := waits.hold(repo, state):          # spec 202: no session while a detached wait runs
+            state.update(result=stopped, code=EXIT_STOPPED)
+            return finish(repo, log, stopped, EXIT_STOPPED)
         begin = begin or clock()
         left = max_minutes - (clock() - begin).total_seconds() / 60
         if left <= 1:
@@ -535,20 +639,26 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         started = clock()
         open_before = unfinished(repo)
         key_before = progress_key(repo, open_before) if open_before else None
+        guard = make_guard(ns, repo, sid, command_of(prompt))
         try:
-            code = run_once(cmd + ["--session-id", sid], repo, log, left, rid, sid)
+            code = run_once(cmd + ["--session-id", sid], repo, log, left, rid, sid, guard=guard)
         finally:
             for k, v in saved.items():
                 if v is None:
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
+        waited = bool(waitdetach.alive(repo))           # spec 202: it ended while its wait runs: no limit, no stall
+        if code == LOOPED:
+            result = waits.looped(repo, guard, state)
+            state.update(result=result, code=EXIT_STOPPED)
+            return finish(repo, log, result, EXIT_STOPPED)
         st = unfinished(repo)
         ended = describe_end(repo, code) if st is None else ""
         message = last_message(log, before)
         # a silent session that changed something (or a silent exit 0 with no ship run open) did its work: no limit
         quiet_end = not message and (code == 0 and st is None or st is not None and progress_key(repo, st) != key_before)
-        hit = None if quiet_end or ended.startswith(("needs you", "shipped")) else \
+        hit = None if quiet_end or waited or ended.startswith(("needs you", "shipped")) else \
             usagelimit.detect(message, (clock() - started).total_seconds(), clock())
         if hit is not None:                             # spec 184: a pause is neither a run nor a stop without progress
             budget.count_invocation(rid, -1)            # also when the pause ends the run: a rerun must not carry it
@@ -568,6 +678,10 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
             result = ended
             break
         key = progress_key(repo, st)
+        if waited:                                      # spec 202: waiting is not standing still
+            last = None
+            print(f"run {runs} ended in phase {st['phase']} (exit {code}) while a wait runs; resuming", flush=True)
+            continue
         if key == last:
             result = f"no progress: two runs in a row ended in phase {st['phase']} with nothing changed"
             msg = last_message(log, before)

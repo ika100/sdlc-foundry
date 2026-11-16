@@ -142,6 +142,7 @@ def _status(repo: Path, as_json: bool) -> int:
 
 
 def _wait(repo: Path, timeout: float) -> int:
+    dispatch_policy.load(repo)
     slug = ds.slug_of(repo)
 
     def body() -> tuple[int, str]:
@@ -154,12 +155,14 @@ def _wait(repo: Path, timeout: float) -> int:
 
 
 def _report(repo: Path, since: int, as_json: bool) -> int:
+    dispatch_policy.load(repo)
     doc = dispatch_view.report_doc(ds.slug_of(repo), since)
     _json(doc) if as_json else _out(dispatch_view.render_report(doc))
     return 0
 
 
 def _inbox(repo: Path, as_json: bool) -> int:
+    dispatch_policy.load(repo)
     doc = needsmod.collect_repo(repo)
     doc = {**doc, "items": [i for i in doc["items"] if i.get("kind") in INBOX_KINDS]}
     _json(doc) if as_json else _out(needsmod.render(doc))
@@ -169,9 +172,10 @@ def _inbox(repo: Path, as_json: bool) -> int:
 # ---------------- steering ----------------
 
 def _pause(repo: Path, drain: bool) -> int:
+    dispatch_policy.load(repo)
     mode = ds.pause(ds.slug_of(repo), drain)
     _out("draining: running units finish, nothing new starts" if mode == "drain"
-         else "paused: nothing new starts; running units stop at their next checkpoint")
+         else "paused: nothing new starts; running units stop at their next stop")
     return 0
 
 
@@ -190,12 +194,14 @@ def _resume(repo: Path, item: str | None) -> int:
 
 
 def _slots(repo: Path, n: int) -> int:
+    dispatch_policy.load(repo)
     ds.set_slots(ds.slug_of(repo), n)
     _out(f"slots: {n}")
     return 0
 
 
 def _prioritize(repo: Path, item: str) -> int:
+    dispatch_policy.load(repo)
     slug = ds.slug_of(repo)
     found = dispatch_items.resolve(repo, slug, item)
     ds.pin(slug, found.key)
@@ -204,6 +210,7 @@ def _prioritize(repo: Path, item: str) -> int:
 
 
 def _skip(repo: Path, item: str, reason: str) -> int:
+    dispatch_policy.load(repo)
     slug = ds.slug_of(repo)
     found = dispatch_items.resolve(repo, slug, item)
     ds.skip(slug, found.key, reason)

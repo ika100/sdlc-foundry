@@ -136,7 +136,9 @@ def headless_cmd(unit: dict, policy) -> list[str]:
     `cplat headless` (the seam of the fake headless)."""
     exe = os.environ.get("CPLAT_DISPATCH_HEADLESS")
     cmd = [exe] if exe else [sys.executable, str(CPLAT), "headless"]
-    cmd += ["--repo", str(unit["worktree"]), *dispatch_policy.budget_args(policy)]
+    guard = policy.values["guard"]
+    cmd += ["--repo", str(unit["worktree"]), *dispatch_policy.budget_args(policy),
+            "--loop-guard", f"{guard['loop_calls']}/{guard['loop_minutes']}"]
     if unit["kind"] == "ship":
         cmd += ["--parallel", "3" if unit.get("mode") == "team" else "1", f"/component:ship {unit['spec']}"]
     else:
