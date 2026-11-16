@@ -1,5 +1,6 @@
 """The post-merge part of `cplat platform release` (spec 129): the upgrade e2e on the merge commit (or on the release PR's head
-when it has the merge commit's tree, #400), the gate, the tag stop, the tag, the GitHub release and the release guard. Every step is entered from the state detected by platrelease_state."""
+when it has the merge commit's tree, #400), the gate, the tag stop, the tag, the GitHub release and the release guard. Every step is entered from the state detected by platrelease_state.
+The release hold on `main` (spec 198, release_hold) is kept 2 hours at the tag stop and cleared right after the tag push."""
 from __future__ import annotations
 
 import json
@@ -8,8 +9,10 @@ from pathlib import Path
 from typing import Callable
 
 import core
+import dispatch_state
 import platrelease_changelog as changelog
 import platrelease_state as st
+import release_hold
 import ship
 
 APPEAR_WINDOW = 600     # seconds a workflow run may take to show up after its push
@@ -103,9 +106,18 @@ def _notes(repo: Path, sha: str, version: str, slug: str) -> str:
     return changelog.absolute_links(body, slug, f"v{version}")
 
 
-def _tag_stop(tag: str, sha: str, notes: str) -> int:
+def stop_line(slug: str, kept: release_hold.Hold | None) -> str:
+    """The `release hold:` line of a stop block (spec 198), empty when this run holds nothing."""
+    if kept is None:
+        return ""
+    return (f"  release hold: merges into {slug} wait until {release_hold.hhmm(kept.expires)} "
+            "(lift it now: cplat platform hold --clear)\n")
+
+
+def _tag_stop(tag: str, sha: str, notes: str, hold_slug: str) -> int:
+    kept = release_hold.stop(hold_slug, "tag")
     print(f"CONFIRM: tag\n  tag: {tag}\n  merge commit: {sha}\n  release notes:\n--- release notes ---\n{notes}\n--- end ---\n"
-          "  continue: cplat platform release --confirm tag")
+          + stop_line(hold_slug, kept) + "  continue: cplat platform release --confirm tag")
     return STOP_EXIT
 
 
@@ -167,8 +179,10 @@ def continue_from(repo: Path, state: st.State, version: str, sha: str | None, o)
         _upgrade_e2e(repo, slug, sha, o)
         _gate(repo, sha)
         if o.confirm != "tag":
-            return _tag_stop(tag, sha, _notes(repo, sha, version, slug))
+            return _tag_stop(tag, sha, _notes(repo, sha, version, slug), dispatch_state.slug_of(repo))
         _tag(repo, tag, sha)
+        if release_hold.release(dispatch_state.slug_of(repo)):    # spec 198: main may move once the tag is pushed
+            print("release hold cleared")
     if phase in (st.MERGED, st.TAGGED):
         assert sha
         release_url = _release(repo, slug, tag, version, sha)
