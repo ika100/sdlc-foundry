@@ -24,6 +24,7 @@ tasks:
     covers: [AC-198.8]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: "`cplat dispatch status` shows the release hold"
     files: [scripts/cplat/dispatch_view.py]
