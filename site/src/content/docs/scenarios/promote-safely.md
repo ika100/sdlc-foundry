@@ -34,7 +34,8 @@ A spec can say where its behaviour may run: `environments: [dev]` in its front m
 ```text
 $ /instance:promote shop-api --to staging
 ERROR: environment limit: 042-anonymous-use allows dev, not staging (Anonymous use)
-  fix: widen the spec with /system:spec --amend 042 once the work that lifts the limit has shipped, or promote anyway with --accept-environment-limit "<reason>" (a person's decision)
+  fix: widen the spec with /system:spec --amend 042 once the work that lifts the limit has shipped, or promote anyway
+       with /instance:promote --accept-environment-limit "<reason>" (a person's decision)
 ```
 
 With `--dry-run` the preview lists one `REFUSED:` line per limiting spec and the `fix:` line, and exits 1. Automatic staging promotion does not fail: it skips and says `not promoted: environment limit 042-anonymous-use allows dev`; the next deploy promotes once the spec is widened.
