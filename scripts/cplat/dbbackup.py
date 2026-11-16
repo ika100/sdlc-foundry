@@ -103,7 +103,7 @@ def main(argv: list[str]) -> int:
     else:
         result = "failed"
         if phase == "failed":
-            reason = status.get("error") or phase
+            reason = (status.get("error") or phase) + _archiving_hint(kns, active, ns.context)
         else:
             reason = f"not finished after 30 minutes (Backup {name} is {phase})"
         text = f"backup failed: {db}/{env}: {reason}"
@@ -112,3 +112,18 @@ def main(argv: list[str]) -> int:
     else:
         print(text)
     return 0 if result == "completed" else 1
+
+
+def _archiving_hint(kns: str, cluster: str, context: str | None) -> str:
+    """J21-3: CloudNativePG reports a failed backup as `rpc error: … exit status 1`; when the cluster's WAL archiving fails
+    too, the bucket is the cause (journey 21: its pods could not pull their image), so the reason names it."""
+    try:
+        conds = (backupstate.get_json(["clusters.postgresql.cnpg.io", cluster, "-n", kns], context).get("status") or {}).get("conditions") or []
+    except backupstate.ReadError:
+        return ""
+    arch = next((c for c in conds if c.get("type") == "ContinuousArchiving"), None)
+    if not arch or arch.get("status") == "True":
+        return ""
+    return (f" (WAL archiving to the bucket fails too: {arch.get('message') or 'no message'}; the bucket is likely not ready, "
+            f"see kubectl get pods -n {kns})")
+

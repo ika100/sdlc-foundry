@@ -34,6 +34,9 @@ def open_store(slug: str):   # tests replace this
     return runs.open_store(slug)
 
 
+UNCHECKED = "unchecked: "   # prefix of a warning whose evidence could not be read (J21-2)
+
+
 def today() -> date:         # tests replace this
     return dt.datetime.now(dt.timezone.utc).date()
 
@@ -58,7 +61,9 @@ class Evidence:
     def lines(self) -> list[str]:
         short = lambda s: (s or "unknown")[:7]   # noqa: E731
         out = []
-        if self.warning:
+        if self.warning and self.warning.startswith(UNCHECKED):
+            out.append(f"WARNING: the staging smoke of {self.service} {self.version} could not be checked: {self.warning[len(UNCHECKED):]}")
+        elif self.warning:
             out.append(f"WARNING: {self.version} of {self.service} has no green staging smoke: {self.warning}")
         out.append(f"evidence for {self.service} {self.version} (commit {short(self.commit)}):")
         if self.note:
@@ -152,24 +157,28 @@ def _stamp(at: str | None) -> str | None:
 def _entry(sec: dict, path: str, store: str, fallback: str | None) -> dict:
     at = sec.get("at") or fallback
     return {"outcome": sec.get("outcome"), "text": _word(sec), "at": at, "at_text": _stamp(at), "reason": sec.get("reason"),
-            "base_url": sec.get("base_url"), "digest": sec.get("digest"), "path": path, "rank": "", "link": f"https://github.com/{store}/blob/HEAD/{path}"}
+            "base_url": sec.get("base_url"), "digest": sec.get("digest"), "path": path, "rank": "",
+            "link": f"https://github.com/{store}/blob/HEAD/{path}" if path else "on this machine, not uploaded yet"}
 
 
 def _records(svc_repo: str, shas: set[str], days: int) -> tuple[dict | None, dict | None, str | None]:
     """(newest dev entry, newest staging entry, why not) from the last 30 days of the run store: the smoke sections of
-    ship records and of `instance verify` records (#422)."""
+    ship records and of `instance verify` records (#422). Records still in this machine's buffer count too (J21-1: a
+    network drop left the staging smoke unuploaded, and the prod check missed it); `why` names an unreadable store."""
     store = runs.configured_repo()
     if not store:
         return None, None, "no run store configured: set CPLAT_RUNS_REPO"
+    why = None
     try:
         days = [today() - dt.timedelta(days=n) for n in range(days)]
         files = runlist.read_days(open_store(store), store, days)
     except Exception as e:  # noqa: BLE001  (an unreadable store is "no record")
-        return None, None, f"run store {store} not readable: {e}"
+        files, why = [], f"run store {store} not readable: {e}"
+    found = [(path, text) for path, text in files] + [(None, rec) for rec in runs._safe_buffer() if not rec.get("followup")]
     best: dict[str, dict] = {}
-    for path, text in files:
+    for path, text in found:
         try:
-            rec = json.loads(text)
+            rec = json.loads(text) if isinstance(text, str) else text
             sec = rec["smoke"]
             if rec.get("kind") not in ("ship", "verify") or rec.get("repo") != svc_repo or not isinstance(sec, dict):
                 continue
@@ -185,7 +194,7 @@ def _records(svc_repo: str, shas: set[str], days: int) -> tuple[dict | None, dic
                         best[env] = e
         except (ValueError, KeyError, TypeError):
             continue
-    return best.get("dev"), best.get("staging"), None
+    return best.get("dev"), best.get("staging"), why
 
 
 def _issues(repo: str) -> tuple[list[dict], str | None]:
@@ -241,4 +250,6 @@ def _warning(ev: Evidence, why: str | None) -> str | None:
         return "staging smoke red"
     if o == "not-run":
         return f"staging smoke not run: {ev.staging.get('reason')}"
+    if why and "not readable" in why:   # J21-2: a store that could not be read says nothing about the smoke
+        return UNCHECKED + why
     return "no staging smoke record"

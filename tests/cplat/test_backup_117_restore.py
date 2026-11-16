@@ -769,3 +769,12 @@ def test_prod_restore_runs_with_confirm_and_the_list_needs_none_ac_117_14(erepo,
     assert rc == 0 and "backups of shop-prod (newest first):" in out and kube.writes() == []
     rc, out = srestore(erepo, capsys, "--backup", "p1", "--confirm", "prod", env="prod")
     assert rc == 0 and "restored p1 into shop-prod: 4 items" in out
+
+
+def test_a_failed_backup_while_archiving_fails_names_the_bucket_j21_3(repo, kube, capsys, clock):
+    """J21-3: the bucket's pods were not running, so the backup failed with CloudNativePG's bare rpc error; the reason now
+    says that WAL archiving to the bucket fails too."""
+    window(kube, archiving="failing", error="Can't connect to cloud provider")
+    kube.auto["cnpg.backup"] = {"phase": "failed", "error": "rpc error: code = Unknown desc = exit status 1"}
+    rc, out = backup(repo, capsys)
+    assert rc == 1 and "exit status 1 (WAL archiving to the bucket fails too: Can't connect to cloud provider" in out
