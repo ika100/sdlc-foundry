@@ -31,6 +31,7 @@ tasks:
     covers: [AC-198.9]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: "`cplat platform release` holds main from its first check until the tag, an error or a stop"
     files: [scripts/cplat/platrelease.py, scripts/cplat/platrelease_publish.py, docs/adr/089-every-merge-into-main-holds-the-repo-merge-lock.md, CONTRIBUTING.md, docs/changelog.d/198-release-holds-main.added.md]
