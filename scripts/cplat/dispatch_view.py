@@ -189,7 +189,7 @@ def render_status(doc: dict) -> str:
     if doc["paused"]:
         head += f"  [{doc['paused']}]"
     hold = doc.get("release_hold")
-    lines = [head, *([_hold_line(hold)] if hold else []), f"slots:{len(doc['slots']['units']) + len(doc['slots']['manual'])} of {doc['slots']['total']} in use"]
+    lines = [head, *([_hold_line(hold)] if hold else []), f"slots: {len(doc['slots']['units']) + len(doc['slots']['manual'])} of {doc['slots']['total']} in use"]
     for u in doc["slots"]["units"]:
         pr = f"  {u['pr']}" if u.get("pr") else ""
         phase = u["phase"]

@@ -38,6 +38,7 @@ tasks:
     covers: [AC-198.1, AC-198.4, AC-198.5, AC-198.6, AC-198.7]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
 ---
 
 # Plan — 198 A platform release holds main through the merge lock
