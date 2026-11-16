@@ -2,7 +2,7 @@
 
 The nouns the platform is built around: what a system is made of, where it runs, and how it changes. The model takes [Backstage's system model](https://backstage.io/docs/features/software-catalog/system-model) for the first part and adds environments and the delivery process. It is a model only: the platform does not use or need Backstage. Decisions and the migration path are in [ADR-053](adr/053-domain-model.md).
 
-**Status:** 5.0 is current. `system.yaml` and the noun-based commands described below are what the platform runs ([ADR-054](adr/054-five-zero-interface-and-proved-migration.md)); `cplat model show` prints a system in these nouns (JSON `schema: 2`). A repo from 4.x moves over with `cplat platform update --migrate` ([Migrating from 4.x to 5.0](ADOPTING.md#migrating-from-4x-to-50)). What the 4.7 names were and where each feature moved is part of the migration guide ([What moved where](ADOPTING.md#what-moved-where)).
+**Status:** the model is current since 5.0 and holds for every 5.x release. `system.yaml` and the noun-based commands described below are what the platform runs ([ADR-054](adr/054-five-zero-interface-and-proved-migration.md)); `cplat model show` prints a system in these nouns (JSON `schema: 2`). A repo from 4.x moves over with `cplat platform update --migrate` ([Migrating from 4.x to 5.0](ADOPTING.md#migrating-from-4x-to-50)). What the 4.7 names were and where each feature moved is part of the migration guide ([What moved where](ADOPTING.md#what-moved-where)).
 
 ## Three questions
 
@@ -38,6 +38,7 @@ The documented SDLC (specs per [ADR-026](adr/026-feature-specs.md), [unattended 
 
 - Specs have the model's two levels. A **system spec** (`/system:spec`) is split by a **Plan** into **component specs** (`/component:spec`), and the plan is where an API contract is set.
 - A **Criterion** (`AC-<NNN>.<n>`) is traced by a **Test** in the component's repo and judged in the **Verification**. A `(smoke)` criterion is checked on an Instance in an Environment, not in a repo.
+- A Run starts when you run `/component:ship` or `/component:fix`, or when the **dispatcher** (`cplat dispatch`) picks an approved spec or a triaged issue from the backlog and starts its run in a free slot ([dispatcher](dispatch.md)).
 - A **Run** ships a spec: it opens a **Pull request**, CI builds an **Image** (`sha-<40>` and its digest), the image is pinned in dev and promoted as an Instance, and a **Release** tag goes to prod with the digest staging verified.
 - Every feedback loop ends as an **Issue** about a model object: a firing alert or a smoke failure is about an Instance; a platform failure or a retro proposal is about the platform.
 
@@ -47,7 +48,7 @@ Following the arrows from Issue to Instance is the evidence chain: every require
 
 ![Lifecycles of a spec, a run and a version](img/model-lifecycles.svg)
 
-Thick borders are where you decide: approving a spec, an escalation, promoting to prod. Everything else runs unattended. The run's `deploy` phase takes a version from "dev pinned" to "dev verified"; `staging` covers the automatic staging promotion. A smoke that did not run is `NOT VERIFIED` and promotes nothing.
+Thick borders are where you decide: approving a spec, an escalation, promoting to prod. Everything else runs unattended. The run's `deploy` phase takes a version from "dev pinned" to "dev verified" and then, where the environment allows it, promotes it to staging and smokes it there; staging is a step of `deploy`, not a phase of its own. A smoke that did not run is `NOT VERIFIED` and promotes nothing.
 
 ## The nouns
 
@@ -267,13 +268,13 @@ Every command names the thing it acts on; the same verbs work for a system and f
 
 | Noun | Verbs |
 |---|---|
-| `system` | `new` · `set` · `status` · `spec` · `plan` · `ship` · `restore` |
-| `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
+| `system` | `new` · `set` · `status` · `explore` · `spec` · `plan` · `ship` · `restore` · `autonomy` |
+| `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `explore` · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
 | `api` | `list` |
-| `resource` | `add` · `remove` · `backup` · `restore` · `upgrade` |
+| `resource` | `add` · `remove` · `backup` · `restore` · `query` · `upgrade` |
 | `cluster` | `new` · `add` · `remove` (`/cluster:new`, `/cluster:add`, `/cluster:remove`) |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |
-| `platform` | `doctor` · `update` · `fleet` · `runs` · `retro` · `ui` · `release` |
+| `platform` | `doctor` · `next` · `update` · `fleet` · `runs` · `retro` · `ui` · `release` |
 
 The contract check of an API is not built yet.

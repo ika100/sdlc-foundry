@@ -187,6 +187,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [199-the-journey-15-seams](specs/199-the-journey-15-seams/spec.md) — The journey 15 seams | P1 | done | 5 |  |
 | [200-a-component-ship-runs-in-its-own-session](specs/200-a-component-ship-runs-in-its-own-session/spec.md) — A component ship runs in its own session | P1 | done | 7 |  |
 | [202-a-waiting-session-makes-no-model-calls](specs/202-a-waiting-session-makes-no-model-calls/spec.md) — A waiting session makes no model calls | P1 | done | 7 | #750 |
+| [203-the-journey-19-seams](specs/203-the-journey-19-seams/spec.md) — The journey 19 seams | P1 | done | 6 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

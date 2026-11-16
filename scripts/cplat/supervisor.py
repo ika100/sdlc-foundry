@@ -86,6 +86,25 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
         units.prepare(repo, kind, spec)
         units.resume(repo)
         while True:
+            change = units.reschedule(repo, kind, spec)
+            if change and "error" in change:
+                reason = f"plan.md does not check after a change: {change['error']}"
+                try:
+                    st = ship.load_state(repo)
+                except PlatformError:
+                    st = None
+                if command.startswith("/component:ship") and st is not None:
+                    ship.escalate(repo, reason, "code")
+                else:
+                    units.escalate(repo, reason, "code")
+                state["cause"] = "code"
+                return end(f"needs you: {reason}", h.EXIT_STOPPED)
+            if change:
+                line = f"plan changed: units {', '.join(change['old'])} -> {', '.join(change['new'])}"
+                print(line, flush=True)
+                with (log.parent / "summary.log").open("a") as fh:
+                    fh.write(f"{h.clock():%H:%M} HEADLESS {repo.name}: {spec} {line}\n")
+                budget.rescale(rid, repo, [spec])
             data = units._read(repo) or {"units": []}
             unit = units.next_open(data)
             if unit is None:

@@ -4,7 +4,7 @@
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat component ship start <spec> [--no-merge] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
+  cplat component ship start <spec> [--no-merge] [--detach] [--context C] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
                                          (--system-dir: /system:ship only, links the run to a system ship, spec 097)
   cplat component ship status [--json]             the state of the current run
   cplat component ship unit [--json]               in a unit session ($CPLAT_UNIT): is the unit at its checkpoint (spec 131)
@@ -1681,7 +1681,10 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
         return _done(repo, st, ["not deployable (platform): nothing to deploy", "Smoke (dev): not deployable",
                                 "Promotion (staging): not deployable"])
     context = context or (st.get("product") or {}).get("context")
-    if not context:                            # headless coordinators rarely pass --context: take the configured one
+    if not context and (recorded := (st.get("context") or {}).get("name")):
+        context = recorded
+        say(f"kube context: {context} (recorded at the hand-off)")
+    if not context:                          # headless coordinators rarely pass --context: take the configured one
         import settings
         context, source = settings.kube_context(repo)
         if context:
@@ -2148,6 +2151,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--detach", action="store_true", help="hand the run to its own `cplat headless` process (spec 200)")
     p.add_argument("--full", action="store_true", help="pass --full to the headless ship (with --detach; no effect without)")
     p.add_argument("--answer", default=None, help="with --detach: the answer the headless session gets to the escalated question")
+    p.add_argument("--context", default=None, help="with --detach: the kube context the headless run's deploy uses (spec 203)")
     p.add_argument("--system-dir", default=os.environ.get("CPLAT_SYSTEM_DIR") or None,
                    help="the gitops-app clone of the system ship this run belongs to (/system:ship only, spec 097; "
                         "default $CPLAT_SYSTEM_DIR, which the system ship sets for the repo's session, spec 155)")
@@ -2211,6 +2215,9 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "start":
         if ns.answer is not None and not ns.detach:
             print("ERROR: --answer needs --detach", file=sys.stderr)
+            return 2
+        if ns.context is not None and not ns.detach:
+            print("ERROR: --context needs --detach", file=sys.stderr)
             return 2
         if ns.detach:
             import ship_handoff
