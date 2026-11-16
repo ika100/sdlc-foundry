@@ -29,7 +29,7 @@ def spy_checks(rw, monkeypatch, record):
     real = rw.run_check
 
     def run_check(repo, cmd):
-        record.append({"hold": read_hold(), "said": list(rw.said), "t": rw.clock198.t})
+        record.append({"hold": read_hold(), "said": list(rw.said), "t": rw.clock198.t, "cmd": list(cmd)})
         return real(repo, cmd)
     import platrelease_state
     monkeypatch.setattr(platrelease_state, "run_check", run_check)
@@ -53,6 +53,7 @@ def test_the_release_sets_its_hold_before_its_first_check_ac_198_1(rw, monkeypat
     spy_checks(rw, monkeypatch, seen)
     r = rw.run()
     assert r.rc == 3 and "CONFIRM: merge" in r.out, r.text
+    seen = [s for s in seen if "needs-major" not in s["cmd"]]       # needs-major finds the version: it runs before the hold
     assert seen, "the release ran no check"
     first = seen[0]
     assert first["hold"]["version"] == "5.5.0" and first["hold"]["pid"] == os.getpid() and first["hold"]["state"] == "running"
@@ -82,7 +83,8 @@ def test_the_release_first_waits_for_a_merge_inside_the_lock_ac_198_1(rw, monkey
     assert r.rc == 3, r.text
     waiting = "waiting for the merge of pr 10 to end before the release"
     assert waiting in r.text and r.text.index(waiting) < r.text.index(SET)
-    assert seen[0]["t"] >= 20                                         # no check before that merge ended
+    seen = [s for s in seen if "needs-major" not in s["cmd"]]       # needs-major finds the version: it runs before the hold
+    assert seen and seen[0]["t"] >= 20                                        # no check before that merge ended
 
 
 # ---------------- AC-198.4 ----------------
@@ -195,7 +197,7 @@ def test_a_second_release_while_the_first_runs_stops_with_an_error_and_changes_n
     assert r.rc == 1, r.text
     assert "5.4.9" in r.err and str(OTHER_PID) in r.err and "one release at a time" in r.err
     assert read_hold() == before and rw.snapshot() == snap
-    assert rw.check_calls == []
+    assert [c for _, c in rw.check_calls if "needs-major" not in c] == []     # needs-major is version detection, before the hold
 
 
 def test_a_release_over_a_hold_whose_process_was_killed_drops_it_and_goes_on_ac_198_7(rw):  # AC-198.7
