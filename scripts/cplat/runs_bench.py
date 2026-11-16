@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import model
 import runs
 import runs_report
 import runs_usage
@@ -132,7 +133,7 @@ def environments_kept(keep: dict, clone: Path) -> str | None:
         except spec.BrokenSpec as e:
             return f"{spec_id} is not readable: {e.problem}"[:200]
         envs = meta.get("environments")
-        if envs is not None and not (isinstance(envs, list) and {"dev", "staging", "prod"} <= set(envs)):
+        if envs is not None and not (isinstance(envs, list) and set(model.ENVIRONMENTS) <= set(envs)):
             listed = ", ".join(str(e) for e in envs) if isinstance(envs, list) else str(envs)
             return f"{spec_id} limits environments: {listed}"
         for bullet in _suggestions(body):
