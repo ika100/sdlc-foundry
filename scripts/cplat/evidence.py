@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 import registry
+import runlist
 import runs
 from core import PlatformError, run
 
@@ -162,7 +163,7 @@ def _records(svc_repo: str, shas: set[str], days: int) -> tuple[dict | None, dic
         return None, None, "no run store configured: set CPLAT_RUNS_REPO"
     try:
         days = [today() - dt.timedelta(days=n) for n in range(days)]
-        files = open_store(store).read(days)
+        files = runlist.read_days(open_store(store), store, days)
     except Exception as e:  # noqa: BLE001  (an unreadable store is "no record")
         return None, None, f"run store {store} not readable: {e}"
     best: dict[str, dict] = {}

@@ -88,7 +88,7 @@
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "description": "The cplat launcher every sdlc-foundry command calls, the quality and security agents and the session hooks. The other plugins depend on it and install it with them.",
       "category": "agents",
       "tags": [
@@ -114,7 +114,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.21.0",
+      "version": "1.22.0",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [

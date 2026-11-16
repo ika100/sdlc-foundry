@@ -6,6 +6,28 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.23.3] - 2026-11-16
+
+### Fixed
+
+**A session that waits for a `cplat` command no longer loops on model calls (#750).** The Stop hook blocked the stop of a session while its wait ran, and every block made the session answer with another model call; a 60 s wait could cost dozens of calls. Now the session may stop and the hook counts nothing. Under `cplat headless` the wait runs detached, no next session starts until it ends (polling local files, no model call), and the next session is told the result at its start. A loop guard stops a session that makes `calls` model calls without progress in `minutes` minutes and escalates with `looping: ...`: `--loop-guard <calls>/<minutes>` (default `10/5`), `guard.loop_calls` (3 to 100) and `guard.loop_minutes` (1 to 60) in `.platform/dispatch.yml`. `cplat dispatch pause` now reaches running units at their next stop, `status` shows `paused_at` and the units escalated today, and `cplat needs` names the cause of an escalation ([ADR-115](adr/115-a-waiting-session-stops-and-its-wait-outlives-it.md)). Update the plugins (`/plugin marketplace update`).
+
+**`cplat next` reads all its sources within its 20 s limit again (#782).** In journey 20 its run records and GitHub sources timed out on every call, so the hand-over guide never showed the next step. The run store now asks its days in parallel, and one `next`, `status` or `needs` call reads each day once for all its readers. Only the system's own runs get rows and PR lookups, and the GitHub sources are asked at once: on the journey's system `next` takes about 10 s with every source read, where before it hit 20 s with two sources missing. Releases show again (`gh release list` has no `url` field). Update the plugins (`/plugin marketplace update`).
+
+**`cplat pr wait --merge` no longer merges before a pull request's CI run exists (#787).** GitHub creates the `pull_request` workflow runs a few seconds after a push, while CodeQL's checks may already have passed. A wait that polled in that gap saw only green CodeQL checks and merged; two platform PRs reached `main` with their CI red. Now, in a repo whose workflows run on pull requests, a head is green only once such a run exists on it, and if none appears within 5 minutes the wait ends with an error instead of a merge.
+
+## [5.23.2] - 2026-11-15
+
+### Fixed
+
+**The ship hand-off passes the kube context, so the dev smoke runs (J19-1, spec 203).** `cplat component ship start <spec> --detach` started the headless run without a kube context when the interactive session had none in `CPLAT_KUBE_CONTEXT`, so its `ship deploy` recorded the dev smoke as "not run". The hand-off now resolves one context (`--context C`, the run's recorded one, `CPLAT_KUBE_CONTEXT`, `KUBE_CONTEXT`, `kube_context:` in the settings, the local `k3d-<system>-local` cluster), refuses a `--context` the kubeconfig does not have, records it in the ship state, gives it to the process and prints `context: <name> (<where it came from>)` after the `headless:` line; a restart keeps it. Without any context it prints `context: none (dev is not checked; pass --context <kube-context>)`. Update the plugins (`/plugin marketplace update`).
+
+**A changed committed plan reschedules the units before the next unit (J19-2, spec 203).** A plan committed after the units were scheduled left the run building the old units. The ship run now reschedules the units from the changed plan before it starts the next unit.
+
+**`cplat next` stops waiting on a slow source (J19-3, spec 203).** One slow or hanging source held `cplat next` indefinitely. Each source now gets 20 seconds and the whole command 60 seconds, and no source can read input.
+
+**A resumed dispatcher unit is finished only when its own pull request merged (#767).** Since #755 a paused ship unit was marked done on resume when any pull request of its branch had merged, so a spec whose approval PR used the same branch was ended mid-build and its worktree removed; a merged pull request now counts only when it holds the unit's current commit.
+
 ## [5.23.1] - 2026-11-15
 
 ### Fixed

@@ -57,6 +57,7 @@ Plumbing keeps its name:
   cplat dispatch start|plan|status|wait|report|inbox|pause|resume|slots|prioritize|skip ...   run the backlog in slots (spec 167)
   cplat quiet [--raw] <script> | test-fast [--repeat N] -- <test args>  run it with output in a log: one line on success, the failure summary and log path on failure (--raw: the tail)
   cplat validate plan|run|final [--base REF] [--full] [--risk low|medium|high]   change-aware validation of the inner loop
+  cplat waits handover [--repo-dir DIR]   the result of the waits a headless session left running (spec 202)
   cplat headless <prompt> [--max-runs N] [--max-minutes M] [--quiet HH:MM-HH:MM]   unattended claude -p runs that resume
   cplat deps findings|patch|report ...   patch fixable dependency findings of a red security gate
   cplat alerts poll [--dry-run] [--app APP]   firing alerts become issues
@@ -74,6 +75,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import core  # noqa: E402
 import localport  # noqa: E402
+import waitdetach  # noqa: E402
 
 # noun -> verb -> (module, argv prefix put before the remaining args)
 NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
@@ -97,7 +99,7 @@ PLUMBING = {
     "shape": "shapecmd", "feedback": "feedback", "model": "modelcmd", "spec": "spec", "pr": "pr", "quiet": "quiet", "validate": "validate",
     "headless": "headless", "deps": "deps", "alerts": "alerts", "budget": "budget", "adopt": "adopt",
     "needs": "needs", "ui": "ui", "dispatch": "dispatch", "adr": "adrcmd", "plan": "plancmd",
-    "explore": "explore", "next": "nextcmd",
+    "explore": "explore", "next": "nextcmd", "waits": "waitdetach",
 }
 
 # 4.x top-level name -> its 5.0 form (exit 2, the module is not imported)
@@ -161,6 +163,24 @@ def _resolve(argv: list[str]) -> tuple[str, list[str], str] | int:
 
 
 def main(argv: list[str]) -> int:
+    """Under `cplat headless` a wait command runs detached (spec 202); the detached child records its result at its end."""
+    if waitdetach.wanted(argv):
+        return waitdetach.front(argv)
+    child = os.environ.get("CPLAT_WAIT_CHILD")
+    if not child:
+        return _main(argv)
+    code = 70
+    try:
+        code = _main(argv)
+        return code
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+        raise
+    finally:
+        waitdetach.finish_child(child, code, argv)
+
+
+def _main(argv: list[str]) -> int:
     localport.reset()       # spec 199: one invocation asks docker at most once per cluster
     for stream in (sys.stdout, sys.stderr):      # #335: a file or a pipe gets each line at once, not all of it at exit
         with contextlib.suppress(AttributeError, ValueError):
@@ -169,7 +189,7 @@ def main(argv: list[str]) -> int:
     try:
         resolved = _resolve(argv)
         if isinstance(resolved, int):
-            return resolved
+            return int(resolved)          # a plain exit code: CodeQL otherwise follows the tuple branch into the wait record
         modname, rest, label = resolved
         module = __import__(modname)
         return module.main(rest)

@@ -82,7 +82,8 @@ def test_plan_without_a_file_prints_the_marked_defaults_and_the_unset_budget_wit
     assert pol["file"] is None
     assert pol["values"] == {"slots": 1, "budget": {"tokens_per_day": None, "per_unit": {}}, "sources": ["issues"],
                              "ready": {"labels": [], "exclude_labels": []}, "priority": ["label:bug", "label:p1", "spec-order", "oldest"],
-                             "gates": {"approve_specs": "human", "merge": "green-ci"}, "serialize": ["merge"]}
+                             "gates": {"approve_specs": "human", "merge": "green-ci"}, "serialize": ["merge"],
+                             "guard": {"loop_calls": 10, "loop_minutes": 5}}
     assert "slots" in pol["defaulted"] and pol["unset"] == ["budget.tokens_per_day"]
     hint = pol["usage_hint"]
     today = world.now.date()

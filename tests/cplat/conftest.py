@@ -196,3 +196,12 @@ def new_service(shared_renders):
         return shared_renders.copy(key, build, dest_root / name)
 
     return make
+
+
+@pytest.fixture(autouse=True)
+def short_guard_poll(monkeypatch):
+    """Spec 202: the loop guard looks at a running fake session every 10 s (`headless.GUARD_POLL`); under load a fake session
+    outlives the guard's first second, so a test that does not fake the clock polls without sleeping 10 s. The tests of
+    the guard replace `headless.sleep` with the fake clock."""
+    import headless
+    monkeypatch.setattr(headless, "sleep", lambda seconds: None)

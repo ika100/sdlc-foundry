@@ -103,16 +103,11 @@ def gate(repo: Path, st: dict, hook_input: dict) -> dict | None:
     progress = not prev or any(prev.get(k) != v for k, v in mark.items())
     waiting = waits.live(repo)
     h = st["headless"]
-    n = 0 if progress else int(prev.get("no_progress", 0))
-    if not waiting:
-        n = 0 if progress else n + 1
+    if waiting:                                    # AC-202.1: the stop is let through; the file's counter stays untouched
+        return stopgate.waiting_message(f"ship {st['spec']}", waiting, f"in phase {st['phase']}")
+    n = 0 if progress else int(prev.get("no_progress", 0)) + 1
     data = {"spec": st["spec"], "by": data.get("by"), "gate": {**mark, "no_progress": n}}
     _file(repo).write_text(json.dumps(data, indent=2) + "\n")
-    if waiting:
-        return {"decision": "block", "reason": "\n".join([
-            f"waiting: {', '.join(waiting)}; stops without progress: {n}/{stopgate.NO_PROGRESS_LIMIT}",
-            f"The ship run of {st['spec']} runs in its own headless session (pid {h.get('pid')}, log {h.get('log')}), "
-            f"phase {st['phase']}; the wait above is still running."])}
     if n >= stopgate.NO_PROGRESS_LIMIT:
         return {"systemMessage": f"ship {st['spec']} runs headless (pid {h.get('pid')}, log {h.get('log')}); "
                                  "check it with cplat component ship wait"}

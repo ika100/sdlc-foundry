@@ -774,6 +774,7 @@ class CheckWatch:
         self.expected: dict[str, bool] = {}                           # spec 178: check name -> required; {} = no expectation
         self.missing: list[str] = []                                  # expected names the head does not show as passed yet
         self.concluded_since: float | None = None
+        self.no_pr_run_since: float | None = None                     # #787: green checks, but no pull_request run yet
 
     def expect_from_current(self) -> None:
         """Before the land changes the head: the checks the new head must show (required ones, and those that passed here)."""
@@ -917,7 +918,7 @@ class CheckWatch:
         if not self.head:
             return []
         slug = self._slug()
-        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId",
+        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId,event",
                   "-L", "50"]
                  + (["-R", slug] if slug else []), cwd=self.repo, check=False)
         try:
@@ -925,6 +926,22 @@ class CheckWatch:
         except ValueError:
             return []
         return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+    def _pr_run_missing(self) -> bool:
+        """The repo runs workflows on pull requests, but the head shows no such run yet: GitHub creates it seconds after
+        the push, while CodeQL's checks may already have passed (#787: two PRs merged with their CI red). After
+        NO_CHECKS_GRACE without one it is an error, never a green."""
+        if not pr_workflows(self.repo) or any(r.get("event") in ("pull_request", "pull_request_target") for r in self.head_runs):
+            self.no_pr_run_since = None
+            return False
+        if self.no_pr_run_since is None:
+            self.no_pr_run_since = now()
+        elif now() - self.no_pr_run_since > NO_CHECKS_GRACE:
+            raise NoChecks(f"no pull_request workflow run was created on {(self.head or '')[:7]} of {self.pr} after "
+                           f"{NO_CHECKS_GRACE}s; only {', '.join(sorted(self.reported)) or 'no'} check(s) reported",
+                           hint="is a runner online and is the workflow's trigger met? Merging without CI is never done "
+                                "automatically")
+        return True
 
     def _runs_pending(self) -> bool:
         """A workflow run of the head commit that has not completed: a queued run reports no checks at all, so the
@@ -1000,6 +1017,9 @@ class CheckWatch:
         pending = [c for c in cs if c.get("bucket") == "pending" or c in own]
         if cs and not pending:
             if self._runs_pending():
+                return "pending", cs, []
+            if self._pr_run_missing():
+                self.missing = ["a pull_request workflow run (not created yet)"]
                 return "pending", cs, []
             self.missing = self._unmet(cs) if self.expected else []
             if self.missing:
@@ -1090,6 +1110,21 @@ class ChecksPending(PlatformError):
     def __init__(self, message: str, hint: str | None = None, checks: list[str] | None = None) -> None:
         super().__init__(message, hint=hint)
         self.checks = checks or []
+
+
+def pr_workflows(repo: Path) -> bool:
+    """Whether a workflow of the repo's checkout runs on pull requests (`pull_request` or `pull_request_target` in `on:`)."""
+    try:
+        files = list((Path(repo) / ".github" / "workflows").glob("*.y*ml"))
+    except OSError:
+        return False
+    for f in files:
+        try:
+            if re.search(r"^\s*(?:on:\s*\[?.*\b)?pull_request(?:_target)?\b", f.read_text(errors="replace"), re.M):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str, list[dict], list[dict]]:
@@ -2021,12 +2056,19 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
     mark = {"head": _head(repo, st["branch"]), "phase": st["phase"]}
     running = stopgate.running_agents(hook_input)
     import waits
-    verdict = stopgate.check(st, session, mark, running, waits.live(repo))   # spec 171: a running cplat wait holds the count
+    if st.get("owner") and session == st["owner"] and stopgate.pause_requested(repo):   # AC-202.7: let it stop, count nothing
+        return {"systemMessage": f"ship {st['spec']}: paused by cplat dispatch in phase {st['phase']}; cplat dispatch resume continues it"}
+    verdict = stopgate.check(st, session, mark, running, waits.live(repo))   # AC-202.1: a running cplat wait lets the stop through
     command = f"/component:ship {st['spec']}"
     if verdict.action == "silent":
         return None
     if verdict.action == "notice":
         return {"systemMessage": f"ship {st['spec']}: unfinished in phase {st['phase']}, no session owns it; resume it with {command}"}
+    if verdict.action == "waiting":                # the count stays as it was; a fresh run's missing count is written as 0
+        if "no_progress" not in (st.get("stop_gate") or {}):
+            st["stop_gate"] = {**(st.get("stop_gate") or {}), "no_progress": 0}
+            save_state(repo, st)
+        return stopgate.waiting_message(f"ship {st['spec']}", verdict.waiting.split(", "), f"in phase {st['phase']}")
     save_state(repo, st)
     if verdict.action == "wait":                   # #496: a background agent at work is progress; its notification resumes us
         return {"systemMessage": f"ship {st['spec']}: waiting for {running} background agent(s) in phase {st['phase']}"}
@@ -2037,16 +2079,11 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             escalate(repo, why, cause)
         return {"systemMessage": f"ship {st['spec']}: escalated ({why}); resume it with {command}"}
-    if verdict.waiting:
-        reason = [stopgate.wait_line(verdict),
-                  f"The ship run of {st['spec']} is not finished (phase {st['phase']}); the wait above is still running.",
-                  "Next: read its result when it ends (a blocking read of its background task, never a polling loop), then go on from it."]
-    else:
-        reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
-                  f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
-                  f"Next: {next_step(st)}."]
-        if st["phase"] == "build" and run_tests:
-            reason += build_status(repo, st["spec"])
+    reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
+              f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
+              f"Next: {next_step(st)}."]
+    if st["phase"] == "build" and run_tests:
+        reason += build_status(repo, st["spec"])
     reason.append("Keep going. Only if a rule needs the user (a merge conflict after its re-plan, a changed acceptance test, a CRITICAL finding, "
                   "a decision the spec does not answer) or the user asked you to stop: run "
                   "`cplat component ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop.")

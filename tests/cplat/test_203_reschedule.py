@@ -228,8 +228,8 @@ def change_plan_after(monkeypatch, unit, edit):
     """After the session of `unit` the plan is changed and committed, once (as an answered escalation does)."""
     real, fired = supervisor._run_session, []
 
-    def wrapped(h, cmd, repo, log, minutes, rid, sid, env):
-        code = real(h, cmd, repo, log, minutes, rid, sid, env)
+    def wrapped(h, cmd, repo, log, minutes, rid, sid, env, *rest, **kw):
+        code = real(h, cmd, repo, log, minutes, rid, sid, env, *rest, **kw)
         if env.get("CPLAT_UNIT") == unit and not fired:
             fired.append(unit)
             put_plan(repo, edit, msg="plan: answer adds a task")

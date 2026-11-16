@@ -43,6 +43,8 @@ adopts the units that still run. Keep it alive with a terminal multiplexer, laun
 | `gates.approve_specs` | `human`, `self` | `human` |
 | `gates.merge` | `green-ci` | `green-ci` |
 | `serialize` | subset of `merge`, `e2e`; must contain `merge` | `[merge]` |
+| `guard.loop_calls` | integer 3 to 100: model calls without a tool call or other progress that make a unit "looping" | `10` |
+| `guard.loop_minutes` | integer 1 to 60: the window those calls are counted in | `5` |
 
 A full file:
 
@@ -61,10 +63,13 @@ gates:
   approve_specs: human
   merge: green-ci
 serialize: [merge]
+guard:
+  loop_calls: 10
+  loop_minutes: 5
 ```
 
 A mistake in the file exits 1 and names the key, for example `ERROR: .platform/dispatch.yml: slots: 11 is not allowed (allowed: ...)`;
-nothing is started. Every verb that reads the file checks it; only `start` and `resume` need it to exist and to carry the budget.
+nothing is started (`guard.loop_calls: 2 is not allowed (allowed: an integer 3..100)`). Every verb that reads the file checks it; only `start` and `resume` need it to exist and to carry the budget.
 
 ## What is ready
 
@@ -102,6 +107,10 @@ that names `cplat dispatch`). Fix units are landed by the dispatcher itself (`cp
   with the log path.
 - A unit that **escalates** gets the label `needs-decision` and a comment with the reason and the log path. Remove the label to let the
   dispatcher try again; the next unit reuses the worktree and branch, and a ship resumes its escalated run.
+- A unit whose session only talks (`guard.loop_calls` model calls without a tool call or other progress within `guard.loop_minutes`) is
+  stopped and **escalates** with cause `platform` and a reason that starts `looping:`; `status` lists it under `escalated today` as
+  `escalated: looping`. The dispatcher passes the effective guard to every unit as `--loop-guard <calls>/<minutes>`
+  ([ADR-115](adr/115-a-waiting-session-stops-and-its-wait-outlives-it.md)).
 - Labels used: `triaged`, `needs-decision`, `stale-premise`, `in-progress`.
 
 ## The merge lock
@@ -132,7 +141,7 @@ All verbs take `--repo DIR` (default `.`); `plan`, `status`, `report` and `inbox
 | `cplat dispatch wait [--timeout S]` | exit 0 `IDLE`; exit 1 `ESCALATED:` or `RED:` for an event you have not seen; exit 2 `TIMEOUT` after 540 s by default, with the running units |
 | `cplat dispatch report [--since D]` | per day: delivered, escalated, held, tokens (default 7 days) |
 | `cplat dispatch inbox` | `cplat needs` for this repo: approvals, answers, escalations, triage, budget, stuck |
-| `cplat dispatch pause [--drain]` | `pause` stops units at the next checkpoint and starts nothing; `--drain` lets running units finish and starts nothing new |
+| `cplat dispatch pause [--drain]` | `pause` starts nothing new, and a running unit stops at its next stop (its session is let through and nothing is counted; `status` keeps `paused` and adds `paused_at`, the phase and last checkpoint); `--drain` lets running units finish and starts nothing new |
 | `cplat dispatch resume [<item>]` | continue; with an item, lift its skip or hold only |
 | `cplat dispatch slots <N>` | override the slots (1 to 10); a lower number stops nothing, it only delays starts |
 | `cplat dispatch prioritize <item>` | pin an item first |

@@ -10,10 +10,12 @@ import hashlib
 import json
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
 MAX_ATTEMPTS = 3
 DAYS_PER_QUERY = 3        # a query returns every record text of its days: keep it well inside one call's 10s
+PARALLEL_QUERIES = 6      # day chunks asked at once: 30 days in about one call's time, not 11 calls in a row (J20-1)
 
 
 class StoreError(Exception):
@@ -176,30 +178,36 @@ class GitHubStore:
         raise StoreUnreachable(_last_line(err or out))
 
     def read(self, days: list[datetime.date], deadline: float | None = None, prefix: str = "runs") -> list[tuple[str, str]]:
+        chunks = [days[i:i + DAYS_PER_QUERY] for i in range(0, len(days), DAYS_PER_QUERY)]
+        if len(chunks) <= 1:
+            return [f for c in chunks for f in self._read_days(c, deadline, prefix)]
+        with ThreadPoolExecutor(max_workers=min(PARALLEL_QUERIES, len(chunks))) as pool:
+            parts = list(pool.map(lambda c: self._read_days(c, deadline, prefix), chunks))
+        return [f for part in parts for f in part]
+
+    def _read_days(self, chunk: list[datetime.date], deadline: float | None, prefix: str) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
         owner, _, name = self.slug.partition("/")
-        for i in range(0, len(days), DAYS_PER_QUERY):
-            chunk = days[i:i + DAYS_PER_QUERY]
-            dirs = {f"d{n}": f"{prefix}/{d:%Y/%m/%d}" for n, d in enumerate(chunk)}
-            fields = " ".join(
-                f'{alias}: object(expression: "HEAD:{path}") {{ ... on Tree {{ entries {{ name object {{ ... on Blob {{ text }} }} }} }} }}'
-                for alias, path in dirs.items())
-            query = f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {fields} }} }}"
-            args = ["api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}"]
+        dirs = {f"d{n}": f"{prefix}/{d:%Y/%m/%d}" for n, d in enumerate(chunk)}
+        fields = " ".join(
+            f'{alias}: object(expression: "HEAD:{path}") {{ ... on Tree {{ entries {{ name object {{ ... on Blob {{ text }} }} }} }} }}'
+            for alias, path in dirs.items())
+        query = f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {fields} }} }}"
+        args = ["api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}"]
+        code, text, err = self._call(args, deadline=deadline)
+        if code == 124:                                         # a slow answer is retried once, not the whole read
             code, text, err = self._call(args, deadline=deadline)
-            if code == 124:                                         # a slow answer is retried once, not the whole read
-                code, text, err = self._call(args, deadline=deadline)
-            if code != 0:
-                raise StoreUnreachable(_last_line(err or text))
-            try:
-                repo = json.loads(text)["data"]["repository"] or {}
-            except (ValueError, KeyError, TypeError):
-                raise StoreUnreachable("unreadable answer from gh api graphql") from None
-            for alias, path in dirs.items():
-                for entry in (repo.get(alias) or {}).get("entries") or []:
-                    blob = entry.get("object") or {}
-                    if blob.get("text") is not None:
-                        out.append((f"{path}/{entry['name']}", blob["text"]))
+        if code != 0:
+            raise StoreUnreachable(_last_line(err or text))
+        try:
+            repo = json.loads(text)["data"]["repository"] or {}
+        except (ValueError, KeyError, TypeError):
+            raise StoreUnreachable("unreadable answer from gh api graphql") from None
+        for alias, path in dirs.items():
+            for entry in (repo.get(alias) or {}).get("entries") or []:
+                blob = entry.get("object") or {}
+                if blob.get("text") is not None:
+                    out.append((f"{path}/{entry['name']}", blob["text"]))
         return out
 
 

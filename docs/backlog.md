@@ -22,7 +22,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
 | [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | approved | 12 |  |
 | [198-a-platform-release-holds-main-through](specs/198-a-platform-release-holds-main-through/spec.md) — A platform release holds main through the merge lock | P1 | approved | 9 |  |
-| [202-a-waiting-session-makes-no-model-calls](specs/202-a-waiting-session-makes-no-model-calls/spec.md) — A waiting session makes no model calls | P1 | approved | 7 | #750 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | approved | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
@@ -187,6 +186,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [199-the-journey-15-seams](specs/199-the-journey-15-seams/spec.md) — The journey 15 seams | P1 | done | 5 |  |
 | [200-a-component-ship-runs-in-its-own-session](specs/200-a-component-ship-runs-in-its-own-session/spec.md) — A component ship runs in its own session | P1 | done | 7 |  |
 | [201-one-cluster-repo-places-environments-on](specs/201-one-cluster-repo-places-environments-on/spec.md) — One cluster repo places environments on several clusters | P1 | done | 12 |  |
+| [202-a-waiting-session-makes-no-model-calls](specs/202-a-waiting-session-makes-no-model-calls/spec.md) — A waiting session makes no model calls | P1 | done | 7 | #750 |
 | [203-the-journey-19-seams](specs/203-the-journey-19-seams/spec.md) — The journey 19 seams | P1 | done | 6 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |

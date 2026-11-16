@@ -72,3 +72,4 @@ None.
 - 2026-11-10 approved
 - 2026-11-10 building
 - 2026-11-11 done
+- 2026-11-15 AC-178.8 variant "stops while its land waits" follows AC-202.1 (spec 202): the stop is let through, not counted (#750)

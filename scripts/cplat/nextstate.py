@@ -314,8 +314,12 @@ def _within(name: str, kinds: list[str], fn, default, deadline: float, src: need
 def collect(repo_dir: Path | str) -> dict:
     """The state of one repo (see the module docstring); read-only, exits through `unavailable` rather than raising.
     Group 1 (repo, runs, github, release, dispatcher, notification settings) is read at once, group 2 (notifier state
-    files, then the in-memory steps) after it."""
-    repo_dir = Path(repo_dir)
+    files, then the in-memory steps) after it. The runs and github sources share one run store read."""
+    with runlist.shared_reads():
+        return _collect(Path(repo_dir))
+
+
+def _collect(repo_dir: Path) -> dict:
     deadline = time.monotonic() + TOTAL_SECONDS
     slug = dispatch_state.slug_of(repo_dir)
     src = needs._Sources()
@@ -355,7 +359,7 @@ def collect(repo_dir: Path | str) -> dict:
             errors.append(e)
         return doc, parked, errors
 
-    tasks = {"repo": _Task(repo_part), "runs": _Task(lambda: runlist.collect(30)["runs"]), "github": _Task(github_part),
+    tasks = {"repo": _Task(repo_part), "runs": _Task(lambda: runlist.collect(30, repo=slug)["runs"]), "github": _Task(github_part),
              "release": _Task(release_part), "dispatcher": _Task(dispatcher_part), "notifications": _Task(notify_config.load)}
 
     def wait(key: str, name: str, kinds: list[str], default):
