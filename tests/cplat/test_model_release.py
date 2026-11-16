@@ -50,7 +50,8 @@ def test_the_changelog_announces_the_model_and_that_nothing_else_changed_ac_113_
 
 def test_the_guides_status_names_the_core_the_command_and_the_json_ac_113_17():  # AC-113.17
     status = next(ln for ln in GUIDE.read_text().splitlines() if ln.startswith("**Status:**"))
-    assert "5.0 is current" in status, status                     # 4.x: "the internal core is in place"; 5.0: the model is what runs
+    assert "current" in status and "5.0" in status, status        # 4.x: "the internal core is in place"; since 5.0: the model is what runs
+    assert "core is in place" not in status
     assert "cplat model show" in status
     assert "schema: 2" in status and "system.yaml" in status
     assert "lands in 4.x" not in status

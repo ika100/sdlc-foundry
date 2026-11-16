@@ -20,4 +20,5 @@
 - Check with `cplat component ship unit` where the run stands, then stop at once when your unit is done.
 - Never start another unit, because a unit is one short session.
 - Commit what is done before every stop, so the next session starts clean.
+- `wait <command> ended: …` start lines are the result of the wait the previous session started; act on them as your phase says, never restart the wait, because it already ended.
 - Escalate as the command says (`cplat component ship escalate` in a ship, `cplat platform runs end --outcome escalated` in a build).

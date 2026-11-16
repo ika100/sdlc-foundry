@@ -11,6 +11,7 @@ import core
 import gitops
 import localport
 import model
+import runlist
 from core import PlatformError, run
 
 
@@ -318,8 +319,10 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
 
 
 def collect(repo: Path, app: str | None, context: list[str] | str | None) -> tuple[str, list[str], list[dict], list[dict]]:
-    """(system, environment names, component rows, resource rows); cells are None where there is no instance."""
-    d = collect_all(repo, app, context)
+    """(system, environment names, component rows, resource rows); cells are None where there is no instance. The smoke
+    evidence of every cell comes from one run store read."""
+    with runlist.shared_reads():
+        d = collect_all(repo, app, context)
     return d["system"], d["environments"], d["rows"], d["resources"]
 
 

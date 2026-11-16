@@ -4,7 +4,7 @@
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat component ship start <spec> [--no-merge] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
+  cplat component ship start <spec> [--no-merge] [--detach] [--context C] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
                                          (--system-dir: /system:ship only, links the run to a system ship, spec 097)
   cplat component ship status [--json]             the state of the current run
   cplat component ship unit [--json]               in a unit session ($CPLAT_UNIT): is the unit at its checkpoint (spec 131)
@@ -173,7 +173,7 @@ def next_step(st: dict) -> str:
     }[phase]
 
 
-def describe(st: dict, repo: Path | None = None) -> str:
+def describe(st: dict, repo: Path | None = None, next: bool = True) -> str:  # noqa: A002  (the contract names the keyword)
     lines = [f"ship {st['spec']}: phase {st['phase']}" + (f" — ESCALATED: {st['escalated']}" if st.get("escalated") else "")]
     lines.append(f"  session: {st['owner']}" if st.get("owner")
                  else f"  session: none (resume with /component:ship {st['spec']} to own the run)")
@@ -189,11 +189,14 @@ def describe(st: dict, repo: Path | None = None) -> str:
         lines.append(row)
     if st.get("fix_rounds"):
         lines.append(f"  CI fix rounds: {st['fix_rounds']}")
+    if st.get("headless") and os.environ.get("CPLAT_HEADLESS") != "1":   # a session of the run itself never hands off (#757)
+        lines.append(f"  run process: pid {st['headless'].get('pid')}, log {st['headless'].get('log')}")
     if st.get("answers"):
-        lines.append(f"  answer from the system ship: {st['answers'][-1]['text']}")
+        lines.append(f"  answer from the {st['answers'][-1].get('from') or 'system ship'}: {st['answers'][-1]['text']}")
     if repo is not None:
         lines += units.describe_lines(repo)
-    lines.append(f"next: {next_step(st)}")
+    if next:
+        lines.append(f"next: {next_step(st)}")
     return "\n".join(lines)
 
 
@@ -211,9 +214,10 @@ def product_link(product: Path) -> dict:
     return link
 
 
-def _open_budget(repo: Path, st: dict, options: dict) -> None:
+def _open_budget(repo: Path, st: dict, options: dict, session_invocation: bool = True) -> None:
     """Spec 102: a ship run is a root (one budget per run tree) unless it runs under headless or a product ship."""
-    budget.open_root(st.get("run_id"), budget.work_key(repo, st["spec"], st["spec"]), options=options, repo=repo)
+    budget.open_root(st.get("run_id"), budget.work_key(repo, st["spec"], st["spec"]), options=options, repo=repo,
+                     session_invocation=session_invocation)
 
 
 def _record_shape(st: dict) -> None:
@@ -223,7 +227,7 @@ def _record_shape(st: dict) -> None:
 
 
 def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: Path | None = None,
-          budget_options: list[str] | dict | None = None) -> dict:
+          budget_options: list[str] | dict | None = None, *, detach: bool = False) -> dict:
     import shapecmd
     shape = shapecmd.resolve(repo)             # spec 123: a declaration error stops here, before any state changes
     options = budget.parse_options(budget_options)
@@ -253,18 +257,21 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
         st.pop("cause", None)
         st.pop("questions", None)
-        if answer := (os.environ.get("CPLAT_SHIP_ANSWER") or "").strip():
+        if not detach and (answer := (os.environ.get("CPLAT_SHIP_ANSWER") or "").strip()):
             answers = st.setdefault("answers", [])
             if not answers or answers[-1].get("text") != answer:
-                answers.append({"at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "text": answer})
-                say(f"answer from the system ship: {answer}")
-        stopgate.claim(st, stopgate.session_of_env())
+                source = (os.environ.get("CPLAT_SHIP_ANSWER_FROM") or "").strip() or "system ship"
+                answers.append({"at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "text": answer,
+                                "from": source})
+                say(f"answer from the {source}: {answer}")
+        stopgate.claim(st, None if detach else stopgate.session_of_env())
         if shape:
             st["shape"] = shape
         save_state(repo, st)
         _record_shape(st)
-        runs.link_parent(st.get("run_id"))
-        _open_budget(repo, st, options)
+        if not (st.get("headless") and os.environ.get("CPLAT_HEADLESS")):   # spec 200: the ship run stays the parent of its headless run
+            runs.link_parent(st.get("run_id"))
+        _open_budget(repo, st, options, session_invocation=not detach)
         return st
     if sp.status in {"draft", "superseded"}:
         raise PlatformError(f"{sp.id} is '{sp.status}'; only an approved spec is shipped",
@@ -288,7 +295,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     if merged:
         st.update({k: merged[k] for k in ("pr", "merge_sha", "deployed") if merged.get(k)})
         say(f"{sp.id} is merged ({merged['pr']}, {str(merged['merge_sha'])[:7]}): resuming at deploy")
-    stopgate.claim(st, stopgate.session_of_env())
+    stopgate.claim(st, None if detach else stopgate.session_of_env())
     if link:
         st["product"] = link
     if shape:
@@ -296,7 +303,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
     save_state(repo, st)
     _record_shape(st)
     runs.link_parent(st.get("run_id"))
-    _open_budget(repo, st, options)
+    _open_budget(repo, st, options, session_invocation=not detach)
     return st
 
 
@@ -499,6 +506,7 @@ def finish(repo: Path) -> Path:
         runs.finish(st.get("run_id"), "abandoned")
     done = f.with_name(f"cplat-ship-{st['spec']}-{dt.datetime.now():%Y%m%d%H%M%S}.json")
     f.rename(done)
+    f.with_name("cplat-ship-handoff.json").unlink(missing_ok=True)
     uf = units._path(repo)
     if uf.is_file():
         uf.rename(uf.with_name(f"cplat-units-{st['spec']}-{dt.datetime.now():%Y%m%d%H%M%S}.json"))
@@ -641,6 +649,8 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     if not open_pr_ and nothing_to_merge(repo):
         raise PlatformError(f"{branch} changes nothing on origin/main: a pull request would merge an empty commit (#452)",
                             hint=f"the spec's code is already on main; resume at deploy: cplat component ship start {st['spec']}")
+    original_body = body
+    body = _built_block(repo, st, body, body_file)
     run_ci(repo, {"PR_TITLE": title, "PR_BODY": body, "PR_LABELS": ",".join(labels)})
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
     if open_pr_:
@@ -650,6 +660,8 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
             say(f"marked {st['pr']} ready for review (it was the spec's draft PR)")
         if open_pr_.get("title") != title:
             gh(["pr", "edit", st["pr"], "--title", title], cwd=repo)
+        if body != original_body:
+            gh(["pr", "edit", st["pr"], "--body-file", str(body_file)], cwd=repo, check=False)
         if no_spec and pr_rules.NO_SPEC not in [lb["name"] for lb in open_pr_.get("labels", [])]:
             gh(["pr", "edit", st["pr"], "--add-label", pr_rules.NO_SPEC], cwd=repo)
     else:
@@ -663,6 +675,22 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     st["phase"] = "land"
     save_state(repo, st)
     return st
+
+
+def _built_block(repo: Path, st: dict, body: str, body_file: Path) -> str:
+    """Spec 200: the run's "How this was built" block goes into the PR body; a failure is a note, never a failure."""
+    try:
+        import runs_built
+        rec = runs_built.find(runs.current_run(repo)) or {}
+        section = runs_built.pr_section(repo, st["spec"]) if rec.get("approved_test_diffs") else None   # only a recorded change of an approved test needs the PR to say so
+        if section:
+            new = runs_built.apply(body, section)
+            if new != body:
+                body_file.write_text(new)
+            return new
+    except Exception as e:  # noqa: BLE001
+        say(f"note: the 'How this was built' block was not written: {e}")
+    return body
 
 
 def _post_decisions(repo: Path, st: dict) -> None:
@@ -746,6 +774,7 @@ class CheckWatch:
         self.expected: dict[str, bool] = {}                           # spec 178: check name -> required; {} = no expectation
         self.missing: list[str] = []                                  # expected names the head does not show as passed yet
         self.concluded_since: float | None = None
+        self.no_pr_run_since: float | None = None                     # #787: green checks, but no pull_request run yet
 
     def expect_from_current(self) -> None:
         """Before the land changes the head: the checks the new head must show (required ones, and those that passed here)."""
@@ -889,7 +918,7 @@ class CheckWatch:
         if not self.head:
             return []
         slug = self._slug()
-        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId",
+        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId,event",
                   "-L", "50"]
                  + (["-R", slug] if slug else []), cwd=self.repo, check=False)
         try:
@@ -897,6 +926,22 @@ class CheckWatch:
         except ValueError:
             return []
         return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+    def _pr_run_missing(self) -> bool:
+        """The repo runs workflows on pull requests, but the head shows no such run yet: GitHub creates it seconds after
+        the push, while CodeQL's checks may already have passed (#787: two PRs merged with their CI red). After
+        NO_CHECKS_GRACE without one it is an error, never a green."""
+        if not pr_workflows(self.repo) or any(r.get("event") in ("pull_request", "pull_request_target") for r in self.head_runs):
+            self.no_pr_run_since = None
+            return False
+        if self.no_pr_run_since is None:
+            self.no_pr_run_since = now()
+        elif now() - self.no_pr_run_since > NO_CHECKS_GRACE:
+            raise NoChecks(f"no pull_request workflow run was created on {(self.head or '')[:7]} of {self.pr} after "
+                           f"{NO_CHECKS_GRACE}s; only {', '.join(sorted(self.reported)) or 'no'} check(s) reported",
+                           hint="is a runner online and is the workflow's trigger met? Merging without CI is never done "
+                                "automatically")
+        return True
 
     def _runs_pending(self) -> bool:
         """A workflow run of the head commit that has not completed: a queued run reports no checks at all, so the
@@ -972,6 +1017,9 @@ class CheckWatch:
         pending = [c for c in cs if c.get("bucket") == "pending" or c in own]
         if cs and not pending:
             if self._runs_pending():
+                return "pending", cs, []
+            if self._pr_run_missing():
+                self.missing = ["a pull_request workflow run (not created yet)"]
                 return "pending", cs, []
             self.missing = self._unmet(cs) if self.expected else []
             if self.missing:
@@ -1062,6 +1110,21 @@ class ChecksPending(PlatformError):
     def __init__(self, message: str, hint: str | None = None, checks: list[str] | None = None) -> None:
         super().__init__(message, hint=hint)
         self.checks = checks or []
+
+
+def pr_workflows(repo: Path) -> bool:
+    """Whether a workflow of the repo's checkout runs on pull requests (`pull_request` or `pull_request_target` in `on:`)."""
+    try:
+        files = list((Path(repo) / ".github" / "workflows").glob("*.y*ml"))
+    except OSError:
+        return False
+    for f in files:
+        try:
+            if re.search(r"^\s*(?:on:\s*\[?.*\b)?pull_request(?:_target)?\b", f.read_text(errors="replace"), re.M):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str, list[dict], list[dict]]:
@@ -1303,6 +1366,7 @@ def _land(repo: Path, st: dict, pr: str, timeout: float, interval: float, queue_
     lines = [*regenerated, f"GREEN: all {len(cs)} check(s) passed on {pr}"]
     if not st.get("merge", True):
         st["phase"] = "done"
+        st["deploy_lines"] = []
         save_state(repo, st)
         return True, lines + ["not merged (--no-merge): merge the PR (and its gitops PRs) yourself, then run `/component:ship` "
                               "again to wait for dev"]
@@ -1652,7 +1716,10 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
         return _done(repo, st, ["not deployable (platform): nothing to deploy", "Smoke (dev): not deployable",
                                 "Promotion (staging): not deployable"])
     context = context or (st.get("product") or {}).get("context")
-    if not context:                            # headless coordinators rarely pass --context: take the configured one
+    if not context and (recorded := (st.get("context") or {}).get("name")):
+        context = recorded
+        say(f"kube context: {context} (recorded at the hand-off)")
+    if not context:                          # headless coordinators rarely pass --context: take the configured one
         import settings
         context, source = settings.kube_context(repo)
         if context:
@@ -1935,6 +2002,7 @@ def _ahead(slug: str, base: str, rev: str) -> bool:
 
 def _done(repo: Path, st: dict, lines: list[str]) -> tuple[bool, list[str]]:
     st["phase"] = "done"
+    st["deploy_lines"] = list(lines)
     save_state(repo, st)
     steps = plan_meta(repo, st).get("human_steps") or []
     if steps:
@@ -1980,15 +2048,26 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
     if not st or st.get("escalated") or st["phase"] == "done":
         return None
     session = hook_input.get("session_id") or None
+    if st.get("headless"):
+        import ship_handoff
+        if session and session == ship_handoff.read_file(repo).get("by"):
+            return ship_handoff.gate(repo, st, hook_input)
     mark = {"head": _head(repo, st["branch"]), "phase": st["phase"]}
     running = stopgate.running_agents(hook_input)
     import waits
-    verdict = stopgate.check(st, session, mark, running, waits.live(repo))   # spec 171: a running cplat wait holds the count
+    if st.get("owner") and session == st["owner"] and stopgate.pause_requested(repo):   # AC-202.7: let it stop, count nothing
+        return {"systemMessage": f"ship {st['spec']}: paused by cplat dispatch in phase {st['phase']}; cplat dispatch resume continues it"}
+    verdict = stopgate.check(st, session, mark, running, waits.live(repo))   # AC-202.1: a running cplat wait lets the stop through
     command = f"/component:ship {st['spec']}"
     if verdict.action == "silent":
         return None
     if verdict.action == "notice":
         return {"systemMessage": f"ship {st['spec']}: unfinished in phase {st['phase']}, no session owns it; resume it with {command}"}
+    if verdict.action == "waiting":                # the count stays as it was; a fresh run's missing count is written as 0
+        if "no_progress" not in (st.get("stop_gate") or {}):
+            st["stop_gate"] = {**(st.get("stop_gate") or {}), "no_progress": 0}
+            save_state(repo, st)
+        return stopgate.waiting_message(f"ship {st['spec']}", verdict.waiting.split(", "), f"in phase {st['phase']}")
     save_state(repo, st)
     if verdict.action == "wait":                   # #496: a background agent at work is progress; its notification resumes us
         return {"systemMessage": f"ship {st['spec']}: waiting for {running} background agent(s) in phase {st['phase']}"}
@@ -1999,16 +2078,11 @@ def gate(repo: Path, hook_input: dict, run_tests: bool = True) -> dict | None:
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             escalate(repo, why, cause)
         return {"systemMessage": f"ship {st['spec']}: escalated ({why}); resume it with {command}"}
-    if verdict.waiting:
-        reason = [stopgate.wait_line(verdict),
-                  f"The ship run of {st['spec']} is not finished (phase {st['phase']}); the wait above is still running.",
-                  "Next: read its result when it ends (a blocking read of its background task, never a polling loop), then go on from it."]
-    else:
-        reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
-                  f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
-                  f"Next: {next_step(st)}."]
-        if st["phase"] == "build" and run_tests:
-            reason += build_status(repo, st["spec"])
+    reason = [f"The ship run of {st['spec']} is not finished (phase {st['phase']}, "
+              f"stops without progress: {verdict.no_progress}/{stopgate.NO_PROGRESS_LIMIT}).",
+              f"Next: {next_step(st)}."]
+    if st["phase"] == "build" and run_tests:
+        reason += build_status(repo, st["spec"])
     reason.append("Keep going. Only if a rule needs the user (a merge conflict after its re-plan, a changed acceptance test, a CRITICAL finding, "
                   "a decision the spec does not answer) or the user asked you to stop: run "
                   "`cplat component ship escalate '<reason>' --cause <platform|code|decision|environment>`, then stop.")
@@ -2084,8 +2158,21 @@ def _wait_command(target: Path, ns: argparse.Namespace) -> int:
     def body() -> tuple[int, str]:
         code, lines = shipwait.ship_wait(target, ns.phase, ns.timeout, ns.interval)
         print("\n".join(lines), flush=True)
-        return code, {waits.REACHED: "reached", waits.RED: "escalated", waits.TIMEOUT: "timeout"}[code]
+        known = {"REACHED": "reached", "ESCALATED": "escalated", "ENDED": "ended", "WAIT": "progress", "TIMEOUT": "timeout"}
+        words = [known[w] for ln in lines if (w := (ln.split(None, 1) or [""])[0].rstrip(":")) in known]
+        return code, (words[0] if words else {waits.REACHED: "reached", waits.RED: "escalated", waits.TIMEOUT: "timeout"}[code])
     return waits.record(Path.cwd(), "component ship wait", body, about=target)
+
+
+def start_plain(repo: Path, ns: argparse.Namespace) -> int:
+    """`ship start` without the hand-off: begin or resume the run in this session."""
+    st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
+    if st["phase"] in ("plan", "build", "pr"):
+        say(on_branch(repo, st["branch"]))
+    print(describe(st))
+    if line := budget.limits_line(st.get("run_id")):
+        print(line)
+    return 0
 
 
 def main(argv: list[str]) -> int:
@@ -2096,6 +2183,10 @@ def main(argv: list[str]) -> int:
     p.add_argument("spec")
     p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
+    p.add_argument("--detach", action="store_true", help="hand the run to its own `cplat headless` process (spec 200)")
+    p.add_argument("--full", action="store_true", help="pass --full to the headless ship (with --detach; no effect without)")
+    p.add_argument("--answer", default=None, help="with --detach: the answer the headless session gets to the escalated question")
+    p.add_argument("--context", default=None, help="with --detach: the kube context the headless run's deploy uses (spec 203)")
     p.add_argument("--system-dir", default=os.environ.get("CPLAT_SYSTEM_DIR") or None,
                    help="the gitops-app clone of the system ship this run belongs to (/system:ship only, spec 097; "
                         "default $CPLAT_SYSTEM_DIR, which the system ship sets for the repo's session, spec 155)")
@@ -2157,13 +2248,16 @@ def main(argv: list[str]) -> int:
             print(json.dumps(answer))
         return 0
     if ns.cmd == "start":
-        st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
-        if st["phase"] in ("plan", "build", "pr"):
-            say(on_branch(repo, st["branch"]))
-        print(describe(st))
-        if line := budget.limits_line(st.get("run_id")):
-            print(line)
-        return 0
+        if ns.answer is not None and not ns.detach:
+            print("ERROR: --answer needs --detach", file=sys.stderr)
+            return 2
+        if ns.context is not None and not ns.detach:
+            print("ERROR: --context needs --detach", file=sys.stderr)
+            return 2
+        if ns.detach:
+            import ship_handoff
+            return ship_handoff.detach(repo, ns)
+        return start_plain(repo, ns)
     if ns.cmd == "unit":
         return unit_command(repo, ns.json)
     if ns.cmd == "wait":
@@ -2178,9 +2272,15 @@ def main(argv: list[str]) -> int:
         st = require_state(repo)
         if ns.json:
             extra = {"units": rs} if (rs := units.rows(repo)) else {}
+            if st["phase"] == "done":
+                import ship_report
+                extra["report"] = ship_report.data(repo, st)
             print(json.dumps({**st, "next": next_step(st), **extra}, indent=2))
         else:
             print(describe(st, repo))
+            if st["phase"] == "done":
+                import ship_report
+                print("\n".join(ship_report.lines(ship_report.data(repo, st))))
         return 0
     if ns.cmd == "phase":
         print(describe(set_phase(repo, ns.phase), repo))

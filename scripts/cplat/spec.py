@@ -693,11 +693,27 @@ def frozen_base(root: Path, base: str) -> str:
     return end if ancestor(base, end) and ancestor(end, "HEAD") else base
 
 
+def judged_specs(root: Path) -> list[Spec]:
+    """Spec 200 (AC-200.7): the `building` specs plus the spec of this clone's unfinished ship run (phase not `done`), whose
+    status is already `done` in the `pr` and `land` phases; a missing or broken state file adds nothing."""
+    specs = all_specs(root)
+    out = [s for s in specs if s.status == "building"]
+    d = core.git_dir(root)
+    try:
+        st = json.loads((d / "cplat-ship.json").read_text()) if d else {}
+        sid = "" if st.get("phase") == "done" else str(st.get("spec") or "")
+    except (OSError, ValueError, AttributeError):
+        return out
+    return out + [s for s in specs if sid and s.id == sid and s not in out]
+
+
 def test_diff(root: Path, base: str, files: list[str], *, red: str | None = None,
               notes: list[str] | None = None) -> dict[str, tuple[bool, str]]:
     """Each changed test file against `base`. Default: files under the shape's `test_globs` (never `docs/` or `*.md`, spec 063)
     that name a criterion of a `building` spec. A file that did not exist at `base` and that a task of a `building`
     spec's plan lists in `files:` is the build's own new file, not a changed acceptance test, and is left out.
+    Spec 200: "building" includes the spec of the clone's unfinished ship run (`judged_specs`), so the `pr` and `land`
+    phases judge the frozen tests too.
     Spec 172: when a `building` spec's red-tests commit lies between `red` (the base as typed) and HEAD, only the files that
     step committed are checked; otherwise the selection above applies and `notes` gets one line saying so."""
     import fnmatch
@@ -705,7 +721,7 @@ def test_diff(root: Path, base: str, files: list[str], *, red: str | None = None
     import testdiff_select
     frozen = None
     if not files:
-        frozen = testdiff_select.frozen_files(root, red or base, base, [s for s in all_specs(root) if s.status == "building"])
+        frozen = testdiff_select.frozen_files(root, red or base, base, judged_specs(root))
         if frozen is not None:
             changed = subprocess.run(["git", "-C", str(root), "diff", "--name-only", base], capture_output=True, text=True,
                                      check=True).stdout.split()
@@ -717,7 +733,7 @@ def test_diff(root: Path, base: str, files: list[str], *, red: str | None = None
     if not files and frozen is None:
         changed = subprocess.run(["git", "-C", str(root), "diff", "--name-only", base], capture_output=True, text=True,
                                  check=True).stdout.split()
-        building = [s for s in all_specs(root) if s.status == "building"]
+        building = judged_specs(root)
         ids = {a for s in building for a in (x.id for x in s.acs())}
         planned = [str(p) for s in building if s.plan for t in (s.plan[0].get("tasks") or []) if isinstance(t, dict)
                    for p in (t.get("files") or [])]
@@ -792,6 +808,11 @@ def tighten_test_change(root: Path, base: str, files: list[str], reason: str | N
     out: dict[str, tuple[bool, str]] = {}
     for f in files:
         old = subprocess.run(["git", "-C", str(root), "show", f"{base}:{f}"], capture_output=True, text=True)
+        if old.returncode != 0 and (root / f).is_file():       # spec 200 (AC-200.7): a new helper defines no test, names no id
+            new = (root / f).read_text()
+            if not _test_names(new) and not AC_ANY.findall(new):
+                out[f] = (True, "tightened by an agent, recorded")
+                continue
         if old.returncode != 0 or not (root / f).is_file():
             out[f] = (False, "new or deleted file")
             continue

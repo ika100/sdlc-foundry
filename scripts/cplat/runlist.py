@@ -7,12 +7,15 @@ unreachable still lists the local records. Recording and reading never raise.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import json
 import os
 import re
 import sys
+import threading
 from pathlib import Path
+from typing import Iterator
 
 import runs
 import runs_report
@@ -378,8 +381,49 @@ def _active_records() -> list[dict]:
     return out
 
 
+_store_lock = threading.Lock()
+_day_files: dict[tuple[str, str, datetime.date], list[tuple[str, str]]] = {}
+_sharing = 0
+
+
+@contextlib.contextmanager
+def shared_reads() -> Iterator[None]:
+    """Within the block every reader of the run store (any thread, through `read_days`) reads each day once, and a
+    second reader waits for the read in flight: `cplat next` reads the store for its runs, its escalations and the
+    smoke evidence of every component (J20-1). Outside it each call reads."""
+    global _sharing
+    with _store_lock:
+        _sharing += 1
+    try:
+        yield
+    finally:
+        with _store_lock:
+            _sharing -= 1
+            if not _sharing:
+                _day_files.clear()
+
+
+def read_days(store, slug: str, days: list[datetime.date]) -> list[tuple[str, str]]:
+    """`store.read(days)`, inside `shared_reads` only for the days not read yet."""
+    if not _sharing:
+        return store.read(days)
+    with _store_lock:
+        missing = [d for d in days if (slug, "runs", d) not in _day_files]
+        if missing:
+            found: dict[datetime.date, list[tuple[str, str]]] = {d: [] for d in missing}
+            for path, text in store.read(missing):
+                y, m, d = path.split("/")[1:4]
+                found.setdefault(datetime.date(int(y), int(m), int(d)), []).append((path, text))
+            _day_files.update({(slug, "runs", d): files for d, files in found.items()})
+        return [f for d in days for f in _day_files[(slug, "runs", d)]]
+
+
 def _store(since: int) -> tuple[dict, list[dict]]:
-    """(store info, records read from the store)."""
+    """(store info, records read from the store); see `shared_reads`."""
+    return _read_store(since)
+
+
+def _read_store(since: int) -> tuple[dict, list[dict]]:
     try:
         status = runs.store_status()
     except Exception as e:  # noqa: BLE001
@@ -390,15 +434,16 @@ def _store(since: int) -> tuple[dict, list[dict]]:
     try:
         now = runs.utcnow()
         days = [now.date() - datetime.timedelta(days=n) for n in range((since or _ALL_DAYS), -1, -1)]
-        files = runs.open_store(status.slug).read(days)
+        files = read_days(runs.open_store(status.slug), status.slug, days)
     except Exception as e:  # noqa: BLE001
         return {"state": "unreachable", "detail": str(e)}, []
     records, _, _ = runs_report.parse([text for _, text in files])
     return info, records
 
 
-def collect(since_days: int = 30, repo: str | None = None, spec: str | None = None) -> dict:
-    """The run list document (schema 1); `since_days` 0 lists every run. Never raises for a missing store."""
+def collect(since_days: int = 30, repo: str | None = None, spec: str | None = None, repos=None) -> dict:
+    """The run list document (schema 1); `since_days` 0 lists every run; `repos` keeps only the runs of those repos
+    (before their rows, which may ask `gh`, are built). Never raises for a missing store."""
     now = runs.utcnow()
     store, stored = _store(since_days)
     chosen: dict[str, tuple[dict, bool]] = {}
@@ -416,7 +461,8 @@ def collect(since_days: int = 30, repo: str | None = None, spec: str | None = No
         ended = _ts(rec.get("ended_at"))
         if not active and cutoff is not None and ended is not None and ended < cutoff:
             continue
-        if (repo and rec.get("repo") != repo) or (spec and rec.get("spec") != spec):
+        if (repo and rec.get("repo") != repo) or (spec and rec.get("spec") != spec) or \
+                (repos is not None and rec.get("repo") not in repos):
             continue
         rows.append(row(rec, active))
     rows.sort(key=lambda r: str(r["ended_at"] or ""), reverse=True)

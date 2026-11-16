@@ -359,7 +359,7 @@ def _fold_previous(data: dict, now: str) -> None:
 
 
 def open_root(run_id: str | None, key: str, *, ships: int = 1, options: list[str] | dict | None = None,
-              repo: Path | None = None) -> None:
+              repo: Path | None = None, session_invocation: bool = True) -> None:
     """Open the ledger of a root run, or continue the unfinished ledger of the same work (AC-102.6).
 
     A run with an active parent is a child: it opens nothing (AC-102.2). A root started in an interactive session is one
@@ -379,7 +379,7 @@ def open_root(run_id: str | None, key: str, *, ships: int = 1, options: list[str
         now = _iso(runs.utcnow())
         path = _path(key)
         # a root started by hand inside a Claude Code session is that session's invocation; headless counts its own sessions
-        started_in_session = 1 if rec.get("mode") != "headless" and os.environ.get("CLAUDE_CODE_SESSION_ID") else 0
+        started_in_session = 1 if session_invocation and rec.get("mode") != "headless" and os.environ.get("CLAUDE_CODE_SESSION_ID") else 0
         with runs._locked():
             data = _read(path)
             if data is not None and run_id in (data.get("roots") or []):

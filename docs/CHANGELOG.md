@@ -6,6 +6,50 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.23.3] - 2026-11-16
+
+### Fixed
+
+**A session that waits for a `cplat` command no longer loops on model calls (#750).** The Stop hook blocked the stop of a session while its wait ran, and every block made the session answer with another model call; a 60 s wait could cost dozens of calls. Now the session may stop and the hook counts nothing. Under `cplat headless` the wait runs detached, no next session starts until it ends (polling local files, no model call), and the next session is told the result at its start. A loop guard stops a session that makes `calls` model calls without progress in `minutes` minutes and escalates with `looping: ...`: `--loop-guard <calls>/<minutes>` (default `10/5`), `guard.loop_calls` (3 to 100) and `guard.loop_minutes` (1 to 60) in `.platform/dispatch.yml`. `cplat dispatch pause` now reaches running units at their next stop, `status` shows `paused_at` and the units escalated today, and `cplat needs` names the cause of an escalation ([ADR-115](adr/115-a-waiting-session-stops-and-its-wait-outlives-it.md)). Update the plugins (`/plugin marketplace update`).
+
+**`cplat next` reads all its sources within its 20 s limit again (#782).** In journey 20 its run records and GitHub sources timed out on every call, so the hand-over guide never showed the next step. The run store now asks its days in parallel, and one `next`, `status` or `needs` call reads each day once for all its readers. Only the system's own runs get rows and PR lookups, and the GitHub sources are asked at once: on the journey's system `next` takes about 10 s with every source read, where before it hit 20 s with two sources missing. Releases show again (`gh release list` has no `url` field). Update the plugins (`/plugin marketplace update`).
+
+**`cplat pr wait --merge` no longer merges before a pull request's CI run exists (#787).** GitHub creates the `pull_request` workflow runs a few seconds after a push, while CodeQL's checks may already have passed. A wait that polled in that gap saw only green CodeQL checks and merged; two platform PRs reached `main` with their CI red. Now, in a repo whose workflows run on pull requests, a head is green only once such a run exists on it, and if none appears within 5 minutes the wait ends with an error instead of a merge.
+
+## [5.23.2] - 2026-11-15
+
+### Fixed
+
+**The ship hand-off passes the kube context, so the dev smoke runs (J19-1, spec 203).** `cplat component ship start <spec> --detach` started the headless run without a kube context when the interactive session had none in `CPLAT_KUBE_CONTEXT`, so its `ship deploy` recorded the dev smoke as "not run". The hand-off now resolves one context (`--context C`, the run's recorded one, `CPLAT_KUBE_CONTEXT`, `KUBE_CONTEXT`, `kube_context:` in the settings, the local `k3d-<system>-local` cluster), refuses a `--context` the kubeconfig does not have, records it in the ship state, gives it to the process and prints `context: <name> (<where it came from>)` after the `headless:` line; a restart keeps it. Without any context it prints `context: none (dev is not checked; pass --context <kube-context>)`. Update the plugins (`/plugin marketplace update`).
+
+**A changed committed plan reschedules the units before the next unit (J19-2, spec 203).** A plan committed after the units were scheduled left the run building the old units. The ship run now reschedules the units from the changed plan before it starts the next unit.
+
+**`cplat next` stops waiting on a slow source (J19-3, spec 203).** One slow or hanging source held `cplat next` indefinitely. Each source now gets 20 seconds and the whole command 60 seconds, and no source can read input.
+
+**A resumed dispatcher unit is finished only when its own pull request merged (#767).** Since #755 a paused ship unit was marked done on resume when any pull request of its branch had merged, so a spec whose approval PR used the same branch was ended mid-build and its worktree removed; a merged pull request now counts only when it holds the unit's current commit.
+
+## [5.23.1] - 2026-11-15
+
+### Fixed
+
+**A detached component ship's own unit sessions do their unit again instead of waiting on the run (#757).** Since 5.23.0 an interactive `/component:ship` hands its run to `cplat headless`; the run's status block then showed `headless: pid …`, and a unit session that printed it (through a plain `cplat component ship start`) followed the hand-off procedure and waited on its own run forever. The status block now names the process `run process: pid …`, and a session running under `cplat headless` never shows it, so only the interactive session that handed the run off waits. Update the plugins (`/plugin marketplace update`).
+
+**A detached component ship's unit sessions can finish while the shipping session waits (#765).** Since 5.23.0 the interactive `/component:ship` waits on its detached run with `cplat component ship wait` in the same checkout, and a unit session's Stop hook counted every running cplat wait of the checkout as its own, so the plan unit was held as "not finished" and escalated although it was done. A wait now records the session that runs it, and a unit session's Stop hook is held only by its own waits (a mark without a session, from an older version, still counts for every session).
+
+## [5.23.0] - 2026-11-15
+
+### Added
+
+**`/platform:next` shows where you are in the delivery process and what waits for you, as choices (spec 192).** `cplat next` prints one screen: the process bar from triage to release, what is happening now, and your part, with the questions as options you pick instead of commands you type; your answers are recorded as follow-ups and appear as person time in `cplat platform runs report`. Triage, spec approval, build, ship and release now end by handing over to it ([ADR-112](adr/112-delivery-screens-are-printed-by-cplat.md)). Update the plugins (`/plugin marketplace update`).
+
+### Changed
+
+**An interactive `/component:ship` hands its run to its own headless session and only waits, relays questions and reports (#200).** "Ship the spec" ran plan, build, PR, land and deploy in the session you typed it in, which took 5.7 to 8.6 M tokens of that main session, and in journey 16 (J16-1) a CI fix that only touched a test helper stopped the run with a question nobody could answer. Now `/component:ship` starts `cplat component ship start <spec> --detach`, which runs one `cplat headless` process for the run; your session runs `cplat component ship wait`, asks you each question the shipping session escalates (or resumes with suggested answers you said to take) and prints the final report from `cplat component ship status`. Every fix round runs `cplat spec test-diff` after the fix and settles a test-helper or type-only change without a stop. Pass `--here` to keep the run in your session as before. See [ADR-113](adr/113-an-interactive-component-ship-runs-in-its-own-headless-session.md). Update the plugins (`/plugin marketplace update`).
+
+### Fixed
+
+**A resumed dispatcher unit whose pull request merged while it was paused is finished, not started again (#755).** `cplat dispatch resume` used to start a paused unit's session again even when its pull request had merged meanwhile, so the unit kept its slot and held every other ship as `ship-busy`; it is now marked done and frees its slot.
+
 ## [5.22.1] - 2026-11-14
 
 ### Changed

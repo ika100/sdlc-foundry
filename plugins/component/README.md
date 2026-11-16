@@ -11,7 +11,7 @@ The commands that work on one component (a service, a website or a library) and 
 | `/component:plan <spec-id>` | Architect writes `design.md` and `plan.md` |
 | `/component:build <spec-id>` | Failing acceptance tests, coders, quality/tests/security, verification, PR |
 | `/component:verify [<spec-id>]` | Check the code against a spec; writes `verification.md` |
-| `/component:ship <spec-id> [--no-merge]` | Plan, build, PR, merge after green CI, wait for dev, unattended |
+| `/component:ship <spec-id> [--no-merge] [--here]` | Plan, build, PR, merge after green CI, wait for dev, unattended; an interactive session hands the run to its own headless process and only waits and reports, `--here` keeps it in the session |
 | `/component:fix <description>` | Bug or small change: coder, quality, tester, PR |
 | `/component:check` | Read-only quality and security audit |
 | `/component:release` | Gates on the commit staging runs, tag it, then changelog and next development version in a follow-up PR |

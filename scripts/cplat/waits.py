@@ -88,7 +88,8 @@ def running(command: str, cwd: Path | None = None) -> Iterator[None]:
             folder = base / WAITS_DIR
             folder.mkdir(parents=True, exist_ok=True)
             mark = folder / f"{os.getpid()}.json"
-            mark.write_text(json.dumps({"pid": os.getpid(), "command": command,
+            session = next((v for n in ("CLAUDE_CODE_SESSION_ID", "CPLAT_SESSION_ID") if (v := (os.environ.get(n) or "").strip())), None)
+            mark.write_text(json.dumps({"pid": os.getpid(), "command": command, "session": session,
                                         "started_at": dt.datetime.now().isoformat(timespec="seconds")}))
     except (OSError, core.PlatformError):
         mark = None
@@ -99,8 +100,10 @@ def running(command: str, cwd: Path | None = None) -> Iterator[None]:
             mark.unlink(missing_ok=True)
 
 
-def live(repo: Path) -> list[str]:
-    """Commands of the waits running in the checkout of `repo`, oldest first; the marks of dead processes are removed."""
+def live(repo: Path, session: str | None = None) -> list[str]:
+    """Commands of the waits running in the checkout of `repo`, oldest first; the marks of dead processes are removed.
+    With `session`, only the waits that session runs (and marks that name no session): another session's wait in the
+    same checkout, such as the shipping session's `ship wait` on its detached run (spec 200), never holds this one (#765)."""
     try:
         base = core.git_dir(repo)
     except (OSError, core.PlatformError):
@@ -116,6 +119,8 @@ def live(repo: Path) -> list[str]:
             continue
         if not _alive(pid):
             f.unlink(missing_ok=True)
+            continue
+        if session and data.get("session") and data["session"] != session:
             continue
         found.append((str(data.get("started_at") or ""), pid, command))
     return [c for _, _, c in sorted(found)]

@@ -291,6 +291,12 @@ A run settles these itself instead of stopping for you:
 
 `main` cannot be protected on GitHub Free for private repos, so a human with write access can still push to it. Unattended runs cannot: the allowlist refuses `git push origin main`. Every automated merge (feature PRs through `cplat component ship land`, pin PRs through `pin-dev`) happens only after its checks passed. A merge happens without a human review of the PR. The approved spec, the acceptance tests written before the code, and the reviewer's `verification.md` (required for `done`) are the review. Use `/component:ship <NNN> --no-merge` to read the PR yourself first.
 
+## A waiting session stops
+
+A session that waits for a `cplat` command (`cplat pr wait`, `cplat component ship land`, ...) may stop: the Stop hook lets it through with one line (`ship <spec>: waiting for <command> in phase <phase>`) and does not count the stop, so a wait no longer makes the session answer the hook again and again with model calls ([ADR-115](adr/115-a-waiting-session-stops-and-its-wait-outlives-it.md), replacing the block of ADR-093). Under `cplat headless` such a wait runs detached from the session; `cplat headless` starts no next session while it runs, polling local files and making no model call, and the next session learns the result at its start (`wait <command> ended: exit <code>`). After 120 minutes it stops the wait and escalates with cause `environment`. An interactive Claude Code session keeps its background task and wakes when it ends.
+
+**The loop guard.** `cplat headless` reads the session's transcript. A session that makes `calls` model calls with no tool call, no new commit, no phase change and no unit progress within `minutes` minutes is stopped and the run escalates with cause `platform` and the reason `looping: <n> model calls in <m> min without progress in phase <phase>; last message: ...`. Set it with `--loop-guard <calls>/<minutes>` (calls 3 to 100, minutes 1 to 60; default `10/5`); under the dispatcher it comes from `guard.loop_calls` and `guard.loop_minutes` in [`.platform/dispatch.yml`](dispatch.md#the-policy-file-platformdispatchyml). A bad value is refused before anything starts.
+
 ## Several runs and the usage limit
 
 Several `cplat headless` runs in one repo, in worktrees or clones, and the usage limit of your account no longer stop each other.

@@ -97,7 +97,7 @@ def test_a_session_that_ended_after_a_local_commit_is_resumed_and_the_commit_is_
     assert merged["head"] != first and first not in judged and judged == {merged["head"]}
 
 
-def test_a_session_that_stops_while_its_land_waits_is_blocked_and_the_stops_are_not_counted_as_without_progress(seam):  # AC-178.8
+def test_a_session_that_stops_while_its_land_waits_is_let_stop_and_the_stops_are_not_counted_as_without_progress(seam):  # AC-178.8, AC-202.1
     seam.behave({"land": ["stop-during-wait"]})
     seam.gh(hold_file=str(seam.dir / "release"), handshake=str(seam.dir / "wait.fifo"))
     res = seam.headless()
@@ -107,7 +107,8 @@ def test_a_session_that_stops_while_its_land_waits_is_blocked_and_the_stops_are_
     stops = seam.lines("stops.jsonl")
     assert len(stops) == 2
     for stop in stops:
-        assert any(a.get("decision") == "block" for a in stop["answers"]), stop
+        assert not any(a.get("decision") == "block" for a in stop["answers"]), stop     # spec 202: the stop is let through
+        assert any("waiting for" in a.get("systemMessage", "") for a in stop["answers"]), stop
     archived = sorted((seam.repo / ".git").glob("cplat-ship-*.json"))
     states = [json.loads(p.read_text()) for p in archived]
     assert states and all(not s.get("escalated") for s in states)

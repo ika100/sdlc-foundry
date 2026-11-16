@@ -9,7 +9,7 @@ description: "Move a verified image through dev, staging and production with one
 
 | Environment | Image tag | Who decides |
 |---|---|---|
-| `dev` | tracks `main` of the service (`latest`) | merge to `main` |
+| `dev` | `sha-<40>` of each merge to `main`, pinned by a self-merging pin PR | merge to `main` |
 | `staging` | `sha-<40>` of the commit | a green dev smoke in `/component:ship` (self-merging `pin-staging` PR), or `/instance:promote` |
 | `prod` | `X.Y.Z` from the service's `vX.Y.Z` release tag | `/instance:promote` after `/component:release` |
 

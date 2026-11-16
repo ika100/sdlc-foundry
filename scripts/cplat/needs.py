@@ -16,6 +16,7 @@ import json
 import re
 import statistics
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import autonomy
@@ -257,6 +258,7 @@ def _escalations(rows: list[dict]) -> list[dict]:
                            **({"issue": issue["number"]} if issue else {}),
                            **({"shape": r["shape"]} if r.get("shape") else {})),
             "since": r.get("ended_at") or r.get("started_at") or "", "reason": reason,
+            "cause": (r.get("escalation") or {}).get("cause"),
             "command": command, "cwd_repo": (issue.get("repo") if issue else None) or r.get("repo"),
             "consequence": {"branch": f"feature/{spec_id}" if spec_id else None, "pr": pr.get("number"), "deployed": False},
             "way_back": {"text": f"Stopping keeps the branch and{ref}; nothing was deployed."}})
@@ -493,10 +495,11 @@ def _releases(components: dict[str, str], since_days: int) -> list[dict]:
     cutoff = (runs.utcnow() - datetime.timedelta(days=since_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     out = []
     for name, repo in components.items():
-        for r in _json(["release", "list", "-R", repo, "--json", "tagName,publishedAt,url"]) or []:
+        for r in _json(["release", "list", "-R", repo, "--json", "tagName,publishedAt"]) or []:   # gh has no `url` field here
             at = r.get("publishedAt") or ""
             if r.get("tagName") and at and at >= cutoff:
-                out.append({"repo": repo, "component": name, "tag": r["tagName"], "published_at": at, "url": r.get("url") or ""})
+                out.append({"repo": repo, "component": name, "tag": r["tagName"], "published_at": at,
+                            "url": f"https://github.com/{repo}/releases/tag/{r['tagName']}"})
     return sorted(out, key=lambda r: r["published_at"], reverse=True)
 
 
@@ -520,7 +523,7 @@ def collect_repo(repo_dir: Path) -> dict:
     src, items = _Sources(), []
     done: list[dict] = []
     try:
-        rows = [r for r in runlist.collect(30)["runs"] if r.get("repo") == slug]
+        rows = runlist.collect(30, repo=slug)["runs"]
         done = [r for r in rows if r.get("phase") == "done"]
         items += _escalations(rows)
     except Exception as e:  # noqa: BLE001
@@ -552,38 +555,45 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
     m = model.load_dir(app_dir)
     gitops_slug, repos = _repos(repo_dir, m)
     src, items, issues = _Sources(), [], []
-    done: list[dict] = []
-    try:
-        rows = runlist.collect(30)["runs"]
-        done = [r for r in rows if r.get("phase") == "done"]
-        items += _escalations(rows)
-        items += _reviews(rows, m, gitops_slug)
-    except Exception as e:  # noqa: BLE001
-        src.fail("runs", e, ["escalation"])
-    for slug in repos:
+    components = {c.name: c.repo for c in m.components if c.repo}
+    # J20-1: every source asks GitHub or the cluster on its own, so they are asked at once, not one after the other
+    with runlist.shared_reads(), ThreadPoolExecutor(max_workers=8) as pool:
+        rows_f = pool.submit(lambda: runlist.collect(30, repos=set(repos))["runs"])
+        per_repo = [(pool.submit(_drafts, slug), pool.submit(_triage, slug), pool.submit(_issues, slug, since_days)) for slug in repos]
+        status_f = pool.submit(status.collect, repo_dir, system, None)
+        releases_f = pool.submit(_releases, components, since_days)
+        done: list[dict] = []
         try:
-            items += [_draft_item(d, gitops_slug, done) for d in _drafts(slug)]
+            rows = rows_f.result()
+            done = [r for r in rows if r.get("phase") == "done"]
+            items += _escalations(rows)
+            items += _reviews(rows, m, gitops_slug)
         except Exception as e:  # noqa: BLE001
-            src.fail("github", e, ["approve", "answer"])
+            src.fail("runs", e, ["escalation"])
+        for drafts_f, triage_f, issues_f in per_repo:
+            try:
+                items += [_draft_item(d, gitops_slug, done) for d in drafts_f.result()]
+            except Exception as e:  # noqa: BLE001
+                src.fail("github", e, ["approve", "answer"])
+            try:
+                items += triage_f.result()
+            except Exception as e:  # noqa: BLE001
+                src.fail("github", e, ["triage"])
+            try:
+                issues += issues_f.result()
+            except Exception as e:  # noqa: BLE001
+                src.fail("github", e, ["issues"])
         try:
-            items += _triage(slug)
+            _, _, status_rows, _ = status_f.result()
+            items += _promotions(status_rows, components, _prod_promotion(m))
         except Exception as e:  # noqa: BLE001
-            src.fail("github", e, ["triage"])
+            src.fail("cluster", e, ["promote"])
+        items += _dispatch_items(repos, src)
+        releases: list[dict] = []
         try:
-            issues += _issues(slug, since_days)
+            releases = releases_f.result()
         except Exception as e:  # noqa: BLE001
-            src.fail("github", e, ["issues"])
-    try:
-        _, _, status_rows, _ = status.collect(repo_dir, system, None)
-        items += _promotions(status_rows, {c.name: c.repo for c in m.components if c.repo}, _prod_promotion(m))
-    except Exception as e:  # noqa: BLE001
-        src.fail("cluster", e, ["promote"])
-    items += _dispatch_items(repos, src)
-    releases: list[dict] = []
-    try:
-        releases = _releases({c.name: c.repo for c in m.components if c.repo}, since_days)
-    except Exception as e:  # noqa: BLE001
-        src.fail("github", e, ["releases"])
+            src.fail("github", e, ["releases"])
     items.sort(key=lambda i: i["since"] or "")
     return {"schema": SCHEMA, "system": app_dir.name, "read_at": runs._iso(runs.utcnow()), "items": items,
             "issues": issues, "releases": releases, "unavailable": src.listing()}
@@ -591,7 +601,8 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
 
 def render(doc: dict) -> str:
     """One line per item, then the count."""
-    lines = [f"{i['kind']:<10} {i['stage']:<8} {i['reason']}  [{i['command']}]" for i in doc["items"]]
+    lines = [f"{i['kind']:<10} {i['stage']:<8} {i['reason']}" + (f" (cause {i['cause']})" if i.get("cause") else "")
+             + f"  [{i['command']}]" for i in doc["items"]]
     lines.append(f"{len(doc['items'])} item{'s' if len(doc['items']) != 1 else ''} need you")
     lines += [f"unavailable: {u['source']}: {u['error']} (hides {', '.join(u['kinds'])})" for u in doc["unavailable"]]
     return "\n".join(lines)

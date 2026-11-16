@@ -3,3 +3,7 @@ rules:
     text: "never edit, skip or weaken an acceptance test, because it is the spec"
     class: hard
     hard: acceptance-tests-fixed
+  - id: R2
+    text: "a `test helper` or `type-only` line → the last paragraph of `build-tighten.md`, never a question, since the check refuses a dropped assertion"
+    class: practice
+    source: spec 200

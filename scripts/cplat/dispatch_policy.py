@@ -36,10 +36,11 @@ DEFAULTS: dict = {
     "priority": ["label:bug", "label:p1", "spec-order", "oldest"],
     "gates": {"approve_specs": "human", "merge": "green-ci"},
     "serialize": ["merge"],
+    "guard": {"loop_calls": 10, "loop_minutes": 5},
 }
 # The dotted keys that take a default (the leaves of DEFAULTS; `budget.per_unit` is one leaf, a mapping).
 DEFAULTED_KEYS = ("slots", "budget.per_unit", "sources", "ready.labels", "ready.exclude_labels", "priority",
-                  "gates.approve_specs", "gates.merge", "serialize")
+                  "gates.approve_specs", "gates.merge", "serialize", "guard.loop_calls", "guard.loop_minutes")
 
 
 @dataclass
@@ -155,6 +156,12 @@ def _validate(data) -> dict:
                 if g[k] not in allowed:
                     raise _bad(f"gates.{k}", g[k], ", ".join(allowed))
                 out["gates"][k] = g[k]
+    if "guard" in top:
+        g = _mapping("guard", top["guard"] or {}, ("loop_calls", "loop_minutes"))
+        if "loop_calls" in g:
+            out["guard"]["loop_calls"] = _int("guard.loop_calls", g["loop_calls"], 3, 100)
+        if "loop_minutes" in g:
+            out["guard"]["loop_minutes"] = _int("guard.loop_minutes", g["loop_minutes"], 1, 60)
     if "serialize" in top:
         out["serialize"] = _subset("serialize", top["serialize"], SERIALIZE, must_have="merge")
     return out
