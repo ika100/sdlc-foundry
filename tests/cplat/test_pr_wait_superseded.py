@@ -216,3 +216,38 @@ def test_a_failed_run_with_no_newer_run_in_the_list_is_still_red(qwf, tmp_path):
     qwf.runs = [[{"status": "completed", "databaseId": 42, "workflowDatabaseId": 7}]]
     ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
     assert not ok and qwf.merges == [] and lines[0].startswith("RED")
+
+
+def pr_workflow(repo):
+    (repo / ".github" / "workflows").mkdir(parents=True)
+    (repo / ".github" / "workflows" / "ci.yml").write_text("on:\n  pull_request:\n  push:\n    branches: [main]\n")
+
+
+CODEQL_RUN = {"status": "completed", "conclusion": "success", "event": "dynamic"}
+CI_RUN = {"status": "completed", "conclusion": "success", "event": "pull_request"}
+
+
+def test_codeql_green_before_the_ci_run_exists_is_not_green_787(queued, tmp_path):   # #787
+    """CodeQL passed seconds after the push, GitHub had not created the CI run yet: no green, no merge until it ran."""
+    pr_workflow(tmp_path)
+    codeql = [_run_check("CodeQL", "pass", 41)]
+    queued.checks = [codeql, codeql, [*codeql, _run_check("ci-success", "pass", 42)]]
+    queued.runs = [[CODEQL_RUN], [CODEQL_RUN], [CODEQL_RUN, CI_RUN]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert ok and queued.merges == [PR] and lines[0].startswith("GREEN: all 2 check(s)")
+
+
+def test_a_ci_run_that_is_never_created_ends_unmerged_787(queued, tmp_path):   # #787
+    pr_workflow(tmp_path)
+    queued.checks = [[_run_check("CodeQL", "pass", 41)]]
+    queued.runs = [[CODEQL_RUN]]
+    with pytest.raises(ship.NoChecks, match="no pull_request workflow run"):
+        prmod.wait(tmp_path, PR, True, 3600, 10, 300)
+    assert queued.merges == []
+
+
+def test_a_repo_without_pull_request_workflows_is_green_on_its_checks_787(queued, tmp_path):   # #787
+    queued.checks = [[_run_check("CodeQL", "pass", 41)]]
+    queued.runs = [[CODEQL_RUN]]
+    ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
+    assert ok and queued.merges == [PR]

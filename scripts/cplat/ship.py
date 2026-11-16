@@ -774,6 +774,7 @@ class CheckWatch:
         self.expected: dict[str, bool] = {}                           # spec 178: check name -> required; {} = no expectation
         self.missing: list[str] = []                                  # expected names the head does not show as passed yet
         self.concluded_since: float | None = None
+        self.no_pr_run_since: float | None = None                     # #787: green checks, but no pull_request run yet
 
     def expect_from_current(self) -> None:
         """Before the land changes the head: the checks the new head must show (required ones, and those that passed here)."""
@@ -917,7 +918,7 @@ class CheckWatch:
         if not self.head:
             return []
         slug = self._slug()
-        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId",
+        out = gh(["run", "list", "--commit", self.head, "--json", "status,conclusion,databaseId,workflowDatabaseId,event",
                   "-L", "50"]
                  + (["-R", slug] if slug else []), cwd=self.repo, check=False)
         try:
@@ -925,6 +926,22 @@ class CheckWatch:
         except ValueError:
             return []
         return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+    def _pr_run_missing(self) -> bool:
+        """The repo runs workflows on pull requests, but the head shows no such run yet: GitHub creates it seconds after
+        the push, while CodeQL's checks may already have passed (#787: two PRs merged with their CI red). After
+        NO_CHECKS_GRACE without one it is an error, never a green."""
+        if not pr_workflows(self.repo) or any(r.get("event") in ("pull_request", "pull_request_target") for r in self.head_runs):
+            self.no_pr_run_since = None
+            return False
+        if self.no_pr_run_since is None:
+            self.no_pr_run_since = now()
+        elif now() - self.no_pr_run_since > NO_CHECKS_GRACE:
+            raise NoChecks(f"no pull_request workflow run was created on {(self.head or '')[:7]} of {self.pr} after "
+                           f"{NO_CHECKS_GRACE}s; only {', '.join(sorted(self.reported)) or 'no'} check(s) reported",
+                           hint="is a runner online and is the workflow's trigger met? Merging without CI is never done "
+                                "automatically")
+        return True
 
     def _runs_pending(self) -> bool:
         """A workflow run of the head commit that has not completed: a queued run reports no checks at all, so the
@@ -1000,6 +1017,9 @@ class CheckWatch:
         pending = [c for c in cs if c.get("bucket") == "pending" or c in own]
         if cs and not pending:
             if self._runs_pending():
+                return "pending", cs, []
+            if self._pr_run_missing():
+                self.missing = ["a pull_request workflow run (not created yet)"]
                 return "pending", cs, []
             self.missing = self._unmet(cs) if self.expected else []
             if self.missing:
@@ -1090,6 +1110,21 @@ class ChecksPending(PlatformError):
     def __init__(self, message: str, hint: str | None = None, checks: list[str] | None = None) -> None:
         super().__init__(message, hint=hint)
         self.checks = checks or []
+
+
+def pr_workflows(repo: Path) -> bool:
+    """Whether a workflow of the repo's checkout runs on pull requests (`pull_request` or `pull_request_target` in `on:`)."""
+    try:
+        files = list((Path(repo) / ".github" / "workflows").glob("*.y*ml"))
+    except OSError:
+        return False
+    for f in files:
+        try:
+            if re.search(r"^\s*(?:on:\s*\[?.*\b)?pull_request(?:_target)?\b", f.read_text(errors="replace"), re.M):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def wait_checks(watch: CheckWatch, timeout: float, interval: float) -> tuple[str, list[dict], list[dict]]:
