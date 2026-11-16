@@ -91,7 +91,8 @@ def command_of(argv: list[str]) -> str:
     for a in argv[len(prefix):]:
         if a.startswith("-"):
             break
-        words.append(a)
+        if a.isdigit():                    # a PR or run number; any other word could carry a value that must not be stored or printed
+            words.append(str(int(a)))
     return "cplat " + " ".join(words)
 
 
