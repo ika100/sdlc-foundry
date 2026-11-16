@@ -122,6 +122,11 @@ cplat prints who holds the lock; past its timeout the command fails with `the me
 no fix round: run it again. With `serialize: [merge, e2e]` the lock covers the whole land phase, so only one PR at a time waits for its
 end-to-end checks.
 
+During a platform release every merge into that repository waits for the release hold instead: cplat prints
+`waiting for the release hold of <repo>: release <version> since <time>` every minute, the wait has no timeout, and the merge continues by
+itself when the hold is cleared or expires. `cplat dispatch status` shows it as `release hold:`, and `cplat platform hold --clear` lifts a
+hold a release left at a confirmation stop.
+
 ## Budget
 
 The day is your local calendar day. The dispatcher books the tokens of every unit and of its own model calls to today's ledger. At
