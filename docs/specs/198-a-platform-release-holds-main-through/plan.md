@@ -17,6 +17,7 @@ tasks:
     covers: [AC-198.1, AC-198.2, AC-198.3, AC-198.4, AC-198.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: "`cplat platform hold [--clear] [--json]`"
     files: [scripts/cplat/holdcmd.py, scripts/cplat/cplat.py]
