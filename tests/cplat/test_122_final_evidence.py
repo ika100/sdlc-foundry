@@ -60,12 +60,12 @@ def test_releases_come_from_gh_with_their_date_within_the_period(monkeypatch):  
 
     def gh(args):
         seen.append(args)
-        return json.dumps([{"tagName": "v1.4.0", "publishedAt": "2026-10-20T10:00:00Z", "url": "https://github.com/acme/shop-api/releases/tag/v1.4.0"},
-                           {"tagName": "v0.1.0", "publishedAt": "2025-01-01T10:00:00Z", "url": "u"}])
+        return json.dumps([{"tagName": "v1.4.0", "publishedAt": "2026-10-20T10:00:00Z"},
+                           {"tagName": "v0.1.0", "publishedAt": "2025-01-01T10:00:00Z"}])
 
     monkeypatch.setattr(needs, "gh", gh)
     out = needs._releases({"shop-api": "acme/shop-api"}, 90)
-    assert seen[0][:4] == ["release", "list", "-R", "acme/shop-api"] and "tagName,publishedAt,url" in seen[0]
+    assert seen[0][:4] == ["release", "list", "-R", "acme/shop-api"] and "url" not in seen[0][-1]   # gh release list has no url field (J20)
     assert out == [{"repo": "acme/shop-api", "component": "shop-api", "tag": "v1.4.0", "published_at": "2026-10-20T10:00:00Z",
                     "url": "https://github.com/acme/shop-api/releases/tag/v1.4.0"}]
 
