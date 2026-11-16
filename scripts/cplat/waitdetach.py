@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import datetime as dt
+import hashlib
 import json
 import os
 import signal
@@ -40,7 +41,7 @@ class Detached:
     id: str
     pid: int
     command: str
-    argv: list[str] = field(default_factory=list)
+    key: str = ""                         # digest of the argv: joins a second caller without storing its words
     session: str | None = None
     log: str = ""
     started_at: str = ""
@@ -86,7 +87,7 @@ def command_of(argv: list[str]) -> str:
     """`cplat <prefix> <positionals>`: the words up to the first option."""
     prefix = _matches(argv)
     if prefix is None:
-        return "cplat " + " ".join(argv[:1])
+        return "cplat"
     words = list(prefix)
     for a in argv[len(prefix):]:
         if a.startswith("-"):
@@ -94,6 +95,11 @@ def command_of(argv: list[str]) -> str:
         if a.isdigit():                    # a PR or run number; any other word could carry a value that must not be stored or printed
             words.append(str(int(a)))
     return "cplat " + " ".join(words)
+
+
+def key_of(argv: list[str]) -> str:
+    """The argv as a digest: a second caller with the same words joins the running wait; the words are not stored."""
+    return hashlib.sha256(json.dumps(argv).encode()).hexdigest()
 
 
 def wanted(argv: list[str]) -> bool:
@@ -133,7 +139,7 @@ def _records(repo: Path) -> list[tuple[Detached, Path]]:
             continue
         data = _read(f)
         try:
-            rec = Detached(str(data["id"]), int(data["pid"]), str(data["command"]), list(data.get("argv") or []),
+            rec = Detached(str(data["id"]), int(data["pid"]), str(data["command"]), str(data.get("key") or ""),
                            data.get("session"), str(data.get("log") or ""), str(data.get("started_at") or ""))
         except (KeyError, TypeError, ValueError):
             continue
@@ -248,7 +254,7 @@ def front(argv: list[str]) -> int:
     d = folder(cwd, create=True)
     assert d is not None
     for w in alive(cwd):
-        if w.argv == argv:
+        if w.key == key_of(argv):
             return _stream(d, w.id, lambda w=w: not _alive(w.pid), w.command)
     ident = uuid.uuid4().hex[:8]
     command = command_of(argv)
@@ -259,7 +265,7 @@ def front(argv: list[str]) -> int:
                                 env={**os.environ, "CPLAT_WAIT_CHILD": ident})
     session = next((v for n in ("CLAUDE_CODE_SESSION_ID", "CPLAT_SESSION_ID") if (v := (os.environ.get(n) or "").strip())), None)
     tmp = d / f"{ident}.tmp"
-    tmp.write_text(json.dumps({"id": ident, "pid": proc.pid, "command": command, "argv": argv, "session": session,
+    tmp.write_text(json.dumps({"id": ident, "pid": proc.pid, "command": command, "key": key_of(argv), "session": session,
                                "log": str(log), "started_at": dt.datetime.now().isoformat(timespec="seconds")}))
     tmp.replace(d / f"{ident}.json")
     return _stream(d, ident, lambda: proc.poll() is not None, command)
