@@ -45,12 +45,14 @@ tasks:
     covers: [AC-191.4, AC-191.5, AC-191.6, AC-191.7]
     parallel_safe: true
     depends_on: [t1, t4, t5]
+    done: true
   - id: t7
     title: "CONTRIBUTING CI section, UPGRADES guide, ADR for the split, changelog fragment"
     files: [CONTRIBUTING.md, docs/UPGRADES.md, docs/adr/README.md, docs/adr/069-one-versions-table-pins-everything-and-every-release-proves-the-upgrade.md, docs/changelog.d/191-upgrade-render-check.changed.md]
     covers: [AC-191.3, AC-191.8]
     parallel_safe: true
     depends_on: [t4]
+    done: true
 ---
 
 # Plan — 191 Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate
