@@ -1,7 +1,7 @@
 ---
 spec_id: 207-preflight-checks-trust-and-subagent
 title: Preflight checks trust and subagent tools before a ship
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -68,8 +68,9 @@ How a failure looks and is recorded.
 
 ## Open questions
 
-- May an unattended run start in a folder whose trust dialog was never accepted? (suggested: yes, when everything trust would give reaches the run another way, as AC-207.1 states, so spec 162's fresh clones keep working; refuse otherwise; cplat never records trust itself; affects AC-207.1, AC-207.8)
+- ~~May an unattended run start in a folder whose trust dialog was never accepted?~~ Answered (user, 2026-11-17): yes, when everything trust would give reaches the run another way, as AC-207.1 states; refused otherwise; cplat never records trust itself.
 
 ## Changelog
 
 - 2026-11-17 created
+- 2026-11-17 approved
