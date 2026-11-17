@@ -212,7 +212,7 @@ def stop_of(item: dict, slug: str, *, events=(), now: datetime.datetime | None =
     spec_id = unit.get("spec") or (item.get("object") or {}).get("spec")
     decision = unit.get("status") == "escalated" and unit.get("cause") == "decision" and not red
     return {"kind": "decision" if decision else "failure", "key": key, "ref": ref_of(key), "branch": unit.get("branch"),
-            "log": unit.get("log"), "phase": (state or {}).get("phase"), "worktree": str(worktree),
+            "log": unit.get("log"), "reason": unit.get("reason"), "phase": (state or {}).get("phase"), "worktree": str(worktree),
             "spec_path": str(worktree / "docs" / "specs" / str(spec_id) / "spec.md") if spec_id and key.startswith("spec-") else None,
             "tried": tried, "questions": questions, "answered": answered, "asked_minutes": asked}
 

@@ -52,6 +52,7 @@ tasks:
     covers: [AC-193.1, AC-193.2, AC-193.3, AC-193.4, AC-193.5, AC-193.6, AC-193.7, AC-193.8]
     parallel_safe: true
     depends_on: [t5]
+    done: true
   - id: t7
     title: nextbuildquestions - options, input, other, actions and undo of those screens
     files: [scripts/cplat/nextbuildquestions.py, scripts/cplat/nextquestions.py]
