@@ -384,7 +384,7 @@ def test_an_amend_leaves_the_priority_and_its_changelog_line_untouched_ac_196_11
 
 @pytest.mark.parametrize("plugin", ["component", "system"])
 def test_the_amend_path_of_the_spec_command_runs_no_priority_step_ac_196_11(plugin):  # AC-196.11
-    # interface: structure of the prompt: section C (--amend) must not propose or change a priority
+    # structure of the prompt: section C (--amend) must not propose or change a priority
     text = (ROOT / "plugins" / plugin / "commands" / "spec.md").read_text()
     section = re.search(r"^## C\. --amend.*?(?=^## )", text, re.M | re.S)
     assert section, "section C (--amend) not found"
