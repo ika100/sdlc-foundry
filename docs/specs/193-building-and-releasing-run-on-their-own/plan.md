@@ -59,6 +59,7 @@ tasks:
     covers: [AC-193.1, AC-193.2, AC-193.3, AC-193.4, AC-193.5, AC-193.6, AC-193.7]
     parallel_safe: true
     depends_on: [t5]
+    done: true
   - id: t8
     title: cplat next --watch, the new --show values, judge_items, the build key and the how additions
     files: [scripts/cplat/nextcmd.py]
