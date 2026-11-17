@@ -123,17 +123,19 @@ def _created(spec: specmod.Spec) -> str:
 def _drafts(slug: str) -> list[dict]:
     """Draft specs of one repo: from `main` and from open draft PRs (the PR wins): `{spec, repo, since, pr, url}`."""
     found: dict[str, dict] = {}
-    for entry in _json(["api", f"repos/{slug}/contents/docs/specs"]) or []:
-        if entry.get("type") != "dir":
-            continue
-        text = _spec_text(slug, entry["name"])
-        parsed = _parse(entry["name"], text) if text else None
-        if parsed and parsed.status == "draft":
-            found[entry["name"]] = {"spec": parsed, "repo": slug, "since": _created(parsed), "pr": None, "url": None}
+    names = [e["name"] for e in _json(["api", f"repos/{slug}/contents/docs/specs"]) or [] if e.get("type") == "dir"]
     prs = _json(["pr", "list", "-R", slug, "--state", "open", "--draft", "--json", "number,body,createdAt,url,headRefName"]) or []
-    for pr in prs:
-        m = MARKER.search(pr.get("body") or "")
-        text = _spec_text(slug, m.group(1), pr.get("headRefName")) if m else None
+    marked = [MARKER.search(pr.get("body") or "") for pr in prs]
+    # one `gh` call per spec: asked at once, not one after the other
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        main_texts = list(pool.map(lambda n: _spec_text(slug, n), names))
+        pr_texts = list(pool.map(lambda pm: _spec_text(slug, pm[1].group(1), pm[0].get("headRefName")) if pm[1] else None,
+                                 zip(prs, marked)))
+    for name, text in zip(names, main_texts):
+        parsed = _parse(name, text) if text else None
+        if parsed and parsed.status == "draft":
+            found[name] = {"spec": parsed, "repo": slug, "since": _created(parsed), "pr": None, "url": None}
+    for pr, m, text in zip(prs, marked, pr_texts):
         parsed = _parse(m.group(1), text) if m and text else None
         if parsed and parsed.status == "draft":
             found[m.group(1)] = {"spec": parsed, "repo": slug, "since": pr.get("createdAt") or _created(parsed),
@@ -522,20 +524,25 @@ def collect_repo(repo_dir: Path) -> dict:
     slug = dispatch_state.slug_of(repo_dir)
     src, items = _Sources(), []
     done: list[dict] = []
-    try:
-        rows = runlist.collect(30, repo=slug)["runs"]
-        done = [r for r in rows if r.get("phase") == "done"]
-        items += _escalations(rows)
-    except Exception as e:  # noqa: BLE001
-        src.fail("runs", e, ["escalation"])
-    try:
-        items += [_draft_item(d, None, done) for d in _drafts(slug)]
-    except Exception as e:  # noqa: BLE001
-        src.fail("github", e, ["approve", "answer"])
-    try:
-        items += _triage(slug, all_triage=True)
-    except Exception as e:  # noqa: BLE001
-        src.fail("github", e, ["triage"])
+    # the runs, the drafts and the triage issues ask GitHub on their own: asked at once (as `collect` does)
+    with runlist.shared_reads(), ThreadPoolExecutor(max_workers=8) as pool:
+        rows_f = pool.submit(lambda: runlist.collect(30, repo=slug)["runs"])
+        drafts_f = pool.submit(_drafts, slug)
+        triage_f = pool.submit(_triage, slug, all_triage=True)
+        try:
+            rows = rows_f.result()
+            done = [r for r in rows if r.get("phase") == "done"]
+            items += _escalations(rows)
+        except Exception as e:  # noqa: BLE001
+            src.fail("runs", e, ["escalation"])
+        try:
+            items += [_draft_item(d, None, done) for d in drafts_f.result()]
+        except Exception as e:  # noqa: BLE001
+            src.fail("github", e, ["approve", "answer"])
+        try:
+            items += triage_f.result()
+        except Exception as e:  # noqa: BLE001
+            src.fail("github", e, ["triage"])
     items += _dispatch_items([slug], src)
     items.sort(key=lambda i: i["since"] or "")
     return {"schema": SCHEMA, "system": slug.rsplit("/", 1)[-1], "read_at": runs._iso(runs.utcnow()), "items": items,

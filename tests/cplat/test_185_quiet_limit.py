@@ -266,3 +266,11 @@ def test_a_run_without_a_progress_file_is_stopped_with_its_processes_ac_185_5(wo
     wait_gone(int(wait_file(world.d / "pid-0").strip()))
     wait_gone(int(wait_file(world.d / "child-0").strip()))
     assert len(world.calls()) == 1
+
+
+def test_a_run_that_blocks_after_its_last_test_says_no_test_runs_797(tmp_path):
+    import quiet_limit
+    progress = tmp_path / "p"
+    progress.write_text("start t/a.py::one\nend t/a.py::one\n")
+    assert quiet_limit.gave_up_lines("test-fast", tmp_path / "log", progress)[1:] == [
+        "still running: no test (every test ended; the run blocks after the last one)"]
