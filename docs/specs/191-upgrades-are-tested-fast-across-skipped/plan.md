@@ -10,18 +10,21 @@ tasks:
     covers: [AC-191.4, AC-191.5, AC-191.6, AC-191.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "upgrade-render-check.py compare: the breaking rules, Upgrade step acceptance, output and exit codes"
     files: [scripts/upgrade-render-check.py]
     covers: [AC-191.1, AC-191.2, AC-191.3]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: "The shared upgrade system builder (create, update) without a cluster"
     files: [tests/e2e/lib/upgrade-system.sh]
     covers: [AC-191.2, AC-191.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: "upgrade-render-check.py run: both from-releases, sections, render failures"
     files: [scripts/upgrade-render-check.py]
