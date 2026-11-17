@@ -235,10 +235,10 @@ def test_without_a_saved_batch_the_commands_say_to_run_batch_ac_176_1(world):  #
 # ---------------- AC-176.3 the confirmation ----------------
 
 PLAN = """The plan (6 actions):
-  #560  bug, P1: queue the fix, it runs on its own
-  #571  feature, P1: write a new spec, track the issue in it
-  #562  bug, P1: queue the fix, it runs on its own
-  #563  feature, P2: write a new spec, track the issue in it
+  #560  bug, P1 (P1: normal bug or feature): queue the fix, it runs on its own
+  #571  feature, P1 (P1: normal bug or feature): write a new spec, track the issue in it
+  #562  bug, P1 (P1: normal bug or feature): queue the fix, it runs on its own
+  #563  feature, P2 (P2: convenience): write a new spec, track the issue in it
   #564  question: post the answer, label question
   #548  tracked in spec 176: label tracked
 Choose: OK, do it / Change one / Cancel"""
@@ -252,7 +252,7 @@ def test_the_confirmation_is_one_line_per_action_in_group_order_ac_176_3(scene):
     w, rows = scene
     out = confirm(w, rows).out
     assert out.rstrip("\n") == PLAN
-    assert max(len(l) for l in out.splitlines()) <= 80
+    assert max(len(l) for l in out.splitlines()) <= 90   # a priority line carries its reason and is not wrapped (spec 196)
     for word in FORBIDDEN:
         assert word not in out.lower(), word
 
@@ -296,7 +296,7 @@ def test_show_replaces_other_priority_labels_and_a_row_without_actions_shows_non
     world.issue(1, labels=("triage", "p2"))
     world.issue(2)
     world.batch()
-    rows = [row(1, priority="P0"), row(2, **{"class": "needs-exploring", "priority": None, "expected": None})]
+    rows = [row(1, priority="P0", priority_decided=True), row(2,**{"class": "needs-exploring", "priority": None, "expected": None})]
     assert "labels: +bug, +triaged, +p0, -triage, -p2" in confirm(world, rows, "--show", "1").out
     out = confirm(world, rows, "--show", "2").out
     assert "labels: none" in out and "comment: none" in out

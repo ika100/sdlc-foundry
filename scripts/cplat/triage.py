@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from pathlib import Path
 import core
 import dispatch_state
 import feedback
+import priority
 import triage_facts
 from core import PlatformError, Report, run
 
@@ -37,7 +39,8 @@ LABELS = {
     "p1": ("d93f0b", "Priority 1: a normal bug or feature"),
     "p2": ("fef2c0", "Priority 2: cosmetic, convenience, easy workaround"),
 }
-DECISION_LABELS = {"needs-info", "tracked", "question", "duplicate", "wontfix"}
+PRIORITY_LABELS = tuple(priority.label_of(level) for level in priority.LEVELS)
+DECISION_LABELS ={"needs-info", "tracked", "question", "duplicate", "wontfix"}
 BODY_LIMIT = 4000
 COMMENT_LIMIT = 1500
 FENCE = "-----"
@@ -64,6 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
     co = sub.add_parser("confirm", help="the plan of the proposals, one line per action; --show N prints the exact labels and comment")
     co.add_argument("--proposals", required=True, metavar="FILE")
     co.add_argument("--show", type=int, metavar="N")
+    co.add_argument("--set", action="append", default=[], metavar="N=P", help="the priority the user chose for issue N (P0, P1 or P2); repeatable")
     co.add_argument("--json", action="store_true")
     ac = sub.add_parser("act", help="apply exactly the confirmed rows of the proposals and print the hand-over summary; never closes")
     ac.add_argument("--proposals", required=True, metavar="FILE")
@@ -197,6 +201,12 @@ def setup_labels(ns: argparse.Namespace) -> Report:
     return r
 
 
+def refuse_unattended_priority(changed: list[str]) -> None:
+    """A priority label is the user's decision: an unattended run (CPLAT_HEADLESS=1) never changes one (spec 196)."""
+    if os.environ.get("CPLAT_HEADLESS") == "1" and any(x in PRIORITY_LABELS for x in changed):
+        raise PlatformError("a priority label needs the user's confirmation", hint="run /issue:triage in a Claude Code session")
+
+
 def apply(ns: argparse.Namespace) -> Report:
     comment = ""
     if ns.comment_file:
@@ -213,12 +223,18 @@ def apply_one(repo: str | None, number: int, want_add: list[str], want_remove: l
         raise PlatformError(f"unknown label(s): {', '.join(unknown)}", hint="allowed: " + ", ".join(LABELS))
     if not (want_add or want_remove or comment):
         raise PlatformError("nothing to do", hint="pass --add/--remove LABEL and/or --comment-file FILE")
+    asked = [x for x in want_add if x in PRIORITY_LABELS]
+    if len(asked) > 1:
+        raise PlatformError("more than one priority label: " + ", ".join(asked), hint="an issue carries one of p0, p1, p2")
     r = Report(title=f"triage #{number}" + ("  (dry run)" if dry_run else ""))
     # Only real changes: gh fails on removing a label the repo lacks, and the undo must not add back what was never there.
     add, remove = want_add, want_remove
     if add or remove:
         have = _labels(json.loads(gh(["issue", "view", str(number), *_rargs(repo), "--json", "labels"]) or "{}") or {})
-        add, remove = [x for x in add if x not in have], [x for x in remove if x in have]
+        if asked:   # one priority label per issue: the others go in the same edit
+            want_remove = want_remove + [x for x in PRIORITY_LABELS if x not in asked and x in have and x not in want_remove]
+        add, remove = [x for x in add if x not in have], [x for x in want_remove if x in have]
+        refuse_unattended_priority(add + remove)
         missing = sorted(set(add) - _repo_labels(repo))
         if missing:
             raise PlatformError(f"label(s) missing in the repo: {', '.join(missing)}", hint="run `cplat issue triage setup-labels` first")
@@ -267,7 +283,8 @@ def main(argv: list[str]) -> int:
         return 0
     if ns.action in ("overview", "confirm"):
         import triage_view
-        print(triage_view.run(_slug(ns), ns.proposals, show_number=getattr(ns, "show", None), as_json=ns.json, what=ns.action))
+        print(triage_view.run(_slug(ns), ns.proposals, show_number=getattr(ns, "show", None), as_json=ns.json, what=ns.action,
+                                sets=getattr(ns, "set", None)))
         return 0
     if ns.action == "act":
         import triage_act
