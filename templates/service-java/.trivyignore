@@ -1,5 +1,1 @@
 # Accepted risks for `devbox run audit` (trivy). One CVE per line; every entry needs a reason and a revisit date.
-#
-# Spring Framework XsltView RCE: the fix exists only in Spring Framework 7 / Spring Boot 4, not in the 6.2.x line used by
-# Spring Boot 3.x (ADR-009). The template does not use XsltView. Revisit when moving to Spring Boot 4.
-CVE-2026-47884
