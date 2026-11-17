@@ -36,7 +36,7 @@ Repo-local commands go through `devbox run <script>`. Reading other repos goes t
      - {env: {TODO_API_URL: 'http://todo-api'}, component: todo-web}
    ```
    Only `resource`, `uses`, `expose`, `env`, `replicas` and `resources` exist; a `uses` names a resource of `system.yaml` or an earlier `resource` operation; every component is in `system.yaml` or a repo of the plan. Quote values with `:`. An instance setting a criterion states becomes its operation, never a separate gitops PR or a question, because the approved spec decided the value and it ships in the one entry PR. `/system:ship` applies them with `cplat`.
-5. **Write the contract** between the repos in the plan body's `## Contract` section: endpoints, request/response fields, status codes, events. With two or more repos it also has `### Errors` (the error format, and how a caller treats a response the contract does not list) and `### Timeouts` (per call, and the behaviour when the other side is down or slow); `plan-check` refuses a contract without them (spec 053). Make it complete: every repo's spec copies it and tests against it. A large contract goes in `docs/specs/<PLAN_ID>/design.md`, `## Contract` (it takes precedence).
+5. **Write the contract** between the repos in the plan body's `## Contract` section: endpoints, request/response fields, status codes, events. With two or more repos it also has `### Rules` (a yaml `rules:` block of the shared input rules, kinds `required`, `min_length`, `max_length`, `min_value`, `max_value`, `allowed`, each with provider and consumers, or the line `No shared rules: <reason>`), `### Errors` (an `errors:` yaml block, and how a caller treats a response the contract does not list) and `### Timeouts` (per call, and the behaviour when the other side is down or slow); `plan-check` refuses a contract without them (spec 053, spec 110). Step 8 shows the format. Make it complete: every repo's spec copies it and tests against it. A large contract goes in `docs/specs/<PLAN_ID>/design.md`, `## Contract` (it takes precedence).
 6. **Order by real dependencies.** `depends_on` captures "library before its consumers" and "service before a service that needs its code". A backend and its UI need none once the contract is written: they build in parallel.
 7. **Plan the pins.** `gitops_pin` lists which components get pinned in which environment: in `staging` after their own PR merges (`apply_after: <repo-id>`) or after all merge (`apply_after: merge_of_all`). Libraries are never pinned, because they are consumed through the service's lockfile bump.
 8. **Write `docs/plan/<PLAN_ID>.md`** in exactly this format, then run `devbox run plan-check` and fix its errors:
@@ -77,9 +77,50 @@ gitops_pin:
 
 <endpoints, fields, status codes, events between the repos>
 
+### Rules
+
+```yaml
+rules:
+  - id: title-max
+    endpoint: POST /todos
+    field: title
+    kind: max_length
+    value: 200
+    provider: todo-api
+    consumers: [todo-web]
+  - id: title-required
+    endpoint: POST /todos
+    field: title
+    kind: required
+    value: true
+    provider: todo-api
+    consumers: [todo-web]
+  - id: status-values
+    endpoint: PATCH /todos/{id}
+    field: status
+    kind: allowed
+    value: [open, done]
+    provider: todo-api
+    consumers: [todo-web]
+```
+
+<prose rules no tool checks, e.g. patterns and formats>
+
 ### Errors
 
-<error format; how a caller treats a response the contract does not list>
+```yaml
+errors:
+  status: 422
+  body:
+    list: errors        # omit `list` when the body is one error object
+    field: field
+    rule: rule
+    message: message
+  unlisted:
+    message: "Something went wrong. Please try again."
+```
+
+<how a caller treats a response the contract does not list>
 
 ### Timeouts
 
