@@ -169,7 +169,8 @@ def test_a_ship_escalation_stores_its_questions_with_the_suggested_answer_ac_186
     assert ship.main(["--repo", str(ship_repo), "escalate", "which store holds the alerts", "--cause", "decision",
                       "--question", "Which store? (suggested: redis; alternatives: postgres)", "--question", "How long?"]) == 0
     st = ship.load_state(ship_repo)
-    assert st["questions"] == [{"text": "Which store?", "suggested": "redis"}, {"text": "How long?", "suggested": None}]
+    assert st["questions"] == [{"text": "Which store?", "suggested": "redis", "options": ["redis", "postgres"]},
+                               {"text": "How long?", "suggested": None, "options": []}]      # options kept since spec 193
     assert ship.main(["--repo", str(ship_repo), "escalate", "CI is red", "--cause", "code"]) == 0
     assert "questions" not in ship.load_state(ship_repo)
 
