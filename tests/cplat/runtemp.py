@@ -1,14 +1,17 @@
 """Spec 208: a run of the cplat tests owns one directory under the developer's pytest temp root.
 
 The directory holds the run's pytest base temp, its uv cache (UV_CACHE_DIR) and the temp root of nested pytest runs
-(PYTEST_DEBUG_TEMPROOT), so nothing a run makes reaches the developer's uv cache or lasts after a passing run. Self-contained:
-it imports nothing from scripts/cplat. The contract is in docs/specs/208-*/design.md.
+(PYTEST_DEBUG_TEMPROOT), so nothing a run makes reaches the developer's uv cache or lasts after a passing run. A failing run
+keeps only its failed tests' directories, and only the last 3 failing runs are kept. Self-contained: it imports nothing from
+scripts/cplat. The contract is in docs/specs/208-*/design.md.
 """
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -23,6 +26,8 @@ from _pytest.tmpdir import get_user
 
 ENV_NAMES = ("UV_CACHE_DIR", "PYTEST_DEBUG_TEMPROOT")
 OK_STATUSES = (0, 5)   # OK, no tests collected
+KEEP_FAILING_RUNS = 3
+SHARED = "shared-renders"   # session-scoped dirs: made inside the first test that needs them, never attributed to a test
 
 
 def _is_worker(config) -> bool:
@@ -61,6 +66,63 @@ def _temp_root() -> Path:
     root = base / f"pytest-of-{get_user() or 'unknown'}"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     return root
+
+
+class _Manifest:
+    """Per test, one start and one end line holding the directories the test made in this process's base temp."""
+
+    def __init__(self, run: Path, worker: str):
+        self.run = run
+        (run / "manifest").mkdir(exist_ok=True)
+        self.out = open(run / "manifest" / f"{worker}.jsonl", "a")
+
+    def write(self, rec: dict) -> None:
+        self.out.write(json.dumps(rec) + "\n")
+        self.out.flush()
+
+
+_manifest: _Manifest | None = None
+
+
+def _retain(root: Path) -> None:
+    """Keep the newest KEEP_FAILING_RUNS failing runs under the temp root; never touch a live run."""
+    failing: list[tuple[float, Path]] = []
+    for run in sorted(root.glob("cplat-run-*")):
+        try:
+            fd = os.open(run / ".lock", os.O_RDWR)
+        except OSError:
+            continue
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                continue   # live
+            try:
+                info = json.loads((run / "run.json").read_text())
+                state, started = info.get("state"), float(info.get("started"))
+            except (OSError, ValueError, TypeError):
+                info, state, started = {}, "failed", run.stat().st_mtime
+            if state == "passed":
+                _force_remove(run)
+                continue
+            if state == "running":   # an orphan: killed before its own cleanup
+                for name in ("uv-cache", "temproot"):
+                    _force_remove(run / name)
+                for path in (run / "tmp").glob("**/" + SHARED + "*"):
+                    _force_remove(path)
+                (run / "run.json").write_text(json.dumps({"pid": info.get("pid"), "started": started, "state": "failed"}))
+            failing.append((started, run))
+        finally:
+            os.close(fd)
+    failing.sort(reverse=True)
+    for _started, run in failing[KEEP_FAILING_RUNS:]:
+        try:
+            fd = os.open(run / ".lock", os.O_RDWR)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            continue   # live or already gone
+        _force_remove(run)
+        os.close(fd)
 
 
 class RunTemp:
@@ -105,6 +167,7 @@ class RunTemp:
         staging = root / f".cplat-starting-{tag}"
         staging.mkdir()
         (staging / ".lock").write_text("")
+        (staging / "uv-cache").mkdir()
         (staging / "temproot").mkdir()   # pytest creates `pytest-of-<user>` below it without parents
         self.lock_fd = os.open(staging / ".lock", os.O_RDWR)
         fcntl.flock(self.lock_fd, fcntl.LOCK_EX)
@@ -133,13 +196,46 @@ class RunTemp:
             for name in ("uv-cache", "temproot"):
                 _force_remove(self.explicit / name)
         elif self.run is not None:
-            ok = self.passed()
-            self._write_state(self.run, "passed" if ok else "failed")
-            if ok:
+            if self.passed():
+                self._write_state(self.run, "passed")
                 self._release()
                 _force_remove(self.run)
             else:
+                self._keep_failed()
+                self._write_state(self.run, "failed")
                 self._release()
+            _retain(self.run.parent)
+
+    def _keep_failed(self) -> None:
+        """Move the failed tests' directories to failed/<slug>/ and drop everything else of the run."""
+        run = self.run
+        ended: dict[str, list[str]] = {}
+        started: list[str] = []
+        for path in sorted((run / "manifest").glob("*.jsonl")):
+            for line in path.read_text().splitlines():
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue   # a line cut short by a kill
+                if "start" in rec:
+                    started.append(rec["start"])
+                elif "end" in rec:
+                    ended[rec["end"]] = rec.get("dirs", [])
+        failed = list(self.failed) + [n for n in started if n not in ended and n not in self.failed]
+        keep = run / "failed"
+        keep.mkdir(exist_ok=True)
+        for nodeid in failed:
+            slug = re.sub(r"[^A-Za-z0-9._-]", "_", nodeid)[:100] + "-" + hashlib.sha1(nodeid.encode()).hexdigest()[:8]
+            dest = keep / slug
+            dest.mkdir(exist_ok=True)
+            (dest / "NODEID").write_text(nodeid + "\n")
+            for rel in ended.get(nodeid, []):
+                src = run / rel
+                if not src.name.startswith(SHARED) and src.exists():
+                    shutil.move(str(src), str(dest / src.name))
+        for name in ("tmp", "uv-cache", "temproot", "manifest"):
+            _force_remove(run / name)
+        print(f"runtemp: kept the files of {len(failed)} failed test(s) in {keep}", file=sys.stderr)
 
     def _release(self) -> None:
         if self.lock_fd is not None:
@@ -149,13 +245,32 @@ class RunTemp:
 
 @pytest.hookimpl(tryfirst=True)   # before pytest's tmpdir plugin reads --basetemp
 def pytest_configure(config):
+    global _manifest
     if _is_worker(config):
         for name, value in config.workerinput.get("runtemp", {}).items():
             os.environ[name] = value
+        if config.workerinput.get("runtemp_run"):
+            _manifest = _Manifest(Path(config.workerinput["runtemp_run"]), config.workerinput["workerid"])
         return
     state = RunTemp(config)
     state.start()
+    if state.run is not None:
+        _manifest = _Manifest(state.run, "main")
     config.pluginmanager.register(_Controller(state), "runtemp-controller")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    if _manifest is None:
+        return (yield)
+    base = item.config._tmp_path_factory.getbasetemp()
+    before = set(os.listdir(base))
+    _manifest.write({"start": item.nodeid})
+    result = yield   # an interrupt raises here: no end line, so the test counts as failed
+    dirs = sorted(os.path.relpath(base / n, _manifest.run) for n in set(os.listdir(base)) - before
+                  if not (base / n).is_symlink())   # pytest's `<name>current` links
+    _manifest.write({"end": item.nodeid, "dirs": dirs})
+    return result
 
 
 class _Controller:
@@ -167,6 +282,7 @@ class _Controller:
     @pytest.hookimpl(optionalhook=True)
     def pytest_configure_node(self, node):
         node.workerinput["runtemp"] = dict(self.state.values)
+        node.workerinput["runtemp_run"] = str(self.state.run) if self.state.run else ""
 
     @pytest.hookimpl(wrapper=True)
     def pytest_sessionfinish(self, session, exitstatus):

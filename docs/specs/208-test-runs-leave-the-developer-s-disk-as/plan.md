@@ -17,6 +17,7 @@ tasks:
     covers: [AC-208.4, AC-208.5, AC-208.6, AC-208.7]
     parallel_safe: false
     depends_on: [t1]
+    done: true
   - id: t3
     title: "e2e scripts run inline scripts with a throwaway uv cache"
     files: [tests/e2e/lib/uv-cache.sh, tests/e2e/run.sh, tests/e2e/cluster.sh, tests/e2e/upgrade.sh]
