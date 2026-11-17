@@ -25,7 +25,7 @@ def engine():
     source = re.sub(r"\{%-?\s*if\b.*?%\}(.*?)\{%-?\s*else\s*-?%\}.*?\{%-?\s*endif\s*-?%\}", r"\1", source, flags=re.S)  # first branch
     source = re.sub(r"\{%.*?%\}", "", source, flags=re.S)
     source = re.sub(r"\{\{\s*module_name\s*\}\}", "demo_app", source)
-    if importlib.util.find_spec("fastapi") is None:       # the default fixtures import it; the engine under test does not need it
+    if "fastapi" not in sys.modules and importlib.util.find_spec("fastapi") is None:       # the default fixtures import it; the engine under test does not need it
         for name in ("fastapi", "fastapi.testclient"):
             sys.modules.setdefault(name, types.ModuleType(name))
         sys.modules["fastapi.testclient"].TestClient = object
