@@ -196,6 +196,8 @@ def test_confirm_set_refuses_what_is_not_a_priority_row_and_leaves_the_file_ac_1
 
 def test_a_run_without_confirmation_writes_no_label_and_makes_no_spec_ac_196_4(world):  # AC-196.4
     world.spec("201-new-thing", status="draft")
+    specs_dir = world.tmp / "docs" / "specs"
+    before = {p.name for p in specs_dir.iterdir()}
     world.issue(1, labels=("triage", "p2"))
     world.issue(2)
     world.batch()
@@ -205,7 +207,7 @@ def test_a_run_without_confirmation_writes_no_label_and_makes_no_spec_ac_196_4(w
     world.run("confirm", "--proposals", path, "--set", "1=P0")
     world.run("act", "--proposals", path, "--rows", "all", "--dry-run")
     assert world.writes() == []
-    assert not any((world.tmp / "docs" / "specs").iterdir())
+    assert {p.name for p in specs_dir.iterdir()} == before
 
 
 def test_an_unattended_act_with_a_priority_change_refuses_before_any_write_ac_196_4(world, monkeypatch):  # AC-196.4
