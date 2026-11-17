@@ -1,9 +1,10 @@
 ---
 spec_id: 126-unattended-runs-stop-wasting-turns-and
 title: Unattended runs stop wasting turns and CI rounds
-status: done
+status: approved
 priority: P1
 shape: platform
+tracks: [784]
 ---
 
 # 126 — Unattended runs stop wasting turns and CI rounds
@@ -41,8 +42,8 @@ Checks before the push. "The PR title rule" is the rule of the platform repo's `
 
 - **AC-126.9** Given `cplat component ship pr` (or the single finishing command of quick-task and fix-bug, AC-100.7) in the platform repo, with a PR body that closes an issue and a diff against the base branch that changes platform code but no spec, when it runs, then it refuses before `devbox run ci` and before anything is pushed, prints the same message as the `spec-required` job, opens no PR, and leaves the run's phase unchanged.
 - **AC-126.10** Given the same command run with `--no-spec`, when it opens the PR, then the PR carries the `no-spec` label and the local spec rule passes.
-- **AC-126.11** Given any platform command that opens or retitles a PR (ship, quick-task and fix-bug finishing, spec draft PRs, product ship PRs, gitops PRs, cluster repo PRs, platform update PRs), when it runs, then the title it sends satisfies the PR title rule, and a title it builds itself is shortened to fit. For example, the draft PR of a spec whose id and title together exceed 72 characters still gets a valid title. A title given by the caller that breaks the rule is refused before the push, with the rule in the message.
-- **AC-126.12** Given `cplat component ship pr` on a branch whose PR is already open under another title, when it runs, then the open PR's title is set to the title that was given and checked.
+- **AC-126.11** Given any platform command that opens or retitles a PR (ship, quick-task and fix-bug finishing, spec draft PRs, product ship PRs, gitops PRs, cluster repo PRs, platform update PRs), when it runs, then the title it sends satisfies the PR title rule, and a title it builds itself is shortened to fit. For example, the draft PR of a spec whose id and title together exceed 72 characters still gets a valid title. A title given by the caller (`--title`) to a ship PR (`cplat component ship pr` and the quick-task and fix-bug finishing), a product ship PR or a gitops PR whose only fault is a subject over 72 characters is shortened the same way as a title the command builds itself, keeping its type and scope, and the command prints one line `title shortened: "<given title>" -> "<sent title>"` before the push; it is not refused (#784). A caller title that breaks the rule in any other way (no Conventional Commits type, empty subject), and any caller title that breaks the rule on the other commands, is refused before the push, with the rule in the message.
+- **AC-126.12** Given `cplat component ship pr` on a branch whose PR is already open under another title, when it runs, then the open PR's title is set to the title that was given and checked (shortened as in AC-126.11 when it was too long).
 - **AC-126.13** Given `devbox run ci` in the platform repo on a branch with an open PR, then it checks that PR's title, body, labels and diff with the PR title rule and the spec rule, and fails with the same messages as the CI jobs. Given a branch without an open PR and no title or body handed to it, then both checks print `skipped (no pull request yet)` and do not fail the run.
 - **AC-126.14** Given a fixed list of sample titles and PR bodies (valid, invalid, 72 and 73 characters, with and without `no-spec`), then the local checks and the CI jobs reach the same verdict for every sample.
 
@@ -58,6 +59,14 @@ Success measure.
 - A local PR title check in the `devbox run ci` of component repos; their titles are checked by the platform commands that open the PRs (AC-126.11).
 - Deciding with a model whether a session made progress or why it stopped; progress and cause come from fixed rules.
 - Blocking or editing PRs that people open by hand with `gh` outside platform commands.
+
+## Assumptions
+
+- **A1** "Ship PRs" in #784 include the quick-task and fix-bug finishing, because they open the PR through the same command (AC-100.7) (other option: `cplat component ship pr` only; affects AC-126.11).
+- **A2** Spec draft PRs, cluster repo PRs and platform update PRs keep refusing a too-long caller title; #784 names only ship, gitops and product ship PRs (other option: shorten on every PR-opening command; affects AC-126.11).
+- **A3** Only an over-long subject is shortened; a caller title missing its type or with an empty subject is still refused, because shortening cannot repair it (other option: refuse nothing, build a title instead; affects AC-126.11).
+- **A4** The shortening is reported as one line `title shortened: "<given>" -> "<sent>"` on the command's output, not as a warning that fails the run (other option: a line in the PR body; affects AC-126.11).
+- **A5** AC-126.11 keeps its id although the caller-title behaviour changes, as the orchestrator asked, so the one title criterion stays in one place; tests that assert the refusal for ship, product ship or gitops PRs must be updated (other option: withdraw AC-126.11 and add AC-126.16; affects AC-126.11).
 
 ## Open questions
 
@@ -79,3 +88,5 @@ Success measure.
 - 2026-10-28 approved
 - 2026-10-28 building
 - 2026-10-28 done
+- 2026-11-17 draft: amend: caller --title over 72 is shortened with pr_rules.fit, not refused (#784)
+- 2026-11-17 approved; the old plan is plan.v1.md
