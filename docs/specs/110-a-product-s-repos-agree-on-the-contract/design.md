@@ -5,7 +5,7 @@
 - **The rules and the error contract are YAML blocks inside the plan's contract** (`### Rules` and `### Errors`, a
   fenced ```` ```yaml ```` block each), not new front-matter keys: they sit next to the prose they belong to, the plan
   stays readable, and `check_contract` already finds the contract in the plan body or in the spec's `design.md` (design
-  wins, as today). ADR: `docs/adr/<n>-shared-input-rules-live-in-the-plan-contract.md` (created by plan task t8 with
+  wins, as today). ADR: [ADR-118](../../adr/118-shared-input-rules-live-in-the-plan-contract.md) (created by plan task t8 with
   `cplat adr add`).
 - **One parser, in the gitops-app template's `scripts/plan.py`.** plan-check, the pin check (`import plan`, a sibling
   script, as `pin.py` imports `render`) and `cplat spec new --from-plan` all use it. cplat runs it as a subprocess
