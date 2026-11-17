@@ -143,8 +143,30 @@ def test_script_cmd_builds_the_helper_argv_ac_209_1():  # AC-209.1
 @pytest.mark.parametrize("module", ["gitops", "update", "clusterrepo", "appship", "appship_joint"])
 def test_cplat_call_sites_no_longer_run_scripts_with_uv_run_ac_209_1(module):  # AC-209.1
     text = (ROOT / "scripts" / "cplat" / f"{module}.py").read_text()
-    assert not re.search(r'"uv",\s*"run"', text), f"{module}.py still starts `uv run` itself"
+    assert not re.search(r"""["']uv["']\s*,\s*["']run["']""", text), f"{module}.py still starts `uv run` itself"
     assert "script_cmd" in text
+
+
+def captured_argv(monkeypatch, module, call):
+    """Run `call` with the module's `run` replaced; returns the argv it tried to start (what the site runs, whatever its spelling)."""
+    seen = []
+    monkeypatch.setattr(module, "run", lambda argv, **kw: seen.append(list(argv)) or subprocess.CompletedProcess(argv, 0, "", ""))
+    try:
+        call()
+    except Exception:  # noqa: BLE001  (only the first command matters; what follows needs a real repo)
+        pass
+    return seen
+
+
+def test_the_render_sites_run_script_cmd_ac_209_1(monkeypatch, tmp_path):  # AC-209.1
+    import clusterrepo
+    import gitops
+    import update
+    import uvscript
+    want = uvscript.script_cmd("scripts/render.py")
+    assert captured_argv(monkeypatch, gitops, lambda: gitops.render(tmp_path))[:1] == [want]
+    assert captured_argv(monkeypatch, clusterrepo, lambda: clusterrepo._render(tmp_path, ""))[:1] == [want]
+    assert captured_argv(monkeypatch, update, lambda: update.rerender_cluster(tmp_path, set()))[:1] == [want]
 
 
 def test_the_joint_pr_devbox_call_goes_through_the_helper_ac_209_1(monkeypatch, tmp_path):  # AC-209.1
@@ -212,9 +234,20 @@ def stub_repo(world, name, commands, template):
                                       if (template / "scripts" / "uv-script.sh").is_file() else {}))
 
 
-def assert_recipes_add_nothing_in_worktrees(world, devbox: Path, names: list[str], template: Path, worktrees=3):
+def inline_segments(cmd: str) -> list[str]:
+    """The parts of a long recipe that run an inline script (`uv run scripts/x.py …` or the helper), run without the rest."""
+    blocks = block_scripts()
+    found = re.finditer(r"(?:\buv run|\bbash scripts/uv-script\.sh)(?: --quiet)? scripts/([\w-]+\.py)[^&;|]*", cmd)
+    return [m.group(0) for m in found if m.group(1) in blocks]
+
+
+def assert_recipes_add_nothing_in_worktrees(world, devbox: Path, names: list[str], template: Path, worktrees=3, segments=False):
     scripts = recipes(devbox)
     cmds = [scripts[n] for n in names]
+    if segments:
+        cmds = [seg for c in cmds for seg in inline_segments(c)]
+        names = [f"segment {i}" for i in range(len(cmds))]
+        assert cmds, "no inline script command found in the recipes"
     repo = stub_repo(world, "gen", cmds, template)
     for n, cmd in zip(names, cmds):
         res = run_recipe(world, repo, cmd)
@@ -262,8 +295,9 @@ def test_the_helper_runs_in_the_cluster_scripts_with_quiet_ac_209_2():  # AC-209
 
 # ---------------- AC-209.3: the platform's own recipes ----------------
 
-def test_the_platform_shapes_check_recipe_in_new_worktrees_adds_no_script_environment_ac_209_3(world):  # AC-209.3
-    assert_recipes_add_nothing_in_worktrees(world, ROOT / "devbox.json", ["shapes-check"], ROOT.joinpath("."))
+def test_the_platform_recipes_inline_script_calls_in_new_worktrees_add_no_script_environment_ac_209_3(world):  # AC-209.3
+    assert_recipes_add_nothing_in_worktrees(world, ROOT / "devbox.json", ["validate", "shapes-check", "quality"], ROOT.joinpath("."),
+                                            segments=True)
 
 
 def test_no_platform_recipe_or_script_starts_an_inline_script_with_uv_run_ac_209_3():  # AC-209.3
@@ -278,20 +312,31 @@ def test_no_platform_recipe_or_script_starts_an_inline_script_with_uv_run_ac_209
 
 # ---------------- AC-209.4: /platform:update ----------------
 
-@pytest.mark.parametrize("template", [APP, CLUSTER], ids=["gitops-app", "cluster-gitops"])
-def test_update_from_the_previous_release_replaces_no_recipe_and_brings_the_helper_ac_209_4(template):  # AC-209.4
-    new = json.loads((template / "devbox.json").read_text())
-    old = json.loads(json.dumps(new))
+def previous_release_devbox(template: Path) -> dict:
+    """The template's devbox.json at the last release tag; without a tag, the current one with the helper swapped back to `uv run`."""
+    tags = subprocess.run(["git", "tag", "--sort=-v:refname", "--merged", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.split()
+    if tags:
+        shown = subprocess.run(["git", "show", f"{tags[0]}:templates/{template.name}/devbox.json"], cwd=ROOT, capture_output=True, text=True)
+        if shown.returncode == 0:
+            return json.loads(shown.stdout)
+    old = json.loads((template / "devbox.json").read_text())
     for name, cmd in old["shell"]["scripts"].items():
         if isinstance(cmd, str):
             old["shell"]["scripts"][name] = cmd.replace("bash scripts/uv-script.sh", "uv run")
     old["shell"]["scripts"].pop("plan", None)
-    assert old != new, "the template's recipes do not use the helper yet"
+    return old
+
+
+@pytest.mark.parametrize("template", [APP, CLUSTER], ids=["gitops-app", "cluster-gitops"])
+def test_update_from_the_previous_release_replaces_no_recipe_and_brings_the_helper_ac_209_4(template):  # AC-209.4
+    new = json.loads((template / "devbox.json").read_text())
+    old = previous_release_devbox(template)
+    assert not any("uv-script.sh" in str(v) for v in old["shell"]["scripts"].values())
     merged, _, replaced = update.merge_devbox(json.loads(json.dumps(old)), new, old)
     assert replaced == []
     assert merged["shell"]["scripts"] == new["shell"]["scripts"]
+    assert "bash scripts/uv-script.sh" in merged["shell"]["scripts"]["render"]  # the repo got the helper's recipes, no edit by hand
     assert (template / "scripts" / "uv-script.sh").is_file()
-    assert "uv-script.sh" not in (template / "copier.yml").read_text()  # not a project-owned file: it ships with the template
 
 
 # ---------------- AC-209.5: each dependency list has its own environment ----------------
@@ -323,7 +368,13 @@ def test_three_runs_at_once_succeed_with_the_same_output_and_add_one_environment
     wts = [world.worktree(main, str(i)) for i in range(3)]
     procs = [subprocess.Popen(["bash", str(helper()), "scripts/x.py", "a"], cwd=wt, env=world.env, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, text=True) for wt in wts]
-    results = [(p.communicate(timeout=110), p.returncode) for p in procs]
+    try:
+        results = [(p.communicate(timeout=110), p.returncode) for p in procs]
+    finally:
+        for p in procs:
+            if p.poll() is None:
+                p.kill()
+                p.wait()
     for (out, err), code in results:
         assert code == alone.returncode, err
         assert out == alone.stdout
@@ -349,13 +400,19 @@ def test_the_helper_passes_arguments_exit_code_output_cwd_and_the_scripts_own_pa
 
 
 def test_the_helper_gives_the_same_result_as_uv_run_for_a_script_with_a_block_ac_209_7(world):  # AC-209.7
-    main = world.repo("proj", {"scripts/x.py": world.script()})
-    direct = subprocess.run(["uv", "run", "scripts/x.py", "q"], cwd=main, env=world.env, capture_output=True, text=True, timeout=110)
-    via = run_helper(world, main, "scripts/x.py", "q")
-    assert (via.returncode, via.stdout) == (direct.returncode, direct.stdout)
-    direct = subprocess.run(["uv", "run", "scripts/x.py"], cwd=main, env=world.env | {"EXIT": "3"}, capture_output=True, text=True, timeout=110)
-    via = run_helper(world, main, "scripts/x.py", EXIT="3")
-    assert (via.returncode, via.stdout) == (direct.returncode, direct.stdout) == (3, "1.0 []\n")
+    body = ("import os, sys\nimport tinydep\nprint('out', tinydep.VERSION, sys.argv[1:])\nprint('err', sys.argv[1:], file=sys.stderr)\n"
+            "open('written.txt', 'w').write(f'{tinydep.VERSION} {sys.argv[1:]} {sys.stdin.read()}')\nsys.exit(int(os.environ.get('EXIT', '0')))\n")
+    main = world.repo("proj", {"scripts/x.py": BLOCK.format(url=world.v1) + body})
+    direct_wt, via_wt = world.worktree(main, "direct"), world.worktree(main, "via")
+    mine = lambda r: [ln for ln in r.stderr.splitlines() if ln.startswith("err")]  # noqa: E731  (uv's own progress lines differ)
+    for code in ("0", "3"):
+        env = world.env | {"EXIT": code}
+        direct = subprocess.run(["uv", "run", "scripts/x.py", "q"], cwd=direct_wt, env=env, input="in", capture_output=True, text=True, timeout=110)
+        via = subprocess.run(["bash", str(helper()), "scripts/x.py", "q"], cwd=via_wt, env=env, input="in", capture_output=True, text=True,
+                             timeout=110)
+        assert (via.returncode, via.stdout, mine(via)) == (direct.returncode, direct.stdout, mine(direct)) == (
+            int(code), "out 1.0 ['q']\n", ["err ['q']"])
+        assert (via_wt / "written.txt").read_text() == (direct_wt / "written.txt").read_text() == "1.0 ['q'] in"
 
 
 def test_a_script_without_a_block_and_the_quiet_flag_still_run_ac_209_7(world):  # AC-209.7
