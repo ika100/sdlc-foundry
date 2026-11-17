@@ -241,7 +241,8 @@ def test_adding_a_priority_label_removes_every_other_one_in_the_same_edit_ac_196
 def test_a_confirmed_priority_replaces_the_one_on_the_issue_when_the_command_acts_ac_196_5(world):  # AC-196.5
     world.issue(1, labels=("triage", "p1"))
     world.batch()
-    world.run("act", "--proposals", world.proposals([row(1, priority="P0", priority_reason="P0: data loss")]), "--rows", "all")
+    world.run("act", "--proposals", world.proposals([row(1, priority="P0", priority_reason="changed by you",
+                                                                  priority_decided=True)]), "--rows", "all")   # as `confirm --set` writes it
     add, remove = world.edits()[1]
     assert "p0" in add and "p1" in remove and not ((add | remove) & {"p2"})
 
