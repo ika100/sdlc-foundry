@@ -110,6 +110,12 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 - Mark every smoke test that creates, changes or deletes data as writing: `@pytest.mark.smoke` plus `@pytest.mark.writes`. It runs only in dev.
 - Keep at least one read-only smoke check (reads, health, lists, a page that loads) for every behaviour you want checked in staging and prod. Outside dev, a run in which no smoke test passed is reported as **not run** (no read-only smoke test), never as passed.
 
+## Contract check
+
+When this service provides a product's shared input rules, `contract/<plan_id>.json` holds the copy of them (written by `/component:spec --from-plan <plan> <repo-id>`; never edit it by hand, rerun the command after a contract change). `devbox run test` and `test-fast` send the boundary values of every rule with `role: provider` to the app in-process (`tests/test_contract.py`, engine `scripts/contract_pytest.py`) and fail naming the rule, field, expected and actual result until the code follows the contract. Without a copy there are no cases.
+
+The defaults call `TestClient(app)` with an empty base body. Override the fixtures `contract_send` (`(endpoint, body) -> (status, json or text)`, needed for paths with `{param}` or auth) and `contract_base` (`endpoint -> a valid body`) in `tests/conftest.py`.
+
 ## Docker image pipeline
 
 Whenever a `Dockerfile` exists, the CI workflow includes a `docker (build + push)` job that:
