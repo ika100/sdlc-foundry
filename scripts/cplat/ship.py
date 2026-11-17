@@ -626,7 +626,7 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
         raise PlatformError(f"on '{cur}', expected the feature branch '{branch}'", hint=f"git switch {branch}")
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
-    check_title(title)
+    title = caller_title(title)
     body = body_file.read_text()
     filled = _fill_closes(repo, st, body)
     if filled != body:
@@ -715,6 +715,22 @@ def check_title(title: str) -> None:
     err = pr_rules.title_error(title)
     if err:
         raise PlatformError(err)
+
+
+def caller_title(title: str) -> str:
+    """A caller's title for a ship, product ship or gitops PR: a subject over 72 characters is shortened and said, any other
+    fault is refused with the rule (AC-126.11, #784)."""
+    err = pr_rules.title_error(title)
+    if not err:
+        return title
+    try:
+        sent = pr_rules.fit(title)
+    except ValueError:
+        raise PlatformError(err) from None
+    if pr_rules.title_error(sent):
+        raise PlatformError(err)
+    say(f'title shortened: "{title}" -> "{sent}"')
+    return sent
 
 
 class GhError(PlatformError):
@@ -1502,7 +1518,7 @@ def with_service_ref(body: str, ref: str) -> str:
 
 def gitops_pr(repo: Path, task_id: str, title: str, body_file: Path) -> dict:
     """Push the task's gitops branch and open (or reuse) its draft PR."""
-    check_title(title)
+    title = caller_title(title)
     st = require_state(repo)
     t = _gitops_task(repo, st, task_id)
     info = st.get("gitops", {}).get(task_id)
