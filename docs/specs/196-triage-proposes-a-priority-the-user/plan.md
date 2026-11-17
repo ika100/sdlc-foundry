@@ -10,18 +10,21 @@ tasks:
     covers: [AC-196.1, AC-196.2, AC-196.3, AC-196.10]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Dispatcher default priority rules start with label:p0
     files: [scripts/cplat/dispatch_policy.py, docs/dispatch.md, docs/specs/167-a-dispatcher-runs-the-backlog-in/design.md, tests/cplat/test_167_policy_plan.py]
     covers: [AC-196.8, AC-196.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: User guide, changelog fragment and plugin versions
     files: [docs/USER-JOURNEY.md, docs/changelog.d/196-triage-proposes-a-priority.added.md, .claude-plugin/marketplace.json, plugins/issue/.claude-plugin/plugin.json, plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, plugins/svc/.claude-plugin/plugin.json]
     covers: [AC-196.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t1
     title: cplat spec - priority resolution and provenance at new, spec priority, show and list fields
     files: [scripts/cplat/spec_priority.py, scripts/cplat/spec.py, tests/cplat/test_spec_priority.py]
