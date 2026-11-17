@@ -1,15 +1,16 @@
 """Spec 193 acceptance tests: `cplat dispatch answer` writes the person's answer into the spec (or the issue) and the item goes on
 (AC-193.4), in the dispatcher world of spec 167 with a unit that ended escalated with cause `decision`."""
 import re
+from pathlib import Path
 
 from dispatch_world import git, world  # noqa: F401  (fixture)
 
 
-def stopped_spec(world, reason="escalated: which currency?"):
+def stopped_spec(world, reason="escalated: which currency?", phase="build"):
     world.policy(sources=["specs", "issues"], slots=1)
     sid = world.spec(7, "price-alerts", tracks=(42,))
     world.issue(42, title="alerts", labels=["triaged"])
-    world.behave("spec-007.1", mode="now", then="escalate", reason=reason)
+    world.behave("spec-007.1", mode="now", then="escalate", reason=reason, phase=phase, start2={"mode": "now", "then": "done"})
     assert world.run("start", "--once").rc == 0
     world.wait_ended("spec-007.1")
     assert world.run("start", "--once").rc == 0
@@ -37,11 +38,24 @@ def test_the_answer_is_an_amendment_that_quotes_it_and_approves_when_only_the_as
     assert re.search(r'^- Decided by the user \(\d{4}-\d\d-\d\d, stop of spec-007\.1\): .*Answer: "EUR"$', text, re.M), text
     assert re.search(r'^- \d{4}-\d\d-\d\d answer to the stop of spec-007\.1 approved by the user: "EUR"$', text, re.M), text
     assert "status: approved" in text
-    assert re.search(r"^answered: spec \d+; it goes on from \S+", r.out, re.M), r
+    assert re.search(r"^answered: spec \d+; it goes on from build$", r.out, re.M), r
     msg = git(world.worktree("spec-007"), "log", "-1", "--format=%B")
     assert msg.startswith(f"docs(spec): answer to the stop of {sid}") and "Signed-off-by:" in msg
     undo = [ln for ln in r.lines if ln.startswith("Undo: ")]
     assert len(undo) == 1 and f"git -C {world.worktree('spec-007')} revert --no-edit " in undo[0]
+
+
+def test_the_answered_item_goes_on_from_the_phase_where_it_stopped(world):  # AC-193.4
+    stopped_spec(world, phase="build")
+    wt = world.worktree("spec-007")
+    assert world.calls_of("spec-007.1")[0]["ship_phase"] is None
+    r = world.run("answer", "spec-7", "--answer", "EUR")
+    assert r.rc == 0 and "answered: spec 007; it goes on from build" in r.lines, r
+    r = world.run("start", "--once")
+    assert r.rc == 0 and [ln for ln in r.lines if ln.startswith("started spec-007.2 ")], r
+    [second] = world.calls_of("spec-007.2")
+    assert second["ship_phase"] == "build"
+    assert Path(second["cwd"]).resolve() == wt.resolve()
 
 
 def test_the_item_goes_on_after_the_answer(world):  # AC-193.4

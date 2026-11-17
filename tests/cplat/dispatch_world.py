@@ -76,8 +76,20 @@ unit = os.environ.get("CPLAT_DISPATCH_UNIT", "")
 res = pathlib.Path(os.environ["CPLAT_DISPATCH_RESULT"]) if os.environ.get("CPLAT_DISPATCH_RESULT") else None
 calls = W / "headless-calls.jsonl"
 n = 1 + sum(1 for ln in calls.read_text().splitlines() if json.loads(ln)["unit"] == unit) if calls.is_file() else 1
+def git_dir():
+    return pathlib.Path(subprocess.run(["git", "rev-parse", "--absolute-git-dir"], capture_output=True, text=True).stdout.strip())
+
+
+def ship_phase():
+    try:
+        return json.loads((git_dir() / "cplat-ship.json").read_text()).get("phase")
+    except (OSError, ValueError):
+        return None
+
+
 with calls.open("a") as fh:
-    fh.write(json.dumps({"argv": argv, "cwd": os.getcwd(), "unit": unit, "pid": os.getpid(), "n": n, "result_file": str(res)}) + "\n")
+    fh.write(json.dumps({"argv": argv, "cwd": os.getcwd(), "unit": unit, "pid": os.getpid(), "n": n, "result_file": str(res),
+                         "ship_phase": ship_phase()}) + "\n")
 B = json.loads((W / "behave.json").read_text())
 cfg = dict(B.get("default", {}))
 u = B.get("units", {}).get(unit, {})
@@ -119,6 +131,8 @@ then =cfg.get("then", "done")
 if then == "die-late":
     os._exit(1)
 if then == "escalate":
+    if cfg.get("phase"):    # the ship state a stopped ship run leaves in the worktree's git dir
+        (git_dir() / "cplat-ship.json").write_text(json.dumps({"phase": cfg["phase"], "escalated": True}))
     end("escalated", cfg.get("reason", "escalated: tests keep failing"), "escalated", cause="decision", code=1)
 text = " ".join(argv)
 m = re.search(r"/component:fix #(\d+)", text)
