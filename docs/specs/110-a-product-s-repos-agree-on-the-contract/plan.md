@@ -31,18 +31,21 @@ tasks:
     covers: [AC-110.11, AC-110.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: The system benchmark plan states its rules and error block
     files: [scripts/cplat/benchmark/system/plan.md]
     covers: [AC-110.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t8
     title: ADR for contract rules and the ADR-011 format amendment with the worked example
     files: [docs/adr/README.md, docs/adr/*-shared-input-rules-live-in-the-plan-contract.md, docs/adr/011-multi-repo-plan-format.md, docs/specs/110-a-product-s-repos-agree-on-the-contract/design.md]
     covers: [AC-110.11]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t9
     title: Plugin versions and changelog fragment
     files: [plugins/system/.claude-plugin/plugin.json, plugins/component/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/changelog.d/110-contract-rules-between-repos.added.md]
