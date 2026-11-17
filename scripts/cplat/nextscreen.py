@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import textwrap
 
+import nextbuildscreen as bs
 import nextstate
 import stages
 
@@ -36,8 +37,10 @@ _ALSO = {"escalation": ("stopped run", "stopped runs"), "stuck": ("stuck run", "
          "budget": ("daily budget reached", "daily budget reached"),
          "answer": ("spec with questions", "specs with questions"), "approve": ("spec to approve", "specs to approve"),
          "triage": ("new issue", "new issues"), "release": ("release ready", "release ready"),
-         "promote": ("release to promote", "releases to promote"), "review": ("fix to review", "fixes to review")}
-_KIND_STAGE = {"answer": "Spec", "approve": "Spec", "triage": "Issue", "release": "Release", "promote": "Prod", "review": "Build"}
+         "promote": ("release to promote", "releases to promote"), "review": ("fix to review", "fixes to review"),
+         "build": ("build ready", "build ready")}
+_KIND_STAGE = {"answer": "Spec", "approve": "Spec", "triage": "Issue", "release": "Release", "promote": "Prod", "review": "Build",
+               "build": "Build"}
 _CHANNEL_WORDS = {"desktop": "on the desktop", "github": "on GitHub", "slack": "in Slack", "email": "by e-mail"}
 _KEEP = (*_CHANNEL_WORDS.values(), "look here again")     # phrases wrap() never breaks
 _ASCII = {"…": "...", "–": "-", "—": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "✓": "x", "●": ">"}
@@ -75,6 +78,11 @@ class _Lines:
     def add(self, text: str, indent: int = 0) -> None:
         self.out.extend(wrap(nextstate.plain(text), indent))
 
+    def lines(self, texts: list[str]) -> None:
+        """Lines of `nextbuildscreen`: each wrapped with its continuation two columns deeper than its own indent."""
+        for text in texts:
+            self.add(text, len(text) - len(text.lstrip(" ")) + 2)
+
     def more(self, items: list, shown: int = LIMIT, lead: str = "  ") -> None:
         if len(items) > shown:
             self.add(f"{lead}and {len(items) - shown} more")
@@ -101,7 +109,12 @@ def _bar(state: dict, group: str | None, shown: list[dict], ascii: bool) -> tupl
     here = running = None
     if group and shown:
         first = shown[0]
-        here = stages.bar_step(first.get("stage") or _KIND_STAGE.get(first.get("kind"), "Issue"), shape)
+        stage = first.get("stage") or _KIND_STAGE.get(first.get("kind"), "Issue")
+        if first.get("kind") == "promote" and (first.get("consequence") or {}).get("env") == "staging":
+            stage = "Staging"
+        here = stages.bar_step(stage, shape)
+        if here not in names:
+            here = "Staging"            # the release of a deployable repo tags the commit staging runs, before Prod
     else:
         found = [r.get("bar_step") for r in state.get("running") or [] if r.get("bar_step") in names]
         running = min(found, key=names.index) if found else None
@@ -169,15 +182,22 @@ def _draft_block(out: _Lines, item: dict, judgement: dict | None) -> None:
     out.add(size, 15)
 
 
-def _group_lines(out: _Lines, group: str, shown: list[dict], judgement: dict | None, ascii: bool) -> None:
+def _group_lines(out: _Lines, group: str, shown: list[dict], judgement: dict | None, ascii: bool, state: dict | None = None) -> None:
     bang = "[!]" if ascii else "!"
+    build, given = (state or {}).get("build") or {}, bs.given_of(judgement)
     if group == "stopped":
-        out.add(f"{_n(len(shown), 'run stopped and waits', 'runs stopped and wait')} for you.")
+        out.add(f"{_n(len(shown), 'run', 'runs')} stopped and wait for you.")
         for item in shown[:LIMIT]:
+            if item.get("stop"):
+                out.lines(bs.stop_lines(item, build, given, bang))
+                continue
             reason = (item.get("reason") or "").rstrip(".")
             when = f" (waiting {_age_of(item)})" if _age_of(item) else ""
-            out.add(f"  {bang} {item.get('what')}: {reason}{when}", 6 if ascii else 4)
+            out.add(f"  {bang} {item.get('what')}", 6 if ascii else 4)
+            out.add(f"    What happened: {reason}{when}", 6)
         out.more(shown)
+    elif group == "build":
+        out.lines(bs.setup_lines(build, given) if build.get("setup") is not None else bs.build_lines(build, given))
     elif group == "specs":
         questions = sum(1 for i in shown if i.get("kind") == "answer")
         out.add(f"{_n(len(shown), 'spec is written and waits', 'specs are written and wait')} for your approval."
@@ -193,23 +213,38 @@ def _group_lines(out: _Lines, group: str, shown: list[dict], judgement: dict | N
             out.add(f"  {item.get('what')} ({', '.join(meta)})", 4)
         out.more(shown)
     else:
+        first = shown[0] if shown else {}
+        if _end_of_build(build, first):
+            out.lines(bs.end_lines(build, (first.get("consequence") or {}).get("sections") if first.get("kind") == "release" else None))
         for item in shown[:LIMIT]:
-            _release_lines(out, item)
+            _release_lines(out, item, bool(_end_of_build(build, first)))
         out.more(shown)
 
 
-def _release_lines(out: _Lines, item: dict) -> None:
+def _end_of_build(build: dict, first: dict) -> bool:
+    """The end-of-build head precedes a release step or a staging promote while this build has no tag after its start."""
+    if not (build.get("ended") and not (build.get("flow") or {}).get("released")):
+        return False
+    return first.get("kind") == "release" or (first.get("kind") == "promote" and (first.get("consequence") or {}).get("env") == "staging")
+
+
+def _release_lines(out: _Lines, item: dict, head_shown: bool = False) -> None:
     kind, when = item.get("kind"), f" (waiting {_age_of(item)})" if _age_of(item) else ""
     obj = item.get("object") or {}
     if kind == "release":
+        if head_shown:
+            return                      # the end-of-build head already lists the sections
         cons = item.get("consequence") or {}
+        if cons.get("sections") is not None:
+            out.lines(bs.release_lines(item, when))
+            return
         changes = cons.get("changes") or []
         out.add(f"A release is ready: {_n(len(changes), 'change', 'changes')} since {cons.get('since_tag') or 'the start'}.{when}")
         for change in changes[:LIMIT]:
             out.add(f"  {change}", 4)
         out.more(changes)
     elif kind == "promote":
-        out.add(f"{item.get('what')} is verified in staging and can go to prod.{when}")
+        out.lines(bs.promote_lines(item, when))
     else:
         out.add(f"A fix waits for your review (PR #{obj.get('pr')}).{when}")
 
@@ -222,8 +257,15 @@ def _unavailable_lines(out: _Lines, state: dict) -> None:
 
 def _tail_lines(out: _Lines, state: dict, also: dict[str, int], later: int, waiting: bool) -> None:
     if also:
-        parts = [(_ALSO[k][0 if n == 1 else 1] if k in ("budget", "release") else f"{n} {_ALSO[k][0 if n == 1 else 1]}")
-                 for k, n in also.items()]
+        parts = []
+        for k, n in also.items():
+            if k == "build":
+                parts.append(f"Build: {len((state.get('build') or {}).get('queue') or [])} ready")
+            elif k == "release":
+                changes = sum(len((i.get("consequence") or {}).get("changes") or []) for i in state["items"] if i["kind"] == "release")
+                parts.append(f"Release: {_n(changes, 'change', 'changes')} ready")
+            else:
+                parts.append(_ALSO[k][0 if n == 1 else 1] if k == "budget" else f"{n} {_ALSO[k][0 if n == 1 else 1]}")
         out.add("Also waiting: " + ", ".join(parts) + ".", 14)
     if later:
         out.add(f"{later} put off for later.")
@@ -271,7 +313,20 @@ def _sub_screen(state: dict, items: list[dict], show: str | None, choose: str | 
             if item.get("kind") == "approve":
                 _action_lines(out, actions.get(item["id"]) or [])
         return out.out, "Your part: read the assumptions, then approve or go back."
+    build = state.get("build") or {}
     qid = (show or "").split(":", 1)[-1]
+    if (show or "").startswith("log:"):
+        found = next((i for i in state["items"] if (i.get("stop") or {}).get("key") == qid), None)
+        out.lines(bs.log_lines(found, qid))
+        return out.out, bs.your_part("log")
+    if (show or "").startswith("raise-budget:"):
+        out.lines(bs.raise_lines(build, qid))
+        return out.out, bs.your_part("raise" if bs.valid_raise(build, qid) else "raise-invalid")
+    if qid == "build-setup" and build.get("setup") is not None:
+        out.out.extend(wrap(nextstate.plain(bs.setup_details(build)[0]), 0))
+        out.out.extend(bs.setup_details(build)[1:])
+        _action_lines(out, actions.get(qid) or [])
+        return out.out, "Your part: choose, or go back."
     out.add("What this choice does:")
     acts = actions.get(qid) or []
     _action_lines(out, acts) if acts else out.add("  Nothing leaves your machine.")
@@ -288,8 +343,22 @@ def _channels_text(channels: list[str] | None) -> str:
     return f"a question reaches you {joined} and shows up here first"
 
 
+def _progress(state: dict) -> bool:
+    """Dispatcher units run: the progress screen replaces the run lines."""
+    return bool((state.get("build") or {}).get("running"))
+
+
+def _last(state: dict) -> bool:
+    """The flow is done and nothing waits or runs: the last screen."""
+    build = state.get("build") or {}
+    return bool((build.get("flow") or {}).get("done")) and not build.get("running") and not state.get("running")
+
+
 def _your_part(state: dict, group: str | None, shown: list[dict]) -> str:
     first = shown[0] if shown else {}
+    build = state.get("build") or {}
+    if group == "build":
+        return bs.your_part("setup" if build.get("setup") is not None else "build")
     if group == "stopped":
         return "Your part: decide how the stopped run goes on."
     if group == "specs":
@@ -301,10 +370,14 @@ def _your_part(state: dict, group: str | None, shown: list[dict]) -> str:
     if group == "issues":
         return "Your part: triage the new issues."
     if group == "release":
-        return {"promote": "Your part: promote to prod, or hold it back.",
+        return {"promote": bs.your_part("promote"),
                 "review": "Your part: review the fix."}.get(first.get("kind"), "Your part: release, or wait for more changes.")
     if state.get("unavailable"):
         return "Your part: check what is missing, then try again."
+    if _last(state):
+        return bs.your_part("last")
+    if _progress(state):
+        return bs.your_part("progress", _channels_text(state.get("channels")))
     if state.get("running"):
         return "Your part: nothing. You can walk away; " + _channels_text(state.get("channels")) + "."
     return "Your part: nothing. You can walk away."
@@ -329,18 +402,27 @@ def render(state: dict, *, ascii: bool = False, later=(), judgement: dict | None
         body, part3 = _sub_screen(state, waiting if choose or show == "assumptions" else shown, show, choose, actions)
         out.out.extend(body)
     else:
+        last = group is None and not state.get("unavailable") and _last(state)
+        progress = group is None and _progress(state)
         if group:
-            _group_lines(out, group, shown, judgement, ascii)
+            _group_lines(out, group, shown, judgement, ascii, state)
+        elif last:
+            out.lines(bs.last_lines(state["build"]))
+        elif progress:
+            out.lines(bs.progress_lines(state["build"], bs.given_of(judgement)))
         elif not state.get("unavailable") and not state.get("running"):
+            done = state.get("build") or {}
+            if done.get("ended") and not (done.get("flow") or {}).get("released"):
+                out.lines(bs.end_lines(done))             # the build ended and nothing is ready to release
             out.add("Nothing is waiting for you.")
             out.add(f"{_n(state.get('parked') or 0, 'parked item', 'parked items')}.")
-        if group is None and state.get("running"):
+        if group is None and state.get("running") and not (last or progress):
             _running_lines(out, state)
         _unavailable_lines(out, state)
         if judgement_error:
             out.add("Could not read the judgement file.")
         _tail_lines(out, state, also, later_count, group is not None)
-        if group is None and not state.get("unavailable") and not state.get("running"):
+        if group is None and not state.get("unavailable") and not state.get("running") and not (last or progress):
             out.add("New issues will show up here.")
         part3 = _your_part(state, group, shown)
     part3_lines = wrap(nextstate.plain(part3), 1)
