@@ -215,10 +215,12 @@ def block_scripts() -> set[str]:
 
 
 def bare_uv_runs(text: str) -> list[str]:
-    """`uv run [--quiet] <path>.py` of a script that has a PEP 723 block: the call that leaks one environment per path."""
+    """`uv run [--quiet] <path>.py` of a script that has a PEP 723 block: the call that leaks one environment per path.
+    cplat.py run from the per-ref platform cache (`"$dir/scripts/cplat/cplat.py"`, spec-check.sh and alert-poll.sh) is no leak:
+    that path is fixed per platform ref, not per worktree (design.md)."""
     blocks = block_scripts()
     hits = re.findall(r'\buv run (?:--quiet )?("?[^\s"]*?([\w.-]+\.py)"?)', text)
-    return [h[0] for h in hits if h[1] in blocks]
+    return [h[0] for h in hits if h[1] in blocks and not h[0].startswith('"$dir/scripts/cplat/')]
 
 
 def run_recipe(world, cwd, command):
