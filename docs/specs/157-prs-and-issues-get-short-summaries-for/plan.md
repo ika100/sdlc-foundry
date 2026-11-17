@@ -17,12 +17,14 @@ tasks:
     covers: [AC-157.5, AC-157.6]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: System ship gitops PRs get the summary block of the system spec
     files: [scripts/cplat/appship.py, scripts/cplat/appship_joint.py]
     covers: [AC-157.5, AC-157.6]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: Commands say cplat writes the summary; changelog and plugin versions
     files: [plugins/component/commands/build.md, plugins/component/references/build-pr.md, plugins/component/commands/ship.md, plugins/system/commands/ship.md, docs/rules/plugins/component/commands/build.yml, docs/rules/plugins/component/references/build-pr.yml, docs/rules/plugins/component/commands/ship.yml, docs/rules/plugins/system/commands/ship.yml, docs/changelog.d/568-pr-summary.added.md, plugins/component/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]
