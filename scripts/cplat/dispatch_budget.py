@@ -3,7 +3,8 @@
   unit_tokens(unit, result) -> int | None   tokens of one unit so far (running) or in the end; None = unknown usage
   book(slug, units) -> Usage                the growth of each unit's tokens goes to today's ledger
   book_agent(slug, tokens) -> int           an agent call of the dispatcher; missing usage books AGENT_CEILING
-  reached(usage, policy) -> bool            today's usage is at or above `budget.tokens_per_day`
+  limit_of(policy, slug=None) -> int | None   `budget.tokens_per_day`, or today's raise (spec 193) when `slug` is given
+  reached(usage, policy, slug=None) -> bool   today's usage is at or above that limit
   history_hint(slug, days=7) -> [{day, tokens}]   the daily usage of the last days, for `plan` without a limit
   budget_need(slug, usage, policy, running) -> dict | None   the one `budget` need of the day
 
@@ -170,14 +171,25 @@ def usage_today(slug: str) -> Usage:
     return Usage(day, sum(int(v or 0) for v in units.values()) + int(entry.get("agent") or 0))
 
 
-def limit_of(policy) -> int | None:
+def policy_limit(policy) -> int | None:
+    """The limit the policy file sets (never the raise of today)."""
     value = policy.values.get("budget", {}).get("tokens_per_day")
     return int(value) if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def reached(usage: Usage, policy) -> bool:
+def limit_of(policy, slug: str | None = None) -> int | None:
+    """The daily limit: today's raise when `slug` is given and one holds today (and the policy sets a limit), else the policy's."""
+    limit = policy_limit(policy)
+    if limit is not None and slug is not None:
+        raised = ds.budget_today(slug)
+        if raised is not None:
+            return raised
+    return limit
+
+
+def reached(usage: Usage, policy, slug: str | None = None) -> bool:
     """True once today's usage is at or above the daily limit (never without a limit)."""
-    limit = limit_of(policy)
+    limit = limit_of(policy, slug)
     return limit is not None and usage.used >= limit
 
 
@@ -242,7 +254,7 @@ def _since(slug: str, day: str) -> str:
 
 def budget_need(slug: str, usage: Usage, policy, running: list[str]) -> dict | None:
     """The `budget` item of the needs file for today, None while the limit is not reached (the need is resolved then)."""
-    limit = limit_of(policy)
+    limit = limit_of(policy, slug)
     if limit is None or usage.used < limit:
         return None
     return {"id": f"budget:{slug}:{usage.day}", "kind": "budget", "stage": "Build",
@@ -254,5 +266,5 @@ def budget_need(slug: str, usage: Usage, policy, running: list[str]) -> dict | N
             "consequence": {"used": usage.used, "limit": limit, "running": list(running)}, "way_back": None}
 
 
-__all__ = ["AGENT_CEILING", "Usage", "book", "book_agent", "budget_need", "history_hint", "limit_of", "reached", "unit_tokens",
+__all__ = ["AGENT_CEILING", "Usage", "book", "book_agent", "budget_need", "history_hint", "limit_of", "policy_limit", "reached", "unit_tokens",
            "usage_today"]

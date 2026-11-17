@@ -1,4 +1,5 @@
 """`cplat dispatch` local state (spec 167): the state file, steering, unit files, events, history and the loop lock.
+Spec 193 adds today's budget raise (`steering.budget_today`, one local day, never the policy file) and the build record (`build`).
 
 Everything the dispatcher keeps lives under `${XDG_STATE_HOME:-~/.local/state}/sdlc-foundry/dispatch/<owner>__<name>/` (state.json,
 state.lock, loop.lock, needs.json, logs/, worktrees/) and, per unit, in the unit worktree's git dir (`cplat-dispatch-unit.json`,
@@ -131,8 +132,9 @@ def read_json(path: Path) -> dict | None:
 
 def empty() -> dict:
     return {"schema": SCHEMA,
-            "steering": {"paused": None, "slots": None, "pinned": [], "skipped": {}, "holds": {}},
-            "ledger": {}, "counted": {}, "checks": {}, "snapshot": {}, "last_cycle": {},
+            "steering": {"paused": None, "slots": None, "pinned": [], "skipped": {}, "holds": {},
+                         "budget_today": None},
+            "build": None, "ledger": {}, "counted": {}, "checks": {}, "snapshot": {}, "last_cycle": {},
             "events": [], "history": [], "days": {}, "seq": {}}
 
 
@@ -283,6 +285,33 @@ def skip(slug: str, key: str, reason: str) -> None:
 def hold(slug: str, key: str, reason: str, unit: str | None) -> None:
     """Hold an item in the state (`needs-decision` of a spec without issue, `stuck`) until `resume <item>`."""
     update(slug, lambda st: st["steering"]["holds"].__setitem__(key, {"reason": reason, "unit": unit, "at": stamp()}))
+
+
+def raise_today(slug: str, tokens: int) -> None:
+    """Raise the daily token budget for the local day only; the policy file is never touched (spec 193)."""
+    update(slug, lambda st: st["steering"].update(budget_today={"day": today(), "tokens": int(tokens), "at": stamp()}))
+
+
+def reset_today(slug: str) -> None:
+    update(slug, lambda st: st["steering"].update(budget_today=None))
+
+
+def budget_today(slug: str) -> int | None:
+    """Today's raised limit; None when there is none or it is of an earlier day."""
+    raised = load(slug)["steering"].get("budget_today")
+    if isinstance(raised, dict) and raised.get("day") == today() and isinstance(raised.get("tokens"), int):
+        return raised["tokens"]
+    return None
+
+
+def open_build(slug: str, slots: int) -> None:
+    """Record a build span (a new one replaces the old); "this build" is every event at or after `started_at`."""
+    update(slug, lambda st: st.update(build={"started_at": stamp(), "slots": slots}))
+
+
+def build_of(slug: str) -> dict | None:
+    build = load(slug).get("build")
+    return build if isinstance(build, dict) else None
 
 
 # ---------------- unit files (in the unit worktree's git dir) ----------------

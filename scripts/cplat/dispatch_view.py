@@ -7,7 +7,8 @@
   render_plan / render_status / render_report     the text; thousands separators only here, never in JSON
 
 `cplat dispatch inbox` is `needs.render` and needs nothing here. This module reads local files only (state.json, the unit files, the
-process table through `dispatch_units.alive`); it writes only when `wait_result` marks events seen.
+process table through `dispatch_units.alive`); it writes only when `wait_result` marks events seen. The limit of `tokens_doc` goes
+through today's raise (spec 193): `raised` says so and the text adds ` (raised for today)`.
 """
 from __future__ import annotations
 
@@ -31,6 +32,9 @@ POLL = 2.0
 
 def _n(value: int | None) -> str:
     return "?" if value is None else f"{value:,}"
+
+
+RAISED = " (raised for today)"          # after the limit when today's raise holds (spec 193)
 
 
 def _one_line(text: object, limit: int = 300) -> str:
@@ -59,7 +63,9 @@ def _unknown(st: dict) -> list[str]:
 def tokens_doc(slug: str, policy, st: dict | None = None) -> dict:
     st = st or ds.load(slug)
     usage = dispatch_budget.usage_today(slug)
-    return {"day": usage.day, "used": usage.used, "limit": dispatch_budget.limit_of(policy), "unknown": _unknown(st)}
+    limit = dispatch_budget.limit_of(policy, slug)
+    return {"day": usage.day, "used": usage.used, "limit": limit, "raised": limit != dispatch_budget.policy_limit(policy),
+            "unknown": _unknown(st)}
 
 
 def starts_doc(slug: str, policy, st: dict | None = None) -> dict:
@@ -69,7 +75,7 @@ def starts_doc(slug: str, policy, st: dict | None = None) -> dict:
     usage = dispatch_budget.usage_today(slug)
     if paused in ("pause", "drain"):
         why = paused
-    elif dispatch_budget.reached(usage, policy):
+    elif dispatch_budget.reached(usage, policy, slug):
         why = "daily budget reached"
     elif _unknown(st):
         why = "usage unknown"
@@ -206,7 +212,8 @@ def render_status(doc: dict) -> str:
     lines.append(f"escalated today ({len(escalated)}):")
     lines += [f"  {e['unit']}  {e['item']}  {e['label']}  {_one_line(e['reason'])}" for e in escalated]
     t = doc["tokens"]
-    lines.append(f"tokens today ({t['day']}): {_n(t['used'])} of {_n(t['limit']) if t['limit'] is not None else 'no limit set'}")
+    lines.append(f"tokens today ({t['day']}): {_n(t['used'])} of {_n(t['limit']) if t['limit'] is not None else 'no limit set'}"
+                 + (RAISED if t.get("raised") else ""))
     if t["unknown"]:
         lines.append("usage unknown: " + ", ".join(t["unknown"]))
     lines.append(f"last cycle: {doc['last_cycle'] or 'never'}")
@@ -253,7 +260,8 @@ def render_plan(doc: dict) -> str:
             continue
         lines.append(f"  {key}: {_value(value)}" + (" (default)" if key in pol["defaulted"] else ""))
     t = doc["tokens"]
-    lines.append(f"tokens today: {_n(t['used'])} of {_n(t['limit']) if t['limit'] is not None else 'no limit set'}")
+    lines.append(f"tokens today: {_n(t['used'])} of {_n(t['limit']) if t['limit'] is not None else 'no limit set'}"
+                 + (RAISED if t.get("raised") else ""))
     if t.get("unknown"):
         lines.append("usage unknown: " + ", ".join(t["unknown"]))
     line = no_starts_line(doc["starts"]["why_not"], t.get("unknown"))
