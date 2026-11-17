@@ -8,6 +8,7 @@ import re
 import pytest
 
 from dispatch_world import SLUG, git, world  # noqa: F401  (fixture)
+from waiting import poll_pause
 
 SETUP_FILE = """# The run queue's policy (docs/dispatch.md), written by /platform:next.
 budget:
@@ -101,6 +102,8 @@ def test_start_detach_adopts_a_running_loop(world):  # AC-193.1
 
 
 def test_start_detach_spawns_the_loop_in_its_own_session(world):  # AC-193.1
+    import dispatch
+    world.mp.setattr(dispatch, "sleep", poll_pause)     # the real loop needs a moment to start: wait outside the sleep guard
     world.policy()
     r = world.run("start", "--detach")
     assert r.rc == 0, r

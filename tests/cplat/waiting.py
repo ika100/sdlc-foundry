@@ -18,6 +18,11 @@ def budget(base: float = 30) -> float:
     return base + 20 * DELAY
 
 
+def poll_pause(seconds: float = POLL) -> None:
+    """The pause between two polls of production code, as a `sleep` seam: capped to one poll, and exempt from the sleep guard."""
+    time.sleep(min(seconds, POLL))
+
+
 def wait_for(pred, timeout: float | None = None, what: str = ""):
     """The first truthy result of `pred()`; AssertionError when `timeout` (default `budget()`) passes first."""
     limit = budget() if timeout is None else timeout
