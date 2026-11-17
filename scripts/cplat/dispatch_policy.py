@@ -33,7 +33,7 @@ DEFAULTS: dict = {
     "budget": {"tokens_per_day": None, "per_unit": {}},
     "sources": ["issues"],
     "ready": {"labels": [], "exclude_labels": []},
-    "priority": ["label:bug", "label:p1", "spec-order", "oldest"],
+    "priority": ["label:p0", "label:bug", "label:p1", "spec-order", "oldest"],
     "gates": {"approve_specs": "human", "merge": "green-ci"},
     "serialize": ["merge"],
     "guard": {"loop_calls": 10, "loop_minutes": 5},
