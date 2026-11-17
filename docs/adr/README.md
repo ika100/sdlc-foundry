@@ -113,4 +113,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [112](112-delivery-screens-are-printed-by-cplat.md) | Delivery screens and their choices are printed by cplat; the session adds only judgement text and follows the procedure the screen carries |
 | [113](113-an-interactive-component-ship-runs-in-its-own-headless-session.md) | An interactive /component:ship hands its run to its own detached cplat headless process and only waits, relays questions and reports |
 | [115](115-a-waiting-session-stops-and-its-wait-outlives-it.md) | A session may stop while its cplat wait runs; under cplat headless the wait runs detached, headless holds the next session until it ends and a loop guard escalates idle sessions |
-| [116](116-a-days-budget-raise-lives-in-local-state.md) | A raise of the run queue's daily token budget holds for the local day in the dispatcher state and never changes the committed policy file |
+| [117](117-a-days-budget-raise-lives-in-local-state.md) | A raise of the run queue's daily token budget holds for the local day in the dispatcher state and never changes the committed policy file |
