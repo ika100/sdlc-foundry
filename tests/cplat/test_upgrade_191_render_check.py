@@ -17,6 +17,7 @@ import pytest
 import yaml
 
 from system_fixtures import ROOT
+from waiting import with_prelude
 
 SCRIPT = ROOT / "scripts" / "upgrade-render-check.py"
 TAG = "v5.3.0"
@@ -238,7 +239,7 @@ def fake_runtime(tmp_path):
     bin_dir.mkdir()
     for tool in ("docker", "podman", "k3d", "kubectl"):
         f = bin_dir / tool
-        f.write_text(f"#!/bin/sh\ntouch {marker}\nexit 99\n")
+        f.write_text(with_prelude(f"#!/bin/sh\ntouch {marker}\nexit 99\n"))
         f.chmod(f.stat().st_mode | stat.S_IEXEC)
     return {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}, marker
 
