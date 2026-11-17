@@ -88,7 +88,7 @@
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "1.5.0",
+      "version": "1.5.1",
       "description": "The cplat launcher every sdlc-foundry command calls, the quality and security agents and the session hooks. The other plugins depend on it and install it with them.",
       "category": "agents",
       "tags": [
@@ -100,7 +100,7 @@
     {
       "name": "system",
       "source": "./plugins/system",
-      "version": "1.21.0",
+      "version": "1.21.1",
       "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
       "category": "agents",
       "tags": [

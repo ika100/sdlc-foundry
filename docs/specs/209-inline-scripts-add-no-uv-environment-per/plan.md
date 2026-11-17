@@ -31,6 +31,7 @@ tasks:
     covers: [AC-209.1, AC-209.7]
     parallel_safe: true
     depends_on: [t2]
+    done: true
 ---
 
 # Plan — 209 Inline scripts add no uv environment per worktree
