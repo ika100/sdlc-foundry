@@ -22,6 +22,7 @@
       "cluster-ui": "bash scripts/local-cluster.sh ui",
       "render-check": "uv run scripts/render.py --check",
       "service-crds": "uv run scripts/check-service-crds.py",
+      "contract-pins": "uv run scripts/check-contract-pins.py",
       "plan-check": "uv run scripts/plan.py validate",
       "pin":            "uv run scripts/pin.py \"$@\"",
       "upgrade-check": "uv run scripts/upgrade-check.py --base \"${BASE_REF:-origin/main}\"",
