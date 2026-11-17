@@ -30,7 +30,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 ## Modes
 
-- **new**: fill Problem, Stories, Acceptance criteria, Non-goals, Assumptions, Open questions. Keep the Changelog's `created` line. A **System context** section (`parent:` is set) is binding and stays as it is: this repo's criteria together implement every system criterion listed there and follow its contract, and each names the one it serves, `(system AC-<NNN>.<n>)`; a conflict with it is an open question. Prefer its answers over a new question; ask what it leaves open.
+- **new**: fill Problem, Stories, Acceptance criteria, Non-goals, Assumptions, Open questions. Keep the Changelog's `created` line. A **System context** section (`parent:` is set) is binding and stays as it is: this repo's criteria together implement every system criterion listed there and follow its contract, and each names the one it serves, `(system AC-<NNN>.<n>)`; a conflict with it is an open question. Prefer the system spec's answers over a new question (spec 141).
 - **amend**: apply the change following "Amending" in the format reference: new ids for new behaviour; withdraw instead of renumbering; one Changelog line. Strike through answered open questions and fold the answers into criteria. An assumption the user changes is struck through, not deleted, and the new decision goes into the criteria, so that revised assumptions stay countable.
 - **fold** (from `/issue:triage`): for each `feature` issue, either add it to an existing spec's `tracks:` (and a criterion when it states a new concrete requirement), or say that a new spec is needed. **Hard rule:** never close or label issues, because `cplat issue triage` owns the lifecycle.
 
