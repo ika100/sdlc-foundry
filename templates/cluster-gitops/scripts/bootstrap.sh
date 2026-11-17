@@ -42,7 +42,7 @@ if git rev-parse --git-dir >/dev/null 2>&1 && git fetch -q origin main 2>/dev/nu
   fi
 fi
 
-uv run --quiet scripts/render.py --check || exit 1
+bash scripts/uv-script.sh --quiet scripts/render.py --check || exit 1
 
 if ! k get namespace argocd >/dev/null 2>&1; then
   echo "ERROR: Argo CD is not installed in ${ctx} (it is a cluster prerequisite)" >&2
@@ -57,7 +57,7 @@ k -n argocd label secret github-creds argocd.argoproj.io/secret-type=repo-creds 
 echo "Applying the operators"
 k apply -n argocd -f cluster/operators-root.yaml
 
-crds=$(uv run --quiet scripts/render.py --crds)
+crds=$(bash scripts/uv-script.sh --quiet scripts/render.py --crds)
 while read -r op crd; do
   [ -n "$op" ] || continue
   echo "Waiting for the CRD ${crd} (operator ${op})"
