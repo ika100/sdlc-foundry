@@ -24,6 +24,7 @@ tasks:
     covers: [AC-193.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t10
     title: Plugin version, ADR and changelog fragment
     files: [plugins/platform/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/adr/README.md, docs/changelog.d/193-building-and-releasing-run-on-their-own.added.md]
