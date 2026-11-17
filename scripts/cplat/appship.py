@@ -46,6 +46,7 @@ import runs
 import ship
 import spec as specmod
 from core import PlatformError, run
+from uvscript import script_cmd
 
 DEFAULT_TIMEOUT = 3600
 INTERVAL = 20
@@ -314,7 +315,7 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     plan = {r["id"]: r for r in state.plan_repos(repo, sid)}
     for rid in st["repos"]:
         if rid in plan and not plan[rid].get("done"):
-            run(["devbox", "run", "--", "uv", "run", "scripts/plan.py", "done", sid, rid], cwd=repo)
+            run(["devbox", "run", "--", *script_cmd("scripts/plan.py", "done", sid, rid)], cwd=repo)
     specmod.write_index(repo)
     git(repo, "add", "-A")
     if run(["git", "diff", "--cached", "--quiet"], cwd=repo, check=False).returncode != 0:
