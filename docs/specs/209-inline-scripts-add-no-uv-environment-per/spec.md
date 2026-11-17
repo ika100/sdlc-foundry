@@ -1,7 +1,7 @@
 ---
 spec_id: 209-inline-scripts-add-no-uv-environment-per
 title: Inline scripts add no uv environment per worktree
-status: draft
+status: approved
 priority: P2
 shape: platform
 explored: true
@@ -61,3 +61,4 @@ none
 ## Changelog
 
 - 2026-11-17 created
+- 2026-11-17 approved
