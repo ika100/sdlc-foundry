@@ -10,6 +10,7 @@ tasks:
     covers: [AC-193.1, AC-193.5, AC-193.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Policy set-up through a pull request that merges on green CI
     files: [scripts/cplat/dispatch_setup.py]
