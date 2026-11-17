@@ -391,7 +391,9 @@ def env(tmp_path, monkeypatch):
 
 
 def body(env):
-    return (env.repo / ".git" / "PR_BODY.md").read_text()
+    """The PR body as sent, without spec 157's summary block (AC-157.1 supersedes the unchanged-body part of AC-133.11)."""
+    import pr_summary
+    return pr_summary.apply((env.repo / ".git" / "PR_BODY.md").read_text(), "").lstrip("\n")
 
 
 def open_cmd(env, capsys, *extra):
