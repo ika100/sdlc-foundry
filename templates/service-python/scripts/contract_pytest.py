@@ -1,9 +1,10 @@
 """Provider contract check (spec 110; platform-owned: /platform:update refreshes it).
 
-Loaded with `-p scripts.contract_pytest`. Every rule of `contract/<plan_id>.json` with `role: provider` becomes
-cases: the boundary values of the rule are sent to the app in-process and the answer is compared with the
-contract. The copy is written by `/component:spec --from-plan`; never edit it by hand. Override the default
-fixtures `contract_send` and `contract_base` in `tests/conftest.py`.
+Loaded with `-p scripts.contract_pytest`. Every rule of `contract/<plan_id>.json` with
+`role: provider` becomes cases: the boundary values of the rule are sent to the app in-process
+and the answer is compared with the contract. The copy is written by
+`/component:spec --from-plan`; never edit it by hand. Override the default fixtures
+`contract_send` and `contract_base` in `tests/conftest.py`.
 """
 
 from __future__ import annotations
@@ -26,7 +27,10 @@ _BODY_LIMIT = 200
 
 @dataclass
 class Case:
-    """One request of a provider rule: `accept` expects a 2xx answer, otherwise the rule's rejection."""
+    """One request of a provider rule.
+
+    `accept` expects a 2xx answer, otherwise the rule's rejection.
+    """
 
     plan_id: str
     rule: dict[str, Any]
@@ -81,7 +85,12 @@ def _not_allowed(values: list[Any]) -> Any:
     return out
 
 
-def _cases_of(plan_id: str, rule: dict[str, Any], errors: dict[str, Any], rules: list[dict[str, Any]]) -> list[Case]:
+def _cases_of(
+    plan_id: str,
+    rule: dict[str, Any],
+    errors: dict[str, Any],
+    rules: list[dict[str, Any]],
+) -> list[Case]:
     kind, value = rule["kind"], rule["value"]
 
     def case(name: str, accept: bool, **kw: Any) -> Case:
@@ -109,7 +118,7 @@ def _cases_of(plan_id: str, rule: dict[str, Any], errors: dict[str, Any], rules:
 
 
 def contract_cases(root: Path | None = None) -> list[Case]:
-    """Every provider rule of every `contract/*.json` under `root` (the working directory by default)."""
+    """Every provider rule of every `contract/*.json` under `root` (default: the cwd)."""
     base_dir = (root if root is not None else Path.cwd()) / "contract"
     cases: list[Case] = []
     for path in sorted(base_dir.glob("*.json")):
@@ -180,7 +189,10 @@ def _is_rejection(case: Case, status: int, body: Any) -> bool:
 
 
 def check_case(case: Case, send: Send, base: Base) -> None:
-    """Send the case's request and assert the answer the contract demands (AssertionError names rule, field, expected, actual)."""
+    """Send the case's request and assert the answer the contract demands.
+
+    The AssertionError names rule, field, expected and actual.
+    """
     rule = case.rule
     body = copy.deepcopy(base(rule["endpoint"]))
     value = case.value
@@ -197,7 +209,7 @@ def check_case(case: Case, send: Send, base: Base) -> None:
         expected = "accepted (2xx)"
     else:
         ok = _is_rejection(case, status, answer)
-        fields = (case.errors.get("body") or {})
+        fields = case.errors.get("body") or {}
         expected = (
             f"rejected {rule.get('status', case.errors.get('status'))} with "
             f"{fields.get('field')}={rule['field']} {fields.get('rule')}={rule['id']} and a message"
@@ -223,7 +235,9 @@ def contract_send() -> Send:
     def send(endpoint: str, body: dict[str, Any]) -> tuple[int, Any]:
         method, path = endpoint.split(" ", 1)
         if "{" in path:
-            raise AssertionError(f"{endpoint} has a path parameter: override contract_send in tests/conftest.py")
+            raise AssertionError(
+                f"{endpoint} has a path parameter: override contract_send in tests/conftest.py"
+            )
         response = client.request(method, path, json=body)
         try:
             return response.status_code, response.json()
@@ -235,5 +249,8 @@ def contract_send() -> Send:
 
 @pytest.fixture()
 def contract_base() -> Base:
-    """endpoint -> a valid request body; override in tests/conftest.py when an endpoint needs more than `{}`."""
+    """endpoint -> a valid request body.
+
+    Override in tests/conftest.py when an endpoint needs more than `{}`.
+    """
     return lambda endpoint: {}

@@ -1,4 +1,7 @@
-"""Provider contract check (spec 110): the boundary values of every provider rule of `contract/*.json`."""
+"""Provider contract check (spec 110).
+
+Sends the boundary values of every provider rule of `contract/*.json`.
+"""
 
 from __future__ import annotations
 
