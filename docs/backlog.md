@@ -18,7 +18,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | approved | 7 | #568 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
-| [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | approved | 12 |  |
 | [201-one-cluster-repo-places-environments-on](specs/201-one-cluster-repo-places-environments-on/spec.md) — One cluster repo places environments on several clusters | P1 | approved | 12 |  |
 | [204-service-java-on-spring-boot-4-cve-free](specs/204-service-java-on-spring-boot-4-cve-free/spec.md) — service-java on Spring Boot 4, CVE-free image | P1 | approved | 7 | #709 |
 | [205-acceptance-tests-are-proven-passable](specs/205-acceptance-tests-are-proven-passable/spec.md) — Acceptance tests are proven passable before they freeze | P1 | approved | 7 |  |
@@ -27,6 +26,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [208-test-runs-leave-the-developer-s-disk-as](specs/208-test-runs-leave-the-developer-s-disk-as/spec.md) — Test runs leave the developer's disk as they found it | P1 | approved | 7 | #810, #811 |
 | [210-the-dispatcher-paces-work-by-the](specs/210-the-dispatcher-paces-work-by-the/spec.md) — The dispatcher budgets by plan limits or by cost | P1 | approved | 10 |  |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | approved | 11 | #143 |
+| [209-inline-scripts-add-no-uv-environment-per](specs/209-inline-scripts-add-no-uv-environment-per/spec.md) — Inline scripts add no uv environment per worktree | P2 | approved | 7 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -188,6 +188,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | done | 10 |  |
 | [194-a-system-ship-wait-returns-before-the](specs/194-a-system-ship-wait-returns-before-the/spec.md) — A system ship wait returns before the Bash limit | P1 | done | 4 |  |
 | [195-a-restored-copy-is-checked-without](specs/195-a-restored-copy-is-checked-without/spec.md) — A restored copy is checked without kubectl | P1 | done | 5 | #683 |
+| [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | done | 12 |  |
 | [197-the-journey-13-seams](specs/197-the-journey-13-seams/spec.md) — The journey 13 seams | P1 | done | 8 |  |
 | [198-a-platform-release-holds-main-through](specs/198-a-platform-release-holds-main-through/spec.md) — A platform release holds main through the merge lock | P1 | done | 9 |  |
 | [199-the-journey-15-seams](specs/199-the-journey-15-seams/spec.md) — The journey 15 seams | P1 | done | 5 |  |

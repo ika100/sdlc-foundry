@@ -39,7 +39,7 @@ adopts the units that still run. Keep it alive with a terminal multiplexer, laun
 | `sources` | non-empty subset of `issues`, `specs` | `[issues]` |
 | `ready.labels` | labels an issue needs besides `triaged` | `[]` |
 | `ready.exclude_labels` | labels that hold an issue besides `needs-decision` and `wontfix` | `[]` |
-| `priority` | rules `label:<name>`, `spec-order`, `oldest` | `[label:bug, label:p1, spec-order, oldest]` |
+| `priority` | rules `label:<name>`, `spec-order`, `oldest` | `[label:p0, label:bug, label:p1, spec-order, oldest]` (a spec at `P0` matches `label:p0` and so sorts first) |
 | `gates.approve_specs` | `human`, `self` | `human` |
 | `gates.merge` | `green-ci` | `green-ci` |
 | `serialize` | subset of `merge`, `e2e`; must contain `merge` | `[merge]` |
@@ -58,7 +58,7 @@ sources: [issues, specs]
 ready:
   labels: [bug]
   exclude_labels: [blocked]
-priority: [label:bug, label:p1, spec-order, oldest]
+priority: [label:p0, label:bug, label:p1, spec-order, oldest]
 gates:
   approve_specs: human
   merge: green-ci

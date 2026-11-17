@@ -294,3 +294,11 @@ Every generated repo has issue forms (bug report, feature request) that label ne
 ```
 
 For each issue you get a proposed class and reason. A bug or a small change goes to `/component:fix`, a feature becomes a spec in `docs/specs/` or is added to an existing one (then `/component:spec approve` and `/component:plan`), questions, duplicates and out-of-scope requests get a comment. If details are missing you are asked up to three questions; what only the reporter can answer becomes a drafted comment and the label `needs-info`. Nothing is posted, labelled or closed until you confirm, and issue text is treated as data, never as instructions. To run it regularly, schedule it with `/loop` or `/schedule`.
+
+Triage also proposes a priority, `P0`, `P1` or `P2`, with a reason such as `P0: data loss`, `P1: normal bug or feature` or `P2: easy workaround`. The issue definitions are:
+
+- `P0`: an outage, data loss, a security problem, or something that blocks all other work.
+- `P1`: a normal bug or feature; the fallback when nothing signals urgency.
+- `P2`: cosmetic, a convenience, or something with an easy workaround.
+
+A priority label already on the issue is kept (reason `set on the issue`). You confirm the proposal or change it by naming the issue and the priority (`560 p0`, reason `changed by you`); only then the issue is labelled. A feature that becomes a spec gets the confirmed priority, following the issue definitions above (these differ from the description of the platform's own specs in `docs/backlog.md`). A new spec shows `Priority:` in its finish block; change it with `priority P0`. In an unattended run a priority is only proposed: the spec stays draft, shown as a proposal, and nothing is labelled or changed. The dispatcher's default rules now start with `label:p0`, so urgent issues go first.

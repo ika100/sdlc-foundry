@@ -71,7 +71,7 @@ def test_a_fix_is_never_started_and_nothing_is_closed_ac_176_8(world):  # AC-176
 def test_only_real_label_changes_are_made_and_another_priority_is_replaced_ac_176_8(world):  # AC-176.8
     world.issue(1, labels=("triage", "triaged", "p2"))
     world.batch()
-    act(world, [row(1, priority="P0")])
+    act(world, [row(1, priority="P0", priority_decided=True)])
     assert world.edits()[1] == ({"bug", "p0"}, {"triage", "p2"})
 
 

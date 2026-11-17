@@ -7,7 +7,7 @@ rules:
     text: "`git status --porcelain` must be empty so that the commit holds only the spec; otherwise stop: commit or stash first."
     class: practice
   - id: R3
-    text: "A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape."
+    text: "A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since that file declares it."
     class: practice
   - id: R4
     text: "Only open questions are asked here, because assumptions are decided by default and shown at F."
@@ -42,3 +42,7 @@ rules:
     reason: cplat spec check validates every spec, so the agent has nothing to check by hand
     enforced_by: cplat spec check
     benchmark_runs: [20261110T000411Z-cc03e09e, 20261110T000533Z-a616f78e]
+  - id: R11
+    text: "A title (≤ 60 chars) and any `#N` issues in the request: `cplat spec new \"<title>\" [--tracks N …] [--no-shape]`, plus `--explored` when the request ends in a `DECIDED:` block (from `/component:explore`) and `--priority P<n>` when the request names `P0`, `P1` or `P2` literally (not \"urgent\"), because only the user's own level counts (prints the spec path, claims each tracked issue)."
+    class: practice
+    source: "spec 196"

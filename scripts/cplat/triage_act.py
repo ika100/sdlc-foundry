@@ -13,6 +13,7 @@ import textwrap
 from pathlib import Path
 
 import pr_rules
+import priority as prio
 import spec as specmod
 import triage
 import triage_batch
@@ -128,6 +129,19 @@ def _choice(nxt: list[dict]) -> dict:
                         {"label": "Show the fix runs", "recommended": False, "command": "cplat dispatch status"}]}
 
 
+def _priority_note(number: int, row: dict | None) -> dict | None:
+    """A feature row that adds the issue to an existing spec of another priority: the spec keeps its own (AC-196.7)."""
+    if not row or row["class"] != "feature" or row.get("new_spec") or not row.get("spec"):
+        return None
+    found = specmod.find(Path.cwd(), row["spec"])
+    spec_priority = found.meta.get("priority")
+    if spec_priority == row["priority"]:
+        return None
+    num = view._number(found.id)
+    return {"number": number, "label": prio.label_of(row["priority"]), "spec": found.id, "spec_priority": spec_priority,
+            "command": f"cplat spec priority {num} {row['priority']}"}
+
+
 def act(slug: str, batch: dict, rows: list[dict], numbers: str, dry_run: bool) -> dict:
     """Apply the actions of the named issues; returns {"done", "next", "undo", "choice"} (nothing is written when it raises)."""
     named = set(_numbers(batch, numbers))
@@ -139,6 +153,17 @@ def act(slug: str, batch: dict, rows: list[dict], numbers: str, dry_run: bool) -
             errors += [f"#{n}: {p}" for p in view._row(e["row"], e["issue"], True, Path.cwd())[1]]
     if errors:
         raise PlatformError("the proposals file is not valid for these rows", hint="\n".join(errors))
+    notes = []
+    for n in sorted(named):   # compute every action first: an unattended priority change refuses before the first write
+        e = entries[n]
+        handled = (e["issue"]["handled"] or {}).get("kind")
+        if handled in ("claimed", "fixed") or (e["row"] and e["row"]["class"] == "needs-exploring"):
+            continue
+        a = view.actions(e["issue"], e["row"])
+        triage.refuse_unattended_priority(a["add"] + a["remove"])
+        note = _priority_note(n, e["row"]) if not handled else None
+        if note:
+            notes.append(note)
     done, undo = [], []
     for key, name in view.GROUPS:
         for n in sorted(named):
@@ -160,7 +185,7 @@ def act(slug: str, batch: dict, rows: list[dict], numbers: str, dry_run: bool) -
     if specs_pr and not dry_run:
         undo.append(f"specs: close draft PR #{specs_pr['number']} and delete branch {specs_pr['branch']}")
     nxt = _next(done, entries)
-    return {"done": done, "next": nxt, "undo": undo, "choice": _choice(nxt), "_entries": entries, "_specs_pr": specs_pr}
+    return {"done": done, "priority_notes": notes, "next": nxt, "undo": undo, "choice": _choice(nxt), "_entries": entries, "_specs_pr": specs_pr}
 
 
 def render(result: dict, dry_run: bool) -> str:
@@ -170,6 +195,10 @@ def render(result: dict, dry_run: bool) -> str:
         items = [f"#{d['number']} {_phrase(entries[d['number']])}" for d in result["done"] if d["group"] == name]
         if items:
             out += _wrap(f"{name}: " + "; ".join(items), "  ", " " * 6)
+    if result["priority_notes"]:
+        out.append("Priority")
+        out += [f"  #{p['number']} {p['label']}, spec {view._number(p['spec'])} {p['spec_priority']}: "
+                f"the spec keeps {p['spec_priority']}; change it with {p['command']}" for p in result["priority_notes"]]
     out.append("Next")
     for item in result["next"]:
         tail = ""
