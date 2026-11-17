@@ -6,6 +6,9 @@
 seconds and without a cluster, every change Kubernetes refuses in place or that loses data, unless a changelog `Upgrade step:` line
 accepts it.
 
+  upgrade-render-check.py [--from TAG]... [--work DIR] [--repo DIR]
+      the run mode (AC-191.4): per from-release (default: the previous and the oldest supported one) build the system with that release,
+      update it with this checkout and compare, each in a section `from <tag>:`. Needs git, uv and copier, no container runtime.
   upgrade-render-check.py compare --from-tag TAG [--repo DIR] BEFORE AFTER
       BEFORE and AFTER are gitops repos (each with scripts/render.py and applications/<system>/system.yaml); each is rendered with
       its own `uv run scripts/render.py`. --repo is the platform checkout whose changelog is read (default: this checkout).
@@ -17,8 +20,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -284,15 +289,103 @@ def compare(before: Path, after: Path, tag: str, repo: Path) -> int:
     return 0
 
 
+# The builder, run as `bash upgrade-system.sh create <tag> <dir>` (the from-release's system) and then `... update <dir>` (the candidate's).
+BUILDER = REPO / "tests" / "e2e" / "lib" / "upgrade-system.sh"
+
+
+def builder(step: str, *args: Path | str) -> tuple[int, str, str]:
+    p = subprocess.run(["bash", str(BUILDER), step, *map(str, args)], cwd=REPO, capture_output=True, text=True)
+    return p.returncode, p.stdout, p.stderr
+
+
+def last_line(out: str, err: str, code: int) -> str:
+    lines = [ln for ln in (err + "\n" + out).splitlines() if ln.strip()]
+    return lines[-1].strip() if lines else f"exit {code}"
+
+
+def section(tag: str, work: Path, repo: Path) -> int:
+    """Create the system with the from-release, update it with the candidate, compare; the section's exit code."""
+    print(f"from {tag}:", flush=True)
+    d = work / tag
+    code, out, err = builder("create", tag, d)
+    for ln in out.splitlines():
+        if ln.startswith("skipped:"):
+            print(ln)
+    if code != 0:
+        print(f"ERROR: from-release {tag} does not render: {last_line(out, err, code)}")
+        return 2
+    before = d / "before"
+    shutil.copytree(d / "upg-gitops", before, symlinks=True)
+    code, out, err = builder("update", d)
+    if code != 0:
+        print(f"ERROR: candidate does not render: {last_line(out, err, code)}")
+        return 2
+    try:
+        return compare(before, d / "upg-gitops", tag, repo)
+    except (CheckError, OSError, yaml.YAMLError) as e:
+        print(f"ERROR: {e}")
+        return 2
+
+
+def release_tag(which: str) -> tuple[str | None, str]:
+    p = subprocess.run([sys.executable, str(REPO / "scripts" / "release-check.py"), "from-tag", which], cwd=REPO, capture_output=True, text=True)
+    out = p.stdout.strip()
+    if p.returncode != 0:
+        raise CheckError(last_line(p.stdout, p.stderr, p.returncode))
+    return (None, out.removeprefix("skipped: ")) if out.startswith("skipped:") else (out, "")
+
+
+def run(froms: list[str], work: Path | None, repo: Path) -> int:
+    tags = list(dict.fromkeys(froms))
+    if not froms:
+        try:
+            previous, _ = release_tag("previous")
+            oldest, why = release_tag("oldest")
+        except CheckError as e:
+            print(f"ERROR: {e}")
+            return 2
+        tags = [t for t in (previous,) if t]
+        if oldest is None:
+            print(f"oldest supported release: skipped: {why}")
+        elif oldest == previous:
+            print(f"previous and oldest supported release are both {previous}: compared once")
+        else:
+            tags.append(oldest)
+    base = (work or Path(tempfile.mkdtemp(prefix="upgrade-render-check-"))).resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    results: list[tuple[str, int]] = []
+    try:
+        for tag in tags:
+            results.append((tag, section(tag, base, repo)))
+    finally:
+        for tag in tags:
+            wt = base / tag / "from"
+            if wt.exists():
+                subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=REPO, capture_output=True)
+        if work is None:
+            shutil.rmtree(base, ignore_errors=True)
+    if all(c == 0 for _t, c in results):
+        print(f"upgrade render check: OK ({', '.join(tags)})")
+        return 0
+    first, *rest = results
+    print(f"upgrade render check: FAILED (from {first[0]}: exit {first[1]}" + "".join(f", from {t}: exit {c}" for t, c in rest) + ")")
+    return 2 if any(c == 2 for _t, c in results) else 1
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="upgrade-render-check.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    ap.add_argument("--from", dest="froms", action="append", default=[], metavar="TAG", help="from-release tag (repeatable)")
+    ap.add_argument("--work", type=Path, default=None, help="work directory (default: a temporary one, removed at the end)")
+    ap.add_argument("--repo", type=Path, default=REPO, help="platform checkout whose changelog is read")
+    sub = ap.add_subparsers(dest="cmd")
     c = sub.add_parser("compare", help="compare two rendered system repos")
     c.add_argument("--from-tag", required=True)
     c.add_argument("--repo", type=Path, default=REPO)
     c.add_argument("before", type=Path)
     c.add_argument("after", type=Path)
     args = ap.parse_args(argv)
+    if args.cmd is None:
+        return run(args.froms, args.work, args.repo)
     try:
         return compare(args.before.resolve(), args.after.resolve(), args.from_tag, args.repo)
     except (CheckError, OSError, yaml.YAMLError) as e:
