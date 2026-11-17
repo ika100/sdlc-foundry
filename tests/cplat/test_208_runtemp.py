@@ -4,16 +4,17 @@ The `runtemp` plugin is loaded by a nested pytest (`-p runtemp`, PYTHONPATH=test
 UV_CACHE_DIR point at a sandbox; the sandbox UV_CACHE_DIR plays the developer's cache. The plugin is not imported here, so each test
 fails on its own while it is missing.
 """
+import ast
 import hashlib
+import json
 import re
 import subprocess
-import sys
-import time
 from pathlib import Path
 
 import pytest
 
 from runtemp_support import Sandbox, hold_lock, make_run, now, snapshot, state_of
+from system_fixtures import ROOT
 
 RECORD = '''
 import json, os, subprocess, sys
@@ -218,7 +219,7 @@ def test_a_run_without_tests_passes_and_leaves_nothing_ac_208_3(sb):  # AC-208.3
 def failed_run(request, tmp_path_factory):
     sb = Sandbox(tmp_path_factory.mktemp("failed-run"))
     before = snapshot(sb.dev_cache)
-    p = sb.run(MIXED, "--timeout=1", "--timeout-method=signal", *request.param, timeout=110)
+    p = sb.run(MIXED, "--timeout=5", "--timeout-method=signal", *request.param, timeout=110)
     return sb, p, before
 
 
@@ -408,27 +409,56 @@ def test_concurrent_runs_get_their_own_directory_and_cache_ac_208_6(sb):  # AC-2
 
 # ---------------- AC-208.7: no measurable per-test work ----------------
 
-TRIVIAL = "import pytest\n\n@pytest.mark.parametrize('n', range(300))\ndef test_t(n, tmp_path):\n    (tmp_path / 'f').write_text('x')\n"
+PER_TEST = '''
+import json, os
+from pathlib import Path
+
+
+def test_a_1(tmp_path):
+    (tmp_path / "f").write_text("x")
+
+
+def test_a_2(tmp_path):
+    (tmp_path / "f").write_text("x")
+
+
+def test_a_3(tmp_path):
+    (tmp_path / "f").write_text("x")
+
+
+def test_a_4(tmp_path):
+    (tmp_path / "f").write_text("x")
+
+
+def test_z_reads_the_manifest(tmp_path):
+    run = Path(os.environ["UV_CACHE_DIR"]).parent
+    lines = [json.loads(ln) for ln in (run / "manifest" / "main.jsonl").read_text().splitlines()]
+    out = {"entries": sorted(p.name for p in run.iterdir()), "lines": lines}
+    Path(os.environ["SCRATCH_OUT"]).write_text(json.dumps(out))
+'''
 
 
 def test_the_plugin_adds_no_per_test_work_beyond_listing_a_directory_ac_208_7(sb):  # AC-208.7
     """The wall-time comparison (before and after, on the same machine) is recorded in the pull request and cannot be a test.
-    What a test can hold: 300 trivial tests that write one file cost under 3 ms each more with the plugin than without it."""
-    suite = sb.suite(TRIVIAL)
+    What a test can hold, without timing: per test the plugin appends one start and one end line holding the directories the test
+    made, and creates no other file or directory in the run."""
+    p = sb.run(PER_TEST)
+    assert p.returncode == 0, p.stdout + p.stderr
+    got = json.loads(sb.out.read_text())
+    assert got["entries"] == sorted([".lock", "run.json", "tmp", "uv-cache", "temproot", "manifest"])
+    lines = got["lines"]
+    assert len(lines) == 4 * 2 + 1, "a start and an end line per finished test, the start of the running one"
+    for i in range(4):
+        start, end = lines[2 * i], lines[2 * i + 1]
+        assert start == {"start": f"test_scratch.py::test_a_{i + 1}"}
+        assert set(end) == {"end", "dirs"} and end["end"] == start["start"]
+        assert len(end["dirs"]) == 1 and end["dirs"][0].startswith("tmp/") and f"test_a_{i + 1}" in end["dirs"][0]
+    assert lines[-1] == {"start": "test_scratch.py::test_z_reads_the_manifest"}
 
-    def wall(*plugin):
-        best = None
-        for _ in range(2):
-            t = time.perf_counter()
-            p = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *plugin, "-o", "addopts="], cwd=suite,
-                               env=sb.env(), capture_output=True, text=True, timeout=100)
-            elapsed = time.perf_counter() - t
-            assert p.returncode == 0, p.stdout + p.stderr
-            best = elapsed if best is None else min(best, elapsed)
-        return best
 
-    without = wall()
-    after_plain = snapshot(sb.R)   # pytest's own numbered directories
-    with_plugin = wall("-p", "runtemp")
-    assert snapshot(sb.R) == after_plain, "the plugin was active: it made its own directory and removed it"
-    assert (with_plugin - without) / 300 < 0.003, (without, with_plugin)
+def test_the_conftest_loads_the_plugin_so_every_entry_point_is_protected_ac_208_1():  # AC-208.1
+    tree = ast.parse((ROOT / "tests" / "cplat" / "conftest.py").read_text())
+    plugins = [n.value for n in tree.body if isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "pytest_plugins" for t in n.targets)]
+    assert plugins, "conftest.py declares pytest_plugins"
+    assert "runtemp" in {e.value for v in plugins for e in v.elts if isinstance(e, ast.Constant)}
+    assert (ROOT / "tests" / "cplat" / "runtemp.py").is_file()

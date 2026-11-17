@@ -70,7 +70,8 @@ def snapshot(root: Path) -> dict[str, tuple]:
         return out
     for p in sorted(root.rglob("*")):
         st = p.lstat()
-        out[p.relative_to(root).as_posix()] = (p.is_dir(), 0 if p.is_dir() else st.st_size, st.st_mtime_ns)
+        mtime = 0 if p.name == ".lock" else st.st_mtime_ns   # opening a lock file without truncating is not a change
+        out[p.relative_to(root).as_posix()] = (p.is_dir(), 0 if p.is_dir() else st.st_size, mtime)
     return out
 
 

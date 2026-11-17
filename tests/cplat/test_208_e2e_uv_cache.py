@@ -4,6 +4,7 @@ No cluster is needed: the scripts run with stubs for the tools they check for, a
 sees and then says docker is not running, so each script ends through its own `cleanup` trap right after its checks.
 """
 import os
+import re
 import stat
 import subprocess
 
@@ -95,15 +96,15 @@ def test_the_lib_end_without_start_does_nothing_and_never_fails_ac_208_2():  # A
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_each_script_sources_the_lib_and_ends_the_cache_in_cleanup_ac_208_2(script):  # AC-208.2
     lines = (ROOT / "tests" / "e2e" / script).read_text().splitlines()
-    source = next(i for i, ln in enumerate(lines) if ln.startswith((". ", "source ")) and "lib/uv-cache.sh" in ln)
+    source = next(i for i, ln in enumerate(lines) if ln.lstrip().startswith((". ", "source ")) and "lib/uv-cache.sh" in ln)
     work = next(i for i, ln in enumerate(lines) if ln.startswith("work="))
-    start = next(i for i, ln in enumerate(lines) if ln.strip() == "e2e_uv_cache_start")
+    start = next(i for i, ln in enumerate(lines) if re.search(r"\be2e_uv_cache_start\b", ln) and not ln.lstrip().startswith("#"))
     checks = next(i for i, ln in enumerate(lines) if "command -v $t" in ln)
     assert source < work < start < checks, "the cache starts right after work=, before the first tool runs"
     c0 = next(i for i, ln in enumerate(lines) if ln.startswith("cleanup()"))
     c1 = next(i for i in range(c0, len(lines)) if lines[i] == "}")
     body = lines[c0:c1]
-    end_at = next(i for i, ln in enumerate(body) if ln.strip() == "e2e_uv_cache_end")
+    end_at = next(i for i, ln in enumerate(body) if re.search(r"\be2e_uv_cache_end\b", ln) and not ln.lstrip().startswith("#"))
     assert end_at < next(i for i, ln in enumerate(body) if ln.strip() == "exit $rc")
     keep = [i for i, ln in enumerate(body) if 'E2E_KEEP:-0}" != 1' in ln]
     for k in keep:   # whatever E2E_KEEP says: the call is not inside the E2E_KEEP block
