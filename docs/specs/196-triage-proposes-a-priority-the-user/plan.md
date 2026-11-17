@@ -45,18 +45,21 @@ tasks:
     covers: [AC-196.12]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t6
     title: Spec commands and product-manager propose, show and change the priority
     files: [plugins/component/commands/spec.md, plugins/system/commands/spec.md, plugins/svc/agents/product-manager.md, docs/rules/plugins/component/commands/spec.yml, docs/rules/plugins/system/commands/spec.yml, docs/rules/plugins/svc/agents/product-manager.yml]
     covers: [AC-196.10, AC-196.11, AC-196.12]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: /issue:triage uses the reason format and confirm --set
     files: [plugins/issue/commands/triage.md, docs/rules/plugins/issue/commands/triage.yml]
     covers: [AC-196.1, AC-196.2, AC-196.4, AC-196.6]
     parallel_safe: true
     depends_on: [t2]
+    done: true
 ---
 
 # Plan — 196 Triage and new specs propose a priority the user confirms

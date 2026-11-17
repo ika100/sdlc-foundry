@@ -28,7 +28,7 @@ Run `overview --proposals F --json` and print `screen` verbatim. Then ask each o
 
 ## 4. Confirm
 
-Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change one` (a row, then what to change) or `Cancel`. A typed answer ("ok", "all ok, 560 feature") is accepted: update the proposals file and ask again about the rows it leaves unclear, because each extra question costs the user a turn. A priority change (`Change one`, typed `560 p0`) runs `confirm --proposals F --set 560=P0`. `--show <n>` shows a row's exact actions. Nothing outward happens before OK. **Hard rule:** Never close an issue, because a closed issue leaves the queue unseen.
+Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change one` (a row, then what to change; run `confirm` again) or `Cancel`. A typed answer ("ok", "all ok, 560 feature") is accepted: update the proposals file and ask again about the rows it leaves unclear, because each extra question costs the user a turn. A priority change (`Change one`, typed `560 p0`) runs `confirm --proposals F --set 560=P0`. `--show <n>` shows a row's exact actions. Nothing outward happens before OK. **Hard rule:** Never close an issue, because a closed issue leaves the queue unseen.
 
 ## 5. Act
 
