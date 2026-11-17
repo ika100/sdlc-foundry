@@ -66,6 +66,7 @@ tasks:
     covers: [AC-193.1, AC-193.3, AC-193.4, AC-193.5]
     parallel_safe: true
     depends_on: [t6, t7]
+    done: true
   - id: t9
     title: /platform:next writes the judgement for the build and the stops
     files: [plugins/platform/commands/next.md, docs/rules/plugins/platform/commands/next.yml]
