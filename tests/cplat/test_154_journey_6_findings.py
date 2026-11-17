@@ -42,10 +42,11 @@ def test_the_gate_retries_a_dropped_network_ac_154_1(gate, monkeypatch, capsys):
         calls.append(cmd)
         if len(calls) == 1:
             return subprocess.CompletedProcess(cmd, 1, "", DOWN)
-        body = '{"check_runs": [{"name": "%s", "conclusion": "success"}]}' % gate.E2E_NAME
+        body = '{"check_runs": [{"name": "%s", "conclusion": "success"}, {"name": "%s", "conclusion": "success"}]}' % (
+            gate.E2E_NAME, gate.RENDER_NAME)
         return subprocess.CompletedProcess(cmd, 0, body, "")
     monkeypatch.setattr(core.subprocess, "run", fake)
-    assert gate.cmd_gate("abc1234") == 0 and len(calls) == 2
+    assert gate.cmd_gate("abc1234") == 0 and len(calls) == 3    # one dropped call, then a read per required check
     assert "OK: abc1234 has a green upgrade e2e" in capsys.readouterr().out
 
 

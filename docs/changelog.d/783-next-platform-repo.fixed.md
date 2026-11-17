@@ -1,0 +1,1 @@
+`cplat next` in the platform repo is faster: the open and merged PRs of a repo are asked once and matched by branch, the spec drafts are read in parallel, and the runs, drafts and triage sources of a repo without a system run at once (#783).

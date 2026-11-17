@@ -17,10 +17,10 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
 | [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | approved | 7 | #568 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
-| [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | approved | 8 | #400 |
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
 | [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | approved | 12 |  |
 | [201-one-cluster-repo-places-environments-on](specs/201-one-cluster-repo-places-environments-on/spec.md) — One cluster repo places environments on several clusters | P1 | approved | 12 |  |
+| [204-service-java-on-spring-boot-4-cve-free](specs/204-service-java-on-spring-boot-4-cve-free/spec.md) — service-java on Spring Boot 4, CVE-free image | P1 | approved | 7 | #709 |
 | [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | approved | 11 | #143 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
@@ -126,7 +126,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | done | 26 |  |
 | [123-the-platform-repo-declares-its-own-shape](specs/123-the-platform-repo-declares-its-own-shape/spec.md) — The platform repo declares its own shape | P1 | done | 24 |  |
 | [125-a-cluster-repo-hosts-several-systems](specs/125-a-cluster-repo-hosts-several-systems/spec.md) — A cluster repo hosts several systems on shared operators | P1 | done | 15 |  |
-| [126-unattended-runs-stop-wasting-turns-and](specs/126-unattended-runs-stop-wasting-turns-and/spec.md) — Unattended runs stop wasting turns and CI rounds | P1 | done | 15 |  |
+| [126-unattended-runs-stop-wasting-turns-and](specs/126-unattended-runs-stop-wasting-turns-and/spec.md) — Unattended runs stop wasting turns and CI rounds | P1 | done | 15 | #784 |
 | [128-generated-passwords-match-the-running](specs/128-generated-passwords-match-the-running/spec.md) — Generated passwords match the running server | P1 | done | 14 | #316 |
 | [129-a-platform-release-command](specs/129-a-platform-release-command/spec.md) — A platform release command | P1 | done | 21 | #296 |
 | [130-quality-gates-fail-when-they-checked](specs/130-quality-gates-fail-when-they-checked/spec.md) — Quality gates fail when they checked nothing | P1 | done | 16 | #285 |
@@ -179,6 +179,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [188-explore-a-feature-before-its-spec-is](specs/188-explore-a-feature-before-its-spec-is/spec.md) — Explore a feature before its spec is written | P1 | done | 12 | #662 |
 | [189-the-web-image-has-no-known-critical-cve](specs/189-the-web-image-has-no-known-critical-cve/spec.md) — The web image has no known critical CVE and the platform scans template images | P1 | done | 7 | #682 |
 | [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | done | 7 | #688 |
+| [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | done | 8 | #400 |
 | [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | done | 10 |  |
 | [194-a-system-ship-wait-returns-before-the](specs/194-a-system-ship-wait-returns-before-the/spec.md) — A system ship wait returns before the Bash limit | P1 | done | 4 |  |
 | [195-a-restored-copy-is-checked-without](specs/195-a-restored-copy-is-checked-without/spec.md) — A restored copy is checked without kubectl | P1 | done | 5 | #683 |
