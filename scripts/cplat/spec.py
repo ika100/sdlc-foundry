@@ -1,4 +1,4 @@
-"""`spec`: feature specs in docs/specs/<NNN>-<slug>/ (ADR-026) — create, check, approve, trace, index, list, migrate.
+"""`spec`: feature specs in docs/specs/<NNN>-<slug>/ (ADR-026) — create, check, approve, show, trace, index, list, migrate.
 
 A spec folder holds spec.md (what: stories, acceptance criteria AC-<NNN>.<n>, non-goals, open questions), optional
 design.md (how, contract) and plan.md (tasks with `covers: [AC-…]`). The slash commands do the judgement; every
@@ -22,6 +22,7 @@ from typing import NamedTuple
 import yaml
 
 import core
+import envlimit
 from core import PlatformError
 
 SPECS_DIR = Path("docs") / "specs"
@@ -284,6 +285,7 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
         errs.append(f"spec.md: priority must be one of {sorted(PRIORITIES)}")
     if "explored" in meta and not isinstance(meta["explored"], bool):
         errs.append("spec.md: explored must be true or false")
+    errs += envlimit.field_errors(meta)          # spec 190: the environments the spec's behaviour may run in
     known = {s["id"] for s in core.registry.load_all()}
     if meta.get("shape") and meta["shape"] not in known:
         errs.append(f"spec.md: unknown shape '{meta['shape']}' (valid: {', '.join(sorted(known))})")
@@ -1183,7 +1185,8 @@ def summary(root: Path, spec: Spec) -> dict:
             "priority": spec.meta.get("priority", ""), "acs": len(spec.active_acs()),
             "open_questions": len(spec.open_questions()), "assumptions": len(spec.assumptions()), "tasks": len(tasks),
             "tasks_done": sum(1 for t in tasks if t.get("done")), "tracks": spec.meta.get("tracks") or [],
-            "explored": spec.meta.get("explored") is True, "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
+            "explored": spec.meta.get("explored") is True, "environments": envlimit.allowed(spec.meta),
+            "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
 
 
 VERDICT_ROW = re.compile(r"^\|\s*(AC-\d{3,}\.\d+)\s*\|\s*([^|]*?)\s*\|")
@@ -1272,7 +1275,7 @@ def detail(root: Path, spec: Spec, shape: str | None) -> dict:
 
 def broken_summary(root: Path, b: BrokenSpec) -> dict:
     return {"id": b.id, "title": "", "status": "broken", "priority": "", "acs": 0, "open_questions": 0,
-            "tasks": 0, "tasks_done": 0, "tracks": [], "explored": False, "next": f"fix {b.rel} line {b.line}: {b.hint}",
+            "tasks": 0, "tasks_done": 0, "tracks": [], "explored": False, "environments": None, "next": f"fix {b.rel} line {b.line}: {b.hint}",
             "path": str(b.dir.relative_to(root))}
 
 
@@ -1521,6 +1524,10 @@ def main(argv: list[str]) -> int:
     p.add_argument("--offline", action="store_true", help="do not ask GitHub for open PRs")
     p = sub.add_parser("approve", help="check a draft and set it approved")
     p.add_argument("id")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("show", help="one spec: status, counts, environment limit and next step (spec 190)")
+    p.add_argument("id")
+    p.add_argument("--json", action="store_true", help="the spec's object of `list --json --detail`")
     p = sub.add_parser("set-status")
     p.add_argument("id")
     p.add_argument("status", choices=STATUSES)
@@ -1629,9 +1636,28 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "approve":
         spec = find(root, ns.id)
         aside = approve(spec, repo_shape(root))
+        envs = envlimit.allowed(spec.meta)
+        if ns.json:
+            print(json.dumps({"id": spec.id, "status": "approved", "plan_aside": aside, "environments": envs}, indent=2))
+            return 0
         print(f"{spec.id}: approved")
+        if envs is not None:
+            print(envlimit.summary_line(envs))
         if aside:
             print(f"plan.md was written for the earlier criteria and is now {aside}; re-plan with `/component:plan {spec.number}`")
+        return 0
+    if ns.cmd == "show":
+        spec = find(root, ns.id)
+        if ns.json:
+            print(json.dumps(detail(root, spec, repo_shape(root)), indent=2))
+            return 0
+        row = summary(root, spec)
+        print(f"{spec.id} — {row['title']}   [{spec.status}]")
+        print(f"{row['priority']} · {row['acs']} acceptance criteria · {row['assumptions']} assumptions · "
+              f"{row['open_questions']} open questions")
+        if row["environments"] is not None:
+            print(envlimit.summary_line(row["environments"]))
+        print(f"next: {row['next']}")
         return 0
     if ns.cmd == "set-status":
         spec = find(root, ns.id)
@@ -1699,6 +1725,10 @@ def main(argv: list[str]) -> int:
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
     given = ns.base if ns.cmd == "test-diff" else None
+    if ns.cmd == "test-diff" and core.run(["git", "rev-parse", "--verify", "-q", f"{ns.base}^{{commit}}"], cwd=root,
+                                           check=False).returncode != 0:   # #752: a crash on git's exit 128 before
+        raise core.PlatformError(f"base {ns.base[:12]} is not a commit of this repository",
+                                 hint="pass the commit with the red acceptance tests: git log --oneline --grep 'acceptance tests for'")
     if ns.cmd == "test-diff" and (base := frozen_base(root, ns.base)) != ns.base:
         print(f"base: {base[:7]}, where the red-tests unit ended (spec 169), not {ns.base[:7]}")
         ns.base = base

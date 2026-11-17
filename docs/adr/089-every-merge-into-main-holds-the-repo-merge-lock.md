@@ -1,6 +1,7 @@
 # ADR-089: Every merge into main holds the repo merge lock
 
 **Status:** Accepted (2026-11-09, spec 167)
+**Amended by:** spec 198 ([design](../specs/198-a-platform-release-holds-main-through/design.md))
 **Builds on:** [ADR-042](042-product-ship-coordinates-repo-ships.md) (the gitops merge slot), spec 079 (`cplat pr wait --merge`), spec 072 (`ship land`)
 
 ## Context
@@ -21,10 +22,18 @@ commit, never a force push), waits for every check of the new head, and merges w
 is a human decision, as before. A repo that lists `e2e` under `serialize` in `.platform/dispatch.yml` holds the lock for
 the whole land phase (the check wait through the merge), because its e2e job runs on a single self-hosted runner.
 
+**Release hold (spec 198).** A platform release holds `main` of its repo from its first check until the tag is pushed.
+The hold is a file beside the lock (`<owner>__<name>.release-hold.json`), not the lock itself, because a release outlives
+any `flock`: it exits at its confirmation stops. `held()` checks the file inside the lock; a merge that meets a hold of
+another process lets go of the lock, waits for the hold outside it, untimed (the wait does not count against its
+timeout), and then takes the lock again. The release's own process passes. At a confirmation stop the hold is kept for 2
+hours and then expires; a hold whose process is gone is dropped by whoever checks it. The hold is machine-local, like the lock.
+
 ## Consequences
 
 - No pull request lands on a `main` its checks did not see; merges in one repo happen one at a time on the machine,
   with or without the dispatcher.
 - A merge that waits for the lock past its timeout ends with a retryable error, never as a red check or an escalation.
 - A second machine merging the same repo is not covered; that needs a lock on GitHub and is out of scope.
+- A release no longer restarts because `main` moved through a cplat merge; merges by hand or from another machine are not held.
 - A behind branch costs one more CI run; that is the price of testing what lands.

@@ -2,7 +2,7 @@
   "version": 1,
   "sample": {
     "repo": "ika100/todo-api",
-    "rev": "03a852e632aa1e376eb17e6bb436804f6fdfc331"
+    "rev": "d5626eca2a73e9d76cdceaf4c400e41d59a8e959"
   },
   "workflows": {
     "quick-task": {
@@ -77,6 +77,15 @@
       "prompt": "/component:explore a GET /todos/count endpoint that returns the number of todos. My decision is final: count with SQL COUNT(*). Write that decision into docs/decisions.md and commit it, then stop.",
       "max_runs": 1,
       "max_minutes": 15,
+      "plugins": [
+        "component"
+      ]
+    },
+    "spec-environments": {
+      "task_version": 1,
+      "prompt": "/component:spec Let a signed-in user share a todo list read-only with one other user by email. The change must work in dev, staging and prod, so write the spec for all three environments.",
+      "max_runs": 2,
+      "max_minutes": 20,
       "plugins": [
         "component"
       ]

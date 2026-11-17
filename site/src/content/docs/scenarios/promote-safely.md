@@ -27,6 +27,21 @@ If the staging smoke is red, the platform files a `smoke-failure` issue and leav
 
 The command verifies in GHCR that the image tag exists before it opens the pull request, adds the environment to the component's `instances`, renders the overlay and pins the tag. Promotion only moves forward, one environment at a time. Production pull requests say so in their description.
 
+## When a spec limits the environments
+
+A spec can say where its behaviour may run: `environments: [dev]` in its front matter, out of `dev`, `staging` and `prod`. While such a spec is `building` or `done`, promotion refuses every target it leaves out, so a half-finished feature does not reach staging or production by accident. The rule covers `/instance:promote` and the automatic staging pin; moving a version back in `dev` is never refused.
+
+```text
+$ /instance:promote shop-api --to staging
+ERROR: environment limit: 042-anonymous-use allows dev, not staging (Anonymous use)
+  fix: widen the spec with /system:spec --amend 042 once the work that lifts the limit has shipped, or promote anyway
+       with /instance:promote --accept-environment-limit "<reason>" (a person's decision)
+```
+
+With `--dry-run` the preview lists one `REFUSED:` line per limiting spec and the `fix:` line, and exits 1. Automatic staging promotion does not fail: it skips and says `not promoted: environment limit 042-anonymous-use allows dev`; the next deploy promotes once the spec is widened.
+
+The usual way out is to widen the spec with `/system:spec --amend` after the work that lifts the limit has shipped. To promote anyway, a person passes `--accept-environment-limit "<reason>"` (a sentence of 3 or more words); the output and the pull request record `environment limit accepted: <spec> (<environments>): <reason>`. Only a person decides this: an unattended run stops and asks instead.
+
 ## What you get
 
 - A pull request per move with the exact tag in the diff; ArgoCD rolls the environment after you merge.

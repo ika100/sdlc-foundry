@@ -2,6 +2,10 @@
 machine-wide lock per repo slug, and a branch that is behind its base is updated and has its checks run again on top
 before it merges.
 
+Inside the lock `held` also checks the release hold of the repo (spec 198): a hold of another process is waited for with the
+lock released, that wait does not count against the timeout, and the merge then starts over from the lock. The release sets
+its own hold with `set_release_hold`, which waits once for a merge already inside the lock.
+
   with merge_lock.held(slug, who, timeout):   an exclusive flock on `<state>/locks/<owner>__<name>.merge.lock`
       caught = merge_lock.catch_up(...)       inside the lock: behind check, `gh pr update-branch`, the new head's checks
 
@@ -22,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import dispatch_state
+import release_hold
 import ship
 from core import PlatformError, run
 
@@ -66,7 +71,8 @@ def _holder(slug: str) -> dict:
 
 @contextlib.contextmanager
 def held(slug: str, who: str, timeout: float, interval: float = 5) -> Iterator[None]:
-    """Hold the merge lock of `slug`; `Busy` when it stays taken for `timeout` seconds."""
+    """Hold the merge lock of `slug`; `Busy` when it stays taken for `timeout` seconds. A release hold of another process
+    (spec 198) is waited for outside the lock and does not count against the timeout."""
     path, info = dispatch_state.merge_lock_path(slug), dispatch_state.merge_info_path(slug)
     path.parent.mkdir(parents=True, exist_ok=True)
     begin = time.monotonic()
@@ -75,23 +81,58 @@ def held(slug: str, who: str, timeout: float, interval: float = 5) -> Iterator[N
         while True:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
             except BlockingIOError:
-                pass
-            holder = _holder(slug)
-            since = holder.get("since") or "an unknown time"
-            if time.monotonic() - begin > timeout:
-                raise Busy(slug, holder.get("who") or "another merge", since)
-            if time.monotonic() - said >= WAIT_LINE_EVERY:
-                said = time.monotonic()
-                ship.say(f"waiting for the merge lock of {slug}: held by {holder.get('who') or 'another merge'} since {since}")
-            sleep(interval)
+                holder = _holder(slug)
+                since = holder.get("since") or "an unknown time"
+                if time.monotonic() - begin > timeout:
+                    raise Busy(slug, holder.get("who") or "another merge", since) from None
+                if time.monotonic() - said >= WAIT_LINE_EVERY:
+                    said = time.monotonic()
+                    ship.say(f"waiting for the merge lock of {slug}: held by {holder.get('who') or 'another merge'} since {since}")
+                sleep(interval)
+                continue
+            hold = release_hold.foreign(slug)       # inside the lock, so no merge starts between the check and the merge
+            if hold is None:
+                break
+            fcntl.flock(lock, fcntl.LOCK_UN)        # wait outside the lock: the release itself must be able to merge
+            begin += release_hold.wait_clear(slug, hold)
+            said = time.monotonic()
         try:
             dispatch_state.write_json(info, {"who": who, "pid": os.getpid(), "since": dispatch_state.now().strftime("%H:%M:%S")})
             yield
         finally:
             info.unlink(missing_ok=True)
             fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def set_release_hold(slug: str, version: str, timeout: float, interval: float = 5) -> release_hold.Hold:
+    """Set the release hold of `slug` for `version`, then wait once for a merge already inside the merge lock to end."""
+    before = release_hold.read(slug)
+    hold, taken = release_hold.claim(slug, version)       # HoldTaken: nothing is written
+    path = dispatch_state.merge_lock_path(slug)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    begin = time.monotonic()
+    said: float | None = None
+    with open(path, "a") as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(lock, fcntl.LOCK_UN)
+                break
+            except BlockingIOError:
+                pass
+            who = _holder(slug).get("who") or "another merge"
+            if time.monotonic() - begin > timeout:
+                release_hold.release(slug)
+                raise PlatformError(f"the merge of {who} in {slug} did not end within {int(timeout)}s; the release did not start",
+                                    hint="run the release again")
+            if said is None or time.monotonic() - said >= WAIT_LINE_EVERY:
+                said = time.monotonic()
+                ship.say(f"waiting for the merge of {who} to end before the release")
+            sleep(interval)
+    tail = f" (taken over from the stop at confirm {before.confirm})" if taken and before is not None else ""
+    ship.say(f"release hold set on {slug} for {version}{tail}")
+    return hold
 
 
 @dataclass

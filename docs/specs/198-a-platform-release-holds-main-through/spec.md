@@ -1,7 +1,7 @@
 ---
 spec_id: 198-a-platform-release-holds-main-through
 title: A platform release holds main through the merge lock
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -66,3 +66,5 @@ None.
 
 - 2026-11-14 created
 - 2026-11-14 approved
+- 2026-11-16 building
+- 2026-11-17 done

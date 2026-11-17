@@ -1,0 +1,1 @@
+**`cplat spec test-diff` refuses a base that is not a commit instead of crashing (#752).** A red-tests commit that was squashed away crashed the check with git's exit 128; it now names the base and how to find the right one.

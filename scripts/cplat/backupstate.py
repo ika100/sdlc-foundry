@@ -430,6 +430,32 @@ def _latest(active: dict, ns: str, context: str | None) -> str | None:
     return norm_time(out.strip()) if rc == 0 else None
 
 
+
+WAL_NAME = re.compile(r"^[0-9A-F]{24}$")
+
+
+def _primary_sql(cluster: dict, ns: str, sql: str, context: str | None) -> str | None:
+    """The output of `sql` on the cluster's primary; None when it cannot be run."""
+    primary = (cluster.get("status") or {}).get("currentPrimary")
+    if not primary:
+        return None
+    rc, out, _ = _k(["exec", "-n", ns, str(primary), "-c", "postgres", "--", "psql", "-U", "postgres", "-At", "-c", sql], context)
+    return out.strip() if rc == 0 else None
+
+
+def end_wal_archived(cluster: dict, ns: str, end_wal: str, context: str | None) -> tuple[bool, str | None]:
+    """(archived, newest archived segment): whether `last_archived_wal` of pg_stat_archiver on the primary is `end_wal` or later.
+    Segment names of one cluster sort by time (timeline first); a history or partial file counts as not archived."""
+    last = _primary_sql(cluster, ns, "select last_archived_wal from pg_stat_archiver", context)
+    if not last or not WAL_NAME.match(last.upper()):
+        return False, last or None
+    return last.upper() >= end_wal.upper(), last
+
+
+def switch_wal(cluster: dict, ns: str, context: str | None) -> bool:
+    """Close the current WAL segment on the primary so it is archived now (J21-4); False when it cannot be run."""
+    return _primary_sql(cluster, ns, "select pg_switch_wal()", context) is not None
+
 def restore_points(row: dict) -> dict:
     """{"earliest", "latest"} of a `database_state` row (both None without a restore point)."""
     return {"earliest": row["backup"]["earliest"], "latest": row["backup"]["latest"]}

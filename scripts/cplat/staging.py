@@ -14,6 +14,7 @@ from pathlib import Path
 
 import yaml
 
+import envlimit
 import model
 import runs
 import smoke
@@ -89,6 +90,20 @@ def _app_dirs(slug: str, repo: Path) -> list[str] | None:
     return [e["name"] for e in data if isinstance(e, dict) and e.get("type") == "dir" and e.get("name")]
 
 
+def _list_dirs(slug: str, path: str, repo: Path) -> list[str] | None:
+    try:
+        data = json.loads(_try(["api", f"repos/{slug}/contents/{path}"], repo) or "null")
+    except ValueError:
+        return None
+    if not isinstance(data, list):
+        return None
+    return [e["name"] for e in data if isinstance(e, dict) and e.get("type") == "dir" and e.get("name")]
+
+
+def _read_text(slug: str, path: str, repo: Path) -> str | None:
+    return _try(["api", f"repos/{slug}/contents/{path}", "-H", "Accept: application/vnd.github.raw"], repo) or None
+
+
 def resolve(service_slug: str, tag: str | None, repo: Path | None = None) -> str | None:
     """The commit sha a staging tag names: sha-<40>, sha-<7> and X.Y.Z (through the release tag)."""
     if not tag:
@@ -160,6 +175,10 @@ def decide(repo: Path, st: dict, apps: list[str], svc: str, dev: smoke.SmokeResu
                 return skip(f"staging already runs {tag}: nothing pinned", **where)
             if newer(me, build, have, repo) == "ahead":
                 return skip(f"staging already runs a newer build of {name} ({have[:7]}): nothing pinned", **where)
+        limits, unreadable = envlimit.remote_limits(
+            lambda p: _list_dirs(slug, p, repo), lambda p: _read_text(slug, p, repo), "staging")
+        if limits or unreadable:
+            return skip(envlimit.skip_reason(limits, unreadable), **where)
         if not has_workflow(slug, repo):
             return skip(f"the gitops-app {app_dir.split('/', 1)[1]} has no pin-staging workflow (update it with /platform:update)", **where)
         return Decision("promote", None, slug, app_dir, name, tag, previous, True)
