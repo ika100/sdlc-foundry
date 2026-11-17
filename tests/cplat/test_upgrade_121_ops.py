@@ -681,7 +681,8 @@ def gate(tmp_path, runs, sha="abc1234", api=None):
 
 
 def test_the_gate_passes_for_a_green_upgrade_e2e_ac_121_24(tmp_path):  # AC-121.24
-    rc, out = gate(tmp_path, [{"name": "ci-success", "conclusion": "success"}, {"name": E2E_NAME, "conclusion": "success"}])
+    rc, out = gate(tmp_path, [{"name": "ci-success", "conclusion": "success"}, {"name": E2E_NAME, "conclusion": "success"},
+                       {"name": "upgrade render check", "conclusion": "success"}])
     assert rc == 0, out
 
 
@@ -702,7 +703,8 @@ def head_api(head_tree="t1", head_e2e="success") -> dict:
     p = "repos/acme/platform/commits/"
     return {p + "abc1234/pulls": [{"number": 7, "head": {"sha": "def5678"}}],
             p + "abc1234": {"commit": {"tree": {"sha": "t1"}}}, p + "def5678": {"commit": {"tree": {"sha": head_tree}}},
-            p + "def5678/check-runs": {"check_runs": [{"name": E2E_NAME, "conclusion": head_e2e}]}}
+            p + "def5678/check-runs": {"check_runs": [{"name": E2E_NAME, "conclusion": head_e2e},
+                                                     {"name": "upgrade render check", "conclusion": "success"}]}}
 
 
 def test_the_gate_takes_a_green_upgrade_e2e_on_the_pull_requests_head_with_the_same_tree_400(tmp_path):
