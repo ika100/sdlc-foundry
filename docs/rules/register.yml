@@ -3,8 +3,8 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "bec4fbbaf4d6204b1d195960c947dde3e5401a58"
-  prompt_bytes: 359241
+  commit: "0490c7b7c6cac690d32be7f0166dde00ba237788"
+  prompt_bytes: 359338
   history:                       # newest last; written only by `cplat platform rules rebaseline`
     - date: "2026-11-12"
       old: 345859
@@ -21,6 +21,11 @@ baseline:
       new: 359241
       reason: "/platform:next and the hand-over (spec 192)"
       benchmark_runs: [20261114T094959Z-7626785d, 20261114T100130Z-5ba97394]
+    - date: "2026-11-17"
+      old: 359241
+      new: 359338
+      reason: "/platform:next judges the build and the stops (spec 193)"
+      benchmark_runs: [20261117T040838Z-09ab8154, 20261117T041112Z-ea3b5cb0]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff
