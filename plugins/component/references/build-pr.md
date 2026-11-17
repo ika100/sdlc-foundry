@@ -1,6 +1,6 @@
 # Build: the pull request and the final report
 
-Read from `/component:build` Phase 7 (the PR body template is also the one `/component:ship` Phase `pr` uses).
+Read from `/component:build` Phase 7 and `/component:ship` Phase `pr`.
 
 ## PR body
 
@@ -42,7 +42,7 @@ Write it with the Write tool to `.pr-body.md` in the repo root (never into `.git
 
 ## Open it
 
-One Bash call; it commits what is left with `-s`, pushes the feature branch, opens the PR, adds "Contains WIP commits from an interrupted build: squash-merge." to the body when the branch has `wip(` commits, plus the run's generated "How this was built" block (never edit it, so that it shows what the run recorded):
+`cplat` puts a generated Summary block at the top of the PR body; the orchestrator writes no summary. One Bash call; it commits what is left with `-s`, pushes the feature branch, opens the PR, adds "Contains WIP commits from an interrupted build: squash-merge." to the body when the branch has `wip(` commits, plus the run's generated "How this was built" block (never edit it, so that it shows what the run recorded):
 
 ```bash
 cplat pr open --spec <spec_id> --title "feat(<scope>): <spec title, ≤72 chars>" [--no-spec]

@@ -39,7 +39,7 @@ Escalate on build's stop rules. Then `cplat component ship phase pr`.
 ## Phase `pr`
 
 1. Write `.pr-body.md` in the repo root (Write tool, never into `.git/`, because Claude Code refuses edits there) with the template in `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`, then `cplat deps report --body-file .git/PR_BODY.md`.
-2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff $RED --task <task>` (`RED=$(git log -1 --format=%H --grep 'acceptance tests for')`): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR, refusing while a gitops task has no PR (platform repo: `--no-spec`).
+2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff $RED --task <task>` (`RED=$(git log -1 --format=%H --grep 'acceptance tests for')`): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (refused while a gitops task has no PR; platform repo: `--no-spec`). `cplat` puts a generated Summary at the top of the PR body; the orchestrator writes no summary.
 
 ## Phase `land`
 
@@ -50,16 +50,15 @@ Escalate on build's stop rules. Then `cplat component ship phase pr`.
 
 ## Phase `deploy`
 
-`cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: the user's context, or `kubectl config current-context` if it is the system's cluster; `--base-url` is the user's to name, since a guess may hit the wrong host. Print its lines.
-
+`cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: the user's context, or `kubectl config current-context` if it is the system's cluster; `--base-url` is the user's to name, since a guess may hit the wrong host.
 - Red smoke (`smoke red in dev: …`, or in staging) or a failed staging pin: since deploy escalates by itself and files the `smoke-failure` issue, never call `cplat component ship escalate` for it; report its lines and stop.
-- Shape `platform`: deploy ends at once with `not deployable (platform): nothing to deploy`: no pin, Argo, smoke or staging.
+- Shape `platform`: deploy ends at once with `not deployable (platform): nothing to deploy`.
 - A closed pin PR, red pin CI or unhealthy app → escalate with the hint.
 
 ## Finish
 
-`cplat component ship status`, `cplat component ship finish`, then print the report in `${CLAUDE_PLUGIN_ROOT}/references/ship-finish.md`. A buffered-record warning is no error. Then end as Escalate ends.
+`cplat component ship status`, `cplat component ship finish`, print the report in `${CLAUDE_PLUGIN_ROOT}/references/ship-finish.md`. A buffered-record warning is no error. End as Escalate ends.
 
 ## Escalate
 
-`cplat component ship escalate '<one line: what needs the user and where>' --cause platform|code|decision|environment` (always pass the cause, since it decides whether cplat files an issue: `platform` = a platform script or command failed, `code` = the user's code, `decision` = the spec or a rule needs the user, `environment` = runner, cluster, network, a secret). For `platform` also pass `--command '<command>'` and the output via `--evidence-file -` or a file; report its `issue:` line. For `decision` always pass each question as `--question '<question> (suggested: <answer>)'`, because the system ship can then answer it while other repos build. An `answer from the system ship:` or `answer from the shipping session:` line printed by `cplat component ship start` is the user's decision for the escalation that stopped the run: always apply it and go on, since the coordinator answered in the user's place. Then print the reason, `cplat component ship status`, the decision. A stop or pause request → escalate `paused by the user`. End with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
+`cplat component ship escalate '<one line: what needs the user and where>' --cause platform|code|decision|environment` (always pass the cause, since it decides whether cplat files an issue: `platform` = a platform script or command failed, `code` = the user's code, `decision` = the spec or a rule needs the user, `environment` = runner, cluster, network, a secret). For `platform` also pass `--command '<command>'` and the output via `--evidence-file -` or a file; report its `issue:` line. For `decision` always pass each question as `--question '<question> (suggested: <answer>)'`, because the system ship can then answer it while other repos build. An `answer from the system ship:` or `answer from the shipping session:` line printed by `cplat component ship start` is the user's decision for the escalation that stopped the run: always apply it and go on, since the coordinator answered in the user's place. Then print the reason, `cplat component ship status`, the decision. A stop or pause request → escalate `paused by the user`. End with the hand-over: `cplat next --json`, follow its `how`, so that the person goes on by choosing.
