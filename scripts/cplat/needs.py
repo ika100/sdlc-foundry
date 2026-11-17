@@ -104,6 +104,31 @@ def _spec_text(slug: str, spec_id: str, ref: str | None = None) -> str | None:
     return out or None
 
 
+SPEC_BATCH = 50
+
+
+def _spec_texts(slug: str, names: list[str]) -> dict[str, str] | None:
+    """The spec.md of each spec folder on the default branch in a few GraphQL queries of SPEC_BATCH folders, asked at once (#783:
+    one `gh api` per folder took 74 s in the platform repo). None when a query fails: the caller reads them one by one."""
+    owner, _, name = slug.partition("/")
+    batches = [names[i:i + SPEC_BATCH] for i in range(0, len(names), SPEC_BATCH)]
+
+    def ask(batch: list[str]) -> dict[str, str]:
+        fields = " ".join(f's{n}: object(expression: {json.dumps(f"HEAD:docs/specs/{d}/spec.md")}) {{ ... on Blob {{ text }} }}'
+                          for n, d in enumerate(batch))
+        query = f"query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) {{ {fields} }} }}"
+        data = json.loads(gh(["api", "graphql", "-f", f"query={query}", "-f", f"owner={owner}", "-f", f"name={name}"]) or "null")
+        repo = ((data or {}).get("data") or {}).get("repository")
+        if not isinstance(repo, dict):
+            raise ValueError("no repository in the answer")
+        return {d: (repo.get(f"s{n}") or {}).get("text") for n, d in enumerate(batch) if (repo.get(f"s{n}") or {}).get("text")}
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, min(6, len(batches)))) as pool:
+            parts = list(pool.map(ask, batches))
+    except Exception:  # noqa: BLE001 - any failure: the slow path reads them one by one
+        return None
+    return {k: v for part in parts for k, v in part.items()}
+
 def _parse(spec_id: str, text: str) -> specmod.Spec | None:
     m = specmod.FRONT.match(text)
     if not m:
@@ -123,10 +148,11 @@ def _created(spec: specmod.Spec) -> str:
 def _drafts(slug: str) -> list[dict]:
     """Draft specs of one repo: from `main` and from open draft PRs (the PR wins): `{spec, repo, since, pr, url}`."""
     found: dict[str, dict] = {}
-    for entry in _json(["api", f"repos/{slug}/contents/docs/specs"]) or []:
-        if entry.get("type") != "dir":
-            continue
-        text = _spec_text(slug, entry["name"])
+    dirs = [e["name"] for e in _json(["api", f"repos/{slug}/contents/docs/specs"]) or [] if e.get("type") == "dir"]
+    texts = _spec_texts(slug, dirs) if dirs else {}
+    for d in dirs:
+        entry = {"name": d}
+        text = texts.get(d) if texts is not None else _spec_text(slug, d)
         parsed = _parse(entry["name"], text) if text else None
         if parsed and parsed.status == "draft":
             found[entry["name"]] = {"spec": parsed, "repo": slug, "since": _created(parsed), "pr": None, "url": None}
@@ -218,6 +244,14 @@ def _finished(r: dict, issue: dict | None, cache: dict) -> bool:
                    lambda: (_json(["issue", "view", str(issue["number"]), "-R", slug, "--json", "state"]) or {}).get("state") == "CLOSED")
     if spec_id and ask(("spec", repo, spec_id), lambda: getattr(_parse(spec_id, _spec_text(repo, spec_id) or ""), "status", None) == "done"):
         return True
+    listed = runlist._repo_prs(repo) if runlist._sharing else None   # #783: the shared listing instead of one call per run
+    if listed is not None:
+        def merged_where(match) -> bool:
+            return any(match(p) and str(p.get("state") or "").upper() == "MERGED" for p in listed)
+        if spec_id and merged_where(lambda p: p.get("headRefName") == f"feature/{spec_id}"):
+            return True
+        if pr.get("number") and any(p.get("number") == pr["number"] for p in listed):
+            return merged_where(lambda p: p.get("number") == pr["number"])
     if spec_id and ask(("branch", repo, spec_id), lambda: merged(["pr", "list", "-R", repo, "--head", f"feature/{spec_id}", "--state", "merged",
                                                                  "--json", "state", "--limit", "1"])):
         return True
@@ -231,6 +265,14 @@ def _escalations(rows: list[dict]) -> list[dict]:
     items = []
     escalated = {r["run_id"] for r in rows if r.get("phase") == "escalated"}
     cache: dict = {}
+    wanted: dict[str, set[str]] = {}
+    for r in rows:
+        if r.get("phase") == "escalated" and r.get("repo") and r.get("spec") and not _issue_of(r):
+            wanted.setdefault(r["repo"], set()).add(r["spec"])
+    for repo, ids in wanted.items():   # #783: the spec status of every escalated run in one batched read per repo
+        texts = _spec_texts(repo, sorted(ids)) if len(ids) > 1 else None
+        for sid in ids if texts is not None else ():
+            cache[("spec", repo, sid)] = getattr(_parse(sid, texts.get(sid) or ""), "status", None) == "done"
     for r in rows:
         if r.get("phase") != "escalated":
             continue
@@ -522,21 +564,27 @@ def collect_repo(repo_dir: Path) -> dict:
     slug = dispatch_state.slug_of(repo_dir)
     src, items = _Sources(), []
     done: list[dict] = []
-    try:
-        rows = runlist.collect(30, repo=slug)["runs"]
-        done = [r for r in rows if r.get("phase") == "done"]
-        items += _escalations(rows)
-    except Exception as e:  # noqa: BLE001
-        src.fail("runs", e, ["escalation"])
-    try:
-        items += [_draft_item(d, None, done) for d in _drafts(slug)]
-    except Exception as e:  # noqa: BLE001
-        src.fail("github", e, ["approve", "answer"])
-    try:
-        items += _triage(slug, all_triage=True)
-    except Exception as e:  # noqa: BLE001
-        src.fail("github", e, ["triage"])
-    items += _dispatch_items([slug], src)
+    # #783: the sources are asked at once, as in `collect`; one after the other they took 138 s in the platform repo
+    with runlist.shared_reads(), ThreadPoolExecutor(max_workers=4) as pool:
+        rows_f = pool.submit(lambda: runlist.collect(30, repo=slug)["runs"])
+        drafts_f = pool.submit(_drafts, slug)
+        triage_f = pool.submit(_triage, slug, all_triage=True)
+        dispatch_f = pool.submit(_dispatch_items, [slug], src)
+        try:
+            rows = rows_f.result()
+            done = [r for r in rows if r.get("phase") == "done"]
+            items += _escalations(rows)
+        except Exception as e:  # noqa: BLE001
+            src.fail("runs", e, ["escalation"])
+        try:
+            items += [_draft_item(d, None, done) for d in drafts_f.result()]
+        except Exception as e:  # noqa: BLE001
+            src.fail("github", e, ["approve", "answer"])
+        try:
+            items += triage_f.result()
+        except Exception as e:  # noqa: BLE001
+            src.fail("github", e, ["triage"])
+        items += dispatch_f.result()
     items.sort(key=lambda i: i["since"] or "")
     return {"schema": SCHEMA, "system": slug.rsplit("/", 1)[-1], "read_at": runs._iso(runs.utcnow()), "items": items,
             "issues": [], "releases": [], "unavailable": src.listing()}

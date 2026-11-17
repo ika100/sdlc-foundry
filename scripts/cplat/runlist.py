@@ -208,6 +208,9 @@ def lookup_pr(repo: str, branch: str, state: str = "all") -> dict | None:
     """The open or merged PR of a branch through `gh` (tests replace this); None when `gh` cannot say."""
     import json as _json
     from core import run
+    if _sharing and (prs := _repo_prs(repo)) is not None:    # #783: one listing per repo instead of one call per run
+        hit = next((p for p in prs if p.get("headRefName") == branch and (state == "all" or p.get("state", "").lower() == state)), None)
+        return {"number": hit["number"], "url": hit["url"]} if hit else None
     try:
         out = run(["gh", "pr", "list", "-R", repo, "--head", branch, "--state", state, "--json", "number,url", "--limit", "1"],
                   check=False, timeout=10).stdout
@@ -216,6 +219,26 @@ def lookup_pr(repo: str, branch: str, state: str = "all") -> dict | None:
         return None
     return found[0] if found and isinstance(found[0], dict) and found[0].get("url") else None
 
+
+PR_LIST_LIMIT = 1000
+_repo_pr_lists: dict[str, list[dict] | None] = {}
+_pr_list_lock = threading.Lock()
+
+
+def _repo_prs(repo: str) -> list[dict] | None:
+    """Within `shared_reads`: the repo's newest PR_LIST_LIMIT PRs (any state, newest first), listed once; None when `gh` fails."""
+    import json as _json
+    from core import run
+    with _pr_list_lock:
+        if repo not in _repo_pr_lists:
+            try:
+                out = run(["gh", "pr", "list", "-R", repo, "--state", "all", "--json", "number,url,headRefName,state",
+                           "--limit", str(PR_LIST_LIMIT)], check=False, timeout=30).stdout
+                found = _json.loads(out or "null")
+                _repo_pr_lists[repo] = found if isinstance(found, list) else None
+            except Exception:  # noqa: BLE001
+                _repo_pr_lists[repo] = None
+        return _repo_pr_lists[repo]
 
 def _as_pr(value) -> dict | None:
     """`{number, url}` from a PR url, a number-and-url dict or None."""
@@ -401,6 +424,7 @@ def shared_reads() -> Iterator[None]:
             _sharing -= 1
             if not _sharing:
                 _day_files.clear()
+                _repo_pr_lists.clear()
 
 
 def read_days(store, slug: str, days: list[datetime.date]) -> list[tuple[str, str]]:
