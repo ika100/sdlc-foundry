@@ -391,14 +391,22 @@ def test_no_value_can_close_the_block_ac_157_5(tmp_path):  # AC-157.5
     r = make_repo(tmp_path, spec_text=SPEC.replace("Thing title", "Title --> and <!-- inside", 1))
     block = render(r)
     fields(block)                                  # still exactly one block shape
-    assert block.count("<!--") == 1 and block.count("-->") == 1
+    assert block.count("<!--") == 2 and block.count("-->") == 2      # the START and END markers, nothing else
+    assert not any("<!--" in ln or "-->" in ln for ln in block.splitlines()[1:-1])
 
 
 def test_a_long_line_is_cut_to_300_characters_with_an_ellipsis_ac_157_5(tmp_path):  # AC-157.5
-    r = make_repo(tmp_path, spec_text=SPEC.replace("Thing title", "T" * 500, 1))
+    r = make_repo(tmp_path, spec_text=SPEC.replace("Thing title", "word " * 100, 1))
     lines = render(r).splitlines()
     assert all(len(ln) <= 300 for ln in lines)
     assert lines[2].endswith("…") and len(lines[2]) == 300
+
+
+def test_free_text_of_the_orchestrators_body_does_not_reach_the_block_ac_157_5(tmp_path):  # AC-157.5
+    body = "## Summary\n\nORCHESTRATOR-FREE-TEXT written by an agent.\n\nCloses #44\n"
+    for spec in ("157", None):
+        block = render(make_repo(tmp_path / str(spec)), body=body, spec=spec)
+        assert "ORCHESTRATOR-FREE-TEXT" not in block and "written by an agent" not in block
 
 
 def test_no_prompt_or_diff_of_the_run_reaches_the_block_ac_157_5(tmp_path, monkeypatch):  # AC-157.5

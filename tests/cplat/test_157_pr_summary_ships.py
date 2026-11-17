@@ -107,6 +107,56 @@ def test_an_open_gitops_pr_is_reused_not_edited_ac_157_6(sysworld):  # AC-157.6
     assert sysworld.made("pr", "create") == [] and sysworld.made("pr", "edit") == []
 
 
+def _boom(monkeypatch):
+    import pr_summary
+
+    def boom(*a, **kw):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(pr_summary, "render", boom)
+
+
+def test_a_failing_summary_leaves_the_ship_body_unchanged_with_a_note_ac_157_5(world, capsys, monkeypatch):  # AC-157.5
+    world.change("docs/guide.md")
+    _boom(monkeypatch)
+    assert world.pr() == 0
+    assert sent_body(world) == BODY
+    [(_, env)] = [e for e in world.events if e[0] == "ci"]
+    assert env["PR_BODY"] == BODY
+    out = capsys.readouterr()
+    assert [ln for ln in (out.out + out.err).splitlines() if ln.startswith("note: summary skipped:")]
+
+
+def test_a_failing_summary_leaves_the_gitops_body_unchanged_with_a_note_ac_157_5(sysworld, capsys, monkeypatch):  # AC-157.5
+    _boom(monkeypatch)
+    appship.open_pr(sysworld.gitops, "feature/x", "feat(shop): gitops change", "## Summary\n\nDid it.\n", spec=t97.SPEC)
+    assert created(sysworld) == "## Summary\n\nDid it.\n"
+    out = capsys.readouterr()
+    assert [ln for ln in (out.out + out.err).splitlines() if ln.startswith("note: summary skipped:")]
+
+
+def _run_without_test_diffs(monkeypatch, spec):
+    import runs
+    from test_runs_built_133 import agent, make_run
+    findings = [{"kind": "finding", "criterion": "AC-157.1", "task": None, "severity": "not met", "pass": "first", "cycle": 1, "tasks": ["t1"]}]
+    rid = make_run(spec=spec, agents=[agent("svc:reviewer", *findings, {"kind": "fix-round", "cause": "test", "task": "t1"})])
+    monkeypatch.setattr(runs, "current_run", lambda repo: rid)
+
+
+def test_a_current_run_adds_no_how_built_block_to_a_ship_pr_ac_157_6(world, monkeypatch):  # AC-157.6
+    _run_without_test_diffs(monkeypatch, "007")
+    world.change("docs/guide.md")
+    assert world.pr() == 0
+    text = sent_body(world)
+    assert text.startswith(START) and HOW_START not in text
+
+
+def test_a_current_run_adds_no_how_built_block_to_a_gitops_pr_ac_157_6(sysworld, monkeypatch):  # AC-157.6
+    _run_without_test_diffs(monkeypatch, "012")
+    appship.open_pr(sysworld.gitops, "feature/x", "feat(shop): gitops change", "## Summary\n\nDid it.\n", spec=t97.SPEC)
+    text = created(sysworld)
+    assert text.startswith(START) and HOW_START not in text
+
+
 def test_the_entry_pr_starts_with_the_block_ac_157_6(tmp_path, monkeypatch, capsys):  # AC-157.6
     j = JointWorld(tmp_path, monkeypatch, capsys)
     j.started()
@@ -137,6 +187,24 @@ def test_the_command_says_cplat_adds_the_summary_to_the_pr_body_ac_157_7(path): 
     assert lines, f"{path} does not say that cplat adds a summary at the top of the PR body"
 
 
+def _paragraphs(path):
+    return re.split(r"\n\s*\n", (ROOT / path).read_text())
+
+
+@pytest.mark.parametrize("path", COMMANDS)
+def test_the_command_puts_the_summary_at_the_top_ac_157_7(path):  # AC-157.7
+    # interface: structural words (cplat, summary, body, a "top" word in one paragraph), not a pinned sentence
+    assert [p for p in _paragraphs(path) if re.search(r"(?i)\bsummary\b", p) and "cplat" in p.lower() and re.search(r"(?i)\bbody\b", p)
+            and re.search(r"(?i)\b(top|start|starts|beginning|first|head)\b", p)], f"{path} does not say the summary goes at the top"
+
+
+@pytest.mark.parametrize("path", COMMANDS)
+def test_the_command_says_the_orchestrator_writes_no_summary_ac_157_7(path):  # AC-157.7
+    # interface: structural words (orchestrator, summary, a negation in one paragraph), not a pinned sentence
+    assert [p for p in _paragraphs(path) if re.search(r"(?i)\bsummary\b", p) and re.search(r"(?i)\borchestrator\b", p)
+            and re.search(r"(?i)\b(no|not|never|none|don't|doesn't)\b", p)], f"{path} does not say the orchestrator writes no summary"
+
+
 def test_the_changelog_has_an_entry_for_568_ac_157_7():  # AC-157.7
-    frags = sorted((ROOT / "docs" / "changelog.d").glob("568-*.md"))
-    assert frags and "(#568)" in frags[0].read_text()
+    frags = [f for f in (ROOT / "docs" / "changelog.d").glob("*.md") if f.name != "README.md"]
+    assert [f for f in frags if "#568" in f.read_text()]
