@@ -201,7 +201,7 @@ def entry_pr(repo: Path, repo_id: str, title: str, body_file: Path | None) -> st
         raise PlatformError(f"{repo_id} has no worktree yet", hint=f"cplat system ship repo start {repo_id}")
     if body_file is not None and not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first, or leave out --body-file")
-    ship.check_title(title)
+    title = ship.caller_title(title)
     git(wt, "fetch", "-q", "origin")
     if int(git(wt, "rev-list", "--count", "origin/main..HEAD") or 0) == 0:
         raise PlatformError("the entry branch has no commit ahead of origin/main", hint="commit the entry's changes in the worktree first")

@@ -626,7 +626,7 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
         raise PlatformError(f"on '{cur}', expected the feature branch '{branch}'", hint=f"git switch {branch}")
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
-    check_title(title)
+    title = caller_title(title)
     body = body_file.read_text()
     filled = _fill_closes(repo, st, body)
     if filled != body:
@@ -715,6 +715,22 @@ def check_title(title: str) -> None:
     err = pr_rules.title_error(title)
     if err:
         raise PlatformError(err)
+
+
+def caller_title(title: str) -> str:
+    """A caller's title for a ship, product ship or gitops PR: a subject over 72 characters is shortened and said, any other
+    fault is refused with the rule (AC-126.11, #784)."""
+    err = pr_rules.title_error(title)
+    if not err:
+        return title
+    try:
+        sent = pr_rules.fit(title)
+    except ValueError:
+        raise PlatformError(err) from None
+    if pr_rules.title_error(sent):
+        raise PlatformError(err)
+    say(f'title shortened: "{title}" -> "{sent}"')
+    return sent
 
 
 class GhError(PlatformError):
@@ -809,6 +825,16 @@ class CheckWatch:
         """Expected names without a passed check on this head; a non-required one that stays absent is dropped."""
         buckets = {c["name"]: c.get("bucket", "") for c in cs}
         absent = [n for n in self.expected if buckets.get(n) not in ("pass", "skipping")]
+        # #815: a matrix job whose workflow skipped it is reported once under its unexpanded name (`e2e ${{ matrix.part }}`);
+        # the expanded names it had on the old head never come, so a non-required one it covers is not waited for.
+        templates = [name.split("${{")[0] for name, b in buckets.items() if b == "skipping" and "${{" in name]
+        covered = [n for n in absent if not self.expected[n] and n not in buckets
+                   and any(t and n.startswith(t) for t in templates)]
+        if covered and not any(b == "pending" for b in buckets.values()):
+            for n in covered:
+                say(f"  {n} did not run on {(self.head or '')[:7]}: skipped with its matrix")
+                del self.expected[n]
+                absent.remove(n)
         if any(b == "pending" for b in buckets.values()):
             self.concluded_since = None
         elif absent:
@@ -1502,7 +1528,7 @@ def with_service_ref(body: str, ref: str) -> str:
 
 def gitops_pr(repo: Path, task_id: str, title: str, body_file: Path) -> dict:
     """Push the task's gitops branch and open (or reuse) its draft PR."""
-    check_title(title)
+    title = caller_title(title)
     st = require_state(repo)
     t = _gitops_task(repo, st, task_id)
     info = st.get("gitops", {}).get(task_id)
