@@ -139,7 +139,7 @@ Starts continue after midnight or when you raise the limit above the usage. When
 known, and `status` names the unit.
 
 `cplat dispatch budget --today N` raises the limit for today only (N above the current limit): it is local state, no file changes, and it ends at
-midnight. `cplat dispatch budget --reset-today` takes it back; `cplat dispatch budget` prints the limit of the day ([ADR-118](adr/README.md)).
+midnight. `cplat dispatch budget --reset-today` takes it back; `cplat dispatch budget` prints the limit of the day ([ADR-119](adr/README.md)).
 
 ## Verbs
 

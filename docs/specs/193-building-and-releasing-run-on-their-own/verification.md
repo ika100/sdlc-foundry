@@ -35,7 +35,7 @@ Scope: only spec 193's criteria and non-goals. The branch also has commits from 
   judgement rule in `plugins/platform/commands/next.md:11` instead of getting its own `R<n>` entry. This is acceptable because
   `cplat platform rules check` passes in the Phase 3 run. The prompt size was rebaselined in `docs/rules/register.yml` after
   benchmark runs, as the human step asks.
-- t10: the ADR is `docs/adr/118-a-days-budget-raise-lives-in-local-state.md`, renumbered 116 to 117 to 118 because of clashes with
+- t10: the ADR is `docs/adr/119-a-days-budget-raise-lives-in-local-state.md`, renumbered 116 to 117 to 118 because of clashes with
   other branches. Acceptable.
 - `tests/cplat/test_186_system_ship.py` and `tests/cplat/test_ship_questions.py` are in no task's `files`. They were updated for
   the new `options` key from t3's `ship.escalate` change. Acceptable: assertions were added and none were relaxed.

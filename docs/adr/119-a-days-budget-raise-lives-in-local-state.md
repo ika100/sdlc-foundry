@@ -1,4 +1,4 @@
-# ADR-118: A days budget raise lives in local state
+# ADR-119: A days budget raise lives in local state
 
 **Status:** Accepted (2026-11-17)
 
