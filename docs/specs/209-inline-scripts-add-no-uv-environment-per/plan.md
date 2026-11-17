@@ -10,6 +10,7 @@ tasks:
     covers: [AC-209.1, AC-209.3, AC-209.5, AC-209.6, AC-209.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "The gitops-app and cluster-gitops recipes run inline scripts through the helper"
     files: [templates/gitops-app/devbox.json, templates/cluster-gitops/devbox.json, templates/cluster-gitops/scripts/bootstrap.sh, templates/cluster-gitops/scripts/cluster-up.sh, tests/cplat/test_130_empty_gates.py, tests/cplat/test_service_crds.py, tests/cplat/gates130_support.py]
