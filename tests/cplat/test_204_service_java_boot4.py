@@ -74,6 +74,9 @@ def test_default_pom_uses_boot_4_starters_ac_204_1(default_repo):  # AC-204.1
 def test_ci_default_variant_checks_spring_webmvc_jar_version_ac_204_1():  # AC-204.1
     text = _java_smoke_text()
     assert "spring-webmvc-" in text and "7.0.9" in text and "sort -V" in text
+    steps = _ci()["jobs"]["smoke-test-service-java"]["steps"]
+    run = "\n".join(s.get("run", "") for s in steps if "sort -V" in s.get("run", ""))
+    assert "app.jar" in run and "BOOT-INF/lib" in run
 
 
 # AC-204.2
@@ -91,7 +94,7 @@ def test_ci_matrix_has_all_four_variants_ac_204_2():  # AC-204.2
     assert "postgres:17" in _java_smoke_text()
 
 
-def test_template_trivyignore_drops_the_spring_framework_6_entry_ac_204_2():  # AC-204.2
+def test_template_trivyignore_drops_the_spring_framework_6_entry_ac_204_1():  # AC-204.1
     assert "CVE-2026-47884" not in (TEMPLATE / ".trivyignore").read_text()
 
 
@@ -107,22 +110,29 @@ def test_ci_image_step_checks_the_image_contract_ac_204_3():  # AC-204.3
     text = _java_smoke_text()
     assert "--user 65532:65532" in text and "--read-only" in text
     assert "health/liveness" in text and "health/readiness" in text
-    assert "--entrypoint sh" in text
-    assert "java -version" in text
     assert "/actuator/prometheus" in text
     steps = _ci()["jobs"]["smoke-test-service-java"]["steps"]
+    image_run = "\n".join(s["run"] for s in steps if "docker build" in s.get("run", ""))
+    sh_lines = [ln.strip() for ln in image_run.splitlines() if "--entrypoint sh" in ln]
+    assert sh_lines and all(ln.startswith(("!", "if ")) for ln in sh_lines), sh_lines
+    assert "java -version" in image_run and ".copier-answers.yml" in image_run
     run = "\n".join(s.get("run", "") for s in steps)
     assert "seq 1 20" in run, "readiness/liveness must be awaited 20 x 3 s = 60 s"
 
 
 # AC-204.4
-def test_dockerfile_agent_and_base_carry_no_old_runtime_ac_204_4(default_repo):  # AC-204.4
+def test_default_dockerfile_names_debian13_and_not_debian12_ac_204_4(default_repo):  # AC-204.4
     text = (default_repo / "Dockerfile").read_text()
     assert "debian13" in text and "debian12" not in text
 
 
-def test_ci_scans_the_default_service_java_image_in_the_spring_scan_job_ac_204_4():  # AC-204.4
-    # the template image scan (spec 189) covers service-java with no acceptance: the list is the only gate
+def test_template_image_scan_covers_service_java_and_accepts_nothing_ac_204_4():  # AC-204.4
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("template_image_scan", ROOT / "scripts" / "template-image-scan.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert "service-java" in mod.TEMPLATES
     assert yaml.safe_load(ACCEPTED.read_text())["findings"] == []
 
 
@@ -163,3 +173,5 @@ def test_copier_question_help_names_boot_4_and_debian13_ac_204_7():  # AC-204.7
     text = (TEMPLATE / "copier.yml").read_text()
     assert "Spring Boot 4.x" in text and "debian13" in text
     assert "Spring Boot 3" not in text and "debian12" not in text
+    help_text = yaml.safe_load(text)["java_version"]["help"]
+    assert "debian13" in help_text and "gcr.io/distroless/java<jdk>-debian13:nonroot" in help_text
