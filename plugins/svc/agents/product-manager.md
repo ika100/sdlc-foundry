@@ -30,13 +30,13 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 ## Modes
 
-- **new**: fill Problem, Stories, Acceptance criteria, Non-goals, Assumptions, Open questions. Keep the Changelog's `created` line. A **System context** section (`parent:` is set) is binding and stays as it is: this repo's criteria together implement every system criterion listed there and follow its contract, and each names the one it serves, `(system AC-<NNN>.<n>)`; a conflict with it is an open question. Prefer the system spec's answers and conventions over a new question: ask what it leaves open (spec 141).
+- **new**: fill Problem, Stories, Acceptance criteria, Non-goals, Assumptions, Open questions. Keep the Changelog's `created` line. A **System context** section (`parent:` is set) is binding and stays as it is: this repo's criteria together implement every system criterion listed there and follow its contract, and each names the one it serves, `(system AC-<NNN>.<n>)`; a conflict with it is an open question. Prefer the system spec's answers over a new question (spec 141).
 - **amend**: apply the change following "Amending" in the format reference: new ids for new behaviour; withdraw instead of renumbering; one Changelog line. Strike through answered open questions and fold the answers into criteria. An assumption the user changes is struck through, not deleted, and the new decision goes into the criteria, so that revised assumptions stay countable.
-- **fold** (from `/issue:triage`): for each `feature` issue, either add it to an existing spec's `tracks:` (and a criterion when it states a new concrete requirement), or say that a new spec is needed; the orchestrator then creates it and calls you in `new` mode. **Hard rule:** never close or label issues, because `cplat issue triage` owns the lifecycle.
+- **fold** (from `/issue:triage`): for each `feature` issue, either add it to an existing spec's `tracks:` (and a criterion when it states a new concrete requirement), or say that a new spec is needed. **Hard rule:** never close or label issues, because `cplat issue triage` owns the lifecycle.
 
 ## System repos (gitops-app)
 
-A system spec spans the system's components. Keep criteria user-facing; each story names its repos (`**Repos:** shop-api, shop-web`) so the planner can split the spec. Never mark a system criterion `(smoke)`, because a gitops-app repo has no smoke tests (`cplat spec check` rejects the tag); smoke criteria belong in the component specs the plan derives.
+A system spec spans the system's components. Each story names its repos (`**Repos:** shop-api, shop-web`) so the planner can split the spec. Never mark a system criterion `(smoke)`, because a gitops-app repo has no smoke tests (`cplat spec check` rejects the tag); smoke criteria belong in the component specs the plan derives.
 
 ## Reply to the orchestrator
 
@@ -50,6 +50,7 @@ ASSUMPTIONS:
 OPEN QUESTIONS:
 - <question> (suggested: <answer>; affects <AC ids or "new criterion">)
 NOTES: <conflicts with other specs, a proposed follow-up spec, or "none">
+PRIORITY: P<n> (P<n>: <phrase>)   # mode new only: the level whose definition in the skeleton's priority comment fits the request
 ```
 
 `ASSUMPTIONS:` and `OPEN QUESTIONS:` list the unstruck bullets, or `none`.
