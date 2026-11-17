@@ -789,10 +789,17 @@ def test_contributing_names_the_release_gate_ac_121_24():  # AC-121.24
 
 # ---------------- the upgrade e2e script (AC-121.24, AC-121.25 and the cluster halves) ----------------
 
+E2E_FILES = ("upgrade.sh", "upgrade-drill.sh", "lib/upgrade-system.sh")   # spec 191: the steps moved to the drill and the builder
+
+
 def e2e() -> str:
-    p = ROOT / "tests" / "e2e" / "upgrade.sh"
-    assert p.is_file(), "tests/e2e/upgrade.sh exists"
-    return p.read_text()
+    """upgrade.sh, the drill it sources and the builder it sources, read together where a needle moved."""
+    parts = []
+    for rel in E2E_FILES:
+        p = ROOT / "tests" / "e2e" / rel
+        assert p.is_file(), f"tests/e2e/{rel} exists"
+        parts.append(p.read_text())
+    return "\n".join(parts)
 
 
 def need(text: str, *needles: str) -> None:
@@ -802,8 +809,8 @@ def need(text: str, *needles: str) -> None:
 
 def test_the_e2e_script_starts_from_the_previous_release_ac_121_24():  # AC-121.24 (needs a cluster)
     t = e2e()
-    need(t, "E2E_UPGRADE_FROM", "v5.0.*", "scripts/cplat/versions.py", "git worktree add", 'fail "no previous release tag found (v5.0.*)"')
-    assert re.search(r"RESOURCE_TYPES", t) and re.search(r"PLANNED_TYPES", t) and re.search(r"\bast\b", t) and re.search(r"skipped: \$why", t) and "(previous release has no $1)" in t   # #323
+    need(t, "E2E_UPGRADE_FROM", "from-tag previous", "git worktree add", 'fail "no previous release tag found (v5.0.*)"')
+    assert re.search(r"RESOURCE_TYPES", t) and re.search(r"PLANNED_TYPES", t) and re.search(r"\bast\b", t) and re.search(r"skipped: \$why", t) and "(previous release has no $2)" in t   # #323
 
 
 def test_the_e2e_script_records_the_resolved_floating_references_ac_121_24():  # AC-121.24 (needs a cluster)
@@ -860,8 +867,8 @@ def test_the_e2e_script_uses_full_kind_names_and_bounded_waits_ac_121_24():  # A
 
 
 def test_the_e2e_script_header_names_the_criteria_and_the_budget_ac_121_24():  # AC-121.24
-    head = e2e().split("set -", 1)[0]
-    for needle in ("AC-121.24", "AC-121.25", "40 minutes"):
+    head = (ROOT / "tests" / "e2e" / "upgrade.sh").read_text().split("set -", 1)[0]
+    for needle in ("AC-191.6", "AC-191.7", "AC-121.25", "15 minutes", "40 minutes"):
         assert needle in head, needle
 
 
