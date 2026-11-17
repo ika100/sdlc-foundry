@@ -31,6 +31,7 @@ tasks:
     covers: [AC-196.6, AC-196.7, AC-196.10, AC-196.11, AC-196.12]
     parallel_safe: true
     depends_on: [t0]
+    done: true
   - id: t2
     title: cplat issue triage - label override, fallback, reason check, confirmation reason, confirm --set, one priority label, unattended refusal, spec-priority note
     files: [scripts/cplat/triage_batch.py, scripts/cplat/triage_view.py, scripts/cplat/triage.py, scripts/cplat/triage_act.py, tests/cplat/support_176.py, tests/cplat/test_176_view.py]
