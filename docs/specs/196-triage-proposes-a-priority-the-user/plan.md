@@ -38,6 +38,7 @@ tasks:
     covers: [AC-196.1, AC-196.2, AC-196.3, AC-196.4, AC-196.5, AC-196.7]
     parallel_safe: true
     depends_on: [t0]
+    done: true
   - id: t4
     title: Console spec panel shows the priority and whether it is a proposal
     files: [scripts/cplat/console/panels.py]
