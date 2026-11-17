@@ -507,8 +507,8 @@ def _template_recipe(template: str, name: str) -> str:
 
 
 EXPECTED_TEST_RECIPES = {
-    "service-python": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test pytest -- uv run python -m pytest -p scripts.smoke_pytest --cov=demo_app --cov-report=term-missing \"$@\"",
-                       "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast pytest -- uv run python -m pytest -p scripts.smoke_pytest -q --tb=line \"$@\""),
+    "service-python": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test pytest -- uv run python -m pytest -p scripts.smoke_pytest -p scripts.contract_pytest --cov=demo_app --cov-report=term-missing \"$@\"",
+                       "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast pytest -- uv run python -m pytest -p scripts.smoke_pytest -p scripts.contract_pytest -q --tb=line \"$@\""),
     "library-python": ("bash scripts/gate.sh tests test pytest -- uv run pytest --cov=demo_app --cov-report=term-missing \"$@\"",
                        "bash scripts/gate.sh tests test-fast pytest -- uv run pytest -q --tb=line \"$@\""),
     "service-go": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test go -- go test -v -race -cover ./... \"$@\"",
