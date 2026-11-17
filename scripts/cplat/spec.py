@@ -23,6 +23,7 @@ import yaml
 
 import core
 import envlimit
+import priority
 from core import PlatformError
 
 SPECS_DIR = Path("docs") / "specs"
@@ -891,6 +892,8 @@ def skeleton(number: str, title: str) -> str:
 
 <!-- Only what may not be decided by default (spec 149): security or access, money, destroying or migrating data, or a request too ambiguous to build. Approval is refused while any is open. Strike answered ones (~~…~~) and fold the answer into the criteria. -->
 
+{priority.skeleton_comment()}
+
 ## Changelog
 
 - {today()} created
@@ -898,7 +901,7 @@ def skeleton(number: str, title: str) -> str:
 
 
 def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: list[int], parent: str | None,
-        explored: bool = False) -> Spec:
+        explored: bool = False, priority_line: str | None = None) -> Spec:
     import specnumbers
     num, warning = specnumbers.next_number(root)
     if warning:
@@ -917,7 +920,8 @@ def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: lis
         meta["explored"] = True
     if parent:
         meta["parent"] = parent
-    save(sdir / "spec.md", meta, skeleton(number, title))
+    body = skeleton(number, title)
+    save(sdir / "spec.md", meta, add_changelog(body, priority_line) if priority_line else body)
     spec = read(sdir)
     back = spec.meta.get("title")
     if not isinstance(back, str) or back != title:
@@ -1179,10 +1183,16 @@ def next_step(spec: Spec) -> str:
     return "—"
 
 
+def _priority_fields(spec: Spec) -> dict:
+    import spec_priority
+    st = spec_priority.state(spec)
+    return {"priority_state": st["state"], "priority_reason": st["reason"]}
+
+
 def summary(root: Path, spec: Spec) -> dict:
     tasks = (spec.plan[0].get("tasks") or []) if spec.plan else []
     return {"id": spec.id, "title": spec.meta.get("title", ""), "status": spec.status,
-            "priority": spec.meta.get("priority", ""), "acs": len(spec.active_acs()),
+            "priority": spec.meta.get("priority", ""), **_priority_fields(spec), "acs": len(spec.active_acs()),
             "open_questions": len(spec.open_questions()), "assumptions": len(spec.assumptions()), "tasks": len(tasks),
             "tasks_done": sum(1 for t in tasks if t.get("done")), "tracks": spec.meta.get("tracks") or [],
             "explored": spec.meta.get("explored") is True, "environments": envlimit.allowed(spec.meta),
@@ -1274,7 +1284,7 @@ def detail(root: Path, spec: Spec, shape: str | None) -> dict:
 
 
 def broken_summary(root: Path, b: BrokenSpec) -> dict:
-    return {"id": b.id, "title": "", "status": "broken", "priority": "", "acs": 0, "open_questions": 0,
+    return {"id": b.id, "title": "", "status": "broken", "priority": "", "priority_state": "unset", "priority_reason": "", "acs": 0, "open_questions": 0,
             "tasks": 0, "tasks_done": 0, "tracks": [], "explored": False, "environments": None, "next": f"fix {b.rel} line {b.line}: {b.hint}",
             "path": str(b.dir.relative_to(root))}
 
@@ -1509,12 +1519,14 @@ def main(argv: list[str]) -> int:
     p.add_argument("title", nargs="*")
     p.add_argument("--from-plan", nargs=2, metavar=("PLAN", "REPO_ID"),
                    help="this repo's slice of a product plan (docs/plan/<id>.md in the gitops-app repo)")
-    p.add_argument("--priority", default="P1", choices=sorted(PRIORITIES))
+    p.add_argument("--priority", type=str.upper, choices=sorted(PRIORITIES), help="the level; recorded as given by you (spec 196)")
     p.add_argument("--tracks", nargs="*", action="extend", default=None, help="issue numbers; words after them are the title")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this spec (spec 082)")
     p.add_argument("--parent")
     p.add_argument("--no-shape", action="store_true", help="do not record the repo's shape")
     p.add_argument("--explored", action="store_true", help="the spec comes from an explore handoff (spec 188)")
+    import spec_priority
+    spec_priority.add_parser(sub)
     p = sub.add_parser("discard", help="remove a never-committed draft spec and release its claims (spec 188)")
     p.add_argument("id")
     p = sub.add_parser("check", help="validate specs and plans (all if none given)")
@@ -1590,8 +1602,11 @@ def main(argv: list[str]) -> int:
         elif not ns.title:
             raise PlatformError("a title or --from-plan PLAN REPO_ID is required")
         else:
-            spec = new(root, " ".join(ns.title), shape=shape, priority=ns.priority, tracks=list(dict.fromkeys(ns.tracks or [])), parent=ns.parent,
-                       explored=ns.explored)
+            import spec_priority
+            tracks = list(dict.fromkeys(ns.tracks or []))
+            level, line = spec_priority.resolve(root, ns.priority, tracks, spec_priority.headless())
+            spec = new(root, " ".join(ns.title), shape=shape, priority=level, tracks=tracks, parent=ns.parent,
+                       explored=ns.explored, priority_line=line)
         print(spec.dir.relative_to(root) / "spec.md")
         if spec.meta.get("tracks"):
             import claim
@@ -1624,6 +1639,14 @@ def main(argv: list[str]) -> int:
         import adr
         print(f"{adr.next_number(root, with_prs=not ns.offline):03d}")
         return 0
+    if ns.cmd == "priority":
+        import spec_priority
+        try:
+            return spec_priority.set_priority(find(root, ns.id), ns.level, ns.propose, ns.json)
+        except PlatformError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            print(f"  fix: {e.hint}", file=sys.stderr)
+            return 1
     if ns.cmd == "discard":
         import spec_discard
         try:
@@ -1655,6 +1678,8 @@ def main(argv: list[str]) -> int:
         print(f"{spec.id} — {row['title']}   [{spec.status}]")
         print(f"{row['priority']} · {row['acs']} acceptance criteria · {row['assumptions']} assumptions · "
               f"{row['open_questions']} open questions")
+        if row["priority_state"] != "unset":
+            print(f"Priority: {row['priority']} ({row['priority_reason']})")
         if row["environments"] is not None:
             print(envlimit.summary_line(row["environments"]))
         print(f"next: {row['next']}")
