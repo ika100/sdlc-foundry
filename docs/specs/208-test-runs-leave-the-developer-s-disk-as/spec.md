@@ -1,7 +1,7 @@
 ---
 spec_id: 208-test-runs-leave-the-developer-s-disk-as
 title: Test runs leave the developer's disk as they found it
-status: approved
+status: building
 priority: P1
 shape: platform
 tracks: [810, 811]
@@ -59,3 +59,4 @@ none
 
 - 2026-11-17 created
 - 2026-11-17 approved
+- 2026-11-17 building
