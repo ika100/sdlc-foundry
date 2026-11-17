@@ -825,6 +825,16 @@ class CheckWatch:
         """Expected names without a passed check on this head; a non-required one that stays absent is dropped."""
         buckets = {c["name"]: c.get("bucket", "") for c in cs}
         absent = [n for n in self.expected if buckets.get(n) not in ("pass", "skipping")]
+        # #815: a matrix job whose workflow skipped it is reported once under its unexpanded name (`e2e ${{ matrix.part }}`);
+        # the expanded names it had on the old head never come, so a non-required one it covers is not waited for.
+        templates = [name.split("${{")[0] for name, b in buckets.items() if b == "skipping" and "${{" in name]
+        covered = [n for n in absent if not self.expected[n] and n not in buckets
+                   and any(t and n.startswith(t) for t in templates)]
+        if covered and not any(b == "pending" for b in buckets.values()):
+            for n in covered:
+                say(f"  {n} did not run on {(self.head or '')[:7]}: skipped with its matrix")
+                del self.expected[n]
+                absent.remove(n)
         if any(b == "pending" for b in buckets.values()):
             self.concluded_since = None
         elif absent:
