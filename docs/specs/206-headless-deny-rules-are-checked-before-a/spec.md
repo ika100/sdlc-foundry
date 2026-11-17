@@ -1,7 +1,7 @@
 ---
 spec_id: 206-headless-deny-rules-are-checked-before-a
 title: Headless deny rules are checked before a session starts
-status: draft
+status: approved
 priority: P1
 shape: platform
 ---
@@ -51,8 +51,9 @@ As a platform maintainer, I want CI to fail when a refused rule over- or under-m
 
 ## Open questions
 
-- AC-206.6 narrows a refused rule: a `gh api` call that contains `merge` but is not a merge request will no longer be refused. Is that acceptable as long as every merge command of AC-206.2 stays refused? (suggested: yes; affects AC-206.6)
+- ~~AC-206.6 narrows a refused rule: a `gh api` call that contains `merge` but is not a merge request will no longer be refused. Is that acceptable as long as every merge command of AC-206.2 stays refused?~~ Answered (user, 2026-11-17): yes, see AC-206.6.
 
 ## Changelog
 
 - 2026-11-17 created
+- 2026-11-17 approved
