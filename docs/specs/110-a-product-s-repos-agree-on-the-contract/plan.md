@@ -52,6 +52,7 @@ tasks:
     covers: []
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cplat spec new --from-plan writes contract/<plan_id>.json and lists the rules in the System context
     files: [scripts/cplat/contract_copy.py, scripts/cplat/spec.py]
