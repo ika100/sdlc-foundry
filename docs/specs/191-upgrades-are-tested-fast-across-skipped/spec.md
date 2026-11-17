@@ -1,7 +1,7 @@
 ---
 spec_id: 191-upgrades-are-tested-fast-across-skipped
 title: Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [400]
@@ -62,3 +62,4 @@ As a platform maintainer, I want the release gate to wait only for the platform 
 - 2026-11-12 created
 - 2026-11-12 approved
 - 2026-11-17 building
+- 2026-11-17 done
