@@ -1,0 +1,72 @@
+name: e2e-upgrade-drill
+
+# Spec 191 (AC-191.7): the whole upgrade e2e from the previous release (tests/e2e/upgrade.sh), then the backup guard and the Postgres
+# 16 to 17 major upgrade with the forced failed verification. It runs when the resource upgrade or backup code, the versions table or the
+# drill itself changes, every night and on dispatch. The release gate does not require it. This workflow only reads and tests.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/cplat/upgrade.py'
+      - 'scripts/cplat/upgradeverify.py'
+      - 'scripts/cplat/dbbackup.py'
+      - 'scripts/cplat/backupstate.py'
+      - 'templates/gitops-app/scripts/render.py'
+      - 'tests/e2e/upgrade-drill.sh'
+      - '.github/workflows/e2e-upgrade-drill.yml'
+  pull_request:
+    paths:
+      - 'scripts/cplat/upgrade.py'
+      - 'scripts/cplat/upgradeverify.py'
+      - 'scripts/cplat/dbbackup.py'
+      - 'scripts/cplat/backupstate.py'
+      - 'templates/gitops-app/scripts/render.py'
+      - 'tests/e2e/upgrade-drill.sh'
+      - '.github/workflows/e2e-upgrade-drill.yml'
+
+# Least privilege: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# A newer push to the same pull request cancels the older run (main and the nightly run always complete).
+concurrency:
+  group: e2e-upgrade-drill-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  decide:
+    name: does this change need the upgrade drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      drill: ${{ steps.needs.outputs.drill }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the release tags and the base of the comparison
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - id: needs
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}   # a pull request decides on its own diff; empty elsewhere: the latest tag
+        run: uv run scripts/release-check.py needs-upgrade-e2e ${BASE:+--base "$BASE"} | tee -a "$GITHUB_OUTPUT"
+
+  drill:
+    name: e2e upgrade drill (Postgres 16 → 17)
+    needs: decide
+    if: needs.decide.outputs.drill == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the previous release is a tag, checked out next to this commit
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install copier and k3d
+        run: |
+          uv tool install copier
+          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash
+      - name: Run the upgrade drill
+        run: E2E_UPGRADE_DRILL=1 bash tests/e2e/upgrade.sh
