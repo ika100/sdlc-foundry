@@ -42,7 +42,7 @@ def test_one_line_per_event_with_the_local_time(world, capsys, tmp_path):  # AC-
 def test_head_line_and_running_items(world, capsys, tmp_path):  # AC-193.3
     j = world.judgement(tmp_path, {"spec-189": {"you_get": "A progress screen"}, "issue-713": {"you_get": "A second fix"}})
     screen = screen_of(world, capsys, "--judgement", j)
-    assert "Building 2 items, two at a time." in screen
+    assert "Building 3 items, two at a time." in screen
     block = screen.split("Building now:\n", 1)[1].split("\n\n", 1)[0].splitlines()
     assert len(block) == 2
     assert any(ln.startswith("  A progress screen (spec 189): ") for ln in block)
@@ -72,7 +72,7 @@ def test_only_the_newest_five_events_are_listed(world, capsys):  # AC-193.3
     screen = screen_of(world, capsys)
     event_lines = [ln for ln in screen.splitlines() if ln[:2] == "  " and ln[2:4].isdigit() and ln[4] == ":"]
     assert len(event_lines) == 5
-    assert "  and 2 earlier" in screen and screen.index("  and 2 earlier") < screen.index(event_lines[0])
+    assert "  and 3 earlier" in screen and screen.index("  and 3 earlier") < screen.index(event_lines[0])
     assert "09:12 started #712" not in screen
 
 

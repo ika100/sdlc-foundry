@@ -34,6 +34,7 @@ def fragments(world):
 
 def test_end_of_build_prints_the_totals_from_the_records(world, capsys):  # AC-193.6
     finished_build(world)
+    world.local_spec("189-progress", "The progress screen", 3)
     world.person("issue:o/n:755", "spec:o/n:189-progress", minutes=8.0)
     fragments(world)
     screen = world.screen(capsys)
@@ -129,24 +130,32 @@ def test_collect_more_leaves_the_release_as_a_waiting_item(world, capsys):  # AC
     assert nothing["waiting"]["later"] == 1
 
 
-def deployable(tmp_path, monkeypatch, promotion, staging_runs_head):
+def deployable(tmp_path, monkeypatch, promotion, staging_runs_head, commits_after_tag=True, prod_tag="prod-tag"):
     """A service repo whose model and staging reads are replaced by the seams the design names (`staging._find`, `staging.resolve`)."""
     import staging
     w = BuildWorld(tmp_path, monkeypatch, shape="service-python")
     w.queue()
     w.tag("v1.0.0", "2026-11-01T09:00:00")
-    w.commit("a.txt", "a", "fix: stop the loop from dying (#755)")
+    if commits_after_tag:
+        w.commit("a.txt", "a", "fix: stop the loop from dying (#755)")
     head = w.read_head()
+
+    class Inst:
+        def __init__(self, tag):
+            self.tag = tag
 
     class Model:
         def staging_promotion(self, component):
             return promotion
 
+        def instance(self, name, env):
+            return Inst("staging-tag" if env == "staging" else prod_tag)
+
     class Comp:
         name = "shop-api"
 
     monkeypatch.setattr(staging, "_find", lambda repo, apps, svc: ("o/gitops", "applications/shop", Comp(), Model(), "o/n"), raising=False)
-    monkeypatch.setattr(staging, "resolve", lambda slug, tag, repo=None: head if staging_runs_head else "0" * 40, raising=False)
+    monkeypatch.setattr(staging, "resolve", lambda slug, tag, repo=None: {"staging-tag": head if staging_runs_head else "0" * 40}.get(tag, "1" * 40), raising=False)
     return w
 
 
@@ -175,6 +184,15 @@ def test_a_staging_that_moves_after_the_dev_smoke_is_never_a_step(tmp_path, monk
     assert doc["build"]["deploy"]["staging"] == "after-dev-smoke" and doc["build"]["deploy"]["step"] == "release"
     assert doc["questions"][0]["header"] == "Release"
     assert not any(i.startswith("promote:") and ":staging" in i for i in doc["waiting"]["items"])
+
+
+def test_a_released_head_in_staging_is_offered_for_prod(tmp_path, monkeypatch, capsys):  # AC-193.7
+    w = deployable(tmp_path, monkeypatch, "manual", staging_runs_head=True, commits_after_tag=False, prod_tag="v0.9.0")
+    doc = w.doc(capsys)
+    assert doc["build"]["deploy"]["step"] == "prod"
+    q = doc["questions"][0]
+    assert q["header"] == "Prod"
+    assert q["options"][0]["steps"] == ["/instance:promote shop-api --to prod --version v1.0.0"]
 
 
 def test_the_prod_promotion_item_offers_promote_to_prod_and_not_now(world, capsys):  # AC-193.7

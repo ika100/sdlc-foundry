@@ -169,7 +169,11 @@ class BuildWorld(World):
 
     def person(self, *refs, minutes=7.0):
         import runs
-        runs.person_answer(shown_at=utc_stamp(20), answered_at=utc_stamp(10), option="x", refs=list(refs), minutes_total=minutes)
+        parts = [tuple(r.split(":", 2)) for r in refs]
+        calls = max(1, -(-int(minutes) // 10))  # one record carries at most 10 minutes
+        for _ in range(calls):
+            runs.person_answer(shown_at=utc_stamp(20), answered_at=utc_stamp(10), option="x", refs=parts,
+                               minutes_total=minutes / calls)
 
     def judgement(self, tmp_path, items):
         p = Path(tmp_path) / "judgement.json"

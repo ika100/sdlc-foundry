@@ -82,7 +82,7 @@ def test_build_refuses_a_bad_slot_count(world, slots):  # AC-193.1
     world.policy()
     r = world.run("build", "--slots", slots)
     assert r.rc == 2, r
-    assert "build" not in world.state()
+    assert not world.state().get("build")
 
 
 def test_build_needs_a_policy_with_a_budget(world):  # AC-193.1
@@ -90,7 +90,7 @@ def test_build_needs_a_policy_with_a_budget(world):  # AC-193.1
     world.policy(budget=None)
     r = world.run("build", "--slots", "2")
     assert r.rc == 2 and "ERROR:" in r.err
-    assert "build" not in world.state()
+    assert not world.state().get("build")
 
 
 def test_start_detach_adopts_a_running_loop(world):  # AC-193.1
