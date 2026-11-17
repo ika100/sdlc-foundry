@@ -366,3 +366,26 @@ def test_the_spec_commands_propose_show_and_change_the_priority_through_cplat_ac
 
 def test_the_product_manager_replies_with_a_priority_line_ac_196_10():  # AC-196.10
     assert "PRIORITY:" in (ROOT / "plugins" / "svc" / "agents" / "product-manager.md").read_text()
+
+
+def test_an_amend_leaves_the_priority_and_its_changelog_line_untouched_ac_196_11(repo, capsys):  # AC-196.11
+    sid, _ = new(repo, capsys, "--priority", "P2")
+    run(repo, capsys, "priority", sid, "P0")
+    lines, level, st = priority_lines(repo, sid), front(repo, sid)["priority"], state(repo, sid)
+    # the cplat step of an amend: an approved spec goes back to draft; the spec itself is then edited
+    path = repo / "docs" / "specs" / sid / "spec.md"
+    path.write_text(path.read_text().replace("status: draft", "status: approved", 1))
+    rc, _, err = run(repo, capsys, "set-status", sid, "draft", "--reason", "amend: reword")
+    assert rc == 0, err
+    assert front(repo, sid)["priority"] == level == "P0"
+    assert priority_lines(repo, sid) == lines
+    assert state(repo, sid) == st
+
+
+@pytest.mark.parametrize("plugin", ["component", "system"])
+def test_the_amend_path_of_the_spec_command_runs_no_priority_step_ac_196_11(plugin):  # AC-196.11
+    # interface: structure of the prompt: section C (--amend) must not propose or change a priority
+    text = (ROOT / "plugins" / plugin / "commands" / "spec.md").read_text()
+    section = re.search(r"^## C\. --amend.*?(?=^## )", text, re.M | re.S)
+    assert section, "section C (--amend) not found"
+    assert "spec priority" not in section.group(0)
