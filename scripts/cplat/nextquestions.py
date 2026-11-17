@@ -15,6 +15,10 @@ An option is `{id, label, recommended, description, steps, then, actions, cannot
 to run) or `then` (argv of the next `cplat next` call) or neither (the option does nothing). The first option is the
 recommended one. Question ids: `approve`, `triage`, `approve-one`, `unavailable`, the item id of a stopped run, a
 release, a promotion or a review, and `<item id>#<n>` for the n-th open question of a draft. Nothing here does any I/O.
+
+Spec 193 adds the questions `build`, `build-setup`, `watch` (progress) and `raise-budget` (`show="raise-budget:<N>"`), the
+stop questions of `nextbuildquestions` (`show="log:<key>"` keeps the one of that stop without "Show the log"), the
+Staging/Prod promote and "Collect more" for a release, and the optional `input` of an option (see `nextbuildquestions`).
 """
 from __future__ import annotations
 
@@ -51,6 +55,8 @@ def actions(item: dict) -> list[dict]:
     """What the item's choice does outside the machine (design.md, Actions); `undo` is None when nothing takes it back."""
     kind, obj, command = item.get("kind"), item.get("object") or {}, item.get("command") or ""
     repo = _where(item)
+    if kind == "build" or item.get("stop"):
+        return _bq().actions(item)
     if kind == "approve":
         sid = (item.get("draft") or {}).get("spec") or obj.get("spec") or ""
         pr = obj.get("pr")
@@ -131,6 +137,10 @@ def action_map(state: dict, later=()) -> dict[str, list[dict]]:
         if item["id"] in later:
             continue
         acts = actions(item)
+        if item["kind"] == "build":
+            setup = (state.get("build") or {}).get("setup") is not None
+            acts = _bq().setup_actions(_where(item)) if setup else acts
+            out["build-setup" if setup else "build"] = acts
         out[item["id"]] = acts
         if item["kind"] == "answer":
             for n, _ in enumerate((item.get("draft") or {}).get("questions") or [], 1):
@@ -159,16 +169,19 @@ class _Ctx:
 
 
 def _option(ctx: _Ctx, oid: str, label: str, what: str, *, steps=None, then=None, acts=None, extra_cannot=None,
-            refs=None) -> dict:
+            refs=None, input=None, undo=None) -> dict:  # noqa: A002 - `input` is the contract's key
     """One option; `what` says what happens when it does not run commands; `refs` are the items its record names."""
     acts = acts or []
     cannot = _cannot(acts, extra_cannot)
     parts = [f"Cannot be undone: {'; '.join(nextstate.plain(c) for c in cannot)}."] if cannot else []
     parts.append(f"Runs {', '.join(steps)}" if steps else nextstate.plain(what))
-    return {"id": oid, "label": nextstate.plain(label), "recommended": False, "description": " ".join(parts),
-            "steps": list(steps) if steps else None, "then": then, "actions": acts, "cannot_undo": cannot,
-            "undo": [f"Undo: {a['undo']}" for a in acts if a.get("undo")],
-            "record": ctx.record(oid, refs or [])}
+    out = {"id": oid, "label": nextstate.plain(label), "recommended": False, "description": " ".join(parts),
+           "steps": list(steps) if steps else None, "then": then, "actions": acts, "cannot_undo": cannot,
+           "undo": [*[f"Undo: {a['undo']}" for a in acts if a.get("undo")], *(undo or [])],
+           "record": ctx.record(oid, refs or [])}
+    if input:
+        out["input"] = input
+    return out
 
 
 def _question(qid: str, header: str, text: str, options: list[dict]) -> dict:
@@ -176,8 +189,8 @@ def _question(qid: str, header: str, text: str, options: list[dict]) -> dict:
     return {"id": qid, "header": header[:12], "question": nextstate.plain(text), "options": options[:4]}
 
 
-def _later(ctx: _Ctx, items: list[dict]) -> dict:
-    return _option(ctx, "later", "Later", "Puts it off for now; it stays in the list of what waits.",
+def _later(ctx: _Ctx, items: list[dict], label: str = "Later") -> dict:
+    return _option(ctx, "later", label, "Puts it off for now; it stays in the list of what waits.",
                    then=ctx.call(more_later=[i["id"] for i in items]), refs=[r for i in items if (r := _ref(i))])
 
 
@@ -188,7 +201,15 @@ def _details(ctx: _Ctx, qid: str, refs: list[str]) -> dict:
 
 # ---------------- questions per group ----------------
 
-def _stopped(ctx: _Ctx, item: dict) -> dict:
+def _bq():
+    """`nextbuildquestions`, imported late: it imports this module for the option helpers."""
+    import nextbuildquestions
+    return nextbuildquestions
+
+
+def _stopped(ctx: _Ctx, item: dict, log: bool = False) -> dict:
+    if item.get("stop"):
+        return _bq().stop(ctx, item, log)
     qid, acts, kind = _qid(item), actions(item), item["kind"]
     if kind == "budget":
         return _question(qid, "Budget", "The daily budget is reached. What now?",
@@ -271,13 +292,21 @@ def _triage(ctx: _Ctx, items: list[dict]) -> dict:
         _details(ctx, "triage", refs), _later(ctx, items)])
 
 
+def _env(item: dict) -> str:
+    """`staging` or `prod`: the stage a promote item moves to."""
+    env = (item.get("consequence") or {}).get("env")
+    return env if env in ("staging", "prod") else "prod" if "--to prod" in (item.get("command") or "") else "staging"
+
+
 def _release(ctx: _Ctx, item: dict) -> dict:
     qid, acts, kind = _qid(item), actions(item), item["kind"]
     extra = [w] if (w := (item.get("way_back") or {}).get("warning")) else []
-    label, oid, header = {"release": ("Release now", "release-now", "Release"), "promote": ("Promote", "promote", "Promote"),
+    env = _env(item) if kind == "promote" else ""
+    label, oid, header = {"release": ("Release now", "release-now", "Release"),
+                          "promote": (f"Promote to {env.title()}", "promote", env.title()),
                           "review": ("Approve and merge", "approve-merge", "Review")}[kind]
     opts = [_option(ctx, oid, label, "", steps=[item["command"]], acts=acts, extra_cannot=extra),
-            _details(ctx, qid, []), _later(ctx, [item])]
+            _details(ctx, qid, []), _later(ctx, [item], {"release": "Collect more", "promote": "Not now"}.get(kind, "Later"))]
     text = {"release": f"{item.get('reason') or 'A release is ready'}. Release now?",
             "promote": f"{item['what']} is verified in staging. Promote it to prod?",
             "review": f"{item['what']} waits for your review. Approve and merge it?"}[kind]
@@ -291,10 +320,14 @@ def _unavailable(ctx: _Ctx, state: dict) -> dict:
         _option(ctx, "not-now", "Not now", "Does nothing; the screen shows what is missing.")])
 
 
-def _all(state: dict, ctx: _Ctx, group: str | None, shown: list[dict]) -> list[dict]:
+def _all(state: dict, ctx: _Ctx, group: str | None, shown: list[dict], log: bool = False) -> list[dict]:
     qs: list[dict] = []
     if group == "stopped":
-        qs += [_stopped(ctx, i) for i in shown]
+        qs += [_stopped(ctx, i, log) for i in shown]
+    elif group == "build":
+        qs += [_bq().build(ctx, i, state.get("build") or {}) for i in shown if i["kind"] == "build"]
+    elif group is None and not state.get("unavailable") and (state.get("build") or {}).get("running"):
+        qs.append(_bq().watch(ctx, state["build"]))
     elif group == "specs":
         qs += _answers(ctx, [i for i in shown if i["kind"] == "answer"])
         drafts = [i for i in shown if i["kind"] == "approve"]
@@ -324,7 +357,13 @@ def build(state: dict, *, shown_at: str, later=(), args=(), page: int = 1, show:
         waiting = [i for i in state["items"] if i["id"] not in set(ctx.later) and i["kind"] == "approve"]
         if waiting:
             return _choose_approve(ctx, waiting, page)
-    questions = _all(state, ctx, group, shown)
+    if (show or "").startswith("raise-budget:") and state.get("build"):
+        return [_bq().raise_budget(ctx, state["build"], show.split(":", 1)[1])], _page(1, 1)
+    is_log = (show or "").startswith("log:")
+    questions = _all(state, ctx, group, shown, is_log)
+    if is_log:
+        ids = {i["id"] for i in shown if (i.get("stop") or {}).get("key") == show.split(":", 1)[1]}
+        return [q for q in questions if q["id"] in ids], _page(1, 1)
     if show:
         wanted = "approve" if show == "assumptions" else show.split(":", 1)[-1]
         questions = [q for q in questions if q["id"] == wanted]
