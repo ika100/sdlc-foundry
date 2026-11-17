@@ -97,7 +97,7 @@ def git(repo, *args):
 def make_repo(tmp_path, *, spec_text=SPEC, verification=VERIFICATION, changelog_dir=False, fragment=None, files=("a.py", "b.py")):
     """A repo on main (spec, verification, optional changelog folder) and a feature branch that adds `files` and a fragment."""
     r = tmp_path / "app"
-    r.mkdir()
+    r.mkdir(parents=True)
     git(r, "init", "-q", "-b", "main")
     (r / "README.md").write_text("app\n")
     if spec_text is not None:
