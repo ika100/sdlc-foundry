@@ -31,6 +31,7 @@ tasks:
     covers: [AC-193.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: cplat dispatch verbs build, start --detach, budget, setup, answer and resume with the label
     files: [scripts/cplat/dispatch.py, docs/dispatch.md]
