@@ -193,14 +193,14 @@ def _paragraphs(path):
 
 @pytest.mark.parametrize("path", COMMANDS)
 def test_the_command_puts_the_summary_at_the_top_ac_157_7(path):  # AC-157.7
-    # interface: structural words (cplat, summary, body, a "top" word in one paragraph), not a pinned sentence
+    # structural words (cplat, summary, body, a "top" word in one paragraph), not a pinned sentence
     assert [p for p in _paragraphs(path) if re.search(r"(?i)\bsummary\b", p) and "cplat" in p.lower() and re.search(r"(?i)\bbody\b", p)
             and re.search(r"(?i)\b(top|start|starts|beginning|first|head)\b", p)], f"{path} does not say the summary goes at the top"
 
 
 @pytest.mark.parametrize("path", COMMANDS)
 def test_the_command_says_the_orchestrator_writes_no_summary_ac_157_7(path):  # AC-157.7
-    # interface: structural words (orchestrator, summary, a negation in one paragraph), not a pinned sentence
+    # structural words (orchestrator, summary, a negation in one paragraph), not a pinned sentence
     assert [p for p in _paragraphs(path) if re.search(r"(?i)\bsummary\b", p) and re.search(r"(?i)\borchestrator\b", p)
             and re.search(r"(?i)\b(no|not|never|none|don't|doesn't)\b", p)], f"{path} does not say the orchestrator writes no summary"
 

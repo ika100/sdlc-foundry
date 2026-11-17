@@ -10,6 +10,7 @@ tasks:
     covers: [AC-157.1, AC-157.2, AC-157.3, AC-157.4, AC-157.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Component ship PRs get the summary block
     files: [scripts/cplat/ship.py]
@@ -28,6 +29,7 @@ tasks:
     covers: [AC-157.7]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 157 Build and ship PRs start with a short summary
