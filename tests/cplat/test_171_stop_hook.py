@@ -4,6 +4,7 @@ A running wait marks itself in the checkout's git dir (`<git dir>/cplat-waits/<p
 component ship (`ship.gate`) and of the system ship (`appship_state.gate`) hold the count of stops without progress while one runs.
 Seams: marks written by the tests for a live pid (the test process) and a dead one; `waits.running` and `waits.live`; the 126 worlds.
 """
+import datetime as dt
 import json
 import os
 import subprocess
@@ -42,7 +43,7 @@ def put_mark(checkout, command, pid=None):
     pid = os.getpid() if pid is None else pid
     f = mark_file(checkout, pid)
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps({"pid": pid, "command": command, "started_at": "2026-11-10T10:00:00"}))
+    f.write_text(json.dumps({"pid": pid, "command": command, "started_at": dt.datetime.now().isoformat(timespec="seconds")}))
     return f
 
 

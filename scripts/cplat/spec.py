@@ -1725,6 +1725,10 @@ def main(argv: list[str]) -> int:
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
     given = ns.base if ns.cmd == "test-diff" else None
+    if ns.cmd == "test-diff" and core.run(["git", "rev-parse", "--verify", "-q", f"{ns.base}^{{commit}}"], cwd=root,
+                                           check=False).returncode != 0:   # #752: a crash on git's exit 128 before
+        raise core.PlatformError(f"base {ns.base[:12]} is not a commit of this repository",
+                                 hint="pass the commit with the red acceptance tests: git log --oneline --grep 'acceptance tests for'")
     if ns.cmd == "test-diff" and (base := frozen_base(root, ns.base)) != ns.base:
         print(f"base: {base[:7]}, where the red-tests unit ended (spec 169), not {ns.base[:7]}")
         ns.base = base

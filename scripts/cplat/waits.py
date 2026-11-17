@@ -77,6 +77,33 @@ def _alive(pid: int) -> bool:
     return True
 
 
+REUSE_SLACK_S = 60
+
+
+def _age(pid: int) -> float | None:
+    """Seconds since process `pid` started (`ps -o etime=`, `[[dd-]hh:]mm:ss`); None when ps cannot tell."""
+    try:
+        out = core.run(["ps", "-o", "etime=", "-p", str(pid)], check=False).stdout.strip()
+        days, _, clock_ = out.rpartition("-")
+        parts = [int(x) for x in clock_.split(":")]
+    except (OSError, ValueError, core.PlatformError):
+        return None
+    if not out or not 2 <= len(parts) <= 3:
+        return None
+    h, m, sec = ([0] * (3 - len(parts)) + parts)
+    return (int(days or 0) * 86400) + h * 3600 + m * 60 + sec
+
+
+def _reused(pid: int, started_at: object) -> bool:
+    """True when `pid` now belongs to a process younger than the mark (#773): the wait that wrote it is gone and its pid was given
+    to another process, so its mark held a Stop hook for days."""
+    try:
+        since = dt.datetime.fromisoformat(str(started_at))
+    except ValueError:
+        return False
+    age = _age(pid)
+    return age is not None and age + REUSE_SLACK_S < (dt.datetime.now() - since).total_seconds()
+
 @contextlib.contextmanager
 def running(command: str, cwd: Path | None = None) -> Iterator[None]:
     """Mark the wait `command` as running in the git dir of `cwd` while the block runs (spec 171, AC-171.8): the Stop hook
@@ -117,7 +144,7 @@ def live(repo: Path, session: str | None = None) -> list[str]:
             pid, command = int(data["pid"]), str(data["command"])
         except (OSError, ValueError, KeyError, TypeError):
             continue
-        if not _alive(pid):
+        if not _alive(pid) or _reused(pid, data.get("started_at")):
             f.unlink(missing_ok=True)
             continue
         if session and data.get("session") and data["session"] != session:
