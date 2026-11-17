@@ -75,7 +75,10 @@ in_part() { # label part...: true when this run takes one of the parts (or all o
 root=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck source=SCRIPTDIR/lib/probe.sh
 . "$root/tests/e2e/lib/probe.sh"   # probe_run: probe pods with a component's own variables (#323)
+# shellcheck source=SCRIPTDIR/lib/uv-cache.sh
+. "$root/tests/e2e/lib/uv-cache.sh"   # a throwaway uv cache per script run (spec 208)
 work="${E2E_WORK:-$(mktemp -d)}"
+e2e_uv_cache_start
 port="${E2E_PORT:-8099}"
 regport=5111
 cluster=e2e-local
@@ -108,6 +111,7 @@ cleanup() {
     (cd "$work/e2e-gitops" 2>/dev/null && LOCAL_CLUSTER=$cluster WITH_ARGO=0 REGISTRY_PORT=$regport bash scripts/local-cluster.sh down) >/dev/null 2>&1 || true
   fi
   [ $rc -eq 0 ] && echo && echo "E2E OK" || echo "E2E FAILED (work dir: $work)"
+  e2e_uv_cache_end
   exit $rc
 }
 trap cleanup EXIT

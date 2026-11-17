@@ -32,7 +32,10 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck source=SCRIPTDIR/lib/probe.sh
 . "$root/tests/e2e/lib/probe.sh"   # probe_run: probe pods with a component's own variables (#323)
+# shellcheck source=SCRIPTDIR/lib/uv-cache.sh
+. "$root/tests/e2e/lib/uv-cache.sh"   # a throwaway uv cache per script run (spec 208)
 work="${E2E_WORK:-$(mktemp -d)}"
+e2e_uv_cache_start
 port="${E2E_PORT:-8098}"
 regport=5112
 cluster=upg-local
@@ -119,6 +122,7 @@ cleanup() {
   else
     echo; echo "UPGRADE E2E FAILED at step '$step_name' (work dir: $work)"
   fi
+  e2e_uv_cache_end
   exit $rc
 }
 trap cleanup EXIT
