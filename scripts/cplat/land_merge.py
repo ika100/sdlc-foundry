@@ -256,6 +256,12 @@ def _local(repo: Path, head: str, base: str, run, warnings: list[str]) -> None:
         if exists and not any(b == head for _, b in trees):
             _step(f"deleting the local branch {head}", warnings, lambda: run(["git", "branch", "-D", "-q", head], cwd=repo, check=False))
         return
+    if trees and trees[0][0] != here:   # a linked worktree does not take the base branch from the main checkout (#789)
+        _step(f"updating origin/{base}", warnings, lambda: run(["git", "fetch", "-q", "origin", base], cwd=repo, check=False))
+        if _step(f"detaching at origin/{base}", warnings,
+                 lambda: run(["git", "switch", "-q", "--detach", f"origin/{base}"], cwd=repo, check=False)) and exists:
+            _step(f"deleting the local branch {head}", warnings, lambda: run(["git", "branch", "-D", "-q", head], cwd=repo, check=False))
+        return
     current = run(["git", "branch", "--show-current"], cwd=repo, check=False).stdout.strip()
     if current != base and not _step(f"switching to {base}", warnings, lambda: run(["git", "switch", "-q", base], cwd=repo, check=False)):
         return
