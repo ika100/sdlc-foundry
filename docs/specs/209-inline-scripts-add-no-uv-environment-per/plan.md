@@ -17,12 +17,14 @@ tasks:
     covers: [AC-209.2, AC-209.4, AC-209.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: "cplat runs the scripts of a target repo through the platform's helper"
     files: [scripts/cplat/uvscript.py, scripts/cplat/gitops.py, scripts/cplat/update.py, scripts/cplat/clusterrepo.py, scripts/cplat/appship.py, scripts/cplat/appship_joint.py]
     covers: [AC-209.1, AC-209.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: "The cplat launcher and the system prompts use the helper; plugin versions and changelog"
     files: [plugins/shared/bin/cplat, plugins/system/commands/plan.md, plugins/system/references/spec-list.md, plugins/shared/.claude-plugin/plugin.json, plugins/system/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/changelog.d/209-inline-scripts-add-no-uv-environment-per.fixed.md]
