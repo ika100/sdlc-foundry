@@ -10,18 +10,21 @@ tasks:
     covers: [AC-110.1, AC-110.2, AC-110.3, AC-110.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: service-python provider contract check from the copy
     files: [templates/service-python/scripts/contract_pytest.py, templates/service-python/tests/test_contract.py, templates/service-python/devbox.json, templates/service-python/CLAUDE.md]
     covers: [AC-110.5, AC-110.8, AC-110.10]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: web-nextjs consumer contract check (validation and error display) from the copy
     files: [templates/web-nextjs/lib/contract/engine.ts, templates/web-nextjs/tests/contract.test.ts, templates/web-nextjs/tests/contract/adapter.ts, templates/web-nextjs/CLAUDE.md.jinja]
     covers: [AC-110.6, AC-110.7, AC-110.8, AC-110.10]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t6
     title: Planner and spec-from-plan prompts show the rules, the error block and the worked example
     files: [plugins/system/agents/planner.md, docs/rules/plugins/system/agents/planner.yml, plugins/component/references/spec-from-plan.md, docs/rules/plugins/component/references/spec-from-plan.yml, docs/rules/register.yml]
