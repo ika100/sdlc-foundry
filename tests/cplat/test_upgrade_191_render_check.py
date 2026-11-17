@@ -340,3 +340,115 @@ def test_the_run_mode_compares_from_both_releases_each_in_its_section_ac_191_4()
     }
     for what, pat in patterns.items():
         assert re.search(pat, text), f"upgrade-render-check.py lacks {what}"
+
+
+# ---------------- AC-191.4: the run mode, run against a stub builder and a stub release-check ----------------
+
+STUB_BUILDER = """#!/bin/bash
+# stub of tests/e2e/lib/upgrade-system.sh: create <tag> <dir> | update <dir>; the tag is the directory's name
+step="$1"
+if [ "$step" = create ]; then
+  tag="$2"; dir="$3"
+  case " $STUB_FAIL_CREATE " in *" $tag "*) echo "starting"; echo "boom: stub create"; exit 1;; esac
+  mkdir -p "$dir/upg-gitops/scripts" "$dir/upg-gitops/applications/shop/overlays/dev"
+  echo 'pass' > "$dir/upg-gitops/scripts/render.py"
+  echo 'name: shop' > "$dir/upg-gitops/applications/shop/system.yaml"
+  printf 'apiVersion: apps/v1\\nkind: Deployment\\nmetadata: {name: w}\\nspec: {selector: {matchLabels: {app: x}}}\\n' \\
+    > "$dir/upg-gitops/applications/shop/overlays/dev/deployment.yaml"
+else
+  dir="$2"; tag="$(basename "$dir")"
+  case " $STUB_FAIL_UPDATE " in *" $tag "*) echo "boom: stub update"; exit 1;; esac
+  case " $STUB_BREAK " in *" $tag "*) sed -i.bak 's/app: x/app: y/' "$dir/upg-gitops/applications/shop/overlays/dev/deployment.yaml";; esac
+fi
+"""
+STUB_RELEASE_CHECK = """import os, sys
+print(os.environ["STUB_" + sys.argv[2].upper()])
+"""
+HEADER = r"from \S+:"
+
+
+def run_mode(tmp_path, previous="v5.3.0", oldest="v5.0.2", args=(), **env):
+    """A copy of the script in a scratch checkout whose builder and release-check are stubs; returns (exit code, output lines)."""
+    repo = tmp_path / "checkout"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "tests" / "e2e" / "lib").mkdir(parents=True)
+    (repo / "scripts" / "upgrade-render-check.py").write_text(SCRIPT.read_text())
+    (repo / "scripts" / "cplat").symlink_to(ROOT / "scripts" / "cplat")
+    (repo / "scripts" / "release-check.py").write_text(STUB_RELEASE_CHECK)
+    (repo / "tests" / "e2e" / "lib" / "upgrade-system.sh").write_text(STUB_BUILDER)
+    plat = make_platform(tmp_path / "platform")
+    p = subprocess.run(
+        [sys.executable, str(repo / "scripts" / "upgrade-render-check.py"), "--repo", str(plat), "--work", str(tmp_path / "work"), *args],
+        capture_output=True, text=True, timeout=300, cwd=tmp_path,
+        env={**os.environ, "STUB_PREVIOUS": previous, "STUB_OLDEST": oldest, **env},
+    )
+    return p.returncode, p.stdout.splitlines() + p.stderr.splitlines()
+
+
+def headers(lines):
+    return [ln for ln in lines if re.fullmatch(HEADER, ln)]
+
+
+def section_of(lines, tag):
+    """The lines under the `from <tag>:` header up to the next header or the last line."""
+    rest = lines[lines.index(f"from {tag}:") + 1:-1]
+    end = next((i for i, ln in enumerate(rest) if re.fullmatch(HEADER, ln)), len(rest))
+    return rest[:end]
+
+
+def ok_line(tag):
+    return f"OK: 1 objects in dev compared, {tag} -> candidate, no breaking change"
+
+
+def test_run_mode_prints_one_section_per_from_release_and_ends_ok_ac_191_4(tmp_path):  # AC-191.4
+    rc, lines = run_mode(tmp_path)
+    assert rc == 0, lines
+    assert headers(lines) == ["from v5.3.0:", "from v5.0.2:"], lines
+    assert section_of(lines, "v5.3.0") == [ok_line("v5.3.0")], lines
+    assert section_of(lines, "v5.0.2") == [ok_line("v5.0.2")], lines
+    assert lines[-1] == "upgrade render check: OK (v5.3.0, v5.0.2)", lines
+
+
+@pytest.mark.parametrize("broken, other", [("v5.0.2", "v5.3.0"), ("v5.3.0", "v5.0.2")])
+def test_run_mode_fails_when_either_section_fails_ac_191_4(tmp_path, broken, other):  # AC-191.4
+    rc, lines = run_mode(tmp_path, STUB_BREAK=broken)
+    assert rc == 1, lines
+    assert section_of(lines, other) == [ok_line(other)], lines
+    sec = section_of(lines, broken)
+    want = f"BREAKING dev Deployment shop-dev/w spec.selector: {j({'matchLabels': {'app': 'x'}})} -> {j({'matchLabels': {'app': 'y'}})}"
+    assert [ln.split(" (")[0] for ln in sec if ln.startswith("BREAKING")] == [want], lines
+    assert sec[-1] == f"FAILED: 1 breaking change(s), {broken} -> candidate", lines
+    exits = ", ".join(f"from {t}: exit {1 if t == broken else 0}" for t in ("v5.3.0", "v5.0.2"))
+    assert lines[-1] == f"upgrade render check: FAILED ({exits})", lines
+
+
+@pytest.mark.parametrize("kw, side, step", [("STUB_FAIL_CREATE", "from-release v5.0.2", "create"), ("STUB_FAIL_UPDATE", "candidate", "update")])
+def test_run_mode_a_section_that_does_not_render_exits_2_ac_191_4(tmp_path, kw, side, step):  # AC-191.4
+    rc, lines = run_mode(tmp_path, **{kw: "v5.0.2"})
+    assert rc == 2, lines
+    assert section_of(lines, "v5.3.0") == [ok_line("v5.3.0")], lines
+    assert section_of(lines, "v5.0.2")[-1] == f"ERROR: {side} does not render: boom: stub {step}", lines
+    assert lines[-1] == "upgrade render check: FAILED (from v5.3.0: exit 0, from v5.0.2: exit 2)", lines
+
+
+def test_run_mode_compares_once_when_previous_and_oldest_are_the_same_tag_ac_191_4(tmp_path):  # AC-191.4
+    rc, lines = run_mode(tmp_path, oldest="v5.3.0")
+    assert rc == 0, lines
+    assert "previous and oldest supported release are both v5.3.0: compared once" in lines, lines
+    assert headers(lines) == ["from v5.3.0:"], lines
+    assert lines[-1] == "upgrade render check: OK (v5.3.0)", lines
+
+
+def test_run_mode_says_so_and_passes_when_there_is_no_oldest_release_ac_191_4(tmp_path):  # AC-191.4
+    rc, lines = run_mode(tmp_path, oldest="skipped: no v5.0.* tag")
+    assert rc == 0, lines
+    assert "oldest supported release: skipped: no v5.0.* tag" in lines, lines
+    assert headers(lines) == ["from v5.3.0:"], lines
+    assert lines[-1] == "upgrade render check: OK (v5.3.0)", lines
+
+
+def test_run_mode_from_options_name_the_sections_ac_191_4(tmp_path):  # AC-191.4
+    rc, lines = run_mode(tmp_path, args=("--from", "v5.1.0", "--from", "v5.2.0", "--from", "v5.1.0"))
+    assert rc == 0, lines
+    assert headers(lines) == ["from v5.1.0:", "from v5.2.0:"], lines
+    assert lines[-1] == "upgrade render check: OK (v5.1.0, v5.2.0)", lines
