@@ -19,7 +19,7 @@ here stays as spec 192 says.
   build, its totals and the last screen are computed from it (AC-193.6, AC-193.8, A11). No other state is kept.
 - **Today's budget raise is local state, never the policy file** (AC-193.5, user decision 2026-11-12):
   `steering.budget_today = {"day", "tokens", "at"}` overrides `budget.tokens_per_day` for that local day only; every
-  reader of the limit goes through `dispatch_budget.limit_of(policy, slug)`. ADR: created in t10 with
+  reader of the limit goes through `dispatch_budget.limit_of(policy, slug)`. ADR: created in the plan's t10 with
   `cplat adr add a-days-budget-raise-lives-in-local-state --decision "A raise of the run queue's daily token budget holds for the local day in the dispatcher state and never changes the committed policy file"`.
 - **An answer is an assumption the person decided; the criteria hash decides what happens next** (AC-193.4).
   `cplat dispatch answer` adds `Decided by the user (<date>, …)` to the spec's Assumptions in the unit worktree. When
@@ -38,11 +38,12 @@ here stays as spec 192 says.
 - **Release step per shape** (A9): platform reads `docs/changelog.d/`, every other shape but `gitops-app` reads the
   first-parent subjects since the last `v*` tag (squash merges carry the PR title). Spec 192's release item extends from
   `platform`/`library-python` to every component shape.
-- **Deployable repos step through Staging, Release, Prod in that order**, one at a time: `/component:release` tags the
-  commit staging runs (specs 106, 138) and this spec changes no release or promote check, so a manual staging comes
-  before the release. With `promote: after-dev-smoke` Staging is done by itself (A10) and the order is Release, Prod,
-  as AC-193.7 says. This departs from AC-193.7's literal order for manual staging; the report raises it as a blocker
-  question.
+- **Deployable repos step through Staging, Release, Prod in that order, one step at a time** (AC-193.7, user decision
+  2026-11-15): `/component:release` tags the commit staging runs (specs 106, 138), so a manual staging comes before
+  the release and prod after it. With `promote: after-dev-smoke` Staging is done by itself (A10): the screen offers
+  Release, then Prod. Release and promote keep their own checks and gates; this spec only orders the choices.
+- **One promote item per component and version**: the new promote items use spec 192's id `promote:<component>:<version>`,
+  so a prod item that `needs.json` already carries (system scan) and the repo's own read collapse into one.
 - **Ids**: an item is `#<n>` for an issue and `spec <n>` for a spec (AC-192.9), also in `starts after <ref>` (A2) and in
   the event lines; the spec writes `#<n>` for both.
 - **The event list keeps the newest 5 lines** with `  and <n> earlier` first, because the newest events matter in a log
@@ -197,6 +198,7 @@ cplat next [... spec 192 options ...] [--watch S --after SEQ]
  "running": [{"key": "spec-189", "ref": "spec 189", "what": "...", "step": "building"}],
  "ended": false,
  "totals": {"wall_minutes": 190, "tokens": 12400000, "questions": 2},
+ "deploy": {"component": "shop-api", "staging": "manual", "step": "staging", "version": null, "head": "<sha>"},
  "flow": {"done": false, "issues_closed": [712], "released": "v5.23.0", "your_minutes": 14.0,
           "parked": [{"ref": "spec 190", "reason": "stopped by you"}]}}
 ```
@@ -215,31 +217,39 @@ cplat next [... spec 192 options ...] [--watch S --after SEQ]
 - `totals` (only when `ended`; a value that cannot be read is left out): `wall_minutes` from the first `started` to the
   last `done` event; `tokens` the sum of `counted[unit]` of this build's units; `questions` the sum of `questions` of
   the AC-192.10 person lines whose `spec`/`issue` is an item of this build (whole store and buffer).
+- `deploy` (deployable component shapes only, else absent; null when the gitops-app cannot be read):
+  `staging` is `manual` or `after-dev-smoke` (`model.staging_promotion` of the component, found as `staging._find`
+  finds it); `step` is the first that applies of `staging` (manual, and the staging instance does not run the head of
+  `origin/main`, resolved as `staging.resolve`), `release` (changes since the last `v*` tag), `prod` (the newest `v*`
+  tag is not what prod runs), else null. With `after-dev-smoke`, `staging` is never a step (A10).
 - `flow` (only when `current` exists): `issues_closed` — the fix issues and the tracked issues of this build's specs
   that GitHub shows closed; `released` — the newest `v*` tag created after `current.started_at` (else null);
   `your_minutes` — the sum of `minutes` of the person lines of this build's items; `parked` — `steering.skipped`;
-  `done` — `ended`, `released` set, nothing waits, and in a deployable repo prod runs `released`.
+  `done` — `ended`, `released` set, nothing waits, and in a deployable repo `deploy.step` is null.
 
 Stop items (stopped group) gain `stop`:
 `{"kind": "decision"|"failure"|"budget", "key", "ref", "branch", "log", "phase", "worktree", "spec_path",
 "tried": ["restarted once", "check rerun once"], "questions": [{"text", "options"}], "answered": [int],
 "asked_minutes": int}` — `null` for a stop that is not a dispatcher unit's (its spec 192 options stay). `tried`:
 `restarted once` when the unit's `starts` ≥ 2, `landing restarted once` when `land_starts` ≥ 2, `check rerun once` for a
-`red` event; `asked_minutes` from the item's `since` (A8).
+`red` event; `asked_minutes` from the item's `since` (A8). A ship state written before this spec has no `options`: the
+question then has only its `suggested` answer.
 
 Release items gain `consequence.sections = {"Fixed": [str], "Added": [str], "Changed": [str]}`: platform — per
 fragment its bold summary without `**` and the final `.` (section from the file name); other component shapes — per
 first-parent subject since the last `v*` tag (not `comprelease.FOLLOW_UP`), `fix…:` → Fixed, `feat…:` → Added, else
-Changed, the subject as written. Promote items (deployable component repos): `kind: promote`, `object.component`,
-`object.version`, `consequence.env` (`staging` | `prod`), `command` `/instance:promote <component> --to staging` or
-`/instance:promote <component> --to prod --version <tag>`; the gitops-app is read as `staging._find` reads it.
+Changed, the subject as written. Promote items (deployable component repos): id `promote:<component>:<version>`
+(`<version>` the head sha for staging), `kind: promote`, `object.component`, `object.version`, `consequence.env`
+(`staging` | `prod`), `command` `/instance:promote <component> --to staging` or
+`/instance:promote <component> --to prod --version <tag>`. A `needs.json` item with the same id is kept and gains
+`consequence.env: prod`.
 
 ### Groups and screens
 
 Group order: `stopped`, `specs`, `issues`, **`build`**, `release`. The `build` group holds one item
 `build:<repo>` (`kind: build`) when `queue` is not empty, nothing runs and the loop does not run (or is paused or
-draining). In `release`, a deployable repo shows only the first step that applies: staging (manual promotion and staging
-does not run `origin/main`'s head), release (changes since the last tag), prod (the newest tag is not in prod).
+draining). In `release`, a deployable repo shows only the item of `deploy.step` (staging promote, release, or prod
+promote), so the person meets Staging, Release and Prod in that order (AC-193.7); other shapes show the release item.
 `Also waiting` words: build → `Build: <n> ready`, release → `Release: <n> changes ready` (AC-193.7); other kinds as
 spec 192.
 
@@ -316,8 +326,10 @@ Ready to release:
 ```
 
 Empty sections are left out, each section cut at 5. Without `ended` the release group shows `A release is ready: <n>
-change(s) since <tag>.` and `Ready to release:` with its sections. Promote: `<component> <version> can go to
-staging.` / `… to prod.`; `Your part: promote, or hold it back.`
+change(s) since <tag>.` and `Ready to release:` with its sections. In a deployable repo whose `deploy.step` is
+`staging`, the end of build shows the same head and then the staging lines instead of the release ones.
+Promote: `<component> <version> can go to staging.` (`<version>` the short head sha) / `<component> <version> can go to
+prod.`; `Your part: promote, or hold it back.`
 
 **Last screen** (AC-193.8) — when `flow.done` and nothing waits or runs (replaces spec 192's nothing lines):
 
