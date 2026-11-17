@@ -112,8 +112,11 @@ def test_a_contract_that_fails_plan_check_writes_no_spec_ac_110_4(tmp_path, prod
     assert not (web / "docs").exists() and not (web / "contract").exists()
 
 
-def test_a_plan_outside_a_git_checkout_cannot_give_a_copy_ac_110_4(tmp_path):  # AC-110.4
-    root = world(tmp_path)                                   # no git init
+def test_a_plan_outside_a_git_checkout_cannot_give_a_copy_ac_110_4(tmp_path, monkeypatch):  # AC-110.4
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))   # an outer repository is never found
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        monkeypatch.delenv(var, raising=False)
+    root = world(tmp_path)                                 # no git init
     web = component(tmp_path, "todo-web")
     with pytest.raises(core.PlatformError, match="cannot read the gitops-app commit of .*: the plan must be in a git checkout"):
         spec.new_from_plan(web, plan_file(root), "todo-web", shape=None)

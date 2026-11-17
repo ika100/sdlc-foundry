@@ -58,7 +58,7 @@ def test_rules_without_a_block_or_a_reason_are_refused_ac_110_1(root, part):  # 
 def test_a_rules_block_that_does_not_parse_is_refused_with_the_parser_message_ac_110_1(root):  # AC-110.1
     proc = validate(root, plan_text(contract_text(rules_part="```yaml\nrules: [unclosed\n  - id: x\n```\n")))
     assert proc.returncode == 1 and has_error(proc, NEITHER), proc.stderr
-    assert any(NEITHER in ln and len(ln) > len(NEITHER) + 30 for ln in error_lines(proc))   # the parser message is appended
+    assert any(NEITHER in ln and ln.split(NEITHER, 1)[1].strip(" :;,.-()[]") for ln in error_lines(proc))   # the parser message is appended
 
 
 def _drop(key):

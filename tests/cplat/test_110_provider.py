@@ -21,7 +21,10 @@ PLAN = "003-todos"
 
 def engine():
     assert ENGINE.is_file(), "missing template file: templates/service-python/scripts/contract_pytest.py"
-    source = re.sub(r"\{%.*?%\}", "", ENGINE.read_text(), flags=re.S).replace("{{ module_name }}", "demo_app")
+    source = ENGINE.read_text()
+    source = re.sub(r"\{%-?\s*if\b.*?%\}(.*?)\{%-?\s*else\s*-?%\}.*?\{%-?\s*endif\s*-?%\}", r"\1", source, flags=re.S)  # first branch
+    source = re.sub(r"\{%.*?%\}", "", source, flags=re.S)
+    source = re.sub(r"\{\{\s*module_name\s*\}\}", "demo_app", source)
     if importlib.util.find_spec("fastapi") is None:       # the default fixtures import it; the engine under test does not need it
         for name in ("fastapi", "fastapi.testclient"):
             sys.modules.setdefault(name, types.ModuleType(name))

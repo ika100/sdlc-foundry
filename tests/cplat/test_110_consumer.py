@@ -27,13 +27,18 @@ RESPONSES = [f"{P}:title-max:response", f"{P}:title-required:response", f"{P}:st
 
 
 def run_engine(tmp_path, copy_root, **options):
-    """{case name: null | failure message} of every case of `copy_root/contract` against the fake form."""
+    """{case name: null | failure message} of every case of `copy_root/contract` against the fake form.
+
+    Requirement for the engine: node >= 22.18 (devbox nodejs) runs engine.ts directly by type stripping, so it may use only
+    erasable TypeScript syntax (no enum, no namespace, no constructor parameter properties). There is no skip: without such a
+    node these tests fail. `contractCases(dir)` gets the repo root (like the provider's `dir`) and reads `<dir>/contract/*.json`.
+    """
     assert ENGINE.is_file(), "missing template file: templates/web-nextjs/lib/contract/engine.ts"
     work = tmp_path / "engine"
     work.mkdir(exist_ok=True)
     (work / "package.json").write_text('{"type": "module"}')
     shutil.copy(ENGINE, work / "engine.ts")
-    proc = subprocess.run(["node", "--no-warnings", str(RUNNER), str(work / "engine.ts"), str(copy_root / "contract"), json.dumps(options)],
+    proc = subprocess.run(["node", "--no-warnings", str(RUNNER), str(work / "engine.ts"), str(copy_root), json.dumps(options)],
                           capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, proc.stderr
     return {r["name"]: r["result"] for r in json.loads(proc.stdout)}

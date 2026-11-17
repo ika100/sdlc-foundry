@@ -83,7 +83,9 @@ def test_the_worked_example_passes_plan_check_ac_110_11(tmp_path, path):  # AC-1
 
 def test_the_planner_template_names_the_rules_part_before_the_timeouts_ac_110_11():  # AC-110.11
     text = PLANNER.read_text()
-    template = text[text.index("## Contract"):text.index("## gitops-app PR")]
+    heading = re.search(r"^## Contract$", text, re.M)
+    assert heading, "the planner template has no `## Contract` heading line"
+    template = text[heading.start():text.index("## gitops-app PR")]
     expected = ["Rules", "Errors", "Timeouts"]
     assert re.findall(r"^###\s+(\w+)", template, re.M) == expected
 
@@ -100,4 +102,5 @@ def test_the_planner_names_the_six_rule_kinds_ac_110_11():  # AC-110.11
 def test_spec_from_plan_tells_the_agent_about_the_copy_ac_110_4():  # AC-110.4
     text = FROM_PLAN.read_text()
     assert "contract/<plan_id>.json" in text
-    assert re.search(r"re-?run|again", text, re.I) and re.search(r"commit", text, re.I)
+    path = r"contract/<plan_id>\.json"
+    assert re.search(rf"{path}[^\n]*(spec step|written by)|(spec step|written by)[^\n]*{path}", text, re.I)
