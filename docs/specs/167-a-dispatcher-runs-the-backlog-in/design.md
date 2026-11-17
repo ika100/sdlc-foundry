@@ -70,7 +70,7 @@ sources: [issues, specs]      # non-empty subset of issues, specs              d
 ready:
   labels: [bug]               # labels an issue needs besides `triaged`        default []
   exclude_labels: [blocked]   # labels that hold an issue besides needs-decision, wontfix   default []
-priority: [label:bug, label:p1, spec-order, oldest]   # rules: label:<name> | spec-order | oldest   (this is the default)
+priority: [label:p0, label:bug, label:p1, spec-order, oldest]   # rules: label:<name> | spec-order | oldest   (this is the default; a spec at P0 matches label:p0 and so sorts first)
 gates:
   approve_specs: human        # human | self                                    default human
   merge: green-ci             # green-ci                                        default green-ci
@@ -296,7 +296,7 @@ make the two agent calls and update the local check cache and ledger.
 ```json
 {"schema": 1, "repo": "acme/shop-api", "read_at": "<iso>",
  "policy": {"file": ".platform/dispatch.yml" | null, "values": {"slots": 1, "budget": {"tokens_per_day": null, "per_unit": {}}, "sources": ["issues"],
-            "ready": {"labels": [], "exclude_labels": []}, "priority": ["label:bug", "label:p1", "spec-order", "oldest"],
+            "ready": {"labels": [], "exclude_labels": []}, "priority": ["label:p0", "label:bug", "label:p1", "spec-order", "oldest"],
             "gates": {"approve_specs": "human", "merge": "green-ci"}, "serialize": ["merge"]},
             "defaulted": ["slots", "..."], "unset": ["budget.tokens_per_day"],
             "usage_hint": [{"day": "2026-11-03", "tokens": 1204331}, "… 7 entries, null when unreadable"] },
