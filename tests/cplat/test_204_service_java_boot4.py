@@ -120,6 +120,19 @@ def test_ci_image_step_checks_the_image_contract_ac_204_3():  # AC-204.3
     assert "seq 1 20" in run, "readiness/liveness must be awaited 20 x 3 s = 60 s"
 
 
+@pytest.mark.parametrize("line", ["java_version: '21'", 'java_version: "21"', "java_version: 21"])
+def test_ci_jdk_version_check_reads_the_copier_answer_ac_204_3(line):  # AC-204.3
+    import subprocess
+
+    steps = _ci()["jobs"]["smoke-test-service-java"]["steps"]
+    run = "\n".join(s.get("run", "") for s in steps)
+    m = re.search(r"want=\$\(sed -n '([^']*)' \.copier-answers\.yml\)", run)
+    assert m, "the JDK check must read the answer with `want=$(sed -n '...' .copier-answers.yml)`"
+    text = f"_commit: v5.23.3\n{line}\nproject_name: x\n"
+    out = subprocess.run(["sed", "-n", m.group(1)], input=text, capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "21", (line, out.stdout)
+
+
 # AC-204.4
 def test_default_dockerfile_names_debian13_and_not_debian12_ac_204_4(default_repo):  # AC-204.4
     text = (default_repo / "Dockerfile").read_text()
