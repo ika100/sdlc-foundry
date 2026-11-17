@@ -31,12 +31,14 @@ tasks:
     covers: [AC-191.2, AC-191.4]
     parallel_safe: true
     depends_on: [t1, t2, t3]
+    done: true
   - id: t5
     title: "upgrade.sh runs the platform update part; the drill moves to upgrade-drill.sh behind E2E_UPGRADE_DRILL=1"
     files: [tests/e2e/upgrade.sh, tests/e2e/upgrade-drill.sh, tests/cplat/test_upgrade_121_ops.py]
     covers: [AC-191.6, AC-191.7]
     parallel_safe: true
     depends_on: [t1, t3]
+    done: true
   - id: t6
     title: "Workflows: upgrade render check, the previous- and oldest-release jobs, the drill workflow"
     files: [.github/workflows/e2e-upgrade.yml, .github/workflows/e2e-upgrade-drill.yml, tests/cplat/test_upgrade_121_ops.py]
