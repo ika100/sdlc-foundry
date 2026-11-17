@@ -184,7 +184,7 @@ def ip_changed(old: object, new: object) -> bool:
 
 
 def is_cluster(kind: str, doc: dict) -> bool:
-    return kind == "Cluster" and str(doc.get("apiVersion", "")).startswith("postgresql.cnpg.io/")
+    return kind == "Cluster" and str(doc.get("apiVersion", "")).partition("/")[0] == "postgresql.cnpg.io"
 
 
 # (kinds, field path, predicate(old, new), reason)
