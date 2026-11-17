@@ -59,12 +59,14 @@ tasks:
     covers: [AC-110.4, AC-110.10]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: gitops-app CI job contract-pins compares pinned copies with the plans
     files: [templates/gitops-app/scripts/check-contract-pins.py, templates/gitops-app/.github/workflows/ci.yml, templates/gitops-app/devbox.json, templates/gitops-app/CLAUDE.md.jinja]
     covers: [AC-110.9]
     parallel_safe: true
     depends_on: [t1]
+    done: true
 ---
 
 # Plan — 110 A product's repos agree on the contract between them
