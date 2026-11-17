@@ -18,6 +18,7 @@ from core import PlatformError
 
 POLL_S = 10.0
 TIMEOUT_S = 30 * 60.0
+ARCHIVE_WAIT_S = 2 * 60.0
 BACKUP_KIND = "backups.postgresql.cnpg.io"
 
 
@@ -96,10 +97,14 @@ def main(argv: list[str]) -> int:
             break
         time.sleep(POLL_S)
 
-    at = reason = None
+    at = reason = warning = None
     if phase == "completed":
         at = backupstate.norm_time(status.get("stoppedAt")) or backupstate.norm_time(status.get("startedAt"))
         text, result = f"backup completed: {db}/{env} at {at} (Backup {name})", "completed"
+        if status.get("endWal"):
+            warning = _archive_end(kns, active, str(status["endWal"]), ns.context)
+            if warning:
+                text += f"\nWARNING: {warning}"
     else:
         result = "failed"
         if phase == "failed":
@@ -108,7 +113,7 @@ def main(argv: list[str]) -> int:
             reason = f"not finished after 30 minutes (Backup {name} is {phase})"
         text = f"backup failed: {db}/{env}: {reason}"
     if ns.json:
-        print(json.dumps({"result": result, "backup": name, "at": at, "reason": reason}, indent=2))
+        print(json.dumps({"result": result, "backup": name, "at": at, "reason": reason, "warning": warning}, indent=2))
     else:
         print(text)
     return 0 if result == "completed" else 1
@@ -127,3 +132,23 @@ def _archiving_hint(kns: str, cluster: str, context: str | None) -> str:
     return (f" (WAL archiving to the bucket fails too: {arch.get('message') or 'no message'}; the bucket is likely not ready, "
             f"see kubectl get pods -n {kns})")
 
+
+def _archive_end(kns: str, cluster: str, end_wal: str, context: str | None) -> str | None:
+    """J21-4: a backup of an idle database completes while its last WAL segment waits in pg_wal, and a restore to it fails ("WAL
+    ends before end of online backup") until that segment is archived. Switch the segment once and wait ARCHIVE_WAIT_S for it; the
+    warning when it is still not archived, else None."""
+    try:
+        obj = backupstate.get_json(["clusters.postgresql.cnpg.io", cluster, "-n", kns], context)
+    except backupstate.ReadError as e:
+        return f"cannot check that its last WAL segment {end_wal} is archived: {e}"
+    deadline, switched = time.monotonic() + ARCHIVE_WAIT_S, False
+    while True:
+        done, last = backupstate.end_wal_archived(obj, kns, end_wal, context)
+        if done:
+            return None
+        if time.monotonic() >= deadline:
+            return (f"its last WAL segment {end_wal} is not archived yet (newest archived: {last or 'none'}), so a restore to this "
+                    "backup fails until it is")
+        if not switched:
+            switched = backupstate.switch_wal(obj, kns, context)
+        time.sleep(POLL_S)
