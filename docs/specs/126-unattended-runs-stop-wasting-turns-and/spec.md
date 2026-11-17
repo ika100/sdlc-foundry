@@ -1,7 +1,7 @@
 ---
 spec_id: 126-unattended-runs-stop-wasting-turns-and
 title: Unattended runs stop wasting turns and CI rounds
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [784]
@@ -90,3 +90,5 @@ Success measure.
 - 2026-10-28 done
 - 2026-11-17 draft: amend: caller --title over 72 is shortened with pr_rules.fit, not refused (#784)
 - 2026-11-17 approved; the old plan is plan.v1.md
+- 2026-11-17 building
+- 2026-11-17 done
