@@ -73,6 +73,7 @@ tasks:
     covers: [AC-193.1, AC-193.3, AC-193.4]
     parallel_safe: true
     depends_on: [t8]
+    done: true
 human_steps:
   - "Before the PR merges: t9 lengthens /platform:next, so the prompts may pass `baseline.prompt_bytes`. In a Claude session on the branch run `cplat platform runs benchmark quick-task --plugins plugins --reset-first`, then `cplat platform rules rebaseline --reason \"/platform:next judges the build and the stops (spec 193)\"` and commit docs/rules/register.yml."
 ---

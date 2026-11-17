@@ -8,7 +8,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 `cplat` is on the Bash PATH. Run `cplat next --json $ARGUMENTS`.
 
-When `judgement_wanted` is true, write for each entry of `drafts` one `you_get` line (what the person gets, from its `problem`) and its most important `assumption`, as JSON keyed by the draft's `spec`, to a temp file, and run the command again with `--judgement <file>`, so that the screen says in plain words what each draft means.
+When `judgement_wanted` is true, write for each entry of `drafts` one `you_get` line (what the person gets, from its `problem`) and its most important `assumption`, as JSON keyed by the draft's `spec`, to a temp file, and run the command again with `--judgement <file>`, so that the screen says in plain words what each draft means. For each entry of `judge_items` write the fields its `wants` names (`you_get`, `what_happened`, `why_ask`), one plain sentence each from its `title` and `text`, under `items` keyed by its `key`, so that the screen says in plain words what each item brings and why it stopped.
 
 Then follow `how`.
 
