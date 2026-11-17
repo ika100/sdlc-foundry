@@ -8,8 +8,12 @@ Public API:
   `state["unavailable"]` (`{source, error, kinds}`), never raised. Nothing here writes: no
   `gh` writing verb, no state file, no run record, no claim.
 - `groups(state, later) -> (group, shown, also, later_count)`: the group that is shown (`stopped`, `specs`, `issues`,
-  `release` or None), its items oldest first, the count per kind of every other waiting item not put off (in group
-  order), and how many items `later` puts off.
+  `build`, `release` or None), its items oldest first, the count per kind of every other waiting item not put off (in
+  group order), and how many items `later` puts off.
+- Spec 193: `state["build"]` is the `nextbuild.collect` document (queue, running build, flow, deploy step; None when none
+  exists); the `build:<repo>` item (kind `build`) waits while a queue is ready and nothing builds; stopped items carry `stop`;
+  release items of every component shape carry `consequence.sections`; a deployable repo lists only the item of its
+  `deploy.step` (staging promote, release, prod promote).
 - `plain(text)`: the plain words of the screen (no dispatcher, slot, unit, claim, escalation or held).
 - `what(item)`, `size_of(criteria)`, `assumption_of(text)`: item descriptions the screen and the questions share.
 
@@ -35,6 +39,7 @@ import dispatch_state
 import dispatch_notify
 import dispatch_view
 import needs
+import nextbuild
 import notify
 import notify_config
 import runlist
@@ -46,14 +51,14 @@ from core import run
 
 SOURCE_SECONDS = 20
 TOTAL_SECONDS = 60
-GROUPS = ("stopped", "specs", "issues", "release")
+GROUPS = ("stopped", "specs", "issues", "build", "release")
 GROUP_OF = {"escalation": "stopped", "stuck": "stopped", "budget": "stopped", "answer": "specs", "approve": "specs",
-            "triage": "issues", "release": "release", "promote": "release", "review": "release"}
-KINDS = ("escalation", "stuck", "budget", "answer", "approve", "triage", "release", "promote", "review")
+            "triage": "issues", "build": "build", "release": "release", "promote": "release", "review": "release"}
+KINDS = ("escalation", "stuck", "budget", "answer", "approve", "triage", "build", "release", "promote", "review")
 MIN_COMPARABLE = 3
 PROBLEM_LIMIT = 600
 ASSUMPTION_LIMIT = 120
-RELEASE_SHAPES = ("platform", "library-python")
+NOT_RELEASED_HERE = ("gitops-app", "cluster-gitops")   # every other shape is a component with a release step (spec 193, A9)
 CHANNELS = ("desktop", "github", "slack", "email")
 _STEP = {"plan": "planning", "build": "building", "red-tests": "testing", "tests": "testing", "review": "review",
          "verify": "review", "pr": "landing", "land": "landing", "landing": "landing", "deploy": "deploying",
@@ -114,6 +119,8 @@ def what(item: dict, titles: dict[str, str] | None = None) -> str:
         return re.sub(r"\s*\(not routed yet\)$", "", item.get("reason") or "") or f"issue #{obj.get('issue')}"
     if kind == "budget":
         return "the daily budget"
+    if kind == "build":
+        return "the run queue"
     if kind == "release":
         return "a release"
     if kind == "promote":
@@ -188,7 +195,7 @@ def _estimates(slug: str, rows: list[dict], local: dict[str, specmod.Spec]) -> d
 
 def _release_items(repo_dir: Path, slug: str, shape: str | None) -> list[dict]:
     """A release item when the repo has changes that are not released: fragments (platform) or commits since the last tag."""
-    if shape not in RELEASE_SHAPES:
+    if not shape or shape in NOT_RELEASED_HERE:
         return []
     tag = git(repo_dir, "describe", "--tags", "--abbrev=0", "--match", "v*") or None
     since, changes = "", []
@@ -202,7 +209,7 @@ def _release_items(repo_dir: Path, slug: str, shape: str | None) -> list[dict]:
         since = min((t.splitlines()[-1] for t in stamps if t), default="")
         command = "/platform:release"
     else:
-        log = git(repo_dir, "log", "--no-merges", "--reverse", "--format=%cI|%s", f"{tag}..HEAD" if tag else "HEAD")
+        log = git(repo_dir, "log", "--first-parent", "--reverse", "--format=%cI|%s", f"{tag}..HEAD" if tag else "HEAD")
         found = [ln.split("|", 1) for ln in log.splitlines() if "|" in ln and not comprelease.FOLLOW_UP.match(ln.split("|", 1)[1])]
         changes, since = [s for _, s in found], (found[0][0] if found else "")
         command = "/component:release"
@@ -210,10 +217,15 @@ def _release_items(repo_dir: Path, slug: str, shape: str | None) -> list[dict]:
         return []
     when = _when(since)
     since = when.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if when else ""
+    try:
+        sections = nextbuild.release_sections(repo_dir, shape, changes)
+    except Exception:  # noqa: BLE001 - lines that cannot be sorted into sections are listed as changed
+        sections = {"Fixed": [], "Added": [], "Changed": list(changes)}
     return [{"id": f"release:{slug}:{tag or 'first'}", "kind": "release", "stage": "Release",
              "object": needs._obj("release", slug, version=tag), "since": since or runs._iso(runs.utcnow()),
              "reason": f"{len(changes)} change{'s' if len(changes) != 1 else ''} since {tag or 'the start'}",
-             "command": command, "cwd_repo": slug, "consequence": {"changes": changes, "since_tag": tag}, "way_back": None}]
+             "command": command, "cwd_repo": slug,
+             "consequence": {"changes": changes, "since_tag": tag, "sections": sections}, "way_back": None}]
 
 
 def _running(slug: str, rows: list[dict], shape: str | None, titles: dict[str, str],
@@ -390,10 +402,36 @@ def _collect(repo_dir: Path) -> dict:
             _draft(item, local, estimates)
         item["what"] = what(item, titles)
     running, slots = _running(slug, rows, shape, titles, dispatch_doc)
+    build = _within("dispatcher", ["build"], lambda: nextbuild.collect(repo_dir, slug, shape, local, items, src), None, deadline, src, flags)
+    items = _with_build(items, build, slug, titles)
     items.sort(key=lambda i: i.get("since") or "")
     return {"repo": slug, "shape": shape, "system": doc.get("system"), "items": items, "running": running, "slots": slots,
-            "parked": parked, "channels": channels, "estimates": estimates, "abandoned": flags["abandoned"],
+            "parked": parked, "channels": channels, "estimates": estimates, "abandoned": flags["abandoned"], "build": build,
             "unavailable": [*doc.get("unavailable", []), *src.listing()]}
+
+
+def _with_build(items: list[dict], build: dict | None, slug: str, titles: dict[str, str]) -> list[dict]:
+    """The items after the build state: the `build:<repo>` item while a queue waits and nothing builds, and in a deployable repo
+    only the item of `deploy.step` (staging promote, release or prod promote; a `needs.json` promote item of the same id kept once)."""
+    if not build:
+        return items
+    now = runs._iso(runs.utcnow())
+    deploy = build.get("deploy")
+    if isinstance(deploy, dict):
+        item = nextbuild.promote_item(slug, deploy, now)
+        items = [i for i in items if not (i["kind"] == "release" and deploy.get("step") != "release")]
+        if item and (same := next((i for i in items if i["id"] == item["id"]), None)):
+            same["consequence"] = {**(same.get("consequence") or {}), "env": "prod"}
+        elif item:
+            items.append({**item, "group": "release", "what": what(item, titles)})
+    queue = build.get("queue") or []
+    loop = build.get("loop") or {}
+    if queue and not build.get("running") and (not loop.get("running") or build.get("paused")):
+        item = {"id": f"build:{slug}", "kind": "build", "stage": "Build", "since": now, "object": needs._obj("repo", slug),
+                "reason": f"{len(queue)} item{'s' if len(queue) != 1 else ''} ready to build", "command": "cplat dispatch build",
+                "cwd_repo": slug, "consequence": None, "way_back": None, "group": "build"}
+        items.append({**item, "what": what(item, titles)})
+    return items
 
 
 # ---------------- grouping ----------------
