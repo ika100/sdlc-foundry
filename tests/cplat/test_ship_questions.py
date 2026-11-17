@@ -7,7 +7,8 @@ def test_escalate_stores_questions_with_and_without_suggestion(repo):
     ship.start(repo, "7", True)
     st = ship.escalate(repo, "needs a decision", "decision",
                        questions=["Which db? (suggested: postgres; alternatives: mysql)", "Ship it?"])
-    assert st["questions"] == [{"text": "Which db?", "suggested": "postgres"}, {"text": "Ship it?", "suggested": None}]
+    assert st["questions"] == [{"text": "Which db?", "suggested": "postgres", "options": ["postgres", "mysql"]},
+                               {"text": "Ship it?", "suggested": None, "options": []}]   # spec 193: each question keeps its options
     assert ship.load_state(repo)["questions"] == st["questions"]
 
 

@@ -457,7 +457,7 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
     st["escalated"] = reason
     st["cause"] = cause
     if questions:
-        st["questions"] = [{"text": q["text"], "suggested": (q["options"] or [None])[0]}
+        st["questions"] = [{"text": q["text"], "suggested": (q["options"] or [None])[0], "options": q["options"]}
                            for q in map(specmod._question, questions)]
     else:
         st.pop("questions", None)
