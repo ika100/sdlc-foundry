@@ -4,6 +4,7 @@ Contract: design.md "Stop hook answers": the gate lets the owning session stop (
 escalates nothing. Seams: the wait marks of spec 171 (`put_mark`), `ship.gate`, `appship_state.gate` (the `w` world), `stopgate`.
 The 60 seconds of the 2026-11-14 `ship land` are simulated by the mark that exists while the session tries to stop.
 """
+import datetime as dt
 import json
 import os
 import re
@@ -93,9 +94,10 @@ def test_a_wait_does_not_start_the_count_either(repo, monkeypatch):  # AC-202.1
 
 def test_several_waits_are_named_together_oldest_first(repo, monkeypatch):  # AC-202.1
     begin(repo, monkeypatch)
-    put_mark(repo, "cplat pr wait 7")
+    first = put_mark(repo, "cplat pr wait 7")
     other = put_mark(repo, "cplat component ship wait", pid=os.getppid())  # interface: wait command name
-    other.write_text(json.dumps({**json.loads(other.read_text()), "started_at": "2026-11-10T10:00:05"}))
+    later = dt.datetime.fromisoformat(json.loads(first.read_text())["started_at"]) + dt.timedelta(seconds=5)
+    other.write_text(json.dumps({**json.loads(other.read_text()), "started_at": later.isoformat(timespec="seconds")}))
     line = lets_stop(stop(repo))
     assert re.fullmatch(rf"ship {SPEC}: waiting for cplat pr wait 7, cplat component ship wait in phase \w+", line), line
 

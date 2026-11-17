@@ -6,6 +6,7 @@ every merge call, the required checks that were pending when it came. Nothing he
 `AC-178.1` (the release stops) is in test_178_release.py.
 """
 import subprocess
+from pathlib import Path
 from dataclasses import dataclass
 
 import pytest
@@ -312,3 +313,13 @@ def test_the_checkout_is_left_as_it_was_by_a_refused_land(world, capsys):  # AC-
     land(world, "pr", capsys)
     assert git(world.repo, "branch", "--show-current") == BRANCH
     assert subprocess.run(["git", "status", "--porcelain"], cwd=world.repo, capture_output=True, text=True).stdout.strip() == ""
+
+
+def test_expected_matrix_checks_skipped_under_their_template_name_are_not_waited_for(monkeypatch):  # #815
+    monkeypatch.setattr(ship, "NO_CHECKS_GRACE", 10**6)
+    watch = ship.CheckWatch(Path("."), "1", 0)
+    watch.head = "abcdef0123"
+    watch.expected = {"test": True, "e2e core": False, "e2e scaling": False, "docs": False}
+    cs = [{"name": "test", "bucket": "pass"}, {"name": "e2e $" + "{{ matrix.part }}", "bucket": "skipping"}]
+    assert watch._unmet(cs) == ["docs"]            # only the one no skipped template covers still waits
+    assert set(watch.expected) == {"test", "docs"}

@@ -1,9 +1,10 @@
 name: e2e-upgrade
 
-# Spec 121 (AC-121.24): the previous release's system is updated to this checkout, one environment at a time, and a database moves from
-# Postgres 16 to 17 through dev, staging and prod (tests/e2e/upgrade.sh). It is a workflow of its own because the e2e job uses about 75 of
-# its 90 minutes. The release gate (scripts/release-check.py gate, workflow release-guard) looks for the check named
-# "e2e upgrade (previous release → candidate)" on the commit someone wants to tag. This workflow only reads and tests: it never
+# Spec 121 and spec 191: the previous release's system is updated to this checkout, one environment at a time (tests/e2e/upgrade.sh),
+# and "upgrade render check" compares the rendered manifests from the previous and the oldest supported release. The nightly run also
+# updates from the oldest supported release; the Postgres 16 to 17 drill is e2e-upgrade-drill.yml. It is a workflow of its own because
+# the e2e job uses about 75 of its 90 minutes. The release gate (scripts/release-check.py gate, workflow release-guard) looks for exactly
+# two checks on the commit someone wants to tag: "upgrade render check" and "e2e upgrade (previous release → candidate)". This workflow only reads and tests: it never
 # creates, moves or deletes a tag or a release.
 on:
   workflow_dispatch:
@@ -12,6 +13,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'templates/gitops-app/**'
+      - 'scripts/upgrade-render-check.py'
       - 'templates/gitops-app/scripts/render.py'
       - 'templates/gitops-app/scripts/local-cluster.sh'
       - 'scripts/cplat/upgrade*.py'
@@ -24,6 +27,8 @@ on:
       - 'docs/CHANGELOG.md'
   pull_request:
     paths:
+      - 'templates/gitops-app/**'
+      - 'scripts/upgrade-render-check.py'
       - 'templates/gitops-app/scripts/render.py'
       - 'templates/gitops-app/scripts/local-cluster.sh'
       - 'scripts/cplat/upgrade*.py'
@@ -51,6 +56,7 @@ jobs:
     timeout-minutes: 2
     outputs:
       run: ${{ steps.needs.outputs.run }}
+      render: ${{ steps.needs.outputs.render }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,12 +67,28 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}   # a pull request decides on its own diff (spec 134); empty elsewhere: the latest tag
         run: uv run scripts/release-check.py needs-upgrade-e2e ${BASE:+--base "$BASE"} | tee -a "$GITHUB_OUTPUT"
 
+  render:
+    name: upgrade render check
+    needs: decide
+    if: needs.decide.outputs.render == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the release tags the comparison starts from
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install copier
+        run: uv tool install copier
+      - name: Compare the renders from the previous and the oldest supported release
+        run: uv run scripts/upgrade-render-check.py
+
   upgrade:
     name: e2e upgrade (previous release → candidate)
     needs: decide
     if: needs.decide.outputs.run == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 75   # about 40 minutes in the log (tests/e2e/upgrade.sh), plus the images and the charts it pulls
+    timeout-minutes: 45   # the platform update part only (spec 191); the drill is e2e-upgrade-drill.yml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,3 +100,33 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash
       - name: Run the upgrade end-to-end test
         run: bash tests/e2e/upgrade.sh
+
+  upgrade-oldest:
+    name: e2e upgrade (oldest supported release → candidate)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Choose the oldest supported release
+        id: oldest
+        run: |
+          out=$(uv run scripts/release-check.py from-tag oldest)
+          echo "$out"
+          case "$out" in
+            skipped:*) echo "skip=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "skip=false" >> "$GITHUB_OUTPUT"; echo "tag=$out" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Install copier and k3d
+        if: steps.oldest.outputs.skip == 'false'
+        run: |
+          uv tool install copier
+          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash
+      - name: Run the upgrade end-to-end test from the oldest supported release
+        if: steps.oldest.outputs.skip == 'false'
+        env:
+          OLDEST: ${{ steps.oldest.outputs.tag }}
+        run: E2E_UPGRADE_FROM="$OLDEST" bash tests/e2e/upgrade.sh

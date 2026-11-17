@@ -769,3 +769,58 @@ def test_prod_restore_runs_with_confirm_and_the_list_needs_none_ac_117_14(erepo,
     assert rc == 0 and "backups of shop-prod (newest first):" in out and kube.writes() == []
     rc, out = srestore(erepo, capsys, "--backup", "p1", "--confirm", "prod", env="prod")
     assert rc == 0 and "restored p1 into shop-prod: 4 items" in out
+
+
+def test_a_failed_backup_while_archiving_fails_names_the_bucket_j21_3(repo, kube, capsys, clock):
+    """J21-3: the bucket's pods were not running, so the backup failed with CloudNativePG's bare rpc error; the reason now
+    says that WAL archiving to the bucket fails too."""
+    window(kube, archiving="failing", error="Can't connect to cloud provider")
+    kube.auto["cnpg.backup"] = {"phase": "failed", "error": "rpc error: code = Unknown desc = exit status 1"}
+    rc, out = backup(repo, capsys)
+    assert rc == 1 and "exit status 1 (WAL archiving to the bucket fails too: Can't connect to cloud provider" in out
+
+
+def archiver(kube, archived):
+    """`kubectl exec … psql`: pg_stat_archiver's last_archived_wal is archived[0] until pg_switch_wal() runs, then archived[1]."""
+    state = {"switches": 0}
+
+    def hook(args, stdin):
+        if not args or args[0] != "exec":
+            return None
+        sql = args[-1]
+        if "pg_switch_wal" in sql:
+            state["switches"] += 1
+            return 0, "0/A000078\n", ""
+        if "last_archived_wal" in sql:
+            return 0, archived[min(state["switches"], 1)] + "\n", ""
+        return None
+    kube.hooks.append(hook)
+    return state
+
+
+def test_a_backup_whose_end_wal_waits_switches_the_segment_and_waits_for_it_j21_4(repo, kube, capsys, clock):
+    """J21-4: the on-demand backup of an idle database completed with its end WAL segment still unarchived, and a restore to it
+    right after failed ("WAL ends before end of online backup"). The backup now switches the segment and waits until it is archived."""
+    window(kube)
+    kube.auto["cnpg.backup"] = {"phase": "completed", "stoppedAt": "2026-10-27T10:00:00Z", "endWal": "000000010000000000000008"}
+    state = archiver(kube, ["000000010000000000000007", "000000010000000000000008"])
+    rc, out = backup(repo, capsys)
+    assert rc == 0 and state["switches"] == 1 and "WARNING" not in out, out
+
+
+def test_a_backup_whose_end_wal_is_archived_already_switches_nothing_j21_4(repo, kube, capsys, clock):
+    window(kube)
+    kube.auto["cnpg.backup"] = {"phase": "completed", "stoppedAt": "2026-10-27T10:00:00Z", "endWal": "000000010000000000000008"}
+    state = archiver(kube, ["000000010000000000000009", "000000010000000000000009"])
+    rc, out = backup(repo, capsys)
+    assert rc == 0 and state["switches"] == 0 and "WARNING" not in out, out
+
+
+def test_an_end_wal_still_unarchived_after_two_minutes_warns_that_a_restore_fails_j21_4(repo, kube, capsys, clock):
+    window(kube)
+    kube.auto["cnpg.backup"] = {"phase": "completed", "stoppedAt": "2026-10-27T10:00:00Z", "endWal": "000000010000000000000008"}
+    state = archiver(kube, ["000000010000000000000007", "000000010000000000000007"])
+    rc, out = backup(repo, capsys, "--json")
+    got = json.loads(out)
+    assert rc == 0 and state["switches"] == 1 and got["result"] == "completed"
+    assert "000000010000000000000008 is not archived yet" in got["warning"] and "restore" in got["warning"]

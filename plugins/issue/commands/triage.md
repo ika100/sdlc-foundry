@@ -2,7 +2,7 @@
 description: "Read new GitHub issues, show one table, ask only what is open and hand fixes to the dispatcher. Usage: /issue:triage [<issue-number> | --new | --waiting]"
 ---
 
-Triage the repo's open issues. **Request:** $ARGUMENTS
+Triage open issues. **Request:** $ARGUMENTS
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
@@ -20,15 +20,15 @@ Run `batch --json` (add `--new` for issues filed without a form). An empty queue
 
 ## 2. Propose
 
-Write one proposals file: a row per issue that is not handled, with `number`, `summary`, `class`, `priority` (P0, P1 or P2; bug, small-change, feature), `priority_reason`, `expected`, `comment`, `question` (`text`, `options`), `spec`. An engine row may omit the class. Classes: `bug` (a reproducible defect), `small-change` (one pass, no new API, schema or module), `feature` (new behaviour, schema change, several modules or business decisions), `question`, `duplicate` (with `duplicate_of`), `wontfix` (out of scope per the non-goals), `needs-exploring` (too unclear to spec), `needs-info` (not decidable from what is written; draft the comment). Do not guess requirements, because a wrong guess becomes a wrong fix.
+Write one proposals file: a row per issue that is not handled, with `number`, `summary`, `class`, `priority` (P0, P1 or P2; bug, small-change, feature), `priority_reason` (`P<n>: <phrase>`, a phrase from `priority_levels`), `expected`, `comment`, `question` (`text`, `options`), `spec`. Classes: `bug` (a reproducible defect), `small-change` (one pass, no new API, schema or module), `feature` (new behaviour, schema change, several modules or business decisions), `question`, `duplicate` (with `duplicate_of`), `wontfix` (out of scope per the non-goals), `needs-exploring` (too unclear to spec), `needs-info` (not decidable from what is written; draft the comment). Do not guess requirements, because a wrong guess becomes a wrong fix.
 
 ## 3. Overview and questions
 
-Run `overview --proposals F --json` and print `screen` verbatim. Then ask each of `pages` with AskUserQuestion, at most 4 questions per screen titled `<n> of <m>`, the first option Recommended. Store the answers in the rows.
+Run `overview --proposals F --json` and print `screen` verbatim. Then ask each of `pages` with AskUserQuestion (at most 4 per screen, titled `<n> of <m>`), the first option Recommended. Store the answers in the rows; a priority answer is stored as in step 4.
 
 ## 4. Confirm
 
-Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change one` (the user picks a row and its class or action; run `confirm` again) or `Cancel`. A typed answer ("ok", "all ok, 560 feature") is accepted: update the proposals file and ask again about the rows it leaves unclear, because each extra question costs the user a turn. On request show the exact actions with `confirm --proposals F --show <n>`. Nothing outward happens before OK. **Hard rule:** Never close an issue, because a closed issue leaves the queue unseen.
+Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change one` (a row, then what to change; run `confirm` again) or `Cancel`. A typed answer ("ok", "all ok, 560 feature") is accepted: update the proposals file and ask again about the rows it leaves unclear, because each extra question costs the user a turn. A priority change (`Change one`, typed `560 p0`) runs `confirm --proposals F --set 560=P0`. `--show <n>` shows a row's exact actions. Nothing outward happens before OK. **Hard rule:** Never close an issue, because a closed issue leaves the queue unseen.
 
 ## 5. Act
 
@@ -38,5 +38,5 @@ Run `confirm --proposals F --json`, show its lines and ask `OK, do it`, `Change 
 
 ## 6. Hand over
 
-Print the output of `act`, then ask its choice with AskUserQuestion; when it offers none, run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command. `cplat dispatch status` and the console Board show the fix runs.
+Print the output of `act`, then ask its choice with AskUserQuestion; when it offers none, run `cplat next --json` and follow its `how`. `cplat dispatch status` and the console Board show the fix runs.
 > If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).

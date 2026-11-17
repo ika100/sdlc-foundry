@@ -681,7 +681,8 @@ def gate(tmp_path, runs, sha="abc1234", api=None):
 
 
 def test_the_gate_passes_for_a_green_upgrade_e2e_ac_121_24(tmp_path):  # AC-121.24
-    rc, out = gate(tmp_path, [{"name": "ci-success", "conclusion": "success"}, {"name": E2E_NAME, "conclusion": "success"}])
+    rc, out = gate(tmp_path, [{"name": "ci-success", "conclusion": "success"}, {"name": E2E_NAME, "conclusion": "success"},
+                       {"name": "upgrade render check", "conclusion": "success"}])
     assert rc == 0, out
 
 
@@ -702,7 +703,8 @@ def head_api(head_tree="t1", head_e2e="success") -> dict:
     p = "repos/acme/platform/commits/"
     return {p + "abc1234/pulls": [{"number": 7, "head": {"sha": "def5678"}}],
             p + "abc1234": {"commit": {"tree": {"sha": "t1"}}}, p + "def5678": {"commit": {"tree": {"sha": head_tree}}},
-            p + "def5678/check-runs": {"check_runs": [{"name": E2E_NAME, "conclusion": head_e2e}]}}
+            p + "def5678/check-runs": {"check_runs": [{"name": E2E_NAME, "conclusion": head_e2e},
+                                                     {"name": "upgrade render check", "conclusion": "success"}]}}
 
 
 def test_the_gate_takes_a_green_upgrade_e2e_on_the_pull_requests_head_with_the_same_tree_400(tmp_path):
@@ -728,7 +730,7 @@ def triggers(wf: dict) -> dict:
     return wf.get("on") or wf.get(True)      # YAML 1.1 reads the key `on` as True
 
 
-E2E_PATHS = {"templates/gitops-app/scripts/render.py", "templates/gitops-app/scripts/local-cluster.sh", "scripts/cplat/upgrade*.py", "scripts/cplat/update.py",
+E2E_PATHS = {"templates/gitops-app/**", "scripts/upgrade-render-check.py", "templates/gitops-app/scripts/render.py", "templates/gitops-app/scripts/local-cluster.sh", "scripts/cplat/upgrade*.py", "scripts/cplat/update.py",
              "scripts/cplat/versions.py", "scripts/release-check.py", "tests/e2e/upgrade.sh", "tests/e2e/lib/**", ".github/workflows/e2e-upgrade.yml", "docs/CHANGELOG.md"}
 
 
@@ -745,7 +747,7 @@ def test_the_upgrade_e2e_workflow_has_a_decide_job_and_the_gated_upgrade_job_ac_
     assert jobs["decide"]["timeout-minutes"] == 2
     assert any("release-check.py needs-upgrade-e2e" in s.get("run", "") for s in jobs["decide"]["steps"])
     up = jobs["upgrade"]
-    assert up["name"] == E2E_NAME and up["timeout-minutes"] == 75 and "decide" in (up["needs"] if isinstance(up["needs"], list) else [up["needs"]])
+    assert up["name"] == E2E_NAME and up["timeout-minutes"] == 45 and "decide" in (up["needs"] if isinstance(up["needs"], list) else [up["needs"]])
     assert re.search(r"needs\.decide\.outputs\.run", up["if"]) and "schedule" in up["if"] and "workflow_dispatch" in up["if"]
     checkout = next(s for s in up["steps"] if str(s.get("uses", "")).startswith("actions/checkout"))
     assert checkout["with"]["fetch-depth"] == 0
@@ -787,10 +789,17 @@ def test_contributing_names_the_release_gate_ac_121_24():  # AC-121.24
 
 # ---------------- the upgrade e2e script (AC-121.24, AC-121.25 and the cluster halves) ----------------
 
+E2E_FILES = ("upgrade.sh", "upgrade-drill.sh", "lib/upgrade-system.sh")   # spec 191: the steps moved to the drill and the builder
+
+
 def e2e() -> str:
-    p = ROOT / "tests" / "e2e" / "upgrade.sh"
-    assert p.is_file(), "tests/e2e/upgrade.sh exists"
-    return p.read_text()
+    """upgrade.sh, the drill it sources and the builder it sources, read together where a needle moved."""
+    parts = []
+    for rel in E2E_FILES:
+        p = ROOT / "tests" / "e2e" / rel
+        assert p.is_file(), f"tests/e2e/{rel} exists"
+        parts.append(p.read_text())
+    return "\n".join(parts)
 
 
 def need(text: str, *needles: str) -> None:
@@ -800,8 +809,8 @@ def need(text: str, *needles: str) -> None:
 
 def test_the_e2e_script_starts_from_the_previous_release_ac_121_24():  # AC-121.24 (needs a cluster)
     t = e2e()
-    need(t, "E2E_UPGRADE_FROM", "v5.0.*", "scripts/cplat/versions.py", "git worktree add", 'fail "no previous release tag found (v5.0.*)"')
-    assert re.search(r"RESOURCE_TYPES", t) and re.search(r"PLANNED_TYPES", t) and re.search(r"\bast\b", t) and re.search(r"skipped: \$why", t) and "(previous release has no $1)" in t   # #323
+    need(t, "E2E_UPGRADE_FROM", "from-tag previous", "git worktree add", 'fail "no previous release tag found (v5.0.*)"')
+    assert re.search(r"RESOURCE_TYPES", t) and re.search(r"PLANNED_TYPES", t) and re.search(r"\bast\b", t) and re.search(r"skipped: \$why", t) and "(previous release has no $2)" in t   # #323
 
 
 def test_the_e2e_script_records_the_resolved_floating_references_ac_121_24():  # AC-121.24 (needs a cluster)
@@ -858,8 +867,8 @@ def test_the_e2e_script_uses_full_kind_names_and_bounded_waits_ac_121_24():  # A
 
 
 def test_the_e2e_script_header_names_the_criteria_and_the_budget_ac_121_24():  # AC-121.24
-    head = e2e().split("set -", 1)[0]
-    for needle in ("AC-121.24", "AC-121.25", "40 minutes"):
+    head = (ROOT / "tests" / "e2e" / "upgrade.sh").read_text().split("set -", 1)[0]
+    for needle in ("AC-191.6", "AC-191.7", "AC-121.25", "15 minutes", "40 minutes"):
         assert needle in head, needle
 
 
