@@ -730,7 +730,7 @@ def triggers(wf: dict) -> dict:
     return wf.get("on") or wf.get(True)      # YAML 1.1 reads the key `on` as True
 
 
-E2E_PATHS = {"templates/gitops-app/scripts/render.py", "templates/gitops-app/scripts/local-cluster.sh", "scripts/cplat/upgrade*.py", "scripts/cplat/update.py",
+E2E_PATHS = {"templates/gitops-app/**", "scripts/upgrade-render-check.py", "templates/gitops-app/scripts/render.py", "templates/gitops-app/scripts/local-cluster.sh", "scripts/cplat/upgrade*.py", "scripts/cplat/update.py",
              "scripts/cplat/versions.py", "scripts/release-check.py", "tests/e2e/upgrade.sh", "tests/e2e/lib/**", ".github/workflows/e2e-upgrade.yml", "docs/CHANGELOG.md"}
 
 
@@ -747,7 +747,7 @@ def test_the_upgrade_e2e_workflow_has_a_decide_job_and_the_gated_upgrade_job_ac_
     assert jobs["decide"]["timeout-minutes"] == 2
     assert any("release-check.py needs-upgrade-e2e" in s.get("run", "") for s in jobs["decide"]["steps"])
     up = jobs["upgrade"]
-    assert up["name"] == E2E_NAME and up["timeout-minutes"] == 75 and "decide" in (up["needs"] if isinstance(up["needs"], list) else [up["needs"]])
+    assert up["name"] == E2E_NAME and up["timeout-minutes"] == 45 and "decide" in (up["needs"] if isinstance(up["needs"], list) else [up["needs"]])
     assert re.search(r"needs\.decide\.outputs\.run", up["if"]) and "schedule" in up["if"] and "workflow_dispatch" in up["if"]
     checkout = next(s for s in up["steps"] if str(s.get("uses", "")).startswith("actions/checkout"))
     assert checkout["with"]["fetch-depth"] == 0
