@@ -14,7 +14,9 @@ import appship
 import spec
 from system_fixtures import files
 from test_commands_114 import APP, commit, gitops5, run, sysdoc  # noqa: F401  (gitops5 is a fixture)
-from test_plan import CONTRACT, SCRIPT, plan
+from test_plan import CONTRACT as _CONTRACT, SCRIPT, plan
+
+CONTRACT = _CONTRACT.replace("consumers: [shop-web]", "consumers: [shop-gitops]")  # this plan has no shop-web repo
 
 ROOT = Path(__file__).resolve().parents[2]
 

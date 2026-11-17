@@ -112,7 +112,7 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 
 ## Contract check
 
-When this service provides a product's shared input rules, `contract/<plan_id>.json` holds the copy of them (written by `/component:spec --from-plan <plan> <repo-id>`; never edit it by hand, rerun the command after a contract change). `devbox run test` and `test-fast` send the boundary values of every rule with `role: provider` to the app in-process (`tests/test_contract.py`, engine `scripts/contract_pytest.py`) and fail naming the rule, field, expected and actual result until the code follows the contract. Without a copy there are no cases.
+When this service provides the shared input rules of a feature, `contract/<plan_id>.json` holds the copy of them (written by `/component:spec --from-plan <plan> <repo-id>`; never edit it by hand, rerun the command after a contract change). `devbox run test` and `test-fast` send the boundary values of every rule with `role: provider` to the app in-process (`tests/test_contract.py`, engine `scripts/contract_pytest.py`) and fail naming the rule, field, expected and actual result until the code follows the contract. Without a copy there are no cases.
 
 The defaults call `TestClient(app)` with an empty base body. Override the fixtures `contract_send` (`(endpoint, body) -> (status, json or text)`, needed for paths with `{param}` or auth) and `contract_base` (`endpoint -> a valid body`) in `tests/conftest.py`.
 
