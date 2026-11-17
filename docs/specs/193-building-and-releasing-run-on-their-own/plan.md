@@ -38,6 +38,7 @@ tasks:
     covers: [AC-193.1, AC-193.2, AC-193.4, AC-193.5]
     parallel_safe: true
     depends_on: [t1, t2, t3]
+    done: true
   - id: t5
     title: nextbuild - the read-only build state, release sections, deploy steps and the build group
     files: [scripts/cplat/nextbuild.py, scripts/cplat/nextstate.py]

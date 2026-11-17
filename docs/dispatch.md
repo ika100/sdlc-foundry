@@ -26,7 +26,11 @@ triage, you approve specs (unless you let the dispatcher do it), you promote to 
 4. **Optional: let the dispatcher approve.** `gates.approve_specs: self` approves a draft that has no open question and passes
    `cplat spec check`. The approval is a commit on the feature branch (`approved by cplat dispatch` in the changelog of the spec).
 
-`start` runs in the foreground until Ctrl-C or SIGTERM. Units are started detached, so ending the loop never kills a unit; the next `start`
+`/platform:next` does steps 2 and 3 by choosing: without a policy file it offers to set one up (`cplat dispatch setup`, a pull request
+that merges on green CI, with a budget from the 7-day hint), then it starts the build (`cplat dispatch build --slots N`), which runs the loop
+in its own session so that closing the terminal does not stop it.
+
+`start` runs in the foreground until Ctrl-C or SIGTERM (`start --detach` runs it in its own session and returns). Units are started detached, so ending the loop never kills a unit; the next `start`
 adopts the units that still run. Keep it alive with a terminal multiplexer, launchd or systemd. One loop per repo and machine.
 
 ## The policy file `.platform/dispatch.yml`
@@ -134,12 +138,20 @@ The day is your local calendar day. The dispatcher books the tokens of every uni
 Starts continue after midnight or when you raise the limit above the usage. When a unit's usage cannot be read, no unit starts until it is
 known, and `status` names the unit.
 
+`cplat dispatch budget --today N` raises the limit for today only (N above the current limit): it is local state, no file changes, and it ends at
+midnight. `cplat dispatch budget --reset-today` takes it back; `cplat dispatch budget` prints the limit of the day ([ADR-116](adr/README.md)).
+
 ## Verbs
 
 All verbs take `--repo DIR` (default `.`); `plan`, `status`, `report` and `inbox` take `--json`.
 
 | Verb | What it does |
 |---|---|
+| `cplat dispatch build --slots N` | start a build: set the slots (1 to 10, not written to the policy), lift a pause or drain, record the build and run the loop as `start --detach` does; needs the policy with a budget; prints `Undo: cplat dispatch pause --drain` |
+| `cplat dispatch start --detach` | run the loop in its own session (log `loop.log` in the state directory) and return; a loop that runs already is adopted |
+| `cplat dispatch budget [--today N \| --reset-today]` | the limit of the day; raise it for today only, or go back to the policy |
+| `cplat dispatch setup (--show [--json] \| --tokens-per-day N)` | the policy file from the 7-day hint; `--tokens-per-day` commits it through a pull request that merges on green CI (refused when the file exists) |
+| `cplat dispatch answer <item> --answer TEXT [--question K]` | answer the stop of an item: into its spec as an assumption (back to draft when a criterion changes) or as a comment on its issue; the item goes on once every question has an answer |
 | `cplat dispatch start [--once]` | run the loop (one cycle with `--once`); prints one line per action: `started`, `adopted`, `landing`, `done`, `escalated`, `restarted`, `stuck`, `closed ... as stale`, `approved`, `no starts: <why>` |
 | `cplat dispatch plan` | read-only view: policy, tokens, candidates with verdict, mode, slot and premise |
 | `cplat dispatch status` | local reads: loop, units with phase and tokens, queue, held, tokens |
@@ -147,7 +159,7 @@ All verbs take `--repo DIR` (default `.`); `plan`, `status`, `report` and `inbox
 | `cplat dispatch report [--since D]` | per day: delivered, escalated, held, tokens (default 7 days) |
 | `cplat dispatch inbox` | `cplat needs` for this repo: approvals, answers, escalations, triage, budget, stuck |
 | `cplat dispatch pause [--drain]` | `pause` starts nothing new, and a running unit stops at its next stop (its session is let through and nothing is counted; `status` keeps `paused` and adds `paused_at`, the phase and last checkpoint); `--drain` lets running units finish and starts nothing new |
-| `cplat dispatch resume [<item>]` | continue; with an item, lift its skip or hold only |
+| `cplat dispatch resume [<item>]` | continue; with an item, lift its skip or hold and remove `needs-decision` from its issues (`label removed: #<n>`) |
 | `cplat dispatch slots <N>` | override the slots (1 to 10); a lower number stops nothing, it only delays starts |
 | `cplat dispatch prioritize <item>` | pin an item first |
 | `cplat dispatch skip <item> --reason <text>` | hold an item |
