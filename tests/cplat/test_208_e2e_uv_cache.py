@@ -12,6 +12,7 @@ import pytest
 
 from runtemp_support import snapshot
 from system_fixtures import ROOT
+from waiting import with_prelude
 
 LIB = ROOT / "tests" / "e2e" / "lib" / "uv-cache.sh"
 SCRIPTS = ["run.sh", "cluster.sh", "upgrade.sh"]
@@ -19,7 +20,7 @@ TOOLS = ["k3d", "kubectl", "uv", "curl", "git", "python3"]
 
 
 def stub(path, body):
-    path.write_text("#!/bin/sh\n" + body)
+    path.write_text(with_prelude("#!/bin/sh\n" + body))
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
