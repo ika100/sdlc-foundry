@@ -8,12 +8,14 @@ builders of spec draft PRs, product ship PRs, gitops PRs, cluster repo PRs and p
 """
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
 import core
 import pr as prmod
 import pr_open
+import pr_summary
 import ship
 from test_pr_open import Fake, URL, allow, env  # noqa: F401  (fixtures, helpers)
 from test_ship import git, repo  # noqa: F401  (fixtures, helpers)
@@ -127,7 +129,7 @@ def test_ac_126_9_the_spec_rule_passes_when_it_is_satisfied(world, files, body):
     assert world.pr() == 0
     assert ship.load_state(world.repo)["phase"] == "land"
     [(_, env_)] = [e for e in world.events if e[0] == "ci"]
-    assert env_["PR_TITLE"] == TITLE and env_["PR_BODY"] == body       # the local check sees what CI will see
+    assert env_["PR_TITLE"] == TITLE and pr_summary._BLOCK.sub("", env_["PR_BODY"]).lstrip("\n") == body       # the local check sees what CI will see
 
 
 def test_ac_126_9_the_title_rule_comes_before_the_spec_rule(world):  # AC-126.9 AC-126.11
@@ -160,7 +162,7 @@ def test_ac_126_9_ci_runs_with_the_pull_request_handed_in_the_environment(world)
     world.change("scripts/x.py", "docs/specs/126-x/spec.md")
     assert world.pr() == 0
     [(_, env_)] = [e for e in world.events if e[0] == "ci"]
-    assert env_["PR_TITLE"] == TITLE and env_["PR_BODY"] == BODY and env_["PR_LABELS"] == ""
+    assert env_["PR_TITLE"] == TITLE and pr_summary._BLOCK.sub("", env_["PR_BODY"]).lstrip("\n") == BODY and env_["PR_LABELS"] == ""
 
 
 def test_ac_126_9_the_order_is_ci_then_push_then_create(world):  # AC-126.9
@@ -243,7 +245,10 @@ def test_ac_126_12_an_open_pr_with_the_same_title_is_not_edited(world):  # AC-12
     world.change("docs/guide.md")
     world.gh.open = [{"number": 7, "url": PR_URL, "title": TITLE, "labels": []}]
     assert world.pr() == 0
-    assert not world.gh.has("pr", "edit") and not world.gh.has("pr", "create")
+    assert not world.gh.has("pr", "create") and not world.gh.has("pr", "edit", "--title")   # no duplicate PR, no retitle
+    for edit in world.gh.has("pr", "edit"):                 # the only edit is the body gaining the summary block (spec 157)
+        assert edit[:4] == ["pr", "edit", PR_URL, "--body-file"] and len(edit) == 5
+        assert pr_summary.START in Path(edit[4]).read_text()
     assert [e for e in world.events if e[0] == "ci"][0][1].get("PR_TITLE") == TITLE
 
 
