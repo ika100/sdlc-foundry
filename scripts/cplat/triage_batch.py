@@ -14,6 +14,7 @@ from pathlib import Path
 
 import dispatch_state
 import feedback
+import priority
 import spec as specs
 import triage
 import triage_facts as facts
@@ -21,7 +22,7 @@ from core import PlatformError
 
 MAX_AGE = 7200
 READ_LIMIT = 100
-PRIORITY = ("p0", "p1", "p2")
+PRIORITY = tuple(priority.label_of(level) for level in priority.LEVELS)
 
 QUERY = """query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
@@ -115,7 +116,8 @@ def build(raw: dict, *, new: bool, root: Path, now: datetime, slug: str = "") ->
     ordered = sorted(queued.values(), key=lambda i: (i.get("createdAt", ""), i["number"]))
     return {"repo": slug, "read_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "batch_file": "",
             "issues": [_entry(i, now, ctx) for i in ordered], "skipped": skipped,
-            "missing_labels": sorted(set(triage.LABELS) - set(raw["labels"])), "specs_pr": None}
+            "missing_labels": sorted(set(triage.LABELS) - set(raw["labels"])), "specs_pr": None,
+            "priority_levels": priority.levels_json()}
 
 
 def path(slug: str) -> Path:
