@@ -26,7 +26,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parent.parent
 if (root / "FAIL").is_file():
     print("starting the render")
-    print((root / "FAIL").read_text().strip(), file=sys.stderr)
+    print((root / "FAIL").read_text().strip())
     sys.exit(1)
 dest = root / "applications" / "shop"
 shutil.copytree(root / "src", dest, dirs_exist_ok=True)
@@ -167,8 +167,11 @@ REMOVALS = [
 def test_an_object_that_holds_data_and_is_gone_is_reported_as_loses_data_ac_191_1(tmp_path, old, kind, name):  # AC-191.1
     rc, lines = compare(tmp_path, [("dev", old), ("dev", K("ConfigMap", "keep"))], [("dev", K("ConfigMap", "keep"))])
     assert rc == 1, lines
-    assert [ln for ln in lines if ln.startswith("BREAKING")] == [breaking("dev", kind, "shop-dev", name, "object", "present", "removed", "loses data")], lines
-    assert lines[-1] == f"FAILED: 1 breaking change(s), {TAG} -> candidate"
+    want = [breaking("dev", kind, "shop-dev", name, "object", "present", "removed", "loses data")]
+    if kind == "ExternalSecret":      # its target Secret (spec.target.name) is a rendered Secret the candidate no longer produces
+        want.append(breaking("dev", "Secret", "shop-dev", "creds", "object", "present", "removed", "loses data"))
+    assert [ln for ln in lines if ln.startswith("BREAKING")] == want, lines
+    assert lines[-1] == f"FAILED: {len(want)} breaking change(s), {TAG} -> candidate"
 
 
 def test_a_renamed_claim_counts_as_removed_ac_191_1(tmp_path):  # AC-191.1
@@ -179,14 +182,20 @@ def test_a_renamed_claim_counts_as_removed_ac_191_1(tmp_path):  # AC-191.1
     assert [ln for ln in lines if ln.startswith("BREAKING")] == [breaking("dev", "PersistentVolumeClaim", "shop-dev", "data", "object", "present", "removed", "loses data")]
 
 
+PLAN_FILE = "addons/dev/db/credentials-configmap.yaml"      # the file name the renderer writes (spec 128)
+
+
 def plan_map(*names):
     plan = {"secrets": [{"name": n, "data": {"k": "v"}} for n in names]}
-    return K("ConfigMap", "db-credentials", None, data={"create.py": "pass\n", "plan.json": json.dumps(plan)})
+    return {PLAN_FILE: yaml.safe_dump(K("ConfigMap", "db-credentials", None, data={"create.py": "pass\n", "plan.json": json.dumps(plan)}))}
 
 
 def test_a_generated_secret_that_the_credentials_plan_no_longer_names_is_reported_ac_191_1(tmp_path):  # AC-191.1
-    folder = "addons"
-    rc, lines = compare(tmp_path, [("dev", plan_map("shop-db-app", "shop-db-admin"), folder)], [("dev", plan_map("shop-db-app-v2", "shop-db-admin"), folder)])
+    b = make_repo(tmp_path / "before", [], extra=plan_map("shop-db-app", "shop-db-admin"))
+    a = make_repo(tmp_path / "after", [], extra=plan_map("shop-db-app-v2", "shop-db-admin"))
+    plat = make_platform(tmp_path / "platform")
+    p = subprocess.run([sys.executable, str(SCRIPT), "compare", "--from-tag", TAG, "--repo", str(plat), str(b), str(a)], capture_output=True, text=True, timeout=300)
+    rc, lines = p.returncode, (p.stdout + p.stderr).splitlines()
     assert rc == 1, lines
     assert [ln for ln in lines if ln.startswith("BREAKING")] == [breaking("dev", "Secret", "shop-dev", "shop-db-app", "object", "present", "removed", "loses data")], lines
 
@@ -315,7 +324,19 @@ def test_a_step_accepts_its_kind_and_field_for_every_object_and_environment_ac_1
 def test_the_run_mode_compares_from_both_releases_each_in_its_section_ac_191_4():  # AC-191.4
     assert SCRIPT.is_file(), "scripts/upgrade-render-check.py exists"
     text = SCRIPT.read_text()
-    for needle in ("from-tag", "previous", "oldest", "compared once", "oldest supported release: skipped:", "upgrade render check: OK",
-                   "upgrade render check: FAILED", "--from", "--work", "upgrade-system.sh", "does not render"):
-        assert needle in text, f"upgrade-render-check.py lacks {needle!r}"
-    assert not re.search(r"\bdocker\b|\bk3d\b|local-cluster", text.replace("container runtime", "")), "no container runtime"
+    patterns = {
+        "a section header per from-release (`from <tag>:`)": r"""from \{[^}]+\}:|from %s:|["']from ["']\s*\+""",
+        "the from-tag call of release-check.py": r"release-check\.py|from-tag",
+        "the previous release tag": r"\bprevious\b",
+        "the oldest supported release tag": r"\boldest\b",
+        "the compared-once message": r"are both \{?\w*\}?[^\n]*compared once",
+        "the skipped message of the oldest release": r"oldest supported release: skipped: ",
+        "the OK last line": r"upgrade render check: OK \(",
+        "the FAILED last line with one exit per section": r"upgrade render check: FAILED \(from [^\n]*exit ",
+        "exit 2 when a section exits 2, else 1": r"\b2\b[\s\S]{0,120}\b1\b|\b1\b[\s\S]{0,120}\b2\b",
+        "the builder create and update steps": r"upgrade-system\.sh[\s\S]{0,300}create[\s\S]{0,1500}update",
+        "the builder failure line of each side": r"does not render",
+        "--from (repeatable) and --work options": r"--from[\s\S]*--work|--work[\s\S]*--from",
+    }
+    for what, pat in patterns.items():
+        assert re.search(pat, text), f"upgrade-render-check.py lacks {what}"

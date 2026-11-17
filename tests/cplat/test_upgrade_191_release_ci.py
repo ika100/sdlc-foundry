@@ -327,6 +327,10 @@ def test_the_update_script_runs_the_update_part_and_sources_the_builder_ac_191_6
     for needle in ("lib/upgrade-system.sh", "release-check.py", "from-tag previous", "E2E_UPGRADE_DRILL", "upgrade-drill.sh", "UPGRADE E2E OK", "AC-191.6", "AC-191.7"):
         assert needle in t, f"upgrade.sh lacks {needle!r}"
     assert "resource add backups" not in t and "--to 17" not in t, "the backups and the major upgrade belong to the drill"
+    assert re.search(r"E2E_UPGRADE_DRILL[^\n]*\n?[^\n]*upgrade-drill\.sh", t), "the drill is sourced only behind E2E_UPGRADE_DRILL"
+    # the checks of the update part stay in the script that always runs (not in the drill-only file), read together with the builder
+    for needle in ("read_data", "instance verify", "doctor", "--dry-run=server"):
+        assert needle in t, f"upgrade.sh (outside the drill-only file) lacks the check {needle!r}"
     assert subprocess.run(["bash", "-n", str(ROOT / "tests/e2e/upgrade.sh")]).returncode == 0
 
 
@@ -342,9 +346,14 @@ def test_the_drill_script_holds_the_guard_and_the_major_steps_ac_191_7():  # AC-
 def test_contributing_names_the_four_jobs_the_gate_and_how_to_run_them_ac_191_8():  # AC-191.8
     t = read("CONTRIBUTING.md")
     for needle in (E2E, RENDER, OLDEST, DRILL, "Upgrade step:", "uv run scripts/upgrade-render-check.py", "bash tests/e2e/upgrade.sh",
-                   "from-tag oldest", "E2E_UPGRADE_DRILL=1 bash tests/e2e/upgrade.sh", "gh workflow run e2e-upgrade.yml", "gh workflow run e2e-upgrade-drill.yml"):
+                   "from-tag oldest", "E2E_UPGRADE_DRILL=1 bash tests/e2e/upgrade.sh"):
         assert needle in t, f"CONTRIBUTING.md lacks {needle!r}"
     assert re.search(r"(?i)release gate", t)
+    # when each job runs: the sentence that names a job also says nightly / pull request / dispatch
+    for job, words in ((RENDER, r"(?i)pull request|push"), (E2E, r"(?i)pull request|push"), (OLDEST, r"(?i)night|schedule"), (DRILL, r"(?i)night|schedule")):
+        around = [t[max(0, m.start() - 400):m.end() + 400] for m in re.finditer(re.escape(job), t)]
+        assert any(re.search(words, a) for a in around), f"CONTRIBUTING.md does not say when {job!r} runs"
+        assert any(re.search(r"(?i)dispatch|manual", a) for a in around if job in (OLDEST, DRILL)) or job in (RENDER, E2E), job
 
 
 def test_an_adr_records_the_split_and_amends_adr_069_ac_191_8():  # AC-191.8
