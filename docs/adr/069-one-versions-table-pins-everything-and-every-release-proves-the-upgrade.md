@@ -1,6 +1,7 @@
 # ADR-069: One versions table pins everything, and every release proves the upgrade from the previous one
 
 **Status:** Accepted (2026-10-28)
+**Amended by:** [ADR-116](116-upgrade-tests-split-a-fast-release-gate-from-nightly-runs.md) (point 4: the release waits for the render check and the platform update e2e; the drill and the oldest-release run are nightly)
 **Builds on:** [ADR-058](058-pinned-versions-and-platform-installed-operators.md) (the versions table in the renderer), [ADR-060](060-a-cluster-repo-owns-shared-services.md) (cluster repos share the table through a copy), spec 121; the rollout side is the companion ADR [068](068-resource-and-operator-upgrades-roll-through-environments-in-verified-steps.md)
 
 ## Context
