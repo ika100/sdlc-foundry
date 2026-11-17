@@ -9,6 +9,8 @@ import sleepguard
 
 sleepguard.install()  # spec 185: before any cplat module binds time.sleep
 
+pytest_plugins = ["runtemp"]  # spec 208: the run's own directory, uv cache and temp root, removed when the run passes
+
 import pytest
 from console_support import console  # noqa: F401  (spec 122: the running-console fixture)
 from sleepguard import pytest_runtest_makereport, pytest_runtest_protocol  # noqa: F401  (spec 185: the real-sleep guard)

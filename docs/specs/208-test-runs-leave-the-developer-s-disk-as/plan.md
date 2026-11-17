@@ -10,6 +10,7 @@ tasks:
     covers: [AC-208.1, AC-208.3, AC-208.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: "runtemp plugin: keep the failed tests' files, limit to 3 failing runs, settle orphans"
     files: [tests/cplat/runtemp.py, CONTRIBUTING.md, docs/changelog.d/208-test-runs-leave-the-disk-clean.fixed.md]
