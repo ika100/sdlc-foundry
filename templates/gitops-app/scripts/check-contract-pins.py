@@ -82,6 +82,8 @@ def new_tag(text: str | None) -> str | None:
 def changed_pins() -> list[tuple[str, str, str]]:
     """(system, component, tag) of every pin that differs from the merge base, in path order."""
     base = (git("merge-base", BASE_REF, "HEAD") or "").strip()
+    if not base:  # a local `devbox run ci` has no base branch: there is no pin change to compare
+        return []
     out = []
     for f in sorted((ROOT / "applications").glob("*/overlays/*/*/kustomization.yaml")):
         tag = new_tag(f.read_text(encoding="utf-8"))
