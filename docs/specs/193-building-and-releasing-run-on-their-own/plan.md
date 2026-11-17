@@ -45,6 +45,7 @@ tasks:
     covers: [AC-193.1, AC-193.2, AC-193.3, AC-193.4, AC-193.5, AC-193.6, AC-193.7, AC-193.8]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t6
     title: nextbuildscreen - the text of the build, stop, release, promote and last screens
     files: [scripts/cplat/nextbuildscreen.py, scripts/cplat/nextscreen.py]
