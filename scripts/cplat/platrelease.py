@@ -54,8 +54,10 @@ def _preflight(repo: Path, skip_eval: str | None = None) -> None:
         raise core.PlatformError("uncommitted changes: " + ", ".join(dirty))
     local = _git(repo, "rev-parse", "--verify", "-q", "refs/heads/main", check=False).strip()
     remote = _git(repo, "rev-parse", "origin/main").strip()
-    if local != remote:
-        raise core.PlatformError(f"local main {local[:7] or 'missing'} differs from origin/main {remote[:7]}")
+    # the release branches from origin/main (#789): a local main that is only behind does not matter, unpushed commits do
+    if local and local != remote and core.run(["git", "merge-base", "--is-ancestor", local, remote], cwd=repo, check=False).returncode:
+        raise core.PlatformError(f"local main {local[:7]} differs from origin/main {remote[:7]}: it has commits that are not on origin/main",
+                                 hint="push them in a pull request first, or drop them: git branch -f main origin/main")
     text = _git(repo, "show", f"origin/main:{CHANGELOG}", check=False)
     fragments = _fragments_at(repo, "origin/main")
     if not changelog.unreleased_body(text).strip() and not fragments:
@@ -92,11 +94,33 @@ def _check(repo: Path, cmd: list[str], name: str) -> None:
         raise core.PlatformError(f"{name} failed")
 
 
+def _stale_local(repo: Path, branch: str) -> bool:
+    """A release branch of an earlier start that was never pushed and is behind origin/main (#789): its checks ran on an old main."""
+    if _git(repo, "rev-parse", "--verify", "-q", f"refs/remotes/origin/{branch}", check=False).strip():
+        return False
+    return core.run(["git", "merge-base", "--is-ancestor", "origin/main", branch], cwd=repo, check=False).returncode != 0
+
+
+def _rebuild(repo: Path, branch: str) -> None:
+    """Start the never-pushed release branch again from origin/main; only its changelog edits are dropped (made again below)."""
+    current = _git(repo, "branch", "--show-current").strip()
+    dirty = [ln[3:] for ln in _git(repo, "status", "--porcelain").splitlines() if ln.strip()]
+    other = [p for p in dirty if p != CHANGELOG and not p.startswith(changelog.FRAGMENTS + "/")]
+    if other or (dirty and current != branch):
+        raise core.PlatformError("uncommitted changes: " + ", ".join(other or dirty))
+    if current == branch:
+        _git(repo, "reset", "-q", "--hard", "origin/main")
+    else:
+        _git(repo, "switch", "--no-track", "-C", branch, "origin/main")
+    print(f"{branch} was never pushed and is behind origin/main: started it again from origin/main")
+
 def _prepare(repo: Path, state: st.State, version: str, skip_eval: str | None = None) -> str:
     """idle/branch → the PR is open; returns the PR URL."""
     branch = f"release/{version}"
     if state.phase == st.IDLE:
-        _git(repo, "switch", "-c", branch, "main")
+        _git(repo, "switch", "--no-track", "-c", branch, "origin/main")
+    elif _stale_local(repo, branch):
+        _rebuild(repo, branch)
     else:
         current = _git(repo, "branch", "--show-current").strip()
         dirty = [ln[3:] for ln in _git(repo, "status", "--porcelain").splitlines() if ln.strip()]

@@ -146,7 +146,7 @@ def detach(repo: Path, ns: argparse.Namespace) -> int:
         print(NOT_HANDED_OFF)
         return ship.start_plain(repo, ns)
     sp = ship.specmod.find(repo, ns.spec)
-    flags = [f for f, on in (("--no-merge", ns.no_merge), ("--full", ns.full)) if on]
+    flags = [f for f, on in (("--no-merge", ns.no_merge), ("--merge", getattr(ns, "merge", False)), ("--full", ns.full)) if on]
     st = ship.load_state(repo)
     given = (ns.context or "").strip() or None
     if given and given not in (shipcontext.contexts() or set()):
@@ -170,7 +170,7 @@ def detach(repo: Path, ns: argparse.Namespace) -> int:
         print("headless: run is done" + (f"; log {log}" if log else ""))
         print(ship.describe(st))
         return 0
-    st = ship.start(repo, ns.spec, not ns.no_merge, ns.take_over, None, ns.budget, detach=True)   # 4: no system link, the spawn drops it
+    st = ship.start(repo, ns.spec, ship.merge_flag(ns), ns.take_over, None, ns.budget, detach=True)   # 4: no system link, the spawn drops it
     name, source = shipcontext.resolve(repo, given, recorded)   # after start: a refused hand-off asks no cluster, no gh
     old = st.get("headless") or {}
     starts = old.get("starts", 0) + 1 if old and old.get("run_id") == st.get("run_id") and not alive(old.get("pid")) else 1   # 5
