@@ -17,6 +17,7 @@ tasks:
     covers: [AC-193.2]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Answers written into the spec (or the issue) and the criteria-hash rule
     files: [scripts/cplat/dispatch_answer.py, scripts/cplat/ship.py]
