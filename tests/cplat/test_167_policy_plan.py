@@ -80,11 +80,12 @@ def test_plan_without_a_file_prints_the_marked_defaults_and_the_unset_budget_wit
     doc = r.json()
     pol = doc["policy"]
     assert pol["file"] is None
-    assert pol["values"] == {"slots": 1, "budget": {"tokens_per_day": None, "per_unit": {}}, "sources": ["issues"],
+    assert pol["values"] == {"slots": 1, "budget": {"mode": "cost", "usd_per_day": None, "usd_per_month": None,  # replaced by AC-210.1
+                                                    "tokens_per_day": None, "per_unit": {}, "plan": None}, "sources": ["issues"],
                              "ready": {"labels": [], "exclude_labels": []}, "priority": ["label:p0", "label:bug", "label:p1", "spec-order", "oldest"],
                              "gates": {"approve_specs": "human", "merge": "green-ci"}, "serialize": ["merge"],
                              "guard": {"loop_calls": 10, "loop_minutes": 5}}
-    assert "slots" in pol["defaulted"] and pol["unset"] == ["budget.tokens_per_day"]
+    assert "slots" in pol["defaulted"] and pol["unset"] == ["budget.usd_per_day"]  # replaced by AC-210.2
     hint = pol["usage_hint"]
     today = world.now.date()
     assert [h["day"] for h in hint] == [(today - dt.timedelta(days=i)).isoformat() for i in range(6, -1, -1)]
@@ -98,9 +99,10 @@ def test_plan_with_a_file_names_it_and_shows_the_set_values_ac_167_2(world):  # 
     world.policy(slots=2, sources=["issues", "specs"], budget={"tokens_per_day": 5_000_000, "per_unit": {"cost": 20}})
     doc = world.plan()
     pol = doc["policy"]
-    assert pol["file"] == ".platform/dispatch.yml" and pol["unset"] == []
+    assert pol["file"] == ".platform/dispatch.yml" and pol["unset"] == ["budget.usd_per_day"]  # replaced by AC-210.2
     assert pol["values"]["slots"] == 2 and pol["values"]["sources"] == ["issues", "specs"]
-    assert pol["values"]["budget"] == {"tokens_per_day": 5_000_000, "per_unit": {"cost": 20}}
+    assert pol["values"]["budget"] == {"mode": "cost", "usd_per_day": None, "usd_per_month": None,  # replaced by AC-210.1
+                                       "tokens_per_day": 5_000_000, "per_unit": {"cost": 20}, "plan": None}
     assert "slots" not in pol["defaulted"] and "gates.merge" in pol["defaulted"]
     assert doc["tokens"]["limit"] == 5_000_000 and doc["slots"]["total"] == 2
     text = world.run("plan").out

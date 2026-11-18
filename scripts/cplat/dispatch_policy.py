@@ -12,15 +12,25 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
+import priority
 from core import PlatformError
 
 FILE = ".platform/dispatch.yml"
 TOKENS_KEY = "budget.tokens_per_day"
+USD_DAY_KEY = "budget.usd_per_day"
+USD_MONTH_KEY = "budget.usd_per_month"
+MODE_KEY = "budget.mode"
+MODES = ("cost", "plan")
+BUDGET_KEYS = ("mode", "usd_per_day", "usd_per_month", "tokens_per_day", "per_unit", "plan")
+PLAN_KEYS = ("weekly_target", "window_stop", "filler_only", "filler_tasks", "filler_drafts")
+PLAN_DEFAULTS: dict = {"weekly_target": 0.92, "window_stop": 0.80, "filler_only": ["priority:P2", "label:enhancement"],
+                       "filler_tasks": [], "filler_drafts": True}
 PER_UNIT_KEYS = ("minutes", "invocations", "reruns", "cost")
 SOURCES = ("issues", "specs")
 SERIALIZE = ("merge", "e2e")
@@ -30,7 +40,8 @@ FIXED_PRIORITY = ("spec-order", "oldest")
 
 DEFAULTS: dict = {
     "slots": 1,
-    "budget": {"tokens_per_day": None, "per_unit": {}},
+    "budget": {"mode": "cost", "usd_per_day": None, "usd_per_month": None, "tokens_per_day": None,
+               "per_unit": {}, "plan": None},
     "sources": ["issues"],
     "ready": {"labels": [], "exclude_labels": []},
     "priority": ["label:p0", "label:bug", "label:p1", "spec-order", "oldest"],
@@ -39,7 +50,7 @@ DEFAULTS: dict = {
     "guard": {"loop_calls": 10, "loop_minutes": 5},
 }
 # The dotted keys that take a default (the leaves of DEFAULTS; `budget.per_unit` is one leaf, a mapping).
-DEFAULTED_KEYS = ("slots", "budget.per_unit", "sources", "ready.labels", "ready.exclude_labels", "priority",
+DEFAULTED_KEYS = ("slots", "budget.mode", "budget.per_unit", "sources", "ready.labels", "ready.exclude_labels", "priority",
                   "gates.approve_specs", "gates.merge", "serialize", "guard.loop_calls", "guard.loop_minutes")
 
 
@@ -77,6 +88,67 @@ def _int(key: str, value, low: int, high: int | None = None) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < low or (high is not None and value > high):
         raise _bad(key, value, f"an integer {low}..{high}" if high is not None else f"an integer >= {low}")
     return value
+
+
+def _usd(key: str, value) -> float | int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        raise _bad(key, value, "a number > 0")
+    return value
+
+
+def _share(key: str, value) -> float | int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.50 <= value <= 1.00:
+        raise _bad(key, value, "a number 0.50..1.00")
+    return value
+
+
+def _filler_only(value) -> list[str]:
+    key = "budget.plan.filler_only"
+    allowed = "a list of label:<name> or priority:P0|P1|P2"
+    if not isinstance(value, list):
+        raise _bad(key, value, allowed)
+    for rule in value:
+        if not isinstance(rule, str) or not (re.fullmatch(r"priority:P[012]", rule) or (rule.startswith("label:") and len(rule) > 6)):
+            raise _bad(key, rule, allowed)
+    return list(dict.fromkeys(value))
+
+
+def _filler_tasks(value) -> list[dict]:
+    key = "budget.plan.filler_tasks"
+    if not isinstance(value, list):
+        raise _bad(key, value, "a list of mappings with the keys name, command")
+    out: list[dict] = []
+    for item in value:
+        item = _mapping(key, item, ("name", "command"))
+        for k in ("name", "command"):
+            if not isinstance(item.get(k), str) or not item[k].strip():
+                raise _err(key, f"{k} is required (allowed: a non-empty string)")
+        if any(item["name"] == o["name"] for o in out):
+            raise _bad(key, item["name"], "unique names")
+        out.append({"name": item["name"], "command": item["command"]})
+    return out
+
+
+def _plan(value, mode: str) -> dict:
+    """The `budget.plan` mapping filled with the defaults (mode plan only; in mode cost any key is refused)."""
+    if mode != "plan":
+        first = next(iter(value), None) if isinstance(value, dict) else None
+        raise _err(f"budget.plan.{first}" if first is not None else "budget.plan", "needs budget.mode: plan")
+    p = _mapping("budget.plan", {} if value is None else value, PLAN_KEYS)
+    out = copy.deepcopy(PLAN_DEFAULTS)
+    for k, v in p.items():
+        key = f"budget.plan.{k}"
+        if k in ("weekly_target", "window_stop"):
+            out[k] = _share(key, v)
+        elif k == "filler_only":
+            out[k] = _filler_only(v)
+        elif k == "filler_tasks":
+            out[k] = _filler_tasks(v)
+        elif not isinstance(v, bool):
+            raise _bad(key, v, "true, false")
+        else:
+            out[k] = v
+    return out
 
 
 def _subset(key: str, value, allowed: tuple, *, must_have: str | None = None) -> list[str]:
@@ -136,7 +208,18 @@ def _validate(data) -> dict:
     if "slots" in top:
         out["slots"] = _int("slots", top["slots"], 1, 10)
     if "budget" in top:
-        b = _mapping("budget", top["budget"] or {}, ("tokens_per_day", "per_unit"))
+        b = _mapping("budget", top["budget"] or {}, BUDGET_KEYS)
+        mode = b.get("mode", "cost")
+        if mode not in MODES:
+            raise _bad(MODE_KEY, mode, ", ".join(MODES))
+        out["budget"]["mode"] = mode
+        for k in ("usd_per_day", "usd_per_month"):
+            if b.get(k) is not None:
+                out["budget"][k] = _usd(f"budget.{k}", b[k])
+        if "plan" in b:
+            out["budget"]["plan"] = _plan(b["plan"], mode)
+        elif mode == "plan":
+            out["budget"]["plan"] = copy.deepcopy(PLAN_DEFAULTS)
         if b.get("tokens_per_day") is not None:
             out["budget"]["tokens_per_day"] = _int(TOKENS_KEY, b["tokens_per_day"], 1)
         if "per_unit" in b:
@@ -167,10 +250,13 @@ def _validate(data) -> dict:
     return out
 
 
+_NULLABLE = ("tokens_per_day", "usd_per_day", "usd_per_month")
+
+
 def _given(data: dict | None, dotted: str) -> bool:
     node = data or {}
     for part in dotted.split("."):
-        if not isinstance(node, dict) or part not in node or node[part] is None and part == "tokens_per_day":
+        if not isinstance(node, dict) or part not in node or node[part] is None and part in _NULLABLE:
             return False
         node = node[part]
     return True
@@ -191,12 +277,36 @@ def load(repo: Path | str, *, require_file: bool = False, require_budget: bool =
     values = _validate(data)
     given = data if isinstance(data, dict) else {}
     defaulted = [k for k in DEFAULTED_KEYS if not _given(given, k)]
-    unset = [TOKENS_KEY] if values["budget"]["tokens_per_day"] is None else []
-    if require_budget and unset:
-        raise PlatformError(f"{FILE}: {TOKENS_KEY} is required (it has no default)",
-                            hint="set a daily token limit in the policy file (see docs/dispatch.md); "
-                                 "cplat dispatch plan shows the daily usage of the last 7 days")
+    if values["budget"]["mode"] == "plan":
+        b = given.get("budget")
+        given_plan = b.get("plan") if isinstance(b, dict) else None
+        given_plan = given_plan if isinstance(given_plan, dict) else {}
+        defaulted += [f"budget.plan.{k}" for k in PLAN_DEFAULTS if k not in given_plan]
+    unset = [USD_DAY_KEY] if values["budget"]["mode"] == "cost" and values["budget"]["usd_per_day"] is None else []
+    if require_budget and unset and values["budget"]["tokens_per_day"] is None:
+        raise PlatformError(f"{FILE}: {USD_DAY_KEY} is required in mode cost (or the deprecated {TOKENS_KEY})",
+                            hint="set a daily limit in US dollars (see docs/dispatch.md); "
+                                 "cplat dispatch plan shows the cost of the last 7 days")
     return Policy(values=values, file=path if path.is_file() else None, defaulted=defaulted, unset=unset)
+
+
+def mode(policy: Policy) -> str:
+    return policy.values.get("budget", {}).get("mode", "cost")
+
+
+def filler_match(policy: Policy, labels: list[str]) -> bool:
+    """True when a `budget.plan.filler_only` rule matches the labels (always false in mode cost)."""
+    plan = policy.values.get("budget", {}).get("plan")
+    if mode(policy) != "plan" or not plan:
+        return False
+    low = [str(x).lower() for x in labels]
+    for rule in plan["filler_only"]:
+        kind, _, name = rule.partition(":")
+        if kind == "label" and name.lower() in low:
+            return True
+        if kind == "priority" and priority.most_urgent(low) == name:
+            return True
+    return False
 
 
 def budget_args(policy: Policy) -> list[str]:

@@ -105,7 +105,7 @@ def test_plan_text_marks_defaults_the_unset_limit_and_the_candidate_rows(home):
              {"item": "#4", "key": "issue-4", "kind": "fix", "title": "no", "verdict": "held", "reason": "skipped", "detail": "later",
               "mode": None, "slot": None, "premise": None, "approve": None}]
     doc = dv.plan_doc(home, SLUG, policy, cands)
-    assert doc["policy"]["file"] is None and doc["policy"]["unset"] == ["budget.tokens_per_day"] and len(doc["policy"]["usage_hint"]) == 7
+    assert doc["policy"]["file"] is None and doc["policy"]["unset"] == ["budget.usd_per_day"] and len(doc["policy"]["usage_hint"]) == 7  # replaced by AC-210.2
     assert doc["slots"] == {"total": 1, "running": 0, "free": 1, "manual": []}
     text = dv.render_plan(doc)
     assert text.startswith("policy: defaults (no .platform/dispatch.yml)")
