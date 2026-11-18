@@ -10,6 +10,7 @@ tasks:
     covers: [AC-206.3, AC-206.4, AC-206.5, AC-206.6, AC-206.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Run the deny-rules check first in the preflight of headless
     files: [scripts/cplat/preflight.py, scripts/cplat/headless.py]
