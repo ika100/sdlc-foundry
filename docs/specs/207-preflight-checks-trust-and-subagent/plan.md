@@ -17,6 +17,7 @@ tasks:
     covers: [AC-207.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t7
     title: Document the new preflight categories and add the changelog fragment
     files: [docs/unattended-delivery.md, docs/changelog.d/207-preflight-checks-trust-and-subagent.added.md]

@@ -9,6 +9,7 @@ import os
 import platform
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +18,7 @@ import denyrules
 from denyrules import refused_rules
 
 TIMEOUT = 30
+GH_LOGIN_WAITS = (15, 30)          # seconds before the 2nd and 3rd try of a gh login that reports "not logged in"
 LAND_COMMANDS = ("/component:ship", "/system:ship")
 MINIMUM = ("Bash(cplat *)", "Read(~/.claude/plugins/**)")     # what a session needs first (spec 171)
 
@@ -250,14 +252,26 @@ def _offline(err: str) -> str | None:
     return err.splitlines()[-1] if hit else None
 
 
+def sleep(seconds: float) -> None:
+    """The wait between gh login tries; the tests replace it."""
+    time.sleep(seconds)
+
+
 def _auth(repo: Path) -> Failure | None:
     host = _origin(repo)[0]
-    code, _, err = _retried(["auth", "status", "--hostname", host], repo)
-    if code == 0:
-        return None
-    if (why := _offline(err)):          # a dropped network once read as "not logged in" and escalated a run
-        return Failure("gh-auth", f"could not reach {host} to check the gh login ({why}): check the network, then run again")
-    return Failure("gh-auth", f"gh is not logged in for {host}: gh auth login --hostname {host}")
+    for n, wait in enumerate((*GH_LOGIN_WAITS, None), start=1):
+        code, _, err = _retried(["auth", "status", "--hostname", host], repo)
+        if code == 0:
+            if n > 1:
+                print(f"preflight: gh login answered on try {n}", flush=True)
+            return None
+        if (why := _offline(err)):          # a dropped network once read as "not logged in" and escalated a run
+            return Failure("gh-auth", f"could not reach {host} to check the gh login ({why}): check the network, then run again")
+        if wait is not None:                # a locked keychain makes gh fail for a moment
+            sleep(wait)
+    hint = "; if gh is logged in, unlock the login keychain" if platform.system() == "Darwin" else ""
+    return Failure("gh-auth", f"gh is not logged in for {host} ({len(GH_LOGIN_WAITS) + 1} tries over "
+                              f"{sum(GH_LOGIN_WAITS)} s): gh auth login --hostname {host}{hint}")
 
 
 def _push_access(repo: Path, slug: str) -> Failure | None:

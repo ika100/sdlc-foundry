@@ -205,3 +205,11 @@ def short_guard_poll(monkeypatch):
     the guard replace `headless.sleep` with the fake clock."""
     import headless
     monkeypatch.setattr(headless, "sleep", lambda seconds: None)
+
+
+@pytest.fixture(autouse=True)
+def no_real_preflight_waits(monkeypatch):
+    """The preflight tries a gh login that reports "not logged in" three times, 15 s and 30 s apart
+    (`preflight.GH_LOGIN_WAITS`); no test sleeps for it. Spec 207's own tests record the waits themselves."""
+    import preflight
+    monkeypatch.setattr(preflight, "sleep", lambda seconds: None)
