@@ -25,11 +25,17 @@ tasks:
     parallel_safe: true
     depends_on: []
     done: true
+  - id: t4
+    title: "runtemp plugin: seed the run cache from a persistent test wheel cache, remove the run directory in the background, measure AC-208.7"
+    files: [tests/cplat/runtemp.py, CONTRIBUTING.md]
+    covers: [AC-208.1, AC-208.3, AC-208.4, AC-208.5, AC-208.6, AC-208.7]
+    parallel_safe: false
+    depends_on: [t1, t2]
 ---
 
 # Plan — 208 Test runs leave the developer's disk as they found it
 
-The contract (paths, `run.json`, manifest, end-of-run rules, retention, e2e lib) is in [design.md](design.md).
+The contract (paths, `run.json`, manifest, end-of-run rules, retention, test wheel cache, detached remover, e2e lib) is in [design.md](design.md).
 
 ## t1 — runtemp plugin: the run's own directory, uv cache and temp root, removed on pass
 
@@ -81,3 +87,36 @@ The contract (paths, `run.json`, manifest, end-of-run rules, retention, e2e lib)
 - Keep `scripts/check-e2e-probes.py` and the e2e-scope tests green (they read these scripts' text).
 
 **Done when:** the acceptance tests for AC-208.2 pass (they may run a script against a stubbed `uv` / an early failure, without a cluster), and `bash -n` passes on each changed script.
+
+## t4 — runtemp plugin: seed the run cache from a persistent test wheel cache, remove the run directory in the background, measure AC-208.7
+
+**Files:** tests/cplat/runtemp.py, CONTRIBUTING.md
+**Covers:** AC-208.1, AC-208.3, AC-208.4, AC-208.5, AC-208.6, AC-208.7
+**Goal:** bring a full `devbox run test-fast` within 10 % of `main` (measured +28 %: about 60 s of cold-cache downloads per run and about 75 s of deletion after the summary). The run's uv cache is seeded from the persistent test wheel cache `W` (A10). The run directory's bulk deletion moves to a detached process after pytest's summary (A11). Every guarantee of AC-208.1 and AC-208.3 to AC-208.6 still holds.
+
+**Before this task (acceptance-test work, not the coder's).** Testers adjust and extend `tests/cplat/runtemp_support.py` and `tests/cplat/test_208_runtemp.py` without changing any existing assertion:
+- `Sandbox.env` sets `XDG_CACHE_HOME=<base>/xdg-cache`.
+- `Sandbox.run`, and the popen-based tests after `communicate`, wait until `R` has no `.cplat-removing-*` entry (0.05 s poll, 60 s cap, then fail with a listing).
+- New tests:
+  - A10 (AC-208.1, AC-208.6, AC-208.7): a second run finds in its own `UV_CACHE_DIR` the `archive-v0` / `wheels-v5` entries a first run's scratch test wrote, with the developer cache unchanged. `W` never holds `environments-v*` or any bucket other than `archive-v*`, `wheels-v*` and `sdists-v*`. A `W` over 2 GiB (sparse file) is emptied at the next run start and nothing is seeded. A missing, unwritable or cross-device `W` leaves the run's result unchanged. Two overlapping runs that both write wheels both pass, and `W` ends with both entries.
+  - A11 (AC-208.3, AC-208.4, AC-208.5, AC-208.6): the nested pytest returns while its removal may still run (stdio not inherited, so `capture_output` returns at once), and after the wait `R` is clean. The remover deletes only its own `.cplat-removing-*` path, so an overlapping live run and the kept failing runs are byte-for-byte unchanged. A `.cplat-removing-*` directory with a held lock is not counted by AC-208.5 retention and is not touched. One with a free lock is removed by the next run.
+
+**Implementation notes:**
+- Seeding at controller start, after the run directory exists and before workers start: one walk of `W`, the 2 GiB check over distinct inodes, then hard links into `<run>/uv-cache/`. Pointer files are listed first. Each archive is linked under `.seed-<id>` and renamed into place when complete. `.tmp-*` names are skipped. Any error skips the entry, and `EXDEV` or a missing `W` skips seeding (design.md, "Start of a run"). Nothing new appears at the run directory's top level, because AC-208.7's proxy test lists it.
+- Over the bound: rename `W` to `W.old-<pid>-<hex6>` (`ENOENT` means someone else emptied it), then start the detached emptier on it and on any other `W.old-*`.
+- End of a run, foreground: renames only. On a pass, `state: passed`, then rename the run directory to `R/.cplat-removing-<tag>/` with the lock held. On a fail, move the failed tests' dirs first, then create a locked `.cplat-removing-<tag>/` and rename `tmp/`, `uv-cache/`, `temproot/` and `manifest/` into it. Start the remover with `pass_fds=(lock_fd,)`, `start_new_session=True`, stdio on `/dev/null` and `close_fds=True`, then close the controller's fd. A failed rename falls back to removal in the foreground.
+- Detached remover = `runtemp.py`'s `__main__` (`--remove <path>` / `--empty <paths>`). It runs `os.nice(10)`, then flow-back from `<path>/uv-cache` into `W`: archive dirs by `os.rename`, skipping `EEXIST`/`ENOTEMPTY`, then pointer files by link to `.tmp-*` and rename. Then `_force_remove(path)`. It never raises and deletes nothing but its given paths.
+- Retention: also scan `.cplat-removing-*`. Skip the live ones (held lock) and remove the ones with a free lock. Never count them as runs.
+- Explicit `--basetemp`: seed too. At the end, flow back and remove in the foreground.
+- CONTRIBUTING.md: one sentence saying that the cplat tests keep downloaded wheels in `${XDG_CACHE_HOME:-~/.cache}/sdlc-foundry/test-wheels` (bounded at 2 GB, safe to delete at any time) and remove a run's files in the background right after the summary.
+- The test_202 failure (`FileNotFoundError` for `…/tmp/popen-gw3/test_no_session_starts_while_a0/shop-api/.git/cplat-waits/detached/w1.json` in `test_202_wait_detach.py::test_no_session_starts_while_a_wait_of_the_ended_session_runs_and_the_next_one_gets_its_result`):
+  - Before this task, nothing of 208 deletes inside a live run's `tmp/`. Only the controller's end does, after every worker has ended, and other runs skip a locked run. So a 208 cause would be a liveness bug.
+  - Reproduce by running that test repeatedly under `-n auto` on `main` and on the branch, alone and next to an overlapping run.
+  - If it is a 208 race, fix it in `runtemp.py`.
+  - If not, name it as pre-existing in the PR body, with the evidence. The likely cause is test 202's own detached sleeper removing `w1.json` while `stop_wait` or `end_wait` reads it. Do not edit test 202.
+- Measure AC-208.7:
+  - Run a full `devbox run test-fast` on `main` and on this branch, on the same quiet machine, at least twice each, alternating.
+  - Start each run only after the previous run's `.cplat-removing-*` is gone and the developer's uv cache is warm (one earlier run of each).
+  - Record the wall time of the whole command for each run, and both medians, in the PR body. The branch median must be at most 1.10 × the `main` median.
+
+**Done when:** both AC-208.7 timings (main vs branch, full `devbox run test-fast`, same machine, branch at most 10 % longer) are measured and recorded for the PR body. The test_202 failure is explained: fixed if it is a 208 race, otherwise named as pre-existing with the evidence. The new A10/A11 acceptance tests and all existing AC-208.1 and AC-208.3 to AC-208.6 tests pass unchanged in their assertions. The full suite passes with `-n auto` and serially.
