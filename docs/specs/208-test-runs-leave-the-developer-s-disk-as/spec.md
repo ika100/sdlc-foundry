@@ -1,7 +1,7 @@
 ---
 spec_id: 208-test-runs-leave-the-developer-s-disk-as
 title: Test runs leave the developer's disk as they found it
-status: draft
+status: approved
 priority: P1
 shape: platform
 tracks: [810, 811]
@@ -63,3 +63,4 @@ none
 - 2026-11-17 approved
 - 2026-11-17 building
 - 2026-11-18 draft: amend: A7 seeds the run's uv cache from a persistent test wheel cache; run dir removed in the background (AC-208.7 measured +28%)
+- 2026-11-19 approved
