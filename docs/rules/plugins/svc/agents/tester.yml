@@ -9,7 +9,8 @@ rules:
     text: "Assert on parsed values, never on serialized text, because formatting and key order are no part of a contract"
     class: practice
   - id: R4
-    text: "Every new test must **fail because the behaviour is missing** (assertion failure, 404, missing module/symbol)."
+    text: "every line must be `missing behaviour` (assertion failure, 404, missing module/symbol)"
+    source: spec 205
     class: practice
   - id: R5
     text: "never edit, skip or weaken an acceptance test to make a build pass, because the tests are the spec in executable form and the user decides about the spec"
