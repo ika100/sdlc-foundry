@@ -17,6 +17,7 @@ tasks:
     covers: [AC-210.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Record usage-limit hits and the run's USD cost in headless and supervisor
     files: [scripts/cplat/usagelimit.py, scripts/cplat/headless.py, scripts/cplat/supervisor.py]
