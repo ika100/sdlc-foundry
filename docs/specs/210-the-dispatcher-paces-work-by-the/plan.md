@@ -51,6 +51,7 @@ tasks:
     covers: [AC-210.9]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t8
     title: Task and draft unit kinds and the hidden dispatch task verb
     files: [scripts/cplat/dispatch_units.py, scripts/cplat/dispatch.py]
