@@ -68,6 +68,18 @@ def test_the_checks_run_in_the_documented_order_and_the_first_failure_wins_ac_20
     assert env.check() is None
 
 
+def test_an_agent_model_the_settings_exclude_fails_though_the_coordinator_is_allowed_ac_207_5(env, s):  # AC-207.5
+    s.install()
+    s.trust(env.repo)
+    path = env.set_layer("user", {"availableModels": ["sonnet"]})
+    write_agent(env.repo, "reviewer", model="opus")
+    f = env.check()                                                                   # the coordinator is sonnet
+    assert f.category == "model-unreachable"
+    assert f.detail == (f"opus (used by reviewer) is not in availableModels of user settings ({path}): "
+                        "add opus to availableModels, or set a model the settings allow")
+    assert s.calls == []
+
+
 def test_a_failure_line_is_one_line_in_the_known_format_ac_207_8(env, s):  # AC-207.8
     s.install()
     write_agent(env.repo, "coder", tools="Read")

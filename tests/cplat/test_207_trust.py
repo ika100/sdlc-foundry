@@ -102,6 +102,7 @@ def test_committed_settings_are_empty_when_missing_or_invalid_ac_207_1(s, tmp_pa
 # ---------------- untrusted, something would be lost ----------------
 
 def test_env_in_the_committed_settings_fails_ac_207_1(s, repo):  # AC-207.1
+    # plan.md t1: "env keys sorted" and "check in this order" (env, then directories, then plugins)
     s.install()
     commit_settings(repo, env={"B_KEY": "2", "A_KEY": "1"})
     detail, line = pt().check(repo, [])
@@ -130,6 +131,7 @@ def test_a_plugin_that_is_neither_installed_nor_passed_fails_ac_207_1(s, repo, t
 
 
 def test_env_is_reported_before_directories_and_plugins_ac_207_1(s, repo):  # AC-207.1
+    # The order is the one of plan.md t1 ("check in this order": env, directories, plugins).
     s.install()
     commit_settings(repo, env={"K": "1"}, enabledPlugins={KEY: True},
                     permissions={**BASE_SETTINGS["permissions"], "additionalDirectories": ["/data"]})

@@ -51,6 +51,28 @@ def test_a_build_starts_five_agents_and_a_ship_adds_the_deployment_agent_ac_207_
     assert "deployment" in dict(ship)                         # the service-go shape is deployable
 
 
+def test_a_ship_of_a_library_starts_the_five_agents_and_no_deployment_agent_ac_207_3(s, repo, monkeypatch):  # AC-207.3
+    s.install()
+    route = {"shape": "library-python", "plugin": "svc", "deployable": False, "library": True,
+             "agents": {"coder": "svc:coder", "tester": "svc:tester", "product-manager": "svc:product-manager",
+                        "architect": "svc:architect", "reviewer": "svc:reviewer", "quality": "shared:quality",
+                        "security": "shared:security"}}
+    monkeypatch.setattr(shapecmd, "route", lambda folder: route)
+    ship = pa().roles(repo, "/component:ship")
+    assert [r for r, _ in ship] == ["coder", "tester", "reviewer", "security", "quality"]
+    assert "deployment" not in dict(ship)
+
+
+def test_a_deployment_override_without_bash_fails_naming_the_deployment_agent_ac_207_3(s, env):  # AC-207.3
+    s.install()
+    s.trust(env.repo)
+    f = write_agent(env.repo, "deployment", tools="Read")
+    got = env.check("/component:ship")
+    assert got.category == "subagent-tools"
+    assert got.detail == (f"deployment resolves to {f} (project definition), which does not grant Bash: "
+                          "add Bash to its tools, or remove the override")
+
+
 def test_a_gitops_folder_starts_no_coder_ac_207_3(s, tmp_path, monkeypatch):  # AC-207.3
     s.install()
     ops = tmp_path / "gitops"
@@ -67,7 +89,7 @@ def test_a_folder_without_a_shape_uses_the_svc_and_shared_agents_ac_207_3(s, tmp
     bare.mkdir()
 
     def no_shape(folder):
-        raise core.PlatformError("cannot determine the repo's shape")
+        raise core.PlatformError("no shape")
     monkeypatch.setattr(shapecmd, "route", no_shape)
     got = dict(pa().roles(bare, "/component:ship"))
     assert got == {"coder": "svc:coder", "tester": "svc:tester", "reviewer": "svc:reviewer",

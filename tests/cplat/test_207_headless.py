@@ -8,7 +8,7 @@ import subprocess
 
 import pytest
 
-from pf207_support import Seams, commit_settings, write_agent
+from pf207_support import Seams, commit_settings, plugin_dir, write_agent
 from test_runs import clock, mem, store, stored  # noqa: F401  (fixtures)
 from units131_support import World, git, snapshot_settings
 
@@ -59,6 +59,11 @@ def b_static_model(w, s):
     w.user_settings.write_text(json.dumps({"availableModels": ["fictional-9"]}))
 
 
+def b_agent_model(w, s):
+    w.user_settings.write_text(json.dumps({"availableModels": ["sonnet"]}))       # the coordinator (sonnet) is allowed
+    write_agent(w.repo, "reviewer", model="opus")                                 # a reviewer override is not
+
+
 def b_call(w, s):
     s.script["*"] = {"ok": False, "error": "Invalid API key", "offline": False, "usage": dict(USAGE)}
 
@@ -73,6 +78,8 @@ BREAKS = [
     pytest.param(b_definition, "subagent-tools", "does not grant Bash", id="subagent-definition"),
     pytest.param(b_worktree, "agent-worktree", "cannot create an agent worktree", id="agent-worktree"),
     pytest.param(b_static_model, "model-unreachable", "is not in availableModels of user settings", id="model-excluded"),
+    pytest.param(b_agent_model, "model-unreachable", "opus (used by reviewer) is not in availableModels of user settings",
+                 id="model-excluded-agent"),
     pytest.param(b_call, "model-unreachable", "cannot be called (Invalid API key)", id="model-call"),
     pytest.param(b_gh, "gh-auth", "(3 tries over 45 s)", id="gh-login"),
 ]
@@ -146,6 +153,23 @@ def test_an_untrusted_folder_that_passes_says_so_once_and_a_trusted_one_does_not
     assert len(w.sessions()) == 1
 
 
+def test_plugin_dir_folders_reach_the_trust_check_ac_207_1(w, seams, tmp_path, capsys):  # AC-207.1
+    commit_settings(w.repo, enabledPlugins={"component@sdlc-foundry": True})
+    d = plugin_dir(tmp_path, "component")
+    assert go(w, seams, "--plugin-dir", str(d)) == 1
+    out = capsys.readouterr().out
+    assert out.splitlines().count(f"preflight: {w.repo} is not trusted; its permission rules are passed to the session") == 1
+    assert "preflight failed" not in out and len(w.sessions()) == 1
+
+
+def test_a_plugin_neither_installed_nor_passed_with_plugin_dir_fails_ac_207_1(w, seams, capsys):  # AC-207.1
+    commit_settings(w.repo, enabledPlugins={"component@sdlc-foundry": True})
+    assert go(w, seams) == 1
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("preflight failed: ")]
+    assert len(lines) == 1 and lines[0].startswith("preflight failed: untrusted-folder: ")
+    assert "nor passed with --plugin-dir" in lines[0] and w.sessions() == []
+
+
 def test_a_trusted_folder_prints_no_untrusted_line_ac_207_1(w, seams, capsys):  # AC-207.1
     seams.install()
     seams.trust(w.repo)
@@ -159,8 +183,12 @@ def test_one_call_per_distinct_model_is_not_a_session_and_not_charged_ac_207_6(w
     assert go(w, seams) == 1
     assert seams.calls and len(seams.calls) == len(set(seams.calls))
     rec = stored(store)[-1]
-    assert rec["budget"]["used"]["invocations"] == 1                     # the one session; the model calls are no invocations
-    assert rec["budget"]["used"]["cost"] < USAGE["cost_usd"]
+    # The fake session reports no usage, so the run's own numbers are 1 invocation and $0: the preflight adds nothing to either.
+    assert rec["budget"]["used"]["invocations"] == len(w.sessions()) == 1
+    assert rec["budget"]["used"]["cost"] == 0
+    (ledger,) = w.ledgers()
+    assert ledger["carried"]["invocations"] + ledger["used"]["invocations"] == 1
+    assert "preflight" not in json.dumps(ledger) and ledger["carried"]["cost"] == 0
     calls = rec["preflight"]["model_calls"]
     assert [c["model"] for c in calls] == seams.calls
     for c in calls:

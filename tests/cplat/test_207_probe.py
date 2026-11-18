@@ -7,6 +7,9 @@ built in tmp_path for the probe.
 import datetime
 import json
 import os
+import stat
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +17,7 @@ import core
 import runs
 from pf207_support import ZERO, Seams, mod, state_of
 from units131_support import git, make_repo
+from waiting import with_prelude
 
 
 @pytest.fixture()
@@ -241,3 +245,70 @@ def test_the_failed_call_is_in_the_log_too_ac_207_6(s, monkeypatch):  # AC-207.6
     assert pp().check_models(MODELS, "run-2") is not None
     models = [c["model"] for c in seen[-1][2]["model_calls"]]
     assert models == ["sonnet", "opus"]
+
+
+# ---------------- AC-207.6: the real call (REAL_MODEL_CALL, design.md "Model check call") ----------------
+
+FAKE_MODEL_CLAUDE = "#!" + sys.executable + """
+import json, os, sys
+with open(os.environ["FAKE_LOG"], "a") as fh:
+    fh.write(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd(), "env": sorted(os.environ)}) + "\\n")
+mode = os.environ["FAKE_MODE"]
+if mode == "pass":
+    print(json.dumps({"type": "result", "is_error": False, "result": "ok", "usage": {"input_tokens": 3, "output_tokens": 1}}))
+elif mode == "is-error":
+    print(json.dumps({"type": "result", "is_error": True, "result": "Credit balance is too low\\n\\nAdd credit to go on\\n"}))
+elif mode == "auth":
+    sys.stderr.write("Error: authentication failed\\n\\nInvalid API key - Please run /login\\n\\n")
+    sys.exit(1)
+else:
+    sys.stderr.write("request failed\\nPost https://api.anthropic.com/v1/messages: dial tcp: lookup api.anthropic.com: no such host\\n")
+    sys.exit(1)
+"""
+
+
+@pytest.fixture()
+def real(tmp_path, monkeypatch):
+    exe = tmp_path / "fake-claude"
+    exe.write_text(with_prelude(FAKE_MODEL_CLAUDE))
+    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
+    log = tmp_path / "model-calls.jsonl"
+    monkeypatch.setenv("CPLAT_CLAUDE", str(exe))
+    monkeypatch.setenv("FAKE_LOG", str(log))
+    monkeypatch.setattr(core, "sleep", lambda seconds: None)
+    monkeypatch.setenv("CPLAT_RUN_ID", "run-from-the-session")
+    monkeypatch.setenv("CPLAT_UNIT", "unit-1")
+
+    def call(mode, model="opus"):
+        monkeypatch.setenv("FAKE_MODE", mode)
+        return pp().REAL_MODEL_CALL(model), [json.loads(ln) for ln in log.read_text().splitlines()]
+    return call
+
+
+def test_the_real_call_is_a_minimal_claude_call_in_a_clean_folder_ac_207_6(real):  # AC-207.6
+    result, (seen,) = real("pass")
+    assert result.ok is True and result.error == "" and result.offline is False
+    assert seen["argv"] == ["-p", "Reply with the single word ok.", "--model", "opus", "--output-format", "json", "--max-turns", "1"]
+    cwd = Path(seen["cwd"])
+    assert cwd.name.startswith("cplat-preflight-") and not cwd.exists()      # a fresh temporary folder, removed afterwards
+    assert not cwd.resolve().is_relative_to(Path.cwd().resolve())
+    assert not [k for k in seen["env"] if k.startswith("CPLAT_")]            # the run's variables never reach it
+
+
+def test_the_real_call_reports_an_error_result_ac_207_6(real):  # AC-207.6
+    result, _ = real("is-error")
+    assert result.ok is False and result.offline is False
+    assert result.error == "Add credit to go on"                             # the last non-empty line of the result
+
+
+def test_the_real_call_reports_the_last_line_of_a_failure_ac_207_6(real):  # AC-207.6
+    result, (seen,) = real("auth", model="sonnet")
+    assert result.ok is False and result.offline is False
+    assert result.error == "Invalid API key - Please run /login"
+    assert seen["argv"][3] == "sonnet"
+
+
+def test_the_real_call_recognises_a_dropped_network_ac_207_6(real):  # AC-207.6
+    result, _ = real("network")
+    assert result.ok is False and result.offline is True
+    assert result.error.endswith("no such host")
