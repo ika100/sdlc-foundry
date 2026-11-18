@@ -183,6 +183,8 @@ In a unit session the Stop hook also runs when `CPLAT_UNIT` is set, not only whe
 
 Before the first session, `cplat headless` and `cplat system ship repo start` run a preflight and print `preflight failed: <category>: <detail>` on a failure. The run is then escalated with cause `environment` and no session, branch, commit or PR is started. In a system ship only that repo is escalated.
 
+The preflight first checks the run's refused rules against the commands the run needs (such as `git push origin feature/x`, `gh pr create` and a `gh api` read of a pull request) and the commands it must never run (a push to the default branch, a force push, a merge). A refused rule that blocks a needed command prints `preflight failed: deny-rules: <rule> refuses "<command>", which the run needs; use: <corrected rule>`; a command that no rule refuses prints `preflight failed: deny-rules: no rule refuses "<command>"; add: <rule>`. The run stops before any session, so a rule that is too wide no longer shows only after two sessions without a commit. A `gh api` read of a pull request's `mergeable` or `mergeStateStatus` is not refused; the merge calls still are.
+
 ### A system ship answers or holds an escalated repo
 
 `cplat system ship next --json` returns the action `answer` for an escalated repo, even while other repos still run, with the repo id, the cause, the reason and the questions with their suggested answers; `next --wait` returns it at the first poll. The system ship then decides per repo:

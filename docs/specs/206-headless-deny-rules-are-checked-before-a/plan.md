@@ -23,6 +23,7 @@ tasks:
     covers: [AC-206.4]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 206 Headless deny rules are checked before a session starts
