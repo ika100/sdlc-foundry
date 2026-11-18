@@ -14,6 +14,8 @@ Run with: uv run scripts/shapes.py <cmd>   (PEP 723 inline deps)
 """
 from __future__ import annotations
 
+import copy
+import functools
 import json
 import re
 import sys
@@ -34,7 +36,13 @@ DECLARED_IN = ".platform-settings.yml"
 
 def load_all() -> list[dict]:
     """Every registry entry in file order, including declared shapes (ADR-056)."""
-    return yaml.safe_load((ROOT / "shapes.yml").read_text())["shapes"]
+    return copy.deepcopy(_parse((ROOT / "shapes.yml").read_text())["shapes"])
+
+
+@functools.lru_cache(maxsize=4)
+def _parse(text: str) -> dict:
+    """The registry parsed once per content: `spec check` asks for it twice per spec, and parsing it was most of its time."""
+    return yaml.safe_load(text)
 
 
 def is_declared(entry: dict) -> bool:

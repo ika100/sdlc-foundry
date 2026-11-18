@@ -62,8 +62,8 @@
     {
       "name": "svc-java",
       "source": "./plugins/svc-java",
-      "version": "0.8.0",
-      "description": "Agents for Java service repos (Spring Boot 3, Maven, JDK 21, distroless): coder, tester, deployment, observability, release.",
+      "version": "0.8.1",
+      "description": "Agents for Java service repos (Spring Boot 4, Maven, JDK 21, distroless): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
         "java",

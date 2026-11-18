@@ -14,12 +14,13 @@ RUN mvn -B -q -DskipTests package
 {%- if needs_observability %}
 
 # OpenTelemetry Java agent (zero-code tracing). Pinned; disabled at runtime unless OTEL_SDK_DISABLED=false.
-ARG OTEL_AGENT_VERSION=2.32.0
+ARG OTEL_AGENT_VERSION=2.33.1
 ADD --chmod=0644 https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/${OTEL_AGENT_VERSION}/opentelemetry-javaagent-${OTEL_AGENT_VERSION}.jar /otel/opentelemetry-javaagent.jar
 {%- endif %}
 
 
-FROM gcr.io/distroless/java{{ java_version }}-debian12:nonroot AS runtime
+# Debian 13 base: the older Debian base carries CVE-2026-111497 and CVE-2023-45853 (spec 204). No shell, user 65532.
+FROM gcr.io/distroless/java{{ java_version }}-debian13:nonroot AS runtime
 # Links the GHCR package to this repository, so CI's GITHUB_TOKEN can push to it (no manual "Manage Actions access" step).
 LABEL org.opencontainers.image.source="https://github.com/{{ github_org }}/{{ project_name }}" \
       org.opencontainers.image.description="{{ description | replace('"', '') | replace('\\', '') }}"
