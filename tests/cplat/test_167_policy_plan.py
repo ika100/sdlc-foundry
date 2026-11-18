@@ -92,7 +92,7 @@ def test_plan_without_a_file_prints_the_marked_defaults_and_the_unset_budget_wit
     assert all("tokens" in h and (h["tokens"] is None or isinstance(h["tokens"], int)) for h in hint)
     text = world.run("plan").out
     assert "policy: defaults (no .platform/dispatch.yml)" in text
-    assert re.search(r"budget\.tokens_per_day: unset .*last 7 days", text) and "(default)" in text
+    assert re.search(r"budget\.usd_per_day: unset .*last 7 days", text) and "(default)" in text  # replaced by AC-210.2
 
 
 def test_plan_with_a_file_names_it_and_shows_the_set_values_ac_167_2(world):  # AC-167.2

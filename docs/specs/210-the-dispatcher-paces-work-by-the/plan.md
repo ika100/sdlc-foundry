@@ -66,6 +66,7 @@ tasks:
     covers: [AC-210.2, AC-210.4, AC-210.10]
     parallel_safe: true
     depends_on: [t6]
+    done: true
   - id: t10
     title: The cycle applies the gate, the pace band and the filler queue
     files: [scripts/cplat/dispatch_cycle.py]
