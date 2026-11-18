@@ -11,7 +11,7 @@
   cplat dispatch sensor install | remove         record the plan's two usage windows from every interactive session (spec 210)
 
 Every verb takes `--repo DIR` (default `.`). The policy is `.platform/dispatch.yml` (see docs/dispatch.md). `land` is the hidden verb
-the dispatcher spawns for a fix unit with an open pull request.
+the dispatcher spawns for a fix unit with an open pull request, `task <unit>` the one it spawns for a filler task (spec 210).
 """
 from __future__ import annotations
 
@@ -230,6 +230,10 @@ def _land(repo: Path, unit: str) -> int:
     return du.land(repo, ds.slug_of(repo), unit)
 
 
+def _task(repo: Path, unit: str) -> int:
+    return du.run_task(repo, ds.slug_of(repo), unit)
+
+
 # ---------------- the command line ----------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -264,6 +268,9 @@ def build_parser() -> argparse.ArgumentParser:
     lnd = sub.add_parser("land", help=argparse.SUPPRESS)       # hidden: spawned by the dispatcher
     lnd.add_argument("unit")
     lnd.add_argument("--repo", default=".", metavar="DIR")
+    tsk = sub.add_parser("task", help=argparse.SUPPRESS)       # hidden: spawned by the dispatcher for a filler task
+    tsk.add_argument("unit")
+    tsk.add_argument("--repo", default=".", metavar="DIR")
     return p
 
 
@@ -306,6 +313,8 @@ def _run(ns: argparse.Namespace) -> int:
         return _prioritize(repo, ns.item)
     if v == "skip":
         return _skip(repo, ns.item, ns.reason)
+    if v == "task":
+        return _task(repo, ns.unit)
     return _land(repo, ns.unit)
 
 

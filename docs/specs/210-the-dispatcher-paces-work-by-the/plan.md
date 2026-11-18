@@ -58,6 +58,7 @@ tasks:
     covers: [AC-210.9]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t9
     title: plan and status show the plan or cost line, held reasons, hints and warnings
     files: [scripts/cplat/dispatch_view.py, tests/cplat/test_dispatch_view.py]

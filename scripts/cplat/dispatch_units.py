@@ -5,6 +5,7 @@
   observe(repo, slug, unit) -> Obs                         what the unit's process, result file and PR say (the design's table)
   advance(repo, slug, unit, policy) -> Step                observe, then act: land, finish, escalate, restart, stuck
   land(repo, slug, unit_id) -> int                         the hidden `cplat dispatch land <unit>` verb: wait for CI and merge
+  run_task(repo, slug, unit_id) -> int                     the hidden `cplat dispatch task <unit>` verb: run a filler task's command (spec 210)
   pause_flags / clear_flags / resume_paused                steering (AC-167.11)
   close_stale(repo, slug, number, evidence, why)           the premise check found the issue resolved on main (AC-167.4)
   cleanup(repo, slug, read_at)                             remove the worktrees of done units once a newer snapshot has seen them
@@ -13,14 +14,19 @@ Every step is written to the unit file (in the unit worktree's git dir, under a 
 GitHub already shows (a claim for the same branch) is not made twice, so a killed dispatcher that starts again repeats nothing
 (AC-167.9). The functions return the action lines `cplat dispatch start` prints. `book` of the daily budget runs before a unit is
 finished and before its worktree goes, so its last tokens are counted. `alive`, `spawn`, `spawn_land` and `gh` are the seams tests replace.
+
+The filler kinds `task` and `draft` (spec 210) have no claim and no branch of their own: each runs in a detached worktree at `origin/main`,
+is never landed, and ends `done` or `escalated` (a `draft` is done once its branch has an open pull request, which is left alone).
 """
 from __future__ import annotations
 
 import contextlib
 import json
 import os
+import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 from collections.abc import Callable
@@ -53,6 +59,9 @@ STALE_MARK = "<!-- cplat-dispatch-stale -->"
 ESCALATION_MARK = "<!-- cplat-dispatch-escalation -->"
 STASH_MESSAGE = "cplat dispatch: before restart"
 EXCERPT = 300
+FILLER = ("task", "draft")           # the unit kinds of the filler queue: no claim, no branch, never landed
+TASK_MINUTES = 240
+RETRO_KEY = re.compile(r"^retro-(\d+)-\d+$")
 
 
 # ---------------- results ----------------
@@ -100,7 +109,7 @@ def git(args: list[str], *, cwd: Path | str, check: bool = True) -> str:
 
 def alive(pid: int | None) -> bool:
     """True while the process runs (a finished child of this process is reaped, so it does not count). A reused pid that runs something
-    else is not ours: its command must name `headless` (or the executable of `$CPLAT_DISPATCH_HEADLESS`) or `dispatch land`."""
+    else is not ours: its command must name `headless` (or the executable of `$CPLAT_DISPATCH_HEADLESS`), `dispatch land` or `dispatch task`."""
     if not pid:
         return False
     try:
@@ -121,7 +130,7 @@ def alive(pid: int | None) -> bool:
     if out.returncode != 0 or not out.stdout.strip():
         return False
     exe = os.path.basename(os.environ.get("CPLAT_DISPATCH_HEADLESS") or "")
-    return "headless" in out.stdout or "dispatch land" in out.stdout or bool(exe and exe in out.stdout)
+    return "headless" in out.stdout or "dispatch land" in out.stdout or "dispatch task" in out.stdout or bool(exe and exe in out.stdout)
 
 
 def _detach(cmd: list[str], cwd: Path | str, env: dict[str, str], log: Path) -> int:
@@ -141,9 +150,16 @@ def headless_cmd(unit: dict, policy) -> list[str]:
             "--loop-guard", f"{guard['loop_calls']}/{guard['loop_minutes']}"]
     if unit["kind"] == "ship":
         cmd += ["--parallel", "3" if unit.get("mode") == "team" else "1", f"/component:ship {unit['spec']}"]
+    elif unit["kind"] == "draft":
+        cmd.append(str(unit["request"]))
     else:
         cmd.append(f"/component:fix {unit.get('task') or unit['item']}")
     return cmd
+
+
+def task_cmd(unit: dict, repo: Path | str) -> list[str]:
+    """`cplat dispatch task <unit> --repo <repo>`: the process of a filler task (no headless session)."""
+    return [sys.executable, str(CPLAT), "dispatch", "task", unit["unit"], "--repo", str(repo)]
 
 
 def _can_write(slug: str, repo: Path) -> Callable[[str], bool]:
@@ -179,7 +195,8 @@ def spawn(unit: dict, policy) -> int:   # tests replace this
     env = {**os.environ, "CPLAT_DISPATCH_UNIT": unit["unit"], "CPLAT_DISPATCH_RESULT": str(ds.result_path(wt))}
     if unit.get("run_id"):
         env["CPLAT_RUN_PARENT"] = unit["run_id"]       # readiness counts the unit's own runs by the parent chain
-    return _detach(headless_cmd(unit, policy), wt, env, Path(unit["log"]))
+    cmd = task_cmd(unit, unit.get("repo") or wt) if unit["kind"] == "task" else headless_cmd(unit, policy)
+    return _detach(cmd, wt, env, Path(unit["log"]))
 
 
 def spawn_land(repo: Path, unit: dict) -> int:   # tests replace this
@@ -217,6 +234,8 @@ def _issues_of(unit: dict) -> list[int]:
     """The issues the unit claims: a fix unit its issue, a ship unit the issues its spec tracks."""
     if unit.get("kind") == "fix":
         return [int(str(unit["item"]).lstrip("#"))]
+    if unit.get("kind") in FILLER:
+        return []
     return [int(n) for n in unit.get("tracks") or []]
 
 
@@ -285,6 +304,19 @@ def _worktree(repo: Path, slug: str, cand, branch: str) -> tuple[Path, bool]:
     return path, True
 
 
+def _detached_worktree(repo: Path, slug: str, cand) -> Path:
+    """A filler unit's worktree: detached at `origin/main` (an existing one is reused)."""
+    path = ds.worktree_path(slug, cand.key)
+    if path.is_dir() and _registered(repo, path):
+        return path
+    git(["worktree", "prune"], cwd=repo, check=False)
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    git(["worktree", "add", "--detach", str(path), "origin/main"], cwd=repo)
+    return path
+
+
 def _discard(repo: Path, path: Path, branch: str, created: bool) -> None:
     git(["worktree", "remove", "--force", str(path)], cwd=repo, check=False)
     if created:
@@ -319,20 +351,25 @@ def _claim(repo: Path, numbers: list[int], branch: str) -> list[int]:
     return fresh
 
 
-def start(repo: Path, slug: str, cand, mode: str, slot: int, policy) -> Start:
-    """Design steps 1 to 4 for a ready candidate (`dispatch_backlog.Candidate`). A refused claim returns `held == "claimed"`."""
+def start(repo: Path, slug: str, cand, mode: str, slot: int, policy, *, filler: bool = False) -> Start:
+    """Design steps 1 to 4 for a ready candidate (`dispatch_backlog.Candidate`). A refused claim returns `held == "claimed"`. A `task` or
+    `draft` candidate (the filler queue) takes no claim and no branch; `filler` marks the start line of a filler start of any kind."""
     repo = Path(repo)
     kind = cand.kind
-    branch = _branch_of(kind, cand.number, cand.spec_id)
-    mode = "single" if kind == "fix" else mode
-    numbers = [cand.number] if kind == "fix" else [int(n) for n in cand.tracks]
+    filler = filler or kind in FILLER
+    branch = None if kind in FILLER else _branch_of(kind, cand.number, cand.spec_id)
+    mode = "single" if kind == "fix" or kind in FILLER else mode
+    numbers = [] if kind in FILLER else [cand.number] if kind == "fix" else [int(n) for n in cand.tracks]
     try:
         fresh = _claim(repo, numbers, branch)
     except PlatformError as e:
         return Start(held="claimed", detail=str(e).splitlines()[0])
     lines: list[str] = []
     try:
-        path, created = _worktree(repo, slug, cand, branch)
+        if kind in FILLER:
+            path, created = _detached_worktree(repo, slug, cand), False
+        else:
+            path, created = _worktree(repo, slug, cand, branch)
         if kind == "ship" and cand.status == "draft" and _self_approve(path, cand.spec_id):
             lines.append(f"approved {cand.item} ({claim.DISPATCH})")
     except PlatformError as e:
@@ -349,6 +386,12 @@ def start(repo: Path, slug: str, cand, mode: str, slot: int, policy) -> Start:
             "slot": slot, "pid": None, "land_pid": None, "log": str(ds.log_path(slug, unit_id)), "starts": 1, "run_id": run_id,
             "status": "starting", "pr": None, "started_at": ds.stamp(), "ended_at": None, "reason": None, "tokens": None,
             "spec": cand.spec_id, "tracks": list(cand.tracks), "draft_pr": draft_pr}
+    if kind in FILLER:
+        unit.update(repo=str(repo), tracks=[])
+    if kind == "task":
+        unit["command"] = cand.text
+    elif kind == "draft":
+        unit.update(retro_issue=int(m.group(1)) if (m := RETRO_KEY.match(cand.key)) else None, request=cand.text)
     if kind == "fix" and (task := _fix_task(repo, slug, cand.number)):
         unit["task"] = task
     ds.write_unit(path, unit)
@@ -360,9 +403,13 @@ def start(repo: Path, slug: str, cand, mode: str, slot: int, policy) -> Start:
         return Start(unit=ds.read_unit(path), lines=[*lines, *step.lines])
     unit = update_unit(path, lambda u: u.update(pid=pid, status="running"))
     ds.events_add(slug, "started", unit_id, cand.item)
-    shown = headless_cmd(unit, policy)
-    shown[-1] = shown[-1].split("\n", 1)[0]       # the reporter's text never reaches the dispatcher's own output
-    lines.append(f"started {unit_id} ({kind}, {mode}, slot {slot}): {shlex.join(shown)}  log: {unit['log']}")
+    if kind in FILLER:
+        shown = str(cand.text).split("\n", 1)[0]
+    else:
+        parts = headless_cmd(unit, policy)
+        parts[-1] = parts[-1].split("\n", 1)[0]       # the reporter's text never reaches the dispatcher's own output
+        shown = shlex.join(parts)
+    lines.append(f"started {unit_id} ({kind}, {mode}, slot {slot}){' (filler)' if filler else ''}: {shown}  log: {unit['log']}")
     return Start(unit=unit, lines=lines)
 
 
@@ -421,6 +468,22 @@ def _classify(repo: Path, unit: dict) -> Obs:
     ended = res if res and res.get("ended_at") else None
     text = str((ended or {}).get("result") or "")
     outcome, stop = (ended or {}).get("outcome"), (ended or {}).get("stop_reason")
+    if unit["kind"] == "task":
+        if outcome == "done":
+            return Obs("done")
+        if outcome == "escalated":
+            return Obs("escalate", reason=f"the filler task ended: {text or 'no message'}", cause="code")
+        return Obs("restart")
+    if unit["kind"] == "draft":
+        if stop == "paused":
+            return Obs("paused")
+        branch = git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=wt, check=False)
+        pr = unit_pr(repo, branch) if branch.startswith("feature/") else None
+        if pr and pr["state"] == "OPEN":
+            return Obs("done", pr=pr["url"])
+        if ended:
+            return Obs("escalate", cause="decision", reason=f"the draft run ended without a pull request: {_one_line(text) or 'no message'}")
+        return Obs("restart")
     if unit["kind"] == "ship":
         st = _ship_state(wt) or {}
         if st.get("phase") == "done" or text.startswith("shipped"):
@@ -505,6 +568,29 @@ def land(repo: Path, slug: str, unit_id: str) -> int:
     return 0 if landed == "merged" else 1
 
 
+def run_task(repo: Path, slug: str, unit_id: str) -> int:
+    """`cplat dispatch task <unit>`: run the filler task's command (`sh -c`) in the unit's worktree, within `budget.per_unit.minutes`
+    (else 240 min), and write the result file the dispatcher reads. Exit 0 when the command did."""
+    wt = ds.worktree_path(slug, ds.unit_key(unit_id))
+    unit = ds.read_unit(wt)
+    if not unit or unit.get("unit") != unit_id or unit.get("kind") != "task":
+        raise PlatformError(f"no task unit {unit_id} in {wt}", "`cplat dispatch status` lists the units")
+    minutes = ((dispatch_policy.load(repo).values.get("budget") or {}).get("per_unit") or {}).get("minutes")
+    limit = minutes if isinstance(minutes, (int, float)) and not isinstance(minutes, bool) and minutes > 0 else TASK_MINUTES
+    proc = subprocess.Popen(["sh", "-c", str(unit["command"])], cwd=wt, start_new_session=True)
+    try:
+        code = proc.wait(timeout=limit * 60)
+        outcome, result = ("done" if code == 0 else "escalated"), f"exit {code}"
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(OSError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+        code, outcome, result = 1, "escalated", f"timed out after {limit:g} min"
+    ds.write_json(ds.result_path(wt), {"unit": unit_id, "ended_at": ds.stamp(), "outcome": outcome, "result": result,
+                                       "stop_reason": "finished" if outcome == "done" else "escalated", "tokens": 0, "cost_usd": 0.0})
+    return 0 if outcome == "done" else code or 1
+
+
 def _end(repo: Path, slug: str, unit: dict, status: str, *, reason: str | None = None, cause: str | None = None, run: str | None = None,
          event: str | None = None, pr: str | None = None) -> dict:
     """The common end of a unit: book its tokens, finish its run record, add the history entry, write the unit file, add the event."""
@@ -534,14 +620,27 @@ def finish_done(repo: Path, slug: str, unit: dict, pr: str | None = None) -> lis
     """A merged unit: release the claim, finish the run record, add the history entry, free the slot. The worktree stays until
     `cleanup` (a snapshot read before the merge would otherwise show the item as open again with no unit to say it is done)."""
     repo = Path(repo)
-    pr = pr or unit.get("pr") or (unit_pr(repo, unit["branch"]) or {}).get("url")
+    pr = pr or unit.get("pr") or (unit_pr(repo, unit["branch"]) or {}).get("url") if unit.get("branch") else pr
     numbers = _issues_of(unit)
     if numbers:
         claim.release(repo, numbers, f"done in {pr} (cplat dispatch)")
     done = _end(repo, slug, unit, "done", pr=pr)
+    _draft_ended(repo, slug, done)
     if unit.get("draft_pr") and pr:
         gh(["pr", "close", str(unit["draft_pr"]), "--comment", f"Superseded by {pr}: cplat dispatch shipped {unit['spec']} on {unit['branch']}."], cwd=repo)
     return [f"done {done['unit']}: {pr}"]
+
+
+def _draft_ended(repo: Path, slug: str, unit: dict) -> None:
+    """A draft unit ended (done or escalated): release the claim its spec run took on the retro issue and record the proposal as drafted
+    (nothing is labelled, nothing merged)."""
+    if unit.get("kind") != "draft":
+        return
+    if unit.get("retro_issue"):
+        claim.release(repo, [int(unit["retro_issue"])], f"retro draft {unit['unit']} ended (cplat dispatch)")
+    branch = git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=unit["worktree"], check=False)
+    record = {"unit": unit["unit"], "branch": branch if branch.startswith("feature/") else None, "pr": unit.get("pr")}
+    ds.update(slug, lambda st: st.setdefault("filler", {}).setdefault("drafted", {}).__setitem__(unit["key"], record))
 
 
 def _note(unit: dict, reason: str) -> str:
@@ -564,6 +663,7 @@ def escalate(repo: Path, slug: str, unit: dict, reason: str, cause: str | None, 
     if not open_issues or (status == "stuck" and unit["kind"] == "ship"):
         ds.hold(slug, unit["key"], "stuck" if status == "stuck" else "needs-decision", unit["unit"])
     ended = _end(repo, slug, unit, status, reason=reason, cause=cause, run=run, event=event, pr=pr)
+    _draft_ended(repo, slug, ended)
     if status == "stuck":
         need = dispatch_notify.stuck_need(slug, ended, cause or "environment")
         dispatch_notify.write_needs(slug, [need])
@@ -581,7 +681,7 @@ def restart(repo: Path, slug: str, unit: dict, policy, *, count: bool = True) ->
     """Start the unit's process again in the same worktree with the same command; a fix worktree with uncommitted changes is stashed
     first. `count` False (a resumed pause) does not count as a restart."""
     wt = unit["worktree"]
-    if unit["kind"] == "fix" and git(["status", "--porcelain"], cwd=wt, check=False):
+    if unit["kind"] in ("fix", "draft") and git(["status", "--porcelain"], cwd=wt, check=False):
         git(["stash", "push", "-u", "-m", STASH_MESSAGE], cwd=wt, check=False)
     ds.clear_stop(wt)
     starts = int(unit.get("starts") or 1) + (1 if count else 0)
@@ -617,7 +717,7 @@ def resume_paused(repo: Path, slug: str, unit: dict, policy) -> Step:
     whose session had ended with an open pull request lands, any other unit starts its process again."""
     repo = Path(repo)
     ds.clear_stop(unit["worktree"])
-    pr = unit_pr(repo, unit["branch"])
+    pr = unit_pr(repo, unit["branch"]) if unit.get("branch") else None
     if pr and pr["state"] == "MERGED" and pr.get("headRefOid") == git(["rev-parse", "HEAD"], cwd=unit["worktree"], check=False):
         return Step(finish_done(repo, slug, unit, pr["url"]))
     if unit["kind"] == "fix":
@@ -669,5 +769,6 @@ def cleanup(repo: Path, slug: str, read_at: str) -> list[str]:
     _book(slug)
     for u in gone:
         git(["worktree", "remove", "--force", str(u["worktree"])], cwd=repo, check=False)
-        git(["branch", "-D", u["branch"]], cwd=repo, check=False)
+        if u.get("branch"):
+            git(["branch", "-D", u["branch"]], cwd=repo, check=False)
     return []
