@@ -276,4 +276,4 @@ def test_the_helper_path_still_applies_to_a_file_without_tests_ac_205_4(built): 
     assert judge(helper.read_text(), new, "helpers.py") is None
     helper.write_text(new)
     good, why = spec.test_diff(root, "HEAD", ["tests/helpers.py"])["tests/helpers.py"]
-    assert not good and why.startswith("test helper (defines no test): ")
+    assert not good and why.startswith("test helper (defines no test): ")  # interface: the reason the command prints

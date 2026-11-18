@@ -122,7 +122,7 @@ def test_the_tests_do_not_freeze_without_a_passing_red_check_ac_205_6(tmp_path, 
     root = reviewed_world(tmp_path)
     before = subjects(root)
     rc, out, err = reviewed(capsys, root)                          # no record at all
-    assert rc != 0 and REFUSAL in err and "cplat component build tests" in err + out and "--red" in err + out
+    assert rc != 0 and REFUSAL in err and "cplat component build tests" in err + out and "--red" in err + out  # interface: the command the refusal names
     assert subjects(root) == before                                # no reviewed commit
     record(root, exit=1)                                           # the check failed
     assert reviewed(capsys, root)[0] != 0 and subjects(root) == before
@@ -174,7 +174,7 @@ def build_text():
 def test_phase_1_runs_the_red_check_and_records_wrong_failures_ac_205_6():  # AC-205.6
     text = build_text()
     assert points_to(BUILD_REL, "cplat component build")
-    assert re.search(r"cplat component build tests[^\n`]*--red", text)           # interface: the command that prints the check line
+    assert re.search(r"cplat component build tests[^\n`]*--red", text)
     assert "--wrong-failure" in text and "cplat quiet test-fast --red" in text     # interface: the flags the build runs
     assert "cplat component build reviewed" in text
 
@@ -189,4 +189,4 @@ def test_the_harness_fix_uses_the_red_check_and_the_tightening_record_ac_205_7()
 
 def test_the_tester_agents_run_their_own_red_check_ac_205_7():  # AC-205.7
     text = (ROOT / "plugins" / "svc" / "agents" / "tester.md").read_text()
-    assert "cplat quiet test-fast --red" in text                                 # interface: the tester's own check before it commits
+    assert "cplat quiet test-fast --red" in text

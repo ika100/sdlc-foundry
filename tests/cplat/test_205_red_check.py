@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 import quiet
+from waiting import with_prelude
 
 USAGE = ("usage: cplat quiet [--raw] <devbox-script> | cplat quiet [--raw] test-fast [--repeat N | --red] -- <test args>   "
          "(a key of shell.scripts in ./devbox.json; only test-fast takes arguments, after --)")
@@ -111,7 +112,7 @@ def world(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     fake = bindir / "devbox"
-    fake.write_text(FAKE_DEVBOX)
+    fake.write_text(with_prelude(FAKE_DEVBOX))
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     root = tmp_path / "myrepo"
     root.mkdir()
