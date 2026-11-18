@@ -10,6 +10,7 @@ tasks:
     covers: [AC-210.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Usage store, status line sensor and sensor install/remove verbs
     files: [scripts/cplat/usage_sensor.py, scripts/cplat/usage_readings.py, scripts/cplat/dispatch_sensor.py, scripts/cplat/dispatch.py]
