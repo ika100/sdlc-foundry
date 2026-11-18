@@ -31,6 +31,7 @@ tasks:
     covers: [AC-210.2, AC-210.3, AC-210.4]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t5
     title: Plan-mode pace (readings, estimate, calibration, limit hold, bands, filler window)
     files: [scripts/cplat/dispatch_pace.py]
