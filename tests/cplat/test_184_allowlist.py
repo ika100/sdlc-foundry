@@ -14,10 +14,12 @@ from units131_support import BRANCH, World
 LOGS = Path("/var/tmp/ci-logs/shop-api")
 GH = ["Bash(gh run view * --log-failed)", "Bash(gh run view * --log-failed -R *)", "Bash(gh run view * -R * --log-failed)"]
 LAND = ["/component:ship", "/system:ship"]
+# Spec 206 (AC-206.6) changed this list on purpose: three narrower gh api rules replace "Bash(gh api *merge*)".
 REFUSED_BEFORE = [
     "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push * --force*)", "Bash(git push * -f*)", "Bash(git push * +*)",
     "Bash(git push * main)", "Bash(git push * main:*main*)", "Bash(git push * main:refs*)", "Bash(git push * *:main)",
-    "Bash(git push * *:refs/heads/main)", "Bash(gh pr merge*)", "Bash(gh api *merge*)", "Bash(cplat pr wait *--merge*)",
+    "Bash(git push * *:refs/heads/main)", "Bash(gh pr merge*)",
+    "Bash(gh api */pulls/*/merge*)", "Bash(gh api */merges*)", "Bash(gh api *mutation*merge*)", "Bash(cplat pr wait *--merge*)",
     "Bash(git rm -f*)", "Bash(git rm --force*)", "Bash(git rm -rf*)", "Bash(git rm -fr*)", "Bash(git rm * -f*)",
     "Bash(git rm * --force*)", "Bash(git rm * -rf*)", "Bash(git rm * -fr*)"]
 
