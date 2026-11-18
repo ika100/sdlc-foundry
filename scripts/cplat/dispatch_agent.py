@@ -1,11 +1,12 @@
 """Spec 167: the two agent calls of the dispatcher (design.md "Premise check", "Mode check").
 
-  premise(repo, issue, main_sha) -> {verdict, evidence, why, tokens, cached}   holds | resolved, the evidence checked in code
-  mode(repo, spec) -> {mode, why, tokens, cached}                                single | team
+  premise(repo, issue, main_sha) -> {verdict, evidence, why, tokens, cost_usd, model, cached}   holds | resolved, evidence checked in code
+  mode(repo, spec) -> {mode, why, tokens, cost_usd, model, cached}               single | team
 
 Both are one short, read-only `claude -p --output-format json` call (`ask`); every other decision of the dispatcher is plain code.
 A failed call is `holds` (premise) or `single` (mode). `tokens` is what the call used (input + output + cache), None when the
-answer reported no usage (the caller books `CEILING` then), 0 for a cached answer; the caller books it with
+answer reported no usage (the caller books `CEILING` then), 0 for a cached answer; `cost_usd` is the answer's
+`total_cost_usd` (None when it reports none, 0.0 for a cached answer) and `model` the model asked; the caller books them with
 `dispatch_budget.book_agent`. The answers are cached in `state.json` under `checks[<key>]`: a premise by (`main_sha`, the issue's
 `updatedAt`), a mode by the sha of the plan (of the spec text when there is none). A failed call is not cached.
 """
@@ -34,14 +35,16 @@ BODY_LIMIT = 4000
 SPEC_LIMIT = 8000
 HINT_LIMIT = 15
 TEAM_PARALLEL = 3
+NO_COST = {"cost_usd": 0.0, "model": None}      # what a call without a model call (a cached answer, a plan) cost
 SHA = re.compile(r"[0-9a-fA-F]{7,40}")
 PR_URL = re.compile(r"/pull/(\d+)")
 
 
 # ---------------- the call ----------------
 
-def ask(prompt: str, cwd: Path | str, tools: list[str] | None = None) -> tuple[str, int | None]:
-    """One `claude -p` call: (the answer's `result` text, tokens used or None). PlatformError when it fails."""
+def ask(prompt: str, cwd: Path | str, tools: list[str] | None = None) -> tuple[str, int | None, float | None, str]:
+    """One `claude -p` call: (the answer's `result` text, tokens used or None, the answer's `total_cost_usd` or None, the model
+    asked). PlatformError when it fails."""
     model, _ = settings.coordinator_model(Path(cwd), prompt, None)
     exe = os.environ.get("CPLAT_CLAUDE") or "claude"
     cmd = [exe, "-p", prompt, "--output-format", "json", "--max-turns", MAX_TURNS, "--model", model,
@@ -59,7 +62,9 @@ def ask(prompt: str, cwd: Path | str, tools: list[str] | None = None) -> tuple[s
     tokens = None
     if isinstance(usage, dict):
         tokens = sum(v for k in TOKEN_FIELDS if isinstance(v := usage.get(k), int) and not isinstance(v, bool))
-    return doc["result"], tokens
+    cost = doc.get("total_cost_usd")
+    cost_usd = float(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None
+    return doc["result"], tokens, cost_usd, model
 
 
 def _answer(text: str) -> dict:
@@ -76,16 +81,17 @@ def _answer(text: str) -> dict:
     raise PlatformError("the answer holds no JSON object")
 
 
-def _call(prompt: str, repo: Path) -> tuple[dict | None, int | None]:
-    """(the answer as a dict or None when the call failed, tokens)."""
+def _call(prompt: str, repo: Path) -> tuple[dict | None, dict]:
+    """(the answer as a dict or None when the call failed, what the call cost: `tokens`, `cost_usd`, `model`)."""
     try:
-        text, tokens = ask(prompt, repo, TOOLS)
+        text, tokens, cost_usd, model = ask(prompt, repo, TOOLS)
     except PlatformError:
-        return None, None
+        return None, {"tokens": None, "cost_usd": None, "model": None}
+    paid = {"tokens": tokens, "cost_usd": cost_usd, "model": model}
     try:
-        return _answer(text), tokens
+        return _answer(text), paid
     except PlatformError:
-        return None, tokens
+        return None, paid
 
 
 # ---------------- the cache ----------------
@@ -164,10 +170,10 @@ def premise(repo: Path, issue: dict, main_sha: str) -> dict:
     slug, key = st.slug_of(repo), f"issue-{int(issue['number'])}"
     updated = issue.get("updatedAt")
     if hit := _cached(slug, key, "premise", main_sha=main_sha, issue_updated=updated):
-        return {"verdict": hit["verdict"], "evidence": hit.get("evidence"), "why": hit.get("why"), "tokens": 0, "cached": True}
-    answer, tokens = _call(_prompt_premise(issue, hints(repo, issue)), repo)
+        return {"verdict": hit["verdict"], "evidence": hit.get("evidence"), "why": hit.get("why"), "tokens": 0, **NO_COST, "cached": True}
+    answer, paid = _call(_prompt_premise(issue, hints(repo, issue)), repo)
     if answer is None:
-        return {"verdict": "holds", "evidence": None, "why": "the premise check failed", "tokens": tokens, "cached": False}
+        return {"verdict": "holds", "evidence": None, "why": "the premise check failed", **paid, "cached": False}
     verdict, why = str(answer.get("verdict") or "").lower(), feedback.redact(str(answer.get("why") or "")).strip()
     evidence = None
     if verdict == "resolved":
@@ -178,7 +184,7 @@ def premise(repo: Path, issue: dict, main_sha: str) -> dict:
         verdict = "holds"
     out = {"verdict": verdict, "evidence": evidence, "why": why}
     _store(slug, key, "premise", {**out, "main_sha": main_sha, "issue_updated": updated})
-    return {**out, "tokens": tokens, "cached": False}
+    return {**out, **paid, "cached": False}
 
 
 # ---------------- the mode check ----------------
@@ -247,19 +253,19 @@ def mode(repo: Path, spec: object) -> dict:
     repo = Path(repo)
     sp = _resolve(repo, spec)
     if sp is None:
-        return {"mode": "single", "why": "the spec cannot be read", "tokens": 0, "cached": False}
+        return {"mode": "single", "why": "the spec cannot be read", "tokens": 0, **NO_COST, "cached": False}
     if _plan_ok(sp):
         team = _batches(sp)
-        return {"mode": "team" if team else "single", "tokens": 0, "cached": False,
+        return {"mode": "team" if team else "single", "tokens": 0, **NO_COST, "cached": False,
                 "why": "the plan has parallel tasks" if team else "the plan has no parallel tasks"}
     slug, key = st.slug_of(repo), f"spec-{sp.number}"
     sha = hashlib.sha256(f"{json.dumps(sp.meta, sort_keys=True, default=str)}\n{sp.body}".encode()).hexdigest()[:16]
     if hit := _cached(slug, key, "mode", plan_sha=sha):
-        return {"mode": hit["mode"], "why": hit.get("why"), "tokens": 0, "cached": True}
-    answer, tokens = _call(_prompt_mode(sp), repo)
+        return {"mode": hit["mode"], "why": hit.get("why"), "tokens": 0, **NO_COST, "cached": True}
+    answer, paid = _call(_prompt_mode(sp), repo)
     if answer is None:
-        return {"mode": "single", "why": "the mode check failed", "tokens": tokens, "cached": False}
+        return {"mode": "single", "why": "the mode check failed", **paid, "cached": False}
     chosen = "team" if str(answer.get("mode") or "").lower() == "team" else "single"
     why = feedback.redact(str(answer.get("why") or "")).strip()
     _store(slug, key, "mode", {"mode": chosen, "why": why, "plan_sha": sha})
-    return {"mode": chosen, "why": why, "tokens": tokens, "cached": False}
+    return {"mode": chosen, "why": why, **paid, "cached": False}
