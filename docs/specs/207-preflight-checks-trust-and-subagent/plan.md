@@ -10,6 +10,7 @@ tasks:
     covers: [AC-207.1]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: Retry a gh login that reports not logged in (15 s, 30 s) before failing gh-auth
     files: [scripts/cplat/preflight.py, tests/cplat/conftest.py, tests/cplat/test_preflight_131.py]
