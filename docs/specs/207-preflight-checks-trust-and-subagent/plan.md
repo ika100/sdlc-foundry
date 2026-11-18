@@ -38,6 +38,7 @@ tasks:
     covers: [AC-207.4, AC-207.6]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: Add preflight_rules (effective permission layers and the coder command sample)
     files: [scripts/cplat/preflight_rules.py]
