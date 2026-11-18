@@ -28,7 +28,7 @@ from sharding import (  # noqa: F401  (spec 112: --shard / --shard-report)
 def silent_sessions_are_not_pauses(request, monkeypatch):
     """Spec 184: a fake `claude` that ends silent and fast reads as a usage-limit pause and the run sleeps 5+ minutes. Every
     test but spec 184's own counts a silent session as one that ran long, so no test waits for a pause by accident."""
-    if request.node.path.name.startswith("test_184_"):
+    if request.node.path.name.startswith("test_184_") or "silent_short_session" in request.node.name:     # spec 210 reads the detect result itself
         return
     import usagelimit
     monkeypatch.setattr(usagelimit, "QUICK_SECONDS", 0)

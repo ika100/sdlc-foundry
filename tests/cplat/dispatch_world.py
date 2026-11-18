@@ -479,7 +479,7 @@ class World:
 
     def _settle(self, before, res):
         """The fake headless records its call when its interpreter is up: wait for the processes this command started."""
-        expected = before + len([ln for ln in res.lines if ln.startswith(("started ", "restarted "))])
+        expected = before + len([ln for ln in res.lines if ln.startswith(("started ", "restarted ")) and "(task," not in ln])   # a filler task runs no headless
         wait_for(lambda: len(self.calls()) >= expected, budget(15), what=f"{expected} headless calls")
         for call in self.calls()[before:expected]:      # the next thing a test reads is the result file the fake writes at start
             if call["result_file"] != "None":
