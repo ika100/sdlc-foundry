@@ -9,7 +9,9 @@ check and every state change of a spec goes through this module so it is determi
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
+import functools
 import hashlib
 import itertools
 import json
@@ -76,13 +78,19 @@ class BrokenSpec(PlatformError):
         return f"{self.rel}, line {self.line}: {self.problem} (fix: {self.hint})"
 
 
+@functools.lru_cache(maxsize=4096)
+def _front_yaml(text: str) -> object:
+    """Front matter parsed once per content: a full check scans every spec and plan many times, and parsing was most of it."""
+    return yaml.safe_load(text)
+
+
 def load(path: Path, root: Path | None = None) -> tuple[dict, str]:
     rel = str(path.relative_to(root)) if root else str(path)
     m = FRONT.match(path.read_text())
     if not m:
         raise BrokenSpec(path.parent, rel, 1, "missing front matter", FENCE_HINT)
     try:
-        meta = yaml.safe_load(m.group(1))
+        meta = copy.deepcopy(_front_yaml(m.group(1)))
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None) or getattr(e, "context_mark", None)
         line = mark.line + 2 if mark else 1
