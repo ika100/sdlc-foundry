@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import core
+import denyrules
 from denyrules import refused_rules
 
 TIMEOUT = 30
@@ -274,10 +275,14 @@ def _push_access(repo: Path, slug: str) -> Failure | None:
 
 
 def check(repo: Path, command: str, specs: list[str],
-          targets: list[tuple[Path, str]] | None = None) -> Failure | None:
-    """The five checks in order; the first failure wins. `targets` are (clone, slug) pairs besides the repo."""
+          targets: list[tuple[Path, str]] | None = None, deny: list[str] | None = None) -> Failure | None:
+    """The checks in order, the refused rules first (spec 206); the first failure wins. `targets` are (clone, slug) pairs besides the repo."""
     repo = Path(repo)
     branches = branches_of(command, specs)
+    default = default_branch(repo)
+    sample = ["feature/x" if b == "feature/*" else b for b in branches]
+    if (detail := denyrules.problem(refused_rules(default) if deny is None else deny, default, sample)):
+        return Failure("deny-rules", detail)
     clones = [(repo, _origin(repo)[1]), *(targets or [])]
     for path, _ in clones:
         if (f := _no_allowlist(path)):

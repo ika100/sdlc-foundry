@@ -17,6 +17,7 @@ tasks:
     covers: [AC-206.1, AC-206.2, AC-206.4, AC-206.5]
     parallel_safe: false
     depends_on: [t1]
+    done: true
   - id: t3
     title: Document the deny-rules preflight and add the changelog fragment
     files: [docs/unattended-delivery.md, docs/changelog.d/206-deny-rules-checked-before-a-run.fixed.md]
