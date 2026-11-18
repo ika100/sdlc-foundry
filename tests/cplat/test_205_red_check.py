@@ -123,6 +123,9 @@ def world(tmp_path, monkeypatch):
     (root / "pkg" / "__init__.py").write_text(PKG)
     d = tmp_path / "fake"
     d.mkdir()
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false",
+                    "commit", "-q", "-m", "init"], cwd=root, check=True)
     monkeypatch.chdir(root)
     monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
