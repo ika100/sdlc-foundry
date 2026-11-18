@@ -24,6 +24,7 @@ tasks:
     covers: [AC-210.3, AC-210.8]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t4
     title: USD ledger per unit and agent call, month sums, booked-token tape, USD history hint
     files: [scripts/cplat/dispatch_budget.py, scripts/cplat/dispatch_agent.py]
