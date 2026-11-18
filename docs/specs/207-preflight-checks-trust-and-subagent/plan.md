@@ -24,6 +24,7 @@ tasks:
     covers: [AC-207.8]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Add preflight_agents (agents per command, winning definition, Bash grant, model exclusion)
     files: [scripts/cplat/preflight_agents.py]
