@@ -116,7 +116,7 @@ def limit() -> dict | None:
 def record_limit(until: float | None, reset_known: bool, message: str, at: float | None = None) -> None:
     try:
         now = time.time() if at is None else at
-        end = until if reset_known and until is not None else now + UNKNOWN_RESET_SECONDS
+        end = until if until is not None else now + UNKNOWN_RESET_SECONDS
         with us.lock():
             cur = limit()
             if cur is not None and cur["until"] >= end:
