@@ -208,6 +208,23 @@ def short_guard_poll(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_claude_home(monkeypatch, tmp_path_factory):
+    """Spec 207: the preflight reads Claude Code's config (trust, plugins) and makes a model check call; tests never touch the
+    developer's `~/.claude.json` or plugins, or call a model. The config is an empty per-test folder and the call passes with
+    zero usage. Spec 207's own tests install their seams, or call the saved originals `REAL_CONFIG_FILE`, `REAL_PLUGINS_DIR`
+    and `preflight_probe.REAL_MODEL_CALL`."""
+    import preflight_probe
+    import preflight_trust
+    if not hasattr(preflight_trust, "REAL_CONFIG_FILE"):
+        preflight_trust.REAL_CONFIG_FILE, preflight_trust.REAL_PLUGINS_DIR = preflight_trust.config_file, preflight_trust.plugins_dir
+    home = tmp_path_factory.mktemp("claude-home")
+    monkeypatch.setattr(preflight_trust, "config_file", lambda: home / ".claude.json")
+    monkeypatch.setattr(preflight_trust, "plugins_dir", lambda: home / "plugins")
+    zero = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "cost_usd": 0.0}
+    monkeypatch.setattr(preflight_probe, "model_call", lambda model: preflight_probe.CallResult(ok=True, error="", offline=False, usage=dict(zero)))
+
+
+@pytest.fixture(autouse=True)
 def no_real_preflight_waits(monkeypatch):
     """The preflight tries a gh login that reports "not logged in" three times, 15 s and 30 s apart
     (`preflight.GH_LOGIN_WAITS`); no test sleeps for it. Spec 207's own tests record the waits themselves."""

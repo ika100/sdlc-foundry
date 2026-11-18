@@ -28,7 +28,8 @@ or time cap applies unless `--max-runs`/`--max-minutes` is given. The legacy loo
 Run allowlist (spec 131): for a ship, build or system ship the git, `gh pr create` and land commands of the run's feature
 branch are printed and passed to every session as `--allowedTools` (refused rules such as force pushes, pushes to the
 default branch and merges as `--disallowedTools`) and in `CPLAT_RUN_ALLOWLIST`; no settings file is written. Before any
-session a preflight checks the refused rules against the run's commands (spec 206), the settings layers, git identity, gh login and push access: `preflight failed: <category>: <detail>`,
+session a preflight checks the refused rules against the run's commands (spec 206), the settings layers, git identity, gh login and push access, then (spec 207) folder trust, the subagents' tools, the agent worktree
+and the models (one check call each): `preflight failed: <category>: <detail>`,
 exit 1, nothing started. For a ship or build, a command the committed plan.md/design.md names as
 `NAME=value devbox run <script>` is allowed verbatim (the others are listed as `not allowed: <command>`), and the ship
 reads the CI logs cplat saved (spec 184).
@@ -511,7 +512,9 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
         if allow is not None:
             print(allowlist_block(allow, deny or [], not_allowed), flush=True)
             targets = plan_targets(repo, ids) if command == "/system:ship" else None
-            failure = preflight.check(repo, command, ids, targets, deny=deny)
+            run_ctx = preflight.RunContext(allow=allow, deny=deny or [], plugin_dirs=dirs, model=model, run_id=rid,
+                                           add_dirs=system_clones(repo, ids) if command == "/system:ship" else [])
+            failure = preflight.check(repo, command, ids, targets, deny=deny, run=run_ctx)
             if failure:
                 print(failure.line(), flush=True)
                 state.update(result=failure.reason(), code=EXIT_STOPPED)
