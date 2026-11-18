@@ -116,3 +116,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [116](116-upgrade-tests-split-a-fast-release-gate-from-nightly-runs.md) | A release waits for the upgrade render check and the platform update e2e from the previous release; the oldest-release cluster run and the Postgres major drill run nightly and on the changes that touch them |
 | [117](117-uv-script-runner.md) | Inline scripts in cplat and recipes run through uv-script.sh, keyed by their dependencies, not their path |
 | [118](118-shared-input-rules-live-in-the-plan-contract.md) | Shared input rules and the error contract are YAML data in the plan's contract; each repo keeps a copy it checks in CI, and the gitops-app pin PR refuses a stale copy |
+| [120](120-dispatcher-budget-units.md) | The dispatcher budgets in plan percentages (status line sensor) or USD (price table), never in raw tokens |
