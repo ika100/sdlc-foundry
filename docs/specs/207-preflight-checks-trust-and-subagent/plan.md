@@ -31,6 +31,7 @@ tasks:
     covers: [AC-207.3, AC-207.5]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: Add preflight_probe (agent worktree probe, cached model check call, preflight log section)
     files: [scripts/cplat/preflight_probe.py]
