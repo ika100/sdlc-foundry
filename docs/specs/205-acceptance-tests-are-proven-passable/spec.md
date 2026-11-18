@@ -1,7 +1,7 @@
 ---
 spec_id: 205-acceptance-tests-are-proven-passable
 title: Acceptance tests are proven passable before they freeze
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -63,3 +63,4 @@ None.
 
 - 2026-11-17 created
 - 2026-11-17 approved
+- 2026-11-18 building
