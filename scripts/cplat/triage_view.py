@@ -7,9 +7,12 @@ every run. `actions` builds the labels and the `Triage:` comment of a row, share
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import textwrap
 from pathlib import Path
 
+import priority as prio
 import triage
 import triage_batch
 from core import PlatformError
@@ -18,6 +21,8 @@ CLASSES = ("bug", "small-change", "feature", "question", "duplicate", "wontfix",
 PRIORITY_CLASSES = ("bug", "small-change", "feature")
 COMMENT_CLASSES = ("question", "duplicate", "wontfix", "needs-info")
 CHECK_CLASSES = ("bug", "small-change", "feature", "needs-info", "question", "wontfix")
+CHANGED_BY_YOU = "changed by you"
+SET_ON_ISSUE = "set on the issue"
 WIDTH = 80
 PAGE = 4
 CHOICES = ["OK, do it", "Change one", "Cancel"]
@@ -79,6 +84,21 @@ def _text(value, limit: int | None = None) -> bool:
     return isinstance(value, str) and bool(value.strip()) and (limit is None or len(value) <= limit)
 
 
+def _priority_problems(row: dict) -> list[str]:
+    """Check the priority and the reason of a priority row; a missing P1 reason becomes the fallback."""
+    level = row.get("priority")
+    if level not in prio.LEVELS:
+        return ["priority must be P0, P1 or P2"]
+    reason = row.get("priority_reason")
+    if not _text(reason):
+        if level != "P1":
+            return ["priority_reason is missing"]
+        row["priority_reason"] = prio.FALLBACK_REASON
+    elif len(reason) <= prio.MAX_REASON and reason not in (CHANGED_BY_YOU, SET_ON_ISSUE) and not prio.proposal_reason_ok(level, reason):
+        return [f'priority_reason must be "{level}: <phrase>" with a phrase of {level}: ' + ", ".join(prio.LEVELS[level]["phrases"])]
+    return []
+
+
 def _row(src: dict, issue: dict, for_act: bool, root: Path) -> tuple[dict, list[str]]:
     row, bad = dict(src), []
     engine = issue.get("engine")
@@ -99,9 +119,11 @@ def _row(src: dict, issue: dict, for_act: bool, root: Path) -> tuple[dict, list[
     summary = row.get("summary")
     if not (isinstance(summary, str) and 1 <= len(summary) <= 80 and "\n" not in summary):
         bad.append("summary must be 1-80 characters on one line")
-    if cls in PRIORITY_CLASSES:
-        if row.get("priority") not in ("P0", "P1", "P2"):
-            bad.append("priority must be P0, P1 or P2")
+    labels = issue.get("priority_labels") or []
+    if cls in PRIORITY_CLASSES and labels and not row.get("priority_decided"):
+        row["priority"], row["priority_reason"] = prio.most_urgent(labels), SET_ON_ISSUE   # the issue's own label wins (AC-196.3)
+    elif cls in PRIORITY_CLASSES:
+        bad += _priority_problems(row)
     elif cls in CLASSES and row.get("priority") is not None:
         bad.append(f"a {cls} row has no priority")
     if len(str(row.get("priority_reason") or "")) > 60:
@@ -125,6 +147,11 @@ def _row(src: dict, issue: dict, for_act: bool, root: Path) -> tuple[dict, list[
 
 # ---------------- groups ----------------
 
+def _decide(issue: dict, row: dict) -> bool:
+    """Several priority labels on the issue and the user has not chosen yet."""
+    return len(issue["priority_labels"]) > 1 and not row.get("priority_decided")
+
+
 def _entries(batch: dict, rows: list[dict]) -> list[dict]:
     """Every issue of the batch, in batch order, with its row (none when handled) and its group."""
     by_number = {r["number"]: r for r in rows}
@@ -133,7 +160,7 @@ def _entries(batch: dict, rows: list[dict]) -> list[dict]:
         row = None if issue["handled"] else by_number.get(issue["number"])
         if issue["handled"]:
             group = "handled"
-        elif row and (row.get("question") or row["mark"] == "check" or len(issue["priority_labels"]) > 1):
+        elif row and (row.get("question") or row["mark"] == "check" or _decide(issue, row)):
             group = "decide"
         else:
             group = "clear"
@@ -262,7 +289,12 @@ def _plan_text(e: dict) -> tuple[str, str] | None:
             return "duplicate", f"duplicate of #{h['duplicate_of']}: label duplicate"
         return None
     cls = row["class"]
-    head = f"{cls}, {row['priority']}" if cls in PRIORITY_CLASSES else cls
+    head = cls
+    if cls in PRIORITY_CLASSES:
+        reason = row["priority_reason"]
+        if _decide(issue, row):
+            reason += "; " + ", ".join(issue["priority_labels"]) + ": decide"
+        head = f"{cls}, {row['priority']} ({reason})"
     if cls == "feature":
         phrase = f"track the issue in spec {_number(row['spec'])}" if row.get("spec") and not row.get("new_spec") \
             else "write a new spec, track the issue in it"
@@ -273,20 +305,28 @@ def _plan_text(e: dict) -> tuple[str, str] | None:
     return cls, f"{head}: {phrase}"
 
 
+def _plan_row(e: dict, step: tuple[str, str]) -> dict:
+    row = e["row"] if e["group"] != "handled" else None
+    has = bool(row) and step[0] in PRIORITY_CLASSES
+    return {"number": e["issue"]["number"], "class": step[0], "text": step[1], "group": e["group"],
+            "priority": row["priority"] if has else None, "priority_reason": row["priority_reason"] if has else None,
+            "decide": bool(has and _decide(e["issue"], row))}
+
+
 def plan(batch: dict, rows: list[dict]) -> list[dict]:
     lines = []
     entries = _entries(batch, rows)
     for e in [e for key, _ in GROUPS for e in entries if e["group"] == key]:
         step = _plan_text(e)
         if step:
-            lines.append({"number": e["issue"]["number"], "class": step[0], "text": step[1], "group": e["group"]})
+            lines.append(_plan_row(e, step))
     return lines
 
 
 def confirm(batch: dict, rows: list[dict]) -> str:
     lines = plan(batch, rows)
     head = f"The plan ({len(lines)} action{'' if len(lines) == 1 else 's'}):"
-    return "\n".join([head, *[_wrap(f"#{l['number']}  {l['text']}", "  ", " " * 8) for l in lines], "Choose: " + " / ".join(CHOICES)])
+    return "\n".join([head, *[f"  #{l['number']}  {l['text']}" for l in lines], "Choose: " + " / ".join(CHOICES)])
 
 
 def show(batch: dict, rows: list[dict], number: int) -> str:
@@ -300,14 +340,47 @@ def show(batch: dict, rows: list[dict], number: int) -> str:
                       "comment:\n" + a["comment"] if a["comment"] else "comment: none"])
 
 
-def run(slug: str, proposals: str, *, show_number: int | None = None, as_json: bool = False, what: str) -> str:
-    """The text `overview` or `confirm` prints (JSON when asked)."""
+def set_priority(path: str | Path, batch: dict, pairs: list[str]) -> None:
+    """Write the user's priorities (`N=P`) into the proposals file: all pairs are checked first, the file is replaced atomically."""
+    parsed = []
+    for pair in pairs:
+        n, _, level = pair.partition("=")
+        if not n.strip().isdigit() or level.upper() not in prio.LEVELS:
+            raise PlatformError("--set takes N=P0|P1|P2")
+        parsed.append((int(n), level.upper()))
+    effective = {r["number"]: r for r in load_proposals(path, batch)}
+    known = {i["number"] for i in batch["issues"]}
+    for n, _ in parsed:
+        if n not in known:
+            raise PlatformError(f"#{n} is not an issue of the batch")
+        cls = effective[n]["class"] if n in effective else "handled issue"
+        if cls not in PRIORITY_CLASSES:
+            raise PlatformError(f"#{n} is a {cls}: it gets no priority")
+    target = Path(path)
+    raw = json.loads(target.read_text())
+    for n, level in parsed:
+        now = effective[n]
+        for r in raw["rows"]:
+            if r.get("number") == n:
+                r["priority_reason"] = now["priority_reason"] if level == now["priority"] else CHANGED_BY_YOU
+                r["priority"], r["priority_decided"] = level, True
+    fd, tmp = tempfile.mkstemp(dir=target.parent, suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        json.dump(raw, f, indent=2)
+    os.replace(tmp, target)
+
+
+def run(slug: str, proposals: str, *, show_number: int | None = None, as_json: bool = False, what: str,
+        sets: list[str] | None = None) -> str:
+    """The text `overview` or `confirm` prints (JSON when asked); `sets` are `confirm --set N=P` pairs written first."""
     batch = triage_batch.load(slug)
+    if sets:
+        set_priority(proposals, batch, sets)
     rows = load_proposals(proposals, batch)
     if what == "overview":
         return json.dumps(overview_json(batch, rows), indent=2) if as_json else overview(batch, rows)
     if show_number is not None:
         return show(batch, rows, show_number)
     if as_json:
-        return json.dumps({"lines": [{k: l[k] for k in ("number", "class", "text")} for l in plan(batch, rows)], "choices": CHOICES}, indent=2)
+        return json.dumps({"lines": [{k: l[k] for k in ("number", "class", "text", "priority", "priority_reason", "decide")} for l in plan(batch, rows)], "choices": CHOICES}, indent=2)
     return confirm(batch, rows)

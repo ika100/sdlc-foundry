@@ -8,7 +8,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-name="${LOCAL_CLUSTER:-$(uv run --quiet scripts/render.py --name)-local}"
+name="${LOCAL_CLUSTER:-$(bash scripts/uv-script.sh --quiet scripts/render.py --name)-local}"
 token="${GH_TOKEN:-}"
 [ -n "$token" ] || token=$(gh auth token)
 repo_token="${REPO_TOKEN:-$token}"
@@ -21,7 +21,7 @@ GH_TOKEN="$token" REPO_TOKEN="$repo_token" PULL_TOKEN="$pull_token" \
   WITH_SYSTEM=0 WITH_ESO=0 WITH_KYVERNO=0 WITH_LGTM=0 WITH_CNPG=0 WITH_SEAWEEDFS=0 LOCAL_CLUSTER="$name" \
   bash scripts/local-cluster.sh up
 
-systems=$(uv run --quiet scripts/render.py --systems)
+systems=$(bash scripts/uv-script.sh --quiet scripts/render.py --systems)
 while read -r system _; do
   [ -n "$system" ] || continue
   for env in dev staging prod; do
@@ -36,7 +36,7 @@ done <<< "$systems"
 KUBE_CONTEXT="$ctx" REPO_TOKEN="$repo_token" bash scripts/bootstrap.sh
 
 port=$(docker port "k3d-${name}-serverlb" 80/tcp 2>/dev/null | head -1 | sed 's/.*://' || true)
-urls=$(uv run --quiet scripts/check.py --urls || true)
+urls=$(bash scripts/uv-script.sh --quiet scripts/check.py --urls || true)
 while read -r system host; do
   [ -n "$system" ] || continue
   echo "Exposed: http://${host}:${port}/   (${system}, once the workloads are running)"

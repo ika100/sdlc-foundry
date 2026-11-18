@@ -1,5 +1,5 @@
 # Copier template: service-java
-# Spring Boot 3.x service on JDK 21: Maven, Spotless (google-java-format) + Checkstyle, JaCoCo, Actuator +
+# Spring Boot 4.x service on JDK 21: Maven, Spotless (google-java-format) + Checkstyle, JaCoCo, Actuator +
 # Micrometer Prometheus + OpenTelemetry Java agent, distroless java21 image (ADR-009), canonical devbox
 # recipes, Docker, agentic setup.
 #
@@ -87,7 +87,7 @@ owner_team:
 
 java_version:
   type: str
-  help: "JDK major version (LTS; pinned in pom.xml, devbox.json and the Dockerfile; bumped via /shared:update-service)."
+  help: "JDK major version (LTS; pinned in pom.xml, devbox.json and the Dockerfile; bumped via /shared:update-service). Spring Boot 4.x runs on it; the runtime image is gcr.io/distroless/java<jdk>-debian13:nonroot."
   default: "21"
 
 port:

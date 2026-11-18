@@ -17,9 +17,11 @@ Usage:
   plan.py start <slug>             draft -> in_progress
   plan.py done <slug> <repo-id>    mark a repo done; all done -> completed
   plan.py abandon <slug>           -> abandoned
+  plan.py contract <plan-file> <repo-id>   the repo's slice of the shared rules and the error contract, as JSON (spec 110)
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -191,19 +193,210 @@ def section(text: str, heading: str) -> str | None:
     return m.group(1) if m else None
 
 
+def contract_text(meta: dict, body: str, spec_dir: Path) -> str | None:
+    """The `## Contract` section: the spec's design.md wins over the plan body (spec 110). `spec_dir` holds the spec folders."""
+    design = spec_dir / str(meta.get("spec")) / "design.md"
+    return (section(design.read_text(), "Contract") if design.is_file() else None) or section(body, "Contract")
+
+
+# ---------------- spec 110: the shared input rules and the error contract ----------------
+
+KINDS = ("allowed", "max_length", "max_value", "min_length", "min_value", "required")
+ENDPOINT = re.compile(r"(POST|PUT|PATCH) /\S*")
+FENCE = re.compile(r"^```ya?ml[ \t]*\n(.*?)^```[ \t]*$", re.M | re.S)
+NO_RULES_LINE = re.compile(r"^[ \t]*No shared rules:[ \t]*(.*)$", re.M)
+NO_RULES_SECTION = ("the contract has no `### Rules` section: add `### Rules` under `## Contract` with a yaml block `rules:` of the "
+                    "shared input rules, or the line `No shared rules: <reason>` (spec 110)")
+NEITHER = "### Rules has neither a yaml block with `rules:` nor the line `No shared rules: <reason>` (spec 110)"
+NO_ERRORS_BLOCK = ("### Errors has no yaml block with `errors:`: state the status code, the body fields (field, rule, message) and "
+                   "`unlisted.message` (spec 110)")
+
+
+def subsection(contract: str, name: str) -> str | None:
+    """The text of `### <name>` up to the next `##`/`###` heading, or None when the heading is missing."""
+    m = re.search(rf"^### +{re.escape(name)}\b[^\n]*\n?(.*?)(?=^##+ |\Z)", contract, re.M | re.S)
+    return m.group(1) if m else None
+
+
+def yaml_block(text: str, key: str) -> dict | None:
+    """The first fenced yaml block of `text` whose mapping has `key` (the whole mapping), or None.
+    A block that does not parse but names `key` raises the yaml error when no other block has it."""
+    failed: yaml.YAMLError | None = None
+    for m in FENCE.finditer(text):
+        try:
+            doc = yaml.safe_load(m.group(1))
+        except yaml.YAMLError as e:
+            if re.search(rf"^\s*{re.escape(key)}\s*:", m.group(1), re.M):
+                failed = failed or e
+            continue
+        if isinstance(doc, dict) and key in doc:
+            return doc
+    if failed is not None:
+        raise failed
+    return None
+
+
+def _one_line(e: Exception) -> str:
+    return " ".join(str(e).split())
+
+
+def _number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _whole(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _value_ok(kind: str, v) -> bool:
+    if kind == "required":
+        return v is True
+    if kind in {"min_length", "max_length"}:
+        return _whole(v) and v >= (1 if kind == "max_length" else 0)
+    if kind in {"min_value", "max_value"}:
+        return _number(v)
+    if not isinstance(v, list) or not v or not all(isinstance(x, str) or _number(x) for x in v):
+        return False
+    return len({(type(x).__name__ if isinstance(x, str) else "n", x) for x in v}) == len(v)
+
+
+def _code(v) -> bool:
+    return _whole(v) and 400 <= v <= 599
+
+
+def parse_rules(contract: str, repo_ids) -> tuple[list[dict] | None, str | None, list[str]]:
+    """(rules, no_rules_reason, errors) of `### Rules`; rules is None unless the section holds a valid-or-not `rules:` block."""
+    text = subsection(contract, "Rules")
+    if text is None:
+        return None, None, [NO_RULES_SECTION]
+    try:
+        doc = yaml_block(text, "rules")
+    except yaml.YAMLError as e:
+        return None, None, [f"{NEITHER}: {_one_line(e)}"]
+    if doc is None:
+        hit = NO_RULES_LINE.search(text)
+        reason = hit.group(1).strip() if hit else ""
+        return (None, reason, []) if reason else (None, None, [NEITHER])
+    rules = doc["rules"]
+    if not isinstance(rules, list) or not rules or not all(isinstance(r, dict) for r in rules):
+        return None, None, [NEITHER]
+    errs: list[str] = []
+    seen: set[str] = set()
+    ids = set(repo_ids)
+    for n, r in enumerate(rules, 1):
+        rid = r.get("id")
+        if not isinstance(rid, str) or not rid:
+            errs.append(f"rule #{n}: missing id")
+            rid = f"#{n}"
+        elif rid in seen:
+            errs.append(f"rule {rid}: duplicate id")
+        seen.add(rid)
+        for k in ("endpoint", "field", "kind", "provider", "consumers"):
+            if not r.get(k):
+                errs.append(f"rule {rid}: missing {k}")
+        kind = r.get("kind")
+        if kind and kind not in KINDS:
+            errs.append(f"rule {rid}: unknown kind '{kind}' (allowed: {', '.join(KINDS)})")
+        elif kind and not _value_ok(kind, r.get("value")):
+            errs.append(f"rule {rid}: no concrete value")
+        elif kind in {"min_value", "max_value"} and isinstance(r["value"], float) and not r["value"].is_integer() \
+                and "step" not in r:
+            errs.append(f"rule {rid}: a decimal value needs `step`")
+        if "step" in r and (kind not in {"min_value", "max_value"} or not _number(r["step"]) or r["step"] <= 0):
+            errs.append(f"rule {rid}: step must be a positive number, for min_value and max_value only")
+        if "status" in r and not _code(r["status"]):
+            errs.append(f"rule {rid}: status must be a code 400-599")
+        ep = r.get("endpoint")
+        if ep and not (isinstance(ep, str) and ENDPOINT.fullmatch(ep)):
+            errs.append(f"rule {rid}: endpoint must be 'POST|PUT|PATCH /path', got '{ep}'")
+        prov, cons = r.get("provider"), r.get("consumers")
+        if prov and prov not in ids:
+            errs.append(f"rule {rid}: provider '{prov}' is not a repo of this plan")
+        if cons:
+            for c in cons if isinstance(cons, list) else [cons]:
+                if c not in ids:
+                    errs.append(f"rule {rid}: consumer '{c}' is not a repo of this plan")
+                elif c == prov:
+                    errs.append(f"rule {rid}: the provider '{prov}' is also a consumer")
+    return rules, None, errs
+
+
+def parse_errors(contract: str) -> tuple[dict | None, list[str]]:
+    """(the `errors:` mapping as written, problems) of `### Errors`."""
+    text = subsection(contract, "Errors")
+    try:
+        doc = yaml_block(text, "errors") if text is not None else None
+    except yaml.YAMLError as e:
+        return None, [f"{NO_ERRORS_BLOCK}: {_one_line(e)}"]
+    if doc is None:
+        return None, [NO_ERRORS_BLOCK]
+    err = doc["errors"] if isinstance(doc["errors"], dict) else {}
+    errs: list[str] = []
+    if "status" in err and not _code(err["status"]):
+        errs.append("### Errors: status must be a code 400-599")
+    body = err.get("body") if isinstance(err.get("body"), dict) else {}
+    for k in ("field", "rule", "message"):
+        if not isinstance(body.get(k), str) or not body[k]:
+            errs.append(f"### Errors: `body.{k}` is missing")
+    if "list" in body and (not isinstance(body["list"], str) or not body["list"]):
+        errs.append("### Errors: `body.list` must be a non-empty string")
+    unlisted = err.get("unlisted") if isinstance(err.get("unlisted"), dict) else {}
+    if not isinstance(unlisted.get("message"), str) or not unlisted["message"]:
+        errs.append("### Errors: `unlisted.message` is missing")
+    return err, errs
+
+
+def resolved(rules: list[dict], errors_block: dict | None) -> list[dict]:
+    """Copies of the rules with `status` filled in (the rule's own, else errors.status) and `step` for value kinds."""
+    out = []
+    for r in rules:
+        r = dict(r)
+        if "status" not in r and errors_block and "status" in errors_block:
+            r["status"] = errors_block["status"]
+        if r.get("kind") in {"min_value", "max_value"}:
+            r.setdefault("step", 1)
+        out.append(r)
+    return out
+
+
+def repo_slice(rules: list[dict], errors_block: dict | None, repo_id: str) -> tuple[list[dict], dict | None]:
+    """The resolved rules where `repo_id` is provider or consumer (with `role`), sorted by id, and the errors block (None if none)."""
+    mine = []
+    for r in resolved(rules, errors_block):
+        if r["provider"] == repo_id:
+            mine.append({**r, "role": "provider"})
+        elif repo_id in r["consumers"]:
+            mine.append({**r, "role": "consumer"})
+    mine.sort(key=lambda r: r["id"])
+    return mine, (errors_block if mine else None)
+
+
+def contract_findings(contract: str, repo_ids) -> tuple[list[dict] | None, dict | None, list[str]]:
+    """(rules, errors block, spec 110 findings) of a contract; the errors block is read only when there are rules."""
+    rules, _reason, errs = parse_rules(contract, repo_ids)
+    block = None
+    if rules is not None and re.search(r"^### +Errors\b", contract, re.M):
+        block, more = parse_errors(contract)
+        errs += more
+        if block is not None and "status" not in block:
+            errs += [f"rule {r.get('id', f'#{n}')}: no status code for a violation: add `status:` to the `errors:` block or to the "
+                     "rule (spec 110)" for n, r in enumerate(rules, 1) if "status" not in r]
+    return rules, block, errs
+
+
 def check_contract(meta: dict, body: str) -> list[str]:
-    """Spec 053: with two or more repos the contract states the error format and the timeouts."""
+    """Spec 053: with two or more repos the contract states the error format and the timeouts. Spec 110: and the shared rules."""
     if "spec" not in meta or len(meta.get("repos") or []) < 2:
         return []
-    design = SPEC_DIR / str(meta["spec"]) / "design.md"
-    contract = section(body, "Contract") or (section(design.read_text(), "Contract") if design.is_file() else None)
+    contract = contract_text(meta, body, SPEC_DIR)
     if contract is None:
         return ["a plan with two or more repos needs a contract: add `## Contract` with the headings `### Errors` and `### Timeouts` "
                 "(in the plan or the spec's design.md; spec 053)"]
-    return [f"the contract has no `### {h}` section: add a line `### {h}` under `## Contract` with {what} (spec 053: say it once "
+    late = [f"the contract has no `### {h}` section: add a line `### {h}` under `## Contract` with {what} (spec 053: say it once "
             "here instead of in every repo)"
             for h, what in (("Errors", "the error format"), ("Timeouts", "the timeout per call"))
             if not re.search(rf"^### +{h}\b", contract, re.M)]
+    return late + contract_findings(contract, [r.get("id") for r in meta["repos"] if isinstance(r, dict)])[2]
 
 
 FINISHED = {"completed", "abandoned"}
@@ -329,6 +522,7 @@ def check_all(path: Path) -> tuple[list[str], list[str]]:
             return errs, []
         missing = (["no `gitops:` list"] if any("gitops" in m and "(spec 179)" not in m for m in late) else []) + \
             [f"no `### {h}`" for h in ("Errors", "Timeouts") if any(f"### {h}" in m for m in late)] + \
+            (["no `### Rules`"] if any("has no `### Rules` section" in m for m in late) else []) + \
             (["no `## Contract`"] if any("needs a contract" in m for m in late) else [])
         return errs, [f"{meta['status']} before specs 045/053 — {', '.join(missing) or '; '.join(late)} (nothing to do)"]
     return errs + late, []
@@ -344,6 +538,36 @@ def plan_path(slug: str) -> Path:
 def progress(meta: dict) -> str:
     repos = meta["repos"]
     return f"{sum(1 for r in repos if r['done'])}/{len(repos)} repos done"
+
+
+def contract_cmd(args: list[str]) -> int:
+    """Spec 110: print the slice of `<repo-id>` as JSON; 1 for an invalid contract or an unknown repo, 2 for wrong usage."""
+    if len(args) != 2:
+        print("usage: plan.py contract <plan-file> <repo-id>", file=sys.stderr)
+        return 2
+    path, repo = Path(args[0]), args[1]
+    try:
+        meta, body = load(path)
+    except Exception as e:  # noqa: BLE001
+        print(f"ERROR: {path}: {e}", file=sys.stderr)
+        return 1
+    ids = [r.get("id") for r in meta.get("repos") or [] if isinstance(r, dict)]
+    if repo not in ids:
+        print(f"ERROR: unknown repo id '{repo}'", file=sys.stderr)
+        return 1
+    rules: list[dict] = []
+    block = None
+    contract = contract_text(meta, body, path.parent.parent / "specs") if "spec" in meta else None
+    if contract is not None and subsection(contract, "Rules") is not None:
+        parsed, block, errs = contract_findings(contract, ids)
+        if errs:
+            for e in errs:
+                print(f"ERROR: {e}", file=sys.stderr)
+            return 1
+        rules, block = repo_slice(parsed or [], block, repo)
+    doc = {"plan_id": meta.get("plan_id"), "gitops_app": meta.get("gitops_app"), "repo": repo, "rules": rules, "errors": block}
+    print(json.dumps(doc, sort_keys=True, indent=2))
+    return 0
 
 
 def main(argv: list[str]) -> int:
@@ -365,6 +589,9 @@ def main(argv: list[str]) -> int:
                 bad += 1
         print(f"OK: {len(targets)} plan(s) valid" if not bad else f"{bad} error(s)")
         return 1 if bad else 0
+
+    if cmd == "contract":
+        return contract_cmd(rest)
 
     if cmd == "list":
         show_all = "--all" in rest
@@ -400,7 +627,6 @@ def main(argv: list[str]) -> int:
         wave = [r for r in meta["repos"] if not r["done"] and set(r.get("depends_on") or []) <= finished]
         wave.sort(key=lambda r: r["id"])
         if "--json" in rest:
-            import json
             print(json.dumps([{"id": r["id"], "shape": r["shape"], "summary": r["summary"], "acs": r.get("acs") or [],
                                "arguments": r.get("arguments", "")} for r in wave]))
         else:

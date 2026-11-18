@@ -204,7 +204,7 @@ def test_ac_126_10_a_label_the_open_pr_already_has_satisfies_the_rule_and_is_not
 
 # ---------------- AC-126.11: caller titles are checked, built titles fit ----------------
 
-@pytest.mark.parametrize("title", ["Price alerts", "feat(alerts): " + "a" * 73, "feat(alerts):", "feat: "])
+@pytest.mark.parametrize("title", ["Price alerts", "feat(alerts):", "feat: ", "Price alerts " + "a" * 80])
 def test_ac_126_11_a_caller_title_that_breaks_the_rule_is_refused_before_the_push_with_the_rule(world, title):  # AC-126.11
     world.change("docs/guide.md")
     with pytest.raises(core.PlatformError) as e:
@@ -220,6 +220,26 @@ def test_ac_126_11_a_caller_title_of_72_characters_is_accepted_and_never_shorten
     assert world.pr(title=t) == 0
     assert world.gh.has("pr", "create")[0][world.gh.has("pr", "create")[0].index("--title") + 1] == t
     assert [e for e in world.events if e[0] == "ci"][0][1].get("PR_TITLE") == t
+
+
+def test_ac_126_11_a_caller_title_only_too_long_is_shortened_said_and_sent(world, capsys):  # AC-126.11
+    given = "feat(alerts): " + "a" * 73
+    world.change("docs/guide.md")
+    assert world.pr(title=given) == 0
+    create = world.gh.has("pr", "create")[0]
+    sent = create[create.index("--title") + 1]
+    assert sent.startswith("feat(alerts): ") and len(sent) - len("feat(alerts): ") <= 72
+    assert ship.pr_rules.title_error(sent) is None
+    assert f'title shortened: "{given}" -> "{sent}"' in capsys.readouterr().out
+    assert [e for e in world.events if e[0] == "ci"][0][1].get("PR_TITLE") == sent   # the checked title is the sent one
+
+
+def test_ac_126_11_an_open_pr_is_retitled_with_the_shortened_title(world):  # AC-126.11 AC-126.12
+    world.change("docs/guide.md")
+    world.gh.open = [{"number": 7, "url": PR_URL, "title": "old title", "labels": []}]
+    assert world.pr(title="fix: " + "b" * 90) == 0
+    edit = world.gh.has("pr", "edit", "--title")[0]
+    assert ship.pr_rules.title_error(edit[edit.index("--title") + 1]) is None
 
 
 def test_ac_126_11_ship_gitops_pr_refuses_a_bad_caller_title(world):  # AC-126.11

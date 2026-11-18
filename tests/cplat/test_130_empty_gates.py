@@ -507,8 +507,8 @@ def _template_recipe(template: str, name: str) -> str:
 
 
 EXPECTED_TEST_RECIPES = {
-    "service-python": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test pytest -- uv run python -m pytest -p scripts.smoke_pytest --cov=demo_app --cov-report=term-missing \"$@\"",
-                       "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast pytest -- uv run python -m pytest -p scripts.smoke_pytest -q --tb=line \"$@\""),
+    "service-python": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test pytest -- uv run python -m pytest -p scripts.smoke_pytest -p scripts.contract_pytest --cov=demo_app --cov-report=term-missing \"$@\"",
+                       "SMOKE_BASE_URL= bash scripts/gate.sh tests test-fast pytest -- uv run python -m pytest -p scripts.smoke_pytest -p scripts.contract_pytest -q --tb=line \"$@\""),
     "library-python": ("bash scripts/gate.sh tests test pytest -- uv run pytest --cov=demo_app --cov-report=term-missing \"$@\"",
                        "bash scripts/gate.sh tests test-fast pytest -- uv run pytest -q --tb=line \"$@\""),
     "service-go": ("SMOKE_BASE_URL= bash scripts/gate.sh tests test go -- go test -v -race -cover ./... \"$@\"",
@@ -563,27 +563,29 @@ def test_test_recipes_run_only_the_targets_cplat_passes(world, tmp_path, templat
 
 def test_gitops_app_recipes_follow_the_contract_ac_130_7():  # AC-130.7, AC-130.9
     validate = _template_recipe("gitops-app", "validate")
-    for step in ("GATE_NAME=validate uv run scripts/render.py --check || exit 1", "uv run scripts/plan.py validate || exit 1",
-                 "uv run scripts/check-k8s-labels.py . || exit 1", 'kustomize build "$d"', "bash scripts/check-policies.sh",
+    for step in ("GATE_NAME=validate bash scripts/uv-script.sh scripts/render.py --check || exit 1",
+                 "bash scripts/uv-script.sh scripts/plan.py validate || exit 1",
+                 "bash scripts/uv-script.sh scripts/check-k8s-labels.py . || exit 1", 'kustomize build "$d"', "bash scripts/check-policies.sh",
                  "bash scripts/gate.sh nothing validate '0 resources' '" + "run `devbox run render` and check that the system has components" + "'"):
         assert step in validate, step
     assert re.search(r"kubeconform -strict .*-summary \"\$f\"", validate)
     assert validate.index("scripts/render.py --check") < validate.index("kustomize build") < validate.index("gate.sh nothing validate")
     assert validate.index("gate.sh nothing validate") < validate.index("check-policies.sh")
     assert _template_recipe("gitops-app", "test") == "devbox run validate"
-    assert _template_recipe("gitops-app", "test-fast") == "GATE_NAME=test-fast uv run scripts/render.py --check && uv run scripts/plan.py validate"
-    assert _template_recipe("gitops-app", "render-check") == "uv run scripts/render.py --check"
+    assert _template_recipe("gitops-app", "test-fast") == ("GATE_NAME=test-fast bash scripts/uv-script.sh scripts/render.py --check"
+                                                            " && bash scripts/uv-script.sh scripts/plan.py validate")
+    assert _template_recipe("gitops-app", "render-check") == "bash scripts/uv-script.sh scripts/render.py --check"
 
 
 def test_cluster_gitops_recipes_follow_the_contract_ac_130_8():  # AC-130.8, AC-130.9
     validate = _template_recipe("cluster-gitops", "validate")
-    assert validate.startswith("GATE_NAME=validate uv run scripts/render.py --check")
+    assert validate.startswith("GATE_NAME=validate bash scripts/uv-script.sh scripts/render.py --check")
     assert 'kustomize build cluster > "$dir/cluster.yaml"' in validate
     assert "bash scripts/gate.sh nothing validate '0 resources'" in validate
     assert "validate: kubeconform checked 0 resources" not in validate
     assert _template_recipe("cluster-gitops", "test") == "devbox run validate"
-    assert _template_recipe("cluster-gitops", "test-fast") == "GATE_NAME=test-fast uv run scripts/render.py --check"
-    assert _template_recipe("cluster-gitops", "render-check") == "uv run scripts/render.py --check"
+    assert _template_recipe("cluster-gitops", "test-fast") == "GATE_NAME=test-fast bash scripts/uv-script.sh scripts/render.py --check"
+    assert _template_recipe("cluster-gitops", "render-check") == "bash scripts/uv-script.sh scripts/render.py --check"
 
 
 @pytest.mark.parametrize("script", ["templates/gitops-app/scripts/render.py", "templates/cluster-gitops/scripts/render.py",

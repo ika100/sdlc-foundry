@@ -4,9 +4,9 @@ Read from `/system:spec` with no argument, `--all`, `show <id>`, `done <id> <rep
 
 | Arguments | Run |
 |---|---|
-| *(none)* / `--all` | `cplat spec list [--all]`, then `devbox run -- uv run scripts/plan.py list [--all]` |
-| `show <id>` | `devbox run -- uv run scripts/plan.py show <spec_id>` |
-| `done <id> <repo-id>` | `devbox run -- uv run scripts/plan.py done <spec_id> <repo-id>`; when the plan reports `completed`, also `spec set-status <spec_id> done` and `spec index` |
-| `abandon <id>` | ask for confirmation, then `devbox run -- uv run scripts/plan.py abandon <spec_id>` and `spec set-status <spec_id> superseded --reason "abandoned"` |
+| *(none)* / `--all` | `cplat spec list [--all]`, then `devbox run plan list [--all]` |
+| `show <id>` | `devbox run plan show <spec_id>` |
+| `done <id> <repo-id>` | `devbox run plan done <spec_id> <repo-id>`; when the plan reports `completed`, also `spec set-status <spec_id> done` and `spec index` |
+| `abandon <id>` | ask for confirmation, then `devbox run plan abandon <spec_id>` and `spec set-status <spec_id> superseded --reason "abandoned"` |
 
 Print every output verbatim. After a state change run `devbox run plan-check` and offer to commit the plan and spec (`docs(plan): <spec_id> <new status>`); never push without confirmation, because a push publishes the branch.
