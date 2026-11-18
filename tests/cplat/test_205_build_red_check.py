@@ -20,7 +20,9 @@ ROOT = Path(__file__).resolve().parents[2]
 BUILD_REL = "plugins/component/commands/build.md"
 TIGHTEN_REL = "plugins/component/references/build-tighten.md"
 FILES = ["tests/test_acceptance.py", "tests/test_hook.py"]
-LINE = "cplat quiet test-fast --red -- " + " ".join(FILES)
+CMD = ["cplat", "quiet", "test-fast", "--red", "--"]
+LINE = " ".join(CMD + FILES)
+RED_CHECK = re.compile(r"cplat\s+quiet\s+test-fast\s+--red")   # the command, as a prompt names it
 REFUSAL = "the red check has not passed on the current acceptance tests"
 BRANCH = f"feature/{SPEC_ID}"
 
@@ -57,7 +59,7 @@ def test_the_files_are_shell_quoted_ac_205_6(tmp_path, capsys):  # AC-205.6
                                         "tests/test_hook.py": "# AC-007.2\ndef test_h():\n    assert h()\n"})
     rc, out, err = build_tests(capsys, root, "--red")
     assert rc == 0, err
-    assert out.strip() == "cplat quiet test-fast --red -- " + shlex.join(["tests/test_a b.py", "tests/test_hook.py"])
+    assert out.strip() == " ".join(CMD + [shlex.join(["tests/test_a b.py", "tests/test_hook.py"])])
 
 
 def test_a_repo_whose_test_fast_is_no_pytest_prints_none_ac_205_6(tmp_path, capsys):  # AC-205.6
@@ -175,18 +177,18 @@ def test_phase_1_runs_the_red_check_and_records_wrong_failures_ac_205_6():  # AC
     text = build_text()
     assert points_to(BUILD_REL, "cplat component build")
     assert re.search(r"cplat component build tests[^\n`]*--red", text)
-    assert "--wrong-failure" in text and "cplat quiet test-fast --red" in text     # interface: the flags the build runs
+    assert "--wrong-failure" in text and RED_CHECK.search(text)     # interface: the flags the build runs
     assert "cplat component build reviewed" in text
 
 
 def test_the_harness_fix_uses_the_red_check_and_the_tightening_record_ac_205_7():  # AC-205.7
     assert points_to(BUILD_REL, "references/build-tighten.md")
     tighten = (ROOT / TIGHTEN_REL).read_text()
-    assert "cplat quiet test-fast --red" in tighten                              # interface: the check that finds a test error
+    assert RED_CHECK.search(tighten)                                             # interface: the check that finds a test error
     assert "cplat spec test-diff $RED --tighten" in tighten and "--reason" in tighten   # interface: the existing record command
     assert "tester" in tighten and "2.5" in build_text()
 
 
 def test_the_tester_agents_run_their_own_red_check_ac_205_7():  # AC-205.7
     text = (ROOT / "plugins" / "svc" / "agents" / "tester.md").read_text()
-    assert "cplat quiet test-fast --red" in text
+    assert RED_CHECK.search(text)
