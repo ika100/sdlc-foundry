@@ -4,7 +4,8 @@
   Pauser().pause(hit, now) -> Pause              the wait before the next session, or `stop` once the pauses would pass the cap
   Pauser().resumed()                             a session that was no pause: the backoff starts again at 5 minutes
 
-No I/O and no sleeping here: the drivers (headless, ship) print the line and sleep.
+No sleeping here: the drivers (headless, ship) print the line and sleep. record(hit, ended) is the one writer
+(spec 210): it hands a hit that carries a message to usage_readings, so the dispatcher holds starts until the reset.
 """
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ _MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
 @dataclass(frozen=True)
 class Hit:
     reset: datetime.datetime | None
+    message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -94,11 +96,23 @@ def detect(output: str, seconds: float, ended: datetime.datetime) -> Hit | None:
     unix = _UNIX.search(last)
     if unix:
         try:
-            return Hit(reset=datetime.datetime.fromtimestamp(int(unix.group(1))))
+            return Hit(reset=datetime.datetime.fromtimestamp(int(unix.group(1))), message=last)
         except (OverflowError, OSError, ValueError):
-            return Hit(reset=None)
+            return Hit(reset=None, message=last)
     match = _RESETS.search(last)
-    return Hit(reset=_resets(match, ended) if match else None)
+    return Hit(reset=_resets(match, ended) if match else None, message=last)
+
+
+def record(hit: Hit, ended: datetime.datetime) -> None:
+    """Spec 210: write the hit to usage/limit.json; a silent short session has no message and records nothing. Never raises."""
+    if not hit.message:
+        return
+    try:
+        import usage_readings
+        until = (hit.reset if hit.reset is not None else ended + datetime.timedelta(minutes=60)).timestamp()
+        usage_readings.record_limit(until=until, reset_known=hit.reset is not None, message=hit.message[:300])
+    except Exception:   # noqa: BLE001
+        pass
 
 
 class Pauser:

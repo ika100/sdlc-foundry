@@ -133,6 +133,25 @@ def run_tokens(rid: str | None) -> int | None:
         return None
 
 
+def run_cost(rid: str | None) -> float | None:
+    """USD cost of the run's usage so far; None when the usage or the prices are not complete (never 0 by guess)."""
+    if not rid:
+        return None
+    try:
+        import runs_usage
+        rec = runlog.active(rid)
+        if rec is None:
+            return None
+        now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        sec = runs_usage.for_run(rec, ended_at=now, budget_s=3.0, peek=True)
+        totals = (sec or {}).get("totals")
+        if not totals or (sec or {}).get("incomplete") or not totals.get("cost_complete") or totals.get("cost_usd") is None:
+            return None
+        return float(totals["cost_usd"])
+    except Exception:   # noqa: BLE001
+        return None
+
+
 def parse_window(text: str | None) -> tuple[dt.time, dt.time] | None:
     if not text:
         return None
@@ -499,6 +518,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
     dispatch_record = {"unit": dispatch_unit, "run_id": rid, "pid": os.getpid(),
                        "started_at": clock().isoformat(timespec="seconds"), "ended_at": None}
     tokens: int | None = None
+    cost: float | None = None
     write_dispatch_result(dispatch_record)
     if dispatch_unit:                  # spec 167: the dispatcher finds a unit's run by this field
         runlog.set_section(rid, "dispatch_unit", dispatch_unit)
@@ -538,6 +558,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
     except BaseException as e:
         state["result"] = f"error: {e}"
         tokens = run_tokens(rid) if os.environ.get("CPLAT_DISPATCH_RESULT") else None
+        cost = run_cost(rid) if os.environ.get("CPLAT_DISPATCH_RESULT") else None
         runlog.finish(rid, "failed", fields={"command": prompt, "sessions": state["sessions"], "stop_reason": "error", **state_fields})
         rid = None
         raise
@@ -552,6 +573,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
                 esc = {"reason": state["result"], "cause": state.get("cause") or "decision"}
             if os.environ.get("CPLAT_DISPATCH_RESULT"):
                 tokens = run_tokens(rid)        # before runlog.finish removes the active record
+                cost = run_cost(rid)
             runlog.finish(rid, outcome, escalation=esc, fields={"command": prompt, "sessions": state["sessions"], "stop_reason": reason, **state_fields})
         if os.environ.get("CPLAT_DISPATCH_RESULT"):   # spec 167: tell the dispatcher how the run ended (also after an exception)
             cause = None
@@ -560,7 +582,7 @@ def _main(argv: list[str], stack: contextlib.ExitStack) -> int:
             elif reason == "escalated":
                 cause = state.get("cause") or escalation_rules.resolve(None, state["result"]).cause
             write_dispatch_result({**dispatch_record, "ended_at": clock().isoformat(timespec="seconds"), "result": state["result"],
-                                   "stop_reason": reason, "outcome": outcome, "cause": cause, "code": state["code"], "tokens": tokens})
+                                   "stop_reason": reason, "outcome": outcome, "cause": cause, "code": state["code"], "tokens": tokens, "cost_usd": cost})
 
 
 def stop_of(result: str, code: int) -> tuple[str, str]:
@@ -661,6 +683,7 @@ def _drive(ns: argparse.Namespace, repo: Path, prompt: str, window, cmd: list[st
         hit = None if quiet_end or waited or ended.startswith(("needs you", "shipped")) else \
             usagelimit.detect(message, (clock() - started).total_seconds(), clock())
         if hit is not None:                             # spec 184: a pause is neither a run nor a stop without progress
+            usagelimit.record(hit, clock())
             budget.count_invocation(rid, -1)            # also when the pause ends the run: a rerun must not carry it
             pause = pauser.pause(hit, clock())
             if pause.stop:
