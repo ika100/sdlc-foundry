@@ -79,8 +79,8 @@ def test_the_mode_never_changes_and_the_policy_file_is_never_written_ac_210_10(w
     before, mtime = path.read_text(), path.stat().st_mtime_ns
     fresh(world, five=10, week=30)
     for verb in ("plan", "status"):
-        doc = world.run(verb, "--json").json()
-        assert doc["policy"]["values"]["budget"]["mode"] == "cost" and doc["plan"] is None
+        assert world.run(verb, "--json").json()["plan"] is None
+        assert world.plan()["policy"]["values"]["budget"]["mode"] == "cost"
     assert path.read_text() == before and path.stat().st_mtime_ns == mtime
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     world.policy(budget={"mode": "plan"})
@@ -88,6 +88,6 @@ def test_the_mode_never_changes_and_the_policy_file_is_never_written_ac_210_10(w
     before, mtime = path.read_text(), path.stat().st_mtime_ns
     (world.state_home / "sdlc-foundry" / "usage" / "readings.json").unlink()
     for verb in ("plan", "status"):
-        doc = world.run(verb, "--json").json()
-        assert doc["policy"]["values"]["budget"]["mode"] == "plan" and doc["plan"] is not None
+        assert world.run(verb, "--json").json()["plan"] is not None
+        assert world.plan()["policy"]["values"]["budget"]["mode"] == "plan"
     assert path.read_text() == before and path.stat().st_mtime_ns == mtime

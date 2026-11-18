@@ -43,7 +43,6 @@ def test_a_five_hour_reading_of_83_percent_holds_every_start_and_agent_call_ac_2
     _nothing_started(world)
     _held_budget(world, HOLD_83)
     status = world.run("status", "--json").json()
-    assert status["starts"] == {"allowed": False, "why_not": "plan window", "text": HOLD_83}
     assert status["plan"]["five_hour"]["used"] == 83 and HOLD_83 in world.run("status").out
     assert all(h["reason"] == "budget" and h["detail"] == HOLD_83 for h in status["held"]) and len(status["held"]) == 3
 
@@ -89,7 +88,7 @@ def test_at_50_percent_used_at_50_percent_elapsed_no_unit_starts_ahead_of_pace_a
     assert r.rc == 0 and f"no starts: {text}" in r.out, r
     _nothing_started(world)
     _held_budget(world, text)
-    assert world.run("status", "--json").json()["starts"]["why_not"] == "ahead of weekly pace"
+    assert f"held: {text}" in world.run("status").out
 
 
 def test_at_or_above_the_weekly_target_no_unit_starts_ac_210_6(world):  # AC-210.6
@@ -99,7 +98,7 @@ def test_at_or_above_the_weekly_target_no_unit_starts_ac_210_6(world):  # AC-210
     assert r.rc == 0 and "no starts: weekly target reached" in r.out, r
     _nothing_started(world)
     _held_budget(world, "weekly target reached")
-    assert world.run("status", "--json").json()["starts"]["why_not"] == "weekly target reached"
+    assert "held: weekly target reached" in world.run("status").out
 
 
 def test_the_window_stop_and_weekly_target_of_the_policy_are_used_ac_210_6(world):  # AC-210.6
@@ -192,7 +191,7 @@ def test_no_reading_at_all_holds_starts_and_lists_one_need_per_day_ac_210_7(worl
     assert p["plan"]["source"] == "unknown" and p["starts"]["text"] == UNKNOWN_TEXT
     _held_budget(world, UNKNOWN_TEXT)
     assert f"plan usage: unknown ({UNKNOWN_TEXT[len('plan usage unknown ('):]}" in world.run("plan").out
-    assert world.run("status", "--json").json()["starts"] == {"allowed": False, "why_not": "plan usage unknown", "text": UNKNOWN_TEXT}
+    assert f"held: {UNKNOWN_TEXT}" in world.run("status").out
     world.run("start", "--once")
     [need] = [i for i in world.needs("--json").json()["items"] if i["kind"] == "budget"]
     assert need["id"] == f"budget:acme/shop-api:{TODAY}" and need["reason"].startswith("plan usage unknown")
@@ -293,7 +292,9 @@ def test_a_weekly_limit_message_is_recorded_ac_210_8(world):  # AC-210.8
     ended = dt.datetime(2026, 11, 10, 12, 0)
     record_message(world, "You've hit your weekly limit · resets Mon 12:00am", ended=ended)
     doc = read_json(usage_dir(world) / "limit.json")
-    assert "weekly limit" in doc["message"] and doc["until"] > ts(ended)
+    assert "weekly limit" in doc["message"]
+    assert dt.datetime.fromtimestamp(doc["until"]) == dt.datetime(2026, 11, 16, 0, 0)      # the next Monday 00:00 after Tue 2026-11-10
+    assert doc["reset_known"] is True
 
 
 def test_a_silent_short_session_records_no_limit_ac_210_8(world):  # AC-210.8

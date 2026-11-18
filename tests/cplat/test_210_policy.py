@@ -139,6 +139,17 @@ def test_mode_cost_without_a_daily_limit_is_refused_by_start_and_resume_naming_u
     assert world.calls() == [] and world.gh_writes() == [] and world.fingerprint() == before
 
 
+@pytest.mark.parametrize("verb", ["start", "resume"])
+def test_a_repo_without_the_policy_file_is_refused_by_start_and_resume_naming_the_file_ac_210_1(world, verb):  # AC-210.1
+    world.issue(1)
+    assert not (world.repo / ".platform" / "dispatch.yml").exists()
+    before = world.fingerprint()
+    r = world.run(verb, "--once") if verb == "start" else world.run(verb)
+    assert r.rc == 1, r
+    assert any(f"no .platform/dispatch.yml in {p}" in r.err for p in (world.repo, world.repo.resolve())), r.err
+    assert world.calls() == [] and world.gh_writes() == [] and world.claude_calls() == [] and world.fingerprint() == before
+
+
 def test_mode_plan_needs_no_usd_or_token_key_to_start_ac_210_1(world):  # AC-210.1
     world.policy(budget={"mode": "plan"})
     fresh(world, five=10, week=30)

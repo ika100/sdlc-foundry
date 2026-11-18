@@ -145,6 +145,58 @@ def test_while_a_units_usage_is_unknown_no_unit_starts_and_status_names_it_ac_21
     assert "issue-1.1" in world.run("status").out
 
 
+def _book_run(model, input=1_000_000, output=100_000, run_id="fake-run-issue-1.1"):
+    """A finished run record in the run buffer whose `usage` is the section of spec 099: priced by the price table (`usage_cost`),
+    `cost_complete` false and no `cost_usd` figure of its own when the model has no price."""
+    import json
+    from types import SimpleNamespace
+
+    import runs
+    import usage_cost
+    call = SimpleNamespace(failed=False, model=model, input=input, output=output, cache_read=0, cache_write=0)
+    usage = usage_cost.section([(call, 1.0, None, "main")], usage_cost.load_prices())
+    path = runs.state_dir() / "buffer.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as fh:
+        fh.write(json.dumps({"run_id": run_id, "repo": "acme/shop-api", "usage": usage}) + "\n")
+    return usage["totals"]
+
+
+def test_a_units_usd_is_priced_from_its_tokens_with_the_price_table_when_no_cost_is_reported_ac_210_3(world):  # AC-210.3
+    _costing_headless(world)
+    world.policy(slots=2, budget={"usd_per_day": 5})
+    issues(world, 3)
+    totals = _book_run("claude-opus-5")
+    expected = 1_000_000 * 5.0 / 1e6 + 100_000 * 25.0 / 1e6                              # the price table of spec 099: $7.50
+    assert totals["cost_complete"] is True and totals["cost_usd"] == pytest.approx(expected)
+    world.behave(mode="wait")
+    world.behave("issue-1.1", mode="now", then="escalate", tokens=None, cost_usd=None)   # the unit reports no cost of its own
+    world.run("start", "--once")
+    world.wait_ended("issue-1.1")
+    r = world.run("start", "--once")
+    assert f"no starts: daily budget reached: ${expected:.2f} of $5.00" in r.out, r.out
+    assert world.state()["ledger"][TODAY]["usd"]["issue-1.1"] == pytest.approx(expected)
+    assert world.run("status", "--json").json()["cost"]["used_usd"] == pytest.approx(expected)
+    assert world.calls_of("issue-3.1") == []
+
+
+def test_a_unit_with_tokens_but_a_model_without_a_price_holds_starts_and_status_names_it_ac_210_3(world):  # AC-210.3
+    _costing_headless(world)
+    world.policy(slots=2, budget={"usd_per_day": 5})
+    issues(world, 3)
+    totals = _book_run("claude-nowhere-9", input=1000, output=500)
+    assert totals["cost_complete"] is False and totals["models_without_price"] == ["claude-nowhere-9"]
+    world.behave(mode="wait")
+    world.behave("issue-1.1", mode="now", then="escalate", tokens=1500, cost_usd=None)   # tokens known, no USD figure, no price
+    world.run("start", "--once")
+    world.wait_ended("issue-1.1")
+    r = world.run("start", "--once")
+    assert r.rc == 0 and "no starts: usage unknown: issue-1.1" in r.out, r
+    assert world.calls_of("issue-3.1") == []
+    assert "issue-1.1" in world.run("status").out
+    assert world.run("plan", "--json").json()["starts"]["why_not"] == "usage unknown"
+
+
 # ---------------- AC-210.4: the deprecated token cap ----------------
 
 def test_the_token_cap_alone_applies_as_before_ac_210_4(world):  # AC-210.4

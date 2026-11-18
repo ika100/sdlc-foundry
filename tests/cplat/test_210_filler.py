@@ -9,8 +9,10 @@ import re
 
 import pytest
 
+import dispatch_world
 from dispatch_world import world  # noqa: F401  (fixture)
 from support_210 import H, fresh, issues
+from waiting import fake_prelude
 
 TASK = {"name": "bench", "command": "touch ran.marker"}
 
@@ -220,6 +222,55 @@ def test_a_draft_that_ended_without_a_pull_request_is_escalated_and_labels_no_is
     assert world.labels_of(90) == ["retro"] and world.labels_of(5) == ["wontfix"]
 
 
+def _drafting_headless(world):
+    """The fake headless as `/component:spec` ends: the unit's worktree gets a `feature/...` branch, the retro issue is claimed
+    for it (what `cplat spec new --tracks 90` does) and a pull request is opened for the branch."""
+    old = 'end("done", "pull request opened", "done")'
+    new = '''if "/component:spec" in text:
+    branch = "feature/spec-" + unit
+    subprocess.run(["git", "checkout", "-q", "-b", branch], capture_output=True, text=True)
+    subprocess.run(["gh", "issue", "edit", "90", "--add-label", "in-progress"], capture_output=True, text=True)
+    subprocess.run(["gh", "issue", "comment", "90", "--body", "<!-- cplat-claim -->\\nClaimed for branch `" + branch + "`."],
+                   capture_output=True, text=True)
+    subprocess.run(["gh", "pr", "create", "--head", branch, "--title", "spec: alpha thing", "--body", "Tracks #90"],
+                   capture_output=True, text=True)
+end("done", "pull request opened", "done")'''
+    text = dispatch_world.FAKE_HEADLESS.replace(old, new)
+    assert text != dispatch_world.FAKE_HEADLESS
+    exe = world.bin / "fake-headless-draft"
+    exe.write_text(text % {"py": dispatch_world.sys.executable, "pre": fake_prelude()})
+    exe.chmod(0o755)
+    world.mp.setenv("CPLAT_DISPATCH_HEADLESS", str(exe))
+
+
+def test_a_draft_with_an_open_pull_request_ends_done_and_the_pr_is_left_alone_ac_210_9(world):  # AC-210.9
+    _drafting_headless(world)
+    world.policy(slots=1, sources=["issues", "specs"], gates={"approve_specs": "self"}, budget={"mode": "plan"})
+    _retro(world)
+    world.behave(mode="wait")
+    world.behave("retro-90-1.1", mode="now", then="done")
+    _window(world)
+    assert world.run("start", "--once").rc == 0
+    world.wait_ended("retro-90-1.1")
+
+    def finished():
+        world.run("start", "--once")
+        return [h for h in world.state().get("history", []) if h["unit"] == "retro-90-1.1"]
+
+    assert world.wait_until(finished, timeout=15)
+    [entry] = finished()
+    assert entry["outcome"] == "done" and "/pull/" in str(entry["pr"]), entry
+    [pr] = [p for p in world._gh()["prs"].values() if p["headRefName"] == "feature/spec-retro-90-1.1"]
+    assert pr["state"] == "OPEN"                                                              # neither merged nor closed
+    assert not [a for a in world.gh_calls() if a[:2] in (["pr", "merge"], ["pr", "review"], ["pr", "ready"], ["pr", "close"])]
+    issue = world.issue_of(90)
+    assert issue["state"] == "OPEN" and "in-progress" not in issue["labels"]                  # the claim is released, the issue stays open
+    comments = world.comments_of(90)
+    assert any(c.startswith("<!-- cplat-claim -->") for c in comments)
+    assert any(c.startswith("<!-- cplat-release -->") and "retro draft retro-90-1.1 ended (cplat dispatch)" in c for c in comments), comments
+    assert "retro-90-1" in world.state()["filler"]["drafted"]
+
+
 def test_a_proposal_answered_by_an_open_pull_request_is_skipped_ac_210_9(world):  # AC-210.9
     _policy(world)
     _retro(world)
@@ -300,12 +351,14 @@ def test_a_retro_draft_is_never_approved_even_with_self_approval_ac_210_9(world)
 
 @pytest.mark.parametrize("hours_left", [10, 100])
 def test_a_retro_draft_stays_unapproved_in_and_out_of_the_filler_window_ac_210_9(world, hours_left):  # AC-210.9
-    world.policy(slots=2, sources=["issues", "specs"], gates={"approve_specs": "self"}, budget={"mode": "plan"})
+    world.policy(slots=2, sources=["issues", "specs"], gates={"approve_specs": "self"},
+                 budget={"mode": "plan", "plan": {"filler_drafts": False}})          # no new draft unit: only the approval is under test
     _retro(world, 90)
-    world.spec(9, "alpha-thing", status="draft", plan=None, tracks=(90,))
+    sid = world.spec(9, "alpha-thing", status="draft", plan=None, tracks=(90,))
     fresh(world, five=10, week=30, week_remaining=hours_left * H)
     assert world.run("start", "--once").rc == 0
     assert world.calls() == [] and not [a for a in world.gh_calls() if a[:2] == ["pr", "merge"]]
+    assert "status: draft" in (world.repo / "docs" / "specs" / sid / "spec.md").read_text()
 
 
 def test_regular_work_is_not_marked_as_filler_in_the_window_ac_210_9(world):  # AC-210.9
