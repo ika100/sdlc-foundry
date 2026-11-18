@@ -1,7 +1,7 @@
 ---
 spec_id: 210-the-dispatcher-paces-work-by-the
 title: The dispatcher budgets by plan limits or by cost
-status: approved
+status: building
 priority: P1
 shape: platform
 ---
@@ -83,3 +83,4 @@ Choosing the mode.
 
 - 2026-11-17 created
 - 2026-11-17 approved
+- 2026-11-18 building
