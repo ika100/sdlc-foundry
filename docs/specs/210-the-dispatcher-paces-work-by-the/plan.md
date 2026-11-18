@@ -38,6 +38,7 @@ tasks:
     covers: [AC-210.6, AC-210.7, AC-210.8, AC-210.9]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t6
     title: One ordered start gate with plan and cost documents, needs, hints and warnings
     files: [scripts/cplat/dispatch_gate.py]
