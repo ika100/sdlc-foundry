@@ -9,6 +9,6 @@ rules:
     hard: acceptance-tests-fixed
     source: spec 165
   - id: R3
-    text: "**A test helper or type-only line**"
+    text: "**Harness fix** (a frozen test raises in test code; `test helper (defines no test): <file>` or `type-only (…)` line), tester"
     class: practice
-    source: spec 179
+    source: spec 205
