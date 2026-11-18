@@ -45,6 +45,7 @@ tasks:
     covers: [AC-207.2]
     parallel_safe: true
     depends_on: [t1, t2]
+    done: true
   - id: t6
     title: Run the new checks in order from preflight.check, check_repo and headless
     files: [scripts/cplat/preflight.py, scripts/cplat/headless.py, tests/cplat/conftest.py, tests/cplat/units131_support.py, tests/cplat/seam178_world.py, tests/cplat/dispatch_world.py]
