@@ -45,6 +45,7 @@ tasks:
     covers: [AC-210.3, AC-210.4, AC-210.6, AC-210.7, AC-210.8, AC-210.10]
     parallel_safe: true
     depends_on: [t1, t4, t5]
+    done: true
   - id: t7
     title: Filler candidates (filler-only split, filler tasks, retro proposals) and the retro-draft hold
     files: [scripts/cplat/dispatch_filler.py, scripts/cplat/dispatch_backlog.py, scripts/cplat/dispatch_ready.py]
