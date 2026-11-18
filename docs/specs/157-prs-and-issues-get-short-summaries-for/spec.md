@@ -51,7 +51,7 @@ same in every repo, including component repos that have no changelog fragments.
   AC-133.8), contains no prompts, no diffs and no agent-written text, and each line is at most 300 characters (cut with `…`); when
   building the summary fails for any reason, the body is left unchanged, the PR still opens with the same exit code, and the output
   has one extra line `note: summary skipped: <why>`.
-- **AC-157.6** Given a `/system:ship` run, when it opens or updates a PR in a component repo or in the gitops repo, then that PR's
+- **AC-157.6** Given a `/system:ship` run, when it creates a PR in a component repo or in the gitops repo, or updates the body of a component repo's PR, then that PR's
   body starts with the AC-157.1 block rendered for that repo's spec and branch (a gitops PR without its own spec uses the system
   spec); the "How this was built" block is not added there (spec 133 non-goal stays).
 - **AC-157.7** Given the docs, when a user reads `/component:build`, `/component:ship`, `/system:ship` and the changelog, then the
@@ -90,3 +90,4 @@ same in every repo, including component repos that have no changelog fragments.
 - 2026-11-08 split: the issue comments moved to spec 158; `Changed`/`Why` sources revised for component repos (A2b)
 - 2026-11-08 approved
 - 2026-11-17 building
+- 2026-11-18 amended AC-157.6 (user): the system ship adds the block to the gitops and entry PRs it creates; an open one it reuses is not edited, as design.md says

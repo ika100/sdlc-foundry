@@ -1,7 +1,7 @@
 ---
 spec_id: 157-prs-and-issues-get-short-summaries-for
 shape: platform
-spec_hash: 77f987e5867a
+spec_hash: c476f660882f
 summary: cplat renders a four-line summary block from records at the top of every PR body it opens (pr open, component ship, system ship)
 tasks:
   - id: t1
