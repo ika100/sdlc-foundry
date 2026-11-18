@@ -72,6 +72,7 @@ tasks:
     covers: [AC-210.1, AC-210.5]
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 210 The dispatcher budgets by plan limits or by cost
