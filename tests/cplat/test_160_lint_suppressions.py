@@ -128,7 +128,7 @@ def test_test_diff_names_the_suppression_and_refuses_a_rule_less_one_ac_160_1_ac
 def test_a_comment_that_is_no_suppression_stays_formatting_in_python_ac_160_1(built):  # AC-160.1
     root, t = built
     t.write_text(t.read_text().replace("password = 'x'", "password = 'x'  # a plain comment"))
-    assert spec.test_diff(root, "HEAD", [])["tests/test_alerts.py"] == (True, "")
+    assert spec.test_diff(root, "HEAD", [])["tests/test_alerts.py"] == (True, "no assertion changed: comments")
 
 
 # ---------------- AC-160.3 / AC-160.4: coder and reviewer ----------------

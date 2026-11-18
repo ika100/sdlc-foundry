@@ -16,6 +16,7 @@ tasks:
     covers: [AC-205.5]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: build tests --red prints the red check; build reviewed freezes only after it passed
     files: [scripts/cplat/buildtests.py, scripts/cplat/testreview.py]
@@ -28,6 +29,7 @@ tasks:
     covers: [AC-205.6, AC-205.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t5
     title: ADR, plugin versions, changelog fragment and guides
     files: [docs/adr/, docs/adr/README.md, plugins/component/.claude-plugin/plugin.json, plugins/svc/.claude-plugin/plugin.json, .claude-plugin/marketplace.json, docs/changelog.d/205-acceptance-tests-are-proven-passable.added.md, docs/HOW-IT-WORKS.md, docs/AGENTS.md]
