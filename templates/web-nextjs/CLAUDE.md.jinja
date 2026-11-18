@@ -109,6 +109,10 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 - Mark every smoke test that creates, changes or deletes data as writing: `@writes` next to `@smoke` in the title (or `{ tag: ["@smoke", "@writes"] }`). It runs only in dev.
 - Keep at least one read-only smoke check (reads, health, lists, a page that loads) for every behaviour you want checked in staging and prod. Outside dev, a run in which no smoke test passed is reported as **not run** (no read-only smoke test), never as passed.
 
+## Contract check
+
+`contract/<plan_id>.json` is this repo's copy of the system plan's shared rules and error response; `/component:spec --from-plan` writes it (a re-run updates it), so never edit it by hand. `tests/contract.test.ts` runs in `devbox run test` (offline): it feeds the boundary values of every rule where this repo is the consumer to your validation, and the contract's error response and one unlisted response to your form. Wire it in `tests/contract/adapter.ts` (project-owned): `base` returns a valid body, `validate` calls your form's validation, `showResponse` renders the form with Testing Library, answers the submit with the response and returns what is shown. Without a copy there is nothing to check.
+
 ## Docker image pipeline
 
 CI's `docker` job builds the multi-stage, non-root image on every run and pushes on `main` (`latest`, `sha-<short>`) and on `v*.*.*` tags (semver tags). Registry: `{{ docker_registry }}/{{ project_name }}`, authenticated with `GITHUB_TOKEN`.
