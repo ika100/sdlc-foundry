@@ -73,6 +73,7 @@ tasks:
     covers: [AC-210.2, AC-210.3, AC-210.4, AC-210.6, AC-210.7, AC-210.8, AC-210.9, AC-210.10]
     parallel_safe: false
     depends_on: [t6, t7, t8, t9]
+    done: true
   - id: t11
     title: Document the two budget modes, the sensor and the filler queue; changelog fragment
     files: [docs/dispatch.md, docs/changelog.d/210-dispatcher-budgets-by-plan-or-cost.added.md]

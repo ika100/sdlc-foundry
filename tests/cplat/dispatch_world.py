@@ -61,7 +61,9 @@ for a in cfg.get("answers", []):
         answer = a["result"]
 out = {"type": "result", "subtype": "success", "is_error": False, "result": json.dumps(answer), "session_id": "fake",
        "total_cost_usd": 0.01}
-if not cfg.get("no_usage"):
+if cfg.get("no_usage"):
+    del out["total_cost_usd"]
+else:
     out["usage"] = cfg.get("usage") or {"input_tokens": 1000, "output_tokens": 500, "cache_read_input_tokens": 0,
                                         "cache_creation_input_tokens": 0}
 print(json.dumps(out))

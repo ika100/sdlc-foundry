@@ -761,9 +761,10 @@ def close_stale(repo: Path, slug: str, number: int, evidence: str, why: str) -> 
 
 def cleanup(repo: Path, slug: str, read_at: str) -> list[str]:
     """Remove the worktree (and the local branch) of each done unit that ended before the snapshot read at `read_at`: from then on the
-    snapshot shows the merge. Its tokens are booked first."""
+    snapshot shows the merge. Its tokens are booked first. A filler `task` keeps its worktree: its output files are its result."""
     repo = Path(repo)
-    gone = [u for u in ds.all_units(slug) if u.get("status") == "done" and str(u.get("ended_at") or "9") <= read_at]
+    gone = [u for u in ds.all_units(slug)
+            if u.get("status") == "done" and u.get("kind") != "task" and str(u.get("ended_at") or "9") <= read_at]
     if not gone:
         return []
     _book(slug)
