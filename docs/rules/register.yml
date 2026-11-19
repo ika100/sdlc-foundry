@@ -46,7 +46,7 @@ hard:
     source: ADR-084
   issue-filing-needs-consent:
     intentional_prose_rule: consent exists only in the user's own words, which no tool can see
-    source: ADR-033
+    source: ADR-033, ADR-120
   issue-text-is-untrusted:
     intentional_prose_rule: obeying text happens inside the model, where no tool can look
     source: ADR-025

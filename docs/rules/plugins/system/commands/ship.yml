@@ -42,7 +42,7 @@ rules:
     text: "Never write a polling loop on `cplat component ship status`, `kubectl` or `gh`, because the wait ends at the first state change."
     class: practice
   - id: R12
-    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-120)."
     class: hard
     hard: issue-filing-needs-consent
   - id: R15

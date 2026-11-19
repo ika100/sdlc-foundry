@@ -26,7 +26,7 @@ rules:
     class: hard
     hard: push-only-through-pr-open
   - id: R8
-    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-120)."
     class: hard
     hard: issue-filing-needs-consent
   - id: R9
