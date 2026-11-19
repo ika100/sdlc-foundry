@@ -77,9 +77,16 @@ def _is_bucket(name: str) -> bool:
     return name.startswith(BUCKETS)
 
 
-def _walk_wheels(wheels: Path) -> tuple[list[str], list[str], int]:
-    """Archive ids, pointer files (relative paths) and the byte size over distinct inodes of the wheel cache."""
+def _is_env(path: Path) -> bool:
+    """A script environment (a virtual environment), not an unpacked wheel: only wheels and source archives are cached (A10)."""
+    return os.path.lexists(path / "pyvenv.cfg")
+
+
+def _walk_wheels(wheels: Path) -> tuple[list[str], list[str], int, list[str]]:
+    """Archive ids, pointer files (relative paths), the byte size over distinct inodes, and the environments found in the
+    wheel cache. The environments are in no other result and not in the size."""
     archives: list[str] = []
+    envs: list[str] = []
     pointers: list[str] = []
     seen: set[tuple[int, int]] = set()
     size = 0
@@ -90,6 +97,8 @@ def _walk_wheels(wheels: Path) -> tuple[list[str], list[str], int]:
         for root, dirs, files in os.walk(top):
             dirs[:] = [d for d in dirs if not d.startswith(".tmp-")]
             if bucket.startswith("archive-v") and root == str(top):
+                envs += [os.path.join(bucket, d) for d in dirs if _is_env(top / d)]
+                dirs[:] = [d for d in dirs if not _is_env(top / d)]
                 archives += [os.path.join(bucket, d) for d in dirs]
             for name in files:
                 if name.startswith(".tmp-"):
@@ -103,14 +112,14 @@ def _walk_wheels(wheels: Path) -> tuple[list[str], list[str], int]:
                     size += st.st_size
                 if not bucket.startswith("archive-v"):
                     pointers.append(os.path.join(os.path.relpath(root, wheels), name))
-    return archives, pointers, size
+    return archives, pointers, size, envs
 
 
 def _seed(cache: Path, tag: str) -> None:
     """Hard-link the test wheel cache into the run's uv cache; any error only means a colder cache."""
     wheels = _wheel_cache()
     try:
-        archives, pointers, size = _walk_wheels(wheels)   # the pointers are listed before the archives are linked
+        archives, pointers, size, envs = _walk_wheels(wheels)   # the pointers are listed before the archives are linked
         if size > WHEEL_BOUND:
             aside = wheels.with_name(f"{wheels.name}.old-{tag}")
             try:
@@ -119,15 +128,28 @@ def _seed(cache: Path, tag: str) -> None:
                 pass   # another run emptied it first
             _detach(["--empty", *map(str, [aside, *wheels.parent.glob(wheels.name + ".old-*")])])
             return
+        purge = []
+        for n, rel in enumerate(envs):   # environments of earlier runs: never seeded, removed behind this run
+            try:
+                os.rename(wheels / rel, wheels / f".purge-{tag}-{n}")
+                purge.append(str(wheels / f".purge-{tag}-{n}"))
+            except OSError:
+                pass
+        if purge:
+            _detach(["--empty", *purge])
         for rel in archives:
             src, dst = wheels / rel, cache / rel
             tmp = dst.with_name(f".seed-{dst.name}")
             try:
-                for root, _dirs, files in os.walk(src):
+                for root, dirs, files in os.walk(src):
                     out = tmp / os.path.relpath(root, src)
                     out.mkdir(parents=True, exist_ok=True)
-                    for name in files:
-                        os.link(os.path.join(root, name), out / name)
+                    for name in dirs + files:   # a symlink is recreated as it is, a file is hard-linked
+                        path = os.path.join(root, name)
+                        if os.path.islink(path):
+                            os.symlink(os.readlink(path), out / name)
+                        elif name in files:
+                            os.link(path, out / name)
                 os.rename(tmp, dst)
             except OSError as exc:
                 _force_remove(tmp)
@@ -158,7 +180,7 @@ def _flow_back(cache: Path) -> None:
             if bucket.startswith("archive-v"):
                 for ident in os.listdir(top):
                     dst = wheels / bucket / ident
-                    if ident.startswith((".seed-", ".tmp-")) or dst.exists():
+                    if ident.startswith((".seed-", ".tmp-")) or dst.exists() or _is_env(top / ident):
                         continue
                     try:
                         dst.parent.mkdir(parents=True, exist_ok=True)

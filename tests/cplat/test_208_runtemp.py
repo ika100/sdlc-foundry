@@ -515,7 +515,12 @@ def write(path, text):
 def test_seed_and_write(tmp_path):
     cache = os.environ["UV_CACHE_DIR"]
     with open(os.environ["SCRATCH_OUT"], "a") as f:
-        f.write(json.dumps({"seeded": listing(cache), "buckets": sorted(os.listdir(cache)) if os.path.isdir(cache) else []}) + "\\n")
+        links = {}
+        for root, dirs, files in os.walk(cache):
+            for n in dirs + files:
+                if os.path.islink(os.path.join(root, n)):
+                    links[os.path.relpath(os.path.join(root, n), cache)] = os.readlink(os.path.join(root, n))
+        f.write(json.dumps({"links": links, "seeded": listing(cache), "buckets": sorted(os.listdir(cache)) if os.path.isdir(cache) else []}) + "\\n")
     ids = [i for i in os.environ.get("SCRATCH_IDS", "").split(",") if i]
     for ident in ids:   # what uv writes for an inline script: an archive, its pointer, and a lot besides
         write(f"{cache}/archive-v0/{ident}/lib.py", "x" * 100)
@@ -524,6 +529,11 @@ def test_seed_and_write(tmp_path):
         write(f"{cache}/simple-v18/pypi/pkg-{ident}.rkyv", "index")
         write(f"{cache}/interpreter-v4/{ident}.msgpack", "py")
         write(f"{cache}/builds-v0/{ident}/b", "b")
+    for ident in [i for i in os.environ.get("SCRATCH_VENVS", "").split(",") if i]:   # a script environment, as uv keys it
+        write(f"{cache}/archive-v0/{ident}/pyvenv.cfg", "home = /x")
+        os.makedirs(f"{cache}/archive-v0/{ident}/bin", exist_ok=True)
+        os.symlink("python3.14", f"{cache}/archive-v0/{ident}/bin/python3")
+        write(f"{cache}/archive-v0/{ident}/bin/python3.14", "py")
     barrier = os.environ.get("SCRATCH_BARRIER")
     if barrier and ids:
         write(os.path.join(barrier, ids[0] + ".written"), "")
@@ -551,6 +561,42 @@ def test_the_wheel_cache_holds_wheels_and_archives_only_ac_208_1(sb):  # AC-208.
     tops = {p.name for p in sb.W.iterdir()}
     assert tops == {"archive-v0", "wheels-v5"}, "no environments-v*, simple-v*, interpreter-v*, builds-v* or temp file"
     assert not [p for p in sb.W.rglob("*") if p.name.startswith(".tmp-")]
+
+
+def seed_env_w(sb, ident):
+    """A script environment that an earlier version of the plugin let into W: pyvenv.cfg and a bin/python3 symlink."""
+    e = sb.W / "archive-v0" / ident
+    (e / "bin").mkdir(parents=True)
+    (e / "pyvenv.cfg").write_text("home = /x")
+    (e / "bin" / "python3.14").write_text("py")
+    (e / "bin" / "python3").symlink_to("python3.14")
+
+
+def test_a_script_environment_of_a_run_never_reaches_the_wheel_cache_ac_208_1(sb):  # AC-208.1 (A10)
+    assert sb.run(SEEDWRITE, SCRATCH_IDS="aaa", SCRATCH_VENVS="venv").returncode == 0
+    assert w_files(sb) == sorted(entry_files("aaa")), "the wheel flowed back, the environment did not"
+    assert not (sb.W / "archive-v0" / "venv").exists()
+
+
+def test_a_script_environment_in_the_wheel_cache_is_not_seeded_and_is_purged_ac_208_1(sb):  # AC-208.1 (A10)
+    seed_w(sb, "aaa")
+    seed_env_w(sb, "venv")
+    p = sb.run(SEEDWRITE)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert seeded(sb) == sorted(entry_files("aaa")), "the wheel is seeded, the environment is not"
+    sb.wait_removed()
+    assert w_files(sb) == sorted(entry_files("aaa"))
+    assert not list((sb.W / "archive-v0").glob("*venv*")) and not list(sb.W.glob(".purge-*"))
+
+
+def test_a_seeded_archive_keeps_its_symlinks_ac_208_1(sb):  # AC-208.1 (A10)
+    seed_w(sb, "aaa")
+    link = sb.W / "archive-v0" / "aaa" / "alias.py"
+    link.symlink_to("lib.py")
+    p = sb.run(SEEDWRITE)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert seeded(sb) == sorted(entry_files("aaa") + ["archive-v0/aaa/alias.py"])
+    assert sb.records()[0]["links"] == {"archive-v0/aaa/alias.py": "lib.py"}
 
 
 def test_a_wheel_cache_over_two_gib_is_emptied_and_nothing_is_seeded_ac_208_1(sb):  # AC-208.1 (A10)
