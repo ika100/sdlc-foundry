@@ -21,7 +21,7 @@ The first part is [Backstage's system model](https://backstage.io/docs/features/
 
 - **What it is.** An Owner owns a System. Components (a service, a website or a library, each in its own repo), APIs and Resources (a database, a bucket, a cache or a message broker, run by the platform or external) are part of it. A component provides or consumes APIs, uses resources and may use a library.
 - **Where it runs.** Every component and resource exists once per environment as an **Instance**. Environments are ordered (dev, staging, prod), so each instance knows where its version came from. A library has no instances.
-- **On which cluster.** Every environment of a system runs on one **Cluster**. A cluster hosts one or more systems and owns what they share: the operators that manage the resource instances (CloudNativePG, SeaweedFS), External Secrets with the secret store, and the Kyverno engine. Its own repo lists the systems it hosts (`/cluster:add`) and fails its check when a system needs an operator the cluster does not list. Components never refer to the cluster, so a system renders the same either way. See [the domain model guide](/sdlc-foundry/guides/domain-model/#cluster) and the [cluster guide](/sdlc-foundry/guides/clusters/).
+- **On which cluster.** Every environment runs on one **Cluster**: the one its system assigns it to (`environments.<env>.cluster`), so dev and staging can run on a laptop and prod on another machine. One cluster repo can manage several clusters; a platform release reaches the first cluster first and a later one through `/cluster:promote`. A cluster hosts one or more systems and owns what they share: the operators that manage the resource instances (CloudNativePG, SeaweedFS), External Secrets with the secret store, and the Kyverno engine. Its own repo lists the systems it hosts (`/cluster:add`) and fails its check when a system needs an operator the cluster does not list. Components never refer to the cluster, so a system renders the same either way. See [the domain model guide](/sdlc-foundry/guides/domain-model/#cluster) and the [cluster guide](/sdlc-foundry/guides/clusters/).
 - **How it changes.** A Spec changes the system or one component; the Run that ships it updates instances, starting in dev.
 
 ## An example: the todo system
@@ -84,7 +84,7 @@ Every slash command names the noun it acts on, and the same verbs work for a sys
 | `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `explore` · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
 | `api` | `list` |
 | `resource` | `add` · `remove` · `backup` · `restore` · `query` · `upgrade` |
-| `cluster` | `new` · `add` · `remove` |
+| `cluster` | `new` · `add` · `remove` · `promote` |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |
 | `platform` | `doctor` · `next` · `update` · `fleet` · `runs` · `retro` · `ui` · `release` |

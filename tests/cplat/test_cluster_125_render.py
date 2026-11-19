@@ -12,7 +12,7 @@ from cluster_fixtures import (NAME, ORG, SERVER, base, cluster_repo, docs, platf
 from resources_fixtures import comp, db, system
 from system_fixtures import render5
 
-ALLOWED_TOP = "cluster, owner, server, org, operators, secretStore, systems"
+ALLOWED_TOP = "cluster, owner, server, org, operators, secretStore, clusters, systems"
 
 
 @pytest.fixture()

@@ -83,8 +83,8 @@ A Cluster is the place systems run. Its own repo (`cluster.yaml`, shape `cluster
 
 Its relations to the rest of the model:
 
-- **A Cluster hosts Systems.** `cluster.yaml` lists each system by its gitops repo, and the cluster repo renders one Argo application `system-<name>` per system (`/cluster:add`, `/cluster:remove`). A System is hosted by one Cluster; a cluster without a cluster repo hosts just the one system that installs its own operators.
-- **An Environment runs on its System's Cluster.** All environments of a system run on the same cluster, each in its namespace `<system>-<env>`. Spreading one system's environments over several clusters is not modelled yet.
+- **A Cluster hosts Systems.** `cluster.yaml` lists each system by its gitops repo, and the cluster repo renders one Argo application `system-<name>` per system (`/cluster:add`, `/cluster:remove`). A System is hosted by one Cluster repo; a cluster without a cluster repo hosts just the one system that installs its own operators.
+- **An Environment runs on the Cluster its System assigns it to.** A cluster repo may manage several clusters ([ADR-114](adr/114-one-cluster-repo-places-environments-on-several-clusters.md)). The assignment is `systems.<s>.environments` in the cluster repo and `environments.<env>.cluster` in `system.yaml`; without it, all environments run on the first cluster, each in its namespace `<system>-<env>`. A later cluster takes a platform release through `/cluster:promote` ([CLUSTERS.md](CLUSTERS.md#several-clusters)). One environment never spreads over two clusters.
 - **A Resource instance is managed by the Cluster's operators.** An in-cluster database instance is run by CloudNativePG, a bucket instance by the SeaweedFS operator, and an external resource's Secret is filled by External Secrets through the cluster's secret store. The cluster repo's check fails when a hosted system needs an operator that `cluster.yaml` does not list.
 - **A System hands its operators to the Cluster** by setting `operators: owner` in every environment; it then no longer renders `operators/`. Kyverno policies stay with each System; only the engine is the Cluster's.
 - **Components and their Instances do not know the Cluster.** Names in the cluster stay the same, so a system renders the same manifests whether it shares a cluster or has its own.
@@ -144,7 +144,7 @@ resources:
 | Where | Allowed keys |
 |---|---|
 | top level | `system`, `owner` (required, non-empty), `environments`, `components`, `apis`, `resources`, `gateway`, `secretStore`, `registries`, `autonomy` (only `paused`) |
-| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `backup`, `autonomy` |
+| `environments.<env>` | `host`, `url`, `policy`, `promote`, `observability`, `operators`, `backup`, `autonomy`, `cluster` |
 | service or website component | `type`, `lang`, `repo`, `image`, `port`, `probes`, `user`, `volumes`, `env`, `secretRefs`, `secrets`, `replicas`, `resources`, `expose`, `metrics`, `provides`, `consumes`, `uses`, `instances`, `scale` |
 | external component | `type`, `lang`, `repo`, `image`, `external`, `provides`, `consumes`, `instances` (an instance sets only `promote` and `autonomy`) |
 | library component | `type`, `lang`, `repo`, `provides`, `consumes` |
@@ -272,7 +272,7 @@ Every command names the thing it acts on; the same verbs work for a system and f
 | `component` | `new` · `add` · `set` · `remove` (`add` and `set` take `--provides` and `--consumes`) · `explore` · `spec` · `plan` · `build` · `verify` · `check` · `ship` · `fix` · `release` |
 | `api` | `list` |
 | `resource` | `add` · `remove` · `backup` · `restore` · `query` · `upgrade` |
-| `cluster` | `new` · `add` · `remove` (`/cluster:new`, `/cluster:add`, `/cluster:remove`) |
+| `cluster` | `new` · `add` · `remove` · `promote` (`/cluster:new`, `/cluster:add`, `/cluster:remove`, `/cluster:promote <name>`) |
 | `instance` | `promote <component> --to <env>` · `secret set <component>/<env>` · `verify` |
 | `issue` | `triage` · `report` |
 | `platform` | `doctor` · `next` · `update` · `fleet` · `runs` · `retro` · `ui` · `release` |

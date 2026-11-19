@@ -210,17 +210,30 @@ def contexts_list(contexts: dict[str, str]) -> list[str]:
     return [f"{e}={c}" for e, c in contexts.items()]
 
 
+def env_backup(repo: Path, app: str | None, resource: str, env: str, context: str | None) -> dict:
+    """The backup status of one database instance, read from its own environment's cluster only ({} when there is no such instance)."""
+    app_dir, m = status.load(repo, app)
+    ri = next((x for x in m.resource_instances if (x.resource, x.environment) == (resource, env) and x.type == "database"), None)
+    if ri is None:
+        return {}
+    try:
+        state = backupstate.restore_state(app_dir, env, resource)
+    except backupstate.StateError:
+        state = None
+    return backupstate.database_state(m.system, resource, env, context, backup=bool(ri.backup), external=ri.external, state=state,
+                                      schedule=(ri.backup or {}).get("schedule"))["backup"]
+
+
 def last_backup_text(typ: str, repo: Path, app: str | None, resource: str, env: str, contexts: dict[str, str], backup: bool) -> str:
     if typ != "database":
         return f"none ({typ} has no backup)"
     if not backup:
         return "none (no backup is configured)"
     try:
-        got = status.public_backups(status.collect_backups(repo, app, contexts_list(contexts)))
+        b = env_backup(repo, app, resource, env, contexts.get(env))
     except (backupstate.ReadError, backupstate.StateError) as e:
         return f"unreadable ({e})"
-    entry = next((i for i in got["resource_instances"] if (i["resource"], i["environment"]) == (resource, env)), None)
-    return ((entry or {}).get("backup") or {}).get("last_success") or "never"
+    return b.get("last_success") or "never"
 
 
 def next_line(m: model.Model, cfgs_res: dict, env: str, resource: str, major: object, pin_of, promote: str | None) -> tuple[str, bool]:

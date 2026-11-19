@@ -113,6 +113,7 @@ class Environment:
     backup: dict | None = None  # {"to", "schedule", "retention"} (spec 117)
     autonomy: dict = field(default_factory=dict, compare=False)  # spec 124: declared and effective policy
     autoscaling: str | None = None  # "keda" when a running instance scales on a queue (spec 120)
+    cluster: str | None = None  # spec 201: the cluster that runs the environment
 
 
 @dataclass(frozen=True)
@@ -664,7 +665,8 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
                               ob.get("alertmanagerURL"), f"addon-observability-{name}", ob.get("headersSecret"), ob.get("querySecret"))
         envs.append(Environment(name, order, _str_or_none(conf.get("host")), _str_or_none(conf.get("url")), _policy(conf, name),
                                 _promotion(conf, name), o, "owner" if conf.get("operators") == "owner" else None, _backup(conf.get("backup")),
-                                _env_autonomy(name, conf, paused, _promotion(conf, name))))
+                                _env_autonomy(name, conf, paused, _promotion(conf, name)),
+                                None, conf["cluster"] if isinstance(conf.get("cluster"), str) else None))
     by_env = {e.name: e for e in envs}
 
     res_docs = {str(k): _map(v) for k, v in _map(doc.get("resources")).items()}

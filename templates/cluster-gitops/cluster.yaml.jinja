@@ -28,6 +28,17 @@ secretStore:
 #     provider: {vault: {...}}        # one External Secrets provider block; default: the Kubernetes provider over the secrets-store namespace
 {%- endif %}
 
+# Optional: several clusters in this one repo, in upgrade order (the first one takes a new platform release first). Each listed
+# cluster needs a file clusters/<name>/cluster.yaml (hand-edited, empty when it has no exceptions) and gets its own tree
+# cluster/<name>/. Bootstrap one with `devbox run bootstrap <name>`; move a later cluster to this repo's release with /cluster:promote.
+# Without `clusters` this repo is the one cluster named above.
+# clusters: [local, {{ project_name }}]
+
 # The systems that run on this cluster: name -> {repo: <owner>/<name>} (the system's gitops repo, owned by `org`).
 # Do not edit by hand: use /cluster:add and /cluster:remove.
+# With `clusters`, a system may say which cluster runs each environment (dev, staging, prod); the default is every environment
+# on every listed cluster:
+#   todo:
+#     repo: {{ github_org }}/todo-gitops
+#     environments: {dev: local, staging: local, prod: {{ project_name }}}
 systems: {}

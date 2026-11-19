@@ -203,7 +203,9 @@ def test_ac_125_15_cluster_down_removes_the_local_cluster(world):  # AC-125.15
     import json
     recipe = json.loads((repo / "devbox.json").read_text())["shell"]["scripts"]["cluster-down"]
     cmd = recipe if isinstance(recipe, str) else "\n".join(recipe)
-    assert "WITH_SYSTEM=0" in cmd and "local-cluster.sh down" in cmd and "-local" in cmd
+    assert "scripts/cluster-down.sh" in cmd
+    body = (repo / "scripts" / "cluster-down.sh").read_text()
+    assert "WITH_SYSTEM=0" in body and "local-cluster.sh down" in body and "suffix=local" in body
     p = subprocess.run(["bash", "-c", cmd], cwd=repo, capture_output=True, text=True)
     assert p.returncode == 0, p.stdout + p.stderr
     assert "k3d cluster delete home-local" in s["kube_log"].read_text()

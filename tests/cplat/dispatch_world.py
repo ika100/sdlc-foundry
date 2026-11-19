@@ -62,7 +62,9 @@ for a in cfg.get("answers", []):
         answer = a["result"]
 out = {"type": "result", "subtype": "success", "is_error": False, "result": json.dumps(answer), "session_id": "fake",
        "total_cost_usd": 0.01}
-if not cfg.get("no_usage"):
+if cfg.get("no_usage"):
+    del out["total_cost_usd"]
+else:
     out["usage"] = cfg.get("usage") or {"input_tokens": 1000, "output_tokens": 500, "cache_read_input_tokens": 0,
                                         "cache_creation_input_tokens": 0}
 print(json.dumps(out))
@@ -509,7 +511,7 @@ class World:
 
     def _settle(self, before, res):
         """The fake headless records its call when its interpreter is up: wait for the processes this command started."""
-        expected = before + len([ln for ln in res.lines if ln.startswith(("started ", "restarted "))])
+        expected = before + len([ln for ln in res.lines if ln.startswith(("started ", "restarted ")) and "(task," not in ln])   # a filler task runs no headless
         wait_for(lambda: len(self.calls()) >= expected, budget(15), what=f"{expected} headless calls")
         for call in self.calls()[before:expected]:      # the next thing a test reads is the result file the fake writes at start
             if call["result_file"] != "None":

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import backupstate
 import core
+import envcluster
 import gitops
 import model
 from core import PlatformError, Report
@@ -45,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
                    "next to the running database (#415)")
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
-    p.add_argument("--context", help="kube context (default: the current one)")
+    p.add_argument("--context", help="kube context (default: the environment's cluster for a system spread over clusters, else the current one)")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
     return p
@@ -315,6 +316,7 @@ def main(argv: list[str]) -> int:
     app_dir = gitops.find_app(repo, ns.app)
     m = model.load_dir(app_dir)
     ri = check(ns, m)
+    ns.context = envcluster.env_context(repo, m, ns.env, ns.context)
     system, db, env, ctx = app_dir.name, ns.name, ns.env, ns.context
     kns = f"{system}-{env}"
     try:

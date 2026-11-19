@@ -10,4 +10,10 @@ A **cluster repo** (shape `cluster-gitops`) owns what a cluster shares between s
 | `/cluster:add <owner>/<repo> [--name <system>]` | Register a system's gitops repo in `cluster.yaml`, render, and open one PR |
 | `/cluster:remove <system>` | Remove the entry and its rendered application in one PR; nothing is deleted in the cluster |
 
-All three run `cplat cluster <verb>`, preview with `--dry-run` first, and change nothing when they fail.
+| `/cluster:promote <cluster> [--component-dir NAME=DIR]...` | Open one PR that moves a later cluster to the platform release the cluster before it runs, once that cluster is ready; a person's decision |
+
+All four run `cplat cluster <verb>`, preview with `--dry-run` first, and change nothing when they fail.
+
+## Several clusters
+
+A cluster repo may list several clusters (`clusters` in `cluster.yaml`); an environment runs on the cluster its system assigns it to. `/cluster:add` then waits on each cluster that runs the system, and `/cluster:promote` moves a later cluster up. See [docs/CLUSTERS.md](../../docs/CLUSTERS.md), "Several clusters".

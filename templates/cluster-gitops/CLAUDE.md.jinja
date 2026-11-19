@@ -17,12 +17,15 @@ cluster/systems-root.yaml          GENERATED: Application platform-systems (read
 cluster/operators/<op>.yaml        GENERATED: one Application per operator listed in cluster.yaml (+ secret-store.yaml with external-secrets)
 cluster/systems/<system>.yaml      GENERATED: one Application per registered system (it syncs the system repo's bootstrap/ folder)
 cluster/kustomization.yaml         GENERATED: lists every manifest so CI can build and validate them
+clusters/<name>/cluster.yaml       hand-edited, only with `clusters` in cluster.yaml: that cluster's exceptions (operators, secretStore, server); cluster/<name>/ replaces cluster/ then
 scripts/                           render.py, check.py, bootstrap.sh, cluster-up.sh (and the system renderer + local-cluster copies)
 ```
 
 Everything marked GENERATED is derived from `cluster.yaml` by `devbox run render`. Never hand-edit files under `cluster/`; change `cluster.yaml` (by hand or with the commands below) and render. A render of an unchanged `cluster.yaml` changes nothing.
 
 ## Commands
+
+- With `clusters` in `cluster.yaml` the repo holds several clusters, each with its own tree `cluster/<name>/`. `clusters/<name>/cluster.yaml` is hand-edited. `/cluster:promote <name>` moves a later cluster to this repo's release. `devbox run bootstrap <cluster>` and `devbox run cluster-up <cluster>` take the cluster's name.
 
 - `/cluster:add <system-repo>` registers a system (a PR that edits `cluster.yaml` and renders). `/cluster:remove <system>` unregisters it.
 - `/platform:update` brings this repo's skeleton (scripts, recipes, CI) to the current platform release. `/platform:doctor` checks the repo and its setup.

@@ -1,1 +1,0 @@
-`cplat spec check` parses each spec's front matter and the shape registry once per content instead of once per lookup: a check of all specs takes about a tenth of the time, and `test_ac_123_16`, which took 99 s of its 120 s limit alone and timed out under load, finishes in seconds (#698).

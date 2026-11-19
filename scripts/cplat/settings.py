@@ -12,6 +12,9 @@
 project file; the personal file may not have the key.
 
 `failure_summary` (spec 108) is `on` (default) or `off`, read from the project file only; `off` restores the raw log tails.
+
+`kube_contexts` (spec 201) is a map of cluster name to kube context name, project over user per key; it holds context names only,
+never credentials. `kube_contexts(repo)` returns {} when unset.
 """
 from __future__ import annotations
 
@@ -103,6 +106,29 @@ def kube_context(repo: Path) -> tuple[str | None, str | None]:
             raise PlatformError(f"{path}: kube_context must be the name of a kube context")
         return value.strip(), source
     return None, None
+
+
+def kube_contexts_with_source(repo: Path) -> dict[str, tuple[str, str]]:
+    """cluster -> (kube context, 'project settings' | 'user settings') from `kube_contexts:`; the project file wins per key."""
+    out: dict[str, tuple[str, str]] = {}
+    for source, path in (("user settings", user_file()), ("project settings", repo / PROJECT_FILE)):   # project read last: it wins
+        if not path.is_file():
+            continue
+        data = _yaml(path)
+        value = data.get("kube_contexts") if isinstance(data, dict) else None
+        if value is None:
+            continue
+        if not isinstance(value, dict) or not all(
+                isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in value.items()):
+            raise PlatformError(f"{path}: kube_contexts must map cluster names to kube context names")
+        for cluster, ctx in value.items():
+            out[cluster] = (ctx.strip(), source)
+    return out
+
+
+def kube_contexts(repo: Path) -> dict[str, str]:
+    """cluster -> kube context name from `kube_contexts:` of the project file over the user file (per key); {} when unset."""
+    return {c: ctx for c, (ctx, _) in kube_contexts_with_source(repo).items()}
 
 
 BUDGET_KEYS = ("minutes", "invocations", "reruns", "cost")

@@ -4,6 +4,7 @@
   report_doc(slug, since_days=7) -> dict          `{"schema": 1, "days": [...]}`, newest day first
   wait_result(slug, timeout) -> (code, lines)     IDLE (0) / ESCALATED or RED (1) / TIMEOUT (2); marks the events it reports seen
   policy_doc / tokens_doc / starts_doc / slots_doc / plan_doc    the parts of `plan --json` (plan_doc puts them together)
+  Spec 210: plan_doc and status_doc add `plan`, `cost`, `hints` and `warnings` from `dispatch_gate.gate`; `starts` carries its text
   render_plan / render_status / render_report     the text; thousands separators only here, never in JSON
 
 `cplat dispatch inbox` is `needs.render` and needs nothing here. This module reads local files only (state.json, the unit files, the
@@ -18,6 +19,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import dispatch_budget
+import dispatch_gate
+import dispatch_pace
 import dispatch_policy
 import dispatch_state as ds
 import dispatch_units
@@ -54,10 +57,10 @@ def policy_doc(slug: str, policy: dispatch_policy.Policy) -> dict:
             "unset": list(policy.unset), "usage_hint": dispatch_budget.history_hint(slug)}
 
 
-def _unknown(st: dict) -> list[str]:
-    """The units whose usage is unknown today (`dispatch_budget.book` marks them in the state)."""
+def _unknown(st: dict, key: str = "unknown") -> list[str]:
+    """The units whose tokens (`unknown`) or USD (`unknown_usd`) are unknown today (`dispatch_budget.book` marks them in the state)."""
     day = ds.today()
-    return sorted(unit for unit, found in (st.get("unknown") or {}).items() if found == day)
+    return sorted(unit for unit, found in (st.get(key) or {}).items() if found == day)
 
 
 def tokens_doc(slug: str, policy, st: dict | None = None) -> dict:
@@ -68,20 +71,23 @@ def tokens_doc(slug: str, policy, st: dict | None = None) -> dict:
             "unknown": _unknown(st)}
 
 
-def starts_doc(slug: str, policy, st: dict | None = None) -> dict:
-    """`{"allowed", "why_not"}`: paused, drain, daily budget reached or usage unknown (in that order)."""
-    st = st or ds.load(slug)
-    paused = st["steering"].get("paused")
+def _gate(slug: str, policy, st: dict, gate: dispatch_gate.Gate | None) -> dispatch_gate.Gate:
+    if gate:
+        return gate
     usage = dispatch_budget.usage_today(slug)
-    if paused in ("pause", "drain"):
-        why = paused
-    elif dispatch_budget.reached(usage, policy, slug):
-        why = "daily budget reached"
-    elif _unknown(st):
-        why = "usage unknown"
-    else:
-        why = None
-    return {"allowed": why is None, "why_not": why}
+    usage.unknown, usage.unknown_usd = _unknown(st), _unknown(st, "unknown_usd")
+    return dispatch_gate.gate(slug, policy, st, usage)
+
+
+def starts_doc(slug: str, policy, st: dict | None = None, gate: dispatch_gate.Gate | None = None) -> dict:
+    """`{"allowed", "why_not", "text"}` of the gate: paused, drain, the plan, the USD and token caps, usage unknown (in that order)."""
+    g = _gate(slug, policy, st or ds.load(slug), gate)
+    return {"allowed": g.why_not is None, "why_not": g.why_not, "text": g.text}
+
+
+def budget_docs(g: dispatch_gate.Gate) -> dict:
+    """The keys `plan` and `status` share: `plan` (null in mode cost), `cost`, `hints`, `warnings`."""
+    return {"plan": g.plan, "cost": g.cost, "hints": list(g.hints), "warnings": list(g.warnings)}
 
 
 def no_starts_line(why: str | None, unknown: list[str] | None = None) -> str | None:
@@ -116,12 +122,13 @@ def slots_doc(slug: str, policy, st: dict | None = None) -> dict:
 
 
 def plan_doc(repo: Path | str, slug: str, policy, candidates: list[dict], *, read_at: str | None = None,
-             unavailable: list[dict] | None = None) -> dict:
+             unavailable: list[dict] | None = None, gate: dispatch_gate.Gate | None = None) -> dict:
     """The whole `plan --json` document from the candidate rows of the evaluation (design.md)."""
     st = ds.load(slug)
+    g = _gate(slug, policy, st, gate)
     return {"schema": SCHEMA, "repo": slug, "read_at": read_at or ds.stamp(), "policy": policy_doc(slug, policy),
-            "tokens": tokens_doc(slug, policy, st), "starts": starts_doc(slug, policy, st), "slots": slots_doc(slug, policy, st),
-            "candidates": candidates, "unavailable": unavailable or []}
+            "tokens": tokens_doc(slug, policy, st), "starts": starts_doc(slug, policy, st, g), **budget_docs(g),
+            "slots": slots_doc(slug, policy, st), "candidates": candidates, "unavailable": unavailable or []}
 
 
 # ---------------- status ----------------
@@ -162,8 +169,9 @@ def _escalated_today(slug: str) -> list[dict]:
     return out
 
 
-def status_doc(repo: Path | str, slug: str, policy) -> dict:
+def status_doc(repo: Path | str, slug: str, policy, gate: dispatch_gate.Gate | None = None) -> dict:
     st = ds.load(slug)
+    g = _gate(slug, policy, st, gate)
     counted = st.get("counted") or {}
     units = sorted(_running(slug), key=lambda u: (int(u.get("slot") or 0), str(u.get("unit"))))
     rows = [{"slot": u.get("slot"), "unit": u.get("unit"), "item": u.get("item"), "kind": u.get("kind"), "mode": u.get("mode"),
@@ -178,7 +186,7 @@ def status_doc(repo: Path | str, slug: str, policy) -> dict:
                       "manual": manual_rows(slug)},
             "queue": [dict(q) for q in cycle.get("queue") or []], "held": [dict(h) for h in cycle.get("held") or []],
             "escalated": _escalated_today(slug), "tokens": tokens_doc(slug, policy, st), "last_cycle": cycle.get("at"),
-            "release_hold": release_hold.view(slug)}
+            "release_hold": release_hold.view(slug), **budget_docs(g)}
 
 
 def _hold_line(hold: dict) -> str:
@@ -187,6 +195,69 @@ def _hold_line(hold: dict) -> str:
     if hold["state"] != "running":
         line += f", {hold['state']}, expires {release_hold.hhmm(hold['expires'])}"
     return line
+
+
+def _clock(iso: object, now: dt.datetime) -> str:
+    try:
+        return dispatch_pace.fmt_when(dt.datetime.fromisoformat(str(iso)), now)
+    except ValueError:
+        return "--:--"
+
+
+def _age(p: dict, now: dt.datetime) -> str:
+    if p["source"] == "limit":
+        return f"usage limit until {_clock(p.get('limit_until'), now)}"
+    try:
+        minutes = max(int((now - dt.datetime.fromisoformat(str(p["read_at"]))).total_seconds() // 60), 0)
+    except (TypeError, ValueError):
+        return "no reading"
+    return f"estimate from a reading {minutes} min old" if p["source"] == "estimate" else f"reading {minutes} min old"
+
+
+def _window(name: str, w: dict, extra: list[str], now: dt.datetime) -> str:
+    used = "?" if w["used"] is None else f"{dispatch_pace.fmt_pct(w['used'])} %"
+    if w.get("resets_at"):
+        extra = [*extra, f"resets {_clock(w['resets_at'], now)}"]
+    return f"{name} {used} ({', '.join(extra)})"
+
+
+def plan_line(p: dict, now: dt.datetime | None = None) -> str:
+    """`plan usage: 5h 83 % (stop 80 %, resets 15:45) · week 41 % (pace 46 %, target 92 %, resets Mon 00:00) · reading 4 min old`."""
+    now = ds.now() if now is None else now
+    if p["source"] == "unknown":
+        return "plan usage: unknown (install the sensor and open an interactive session)"
+    five, week, pct = p["five_hour"], p["seven_day"], dispatch_pace.fmt_pct
+    stop, target = pct(five["stop"]), pct(week["target"])
+    pace = [] if week.get("pace") is None else [f"pace {pct(week['pace'])} %"]
+    return (f"plan usage: {_window('5h', five, [f'stop {stop} %'], now)} · "
+            f"{_window('week', week, [*pace, f'target {target} %'], now)} · {_age(p, now)}")
+
+
+def cost_line(c: dict) -> str:
+    """`cost today: $1.20 of $5.00 · this month: $30.40 of $100.00` (no month part without a monthly limit)."""
+    line = f"cost today: {dispatch_gate.usd(c['used_usd'])}"
+    line += f" of {dispatch_gate.usd(c['limit_usd'])}" if c["limit_usd"] is not None else " (no USD limit set)"
+    if c["month_limit_usd"] is not None:
+        line += f" · this month: {dispatch_gate.usd(c['month_used_usd'])} of {dispatch_gate.usd(c['month_limit_usd'])}"
+    return line
+
+
+def _budget_lines(doc: dict) -> list[str]:
+    """The plan line, the cost line (mode cost or any USD cap), then each warning and each hint."""
+    cost = doc["cost"]
+    lines = [plan_line(doc["plan"])] if doc.get("plan") else []
+    if not doc.get("plan") or cost["limit_usd"] is not None or cost["month_limit_usd"] is not None:
+        lines.append(cost_line(cost))
+    return lines + list(doc.get("warnings") or []) + list(doc.get("hints") or [])
+
+
+def _held_text(h: dict) -> str:
+    """`held: <detail>` for a budget hold, `held: filler only` for a filler-only candidate, else `<reason> (<detail>)`."""
+    if h.get("reason") == "budget":
+        return f"held: {h.get('detail')}"
+    if h.get("reason") == "filler only":
+        return "held: filler only"
+    return f"{h.get('reason')}" + (f" ({h['detail']})" if h.get("detail") else "")
 
 
 def render_status(doc: dict) -> str:
@@ -207,10 +278,11 @@ def render_status(doc: dict) -> str:
     lines.append(f"queue ({len(doc['queue'])}):")
     lines += [f"  {q.get('item')}  {q.get('kind')}  {q.get('mode')}" for q in doc["queue"]]
     lines.append(f"held ({len(doc['held'])}):")
-    lines += [f"  {h.get('item')}  {h.get('reason')}" + (f" ({h['detail']})" if h.get("detail") else "") for h in doc["held"]]
+    lines += [f"  {h.get('item')}  {_held_text(h)}" for h in doc["held"]]
     escalated = doc.get("escalated") or []
     lines.append(f"escalated today ({len(escalated)}):")
     lines += [f"  {e['unit']}  {e['item']}  {e['label']}  {_one_line(e['reason'])}" for e in escalated]
+    lines += _budget_lines(doc)
     t = doc["tokens"]
     lines.append(f"tokens today ({t['day']}): {_n(t['used'])} of {_n(t['limit']) if t['limit'] is not None else 'no limit set'}"
                  + (RAISED if t.get("raised") else ""))
@@ -229,7 +301,8 @@ def _flat(values: dict) -> list[tuple[str, object]]:
         if key in ("ready", "gates", "guard"):
             out += [(f"{key}.{k}", v) for k, v in value.items()]
         elif key == "budget":
-            out += [("budget.tokens_per_day", value.get("tokens_per_day")), ("budget.per_unit", value.get("per_unit"))]
+            out += [(f"budget.{k}", value.get(k)) for k in ("mode", "usd_per_day", "usd_per_month", "tokens_per_day", "per_unit")]
+            out += [(f"budget.plan.{k}", v) for k, v in (value.get("plan") or {}).items()]
         else:
             out.append((key, value))
     return out
@@ -248,25 +321,32 @@ def _value(value: object) -> str:
 
 
 def _hint(hint: list[dict]) -> str:
-    return " ".join(f"{h['day']} {_n(h['tokens'])}" for h in hint)
+    return " ".join(f"{h['day']} {'$?' if h.get('usd') is None else dispatch_gate.usd(h['usd'])}" for h in hint)
 
 
 def render_plan(doc: dict) -> str:
     pol = doc["policy"]
     lines = [f"policy: {pol['file']}" if pol["file"] else f"policy: defaults (no {dispatch_policy.FILE})"]
     for key, value in _flat(pol["values"]):
-        if key == dispatch_policy.TOKENS_KEY and value is None:
-            lines.append(f"  {key}: unset (required by start and resume) — last 7 days: {_hint(pol.get('usage_hint') or [])}")
+        if key in pol["unset"]:
+            lines.append(f"  {key}: unset (required by start and resume in mode cost) — last 7 days: {_hint(pol.get('usage_hint') or [])}")
+            continue
+        if value is None and key.startswith("budget."):
+            # a daily USD limit is the way forward, so the deprecation note is for the policies that still lack it
+            deprecated = key == dispatch_policy.TOKENS_KEY and "budget.usd_per_day" in pol["unset"]
+            lines.append(f"  {key}: unset" + (" (deprecated)" if deprecated else ""))
             continue
         lines.append(f"  {key}: {_value(value)}" + (" (default)" if key in pol["defaulted"] else ""))
     t = doc["tokens"]
+    lines += _budget_lines(doc)
+    if (doc.get("plan") or {}).get("filler"):
+        lines.append("filler: true")
     lines.append(f"tokens today: {_n(t['used'])} of {_n(t['limit']) if t['limit'] is not None else 'no limit set'}"
                  + (RAISED if t.get("raised") else ""))
     if t.get("unknown"):
         lines.append("usage unknown: " + ", ".join(t["unknown"]))
-    line = no_starts_line(doc["starts"]["why_not"], t.get("unknown"))
-    if line:
-        lines.append(line)
+    if doc["starts"].get("text"):
+        lines.append(f"no starts: {doc['starts']['text']}")
     lines += [_held_line(m) for m in doc["slots"]["manual"]]
     lines.append(f"candidates ({len(doc['candidates'])}):")
     for c in doc["candidates"]:
@@ -274,9 +354,11 @@ def render_plan(doc: dict) -> str:
             verdict = "ready"
         elif c.get("reason") == "skipped":
             verdict = f"held: skipped: {c['detail']}" if c.get("detail") else "held: skipped"
+        elif c.get("reason") in ("budget", "filler only"):
+            verdict = _held_text(c)
         else:
             verdict = f"held: {c.get('reason')}" + (f" ({c['detail']})" if c.get("detail") else "")
-        slot = f"slot {c['slot']}" if c.get("slot") else ("queued" if c["verdict"] == "ready" else "-")
+        slot = f"slot {c['slot']}" + (" (filler)" if c.get("filler") else "") if c.get("slot") else ("queued" if c["verdict"] == "ready" else "-")
         lines.append(f"{c['item']}  {c['kind']}  {verdict}  {c.get('mode') or '-'}  {slot}  premise {c.get('premise') or '-'}  {c['title']}")
     for u in doc.get("unavailable") or []:
         lines.append(f"unavailable: {u['source']}: {u['error']}")
@@ -375,5 +457,5 @@ def wait_result(slug: str, timeout: float = 540, *, sleep: Callable[[float], Non
         sleep(min(POLL, left))
 
 
-__all__ = ["check", "no_starts_line", "plan_doc", "policy_doc", "render_plan", "render_report", "render_status", "report_doc",
+__all__ = ["budget_docs", "check", "cost_line", "no_starts_line", "plan_doc", "plan_line", "policy_doc", "render_plan", "render_report", "render_status", "report_doc",
            "slots_doc", "starts_doc", "status_doc", "tokens_doc", "wait_result"]

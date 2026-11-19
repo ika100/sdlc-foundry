@@ -128,6 +128,10 @@ CPLAT_SH = '#!/bin/sh\nexec %(py)s %(cplat)s "$@"\n'
 CLAUDE = r'''#!@@PY@@
 import json, os, pathlib, subprocess, sys
 
+if "--max-turns" in sys.argv and "Reply with the single word ok." in sys.argv:    # spec 207: the preflight's model check call
+    print(json.dumps({"type": "result", "is_error": False, "result": "ok",
+                      "usage": {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}))
+    sys.exit(0)
 W = pathlib.Path("@@WORLD@@")
 PY, CPLAT, PLUGIN, HOOKS = "@@PY@@", "@@CPLAT@@", "@@PLUGIN@@", pathlib.Path("@@HOOKS@@")
 SPEC, BRANCH = "@@SPEC@@", "@@BRANCH@@"

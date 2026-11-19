@@ -80,3 +80,19 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash
       - name: Run the cluster end-to-end test
         run: bash tests/e2e/cluster.sh
+
+  e2e-clusters:
+    name: e2e clusters (one repo, two clusters)
+    needs: decide
+    if: needs.decide.outputs.run == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install copier and k3d
+        run: |
+          uv tool install copier
+          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash
+      - name: Run the clusters end-to-end test
+        run: bash tests/e2e/clusters.sh
