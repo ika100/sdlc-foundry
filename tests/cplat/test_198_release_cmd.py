@@ -19,7 +19,9 @@ STOP_LINE = f"  release hold: merges into {SLUG} wait until 2026-11-16 12:20 (li
 @pytest.fixture()
 def rw(w, clock, monkeypatch):
     """The release world with the hold seams: the repo's slug is acme/shop, and the clock stands at 2026-11-16 10:20."""
-    monkeypatch.setattr(dispatch_state, "slug_of", lambda repo: SLUG)
+    import platrelease
+    for mod in {dispatch_state, platrelease.dispatch_state}:         # the module the release calls, whichever copy the worker holds
+        monkeypatch.setattr(mod, "slug_of", lambda repo: SLUG)
     w.clock198 = clock
     return w
 
