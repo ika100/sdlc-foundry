@@ -158,8 +158,19 @@ def default_base() -> str:
         return "HEAD^"
 
 
+def pr_base(base: str) -> str:
+    """On a pull request merge commit the first parent is the base branch as merged: it holds main's newer changes,
+    which the event's base sha (it lags on a synchronize) does not, so they would count as the pull request's (#814)."""
+    try:
+        git("rev-parse", "--verify", "--quiet", "HEAD^2^{commit}")
+    except RuntimeError:
+        return base
+    return "HEAD^1"
+
+
 def decide(base: str) -> tuple[bool, list[str]]:
     git("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
+    base = pr_base(base)
     files = git("diff", "--name-only", base, "HEAD").split()
     reasons = triggers(REPO, files)
     if CHANGELOG in files:

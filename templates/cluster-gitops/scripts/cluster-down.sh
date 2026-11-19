@@ -8,14 +8,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-repo_cluster=$(uv run --quiet scripts/render.py --name)
-first=$(uv run --quiet scripts/render.py --clusters | sed -n 1p)
+repo_cluster=$(bash scripts/uv-script.sh --quiet scripts/render.py --name)
+first=$(bash scripts/uv-script.sh --quiet scripts/render.py --clusters | sed -n 1p)
 want="${1:-$first}"
 suffix=local
 if [ -n "$first" ]; then
   suffix="$want"
-  if ! uv run --quiet scripts/render.py --clusters | grep -qxF -- "$want"; then
-    echo "ERROR: unknown cluster '${want}' (clusters: $(uv run --quiet scripts/render.py --clusters | paste -sd, - | sed 's/,/, /g'))" >&2
+  if ! bash scripts/uv-script.sh --quiet scripts/render.py --clusters | grep -qxF -- "$want"; then
+    echo "ERROR: unknown cluster '${want}' (clusters: $(bash scripts/uv-script.sh --quiet scripts/render.py --clusters | paste -sd, - | sed 's/,/, /g'))" >&2
     exit 1
   fi
 elif [ -n "$want" ] && [ "$want" != "$repo_cluster" ]; then

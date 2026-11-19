@@ -87,6 +87,8 @@ def gave_up_lines(script: str, log: Path, progress: Path) -> list[str]:
     tests = still_running(progress)
     if tests is None:
         return lines + [f"still running: {NOT_REPORTED}"]
+    if not tests:
+        return lines + ["still running: no test (every test ended; the run blocks after the last one)"]
     lines += [f"still running: {t}" for t in tests[:MAX_LISTED]]
     if len(tests) > MAX_LISTED:
         lines.append(f"... and {len(tests) - MAX_LISTED} more")

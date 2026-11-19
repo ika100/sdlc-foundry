@@ -1,4 +1,4 @@
-"""`spec`: feature specs in docs/specs/<NNN>-<slug>/ (ADR-026) — create, check, approve, trace, index, list, migrate.
+"""`spec`: feature specs in docs/specs/<NNN>-<slug>/ (ADR-026) — create, check, approve, show, trace, index, list, migrate.
 
 A spec folder holds spec.md (what: stories, acceptance criteria AC-<NNN>.<n>, non-goals, open questions), optional
 design.md (how, contract) and plan.md (tasks with `covers: [AC-…]`). The slash commands do the judgement; every
@@ -9,7 +9,9 @@ check and every state change of a spec goes through this module so it is determi
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
+import functools
 import hashlib
 import itertools
 import json
@@ -22,6 +24,8 @@ from typing import NamedTuple
 import yaml
 
 import core
+import envlimit
+import priority
 from core import PlatformError
 
 SPECS_DIR = Path("docs") / "specs"
@@ -74,13 +78,19 @@ class BrokenSpec(PlatformError):
         return f"{self.rel}, line {self.line}: {self.problem} (fix: {self.hint})"
 
 
+@functools.lru_cache(maxsize=4096)
+def _front_yaml(text: str) -> object:
+    """Front matter parsed once per content: a full check scans every spec and plan many times, and parsing was most of it."""
+    return yaml.safe_load(text)
+
+
 def load(path: Path, root: Path | None = None) -> tuple[dict, str]:
     rel = str(path.relative_to(root)) if root else str(path)
     m = FRONT.match(path.read_text())
     if not m:
         raise BrokenSpec(path.parent, rel, 1, "missing front matter", FENCE_HINT)
     try:
-        meta = yaml.safe_load(m.group(1))
+        meta = copy.deepcopy(_front_yaml(m.group(1)))
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None) or getattr(e, "context_mark", None)
         line = mark.line + 2 if mark else 1
@@ -284,6 +294,7 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
         errs.append(f"spec.md: priority must be one of {sorted(PRIORITIES)}")
     if "explored" in meta and not isinstance(meta["explored"], bool):
         errs.append("spec.md: explored must be true or false")
+    errs += envlimit.field_errors(meta)          # spec 190: the environments the spec's behaviour may run in
     known = {s["id"] for s in core.registry.load_all()}
     if meta.get("shape") and meta["shape"] not in known:
         errs.append(f"spec.md: unknown shape '{meta['shape']}' (valid: {', '.join(sorted(known))})")
@@ -889,6 +900,8 @@ def skeleton(number: str, title: str) -> str:
 
 <!-- Only what may not be decided by default (spec 149): security or access, money, destroying or migrating data, or a request too ambiguous to build. Approval is refused while any is open. Strike answered ones (~~…~~) and fold the answer into the criteria. -->
 
+{priority.skeleton_comment()}
+
 ## Changelog
 
 - {today()} created
@@ -896,7 +909,7 @@ def skeleton(number: str, title: str) -> str:
 
 
 def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: list[int], parent: str | None,
-        explored: bool = False) -> Spec:
+        explored: bool = False, priority_line: str | None = None) -> Spec:
     import specnumbers
     num, warning = specnumbers.next_number(root)
     if warning:
@@ -915,7 +928,8 @@ def new(root: Path, title: str, *, shape: str | None, priority: str, tracks: lis
         meta["explored"] = True
     if parent:
         meta["parent"] = parent
-    save(sdir / "spec.md", meta, skeleton(number, title))
+    body = skeleton(number, title)
+    save(sdir / "spec.md", meta, add_changelog(body, priority_line) if priority_line else body)
     spec = read(sdir)
     back = spec.meta.get("title")
     if not isinstance(back, str) or back != title:
@@ -1015,6 +1029,11 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
     contract = contract or sections(body).get("contract", "").strip()
     if contract:
         parts.append("### Contract\n\n" + contract)
+    import contract_copy
+    copy = contract_copy.slice(plan_path, repo_id)       # spec 110: a bad contract writes no spec
+    if copy["rules"]:
+        copy["commit"] = contract_copy.commit(plan_path)
+        parts.append(contract_copy.section(copy))
     provided = provided_by_system(app_root, meta.get("repos") or [], repo_id)
     if provided:
         parts.append("### Provided by the system\n\nThe gitops part of this plan wires these for this repo; rely on them, "
@@ -1023,11 +1042,11 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
         parts.append("### Notes for this repo\n\n" + str(repo["arguments"]).strip())
     parent = f"{meta.get('gitops_app')}:{meta.get('spec') or meta.get('plan_id')}"
     return {"title": str(repo.get("summary") or repo_id), "priority": priority if priority in PRIORITIES else "P1",
-            "parent": parent, "problem": problem, "context": "\n\n".join(parts),
+            "parent": parent, "problem": problem, "context": "\n\n".join(parts), "contract_copy": copy,
             "criteria": [str(c).strip() for c in repo.get("criteria") or [] if str(c).strip()]}
 
 
-def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | None) -> Spec:
+def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | None, notes: list[str] | None = None) -> Spec:
     sl = slice_from_plan(plan_path, repo_id)
     spec = new(root, sl["title"], shape=shape, priority=sl["priority"], tracks=[], parent=sl["parent"])
     body = spec.body.replace("## Stories", f"## System context\n\n{sl['context']}\n\n## Stories", 1)
@@ -1038,6 +1057,10 @@ def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | Non
         body = re.sub(r"(## Acceptance criteria\n\n)<!--.*?-->", lambda m: m.group(1) + lines, body, count=1, flags=re.S)
         body = body.replace("- " + today() + " created", f"- {today()} created from the system plan, with its criteria (spec 147)", 1)
     save(spec.dir / "spec.md", spec.meta, body)
+    import contract_copy
+    line = contract_copy.write(root, sl["contract_copy"])
+    if notes is not None:
+        notes.append(line)
     import spec_replace
     new_spec = read(spec.dir)
     by_number = {s.number: s for s in all_specs(root)}
@@ -1177,13 +1200,20 @@ def next_step(spec: Spec) -> str:
     return "—"
 
 
+def _priority_fields(spec: Spec) -> dict:
+    import spec_priority
+    st = spec_priority.state(spec)
+    return {"priority_state": st["state"], "priority_reason": st["reason"]}
+
+
 def summary(root: Path, spec: Spec) -> dict:
     tasks = (spec.plan[0].get("tasks") or []) if spec.plan else []
     return {"id": spec.id, "title": spec.meta.get("title", ""), "status": spec.status,
-            "priority": spec.meta.get("priority", ""), "acs": len(spec.active_acs()),
+            "priority": spec.meta.get("priority", ""), **_priority_fields(spec), "acs": len(spec.active_acs()),
             "open_questions": len(spec.open_questions()), "assumptions": len(spec.assumptions()), "tasks": len(tasks),
             "tasks_done": sum(1 for t in tasks if t.get("done")), "tracks": spec.meta.get("tracks") or [],
-            "explored": spec.meta.get("explored") is True, "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
+            "explored": spec.meta.get("explored") is True, "environments": envlimit.allowed(spec.meta),
+            "next": next_step(spec), "path": str(spec.dir.relative_to(root))}
 
 
 VERDICT_ROW = re.compile(r"^\|\s*(AC-\d{3,}\.\d+)\s*\|\s*([^|]*?)\s*\|")
@@ -1271,8 +1301,8 @@ def detail(root: Path, spec: Spec, shape: str | None) -> dict:
 
 
 def broken_summary(root: Path, b: BrokenSpec) -> dict:
-    return {"id": b.id, "title": "", "status": "broken", "priority": "", "acs": 0, "open_questions": 0,
-            "tasks": 0, "tasks_done": 0, "tracks": [], "explored": False, "next": f"fix {b.rel} line {b.line}: {b.hint}",
+    return {"id": b.id, "title": "", "status": "broken", "priority": "", "priority_state": "unset", "priority_reason": "", "acs": 0, "open_questions": 0,
+            "tasks": 0, "tasks_done": 0, "tracks": [], "explored": False, "environments": None, "next": f"fix {b.rel} line {b.line}: {b.hint}",
             "path": str(b.dir.relative_to(root))}
 
 
@@ -1506,12 +1536,14 @@ def main(argv: list[str]) -> int:
     p.add_argument("title", nargs="*")
     p.add_argument("--from-plan", nargs=2, metavar=("PLAN", "REPO_ID"),
                    help="this repo's slice of a product plan (docs/plan/<id>.md in the gitops-app repo)")
-    p.add_argument("--priority", default="P1", choices=sorted(PRIORITIES))
+    p.add_argument("--priority", type=str.upper, choices=sorted(PRIORITIES), help="the level; recorded as given by you (spec 196)")
     p.add_argument("--tracks", nargs="*", action="extend", default=None, help="issue numbers; words after them are the title")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this spec (spec 082)")
     p.add_argument("--parent")
     p.add_argument("--no-shape", action="store_true", help="do not record the repo's shape")
     p.add_argument("--explored", action="store_true", help="the spec comes from an explore handoff (spec 188)")
+    import spec_priority
+    spec_priority.add_parser(sub)
     p = sub.add_parser("discard", help="remove a never-committed draft spec and release its claims (spec 188)")
     p.add_argument("id")
     p = sub.add_parser("check", help="validate specs and plans (all if none given)")
@@ -1521,6 +1553,10 @@ def main(argv: list[str]) -> int:
     p.add_argument("--offline", action="store_true", help="do not ask GitHub for open PRs")
     p = sub.add_parser("approve", help="check a draft and set it approved")
     p.add_argument("id")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("show", help="one spec: status, counts, environment limit and next step (spec 190)")
+    p.add_argument("id")
+    p.add_argument("--json", action="store_true", help="the spec's object of `list --json --detail`")
     p = sub.add_parser("set-status")
     p.add_argument("id")
     p.add_argument("status", choices=STATUSES)
@@ -1578,14 +1614,20 @@ def main(argv: list[str]) -> int:
         issues = [int(t) for t in itertools.takewhile(str.isdigit, ns.tracks or [])]   # `--tracks 5 Title words`: the rest is the title
         ns.title = [*(ns.tracks or [])[len(issues):], *ns.title]
         ns.tracks = issues
+        notes: list[str] = []
         if ns.from_plan:
-            spec = new_from_plan(root, Path(ns.from_plan[0]).expanduser(), ns.from_plan[1], shape=shape)
+            spec = new_from_plan(root, Path(ns.from_plan[0]).expanduser(), ns.from_plan[1], shape=shape, notes=notes)
         elif not ns.title:
             raise PlatformError("a title or --from-plan PLAN REPO_ID is required")
         else:
-            spec = new(root, " ".join(ns.title), shape=shape, priority=ns.priority, tracks=list(dict.fromkeys(ns.tracks or [])), parent=ns.parent,
-                       explored=ns.explored)
+            import spec_priority
+            tracks = list(dict.fromkeys(ns.tracks or []))
+            level, line = spec_priority.resolve(root, ns.priority, tracks, spec_priority.headless())
+            spec = new(root, " ".join(ns.title), shape=shape, priority=level, tracks=tracks, parent=ns.parent,
+                       explored=ns.explored, priority_line=line)
         print(spec.dir.relative_to(root) / "spec.md")
+        for note in notes:
+            print(note)
         if spec.meta.get("tracks"):
             import claim
             for note in claim.claim(root, spec.meta["tracks"], f"feature/{spec.id}", take_over=ns.take_over, what=spec.id):
@@ -1617,6 +1659,14 @@ def main(argv: list[str]) -> int:
         import adr
         print(f"{adr.next_number(root, with_prs=not ns.offline):03d}")
         return 0
+    if ns.cmd == "priority":
+        import spec_priority
+        try:
+            return spec_priority.set_priority(find(root, ns.id), ns.level, ns.propose, ns.json)
+        except PlatformError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            print(f"  fix: {e.hint}", file=sys.stderr)
+            return 1
     if ns.cmd == "discard":
         import spec_discard
         try:
@@ -1629,9 +1679,30 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "approve":
         spec = find(root, ns.id)
         aside = approve(spec, repo_shape(root))
+        envs = envlimit.allowed(spec.meta)
+        if ns.json:
+            print(json.dumps({"id": spec.id, "status": "approved", "plan_aside": aside, "environments": envs}, indent=2))
+            return 0
         print(f"{spec.id}: approved")
+        if envs is not None:
+            print(envlimit.summary_line(envs))
         if aside:
             print(f"plan.md was written for the earlier criteria and is now {aside}; re-plan with `/component:plan {spec.number}`")
+        return 0
+    if ns.cmd == "show":
+        spec = find(root, ns.id)
+        if ns.json:
+            print(json.dumps(detail(root, spec, repo_shape(root)), indent=2))
+            return 0
+        row = summary(root, spec)
+        print(f"{spec.id} — {row['title']}   [{spec.status}]")
+        print(f"{row['priority']} · {row['acs']} acceptance criteria · {row['assumptions']} assumptions · "
+              f"{row['open_questions']} open questions")
+        if row["priority_state"] != "unset":
+            print(f"Priority: {row['priority']} ({row['priority_reason']})")
+        if row["environments"] is not None:
+            print(envlimit.summary_line(row["environments"]))
+        print(f"next: {row['next']}")
         return 0
     if ns.cmd == "set-status":
         spec = find(root, ns.id)
@@ -1699,6 +1770,10 @@ def main(argv: list[str]) -> int:
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
     given = ns.base if ns.cmd == "test-diff" else None
+    if ns.cmd == "test-diff" and core.run(["git", "rev-parse", "--verify", "-q", f"{ns.base}^{{commit}}"], cwd=root,
+                                           check=False).returncode != 0:   # #752: a crash on git's exit 128 before
+        raise core.PlatformError(f"base {ns.base[:12]} is not a commit of this repository",
+                                 hint="pass the commit with the red acceptance tests: git log --oneline --grep 'acceptance tests for'")
     if ns.cmd == "test-diff" and (base := frozen_base(root, ns.base)) != ns.base:
         print(f"base: {base[:7]}, where the red-tests unit ended (spec 169), not {ns.base[:7]}")
         ns.base = base

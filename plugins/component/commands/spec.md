@@ -2,7 +2,7 @@
 description: "Write, amend or approve a feature spec, or list the specs. Usage: /component:spec <description> | --amend <id> <change> | approve <id> | --from-plan <plan> [<repo-id>] | [--all] | index | migrate"
 ---
 
-You are the **spec orchestrator** (ADR-026): get an approved spec. The product-manager decides by default and lists those decisions as **assumptions**; the user approves them with the spec in one step and answers the few open questions that may not be decided by default (ADR-084). You write no code and no plan.
+You are the **spec orchestrator** (ADR-026): get an approved spec. The user approves the product-manager's default **assumptions** with the spec and answers its few open questions (ADR-084). You write no code and no plan.
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
@@ -17,31 +17,31 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 ## 0. Pre-flight
 
 1. **Mode:** `approve <id>` → A. `--amend <id> <change>` → C. `--from-plan <plan> [<repo-id>]` → D. Otherwise → B (new spec).
-2. **Route small work away** (for a new spec): a typo, rename, one-file tweak, an error message or "X is broken" → recommend `/component:fix` and stop; the user may still insist.
+2. **Route small work away** (for a new spec): a typo, rename, one-file tweak, an error message or "X is broken" → recommend `/component:fix` and stop.
 3. `git status --porcelain` must be empty so that the commit holds only the spec; otherwise stop: commit or stash first.
-4. **Shape:** `unsupported` (a gitops-app repo) → stop and point to `/system:spec`. "cannot determine the repo's shape" → continue with `--no-shape` on `spec new` (`/component:build` needs a shape). A repo with a shape (the platform repo too, `shape: platform`) records it: no `--no-shape`. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. That file already declares it, since the user put it there.
-5. **Branch:** every step of one spec happens on `feature/<spec_id>` (one PR for everything). On another branch than `main`, ask before switching.
+4. **Shape:** `unsupported` (a gitops-app repo) → stop and point to `/system:spec`. "cannot determine the repo's shape" → continue with `--no-shape` on `spec new` (`/component:build` needs a shape). A repo with a shape (`shape: platform` too) records it: no `--no-shape`. A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since that file declares it.
+5. **Branch:** every step of one spec happens on `feature/<spec_id>`. On another branch than `main`, ask before switching.
 
 ## A. approve <id>
 
 1. `cplat spec approve <id>`. Refused → show the reasons and the fix (usually `/component:spec --amend <id> …`). It set the plan aside (criteria changed) → tell the user the spec needs a new plan.
-2. Switch to `feature/<spec_id>` if it exists; commit `docs/specs/<spec_id>/`: `docs(spec): approve <spec_id>`.
-3. `cplat spec land <spec_id>` (merges the PR on green CI); show its output, stop on a failure.
+2. Switch to `feature/<spec_id>` if it exists; commit `docs/specs/<spec_id>/` as `docs(spec): approve <spec_id>`.
+3. `cplat spec land <spec_id>`; show its output, stop on failure.
 4. End with F's hand-over.
 
 ## B. New spec
 
-1. A title (≤ 60 chars) and any `#N` issues in the request: `cplat spec new "<title>" [--tracks N …] [--no-shape]`, plus `--explored` when the request ends in a `DECIDED:` block (the handoff of `/component:explore`; no decisions file exists) (prints `docs/specs/<spec_id>/spec.md`, claims each tracked issue). An issue another branch claimed stops it: tell the user who has it; `--take-over` takes it from them, so use it after the user says yes.
-2. `git checkout -b feature/<spec_id>` (from `main`).
-3. **product-manager** (`agents.product-manager`; `svc:product-manager` without a shape): `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the `<project-map>` (`ls -d */` without dot and dependency directories), and `cplat spec list --all`. With a `DECIDED:` block also `cplat explore context "<title>" --json`: pass the block verbatim and that output's `specs` and `adrs`, so that a decision contradicting an active criterion or accepted ADR becomes an open question.
-4. `cplat spec check <spec_id>`; errors go back to the product-manager once; still failing → stop and show them.
+1. A title (≤ 60 chars) and any `#N` issues in the request: `cplat spec new "<title>" [--tracks N …] [--no-shape]`, plus `--explored` when the request ends in a `DECIDED:` block (from `/component:explore`) and `--priority P<n>` when the request names `P0`, `P1` or `P2` literally (not "urgent"), because only the user's own level counts (prints the spec path, claims each tracked issue). An issue another branch claimed stops it: tell the user who has it; `--take-over` takes it from them, so use it after the user says yes.
+2. `git checkout -b feature/<spec_id>`.
+3. **product-manager** (`agents.product-manager`; `svc:product-manager` without a shape): `MODE: new`, `SPEC_DIR: docs/specs/<spec_id>/`, the request verbatim, the `<project-map>`, `cplat spec list --all`. With a `DECIDED:` block also `cplat explore context "<title>" --json`: pass the block verbatim and that output's `specs` and `adrs`, so that a decision contradicting an active criterion or accepted ADR becomes an open question.
+4. Without `--priority`: `cplat spec priority <spec_id> <P> --propose "<reason>"` from its `PRIORITY:` line. `cplat spec check <spec_id>`; errors go back to the product-manager once; still failing → stop and show them.
 5. Questions loop (Q).
-6. Commit `docs(spec): <spec_id> — <title>`, then `cplat spec publish <spec_id>` (opens or updates the draft PR); print its note. Then F.
+6. Commit `docs(spec): <spec_id> — <title>`, then `cplat spec publish <spec_id>` (opens or updates the draft PR). Then F.
 
 ## C. --amend <id> <change>
 
 1. `cplat spec list --all --json` for the spec and its status. Switch to `feature/<spec_id>` (create it from `main` if the spec is merged).
-2. Not `draft` → `cplat spec set-status <id> draft --reason "amend: <one line>"`; tell the user it needs a new approval and, if it has a plan and the criteria change, a new plan.
+2. Not `draft` → `cplat spec set-status <id> draft --reason "amend: <one line>"`; tell the user it needs a new approval (and a new plan if it has one and criteria change).
 3. First `cplat spec review <id> --comments --json`. A console review comment ("Request changes") in the request → write it to a temp file and post it: `cplat spec review <id> --request-changes --body-file <file>`. **product-manager**: `MODE: amend`, `SPEC_DIR`, the change verbatim, the review comments, any answers the user gave.
 4. `cplat spec check <id>`, Q, commit `docs(spec): amend <spec_id> — <one line>`, `cplat spec publish <spec_id>`, F.
 
@@ -53,25 +53,26 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/spec-from-plan.md` and follow it.
 
 Only open questions are asked here, because assumptions are decided by default and shown at F. While the product-manager's `OPEN QUESTIONS:` is not `none` (at most 3 rounds):
 
-1. **AskUserQuestion**, up to 4 questions per call: the question as header, the suggested answer first marked "(Recommended)", one or two alternatives. A suggested answer `explore first` becomes the option `/component:explore <topic>` (Recommended); chosen → `cplat spec discard <spec_id>`, `git switch main`, `git branch -d feature/<spec_id>`, then print that command as the next step and stop.
+1. **AskUserQuestion**, up to 4 questions per call: the suggested answer first marked "(Recommended)", 1-2 alternatives. A suggested answer `explore first` becomes the option `/component:explore <topic>` (Recommended); chosen → `cplat spec discard <spec_id>`, `git switch main`, `git branch -d feature/<spec_id>`, print that command and stop.
 2. Answers to the product-manager: `MODE: amend`, "answers to open questions: …".
 3. `cplat spec check <spec_id>`; when the answers change a committed draft, commit `docs(spec): answer open questions for <spec_id>` and `cplat spec publish <spec_id>`.
 
-The user stops answering → the questions stay and the spec stays `draft`.
 
 ## F. Finish
 
 ```
 ## Spec <spec_id> — <title>   [<status>]
 <n> acceptance criteria:
-- AC-NNN.1 …   (one short line each)
+- AC-NNN.1 …
 Assumptions (decided by default):
 - A1 …
 Open questions: <n or none> · Non-goals: <short list>
 File: docs/specs/<spec_id>/spec.md · Branch: feature/<spec_id>
 ```
 
-No open questions → one AskUserQuestion: "Approve with these <n> assumptions (Recommended)" / "Change an assumption" / "I'll review the file first". Approve → A. Change → ask which one and the new decision (the user types it), then C with that change and F again. Otherwise end with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
+The summary carries the `Priority:` and `Environment limit:` lines of `cplat spec show <spec_id>`, so that approval is informed.
+
+No open questions → one AskUserQuestion: "Approve with these <n> assumptions (Recommended)" / "Change an assumption" / "I'll review the file first". Approve → A. Change → ask which and the new decision (typed): `priority P<n>` runs `cplat spec priority <spec_id> P<n>`, commit, `cplat spec publish <spec_id>`; anything else is C; then F again. Otherwise end with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 
 ## Rules
 

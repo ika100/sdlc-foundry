@@ -204,10 +204,40 @@ def _children(rec: dict) -> list[str]:
     return [c for c in rec.get("ships") or [] if isinstance(c, str)]
 
 
-def lookup_pr(repo: str, branch: str, state: str = "all") -> dict | None:
-    """The open or merged PR of a branch through `gh` (tests replace this); None when `gh` cannot say."""
+_PR_LIST_LIMIT = 300
+_pr_lists: dict[str, list[dict] | None] = {}
+_pr_lock = threading.Lock()
+
+
+def _listed_prs(repo: str) -> list[dict] | None:
+    """The newest pull requests of a repo from one `gh` call, kept while `shared_reads` is open; None when the list
+    may be incomplete or `gh` cannot say (the caller then asks per branch)."""
     import json as _json
     from core import run
+    with _pr_lock:
+        if repo not in _pr_lists:
+            try:
+                out = run(["gh", "pr", "list", "-R", repo, "--state", "all", "--json", "number,url,headRefName,state",
+                           "--limit", str(_PR_LIST_LIMIT)], check=False, timeout=30).stdout
+                found = _json.loads(out or "[]")
+                _pr_lists[repo] = found if isinstance(found, list) and len(found) < _PR_LIST_LIMIT else None
+            except Exception:  # noqa: BLE001
+                _pr_lists[repo] = None
+        return _pr_lists[repo]
+
+
+def lookup_pr(repo: str, branch: str, state: str = "all") -> dict | None:
+    """The open or merged PR of a branch through `gh` (tests replace this); None when `gh` cannot say. Inside
+    `shared_reads` the PRs of a repo are asked once and matched here, not one call per branch."""
+    import json as _json
+    from core import run
+    listed = _listed_prs(repo) if _sharing else None
+    if listed is not None:
+        for pr in listed:
+            if (isinstance(pr, dict) and pr.get("headRefName") == branch and pr.get("url")
+                    and (state == "all" or str(pr.get("state") or "").lower() == state)):
+                return {"number": pr.get("number"), "url": pr["url"]}
+        return None
     try:
         out = run(["gh", "pr", "list", "-R", repo, "--head", branch, "--state", state, "--json", "number,url", "--limit", "1"],
                   check=False, timeout=10).stdout
@@ -401,6 +431,7 @@ def shared_reads() -> Iterator[None]:
             _sharing -= 1
             if not _sharing:
                 _day_files.clear()
+                _pr_lists.clear()
 
 
 def read_days(store, slug: str, days: list[datetime.date]) -> list[tuple[str, str]]:

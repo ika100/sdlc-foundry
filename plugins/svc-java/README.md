@@ -1,12 +1,12 @@
 # svc-java plugin
 
-Agents for **Java service repos** — the `service-java` shape (Spring Boot 3.x, JDK 21, Maven). Used by the `/svc:*` orchestrators (which route to `svc-java:<role>` when the detected shape is `service-java`). Pair with `svc` (orchestrators, product-manager, architect), `shared` (quality/security) and the `service-java` Copier template.
+Agents for **Java service repos** — the `service-java` shape (Spring Boot 4.x, JDK 21, Maven). Used by the `/svc:*` orchestrators (which route to `svc-java:<role>` when the detected shape is `service-java`). Pair with `svc` (orchestrators, product-manager, architect), `shared` (quality/security) and the `service-java` Copier template.
 
 ## Agents
 
 | Agent | Model | Purpose |
 |---|---|---|
-| `coder` | sonnet | Spring Boot 3 / Java 21 implementation following the architect's plan |
+| `coder` | sonnet | Spring Boot 4 / Java 21 implementation following the architect's plan |
 | `tester` | sonnet | JUnit 5 + Spring Boot Test, Testcontainers, JaCoCo 80% gate |
 | `deployment` | sonnet | Distroless Java Dockerfile, GHCR CI (image only) |
 | `observability` | sonnet | Actuator + Micrometer Prometheus + OTel Java agent, alerts |

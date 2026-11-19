@@ -126,11 +126,12 @@ def _journey_wait(seconds: float, kind: str) -> None:
 
 
 def run_renderer(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    """`uv run scripts/render.py` in a cluster repo that never reads a stale bytecode cache: a renderer written within the same second
+    """`scripts/render.py` (through uv-script.sh) in a cluster repo that never reads a stale bytecode cache: a renderer written within the same second
     and with the same size as the one that wrote `scripts/__pycache__` passes Python's mtime+size check and would render the old pins."""
     for cache in [repo / "scripts" / "__pycache__", *(repo / ".platform" / "releases").glob("*/__pycache__")]:
         shutil.rmtree(cache, ignore_errors=True)
-    return run(["uv", "run", "scripts/render.py", *args], cwd=repo, check=False, env={"PYTHONDONTWRITEBYTECODE": "1"})
+    from uvscript import script_cmd     # uvscript imports core
+    return run(script_cmd("scripts/render.py", *args), cwd=repo, check=False, env={"PYTHONDONTWRITEBYTECODE": "1"})
 
 
 def repo_env(extra: dict[str, str] | None = None) -> dict[str, str]:

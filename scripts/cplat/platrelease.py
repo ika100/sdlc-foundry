@@ -2,7 +2,8 @@
 
 Prepare, merge, tag and publish a platform release (spec 129). The progress is derived from git and GitHub on every run
 (platrelease_state), never stored: a run that stopped continues at the first step not done. Two stops (exit 3) wait for
-`--confirm merge` and `--confirm tag`. This module: preflight, dry run, prepare/commit/push/PR, the CI wait and the merge;
+`--confirm merge` and `--confirm tag`. From its first check until the tag (spec 198) the release holds `main` against every cplat
+merge on this machine (release_hold): cleared on an error, on Ctrl-C and after the tag push, kept 2 hours at a stop. This module: preflight, dry run, prepare/commit/push/PR, the CI wait and the merge;
 platrelease_publish: the upgrade e2e, the gate, the tag, the GitHub release and the release guard."""
 from __future__ import annotations
 
@@ -12,10 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import core
+import dispatch_state
 import land_merge
+import merge_lock
 import platrelease_changelog as changelog
+import platrelease_publish as pub
 import platrelease_state as st
 import pr as prmod
+import release_hold
 import ship
 
 E2E_NAME = st.E2E_NAME
@@ -49,8 +54,10 @@ def _preflight(repo: Path, skip_eval: str | None = None) -> None:
         raise core.PlatformError("uncommitted changes: " + ", ".join(dirty))
     local = _git(repo, "rev-parse", "--verify", "-q", "refs/heads/main", check=False).strip()
     remote = _git(repo, "rev-parse", "origin/main").strip()
-    if local != remote:
-        raise core.PlatformError(f"local main {local[:7] or 'missing'} differs from origin/main {remote[:7]}")
+    # the release branches from origin/main (#789): a local main that is only behind does not matter, unpushed commits do
+    if local and local != remote and core.run(["git", "merge-base", "--is-ancestor", local, remote], cwd=repo, check=False).returncode:
+        raise core.PlatformError(f"local main {local[:7]} differs from origin/main {remote[:7]}: it has commits that are not on origin/main",
+                                 hint="push them in a pull request first, or drop them: git branch -f main origin/main")
     text = _git(repo, "show", f"origin/main:{CHANGELOG}", check=False)
     fragments = _fragments_at(repo, "origin/main")
     if not changelog.unreleased_body(text).strip() and not fragments:
@@ -87,11 +94,33 @@ def _check(repo: Path, cmd: list[str], name: str) -> None:
         raise core.PlatformError(f"{name} failed")
 
 
+def _stale_local(repo: Path, branch: str) -> bool:
+    """A release branch of an earlier start that was never pushed and is behind origin/main (#789): its checks ran on an old main."""
+    if _git(repo, "rev-parse", "--verify", "-q", f"refs/remotes/origin/{branch}", check=False).strip():
+        return False
+    return core.run(["git", "merge-base", "--is-ancestor", "origin/main", branch], cwd=repo, check=False).returncode != 0
+
+
+def _rebuild(repo: Path, branch: str) -> None:
+    """Start the never-pushed release branch again from origin/main; only its changelog edits are dropped (made again below)."""
+    current = _git(repo, "branch", "--show-current").strip()
+    dirty = [ln[3:] for ln in _git(repo, "status", "--porcelain").splitlines() if ln.strip()]
+    other = [p for p in dirty if p != CHANGELOG and not p.startswith(changelog.FRAGMENTS + "/")]
+    if other or (dirty and current != branch):
+        raise core.PlatformError("uncommitted changes: " + ", ".join(other or dirty))
+    if current == branch:
+        _git(repo, "reset", "-q", "--hard", "origin/main")
+    else:
+        _git(repo, "switch", "--no-track", "-C", branch, "origin/main")
+    print(f"{branch} was never pushed and is behind origin/main: started it again from origin/main")
+
 def _prepare(repo: Path, state: st.State, version: str, skip_eval: str | None = None) -> str:
     """idle/branch → the PR is open; returns the PR URL."""
     branch = f"release/{version}"
     if state.phase == st.IDLE:
-        _git(repo, "switch", "-c", branch, "main")
+        _git(repo, "switch", "--no-track", "-c", branch, "origin/main")
+    elif _stale_local(repo, branch):
+        _rebuild(repo, branch)
     else:
         current = _git(repo, "branch", "--show-current").strip()
         dirty = [ln[3:] for ln in _git(repo, "status", "--porcelain").splitlines() if ln.strip()]
@@ -166,7 +195,7 @@ def _wait_e2e(repo: Path, url: str, o: Opts) -> None:
 
 def _ci_and_merge(repo: Path, url: str, version: str, o: Opts) -> tuple[bool, str | None]:
     """Wait for CI on the PR. (False, None) at the merge stop; (True, sha) once merged."""
-    slug = ship.service_slug(repo)
+    slug, hold_slug = ship.service_slug(repo), dispatch_state.slug_of(repo)
     land_merge.ensure_current(repo, url)
     _wait_e2e(repo, url, o)
     _wait_pr(repo, url, o, False, slug)
@@ -175,9 +204,11 @@ def _ci_and_merge(repo: Path, url: str, version: str, o: Opts) -> tuple[bool, st
         raise core.PlatformError(f"the upgrade e2e did not run on {url}")
     if o.confirm != "merge":
         passed = sum(1 for c in cs if c.get("bucket") == "pass")
+        kept = release_hold.stop(hold_slug, "merge")
         print(f"CONFIRM: merge\n  version: {version}\n  PR: {url}\n"
               f"  checks: {passed} passed (newest run of each workflow), {E2E_NAME}: pass\n"
-              "  continue: cplat platform release --confirm merge")
+              + pub.stop_line(hold_slug, kept)
+              + "  continue: cplat platform release --confirm merge")
         return False, None
     _wait_pr(repo, url, o, True, slug)
     sha = ship.gh(["pr", "view", url, "--json", "mergeCommit", "-q", ".mergeCommit.oid"], cwd=repo).strip()
@@ -189,8 +220,6 @@ def _ci_and_merge(repo: Path, url: str, version: str, o: Opts) -> tuple[bool, st
 
 def _publish(repo: Path, state: st.State, version: str, sha: str | None, o: Opts) -> int:
     """merged, tagged, guarding, guard-red: the post-merge part (platrelease_publish)."""
-    import platrelease_publish as pub
-
     return pub.continue_from(repo, state, version, sha, o)
 
 
@@ -212,9 +241,6 @@ def _parse(argv: list[str]) -> tuple[Opts, Path]:
 
 def main(argv: list[str]) -> int:
     o, repo = _parse(argv)
-    mism = changelog.plugin_mismatches(repo)
-    if mism:
-        raise core.PlatformError("\n".join(mism))
     if o.version is not None:
         st.check_syntax(o.version)
     st.fetch(repo)
@@ -238,6 +264,22 @@ def main(argv: list[str]) -> int:
         raise core.PlatformError(f"--confirm merge needs phase pr-open, this run starts in phase {state.phase}")
     if o.confirm == "tag" and state.phase != st.MERGED:
         raise core.PlatformError(f"--confirm tag needs phase merged, this run starts in phase {state.phase}")
+    slug = dispatch_state.slug_of(repo)
+    hold = None
+    if not o.dry_run and state.phase in (st.IDLE, st.BRANCH, st.PR_OPEN, st.MERGED):   # spec 198: main stays still until the tag
+        hold = merge_lock.set_release_hold(slug, version, o.timeout)
+    try:
+        return _run(repo, o, state, version, sha, changes, slug)
+    finally:
+        if hold and release_hold.release(slug):      # an error, Ctrl-C or the end; a hold kept at a stop is not removed
+            print("release hold cleared")
+
+
+def _run(repo: Path, o: Opts, state: st.State, version: str, sha: str | None, changes: list[str], slug: str) -> int:
+    """The checks and steps of a release, run under the release hold (spec 198)."""
+    mism = changelog.plugin_mismatches(repo)
+    if mism:
+        raise core.PlatformError("\n".join(mism))
     if state.phase == st.IDLE:
         if o.version is not None:
             st.check_version(o.version, state, changes)

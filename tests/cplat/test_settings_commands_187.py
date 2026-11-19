@@ -237,7 +237,8 @@ def test_a_schedule_that_is_not_five_field_cron_is_refused_ac_187_6(tmp_path, ca
 
 @pytest.mark.parametrize("ret", ["0d", "30", "3m", "-1d", "d"])
 def test_a_retention_that_is_not_n_days_or_weeks_is_refused_ac_187_6(tmp_path, capsys, ret):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--to", "backups", "--retention", ret, names=("retention",), key=BK + ".retention")
+    # `--retention=<ret>`: Python 3.13's argparse reads a separate "-1d" as an option, not as the value
+    refused(backup_repo(tmp_path), capsys, "--to", "backups", f"--retention={ret}", names=("retention",), key=BK + ".retention")
 
 
 def test_schedule_without_to_on_an_instance_without_backup_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6

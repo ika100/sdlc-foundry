@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 import core
+import envlimit
 import evidence
 import gitops
 import model
@@ -36,6 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-verify", action="store_true", help="do not check that the image tag exists in GHCR")
     p.add_argument("--accept-digest-mismatch", metavar="REASON", default=None,
                    help="prod: promote although the release image is not the one staging tested; REASON is a sentence")
+    p.add_argument("--accept-environment-limit", metavar="REASON", default=None,
+                   help="promote although an approved spec limits the system to other environments; REASON is a sentence")
     p.add_argument("--system", dest="app", help="the system (applications/<name>) when the repo holds several")
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--pr", action="store_true")
@@ -275,6 +278,9 @@ def main(argv: list[str]) -> int:
     if ns.accept_digest_mismatch is not None and not _reason_ok(ns.accept_digest_mismatch):
         raise PlatformError("--accept-digest-mismatch needs a reason of at least one sentence (3 or more words, ending in . ! or ?)",
                             hint='e.g. --accept-digest-mismatch "The release was rebuilt on purpose."')
+    if ns.accept_environment_limit is not None and not _reason_ok(ns.accept_environment_limit):
+        raise PlatformError("--accept-environment-limit needs a reason of at least one sentence (3 or more words, ending in . ! or ?)",
+                            hint='e.g. --accept-environment-limit "Login ships next week; the person accepts it."')
     if ns.version and ns.versions is None and len(names) > 1:
         raise PlatformError("--version vX.Y.Z names the release of one component",
                             hint="several in one PR: --version api=v0.1.0,web=v0.1.0, or leave --version out to pin each "
@@ -284,6 +290,21 @@ def main(argv: list[str]) -> int:
     app_dir = gitops.find_app(repo, ns.app)
     if ns.smoke:
         return _smoke_staging(ns, repo, app_dir, names)
+    limits = envlimit.local_limits(repo, to) if to in ("staging", "prod") else []
+    reason = ns.accept_environment_limit
+    limit_data = [{"spec": lim.spec_id, "title": lim.title, "environments": list(lim.environments), "target": to,
+                   "accepted": reason is not None, **({"reason": reason} if reason is not None else {})} for lim in limits]
+    if limits and reason is None:
+        refused = [envlimit.refusal_line(lim, to) for lim in limits]
+        if not ns.dry_run:
+            raise PlatformError("\n".join(refused), hint=envlimit.fix_text(limits))
+        shown = "--all" if ns.all else ", ".join(names)
+        rr = Report(title=f"promote {shown}: {frm} → {to} ({app_dir.name})")
+        rr.will_do += [f"REFUSED: {line}" for line in refused] + [f"fix: {envlimit.fix_text(limits)}"]
+        rr.data["environment_limits"] = limit_data
+        rr.emit(True, ns.json)
+        return 1
+    limit_lines = [envlimit.accepted_line(lim, reason) for lim in limits] if reason is not None else []
     if not ns.dry_run:
         gitops.require_clean(repo)
     if to == model.ENVIRONMENTS[0]:
@@ -303,6 +324,8 @@ def main(argv: list[str]) -> int:
         raise PlatformError(f"--version names {', '.join(extra)}, which this promotion does not include",
                             hint="name each component once, with its version: --version api=v0.1.0,web=v0.1.0")
     r = Report(title=f"promote {', '.join(names)}: {frm} → {to} ({app_dir.name})")
+    r.data["environment_limits"] = limit_data
+    r.will_do += limit_lines
     plan: list[tuple[str, str]] = []
     checks: dict[str, dict] = {}
     problems: list[str] = []
@@ -384,12 +407,15 @@ def main(argv: list[str]) -> int:
     except PlatformError:
         gitops.discard_changes(repo)            # spec 142 (AC-142.5): a failed promotion leaves no edit behind
         raise
+    r.did += limit_lines
     if accepted:
         r.did.append(accepted)
     r.did.append("pinned " + ", ".join(f"{n}={t}" for n, t in plan))
     if ns.pr:
         title = f"chore(promote): {' '.join(n for n, _ in plan)} {frm}→{to}"
         body = "\n".join(f"- {n}: `{t}`" for n, t in plan) + ("\n\n**Production promotion — review carefully.**" if to == "prod" else "")
+        if limit_lines:
+            body += "\n\n" + "\n".join(limit_lines)
         if accepted:
             body += "\n\n" + accepted
         if summaries:

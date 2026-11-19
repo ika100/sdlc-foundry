@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import model
 import runs
 import runs_report
 import runs_usage
@@ -88,7 +89,8 @@ def snapshot(repo: str, clone: Path) -> dict:
             "newest_pr": _newest_pr(repo), "head": _head(clone)}
 
 
-EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged", "fix-rounds": "open", "explore-stop": "unchanged"}
+EXPECTED = {"quick-task": "open", "build": "open", "ship": "merged", "fix-rounds": "open", "explore-stop": "unchanged",
+            "spec-environments": "spec"}
 
 
 def unchanged(repo: str, keep: dict, clone: Path) -> str | None:
@@ -103,12 +105,51 @@ def unchanged(repo: str, keep: dict, clone: Path) -> str | None:
     return "explore opened a PR" if _newest_pr(repo) > keep.get("newest_pr", 0) else None
 
 
+def _suggestions(body: str) -> list[str]:
+    """The bullets under `## Open questions` and `## Assumptions` of a spec body."""
+    found, section = [], ""
+    for line in body.splitlines():
+        if line.startswith("## "):
+            section = line[3:].strip().lower()
+        elif section in ("open questions", "assumptions") and line.lstrip().startswith("- "):
+            found.append(line.strip())
+    return found
+
+
+def environments_kept(keep: dict, clone: Path) -> str | None:
+    """spec-environments (spec 190, AC-190.6): the spec written for a request that names every environment limits none of them,
+    neither in its `environments:` field nor in a suggested answer or assumption (`limits to`)."""
+    import spec
+    code, out, err = run(["git", "diff", "--name-only", "--diff-filter=A", keep.get("head") or "HEAD", "HEAD", "--", "docs/specs"], cwd=clone)
+    if code != 0:
+        return f"could not check the result: {_why(out, err)}"[:200]
+    paths = [p for p in out.split() if p.endswith("/spec.md")]
+    if not paths:
+        return "no spec written"
+    for rel in paths:
+        spec_id = Path(rel).parent.name
+        try:
+            meta, body = spec.load(clone / rel)
+        except spec.BrokenSpec as e:
+            return f"{spec_id} is not readable: {e.problem}"[:200]
+        envs = meta.get("environments")
+        if envs is not None and not (isinstance(envs, list) and set(model.ENVIRONMENTS) <= set(envs)):
+            listed = ", ".join(str(e) for e in envs) if isinstance(envs, list) else str(envs)
+            return f"{spec_id} limits environments: {listed}"
+        for bullet in _suggestions(body):
+            if "limits to" in bullet:
+                return f"{spec_id} suggests an environment limit: {bullet[:120]}"
+    return None
+
+
 def result(workflow: str, repo: str, keep: dict, clone: Path | None = None) -> str | None:
     """Why the run did not deliver, or None when it did: quick-task and build end at a new open PR, ship at a new merged one,
-    explore-stop with the clone and the repo as they were."""
+    explore-stop with the clone and the repo as they were, spec-environments with a spec that limits no environment."""
     state = EXPECTED[workflow]
     if state == "unchanged":
         return unchanged(repo, keep, clone)
+    if state == "spec":
+        return environments_kept(keep, clone)
     try:
         prs = json.loads(_ok(["gh", "pr", "list", "--repo", repo, "--state", state, "--json", "number", "--limit", "20"]) or "[]")
     except (ValueError, RuntimeError) as e:
@@ -407,7 +448,7 @@ def main(argv: list[str]) -> int:
         import runs_bench_system
         return runs_bench_system.main(argv[1:])
     ap = argparse.ArgumentParser(prog="cplat platform runs benchmark", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds", "explore-stop"])
+    ap.add_argument("workflow", choices=["quick-task", "build", "ship", "fix-rounds", "explore-stop", "spec-environments"])
     ap.add_argument("--reset-first", action="store_true", help="put the sample repo back to the pinned revision before starting")
     ap.add_argument("--model", help="coordinator model for the run (sonnet, opus, haiku); else the settings files, else sonnet")
     ap.add_argument("--plugins", metavar="DIR", help="run with the plugins in DIR (this worktree's plugins/) instead of the installed ones")

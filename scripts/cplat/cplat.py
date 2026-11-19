@@ -92,7 +92,8 @@ NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "instance": {"promote": ("promote", []), "secret": ("secret", []), "verify": ("smoke", ["run"])},
     "issue": {"triage": ("triage", [])},
     "platform": {"doctor": ("doctor", []), "update": ("update", []), "versions": ("versions", []), "fleet": ("fleet", []), "runs": ("runs", []), "retro": ("retro", []),
-                 "release": ("platrelease", []), "ui": ("ui", []), "pr-check": ("house_rules", []), "eval-gate": ("evalgate", []), "rules": ("rulescheck", [])},
+                 "release": ("platrelease", []), "ui": ("ui", []), "pr-check": ("house_rules", []), "eval-gate": ("evalgate", []), "rules": ("rulescheck", []),
+                 "hold": ("holdcmd", [])},
 }
 
 PLUMBING = {
@@ -153,8 +154,6 @@ def _resolve(argv: list[str]) -> tuple[str, list[str], str] | int:
             return 0
         if len(argv) < 2 or argv[1] not in verbs:
             print(f"usage: cplat {name} <verb> ...  (verbs: {' '.join(verbs)})", file=sys.stderr)
-            for v in verbs:
-                print(f"  cplat {name} {v}", file=sys.stderr)
             return 2
         module, prefix = verbs[argv[1]]
         return module, [*prefix, *argv[2:]], f"{name} {argv[1]}"

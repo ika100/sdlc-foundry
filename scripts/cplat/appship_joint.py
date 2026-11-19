@@ -18,6 +18,7 @@ from pathlib import Path
 import appship_state as state
 import cluster
 import core
+import envlimit
 import envwait
 import localport
 import model
@@ -28,6 +29,7 @@ import spec as specmod
 import staging
 import waits
 from core import PlatformError, run
+from uvscript import script_cmd
 
 MARKER_TEXT = "refs/heads/ship/"
 WORKFLOW = ".github/workflows/pin-dev.yml"
@@ -160,7 +162,7 @@ def component_of(gitops: Path, repo_id: str) -> str:
 
 
 def _devbox(wt: Path, *args: str) -> None:
-    res = run(["devbox", "run", "--", "uv", "run", *args], cwd=wt, check=False)
+    res = run(["devbox", "run", "--", *script_cmd(*args)], cwd=wt, check=False)
     if res.returncode != 0:
         tail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["no output"]
         raise PlatformError(f"{' '.join(args)} failed in {wt}: {tail[0]}", hint="fix the gitops-app checkout, then run the command again")
@@ -501,11 +503,15 @@ def _candidates(gitops: Path, st: dict, plan: list[dict]) -> tuple[list[tuple[st
     m = model.load_dir(_app_dir(gitops))
     org = _org(gitops)
     cands, skipped = [], {}
+    limits = envlimit.local_limits(gitops, "staging")
     for r in plan:
         e = st["repos"].get(r["id"]) or {}
         if not e.get("pinned") or e.get("gate") not in ("exposed", "internal"):
             continue
         rid, tag = r["id"], e["pinned"]
+        if limits:
+            skipped[rid] = envlimit.skip_reason(limits)
+            continue
         comp = m.component(e["component"])
         if comp is None:
             skipped[rid] = f"{e['component']} is not in system.yaml"

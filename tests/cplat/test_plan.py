@@ -106,7 +106,10 @@ repos:
   - {id: shop-web, shape: web-nextjs, summary: UI, acs: [AC-012.2], depends_on: [], done: false}
 ---
 """
-CONTRACT = "\n## Contract\n\nPOST /x -> 201\n\n### Errors\n\nproblem+json\n\n### Timeouts\n\n3 s; 503 when down\n"
+CONTRACT = ("\n## Contract\n\nPOST /x -> 201\n\n### Rules\n\n```yaml\nrules:\n"
+            "  - {id: name-max, endpoint: POST /x, field: name, kind: max_length, value: 50, provider: shop-api, consumers: [shop-web]}\n"
+            "```\n\n### Errors\n\n```yaml\nerrors:\n  status: 422\n  body: {field: field, rule: rule, message: message}\n"
+            "  unlisted: {message: Something went wrong}\n```\n\n### Timeouts\n\n3 s; 503 when down\n")
 SPEC_PLAN = SPEC_PLAN_BARE + CONTRACT   # spec 053: two repos need errors and timeouts in the contract
 
 

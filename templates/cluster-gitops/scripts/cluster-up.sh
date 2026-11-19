@@ -10,14 +10,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-repo_cluster=$(uv run --quiet scripts/render.py --name)
-want="${1:-$(uv run --quiet scripts/render.py --clusters | sed -n 1p)}"
+repo_cluster=$(bash scripts/uv-script.sh --quiet scripts/render.py --name)
+want="${1:-$(bash scripts/uv-script.sh --quiet scripts/render.py --clusters | sed -n 1p)}"
 want="${want:-$repo_cluster}"
-has_clusters=$(uv run --quiet scripts/render.py --clusters | sed -n 1p)
+has_clusters=$(bash scripts/uv-script.sh --quiet scripts/render.py --clusters | sed -n 1p)
 suffix=local
 [ -z "$has_clusters" ] || suffix="$want"
 name="${LOCAL_CLUSTER:-${repo_cluster}-${suffix}}"
-envs=$(uv run --quiet scripts/render.py --envs "$want")
+envs=$(bash scripts/uv-script.sh --quiet scripts/render.py --envs "$want")
 token="${GH_TOKEN:-}"
 [ -n "$token" ] || token=$(gh auth token)
 repo_token="${REPO_TOKEN:-$token}"
@@ -42,7 +42,7 @@ done <<< "$envs"
 KUBE_CONTEXT="$ctx" REPO_TOKEN="$repo_token" bash scripts/bootstrap.sh "$want"
 
 port=$(docker port "k3d-${name}-serverlb" 80/tcp 2>/dev/null | head -1 | sed 's/.*://' || true)
-urls=$(uv run --quiet scripts/check.py --urls || true)
+urls=$(bash scripts/uv-script.sh --quiet scripts/check.py --urls || true)
 while read -r system host; do
   [ -n "$system" ] || continue
   echo "Exposed: http://${host}:${port}/   (${system}, once the workloads are running)"

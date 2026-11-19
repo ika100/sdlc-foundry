@@ -84,3 +84,37 @@ def test_a_refresh_request_that_fails_is_one_line_and_the_wait_goes_on_ac_186_9(
     assert APP in line and "forbidden" in line and line.endswith("waiting for its poll") and "\n" not in line
     assert not [d for d in did if d.startswith("asked Argo CD to refresh")]
     assert len(annotations(kube)) == 1                                     # one request, not a retry loop
+
+
+def stuck_sync(app, revision="0ldc0mm1t"):
+    """J21-5: the app's sync of an earlier restore still runs, waiting for a copy that never became healthy."""
+    app["operation"] = {"sync": {"revision": revision}}
+    app["status"]["operationState"] = {"phase": "Running", "operation": {"sync": {"revision": revision}},
+                                       "message": "waiting for healthy state of postgresql.cnpg.io/Cluster/shop-orders-db-g1"}
+    return app
+
+
+def patches(kube):
+    return [args for args, _, _ in kube.calls if "patch" in args and ARGO_KIND in args]
+
+
+def test_a_discard_ends_a_sync_still_running_for_an_earlier_restore_before_the_refresh_j21_5(repo, kube, capsys, clock, monkeypatch):
+    merged_pr(monkeypatch, kube)
+    switch_world(repo, kube)
+    kube.put("application", stuck_sync(argo_app(APP, revision=head_of(repo))))
+    rc, out = restore(repo, capsys, "--discard", "--json")
+    assert rc == 0, out
+    (args,) = patches(kube)
+    assert APP in args and '"/operation"' in args[-1] and '"remove"' in args[-1]
+    assert kube.calls.index(next(c for c in kube.calls if c[0] == args)) < annotations(kube)[0][0]
+    did = json.loads(out[out.index("{"):])["did"]
+    assert any(d.startswith(f"ended the sync of {APP}") and "shop-orders-db-g1" in d for d in did)
+
+
+def test_a_sync_running_for_the_merged_revision_is_left_alone_j21_5(repo, kube, capsys, clock, monkeypatch):
+    restore_world(repo, kube, monkeypatch)
+    kube.store["application"] = []
+    kube.put("application", stuck_sync(argo_app(APP, revision=head_of(repo)), revision=head_of(repo)))
+    rc, out = restore(repo, capsys, "--to", "2026-10-27T09:59:00Z", "--json")
+    assert rc == 0, out
+    assert patches(kube) == []

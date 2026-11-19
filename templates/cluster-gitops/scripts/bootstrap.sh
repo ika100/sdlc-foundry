@@ -28,9 +28,9 @@ if [ -z "${REPO_TOKEN:-}" ]; then
   exit 1
 fi
 
-clusters=$(uv run --quiet scripts/render.py --clusters)
+clusters=$(bash scripts/uv-script.sh --quiet scripts/render.py --clusters)
 cluster_list=$(echo "$clusters" | paste -sd, - | sed 's/,/, /g')
-repo_cluster=$(uv run --quiet scripts/render.py --name)
+repo_cluster=$(bash scripts/uv-script.sh --quiet scripts/render.py --name)
 want="${1:-}"
 if [ -n "$clusters" ]; then
   if [ -z "$want" ]; then
@@ -50,7 +50,7 @@ else
   fi
   first="$repo_cluster"
 fi
-tree=$(uv run --quiet scripts/render.py --trees | awk -v c="$want" '$1 == c { print $2 }')
+tree=$(bash scripts/uv-script.sh --quiet scripts/render.py --trees | awk -v c="$want" '$1 == c { print $2 }')
 tries="${CRD_WAIT_TRIES:-200}"
 k() { kubectl --context "$ctx" "$@"; }
 
@@ -69,7 +69,7 @@ if git rev-parse --git-dir >/dev/null 2>&1 && git fetch -q origin main 2>/dev/nu
   fi
 fi
 
-uv run --quiet scripts/render.py --check || exit 1
+bash scripts/uv-script.sh --quiet scripts/render.py --check || exit 1
 
 if ! k get namespace argocd >/dev/null 2>&1; then
   echo "ERROR: Argo CD is not installed in ${ctx} (it is a cluster prerequisite)" >&2
@@ -105,7 +105,7 @@ k -n argocd label secret github-creds argocd.argoproj.io/secret-type=repo-creds 
 echo "Applying the operators"
 k apply -n argocd -f "${tree}/operators-root.yaml"
 
-crds=$(uv run --quiet scripts/render.py --crds "$want")
+crds=$(bash scripts/uv-script.sh --quiet scripts/render.py --crds "$want")
 while read -r op crd; do
   [ -n "$op" ] || continue
   echo "Waiting for the CRD ${crd} (operator ${op})"

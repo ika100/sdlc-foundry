@@ -21,6 +21,7 @@ import migrate5
 import settingsmerge
 import shapecmd
 from core import PLATFORM_ROOT, PlatformError, Report, run
+from uvscript import script_cmd
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -597,7 +598,7 @@ def reference_render(repo: Path, tmp: Path) -> dict[str, bytes]:
     subprocess.run(["tar", "-x", "-C", str(root)], input=archive, capture_output=True, check=True)
     (root / "scripts").mkdir(exist_ok=True)
     shutil.copyfile(RENDER_V4, root / "scripts" / "render.py")
-    run(["uv", "run", "scripts/render.py"], cwd=root)
+    run(script_cmd("scripts/render.py"), cwd=root)
     return _tree(root)
 
 

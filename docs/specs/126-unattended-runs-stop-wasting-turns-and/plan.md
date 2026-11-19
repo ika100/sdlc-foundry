@@ -1,7 +1,7 @@
 ---
 spec_id: 126-unattended-runs-stop-wasting-turns-and
 shape: platform
-spec_hash: 3a31d17b57f1
+spec_hash: ef518a47bbac
 summary: "A pure stopgate module (owner = the session that started or resumed the run, progress = a new feature-branch commit or a phase change, two stops without progress escalate, cause by the AC-088.16 rule on the last message, else code on red tests or required checks, else decision) used by the component and product Stop hooks and cplat headless; one stdlib pr_rules module for the PR title rule, title fitting (72 characters and bytes) and the spec rule, run by the platform CI jobs, by a new devbox run ci step and by every PR-opening command; ship pr refuses before devbox run ci, adds --no-spec and retitles an open PR; ADR-070, docs, changelog, plugin bumps, and the post-release measurement"
 tasks:
   - id: t1
@@ -80,6 +80,13 @@ tasks:
     covers: [AC-126.2, AC-126.7]
     parallel_safe: true
     depends_on: [t2, t6]
+    done: true
+  - id: t12
+    title: caller titles of ship, product ship and gitops PRs that are only too long are shortened and said (#784)
+    files: [scripts/cplat/ship.py, scripts/cplat/appship.py, tests/cplat/test_ship_pr_126.py, tests/cplat/test_built_titles_126.py, docs/changelog.d/784-caller-title-shortened.changed.md]
+    covers: [AC-126.11, AC-126.12]
+    parallel_safe: false
+    depends_on: [t1, t6, t7]
     done: true
 human_steps:
   - "AC-126.15, seven days after the release that ships spec 126: run the commands in docs/specs/126-unattended-runs-stop-wasting-turns-and/measurements.md (cplat platform runs report --since 7 and the gh query for red pr-title / spec-required checks on PRs opened by platform commands), fill its table, and open an issue for any line that fails."
@@ -327,3 +334,22 @@ ship tests are green.
 **Done when:** the AC-126.2 headless test (each session exports its id, and the run's owner is the latest session) and the AC-126.7
 headless tests pass (two sessions without change: `decision`, `code` with a red required check, the rule's cause with a matching last
 message, the headless run record with the same cause and never `environment` by default). `test_headless.py` is green.
+
+
+## t12 — caller titles that are only too long
+
+**Files:** scripts/cplat/ship.py, scripts/cplat/appship.py, tests/cplat/test_ship_pr_126.py, tests/cplat/test_built_titles_126.py,
+docs/changelog.d/784-caller-title-shortened.changed.md
+**Covers:** AC-126.11, AC-126.12
+**Goal:** A `--title` given to `cplat component ship pr` (and so the fix and quick-task finishing), `ship gitops pr` or
+`cplat system ship entry pr` whose only fault is a subject over 72 characters is shortened with `pr_rules.fit`, not refused (#784).
+
+**Implementation notes:**
+- `ship.caller_title(title) -> str`: the title when `title_error` passes; else `pr_rules.fit(title)` when it does not raise and its
+  result passes, printing `title shortened: "<given>" -> "<sent>"`; else the `title_error` refusal as before.
+- `ship.open_pr`, `ship.gitops_pr` and `appship.entry_pr` call it in place of `check_title` and use the returned title for the local
+  CI run, `gh pr create` and the retitle of an open PR. Other openers keep `check_title` (assumption A2).
+- Tests: the 73-character refusal cases become shortening cases (sent title, printed line, local CI title, retitle); no type and empty
+  subject stay refused.
+
+**Done when:** the AC-126.11 and AC-126.12 tests in `test_ship_pr_126.py` and `test_built_titles_126.py` pass.

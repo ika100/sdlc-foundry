@@ -18,6 +18,8 @@ COPIES: list[tuple[Path, Path]] = [
     (APP / "local-cluster.sh", CLUSTER / "local-cluster.sh"),
     (APP / "ports.sh", CLUSTER / "ports.sh"),
     (APP / "operator-handover.sh", CLUSTER / "operator-handover.sh"),   # local-cluster.sh calls it (#425)
+    (APP / "uv-script.sh", CLUSTER / "uv-script.sh"),   # spec 209: inline scripts keyed by their dependencies
+    (APP / "uv-script.sh", ROOT / "scripts" / "uv-script.sh"),
     (TEMPLATES / "service-python" / "scripts" / "pytest_limit" / "platform_test_limit.py",
      TEMPLATES / "library-python" / "scripts" / "pytest_limit" / "platform_test_limit.py"),   # spec 197
 ] + [

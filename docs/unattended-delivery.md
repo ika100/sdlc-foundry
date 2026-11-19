@@ -165,6 +165,8 @@ A deploy counts only after every step below. Each step is enforced by `code` (a 
 | digest match | code | staging is pinned only while the registry digest of the tag equals the smoked digest | `test_a_changed_digest_pins_nothing_and_says_so_ac_105_2` |
 | promotion | code | a smoke that was not run is reported `NOT VERIFIED` and promotes nothing | `test_a_not_run_smoke_reports_not_verified_and_promotes_nothing_ac_105_6`, `test_a_dev_smoke_that_was_not_run_promotes_nothing_ac_093_3` |
 
+A spec that is `building` or `done` and lists `environments:` without staging skips the staging pin with `not promoted: environment limit <spec_id> allows <envs>`; the step is not red, and the person widens the spec to lift it.
+
 A replay of `cplat component ship deploy` skips the dev smoke only when the record holds a pass for the digest dev runs now (`test_a_replay_with_the_same_digest_does_not_smoke_dev_again_ac_105_7`). `cplat instance promote … --to prod` prints the checked digest and flags `digest differs from what staging runs`.
 
 ### Prod runs what staging tested
@@ -180,6 +182,8 @@ A replay of `cplat component ship deploy` skips the dev smoke only when the reco
 In a unit session the Stop hook also runs when `CPLAT_UNIT` is set, not only when `cplat-ship.json` exists. It holds the session until the unit has its checkpoint, once per `HEAD`: a stop without a new commit since the last hold is let through and the supervisor counts it as a stall. **Two sessions in a row on the same unit without a new commit escalate the run** as `no progress: unit <unit> after 2 sessions without a commit`. A session that moves `HEAD` resets the count.
 
 Before the first session, `cplat headless` and `cplat system ship repo start` run a preflight and print `preflight failed: <category>: <detail>` on a failure. The run is then escalated with cause `environment` and no session, branch, commit or PR is started. In a system ship only that repo is escalated.
+
+The preflight first checks the run's refused rules against the commands the run needs (such as `git push origin feature/x`, `gh pr create` and a `gh api` read of a pull request) and the commands it must never run (a push to the default branch, a force push, a merge). A refused rule that blocks a needed command prints `preflight failed: deny-rules: <rule> refuses "<command>", which the run needs; use: <corrected rule>`; a command that no rule refuses prints `preflight failed: deny-rules: no rule refuses "<command>"; add: <rule>`. The run stops before any session, so a rule that is too wide no longer shows only after two sessions without a commit. A `gh api` read of a pull request's `mergeable` or `mergeStateStatus` is not refused; the merge calls still are.
 
 ### A system ship answers or holds an escalated repo
 

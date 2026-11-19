@@ -20,6 +20,7 @@ import dispatch_budget
 import dispatch_policy
 import dispatch_state as ds
 import dispatch_units
+import release_hold
 import run_slot
 import units as unitsmod
 
@@ -170,7 +171,16 @@ def status_doc(repo: Path | str, slug: str, policy) -> dict:
             "slots": {"total": int(st["steering"].get("slots") or policy.values["slots"]), "units": rows,
                       "manual": manual_rows(slug)},
             "queue": [dict(q) for q in cycle.get("queue") or []], "held": [dict(h) for h in cycle.get("held") or []],
-            "escalated": _escalated_today(slug), "tokens": tokens_doc(slug, policy, st), "last_cycle": cycle.get("at")}
+            "escalated": _escalated_today(slug), "tokens": tokens_doc(slug, policy, st), "last_cycle": cycle.get("at"),
+            "release_hold": release_hold.view(slug)}
+
+
+def _hold_line(hold: dict) -> str:
+    """Spec 198: `release hold: <version> since <time>`, with the stop and its expiry when the release stopped."""
+    line = f"release hold: {hold['version']} since {release_hold.hhmm(hold['since'])}"
+    if hold["state"] != "running":
+        line += f", {hold['state']}, expires {release_hold.hhmm(hold['expires'])}"
+    return line
 
 
 def render_status(doc: dict) -> str:
@@ -178,7 +188,8 @@ def render_status(doc: dict) -> str:
     head = f"dispatcher: {'running (pid ' + str(loop['pid']) + ')' if loop['running'] else 'not running'}"
     if doc["paused"]:
         head += f"  [{doc['paused']}]"
-    lines = [head, f"slots: {len(doc['slots']['units']) + len(doc['slots']['manual'])} of {doc['slots']['total']} in use"]
+    hold = doc.get("release_hold")
+    lines = [head, *([_hold_line(hold)] if hold else []), f"slots: {len(doc['slots']['units']) + len(doc['slots']['manual'])} of {doc['slots']['total']} in use"]
     for u in doc["slots"]["units"]:
         pr = f"  {u['pr']}" if u.get("pr") else ""
         phase = u["phase"]

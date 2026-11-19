@@ -180,7 +180,25 @@ All bodies are JSON (`Content-Type: application/json`, UTF-8). Base URLs: the AP
 - Filtered: a link `Show all` with `href="/"`. Unfiltered: no `Show all` link.
 - API failure: HTTP `200` page with the text `Files could not be loaded. Please try again later.` and no list.
 
+### Rules
+
+No shared rules: only the API accepts input (`POST /files`); the worker and the web UI send none, so no consumer
+repo has a rule to follow (the limits are listed under `POST /files` above).
+
 ### Errors
+
+```yaml
+errors:
+  status: 422
+  body:
+    field: field
+    rule: error
+    message: message
+  unlisted:
+    message: "Files could not be loaded. Please try again later."
+```
+
+The error body is one object (no list); its `error` key names the violated rule's code (`validation_failed`).
 
 - Error body of the API and the worker: `{"error": <code>, "message": <human text>}`, plus `"field"` on the API's
   `422`. Codes: `validation_failed` (API, `422`), `upstream_unavailable` (worker, `502`), `not_found` (any unknown

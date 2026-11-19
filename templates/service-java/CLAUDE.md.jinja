@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **{{ project_name }}** — {{ description }}
 
-Owned by {{ owner_team }}. Java {{ java_version }} (LTS), Spring Boot 3.x, Maven. Group `{{ group_id }}`, package `{{ package_name }}`. Container image: `{{ docker_registry }}/{{ project_name }}`.
+Owned by {{ owner_team }}. Java {{ java_version }} (LTS), Spring Boot 4.x, Maven. Group `{{ group_id }}`, package `{{ package_name }}`. Container image: `{{ docker_registry }}/{{ project_name }}`.
 
 ## Development Environment
 
@@ -85,7 +85,7 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 
 ## Conventions
 
-- **Spring Boot 3.x idioms:** constructor injection, `@ConfigurationProperties` for structured config, `@RestController` + records for DTOs, `@ControllerAdvice` for error mapping. Source under `src/main/java/{{ package_path }}/`.
+- **Spring Boot 4.x idioms:** constructor injection, `@ConfigurationProperties` for structured config, `@RestController` + records for DTOs, `@ControllerAdvice` for error mapping; Jackson 3 (`tools.jackson`) is the JSON stack. Source under `src/main/java/{{ package_path }}/`.
 - **Formatting:** google-java-format via Spotless — run `devbox run lint-fix`, never hand-format. Checkstyle enforces unused/star imports, naming, and Javadoc on public types and non-trivial public methods.
 - **Config:** `application.yml` with environment-variable placeholders (`${PORT:{{ port }}}`); see `docs/env-vars.md`. No secrets in the repo.
 - **Probes:** `/actuator/health/liveness` and `/actuator/health/readiness` must keep responding.
@@ -110,7 +110,7 @@ Updates (`/platform:update`) overwrite the skeleton files below. Put your own wo
 
 ## Docker image pipeline
 
-CI's `docker` job builds a multi-stage image (Maven builder → `gcr.io/distroless/java{{ java_version }}-debian12:nonroot`, no shell) and pushes on `main` (`latest`, `sha-<short>`) and on `v*.*.*` tags (semver tags). Registry: `{{ docker_registry }}/{{ project_name }}`.
+CI's `docker` job builds a multi-stage image (Maven builder → `gcr.io/distroless/java{{ java_version }}-debian13:nonroot`, no shell) and pushes on `main` (`latest`, `sha-<short>`) and on `v*.*.*` tags (semver tags). Registry: `{{ docker_registry }}/{{ project_name }}`.
 
 ## Deployment
 
