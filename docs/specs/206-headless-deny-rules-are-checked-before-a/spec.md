@@ -1,7 +1,7 @@
 ---
 spec_id: 206-headless-deny-rules-are-checked-before-a
 title: Headless deny rules are checked before a session starts
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -57,3 +57,5 @@ As a platform maintainer, I want CI to fail when a refused rule over- or under-m
 
 - 2026-11-17 created
 - 2026-11-17 approved
+- 2026-11-18 building
+- 2026-11-18 done

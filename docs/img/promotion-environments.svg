@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" width="960" height="520" role="img">
+  <title>Component versions move from the component repo into dev on every merge, into staging after a green dev smoke, and into prod only through a reviewed instance promote that crosses from the local to the home cluster. The postgres resource has one instance per environment and is not promoted.</title>
+  <style>svg{--bg:#ffffff;--surface:#ffffff;--fg:#1d2330;--muted:#5b6475;--line:#d5d9e2;--frame:#f4f5f9;--cell:#f7f8fb;--accent:#3d4fc4;--accent-soft:#eceefc;--sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--fg)}@media (prefers-color-scheme: dark){svg{--bg:#1a1e28;--surface:#1a1e28;--fg:#e4e7ee;--muted:#9aa2b3;--line:#2f3545;--frame:#1f2430;--cell:#222836;--accent:#9aa6ff;--accent-soft:#232945;}}text{font-family:var(--sans)}.bg{fill:var(--bg)}.frame{fill:var(--frame);stroke:var(--line);stroke-dasharray:5 4}.box{fill:var(--surface);stroke:var(--line)}.cell{fill:var(--cell);stroke:var(--line)}.cell-prod{fill:var(--accent-soft);stroke:var(--accent)}.t{fill:var(--fg);font-size:13px;font-weight:500}.tb{fill:var(--fg);font-size:14px;font-weight:600}.ts{fill:var(--muted);font-size:11.5px}.tm{fill:var(--fg);font-family:var(--mono);font-size:12.5px;font-weight:500}.tms{fill:var(--muted);font-family:var(--mono);font-size:11px}.ta{fill:var(--accent);font-size:12.5px;font-weight:600}.tam{fill:var(--accent);font-family:var(--mono);font-size:12px;font-weight:500}.edge{stroke:var(--fg);stroke-width:1.4;fill:none}.edge-dash{stroke:var(--muted);stroke-width:1.4;fill:none;stroke-dasharray:4 4}.edge-acc{stroke:var(--accent);stroke-width:2.4;fill:none}.badge{fill:var(--surface);stroke:var(--fg);stroke-width:1.2}.badge-acc{fill:var(--accent);stroke:var(--accent)}.badge-t{fill:var(--fg);font-size:11px;font-weight:600}.badge-ta{fill:var(--bg);font-size:11px;font-weight:600}.ah{fill:var(--fg)}.ah-acc{fill:var(--accent)}.ah-m{fill:var(--muted)}</style>
+  <rect class="bg" x="0" y="0" width="960" height="520"/>
+        <defs>
+          <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+          <marker id="a1acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ah-acc" d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+
+        <!-- clusters -->
+        <rect class="frame" x="240" y="20" width="440" height="370" rx="10"/>
+        <text class="tb" x="256" y="44">cluster local</text><text class="ts" x="352" y="44">laptop · always on</text>
+        <rect class="frame" x="720" y="20" width="220" height="370" rx="10"/>
+        <text class="tb" x="736" y="44">cluster home</text>
+
+        <!-- column heads -->
+        <text class="ts" x="20" y="80">SYSTEM todo · its parts</text>
+        <text class="tb" x="350" y="80" text-anchor="middle">dev</text><text class="tms" x="350" y="96" text-anchor="middle">ns todo-dev</text>
+        <text class="tb" x="570" y="80" text-anchor="middle">staging</text><text class="tms" x="570" y="96" text-anchor="middle">ns todo-staging</text>
+        <text class="tb" x="830" y="80" text-anchor="middle">prod</text><text class="tms" x="830" y="96" text-anchor="middle">ns todo-prod</text>
+
+        <!-- row: todo-api -->
+        <rect class="box" x="20" y="113" width="180" height="54" rx="6"/>
+        <text class="t" x="32" y="135">todo-api</text><text class="ts" x="32" y="154">component · repo main</text>
+        <rect class="cell" x="270" y="113" width="160" height="54" rx="6"/>
+        <text class="tm" x="350" y="136" text-anchor="middle">sha-9f3c…</text><text class="ts" x="350" y="154" text-anchor="middle">instance</text>
+        <rect class="cell" x="490" y="113" width="160" height="54" rx="6"/>
+        <text class="tm" x="570" y="136" text-anchor="middle">sha-7a1e…</text><text class="ts" x="570" y="154" text-anchor="middle">instance</text>
+        <rect class="cell-prod" x="750" y="113" width="160" height="54" rx="6"/>
+        <text class="tm" x="830" y="136" text-anchor="middle">1.4.0</text><text class="ts" x="830" y="154" text-anchor="middle">release tag</text>
+        <line class="edge" x1="200" y1="140" x2="268" y2="140" marker-end="url(#a1)"/>
+        <line class="edge" x1="430" y1="140" x2="488" y2="140" marker-end="url(#a1)"/>
+        <line class="edge-acc" x1="650" y1="140" x2="747" y2="140" marker-end="url(#a1acc)"/>
+        <circle class="badge" cx="234" cy="140" r="9"/><text class="badge-t" x="234" y="144" text-anchor="middle">1</text>
+        <circle class="badge" cx="459" cy="140" r="9"/><text class="badge-t" x="459" y="144" text-anchor="middle">2</text>
+        <circle class="badge-acc" cx="700" cy="140" r="10"/><text class="badge-ta" x="700" y="144" text-anchor="middle">3</text>
+
+        <!-- row: todo-web -->
+        <rect class="box" x="20" y="193" width="180" height="54" rx="6"/>
+        <text class="t" x="32" y="215">todo-web</text><text class="ts" x="32" y="234">component · repo main</text>
+        <rect class="cell" x="270" y="193" width="160" height="54" rx="6"/>
+        <text class="tm" x="350" y="216" text-anchor="middle">sha-c21d…</text><text class="ts" x="350" y="234" text-anchor="middle">instance</text>
+        <rect class="cell" x="490" y="193" width="160" height="54" rx="6"/>
+        <text class="tm" x="570" y="216" text-anchor="middle">sha-c21d…</text><text class="ts" x="570" y="234" text-anchor="middle">instance</text>
+        <rect class="cell-prod" x="750" y="193" width="160" height="54" rx="6"/>
+        <text class="tm" x="830" y="216" text-anchor="middle">0.9.2</text><text class="ts" x="830" y="234" text-anchor="middle">release tag</text>
+        <line class="edge" x1="200" y1="220" x2="268" y2="220" marker-end="url(#a1)"/>
+        <line class="edge" x1="430" y1="220" x2="488" y2="220" marker-end="url(#a1)"/>
+        <line class="edge-acc" x1="650" y1="220" x2="747" y2="220" marker-end="url(#a1acc)"/>
+        <circle class="badge" cx="234" cy="220" r="9"/><text class="badge-t" x="234" y="224" text-anchor="middle">1</text>
+        <circle class="badge" cx="459" cy="220" r="9"/><text class="badge-t" x="459" y="224" text-anchor="middle">2</text>
+        <circle class="badge-acc" cx="700" cy="220" r="10"/><text class="badge-ta" x="700" y="224" text-anchor="middle">3</text>
+
+        <!-- row: postgres (resource, not promoted) -->
+        <rect class="box" x="20" y="293" width="180" height="54" rx="6"/>
+        <text class="t" x="32" y="315">postgres</text><text class="ts" x="32" y="334">resource · nothing to build</text>
+        <rect class="cell" x="270" y="293" width="160" height="54" rx="6"/>
+        <text class="tm" x="350" y="316" text-anchor="middle">pg 17</text><text class="ts" x="350" y="334" text-anchor="middle">own data · CloudNativePG</text>
+        <rect class="cell" x="490" y="293" width="160" height="54" rx="6"/>
+        <text class="tm" x="570" y="316" text-anchor="middle">pg 17</text><text class="ts" x="570" y="334" text-anchor="middle">own data · CloudNativePG</text>
+        <rect class="cell" x="750" y="293" width="160" height="54" rx="6"/>
+        <text class="tm" x="830" y="316" text-anchor="middle">pg 17</text><text class="ts" x="830" y="334" text-anchor="middle">own data · CloudNativePG</text>
+        <text class="ts" x="460" y="372" text-anchor="middle">no arrows: each environment has its own resource instance; data never moves along</text>
+
+        <!-- key -->
+        <circle class="badge" cx="30" cy="428" r="9"/><text class="badge-t" x="30" y="432" text-anchor="middle">1</text>
+        <text class="t" x="48" y="432">pin PR on every merge</text>
+        <text class="ts" x="48" y="452">CI builds sha-&lt;40&gt;, dev follows main</text>
+        <text class="ts" x="48" y="470">automatic</text>
+
+        <circle class="badge" cx="340" cy="428" r="9"/><text class="badge-t" x="340" y="432" text-anchor="middle">2</text>
+        <text class="t" x="358" y="432">pin-staging PR after green dev smoke</text>
+        <text class="ts" x="358" y="452">staging: promote: after-dev-smoke</text>
+        <text class="ts" x="358" y="470">automatic (or manual if set)</text>
+
+        <circle class="badge-acc" cx="650" cy="428" r="10"/><text class="badge-ta" x="650" y="432" text-anchor="middle">3</text>
+        <text class="ta" x="668" y="432">/instance:promote --to prod</text>
+        <text class="ts" x="668" y="452">reviewed PR · staging sha digest = release digest</text>
+        <text class="ts" x="668" y="470">a person decides · crosses to cluster home</text>
+
+        <text class="tms" x="20" y="506">every arrow is a PR to the gitops repo: it writes instances.&lt;env&gt; in system.yaml</text>
+      </svg>

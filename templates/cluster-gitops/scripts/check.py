@@ -86,11 +86,38 @@ def needs(system: dict) -> dict[str, set[str]]:
     return out
 
 
-def check_system(name: str, repo: str, root: Path, cluster_ops: list[str], release: str | None) -> tuple[list[str], list[str], set[str]]:
-    """(WARNING and ERROR lines in order, the ERROR lines among them, the operators needed)."""
+def version_tuple(value: str | None) -> tuple[int, ...] | None:
+    try:
+        return tuple(int(p) for p in value.split(".")) if value else None
+    except ValueError:
+        return None
+
+
+def older(theirs: str | None, mine: str | None) -> bool:
+    """True when the system's release is unknown or older than the cluster repo's (design section 4, step 2)."""
+    if theirs is None:
+        return True
+    a, b = version_tuple(theirs), version_tuple(mine)
+    return a is not None and b is not None and a < b
+
+
+def check_system(name: str, repo: str, root: Path, cluster_ops: list[str], release: str | None,
+                 eff: dict | None = None) -> tuple[list[str], list[str], set[str]]:
+    """(WARNING and ERROR lines in order, the ERROR lines among them, the operators needed).
+
+    With `eff` (render.effective() of a repo that lists clusters) the operator need of an environment is checked against the cluster
+    that runs it, and a system with `environments` gets the assignment checks of design section 4, step 2."""
     lines: list[str] = []
     errors: list[str] = []
     wanted: set[str] = set()
+    clusters = eff["clusters"] if eff and len(eff["clusters"]) > 0 and eff["clusters"][0]["tree"] != "cluster" else []
+    assigned: dict[str, str] | None = None     # env -> cluster, None for form 125 (the first cluster runs all three)
+    for cl in clusters:
+        for sysentry in cl["systems"]:
+            if sysentry["name"] == name and sysentry["environments"] is not None:
+                assigned = (assigned or {}) | {e: cl["name"] for e in sysentry["environments"]}
+    on_cluster = {e: (assigned or {}).get(e) or clusters[0]["name"] for e in sr.ENVS} if clusters else {}
+    ops_of = {cl["name"]: cl["operators"] for cl in clusters}
 
     def err(text: str) -> None:
         lines.append(f"ERROR: {text}")
@@ -116,8 +143,14 @@ def check_system(name: str, repo: str, root: Path, cluster_ops: list[str], relea
                     err(f"{s} ({env}): would install operators itself: set environments.{env}.operators: owner in {repo}")
                 for op in sorted(per_env[env]):
                     wanted.add(op)
-                    if op not in cluster_ops:
+                    if clusters:
+                        c = on_cluster[env]
+                        if op not in ops_of[c]:
+                            err(f"{s} ({env}): needs {op}, which cluster {c} does not install")
+                    elif op not in cluster_ops:
                         err(f"{s} ({env}): needs {op}, which cluster.yaml does not list in operators")
+            if assigned is not None and s == name:
+                assignment_errors(system, assigned, [cl["name"] for cl in clusters], name, repo, root, release, err)
     theirs = release_of(root)
     if theirs is None:
         lines.insert(0, f"WARNING: {name}: release unknown (no .platform-version or _commit on main of {repo}), "
@@ -125,6 +158,33 @@ def check_system(name: str, repo: str, root: Path, cluster_ops: list[str], relea
     elif theirs != release:
         lines.insert(0, f"WARNING: {name} is on platform {theirs}, this cluster repo on {release or 'unknown'}")
     return lines, errors, wanted
+
+
+def assignment_errors(system: dict, assigned: dict[str, str], listed: list[str], name: str, repo: str, root: Path,
+                      release: str | None, err) -> None:
+    """Design section 4, step 2, in its order; the first case that applies ends the list."""
+    s = system["system"]
+    left_out = [e for e in sr.ENVS if e not in assigned]
+    for env in left_out:
+        err(f"{s} ({env}): {repo} declares {env}, which systems.{s}.environments in cluster.yaml leaves out; assign it to a cluster")
+    if left_out:
+        return
+    own = system["cfg"].get("cluster") or {}
+    theirs = release_of(root)
+    if not own and older(theirs, release):
+        used = [c for c in listed if c in assigned.values()]
+        err(f"{s} runs on clusters {', '.join(used)}, but {repo} is on platform {theirs or 'unknown'}, older than this cluster repo "
+            f"({release or 'unknown'}); run /platform:update in {repo} first")
+        return
+    wrong = [e for e in sr.ENVS if own.get(e) != assigned[e]]
+    for env in wrong:
+        err(f"{s} ({env}): cluster.yaml runs it on {assigned[env]}, but {repo} sets environments.{env}.cluster: {own.get(env) or 'nothing'}; "
+            f"set it to {assigned[env]} in {repo}")
+    if wrong:
+        return
+    for env in sr.ENVS:
+        if not (root / "bootstrap" / "environments" / f"{s}-{env}.yaml").is_file():
+            err(f"{s}: {repo} has no bootstrap/environments/{s}-{env}.yaml on main; run devbox run render in {repo} and merge it")
 
 
 def urls(name: str, root: Path) -> list[str]:
@@ -145,6 +205,14 @@ def main() -> int:
     except render.ClusterError as err:
         print(f"ERROR: cluster.yaml: {err}", file=sys.stderr)
         return 1
+    try:
+        eff = render.effective(c)
+    except render.ClusterError as err:
+        print(f"ERROR: {err.file}: {err}", file=sys.stderr)
+        return 1
+    if not flags:
+        for line in [f"EXCEPTION: {x}" for cl in eff["clusters"] for x in cl["exceptions"]] + render.behind_lines(eff):
+            print(line)
     if not c["systems"]:
         if not flags:
             print("OK: no systems registered")
@@ -169,7 +237,7 @@ def main() -> int:
                       f"(CI: the SYSTEMS_TOKEN secret; locally: gh auth login)")
                 problems += 1
                 continue
-            lines, errors, wanted = check_system(name, repo, dest, c["operators"], release)
+            lines, errors, wanted = check_system(name, repo, dest, c["operators"], release, eff)
             print("\n".join(lines)) if lines else None
             problems += len(errors)
             oks.append(f"OK: {name} {repo} needs: {', '.join(sorted(wanted)) or 'none'}")

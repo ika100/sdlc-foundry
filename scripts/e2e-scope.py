@@ -4,7 +4,7 @@
   e2e-scope.py [--base REF]   prints `run=true|false` (for $GITHUB_OUTPUT); one `trigger: <path>` line per reason on stderr
   e2e-scope.py --list         the scripts/cplat modules the e2e exercises, one per line
 
-The cluster e2e (tests/e2e/run.sh, tests/e2e/cluster.sh) runs on a pull request only when the change touches what it exercises:
+The cluster e2e (tests/e2e/run.sh, tests/e2e/cluster.sh, tests/e2e/clusters.sh) runs on a pull request only when the change touches what it exercises:
 the gitops-app and cluster-gitops templates (not their copied .github/ files or Markdown), the templates' Dockerfiles, the e2e files,
 shapes.yml, or a scripts/cplat module that the e2e scripts call or import, closed over every import. A release heading in the
 changelog (the release pull request) always runs it. The module set is read from the code at HEAD, never from a list (ADR-080).
@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-E2E_SCRIPTS = ("tests/e2e/run.sh", "tests/e2e/cluster.sh")
-FILES = ("tests/e2e/run.sh", "tests/e2e/cluster.sh", ".github/workflows/e2e.yml", "scripts/e2e-scope.py", "shapes.yml")
+E2E_SCRIPTS = ("tests/e2e/run.sh", "tests/e2e/cluster.sh", "tests/e2e/clusters.sh")
+FILES = ("tests/e2e/run.sh", "tests/e2e/cluster.sh", "tests/e2e/clusters.sh", ".github/workflows/e2e.yml", "scripts/e2e-scope.py", "shapes.yml")
 TEMPLATES = ("templates/gitops-app/", "templates/cluster-gitops/")
 CHANGELOG = "docs/CHANGELOG.md"
 CALL = re.compile(r"\$cplat\s+([a-z][\w-]*)(?:\s+([a-z][\w-]*))?")
