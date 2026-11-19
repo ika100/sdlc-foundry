@@ -81,7 +81,7 @@ class ReportTest {
     ("page.test.ts", TS, TS.replace('  expect', '  // the count\n  expect')),
     ("page.test.ts", TS, TS.replace('test("lists', '/* block\n   comment */\ntest("lists')),
     ("page.test.tsx", TS, TS.replace("// AC-007.1", "// AC-007.1 the list")),
-    ("page.test.js", TS, TS.replace("expect(res.files)", "expect(res.files) // check")),
+    ("page.test.js", TS, TS.replace("toHaveLength(3);", "toHaveLength(3); // check")),
     ("report_test.go", GO, GO.replace("\tresp :=", "\t// fetch\n\tresp :=")),
     ("report_test.go", GO, GO.replace("// AC-007.1", "/* AC-007.1\n   note */")),
     ("ReportTest.java", JAVA, JAVA.replace("        var raw", "        // load it\n        var raw")),
