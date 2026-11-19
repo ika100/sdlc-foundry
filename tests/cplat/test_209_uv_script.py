@@ -319,7 +319,7 @@ def previous_release_devbox(template: Path) -> dict:
     tags = subprocess.run(["git", "tag", "--sort=-v:refname", "--merged", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.split()
     if tags:
         shown = subprocess.run(["git", "show", f"{tags[0]}:templates/{template.name}/devbox.json"], cwd=ROOT, capture_output=True, text=True)
-        if shown.returncode == 0:
+        if shown.returncode == 0 and "uv-script.sh" not in shown.stdout:  # a tag from after the helper shipped is no "previous release"
             return json.loads(shown.stdout)
     old = json.loads((template / "devbox.json").read_text())
     for name, cmd in old["shell"]["scripts"].items():
