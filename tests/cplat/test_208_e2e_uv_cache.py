@@ -15,7 +15,7 @@ from system_fixtures import ROOT
 from waiting import with_prelude
 
 LIB = ROOT / "tests" / "e2e" / "lib" / "uv-cache.sh"
-SCRIPTS = ["run.sh", "cluster.sh", "upgrade.sh"]
+SCRIPTS = ["run.sh", "cluster.sh", "clusters.sh", "upgrade.sh"]
 TOOLS = ["k3d", "kubectl", "uv", "curl", "git", "python3"]
 
 
