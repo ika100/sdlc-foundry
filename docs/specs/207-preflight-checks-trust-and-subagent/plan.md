@@ -52,6 +52,7 @@ tasks:
     covers: [AC-207.1, AC-207.2, AC-207.3, AC-207.4, AC-207.5, AC-207.6, AC-207.8]
     parallel_safe: false
     depends_on: [t2, t3, t4, t5]
+    done: true
 ---
 
 # Plan — 207 Preflight checks trust and subagent tools before a ship
