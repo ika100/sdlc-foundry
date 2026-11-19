@@ -8,11 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import comprelease
 import cplat
 import platrelease_publish as pub
 import platrelease_state as st
-import ship
 from support_158 import FakeGh, ReleaseRepo, SLUG, install, marker
 
 PLATFORM_HOW = "run `/plugin marketplace update`, then `/platform:update`."
@@ -22,7 +20,6 @@ PLATFORM_HOW = "run `/plugin marketplace update`, then `/platform:update`."
 def world(tmp_path, monkeypatch):
     gh = FakeGh()
     repo = ReleaseRepo(tmp_path, gh)
-    monkeypatch.setattr(comprelease, "shape_of", lambda r: ("platform", False))
     install(monkeypatch, gh)
     return gh, repo
 
@@ -79,9 +76,10 @@ def test_the_platform_gets_the_update_commands_ac_158_4(world, capsys):  # AC-15
     assert f"Get it: {PLATFORM_HOW}" in body_rows(gh, 5)
 
 
-def test_a_component_gets_the_release_page_ac_158_4(world, monkeypatch, capsys):  # AC-158.4
-    gh, repo = world
-    monkeypatch.setattr(comprelease, "shape_of", lambda r: ("service-python", True))
+def test_a_component_gets_the_release_page_ac_158_4(tmp_path, monkeypatch, capsys):  # AC-158.4
+    gh = FakeGh()
+    repo = ReleaseRepo(tmp_path, gh, shape="service-python")
+    install(monkeypatch, gh)
     issues_cmd(repo, capsys)
     assert f"Get it: https://github.com/{SLUG}/releases/tag/v1.1.0" in body_rows(gh, 5)
 
@@ -176,7 +174,6 @@ def publish(world, monkeypatch):
     monkeypatch.setattr(milestones, "gh", ev)
     monkeypatch.setattr(pub, "_release", lambda *a, **k: "https://github.com/acme/shop/releases/tag/v1.1.0")
     monkeypatch.setattr(pub, "_guard", lambda *a, **k: ev.log.append("guard"))
-    monkeypatch.setattr(ship, "service_slug", lambda r: SLUG)
     state = st.State(phase=st.TAGGED, version="1.1.0", tag="v1.1.0")
     return gh, repo, ev, state
 

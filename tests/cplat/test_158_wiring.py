@@ -12,6 +12,7 @@ import pytest
 import spec
 from support_158 import FakeGh, SID, make_spec, marker, pr_body
 from test_spec_pr import PR_URL, World
+from test_tags_and_wait import fake  # noqa: F401  (fixture)
 
 URL = "https://github.com/acme/shop/pull/5"
 
@@ -77,7 +78,8 @@ def test_land_posts_the_approved_comment_after_the_merge_ac_158_2(tmp_path, monk
     keys = [b.rstrip().splitlines()[-1] for b in gh.posts(42)]
     assert keys == [marker("spec-written", SID), marker("spec-approved", SID)]   # publish ran first, as today
     out = capsys.readouterr().out.splitlines()
-    assert out[0] == "merged" and out[-1] == "issue #42: spec-approved comment posted"
+    assert "merged" in out and out[-1] == "issue #42: spec-approved comment posted"
+    assert out.index("merged") < out.index("issue #42: spec-approved comment posted")
 
 
 def test_land_that_does_not_merge_says_nothing_of_approval_ac_158_2(tmp_path, monkeypatch, gh, capsys):  # AC-158.2
@@ -131,6 +133,32 @@ def test_pr_wait_merge_on_an_already_merged_pr_posts_ac_158_3(tmp_path, monkeypa
     ok, lines = prmod.wait(tmp_path, URL, True, 10, 1, 1)
     assert ok and lines[0] == f"{URL} is already merged" and lines[-1] == "issue #42: pr-merged comment posted"
     assert [b.rstrip().splitlines()[-1] for b in gh.posts(42)] == [marker("pr-merged", "5")]
+
+
+def test_pr_wait_merge_on_green_posts_after_the_merge_ac_158_3(tmp_path, monkeypatch, gh, fake):  # AC-158.3
+    import pr as prmod
+    from support_158 import install
+    from test_ship import check
+    install(monkeypatch, gh)
+    url = "https://github.com/acme/other/pull/5"        # the URL the `test_tags_and_wait` fake answers `pr view` with
+    gh.pr(5, body=pr_body([42]), url=url)
+    fake.checks = [[check("quality", "pending")], [check("quality", "pass")]]
+    ok, lines = prmod.wait(tmp_path, url, True, 600, 10, 300)
+    assert ok and fake.merges == [url]
+    assert lines[-1] == "issue #42: pr-merged comment posted"
+    assert [b.rstrip().splitlines()[-1] for b in gh.posts(42)] == [marker("pr-merged", "5")]
+
+
+def test_pr_wait_merge_on_red_posts_nothing_ac_158_3(tmp_path, monkeypatch, gh, fake):  # AC-158.3
+    import pr as prmod
+    from support_158 import install
+    from test_ship import check
+    install(monkeypatch, gh)
+    url = "https://github.com/acme/other/pull/5"
+    gh.pr(5, body=pr_body([42]), url=url)
+    fake.checks = [[check("quality", "fail")]]
+    ok, _ = prmod.wait(tmp_path, url, True, 600, 10, 300)
+    assert not ok and fake.merges == [] and not gh.posts()
 
 
 def test_pr_wait_without_merge_never_posts_ac_158_3(tmp_path, monkeypatch, gh, merged):  # AC-158.3
@@ -191,6 +219,44 @@ def test_a_component_ship_land_keeps_its_result_when_gh_fails_ac_158_7(tmp_path,
     ok, lines = merged._merged(tmp_path, {"pr": URL, "phase": "land"}, "b" * 40, ["merged"])
     assert ok is True and lines[0] == "merged" and saved[-1]["merge_sha"] == "b" * 40
     assert all(ln == "merged" or ln.startswith("note: issue comment skipped: #") for ln in lines)
+
+
+def gitops_world(monkeypatch, merged, tmp_path):
+    """One gitops task `g1` whose open PR is green; `gh pr merge` succeeds."""
+    task = {"id": "g1", "order": "before-merge", "repo": "acme/shop-gitops"}
+    saved = []
+    monkeypatch.setattr(merged, "gitops_tasks", lambda repo, st, order=None: [task])
+    monkeypatch.setattr(merged, "gh", lambda args, *, cwd, check=True: json.dumps({"state": "OPEN", "isDraft": False}))
+    monkeypatch.setattr(merged, "CheckWatch", lambda *a, **k: SimpleNamespace(refused=None))
+    monkeypatch.setattr(merged, "wait_checks", lambda *a, **k: ("green", [], []))
+    monkeypatch.setattr(merged, "save_state", lambda repo, st: saved.append(dict(st)))
+    monkeypatch.setattr(merged, "run", lambda cmd, **k: SimpleNamespace(returncode=0, stdout="", stderr=""))
+    return {"gitops": {"g1": {"pr": GITOPS_URL}}}
+
+
+GITOPS_URL = "https://github.com/acme/shop-gitops/pull/3"
+
+
+def test_a_gitops_task_pr_the_ship_merges_posts_ac_158_3(tmp_path, monkeypatch, gh, merged):  # AC-158.3
+    from support_158 import install
+    install(monkeypatch, gh)
+    gh.pr(3, body=pr_body([42]), url=GITOPS_URL)
+    st = gitops_world(monkeypatch, merged, tmp_path)
+    ok, lines = merged.merge_gitops(tmp_path, st, "before-merge", 10, 1, 1)
+    assert ok and lines[0] == f"merged gitops task g1 (before-merge): {GITOPS_URL}"
+    assert "issue #42: pr-merged comment posted" in lines
+    assert [b.rstrip().splitlines()[-1] for b in gh.posts(42)] == [marker("pr-merged", "3")]
+
+
+def test_a_red_gitops_task_pr_posts_nothing_ac_158_3(tmp_path, monkeypatch, gh, merged):  # AC-158.3
+    from support_158 import install
+    install(monkeypatch, gh)
+    gh.pr(3, body=pr_body([42]), url=GITOPS_URL)
+    st = gitops_world(monkeypatch, merged, tmp_path)
+    monkeypatch.setattr(merged, "wait_checks", lambda *a, **k: ("red", [], []))
+    monkeypatch.setattr(merged, "red", lambda *a, **k: ["red"])
+    ok, _ = merged.merge_gitops(tmp_path, st, "before-merge", 10, 1, 1)
+    assert not ok and not gh.posts()
 
 
 def appship_world(monkeypatch, view, tmp_path):

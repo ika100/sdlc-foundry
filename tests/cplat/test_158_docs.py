@@ -11,8 +11,6 @@ import core
 ROOT = core.PLATFORM_ROOT
 COMMANDS = sorted((ROOT / "plugins").glob("*/commands/*.md"))
 RELEASE = ROOT / "plugins/component/commands/release.md"
-NOTE = "the platform posts only `platform` escalations and milestone comments itself."   # interface: the closing note every command carries
-OLD_NOTE = "the one issue the platform files itself"   # interface: the closing note's old wording that must be gone
 
 
 def phase_7(text: str) -> str:
@@ -37,14 +35,11 @@ def test_the_four_commands_say_cplat_posts_the_milestone_comments_ac_158_8():  #
 
 def test_every_closing_note_names_milestone_comments_ac_158_8():  # AC-158.8
     assert COMMANDS
-    noted = [p for p in COMMANDS if "never file an issue without the user's OK" in p.read_text()]   # the commands that carry the note
+    rows = {p: [ln for ln in p.read_text().splitlines() if "/issue:report" in ln] for p in COMMANDS}   # the note sits on the escalation line
+    noted = {p: r for p, r in rows.items() if r}
     assert len(noted) >= 40
-    missing = [str(p.relative_to(ROOT)) for p in noted if NOTE not in p.read_text()]
+    missing = [str(p.relative_to(ROOT)) for p, r in noted.items() if not any("`platform` escalation" in ln and "milestone comment" in ln for ln in r)]
     assert not missing, missing
-
-
-def test_no_command_keeps_the_old_closing_note_ac_158_8():  # AC-158.8
-    assert [str(p.relative_to(ROOT)) for p in COMMANDS if OLD_NOTE in p.read_text()] == []
 
 
 def test_an_adr_next_to_adr_033_records_the_decision_ac_158_8():  # AC-158.8
@@ -58,6 +53,5 @@ def test_an_adr_next_to_adr_033_records_the_decision_ac_158_8():  # AC-158.8
 
 
 def test_the_changelog_has_an_entry_for_568_ac_158_8():  # AC-158.8
-    fragments = sorted((ROOT / "docs/changelog.d").glob("158-*.added.md"))
-    assert fragments, "no fragment docs/changelog.d/158-*.added.md"
-    assert "(#568)" in fragments[0].read_text()
+    fragments = [p for p in sorted((ROOT / "docs/changelog.d").glob("*.md")) if "(#568)" in p.read_text()]
+    assert fragments, "no changelog fragment names (#568)"

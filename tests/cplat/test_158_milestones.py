@@ -67,10 +67,12 @@ def test_without_open_questions_the_comment_says_so_ac_158_1(tmp_path, gh, monke
 
 def test_an_approved_spec_is_announced_with_the_next_step_ac_158_2(tmp_path, gh, monkeypatch):  # AC-158.2
     m = install(monkeypatch, gh)
+    gh.default = "trunk"
     out = m.spec_approved(tmp_path, make_spec(tmp_path, status="approved"))
     [body] = gh.posts(42)
     rows = lines_of(body)
-    assert rows[0].startswith("Spec 007 approved on 2026-10-02:") and f"[{SID}]({SPEC_AT_MAIN})" in rows[0]
+    assert rows[0].startswith("Spec 007 approved on 2026-10-02:")
+    assert f"[{SID}]({SPEC_AT_MAIN.replace('/blob/main/', '/blob/trunk/')})" in rows[0]
     assert f"Planned solution: {STORY} It has 2 acceptance criteria." in rows
     assert "Next: the build; you will hear here when its PR merges." in rows
     assert out == ["issue #42: spec-approved comment posted"]
@@ -203,8 +205,10 @@ def test_an_entry_point_with_a_dead_gh_returns_lines_and_never_raises_ac_158_7(t
     m = install(monkeypatch, gh)
     gh.pr(9, body="Closes #7\n")
     gh.offline = True
-    for out in (m.pr_merged(tmp_path, "9"), m.spec_approved(tmp_path, make_spec(tmp_path, status="approved"))):
-        assert isinstance(out, list) and all(ln.startswith("note: issue comment skipped: #") for ln in out)
+    out = m.pr_merged(tmp_path, "9")
+    assert isinstance(out, list) and out and all(ln.startswith("note: issue comment skipped: #") for ln in out)
+    [line] = m.spec_approved(tmp_path, make_spec(tmp_path, status="approved"))
+    assert line.startswith("note: issue comment skipped: #42 spec-approved: ")
 
 
 def test_a_gh_that_raises_is_caught_ac_158_7(tmp_path, gh, monkeypatch):  # AC-158.7

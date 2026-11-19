@@ -194,13 +194,18 @@ class ReleaseRepo:
     names another repo's #8, a PR 9 merged before v1.0.0 that closed #3, a fragment naming #77, a spec-numbered fragment `88-…`
     that does not name #88, and the changelog of v1.1.0 on `origin/main`."""
 
-    def __init__(self, tmp: Path, fake: FakeGh):
-        origin = tmp / "origin.git"
+    def __init__(self, tmp: Path, fake: FakeGh, *, shape: str = "platform"):
+        origin = tmp / "github.com" / f"{SLUG}.git"      # the origin URL names acme/shop the way a GitHub remote does
+        origin.parent.mkdir(parents=True)
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
         self.dir = tmp / "clone"
         subprocess.run(["git", "clone", "-q", str(origin), str(self.dir)], check=True, capture_output=True)
         git(self.dir, "checkout", "-q", "-b", "main")
         (self.dir / "docs" / "changelog.d").mkdir(parents=True)
+        if shape == "platform":      # the platform repo declares its shape (ADR-056); a component repo keeps its copier answers
+            (self.dir / ".platform-settings.yml").write_text("shape: platform\n")
+        else:
+            (self.dir / ".copier-answers.yml").write_text(f"_src_path: templates/{shape}\n")
         self.sha = {}
         self.sha[9] = self.commit("old.txt", "pr 9 (#3)")
         git(self.dir, "tag", "v1.0.0")
