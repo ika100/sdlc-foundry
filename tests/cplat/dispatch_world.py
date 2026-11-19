@@ -39,6 +39,7 @@ from waiting import budget, fake_prelude, wait_file, wait_for, with_prelude
 from dispatch_fake_gh import script as gh_script
 from units131_support import plan_for, spec_text
 
+CPLAT_DIR = Path(claim.__file__).resolve().parent   # scripts/cplat: the modules `restart` may leave fresh copies of
 REAL_CLAIM_GH = claim.gh            # conftest replaces `claim.gh` for every test; the world wants the real one (it reaches the fake gh)
 SLUG = "acme/shop-api"
 BASE = "dispatch/acme__shop-api"
@@ -172,6 +173,7 @@ MUTATING = {("issue", "edit"), ("issue", "comment"), ("issue", "close"), ("issue
 class World:
     def __init__(self, tmp_path: Path, monkeypatch):
         self.tmp, self.mp = tmp_path, monkeypatch
+        self._modules = None            # sys.modules before the first `restart`
         self.work = tmp_path / "work"
         self.work.mkdir()
         self.dir = tmp_path / "fake"
@@ -437,10 +439,24 @@ class World:
             self.mp.setattr(mod, "now", lambda: self.now, raising=False)
 
     def restart(self):
-        """A killed dispatcher keeps nothing in memory: every `dispatch*` module is imported afresh by the next command."""
+        """A killed dispatcher keeps nothing in memory: every `dispatch*` module is imported afresh by the next command.
+        `close` puts the old modules back, so a later test in the same worker patches the modules the code under test uses."""
+        if self._modules is None:
+            self._modules = dict(sys.modules)
         keep = ("dispatch_world", "dispatch_fake_gh")
         for name in [n for n in sys.modules if (n == "dispatch" or n.startswith("dispatch_")) and n not in keep]:
             del sys.modules[name]
+
+    def _restore_modules(self):
+        """Undo `restart`: drop the cplat modules imported since (they hold the fresh `dispatch*` modules), restore the old ones."""
+        if self._modules is None:
+            return
+        for name, mod in list(sys.modules.items()):
+            f = getattr(mod, "__file__", None)
+            if name not in self._modules and f and Path(f).resolve().parent == CPLAT_DIR:
+                del sys.modules[name]
+        sys.modules.update(self._modules)
+        self._modules = None
 
     def run(self, *argv, cwd=None) -> Result:
         import cplat
@@ -534,6 +550,7 @@ class World:
         end = time.time() + 20                      # a thread the test left behind would call gh in the next test's world
         for t in [t for t in threading.enumerate() if t not in self._threads and t is not threading.current_thread()]:
             t.join(max(0.0, end - time.time()))
+        self._restore_modules()
 
 
 @pytest.fixture()
