@@ -31,6 +31,7 @@ tasks:
     covers: [AC-208.1, AC-208.3, AC-208.4, AC-208.5, AC-208.6, AC-208.7]
     parallel_safe: false
     depends_on: [t1, t2]
+    done: true
 ---
 
 # Plan — 208 Test runs leave the developer's disk as they found it
