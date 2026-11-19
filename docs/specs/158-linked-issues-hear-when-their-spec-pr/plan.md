@@ -10,6 +10,7 @@ tasks:
     covers: [AC-158.1, AC-158.2, AC-158.3, AC-158.6, AC-158.7]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: Release milestone (linked issues, texts, close, summary) and `cplat component release issues`
     files: [scripts/cplat/milestones_release.py, scripts/cplat/comprelease.py]
