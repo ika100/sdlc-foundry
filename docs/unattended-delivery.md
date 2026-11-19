@@ -205,8 +205,14 @@ When a build task's checks fail only because a later task that depends on it has
 | `no-repo-allowlist` | `.claude/settings.json` is missing: run `/platform:update` or `cplat adopt` |
 | `blocked-by-settings` | a `deny` or `ask` rule matches a git or gh command the run needs: remove or narrow the rule, or run the command attended |
 | `git-identity` | set `git config --global user.name` and `user.email` (needed for `commit -s`) |
-| `gh-auth` | `gh auth login --hostname <host>` |
+| `gh-auth` | `gh auth login --hostname <host>`; the login is tried three times over 45 s, so a login that fails for a moment passes, and on macOS a locked login keychain is a possible cause: unlock it |
 | `no-push-access` | ask for write access to the repository |
+| `untrusted-folder` | the folder is not trusted and its committed settings set `env`, `permissions.additionalDirectories` or a plugin that is neither installed nor passed with `--plugin-dir`: open `claude` in the folder once and accept the trust dialog |
+| `subagent-tools` | an agent of the run is refused its shell or a command it needs (a deny or ask rule, a missing allow rule, a definition without `Bash`): remove or narrow the named rule, add the allow rule it prints, or add `Bash` to the agent's `tools` |
+| `agent-worktree` | an agent worktree cannot be created, or lands outside the folders the session may work in: run `git worktree prune`, and make `.claude/worktrees` a plain folder inside the repo |
+| `model-unreachable` | a model the run uses is excluded by `availableModels` or `deniedModels`, or cannot be called with this machine's login: change the setting, run `claude /login`, or set a model the account may use |
+
+The checks run in this order: the existing ones, then the trust of each folder, the commands the agents run, the agent definitions, the agent worktree, and the models' settings. A model check call happens only when every other check passed. That call is not counted in the budget, is cached for an hour per model and account, and its tokens are listed under `preflight` in the run's log. `cplat` never accepts a trust dialog itself: you do that once in `claude`.
 
 The sessions get a **run allowlist** ([ADR-076](adr/076-an-unattended-run-gets-its-permissions-per-session-from-a-checked-run-allowlist.md)): the feature branch (switch, create), `commit -s`, `push` of that branch without force and `gh pr create`. It applies to this run's sessions only and no settings file is changed; `cplat headless` prints it at the start. Force pushes, pushes to the default branch and merges outside `cplat component ship land` stay refused.
 

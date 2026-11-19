@@ -47,7 +47,8 @@ def test_the_growth_of_a_unit_is_booked_once_and_agent_calls_are_added(home, tmp
     assert _book(monkeypatch, [u]).used == 100                                       # nothing grew: nothing booked twice
     assert db.book_agent(SLUG, 50) == 50
     st = ds.load(SLUG)
-    assert st["ledger"]["2026-11-10"] == {"units": {"issue-1.1": 100}, "agent": 50} and st["counted"] == {"issue-1.1": 100}
+    day = st["ledger"]["2026-11-10"]
+    assert (day["units"], day["agent"]) == ({"issue-1.1": 100}, 50) and st["counted"] == {"issue-1.1": 100}
 
 
 def test_a_call_without_usage_books_the_ceiling(home):
@@ -57,10 +58,10 @@ def test_a_call_without_usage_books_the_ceiling(home):
 
 def test_the_day_changes_at_local_midnight_and_the_growth_goes_to_the_new_day(home, tmp_path, monkeypatch):
     u = _unit(tmp_path, "issue-1.1", {"run_id": "r1", "ended_at": None})
-    monkeypatch.setattr(db, "_peek", lambda rid: 100)
+    monkeypatch.setattr(db, "_peek_section", lambda rid: (True, {"totals": {"input": 100}}))
     assert _book(monkeypatch, [u]).used == 100
     home["now"] = dt.datetime(2026, 11, 11, 0, 5)
-    monkeypatch.setattr(db, "_peek", lambda rid: 130)
+    monkeypatch.setattr(db, "_peek_section", lambda rid: (True, {"totals": {"input": 130}}))
     usage = _book(monkeypatch, [u])
     assert (usage.day, usage.used) == ("2026-11-11", 30)
 
@@ -118,5 +119,5 @@ def test_the_hint_lists_seven_days_oldest_first_from_top_level_records(home, mon
         {"run_id": "d", "repo": SLUG, "started_at": at(3), "usage": {**usage, "incomplete": "gap"}}])
     hint = db.history_hint(SLUG)
     assert len(hint) == 7 and [h["day"] for h in hint] == sorted(h["day"] for h in hint)
-    assert hint[-1] == {"day": dt.date.today().isoformat(), "tokens": 120}
+    assert hint[-1] == {"day": dt.date.today().isoformat(), "tokens": 120, "usd": None}      # usd: no `cost_complete` in these records
     assert hint[-4]["tokens"] is None and hint[0]["tokens"] == 0
