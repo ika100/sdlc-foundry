@@ -73,11 +73,12 @@ def test_releases_come_from_gh_with_their_date_within_the_period(monkeypatch):  
 def test_done_lists_releases_with_their_date_and_filters_by_period(console):  # AC-122.48
     c = console()
     doc = needs_json()
-    doc["releases"] = [{"repo": "acme/shop-api", "component": "shop-api", "tag": "v1.4.0", "published_at": "2026-10-20T10:00:00Z", "url": "u"},
+    recent = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=5)).strftime("%Y-%m-%dT10:00:00Z")   # inside the 30 days, whatever today is
+    doc["releases"] = [{"repo": "acme/shop-api", "component": "shop-api", "tag": "v1.4.0", "published_at": recent, "url": "u"},
                        {"repo": "acme/shop-api", "component": "shop-api", "tag": "v0.9.0", "published_at": "2026-01-01T10:00:00Z", "url": "u"}]
     c.set("needs", doc)
     _, text = c.page("/board?view=done&period=30")
-    assert "1.4.0" in text and "2026-10-20" in text and "0.9.0" not in text
+    assert "1.4.0" in text and recent[:10] in text and "0.9.0" not in text
     assert "0.9.0" in c.page("/board?view=done&period=all")[1]
 
 
