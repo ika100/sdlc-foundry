@@ -1745,6 +1745,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
         return _done(repo, st, ["not deployable (platform): nothing to deploy", "Smoke (dev): not deployable",
                                 "Promotion (staging): not deployable"])
     context = context or (st.get("product") or {}).get("context")
+    context = smoke.env_context_for(repo, gitops_apps(repo), service_name(repo), "dev", context) or context  # spec 201
     if not context and (recorded := (st.get("context") or {}).get("name")):
         context = recorded
         say(f"kube context: {context} (recorded at the hand-off)")

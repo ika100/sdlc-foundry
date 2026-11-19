@@ -34,7 +34,7 @@ def test_the_e2e_workflow_has_no_pr_path_filter_and_a_decide_job_ac_134_1():  # 
 def test_every_cluster_job_needs_decide_and_runs_on_true_or_a_schedule_ac_134_1():  # AC-134.1
     jobs = workflow("e2e.yml")["jobs"]
     others = {k: j for k, j in jobs.items() if k != "decide"}
-    assert set(others) == {"e2e", "e2e-cluster"}
+    assert set(others) == {"e2e", "e2e-cluster", "e2e-clusters"}  # spec 201: plus the two-cluster run
     for name, job in others.items():
         needs = job["needs"] if isinstance(job["needs"], list) else [job["needs"]]
         assert "decide" in needs, name

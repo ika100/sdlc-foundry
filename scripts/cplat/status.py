@@ -10,6 +10,7 @@ import backupstate
 import core
 import gitops
 import localport
+import envcluster
 import model
 import runlist
 from core import PlatformError, run
@@ -97,6 +98,25 @@ def parse_contexts(values: list[str] | None, envs: list[str]) -> dict[str, str]:
     for v in plain:
         out.update({e: v for e in envs if e not in out})
     return out
+
+
+def env_contexts(repo: Path, m: model.Model, contexts: list[str] | str | None) -> tuple[list[str], dict[str, str]]:
+    """Spec 201 (AC-201.9): `--context` values plus `ENV=CTX` for each environment they do not cover, from its cluster's context;
+    and environment -> cluster for those whose cluster cannot be told or reached. A system on one cluster adds nothing."""
+    given = [contexts] if isinstance(contexts, str) else list(contexts or [])
+    covered = parse_contexts(given, [e.name for e in m.environments])
+    out, unreachable = list(given), {}
+    for e in m.environments:
+        if e.name in covered:
+            continue
+        try:
+            ctx = envcluster.env_context(repo, m, e.name, None)
+        except PlatformError:
+            unreachable[e.name] = envcluster.cluster_of(m, e.name) or "?"
+            continue
+        if ctx:
+            out.append(f"{e.name}={ctx}")
+    return out, unreachable
 
 
 def _smoke(repo: str, tag: str | None, env: str) -> dict | None:
@@ -231,7 +251,7 @@ def _version_cell(app_dir: Path, m: model.Model, ri: model.ResourceInstance, con
 
 
 def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
-                loaded: tuple[Path, model.Model] | None = None) -> dict:
+                loaded: tuple[Path, model.Model] | None = None, unreachable: dict[str, str] | None = None) -> dict:
     """Everything `system status --json` reports except `backups`; `collect` is its 4-tuple view."""
     app_dir, m = loaded or load(repo, app)
     localport.use_repo(repo)
@@ -243,6 +263,10 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
     argo: dict[str, dict[str, str]] = {}
     unreadable: set[str] = set()
     unavailable = []
+    unreachable = unreachable or {}
+    for env, cluster in unreachable.items():
+        unreadable.add(env)
+        unavailable.append({"source": f"cluster:{env}", "error": f"unreachable: {cluster}"})
     for env, ctx in by_env.items():
         if ctx not in cache:
             cache[ctx] = read_argo(ctx)
@@ -269,6 +293,7 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
                 cells[env] = None
                 continue
             miss = "unknown" if env in unreadable else ("-" if env not in by_env else "missing")
+            miss = f"unreachable: {unreachable[env]}" if env in unreachable else miss
             seen = argo.get(env, {}).get(inst.argo_application, miss)
             inst.observed.update(argo=seen, ci=ci)
             smoke = _smoke(c.repo or "", inst.tag, env)
@@ -287,7 +312,8 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
         if candidate:
             row["release_candidate"] = candidate
         rows.append(row)
-    miss_of = lambda env: "unknown" if env in unreadable else ("-" if env not in by_env else "missing")  # noqa: E731
+    miss_of = lambda env: (f"unreachable: {unreachable[env]}" if env in unreachable  # noqa: E731
+                           else "unknown" if env in unreadable else ("-" if env not in by_env else "missing"))
     def res_cell(env: str, app_name: str | None, external: bool = False) -> dict:
         seen = "external" if external else argo.get(env, {}).get(app_name or "", miss_of(env))
         return {"argo": seen}
@@ -312,10 +338,12 @@ def collect_all(repo: Path, app: str | None, contexts: list[str] | str | None,
         if by:
             versions.append({"resource": r.name, "type": r.type, "cells": {
                 env: (_version_cell(app_dir, m, by[env], by_env.get(env), renderer) if env in by else None) for env in envs}})
-    rules = [{"name": e.name, "promote": None if i == 0 else e.promotion, "policy": e.policy} for i, e in enumerate(m.environments)]
+    rules = [{"name": e.name, "promote": None if i == 0 else e.promotion, "policy": e.policy,
+              **({"unreachable": unreachable[e.name]} if e.name in unreachable else {})} for i, e in enumerate(m.environments)]
     libraries = [{"component": lb.name, "used_by": [c.name for c in m.components if lb.name in c.uses or lb.name in c.libraries]} for lb in libs]
     return {"system": app_dir.name, "environments": envs, "environment_rules": rules, "rows": rows, "libraries": libraries,
-            "resources": resources, "resource_versions": versions, "unavailable": unavailable}
+            "resources": resources, "resource_versions": versions, "unavailable": unavailable,
+            "unreachable": unreachable}
 
 
 def collect(repo: Path, app: str | None, context: list[str] | str | None) -> tuple[str, list[str], list[dict], list[dict]]:
@@ -327,7 +355,7 @@ def collect(repo: Path, app: str | None, context: list[str] | str | None) -> tup
 
 
 def collect_backups(repo: Path, app: str | None, contexts: list[str] | str | None,
-                    loaded: tuple[Path, model.Model] | None = None) -> dict:
+                    loaded: tuple[Path, model.Model] | None = None, unreachable: dict[str, str] | None = None) -> dict:
     """Spec 117: backup state of every database instance and environment. The cluster is read (through backupstate's kubectl seam)
     only when the system has a backup or a restore-state.yaml; otherwise every row is `off` and nothing is read."""
     app_dir, m = loaded or load(repo, app)
@@ -342,8 +370,13 @@ def collect_backups(repo: Path, app: str | None, contexts: list[str] | str | Non
     wanted = any(e.backup for e in m.environments) or any(ri.backup for ri in dbs if not ri.external) \
         or any(v is not None for v in states.values())
     out: dict = {"resource_instances": [], "environments": [], "_read": wanted, "_contexts": sorted(set(by_env.values()))}
+    unreachable = unreachable or {}
     for ri in dbs:
-        if wanted:
+        if ri.environment in unreachable:
+            row = backupstate.database_state(m.system, ri.resource, ri.environment, None, backup=False, external=ri.external)
+            if ri.backup and not ri.external:
+                row["backup"].update({"state": "unknown", "error": f"unreachable: {unreachable[ri.environment]}"})
+        elif wanted:
             row = backupstate.database_state(m.system, ri.resource, ri.environment, by_env.get(ri.environment), backup=bool(ri.backup),
                                              external=ri.external, state=states[(ri.resource, ri.environment)],
                                              schedule=(ri.backup or {}).get("schedule"))
@@ -351,6 +384,12 @@ def collect_backups(repo: Path, app: str | None, contexts: list[str] | str | Non
             row = backupstate.database_state(m.system, ri.resource, ri.environment, None, backup=False, external=ri.external)
         out["resource_instances"].append(row)
     for e in m.environments:
+        if e.name in unreachable:
+            row = backupstate.environment_state(m.system, e.name, None, backup=False)
+            if wanted and e.backup:
+                row["backup"].update({"state": "unknown", "reason": f"unreachable: {unreachable[e.name]}"})
+            out["environments"].append(row)
+            continue
         out["environments"].append(backupstate.environment_state(m.system, e.name, by_env.get(e.name), backup=bool(wanted and e.backup)))
     return out
 
@@ -498,10 +537,12 @@ def main(argv: list[str]) -> int:
     ns = ap.parse_args(argv)
     repo = Path(ns.repo_dir).resolve()
     loaded = load(repo, ns.system)
-    d = collect_all(repo, ns.system, ns.context, loaded)
-    backups = collect_backups(repo, ns.system, ns.context, loaded)
+    contexts, unreachable = env_contexts(repo, loaded[1], ns.context)
+    contexts = contexts or ns.context
+    d = collect_all(repo, ns.system, contexts, loaded, unreachable)
+    backups = collect_backups(repo, ns.system, contexts, loaded, unreachable)
     if ns.json:
         print(json.dumps({**d, "backups": public_backups(backups)}, indent=2))
     else:
-        print(render_table(d["system"], d["environments"], d["rows"], d["resources"], core.read_stamp(repo), ns.context, backups, d["resource_versions"]))
-    return 0
+        print(render_table(d["system"], d["environments"], d["rows"], d["resources"], core.read_stamp(repo), contexts, backups, d["resource_versions"]))
+    return 1 if unreachable else 0

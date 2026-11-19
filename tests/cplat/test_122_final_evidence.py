@@ -8,6 +8,7 @@ import releases
 import runlist
 import runs
 from console import handoff, palette
+from console import sources as sources_mod
 from console_support import cell, needs_json, q, run_row, runs_json, status_json
 
 PR = {"number": 41, "url": "https://github.com/acme/shop-api/pull/41"}
@@ -70,7 +71,8 @@ def test_releases_come_from_gh_with_their_date_within_the_period(monkeypatch):  
                     "url": "https://github.com/acme/shop-api/releases/tag/v1.4.0"}]
 
 
-def test_done_lists_releases_with_their_date_and_filters_by_period(console):  # AC-122.48
+def test_done_lists_releases_with_their_date_and_filters_by_period(console, monkeypatch):  # AC-122.48
+    monkeypatch.setattr(sources_mod, "utcnow", lambda: datetime.datetime(2026, 10, 27, tzinfo=datetime.timezone.utc))  # the 30-day window must not drift with the calendar
     c = console()
     doc = needs_json()
     recent = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)).strftime("%Y-%m-%dT10:00:00Z")   # inside the 30-day period whenever it runs

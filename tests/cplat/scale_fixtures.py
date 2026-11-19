@@ -17,7 +17,7 @@ SKIP_DRY = "SkipDryRunOnMissingResource=true"
 SERVICE_KEYS = ("type, lang, repo, image, port, probes, user, volumes, env, secretRefs, secrets, replicas, resources, expose, metrics, provides, "
                 "consumes, uses, instances, scale")
 INSTANCE_KEYS = "replicas, resources, env, promote, secrets, autonomy, scale"
-ENV_KEYS = "host, url, policy, promote, observability, operators, backup, autonomy"
+ENV_KEYS = "host, url, policy, promote, observability, operators, backup, autonomy, cluster"
 KEDA = {"repo_url": "https://kedacore.github.io/charts", "chart": "keda", "chart_version": "2.19.0", "operator_version": "2.19.0", "namespace": "keda",
         "release": "keda", "crd": "scaledobjects.keda.sh", "selector": "app.kubernetes.io/name=keda-operator"}
 METRICS = {"repo_url": "https://kubernetes-sigs.github.io/metrics-server", "chart": "metrics-server", "chart_version": "3.14.0",

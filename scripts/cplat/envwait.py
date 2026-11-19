@@ -1,7 +1,7 @@
 """`system wait` and `cluster wait` (spec 143): block until Argo CD runs what `main` of the gitops repo says.
 
   cplat system wait --env <env> [<component>…] [--revision SHA] [--refresh] [--timeout S] [--context C] [--repo-dir DIR]
-  cplat cluster wait [--refresh] [--timeout S] [--context C] [--repo-dir DIR]
+  cplat cluster wait [<cluster>] [--refresh] [--timeout S] [--context C] [--repo-dir DIR]
 
 An app is in its wanted state when Argo CD synced it to the wanted revision (default: the head of `main` on GitHub when the
 wait starts, read with one `git fetch`; a later commit that contains it also counts), it is Synced and Healthy, and a
@@ -10,6 +10,8 @@ One line each time an app's state changes; exit 0 READY, 1 RED (a sync error, a 
 revision; a ComparisonError with a network cause only when it lasts until the timeout, #506), 2 TIMEOUT (one line per app behind; the command with `--refresh` when Argo CD has not picked up the revision).
 `--refresh` asks Argo CD once for a hard refresh of each app not yet at the revision. A context that is not the system's
 cluster, a cluster that does not answer, or no Argo CD exits 1 at once.
+In a system on several clusters (spec 201) the context of `--env`'s cluster is used (`kube_contexts` in the settings files), never the
+current one; in a cluster repo with `clusters`, `cluster wait <cluster>` names the cluster whose roots it waits for.
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ from pathlib import Path
 
 import yaml
 
+import envcluster
 import gitops
 import model
 import settings
@@ -323,15 +326,34 @@ def watch(repo: Path, targets: list[Target], wanted: str, ctx: str, items: dict[
 def system_wait(repo: Path, ns: argparse.Namespace, command: str) -> tuple[int, list[str]]:
     wanted = wanted_revision(repo, ns.revision)
     system, targets, every = env_targets(repo, ns.system, wanted, ns.env, ns.components)
-    ctx, items = resolve_context(repo, ns.context, every, f"system {system}")
+    m = model.load_dir(gitops.find_app(repo, ns.system))
+    ctx, items = resolve_context(repo, envcluster.env_context(repo, m, ns.env, ns.context), every, f"system {system}")
     return watch(repo, targets, wanted, ctx, items, f"in {ns.env}", command, ns.refresh, ns.timeout, ns.interval, system)
+
+
+def _named_cluster(repo: Path, name: str | None) -> str | None:
+    """The cluster `cluster wait` is for: required and validated with `clusters` in cluster.yaml; else None (today's behaviour)."""
+    doc = yaml.safe_load((repo / "cluster.yaml").read_text()) or {}
+    listed = doc.get("clusters") if isinstance(doc, dict) else None
+    if not listed:
+        if name and isinstance(doc, dict) and name != doc.get("cluster"):
+            raise PlatformError(f"unknown cluster '{name}' (cluster: {doc.get('cluster')})", hint="name this repo's cluster, or leave it out")
+        return None
+    shown = ", ".join(map(str, listed))
+    if not name:
+        raise PlatformError(f"name the cluster to wait for: cplat cluster wait <cluster> (clusters: {shown})")
+    if name not in listed:
+        raise PlatformError(f"unknown cluster '{name}' (clusters: {shown})")
+    return name
 
 
 def cluster_wait(repo: Path, ns: argparse.Namespace, command: str) -> tuple[int, list[str]]:
     if not (repo / "cluster.yaml").is_file():
         raise PlatformError(f"not a cluster repo: {repo} has no cluster.yaml", hint="run it in the cluster repo (/cluster:new creates one)")
+    cluster = _named_cluster(repo, ns.cluster)
+    context = envcluster.cluster_context(repo, cluster, ns.context, f"cluster {cluster}") if cluster else ns.context
     wanted = wanted_revision(repo, None)
-    ctx, items = resolve_context(repo, ns.context, set(ROOTS), f"cluster repo {repo.name}")
+    ctx, items = resolve_context(repo, context, set(ROOTS), f"cluster repo {repo.name}")
     return watch(repo, [Target(r) for r in ROOTS], wanted, ctx, items, "of the cluster", command, ns.refresh, ns.timeout, ns.interval)
 
 
@@ -343,6 +365,8 @@ def main(argv: list[str]) -> int:
         ap.add_argument("--env", required=True)
         ap.add_argument("--revision", help="wait for this commit of the gitops repo (default: the head of main on GitHub)")
         ap.add_argument("--system", help="the system, when the repo holds several")
+    if kind == "cluster":
+        ap.add_argument("cluster", nargs="?", help="the cluster to wait for (required when cluster.yaml lists `clusters`)")
     ap.add_argument("--refresh", action="store_true", help="ask Argo CD once for a hard refresh of each app behind the revision")
     ap.add_argument("--timeout", type=float, default=waits.DEFAULT_TIMEOUT)
     ap.add_argument("--interval", type=float, default=10.0, help=argparse.SUPPRESS)

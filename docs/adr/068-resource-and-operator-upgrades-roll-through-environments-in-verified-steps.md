@@ -33,7 +33,7 @@ new system identifier.
    rendered files (a held pin, like an overlay's `newTag`) until a step moves them; no backup is checked. A held environment takes this
    release's pin before its next major step.
 7. **Operators move once per cluster, with the earliest environment there.** Every environment of a gitops repo deploys to its one
-   cluster, so an operator pin moves with dev's step and the verification runs the smoke tests of every environment on that cluster.
+   cluster, so an operator pin moves with dev's step and the verification runs the smoke tests of every environment on that cluster. For a system spread over clusters: [ADR-114](114-one-cluster-repo-places-environments-on-several-clusters.md) (operators move on the first cluster; a later cluster through /cluster:promote).
 
 ## Consequences
 
@@ -46,4 +46,4 @@ new system identifier.
 ## Not included
 
 - Automatic rollback or downgrade; zero-downtime major upgrades; upgrading external resources, Kubernetes or nodes.
-- Per-environment clusters: the order of AC-121.20 is stated for the spec that adds them.
+- Per-environment clusters: the order of AC-121.20 is stated for the spec that adds them; see [ADR-114](114-one-cluster-repo-places-environments-on-several-clusters.md) (operators move on the first cluster; a later cluster through /cluster:promote).
