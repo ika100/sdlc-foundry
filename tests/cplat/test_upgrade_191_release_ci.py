@@ -365,6 +365,8 @@ def test_an_adr_records_the_split_and_amends_adr_069_ac_191_8():  # AC-191.8
 
 
 def test_a_changelog_fragment_lists_the_change_ac_191_8():  # AC-191.8
-    frags = sorted((ROOT / "docs" / "changelog.d").glob("191-*.md"))
-    assert frags, "a fragment docs/changelog.d/191-*.md"
-    assert any(f.name.endswith(".changed.md") and "upgrade render check" in f.read_text() and "#400" in f.read_text() for f in frags)
+    # a "changed" fragment until the release, then a paragraph of docs/CHANGELOG.md
+    frags = [f.read_text() for f in (ROOT / "docs" / "changelog.d").glob("191-*.changed.md")]
+    released = (ROOT / "docs" / "CHANGELOG.md").read_text().split("\n\n")
+    hits = [e for e in frags + released if "upgrade render check" in e and "#400" in e]
+    assert hits, "no changelog entry names the upgrade render check and #400"
