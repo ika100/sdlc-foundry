@@ -125,13 +125,21 @@ def _journey_wait(seconds: float, kind: str) -> None:
         pass
 
 
-def run_renderer(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    """`scripts/render.py` (through uv-script.sh) in a cluster repo that never reads a stale bytecode cache: a renderer written within the same second
-    and with the same size as the one that wrote `scripts/__pycache__` passes Python's mtime+size check and would render the old pins."""
+def drop_render_cache(repo: Path) -> None:
+    """A cluster repo's renderer must never read a stale bytecode cache: a renderer written within the same second and with the
+    same size as the one that wrote `scripts/__pycache__` passes Python's mtime+size check and would render the old pins."""
     for cache in [repo / "scripts" / "__pycache__", *(repo / ".platform" / "releases").glob("*/__pycache__")]:
         shutil.rmtree(cache, ignore_errors=True)
+
+
+RENDER_ENV = {"PYTHONDONTWRITEBYTECODE": "1"}
+
+
+def run_renderer(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """`scripts/render.py` (through uv-script.sh) in a cluster repo, without a stale bytecode cache (`drop_render_cache`)."""
     from uvscript import script_cmd     # uvscript imports core
-    return run(script_cmd("scripts/render.py", *args), cwd=repo, check=False, env={"PYTHONDONTWRITEBYTECODE": "1"})
+    drop_render_cache(repo)
+    return run(script_cmd("scripts/render.py", *args), cwd=repo, check=False, env=RENDER_ENV)
 
 
 def repo_env(extra: dict[str, str] | None = None) -> dict[str, str]:

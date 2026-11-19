@@ -712,7 +712,8 @@ def rerender_cluster(repo: Path, written: set[str]) -> int:
     """A cluster repo: re-render cluster/ with the updated scripts/render.py, which the template update never touches (it is the
     render's output), so the review branch passes its own render check (#264). Adds the changed paths to `written`; returns their count."""
     before = _generated_snapshot(repo, ("cluster",))
-    res = core.run_renderer(repo)
+    core.drop_render_cache(repo)
+    res = run(script_cmd("scripts/render.py"), cwd=repo, check=False, env=core.RENDER_ENV)
     if res.returncode != 0:
         lines = [ln for ln in (res.stderr or res.stdout or "").splitlines() if ln.strip()]
         raise PlatformError("the updated cluster render fails: " + (lines[-1] if lines else f"exit {res.returncode}"),
@@ -777,7 +778,8 @@ def release_unused_clusters(repo: Path, old: str, later: list[str], frozen: list
     texts = {c: f.read_text() for c, f in releases.items()}
     for f in releases.values():
         f.unlink()
-    res = core.run_renderer(repo)
+    core.drop_render_cache(repo)
+    res = run(script_cmd("scripts/render.py"), cwd=repo, check=False, env=core.RENDER_ENV)
     if res.returncode != 0:
         lines = [ln for ln in (res.stderr or res.stdout or "").splitlines() if ln.strip()]
         raise PlatformError("the updated cluster render fails: " + (lines[-1] if lines else f"exit {res.returncode}"),
