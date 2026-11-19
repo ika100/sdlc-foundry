@@ -174,9 +174,10 @@ def test_a_units_usd_is_priced_from_its_tokens_with_the_price_table_when_no_cost
     world.run("start", "--once")
     world.wait_ended("issue-1.1")
     r = world.run("start", "--once")
-    assert f"no starts: daily budget reached: ${expected:.2f} of $5.00" in r.out, r.out
+    total = expected + world.state()["ledger"][TODAY].get("agent_usd", 0)              # plus the dispatcher's own premise call (AC-210.3)
+    assert f"no starts: daily budget reached: ${total:.2f} of $5.00" in r.out, r.out
     assert world.state()["ledger"][TODAY]["usd"]["issue-1.1"] == pytest.approx(expected)
-    assert world.run("status", "--json").json()["cost"]["used_usd"] == pytest.approx(expected)
+    assert world.run("status", "--json").json()["cost"]["used_usd"] == pytest.approx(total)
     assert world.calls_of("issue-3.1") == []
 
 
@@ -317,4 +318,4 @@ def test_plan_and_status_change_nothing_in_mode_cost_ac_210_2(world):  # AC-210.
     before = world.fingerprint()
     for args in (("plan",), ("plan", "--json"), ("status",), ("status", "--json")):
         assert world.run(*args).rc == 0
-    assert world.fingerprint() == before and world.calls() == [] and world.gh_writes() == [] and world.claude_calls() == []
+    assert world.fingerprint() == before and world.calls() == [] and world.gh_writes() == []   # the premise check may run (spec 167)
