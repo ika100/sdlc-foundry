@@ -17,6 +17,7 @@ from pathlib import Path
 from _pytest.tmpdir import get_user
 
 from system_fixtures import ROOT
+from waiting import wait_for
 
 PLUGIN_DIR = ROOT / "tests" / "cplat"
 
@@ -31,30 +32,55 @@ class Sandbox:
         (self.dev_cache / "environments-v2" / "abc123").mkdir(parents=True)
         (self.dev_cache / "environments-v2" / "abc123" / "pyvenv.cfg").write_text("home = /x\n")
         self.R = self.temproot / f"pytest-of-{get_user() or 'unknown'}"
+        self.xdg = base / "xdg-cache"
+        self.W = self.xdg / "sdlc-foundry" / "test-wheels"   # the persistent test wheel cache (A10)
         self._n = 0
 
     def env(self, **extra: str) -> dict[str, str]:
         env = {k: v for k, v in os.environ.items() if not k.startswith(("PYTEST_", "UV_", "SCRATCH_"))}
         env.update(PYTEST_DEBUG_TEMPROOT=str(self.temproot), UV_CACHE_DIR=str(self.dev_cache), PYTHONPATH=str(PLUGIN_DIR),
-                   SCRATCH_OUT=str(self.out), **extra)
+                   XDG_CACHE_HOME=str(self.xdg), SCRATCH_OUT=str(self.out), **extra)
         return env
 
-    def suite(self, source: str) -> Path:
+    def suite(self, source: str, conftest: str | None = None) -> Path:
         self._n += 1
         d = self.base / f"suite{self._n}"
         d.mkdir()
         (d / "pytest.ini").write_text("[pytest]\n")
         (d / "test_scratch.py").write_text(source)
+        if conftest is not None:
+            (d / "conftest.py").write_text(conftest)
         return d
 
     def popen(self, suite: Path, *args: str, env: dict[str, str] | None = None, **kw) -> subprocess.Popen:
         cmd = [sys.executable, "-m", "pytest", "-p", "runtemp", "-p", "no:cacheprovider", "-q", *args]
         return subprocess.Popen(cmd, cwd=suite, env=env or self.env(), text=True, **kw)
 
-    def run(self, source: str, *args: str, timeout: int = 100, **extra_env: str) -> subprocess.CompletedProcess:
-        suite = self.suite(source)
+    def run(self, source: str, *args: str, timeout: int = 100, conftest: str | None = None, wait: bool = True,
+            ignore: tuple[str, ...] = (), **extra_env: str) -> subprocess.CompletedProcess:
+        """Run the scratch suite. The run counts as ended once `R` holds no `.cplat-removing-*` entry (A11), except those
+        named in `ignore` (a removal the test itself holds); `wait=False` skips the wait (for probes of the moment of exit)."""
+        suite = self.suite(source, conftest)
         cmd = [sys.executable, "-m", "pytest", "-p", "runtemp", "-p", "no:cacheprovider", "-q", *args]
-        return subprocess.run(cmd, cwd=suite, env=self.env(**extra_env), capture_output=True, text=True, timeout=timeout)
+        done = subprocess.run(cmd, cwd=suite, env=self.env(**extra_env), capture_output=True, text=True, timeout=timeout)
+        if wait:
+            self.wait_removed(ignore=ignore)
+        return done
+
+    def wait_removed(self, ignore: tuple[str, ...] = (), cap: float = 60.0) -> None:
+        """Poll (waiting.wait_for, the suite's sanctioned poll; the sleep guard of spec 185 forbids a loop of our own) up to `cap` s
+        until `R` has no `.cplat-removing-*` entry; then fail with a listing of `R`."""
+        def left() -> list[str]:
+            return sorted(p.name for p in self.R.glob(".cplat-removing-*") if p.name not in ignore) if self.R.exists() else []
+
+        try:
+            wait_for(lambda: not left(), cap, what="the removal")
+        except AssertionError:
+            raise AssertionError(f"a removal still ran after {cap} s: {left()}; R holds {sorted(p.name for p in self.R.iterdir())}") from None
+
+    def wait_gone(self, parent: Path, pattern: str, cap: float = 60.0) -> None:
+        """Poll until nothing in `parent` matches the glob `pattern` (an emptier of W.old-* is detached)."""
+        wait_for(lambda: not parent.exists() or not list(parent.glob(pattern)), cap, what=f"{pattern} in {parent} to go")
 
     def records(self) -> list[dict]:
         return [json.loads(line) for line in self.out.read_text().splitlines()] if self.out.exists() else []
@@ -94,6 +120,11 @@ def make_run(R: Path, name: str, state: str, started: float, *, failed_ids: tupl
         (d / "tmp" / "shared-renders0" / "big").write_text("x" * 100)
         (d / "temproot").mkdir()
     return d
+
+
+def make_removing(R: Path, name: str, state: str, started: float) -> Path:
+    """A `.cplat-removing-*` directory (design.md, Paths): `.lock` plus what is being deleted, as a run directory holds it."""
+    return make_run(R, name, state, started, uv_cache=True)
 
 
 def state_of(run_dir: Path) -> str:
