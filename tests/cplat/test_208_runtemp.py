@@ -529,7 +529,7 @@ def test_seed_and_write(tmp_path):
         write(os.path.join(barrier, ids[0] + ".written"), "")
         deadline = time.time() + 60
         while not os.path.exists(os.path.join(barrier, "go")) and time.time() < deadline:
-            time.sleep(0.02)
+            time.sleep(0.02)   # fake-delay: the scratch run's barrier poll, no waiting helper in a nested suite
 '''
 
 
