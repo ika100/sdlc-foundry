@@ -590,7 +590,7 @@ def test_an_unwritable_wheel_cache_changes_nothing_but_the_speed_ac_208_6(sb):  
         assert snapshot(sb.W) == before
     finally:
         for d in dirs:
-            d.chmod(0o755)
+            d.chmod(0o750)   # owner-writable again so the temp dir can be cleaned up
     assert not sb.run_dirs()
 
 
@@ -654,8 +654,10 @@ atexit.register(_probe)   # runs when the interpreter exits, after pytest's unco
 
 MANY_FILES = '''
 def test_many(tmp_path):
-    for i in range(5000):
-        (tmp_path / f"f{i}").write_text("x")
+    for d in range(200):   # 40000 files: deleting them takes far longer than the interpreter needs to exit
+        (tmp_path / f"d{d}").mkdir()
+        for i in range(200):
+            (tmp_path / f"d{d}" / f"f{i}").write_text("x")
 {tail}
 '''
 
