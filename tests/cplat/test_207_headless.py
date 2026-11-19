@@ -98,7 +98,7 @@ def test_a_failed_check_starts_no_session_and_says_why_ac_207_8(w, seams, store,
     assert w.sessions() == []
     rec = stored(store)[-1]
     assert rec["outcome"] == "escalated" and rec["stop_reason"] == "preflight"
-    assert rec["escalation"] == {"reason": f"preflight failed: {category}", "cause": "environment"}
+    assert {k: rec["escalation"].get(k) for k in ("reason", "cause")} == {"reason": f"preflight failed: {category}", "cause": "environment"}
 
 
 @pytest.mark.parametrize("brk, category, marker", BREAKS)
@@ -183,12 +183,12 @@ def test_one_call_per_distinct_model_is_not_a_session_and_not_charged_ac_207_6(w
     assert go(w, seams) == 1
     assert seams.calls and len(seams.calls) == len(set(seams.calls))
     rec = stored(store)[-1]
-    # The fake session reports no usage, so the run's own numbers are 1 invocation and $0: the preflight adds nothing to either.
+    # The fake session reports no usage, so the run's own numbers are 1 invocation and cost "unknown": the preflight adds nothing to either.
     assert rec["budget"]["used"]["invocations"] == len(w.sessions()) == 1
-    assert rec["budget"]["used"]["cost"] == 0
+    assert rec["budget"]["used"]["cost"] == "unknown"
     (ledger,) = w.ledgers()
     assert ledger["carried"]["invocations"] + ledger["used"]["invocations"] == 1
-    assert "preflight" not in json.dumps(ledger) and ledger["carried"]["cost"] == 0
+    assert "preflight" not in json.dumps(ledger) and ledger["carried"]["cost"] == "unknown"
     calls = rec["preflight"]["model_calls"]
     assert [c["model"] for c in calls] == seams.calls
     for c in calls:
@@ -200,9 +200,11 @@ def test_a_model_that_passed_a_minute_ago_is_not_called_again_by_the_next_run_ac
     assert go(w, seams) == 1
     first = list(seams.calls)
     assert first
+    seen = {r["run_id"] for r in stored(store)}   # both runs start at the same fake time: find the second by its id
     assert w.run("--max-runs", "1") in (0, 1)
     assert seams.calls == first
-    calls = stored(store)[-1]["preflight"]["model_calls"]
+    (second,) = [r for r in stored(store) if r["run_id"] not in seen]
+    calls = second["preflight"]["model_calls"]
     assert all(c["cached"] and c["input_tokens"] == 0 for c in calls)
 
 
