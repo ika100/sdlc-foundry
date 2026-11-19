@@ -1,1 +1,0 @@
-`cplat component ship pr`, `ship gitops pr` and `cplat system ship entry pr` shorten a `--title` whose only fault is a subject over 72 characters, keeping its type and scope, and print `title shortened: "<given>" -> "<sent>"`; they no longer refuse it (spec 126, #784).

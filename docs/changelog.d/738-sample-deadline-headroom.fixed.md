@@ -1,1 +1,0 @@
-**The benchmark sample no longer fails its database deadline test one run in three (#738).** `ika100/todo-api` answers an unreachable database within 2 s instead of 2.5 s, leaving headroom under the 3 s its test allows; the benchmark pins the fixed sample.
