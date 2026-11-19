@@ -21,6 +21,7 @@ import migrate5
 import settingsmerge
 import shapecmd
 from core import PLATFORM_ROOT, PlatformError, Report, run
+from uvscript import script_cmd
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -596,7 +597,7 @@ def reference_render(repo: Path, tmp: Path) -> dict[str, bytes]:
     subprocess.run(["tar", "-x", "-C", str(root)], input=archive, capture_output=True, check=True)
     (root / "scripts").mkdir(exist_ok=True)
     shutil.copyfile(RENDER_V4, root / "scripts" / "render.py")
-    run(["uv", "run", "scripts/render.py"], cwd=root)
+    run(script_cmd("scripts/render.py"), cwd=root)
     return _tree(root)
 
 
@@ -710,7 +711,7 @@ def rerender_cluster(repo: Path, written: set[str]) -> int:
     """A cluster repo: re-render cluster/ with the updated scripts/render.py, which the template update never touches (it is the
     render's output), so the review branch passes its own render check (#264). Adds the changed paths to `written`; returns their count."""
     before = _generated_snapshot(repo, ("cluster",))
-    res = run(["uv", "run", "scripts/render.py"], cwd=repo, check=False)
+    res = run(script_cmd("scripts/render.py"), cwd=repo, check=False)
     if res.returncode != 0:
         lines = [ln for ln in (res.stderr or res.stdout or "").splitlines() if ln.strip()]
         raise PlatformError("the updated cluster render fails: " + (lines[-1] if lines else f"exit {res.returncode}"),

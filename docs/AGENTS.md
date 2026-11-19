@@ -206,7 +206,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 
 | Agent | Model | Job |
 |---|---|---|
-| `coder` | sonnet | Spring Boot 3 / Java 21 implementation |
+| `coder` | sonnet | Spring Boot 4 / Java 21 implementation |
 | `tester` | sonnet | JUnit 5 + Spring Boot Test, JaCoCo gate |
 | `deployment` | sonnet | Distroless Java image, JVM-aware probes |
 | `observability` | sonnet | Actuator + Micrometer + OTel agent |

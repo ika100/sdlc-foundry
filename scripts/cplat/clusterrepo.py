@@ -17,6 +17,7 @@ import newsvc
 import pr_rules
 import versions
 from core import PlatformError, Report, run
+from uvscript import script_cmd
 
 NAME_RE = re.compile(r"^[a-z]([a-z0-9-]{0,38}[a-z0-9])?$")
 NAME_HINT = "lowercase letters, digits and hyphens, at most 40 characters, starting with a letter and not ending with a hyphen"
@@ -206,7 +207,7 @@ def _edit(repo: Path, change) -> str:
 
 
 def _render(repo: Path, original: str) -> None:
-    res = run(["uv", "run", "scripts/render.py"], cwd=repo, check=False)
+    res = run(script_cmd("scripts/render.py"), cwd=repo, check=False)
     if res.returncode != 0:
         (repo / "cluster.yaml").write_text(original)
         lines = [ln for ln in (res.stderr or res.stdout or "").strip().splitlines() if ln.strip()]
@@ -230,7 +231,7 @@ def _preflight(repo: Path, system: str, slug: str) -> None:
     entry = lambda s: s.__setitem__(system, _block(CommentedMap([("repo", slug)])))   # noqa: E731
     original = _edit(repo, entry)
     try:
-        res = run(["uv", "run", "scripts/check.py"], cwd=repo, check=False)
+        res = run(script_cmd("scripts/check.py"), cwd=repo, check=False)
     finally:
         (repo / "cluster.yaml").write_text(original)
     mine = re.compile(rf"^ERROR: {re.escape(system)}[ :(]")

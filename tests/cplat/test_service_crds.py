@@ -590,7 +590,7 @@ def devbox():
 
 def test_ac_098_14_the_devbox_recipe_runs_the_script():
     """AC-098.14: `devbox run service-crds`."""
-    assert devbox()["service-crds"] == "uv run scripts/check-service-crds.py"
+    assert devbox()["service-crds"] == "bash scripts/uv-script.sh scripts/check-service-crds.py"
 
 
 OLD_ARGS = ["-strict", "-ignore-missing-schemas", "-schema-location", "default", "-schema-location",

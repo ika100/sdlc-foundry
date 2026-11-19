@@ -11,7 +11,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 **Shell rule:** run every tool through `devbox run <script>`, never `docker`, `trivy` or the language tools directly, so that versions and flags match CI; add a missing recipe to `devbox.json` first.
 
-The template already ships: `Dockerfile` (Maven builder on the native platform → `gcr.io/distroless/java<jdk>-debian12:nonroot`, user 65532, OpenTelemetry agent baked in and disabled by default), `.github/workflows/ci.yml` (quality, test, security, pr-title, branch-name and a **docker (build + push)** job publishing `linux/amd64,linux/arm64` on `main` and `v*.*.*` tags as semver, `sha-<40>` and `sha-<7>`), and the recipes `image-build` / `image-scan`.
+The template already ships: `Dockerfile` (Maven builder on the native platform → `gcr.io/distroless/java<jdk>-debian13:nonroot`, user 65532, OpenTelemetry agent baked in and disabled by default), `.github/workflows/ci.yml` (quality, test, security, pr-title, branch-name and a **docker (build + push)** job publishing `linux/amd64,linux/arm64` on `main` and `v*.*.*` tags as semver, `sha-<40>` and `sha-<7>`), and the recipes `image-build` / `image-scan`.
 
 ## Workflow
 

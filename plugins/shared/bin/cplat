@@ -47,4 +47,7 @@ else
 fi
 export CPLAT_SOURCE="$source $root"   # shown by `cplat doctor`
 export PYTHONUNBUFFERED=1              # #335: progress shows as it happens when output goes to a file or a pipe
+if [ -f "$root/scripts/uv-script.sh" ]; then   # #209: one uv environment per dependency list, not per worktree path
+  exec bash "$root/scripts/uv-script.sh" "$root/scripts/cplat/cplat.py" "$@"
+fi
 exec uv run "$root/scripts/cplat/cplat.py" "$@"

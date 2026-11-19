@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import core
+import denyrules
+from denyrules import refused_rules
 
 TIMEOUT = 30
 LAND_COMMANDS = ("/component:ship", "/system:ship")
@@ -74,19 +76,6 @@ def run_allowlist(command: str, branches: list[str], log_dirs: tuple[Path, ...] 
         rules += [log_dir_rule(d) for d in log_dirs]
         rules += GH_RUN_VIEW
     return list(dict.fromkeys(rules))
-
-
-def refused_rules(default_branch: str) -> list[str]:
-    d = default_branch
-    return [
-        "Bash(git push --force*)", "Bash(git push -f*)", "Bash(git push * --force*)", "Bash(git push * -f*)",
-        "Bash(git push * +*)", f"Bash(git push * {d})", f"Bash(git push * {d}:*{d}*)", f"Bash(git push * {d}:refs*)", f"Bash(git push * *:{d})",
-        f"Bash(git push * *:refs/heads/{d})",
-        "Bash(gh pr merge*)", "Bash(gh api *merge*)",
-        "Bash(cplat pr wait *--merge*)",
-        "Bash(git rm -f*)", "Bash(git rm --force*)", "Bash(git rm -rf*)", "Bash(git rm -fr*)",
-        "Bash(git rm * -f*)", "Bash(git rm * --force*)", "Bash(git rm * -rf*)", "Bash(git rm * -fr*)",
-    ]
 
 
 def env(allowlist: list[str]) -> dict[str, str]:
@@ -286,10 +275,14 @@ def _push_access(repo: Path, slug: str) -> Failure | None:
 
 
 def check(repo: Path, command: str, specs: list[str],
-          targets: list[tuple[Path, str]] | None = None) -> Failure | None:
-    """The five checks in order; the first failure wins. `targets` are (clone, slug) pairs besides the repo."""
+          targets: list[tuple[Path, str]] | None = None, deny: list[str] | None = None) -> Failure | None:
+    """The checks in order, the refused rules first (spec 206); the first failure wins. `targets` are (clone, slug) pairs besides the repo."""
     repo = Path(repo)
     branches = branches_of(command, specs)
+    default = default_branch(repo)
+    sample = ["feature/x" if b == "feature/*" else b for b in branches]
+    if (detail := denyrules.problem(refused_rules(default) if deny is None else deny, default, sample)):
+        return Failure("deny-rules", detail)
     clones = [(repo, _origin(repo)[1]), *(targets or [])]
     for path, _ in clones:
         if (f := _no_allowlist(path)):

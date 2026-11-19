@@ -10,10 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 {%- if needs_observability %}
-import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 {%- endif %}
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 {%- if needs_database %}
 import org.springframework.context.annotation.Import;
 {%- endif %}
@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 {%- endif %}
 {%- if needs_observability %}
 // Test slices disable metric exporters by default; enable them to scrape /actuator/prometheus.
-@AutoConfigureObservability
+@AutoConfigureMetrics
 {%- endif %}
 class ApplicationTests {
 

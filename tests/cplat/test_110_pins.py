@@ -259,7 +259,7 @@ def test_a_checked_repo_needs_the_read_token_ac_110_9(gitops):  # AC-110.9
 def test_the_job_is_wired_into_the_gitops_app_ci_ac_110_9():  # AC-110.9
     template = ROOT / "templates" / "gitops-app"
     devbox = json.loads((template / "devbox.json").read_text())["shell"]["scripts"]
-    assert devbox.get("contract-pins") == "uv run scripts/check-contract-pins.py"
+    assert devbox.get("contract-pins") == "bash scripts/uv-script.sh scripts/check-contract-pins.py"  # spec 209: inline scripts run through uv-script.sh
     workflow = yaml.safe_load((template / ".github" / "workflows" / "ci.yml").read_text())
     job = workflow["jobs"]["contract-pins"]
     steps = json.dumps(job)
