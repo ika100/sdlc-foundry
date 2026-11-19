@@ -15,11 +15,18 @@ The GitOps repo owns every manifest. applications/<system>/system.yaml is the on
                                                                Kyverno and LGTM (operators/apps/lgtm.yaml, operators/lgtm/); never for operators: owner
   applications/<system>/addons/<env>/<db>/restore-state.yaml  written by `cplat resource restore`/`upgrade`: clusters and archives (server, major)
   bootstrap/<system>-root.yaml                                 root Argo Application (app-of-apps), applied once by a human
+  applications/<system>/applicationset-<env>.yaml              split form only (spec 201): that environment's ApplicationSets, each with
+                                                               preserveResourcesOnDeletion
+  bootstrap/environments/<system>-<env>.yaml                   split form only: one root Application per environment, which a cluster repo selects
 
 A component only runs in the environments that are keys of its `instances` (none = dev), so a new component never reaches
 staging/prod before `/instance:promote` adds the key. Image pins (`newTag`) live in the overlays and are preserved on re-render:
 versions never appear in system.yaml. A directory that still has app.yaml or services.yaml is not rendered: run
 `cplat platform update --migrate`.
+
+environments.<env>.cluster (spec 201) names the cluster that runs the environment: a lowercase DNS label of at most 40 characters,
+set on all three environments or on none. Once set (split form) each root carries the resources finalizer, so removing it stops
+management and deletes nothing, and cluster_server must be https://kubernetes.default.svc. Without it nothing changes.
 
 system.yaml (every value explicit and reviewable; the model is described in docs/DOMAIN-MODEL.md):
   system: todo                       # required; equals the directory name
@@ -167,7 +174,7 @@ MANAGED_FILES = {"deployment.yaml", "service.yaml", "httproute.yaml", "kustomiza
                  "hpa.yaml", "scaledobject.yaml", "triggerauthentication.yaml"}
 MANAGED_PREFIXES = ("externalsecret-", "credentials-")
 TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources", "gateway", "secretStore", "registries", "autonomy"]
-ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy"]
+ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy", "cluster"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
 VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"), ("library", "python"),
                ("service", "unknown")]
@@ -760,7 +767,7 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
     if names != ENVS:
         fail(f"environments must be dev, staging, prod in this order (the promotion order), got {', '.join(map(str, names)) or 'none'}")
     hosts: dict[str, str] = {}
-    conf: dict = {"policy": {}, "observability": {}, "operators": {}, "backup": {}, "autonomy": {}, "promote": {}, "declared": False}
+    conf: dict = {"policy": {}, "observability": {}, "operators": {}, "backup": {}, "autonomy": {}, "promote": {}, "declared": False, "cluster": {}}
     for e in ENVS:
         c = envs[e] if envs[e] is not None else {}
         if not isinstance(c, dict):
@@ -773,6 +780,11 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
             hosts[e] = c["host"]
         if c.get("url") is not None and not isinstance(c["url"], str):
             fail(f"environments.{e}.url must be a string")
+        if "cluster" in c:
+            v = c["cluster"]
+            if not isinstance(v, str) or len(v) > 40 or not DNS_LABEL.match(v):
+                fail(f"environments.{e}.cluster: '{v}' must be a lowercase DNS label of at most 40 characters")
+            conf["cluster"][e] = v
         v = c.get("policy")
         if v is None:
             conf["policy"][e] = "Enforce" if e == "prod" else "Audit"
@@ -794,6 +806,11 @@ def validate_environments(doc: dict) -> tuple[dict, dict]:
         conf["declared"] = conf["declared"] or "autonomy" in c
         if "promote" in c:
             conf["promote"][e] = c["promote"]
+    if conf["cluster"]:
+        other = next(e for e in ENVS if e in conf["cluster"])
+        for e in ENVS:
+            if e not in conf["cluster"]:
+                fail(f"environments.{e}.cluster is required once another environment sets one (environments.{other}.cluster: {conf['cluster'][other]})")
     return hosts, conf
 
 
@@ -1747,7 +1764,7 @@ def _load_system(app_dir: Path) -> dict:
     services = [{**c, "uses": effective_uses(c, resources, events)} for c in comps if c["type"] != "library"]
     cfg = {"gateway": doc.get("gateway"), "secretStore": doc.get("secretStore"), "hosts": hosts, "registries": [str(r) for r in registries],
            "policy": env_conf["policy"], "observability": env_conf["observability"], "operators": env_conf["operators"],
-           "backup": backups, "resources": resources, "events": events}
+           "backup": backups, "resources": resources, "events": events, "cluster": env_conf["cluster"]}
     cfg["autoscaling"] = {e: "keda" if any(s["_eff"][e]["scale"]["trigger"] in ("consumes", "cache") for s in services if "external" not in s
                                           and e in s["environments"] and s["_eff"][e].get("scale")) else None for e in ENVS}
     declared = "autonomy" in doc or env_conf["declared"] or any("autonomy_max" in s["_eff"][e] for s in services for e in s["environments"])
@@ -3545,6 +3562,10 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
     server = ans.get("cluster_server", "https://kubernetes.default.svc")
     gitops_repo = f"https://github.com/{org}/{ans.get('project_name', app + '-gitops')}"
     out: dict[Path, str] = {}
+    split = bool(cfg["cluster"])
+    if split and server != "https://kubernetes.default.svc":
+        fail(f"environments.{ENVS[0]}.cluster needs cluster_server https://kubernetes.default.svc "
+             f"(each cluster's own Argo CD deploys in-cluster), not {server}")
 
     docs = []
     for env in ENVS:
@@ -3651,10 +3672,31 @@ def render_app(app_dir: Path, ans: dict) -> dict[Path, str]:
         for fname, doc in backup_files(app, env, cfg).items():
             out[app_dir / "backup" / env / fname] = dump(doc)
     out[app_dir / "applicationset.yaml"] = "---\n".join(dump(d) for d in docs)
+    root_meta: dict = {"name": f"{app}-root", "namespace": "argocd"}
+    if split:
+        root_meta["finalizers"] = ["resources-finalizer.argocd.argoproj.io"]
+        for env in ENVS:
+            part = []
+            for d in docs:
+                if d["metadata"]["name"].endswith(f"-{env}"):
+                    d = {**d, "spec": {**d["spec"], "syncPolicy": {"preserveResourcesOnDeletion": True}}}
+                    part.append(d)
+            out[app_dir / f"applicationset-{env}.yaml"] = "---\n".join(dump(d) for d in part)
+            out[ROOT / "bootstrap" / "environments" / f"{app}-{env}.yaml"] = dump({
+                "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
+                "metadata": {"name": f"{app}-{env}-root", "namespace": "argocd", "finalizers": ["resources-finalizer.argocd.argoproj.io"]},
+                "spec": {
+                    "project": "default",
+                    "source": {"repoURL": gitops_repo, "targetRevision": "main", "path": f"applications/{app}",
+                              "directory": {"include": f"applicationset-{env}.yaml"}},
+                    "destination": {"server": "https://kubernetes.default.svc", "namespace": "argocd"},
+                    "syncPolicy": {"automated": {"prune": True, "selfHeal": True}},
+                },
+            })
 
     out[ROOT / "bootstrap" / f"{app}-root.yaml"] = dump({
         "apiVersion": "argoproj.io/v1alpha1", "kind": "Application",
-        "metadata": {"name": f"{app}-root", "namespace": "argocd"},
+        "metadata": root_meta,
         "spec": {
             "project": "default",
             "source": {"repoURL": gitops_repo, "targetRevision": "main", "path": f"applications/{app}", "directory": {"include": "applicationset.yaml"}},
