@@ -88,7 +88,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 
 `cplat platform runs phase build:qa`
 1. Stage the tree, then `devbox run lint-fix` and `devbox run ci` as `cplat quiet lint-fix` and `cplat quiet ci`: the CI gates.
-2. **Red** → `cplat validate final --check <name> failed` per failed check, then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the summary and log path `cplat quiet` printed, so that no green gate is touched:
+2. **Red** → `cplat validate final --check <name> failed` per failed check, then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the summary and log path `cplat quiet` printed (log if not enough), so that no green gate is touched:
    - lint or type → **quality** (`agents.quality`), lint/type fixes only;
    - tests → the **coder** of the task whose files are involved (acceptance tests stay fixed; `cplat platform runs agent fix-round ci --task <task>`);
    - security → `cplat deps patch` first, then read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → step 3; exit 3 → escalate with its `ESCALATE` reason and `--cause <CAUSE>`, via `cplat component ship escalate` in a ship, else `cplat platform runs end --outcome escalated`; exit 4 → **security** agent). A red gate after a bump never goes to a coder, because a dependency is at fault.
