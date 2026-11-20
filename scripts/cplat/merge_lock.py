@@ -31,7 +31,8 @@ import ship
 from core import PlatformError, run
 
 WAIT_LINE_EVERY = 60          # seconds between two "waiting for the merge lock" lines
-HEAD_POLLS = 5                # polls for the new head after an update
+QUEUE_LIMIT = 6 * 3600        # seconds a merge queues behind live holders before it gives up
+HEAD_POLLS = 5               # polls for the new head after an update
 
 
 def sleep(seconds: float) -> None:   # tests replace this
@@ -71,11 +72,13 @@ def _holder(slug: str) -> dict:
 
 @contextlib.contextmanager
 def held(slug: str, who: str, timeout: float, interval: float = 5) -> Iterator[None]:
-    """Hold the merge lock of `slug`; `Busy` when it stays taken for `timeout` seconds. A release hold of another process
-    (spec 198) is waited for outside the lock and does not count against the timeout."""
+    """Hold the merge lock of `slug`. While the holder's process is alive the wait is a queue: it does not count against
+    `timeout` and ends in `Busy` only after QUEUE_LIMIT seconds. `Busy` after `timeout` seconds when the holder's process
+    is gone and the lock stays taken. A release hold of another process (spec 198) is waited for outside the lock and does
+    not count against the timeout."""
     path, info = dispatch_state.merge_lock_path(slug), dispatch_state.merge_info_path(slug)
     path.parent.mkdir(parents=True, exist_ok=True)
-    begin = time.monotonic()
+    begin = queued = time.monotonic()
     said = begin
     with open(path, "a") as lock:
         while True:
@@ -84,7 +87,9 @@ def held(slug: str, who: str, timeout: float, interval: float = 5) -> Iterator[N
             except BlockingIOError:
                 holder = _holder(slug)
                 since = holder.get("since") or "an unknown time"
-                if time.monotonic() - begin > timeout:
+                if isinstance(holder.get("pid"), int) and release_hold.alive(holder["pid"]):
+                    begin = time.monotonic()        # a live holder: the queue, not a stuck lock
+                if time.monotonic() - begin > timeout or time.monotonic() - queued > QUEUE_LIMIT:
                     raise Busy(slug, holder.get("who") or "another merge", since) from None
                 if time.monotonic() - said >= WAIT_LINE_EVERY:
                     said = time.monotonic()

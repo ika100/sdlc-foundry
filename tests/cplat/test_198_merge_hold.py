@@ -83,6 +83,7 @@ def test_a_busy_lock_after_the_hold_still_ends_as_busy_ac_198_2(clock, said):  #
         drop_hold()
         holder["let_go"] = busy_lock(SLUG, "pr 11")
     clock.at(100, hold_ends_and_a_merge_takes_the_lock)
+    clock.live.discard(os.getpid())                              # the holder's process is gone: the lock is stuck, not a queue
     try:
         with pytest.raises(merge_lock.Busy):
             with merge_lock.held(SLUG, "pr 10", 30, 5):
@@ -231,3 +232,22 @@ def test_a_dead_hold_is_dropped_when_a_release_sets_its_own_ac_198_7(clock, said
     write_hold(pid=OTHER_PID)
     merge_lock.set_release_hold(SLUG, "5.24.0", 600)
     assert said == [f"release hold of {SLUG} dropped: process {OTHER_PID} is gone", f"release hold set on {SLUG} for 5.24.0"]
+
+
+def test_a_live_holder_is_a_queue_and_the_merge_waits_past_its_timeout(clock, said):
+    let_go = busy_lock(SLUG, "pr 11")
+    clock.at(7200, let_go)                          # twice the 3600 s timeout
+    with merge_lock.held(SLUG, "pr 10", 3600, 5):
+        pass
+    assert lines_of(said, "waiting for the merge lock")
+
+
+def test_a_live_holder_ends_the_wait_at_the_queue_limit(clock, said):
+    let_go = busy_lock(SLUG, "pr 11")
+    try:
+        with pytest.raises(merge_lock.Busy):
+            with merge_lock.held(SLUG, "pr 10", 3600, 5):
+                pass
+    finally:
+        let_go()
+    assert clock.t > merge_lock.QUEUE_LIMIT
