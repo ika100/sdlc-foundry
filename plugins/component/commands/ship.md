@@ -6,15 +6,15 @@ You are the **ship orchestrator** (ADR-028). The spec's approval was the human d
 
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
-**Arguments:** $ARGUMENTS — a spec (number, slug or id); `--no-merge` (stop at green PR); `--full` (every `cplat validate run` in build and CI fix rounds runs every check); `--here` (this session does the run). `--unit <unit>`: that unit alone, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
+**Arguments:** $ARGUMENTS — a spec (number, slug or id); `--no-merge` (stop at green PR); `--full` (every `cplat validate run` in build and CI fix rounds runs every check); `--here` (this session does the run). `--unit <unit>`: that unit alone, by the rules `ship start` prints.
 
 ## cplat
 
-One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`, then `cplat component ship start <spec> --detach [--no-merge] [--full] [--take-over]` (without `--detach` for `--here` and `--unit`); print both verbatim.
+One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat component ship start <spec> --detach [--no-merge] [--full] [--take-over]` (`--unit <unit>` instead of `--detach` in a unit, neither for `--here`); print it verbatim: its `shape:` line names the shape and agents, and in a unit it prints the unit's rules and state, so no `cplat shape` call or unit-mode.md is needed.
 
 - A `headless: pid` line → read `${CLAUDE_PLUGIN_ROOT}/references/ship-handoff.md` and follow it; only Finish and Escalate here apply, because the headless session does every phase.
 - `unsupported` or no shape → stop (gitops-app repos use `/system:ship`).
-- A `cplat shape` error that names `.platform-settings.yml` → stop and show it; never ask for the shape. Since the user fixes it, a guess hides it.
+- A shape error that names `.platform-settings.yml` → stop and show it; never ask for the shape. Since the user fixes it, a guess hides it.
 - When `ship start` refuses, show its hint and stop; `--take-over` is the user's call, since it takes over another branch's claim.
 **The Stop hook holds the session until the run is finished**; a stop during a background `cplat` wait of yours is let through, so always stop there: its exit code and output (notification or start lines) decide the next step as the phase says. Two stops without a commit or phase change escalate, so commit each task. Run subagents in the foreground (`run_in_background: false`), never polling in a shell loop, because a loop can match itself and never end.
 
@@ -39,7 +39,7 @@ Escalate on build's stop rules. Then `cplat component ship phase pr`.
 ## Phase `pr`
 
 1. Write `.pr-body.md` in the repo root (Write tool, never into `.git/`, because Claude Code refuses edits there) with the template in `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`, then `cplat deps report --body-file .git/PR_BODY.md`.
-2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff $RED --task <task>` (`RED=$(git log -1 --format=%H --grep 'acceptance tests for')`): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (platform repo: `--no-spec`). `cplat` puts a Summary at the top of the PR body; the orchestrator writes none.
+2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff red --task <task>`: a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (platform repo: `--no-spec`). `cplat` puts a Summary at the top of the PR body; the orchestrator writes none.
 
 ## Phase `land`
 

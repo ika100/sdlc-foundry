@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /shared:fleet is /platform:fleet. Runs nothing."
 moved-to: "/platform:fleet"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/shared:fleet` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

@@ -1596,7 +1596,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--comments", action="store_true")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("test-diff", help="acceptance tests changed only in formatting since BASE? (exit 1 otherwise)")
-    p.add_argument("base", help="the commit with the red acceptance tests (Phase 1)")
+    p.add_argument("base", help="the commit with the red acceptance tests (Phase 1), or `red` to find it (#869)")
     p.add_argument("files", nargs="*")
     p.add_argument("--by", default="coder", help="the agent that changed the tests (coder or quality), for agent metrics")
     p.add_argument("--task", help="the task being built, for agent metrics")
@@ -1775,6 +1775,13 @@ def main(argv: list[str]) -> int:
     if ns.cmd in ("publish", "land", "review"):
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
+    if ns.cmd == "test-diff" and ns.base == "red":   # #869: the red commit found here, not by a `git log` call of the model
+        found = core.run(["git", "log", "-1", "--format=%H", "--grep", "acceptance tests for"], cwd=root, check=False).stdout.strip()
+        if not found:
+            raise core.PlatformError("no commit with the red acceptance tests on this branch",
+                                     hint="Build Phase 1 commits them as `test(...): acceptance tests for <spec>`")
+        print(f"red: {found[:7]}")
+        ns.base = found
     given = ns.base if ns.cmd == "test-diff" else None
     if ns.cmd == "test-diff" and core.run(["git", "rev-parse", "--verify", "-q", f"{ns.base}^{{commit}}"], cwd=root,
                                            check=False).returncode != 0:   # #752: a crash on git's exit 128 before

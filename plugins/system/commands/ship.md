@@ -54,7 +54,7 @@ Loop on `cplat system ship next --json`, one call per action, never a shell loop
 
 An escalation decision that needs work always becomes a plan task before the ship goes on, so that it is done.
 
-When the user's answer changes a repo's acceptance test, change it in that repo's clone and record it as their approval at once, so its build does not stop on it again (#596): in the clone, `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`, commit the test, then `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (the component plugin's `references/build-test-approval.md`). `/system:ship <spec>` then resumes.
+When the user's answer changes a repo's acceptance test, change it in that repo's clone and record it as their approval at once, so its build does not stop on it again (#596): in the clone, commit the test, then `cplat spec test-diff red --approve <file>... --reason '<the user's words>'` (the component plugin's `references/build-test-approval.md`). `/system:ship <spec>` then resumes.
 
 End `complete` and an escalation with the hand-over: `cplat next --json`, follow its `how`, so that the person goes on by choosing.
 
