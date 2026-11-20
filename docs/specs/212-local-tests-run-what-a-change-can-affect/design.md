@@ -21,10 +21,11 @@
 - **The suite's autouse fixtures are muted.** `conftest.py`'s autouse fixtures import a dozen cplat modules only to patch
   them; counting those would make every test depend on them. The import wrapper mutes imports made from those functions
   (found in conftest.py's AST), and everything they trigger. Non-autouse conftest fixtures (`new_service`, `clock`) count.
-- **The selection (AC-212.1, AC-212.3).** `scripts/testselect.py plan` (standard library only) picks a map, computes the
-  changed files and decides `full <map to record>`, `select` plus the files, or `none`. Rules in order: `--full`; no map;
+- **The selection (AC-212.1, AC-212.3).** `scripts/testselect.py args` (standard library only) picks a map, computes the
+  changed files and prints the pytest arguments: `--deps-record <map to record>` (every test) or `--deps-select=<files>`
+  (comma-separated, possibly empty). Rules in order: `--full`; no map;
   a shared file changed (`conftest.py` and its module-level import closure including `pytest_plugins`, `pytest.ini`,
-  `requirements-test.txt`, `testselect.py`, `test-fast.sh`, `depstrace.py`, `depsmap.py`); then per changed file: a test
+  `requirements-test.txt`, `testselect.py`, `depstrace.py`, `depsmap.py`); then per changed file: a test
   file selects itself, another file selects the test files that depend on it (a file in their files, its folder in their
   listed folders, or a tree above it); a changed code or configuration file that still exists and that no test depends on
   runs everything; then the test files new since the map and the ones that failed in it are added; more than half of the
@@ -35,9 +36,15 @@
 - **Maps.** `<git common dir>/sdlc-test-deps/<time>-<pid>.json`, written to a temporary name and renamed, the 5 newest kept.
   A map is written only by a run that ends with status 0 or 1 (an interrupted run, or one that collected nothing, writes
   none). A map's `failed` paths come from the reports' fspath, which is relative to pytest's rootdir (`tests/cplat`).
-- **Recipes (AC-212.4, AC-212.5).** `test-fast.sh` selects when it gets no argument or only `--full`; otherwise it keeps its
-  spec 172 behaviour. `devbox run test` is `test-fast.sh --full`. `ci-local.sh` parses `--full`, `--site` and `--render` in
-  any order and runs `test-fast.sh` or `test-fast.sh --full` as its test step.
+- **The selection runs inside pytest.** Under `--deps-select` the plugin's `pytest_ignore_collect` skips every `test_*.py`
+  outside the list (in each xdist worker, from the same option), and an empty list turns pytest's "no tests collected"
+  (exit 5) into exit 0. So the suite command stays one literal line, `uv run --with-requirements requirements-test.txt
+  pytest tests/cplat -q -n auto`, in `devbox.json` and `ci-local.sh`, where the pin check (spec 127), the timeout check
+  (spec 185) and the suite-command tests (specs 084, 112, 184) read it; only the selector's arguments are appended.
+- **Recipes (AC-212.4, AC-212.5).** `devbox run test-fast` with no argument or only `--full` runs that line with
+  `$(python3 scripts/testselect.py args "$@")`; any other arguments go to `test-fast.sh` as before (spec 172, which is
+  unchanged). `devbox run test` is `devbox run test-fast --full`. `ci-local.sh` parses `--full`, `--site` and `--render` in
+  any order and appends `testselect.py args [--full]` to its suite line.
 - **Off by default (AC-212.7).** Without `--deps-record` the plugin registers nothing and installs no hook; cplat checks one
   environment variable. CI's `pytest tests/cplat --shard` is unchanged.
 - **A run with nothing to check passes and says so.** [ADR-074](../../adr/074-a-gate-that-checked-nothing-fails.md) covers the
@@ -53,14 +60,14 @@
 | `tests/cplat/conftest.py` | loads `depsmap` | changed |
 | `tests/cplat/shared_render.py` | renders record into their own bucket and attach to the copying test | changed |
 | `scripts/testselect.py` | the selection and its message | new |
-| `scripts/test-fast.sh`, `devbox.json`, `scripts/ci-local.sh` | the recipes | changed |
+| `devbox.json`, `scripts/ci-local.sh` | the recipes append the selector's arguments to the suite line | changed |
 
 ## Contract
 
 Map (JSON, version 1): `{"version": 1, "commit": sha, "dirty": [path], "recorded": "YYYY-MM-DDTHH:MM:SS", "failed": [test
 file], "tests": {test file: {"files": [path], "dirs": [path], "trees": [path or "."]}}}`; paths are repo-relative posix.
 
-`testselect.py plan [--full]`: stdout first line `full <path>` | `select` | `none`; for `select` the test files follow, one
-per line. One stderr line: `test-fast: all <N> test files: <reason>; this run records a new dependency map`,
+`testselect.py args [--full]`: stdout one line, `--deps-record <path>` or `--deps-select=<file>,<file>…` (empty after `=`
+when nothing is selected). One stderr line: `test-fast: all <N> test files: <reason>; this run records a new dependency map`,
 `test-fast: <k> of <N> test files (map at <sha9>, <c> changed file(s)); devbox run test-fast --full runs every test`, or
 `test-fast: 0 of <N> test files: no test file can see this change (map at <sha9>, <c> changed file(s)); devbox run test-fast --full runs every test`.

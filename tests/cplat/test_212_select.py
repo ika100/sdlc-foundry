@@ -16,6 +16,7 @@ import pytest
 
 from support_212 import ALL_TESTS, Repo, clean_env
 from system_fixtures import ROOT
+from waiting import with_prelude
 
 CPLAT = ROOT / "scripts" / "cplat" / "cplat.py"
 
@@ -157,7 +158,7 @@ def test_an_interrupted_or_empty_run_records_no_map_ac_212_3(repo):
 def fake_uv(tmp_path: Path) -> tuple[dict[str, str], Path]:
     bin_dir, log = tmp_path / "bin", tmp_path / "uv.log"
     bin_dir.mkdir()
-    (bin_dir / "uv").write_text(f'#!/bin/sh\necho "$*" >> "{log}"\n')
+    (bin_dir / "uv").write_text(with_prelude(f'#!/bin/sh\necho "$*" >> "{log}"\n'))
     (bin_dir / "uv").chmod(0o755)
     return clean_env(PATH=f"{bin_dir}:{os.environ['PATH']}"), log
 
@@ -233,7 +234,7 @@ def ci_local_world(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
              "uv": f'case "$*" in *"pytest tests/cplat"*) echo "suite $*" >> "{log}" ;; esac', "uvx": "exit 0",
              "npm": f'echo "npm $*" >> "{log}"', "copier": f'echo "copier $3" >> "{log}"'}
     for name, body in fakes.items():
-        (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
+        (bin_dir / name).write_text(with_prelude(f"#!/bin/sh\n{body}\n"))
         (bin_dir / name).chmod(0o755)
     return w, clean_env(PATH=f"{bin_dir}:{os.environ['PATH']}"), log
 

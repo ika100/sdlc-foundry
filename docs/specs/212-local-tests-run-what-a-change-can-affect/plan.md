@@ -13,7 +13,7 @@ tasks:
     done: true
   - id: t2
     title: "The selector and the recipes"
-    files: [scripts/testselect.py, scripts/test-fast.sh, devbox.json, scripts/ci-local.sh]
+    files: [scripts/testselect.py, devbox.json, scripts/ci-local.sh]
     covers: [AC-212.1, AC-212.3, AC-212.4, AC-212.5, AC-212.6]
     parallel_safe: false
     depends_on: [t1]
@@ -40,7 +40,7 @@ and AC-212.9 on the real suite (numbers in the pull request and verification.md)
 
 ## t2 — The selector and the recipes
 
-**Files:** scripts/testselect.py, scripts/test-fast.sh, devbox.json, scripts/ci-local.sh
+**Files:** scripts/testselect.py, devbox.json, scripts/ci-local.sh
 **Covers:** AC-212.1, AC-212.3, AC-212.4, AC-212.5, AC-212.6
 **Goal:** `test-fast` without arguments and `ci-local.sh` run the selection; `--full` and `devbox run test` run everything.
 
