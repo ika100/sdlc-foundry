@@ -310,7 +310,16 @@ def _release(ctx: _Ctx, item: dict) -> dict:
     text = {"release": f"{item.get('reason') or 'A release is ready'}. Release now?",
             "promote": f"{item['what']} is verified in staging. Promote it to prod?",
             "review": f"{item['what']} waits for your review. Approve and merge it?"}[kind]
+    missing = (item.get("consequence") or {}).get("missing_backups") or [] if env == "prod" else []
+    if missing:     # #861: prod's database has no backup: the backup comes first, the promotion stays the second choice
+        dbs = ", ".join(b["resource"] for b in missing)
+        steps = [f"/resource:backup {b['resource']} --env prod --to {b['to']} --schedule daily" for b in missing]
+        opts.insert(0, _option(ctx, "backup-first", "Set the backup first", "", steps=steps,
+                               acts=[{"what": "backup pull request", "target": f"{b['resource']} in prod",
+                                      "undo": f"/resource:backup {b['resource']} --env prod --off"} for b in missing]))
+        text = f"{item['what']} is verified in staging, but the prod database {dbs} has no backup. Set the backup first, then promote?"
     return _question(qid, header, text, opts)
+
 
 
 def _unavailable(ctx: _Ctx, state: dict) -> dict:

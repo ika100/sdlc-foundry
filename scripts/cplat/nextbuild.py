@@ -293,7 +293,8 @@ def _deploy(repo_dir: Path, shape: str | None, items: list[dict], tags: list[tup
         newest = tags[0][0]
         if prod is None or str(prod.tag).lstrip("v") != newest.lstrip("v"):
             step, version = "prod", newest
-    return {"component": name, "staging": promotion, "step": step, "version": version, "head": head}
+    return {"component": name, "staging": promotion, "step": step, "version": version, "head": head,
+            "missing_backups": needs.missing_prod_backups(model) if step == "prod" else []}
 
 
 def promote_item(slug: str, deploy: dict, since: str) -> dict | None:
@@ -306,7 +307,7 @@ def promote_item(slug: str, deploy: dict, since: str) -> dict | None:
     return {"id": f"promote:{name}:{shown}", "kind": "promote", "stage": "Staging" if step == "staging" else "Prod",
             "object": needs._obj("component", slug, component=name, version=shown), "since": since,
             "reason": f"{name} {shown} can go to {step}", "command": command, "cwd_repo": slug,
-            "consequence": {"env": step}, "way_back": None}
+            "consequence": {"env": step, "missing_backups": list(deploy.get("missing_backups") or [])}, "way_back": None}
 
 
 # ---------------- events ----------------

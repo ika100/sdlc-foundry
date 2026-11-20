@@ -377,7 +377,20 @@ def _commit_time(slug: str | None, ref: str | None) -> str:
         return ""
 
 
-def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str = "manual") -> list[dict]:
+def missing_prod_backups(m: model.Model) -> list[dict]:
+    """#861: the in-cluster databases of prod without a backup, as {resource, to}: `to` is the bucket another environment of the
+    database backs up to, else `<db>-backups` (`resource backup --to` declares a bucket that does not exist yet, #860)."""
+    out, instances = [], list(getattr(m, "resource_instances", None) or [])
+    for ri in instances:
+        if ri.environment != "prod" or ri.type != "database" or ri.external or ri.backup:
+            continue
+        other = next((o.backup["to"] for o in instances if o.resource == ri.resource and o.backup), None)
+        out.append({"resource": ri.resource, "to": other or f"{ri.resource}-backups"})
+    return out
+
+
+def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str = "manual",
+                missing_backups: list[dict] | None = None) -> list[dict]:
     """A promote item exists only where prod waits for a person (`manual`); otherwise the rule promotes by itself."""
     if prod_promotion != "manual":
         return []
@@ -405,7 +418,8 @@ def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str =
             "command": f"/instance:promote {name} --to prod --version {to}", "cwd_repo": slug,
             "consequence": {"from": frm, "to": to, "specs": between.get("specs") or [], "criteria": between.get("criteria"),
                             "commits": between.get("commits"), "migrations": migrations, "digest": digest,
-                            "verified_digest": verified_digest, "digest_matches": digest is not None and digest == verified_digest},
+                            "verified_digest": verified_digest, "digest_matches": digest is not None and digest == verified_digest,
+                            "env": "prod", "missing_backups": list(missing_backups or [])},
             "way_back": {"command": f"/instance:promote {name} --to prod --version {frm}" if frm else None,
                          "warning": (f"migration {', '.join(bad)} is not additive" if bad else None)}})
     return items
@@ -592,7 +606,7 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
                 src.fail("github", e, ["issues"])
         try:
             _, _, status_rows, _ = status_f.result()
-            items += _promotions(status_rows, components, _prod_promotion(m))
+            items += _promotions(status_rows, components, _prod_promotion(m), missing_prod_backups(m))
         except Exception as e:  # noqa: BLE001
             src.fail("cluster", e, ["promote"])
         items += _dispatch_items(repos, src)
