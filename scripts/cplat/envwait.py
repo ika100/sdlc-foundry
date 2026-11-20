@@ -8,7 +8,9 @@ wait starts, read with one `git fetch`; a later commit that contains it also cou
 component's app runs the image tag that revision pins for it (the image rule of `cplat component ship deploy`, spec 077).
 One line each time an app's state changes; exit 0 READY, 1 RED (a sync error, a failed sync or Degraded at the wanted
 revision; a ComparisonError with a network cause only when it lasts until the timeout, #506), 2 TIMEOUT (one line per app behind; the command with `--refresh` when Argo CD has not picked up the revision).
-`--refresh` asks Argo CD once for a hard refresh of each app not yet at the revision. A context that is not the system's
+Every wait asks Argo CD for a hard refresh of each app not yet at the revision when it starts and once more after 45 s (#867;
+`--refresh` is kept and only drops the hint). A container of the version waited for that stays in ImagePullBackOff, ErrImagePull,
+InvalidImageName or CrashLoopBackOff longer than 60 s is RED at once, naming pod, reason, image and the last event (#867). A context that is not the system's
 cluster, a cluster that does not answer, or no Argo CD exits 1 at once.
 In a system on several clusters (spec 201) the context of `--env`'s cluster is used (`kube_contexts` in the settings files), never the
 current one; in a cluster repo with `clusters`, `cluster wait <cluster>` names the cluster whose roots it waits for.
@@ -20,7 +22,9 @@ import json
 import re
 import shlex
 import subprocess
+import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -35,9 +39,14 @@ from core import PlatformError, run
 
 ROOTS = ("platform-operators", "platform-systems")     # the cluster repo's own applications (spec 125, scripts/render.py)
 REFRESH = "argocd.argoproj.io/refresh=hard"
-# Spec 148 (#542): an app still behind (or not generated yet) this long into the wait gets one hard refresh, and so does the
-# system's root app: Argo CD polls git every 3 minutes, and a root app whose repo fetch timed out never generates the app.
+# Spec 148 (#542), #867: an app behind the revision (or not generated yet) gets a hard refresh when the wait starts, since every
+# wait follows a merged gitops PR, and once more this long into the wait; so does the system's root app: Argo CD polls git every
+# 3 minutes, and a root app whose repo fetch timed out never generates the app.
 AUTO_REFRESH_AFTER = 45.0
+# #867: a container of the new version waiting for one of these reasons longer than POD_FAIL_AFTER ends the wait RED at once.
+POD_FAILURES = ("ImagePullBackOff", "ErrImagePull", "InvalidImageName", "CrashLoopBackOff")
+POD_FAIL_AFTER = 60.0
+NOT_IN_REGISTRY = re.compile(r"manifest unknown|not found", re.I)
 NO_ARGO = re.compile(r"doesn't have a resource type|the server could not find the requested resource|namespaces? \"?argocd\"? not found",
                      re.I)
 # A ComparisonError whose cause is the network (#506): Argo CD could not reach the repo and retries by itself, so the wait keeps
@@ -260,6 +269,81 @@ def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None) -> t
     return "reached", line, ""
 
 
+# ---------------- the pods of the new version (#867) ----------------
+
+def wallclock() -> float:      # tests replace this: the pod's start time is a cluster timestamp, not the wait's clock
+    return time.time()
+
+
+def _stamp(value) -> float | None:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp() if value else None
+    except ValueError:
+        return None
+
+
+def _json(p: subprocess.CompletedProcess) -> dict:
+    if p.returncode != 0:
+        return {}
+    try:
+        doc = json.loads(p.stdout or "{}")
+    except ValueError:
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+class PodWatch:
+    """Whether a pod of the version a wait expects is stuck: a container waiting in one of POD_FAILURES for more than
+    POD_FAIL_AFTER seconds (seen during this wait, or since the pod started). `get` runs kubectl with the wait's context,
+    `clock` is the wait's clock. Reads nothing when the app names no namespaced workload; a kubectl error reads as no pods."""
+
+    def __init__(self, get, clock):
+        self.get, self.clock, self.first = get, clock, {}
+
+    def __call__(self, status: dict, wanted) -> str | None:
+        namespaces = sorted({r["namespace"] for r in status.get("resources") or []
+                             if r.get("namespace") and r.get("kind") != "Application"})
+        for ns in namespaces:
+            for pod in _json(self.get(["-n", ns, "get", "pods", "-o", "json"])).get("items") or []:
+                why = self._stuck(ns, pod, wanted)
+                if why:
+                    return why
+        return None
+
+    def _stuck(self, ns: str, pod: dict, wanted) -> str | None:
+        spec, st = pod.get("spec") or {}, pod.get("status") or {}
+        images = {c.get("name"): c.get("image") or "" for c in (spec.get("initContainers") or []) + (spec.get("containers") or [])}
+        if not any(wanted(i) for i in images.values()):
+            return None                      # a pod of another version: not what this wait waits for
+        name = (pod.get("metadata") or {}).get("name") or "?"
+        started = _stamp(st.get("startTime"))
+        for c in (st.get("initContainerStatuses") or []) + (st.get("containerStatuses") or []):
+            reason = ((c.get("state") or {}).get("waiting") or {}).get("reason")
+            if reason not in POD_FAILURES:
+                continue
+            key = (ns, name, c.get("name"), reason)
+            first = self.first.setdefault(key, self.clock())
+            seen = max(self.clock() - first, wallclock() - started if started else 0.0)
+            if seen <= POD_FAIL_AFTER:
+                continue
+            image = images.get(c.get("name")) or c.get("image") or "?"
+            event = self._event(ns, name)
+            why = f"pod {ns}/{name}: {reason} for {int(seen)}s, image {image}"
+            if event:
+                why += f"; last event: {event}"
+            if reason in ("ImagePullBackOff", "ErrImagePull") and NOT_IN_REGISTRY.search(event or ""):
+                why += " (the image tag does not exist in the registry)"
+            return why
+        return None
+
+    def _event(self, ns: str, pod: str) -> str:
+        p = self.get(["-n", ns, "get", "events", "--field-selector", f"involvedObject.kind=Pod,involvedObject.name={pod}", "-o", "json"])
+        events = [e for e in _json(p).get("items") or [] if isinstance(e, dict)]
+        events.sort(key=lambda e: (e.get("type") == "Warning",
+                                   str(e.get("lastTimestamp") or e.get("eventTime") or (e.get("metadata") or {}).get("creationTimestamp") or "")))
+        return " ".join(str(events[-1].get("message") or "").split()) if events else ""
+
+
 # ---------------- the wait ----------------
 
 def _refresh(names: list[str], ctx: str) -> None:
@@ -271,17 +355,26 @@ def _errored(st: dict | None) -> bool:
     return any(str(c.get("type", "")) == "ComparisonError" for c in (st or {}).get("conditions") or [])
 
 
+def _stuck_pod(states: list, items: dict[str, dict], at, pins, pods: PodWatch) -> tuple[Target, str] | None:
+    """#867: the first component behind at the wanted revision whose new pods are stuck (PodWatch), with why."""
+    for t, kind, _, why in states:
+        st = items.get(t.app)
+        if kind != "behind" or not t.component or not st or why.startswith("waiting for revision"):
+            continue
+        tag = pins(t, (st.get("sync") or {}).get("revision") or "")
+        stuck = pods(st, lambda image, tag=tag: _matches([image], tag)) if tag else None
+        if stuck:
+            return t, stuck
+    return None
+
+
 def watch(repo: Path, targets: list[Target], wanted: str, ctx: str, items: dict[str, dict], label: str, command: str,
           refresh: bool, timeout: float, interval: float, system: str | None = None) -> tuple[int, list[str]]:
     at, pins = Ancestry(repo, wanted), Pins(repo, wanted, system)
+    pods = PodWatch(lambda args: kubectl(args, ctx), waits.now)
     w7 = waits.short(wanted)
-    if refresh:
-        behind = [t.app for t in targets if t.app in items and not at(((items[t.app].get("sync") or {}).get("revision")))]
-        _refresh(behind, ctx)
-        if behind:
-            ship.say(f"asked Argo CD for a hard refresh of {', '.join(behind)} (not at {w7} yet)")
     begin = waits.now()
-    auto_refreshed = refresh
+    refreshes = 0                 # #867: one when the wait starts, one more after AUTO_REFRESH_AFTER (spec 148)
     root = f"{system}-root" if system else None
     last: dict[str, str] = {}
     while True:
@@ -290,21 +383,22 @@ def watch(repo: Path, targets: list[Target], wanted: str, ctx: str, items: dict[
             if last.get(t.app) != line:
                 ship.say(line)
                 last[t.app] = line
-        red = next(((t, why) for t, kind, _, why in states if kind == "red"), None)
+        red = next(((t, why) for t, kind, _, why in states if kind == "red"), None) or _stuck_pod(states, items, at, pins, pods)
         if red:
             rev = ((items.get(red[0].app) or {}).get("sync") or {}).get("revision")
             return waits.RED, [f"RED: {red[0].app} at {waits.short(rev)}: {red[1]}"]
         behind = [(t, why) for t, kind, _, why in states if kind in ("behind", "retrying")]
         if not behind:
             return waits.REACHED, [f"READY: {len(targets)} app(s) {label} run {w7}"]
-        if not auto_refreshed and waits.now() - begin >= AUTO_REFRESH_AFTER:   # spec 148 (#542): once per wait
-            auto_refreshed = True
+        if refreshes == 0 or (refreshes == 1 and waits.now() - begin >= AUTO_REFRESH_AFTER):
+            refreshes += 1
             stale = [t.app for t, why in behind if t.app in items and (why.startswith("waiting for revision") or _errored(items[t.app]))]
             if root and root in items and (_errored(items[root]) or any(why == "missing" for _, why in behind)):
                 stale.insert(0, root)
             if stale:
                 _refresh(stale, ctx)
-                ship.say(f"asked Argo CD for a hard refresh of {', '.join(stale)} (not at {w7} after {int(AUTO_REFRESH_AFTER)}s)")
+                when = "yet" if refreshes == 1 else f"after {int(waits.now() - begin)}s"
+                ship.say(f"asked Argo CD for a hard refresh of {', '.join(stale)} (not at {w7} {when})")
         left = timeout - (waits.now() - begin)
         if left <= 0:
             flaky = next(((t, why) for t, kind, _, why in states if kind == "retrying"), None)
@@ -367,7 +461,7 @@ def main(argv: list[str]) -> int:
         ap.add_argument("--system", help="the system, when the repo holds several")
     if kind == "cluster":
         ap.add_argument("cluster", nargs="?", help="the cluster to wait for (required when cluster.yaml lists `clusters`)")
-    ap.add_argument("--refresh", action="store_true", help="ask Argo CD once for a hard refresh of each app behind the revision")
+    ap.add_argument("--refresh", action="store_true", help="kept for scripts: every wait asks Argo CD for a hard refresh of each app behind the revision")
     ap.add_argument("--timeout", type=float, default=waits.DEFAULT_TIMEOUT)
     ap.add_argument("--interval", type=float, default=10.0, help=argparse.SUPPRESS)
     ap.add_argument("--context", help="kube context (default: the configured one, else the current one)")
