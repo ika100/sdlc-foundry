@@ -39,7 +39,7 @@ Escalate on build's stop rules. Then `cplat component ship phase pr`.
 ## Phase `pr`
 
 1. Write `.pr-body.md` in the repo root (Write tool, never into `.git/`, because Claude Code refuses edits there) with the template in `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`, then `cplat deps report --body-file .git/PR_BODY.md`.
-2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff $RED --task <task>` (`RED=$(git log -1 --format=%H --grep 'acceptance tests for')`): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (refused while a gitops task has no PR; platform repo: `--no-spec`). `cplat` puts a generated Summary at the top of the PR body; the orchestrator writes no summary.
+2. `cplat component ship pr --title "feat(<scope>): <spec title, ≤72 chars>" --body-file .pr-body.md`: it runs the whole `devbox run ci` first; red → nothing is pushed: fix it via the coder (`cplat platform runs agent fix-round ci`), `cplat validate run` between rounds, and call it again; after the fix `cplat spec test-diff $RED --task <task>` (`RED=$(git log -1 --format=%H --grep 'acceptance tests for')`): a `test helper` or `type-only` line → the last paragraph of `${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md` without asking, exit 1 otherwise → escalate cause `decision` as a changed test. Then it pushes and opens the PR (platform repo: `--no-spec`). `cplat` puts a Summary at the top of the PR body; the orchestrator writes none.
 
 ## Phase `land`
 
@@ -52,7 +52,7 @@ Escalate on build's stop rules. Then `cplat component ship phase pr`.
 
 `cplat component ship deploy [--context <kube-context>] [--base-url <url>]`: the user's context, or `kubectl config current-context` if it is the system's cluster; `--base-url` is the user's to name, since a guess may hit the wrong host.
 - Red smoke (`smoke red in dev: …`, or in staging) or a failed staging pin: since deploy escalates by itself and files the `smoke-failure` issue, never call `cplat component ship escalate` for it; report its lines and stop.
-- Shape `platform`: deploy ends at once with `not deployable (platform): nothing to deploy`.
+- Shape `platform`: deploy ends with `not deployable (platform): nothing to deploy`.
 - A closed pin PR, red pin CI or unhealthy app → escalate with the hint.
 
 ## Finish

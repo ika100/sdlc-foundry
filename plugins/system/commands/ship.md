@@ -46,7 +46,7 @@ Loop on `cplat system ship next --json`, one call per action, never a shell loop
 
 ## Phase `complete`
 
-`cplat system ship complete` (spec done, plan completed, via a PR merged on green) prints the final report: print it verbatim, then `cplat system ship finish`. `cplat` puts a generated Summary at the top of each gitops PR body; the orchestrator writes no summary.
+`cplat system ship complete` (spec done, plan completed, via a PR merged on green) prints the final report: print it verbatim, then `cplat system ship finish`. `cplat` puts a Summary at the top of each PR body; the orchestrator writes none.
 
 ## Escalate
 
