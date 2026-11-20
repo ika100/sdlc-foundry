@@ -19,6 +19,7 @@ RESOURCE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")                 # render.py's r
 NEW_BUCKET = {"type": "bucket", "storage": "10Gi", "versioning": False}     # what `resource add <name> --type bucket` declares
 CRON_RANGES = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)]        # minute, hour, day of month, month, day of week
 CRON_ITEM = re.compile(r"^(\*|[0-9]+|[0-9]+-[0-9]+)(/[0-9]+)?$")
+SCHEDULE_WORDS = {"hourly": "0 * * * *", "daily": "0 3 * * *", "weekly": "0 3 * * 0"}   # #862: words for the usual schedules, in UTC
 RENDER_HINT = "system.yaml and the generated files are restored: fix what the render names and run again"
 
 
@@ -84,9 +85,12 @@ def run(ns: argparse.Namespace) -> int:
             raise PlatformError(f"{key}.to: '{to}' is not a bucket resource of the system (buckets: {names(buckets)})",
                                 hint="pick a listed bucket, or name a new one (lowercase letters, digits, hyphens) to declare it here")
         new_bucket = to
+    if "schedule" in given and given["schedule"].strip().lower() in SCHEDULE_WORDS:
+        given["schedule"] = SCHEDULE_WORDS[given["schedule"].strip().lower()]
     if "schedule" in given and not cron_ok(given["schedule"]):
         raise PlatformError(f"{key}.schedule '{given['schedule']}' is not a five-field cron expression "
-                            "(minute hour day-of-month month day-of-week, in UTC)", hint='e.g. --schedule "0 3 * * *"')
+                            "(minute hour day-of-month month day-of-week, in UTC) or hourly, daily, weekly",
+                            hint='e.g. --schedule daily (= "0 3 * * *") or --schedule "30 2 * * *"')
     if "retention" in given and not (RETENTION.match(given["retention"]) and not given["retention"].endswith("\n")):
         raise PlatformError(f"{key}.retention '{given['retention']}' must be <n>d or <n>w with n of at least 1",
                             hint="e.g. --retention 30d or --retention 8w")
