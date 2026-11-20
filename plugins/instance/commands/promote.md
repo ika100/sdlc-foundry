@@ -30,4 +30,4 @@ The script enforces its rules: the source is the environment before `--to`; stag
 
 From a component repo with `.platform-app.yml`, clone the listed gitops-app repo and run there.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.

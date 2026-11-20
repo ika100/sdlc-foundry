@@ -8,9 +8,10 @@ rules:
     class: practice
     source: spec 201
   - id: R3
-    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself"
     class: hard
     hard: issue-filing-needs-consent
+    source: "ADR-033, ADR-122"
   - id: R4
     text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
     class: practice

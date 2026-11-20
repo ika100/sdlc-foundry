@@ -10,6 +10,7 @@ rules:
     text: "Never pass `--confirm` without the user's yes, because a merge or a tag cannot be undone."
     class: practice
   - id: R4
-    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself."
     class: hard
     hard: issue-filing-needs-consent
+    source: "ADR-033, ADR-122"

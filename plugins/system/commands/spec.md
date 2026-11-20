@@ -51,4 +51,4 @@ Print the spec id, title, status, each criterion on one line, the repos, the ass
 - End A and F with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 - Never touch `system.yaml`, overlays or component repos, because this command changes the spec alone. **Hard rule:** push only through `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced), because a push from the shell reaches GitHub before any check runs.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.

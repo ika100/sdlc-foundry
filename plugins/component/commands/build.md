@@ -124,4 +124,4 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 - **Shell rule:** run every tool through `devbox run <script>`, never `pytest`, `ruff` or `uv` directly, so that versions and flags match CI.
 - **Hard rule:** never use `--no-verify` or `--no-gpg-sign`, because a skipped hook leaves no trace.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.

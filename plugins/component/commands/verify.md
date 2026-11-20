@@ -31,4 +31,4 @@ cplat shape
 
 Print the reviewer's `RESULT`, the `NOT MET` list and the `verification.md` path. For `fail`, suggest the fitting next step: `/component:build <NNN>`, `/component:fix "<criterion and reason>"` for a single defect, or `/component:spec --amend <NNN>` when the spec itself is wrong.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.
