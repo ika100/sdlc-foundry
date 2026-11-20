@@ -249,6 +249,18 @@ def _of(b: dict, cluster: str) -> bool:
     return ((b.get("spec") or {}).get("cluster") or {}).get("name") == cluster
 
 
+PLUGIN_START_GRACE = datetime.timedelta(minutes=15)
+
+
+def plugin_starting(arch: dict) -> bool:
+    """#864: archiving fails only because the Barman Cloud plugin is not running yet (the first backup PR installs it), for less
+    than PLUGIN_START_GRACE: the plugin is starting, not broken. Longer than that it is a failure."""
+    if "plugin is not available" not in str(arch.get("message") or ""):
+        return False
+    since = parse_time(arch.get("lastTransitionTime"))
+    return since is None or now() - since <= PLUGIN_START_GRACE
+
+
 def _plugin_failure(b: dict) -> bool:
     return PLUGIN_UNAVAILABLE in str((b.get("status") or {}).get("error") or "")
 
@@ -361,7 +373,7 @@ def database_state(system: str, db: str, env: str, context: str | None, *, backu
         active = get_json(["clusters.postgresql.cnpg.io", roles["active"], "-n", ns], context)
         arch = _cond(active, "ContinuousArchiving")
         if arch:
-            b["archiving"] = "ok" if arch.get("status") == "True" else "failing"
+            b["archiving"] = "ok" if arch.get("status") == "True" else "starting" if plugin_starting(arch) else "failing"
             if b["archiving"] == "failing":
                 b["error"] = arch.get("message") or "continuous archiving is failing"
         backups = database_backups(system, db, ns, roles["all"], context)
@@ -373,7 +385,7 @@ def database_state(system: str, db: str, env: str, context: str | None, *, backu
         mine = [x for x in done if _of(x, roles["active"])]
         failed_mine = [x for x in mine if _phase(x) == "failed"]
         only_plugin = bool(failed_mine) and len(failed_mine) == len(mine) and all(_plugin_failure(x) for x in failed_mine)
-        pending = only_plugin and b["archiving"] != "failing" and not completed
+        pending = (only_plugin and b["archiving"] != "failing" and not completed) or b["archiving"] == "starting"
         if pending:
             failing_backup = False
         elif done and (done[0].get("status") or {}).get("phase") == "failed":

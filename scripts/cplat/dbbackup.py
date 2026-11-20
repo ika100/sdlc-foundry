@@ -131,6 +131,8 @@ def _archiving_hint(kns: str, cluster: str, context: str | None) -> str:
     arch = next((c for c in conds if c.get("type") == "ContinuousArchiving"), None)
     if not arch or arch.get("status") == "True":
         return ""
+    if backupstate.plugin_starting(arch):   # #864: the first backup PR installs the plugin; it is still starting
+        return " (the backup plugin is still starting: try again in a few minutes)"
     return (f" (WAL archiving to the bucket fails too: {arch.get('message') or 'no message'}; the bucket is likely not ready, "
             f"see kubectl get pods -n {kns})")
 

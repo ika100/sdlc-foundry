@@ -416,6 +416,8 @@ def backup_lines(b: dict) -> list[str]:
             rows.append((label, "external (backed up by its provider)"))
         elif st == "unknown":
             rows.append((label, f"unknown ({x['error']})"))
+        elif st == "pending" and x["archiving"] == "starting":     # #864: not a failure while the plugin comes up
+            rows.append((label, f"last base backup {x['last_success'] or 'never'}  archiving waiting for the backup plugin to start"))
         elif st == "pending":
             rows.append((label, f"last base backup never (first backup pending)  archiving ok  restore points "
                                 f"{x['earliest'] + ' … ' + (x['latest'] or x['earliest']) if x['earliest'] else 'none'}"))
