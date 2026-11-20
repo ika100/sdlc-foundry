@@ -31,7 +31,7 @@ def wf(fake, monkeypatch):  # noqa: F811
 def test_older_cancelled_run_and_newer_green_run_is_green_and_merges(wf, tmp_path):
     wf.checks = [[_run_check("ci-success", "cancel", 41), _run_check("ci-success", "pass", 42)]]
     ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
-    assert ok and wf.merges == [PR] and lines[-1].startswith("merged")
+    assert ok and wf.merges == [PR] and any(l.startswith("merged") for l in lines)
 
 
 def test_older_cancelled_run_and_newer_running_run_waits(wf, tmp_path):

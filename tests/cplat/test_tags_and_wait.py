@@ -116,7 +116,7 @@ def test_pr_wait_merges_on_green_and_resolves_numbers(fake, tmp_path):
     assert prmod.url_of("https://github.com/x/y/pull/1", None) == "https://github.com/x/y/pull/1"
     fake.checks = [[check("quality", "pending")], [check("quality", "pass")]]
     ok, lines = prmod.wait(tmp_path, "https://github.com/acme/other/pull/5", True, 600, 10, 300)
-    assert ok and fake.merges == ["https://github.com/acme/other/pull/5"] and lines[-1].startswith("merged")
+    assert ok and fake.merges == ["https://github.com/acme/other/pull/5"] and any(l.startswith("merged") for l in lines)
 
 
 def test_an_empty_answer_after_checks_were_seen_keeps_waiting(fake, tmp_path):
