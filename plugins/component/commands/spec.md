@@ -80,4 +80,4 @@ No open questions → one AskUserQuestion: "Approve with these <n> assumptions (
 - **Hard rule:** Never answer an open question on the user's behalf and never approve without the user's word, because approval exists only in the user's own words.
 - **Hard rule:** the only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced, only `docs/specs/<id>/`), so that every check runs before a push.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-120).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-122).

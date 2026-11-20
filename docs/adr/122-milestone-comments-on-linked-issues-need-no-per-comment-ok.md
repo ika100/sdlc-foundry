@@ -1,4 +1,4 @@
-# ADR-120: Milestone comments on linked issues need no per comment ok
+# ADR-122: Milestone comments on linked issues need no per comment ok
 
 **Status:** Accepted (2026-11-19)
 

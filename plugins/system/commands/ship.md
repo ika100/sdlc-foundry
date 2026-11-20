@@ -58,4 +58,4 @@ When the user's answer changes a repo's acceptance test, change it in that repo'
 
 End `complete` and an escalation with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 
-> If a platform template, script or command fails (not the user's code), stop, sum it up in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-120).
+> If a platform template, script or command fails (not the user's code), stop, sum it up in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-122).
