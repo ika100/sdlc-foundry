@@ -178,7 +178,7 @@ def test_docker_cache_only_on_github_hosted_runners(template):
     """AC-064.5: the docker job reads and writes the GitHub Actions cache only on GitHub-hosted runners."""
     text = (TEMPLATES / template / ".github" / "workflows" / "ci.yml").read_text()
     lines = re.findall(r"^\s*cache-(?:from|to): .*$", text, re.M)
-    assert len(lines) == 2, lines
+    assert len(lines) in (2, 4), lines   # 4: the retry of a failed push builds with the same cache (#866)
     for line in lines:
         assert "runner.environment == 'github-hosted' && format('type=gha," in line and "|| ''" in line, line
 
