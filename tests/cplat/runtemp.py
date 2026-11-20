@@ -171,6 +171,11 @@ def _flow_back(cache: Path) -> None:
     wheels = _wheel_cache()
     try:
         buckets = sorted(b for b in os.listdir(cache) if _is_bucket(b))
+        anchor = wheels
+        while not anchor.exists():   # W itself may not exist yet; its nearest existing parent is on its file system
+            anchor = anchor.parent
+        if os.stat(anchor).st_dev != os.stat(cache).st_dev:
+            return   # hard links cannot cross file systems; trying would only leave empty directories in W
     except OSError:
         return
     pointers: list[tuple[Path, Path]] = []
