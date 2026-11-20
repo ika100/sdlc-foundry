@@ -407,7 +407,8 @@ def preview(repo: Path | str, policy) -> list[dict]:
     units = ds.all_units(slug)
     snap = dispatch_backlog.snapshot(repo, slug, max_age=300, fetch=False)
     state = ds.load(slug)
-    ordered, _rest = _judge(repo, slug, policy, snap, state, units)
+    gate = dispatch_gate.gate(slug, policy, state, dispatch_budget.usage_today(slug))   # today's usage, booking nothing
+    ordered, _held, _filler = _judge(repo, slug, policy, snap, state, units, gate)
     busy = dispatch_ready.ship_busy_unit(units)
     waiting_for = _ref(ds.unit_key(busy)) if busy else None
     out: list[dict] = []
