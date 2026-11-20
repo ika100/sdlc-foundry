@@ -141,8 +141,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # the first push of a new GHCR package races between the two architecture jobs and one of them gets "denied"
+      # (#866): a publishing build retries once, which is a cached build of a few seconds
       - name: Build (and push by digest when publishing)
-        id: build
+        id: build-try
+        continue-on-error: ${{ env.PUBLISH == 'true' }}
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
@@ -153,6 +156,28 @@ jobs:
           # site's uplink costs more than it saves (docs/self-hosted-runners.md)
           cache-from: ${{ runner.environment == 'github-hosted' && format('type=gha,scope={0}', matrix.arch) || '' }}
           cache-to: ${{ runner.environment == 'github-hosted' && format('type=gha,mode=max,scope={0}', matrix.arch) || '' }}
+
+      - name: Pause before the retry
+        if: steps.build-try.outcome == 'failure'
+        run: sleep 20
+
+      - name: Build again after a failed push
+        id: build-retry
+        if: steps.build-try.outcome == 'failure'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          build-args: VERSION=${{ github.ref_name }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=${{ env.PUBLISH }}
+          # the GitHub Actions cache only on GitHub-hosted runners: on self-hosted ones exporting every layer over the
+          # site's uplink costs more than it saves (docs/self-hosted-runners.md)
+          cache-from: ${{ runner.environment == 'github-hosted' && format('type=gha,scope={0}', matrix.arch) || '' }}
+          cache-to: ${{ runner.environment == 'github-hosted' && format('type=gha,mode=max,scope={0}', matrix.arch) || '' }}
+
+      - name: Image digest
+        id: build
+        run: echo "digest=${{ steps.build-retry.outputs.digest || steps.build-try.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
       - name: Scan the image for fixable HIGH/CRITICAL vulnerabilities
         if: env.PUBLISH == 'true'
