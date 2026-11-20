@@ -17,18 +17,21 @@ tasks:
     covers: [AC-158.4, AC-158.5, AC-158.6, AC-158.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t3
     title: spec publish and spec land post spec-written and spec-approved
     files: [scripts/cplat/spec_pr.py]
     covers: [AC-158.1, AC-158.2, AC-158.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t4
     title: cplat merges post pr-merged (pr wait --merge, component ship land, system ship)
     files: [scripts/cplat/pr.py, scripts/cplat/ship.py, scripts/cplat/appship_merge.py]
     covers: [AC-158.3, AC-158.7]
     parallel_safe: true
     depends_on: [t1]
+    done: true
   - id: t5
     title: cplat platform release posts released comments and closes issues
     files: [scripts/cplat/platrelease_publish.py]
