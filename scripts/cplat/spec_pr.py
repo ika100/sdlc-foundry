@@ -12,6 +12,7 @@ import re
 import sys
 from pathlib import Path
 
+import milestones
 import pr_rules
 import spec as specmod
 from core import PlatformError, run
@@ -158,7 +159,9 @@ def publish(root: Path, spec: specmod.Spec) -> dict:
         row = {"number": int(m.group(1)), "url": url}
     number = int(row["number"])
     reviewer, note = _ask_review(root, number, owner_of(root), login(root))
-    return {"pr": number, "url": row.get("url"), "reviewer": reviewer, "note": note}
+    url = str(row.get("url") or "")
+    return {"pr": number, "url": row.get("url"), "reviewer": reviewer, "note": note,
+            "issue_comments": milestones.spec_written(root, spec, branch, url)}
 
 
 def land(root: Path, spec: specmod.Spec) -> tuple[bool, list[str]]:
@@ -180,7 +183,10 @@ def land(root: Path, spec: specmod.Spec) -> tuple[bool, list[str]]:
     import land_merge
     import pr
     import ship
-    return pr.wait(root, number, True, 3600, 20, ship.QUEUE_TIMEOUT, mode=land_merge.CATCH_UP)
+    res = pr.wait(root, number, True, 3600, 20, ship.QUEUE_TIMEOUT, mode=land_merge.CATCH_UP)
+    ok, lines = res if isinstance(res, tuple) else (res == 0, [])
+    approved = milestones.spec_approved(root, spec) if ok else []
+    return ok, [*info["issue_comments"], *lines, *approved]
 
 
 def request_changes(root: Path, spec: specmod.Spec, body_file: Path) -> str:
@@ -213,6 +219,9 @@ def main(ns, root: Path, spec: specmod.Spec) -> int:
     if ns.cmd == "publish":
         info = publish(root, spec)
         print(json.dumps(info, indent=2) if ns.json else f"{spec.id}: {info['url']}" + (f" ({info['note']})" if info["note"] else ""))
+        if not ns.json:
+            for line in info["issue_comments"]:
+                print(line)
         return 0
     if ns.cmd == "land":
         if spec.status != "approved":
