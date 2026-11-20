@@ -64,7 +64,8 @@ def test_once_the_limit_is_reached_no_unit_starts_and_no_agent_call_is_made_ac_1
     assert world.calls() == [] and world.claude_calls() == [] and world.gh_writes() == []
     status = world.run("status", "--json").json()
     assert status["tokens"]["limit"] == 20_000_000 and status["tokens"]["used"] >= 20_000_000
-    assert world.run("plan", "--json").json()["starts"] == {"allowed": False, "why_not": "daily budget reached"}
+    starts = world.run("plan", "--json").json()["starts"]
+    assert (starts["allowed"], starts["why_not"]) == (False, "daily budget reached")  # replaced by AC-210.3 (starts also has `text`)
 
 
 def test_running_units_continue_and_one_budget_need_per_day_is_listed_ac_167_10(world):  # AC-167.10
@@ -149,7 +150,8 @@ def test_while_a_units_usage_is_unknown_no_unit_starts_and_status_names_it_ac_16
     status = world.run("status", "--json").json()
     assert status["tokens"]["unknown"] == ["issue-1.1"]
     assert "issue-1.1" in world.run("status").out
-    assert world.run("plan", "--json").json()["starts"] == {"allowed": False, "why_not": "usage unknown"}
+    starts = world.run("plan", "--json").json()["starts"]
+    assert (starts["allowed"], starts["why_not"]) == (False, "usage unknown")  # replaced by AC-210.3 (starts also has `text`)
 
 
 # ---------------- AC-167.12: needs kinds, the inbox, notifications, the digest ----------------

@@ -9,7 +9,9 @@ check and every state change of a spec goes through this module so it is determi
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
+import functools
 import hashlib
 import itertools
 import json
@@ -76,13 +78,19 @@ class BrokenSpec(PlatformError):
         return f"{self.rel}, line {self.line}: {self.problem} (fix: {self.hint})"
 
 
+@functools.lru_cache(maxsize=4096)
+def _front_yaml(text: str) -> object:
+    """Front matter parsed once per content: a full check scans every spec and plan many times, and parsing was most of it."""
+    return yaml.safe_load(text)
+
+
 def load(path: Path, root: Path | None = None) -> tuple[dict, str]:
     rel = str(path.relative_to(root)) if root else str(path)
     m = FRONT.match(path.read_text())
     if not m:
         raise BrokenSpec(path.parent, rel, 1, "missing front matter", FENCE_HINT)
     try:
-        meta = yaml.safe_load(m.group(1))
+        meta = copy.deepcopy(_front_yaml(m.group(1)))
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None) or getattr(e, "context_mark", None)
         line = mark.line + 2 if mark else 1
@@ -1027,6 +1035,11 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
     contract = contract or sections(body).get("contract", "").strip()
     if contract:
         parts.append("### Contract\n\n" + contract)
+    import contract_copy
+    copy = contract_copy.slice(plan_path, repo_id)       # spec 110: a bad contract writes no spec
+    if copy["rules"]:
+        copy["commit"] = contract_copy.commit(plan_path)
+        parts.append(contract_copy.section(copy))
     provided = provided_by_system(app_root, meta.get("repos") or [], repo_id)
     if provided:
         parts.append("### Provided by the system\n\nThe gitops part of this plan wires these for this repo; rely on them, "
@@ -1035,11 +1048,11 @@ def slice_from_plan(plan_path: Path, repo_id: str) -> dict:
         parts.append("### Notes for this repo\n\n" + str(repo["arguments"]).strip())
     parent = f"{meta.get('gitops_app')}:{meta.get('spec') or meta.get('plan_id')}"
     return {"title": str(repo.get("summary") or repo_id), "priority": priority if priority in PRIORITIES else "P1",
-            "parent": parent, "problem": problem, "context": "\n\n".join(parts),
+            "parent": parent, "problem": problem, "context": "\n\n".join(parts), "contract_copy": copy,
             "criteria": [str(c).strip() for c in repo.get("criteria") or [] if str(c).strip()]}
 
 
-def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | None) -> Spec:
+def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | None, notes: list[str] | None = None) -> Spec:
     sl = slice_from_plan(plan_path, repo_id)
     spec = new(root, sl["title"], shape=shape, priority=sl["priority"], tracks=[], parent=sl["parent"])
     body = spec.body.replace("## Stories", f"## System context\n\n{sl['context']}\n\n## Stories", 1)
@@ -1050,6 +1063,10 @@ def new_from_plan(root: Path, plan_path: Path, repo_id: str, *, shape: str | Non
         body = re.sub(r"(## Acceptance criteria\n\n)<!--.*?-->", lambda m: m.group(1) + lines, body, count=1, flags=re.S)
         body = body.replace("- " + today() + " created", f"- {today()} created from the system plan, with its criteria (spec 147)", 1)
     save(spec.dir / "spec.md", spec.meta, body)
+    import contract_copy
+    line = contract_copy.write(root, sl["contract_copy"])
+    if notes is not None:
+        notes.append(line)
     import spec_replace
     new_spec = read(spec.dir)
     by_number = {s.number: s for s in all_specs(root)}
@@ -1603,8 +1620,9 @@ def main(argv: list[str]) -> int:
         issues = [int(t) for t in itertools.takewhile(str.isdigit, ns.tracks or [])]   # `--tracks 5 Title words`: the rest is the title
         ns.title = [*(ns.tracks or [])[len(issues):], *ns.title]
         ns.tracks = issues
+        notes: list[str] = []
         if ns.from_plan:
-            spec = new_from_plan(root, Path(ns.from_plan[0]).expanduser(), ns.from_plan[1], shape=shape)
+            spec = new_from_plan(root, Path(ns.from_plan[0]).expanduser(), ns.from_plan[1], shape=shape, notes=notes)
         elif not ns.title:
             raise PlatformError("a title or --from-plan PLAN REPO_ID is required")
         else:
@@ -1614,6 +1632,8 @@ def main(argv: list[str]) -> int:
             spec = new(root, " ".join(ns.title), shape=shape, priority=level, tracks=tracks, parent=ns.parent,
                        explored=ns.explored, priority_line=line)
         print(spec.dir.relative_to(root) / "spec.md")
+        for note in notes:
+            print(note)
         if spec.meta.get("tracks"):
             import claim
             for note in claim.claim(root, spec.meta["tracks"], f"feature/{spec.id}", take_over=ns.take_over, what=spec.id):

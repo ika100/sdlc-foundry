@@ -1,7 +1,7 @@
 ---
 spec_id: 207-preflight-checks-trust-and-subagent
 title: Preflight checks trust and subagent tools before a ship
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -74,3 +74,5 @@ How a failure looks and is recorded.
 
 - 2026-11-17 created
 - 2026-11-17 approved
+- 2026-11-19 building
+- 2026-11-19 done

@@ -1,1 +1,0 @@
-**`cplat component ship start --no-merge` changes a run that already started (#703).** The flag was read only when a run was created, so holding a running ship's merge (during a release, for example) needed a hand edit of `cplat-ship.json`. `--no-merge` and the new `--merge` now update the run and say so; without either flag a resumed run keeps its setting.

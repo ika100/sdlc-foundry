@@ -208,7 +208,7 @@ def test_a_python_template_test_fast_runs_only_the_given_file_or_k_expression_ac
     recipe = line.strip().rstrip(",").split(":", 1)[1].strip()[1:-1].replace('\\"', '"')    # the template is not plain JSON
     runner = recipe.split(" -- ", 1)[1]                      # the test runner's own command, after the gate script's `--`
     runner = runner.replace("uv run python", sys.executable).replace("uv run pytest", f"{sys.executable} -m pytest")
-    runner = runner.replace("-p scripts.smoke_pytest", "").replace("-q", "-v")
+    runner = runner.replace("-p scripts.smoke_pytest", "").replace("-p scripts.contract_pytest", "").replace("-q", "-v")
     assert '"$@"' in runner and "uv" not in runner.split()
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_one.py").write_text("def test_alpha():\n    pass\n\n\ndef test_beta():\n    pass\n")

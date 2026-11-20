@@ -191,6 +191,7 @@ def _checks_of(message: str, fallback_key: str) -> list[dict]:
     for line in lines:
         line = re.sub(r"^(ERROR|error|fail(ed)?):\s*", "", line)
         line = re.sub(r"^`[^`]+` failed \(exit \d+\):\s*", "", line)    # the wrapper of a failed subprocess
+        line = re.sub(r"^ERROR:\s*", "", line)    # the subprocess's own prefix
         line = re.sub(r"^(?:\S+/)?system\.yaml:\s*(?=\w+\.)", "", line)
         if not line or line.startswith(("fix:", "Traceback")) or re.match(r"(Installed|Resolved|Downloaded|Prepared|Audited) \d+", line):
             continue

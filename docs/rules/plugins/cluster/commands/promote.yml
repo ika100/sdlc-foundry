@@ -1,0 +1,17 @@
+rules:
+  - id: R1
+    text: "A promotion is a person's decision: run it for the user's request, never as a step of a ship, update or engine run, because the command refuses those runs"
+    class: practice
+    source: spec 201
+  - id: R2
+    text: "Never merge the PR yourself, because merging it changes what runs on the cluster"
+    class: practice
+    source: spec 201
+  - id: R3
+    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)"
+    class: hard
+    hard: issue-filing-needs-consent
+  - id: R4
+    text: "Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes"
+    class: practice
+    source: "#476"

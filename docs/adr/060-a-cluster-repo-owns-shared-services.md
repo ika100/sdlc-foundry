@@ -1,6 +1,6 @@
 # ADR-060: A cluster repo owns what a cluster shares and lists the systems it runs
 
-**Status:** Accepted (2026-10-27)
+**Status:** Accepted (2026-10-27); decision 1 and the consequence "one system runs all its environments on its cluster" replaced by [ADR-114](114-one-cluster-repo-places-environments-on-several-clusters.md)
 **Builds on:** [ADR-017](017-gitops-owns-manifests.md) (the gitops repo owns every manifest), [ADR-018](018-secrets-with-external-secrets-operator.md), [ADR-022](022-kyverno-policies.md), [ADR-058](058-pinned-versions-and-platform-installed-operators.md) (amends its consequence for shared clusters), spec 125
 
 ## Context
@@ -21,6 +21,6 @@ Since ADR-058 each system's gitops repo renders `operators/` for the cluster it 
 
 - ADR-058's consequence "a cluster shared by several gitops repos must let one of them install the operators" now reads: a shared cluster gets a cluster repo. Every system registered there sets `operators: owner` in every environment. A system that does not use a cluster repo keeps ADR-058 unchanged, and its rendered tree is unchanged.
 - Operator upgrades follow the cluster repo's platform release (`/platform:update` in the cluster repo), not a system's. The check warns when a registered system is on another release.
-- One system runs all its environments on its cluster. Spreading environments over clusters and managing several clusters from one Argo CD are left to later specs.
+- One system runs all its environments on its cluster (replaced by [ADR-114](114-one-cluster-repo-places-environments-on-several-clusters.md)). Spreading environments over clusters and managing several clusters from one Argo CD are left to later specs.
 - Removing a system from a cluster leaves its namespaces, resources and data in place until a person deletes them.
 - The cluster repo's `cluster-up` runs the system template's `local-cluster.sh` in a cluster-only mode (`WITH_SYSTEM=0`), so the local cluster is built the same way for both repo kinds.

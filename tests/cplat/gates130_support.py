@@ -97,6 +97,15 @@ stub_pytest() {
 }
 [ "$1" = run ] && shift
 log "uv $*"
+while :; do
+  case "$1" in
+    --quiet|--no-project) shift;;
+    --python|--with-requirements) shift 2;;
+    *) break;;
+  esac
+done
+# the helper runs `python <script>.py` after the options: treat it as `uv run <script>.py`
+case "$1:$2" in python:*.py) shift;; esac
 case "$1" in
   python)
     shift

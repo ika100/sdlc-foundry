@@ -559,7 +559,8 @@ def test_ac_098_10_the_step_gets_the_body_and_the_token_through_env():
 def test_ac_098_13_the_token_appears_only_in_the_crd_step():
     """AC-098.13: the quality step (and every other step) never sees the secret."""
     text = (TEMPLATE / ".github" / "workflows" / "ci.yml").read_text()
-    assert text.count("secrets.SERVICE_REPOS_READ_TOKEN") == 1
+    # the CRD step and spec 110's contract-pins step (a separate job) read it; nothing else
+    assert text.count("secrets.SERVICE_REPOS_READ_TOKEN") == 2
     assert text.count("github.event.pull_request.body") == 1
     q = next(s for s in quality_steps() if s.get("run") == "devbox run quality")
     assert "env" not in q or "SERVICE_REPOS_READ_TOKEN" not in q["env"]
@@ -579,7 +580,7 @@ def test_ac_098_17_triggers_and_job_names_are_unchanged():
     wf = ci()
     triggers = wf.get("on", wf.get(True))
     assert triggers["push"]["branches"] == ["main"] and "workflow_dispatch" in triggers and "workflow_call" in triggers
-    assert set(wf["jobs"]) == {"quality", "security", "ci-extra", "pr-title", "upgrade-check"}  # ci-extra: spec 086; spec 121: upgrade-check
+    assert set(wf["jobs"]) == {"quality", "security", "ci-extra", "pr-title", "upgrade-check", "contract-pins"}  # ci-extra: spec 086; spec 121: upgrade-check; spec 110: contract-pins
     assert any(s.get("run") == "devbox run quality" for s in quality_steps())
 
 
@@ -589,7 +590,7 @@ def devbox():
 
 def test_ac_098_14_the_devbox_recipe_runs_the_script():
     """AC-098.14: `devbox run service-crds`."""
-    assert devbox()["service-crds"] == "uv run scripts/check-service-crds.py"
+    assert devbox()["service-crds"] == "bash scripts/uv-script.sh scripts/check-service-crds.py"
 
 
 OLD_ARGS = ["-strict", "-ignore-missing-schemas", "-schema-location", "default", "-schema-location",

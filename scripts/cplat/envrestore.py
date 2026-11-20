@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 import backupstate
+import envcluster
 import gitops
 import model
 import yaml
@@ -32,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--confirm", help="prod: pass `prod` to do it")
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
-    p.add_argument("--context", help="kube context (default: the current one)")
+    p.add_argument("--context", help="kube context (default: the environment's cluster for a system spread over clusters, else the current one)")
     p.add_argument("--json", action="store_true")
     return p
 
@@ -176,6 +177,7 @@ def main(argv: list[str]) -> int:
     e = m.environment(env)
     if e is None or not e.backup:
         raise PlatformError(f"{env} has no backup: set environments.{env}.backup in system.yaml")
+    ns.context = envcluster.env_context(Path(ns.repo_dir).resolve(), m, env, ns.context)
     system, kns = app_dir.name, f"{app_dir.name}-{env}"
     try:
         backups = backupstate.velero_backups(system, env, ns.context)

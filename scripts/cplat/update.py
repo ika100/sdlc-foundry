@@ -21,6 +21,7 @@ import migrate5
 import settingsmerge
 import shapecmd
 from core import PLATFORM_ROOT, PlatformError, Report, run
+from uvscript import script_cmd
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -129,15 +130,16 @@ def widen_generated_lines(repo: Path) -> bool:
     return True
 
 
-def drop_new_project_owned_files(repo: Path, patterns: list[str]) -> list[str]:
+def drop_new_project_owned_files(repo: Path, patterns: list[str], keep: tuple[str, ...] = ()) -> list[str]:
     """copier creates files that do not exist yet even inside `_skip_if_exists` paths. For an update that is wrong: a repo that
-    evolved its own app code or tests must not receive new starter files (and tests that assert the starter UI). Remove them."""
+    evolved its own app code or tests must not receive new starter files (and tests that assert the starter UI). Remove them.
+    Paths under `keep` (what the update itself wrote before copier ran, spec 201) stay."""
     dropped = []
     for line in run(["git", "status", "--porcelain", "-uall"], cwd=repo).stdout.splitlines():
         if not line.startswith("??"):
             continue
         path = line[3:]
-        if path not in SEEDS and any(fnmatch.fnmatch(path, pattern) for pattern in patterns):
+        if path not in SEEDS and not path.startswith(keep) and any(fnmatch.fnmatch(path, pattern) for pattern in patterns):
             (repo / path).unlink()
             dropped.append(path)
     for directory in sorted({str(Path(d).parent) for d in dropped}, key=len, reverse=True):   # tidy empty directories
@@ -596,7 +598,7 @@ def reference_render(repo: Path, tmp: Path) -> dict[str, bytes]:
     subprocess.run(["tar", "-x", "-C", str(root)], input=archive, capture_output=True, check=True)
     (root / "scripts").mkdir(exist_ok=True)
     shutil.copyfile(RENDER_V4, root / "scripts" / "render.py")
-    run(["uv", "run", "scripts/render.py"], cwd=root)
+    run(script_cmd("scripts/render.py"), cwd=root)
     return _tree(root)
 
 
@@ -710,7 +712,8 @@ def rerender_cluster(repo: Path, written: set[str]) -> int:
     """A cluster repo: re-render cluster/ with the updated scripts/render.py, which the template update never touches (it is the
     render's output), so the review branch passes its own render check (#264). Adds the changed paths to `written`; returns their count."""
     before = _generated_snapshot(repo, ("cluster",))
-    res = run(["uv", "run", "scripts/render.py"], cwd=repo, check=False)
+    core.drop_render_cache(repo)
+    res = run(script_cmd("scripts/render.py"), cwd=repo, check=False, env=core.RENDER_ENV)
     if res.returncode != 0:
         lines = [ln for ln in (res.stderr or res.stdout or "").splitlines() if ln.strip()]
         raise PlatformError("the updated cluster render fails: " + (lines[-1] if lines else f"exit {res.returncode}"),
@@ -719,6 +722,91 @@ def rerender_cluster(repo: Path, written: set[str]) -> int:
     changed = {k for k in before.keys() | after.keys() if before.get(k) != after.get(k)}
     written |= changed
     return len(changed)
+
+
+RELEASE_HEADER = "# Written by /platform:update and /cluster:promote: the platform release this cluster's tree is rendered with.\n"
+
+
+def later_clusters(req: dict) -> list[str]:
+    """Spec 201: the clusters after the first one in a cluster repo that lists at least two and moves to another release."""
+    repo: Path = req["repo"]
+    if req["shape"] != "cluster-gitops" or not (repo / "cluster.yaml").is_file():
+        return []
+    try:
+        doc = yaml.safe_load((repo / "cluster.yaml").read_text())
+    except yaml.YAMLError:
+        return []
+    listed = doc.get("clusters") if isinstance(doc, dict) else None
+    if not isinstance(listed, list) or len(listed) < 2 or not all(isinstance(c, str) for c in listed):
+        return []
+    return listed[1:]
+
+
+def keep_later_clusters(repo: Path, old: str, later: list[str]) -> list[str]:
+    """Design 6 steps 1 and 2: pin each later cluster without `release.yaml` to `old` and keep the renderer of `old`. Returns the frozen."""
+    frozen: list[str] = []
+    for c in later:
+        f = repo / "clusters" / c / "release.yaml"
+        if not f.exists():
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(f"{RELEASE_HEADER}platform: {old}\n")
+            frozen.append(c)
+    kept = repo / ".platform" / "releases" / old
+    named = [c for c in later if _pinned(repo, c) == old]
+    if named and not kept.is_dir():
+        kept.mkdir(parents=True)
+        for n in ("render.py", "system_render.py"):
+            shutil.copy2(repo / "scripts" / n, kept / n)
+    return frozen
+
+
+def _pinned(repo: Path, cluster: str) -> str | None:
+    f = repo / "clusters" / cluster / "release.yaml"
+    try:
+        doc = yaml.safe_load(f.read_text()) if f.is_file() else None
+    except yaml.YAMLError:
+        return None
+    return str(doc["platform"]) if isinstance(doc, dict) and doc.get("platform") else None
+
+
+def release_unused_clusters(repo: Path, old: str, later: list[str], frozen: list[str], written: set[str]) -> list[str]:
+    """Design 6 after the re-render: a frozen cluster whose tree the new renderer leaves unchanged is released again; the kept renderer
+    goes when no cluster names `old`. Returns the clusters still kept at `old`."""
+    trees = {c: f"cluster/{c}" for c in frozen}
+    snap = {c: _generated_snapshot(repo, (t,)) for c, t in trees.items()}
+    releases = {c: repo / "clusters" / c / "release.yaml" for c in frozen}
+    texts = {c: f.read_text() for c, f in releases.items()}
+    for f in releases.values():
+        f.unlink()
+    core.drop_render_cache(repo)
+    res = run(script_cmd("scripts/render.py"), cwd=repo, check=False, env=core.RENDER_ENV)
+    if res.returncode != 0:
+        lines = [ln for ln in (res.stderr or res.stdout or "").splitlines() if ln.strip()]
+        raise PlatformError("the updated cluster render fails: " + (lines[-1] if lines else f"exit {res.returncode}"),
+                            hint="fix cluster.yaml, then run the update again")
+    still: list[str] = []
+    for c in frozen:
+        if _generated_snapshot(repo, (trees[c],)) == snap[c]:
+            written.add(f"clusters/{c}/release.yaml")
+            continue
+        shutil.rmtree(repo / trees[c], ignore_errors=True)
+        for path, data in snap[c].items():
+            (repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (repo / path).write_bytes(data)
+        releases[c].write_text(texts[c])
+        still.append(c)
+    kept = repo / ".platform" / "releases" / old
+    if kept.is_dir() and not any(_pinned(repo, c) == old for c in later):
+        shutil.rmtree(kept)
+        if not any(kept.parent.iterdir()):
+            kept.parent.rmdir()
+            if not any(kept.parent.parent.iterdir()):
+                kept.parent.parent.rmdir()
+    written.update(f"clusters/{c}/release.yaml" for c in still)
+    if still:
+        written.add(f".platform/releases/{old}")
+        written.update(f".platform/releases/{old}/{n}" for n in ("render.py", "system_render.py"))
+    return still
 
 
 def _generated_snapshot(repo: Path, tops: tuple[str, ...] = ("applications", "operators")) -> dict[str, bytes]:
@@ -961,6 +1049,8 @@ def plan(req: dict) -> Report:
         r.will_do.append("DELETE k8s/ (v1 → v2 migration: manifests are generated in the system's gitops-app repo; recoverable from git history)")
     if req["shape"] == "cluster-gitops":
         r.will_do.append("re-render cluster/ with the updated scripts/render.py (its output; the template update leaves it alone)")
+    if later_clusters(req):
+        r.will_do.append(f"keep the later clusters ({', '.join(later_clusters(req))}) at platform {req['old'] or 'unknown'} unless the release leaves their trees unchanged")
     r.will_do.append("restore the stable template source in .copier-answers.yml and stamp .platform-version")
     r.will_do.append("commit once (nothing is pushed)")
     return r
@@ -1054,6 +1144,10 @@ def execute(req: dict) -> Report:
         systems = convert_systems(repo)
         if systems:
             reference = reference_render(repo, Path(tmp.name))
+    later = later_clusters(req) if req["old"] != req["new"] else []
+    if later and not req["old"]:
+        raise PlatformError("cannot keep the later clusters at their release: this repo has no .platform-version",
+                            hint="restore .platform-version from git history (git log -- .platform-version), then run the update again")
     cur = run(["git", "symbolic-ref", "--short", "HEAD"], cwd=repo).stdout.strip()
     branch = branch_name(repo)
     created = cur in ("main", "master")
@@ -1076,9 +1170,13 @@ def execute(req: dict) -> Report:
         cmd += ["--data", kv]
     mig: dict = {"ran": False, "already_migrated": True}
     generated: set[str] = set()
+    frozen: list[str] = []
     try:
+        if later:
+            frozen = keep_later_clusters(repo, req["old"], later)
         run(cmd, cwd=repo)
-        dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]))
+        kept_paths = tuple(f"clusters/{c}/release.yaml" for c in later) + (".platform/releases/",) if later else ()
+        dropped = drop_new_project_owned_files(repo, project_owned_patterns(req["template"]), kept_paths)
         written = {f"{s['dir'].as_posix()}/system.yaml" for s in systems}   # the migration writes these next, not left out (#238)
         dropped = [d for d in dropped if d not in written]
         if dropped:
@@ -1112,6 +1210,11 @@ def execute(req: dict) -> Report:
         if rendering_cluster:
             n = rerender_cluster(repo, generated)
             r.did.append(f"re-rendered cluster/ with the updated scripts/render.py ({n} file(s) changed)")
+            if later:
+                still = release_unused_clusters(repo, req["old"], later, frozen, generated) if frozen else []
+                kept_rel = [c for c in later if c not in frozen and _pinned(repo, c) == req["old"]]
+                for c in [*still, *kept_rel]:
+                    r.did.append(f"kept cluster {c} at platform {req['old']}; promote it with /cluster:promote {c}")
     except BaseException:
         if migrating or rendering or rendering_cluster:
             rollback(repo, cur, branch, created, ignored)

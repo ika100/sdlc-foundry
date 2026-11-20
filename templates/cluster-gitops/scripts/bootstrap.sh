@@ -3,7 +3,10 @@
 # waits for each operator's CRD, then applies the systems root. After that, systems and operators change only through
 # merged PRs to this repo. Re-running it changes nothing that is in sync.
 #
-#   KUBE_CONTEXT=<ctx> REPO_TOKEN=<token> devbox run bootstrap
+#   KUBE_CONTEXT=<ctx> REPO_TOKEN=<token> devbox run bootstrap [<cluster>]
+#
+# A repo with `clusters` in cluster.yaml needs the cluster's name: it bootstraps that cluster from its own tree (cluster/<name>/)
+# and refuses a context that already runs another cluster of this repo. Without `clusters` the name is optional.
 #
 # Environment:
 #   KUBE_CONTEXT    the cluster to bootstrap (required)
@@ -24,6 +27,30 @@ if [ -z "${REPO_TOKEN:-}" ]; then
   echo "ERROR: set REPO_TOKEN to a read-only token (Contents: read) for the cluster repo and every system repo under https://github.com/${org}" >&2
   exit 1
 fi
+
+clusters=$(bash scripts/uv-script.sh --quiet scripts/render.py --clusters)
+cluster_list=$(echo "$clusters" | paste -sd, - | sed 's/,/, /g')
+repo_cluster=$(bash scripts/uv-script.sh --quiet scripts/render.py --name)
+want="${1:-}"
+if [ -n "$clusters" ]; then
+  if [ -z "$want" ]; then
+    echo "ERROR: name the cluster to bootstrap: devbox run bootstrap <cluster> (clusters: ${cluster_list})" >&2
+    exit 1
+  fi
+  if ! echo "$clusters" | grep -qxF -- "$want"; then
+    echo "ERROR: unknown cluster '${want}' (clusters: ${cluster_list})" >&2
+    exit 1
+  fi
+  first=$(echo "$clusters" | head -1)
+else
+  want="${want:-$repo_cluster}"
+  if [ "$want" != "$repo_cluster" ]; then
+    echo "ERROR: unknown cluster '${want}' (this repo has one cluster: ${repo_cluster})" >&2
+    exit 1
+  fi
+  first="$repo_cluster"
+fi
+tree=$(bash scripts/uv-script.sh --quiet scripts/render.py --trees | awk -v c="$want" '$1 == c { print $2 }')
 tries="${CRD_WAIT_TRIES:-200}"
 k() { kubectl --context "$ctx" "$@"; }
 
@@ -42,11 +69,32 @@ if git rev-parse --git-dir >/dev/null 2>&1 && git fetch -q origin main 2>/dev/nu
   fi
 fi
 
-uv run --quiet scripts/render.py --check || exit 1
+bash scripts/uv-script.sh --quiet scripts/render.py --check || exit 1
 
 if ! k get namespace argocd >/dev/null 2>&1; then
   echo "ERROR: Argo CD is not installed in ${ctx} (it is a cluster prerequisite)" >&2
   exit 1
+fi
+
+# Identity guard: a context whose platform-operators already syncs another cluster's tree of this repo is not this cluster.
+source=$(k -n argocd get application platform-operators -o jsonpath='{.spec.source.repoURL} {.spec.source.path}' 2>/dev/null || true)
+src_repo="${source%% *}"
+src_path="${source#* }"
+if [ "${src_repo%.git}" = "https://github.com/${org}/${repo_cluster}" ]; then
+  other=""
+  case "$src_path" in
+    cluster/operators) [ "$want" = "$first" ] || other="$first" ;;
+    cluster/*/operators)
+      other="${src_path#cluster/}"
+      other="${other%/operators}"
+      [ "$other" != "$want" ] || other=""
+      ;;
+  esac
+  if [ -n "$other" ]; then
+    echo "ERROR: ${ctx} already runs cluster ${other} of this repo (platform-operators syncs ${src_path}); bootstrapping ${want} there would replace it. Nothing was changed." >&2
+    echo "  fix: pass the kube context of ${want}: KUBE_CONTEXT=<its context> devbox run bootstrap ${want}" >&2
+    exit 1
+  fi
 fi
 
 echo "Storing the repository credential template for https://github.com/${org}"
@@ -55,9 +103,9 @@ k -n argocd create secret generic github-creds --from-literal=url="https://githu
 k -n argocd label secret github-creds argocd.argoproj.io/secret-type=repo-creds --overwrite >/dev/null
 
 echo "Applying the operators"
-k apply -n argocd -f cluster/operators-root.yaml
+k apply -n argocd -f "${tree}/operators-root.yaml"
 
-crds=$(uv run --quiet scripts/render.py --crds)
+crds=$(bash scripts/uv-script.sh --quiet scripts/render.py --crds "$want")
 while read -r op crd; do
   [ -n "$op" ] || continue
   echo "Waiting for the CRD ${crd} (operator ${op})"
@@ -74,5 +122,5 @@ while read -r op crd; do
 done <<< "$crds"
 
 echo "Applying the systems"
-k apply -n argocd -f cluster/systems-root.yaml
+k apply -n argocd -f "${tree}/systems-root.yaml"
 echo "Bootstrapped ${ctx}. From now on, change systems and operators through merged PRs to this repo."

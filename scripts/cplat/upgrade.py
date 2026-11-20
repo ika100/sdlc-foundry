@@ -17,6 +17,7 @@ from pathlib import Path
 
 import backupstate
 import core
+import envcluster
 import gitops
 import model
 import pr_rules
@@ -39,7 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--verify", action="store_true", help="verify the environment's step instead of making one")
     p.add_argument("--pr", action="store_true", help="branch, commit (signed off) and open a pull request")
     p.add_argument("--wait", action="store_true", help="with --pr: wait for the merge, then Argo CD, then verify")
-    p.add_argument("--context", action="append", metavar="[ENV=]CTX", help="kube context (of one environment, or of all); repeatable")
+    p.add_argument("--context", action="append", metavar="[ENV=]CTX", help="kube context (of one environment, or of all); repeatable (default: the environment's cluster for a system spread over clusters, else the current one)")
     p.add_argument("--component-dir", action="append", metavar="C=DIR", help="a checkout of a component for the smoke tests; repeatable")
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
@@ -103,6 +104,23 @@ def first_instance_env(ris: dict) -> str:
     return next((e for e in ENVS if e in ris), ENVS[0])
 
 
+def resolve_contexts(ns: argparse.Namespace, repo: Path, m: model.Model, previous: bool = True) -> None:
+    """Spec 201: for a system spread over clusters, add `ENV=CTX` for the environment and its previous one; an explicit one wins."""
+    ris = {ri.environment for ri in m.resource_instances if ri.resource == ns.name}
+    env = ns.env or first_instance_env(ris)
+    if env not in ENVS:
+        return
+    earlier = [e for e in reversed(ENVS[:ENVS.index(env)]) if e in ris][:1] if previous else []
+    touched = [env, *earlier]
+    have = status.parse_contexts(ns.context, ENVS)
+    extra = []
+    for e in touched:
+        ctx = None if e in have else envcluster.env_context(repo, m, e, None)
+        if ctx:
+            extra.append(f"{e}={ctx}")
+    ns.context = [*(ns.context or []), *extra] or ns.context
+
+
 def record_of(system: str, name: str, env: str, ctx: str | None) -> dict | None:
     """The verification ConfigMap's data, None when there is none; backupstate.ReadError when the cluster cannot be read."""
     try:
@@ -149,13 +167,12 @@ def check_backup(plan: Plan, ri, ns: argparse.Namespace, app_dir: Path) -> str:
         raise PlatformError(f"{name} in {env} has no backup: resources.{name}.instances.{env}.backup is required for a major upgrade",
                             hint=f"set it in system.yaml, then /resource:backup {name} --env {env}")
     try:
-        got = status.public_backups(status.collect_backups(Path(ns.repo_dir).resolve(), ns.app, ns.context))
+        import upgradeverify
+        b = upgradeverify.env_backup(Path(ns.repo_dir).resolve(), ns.app, name, env, status.parse_contexts(ns.context, ENVS).get(env))
     except (backupstate.ReadError, backupstate.StateError) as e:
         raise PlatformError(f"cannot read the backups of {name} in {env}: {e}",
                             hint=f"check the kube context: cplat system status --context {env}=<ctx>") from e
-    entry = next((i for i in got["resource_instances"] if (i["resource"], i["environment"]) == (name, env)), None)
-    b = (entry or {}).get("backup") or {}
-    if b.get("state") == "unknown" or entry is None:
+    if b.get("state") == "unknown" or not b:
         contexts = status.parse_contexts(ns.context, ENVS)
         raise PlatformError(f"cannot read the backups of {name} in {env}: {b.get('error') or b.get('state') or 'not found'}",
                             hint=f"check the kube context: cplat system status --context {env}={contexts.get(env) or '<ctx>'}")
@@ -411,12 +428,15 @@ def main(argv: list[str]) -> int:
         import upgradeverify
         if not ns.env:
             raise PlatformError("--verify needs --env")
+        vrepo = Path(ns.repo_dir).resolve()
+        resolve_contexts(ns, vrepo, model.load_dir(gitops.find_app(vrepo, ns.app)), previous=False)
         return upgradeverify.run(ns)
     if ns.wait and not ns.pr:
         raise PlatformError("--wait needs --pr")
     repo = Path(ns.repo_dir).resolve()
     app_dir = gitops.find_app(repo, ns.app)
     m = model.load_dir(app_dir)
+    resolve_contexts(ns, repo, m)
     r = load_renderer(repo)
     import yaml
     doc = yaml.safe_load((app_dir / "system.yaml").read_text()) or {}

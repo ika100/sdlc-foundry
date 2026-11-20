@@ -26,7 +26,7 @@ WORKING = {
     "api": ["list"], "resource": ["add", "remove", "backup", "restore", "upgrade", "query"],  # spec 117: resource backup, restore; spec 121: resource upgrade
     "instance": ["promote", "secret", "verify"], "issue": ["triage", "report"],
     "platform": ["doctor", "update", "fleet", "runs", "retro", "ui", "release", "next"],  # spec 129: platform release; spec 192: platform next
-    "cluster": ["new", "add", "remove"],   # spec 125 adds the cluster noun after 5.0
+    "cluster": ["new", "add", "remove", "promote"],   # spec 125 adds the cluster noun after 5.0
 }
 # the 27 slash commands of 4.7 and the new command each one names (AC-114.65 gives the special targets)
 OLD_TO_NEW = {
@@ -80,7 +80,7 @@ def test_exactly_the_33_working_commands_exist_ac_114_59():  # AC-114.59  (spec 
             if "moved-to" not in fm:
                 found.setdefault(plugin, []).append(f.stem)
     assert {k: sorted(v) for k, v in found.items()} == {k: sorted(v) for k, v in WORKING.items()}
-    assert sum(len(v) for v in found.values()) == 45   # spec 192: plus /platform:next; spec 195: plus /resource:query; spec 188: plus /component:explore and /system:explore; spec 129: plus /platform:release; spec 121: plus /resource:upgrade; 32 (5.0 plus /platform:ui and /system:set), plus /cluster:new|add|remove (spec 125), plus /resource:backup|restore and /system:restore (spec 117), plus /system:autonomy (spec 124)
+    assert sum(len(v) for v in found.values()) == 46   # spec 201: plus /cluster:promote; spec 192: plus /platform:next; spec 195: plus /resource:query; spec 188: plus /component:explore and /system:explore; spec 129: plus /platform:release; spec 121: plus /resource:upgrade; 32 (5.0 plus /platform:ui and /system:set), plus /cluster:new|add|remove (spec 125), plus /resource:backup|restore and /system:restore (spec 117), plus /system:autonomy (spec 124)
     assert not (PLUGINS / "api" / "commands" / "check.md").exists()
 
 

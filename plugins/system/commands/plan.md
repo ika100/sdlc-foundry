@@ -20,7 +20,7 @@ Stop when it does not report `shape: gitops-app`, because a component repo plans
 
 ## 1. Pre-flight
 
-1. Require an empty `git status --porcelain` and an existing `scripts/plan.py` (else `/platform:update` first), so that the branch holds just the spec and plan.
+1. Require an empty `git status --porcelain` and a `plan` recipe in `devbox.json` (else `/platform:update` first), so that the branch holds just the spec and plan.
 2. `cplat spec check <id> --require approved`; on failure show the fix (`/system:spec approve <NNN>`) and stop.
 3. Switch to `docs/spec-<spec_id>` (from `main` if missing). `GITOPS_APP` = `github_org`/`project_name` from `.copier-answers.yml`.
 4. If `docs/plan/<spec_id>.md` exists and any repo is `done: true`, the system is partly built: ask before re-planning.
@@ -29,7 +29,7 @@ Stop when it does not report `shape: gitops-app`, because a component repo plans
 
 **planner** (`system:planner`) with `SPEC: docs/specs/<spec_id>/spec.md`, `PLAN_ID: <spec_id>`, `GITOPS_APP`. It writes `docs/plan/<spec_id>.md` with its `## Contract` and runs `devbox run plan-check`.
 
-Then verify yourself: `devbox run plan-check` and `devbox run -- uv run scripts/plan.py show <spec_id>`. Errors go back to the planner once, then stop and show them. A needed repo that does not exist yet: stop and show the `/component:new` command the planner suggests.
+Then verify yourself: `devbox run plan-check` and `devbox run plan show <spec_id>`. Errors go back to the planner once, then stop and show them. A needed repo that does not exist yet: stop and show the `/component:new` command the planner suggests.
 
 ## 3. Commit and hand off
 

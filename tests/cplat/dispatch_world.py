@@ -39,6 +39,7 @@ from waiting import budget, fake_prelude, wait_file, wait_for, with_prelude
 from dispatch_fake_gh import script as gh_script
 from units131_support import plan_for, spec_text
 
+CPLAT_DIR = Path(claim.__file__).resolve().parent   # scripts/cplat: the modules `restart` may leave fresh copies of
 REAL_CLAIM_GH = claim.gh            # conftest replaces `claim.gh` for every test; the world wants the real one (it reaches the fake gh)
 SLUG = "acme/shop-api"
 BASE = "dispatch/acme__shop-api"
@@ -61,7 +62,9 @@ for a in cfg.get("answers", []):
         answer = a["result"]
 out = {"type": "result", "subtype": "success", "is_error": False, "result": json.dumps(answer), "session_id": "fake",
        "total_cost_usd": 0.01}
-if not cfg.get("no_usage"):
+if cfg.get("no_usage"):
+    del out["total_cost_usd"]
+else:
     out["usage"] = cfg.get("usage") or {"input_tokens": 1000, "output_tokens": 500, "cache_read_input_tokens": 0,
                                         "cache_creation_input_tokens": 0}
 print(json.dumps(out))
@@ -172,6 +175,7 @@ MUTATING = {("issue", "edit"), ("issue", "comment"), ("issue", "close"), ("issue
 class World:
     def __init__(self, tmp_path: Path, monkeypatch):
         self.tmp, self.mp = tmp_path, monkeypatch
+        self._modules = None            # sys.modules before the first `restart`
         self.work = tmp_path / "work"
         self.work.mkdir()
         self.dir = tmp_path / "fake"
@@ -437,10 +441,24 @@ class World:
             self.mp.setattr(mod, "now", lambda: self.now, raising=False)
 
     def restart(self):
-        """A killed dispatcher keeps nothing in memory: every `dispatch*` module is imported afresh by the next command."""
+        """A killed dispatcher keeps nothing in memory: every `dispatch*` module is imported afresh by the next command.
+        `close` puts the old modules back, so a later test in the same worker patches the modules the code under test uses."""
+        if self._modules is None:
+            self._modules = dict(sys.modules)
         keep = ("dispatch_world", "dispatch_fake_gh")
         for name in [n for n in sys.modules if (n == "dispatch" or n.startswith("dispatch_")) and n not in keep]:
             del sys.modules[name]
+
+    def _restore_modules(self):
+        """Undo `restart`: drop the cplat modules imported since (they hold the fresh `dispatch*` modules), restore the old ones."""
+        if self._modules is None:
+            return
+        for name, mod in list(sys.modules.items()):
+            f = getattr(mod, "__file__", None)
+            if name not in self._modules and f and Path(f).resolve().parent == CPLAT_DIR:
+                del sys.modules[name]
+        sys.modules.update(self._modules)
+        self._modules = None
 
     def run(self, *argv, cwd=None) -> Result:
         import cplat
@@ -479,7 +497,7 @@ class World:
 
     def _settle(self, before, res):
         """The fake headless records its call when its interpreter is up: wait for the processes this command started."""
-        expected = before + len([ln for ln in res.lines if ln.startswith(("started ", "restarted "))])
+        expected = before + len([ln for ln in res.lines if ln.startswith(("started ", "restarted ")) and "(task," not in ln])   # a filler task runs no headless
         wait_for(lambda: len(self.calls()) >= expected, budget(15), what=f"{expected} headless calls")
         for call in self.calls()[before:expected]:      # the next thing a test reads is the result file the fake writes at start
             if call["result_file"] != "None":
@@ -534,6 +552,7 @@ class World:
         end = time.time() + 20                      # a thread the test left behind would call gh in the next test's world
         for t in [t for t in threading.enumerate() if t not in self._threads and t is not threading.current_thread()]:
             t.join(max(0.0, end - time.time()))
+        self._restore_modules()
 
 
 @pytest.fixture()
