@@ -1,6 +1,5 @@
-"""The released milestone of spec 158 (AC-158.4 to AC-158.7): the issues a release fixes (closing references of the PRs merged
-since the previous tag, and changelog fragments named by an issue number), one `Fixed in vX.Y.Z` comment each, the close of
-the open ones, and the `## Phase 7 complete` summary. `released` never raises; a failure becomes a `note:` line."""
+"""The release milestone (spec 158): the issues a release fixes get one `Fixed in vX.Y.Z` comment and are closed, and one call
+returns the Phase 7 summary. Never raises: a failed read or comment becomes a `note:` line (AC-158.7)."""
 from __future__ import annotations
 
 import json
@@ -13,191 +12,194 @@ import milestones as ms
 
 WHAT_MAX = 300
 FRAGMENT = re.compile(r"^(\d+)-.*\.md$")
-PLATFORM_HOW = "run `/plugin marketplace update`, then `/platform:update`."
-SEMVER_TAG = "v[0-9]*.[0-9]*.[0-9]*"
-LOCAL_LIMIT_S = 20.0
 
 
 @dataclass
 class Result:
-    lines: list[str] = field(default_factory=list)       # `issue …` and `note: …` lines, in issue order
-    issues: list[dict] = field(default_factory=list)     # {"number", "comment": posted|present|skipped, "closed": now|before|failed|no}
-    summary: str = ""                                    # `## Phase 7 complete — …`
+    lines: list[str] = field(default_factory=list)
+    issues: list[dict] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    summary: str = ""
+
+
+def git(repo: Path, args: list[str], timeout: float) -> tuple[int, str]:
+    """`git` with a timeout; (rc, stdout). Never raises; tests may replace this."""
+    try:
+        r = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError):
+        return 124, ""
+    return r.returncode, r.stdout
 
 
 def _git(repo: Path, *args: str) -> str:
-    """One local git call inside what is left of the step budget; stdout, or raises `ms._Skip(why)`."""
-    left = ms.remaining()
+    """stdout of a git call inside the step budget, or `ms._Skip`."""
+    left = min(ms.remaining(), ms.ISSUE_LIMIT_S)
     if left <= 0:
         raise ms._Skip(ms.STEP_MSG)
-    try:
-        r = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=min(left, LOCAL_LIMIT_S))
-    except subprocess.TimeoutExpired as e:
-        raise ms._Skip(f"git {args[0]} timed out") from e
-    except OSError as e:
-        raise ms._Skip(str(e)) from e
-    if r.returncode != 0:
-        raise ms._Skip(ms._first_line(r.stderr) or f"git {args[0]} exited {r.returncode}")
-    return r.stdout
+    rc, out = git(repo, list(args), left)
+    if rc != 0:
+        raise ms._Skip(f"git {args[0]} failed")
+    return out
 
 
-def _try_git(repo: Path, *args: str) -> str | None:
+def tag_exists(repo: Path, tag: str) -> bool:
+    rc, _ = git(repo, ["rev-parse", "-q", "--verify", f"refs/tags/{tag}"], ms.ISSUE_LIMIT_S)
+    return rc == 0
+
+
+def _previous(repo: Path, tag: str) -> str | None:
     try:
-        return _git(repo, *args)
+        return _git(repo, "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*.[0-9]*.[0-9]*", f"{tag}^").strip() or None
     except ms._Skip:
         return None
 
 
-def tag_exists(repo: Path, tag: str) -> bool:
-    return _try_git(repo, "rev-parse", "--verify", "-q", f"refs/tags/{tag}^{{commit}}") is not None
-
-
-def previous_tag(repo: Path, tag: str) -> str | None:
-    out = _try_git(repo, "describe", "--tags", "--abbrev=0", "--match", SEMVER_TAG, f"{tag}^")
-    return out.strip() or None if out else None
-
-
 def _fragments(repo: Path, tag: str) -> dict[int, str]:
-    """Fragments `docs/changelog.d/<N>-*.md` at the tag or its parent whose text names `#<N>`: issue -> text."""
+    """issue -> fragment text, for the `<N>-*.md` fragments at the tag or its parent that name `#<N>`."""
     found: dict[int, str] = {}
-    for ref in (tag, f"{tag}^"):
-        names = _try_git(repo, "ls-tree", "-r", "--name-only", ref, "--", "docs/changelog.d/") or ""
-        for path in names.splitlines():
+    for rev in (tag, f"{tag}^"):
+        try:
+            names = _git(repo, "ls-tree", "--name-only", rev, "docs/changelog.d/").split()
+        except ms._Skip:
+            continue
+        for path in names:
             m = FRAGMENT.match(path.rsplit("/", 1)[-1])
             if not m or int(m.group(1)) in found:
                 continue
-            n = int(m.group(1))
-            text = _try_git(repo, "show", f"{ref}:{path}") or ""
-            if re.search(rf"(?<![\w/])#{n}(?!\d)", text):
-                found[n] = text
+            try:
+                text = _git(repo, "show", f"{rev}:{path}")
+            except ms._Skip:
+                continue
+            if re.search(rf"#{m.group(1)}(?!\d)", text):
+                found[int(m.group(1))] = text
     return found
 
 
-def _has_fragment_dir(repo: Path, tag: str) -> bool:
-    return any(_try_git(repo, "ls-tree", "--name-only", ref, "docs/changelog.d/") for ref in (tag, f"{tag}^"))
-
-
-def _plain(text: str) -> str:
-    text = re.sub(r"\*\*|__|\*|`", "", text)
-    return ms._collapse(re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"\1", text))
-
-
-def _sentence(block: str) -> str:
-    block = ms._collapse(re.sub(r"^\s*(?:[-*+]|\d+\.)\s+", "", block))
-    bold = re.match(r"\*\*(.+?)\*\*", block)
-    return _plain(bold.group(1) if bold else re.split(r"(?<=[.!?])\s", block, 1)[0])
-
-
-def _cut(text: str) -> str:
-    return text if len(text) <= WHAT_MAX else text[:WHAT_MAX - 1] + "…"
-
-
-def _changelog(repo: Path, version: str) -> str:
-    """The section of the release in the changelog at origin/main (fetched first), else at the working tree's HEAD."""
-    _try_git(repo, "fetch", "-q", "origin", "main")
-    for ref in ("origin/main", "HEAD"):
-        for name in ("docs/CHANGELOG.md", "CHANGELOG.md"):
-            text = _try_git(repo, "show", f"{ref}:{name}")
-            if text is None:
-                continue
-            section: list[str] | None = None
-            for row in text.splitlines():
-                if row.startswith("## "):
-                    if section is not None:
-                        break
-                    section = [] if version in row else None
-                elif section is not None:
-                    section.append(row)
-            if section is not None:
-                return "\n".join(section)
-    return ""
+def _unemph(text: str) -> str:
+    text = re.sub(r"(\*\*|__|`)(.+?)\1", r"\2", text)
+    return re.sub(r"(?<!\w)(\*|_)(.+?)\1(?!\w)", r"\2", text)
 
 
 def _entry(section: str, n: int) -> str:
-    """The first bullet or paragraph of a changelog section that names `#<n>`, reduced to its sentence."""
-    blocks: list[list[str]] = []
-    for row in section.splitlines():
-        if not row.strip():
-            blocks.append([])
-        elif re.match(r"\s*(?:[-*+]|\d+\.)\s", row) or not blocks:
-            blocks.append([row])
+    """The first bullet or paragraph of a changelog section naming `#n`, as one sentence without emphasis."""
+    blocks: list[str] = []
+    for line in section.splitlines():
+        if line.startswith(("- ", "* ")) or not blocks or not line.strip() or not blocks[-1]:
+            blocks.append(line[2:] if line.startswith(("- ", "* ")) else line)
         else:
-            blocks[-1].append(row)
+            blocks[-1] += " " + line.strip()
     for block in blocks:
-        text = " ".join(block)
-        if re.search(rf"(?<![\w/])#{n}(?!\d)", text):
-            return _sentence(text)
+        text = ms._collapse(block)
+        if re.search(rf"#{n}(?!\d)", text):
+            bold = re.match(r"\*\*(.+?)\*\*", text)
+            first = bold.group(1) if bold else re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0]
+            return _unemph(first).strip()
     return ""
 
 
-def _merged(repo: Path, slug: str, default: str, tag: str, prev: str | None) -> list[dict]:
-    """The PRs merged into the release: the merged-PR list filtered to the commits of `prev..tag`."""
-    args = ["pr", "list", "-R", slug, "--state", "merged", "--base", default, "--limit", "300"]
-    if prev:
-        since = (_try_git(repo, "log", "-1", "--format=%cs", prev) or "").strip()
-        if since:
-            args += ["--search", f"merged:>={since}"]
-    rows = json.loads(ms._call([*args, "--json", "number,title,body,url,mergeCommit"], repo) or "[]")
-    shas = set(_git(repo, "rev-list", f"{prev}..{tag}" if prev else tag).split())
-    return sorted((r for r in rows if (r.get("mergeCommit") or {}).get("oid") in shas), key=lambda r: r["number"])
+def _changelog(repo: Path, version: str) -> str:
+    """The section of the changelog at `origin/main` that names this version."""
+    try:
+        _git(repo, "fetch", "-q", "origin", "main")
+    except ms._Skip:
+        pass
+    for name in ("docs/CHANGELOG.md", "CHANGELOG.md"):
+        try:
+            text = _git(repo, "show", f"origin/main:{name}")
+        except ms._Skip:
+            continue
+        for part in re.split(r"(?m)^(?=## )", text):
+            if part.startswith("## ") and version.lstrip("v") in part.splitlines()[0]:
+                return part
+        return ""
+    return ""
+
+
+def _cap(text: str) -> str:
+    return text if len(text) <= WHAT_MAX else text[:WHAT_MAX - 1] + "…"
 
 
 def _how(repo: Path, slug: str, version: str) -> str:
     try:
         import shapecmd
         if shapecmd.route(repo)["shape"] == "platform":
-            return PLATFORM_HOW
-    except Exception:  # noqa: BLE001 - an unknown shape is a component
+            return "run `/plugin marketplace update`, then `/platform:update`."
+    except Exception:  # noqa: BLE001 - an unknown shape gets the release page
         pass
     return f"https://github.com/{slug}/releases/tag/{version}"
 
 
-def summary_line(issues: list[dict], notes: list[str]) -> str:
-    if not issues:
-        return "## Phase 7 complete — no linked issues found"
-    now = sum(1 for i in issues if i["closed"] == "now")
-    before = sum(1 for i in issues if i["closed"] == "before")
-    skipped = f", {len(notes)} skipped" if notes else ""
-    names = ", ".join(f"#{i['number']}" for i in issues)
-    return f"## Phase 7 complete — issues closed: {names} ({now} closed, {before} already closed{skipped})"
+def _merged(repo: Path, slug: str, default: str, tag: str, previous: str | None) -> list[dict]:
+    revs = set(_git(repo, "rev-list", f"{previous}..{tag}" if previous else tag).split())
+    args = ["pr", "list", "-R", slug, "--state", "merged", "--base", default, "--limit", "300"]
+    if previous:
+        date = _git(repo, "log", "-1", "--format=%cs", previous).strip()
+        args += ["--search", f"merged:>={date}"]
+    prs = json.loads(ms._call([*args, "--json", "number,title,body,url,mergeCommit"], repo))
+    return sorted((p for p in prs if (p.get("mergeCommit") or {}).get("oid") in revs), key=lambda p: p["number"])
 
 
 def released(repo: Path, version: str, previous: str | None = None) -> Result:
-    """Comment on and close the issues linked to release `version` (`vX.Y.Z`). Never raises."""
-    version = "v" + version.lstrip("v")
     res = Result()
-    skipped = lambda why, what: res.notes.append(f"note: issue comment skipped: {what}: {why}")  # noqa: E731
+    notes: list[str] = []
+    prs: list[dict] = []
+    slug, default, why = "", "main", "no repository"
     try:
         slug, default = ms._repo(repo)
-        prev = "v" + previous.lstrip("v") if previous else previous_tag(repo, version)
-        prs: list[dict] = []
-        try:
-            prs = _merged(repo, slug, default, version, prev)
-        except Exception as e:  # noqa: BLE001 - the fragments alone still link issues
-            skipped(ms._why(e), f"merged PRs of {version}")
-        linked: dict[int, str] = {}       # issue -> the `what` fallback (closing PR's Changed or title, else the fragment)
-        for pr in prs:
-            for n in ms.closing_issues(pr.get("body") or ""):
-                linked.setdefault(n, ms.summary_lines(pr.get("body") or "", pr.get("title") or "")[0])
-        if _has_fragment_dir(repo, version):
-            for n, text in _fragments(repo, version).items():
-                linked.setdefault(n, _sentence(text))
-        section = _changelog(repo, version.lstrip("v")) if linked else ""
+        prev = previous or _previous(repo, version)
+        prs = _merged(repo, slug, default, version, prev)
+    except Exception as e:  # noqa: BLE001
+        why = ms._why(e)
+        notes.append(f"note: issue comment skipped: merged PRs of {version}: {why}")
+    fragments: dict[int, str] = {}
+    try:
+        fragments = _fragments(repo, version)
+    except Exception:  # noqa: BLE001
+        pass
+    source: dict[int, dict | None] = {}
+    for pr in prs:
+        for n in ms.closing_issues(pr.get("body", "")):
+            source.setdefault(n, pr)
+    for n in fragments:
+        source.setdefault(n, None)
+    res.lines.extend(notes)
+    if not slug:
+        for n in sorted(source):
+            res.lines.append(f"note: issue comment skipped: #{n} released: {why}")
+        res.notes = [x for x in res.lines if x.startswith("note:")]
+        res.summary = _summary({})
+        return res
+    try:
+        section = _changelog(repo, version)
         how = _how(repo, slug, version)
+    except Exception:  # noqa: BLE001
+        section, how = "", _how(repo, slug, version)
+    status: dict[int, tuple[str, str]] = {}
+    for n in sorted(source):
+        pr = source[n]
+        what = _entry(section, n)
+        if not what and pr:
+            what = ms.summary_lines(pr.get("body", ""), pr.get("title", ""))[0]
+        if not what:
+            what = ms._collapse(fragments.get(n, "")) or "see the release notes"
+        body = f"Fixed in {version}.\n\nShipped: {_cap(what)}\n\nGet it: {how}"
         closed: dict[int, str] = {}
-        how_posted: dict[int, str] = {}
-        for n in sorted(linked):
-            what = _cut(_entry(section, n) or linked[n])
-            body = f"Fixed in {version}.\n\nShipped: {what}\n\nGet it: {how}"
-            lines, got = ms.post(repo, slug, [n], "released", version, body, close=True, closed=closed)
-            res.lines += lines
-            how_posted.update(got)
-        res.notes += [x for x in res.lines if x.startswith("note:")]
-        res.issues = [{"number": n, "comment": c, "closed": closed.get(n, "no")} for n, c in sorted(how_posted.items())
-                      if c != "ignored"]
-    except Exception as e:  # noqa: BLE001 - a comment never fails its command
-        skipped(ms._why(e), f"linked issues of {version}")
-    res.lines += [n for n in res.notes if n not in res.lines]
-    res.summary = summary_line(res.issues, res.notes)
+        lines, posted = ms.post(repo, slug, [n], "released", version, body, close=True, closed=closed)
+        res.lines.extend(lines)
+        if n in posted and posted[n] != "ignored":
+            status[n] = (posted[n], closed.get(n, "no"))
+    res.notes = [x for x in res.lines if x.startswith("note:")]
+    res.issues = [{"number": n, "comment": c, "closed": k} for n, (c, k) in sorted(status.items())]
+    res.summary = _summary(status)
     return res
+
+
+def _summary(status: dict[int, tuple[str, str]]) -> str:
+    head = "## Phase 7 complete — "
+    if not status:
+        return head + "no linked issues found"
+    now = sum(1 for _, k in status.values() if k == "now")
+    before = sum(1 for _, k in status.values() if k == "before")
+    skipped = len({n for n in status if status[n][0] == "skipped" or status[n][1] == "failed"})
+    tail = f", {skipped} skipped" if skipped else ""
+    return head + f"issues closed: {', '.join(f'#{n}' for n in sorted(status))} ({now} closed, {before} already closed{tail})"
