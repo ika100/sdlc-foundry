@@ -187,6 +187,7 @@ def test_post_with_close_closes_an_open_issue_even_when_its_comment_was_present_
     gh.issue(1, comments=[marker("released", "v1.1.0")]).issue(2, state="closed")
     m.post(tmp_path, SLUG, [1, 2, 42], "released", "v1.1.0", f"Fixed in v1.1.0.\n\n{marker('released', 'v1.1.0')}", close=True)
     assert sorted(gh.closes()) == [1, 42]
+    assert gh.close_reasons() == ["completed"] * 2
 
 
 # ---------------- AC-158.7: failing, slow, refused ----------------

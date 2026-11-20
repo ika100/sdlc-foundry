@@ -120,6 +120,10 @@ class FakeGh:
     def closes(self) -> list[int]:
         return [int(a[2]) for a, _ in self.calls if a[:2] == ["issue", "close"]]
 
+    def close_reasons(self) -> list[str]:
+        """The `--reason` value of every `gh issue close` call ('' when none was passed)."""
+        return [a[a.index("--reason") + 1] if "--reason" in a else "" for a, _ in self.calls if a[:2] == ["issue", "close"]]
+
     def issue_calls(self, n) -> list[tuple[list[str], float]]:
         return [(a, t) for a, t in self.calls if re.search(rf"issues/{n}\b", " ".join(a)) or (a[:2] == ["issue", "close"] and a[2] == str(n))]
 

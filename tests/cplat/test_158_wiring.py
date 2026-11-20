@@ -82,6 +82,23 @@ def test_land_posts_the_approved_comment_after_the_merge_ac_158_2(tmp_path, monk
     assert out.index("merged") < out.index("issue #42: spec-approved comment posted")
 
 
+def test_land_budget_counts_comment_time_not_the_ci_wait_ac_158_2(tmp_path, monkeypatch, gh, capsys):  # AC-158.2
+    import pr as prmod
+    from support_158 import install
+    install(monkeypatch, gh)
+    sp, w = spec_world(tmp_path, monkeypatch, status="approved")
+
+    def slow_wait(*a, **k):
+        gh.clock.now += 500.0          # far over the 120 s comment budget, spent waiting for CI
+        return True, ["merged"]
+
+    monkeypatch.setattr(prmod, "wait", slow_wait)
+    assert run_spec(sp, tmp_path, "land") == 0
+    assert [b.rstrip().splitlines()[-1] for b in gh.posts(42)] == [marker("spec-written", SID), marker("spec-approved", SID)]
+    out = capsys.readouterr()
+    assert "comment step time limit" not in out.out + out.err
+
+
 def test_land_that_does_not_merge_says_nothing_of_approval_ac_158_2(tmp_path, monkeypatch, gh, capsys):  # AC-158.2
     import pr as prmod
     from support_158 import install

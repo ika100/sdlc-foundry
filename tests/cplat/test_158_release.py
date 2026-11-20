@@ -48,6 +48,7 @@ def test_the_release_comments_and_closes_the_linked_issues_ac_158_4(world, capsy
     assert [i["number"] for i in doc["issues"]] == [5, 6, 7, 77]
     assert doc["notes"] == []
     assert sorted(gh.closes()) == [5, 7, 77]                # the closed #6 stays closed, and is not reopened
+    assert gh.close_reasons() == ["completed"] * 3          # closed as completed
     for n in (5, 6, 7, 77):
         assert gh.posts(n)[0].startswith("Fixed in v1.1.0")
         assert body_rows(gh, n)[-1] == marker("released", "v1.1.0")
