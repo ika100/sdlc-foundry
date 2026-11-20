@@ -20,7 +20,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
 | [201-one-cluster-repo-places-environments-on](specs/201-one-cluster-repo-places-environments-on/spec.md) — One cluster repo places environments on several clusters | P1 | approved | 12 |  |
 | [204-service-java-on-spring-boot-4-cve-free](specs/204-service-java-on-spring-boot-4-cve-free/spec.md) — service-java on Spring Boot 4, CVE-free image | P1 | approved | 7 | #709 |
-| [205-acceptance-tests-are-proven-passable](specs/205-acceptance-tests-are-proven-passable/spec.md) — Acceptance tests are proven passable before they freeze | P1 | approved | 7 |  |
 | [206-headless-deny-rules-are-checked-before-a](specs/206-headless-deny-rules-are-checked-before-a/spec.md) — Headless deny rules are checked before a session starts | P1 | approved | 7 |  |
 | [207-preflight-checks-trust-and-subagent](specs/207-preflight-checks-trust-and-subagent/spec.md) — Preflight checks trust and subagent tools before a ship | P1 | approved | 8 |  |
 | [208-test-runs-leave-the-developer-s-disk-as](specs/208-test-runs-leave-the-developer-s-disk-as/spec.md) — Test runs leave the developer's disk as they found it | P1 | approved | 7 | #810, #811 |
@@ -195,6 +194,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [200-a-component-ship-runs-in-its-own-session](specs/200-a-component-ship-runs-in-its-own-session/spec.md) — A component ship runs in its own session | P1 | done | 7 |  |
 | [202-a-waiting-session-makes-no-model-calls](specs/202-a-waiting-session-makes-no-model-calls/spec.md) — A waiting session makes no model calls | P1 | done | 7 | #750 |
 | [203-the-journey-19-seams](specs/203-the-journey-19-seams/spec.md) — The journey 19 seams | P1 | done | 6 |  |
+| [205-acceptance-tests-are-proven-passable](specs/205-acceptance-tests-are-proven-passable/spec.md) — Acceptance tests are proven passable before they freeze | P1 | done | 7 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
