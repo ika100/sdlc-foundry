@@ -139,7 +139,7 @@ def test_a_refused_comment_is_a_note_and_the_exit_code_stays_0_ac_158_7(world, c
     assert doc["summary"].startswith("## Phase 7 complete — issues closed: #5, #6, #7, #77 (") and doc["summary"].endswith(", 1 skipped)")
     gh.issues[5]["post_error"] = None
     rc, out, _ = issues_cmd(repo, capsys, "--json")
-    assert rc == 0 and len(gh.posts(5)) == 1 and len(gh.posts(7)) == 1
+    assert rc == 0 and len(gh.issues[5]["comments"]) == 1 and len(gh.posts(7)) == 1
 
 
 def test_a_hanging_issue_is_cut_at_20_seconds_and_the_others_still_hear_ac_158_7(world, capsys):  # AC-158.7
