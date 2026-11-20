@@ -4,7 +4,8 @@
                                       [--journey RUN_ID] [--records FILE]
 
 <session> is a coordinator transcript without `.jsonl`; its subagents are `<session>/subagents/*.jsonl`. The repo sessions
-come from the system ship's run records. Each minute counts once: a person, agents, then waiting (journey_timeline.split).
+come from the run records of the system and component ships; tokens count every session and its subagents, each message
+once. Each minute counts once: a person, agents, then waiting (journey_timeline.split).
 """
 from __future__ import annotations
 
@@ -71,26 +72,33 @@ def _ts(e: dict) -> float | None:
         return None
 
 
-def tokens(paths: list[str], start: float, end: float) -> dict:
+ACTORS = ("coordinator", "coordinator_subagents", "repo_sessions", "repo_subagents")
+
+
+def tokens(groups: dict[str, list[str]], start: float, end: float) -> dict:
+    """Tokens of the assistant messages in [start, end], each message id once; `by_actor` splits the total per group."""
     seen: set[str] = set()
     tot: collections.Counter = collections.Counter()
     by_model: collections.Counter = collections.Counter()
-    for path in paths:
-        for e in _events(path):
-            t = _ts(e)
-            if e.get("type") != "assistant" or t is None or not start <= t <= end:
-                continue
-            m = e.get("message") or {}
-            if not m.get("id") or m["id"] in seen:
-                continue
-            seen.add(m["id"])
-            u = m.get("usage") or {}
-            for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"):
-                tot[k] += u.get(k) or 0
-            by_model[m.get("model", "?")] += u.get("output_tokens") or 0
+    by_actor = {actor: 0 for actor in groups}
+    for actor, paths in groups.items():
+        for path in paths:
+            for e in _events(path):
+                t = _ts(e)
+                if e.get("type") != "assistant" or t is None or not start <= t <= end:
+                    continue
+                m = e.get("message") or {}
+                if not m.get("id") or m["id"] in seen:
+                    continue
+                seen.add(m["id"])
+                u = m.get("usage") or {}
+                for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"):
+                    tot[k] += u.get(k) or 0
+                    by_actor[actor] += u.get(k) or 0
+                by_model[m.get("model", "?")] += u.get("output_tokens") or 0
     return {"api_calls": len(seen), "input": tot["input_tokens"], "cache_write": tot["cache_creation_input_tokens"],
             "cache_read": tot["cache_read_input_tokens"], "output": tot["output_tokens"], "total": sum(tot.values()),
-            "output_by_model": dict(by_model)}
+            "output_by_model": dict(by_model), "by_actor": by_actor}
 
 
 def questions(sessions: list[str], start: float, end: float) -> dict:
@@ -208,6 +216,9 @@ def _print_text(result: dict) -> None:
           f"{w['agents']['children']}), waiting {w['waiting_min']} ({wait})")
     print(f"tokens {t['total'] / 1e6:.1f} M in {t['api_calls']} calls: input {t['input']}, cache write {t['cache_write']},"
           f" cache read {t['cache_read']}, output {t['output']}; output by model {t['output_by_model']}")
+    a = t["by_actor"]
+    print(f"  coordinator {a['coordinator'] / 1e6:.1f} M, its subagents {a['coordinator_subagents'] / 1e6:.1f} M,"
+          f" repo sessions {a['repo_sessions'] / 1e6:.1f} M, their subagents {a['repo_subagents'] / 1e6:.1f} M")
     print(f"github {g['merged_prs']} merged PRs, {g['runs']} runs ({g['failed_runs']} failed), {g['run_min']} min run,"
           f" {g['queue_min']} min queued, CI active {g['ci_active_min']} min")
     print(f"questions {q['questions']} in {q['rounds']} rounds")
@@ -237,20 +248,20 @@ def main(argv: list[str]) -> int:
     warnings: list[str] = []
     coord_ids = [Path(s).name for s in sessions]
     tree = journey_sources.system_tree(records, coord_ids, ns.repos, start_dt, end_dt)
-    if not any(r.get("kind") == "product-ship" and journey_sources._overlaps(journey_sources._record_span(r), start_dt, end_dt)
-               for r in records):
+    if not tree:
         warnings.append(journey_sources.NO_RECORD_WARNING)
     repo_sess, missing = journey_sources.repo_sessions(tree, coord_ids, runs_usage.projects_root(), (start_dt, end_dt))
     warnings += missing
 
     threads = []
-    paths = [s + ".jsonl" for s in sessions]
+    paths: dict[str, list[str]] = {actor: [] for actor in ACTORS}
+    paths["coordinator"] = [s + ".jsonl" for s in sessions]
     n_sub = 0
     for s in sessions:
         threads.append(journey_timeline.read_thread(s + ".jsonl", role="coordinator", main=True))
         for p in _subagents(s):
             threads.append(journey_timeline.read_thread(p, role="coordinator", main=False))
-            paths.append(p)
+            paths["coordinator_subagents"].append(p)
             n_sub += 1
     no_tr = []
     for rs in repo_sess:
@@ -260,8 +271,10 @@ def main(argv: list[str]) -> int:
             continue
         base = str(rs["path"])[:-len(".jsonl")]
         threads.append(journey_timeline.read_thread(rs["path"], role="child", main=False))
+        paths["repo_sessions"].append(str(rs["path"]))
         for p in _subagents(base):
             threads.append(journey_timeline.read_thread(p, role="child", main=False))
+            paths["repo_subagents"].append(p)
             n_sub += 1
     kinds = [(_epoch(a), _epoch(b), k) for a, b, k in journey_sources.record_evidence(records, tree, ns.repos, start_dt, end_dt)]
     runs_found, action_spans = journey_sources.actions(ns.repos, start_dt, end_dt)
@@ -281,16 +294,18 @@ def main(argv: list[str]) -> int:
         for label, a, b in _steps(ns.steps, start, end):
             tok = tokens(paths, a, b)
             rows.append({"step": label, "started_at": _iso(a), "ended_at": _iso(b),
-                         **journey_timeline.split(threads, evidence, a, b), "tokens": tok["total"], "api_calls": tok["api_calls"]})
+                         **journey_timeline.split(threads, evidence, a, b), "tokens": tok["total"], "api_calls": tok["api_calls"],
+                         "tokens_by_actor": tok["by_actor"]})
         result["steps"] = rows
         if rows:
             first = rows[0]
             a = journey_sources.parse_ts(first["started_at"])
             tot = tokens(paths, _epoch(a), end)
             result["steps_total"] = {**journey_timeline.split(threads, evidence, _epoch(a), end), "tokens": tot["total"],
-                                     "api_calls": tot["api_calls"]}
+                                     "api_calls": tot["api_calls"], "tokens_by_actor": tot["by_actor"]}
         else:
-            result["steps_total"] = {**journey_timeline.split(threads, evidence, start, start), "tokens": 0, "api_calls": 0}
+            result["steps_total"] = {**journey_timeline.split(threads, evidence, start, start), "tokens": 0, "api_calls": 0,
+                                     "tokens_by_actor": {actor: 0 for actor in ACTORS}}
     message = None
     if record is not None:
         warning = runs.followup(ns.journey, "journey_split", {"split": _journey_split(record, threads, evidence)})
