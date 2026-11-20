@@ -585,6 +585,7 @@ def test_a_script_environment_in_the_wheel_cache_is_not_seeded_and_is_purged_ac_
     assert p.returncode == 0, p.stdout + p.stderr
     assert seeded(sb) == sorted(entry_files("aaa")), "the wheel is seeded, the environment is not"
     sb.wait_removed()
+    sb.wait_gone(sb.W, ".purge-*")   # the purge of W has its own detached remover
     assert w_files(sb) == sorted(entry_files("aaa"))
     assert not list((sb.W / "archive-v0").glob("*venv*")) and not list(sb.W.glob(".purge-*"))
 
