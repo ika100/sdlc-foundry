@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /shared:report-issue is /issue:report. Runs nothing."
 moved-to: "/issue:report"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/shared:report-issue` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

@@ -63,6 +63,19 @@ def _flaky(cwd: Path, summary) -> bool:
         return False
 
 
+def _record_ci(cwd: Path, result: str) -> None:
+    """#869: the whole CI gate's result is the run's security gate and the budget's `ci` stage; recorded here, so the
+    build makes no `runs gate security` and `budget stage ci` calls of its own. Never changes the result."""
+    try:
+        import budget
+        import runs
+        if runs.record_gate(cwd, "security", result):
+            budget.record_stage(cwd.resolve(), "ci", result)
+            print(f"recorded: gate security {result}, stage ci {result}")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 USAGE = ("usage: cplat quiet [--raw] <devbox-script> | cplat quiet [--raw] test-fast [--repeat N | --red] -- <test args>   "
          "(a key of shell.scripts in ./devbox.json; only test-fast takes arguments, after --)")
 
@@ -137,6 +150,8 @@ def main(argv: list[str]) -> int:
             rc = subprocess.run(cmd, cwd=cwd, stdout=fh, stderr=subprocess.STDOUT, env=repo_env()).returncode
     lines = log.read_text(errors="replace").splitlines()
     nonempty = [ln for ln in lines if ln.strip()]
+    if script == "ci" and not raw:
+        _record_ci(cwd, "passed" if rc == 0 else "failed")
     if rc == 0:
         print(f"ok: devbox run {script} ({len(lines)} lines, log: {log})")
         if nonempty:

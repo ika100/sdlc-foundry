@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /shared:triage is /issue:triage. Runs nothing."
 moved-to: "/issue:triage"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/shared:triage` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

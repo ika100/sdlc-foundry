@@ -251,3 +251,43 @@ def test_a_repo_without_pull_request_workflows_is_green_on_its_checks_787(queued
     queued.runs = [[CODEQL_RUN]]
     ok, lines = prmod.wait(tmp_path, PR, True, 600, 10, 300)
     assert ok and queued.merges == [PR]
+
+
+class QueuedConflictGh(QueuedGh, ConflictGh):
+    """The run list of the head commit plus the PR's mergeable state (#863)."""
+
+
+@pytest.fixture()
+def qconflict(fake, monkeypatch):  # noqa: F811
+    g = QueuedConflictGh()
+    g.said, g.merges = fake.said, fake.merges
+    g.heads = ["abc123"]
+    monkeypatch.setattr(ship, "gh", g)
+    return g
+
+
+def test_a_missing_ci_run_on_a_conflicting_pr_is_a_conflict_not_a_runner_problem_863(qconflict, tmp_path):   # #863
+    pr_workflow(tmp_path)
+    qconflict.checks = [[_run_check("CodeQL", "pass", 41)]]
+    qconflict.runs = [[CODEQL_RUN]]
+    with pytest.raises(ship.Conflicting, match="conflicts with its base branch"):
+        prmod.wait(tmp_path, PR, False, 3600, 10, 300)
+    assert qconflict.merges == []
+
+
+def test_a_missing_ci_run_on_a_conflicting_pr_goes_to_the_land_conflict_path_863(qconflict, tmp_path):   # #863
+    pr_workflow(tmp_path)
+    qconflict.checks = [[_run_check("CodeQL", "pass", 41)]]
+    qconflict.runs = [[CODEQL_RUN]]
+    with pytest.raises(land_merge.Unresolvable, match="conflicts with main"):
+        prmod.wait(tmp_path, PR, True, 3600, 10, 300)
+    assert qconflict.merges == []
+
+
+def test_a_missing_ci_run_on_a_mergeable_pr_still_blames_the_runner_863(qconflict, tmp_path):   # #863
+    pr_workflow(tmp_path)
+    qconflict.mergeable = "MERGEABLE"
+    qconflict.checks = [[_run_check("CodeQL", "pass", 41)]]
+    qconflict.runs = [[CODEQL_RUN]]
+    with pytest.raises(ship.NoChecks, match="no pull_request workflow run"):
+        prmod.wait(tmp_path, PR, True, 3600, 10, 300)

@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /shared:doctor is /platform:doctor. Runs nothing."
 moved-to: "/platform:doctor"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/shared:doctor` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

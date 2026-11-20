@@ -55,7 +55,9 @@ bash tests/e2e/run.sh                                                       # wh
 E2E_PART=<part> bash tests/e2e/run.sh                                       # one part only: core, scaling or backups (as a PR runs it)
 ```
 
-`bash scripts/ci-local.sh` (or `devbox run ci-local`; add `--render` to render every template) runs the first six in one go. The same checks are devbox scripts for the `/component:*` gates: `devbox run test-fast` (cplat tests), `quality` (static checks, no tests), `ci` (= `ci-local.sh`), `lint-fix` (no-op, no formatter here).
+`bash scripts/ci-local.sh` (or `devbox run ci-local`; add `--render` to render every template, `--full` to run every cplat test) runs the first six in one go. The same checks are devbox scripts for the `/component:*` gates: `devbox run test-fast` (cplat tests), `quality` (static checks, no tests), `ci` (= `ci-local.sh`), `lint-fix` (no-op, no formatter here).
+
+Locally, `devbox run test-fast` and `ci-local.sh` run only the cplat test files your change can affect, read from a dependency map that the last full local run recorded: what each test file imported, opened, listed or handed to a subprocess, also inside the cplat processes it started. The first line says how many files it picked and why; without a map, after a change to the suite's setup, or for changed code no test reads, it runs everything. `devbox run test-fast --full` (or `devbox run test`) runs every test and records a new map; `devbox run test-fast <tests or options>` runs exactly what you give it. CI always runs every test ([ADR-123](docs/adr/123-local-test-runs-select-by-recorded-dependencies.md)).
 
 CI runs the same checks plus a smoke test per template (generated repos must pass their own `quality` and `test` recipes). Pull requests that only touch documentation run a reduced set of jobs.
 

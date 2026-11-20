@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /gitops:promote is /instance:promote. Runs nothing."
 moved-to: "/instance:promote"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/gitops:promote` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

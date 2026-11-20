@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /gitops:compose is /component:add. Runs nothing."
 moved-to: "/component:add"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/gitops:compose` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

@@ -3,8 +3,8 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "2f77b52e7946c1dcccaaf2cc0acf98046590abd3"
-  prompt_bytes: 361448
+  commit: "4165ff426bfe20634d5d241fb3a7600b1b56ae4f"
+  prompt_bytes: 362326
   history:                       # newest last; written only by `cplat platform rules rebaseline`
     - date: "2026-11-12"
       old: 345859
@@ -56,6 +56,11 @@ baseline:
       new: 361448
       reason: "spec 193 merged with main (157, 205, #845); quick-task and build benchmarks passed on todo-api@136a96f"
       benchmark_runs: [20261120T113430Z-5cd7aece, 20261120T113628Z-407aa4fa]
+    - date: "2026-11-20"
+      old: 361448
+      new: 362326
+      reason: "#869: the growth is the tombstones' disable-model-invocation line (never loaded by a session) and a short note on test-diff red; benchmarks pass with fewer tokens"
+      benchmark_runs: [20261120T192907Z-807b0214, 20261120T193053Z-787ee3c0]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff
