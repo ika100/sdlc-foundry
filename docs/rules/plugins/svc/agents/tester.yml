@@ -26,7 +26,7 @@ rules:
     class: experience
     source: "#499"
   - id: R8
-    text: "never changes or deletes data it did not create, so that it is repeatable against a shared environment"
+    text: "never changes or deletes data it did not create, so that it is repeatable"
     class: practice
   - id: R9
     text: "For every `(smoke)` criterion also write a read-only check where the behaviour can be observed without writing"

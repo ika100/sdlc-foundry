@@ -13,7 +13,9 @@ Run the phases in order, printing `## Phase N complete — <one line>` after eac
 
 One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`. `unsupported` or no shape → stop.
 
-- A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since the user declared it.## Phase 0 — Pre-flight
+- A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since the user declared it.
+
+## Phase 0 — Pre-flight
 
 0. `cplat platform runs begin build --spec <id>`. A stop that needs the user runs `cplat platform runs end --outcome escalated --reason '<why>'` first (`failed` on failure); the end `--outcome done`. After every subagent: `cplat platform runs agent spawned <role> [--model-id <id>]`.
 1. `git status --porcelain`: dirty on a spec whose status is not `building` → stop: commit or stash first (clean tree). Dirty on a `building` spec → read `${CLAUDE_PLUGIN_ROOT}/references/build-resume.md` and follow it (`git restore --staged`; `wip(<task-id>): interrupted`).
@@ -26,14 +28,15 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 `cplat platform runs phase build:tests`; skip if `reviewed acceptance tests for` is committed, since the tests are frozen; only `cplat spec trace <id>` passing → start at the review.
 
-**tester** (`agents.tester`): "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion in full, the non-goals), `Contract` (`design.md`'s contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests, confirms they fail because the behaviour is missing, and commits only test files. Then:
+**tester** (`agents.tester`): "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion in full, the non-goals), `Contract` (`design.md`'s contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests (a `(smoke)` one also a smoke test, base URL only), confirms they fail because the behaviour is missing, and commits only test files. Then:
 - `cplat spec trace <id>` must pass; else the missing ids go back to the tester once, so that every criterion has a red test.
 - `cplat quiet test-fast`: the new tests fail, nothing else newly fails.
 - After each tester round (test-review too), run the line `cplat component build tests <id> --red` prints. Each `test error` or `passes` line goes back: "**Acceptance mode.** Change only these tests so that each fails because the behaviour is missing: <lines>". After 2 rounds, lines left → escalate `--cause code`: `wrong failures after 2 tester rounds: <node id> (<class>: <exception line>); …`. `none: …` → an erroring test goes back.
 - Trace files `test-fast` does not run (`e2e/` specs): `cplat quiet e2e` once; one failing before any assertion about the missing behaviour goes back as a wrong failure.
 - One call: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...`.
 - `cplat spec trace <id> --json` → `TRACE` (criterion → test files).
-- **reviewer** in `**Test-review mode.**` (criteria, `Contract`, `TRACE`) reports `TEST FINDINGS:`; the tester gets them once: "**Acceptance mode.** Resolve only these test-review findings, changing only the tests named, so that nothing else moves: <findings>. Commit as `test(<number>): resolve test-review findings for <id>`. Reply `UNRESOLVED: <finding> — <why>` per line, or `UNRESOLVED: none`." A failing `cplat spec trace <id>` after it → `git revert --no-edit HEAD`, all unresolved, since a broken trace leaves a criterion untested.- `cplat quiet lint-fix`; commit `test(<slug>): lint-fix acceptance tests for <id>`; `cplat component build reviewed <id> --findings <n> [--unresolved '<test> | <AC> | <what>']...`. `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`.
+- **reviewer** in `**Test-review mode.**` (criteria, `Contract`, `TRACE`) reports `TEST FINDINGS:`; the tester gets them once: "**Acceptance mode.** Resolve only these test-review findings, changing only the tests named, so that nothing else moves: <findings>. Commit as `test(<number>): resolve test-review findings for <id>`. Reply `UNRESOLVED: <finding> — <why>` per line, or `UNRESOLVED: none`." A failing `cplat spec trace <id>` after it → `git revert --no-edit HEAD`, all unresolved, since a broken trace leaves a criterion untested. No second review.
+- `cplat quiet lint-fix`; commit `test(<slug>): lint-fix acceptance tests for <id>`; `cplat component build reviewed <id> --findings <n> [--unresolved '<test> | <AC> | <what>']...`. `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`.
 
 ## Phase 2 — Implement (parallel via git worktrees)
 
@@ -44,7 +47,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 ### 2.2 Worktree probe
 
-Before the first parallel batch, a probe Agent in a worktree reports `git rev-parse HEAD`. Error → `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md`. Else `cplat platform runs agent execution parallel`; a HEAD other than `$FEATURE_HEAD` is fine (#501): coders reset to it, so that a merge brings only its commits.
+Before the first parallel batch, a probe Agent in a worktree reports `git rev-parse HEAD`. Error → `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md`. Else `cplat platform runs agent execution parallel`; a HEAD other than `$FEATURE_HEAD` (no `worktree.baseRef: "head"`) is fine (#501): coders reset to it, so that a merge brings only its commits.
 
 ### 2.3 Coder prompt (every task)
 
