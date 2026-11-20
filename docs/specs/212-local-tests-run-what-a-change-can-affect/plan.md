@@ -20,7 +20,7 @@ tasks:
     done: true
   - id: t3
     title: "Tests, measurements, ADR, guides and changelog"
-    files: [tests/cplat/test_212_select.py, tests/cplat/support_212.py, docs/adr/123-local-test-runs-select-by-recorded-dependencies.md, docs/adr/README.md, CONTRIBUTING.md, CLAUDE.md, docs/changelog.d/212-local-tests-select.added.md]
+    files: [tests/cplat/test_212_select.py, tests/cplat/support_212.py, docs/adr/123-local-test-runs-select-by-recorded-dependencies.md, docs/adr/README.md, CONTRIBUTING.md, CLAUDE.md, docs/changelog.d/881-local-tests-select.added.md]
     covers: [AC-212.1, AC-212.2, AC-212.3, AC-212.4, AC-212.5, AC-212.6, AC-212.7, AC-212.8, AC-212.9]
     parallel_safe: false
     depends_on: [t2]
