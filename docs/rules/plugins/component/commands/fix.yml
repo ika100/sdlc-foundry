@@ -13,6 +13,7 @@ rules:
     text: "run every tool through `devbox run <script>`, never directly, so that versions and flags match CI."
     class: practice
   - id: R5
-    text: "never file an issue without the user's OK, because the platform repository is public."
+    text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself"
     class: hard
     hard: issue-filing-needs-consent
+    source: "ADR-033, ADR-122"

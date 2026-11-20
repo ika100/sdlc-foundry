@@ -52,6 +52,7 @@ tasks:
     covers: [AC-158.8]
     parallel_safe: false
     depends_on: [t6]
+    done: true
 human_steps:
   - Before the next platform release, run the two benchmarks the eval gate asks for (quick-task and build), because t6 and t7 change command prompts.
 ---
