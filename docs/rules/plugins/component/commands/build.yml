@@ -4,7 +4,7 @@ rules:
     class: not a rule
     source: spec 131
   - id: R2
-    text: "never ask for the shape."
+    text: "never ask for the shape, since the user declared it"
     class: practice
   - id: R3
     text: "`cplat spec check <id> --require approved` must pass and `docs/specs/<spec_id>/plan.md` exist"
@@ -177,3 +177,7 @@ rules:
     text: "`cplat plan merge <task> tM --reason '<why>'`, go on with tM without asking or escalating, because the plan's split was a mistake, not a decision."
     class: experience
     source: "#681"
+  - id: R46
+    text: "Change only these tests so that each fails because the behaviour is missing: <lines>"
+    class: practice
+    source: spec 205
