@@ -8,8 +8,10 @@
   cplat dispatch inbox [--json]                  what needs you in this repo (`cplat needs` in repo scope)
   cplat dispatch pause [--drain] | resume [<item>] | slots <N> | prioritize <item> | skip <item> --reason <text>
 
+  cplat dispatch sensor install | remove         record the plan's two usage windows from every interactive session (spec 210)
+
 Every verb takes `--repo DIR` (default `.`). The policy is `.platform/dispatch.yml` (see docs/dispatch.md). `land` is the hidden verb
-the dispatcher spawns for a fix unit with an open pull request.
+the dispatcher spawns for a fix unit with an open pull request, `task <unit>` the one it spawns for a filler task (spec 210).
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ from pathlib import Path
 import dispatch_cycle
 import dispatch_items
 import dispatch_policy
+import dispatch_sensor
 import dispatch_state as ds
 import dispatch_units as du
 import dispatch_view
@@ -218,8 +221,17 @@ def _skip(repo: Path, item: str, reason: str) -> int:
     return 0
 
 
+def _sensor(action: str) -> int:
+    _out(dispatch_sensor.install() if action == "install" else dispatch_sensor.remove())
+    return 0
+
+
 def _land(repo: Path, unit: str) -> int:
     return du.land(repo, ds.slug_of(repo), unit)
+
+
+def _task(repo: Path, unit: str) -> int:
+    return du.run_task(repo, ds.slug_of(repo), unit)
 
 
 # ---------------- the command line ----------------
@@ -251,9 +263,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = verb("skip", "hold an item until `resume <item>`")
     s.add_argument("item")
     s.add_argument("--reason", required=True, metavar="TEXT")
+    verb("sensor", "install or remove the usage status line sensor", json_flag=True).add_argument(
+        "action", choices=("install", "remove"))
     lnd = sub.add_parser("land", help=argparse.SUPPRESS)       # hidden: spawned by the dispatcher
     lnd.add_argument("unit")
     lnd.add_argument("--repo", default=".", metavar="DIR")
+    tsk = sub.add_parser("task", help=argparse.SUPPRESS)       # hidden: spawned by the dispatcher for a filler task
+    tsk.add_argument("unit")
+    tsk.add_argument("--repo", default=".", metavar="DIR")
     return p
 
 
@@ -272,6 +289,8 @@ def main(argv: list[str]) -> int:
 def _run(ns: argparse.Namespace) -> int:
     repo = Path(ns.repo).resolve()
     v = ns.verb
+    if v == "sensor":
+        return _sensor(ns.action)
     if v == "start":
         return _start(repo, ns.once)
     if v == "plan":
@@ -294,6 +313,8 @@ def _run(ns: argparse.Namespace) -> int:
         return _prioritize(repo, ns.item)
     if v == "skip":
         return _skip(repo, ns.item, ns.reason)
+    if v == "task":
+        return _task(repo, ns.unit)
     return _land(repo, ns.unit)
 
 

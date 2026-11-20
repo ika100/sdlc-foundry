@@ -7,6 +7,7 @@ the environment of the test. The module does not exist yet, so it is imported in
 import importlib
 import json
 import os
+import platform
 import stat
 import subprocess
 from pathlib import Path
@@ -215,7 +216,10 @@ def test_gh_is_not_logged_in(world, monkeypatch):  # AC-131.11
     monkeypatch.setenv("FAKE_GH_AUTH", "fail")
     f = check(world)
     assert f.category == "gh-auth"
-    assert f.line() == "preflight failed: gh-auth: gh is not logged in for github.com: gh auth login --hostname github.com"
+    # spec 207 (AC-207.7) changed the text on purpose: the login is tried three times, and macOS may have a locked keychain
+    suffix = "; if gh is logged in, unlock the login keychain" if platform.system() == "Darwin" else ""
+    assert f.line() == ("preflight failed: gh-auth: gh is not logged in for github.com (3 tries over 45 s): "
+                        f"gh auth login --hostname github.com{suffix}")
 
 
 def test_the_account_cannot_push(world, monkeypatch):  # AC-131.11

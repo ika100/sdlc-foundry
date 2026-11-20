@@ -4,6 +4,7 @@
   order(ready, priority, pins) -> [Verdict]               pins first, then the policy's rules, each only breaking a tie
   text(verdict) -> str                                    `ready`, `held: <reason> (<detail>)`, `held: skipped: <text>`
   hold_ship_busy(verdict, unit) / hold_stale(verdict, evidence) -> Verdict     applied while slots are assigned
+  hold_filler(verdict) -> Verdict                         `filler only` (spec 210); a draft of a retro issue is `needs-approval`
   ship_busy_unit(units) -> str | None                     the ship unit that is not ended, if any
 
 Pure functions over the snapshot (`dispatch_backlog.Snapshot`), the state (`dispatch_state.load`) and the unit files
@@ -26,7 +27,8 @@ from dispatch_backlog import Candidate, Snapshot
 
 REASONS = ("skipped", "needs-decision", "stuck", "claimed", "blocked", "duplicate", "needs-spec", "needs-approval", "ship-busy", "stale")
 ENDED = ("done", "escalated", "stuck")
-BLOCKED = re.compile(r"(?i)\b(?:blocked by|depends on)\s+#(\d+)")
+RETRO_TITLE = re.compile(r"^Weekly retro \d{4}-W\d{2}$")
+BLOCKED =re.compile(r"(?i)\b(?:blocked by|depends on)\s+#(\d+)")
 
 
 @dataclass
@@ -67,6 +69,11 @@ def _held(v: Verdict, reason: str, detail: str | None) -> Verdict:
 def hold_ship_busy(v: Verdict, unit: str | None) -> Verdict:
     """The candidate waits for the ship unit that runs, or for an earlier ship candidate that takes the slot in this cycle."""
     return _held(v, "ship-busy", unit)
+
+
+def hold_filler(v: Verdict) -> Verdict:
+    """Mode plan, outside the filler window: a filler-only candidate waits for it."""
+    return _held(v, "filler only", None)
 
 
 def hold_stale(v: Verdict, evidence: str | None) -> Verdict:
@@ -224,6 +231,14 @@ def _approval(c: Candidate, policy, shape: str | None) -> tuple[str, str | None,
     return "ready", None, "self"
 
 
+def _retro_draft(c: Candidate, snap: Snapshot, state: dict) -> bool:
+    """A draft that tracks a `Weekly retro` issue, or that the dispatcher's own draft unit opened: only the user approves it."""
+    drafted = (state.get("filler") or {}).get("drafted") or {}
+    if any(d.get("branch") == _branch(c) for d in drafted.values() if isinstance(d, dict)):
+        return True
+    return any(RETRO_TITLE.match(str(r.get("title") or "")) for r in _issue_rows(c, snap))
+
+
 def _spec_hold(c: Candidate, state: dict, snap: Snapshot, units: list[dict]) -> tuple[str, str] | None:
     """`needs-decision` / `stuck` of an item: from the state (a spec without issue) or from the label of its tracked issues."""
     mine = _units_of(units, c.key)
@@ -288,6 +303,9 @@ def judge(cands: list[Candidate], snap: Snapshot, state: dict, units: list[dict]
             continue
         if _needs_spec(c):
             out.append(_held(v, "needs-spec", None))
+            continue
+        if c.kind == "ship" and c.status == "draft" and _retro_draft(c, snap, state):
+            out.append(_held(v, "needs-approval", "a retro draft: approve it yourself"))
             continue
         if c.kind == "ship" and c.status == "draft":
             verdict, detail, approve = _approval(c, policy, shape)

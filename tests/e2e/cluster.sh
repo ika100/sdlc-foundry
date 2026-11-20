@@ -9,7 +9,10 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+# shellcheck source=SCRIPTDIR/lib/uv-cache.sh
+. "$root/tests/e2e/lib/uv-cache.sh"   # a throwaway uv cache per script run (spec 208)
 work="${E2E_WORK:-$(mktemp -d)}"
+e2e_uv_cache_start
 cluster=e2e-cluster-local
 export PATH="$PATH:$HOME/.local/bin"
 fail() { echo "E2E FAIL: $*" >&2; exit 1; }
@@ -21,6 +24,7 @@ cleanup() {
     (cd "$work/alpha-gitops" 2>/dev/null && LOCAL_CLUSTER=$cluster WITH_ARGO=0 bash scripts/local-cluster.sh down) >/dev/null 2>&1 || true
   fi
   [ $rc -eq 0 ] && echo && echo "E2E CLUSTER OK" || echo "E2E CLUSTER FAILED (work dir: $work)"
+  e2e_uv_cache_end
   exit $rc
 }
 trap cleanup EXIT

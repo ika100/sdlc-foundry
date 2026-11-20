@@ -195,6 +195,7 @@ def drive(repo: Path, command: str, specs: list[str], prompt: str, make_cmd: Cal
             elif commit and unit == "verification":
                 budget.end_grace(rid)
             if hit is not None:
+                usagelimit.record(hit, ended)
                 budget.count_invocation(rid, -1)
                 sessions -= 1
                 state["sessions"] = sessions

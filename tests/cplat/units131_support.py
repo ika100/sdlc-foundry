@@ -99,6 +99,10 @@ def plan_text(repo, tasks=None, acs=None) -> str:
 FAKE_CLAUDE = r'''#!%(py)s
 %(prelude)s
 import json, os, pathlib, subprocess, sys
+if "--max-turns" in sys.argv and "Reply with the single word ok." in sys.argv:    # spec 207: the preflight's model check call
+    print(json.dumps({"type": "result", "is_error": False, "result": "ok",
+                      "usage": {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}))
+    sys.exit(0)
 sys.path.insert(0, %(scripts)r)
 W = pathlib.Path(%(world)r)
 cfg = json.loads((W / "behave.json").read_text())

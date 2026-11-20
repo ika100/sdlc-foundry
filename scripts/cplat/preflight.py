@@ -9,6 +9,7 @@ import os
 import platform
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +18,7 @@ import denyrules
 from denyrules import refused_rules
 
 TIMEOUT = 30
+GH_LOGIN_WAITS = (15, 30)          # seconds before the 2nd and 3rd try of a gh login that reports "not logged in"
 LAND_COMMANDS = ("/component:ship", "/system:ship")
 MINIMUM = ("Bash(cplat *)", "Read(~/.claude/plugins/**)")     # what a session needs first (spec 171)
 
@@ -250,14 +252,26 @@ def _offline(err: str) -> str | None:
     return err.splitlines()[-1] if hit else None
 
 
+def sleep(seconds: float) -> None:
+    """The wait between gh login tries; the tests replace it."""
+    time.sleep(seconds)
+
+
 def _auth(repo: Path) -> Failure | None:
     host = _origin(repo)[0]
-    code, _, err = _retried(["auth", "status", "--hostname", host], repo)
-    if code == 0:
-        return None
-    if (why := _offline(err)):          # a dropped network once read as "not logged in" and escalated a run
-        return Failure("gh-auth", f"could not reach {host} to check the gh login ({why}): check the network, then run again")
-    return Failure("gh-auth", f"gh is not logged in for {host}: gh auth login --hostname {host}")
+    for n, wait in enumerate((*GH_LOGIN_WAITS, None), start=1):
+        code, _, err = _retried(["auth", "status", "--hostname", host], repo)
+        if code == 0:
+            if n > 1:
+                print(f"preflight: gh login answered on try {n}", flush=True)
+            return None
+        if (why := _offline(err)):          # a dropped network once read as "not logged in" and escalated a run
+            return Failure("gh-auth", f"could not reach {host} to check the gh login ({why}): check the network, then run again")
+        if wait is not None:                # a locked keychain makes gh fail for a moment
+            sleep(wait)
+    hint = "; if gh is logged in, unlock the login keychain" if platform.system() == "Darwin" else ""
+    return Failure("gh-auth", f"gh is not logged in for {host} ({len(GH_LOGIN_WAITS) + 1} tries over "
+                              f"{sum(GH_LOGIN_WAITS)} s): gh auth login --hostname {host}{hint}")
 
 
 def _push_access(repo: Path, slug: str) -> Failure | None:
@@ -274,9 +288,53 @@ def _push_access(repo: Path, slug: str) -> Failure | None:
     return Failure("no-push-access", f"{user} cannot push to {slug}: ask for write access to it")
 
 
-def check(repo: Path, command: str, specs: list[str],
-          targets: list[tuple[Path, str]] | None = None, deny: list[str] | None = None) -> Failure | None:
-    """The checks in order, the refused rules first (spec 206); the first failure wins. `targets` are (clone, slug) pairs besides the repo."""
+@dataclass
+class RunContext:
+    """What the new checks (spec 207) need of an unattended run; without one only the spec-131 checks run."""
+    allow: list[str]
+    deny: list[str]
+    plugin_dirs: list[str]
+    add_dirs: list[str]
+    model: str | None
+    run_id: str | None
+
+    @classmethod
+    def from_env(cls, repo: Path) -> "RunContext":
+        try:
+            allow = [r for r in json.loads(os.environ.get("CPLAT_RUN_ALLOWLIST") or "[]") if isinstance(r, str)]
+        except ValueError:
+            allow = []
+        dirs = [d for d in (os.environ.get("CPLAT_PLUGIN_DIRS") or "").split(os.pathsep) if d]
+        return cls(allow=allow, deny=refused_rules(default_branch(Path(repo))), plugin_dirs=dirs, add_dirs=[], model=None, run_id=None)
+
+
+def _new_checks(folders: list[Path], command: str, specs: list[str], run: RunContext) -> tuple[Failure | None, dict[Path, list]]:
+    """AC-207.1, then .2, then .3 for each folder (spec 207); the agents of each folder are collected once."""
+    import preflight_agents
+    import preflight_rules
+    import preflight_trust
+    for f in folders:
+        detail, line = preflight_trust.check(f, run.plugin_dirs)
+        if detail:
+            return Failure("untrusted-folder", detail), {}
+        if line:
+            print(line, flush=True)
+    agents = {f: [preflight_agents.resolve(f, role, type_, run.plugin_dirs) for role, type_ in preflight_agents.roles(f, command)]
+              for f in folders}
+    for f in folders:
+        if agents[f] and (detail := preflight_rules.check(f, specs if f == folders[0] else [], agents[f], run.allow, run.deny)):
+            return Failure("subagent-tools", detail), agents
+    for f in folders:
+        if (detail := preflight_agents.check_definitions(agents[f])):
+            return Failure("subagent-tools", detail), agents
+    return None, agents
+
+
+def check(repo: Path, command: str, specs: list[str], targets: list[tuple[Path, str]] | None = None,
+          deny: list[str] | None = None, run: RunContext | None = None) -> Failure | None:
+    """The checks in order, the refused rules first (spec 206); the first failure wins. `targets` are (clone, slug) pairs besides the repo.
+
+    With a `run` (spec 207) the trust, subagent tools, worktree and model checks follow the spec-131 ones."""
     repo = Path(repo)
     branches = branches_of(command, specs)
     default = default_branch(repo)
@@ -297,10 +355,31 @@ def check(repo: Path, command: str, specs: list[str],
     for path, slug in clones:
         if (f := _push_access(path, slug)):
             return f
+    if run is None:
+        return None
+    import preflight_agents
+    import preflight_probe
+    failure, agents = _new_checks([path for path, _ in clones], command, specs, run)
+    if failure:
+        return failure
+    if command in ("/component:build", "/component:ship") and (detail := preflight_probe.check_worktree(repo, run.add_dirs)):
+        return Failure("agent-worktree", detail)
+    models = preflight_agents.models(agents, run.model)
+    if (detail := preflight_agents.check_models(models, repo)):
+        return Failure("model-unreachable", detail)
+    if (detail := preflight_probe.check_models(models, run.run_id)):
+        return Failure("model-unreachable", detail)
     return None
 
 
-def check_repo(clone: Path, slug: str) -> Failure | None:
-    """The checks of a repo started later by `/system:ship`: allowlist, settings and push access."""
+def check_repo(clone: Path, slug: str, run: RunContext | None = None) -> Failure | None:
+    """The checks of a repo started later by `/system:ship`: allowlist, settings and push access; in a headless session also
+    trust and subagent tools (spec 207), with no probe and no model call."""
     clone = Path(clone)
-    return (_no_allowlist(clone) or _blocked(clone, "/system:ship", ["feature/*"]) or _push_access(clone, slug))
+    if (f := _no_allowlist(clone) or _blocked(clone, "/system:ship", ["feature/*"]) or _push_access(clone, slug)):
+        return f
+    if run is None and os.environ.get("CPLAT_HEADLESS") == "1":
+        run = RunContext.from_env(clone)
+    if run is None:
+        return None
+    return _new_checks([clone], "/system:ship", [], run)[0]
