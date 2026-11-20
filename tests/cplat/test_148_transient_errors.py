@@ -252,16 +252,19 @@ def test_a_root_app_with_a_comparison_error_gets_one_hard_refresh_ac_148_5(w):  
     stuck = {"shop-root": app(w.old, conditions=[err]), "addon-postgres-dev": app(w.head)}
     w.argo.polls = [stuck] * 6 + [{**w.ready(), "shop-root": app(w.head)}]
     rc, out, _, _ = w.wait("--env", "dev", "--timeout", "300")
-    assert rc == 0 and w.argo.refreshed == ["shop-root"]
+    assert rc == 0 and w.argo.refreshed == ["shop-root", "shop-root"]     # at the start and once more after 45 s (#867)
     assert any("asked Argo CD for a hard refresh of shop-root" in ln for ln in out)
 
 
-def test_an_app_behind_the_revision_is_refreshed_once_after_45_seconds_ac_148_5(w):  # AC-148.5
+def test_an_app_behind_the_revision_is_refreshed_at_the_start_and_once_after_45_seconds_ac_148_5(w):  # AC-148.5, #867
     behind = {"todo-api-dev": app(w.old, images=[w.image]), "addon-postgres-dev": app(w.head)}
     w.argo.polls = [behind] * 12 + [w.ready()]
     rc, out, _, _ = w.wait("--env", "dev", "--timeout", "300")
-    assert rc == 0 and w.argo.refreshed == ["todo-api-dev"]
-    assert w.argo.calls.index(next(c for c in w.argo.calls if "annotate" in c)) > 4     # not before 45 s
+    assert rc == 0 and w.argo.refreshed == ["todo-api-dev", "todo-api-dev"]
+    gets = [i for i, c in enumerate(w.argo.calls) if "applications" in c and "get" in c]
+    first, second = [i for i, c in enumerate(w.argo.calls) if "annotate" in c]
+    assert first < gets[1]                                  # right after the first poll, not after 45 s
+    assert sum(1 for g in gets if g < second) > 4           # the second one not before 45 s
 
 
 def test_a_wait_that_is_ready_at_once_refreshes_nothing_ac_148_5(w):  # AC-148.5

@@ -1,6 +1,6 @@
 {
   "name": "shared",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "The cplat launcher every sdlc-foundry command calls, the quality and security agents and the session hooks. The other plugins depend on it and install it with them.",
   "author": {
     "name": "Eike Hensler",

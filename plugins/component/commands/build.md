@@ -11,7 +11,7 @@ Run the phases in order, printing `## Phase N complete — <one line>` after eac
 
 ## cplat
 
-One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`. `unsupported` or no shape → stop.
+One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape` (in a ship: the `shape:` line `ship start` printed). `unsupported` or no shape → stop.
 
 - A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since the user declared it.
 
@@ -36,7 +36,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 - One call: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...`.
 - `cplat spec trace <id> --json` → `TRACE` (criterion → test files).
 - **reviewer** in `**Test-review mode.**` (criteria, `Contract`, `TRACE`) reports `TEST FINDINGS:`; the tester gets them once: "**Acceptance mode.** Resolve only these test-review findings, changing only the tests named, so that nothing else moves: <findings>. Commit as `test(<number>): resolve test-review findings for <id>`. Reply `UNRESOLVED: <finding> — <why>` per line, or `UNRESOLVED: none`." A failing `cplat spec trace <id>` after it → `git revert --no-edit HEAD`, all unresolved, since a broken trace leaves a criterion untested. No second review.
-- `cplat quiet lint-fix`; commit `test(<slug>): lint-fix acceptance tests for <id>`; `cplat component build reviewed <id> --findings <n> [--unresolved '<test> | <AC> | <what>']...`. `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`.
+- `cplat quiet lint-fix`; commit `test(<slug>): lint-fix acceptance tests for <id>`; `cplat component build reviewed <id> --findings <n> [--unresolved '<test> | <AC> | <what>']...`. `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`; `red` in place of `$RED` finds it too.
 
 ## Phase 2 — Implement (parallel via git worktrees)
 
@@ -93,7 +93,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
    - tests → the **coder** of the task whose files are involved (acceptance tests stay fixed; `cplat platform runs agent fix-round ci --task <task>`);
    - security → `cplat deps patch` first, then read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → step 3; exit 3 → escalate with its `ESCALATE` reason and `--cause <CAUSE>`, via `cplat component ship escalate` in a ship, else `cplat platform runs end --outcome escalated`; exit 4 → **security** agent). A red gate after a bump never goes to a coder, because a dependency is at fault.
 
-   Between fix rounds: `cplat validate run`, `cplat quiet ci`; 2 rounds at most, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`; record gates with `cplat budget stage <name> passed|failed`. `cplat quiet ci` green → `cplat platform runs gate security passed`; stays red → `... gate security failed`.
+   Between fix rounds: `cplat validate run`, `cplat quiet ci`; 2 rounds at most, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`; record gates with `cplat budget stage <name> passed|failed`. `cplat quiet ci` records the `security` gate and the `ci` stage itself.
 3. **Green** → agents only where needed: **tester** (`agents.tester`) so that every new internal has a unit test; **security** so that a changed Dockerfile is built and scanned.
 4. `cplat spec test-diff $RED` again (`--by quality` after the quality agent); exit 1 stops as in Phase 2. Commit changes.
 

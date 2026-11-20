@@ -1096,6 +1096,20 @@ def _record_stage(repo_dir: Path, gate: str, result: str) -> None:
         pass
 
 
+def record_gate(repo_dir: Path, gate: str, result: str) -> bool:
+    """`runs gate <gate> <result>` for the current run, as a function (#869: `cplat quiet ci` records its own result,
+    so the model makes no extra call). False when no run is current. Never raises."""
+    try:
+        current = _read_pointer(_pointer(repo_dir))
+        if not current:
+            return False
+        _mutate(current.get("run_id"), lambda rec: rec.setdefault("gates", {}).__setitem__(gate, result))
+        _record_stage(repo_dir, gate, result)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _recording_command(ns: argparse.Namespace) -> None:
     repo_dir = Path(ns.dir)
     pointer = _pointer(repo_dir)

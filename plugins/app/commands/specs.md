@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /app:specs is /system:spec. Runs nothing."
 moved-to: "/system:spec"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/app:specs` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

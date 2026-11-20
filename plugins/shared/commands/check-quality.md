@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /shared:check-quality is /component:check. Runs nothing."
 moved-to: "/component:check"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/shared:check-quality` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

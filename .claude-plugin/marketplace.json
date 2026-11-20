@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "4.14.0",
+      "version": "4.14.1",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": [
@@ -37,7 +37,7 @@
     {
       "name": "app",
       "source": "./plugins/app",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "description": "Tombstones only (the 4.x app commands moved to /system and /component); leaves the marketplace in 6.0.",
       "category": "agents",
       "tags": [
@@ -76,7 +76,7 @@
     {
       "name": "gitops",
       "source": "./plugins/gitops",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "description": "Tombstones only (the 4.x gitops commands moved to the noun plugins); leaves the marketplace in 6.0.",
       "category": "agents",
       "tags": [
@@ -88,7 +88,7 @@
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "description": "The cplat launcher every sdlc-foundry command calls, the quality and security agents and the session hooks. The other plugins depend on it and install it with them.",
       "category": "agents",
       "tags": [
@@ -114,7 +114,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.25.0",
+      "version": "1.26.0",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [

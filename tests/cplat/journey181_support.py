@@ -34,9 +34,10 @@ class Transcript:
         self.n += 1
         return f"toolu_{self.n}"
 
-    def model(self, minute):
+    def model(self, minute, usage=None, msg_id=None):
         self.events.append({"type": "assistant", "timestamp": at(minute),
-                            "message": {"id": f"msg_{self._id()}", "content": [{"type": "text", "text": "ok"}], "usage": {}}})
+                            "message": {"id": msg_id or f"msg_{self._id()}", "content": [{"type": "text", "text": "ok"}],
+                                        "usage": usage or {}}})
         return self
 
     def call(self, start, end, name="Bash", **inp):

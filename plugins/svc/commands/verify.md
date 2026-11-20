@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /svc:verify is /component:verify. Runs nothing."
 moved-to: "/component:verify"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/svc:verify` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

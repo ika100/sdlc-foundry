@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
 # The cheap CI checks, locally: for contributors without CI minutes and for a quick check before pushing.
-#   scripts/ci-local.sh          fast checks (about a minute)
+#   scripts/ci-local.sh          fast checks; the cplat tests the branch's change can affect (spec 212)
+#   scripts/ci-local.sh --full   every cplat test, as CI runs them
 #   scripts/ci-local.sh --render also render every template (needs copier: uv tool install copier)
 #   scripts/ci-local.sh --site   also build the documentation site (needs node 24: cd site && npm ci first time)
-# The cluster test (tests/e2e/run.sh) and the per-template smoke jobs (devbox, Docker, Maven, pnpm) stay in CI.
+# The flags combine in any order. The cluster test (tests/e2e/run.sh) and the per-template smoke jobs (devbox, Docker,
+# Maven, pnpm) stay in CI.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+full=0 site=0 render=0
+for arg in "$@"; do
+  case "$arg" in
+    --full) full=1 ;;
+    --site) site=1 ;;
+    --render) render=1 ;;
+    *) echo "usage: scripts/ci-local.sh [--full] [--site] [--render]" >&2; exit 2 ;;
+  esac
+done
 
 step() { printf '\n==> %s\n' "$*"; }
 
@@ -55,15 +67,22 @@ python3 scripts/check-pr-local.py
 step "lint of the templates this branch changes (spec 184)"
 uv run scripts/template-lint.py --changed
 
-step "cplat tests (Kyverno CLI tests skip without the kyverno binary)"
-uv run --with-requirements requirements-test.txt pytest tests/cplat -q -n auto
+if [ "$full" -eq 1 ]; then
+  step "cplat tests, all of them (Kyverno CLI tests skip without the kyverno binary)"
+  selection=$(python3 scripts/testselect.py args --full)
+else
+  step "cplat tests the change can affect (spec 212; --full runs all; Kyverno CLI tests skip without the kyverno binary)"
+  selection=$(python3 scripts/testselect.py args)
+fi
+# shellcheck disable=SC2086  # the selection is one or two pytest arguments without spaces
+uv run --with-requirements requirements-test.txt pytest tests/cplat -q -n auto $selection
 
-if [ "${1:-}" = "--site" ]; then
+if [ "$site" -eq 1 ]; then
   step "documentation site (unit tests + build with link validation)"
   (cd site && { [ -d node_modules ] || npm ci --ignore-scripts; } && npm test && npm run build)
 fi
 
-if [ "${1:-}" = "--render" ]; then
+if [ "$render" -eq 1 ]; then
   step "render every template"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT

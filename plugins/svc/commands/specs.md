@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /svc:specs is /component:spec. Runs nothing."
 moved-to: "/component:spec"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/svc:specs` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.
