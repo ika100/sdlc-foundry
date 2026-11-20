@@ -2,7 +2,7 @@
   "version": 1,
   "sample": {
     "repo": "ika100/todo-api",
-    "rev": "d5626eca2a73e9d76cdceaf4c400e41d59a8e959"
+    "rev": "136a96f10f74d692a34401627873c8a0b76bcea9"
   },
   "workflows": {
     "quick-task": {
