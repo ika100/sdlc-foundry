@@ -206,5 +206,7 @@ def test_the_command_says_the_orchestrator_writes_no_summary_ac_157_7(path):  # 
 
 
 def test_the_changelog_has_an_entry_for_568_ac_157_7():  # AC-157.7
-    frags = [f for f in (ROOT / "docs" / "changelog.d").glob("*.md") if f.name != "README.md"]
-    assert [f for f in frags if "#568" in f.read_text()]
+    # a fragment until the release, then a paragraph of docs/CHANGELOG.md
+    frags = [f.read_text() for f in (ROOT / "docs" / "changelog.d").glob("*.md") if f.name != "README.md"]
+    released = (ROOT / "docs" / "CHANGELOG.md").read_text().split("\n\n")
+    assert [e for e in frags + released if "#568" in e], "no changelog entry names #568"
