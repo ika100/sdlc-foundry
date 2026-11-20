@@ -78,9 +78,9 @@ lines to append to the command's own output, in issue order:
 
 `post`'s second value maps each handled issue to `posted|present|skipped|ignored` (used by the release summary).
 
-The step budget starts at the first gh call of the process and is shared by every entry point the process calls
-(`spec land` = written + approved within one 120 s). Each gh call gets `timeout = min(issue deadline, step deadline) - now`;
-a call with no time left is not started.
+The step budget is the time spent in gh calls, shared by every entry point the process calls (`spec land` = written +
+approved within one 120 s of commenting; the CI wait between them does not count, found in verification). Each gh call gets
+`timeout = min(issue deadline, step time left)`; a call with no time left is not started.
 
 ### gh calls per issue (in order; a test fake answers these)
 
