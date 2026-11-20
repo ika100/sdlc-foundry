@@ -16,11 +16,8 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
-| [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | approved | 8 | #400 |
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
-| [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | approved | 12 |  |
-| [201-one-cluster-repo-places-environments-on](specs/201-one-cluster-repo-places-environments-on/spec.md) — One cluster repo places environments on several clusters | P1 | approved | 12 |  |
-| [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | approved | 11 | #143 |
+| [205-acceptance-tests-are-proven-passable](specs/205-acceptance-tests-are-proven-passable/spec.md) — Acceptance tests are proven passable before they freeze | P1 | approved | 7 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -125,7 +122,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [121-resources-and-environment-properties](specs/121-resources-and-environment-properties/spec.md) — Resources and environment properties upgrade safely | P1 | done | 26 |  |
 | [123-the-platform-repo-declares-its-own-shape](specs/123-the-platform-repo-declares-its-own-shape/spec.md) — The platform repo declares its own shape | P1 | done | 24 |  |
 | [125-a-cluster-repo-hosts-several-systems](specs/125-a-cluster-repo-hosts-several-systems/spec.md) — A cluster repo hosts several systems on shared operators | P1 | done | 15 |  |
-| [126-unattended-runs-stop-wasting-turns-and](specs/126-unattended-runs-stop-wasting-turns-and/spec.md) — Unattended runs stop wasting turns and CI rounds | P1 | done | 15 |  |
+| [126-unattended-runs-stop-wasting-turns-and](specs/126-unattended-runs-stop-wasting-turns-and/spec.md) — Unattended runs stop wasting turns and CI rounds | P1 | done | 15 | #784 |
 | [128-generated-passwords-match-the-running](specs/128-generated-passwords-match-the-running/spec.md) — Generated passwords match the running server | P1 | done | 14 | #316 |
 | [129-a-platform-release-command](specs/129-a-platform-release-command/spec.md) — A platform release command | P1 | done | 21 | #296 |
 | [130-quality-gates-fail-when-they-checked](specs/130-quality-gates-fail-when-they-checked/spec.md) — Quality gates fail when they checked nothing | P1 | done | 16 | #285 |
@@ -158,7 +155,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [164-the-journey-7-findings](specs/164-the-journey-7-findings/spec.md) — The journey 7 findings | P1 | done | 4 | #596, #598, #599, #600 |
 | [165-a-test-problem-does-not-stop-an-unattended-run](specs/165-a-test-problem-does-not-stop-an-unattended-run/spec.md) — A test problem does not stop an unattended run | P1 | done | 7 | #595, #582, #583 |
 | [166-the-dev-pr-of-a-system-ship-lands-on-the](specs/166-the-dev-pr-of-a-system-ship-lands-on-the/spec.md) — The dev PR of a system ship lands on the current main | P1 | done | 4 | #597 |
-| [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | done | 10 |  |
+| [167-a-dispatcher-runs-the-backlog-in](specs/167-a-dispatcher-runs-the-backlog-in/spec.md) — A dispatcher runs the backlog in parallel slots | P1 | done | 7 |  |
 | [168-agent-rules-state-their-reason-and-can](specs/168-agent-rules-state-their-reason-and-can/spec.md) — Agent rules state their reason and can retire | P1 | done | 8 |  |
 | [169-the-acceptance-tests-freeze-when-the-red-tests](specs/169-the-acceptance-tests-freeze-when-the-red-tests/spec.md) — The acceptance tests freeze when the red-tests unit ends | P1 | done | 4 |  |
 | [171-unattended-runs-settle-their-own-small](specs/171-unattended-runs-settle-their-own-small/spec.md) — Unattended runs settle their own small problems | P1 | done | 9 | #613, #621, #622, #623, #624, #625, #626, #633 |
@@ -179,15 +176,23 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [188-explore-a-feature-before-its-spec-is](specs/188-explore-a-feature-before-its-spec-is/spec.md) — Explore a feature before its spec is written | P1 | done | 12 | #662 |
 | [189-the-web-image-has-no-known-critical-cve](specs/189-the-web-image-has-no-known-critical-cve/spec.md) — The web image has no known critical CVE and the platform scans template images | P1 | done | 7 | #682 |
 | [190-promotion-respects-an-environment-limit](specs/190-promotion-respects-an-environment-limit/spec.md) — Promotion respects an environment limit in the spec | P1 | done | 7 | #688 |
+| [191-upgrades-are-tested-fast-across-skipped](specs/191-upgrades-are-tested-fast-across-skipped/spec.md) — Upgrades are tested fast, across skipped versions, and the database drill leaves the release gate | P1 | done | 8 | #400 |
 | [192-the-delivery-process-guides-the-person](specs/192-the-delivery-process-guides-the-person/spec.md) — The delivery process guides the person from triage to release | P1 | done | 10 |  |
 | [194-a-system-ship-wait-returns-before-the](specs/194-a-system-ship-wait-returns-before-the/spec.md) — A system ship wait returns before the Bash limit | P1 | done | 4 |  |
 | [195-a-restored-copy-is-checked-without](specs/195-a-restored-copy-is-checked-without/spec.md) — A restored copy is checked without kubectl | P1 | done | 5 | #683 |
+| [196-triage-proposes-a-priority-the-user](specs/196-triage-proposes-a-priority-the-user/spec.md) — Triage and new specs propose a priority the user confirms | P1 | done | 12 |  |
 | [197-the-journey-13-seams](specs/197-the-journey-13-seams/spec.md) — The journey 13 seams | P1 | done | 8 |  |
 | [198-a-platform-release-holds-main-through](specs/198-a-platform-release-holds-main-through/spec.md) — A platform release holds main through the merge lock | P1 | done | 9 |  |
 | [199-the-journey-15-seams](specs/199-the-journey-15-seams/spec.md) — The journey 15 seams | P1 | done | 5 |  |
 | [200-a-component-ship-runs-in-its-own-session](specs/200-a-component-ship-runs-in-its-own-session/spec.md) — A component ship runs in its own session | P1 | done | 7 |  |
+| [201-one-cluster-repo-places-environments-on](specs/201-one-cluster-repo-places-environments-on/spec.md) — One cluster repo places environments on several clusters | P1 | done | 12 |  |
 | [202-a-waiting-session-makes-no-model-calls](specs/202-a-waiting-session-makes-no-model-calls/spec.md) — A waiting session makes no model calls | P1 | done | 7 | #750 |
 | [203-the-journey-19-seams](specs/203-the-journey-19-seams/spec.md) — The journey 19 seams | P1 | done | 6 |  |
+| [204-service-java-on-spring-boot-4-cve-free](specs/204-service-java-on-spring-boot-4-cve-free/spec.md) — service-java on Spring Boot 4, CVE-free image | P1 | done | 7 | #709 |
+| [206-headless-deny-rules-are-checked-before-a](specs/206-headless-deny-rules-are-checked-before-a/spec.md) — Headless deny rules are checked before a session starts | P1 | done | 7 |  |
+| [207-preflight-checks-trust-and-subagent](specs/207-preflight-checks-trust-and-subagent/spec.md) — Preflight checks trust and subagent tools before a ship | P1 | done | 8 |  |
+| [208-test-runs-leave-the-developer-s-disk-as](specs/208-test-runs-leave-the-developer-s-disk-as/spec.md) — Test runs leave the developer's disk as they found it | P1 | done | 7 | #810, #811 |
+| [210-the-dispatcher-paces-work-by-the](specs/210-the-dispatcher-paces-work-by-the/spec.md) — The dispatcher budgets by plan limits or by cost | P1 | done | 10 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
@@ -204,6 +209,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [094-a-merge-conflict-re-plans-instead-of](specs/094-a-merge-conflict-re-plans-instead-of/spec.md) — A merge conflict re-plans instead of escalating | P2 | done | 15 |  |
 | [108-agents-get-a-compact-failure-summary-not](specs/108-agents-get-a-compact-failure-summary-not/spec.md) — Agents get a compact failure summary, not the full log | P2 | done | 11 | #139 |
 | [109-every-requirement-traces-to-its-evidence](specs/109-every-requirement-traces-to-its-evidence/spec.md) — Every requirement traces to its evidence | P2 | done | 13 | #164 |
+| [110-a-product-s-repos-agree-on-the-contract](specs/110-a-product-s-repos-agree-on-the-contract/spec.md) — A product's repos agree on the contract between them | P2 | done | 11 | #143 |
 | [122-a-local-console-shows-the-system-and-what](specs/122-a-local-console-shows-the-system-and-what/spec.md) — A local console shows the system, its process and what needs you | P2 | done | 52 |  |
 | [124-autonomy-is-declared-per-environment-and](specs/124-autonomy-is-declared-per-environment-and/spec.md) — Autonomy is declared per environment and supervised in the console | P2 | done | 22 |  |
 | [127-the-cache-url-names-its-user-and-ci-pins](specs/127-the-cache-url-names-its-user-and-ci-pins/spec.md) — the cache URL names its user and CI pins its test tools | P2 | done | 5 |  |
@@ -214,6 +220,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [153-fewer-waits-after-a-merge](specs/153-fewer-waits-after-a-merge/spec.md) — Fewer waits after a merge | P2 | done | 2 |  |
 | [170-release-wait-names-a-commit-of-another-repo](specs/170-release-wait-names-a-commit-of-another-repo/spec.md) — Release wait names a commit of another repo | P2 | done | 2 | #614 |
 | [173-the-guides-read-without-spec-numbers](specs/173-the-guides-read-without-spec-numbers/spec.md) — The guides read without spec numbers | P2 | done | 3 |  |
+| [209-inline-scripts-add-no-uv-environment-per](specs/209-inline-scripts-add-no-uv-environment-per/spec.md) — Inline scripts add no uv environment per worktree | P2 | done | 7 |  |
 <!-- spec-index:end -->
 
 ## Not built (specified in the PRD, absent from the code)

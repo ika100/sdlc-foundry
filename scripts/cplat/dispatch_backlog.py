@@ -29,7 +29,7 @@ from core import PlatformError
 
 MAX_AGE = 300
 ISSUE_FIELDS = "number,title,body,labels,assignees,createdAt,updatedAt"
-PR_FIELDS = "number,url,headRefName,body,isDraft,closingIssuesReferences"
+PR_FIELDS = "number,url,title,headRefName,body,isDraft,closingIssuesReferences"
 COMMENT_LABELS = ("in-progress", "stale-premise")   # an issue the dispatcher or a manual session works on: its comments matter
 SPEC_MARK = re.compile(r"<!--\s*cplat:spec\s+(\S+)\s*-->")
 SPEC_FILE = re.compile(r"^docs/specs/([^/]+)/(spec|plan)\.md$")

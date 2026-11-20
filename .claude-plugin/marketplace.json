@@ -10,7 +10,7 @@
     {
       "name": "svc",
       "source": "./plugins/svc",
-      "version": "4.12.0",
+      "version": "4.13.0",
       "description": "Spec-driven pipeline for every service shape: spec → plan → failing acceptance tests → parallel coders → quality ‖ tests ‖ security → verify against the spec → PR.",
       "category": "agents",
       "tags": [
@@ -62,8 +62,8 @@
     {
       "name": "svc-java",
       "source": "./plugins/svc-java",
-      "version": "0.8.0",
-      "description": "Agents for Java service repos (Spring Boot 3, Maven, JDK 21, distroless): coder, tester, deployment, observability, release.",
+      "version": "0.8.1",
+      "description": "Agents for Java service repos (Spring Boot 4, Maven, JDK 21, distroless): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
         "java",
@@ -88,7 +88,7 @@
     {
       "name": "shared",
       "source": "./plugins/shared",
-      "version": "1.5.0",
+      "version": "1.5.1",
       "description": "The cplat launcher every sdlc-foundry command calls, the quality and security agents and the session hooks. The other plugins depend on it and install it with them.",
       "category": "agents",
       "tags": [
@@ -100,7 +100,7 @@
     {
       "name": "system",
       "source": "./plugins/system",
-      "version": "1.22.0",
+      "version": "1.24.0",
       "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
       "category": "agents",
       "tags": [
@@ -114,7 +114,7 @@
     {
       "name": "component",
       "source": "./plugins/component",
-      "version": "1.24.0",
+      "version": "1.25.0",
       "description": "The component commands: /component:new, add, set, remove, spec, plan, build, verify, check, ship, fix and release. Component repos run the spec-driven pipeline (spec, plan, build, verify, ship); gitops-app repos add, change and remove components. Agents come from the svc and language plugins.",
       "category": "agents",
       "tags": [
@@ -166,7 +166,7 @@
     {
       "name": "issue",
       "source": "./plugins/issue",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "description": "The issue noun: /issue:triage routes GitHub issues to specs and fixes; /issue:report files a platform issue.",
       "category": "agents",
       "tags": [
@@ -194,8 +194,8 @@
     {
       "name": "cluster",
       "source": "./plugins/cluster",
-      "version": "1.4.0",
-      "description": "The cluster noun: /cluster:new creates a cluster repo, /cluster:add installs a system in it, /cluster:remove takes one out. The cluster repo owns the shared operators and the secret store.",
+      "version": "1.5.0",
+      "description": "The cluster noun: /cluster:new creates a cluster repo, /cluster:add installs a system in it, /cluster:remove takes one out, /cluster:promote moves a later cluster up. The cluster repo owns the shared operators and the secret store.",
       "category": "agents",
       "tags": [
         "cluster",

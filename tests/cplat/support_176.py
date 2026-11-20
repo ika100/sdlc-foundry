@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 import claim
+import priority
 import triage
 
 SLUG = "acme/shop"
@@ -59,6 +60,8 @@ def row(n, **kw):
     base = {"number": n, "summary": f"Summary of issue {n}", "class": "bug", "priority": "P1", "priority_reason": "P1: normal bug or feature",
             "mark": "sure", "question": None, "answers": [], "expected": f"Issue {n} works", "comment": None, "spec": None,
             "duplicate_of": None}
+    if kw.get("priority") in priority.LEVELS and "priority_reason" not in kw:    # the reason of the level asked for (spec 196)
+        base["priority_reason"] = f"{kw['priority']}: {priority.LEVELS[kw['priority']]['phrases'][0]}"
     base.update(kw)
     return {k: v for k, v in base.items() if v is not None}     # a key set to None is left out of the row
 
@@ -192,7 +195,8 @@ def overview_world(w):
         row(560, summary="Login fails after the token refresh on Safari", mark="check",
             question={"text": "Is the refresh failure on every browser?", "options": ["Only Safari", "All browsers"]}),
         row(562, summary="Crash when the config file is empty"),
-        row(563, summary="Dark mode for the console", **{"class": "feature", "priority": "P2", "expected": None}),
+        row(563, summary="Dark mode for the console", **{"class": "feature", "priority": "P2", "priority_reason": "P2: convenience",
+                                                                   "expected": None}),
         row(564, summary="How do I rotate the token", **{"class": "question", "priority": None, "priority_reason": None, "expected": None,
                                                            "comment": "Run cplat rotate."}),
         row(571, summary="Add CSV export to the run list", **{"class": "feature", "expected": None,

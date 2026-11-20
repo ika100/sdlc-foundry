@@ -183,6 +183,8 @@ In a unit session the Stop hook also runs when `CPLAT_UNIT` is set, not only whe
 
 Before the first session, `cplat headless` and `cplat system ship repo start` run a preflight and print `preflight failed: <category>: <detail>` on a failure. The run is then escalated with cause `environment` and no session, branch, commit or PR is started. In a system ship only that repo is escalated.
 
+The preflight first checks the run's refused rules against the commands the run needs (such as `git push origin feature/x`, `gh pr create` and a `gh api` read of a pull request) and the commands it must never run (a push to the default branch, a force push, a merge). A refused rule that blocks a needed command prints `preflight failed: deny-rules: <rule> refuses "<command>", which the run needs; use: <corrected rule>`; a command that no rule refuses prints `preflight failed: deny-rules: no rule refuses "<command>"; add: <rule>`. The run stops before any session, so a rule that is too wide no longer shows only after two sessions without a commit. A `gh api` read of a pull request's `mergeable` or `mergeStateStatus` is not refused; the merge calls still are.
+
 ### A system ship answers or holds an escalated repo
 
 `cplat system ship next --json` returns the action `answer` for an escalated repo, even while other repos still run, with the repo id, the cause, the reason and the questions with their suggested answers; `next --wait` returns it at the first poll. The system ship then decides per repo:
@@ -203,8 +205,14 @@ When a build task's checks fail only because a later task that depends on it has
 | `no-repo-allowlist` | `.claude/settings.json` is missing: run `/platform:update` or `cplat adopt` |
 | `blocked-by-settings` | a `deny` or `ask` rule matches a git or gh command the run needs: remove or narrow the rule, or run the command attended |
 | `git-identity` | set `git config --global user.name` and `user.email` (needed for `commit -s`) |
-| `gh-auth` | `gh auth login --hostname <host>` |
+| `gh-auth` | `gh auth login --hostname <host>`; the login is tried three times over 45 s, so a login that fails for a moment passes, and on macOS a locked login keychain is a possible cause: unlock it |
 | `no-push-access` | ask for write access to the repository |
+| `untrusted-folder` | the folder is not trusted and its committed settings set `env`, `permissions.additionalDirectories` or a plugin that is neither installed nor passed with `--plugin-dir`: open `claude` in the folder once and accept the trust dialog |
+| `subagent-tools` | an agent of the run is refused its shell or a command it needs (a deny or ask rule, a missing allow rule, a definition without `Bash`): remove or narrow the named rule, add the allow rule it prints, or add `Bash` to the agent's `tools` |
+| `agent-worktree` | an agent worktree cannot be created, or lands outside the folders the session may work in: run `git worktree prune`, and make `.claude/worktrees` a plain folder inside the repo |
+| `model-unreachable` | a model the run uses is excluded by `availableModels` or `deniedModels`, or cannot be called with this machine's login: change the setting, run `claude /login`, or set a model the account may use |
+
+The checks run in this order: the existing ones, then the trust of each folder, the commands the agents run, the agent definitions, the agent worktree, and the models' settings. A model check call happens only when every other check passed. That call is not counted in the budget, is cached for an hour per model and account, and its tokens are listed under `preflight` in the run's log. `cplat` never accepts a trust dialog itself: you do that once in `claude`.
 
 The sessions get a **run allowlist** ([ADR-076](adr/076-an-unattended-run-gets-its-permissions-per-session-from-a-checked-run-allowlist.md)): the feature branch (switch, create), `commit -s`, `push` of that branch without force and `gh pr create`. It applies to this run's sessions only and no settings file is changed; `cplat headless` prints it at the start. Force pushes, pushes to the default branch and merges outside `cplat component ship land` stay refused.
 

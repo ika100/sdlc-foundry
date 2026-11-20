@@ -1,0 +1,1 @@
+**The benchmark sample pins todo-api at its 1 s database deadline (#842).** At the old pin todo-api's own quality gate and its AC-001.17 timing test failed, so the quick-task benchmark's agent refused to open its PR.

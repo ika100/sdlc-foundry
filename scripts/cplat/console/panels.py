@@ -234,8 +234,14 @@ def panel_spec(ctx: Any, ident: str) -> str:
     contract_html = _section("Contract change", f"<p>{esc(contract)}</p>") if contract else ""
     activity = "".join(f"<li>{esc(a.get('at'))} {esc(a.get('agent'))}: {esc(a.get('text'))}</li>" for a in (run or {}).get("activity") or [])
     activity_html = _section("Activity", f"<ul>{activity}</ul>") if activity else ""
+    state = str(spec.get("priority_state") or "")
+    priority_html = ""
+    if spec.get("priority") and state and state != "unset":
+        note = " - proposed, not yet approved" if state == "proposed" else ""
+        priority_html = (f'<p data-priority="{esc(state)}">Priority: {esc(spec.get("priority"))} '
+                         f'({esc(spec.get("priority_reason"))}){esc(note)}</p>')
     body = (_strip(current, bool(run and run.get("stopped"))) + f"<p>{esc(spec.get('title'))}{'' if current else ' - Done'}</p>"
-            + _section("Slices", f'<ul class="slices">{lines}</ul>') + _section("Criteria", f"<ul>{criteria}</ul>")
+            + priority_html + _section("Slices", f'<ul class="slices">{lines}</ul>') + _section("Criteria", f"<ul>{criteria}</ul>")
             + _section("Evidence", _evidence(repo, spec, run)) + contract_html + activity_html)
     return _aside(f"Spec {ident}", body, ctx, _read_at(ctx, f"specs:{repo}"))
 

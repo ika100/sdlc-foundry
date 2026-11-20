@@ -32,8 +32,8 @@ Words used below. A **candidate** is an approved spec, or an open issue with the
 
 The policy and the plan.
 
-- **AC-167.1** Given a repo without `.platform/dispatch.yml`, when `cplat dispatch start` or `cplat dispatch resume` runs, then it exits 1 naming the file and starts nothing. Given a policy without `budget.tokens_per_day` (it has no default), when `cplat dispatch start` or `cplat dispatch resume` runs, then it exits 1 naming that key and starts nothing. Given a policy with an unknown key, or with a value outside the allowed ones, when any `cplat dispatch` command reads it, then it fails naming the key and the allowed values. The keys are `slots`, `budget.tokens_per_day`, `budget.per_unit`, `sources`, `ready`, `priority`, `gates.approve_specs`, `gates.merge` and `serialize`. A `gates.merge` other than `green-ci`, a `gates.approve_specs` other than `human` or `self`, or a `serialize` without `merge`, is refused.
-- **AC-167.2** Given any repo, when `cplat dispatch plan [--json]` runs, then it prints the effective policy (the defaults when there is no file, marked as such). When `budget.tokens_per_day` is not set, it shows the key as unset together with the daily token usage of each of the last 7 days as a hint. It then lists every candidate once, in priority order, with its kind (`fix` or `ship`), its verdict (`ready` or `held: <reason>`), its mode (`single` or `team`) and the slot it would take. GitHub (labels, assignees, comments, issue state), branches, worktrees and claims are the same before and after the command.
+- ~~**AC-167.1**~~ superseded by AC-210.1 on 2026-11-17: Given a repo without `.platform/dispatch.yml`, when `cplat dispatch start` or `cplat dispatch resume` runs, then it exits 1 naming the file and starts nothing. Given a policy without `budget.tokens_per_day` (it has no default), when `cplat dispatch start` or `cplat dispatch resume` runs, then it exits 1 naming that key and starts nothing. Given a policy with an unknown key, or with a value outside the allowed ones, when any `cplat dispatch` command reads it, then it fails naming the key and the allowed values. The keys are `slots`, `budget.tokens_per_day`, `budget.per_unit`, `sources`, `ready`, `priority`, `gates.approve_specs`, `gates.merge` and `serialize`. A `gates.merge` other than `green-ci`, a `gates.approve_specs` other than `human` or `self`, or a `serialize` without `merge`, is refused.
+- ~~**AC-167.2**~~ superseded by AC-210.2 on 2026-11-17: Given any repo, when `cplat dispatch plan [--json]` runs, then it prints the effective policy (the defaults when there is no file, marked as such). When `budget.tokens_per_day` is not set, it shows the key as unset together with the daily token usage of each of the last 7 days as a hint. It then lists every candidate once, in priority order, with its kind (`fix` or `ship`), its verdict (`ready` or `held: <reason>`), its mode (`single` or `team`) and the slot it would take. GitHub (labels, assignees, comments, issue state), branches, worktrees and claims are the same before and after the command.
 
 Readiness and order.
 
@@ -56,7 +56,7 @@ Running units.
 
 Budget, steering and seeing it.
 
-- **AC-167.10** Given `budget.tokens_per_day` (required to start, AC-167.1), when a cycle runs, then it adds up the tokens of every unit and of the dispatcher's own agent calls since local midnight. Once the limit is reached, no unit starts and no agent call is made. Running units continue within their own budgets (spec 102). `cplat needs` gets one `budget` entry per day, and starts continue after midnight on their own. While a running or finished unit's usage is unknown, no new unit starts, and `status` names that unit.
+- ~~**AC-167.10**~~ superseded by AC-210.3 on 2026-11-17: Given `budget.tokens_per_day` (required to start, AC-167.1), when a cycle runs, then it adds up the tokens of every unit and of the dispatcher's own agent calls since local midnight. Once the limit is reached, no unit starts and no agent call is made. Running units continue within their own budgets (spec 102). `cplat needs` gets one `budget` entry per day, and starts continue after midnight on their own. While a running or finished unit's usage is unknown, no new unit starts, and `status` names that unit.
 - ~~**AC-167.11**~~ superseded by AC-202.7 on 2026-11-15: Steering takes effect within one cycle and is recorded in the dispatcher's state, so it survives a restart:
   - `cplat dispatch pause`: no unit starts, and running units stop at their next checkpoint (spec 131), ready to resume.
   - `pause --drain`: no unit starts, and running units finish.
@@ -100,6 +100,7 @@ Budget, steering and seeing it.
 
 - 2026-11-09 created
 - 2026-11-09 amended: both open questions answered; `budget.tokens_per_day` is required to start or resume and `plan` shows a 7-day usage hint (AC-167.1, AC-167.2, AC-167.10); `gates.approve_specs: self` lets the dispatcher approve clean drafts (AC-167.1, AC-167.6)
+- 2026-11-17 AC-167.1, AC-167.2 and AC-167.10 superseded by AC-210.1, AC-210.2 and AC-210.3 (budget modes `cost` and `plan`; `tokens_per_day` deprecated)
 - 2026-11-09 approved
 - 2026-11-10 building
 - 2026-11-10 done

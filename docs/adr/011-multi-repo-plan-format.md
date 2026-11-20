@@ -110,3 +110,54 @@ A final section describes the gitops-app PR that pins the resulting image tags.
 
 - The gitops-app repo can be an entry of its own plan (`shape: gitops-app`). Instead of a prompt it carries `gitops:`, a list of operations in execution order: `{addon: X}`, `{uses: X, service: S}`, `{expose: S, host: H}`, `{env: {K: V}, service: S}`. `plan-check` rejects unknown operations, services (not in `services.yaml` and not a repo of the plan) and addons (not in `render.py`'s `ADDONS`).
 - `/app:build` builds that entry itself with `cplat addon add` and the new `cplat compose set` (which changes a service that is already composed), opens its PR first and marks it **merge first**, and removes any worktree it created.
+
+## Amendment (spec 110)
+
+The plan's `## Contract` states the shared input rules and the error contract as YAML, so every repo of the product can check the same facts ([ADR-118](118-shared-input-rules-live-in-the-plan-contract.md)). `cplat spec new --from-plan` writes each repo's copy, `contract/<plan_id>.json`. Worked example:
+
+### Rules
+
+```yaml
+rules:
+  - id: title-max
+    endpoint: POST /todos
+    field: title
+    kind: max_length
+    value: 200
+    provider: todo-api
+    consumers: [todo-web]
+  - id: title-required
+    endpoint: POST /todos
+    field: title
+    kind: required
+    value: true
+    provider: todo-api
+    consumers: [todo-web]
+  - id: status-values
+    endpoint: PATCH /todos/{id}
+    field: status
+    kind: allowed
+    value: [open, done]
+    provider: todo-api
+    consumers: [todo-web]
+```
+
+The kinds are `required`, `min_length`, `max_length`, `min_value`, `max_value` and `allowed`. A plan with no shared rules writes the line `No shared rules: <reason>` instead.
+
+### Errors
+
+```yaml
+errors:
+  status: 422
+  body:
+    list: errors        # the body is {"errors": [ {...}, ... ]}; omit `list` when the body is one error object
+    field: field        # key naming the field that failed
+    rule: rule          # key naming the rule id
+    message: message    # key holding the message to show
+  unlisted:
+    message: "Something went wrong. Please try again."
+```
+
+### Timeouts
+
+Stated as prose, as before (for example `3 s`).

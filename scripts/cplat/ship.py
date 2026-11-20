@@ -4,7 +4,7 @@
 can be code: open the PR, wait for its checks, merge only when all of them passed, wait until `dev` runs the merge.
 It needs no branch protection or auto-merge, so it works for private repos on GitHub Free.
 
-  cplat component ship start <spec> [--no-merge] [--detach] [--context C] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
+  cplat component ship start <spec> [--no-merge|--merge] [--detach] [--context C] [--system-dir DIR] [--budget KEY=VALUE]   begin or resume; prints the state, the budget and the next step
                                          (--system-dir: /system:ship only, links the run to a system ship, spec 097)
   cplat component ship status [--json]             the state of the current run
   cplat component ship unit [--json]               in a unit session ($CPLAT_UNIT): is the unit at its checkpoint (spec 131)
@@ -227,7 +227,7 @@ def _record_shape(st: dict) -> None:
         runs.set_section(st.get("run_id"), "shape", st["shape"])
 
 
-def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: Path | None = None,
+def start(repo: Path, ref: str, merge: bool | None, take_over: bool = False, product: Path | None = None,
           budget_options: list[str] | dict | None = None, *, detach: bool = False) -> dict:
     import shapecmd
     shape = shapecmd.resolve(repo)             # spec 123: a declaration error stops here, before any state changes
@@ -255,6 +255,9 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
             st["recorded"] = False
         if link:
             st["product"] = link
+        if merge is not None and bool(st.get("merge", True)) != merge:   # #703: a hold needed a hand edit of the state
+            st["merge"] = merge
+            say("this run now merges its PR after green CI" if merge else "this run now stops at a green PR (--no-merge): you merge")
         st.pop("escalated", None)              # a re-run after an escalation resumes where it stopped
         st.pop("cause", None)
         st.pop("questions", None)
@@ -291,7 +294,7 @@ def start(repo: Path, ref: str, merge: bool, take_over: bool = False, product: P
         phase = "plan"
     if st and st["spec"] != sp.id and st["phase"] != "done" and not st.get("escalated") and not st.get("recorded"):
         runs.finish(st.get("run_id"), "abandoned")   # take-over: only after every check that can still refuse
-    st = {"spec": sp.id, "phase": phase, "merge": merge, "branch": f"feature/{sp.id}", "fix_rounds": 0,
+    st = {"spec": sp.id, "phase": phase, "merge": merge is not False, "branch": f"feature/{sp.id}", "fix_rounds": 0,
           "started": dt.datetime.now().isoformat(timespec="seconds"), "recorded": False}
     if merged:
         st.update({k: merged[k] for k in ("pr", "merge_sha", "deployed") if merged.get(k)})
@@ -624,7 +627,7 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
         raise PlatformError(f"on '{cur}', expected the feature branch '{branch}'", hint=f"git switch {branch}")
     if not body_file.is_file():
         raise PlatformError(f"{body_file} does not exist", hint="write the PR body first (the /component:build Phase 7 template)")
-    check_title(title)
+    title = caller_title(title)
     body = body_file.read_text()
     filled = _fill_closes(repo, st, body)
     if filled != body:
@@ -727,6 +730,22 @@ def check_title(title: str) -> None:
         raise PlatformError(err)
 
 
+def caller_title(title: str) -> str:
+    """A caller's title for a ship, product ship or gitops PR: a subject over 72 characters is shortened and said, any other
+    fault is refused with the rule (AC-126.11, #784)."""
+    err = pr_rules.title_error(title)
+    if not err:
+        return title
+    try:
+        sent = pr_rules.fit(title)
+    except ValueError:
+        raise PlatformError(err) from None
+    if pr_rules.title_error(sent):
+        raise PlatformError(err)
+    say(f'title shortened: "{title}" -> "{sent}"')
+    return sent
+
+
 class GhError(PlatformError):
     """`gh` itself failed (rate limit, 5xx, auth), so it said nothing about the checks (#356)."""
 
@@ -819,6 +838,16 @@ class CheckWatch:
         """Expected names without a passed check on this head; a non-required one that stays absent is dropped."""
         buckets = {c["name"]: c.get("bucket", "") for c in cs}
         absent = [n for n in self.expected if buckets.get(n) not in ("pass", "skipping")]
+        # #815: a matrix job whose workflow skipped it is reported once under its unexpanded name (`e2e ${{ matrix.part }}`);
+        # the expanded names it had on the old head never come, so a non-required one it covers is not waited for.
+        templates = [name.split("${{")[0] for name, b in buckets.items() if b == "skipping" and "${{" in name]
+        covered = [n for n in absent if not self.expected[n] and n not in buckets
+                   and any(t and n.startswith(t) for t in templates)]
+        if covered and not any(b == "pending" for b in buckets.values()):
+            for n in covered:
+                say(f"  {n} did not run on {(self.head or '')[:7]}: skipped with its matrix")
+                del self.expected[n]
+                absent.remove(n)
         if any(b == "pending" for b in buckets.values()):
             self.concluded_since = None
         elif absent:
@@ -1512,7 +1541,7 @@ def with_service_ref(body: str, ref: str) -> str:
 
 def gitops_pr(repo: Path, task_id: str, title: str, body_file: Path) -> dict:
     """Push the task's gitops branch and open (or reuse) its draft PR."""
-    check_title(title)
+    title = caller_title(title)
     st = require_state(repo)
     t = _gitops_task(repo, st, task_id)
     info = st.get("gitops", {}).get(task_id)
@@ -1729,6 +1758,7 @@ def deploy(repo: Path, timeout: float, interval: float, context: str | None,
         return _done(repo, st, ["not deployable (platform): nothing to deploy", "Smoke (dev): not deployable",
                                 "Promotion (staging): not deployable"])
     context = context or (st.get("product") or {}).get("context")
+    context = smoke.env_context_for(repo, gitops_apps(repo), service_name(repo), "dev", context) or context  # spec 201
     if not context and (recorded := (st.get("context") or {}).get("name")):
         context = recorded
         say(f"kube context: {context} (recorded at the hand-off)")
@@ -2177,9 +2207,14 @@ def _wait_command(target: Path, ns: argparse.Namespace) -> int:
     return waits.record(Path.cwd(), "component ship wait", body, about=target)
 
 
+def merge_flag(ns: argparse.Namespace) -> bool | None:
+    """False for --no-merge, True for --merge, None (keep the run's setting; a new run merges) for neither."""
+    return False if ns.no_merge else (True if getattr(ns, "merge", False) else None)
+
+
 def start_plain(repo: Path, ns: argparse.Namespace) -> int:
     """`ship start` without the hand-off: begin or resume the run in this session."""
-    st = start(repo, ns.spec, not ns.no_merge, ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
+    st = start(repo, ns.spec, merge_flag(ns), ns.take_over, Path(ns.system_dir).resolve() if ns.system_dir else None, ns.budget)
     if st["phase"] in ("plan", "build", "pr"):
         say(on_branch(repo, st["branch"]))
     print(describe(st))
@@ -2194,7 +2229,9 @@ def main(argv: list[str]) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("start")
     p.add_argument("spec")
-    p.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--no-merge", action="store_true", help="stop at a green PR; you merge (also changes a run that already started)")
+    g.add_argument("--merge", action="store_true", help="merge after green CI again, on a run started with --no-merge")
     p.add_argument("--take-over", action="store_true", help="move a claim on a tracked issue to this run (spec 082)")
     p.add_argument("--detach", action="store_true", help="hand the run to its own `cplat headless` process (spec 200)")
     p.add_argument("--full", action="store_true", help="pass --full to the headless ship (with --detach; no effect without)")

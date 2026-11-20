@@ -1,37 +1,41 @@
 #!/usr/bin/env bash
-# Platform upgrade end-to-end test (spec 121, AC-121.24 and AC-121.25, with the cluster halves of AC-121.4, .5, .8, .11, .15, .16, .19, .21, .22):
-# a system created by the previous release is updated to this checkout and its database moves from Postgres 16 to 17, in the order a person
+# Platform upgrade end-to-end test (spec 191, AC-191.6 and AC-191.7; the steps of spec 121, AC-121.24 and AC-121.25, with the cluster halves of
+# AC-121.4, .5, .8, .11, .15, .16, .19, .21, .22): a system created by the previous release is updated to this checkout, in the order a person
 # would do it. No GitHub, no GHCR, no Argo CD (WITH_ARGO=0): the rendered manifests are applied with kubectl, as tests/e2e/run.sh does.
 #
-#   1. From      the previous release: $E2E_UPGRADE_FROM, else the newest tag v5.0.* while no release tag has scripts/cplat/versions.py,
-#                else the newest such tag older than this commit; checked out with `git worktree add`.
-#   2. Setup     with that release's own cplat and templates: system `upg`, a python service `upg-api` (dev, staging, prod; staging promotes
-#                after-dev-smoke), postgres 16 (+ a bucket, a cache and a broker when that release supports the type), its local cluster
-#                (floating defaults), all three environments healthy; every floating reference is resolved and recorded
-#                ($work/resolved-<tag>.txt); a row, an object, a cache key and a message per environment.
+# The update part (AC-191.6, the gate job `e2e upgrade (previous release -> candidate)`), always:
+#   1. From      the previous release: $E2E_UPGRADE_FROM, else `scripts/release-check.py from-tag previous`.
+#   2. Setup     lib/upgrade-system.sh builds the system with that release's own cplat and templates: `upg`, a python service `upg-api`
+#                (dev, staging, prod; staging promotes after-dev-smoke), postgres 16 (+ a bucket, a cache and a broker when that release
+#                supports the type); its local cluster (floating defaults), all three environments healthy; every floating reference is
+#                resolved and recorded ($work/resolved-<tag>.txt); a row, an object, a cache key and a message per environment.
 #   3. Update    this checkout's `cplat platform update`; the report lists dev's moved pin and the held pins of staging and prod; the
 #                local cluster's operators move once; dev, then staging, then prod move to this release's Postgres 16 pin, each applied and
 #                verified (`platform update --verify`, `resource upgrade --verify`).
-#   4. Guard     a bucket `backups` and `backup` on all three instances: `resource upgrade postgres --to 17` is refused without a recent
-#                backup and changes nothing; then the backups run and every environment has a last_success.
-#   5. Majors    dev goes to 17; a forced failing verification keeps staging and prod on 16 and readable; the real verification lets
-#                staging follow; prod last, which folds the per-environment entries into `version: 17`.
-#   6. Checks    major 17 and server_version 17.11 everywhere, the data of step 2 unchanged, `cplat instance verify`, doctor (every operator
-#                `ok`), system status (upgrade.state verified), every rendered manifest accepted by the API server. Prints UPGRADE E2E OK.
+#   4. Checks    the data of step 2 reads back unchanged, `cplat instance verify` (the smoke tests) of every instance, doctor (every operator
+#                `ok`), every rendered manifest accepted by the API server. Prints UPGRADE E2E OK. It adds no backups and upgrades no major.
 #
-# Time budget: about 40 minutes in the log with the environments one after another (setup on the previous release 10, update and pin moves
-# 9, backups 5, the three major steps with the forced failure 12, checks 4); the workflow gives it 75. The two passes that apply every
-# environment and wait (setup, backups) run dev, staging and prod in parallel (for_envs, #400), about 13 minutes less. The major-upgrade
-# steps stay ordered. Each step prints how long it took.
+# The drill (AC-191.7), E2E_UPGRADE_DRILL=1: the update part from the previous release, then tests/e2e/upgrade-drill.sh (the backup guard and
+# the Postgres 16 to 17 major upgrade with the forced failed verification of AC-121.25; ends with major 17 and the table's 17 minor in every
+# environment, the data unchanged, upgrade state `verified`), then the same checks.
 #
-# Needs: docker (running), k3d, kubectl, uv, curl, copier (or uv), git with the release tags. Env: E2E_UPGRADE_FROM=<tag>, E2E_KEEP=1 keeps the
-# cluster, E2E_PORT, E2E_WORK, E2E_UPGRADE_SEQUENTIAL=1 applies the environments one after another (a runner short of CPU or memory).
+# Time budget: about 15 minutes for the update part (setup on the previous release 6, update and pin moves 7, checks 2), about 40 minutes for
+# the drill (backups 5, the three major steps with the forced failure 12, more checks); the workflows give it 45 and 75. The pass that applies
+# every environment and waits (setup) runs dev, staging and prod in parallel (for_envs, #400). The major-upgrade steps stay ordered. Each step
+# prints how long it took.
+#
+# Needs: docker (running), k3d, kubectl, uv, curl, copier (or uv), git with the release tags. Env: E2E_UPGRADE_FROM=<tag>, E2E_UPGRADE_DRILL=1,
+# E2E_KEEP=1 keeps the cluster, E2E_PORT, E2E_WORK, E2E_UPGRADE_SEQUENTIAL=1 applies the environments one after another (a runner short of
+# CPU or memory).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 # shellcheck source=SCRIPTDIR/lib/probe.sh
 . "$root/tests/e2e/lib/probe.sh"   # probe_run: probe pods with a component's own variables (#323)
+# shellcheck source=SCRIPTDIR/lib/uv-cache.sh
+. "$root/tests/e2e/lib/uv-cache.sh"   # a throwaway uv cache per script run (spec 208)
 work="${E2E_WORK:-$(mktemp -d)}"
+e2e_uv_cache_start
 port="${E2E_PORT:-8098}"
 regport=5112
 cluster=upg-local
@@ -112,11 +116,13 @@ cleanup() {
     if [ -s "$work/skipped.txt" ]; then   # #323: what this run did not exercise because the previous release lacked a type
       echo; echo "Skipped (the previous release lacks the resource type):"; sed 's/^/  skipped: /' "$work/skipped.txt"
     fi
-    [ "$total" -le 2700 ] || echo "WARNING: the run took more than 45 minutes in the log (budget: about 40)"
+    if [ "${E2E_UPGRADE_DRILL:-0}" = 1 ]; then limit=2700 lim_min=45 budget=40; else limit=1200 lim_min=20 budget=15; fi
+    [ "$total" -le "$limit" ] || echo "WARNING: the run took more than $lim_min minutes in the log (budget: about $budget)"
     echo; echo "UPGRADE E2E OK"
   else
     echo; echo "UPGRADE E2E FAILED at step '$step_name' (work dir: $work)"
   fi
+  e2e_uv_cache_end
   exit $rc
 }
 trap cleanup EXIT
@@ -144,13 +150,6 @@ cplat_run() { # label seconds command...: streams the output, fails with the lab
   tmo "$secs" "$@" 2>&1 | tee /dev/stderr || fail "$label failed (exit ${PIPESTATUS[0]})"
 }
 yaml_py() { uv run --with pyyaml --with ruamel.yaml python "$@"; }
-system_get() { # python expression over `d`, the parsed system.yaml (yaml.safe_load)
-  yaml_py - "$app_dir/system.yaml" "$1" <<'PY'
-import sys, yaml
-d = yaml.safe_load(open(sys.argv[1]))
-print(eval(sys.argv[2]))
-PY
-}
 table_pin() { # major: the postgres reference of this checkout's versions table, from the repo's own render.py
   yaml_py - "$gitops_repo/scripts/render.py" "$1" <<'PY'
 import importlib.util, sys
@@ -170,114 +169,16 @@ PY
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 step "1 From: pick the previous release and check it out next to this commit"
-has_versions() { git -C "$root" cat-file -e "$1:scripts/cplat/versions.py" 2>/dev/null; }
-FROM="${E2E_UPGRADE_FROM:-}"
-if [ -z "$FROM" ]; then
-  any=0
-  for t in $(git -C "$root" tag --list 'v*' --sort=-v:refname); do has_versions "$t" && { any=1; break; }; done
-  if [ $any = 0 ]; then
-    FROM=$(git -C "$root" tag --list 'v5.0.*' --sort=-v:refname | head -1)
-  else
-    here=$(git -C "$root" tag --points-at HEAD)
-    for t in $(git -C "$root" tag --merged HEAD --sort=-v:refname); do
-      has_versions "$t" || continue
-      grep -x -F -q "$t" <<< "$here" && continue
-      FROM=$t; break
-    done
-  fi
-fi
+FROM="${E2E_UPGRADE_FROM:-$(uv run "$root/scripts/release-check.py" from-tag previous)}"   # the rule lives in release-check.py (spec 191)
 [ -n "$FROM" ] || fail "no previous release tag found (v5.0.*)"
 echo "previous release: $FROM"
-(cd "$root" && git worktree add --detach "$work/from" "$FROM") >/dev/null 2>&1 || fail "git worktree add $work/from $FROM failed"
-from_cplat="uv run $work/from/scripts/cplat/cplat.py"   # the previous release's own cplat and templates
-
-# the resource types that release supports: RESOURCE_TYPES minus PLANNED_TYPES, read with ast (the release is never imported)
-FROM_TYPES=$(python3 - "$work/from" <<'PY'
-import ast, sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-found = {}
-for rel in ("templates/gitops-app/scripts/render.py", "scripts/cplat/addon.py"):
-    path = root / rel
-    if not path.is_file():
-        continue
-    for node in ast.parse(path.read_text()).body:
-        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
-        for t in targets:
-            if isinstance(t, ast.Name) and t.id in ("RESOURCE_TYPES", "PLANNED_TYPES") and t.id not in found and getattr(node, "value", None) is not None:
-                try:
-                    found[t.id] = ast.literal_eval(node.value)
-                except ValueError:
-                    pass
-print(" ".join(t for t in found.get("RESOURCE_TYPES", ("database",)) if t not in (found.get("PLANNED_TYPES") or {})))
-PY
-)
-echo "$FROM supports: $FROM_TYPES"
-has_type() { grep -w -q "$1" <<< "$FROM_TYPES"; }
-: > "$work/skipped.txt"
-needs_type() { # type step: has_type; when the previous release lacks the type, prints "skipped: <step> (...)" once per step (#323)
-  has_type "$1" && return 0
-  local why="$2 (previous release has no $1)"
-  grep -qxF -- "$why" "$work/skipped.txt" || { echo "skipped: $why"; echo "$why" >> "$work/skipped.txt"; }
-  return 1
-}
+# shellcheck source=SCRIPTDIR/lib/upgrade-system.sh
+. "$root/tests/e2e/lib/upgrade-system.sh"   # upg_types, upg_needs_type, upg_create, upg_update: the system builder, no cluster
+needs_type() { upg_needs_type "$work" "$@"; }   # type step: FROM_TYPES has the type; else "skipped: <step>" once (#323)
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 step "2 Setup on $FROM: system upg, python service upg-api, postgres 16, its local cluster with the floating defaults"
-printf '%s\n' 'system: upg' 'owner: upg' 'components:' \
-  '  - {name: upg-api, description: "upg api", type: service, lang: python}' > "$work/system.yml"
-$from_cplat system new "$work/system.yml" --no-github --skip-tasks --dir "$work" --org upg >/dev/null || fail "system new (previous release) failed"
-[ -f "$app_dir/system.yaml" ] || fail "system new did not write applications/upg/system.yaml"
-git -C "$gitops_repo" config user.name e2e
-git -C "$gitops_repo" config user.email e2e@example.com
-main_branch=$(git -C "$gitops_repo" symbolic-ref --short HEAD)
-
-$from_cplat resource add postgres --version 16 --repo-dir "$gitops_repo" >/dev/null || fail "resource add postgres --version 16 failed"
-commit "postgres 16"
-for pair in bucket:files cache:sessions broker:bus; do
-  typ=${pair%%:*}; name=${pair##*:}
-  if needs_type "$typ" "resource add $name --type $typ, and every step that uses it"; then
-    $from_cplat resource add "$name" --type "$typ" --repo-dir "$gitops_repo" >/dev/null || fail "resource add $name --type $typ failed"
-    commit "$name"
-  fi
-done
-
-# environments, the component and its instances (one Python edit with the previous release's own modules, as /component:add does)
-(cd "$gitops_repo" && FROM_TYPES="$FROM_TYPES" uv run --with pyyaml --with ruamel.yaml python - "$work/from" "$port" "$registry:$regport" <<'PY'
-import os, sys
-from pathlib import Path
-sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
-import compose, core, gitops
-
-port, registry = sys.argv[2], sys.argv[3]
-types = os.environ["FROM_TYPES"].split()
-app_dir = gitops.find_app(Path("."))
-y, data = gitops.load(app_dir)
-for env in ("dev", "staging", "prod"):
-    data["environments"][env]["host"] = "{component}.{system}-" + env + ".localhost"
-    data["environments"][env]["url"] = "http://{host}:" + port
-data["environments"]["staging"]["promote"] = "after-dev-smoke"
-shapes = {s["id"]: s for s in core.registry.load()}
-ns = compose.build_parser().parse_args(["add", "upg-api", "--expose"])    # real parser defaults
-ns.env, ns.secret, ns.secret_ref = [], [], []
-ns.generate = ["upg-api-auth=JWT_KEY"]   # a generated component secret, so that the update covers it (AC-128.9)
-ns.uses = ["postgres"] + [name for typ, name in (("bucket", "files"), ("cache", "sessions"), ("broker", "bus")) if typ in types]
-if "broker" in types:
-    data["apis"] = {"orders": {"type": "events"}}
-    ns.provides, ns.consumes = ["orders"], ["orders"]
-components = gitops.components_of(data)
-entry = compose.build_entry("upg-api", "upg/upg-api", shapes["service-python"], None, registry, ns, {})
-if "broker" in types:
-    entry["provides"], entry["consumes"] = ["orders"], ["orders"]
-    entry["uses"] = [u for u in entry["uses"] if u != "bus"]
-entry["instances"] = {"dev": {}, "staging": {}, "prod": {}}
-components["upg-api"] = entry
-gitops.save(app_dir, y, data)
-PY
-cd "$gitops_repo" && uv run scripts/render.py) || fail "describing the component and rendering (previous release) failed"
-commit "upg-api in dev, staging and prod"
-[ -f "$app_dir/addons/dev/postgres/cluster.yaml" ] || fail "render did not write addons/dev/postgres/cluster.yaml"
+upg_create "$FROM" "$work" "$port" "$registry:$regport" || fail "creating the system on $FROM (lib/upgrade-system.sh) failed"
 for e in dev staging prod; do echo "$e=$(image_name_of $e)"; done > "$work/pins-before.txt"
 echo "database references of $FROM:"; cat "$work/pins-before.txt"
 
@@ -290,15 +191,6 @@ step "2 Setup on $FROM: build and push upg-api"
 (cd "$api_repo" && uv lock -q) || fail "uv lock in upg-api failed"      # --skip-tasks left no uv.lock and the Dockerfile needs it
 docker build -q -t "localhost:$regport/upg-api:latest" "$api_repo" >/dev/null || fail "docker build upg-api failed"
 docker push -q "localhost:$regport/upg-api:latest" >/dev/null || fail "docker push upg-api failed"
-# a copy of the service whose smoke recipe always fails (step 5: the forced failed verification)
-rm -rf "$work/upg-api-failing"; cp -R "$api_repo" "$work/upg-api-failing"
-python3 - "$work/upg-api-failing/devbox.json" <<'PY'
-import json, sys
-path = sys.argv[1]
-d = json.load(open(path))
-d["shell"]["scripts"]["smoke"] = "echo 'FAIL forced'; exit 1"
-json.dump(d, open(path, "w"), indent=2)
-PY
 
 # ---- probes: plain Pods that carry upg-api's own variables, as the component sees them ----
 S3_IMAGE=amazon/aws-cli:2.22.35
@@ -677,19 +569,7 @@ fi
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 step "3 Update: this checkout's cplat platform update, merged"
-[ -z "$(gitops_dirty)" ] || fail "the gitops repo is not clean before the update"
-$cplat platform update --repo "$gitops_repo" --skip-tasks 2>&1 | tee "$work/update.out" | tee /dev/stderr >/dev/null || fail "cplat platform update failed"
-upd_branch=$(git -C "$gitops_repo" symbolic-ref --short HEAD)
-if [ "$upd_branch" = "$main_branch" ] && grep -q 'already up to date with platform .* nothing changed' "$work/update.out"; then
-  # A candidate whose templates equal the previous release (a PR that changes only tests or docs, right after a
-  # release) leaves nothing to update: no branch is made, and the rest of the run checks the same render.
-  echo "ok   the candidate's templates equal $FROM: nothing to update, the repo stays on $main_branch"
-else
-  [ "$upd_branch" != "$main_branch" ] || fail "platform update left the repo on $main_branch (it should have made a branch)"
-  git -C "$gitops_repo" checkout -q "$main_branch" && git -C "$gitops_repo" merge -q --ff-only "$upd_branch" || fail "merging $upd_branch into $main_branch failed"
-fi
-(cd "$gitops_repo" && uv run scripts/render.py >/dev/null) || fail "render.py of the updated repo failed"
-commit "render after the platform update"
+upg_update "$work" || fail "the update of the system (lib/upgrade-system.sh) failed"   # platform update, merged, rendered, committed; a candidate equal to $FROM leaves nothing to update
 table16=$(table_pin 16)
 moves=1   # the pin-move steps need a release whose versions table moves postgres 16 (5.3.0 -> 5.4.0 did; 5.4.0 -> 5.5.0 does not)
 [ "$(sed -n 's/^dev=//p' "$work/pins-before.txt")" != "$table16" ] || moves=0
@@ -779,144 +659,18 @@ done
 fi
 
 # ---------------------------------------------------------------------------------------------------------------------------------
-step "4 Guard: backups declared and rendered but not applied; the major upgrade is refused and changes nothing (AC-121.25)"
-$cplat resource add backups --type bucket --repo-dir "$gitops_repo" >/dev/null || fail "resource add backups --type bucket failed"
-commit "bucket backups"
-(cd "$gitops_repo" && uv run --with pyyaml --with ruamel.yaml python - "$root" <<'PY'
-import sys
-sys.path.insert(0, f"{sys.argv[1]}/scripts/cplat")
-import gitops
-from pathlib import Path
-app_dir = gitops.find_app(Path("."))
-y, data = gitops.load(app_dir)
-components = gitops.components_of(data)
-components["upg-api"]["uses"] = [*(components["upg-api"].get("uses") or []), "backups"]   # the target must be used by a component in the environment
-pg = data["resources"]["postgres"]
-instances = pg.get("instances") or {}
-for env in ("dev", "staging", "prod"):
-    instances[env] = {**(instances.get(env) or {}), "backup": {"to": "backups"}}
-pg["instances"] = instances
-gitops.save(app_dir, y, data)
-PY
-uv run scripts/render.py) || fail "render.py failed with backup on all three instances"
-commit "postgres: backup to the bucket backups in dev, staging and prod"
+# The drill (AC-191.7): the guard, the 16 -> 17 major upgrade with the forced failed verification (AC-121.25) and its checks of 17.
+if [ "${E2E_UPGRADE_DRILL:-0}" = 1 ]; then
+  # shellcheck source=SCRIPTDIR/upgrade-drill.sh
+  . "$root/tests/e2e/upgrade-drill.sh"
+fi
 
-# the backup operators (plugin, cert-manager, SeaweedFS) are new in operators/apps: the same script installs them; the ones from step 3 do not move again
-(cd "$gitops_repo" && LOCAL_CLUSTER=$cluster LOCAL_HTTP_PORT=$port WITH_ARGO=0 REGISTRY_PORT=$regport bash scripts/local-cluster.sh up 2>&1 | tee "$work/up-backups.out" | tee /dev/stderr >/dev/null) \
-  || fail "local-cluster.sh up (for the backup operators) failed"
-chart_versions > "$work/charts-after-backups.txt"
-while read -r name version; do
-  [ -n "$name" ] || continue
-  now=$(sed -n "s/^$name //p" "$work/charts-after-backups.txt" | head -1)
-  [ "$now" = "$version" ] || fail "the operator chart $name moved twice: '$version' after the update, '$now' after the second cluster-up"
-done < "$work/charts-after-update.txt"
-echo "ok   no operator chart moved a second time (AC-121.21)"
-wait_for 300 "the Barman Cloud ObjectStore CRD" k get customresourcedefinitions.apiextensions.k8s.io/objectstores.barmancloud.cnpg.io
-wait_for 300 "the ExternalSecret CRD" k get customresourcedefinitions.apiextensions.k8s.io/externalsecrets.external-secrets.io
-
-# only the ObjectStore of dev is applied: the Cluster has no plugin and no backup yet, so the last successful backup reads never
-kn upg-dev apply -f "$app_dir/addons/dev/postgres/objectstore.yaml" >/dev/null || fail "applying the ObjectStore of dev failed"
-head_before=$(gitops_head)
-image_before=$(cfield dev '{.spec.imageName}')
-gen_before=$(cfield dev '{.metadata.generation}')
-if out=$($cplat resource upgrade postgres --to 17 --env dev --repo-dir "$gitops_repo" --context "$ctx" 2>&1); then rc=0; else rc=$?; fi
-echo "$out" >&2
-[ "$rc" = 1 ] || fail "resource upgrade postgres --to 17 without a backup exited $rc, expected 1"
-grep -w -i -q "never" <<< "$out" || fail "the refusal does not say the last successful backup is never"
-grep -F -q "/resource:backup postgres --env dev" <<< "$out" || fail "the refusal does not name /resource:backup postgres --env dev"
-[ "$(gitops_head)" = "$head_before" ] || fail "the refused upgrade changed HEAD"
-[ -z "$(gitops_dirty)" ] || fail "the refused upgrade left changes in the tree"
-[ "$(cfield dev '{.spec.imageName}')" = "$image_before" ] && [ "$(cfield dev '{.metadata.generation}')" = "$gen_before" ] \
-  || fail "the refused upgrade changed the dev Cluster (imageName or .metadata.generation)"
-echo "ok   refused without a backup (last successful backup never); HEAD, tree and the dev Cluster are unchanged"
-
-step "4 Guard: apply the backups in dev, staging and prod in parallel, take the first backup of every environment, wait for last_success"
-for_envs apply_env
-last_success() { # env: last_success of postgres in the environment, from `cplat system status --json`
-  $cplat system status --json --repo-dir "$gitops_repo" --context "$ctx" 2>/dev/null | python3 -c '
-import json, sys
-d = json.loads(sys.stdin.read())
-r = next(r for r in d["backups"]["resource_instances"] if r["resource"] == "postgres" and r["environment"] == sys.argv[1])
-print(r["backup"].get("last_success") or "")' "$1"
-}
-has_last_success() { [ -n "$(last_success "$1")" ]; }
-archiving_on() { [ "$(cfield "$1" '{.status.conditions[?(@.type=="ContinuousArchiving")].status}')" = True ]; }
-take_backup() { # env: the on-demand backup (CloudNativePG's immediate one may fail while the plugin loads, so it is not relied on)
-  local i out
-  wait_for 500 "the plugin to be loaded in $1 (ContinuousArchiving)" archiving_on "$1"
-  for i in 1 2 3; do
-    if out=$(tmo 600 $cplat resource backup postgres --env "$1" --repo-dir "$gitops_repo" --context "$ctx" 2>&1 | tee /dev/stderr) && grep -q "backup completed" <<< "$out"; then return 0; fi
-    sleep 20
-  done
-  fail "/resource:backup postgres --env $1 did not complete in 3 tries"
-}
+final_checks() { # the data reads back, every instance verifies, every operator is ok, the API server accepts every manifest (AC-191.6)
 for e in dev staging prod; do
-  take_backup "$e"
-  wait_for 600 "last_success of postgres in $e (cplat system status)" has_last_success "$e"
-  echo "ok   $e: last_success $(last_success "$e")"
-done
-
-# ---------------------------------------------------------------------------------------------------------------------------------
-step "5 Majors: dev to 17, then a forced failed verification (AC-121.25)"
-cplat_run "resource upgrade postgres --to 17 --env dev" 300 $cplat resource upgrade postgres --to 17 --env dev --repo-dir "$gitops_repo" --context "$ctx" >/dev/null
-[ "$(system_get "d['resources']['postgres']['instances']['dev']['version']")" = 17 ] || fail "system.yaml lacks resources.postgres.instances.dev.version: 17"
-commit "postgres: dev to 17"
-apply_addons dev
-if out=$(tmo 1500 $cplat resource upgrade postgres --verify --env dev --repo-dir "$gitops_repo" --context "$ctx" --component-dir upg-api="$work/upg-api-failing" 2>&1 | tee /dev/stderr); then rc=0; else rc=$?; fi
-[ "$rc" = 1 ] || fail "the verification with a failing smoke recipe exited $rc, expected 1"
-grep -F -q "NOT VERIFIED" <<< "$out" && grep -w -q "dev" <<< "$out" && grep -F -q "smoke upg-api" <<< "$out" || fail "the failed verification does not name dev and smoke upg-api"
-grep -F -q "last successful backup: $(last_success dev)" <<< "$out" || fail "the failed verification does not name the last backup time $(last_success dev)"
-grep -F -q "/resource:restore postgres --env dev" <<< "$out" || fail "the failed verification does not name /resource:restore postgres --env dev"
-echo "ok   dev: NOT VERIFIED with FAIL forced named (smoke upg-api, the last backup, the way back)"
-
-if out=$($cplat resource upgrade postgres --to 17 --env staging --repo-dir "$gitops_repo" --context "$ctx" 2>&1); then rc=0; else rc=$?; fi
-echo "$out" >&2
-[ "$rc" = 1 ] || fail "resource upgrade postgres --to 17 --env staging after dev's failed verification exited $rc, expected 1"
-grep -w -q "dev" <<< "$out" && grep -F -i -q "failed its verification" <<< "$out" || fail "the staging refusal does not name dev and 'failed its verification'"
-[ -z "$(gitops_dirty)" ] || fail "the refused staging step left changes in the tree"
-for e in staging prod; do
-  [ "$(cfield $e '{.status.pgDataImageInfo.majorVersion}')" = 16 ] || fail "$e reports pgDataImageInfo.majorVersion '$(cfield $e '{.status.pgDataImageInfo.majorVersion}')', expected 16"
-  healthy "$e" || fail "the Postgres cluster of $e is not healthy after dev's failed verification"
-  read_data "$e"
-done
-echo "ok   staging and prod stay on 16 and readable while dev failed its verification"
-
-step "5 Majors: dev verified (the real repo), staging follows (after-dev-smoke), prod last and the entries fold"
-take_backup staging   # fresh: the 60-minute rule must hold on a slow runner
-if out=$(tmo 1500 $cplat resource upgrade postgres --verify --env dev --repo-dir "$gitops_repo" --context "$ctx" --component-dir upg-api="$work/upg-api" 2>&1 | tee /dev/stderr); then rc=0; else rc=$?; fi
-[ "$rc" = 0 ] || fail "resource upgrade postgres --verify --env dev with the real repo exited $rc"
-grep -w -q "verified" <<< "$out" || fail "dev's verification did not print 'verified'"
-[ "$(system_get "d['resources']['postgres']['instances']['staging']['version']")" = 17 ] || fail "the verified dev step did not write instances.staging.version: 17 (promote: after-dev-smoke)"
-commit "postgres: staging to 17"
-apply_addons staging
-$cplat resource upgrade postgres --verify --env staging --repo-dir "$gitops_repo" --context "$ctx" --component-dir upg-api="$work/upg-api" 2>&1 | tee /dev/stderr >/dev/null \
-  || fail "resource upgrade --verify --env staging failed after the major step"
-take_backup prod
-cplat_run "resource upgrade postgres --to 17 --env prod" 300 $cplat resource upgrade postgres --to 17 --env prod --repo-dir "$gitops_repo" --context "$ctx" >/dev/null
-system_get "d['resources']['postgres']['version']" | grep -x -q 17 || fail "system.yaml lacks resources.postgres.version: 17 after the last environment"
-system_get "[k for v in (d['resources']['postgres'].get('instances') or {}).values() for k in (v or {}) if k == 'version']" | grep -x -F -q "[]" \
-  || fail "per-environment version entries are left in instances after the last step (the entries must fold into version: 17)"
-echo "ok   the entries folded: resources.postgres has version: 17 and no instances.*.version"
-commit "postgres: prod to 17 (the entries fold)"
-apply_addons prod
-$cplat resource upgrade postgres --verify --env prod --repo-dir "$gitops_repo" --context "$ctx" --component-dir upg-api="$work/upg-api" 2>&1 | tee /dev/stderr >/dev/null \
-  || fail "resource upgrade --verify --env prod failed after the major step"
-
-# ---------------------------------------------------------------------------------------------------------------------------------
-step "6 Checks: major, server_version, data, instance verify, doctor, status, CRDs, server-side dry runs"
-want_minor=$(table_pin 17 | sed -n 's/^[^:]*:\([0-9][0-9.]*\).*/\1/p')   # 17.11 at the time of writing (design.md, Verified)
-[ -n "$want_minor" ] || fail "cannot read the minor of the table's postgres 17 pin"
-for e in dev staging prod; do
-  [ "$(cfield $e '{.status.pgDataImageInfo.majorVersion}')" = 17 ] || fail "$e reports major '$(cfield $e '{.status.pgDataImageInfo.majorVersion}')', expected 17"
-  dbq "$e" "show server_version"
-  [ "${Q%% *}" = "$want_minor" ] || fail "server_version of $e is '$Q', expected $want_minor (the table's 17 pin, 17.11 at the time of writing)"
   read_data "$e"
   (cd "$api_repo" && $cplat instance verify "$e" --base-url "http://upg-api.upg-$e.localhost:$port" --no-retry) || fail "cplat instance verify $e failed"
-  rec=$(kn "upg-$e" get configmaps/upg-postgres-upgrade -o jsonpath='{.data.state}' 2>/dev/null || true)
-  [ "$rec" = verified ] || fail "the upgrade record configmaps/upg-postgres-upgrade of $e reads '$rec', expected verified"
 done
-echo "ok   every environment is on 17 ($want_minor), its data reads back, instance verify is green"
-
+echo "ok   every environment's data reads back and instance verify is green"
 $cplat platform doctor --context "$ctx" --repo "$gitops_repo" --json > "$work/doctor.json" 2> "$work/doctor.err" || true
 python3 - "$work/doctor.json" <<'PY' || fail "doctor --context: an operator row is not ok (see above)"
 import json, sys
@@ -930,23 +684,6 @@ if bad:
     sys.exit(f"{len(bad)} operator row(s) with state != ok")
 PY
 echo "ok   platform doctor --context: every operator row is ok (installed = the table, every CRD serves the table's versions)"
-$cplat system status --json --repo-dir "$gitops_repo" --context "$ctx" > "$work/status.json" 2> "$work/status.err" || fail "system status --json failed: $(tail -3 "$work/status.err")"
-python3 - "$work/status.json" <<'PY' || fail "system status does not show upgrade.state verified for postgres in every environment (see above)"
-import json, sys
-d = json.loads(open(sys.argv[1]).read())
-row = next(r for r in d["resource_versions"] if r["resource"] == "postgres")
-for env in ("dev", "staging", "prod"):
-    cell = row["cells"][env]
-    print(f"  {env}: version {cell['version']} health {cell['health']} upgrade {cell['upgrade']}")
-    if (cell.get("upgrade") or {}).get("state") != "verified" or str(cell["version"]) != "17":
-        sys.exit(f"{env}: upgrade.state is not verified on 17")
-PY
-echo "ok   system status: upgrade.state verified on 17 in dev, staging and prod"
-for crd in clusters.postgresql.cnpg.io backups.postgresql.cnpg.io objectstores.barmancloud.cnpg.io; do
-  served=$(k get "customresourcedefinitions.apiextensions.k8s.io/$crd" -o jsonpath='{.spec.versions[?(@.served==true)].name}' 2>/dev/null || true)
-  grep -w -q v1 <<< "$served" || fail "the CRD $crd serves '$served', expected v1"
-done
-echo "ok   the Postgres CRDs serve v1"
 for e in dev staging prod; do
   for sub in addons overlays; do
     for d in "$app_dir/$sub/$e"/*/; do
@@ -963,3 +700,7 @@ for e in dev staging prod; do
   done
 done
 echo "ok   every rendered addon and overlay is accepted by the API server (AC-121.22)"
+}
+
+step "4 Checks: the data, instance verify, doctor, server-side dry runs"
+final_checks

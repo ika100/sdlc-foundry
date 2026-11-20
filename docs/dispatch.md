@@ -11,15 +11,16 @@ triage, you approve specs (unless you let the dispatcher do it), you promote to 
 1. **Look first.** `cplat dispatch plan` reads only. It works without a policy file and shows the defaults, every candidate with its verdict
    (`ready` or `held: <reason>`), the order, the slot each would take and the daily token usage of the last 7 days. It writes nothing to
    GitHub and creates no branch, worktree or claim.
-2. **One slot, issues only.** Commit `.platform/dispatch.yml` with a token budget and leave `slots` at 1 and `sources` at `[issues]`:
+2. **One slot, issues only.** Commit `.platform/dispatch.yml` with a daily limit in US dollars and leave `slots` at 1 and `sources` at `[issues]`:
 
    ```yaml
    slots: 1
    budget:
-     tokens_per_day: 20000000
+     usd_per_day: 20
    ```
 
-   Pick the budget from the 7-day hint of `plan`. Then run `cplat dispatch start --once` once and read the lines it prints, then
+   Pick the limit from the 7-day cost hint of `plan`. On a subscription, set `budget.mode: plan` instead and install the
+   [usage sensor](#plan-usage-sensor). Then run `cplat dispatch start --once` once and read the lines it prints, then
    `cplat dispatch start` for the loop. Fix runs open a PR; the dispatcher lands it when the checks are green.
 3. **Specs and more slots.** Add `specs` to `sources` and raise `slots` (or `cplat dispatch slots 3` for a try without a commit). Specs are
    still approved by you (`gates.approve_specs: human`); a draft waits as `held: needs-approval`.
@@ -34,12 +35,20 @@ adopts the units that still run. Keep it alive with a terminal multiplexer, laun
 | Key | Values | Default |
 |---|---|---|
 | `slots` | integer 1 to 10 | `1` |
-| `budget.tokens_per_day` | integer >= 1 | none: `start` and `resume` refuse without it |
+| `budget.mode` | `cost`, `plan` | `cost` |
+| `budget.usd_per_day` | number > 0: the daily limit in US dollars | none: in mode `cost`, `start` and `resume` refuse without it (or without the deprecated `budget.tokens_per_day`) |
+| `budget.usd_per_month` | number > 0: the limit since the 1st of the local month | none |
+| `budget.tokens_per_day` | integer >= 1; **deprecated**, use `budget.usd_per_day` | none |
 | `budget.per_unit` | map of `minutes`, `invocations`, `reruns`, `cost` to a number > 0 or `off`; passed to `cplat headless` as `--budget KEY=VALUE` | `{}` (the budgets of [unattended delivery](unattended-delivery.md#budgets-and-repeated-failures)) |
+| `budget.plan.weekly_target` | number 0.50 to 1.00: the share of the weekly limit to use by its reset; only with mode `plan` | `0.92` |
+| `budget.plan.window_stop` | number 0.50 to 1.00: the share of the 5-hour window at which no unit starts; only with mode `plan` | `0.80` |
+| `budget.plan.filler_only` | rules `label:<name>` or `priority:P0` to `P2`; only with mode `plan`; `[]` is allowed | `[priority:P2, label:enhancement]` |
+| `budget.plan.filler_tasks` | list of `{name, command}` with unique names; only with mode `plan` | `[]` |
+| `budget.plan.filler_drafts` | `true`, `false`; only with mode `plan` | `true` |
 | `sources` | non-empty subset of `issues`, `specs` | `[issues]` |
 | `ready.labels` | labels an issue needs besides `triaged` | `[]` |
 | `ready.exclude_labels` | labels that hold an issue besides `needs-decision` and `wontfix` | `[]` |
-| `priority` | rules `label:<name>`, `spec-order`, `oldest` | `[label:bug, label:p1, spec-order, oldest]` |
+| `priority` | rules `label:<name>`, `spec-order`, `oldest` | `[label:p0, label:bug, label:p1, spec-order, oldest]` (a spec at `P0` matches `label:p0` and so sorts first) |
 | `gates.approve_specs` | `human`, `self` | `human` |
 | `gates.merge` | `green-ci` | `green-ci` |
 | `serialize` | subset of `merge`, `e2e`; must contain `merge` | `[merge]` |
@@ -51,14 +60,16 @@ A full file:
 ```yaml
 slots: 2
 budget:
-  tokens_per_day: 20000000
+  mode: cost
+  usd_per_day: 20
+  usd_per_month: 300
   per_unit:
     cost: 20
 sources: [issues, specs]
 ready:
   labels: [bug]
   exclude_labels: [blocked]
-priority: [label:bug, label:p1, spec-order, oldest]
+priority: [label:p0, label:bug, label:p1, spec-order, oldest]
 gates:
   approve_specs: human
   merge: green-ci
@@ -68,8 +79,8 @@ guard:
   loop_minutes: 5
 ```
 
-A mistake in the file exits 1 and names the key, for example `ERROR: .platform/dispatch.yml: slots: 11 is not allowed (allowed: ...)`;
-nothing is started (`guard.loop_calls: 2 is not allowed (allowed: an integer 3..100)`). Every verb that reads the file checks it; only `start` and `resume` need it to exist and to carry the budget.
+A `budget.plan.*` key in mode `cost` fails with `budget.plan.<key>: needs budget.mode: plan`. A mistake in the file exits 1 and names the key, for example `ERROR: .platform/dispatch.yml: slots: 11 is not allowed (allowed: ...)`;
+nothing is started (`guard.loop_calls: 2 is not allowed (allowed: an integer 3..100)`). Every verb that reads the file checks it; only `start` and `resume` need it to exist and, in mode `cost`, to carry a daily limit.
 
 ## What is ready
 
@@ -129,10 +140,73 @@ hold a release left at a confirmation stop.
 
 ## Budget
 
-The day is your local calendar day. The dispatcher books the tokens of every unit and of its own model calls to today's ledger. At
-`budget.tokens_per_day` no unit starts and no model call is made; running units go on within their own budgets, and you get one `budget` need.
-Starts continue after midnight or when you raise the limit above the usage. When a unit's usage cannot be read, no unit starts until it is
-known, and `status` names the unit.
+The day is your local calendar day, the month starts on the 1st. The mode is the one the policy states (`cost` by default) and never
+changes on its own; `plan` and `status` only print a hint when another mode fits (readings of a subscription found while the mode is
+`cost`, or an API key and no readings in mode `plan`). Both verbs show the mode's line: `cost today: $1.20 of $5.00` or
+`plan usage: 5h 83 % (stop 80 %, resets 15:45) · week 41 % (pace 46 %, target 92 %, resets Mon 00:00) · reading 4 min old`.
+
+### Mode cost
+
+The dispatcher adds up the US dollar cost of every unit and of its own model calls (the reported cost of a call, else its tokens priced
+from the platform's price table) since local midnight. At `budget.usd_per_day` no unit starts and no model call is made; running units go on
+within their own budgets, and you get one `budget` need per day. With `budget.usd_per_month` the same holds for the sum since the 1st, with
+one need per month. Starts continue after midnight, on the 1st or when you raise the limit. When a unit's usage is unknown, or its model has
+no price in the table, no unit starts until it is known, and `status` names the unit.
+
+`budget.tokens_per_day` still works as a deprecated cap in raw tokens, and `plan` and `status` warn about it with the cost of today. With
+both keys, the first limit reached holds starts. Without `budget.usd_per_day`, `plan` shows the key as unset with the cost of the last 7 days.
+
+### Mode plan
+
+On a subscription the limits are shares of your plan, not dollars. The dispatcher reads them from the [usage sensor](#plan-usage-sensor):
+
+- **Weekly target.** `budget.plan.weekly_target` (92 %) of the weekly limit is the target by its reset. The pace is the target times the
+  elapsed share of the week. Ahead of the pace, or at the target, no unit starts. Up to 5 points behind the pace, at most 1 unit runs at a
+  time; further behind, up to `slots`.
+- **Window stop.** At `budget.plan.window_stop` (80 %) of the 5-hour window no unit starts. Running units always finish.
+- **Stale reading.** A reading older than 30 minutes is estimated: the reading plus the tokens the dispatcher booked since then, divided by
+  the tokens per percentage point of the readings of the last 7 days. A window whose reset has passed counts from 0 %. `plan` shows
+  `source: estimate`. Without a reading, or without a calibration for a stale one, no unit starts and `plan` shows
+  `held: plan usage unknown (install the sensor and open an interactive session)`.
+- **Limit messages.** A unit that ends with the usage-limit message (a session or weekly limit) holds every start until the reset it names,
+  or for 60 minutes without one, even when a later reading is lower. `plan` shows `source: limit`. Usage credits are never spent to go on.
+
+`budget.usd_per_day`, `budget.usd_per_month` and `budget.tokens_per_day` are optional in mode `plan`; when set, they cap as in mode `cost`.
+While a start is held, every candidate that would have taken a slot shows `held: <reason>` in `plan` and `status`; a paused or draining
+dispatcher keeps its candidates ready.
+
+## Plan usage sensor
+
+The readings of mode `plan` come from the status line of your interactive Claude Code sessions, which passes the subscription's limits to
+the sensor script. Install it once per machine:
+
+```
+cplat dispatch sensor install
+cplat dispatch sensor remove
+```
+
+`install` copies the script to `${XDG_STATE_HOME:-~/.local/state}/sdlc-foundry/usage/` and sets it as the `statusLine` of
+`${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`. A status line you had before keeps working: the sensor runs it and prints its output
+unchanged. `remove` restores the earlier status line (and leaves a status line you changed since the install alone). Running `install`
+again only refreshes the copy.
+
+Readings are written only while an interactive session runs and shows its status line: a headless unit does not write one. A reading
+holds both windows with the time it was taken; input without a window leaves that window's last reading in place. Readings are kept for the
+machine, not for a repo, because one subscription serves all repos.
+
+## Filler work
+
+Near the end of the weekly window, unused plan is spent on work that can wait. The filler window opens in the last 24 hours before the
+weekly reset, when no limit above holds and no regular candidate is ready. Filler starts show `(filler)` and `plan` prints `filler: true`.
+In this order:
+
+1. **Filler-only candidates**, in priority order: the ones that match `budget.plan.filler_only` (by default P2 specs and `enhancement`
+   issues). Outside the filler window they are held as `held: filler only`.
+2. **`budget.plan.filler_tasks`**: each named command runs once per weekly window, in its own worktree. Use it for the benchmark, the
+   mutation run or a journey; the commands differ per machine, so the list is empty by default.
+3. **Retro drafts**, with `filler_drafts: true`: one run per proposal of the latest weekly retro issue that no spec or open pull request
+   answers yet, at most 3 per weekly window, one at a time. Each opens a pull request with a draft spec that tracks the retro issue.
+   The pull request stays open for you: the dispatcher never approves or lands it, even with `gates.approve_specs: self`.
 
 ## Verbs
 

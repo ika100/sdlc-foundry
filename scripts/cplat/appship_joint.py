@@ -29,6 +29,7 @@ import spec as specmod
 import staging
 import waits
 from core import PlatformError, run
+from uvscript import script_cmd
 
 MARKER_TEXT = "refs/heads/ship/"
 WORKFLOW = ".github/workflows/pin-dev.yml"
@@ -161,7 +162,7 @@ def component_of(gitops: Path, repo_id: str) -> str:
 
 
 def _devbox(wt: Path, *args: str) -> None:
-    res = run(["devbox", "run", "--", "uv", "run", *args], cwd=wt, check=False)
+    res = run(["devbox", "run", "--", *script_cmd(*args)], cwd=wt, check=False)
     if res.returncode != 0:
         tail = (res.stderr or res.stdout or "").strip().splitlines()[-1:] or ["no output"]
         raise PlatformError(f"{' '.join(args)} failed in {wt}: {tail[0]}", hint="fix the gitops-app checkout, then run the command again")

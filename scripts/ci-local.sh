@@ -21,7 +21,7 @@ echo "OK: plugin manifests match the marketplace"
 python3 scripts/check-plugin-deps.py
 
 step "shape registry, templates, plugins, descriptions"
-uv run scripts/shapes.py check
+bash scripts/uv-script.sh scripts/shapes.py check
 
 step "4.x slash-command tombstones"
 python3 scripts/tombstones.py check
@@ -36,7 +36,7 @@ step "the platform's allowlist holds the library template's rules (spec 171)"
 python3 scripts/check-settings.py
 
 step "every prompt rule is classified, reasoned and marked (spec 168)"
-uv run scripts/cplat/cplat.py platform rules check
+bash scripts/uv-script.sh scripts/cplat/cplat.py platform rules check
 step "user docs name only things that exist (spec 161)"
 uv run --with-requirements requirements-test.txt python scripts/check-docs.py
 

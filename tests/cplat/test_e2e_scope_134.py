@@ -158,6 +158,22 @@ def test_an_unknown_base_is_one_error_line_not_a_traceback_ac_134_2(tmp_path):  
     assert p.returncode == 1 and p.stdout.startswith("ERROR: ") and "Traceback" not in p.stdout + p.stderr
 
 
+def test_main_changes_in_the_merge_commit_are_not_the_pull_requests_814(tmp_path):
+    root = mini_root(tmp_path)
+    git(root, "checkout", "-qb", "pr")
+    (root / "docs" / "spec.md").write_text("spec\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "spec only")
+    git(root, "checkout", "-q", "main")
+    stale = git(root, "rev-parse", "HEAD").strip()
+    (root / "scripts" / "cplat" / "ship.py").write_text("# changed on main\n")
+    git(root, "commit", "-qam", "main moves on")
+    git(root, "checkout", "-q", "--detach")
+    git(root, "merge", "-q", "--no-ff", "-m", "merge", "pr")
+    got = decide(root, "--base", stale)
+    assert "run=false" in got.stdout, got.stdout + got.stderr
+
+
 # ---------------- AC-134.8: fewer pull requests start the cluster e2e ----------------
 
 def test_fewer_of_the_last_40_pull_requests_start_the_cluster_e2e_ac_134_8():  # AC-134.8

@@ -345,3 +345,33 @@ def test_a_release_merge_that_staging_runs_itself_is_its_own_evidence(ev):
     s = summary(staging_tag=f"sha-{RELEASE}")
     assert s.evidence_commit == RELEASE and s.warning is None, s.lines()
     assert not any(ln.startswith("- evidence commit:") for ln in s.lines())
+
+
+# ---------------- journey 21: a network drop during the evidence ----------------
+
+def test_a_staging_smoke_still_in_the_local_buffer_counts_j21_1(ev, monkeypatch):
+    """J21-1: the staging smoke record could not be uploaded (network down) and waits in this machine's buffer; the prod
+    evidence counts it instead of reporting no staging smoke."""
+    import runs
+    ev.records.update({"runs/2026/10/24/r1.json": dev_rec("r1", f"sha-{E}")})
+    verify = {"run_id": "v1", "kind": "verify", "repo": "acme/shop-api", "ended_at": "2026-10-24T14:30:00Z",
+              "smoke": stg("passed", f"sha-{E}", at="2026-10-24T14:30:00Z")}
+    monkeypatch.setattr(runs, "_safe_buffer", lambda: [verify])
+    ev_ = summary()
+    assert ev_.warning is None and ev_.staging["outcome"] == "passed"
+    assert any(line.startswith("- smoke (staging): passed 3/3") and "not uploaded yet" in line for line in ev_.lines())
+
+
+def test_an_unreadable_run_store_reads_as_unchecked_not_as_no_green_smoke_j21_2(ev, monkeypatch):
+    """J21-2: the store could not be read; the warning says the smoke could not be checked and why."""
+    import runs
+    mod = evidence_mod()
+
+    class Down:
+        def read(self, days, deadline=None):
+            raise RuntimeError("dial tcp 140.82.121.6:443: connect: network is down")
+    monkeypatch.setattr(mod, "open_store", lambda slug: Down())
+    monkeypatch.setattr(runs, "_safe_buffer", lambda: [])
+    first = summary().lines()[0]
+    assert first.startswith("WARNING: the staging smoke of shop-api v1.4.0 could not be checked: run store acme/runs not readable")
+    assert "network is down" in first and "no green staging smoke" not in first

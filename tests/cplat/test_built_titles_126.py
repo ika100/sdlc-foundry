@@ -167,7 +167,7 @@ def test_appship_open_pr_fits_the_title(lw):  # AC-126.11
     assert_sent(sent)
 
 
-@pytest.mark.parametrize("title", ["feat(shop): " + "x" * 80, "no conventional commit here"])
+@pytest.mark.parametrize("title", ["feat(shop):", "no conventional commit here"])
 def test_entry_pr_refuses_a_bad_title_before_anything_is_pushed(w, title):  # AC-126.11
     w.started()
     r = w.app("repo", "start", t97.GITOPS)
@@ -184,6 +184,26 @@ def test_entry_pr_refuses_a_bad_title_before_anything_is_pushed(w, title):  # AC
     assert w.made("pr", "create") == []
     branch = f"compose/{t97.SPEC}"
     assert subprocess.run(["git", "--git-dir", str(w.origin), "rev-parse", branch], capture_output=True).returncode != 0
+
+
+def test_entry_pr_shortens_a_caller_title_that_is_only_too_long(w):  # AC-126.11
+    given = "feat(shop): " + "x" * 80
+    w.started()
+    r = w.app("repo", "start", t97.GITOPS)
+    assert r.rc == 0, r.out
+    wt = Path(r.out.strip().splitlines()[-1].split()[-1])
+    (wt / "applications" / "shop" / "entry.yaml").write_text("entry: true\n")
+    t97.git(wt, "add", "-A")
+    t97.git(wt, "commit", "-qm", "feat(shop): gitops entry")
+    body = w.root / "body.md"
+    body.write_text("## Summary\n")
+    r = w.app("entry", "pr", t97.GITOPS, "--title", given, "--body-file", str(body))
+    assert r.rc == 0, r.out
+    (create,) = w.made("pr", "create")
+    sent = create[create.index("--title") + 1]
+    assert_sent(sent)
+    assert sent.startswith("feat(shop): ")
+    assert f'title shortened: "{given}" -> "{sent}"' in r.out
 
 
 from test_appship_097 import w  # noqa: E402,F401  (fixture)

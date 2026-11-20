@@ -17,6 +17,7 @@ from pathlib import Path
 
 import backupstate
 import core
+import envcluster
 import gitops
 import model
 from core import PlatformError, Report
@@ -45,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
                    "next to the running database (#415)")
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
-    p.add_argument("--context", help="kube context (default: the current one)")
+    p.add_argument("--context", help="kube context (default: the environment's cluster for a system spread over clusters, else the current one)")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--json", action="store_true")
     return p
@@ -150,6 +151,7 @@ def _publish(repo: Path, app_dir: Path, ns: argparse.Namespace, title: str, acti
         core.run(["git", "checkout", "-q", branch if branch != "HEAD" else "main"], cwd=repo)
         core.run(["git", "pull", "-q"], cwd=repo, check=False)
         head = core.run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+        _end_stale_sync(app, head, ctx, r)
         rc, _out, err = backupstate.kubectl(["-n", "argocd", "annotate", "applications.argoproj.io", app,
                                              "argocd.argoproj.io/refresh=normal", "--overwrite"], ctx)
         if rc == 0:
@@ -179,6 +181,27 @@ def _publish(repo: Path, app_dir: Path, ns: argparse.Namespace, title: str, acti
     r.did.append(f"applied applications/{app_dir.name}/addons/{env}/{db}")
     return False
 
+
+def _end_stale_sync(app: str, head: str, ctx: str | None, r: Report) -> None:
+    """J21-5: after a restore whose copy never became healthy, Argo CD's sync of the addon app kept waiting for that copy, and the
+    discard and later restores merged but were never applied. A sync still running for another revision than `head` is ended
+    (its `operation` removed) before the refresh, so the merged change is applied."""
+    try:
+        obj = backupstate.get_json(["applications.argoproj.io", app, "-n", "argocd"], ctx)
+    except backupstate.ReadError:
+        return
+    op = (obj.get("status") or {}).get("operationState") or {}
+    rev = (op.get("syncResult") or {}).get("revision") or ((op.get("operation") or {}).get("sync") or {}).get("revision")
+    if not obj.get("operation") or op.get("phase") != "Running" or rev == head:
+        return
+    waits = (op.get("message") or "").strip().splitlines()[:1] or [f"revision {str(rev or '?')[:7]}"]
+    rc, _out, err = backupstate.kubectl(["-n", "argocd", "patch", "applications.argoproj.io", app, "--type", "json",
+                                         "-p", '[{"op": "remove", "path": "/operation"}]'], ctx)
+    if rc == 0:
+        r.did.append(f"ended the sync of {app} that was still running ({waits[0]})")
+    else:
+        why = (err or "").strip().splitlines()[-1:] or ["no reason given"]
+        r.did.append(f"could not end the sync of {app} that is still running ({why[0]}); end it with: argocd app terminate-op {app}")
 
 def _only_prune_left(app: str, ctx: str | None) -> bool:
     """True when every OutOfSync resource of the Argo CD application only waits to be pruned. The database addon's
@@ -293,6 +316,7 @@ def main(argv: list[str]) -> int:
     app_dir = gitops.find_app(repo, ns.app)
     m = model.load_dir(app_dir)
     ri = check(ns, m)
+    ns.context = envcluster.env_context(repo, m, ns.env, ns.context)
     system, db, env, ctx = app_dir.name, ns.name, ns.env, ns.context
     kns = f"{system}-{env}"
     try:

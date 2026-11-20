@@ -12,12 +12,14 @@ from pathlib import Path
 
 import backupstate
 import dbbackupset
+import envcluster
 import gitops
 import model
 from core import PlatformError
 
 POLL_S = 10.0
 TIMEOUT_S = 30 * 60.0
+ARCHIVE_WAIT_S = 2 * 60.0
 BACKUP_KIND = "backups.postgresql.cnpg.io"
 
 
@@ -27,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--env", required=True)
     p.add_argument("--app")
     p.add_argument("--repo-dir", default=".")
-    p.add_argument("--context", help="kube context (default: the current one)")
+    p.add_argument("--context", help="kube context (default: the environment's cluster for a system spread over clusters, else the current one)")
     p.add_argument("--to", metavar="BUCKET", help="set the scheduled backup: the bucket resource that receives it")
     p.add_argument("--schedule", metavar="CRON", help="set the scheduled backup: five-field cron in UTC (default \"0 3 * * *\")")
     p.add_argument("--retention", metavar="N", help="set the scheduled backup: <n>d or <n>w (default 30d)")
@@ -67,6 +69,7 @@ def main(argv: list[str]) -> int:
     m = model.load_dir(app_dir)
     check(ns, m)
     system, db, env = app_dir.name, ns.name, ns.env
+    ns.context = envcluster.env_context(Path(ns.repo_dir).resolve(), m, env, ns.context)
     try:
         roles = backupstate.cluster_roles(system, db, backupstate.restore_state(app_dir, env, db))
     except backupstate.StateError as e:
@@ -96,19 +99,58 @@ def main(argv: list[str]) -> int:
             break
         time.sleep(POLL_S)
 
-    at = reason = None
+    at = reason = warning = None
     if phase == "completed":
         at = backupstate.norm_time(status.get("stoppedAt")) or backupstate.norm_time(status.get("startedAt"))
         text, result = f"backup completed: {db}/{env} at {at} (Backup {name})", "completed"
+        if status.get("endWal"):
+            warning = _archive_end(kns, active, str(status["endWal"]), ns.context)
+            if warning:
+                text += f"\nWARNING: {warning}"
     else:
         result = "failed"
         if phase == "failed":
-            reason = status.get("error") or phase
+            reason = (status.get("error") or phase) + _archiving_hint(kns, active, ns.context)
         else:
             reason = f"not finished after 30 minutes (Backup {name} is {phase})"
         text = f"backup failed: {db}/{env}: {reason}"
     if ns.json:
-        print(json.dumps({"result": result, "backup": name, "at": at, "reason": reason}, indent=2))
+        print(json.dumps({"result": result, "backup": name, "at": at, "reason": reason, "warning": warning}, indent=2))
     else:
         print(text)
     return 0 if result == "completed" else 1
+
+
+def _archiving_hint(kns: str, cluster: str, context: str | None) -> str:
+    """J21-3: CloudNativePG reports a failed backup as `rpc error: … exit status 1`; when the cluster's WAL archiving fails
+    too, the bucket is the cause (journey 21: its pods could not pull their image), so the reason names it."""
+    try:
+        conds = (backupstate.get_json(["clusters.postgresql.cnpg.io", cluster, "-n", kns], context).get("status") or {}).get("conditions") or []
+    except backupstate.ReadError:
+        return ""
+    arch = next((c for c in conds if c.get("type") == "ContinuousArchiving"), None)
+    if not arch or arch.get("status") == "True":
+        return ""
+    return (f" (WAL archiving to the bucket fails too: {arch.get('message') or 'no message'}; the bucket is likely not ready, "
+            f"see kubectl get pods -n {kns})")
+
+
+def _archive_end(kns: str, cluster: str, end_wal: str, context: str | None) -> str | None:
+    """J21-4: a backup of an idle database completes while its last WAL segment waits in pg_wal, and a restore to it fails ("WAL
+    ends before end of online backup") until that segment is archived. Switch the segment once and wait ARCHIVE_WAIT_S for it; the
+    warning when it is still not archived, else None."""
+    try:
+        obj = backupstate.get_json(["clusters.postgresql.cnpg.io", cluster, "-n", kns], context)
+    except backupstate.ReadError as e:
+        return f"cannot check that its last WAL segment {end_wal} is archived: {e}"
+    deadline, switched = time.monotonic() + ARCHIVE_WAIT_S, False
+    while True:
+        done, last = backupstate.end_wal_archived(obj, kns, end_wal, context)
+        if done:
+            return None
+        if time.monotonic() >= deadline:
+            return (f"its last WAL segment {end_wal} is not archived yet (newest archived: {last or 'none'}), so a restore to this "
+                    "backup fails until it is")
+        if not switched:
+            switched = backupstate.switch_wal(obj, kns, context)
+        time.sleep(POLL_S)

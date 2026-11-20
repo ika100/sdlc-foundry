@@ -5,7 +5,7 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/scripts" "$tmp/docs/plan"
 cp "$here/templates/gitops-app/scripts/plan.py" "$tmp/scripts/"
-plan() { (cd "$tmp" && uv run scripts/plan.py "$@"); }
+plan() { (cd "$tmp" && bash "$here/scripts/uv-script.sh" scripts/plan.py "$@"); }
 fail=0
 ok()  { echo "ok   $1"; }
 bad() { echo "FAIL $1"; fail=1; }

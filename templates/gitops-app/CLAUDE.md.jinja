@@ -73,6 +73,7 @@ A gitops PR opened by `/component:ship` carries one body line `Service-ref: <own
 | `security` | detect-secrets |
 | `secrets-baseline` | refresh `.secrets.baseline.json` with fixed flags (never run `detect-secrets scan` by hand) |
 | `service-crds` | spec 098: reads the PR body's `Service-ref` marker and validates the Components under `applications/` against the CRDs of that service branch (a no-op without a marker) |
+| `contract-pins` | spec 110: for each component whose pin changed against `BASE_REF`, compares the pinned commit's `contract/<plan_id>.json` with the plans' shared rules and error contract; CI job `contract-pins` on pin PRs (chained into `ci`; a local run has no base branch and passes with nothing to check) |
 | `ci` | `service-crds` + `validate` + `security`: the gates CI runs, then `ci-extra` when your repo defines it; run it before every push |
 
 **Rule for every agent: never call `kustomize`, `kubeconform`, `kubectl`, or `detect-secrets` directly. Always `devbox run <script>`. Never `kubectl apply` — Argo owns reconciliation.**

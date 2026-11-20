@@ -11,6 +11,7 @@ import core
 import model
 import pr_rules
 from core import PlatformError, run
+from uvscript import script_cmd
 
 ENVS = list(model.ENVIRONMENTS)
 
@@ -73,7 +74,7 @@ def save(app_dir: Path, y: YAML, data) -> None:
 
 def render(repo: Path) -> None:
     """Regenerate ApplicationSets/overlays with the repo's own scripts/render.py."""
-    run(["uv", "run", "scripts/render.py"], cwd=repo)
+    run(script_cmd("scripts/render.py"), cwd=repo)
 
 
 def rendered_changes(repo: Path) -> list[str]:
