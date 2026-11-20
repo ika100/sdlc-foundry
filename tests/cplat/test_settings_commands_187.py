@@ -213,8 +213,9 @@ def test_a_target_that_is_not_a_bucket_lists_the_buckets_ac_187_6(tmp_path, caps
     refused(backup_repo(tmp_path), capsys, "--to", "orders-db", names=("backups",), key=BK + ".to")
 
 
-def test_an_unknown_bucket_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
-    refused(backup_repo(tmp_path), capsys, "--to", "nope", names=("nope", "backups"), key=BK + ".to")
+def test_a_target_that_cannot_be_a_new_bucket_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6; #860 declares an unknown valid name
+    refused(backup_repo(tmp_path), capsys, "--to", "No_Pe", names=("No_Pe", "backups"), key=BK + ".to")
+    refused(backup_repo(tmp_path / "c"), capsys, "--to", "api", names=("api", "backups"), key=BK + ".to")
 
 
 def test_a_resource_that_is_not_a_database_is_refused_ac_187_6(tmp_path, capsys):  # AC-187.6
