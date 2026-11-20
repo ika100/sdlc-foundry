@@ -250,9 +250,18 @@ def test_a_failed_job_of_a_run_in_progress_is_summarised_from_its_own_log_399(re
     ok, lines = ship.land(repo, timeout=600, interval=10)
     text = "\n".join(lines)
     (log,) = saved(running, "ci-e2e")
-    assert not ok and running.calls == [["api", "repos/acme/shop-api/actions/jobs/777/logs"]]
+    assert not ok and running.calls == [["api", "repos/acme/shop-api/actions/jobs/777/logs", "--allow-escape-sequences"]]
     assert f"| exit: 1 | log: {log} | entries: 1" in text and "not a GitHub Actions run" not in text
     assert has(text, r"^- tests/test_shop\.py::test_delete at src/shop/router\.py:58 \| AssertionError")
+
+
+def test_a_job_log_with_escape_sequences_is_read_and_stripped_825(repo, running):
+    running.job_log = "".join("\x1b[31m" + ln.split("\t", 2)[2] + "\x1b[0m\n" for ln in ci_log(1).splitlines() if ln.startswith("test\t"))
+    to_land(repo, running.gh)
+    running.gh.checks = [[job_check("e2e"), check("quality", "pass")]]
+    ok, lines = ship.land(repo, timeout=600, interval=10)
+    (log,) = saved(running, "ci-e2e")
+    assert not ok and "\x1b" not in log.read_text() and "log: none" not in "\n".join(lines)
 
 
 def test_a_failed_job_without_any_log_says_why_not_that_it_is_no_actions_run_399(repo, running):

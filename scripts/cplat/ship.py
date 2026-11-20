@@ -1255,6 +1255,9 @@ def _ci_checks(repo: Path, failed: list[dict]) -> list[failsum.CiCheck]:
     return out
 
 
+ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
 def _job_log(repo: Path, slug: str, c: dict, why: str) -> tuple[str, str]:
     """#399: GitHub serves `--log-failed` only once the whole run is complete; a finished job's own log is there before that.
     Its lines get the `--log-failed` job/step columns (step unknown), so the summary reads them alike."""
@@ -1262,7 +1265,8 @@ def _job_log(repo: Path, slug: str, c: dict, why: str) -> tuple[str, str]:
     if not m:
         return "", why
     path = f"repos/{slug}/actions/jobs/{m.group(1)}/logs"
-    raw = gh(["api", path], cwd=repo, check=False)
+    # #825: `gh run view --log-failed` refuses a log with terminal escape sequences; `gh api` prints it on request
+    raw = ANSI.sub("", gh(["api", path, "--allow-escape-sequences"], cwd=repo, check=False))
     text = "".join(f"{c['name']}\t\t{ln}" for ln in raw.splitlines(keepends=True) if ln.strip())
     return text, GH_ERRORS.get(f"api {path}", "") or why
 
