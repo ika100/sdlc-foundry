@@ -35,7 +35,7 @@ def test_the_four_commands_say_cplat_posts_the_milestone_comments_ac_158_8():  #
 
 def test_every_closing_note_names_milestone_comments_ac_158_8():  # AC-158.8
     assert COMMANDS
-    rows = {p: [ln for ln in p.read_text().splitlines() if "/issue:report" in ln] for p in COMMANDS}   # the note sits on the escalation line
+    rows = {p: [ln for ln in p.read_text().splitlines() if ln.startswith(">") and "/issue:report" in ln] for p in COMMANDS}   # the closing note: a quoted escalation line, not a description
     noted = {p: r for p, r in rows.items() if r}
     assert len(noted) >= 40
     missing = [str(p.relative_to(ROOT)) for p, r in noted.items() if not any("`platform` escalation" in ln and "milestone comment" in ln for ln in r)]
