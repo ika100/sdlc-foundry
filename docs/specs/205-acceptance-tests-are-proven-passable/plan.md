@@ -10,6 +10,7 @@ tasks:
     covers: [AC-205.1, AC-205.2, AC-205.3, AC-205.4]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: cplat quiet test-fast --red classifies each red pytest test
     files: [scripts/cplat/test_progress/cplat_red_check.py, scripts/cplat/quiet_red.py, scripts/cplat/quiet.py]
