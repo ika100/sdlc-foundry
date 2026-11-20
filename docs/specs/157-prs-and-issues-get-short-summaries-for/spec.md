@@ -1,7 +1,7 @@
 ---
 spec_id: 157-prs-and-issues-get-short-summaries-for
 title: Build and ship PRs start with a short summary
-status: building
+status: done
 priority: P1
 shape: platform
 tracks: [568]
@@ -91,3 +91,4 @@ same in every repo, including component repos that have no changelog fragments.
 - 2026-11-08 approved
 - 2026-11-17 building
 - 2026-11-18 amended AC-157.6 (user): the system ship adds the block to the gitops and entry PRs it creates; an open one it reuses is not edited, as design.md says
+- 2026-11-20 done
