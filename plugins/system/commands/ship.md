@@ -46,7 +46,7 @@ Loop on `cplat system ship next --json`, one call per action, never a shell loop
 
 ## Phase `complete`
 
-`cplat system ship complete` (spec done, plan completed, via a PR merged on green) prints the final report: print it verbatim, then `cplat system ship finish`.
+`cplat system ship complete` (spec done, plan completed, via a PR merged on green) prints the final report: print it verbatim, then `cplat system ship finish`. `cplat` puts a Summary at the top of each PR body; the orchestrator writes none.
 
 ## Escalate
 
@@ -56,6 +56,6 @@ An escalation decision that needs work always becomes a plan task before the shi
 
 When the user's answer changes a repo's acceptance test, change it in that repo's clone and record it as their approval at once, so its build does not stop on it again (#596): in the clone, `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`, commit the test, then `cplat spec test-diff $RED --approve <file>... --reason '<the user's words>'` (the component plugin's `references/build-test-approval.md`). `/system:ship <spec>` then resumes.
 
-End `complete` and an escalation with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
+End `complete` and an escalation with the hand-over: `cplat next --json`, follow its `how`, so that the person goes on by choosing.
 
 > If a platform template, script or command fails (not the user's code), stop, sum it up in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-122).

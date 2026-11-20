@@ -49,7 +49,7 @@ python3 scripts/check-links.py                                               # r
 python3 scripts/check-test-sleeps.py                                        # no fixed sleeps in tests/cplat (ADR-097)
 uv run --with-requirements requirements-test.txt python scripts/check-docs.py   # the user docs name only commands, flags, plugins, recipes and manifests that exist
 uvx --from "reuse[charset-normalizer]" reuse lint                           # every file has license + copyright metadata (REUSE)
-uv run --with-requirements requirements-test.txt pytest tests/cplat -q # CLI + render tests (3 tests need the Kyverno CLI and skip without it)
+uv run --with-requirements requirements-test.txt pytest tests/cplat -q # CLI + render tests (3 tests need the Kyverno CLI and skip without it); a failing run keeps its failed tests' files in `pytest-of-<user>/cplat-run-*/failed/` under the temp directory, the last 3 failing runs only; the tests keep downloaded wheels in `${XDG_CACHE_HOME:-~/.cache}/sdlc-foundry/test-wheels` (bounded at 2 GB, safe to delete at any time) and remove a run's files in the background right after the summary
 copier copy ./templates/web-nextjs /tmp/try --defaults --trust --skip-tasks --data project_name=try   # render a template you touched
 bash tests/e2e/run.sh                                                       # whole stack on a local k3d cluster (Docker, k3d, kubectl)
 E2E_PART=<part> bash tests/e2e/run.sh                                       # one part only: core, scaling or backups (as a PR runs it)

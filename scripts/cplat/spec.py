@@ -765,7 +765,13 @@ def test_diff(root: Path, base: str, files: list[str], *, red: str | None = None
             out[f] = (False, "new or deleted file")
             continue
         lint = suppression_only(old.stdout, new, f)        # spec 160: before formatting, as a comment can be formatting
-        out[f] = lint if lint[0] or lint[1] else formatting_only(old.stdout, new, f)
+        if lint[0] or lint[1]:
+            out[f] = lint
+        else:
+            import testdiff_neutral                        # spec 205: comments, docstrings, static imports change no assertion
+            fmt = formatting_only(old.stdout, new, f)
+            why = testdiff_neutral.judge(old.stdout, new, f)
+            out[f] = (True, why) if why else fmt
         texts[f] = (old.stdout, new)
     approved = _approvals(root, base)
     for f, (ok, _) in out.items():

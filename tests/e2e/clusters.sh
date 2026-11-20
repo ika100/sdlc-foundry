@@ -12,7 +12,10 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
+# shellcheck source=SCRIPTDIR/lib/uv-cache.sh
+. "$root/tests/e2e/lib/uv-cache.sh"   # a throwaway uv cache per script run (spec 208)
 work="${E2E_WORK:-$(mktemp -d)}"
+e2e_uv_cache_start
 export PATH="$PATH:$HOME/.local/bin"
 export GH_TOKEN=e2e-token   # no GitHub: the repository credential is a placeholder (Argo CD pulls from the local git server)
 id="$$"
@@ -30,7 +33,8 @@ cleanup() {
   rc=$?
   trap - EXIT
   if [ "${E2E_KEEP:-0}" != 1 ]; then
-    for p in "${pids[@]}"; do kill "$p" >/dev/null 2>&1 || true; done
+    # an empty array is unbound to bash 3.2 under set -u
+    for p in ${pids[@]+"${pids[@]}"}; do kill "$p" >/dev/null 2>&1 || true; done
     docker rm -f "$git_name" >/dev/null 2>&1 || true
     for c in one two; do
       if [ -d "$work/e2e-clusters" ]; then
@@ -40,6 +44,7 @@ cleanup() {
     done
   fi
   [ $rc -eq 0 ] && echo && echo "E2E CLUSTERS OK" || echo "E2E CLUSTERS FAILED (work dir: $work)"
+  e2e_uv_cache_end
   exit $rc
 }
 trap cleanup EXIT

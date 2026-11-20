@@ -162,7 +162,7 @@ def test_appship_complete_sends_a_fitted_title_and_subject(lw):  # AC-126.11
 def test_appship_open_pr_fits_the_title(lw):  # AC-126.11
     import appship
     w = lw
-    appship.open_pr(w.gitops, "feature/x", f"docs(spec): {LONG_ID} — something quite a bit longer than allowed", "body")
+    appship.open_pr(w.gitops, "feature/x", f"docs(spec): {LONG_ID} — something quite a bit longer than allowed", "body", spec=LONG_ID)
     (sent,) = created_titles(w)
     assert_sent(sent)
 

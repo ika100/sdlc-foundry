@@ -1,6 +1,6 @@
 # Build: the pull request and the final report
 
-Read from `/component:build` Phase 7 (the PR body template is also the one `/component:ship` Phase `pr` uses).
+Read from `/component:build` Phase 7 and `/component:ship` Phase `pr`.
 
 ## PR body
 

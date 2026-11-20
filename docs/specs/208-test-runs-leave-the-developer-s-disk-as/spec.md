@@ -1,7 +1,7 @@
 ---
 spec_id: 208-test-runs-leave-the-developer-s-disk-as
 title: Test runs leave the developer's disk as they found it
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [810, 811]
@@ -47,9 +47,11 @@ Every run of the platform's test suite fills the developer's disk and never give
 - **A4** The limit of 3 counts failing runs, the only ones that leave anything behind; passing runs in between do not push a failure's leftovers out (other option: the last 3 runs of any result; affects AC-208.5).
 - **A5** A run that is interrupted (Ctrl-C, or `cplat quiet test-fast` giving up after 9 minutes under ADR-108) counts as a failing run for AC-208.4 and AC-208.5, and still leaves the developer's uv cache unchanged (other option: an interrupted run leaves everything for the next run to clean; affects AC-208.1, AC-208.4, AC-208.5).
 - **A6** A developer who sets their own uv cache location gets the same guarantee for that location (other option: only the default location is protected; affects AC-208.1, AC-208.2).
-- **A7** The run's uv cache starts empty, so inline-script dependencies are fetched once per run as uv does today on a cold cache; network access during tests stays as it is (other option: seed the run cache from the developer's cache without writing to it; affects AC-208.1, AC-208.7).
+- ~~**A7** The run's uv cache starts empty, so inline-script dependencies are fetched once per run as uv does today on a cold cache; network access during tests stays as it is (other option: seed the run cache from the developer's cache without writing to it; affects AC-208.1, AC-208.7).~~ Revised 2026-11-18: the cold cache cost about 60 s per full run and broke AC-208.7; see A10.
 - **A8** The time budget is at most 10% longer wall time for a full local run, in line with ADR-108's bounded test time (other option: 5%, or no time criterion; affects AC-208.7).
 - **A9** No new environment variable, flag or setup step is needed to run the suite (AC-112.15 stays true) (other option: an opt-in variable; affects AC-208.1).
+- **A10** The run's uv cache is seeded from a persistent test-only wheel cache that lies outside the developer's uv cache (in the user's own cache directory, in a folder of the platform's own), so inline-script dependencies are downloaded once per machine and not again on every run; the developer's uv cache stays untouched (AC-208.1 unchanged). The persistent cache holds only downloaded wheels and source archives: a run never writes script environments into it, and only new wheel and archive entries flow back to it after a run. It is bounded: when it exceeds 2 GB at the start of a run, it is emptied and refilled by that run. Two overlapping runs may read and fill it at the same time without breaking each other, and a missing or emptied persistent cache only makes a run slower, never failing (other option: the run's uv cache starts empty and fetches every dependency once per run, as before this revision; affects AC-208.1, AC-208.6, AC-208.7).
+- **A11** The run's own directory (its uv cache, shared renders and passed tests' directories) is removed after pytest has printed its summary, by a detached background process, so the removal does not count toward the run's wall time for AC-208.7 and the run's exit code is already set when it starts. A run counts as clean for AC-208.3 and AC-208.4 once that background removal has completed; a test of those criteria waits for it. The removal deletes only the directory of the run that started it, so it never touches the directories of an overlapping run or of the failing runs AC-208.5 keeps, and AC-208.5 counts a passing run whose removal is still in progress as no failing run (other option: remove the run directory in the foreground before the run ends, which measured about 75 s per full run; affects AC-208.3, AC-208.4, AC-208.5, AC-208.6, AC-208.7).
 
 ## Open questions
 
@@ -59,3 +61,8 @@ none
 
 - 2026-11-17 created
 - 2026-11-17 approved
+- 2026-11-17 building
+- 2026-11-18 draft: amend: A7 seeds the run's uv cache from a persistent test wheel cache; run dir removed in the background (AC-208.7 measured +28%)
+- 2026-11-19 approved
+- 2026-11-19 building
+- 2026-11-19 done

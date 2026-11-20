@@ -1,4 +1,4 @@
-"""Spec 172: `cplat quiet test-fast [--repeat N] -- <test args>` and the platform's `test-fast` with arguments (AC-172.3, AC-172.5).
+"""Spec 172: `cplat quiet test-fast [--repeat N | --red] -- <test args>` and the platform's `test-fast` with arguments (AC-172.3, AC-172.5).
 
 Seam: `quiet.main(argv)` with a fake `devbox` on PATH that logs its argument list per call in $FAKE_DIR (one argument per line):
 - a run started with CPLAT_REPEAT_RUN=<i> writes `rargs-<i>`, waits (bounded) until all $FAKE_N runs have started (proof that they run
@@ -43,7 +43,7 @@ echo "1 passed"
 exit 0
 """
 
-USAGE = ("usage: cplat quiet [--raw] <devbox-script> | cplat quiet [--raw] test-fast [--repeat N] -- <test args>   "
+USAGE = ("usage: cplat quiet [--raw] <devbox-script> | cplat quiet [--raw] test-fast [--repeat N | --red] -- <test args>   "
          "(a key of shell.scripts in ./devbox.json; only test-fast takes arguments, after --)")
 A = "tests/test_x.py::test_a"
 B = "tests/test_x.py::test_b"

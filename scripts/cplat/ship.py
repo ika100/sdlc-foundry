@@ -45,6 +45,7 @@ import feedback
 import model
 import pr_open
 import pr_rules
+import pr_summary
 import quiet
 import runs
 import smoke
@@ -653,6 +654,7 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
         raise PlatformError(f"{branch} changes nothing on origin/main: a pull request would merge an empty commit (#452)",
                             hint=f"the spec's code is already on main; resume at deploy: cplat component ship start {st['spec']}")
     original_body = body
+    body = _summary(repo, st, title, body, body_file)
     body = _built_block(repo, st, body, body_file)
     run_ci(repo, {"PR_TITLE": title, "PR_BODY": body, "PR_LABELS": ",".join(labels)})
     run(["git", "push", "-q", "-u", "origin", branch], cwd=repo)
@@ -678,6 +680,17 @@ def open_pr(repo: Path, title: str, body_file: Path, no_spec: bool = False) -> d
     st["phase"] = "land"
     save_state(repo, st)
     return st
+
+
+def _summary(repo: Path, st: dict, title: str, body: str, body_file: Path) -> str:
+    """Spec 157: the short summary block goes on top of the PR body; a failure is a note, never a failure."""
+    base = "origin/main" if run(["git", "rev-parse", "--verify", "--quiet", "origin/main"], cwd=repo, check=False).returncode == 0 else "main"
+    new, note = pr_summary.add(repo, body, title=title, spec=st["spec"], base=base)
+    if new != body:
+        body_file.write_text(new)
+    if note:
+        say(note)
+    return new
 
 
 def _built_block(repo: Path, st: dict, body: str, body_file: Path) -> str:
@@ -1242,6 +1255,9 @@ def _ci_checks(repo: Path, failed: list[dict]) -> list[failsum.CiCheck]:
     return out
 
 
+ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
 def _job_log(repo: Path, slug: str, c: dict, why: str) -> tuple[str, str]:
     """#399: GitHub serves `--log-failed` only once the whole run is complete; a finished job's own log is there before that.
     Its lines get the `--log-failed` job/step columns (step unknown), so the summary reads them alike."""
@@ -1249,7 +1265,8 @@ def _job_log(repo: Path, slug: str, c: dict, why: str) -> tuple[str, str]:
     if not m:
         return "", why
     path = f"repos/{slug}/actions/jobs/{m.group(1)}/logs"
-    raw = gh(["api", path], cwd=repo, check=False)
+    # #825: `gh run view --log-failed` refuses a log with terminal escape sequences; `gh api` prints it on request
+    raw = ANSI.sub("", gh(["api", path, "--allow-escape-sequences"], cwd=repo, check=False))
     text = "".join(f"{c['name']}\t\t{ln}" for ln in raw.splitlines(keepends=True) if ln.strip())
     return text, GH_ERRORS.get(f"api {path}", "") or why
 

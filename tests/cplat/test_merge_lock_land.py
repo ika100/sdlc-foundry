@@ -26,6 +26,7 @@ def test_a_busy_lock_stops_the_land_before_a_merge_and_without_a_fix_round(repo,
     to_land(repo, gh)
     gh.checks = [[check("test", "pass")]]
     monkeypatch.setattr(merge_lock, "sleep", lambda s: None)
+    monkeypatch.setattr(merge_lock.release_hold, "alive", lambda pid: False)     # the holder's process is gone
     with merge_lock.held("acme/shop-api", "pr 9 (issue-9)", 5):
         with pytest.raises(merge_lock.Busy, match="held by pr 9 .issue-9. since"):
             # a zero timeout: the lock is taken by this process, flock on a second open file description blocks

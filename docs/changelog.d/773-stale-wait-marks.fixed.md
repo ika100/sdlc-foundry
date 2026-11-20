@@ -1,1 +1,0 @@
-**The Stop hook no longer waits on a wait mark whose process is gone (#773).** A wait's mark stayed in the git dir after its process ended, and once another process got its pid the Stop hook blocked finished units on a wait nobody ran. A mark older than the process that now holds its pid is removed.

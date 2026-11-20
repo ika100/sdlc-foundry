@@ -13,7 +13,8 @@ Run the phases in order, printing `## Phase N complete — <one line>` after eac
 
 One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `tail`). First `cplat shape`. `unsupported` or no shape → stop.
 
-- A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape. Asking is pointless because the user declared it.
+- A `cplat shape` error that names `.platform-settings.yml` (an invalid shape declaration) → stop and show it; never ask for the shape, since the user declared it.
+
 ## Phase 0 — Pre-flight
 
 0. `cplat platform runs begin build --spec <id>`. A stop that needs the user runs `cplat platform runs end --outcome escalated --reason '<why>'` first (`failed` on failure); the end `--outcome done`. After every subagent: `cplat platform runs agent spawned <role> [--model-id <id>]`.
@@ -29,7 +30,8 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 **tester** (`agents.tester`): "**Acceptance mode.**" + `<project-map>` + the brief: `Criteria` (every active criterion in full, the non-goals), `Contract` (`design.md`'s contract, verbatim), `Commands` (`cplat quiet test-fast`). It writes criterion-tagged tests (a `(smoke)` one also a smoke test, base URL only), confirms they fail because the behaviour is missing, and commits only test files. Then:
 - `cplat spec trace <id>` must pass; else the missing ids go back to the tester once, so that every criterion has a red test.
-- `cplat quiet test-fast`: the new tests fail, nothing else newly fails; one erroring for another reason goes back.
+- `cplat quiet test-fast`: the new tests fail, nothing else newly fails.
+- After each tester round (test-review too), run the line `cplat component build tests <id> --red` prints. Each `test error` or `passes` line goes back: "**Acceptance mode.** Change only these tests so that each fails because the behaviour is missing: <lines>". After 2 rounds, lines left → escalate `--cause code`: `wrong failures after 2 tester rounds: <node id> (<class>: <exception line>); …`. `none: …` → an erroring test goes back.
 - Trace files `test-fast` does not run (`e2e/` specs): `cplat quiet e2e` once; one failing before any assertion about the missing behaviour goes back as a wrong failure.
 - One call: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...`.
 - `cplat spec trace <id> --json` → `TRACE` (criterion → test files).
@@ -45,7 +47,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 
 ### 2.2 Worktree probe
 
-Before the first parallel batch, a probe Agent (`isolation: "worktree"`) reports `git rev-parse HEAD`. Error → `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md`. Else `cplat platform runs agent execution parallel`; a HEAD other than `$FEATURE_HEAD` (no `worktree.baseRef: "head"`) is fine (#501): coders reset to it, so that a merge brings only that task's commits.
+Before the first parallel batch, a probe Agent in a worktree reports `git rev-parse HEAD`. Error → `${CLAUDE_PLUGIN_ROOT}/references/build-worktree-fallback.md`. Else `cplat platform runs agent execution parallel`; a HEAD other than `$FEATURE_HEAD` (no `worktree.baseRef: "head"`) is fine (#501): coders reset to it, so that a merge brings only its commits.
 
 ### 2.3 Coder prompt (every task)
 
@@ -74,19 +76,19 @@ Merge exit 3 or a task in `replans[]` → read `${CLAUDE_PLUGIN_ROOT}/references
 
 ### 2.5 All green
 
-`cplat quiet test-fast`: every acceptance test passes. Failing ones go to a coder of a task covering that criterion (at most 2 rounds, each `cplat platform runs agent fix-round test --task <task>`), then escalate. All pass → `cplat platform runs gate acceptance passed`; failing → `... gate acceptance failed`.
+`cplat quiet test-fast`: every acceptance test passes. A test with `test error` in `cplat quiet test-fast --red -- <failing tests>` (other repos: the summary's innermost frame is in a test file) goes to the tester as a harness fix (`${CLAUDE_PLUGIN_ROOT}/references/build-tighten.md`) unasked, since the test is wrong. Others go to a coder of a covering task (at most 2 rounds, each `cplat platform runs agent fix-round test --task <task>`), then escalate. All pass → `cplat platform runs gate acceptance passed`; failing → `... gate acceptance failed`.
 
 `TOUCHED_FILES=$(git diff --name-only $BASE_REF..HEAD)`.
 
 ### 2.6 Under load
 
-Run the line `cplat component build tests <id> --load` prints (`cplat quiet test-fast --repeat 3 -- …`); `none: …` → skip, say so in the report. Exit 1 → failing tests to a coder as in 2.5. Exit 3 → `${CLAUDE_PLUGIN_ROOT}/references/build-load-run.md` (the tester fixes the harness; 2 rounds, then escalate).
+Run the line `cplat component build tests <id> --load` prints (`cplat quiet test-fast --repeat 3 -- …`); `none: …` → skip, say so. Exit 1 → failing tests to a coder as in 2.5. Exit 3 → `${CLAUDE_PLUGIN_ROOT}/references/build-load-run.md` (the tester fixes the harness; 2 rounds, then escalate).
 
 ## Phase 3 — QA: one CI gate, agents only where it is red
 
 `cplat platform runs phase build:qa`
 1. Stage the tree, then `devbox run lint-fix` and `devbox run ci` as `cplat quiet lint-fix` and `cplat quiet ci`: the CI gates.
-2. **Red** → `cplat validate final --check <name> failed` per failed check, then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the summary and log path `cplat quiet` printed (the log when the summary is not enough), so that no green gate is touched:
+2. **Red** → `cplat validate final --check <name> failed` per failed check, then spawn only the agent that owns the red gate, with `<project-map>`, `<touched-files>` and the summary and log path `cplat quiet` printed (log if not enough), so that no green gate is touched:
    - lint or type → **quality** (`agents.quality`), lint/type fixes only;
    - tests → the **coder** of the task whose files are involved (acceptance tests stay fixed; `cplat platform runs agent fix-round ci --task <task>`);
    - security → `cplat deps patch` first, then read `${CLAUDE_PLUGIN_ROOT}/references/build-security-red.md` and follow it (exit 0 → step 3; exit 3 → escalate with its `ESCALATE` reason and `--cause <CAUSE>`, via `cplat component ship escalate` in a ship, else `cplat platform runs end --outcome escalated`; exit 4 → **security** agent). A red gate after a bump never goes to a coder, because a dependency is at fault.
@@ -113,7 +115,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 
 ## Phase 7 — Pull request
 
-`cplat platform runs phase build:pr`; follow `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`: `.pr-body.md`, `cplat pr open --spec <spec_id>` ("How this was built" block), the Final Report. End with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
+`cplat platform runs phase build:pr`; follow `${CLAUDE_PLUGIN_ROOT}/references/build-pr.md`: `.pr-body.md`, `cplat pr open --spec <spec_id>` ("How this was built"), the Final Report. `cplat` puts a Summary at the top of the PR body, not the orchestrator. End with the hand-over: `cplat next --json`, follow its `how`, so that the person goes on by choosing.
 
 ## Rules
 

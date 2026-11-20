@@ -42,6 +42,7 @@ import appship_state as state
 import budget
 import core
 import pr_rules
+import pr_summary
 import runs
 import ship
 import spec as specmod
@@ -67,11 +68,14 @@ def show(st: dict) -> None:
 
 # ---------------- gitops-app PRs ----------------
 
-def open_pr(repo: Path, branch: str, title: str, body: str) -> str:
+def open_pr(repo: Path, branch: str, title: str, body: str, *, spec: str) -> str:
     title = pr_rules.fit(title)
     existing = json.loads(ship.gh(["pr", "list", "--head", branch, "--state", "open", "--json", "number,url"], cwd=repo) or "[]")
     if existing:
         return existing[0]["url"]
+    body, note = pr_summary.add(repo, body, title=title, spec=spec, base="origin/main")
+    if note:
+        print(note)
     out = ship.gh(["pr", "create", "--base", "main", "--head", branch, "--title", title, "--body", body], cwd=repo)
     return out.strip().splitlines()[-1]
 
@@ -122,7 +126,7 @@ def publish(repo: Path, timeout: float) -> tuple[bool, list[str]]:
     repos = ", ".join(r["id"] for r in state.plan_repos(repo, sid))
     pr = open_pr(repo, branch, f"docs(spec): {sid} — product spec and plan",
                  f"## Summary\n\nThe product spec and plan of {sid} ({acs} acceptance criteria), published by `/system:ship` before "
-                 f"any repo starts.\n\nRepos: {repos}\n")
+                 f"any repo starts.\n\nRepos: {repos}\n", spec=sid)
     ok, lines = appship_merge.land(repo, pr, "publish", timeout, INTERVAL)
     if not ok:
         reason = red_reason("spec/plan PR", pr, lines)
@@ -212,7 +216,11 @@ def entry_pr(repo: Path, repo_id: str, title: str, body_file: Path | None) -> st
     if existing:
         pr = existing[0]["url"]
     else:
-        body = ["--body-file", str(body_file)] if body_file is not None else ["--body", entry_body(repo, st, repo_id, wt)]
+        text = body_file.read_text() if body_file is not None else entry_body(repo, st, repo_id, wt)
+        text, note = pr_summary.add(wt, text, title=title, spec=st["spec"], base="origin/main")
+        if note:
+            print(note)
+        body = ["--body", text]
         pr = ship.gh(["pr", "create", "--base", "main", "--head", branch, "--title", title, *body], cwd=wt).strip().splitlines()[-1]
     state.update(repo, lambda s: s["repos"][repo_id].__setitem__("pr", pr))
     return pr
@@ -322,7 +330,7 @@ def complete(repo: Path, timeout: float) -> tuple[bool, list[str]]:
         git(repo, *core.git_identity(repo), "commit", "-q", "-s", "-m", pr_rules.fit(f"docs(spec): {sid} done"))
     git(repo, "push", "-q", "-u", "origin", branch)
     pr = open_pr(repo, branch, f"docs(spec): {sid} done",
-                 f"## Summary\n\nEvery repo of {sid} passed its gate; the spec is `done` and the plan completed (`/system:ship`).\n")
+                 f"## Summary\n\nEvery repo of {sid} passed its gate; the spec is `done` and the plan completed (`/system:ship`).\n", spec=sid)
     ok, lines = appship_merge.land(repo, pr, "complete", timeout, INTERVAL)
     if not ok:
         reason = red_reason("completion PR", pr, lines)

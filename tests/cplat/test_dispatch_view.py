@@ -85,7 +85,7 @@ def test_a_ship_unit_shows_the_phase_of_its_ship_state(home, monkeypatch):
 
 def test_starts_say_why_not_in_the_order_paused_budget_unknown(home):
     policy = _policy(home, budget={"tokens_per_day": 100})
-    assert dv.starts_doc(SLUG, policy) == {"allowed": True, "why_not": None}
+    assert dv.starts_doc(SLUG, policy) == {"allowed": True, "why_not": None, "text": None}  # replaced by AC-210.2
     ds.update(SLUG, lambda st: st.update(unknown={"issue-1.1": "2026-11-10"}))
     assert dv.starts_doc(SLUG, policy)["why_not"] == "usage unknown"
     assert dv.no_starts_line("usage unknown", ["issue-1.1"]) == "no starts: usage unknown: issue-1.1"
@@ -105,11 +105,11 @@ def test_plan_text_marks_defaults_the_unset_limit_and_the_candidate_rows(home):
              {"item": "#4", "key": "issue-4", "kind": "fix", "title": "no", "verdict": "held", "reason": "skipped", "detail": "later",
               "mode": None, "slot": None, "premise": None, "approve": None}]
     doc = dv.plan_doc(home, SLUG, policy, cands)
-    assert doc["policy"]["file"] is None and doc["policy"]["unset"] == ["budget.tokens_per_day"] and len(doc["policy"]["usage_hint"]) == 7
+    assert doc["policy"]["file"] is None and doc["policy"]["unset"] == ["budget.usd_per_day"] and len(doc["policy"]["usage_hint"]) == 7  # replaced by AC-210.2
     assert doc["slots"] == {"total": 1, "running": 0, "free": 1, "manual": []}
     text = dv.render_plan(doc)
     assert text.startswith("policy: defaults (no .platform/dispatch.yml)")
-    assert "  slots: 1 (default)" in text and "budget.tokens_per_day: unset (required by start and resume) — last 7 days: 2026-11-04 0" in text
+    assert "  slots: 1 (default)" in text and "budget.usd_per_day: unset (required by start and resume in mode cost) — last 7 days: 2026-11-04 $0.00" in text  # replaced by AC-210.2
     assert "#2  fix  ready  single  slot 1  premise holds  a bug" in text and "#3  fix  ready  single  queued  premise unchecked  late" in text
     assert "#4  fix  held: skipped: later  -  -  premise -  no" in text
 

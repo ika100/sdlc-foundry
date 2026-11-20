@@ -15,12 +15,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | approved | 7 | #568 |
 | [193-building-and-releasing-run-on-their-own](specs/193-building-and-releasing-run-on-their-own/spec.md) — Building and releasing run on their own and interrupt only to ask | P1 | approved | 8 |  |
-| [205-acceptance-tests-are-proven-passable](specs/205-acceptance-tests-are-proven-passable/spec.md) — Acceptance tests are proven passable before they freeze | P1 | approved | 7 |  |
-| [207-preflight-checks-trust-and-subagent](specs/207-preflight-checks-trust-and-subagent/spec.md) — Preflight checks trust and subagent tools before a ship | P1 | approved | 8 |  |
-| [208-test-runs-leave-the-developer-s-disk-as](specs/208-test-runs-leave-the-developer-s-disk-as/spec.md) — Test runs leave the developer's disk as they found it | P1 | approved | 7 | #810, #811 |
-| [210-the-dispatcher-paces-work-by-the](specs/210-the-dispatcher-paces-work-by-the/spec.md) — The dispatcher budgets by plan limits or by cost | P1 | approved | 10 |  |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -149,6 +144,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [154-the-journey-6-findings](specs/154-the-journey-6-findings/spec.md) — The journey 6 findings | P1 | done | 4 | #557, #558, #559, #560 |
 | [155-each-repo-of-a-system-ship-runs-in-its-own-session](specs/155-each-repo-of-a-system-ship-runs-in-its-own-session/spec.md) — Each repo of a system ship runs in its own session | P1 | done | 10 | #560 |
 | [156-a-system-ship-benchmark](specs/156-a-system-ship-benchmark/spec.md) — A system ship benchmark | P1 | done | 7 | #560 |
+| [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | done | 7 | #568 |
 | [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | done | 8 | #568 |
 | [159-unit-mode-runs-independent-tasks-at-once](specs/159-unit-mode-runs-independent-tasks-at-once/spec.md) — Unit mode runs independent tasks at once | P1 | done | 8 | #560 |
 | [160-a-lint-suppression-in-an-acceptance-test-is-not-a](specs/160-a-lint-suppression-in-an-acceptance-test-is-not-a/spec.md) — A lint suppression in an acceptance test is not a changed test | P1 | done | 4 | #570 |
@@ -192,7 +188,11 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [202-a-waiting-session-makes-no-model-calls](specs/202-a-waiting-session-makes-no-model-calls/spec.md) — A waiting session makes no model calls | P1 | done | 7 | #750 |
 | [203-the-journey-19-seams](specs/203-the-journey-19-seams/spec.md) — The journey 19 seams | P1 | done | 6 |  |
 | [204-service-java-on-spring-boot-4-cve-free](specs/204-service-java-on-spring-boot-4-cve-free/spec.md) — service-java on Spring Boot 4, CVE-free image | P1 | done | 7 | #709 |
+| [205-acceptance-tests-are-proven-passable](specs/205-acceptance-tests-are-proven-passable/spec.md) — Acceptance tests are proven passable before they freeze | P1 | done | 7 |  |
 | [206-headless-deny-rules-are-checked-before-a](specs/206-headless-deny-rules-are-checked-before-a/spec.md) — Headless deny rules are checked before a session starts | P1 | done | 7 |  |
+| [207-preflight-checks-trust-and-subagent](specs/207-preflight-checks-trust-and-subagent/spec.md) — Preflight checks trust and subagent tools before a ship | P1 | done | 8 |  |
+| [208-test-runs-leave-the-developer-s-disk-as](specs/208-test-runs-leave-the-developer-s-disk-as/spec.md) — Test runs leave the developer's disk as they found it | P1 | done | 7 | #810, #811 |
+| [210-the-dispatcher-paces-work-by-the](specs/210-the-dispatcher-paces-work-by-the/spec.md) — The dispatcher budgets by plan limits or by cost | P1 | done | 10 |  |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

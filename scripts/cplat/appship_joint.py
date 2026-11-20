@@ -219,7 +219,7 @@ def pin(gitops: Path, st: dict, repo_id: str, tag: str) -> tuple[str, list[str]]
         if not pr:
             pr = appship.open_pr(wt, branch(spec_id), f"chore(dev): {spec_id} — the builds of the system spec",
                                  f"## Summary\n\nThe dev pins of the builds of the system spec {spec_id}, landed in one PR by "
-                                 f"`/system:ship` (spec 144) after the last component merged.\n")
+                                 f"`/system:ship` (spec 144) after the last component merged.\n", spec=spec_id)
             state.update(gitops, lambda s: s.__setitem__("joint_pr", pr))
             lines.append(f"dev PR opened: {pr}")
         stray = f"pin/dev-{comp}-{tag.removeprefix('sha-')[:7]}"
@@ -571,7 +571,7 @@ def _staging_pr(gitops: Path, st: dict, cands: list[tuple[str, str, str, str | N
     rows = "\n".join(f"- `{n}`: `{p}` -> `{t}`" for _r, n, t, p in cands)
     pr = appship.open_pr(wt, br, f"chore(staging): promote {spec_id} (automatic, spec 093)",
                          f"## Summary\n\nEvery dev smoke of the system spec {spec_id} passed, so staging follows it in one PR "
-                         f"(`/system:ship`, spec 144):\n\n{rows}\n\nRevert this PR to put staging back.\n")
+                         f"(`/system:ship`, spec 144):\n\n{rows}\n\nRevert this PR to put staging back.\n", spec=spec_id)
     return pr
 
 
