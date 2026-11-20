@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /app:ship is /system:ship. Runs nothing."
 moved-to: "/system:ship"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/app:ship` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

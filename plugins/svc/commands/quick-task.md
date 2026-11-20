@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /svc:quick-task is /component:fix. Runs nothing."
 moved-to: "/component:fix"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/svc:quick-task` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.
