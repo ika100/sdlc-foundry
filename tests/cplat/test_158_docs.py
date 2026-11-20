@@ -32,7 +32,7 @@ def test_the_four_commands_say_cplat_posts_the_milestone_comments_ac_158_8():  #
         assert path.is_file(), rel
         body = [ln for ln in path.read_text().splitlines() if not ln.startswith(">")]   # outside the closing note
         hits = [ln for ln in body if "milestone comment" in ln]
-        assert any("cplat" in ln and "itself, without asking" in ln for ln in hits), rel   # interface: AC-158.8 wording "without asking"
+        assert any("cplat" in ln and "itself, without asking" in ln for ln in hits), rel
 
 
 def test_every_closing_note_names_milestone_comments_ac_158_8():  # AC-158.8

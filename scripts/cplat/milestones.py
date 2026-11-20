@@ -13,7 +13,7 @@ from pathlib import Path
 import spec as spec_mod
 
 ISSUE_LIMIT_S = 20.0  # read + post (+ close) of one issue (AC-158.7)
-STEP_LIMIT_S = 120.0  # all milestone work of one command process (AC-158.7)
+STEP_LIMIT_S = 120.0  # all milestone work of one command process (AC-158.7); only time spent commenting counts, not a CI wait between steps
 SKIP_LABELS = {"auto-filed", "notify", "retro"}
 STORY_MAX = 400
 QUESTIONS_MAX = 5
@@ -21,7 +21,7 @@ CLOSING = re.compile(r"(?<![\w/])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\
 SUMMARY = re.compile(r"<!-- cplat:summary -->(.*?)<!-- /cplat:summary -->", re.S)
 STEP_MSG = f"comment step time limit ({STEP_LIMIT_S:g}s) reached"
 
-_started: float | None = None
+_spent = 0.0
 
 
 class _Skip(Exception):
@@ -48,13 +48,13 @@ def clock() -> float:
 
 def reset() -> None:
     """Forget the process's step budget (tests)."""
-    global _started
-    _started = None
+    global _spent
+    _spent = 0.0
 
 
 def remaining() -> float:
     """Seconds left of the step budget (the full budget before the first call)."""
-    return STEP_LIMIT_S if _started is None else _started + STEP_LIMIT_S - clock()
+    return STEP_LIMIT_S - _spent
 
 
 def _first_line(text: str) -> str:
@@ -63,15 +63,16 @@ def _first_line(text: str) -> str:
 
 def _call(args: list[str], cwd: Path, issue_end: float | None = None) -> str:
     """One gh call inside the time limits; returns stdout or raises `_Skip(why)`."""
-    global _started
-    if _started is None:
-        _started = clock()
+    global _spent
     now = clock()
-    step_end = _started + STEP_LIMIT_S
-    end = min(step_end, now + ISSUE_LIMIT_S if issue_end is None else issue_end)
-    if end - now <= 0:
-        raise _Skip(STEP_MSG if now >= step_end else f"timed out after {ISSUE_LIMIT_S:g}s")
-    rc, out, err = gh(args, cwd=cwd, timeout=end - now)
+    step_left = remaining()
+    issue_left = ISSUE_LIMIT_S if issue_end is None else issue_end - now
+    if min(step_left, issue_left) <= 0:
+        raise _Skip(STEP_MSG if step_left <= 0 else f"timed out after {ISSUE_LIMIT_S:g}s")
+    try:
+        rc, out, err = gh(args, cwd=cwd, timeout=min(step_left, issue_left))
+    finally:
+        _spent += max(0.0, clock() - now)
     if rc != 0:
         raise _Skip(_first_line(err) or _first_line(out) or f"gh exited {rc}")
     return out
