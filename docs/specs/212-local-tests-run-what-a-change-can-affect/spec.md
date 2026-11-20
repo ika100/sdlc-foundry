@@ -1,7 +1,7 @@
 ---
 spec_id: 212-local-tests-run-what-a-change-can-affect
 title: Local tests run what a change can affect
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -58,3 +58,5 @@ none
 - 2026-11-20 created (as 211; renumbered to 212, 211 was taken by PR #877)
 - 2026-11-20 priority P1 proposed: P1: normal bug or feature
 - 2026-11-20 approved
+- 2026-11-20 building
+- 2026-11-20 done
