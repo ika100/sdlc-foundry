@@ -12,6 +12,7 @@ import core
 import dispatch_state
 import platrelease_changelog as changelog
 import platrelease_state as st
+import milestones_release
 import release_hold
 import ship
 
@@ -166,6 +167,18 @@ def _guard(repo: Path, slug: str, tag: str, o) -> None:
         raise core.PlatformError(f"release-guard on {tag}: still running after {int(o.timeout)}s: {url}")
 
 
+def _release_issues(repo: Path, tag: str) -> None:
+    """Spec 158: the issues the release fixes hear about it; never changes the release's result (AC-158.7)."""
+    try:
+        res = milestones_release.released(repo, tag)
+        lines = [*res.lines, "release issues — " + res.summary.removeprefix("## Phase 7 complete — ")]
+        if res.notes:
+            lines.append(f"  post the missing ones: cplat component release issues --version {tag}")
+    except Exception as e:  # noqa: BLE001
+        lines = [f"note: issue comment skipped: release {tag}: {e}"]
+    print("\n".join(lines))
+
+
 def continue_from(repo: Path, state: st.State, version: str, sha: str | None, o) -> int:
     """merged → tagged → guarding, from the phase the run starts in (or the merge just made)."""
     tag, slug = f"v{version}", ship.service_slug(repo)
@@ -187,6 +200,7 @@ def continue_from(repo: Path, state: st.State, version: str, sha: str | None, o)
         assert sha
         release_url = _release(repo, slug, tag, version, sha)
         print(f"release: {release_url}")
+    _release_issues(repo, tag)
     _guard(repo, slug, tag, o)
     print(f"RELEASED: {tag}\n  tag: https://github.com/{slug}/tree/{tag}\n  release: {release_url}")
     return 0

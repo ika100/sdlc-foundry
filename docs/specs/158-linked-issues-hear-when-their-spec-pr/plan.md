@@ -38,6 +38,7 @@ tasks:
     covers: [AC-158.4, AC-158.7]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t6
     title: Release Phase 7 as one cplat call; spec, ship and system ship docs; ADR; changelog fragment
     files: [plugins/component/commands/release.md, plugins/component/commands/spec.md, plugins/component/commands/ship.md, plugins/system/commands/ship.md, docs/rules/plugins/component/commands/release.yml, docs/rules/plugins/component/commands/spec.yml, docs/rules/plugins/component/commands/ship.yml, docs/rules/plugins/system/commands/ship.yml, docs/rules/register.yml, docs/adr/README.md, docs/changelog.d/158-linked-issues-hear-milestones.added.md]
