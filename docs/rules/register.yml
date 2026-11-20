@@ -3,8 +3,8 @@
 # `cplat platform rules check` validates all of it.
 schema: 1
 baseline:
-  commit: "5494af37ba151000dca1cd5f66952a88083d895b"
-  prompt_bytes: 361009
+  commit: "806a450ae90cc38416b0b2bb6c05ecc68aa5b456"
+  prompt_bytes: 361189
   history:                       # newest last; written only by `cplat platform rules rebaseline`
     - date: "2026-11-12"
       old: 345859
@@ -31,6 +31,11 @@ baseline:
       new: 361009
       reason: "spec 201 merged with main (cluster placement prompts); quick-task and build benchmarks pass on todo-api@d5626ec"
       benchmark_runs: [20261119T075431Z-46f4f5ca, 20261119T075822Z-17389ebf]
+    - date: "2026-11-20"
+      old: 361009
+      new: 361189
+      reason: "spec 205 merged with main after 207, 208 and 210: build Phase 1 red-check text on top of main"
+      benchmark_runs: [20261120T074100Z-a593aac3, 20261120T074551Z-90986507]
 hard:
   acceptance-tests-fixed:
     enforced_by: cplat spec test-diff
