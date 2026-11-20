@@ -972,13 +972,15 @@ class CheckWatch:
     def _pr_run_missing(self) -> bool:
         """The repo runs workflows on pull requests, but the head shows no such run yet: GitHub creates it seconds after
         the push, while CodeQL's checks may already have passed (#787: two PRs merged with their CI red). After
-        NO_CHECKS_GRACE without one it is an error, never a green."""
+        NO_CHECKS_GRACE without one it is an error, never a green: a conflict with the base when the PR conflicts (#863)."""
         if not pr_workflows(self.repo) or any(r.get("event") in ("pull_request", "pull_request_target") for r in self.head_runs):
             self.no_pr_run_since = None
             return False
         if self.no_pr_run_since is None:
             self.no_pr_run_since = now()
         elif now() - self.no_pr_run_since > NO_CHECKS_GRACE:
+            if self.conflicting():       # #863: GitHub creates no pull_request run for a conflicting PR; the runner is fine
+                raise _conflicting(self)
             raise NoChecks(f"no pull_request workflow run was created on {(self.head or '')[:7]} of {self.pr} after "
                            f"{NO_CHECKS_GRACE}s; only {', '.join(sorted(self.reported)) or 'no'} check(s) reported",
                            hint="is a runner online and is the workflow's trigger met? Merging without CI is never done "
