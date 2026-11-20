@@ -39,7 +39,7 @@ def repo(tmp_path, monkeypatch):
 
 def passing_when(*cases):
     """A run_tests stand-in: the module passes when is_adult(age) == want for every (age, want)."""
-    def run(root, files):
+    def run(root, files, timeout=None):
         ns: dict = {}
         exec((root / "src/app/rules.py").read_text(), ns)
         return all(ns["is_adult"](age) == want for age, want in cases)
@@ -100,7 +100,7 @@ def test_other_shapes_and_specs_without_tests_are_skipped_ac_152_3(repo, monkeyp
 
 
 def test_red_tests_before_mutation_are_a_setup_error_ac_152_3(repo, monkeypatch):  # AC-152.3
-    monkeypatch.setattr(mutation, "run_tests", lambda root, files: False)
+    monkeypatch.setattr(mutation, "run_tests", lambda root, files, timeout=None: False)
     with pytest.raises(mutation.PlatformError, match="fail before any mutation"):
         mutation.mutate(repo, "007", base="main")
     assert (repo / "src/app/rules.py").read_text() == CHANGED
@@ -112,3 +112,61 @@ def test_the_build_runs_it_after_the_reviewer_and_never_stops_on_it_ac_152_3(): 
     verify = build[build.index("## Phase 4"):build.index("## Phase 5")]
     assert verify.index("reviewer") < verify.index("cplat spec mutate <id> --write") < verify.index("Commit `docs/specs")
     assert "cplat spec mutate" in verify
+
+
+# ---------------- #868: time budget ----------------
+
+class Clock:
+    """A fake clock: every test run advances it by `step` seconds; `cut_after` runs later a run is cut off."""
+    def __init__(self, step, cut_after=None, result=True):
+        self.now, self.step, self.runs, self.cut_after, self.result, self.timeouts = 0.0, step, 0, cut_after, result, []
+
+    def __call__(self):
+        return self.now
+
+    def run(self, root, files, timeout=mutation.TIMEOUT):
+        self.timeouts.append(timeout)
+        self.runs += 1
+        if self.cut_after is not None and self.runs > self.cut_after:
+            self.now += timeout
+            return None
+        self.now += self.step
+        return self.result if self.runs > 1 else True
+
+
+def test_the_budget_stops_early_with_a_partial_score_and_restores_files_868(repo, monkeypatch):
+    c = Clock(step=30, result=False)                     # baseline 30 s, each mutant 30 s and caught
+    monkeypatch.setattr(mutation, "clock", c)
+    monkeypatch.setattr(mutation, "run_tests", c.run)
+    r = mutation.mutate(repo, "007", base="main", budget=90)
+    assert r["mutants"] == 3 and r["tested"] == 2 and r["killed"] == 2 and r["score"] == 1.0
+    assert r["budget_hit"] and r["seconds"] == 90 and r["survivors"] == []
+    assert (repo / "src/app/rules.py").read_text() == CHANGED
+    text = mutation.render(r)
+    assert text.startswith(mutation.HEADING + "\n")
+    assert "2 of 3 mutants tested in 90 s (time budget" in text and "2 of 2 mutants of the changed code were caught" in text
+
+
+def test_a_run_cut_off_by_the_budget_is_not_counted_as_caught_868(repo, monkeypatch):
+    c = Clock(step=10, cut_after=2)                      # baseline + one mutant, then the next run outlasts the budget
+    monkeypatch.setattr(mutation, "clock", c)
+    monkeypatch.setattr(mutation, "run_tests", c.run)
+    r = mutation.mutate(repo, "007", base="main", budget=60)
+    assert r["tested"] == 1 and r["budget_hit"] and c.timeouts[2] == 40   # never longer than what is left
+    assert (repo / "src/app/rules.py").read_text() == CHANGED
+
+
+def test_a_baseline_that_uses_the_budget_reports_nothing_tested_exit_0_868(repo, monkeypatch, capsys):
+    c = Clock(step=0, cut_after=0)
+    monkeypatch.setattr(mutation, "clock", c)
+    monkeypatch.setattr(mutation, "run_tests", c.run)
+    assert spec.main(["--repo", str(repo), "mutate", "007", "--base", "main", "--budget", "20"]) == 0
+    out = capsys.readouterr().out
+    assert "0 of 3 mutants tested" in out and "No mutant was tested" in out
+
+
+def test_within_the_budget_the_report_has_no_budget_note_868(repo, monkeypatch):
+    monkeypatch.setattr(mutation, "run_tests", passing_when((18, True), (17, False)))
+    r = mutation.mutate(repo, "007", base="main")
+    assert r["tested"] == r["mutants"] == 3 and not r["budget_hit"]
+    assert "time budget" not in mutation.render(r)

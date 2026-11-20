@@ -1979,13 +1979,16 @@ def envwait_refresh_after() -> float:
 def argo_health(context: str, app: str, timeout: float, interval: float, images: set[str] | None = None,
                 revision: str | None = None, slug: str = "") -> str:
     """`Synced/Healthy` once the app runs the wanted build (spec 077: an image tag in `status.summary.images`, or a
-    revision at least `revision`), a sync error of that build (stops at once), or the last state when the time is up."""
+    revision at least `revision`), a sync error of that build or a pod of it stuck in ImagePullBackOff and the like for over
+    60 s (#867; both stop at once), or the last state when the time is up."""
+    import envwait
     begin = now()
     state = "missing"
-    refreshed = False
+    refreshes = 0
+    pods = envwait.PodWatch(lambda args: run(["kubectl", "--context", context, *args], check=False), now)
     while True:
-        if not refreshed and state.startswith(("waiting for", "missing")) and now() - begin >= envwait_refresh_after():
-            refreshed = True   # spec 153: Argo CD polls git every 3 minutes; ask once instead of waiting for the poll
+        if state.startswith(("waiting for", "missing")) and (refreshes == 0 or (refreshes == 1 and now() - begin >= envwait_refresh_after())):
+            refreshes += 1     # spec 153, #867: Argo CD polls git every 3 minutes; ask at once and once more instead of waiting
             run(["kubectl", "--context", context, "-n", "argocd", "annotate", "application", app,
                  "argocd.argoproj.io/refresh=hard", "--overwrite"], check=False)
             say(f"asked Argo CD for a hard refresh of {app} ({state} after {int(now() - begin)}s)")
@@ -2008,6 +2011,9 @@ def argo_health(context: str, app: str, timeout: float, interval: float, images:
                 state = f"{s.get('sync', {}).get('status', '?')}/{s.get('health', {}).get('status', '?')}"
                 if state == "Synced/Healthy" or s.get("health", {}).get("status") == "Degraded":
                     return state
+            stuck = pods(s, lambda img: img.rsplit("@", 1)[0].rsplit(":", 1)[-1] in images) if images else None
+            if stuck:
+                return stuck
         if now() - begin > max(timeout, 0):
             return state
         sleep(interval)
