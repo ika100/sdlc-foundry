@@ -77,6 +77,10 @@ import core  # noqa: E402
 import localport  # noqa: E402
 import waitdetach  # noqa: E402
 
+if os.environ.get("SDLC_DEPS_TRACE"):   # spec 212: started from a recorded test run, record what this process touches
+    import depstrace
+    depstrace.child()
+
 # noun -> verb -> (module, argv prefix put before the remaining args)
 NOUNS: dict[str, dict[str, tuple[str, list[str]]]] = {
     "system": {"new": ("newapp", []), "status": ("status", []), "ship": ("appship", []),

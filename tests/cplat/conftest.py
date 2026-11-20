@@ -9,7 +9,8 @@ import sleepguard
 
 sleepguard.install()  # spec 185: before any cplat module binds time.sleep
 
-pytest_plugins = ["runtemp"]  # spec 208: the run's own directory, uv cache and temp root, removed when the run passes
+pytest_plugins = ["runtemp", "depsmap"]  # spec 208: the run's own directory, uv cache and temp root, removed when the run
+# passes; spec 212: --deps-record records the dependency map of a full run
 
 import pytest
 from console_support import console  # noqa: F401  (spec 122: the running-console fixture)
