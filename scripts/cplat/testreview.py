@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -80,8 +82,31 @@ def _parse(value: str, active: list[str]) -> str:
     return " | ".join(parts)
 
 
+def _red_gate(repo: Path, sp) -> None:
+    """Spec 205: in a pytest repo the tests freeze only after a red check that exited 0 on their current content."""
+    import buildtests
+    import quiet_red
+    doc = buildtests.build_tests(repo, sp.id, None, False, None, red=True)
+    if not doc["command"]:
+        return
+    refusal = PlatformError("the red check has not passed on the current acceptance tests",
+                            hint=f"run the line `cplat component build tests {sp.id} --red` prints; it must exit 0")
+    gd = core.git_dir(repo)
+    try:
+        rec = json.loads(((gd if gd.is_absolute() else repo / gd) / quiet_red.RECORD_FILE).read_text()) if gd else None
+    except (OSError, ValueError):
+        rec = None
+    if not isinstance(rec, dict) or rec.get("exit") != 0 or not isinstance(rec.get("files"), dict):
+        raise refusal
+    for f in doc["files"]:
+        p = repo / f
+        if not p.is_file() or rec["files"].get(f) != hashlib.sha256(p.read_bytes()).hexdigest():
+            raise refusal
+
+
 def commit(repo: Path, spec_ref: str, findings: int, unresolved: list[str]) -> str:
     sp = specmod.find(repo, spec_ref)
+    _red_gate(repo, sp)
     code, out = _git(repo, "status", "--porcelain", "--untracked-files=no")
     if out:
         raise PlatformError("tracked files have uncommitted changes", hint="commit the tests first")

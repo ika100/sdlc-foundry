@@ -24,6 +24,7 @@ tasks:
     covers: [AC-205.6]
     parallel_safe: true
     depends_on: [t2]
+    done: true
   - id: t4
     title: Build and tester prompts - red check rounds in Phase 1, harness fix by the tester after the freeze
     files: [plugins/component/commands/build.md, docs/rules/plugins/component/commands/build.yml, plugins/component/references/build-tighten.md, docs/rules/plugins/component/references/build-tighten.yml, plugins/svc/agents/tester.md, docs/rules/plugins/svc/agents/tester.yml]

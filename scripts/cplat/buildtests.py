@@ -2,9 +2,11 @@
 
   cplat.py build tests <spec> <task> [--json] [--repo DIR]
   cplat.py build tests <spec> --load [--base REF] [--json] [--repo DIR]
+  cplat.py build tests <spec> --red [--json] [--repo DIR]
 
 Prints exactly one line: `cplat quiet test-fast -- <the task's test files>` in the shape's runner form, or for `--load`
-`cplat quiet test-fast --repeat 3 -- <files>`; a load run with nothing to repeat prints `none: <reason>`.
+`cplat quiet test-fast --repeat 3 -- <files>`; a load run with nothing to repeat prints `none: <reason>`. `--red` prints
+`cplat quiet test-fast --red -- <the trace's test files>` (spec 205), or `none: <reason>` where test-fast runs no pytest.
 """
 from __future__ import annotations
 
@@ -68,8 +70,10 @@ def _git(root: Path, *args: str) -> str:
     return p.stdout
 
 
-def build_tests(root: Path, ref: str, task: str | None, load: bool, base: str | None) -> dict:
+def build_tests(root: Path, ref: str, task: str | None, load: bool, base: str | None, red: bool = False) -> dict:
     sp = specmod.find(root, ref)
+    if red and (task or load):
+        raise PlatformError("use one of a task, --load, --red", hint="cplat component build tests <spec> --red")
     if load and task:
         raise PlatformError("a task and --load cannot be used together", hint="use one or the other")
     repo_shape = specmod.repo_shape(root)
@@ -77,6 +81,20 @@ def build_tests(root: Path, ref: str, task: str | None, load: bool, base: str | 
     entry = TEST_FAST.get(repo_shape or "")
     doc: dict = {"spec": sp.id, "task": task, "load": load, "files": [], "args": [], "command": None, "reason": None}
     globs, kind = entry if entry else ([], "")
+
+    if red:
+        import quiet_red
+        doc["red"] = True
+        if not quiet_red.runs_pytest(root):
+            doc["reason"] = "test-fast does not run pytest"
+        else:
+            doc["files"] = sorted({f for fs in trace.values() for f in fs if matches(f, globs)})
+            if doc["files"]:
+                doc["args"] = list(doc["files"])
+                doc["command"] = "cplat quiet test-fast --red -- " + shlex.join(doc["args"])
+            else:
+                doc["reason"] = "no acceptance test files test-fast runs"
+        return doc
 
     if load:
         if not entry:
@@ -100,7 +118,7 @@ def build_tests(root: Path, ref: str, task: str | None, load: bool, base: str | 
         return doc
 
     if not task:
-        raise PlatformError("name a task or pass --load", hint="cplat component build tests <spec> <task>")
+        raise PlatformError("name a task, --load or --red", hint="cplat component build tests <spec> <task>")
     tasks = [t for t in (sp.plan[0].get("tasks") or []) if isinstance(t, dict)] if sp.plan else []
     t = next((t for t in tasks if t.get("id") == task), None)
     if t is None:
@@ -119,10 +137,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("spec")
     ap.add_argument("task", nargs="?")
     ap.add_argument("--load", action="store_true")
+    ap.add_argument("--red", action="store_true")
     ap.add_argument("--base")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--repo", default=".")
     ns = ap.parse_args(argv)
-    doc = build_tests(Path(ns.repo).resolve(), ns.spec, ns.task, ns.load, ns.base)
+    doc = build_tests(Path(ns.repo).resolve(), ns.spec, ns.task, ns.load, ns.base, ns.red)
     print(json.dumps(doc) if ns.json else (doc["command"] or f"none: {doc['reason']}"))
     return 0
