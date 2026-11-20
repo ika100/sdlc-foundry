@@ -36,7 +36,7 @@ One `cplat` call per Bash invocation, output read whole (no `grep`, `head` or `t
 - One call: `cplat platform runs agent tester [--untraced <AC>]... [--wrong-failure <test>]...`.
 - `cplat spec trace <id> --json` → `TRACE` (criterion → test files).
 - **reviewer** in `**Test-review mode.**` (criteria, `Contract`, `TRACE`) reports `TEST FINDINGS:`; the tester gets them once: "**Acceptance mode.** Resolve only these test-review findings, changing only the tests named, so that nothing else moves: <findings>. Commit as `test(<number>): resolve test-review findings for <id>`. Reply `UNRESOLVED: <finding> — <why>` per line, or `UNRESOLVED: none`." A failing `cplat spec trace <id>` after it → `git revert --no-edit HEAD`, all unresolved, since a broken trace leaves a criterion untested. No second review.
-- `cplat quiet lint-fix`; commit `test(<slug>): lint-fix acceptance tests for <id>`; `cplat component build reviewed <id> --findings <n> [--unresolved '<test> | <AC> | <what>']...`.
+- `cplat quiet lint-fix`; commit `test(<slug>): lint-fix acceptance tests for <id>`; `cplat component build reviewed <id> --findings <n> [--unresolved '<test> | <AC> | <what>']...`. `RED=$(git log -1 --format=%H --grep 'acceptance tests for')`; `red` in place of `$RED` finds it too.
 
 ## Phase 2 — Implement (parallel via git worktrees)
 
