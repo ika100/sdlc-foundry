@@ -72,11 +72,9 @@ Print `## Phase 5 complete — tag vX.Y.Z pushed on <TAG_COMMIT>`.
 
 Then `cplat pr wait <PR URL> --merge` (never a polling loop, since the wait reruns a stuck check). The follow-up commit stays untagged (a later release ignores `chore(release): …`). If either fails, the release stays tagged: report it and the PR. Print `## Phase 6 complete — follow-up PR merged: <URL>`.
 
-## Phase 7 — Close linked GitHub issues
+## Phase 7 — Linked issues
 
-Collect each `#NNN` from the commit messages `git log "$PREV_TAG"..vX.Y.Z --format='%B'` (`PREV_TAG=$(git describe --tags --abbrev=0 vX.Y.Z^ 2>/dev/null)`; empty → `git log vX.Y.Z --format='%B'`), the PR bodies (`gh pr list --state merged --limit 50 --json number,body`) and the CHANGELOG entry. For each: `gh issue view <NNN> --json state,number -q '"\(.number) \(.state)"'`; `OPEN` → `gh issue close <NNN> --comment "Closed by release vX.Y.Z — see [CHANGELOG.md](../blob/main/CHANGELOG.md) for details."`; `CLOSED` → skip.
-
-Print `## Phase 7 complete — issues closed: #42, #7 (2 closed, 1 already closed)` or `— no linked issues found`.
+`cplat component release issues --version <VERSION>`; show its lines. `cplat` posts the milestone comment and closes the open issues itself, without asking, and prints the `## Phase 7 complete — …` line.
 
 ## Final Summary
 
@@ -97,9 +95,9 @@ Version: the tagged commit's version file shows the previous development version
 
 - After the summary, end with the hand-over: run `cplat next --json` and follow its `how`, so that the person goes on by choosing, not by typing a command.
 - **Fail fast**; after Phase 1 a stop runs `git switch main` first, so the checkout is left on `main`.
-- `git push origin v*` is pre-approved. **Phase 7 closes issues via `gh issue close`** (an `ask` permission).
+- `git push origin v*` is pre-approved.
 - Never auto-fix quality, test or security failures (report and stop), so that the released code is what passed the gates; never force-merge (a failed merge goes to the user), because it needs the user's decision.
 
 Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-122).

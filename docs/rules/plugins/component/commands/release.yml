@@ -36,7 +36,7 @@ rules:
     class: practice
     source: "#476"
   - id: R10
-    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-122)."
     class: hard
     hard: issue-filing-needs-consent
   - id: R16

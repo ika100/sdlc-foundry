@@ -15,9 +15,10 @@ rules:
     class: hard
     hard: triage-never-closes
   - id: R5
-    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself."
     class: hard
     hard: issue-filing-needs-consent
+    source: "ADR-033, ADR-122"
   - id: R7
     text: "Do not label it, because a label would hide it from the next triage while it stays in the queue until it is explored and specced."
     class: practice

@@ -26,7 +26,7 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 1. `cplat spec approve <id>`. Refused → show the reasons and the fix (usually `/component:spec --amend <id> …`). It set the plan aside (criteria changed) → tell the user the spec needs a new plan.
 2. Switch to `feature/<spec_id>` if it exists; commit `docs/specs/<spec_id>/` as `docs(spec): approve <spec_id>`.
-3. `cplat spec land <spec_id>`; show its output, stop on failure.
+3. `cplat spec land <spec_id>`; show its output, stop on failure. `cplat` posts the milestone comments on linked issues itself, without asking.
 4. End with F's hand-over.
 
 ## B. New spec
@@ -80,4 +80,4 @@ No open questions → one AskUserQuestion: "Approve with these <n> assumptions (
 - **Hard rule:** Never answer an open question on the user's behalf and never approve without the user's word, because approval exists only in the user's own words.
 - **Hard rule:** the only push is `cplat spec publish` / `cplat spec land` (the spec's own branch, never forced, only `docs/specs/<id>/`), so that every check runs before a push.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself (ADR-033, ADR-122).

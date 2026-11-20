@@ -21,7 +21,7 @@ REGISTER = "docs/rules/register.yml"
 R1 = "Always run the tests first, because a red suite hides every later failure."
 R2 = "Never skip the lint step, since the CI lint job refuses it otherwise."
 # interface: the hard rule marker sentence the check detects
-R3 = "**Hard rule:** never file an issue without the user's OK, because the platform repository is public."
+R3 = "**Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself."
 GOOD_BODY = f"{R1}\n\n- {R2}\n\n{R3}\n"
 PROSE = "consent exists only in the user's own words, which no tool can see"
 HARD = {"issue-filing-needs-consent": {"intentional_prose_rule": PROSE, "source": "ADR-033"}}

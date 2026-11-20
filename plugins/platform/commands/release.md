@@ -15,4 +15,4 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 
 Never merge, tag, push or create a release by hand, because the command checks each step first. Never pass `--confirm` without the user's yes, because a merge or a tag cannot be undone.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.

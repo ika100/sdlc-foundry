@@ -16,9 +16,10 @@ rules:
     text: "Never overwrite a non-empty directory, so that no user file is lost."
     class: practice
   - id: R6
-    text: "never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033)."
+    text: "never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself."
     class: hard
     hard: issue-filing-needs-consent
+    source: "ADR-033, ADR-122"
   - id: R7
     text: "do not ask again unless the preview shows something they did not ask for."
     class: retired

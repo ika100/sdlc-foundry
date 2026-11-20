@@ -64,4 +64,4 @@ After the tester passes: read `${CLAUDE_PLUGIN_ROOT}/references/fix-pr.md` and f
 - Commit once, at Phase 3: the coder leaves the tree dirty.
 - **Shell rule:** run every tool through `devbox run <script>`, never directly, so that versions and flags match CI.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public.
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.

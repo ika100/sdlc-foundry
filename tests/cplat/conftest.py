@@ -56,6 +56,17 @@ def no_real_issue_claims(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_milestone_comments(monkeypatch):
+    """Spec 158: milestone comments call GitHub; tests never do. `milestones.gh` answers "not available" and the step budget
+    starts afresh; the tests of spec 158 install their own fake (`support_158.install`), the real one is `milestones.REAL_GH`."""
+    import milestones
+    if not hasattr(milestones, "REAL_GH"):
+        milestones.REAL_GH = milestones.gh
+    monkeypatch.setattr(milestones, "gh", lambda args, *, cwd, timeout: (127, "", "tests never call GitHub"))
+    milestones.reset()
+
+
+@pytest.fixture(autouse=True)
 def no_real_suite_times(monkeypatch):
     """Spec 185: the retro reads the suite times of `main` from GitHub; tests never do (no runs). Tests of the real fetch call
     the saved original, `retro_suite.REAL_FETCH`."""

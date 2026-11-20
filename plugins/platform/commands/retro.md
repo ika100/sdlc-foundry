@@ -12,4 +12,4 @@ A rule marked **Hard rule:** is never departed from. Any other rule is a practic
 2. **Propose**: `cplat platform retro propose --dir DIR` lets a headless Claude write `DIR/proposals.json`.
 3. **Post**: `cplat platform retro post [--dir DIR]` checks the proposals, posts the public issue and stores the full report in the run store. **Hard rule:** never run it unless the user asked for it, because the issue it posts is public; show what it will post first.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.

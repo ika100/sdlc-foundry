@@ -24,4 +24,4 @@ Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its
 
 The script changes `applications/` and `bootstrap/` alone. **Hard rule:** never `kubectl apply`, because the gitops repo and Argo CD own the cluster.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.

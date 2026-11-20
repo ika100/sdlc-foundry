@@ -315,7 +315,24 @@ def main(argv: list[str]) -> int:
     p.add_argument("--interval", type=float, default=10.0, help=argparse.SUPPRESS)
     p.add_argument("--repo", default=".")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("issues", help="comment on and close the issues a release fixes (spec 158)")
+    p.add_argument("--version", required=True)
+    p.add_argument("--previous")
+    p.add_argument("--repo", default=".")
+    p.add_argument("--json", action="store_true")
     ns = ap.parse_args(argv)
+    if ns.cmd == "issues":
+        import milestones_release as mr
+        repo, version = Path(ns.repo).resolve(), "v" + ns.version.lstrip("v")
+        if not mr.tag_exists(repo, version):
+            print(f"ERROR: tag {version} not found")
+            return 2
+        res = mr.released(repo, version, ns.previous)
+        if ns.json:
+            print(json.dumps({"version": version, "issues": res.issues, "notes": res.notes, "summary": res.summary}, indent=2))
+        else:
+            print("\n".join([*res.lines, res.summary]))
+        return 0
     if ns.cmd == "gates":
         import waits
         repo = Path(ns.repo).resolve()

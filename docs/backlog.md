@@ -15,7 +15,6 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
-| [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | approved | 8 | #568 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -145,6 +144,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [155-each-repo-of-a-system-ship-runs-in-its-own-session](specs/155-each-repo-of-a-system-ship-runs-in-its-own-session/spec.md) — Each repo of a system ship runs in its own session | P1 | done | 10 | #560 |
 | [156-a-system-ship-benchmark](specs/156-a-system-ship-benchmark/spec.md) — A system ship benchmark | P1 | done | 7 | #560 |
 | [157-prs-and-issues-get-short-summaries-for](specs/157-prs-and-issues-get-short-summaries-for/spec.md) — Build and ship PRs start with a short summary | P1 | done | 7 | #568 |
+| [158-linked-issues-hear-when-their-spec-pr](specs/158-linked-issues-hear-when-their-spec-pr/spec.md) — Linked issues hear when their spec, PR and release land | P1 | done | 8 | #568 |
 | [159-unit-mode-runs-independent-tasks-at-once](specs/159-unit-mode-runs-independent-tasks-at-once/spec.md) — Unit mode runs independent tasks at once | P1 | done | 8 | #560 |
 | [160-a-lint-suppression-in-an-acceptance-test-is-not-a](specs/160-a-lint-suppression-in-an-acceptance-test-is-not-a/spec.md) — A lint suppression in an acceptance test is not a changed test | P1 | done | 4 | #570 |
 | [161-a-tested-quickstart-and-leaner-user-docs](specs/161-a-tested-quickstart-and-leaner-user-docs/spec.md) — A tested quickstart and leaner user docs | P1 | done | 10 |  |

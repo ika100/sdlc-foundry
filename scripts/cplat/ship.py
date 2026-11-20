@@ -1470,7 +1470,8 @@ def _merged(repo: Path, st: dict, sha: str, lines: list[str], cleanup_of: str | 
     if cleanup_of:
         import land_merge
         lines = [*lines, *land_merge.cleanup(repo, cleanup_of, run)]
-    return True, lines
+    import milestones
+    return True, [*lines, *milestones.pr_merged(repo, st["pr"])]
 
 
 # ---------------- gitops tasks (spec 076) ----------------
@@ -1618,6 +1619,8 @@ def merge_gitops(repo: Path, st: dict, order: str, timeout: float, interval: flo
         info["merged"] = True
         save_state(repo, st)
         lines.append(f"merged gitops task {t['id']} ({order}): {pr}")
+        import milestones
+        lines.extend(milestones.pr_merged(repo, pr))
     return True, lines
 
 

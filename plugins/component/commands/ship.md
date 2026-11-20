@@ -43,7 +43,7 @@ Escalate on build's stop rules. Then `cplat component ship phase pr`.
 
 ## Phase `land`
 
-`cplat component ship land` waits for the PR's checks, merges the `before-merge` gitops PRs and the PR.
+`cplat component ship land` waits for the PR's checks, merges the `before-merge` gitops PRs and the PR, and posts the milestone comments on linked issues itself, without asking.
 
 - **GREEN** → merged, phase `deploy` (`--no-merge`: done).
 - Non-zero exit (**RED**, the security check, or an error) → read `${CLAUDE_PLUGIN_ROOT}/references/ship-land-red.md` and follow it (3 red rounds, `fix_rounds`, then escalate; a red security check: `cplat deps patch`, `cplat deps report --update-pr`, exit 3 → `cplat component ship escalate --cause <CAUSE>`).

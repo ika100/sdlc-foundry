@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import appship_state as state
+import milestones
 import ship
 from core import PlatformError
 
@@ -121,10 +122,13 @@ def land(gitops_dir: Path, pr: str, repo_id: str, timeout: float, interval: floa
     """Wait for every check of the gitops-app's own PR, then merge it through the slot. Red → (False, failed checks)."""
     view = json.loads(ship.gh(["pr", "view", pr, "--json", "state,isDraft"], cwd=gitops_dir) or "{}")
     if view.get("state") == "MERGED":
-        return True, [f"{pr} is already merged"]
+        return True, [f"{pr} is already merged", *milestones.pr_merged(gitops_dir, pr)]
     if view.get("isDraft"):
         ship.gh(["pr", "ready", pr], cwd=gitops_dir, check=False)
-    st = state.load_state(gitops_dir) or {}
+    try:
+        st = state.load_state(gitops_dir) or {}
+    except PlatformError:    # no run state to attach the wait to (not a checkout): the wait goes on without a run id
+        st = {}
     status, cs, failed = ship.wait_checks(ship.CheckWatch(gitops_dir, pr, ship.QUEUE_TIMEOUT, st.get("run_id")), timeout, interval)
     if status == "red":
         return False, ship.red(gitops_dir, pr, cs, failed)
@@ -133,4 +137,4 @@ def land(gitops_dir: Path, pr: str, repo_id: str, timeout: float, interval: floa
             merge(gitops_dir, pr, repo_id, cwd=gitops_dir)
     except Conflict as e:
         return False, [str(e)]
-    return True, [f"merged {pr}"]
+    return True, [f"merged {pr}", *milestones.pr_merged(gitops_dir, pr)]

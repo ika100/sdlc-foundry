@@ -20,4 +20,4 @@ With `--ref <tag>`, prefix every call with `CPLAT_REF=<tag>` so that the update 
 
 Never merge, label, comment on or edit a PR by hand, because the labelled open PR and its comment are the work item. Never resolve a conflict or restore a customisation for the user, because the repo's owner decides what stays.
 
-> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+> If a platform template, script or command misbehaves (not the user's code), stop, summarize it in two lines and offer `/issue:report`. **Hard rule:** never file an issue without the user's OK, because the platform repository is public; the platform posts only `platform` escalations and milestone comments itself.

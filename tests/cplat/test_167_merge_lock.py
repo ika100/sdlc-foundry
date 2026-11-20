@@ -101,7 +101,7 @@ def test_two_lands_in_one_repo_merge_one_at_a_time_and_the_second_reruns_its_ci_
 def test_a_branch_that_is_not_behind_main_is_merged_without_an_update_ac_167_7(world):  # AC-167.7
     world.pr(10, "fix/a", checks=[PASS])
     ok, lines = prmod.wait(world.repo, A, True, 60, 0.05, 60)
-    assert ok and lines[-1].startswith("merged")
+    assert ok and any(l.startswith("merged") for l in lines)
     assert not any(a[:2] == ["pr", "update-branch"] for a in world.gh_calls())
     assert [e["green"] for e in world.events() if e["ev"] == "merged"] == [True]
     assert _lock(world).exists()                                       # even a lone merge goes through the repo lock
