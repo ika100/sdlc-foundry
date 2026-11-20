@@ -1,1 +1,0 @@
-**Test runs no longer grow the uv cache or the pytest temp root (#810, #811).** Every run of the cplat tests has its own uv cache and temp directory, removes both when it passes, and keeps only the failed tests' files of the last 3 failing runs; the e2e scripts use a throwaway uv cache.

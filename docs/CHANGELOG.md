@@ -6,6 +6,24 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.25.0] - 2026-11-20
+
+### Added
+
+**Acceptance tests are proven passable before they freeze, and test-diff accepts edits that change no assertion (spec 205).** A red acceptance test could be red for the wrong reason (a helper that raises) and freeze anyway, so the build stopped later at a higher cost. `cplat quiet test-fast --red -- <tests>` now classes each red pytest test as `missing behaviour`, `test error` or `passes`; `cplat component build tests <id> --red` prints the command for the spec's trace; `cplat component build reviewed` freezes the tests only after that check passed; and after the freeze a test that raises in test code goes to the tester as a harness fix. `cplat spec test-diff` now passes an edit whose only differences are comments, docstrings and static imports without a record ([ADR-121](adr/121-red-tests-fail-for-the-missing-behaviour-before-they-freeze.md), [spec 205](specs/205-acceptance-tests-are-proven-passable/spec.md)). Update the plugins (`/plugin marketplace update`).
+
+**Every PR that `cplat` opens now starts with a four-line summary block (#568).** The block names what changed, why, how the review went, and the risks and follow-ups, so a reviewer reads the point of the PR before the diff. `cplat` renders it purely from records (the spec, a changelog fragment, git, the run record and the verification), with no agent text, so it cannot drift from what happened. It sits at the top of the body for `cplat pr open`, for `cplat component ship pr` and for the gitops PRs of `cplat system ship`; the orchestrator writes none, and `/component:build`, `/component:ship` and `/system:ship` say so ([spec 157](specs/157-prs-and-issues-get-short-summaries-for/spec.md)).
+
+### Fixed
+
+**Test runs no longer grow the uv cache or the pytest temp root (#810, #811).** Every run of the cplat tests has its own uv cache and temp directory, removes both when it passes, and keeps only the failed tests' files of the last 3 failing runs; the e2e scripts use a throwaway uv cache.
+
+**A red check's log is read even when it holds terminal escape sequences (#825).** `gh run view --log-failed` refuses such a log, so `cplat land` and `pr wait` reported "log: none" and escalated with an unknown cause. The failed job's own log is now fetched with `gh api --allow-escape-sequences`, the escape sequences are stripped, and the summary names the failing step and lines as usual.
+
+**A land queues behind a live merge-lock holder instead of giving up (#833).** `cplat spec land` and `pr wait --merge` ended with "the merge lock … is held by pr N" when other pull requests held the lock for more than the one-hour timeout. While the holder's process is alive, the wait for the lock is a queue that does not count against the timeout and ends only after 6 hours; a holder whose process is gone and whose lock stays stuck still ends the land after the timeout.
+
+**The benchmark sample pins todo-api at its 1 s database deadline (#842).** At the old pin todo-api's own quality gate and its AC-001.17 timing test failed, so the quick-task benchmark's agent refused to open its PR.
+
 ## [5.24.0] - 2026-11-19
 
 ### Added
