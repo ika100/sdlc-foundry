@@ -20,6 +20,7 @@ import core
 import dispatch_policy
 import land_merge
 import merge_lock
+import milestones
 import pr_open
 import runs
 import ship
@@ -74,6 +75,8 @@ def wait(repo: Path, pr: str, merge: bool, timeout: float, interval: float, queu
         raise
     if own:
         runs.finish(own, "done" if ok else "failed", fields={"pr_wait": section})
+    if merge and ok:    # spec 158: merged now or found merged; a plain wait posts nothing
+        lines = [*lines, *milestones.pr_merged(repo, url_of(pr, slug))]
     return ok, lines
 
 
