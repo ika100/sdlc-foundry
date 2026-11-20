@@ -37,6 +37,7 @@ tasks:
     covers: []
     parallel_safe: true
     depends_on: []
+    done: true
 ---
 
 # Plan — 205 Acceptance tests are proven passable before they freeze
