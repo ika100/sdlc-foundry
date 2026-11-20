@@ -186,7 +186,7 @@ def land(root: Path, spec: specmod.Spec) -> tuple[bool, list[str]]:
     res = pr.wait(root, number, True, 3600, 20, ship.QUEUE_TIMEOUT, mode=land_merge.CATCH_UP)
     ok, lines = res if isinstance(res, tuple) else (res == 0, [])
     approved = milestones.spec_approved(root, spec) if ok else []
-    return ok, [*info["issue_comments"], *lines, *approved]
+    return ok, [*info.get("issue_comments", []), *lines, *approved]
 
 
 def request_changes(root: Path, spec: specmod.Spec, body_file: Path) -> str:
