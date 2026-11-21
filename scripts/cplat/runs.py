@@ -536,9 +536,10 @@ def unit_started(repo_dir: Path, unit: str | None) -> None:
 def build_run(repo_dir: Path) -> str | None:
     """Run id of the repo's pointer run when it is an active `build` run (attached or not), else None."""
     try:
-        rid = (_read_pointer(_pointer(Path(repo_dir))) or {}).get("run_id")
+        pointer = _read_pointer(_pointer(Path(repo_dir))) or {}
+        rid = pointer.get("run_id")
         rec = _read_active(rid) if rid else None
-        return rid if rec is not None and rec.get("kind") == "build" else None
+        return rid if rec is not None and pointer.get("kind") == "build" else None
     except Exception:  # noqa: BLE001
         return None
 

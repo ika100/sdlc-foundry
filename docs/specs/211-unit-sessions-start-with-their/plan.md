@@ -38,6 +38,7 @@ tasks:
     covers: [AC-211.1, AC-211.6, AC-211.9]
     parallel_safe: true
     depends_on: [t1, t3]
+    done: true
   - id: t5
     title: cplat quiet ci records the security gate and the ci stage of the build run
     files: [scripts/cplat/quiet.py]
