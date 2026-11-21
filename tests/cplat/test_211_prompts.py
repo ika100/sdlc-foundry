@@ -36,6 +36,28 @@ def test_the_build_instructions_start_a_unit_session_with_ship_unit_ac_211_6(): 
     assert "cplat component ship unit" in text  # interface: the command a unit session of a build starts with (design section 7)
 
 
+NEGATION = r"\b(no|not|never|without|instead of)\b"
+
+
+def unit_sentences(path):
+    """The clauses of a prompt that speak of a unit session (`--unit`), split at full stops and semicolons."""
+    return [s for s in re.split(r"[.;]\s+", path.read_text()) if "--unit" in s]
+
+
+def test_no_prompt_tells_a_unit_session_to_run_shape_first_ac_211_6():  # AC-211.6
+    for path in (SHIP, BUILD):
+        for sentence in unit_sentences(path):
+            if "cplat shape" in sentence:
+                assert re.search(NEGATION + r"[^`]{0,30}`cplat shape`", sentence), (path.name, sentence)
+
+
+def test_no_prompt_tells_a_unit_session_to_read_the_instructions_first_ac_211_6():  # AC-211.6
+    for path in (SHIP, BUILD):
+        for sentence in unit_sentences(path):
+            reads = re.search(r"\bread\b", sentence) and re.search(r"(commands/build|references/unit-mode)\.md", sentence)
+            assert not reads or re.search(NEGATION, sentence), (path.name, sentence)
+
+
 def test_the_unit_mode_reference_is_still_the_source_both_prompts_name_ac_211_6():  # AC-211.6
     for path in (SHIP, BUILD):
         assert "references/unit-mode.md" in path.read_text(), path.name

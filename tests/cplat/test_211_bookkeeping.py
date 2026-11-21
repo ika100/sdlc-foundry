@@ -117,9 +117,11 @@ def test_an_explicit_call_afterwards_adds_no_second_entry_ac_211_7(ci_repo):  # 
     assert runs.main(["gate", "security", "passed", "--dir", str(ci_repo)]) == 0
     budget.record_stage(ci_repo, "ci", "passed")
     rec = record(rid)
-    assert rec["gates"] == {"security": "passed"} or rec["gates"].get("security") == "passed"
+    assert rec["gates"] == {"security": "passed"}                       # one entry, overwritten in place
     assert build_markers(rid) == before == ["build:verify"]
     assert stage_result(rid, "ci") == "passed"
+    stages = budget.find(rid)[1]["stages"]
+    assert list(stages) == ["ci"]                                       # one stage entry, not a second one
 
 
 # ---------------- AC-211.9: markers set by commands ----------------
@@ -149,6 +151,15 @@ def test_a_begin_for_another_spec_or_without_a_unit_starts_a_new_run_as_before_a
     rid = begin_build(ci_repo)
     monkeypatch.delenv("CPLAT_UNIT")
     assert begin_build(ci_repo) != rid
+
+
+def test_a_begin_for_another_spec_in_a_unit_session_starts_a_new_run_ac_211_9(ci_repo, monkeypatch):  # AC-211.9
+    monkeypatch.setenv("CPLAT_UNIT", "task:t1")
+    rid = begin_build(ci_repo)
+    assert runs.main(["begin", "build", "--spec", "008-other-thing", "--dir", str(ci_repo)]) == 0
+    other = runs.current_run(ci_repo)
+    assert other and other != rid
+    assert build_markers(other) == ["build:implement"]
 
 
 def test_the_gates_set_qa_and_verify_ac_211_9(ci_repo):  # AC-211.9

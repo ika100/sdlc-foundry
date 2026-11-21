@@ -3,6 +3,8 @@
 Seam: `spec.main(["--repo", root, "test-diff", ...])` and `cplat.main(["spec", "test-diff"])` on a small git repo with one `building`
 spec (spec 160's `g` helper, spec 007's files) and commits whose subject is "acceptance tests for <spec id>". The contract is
 design.md section 6."""
+import pytest
+
 import cplat
 import spec
 from test_160_lint_suppressions import g
@@ -22,7 +24,7 @@ def commit(root, msg):
 def world(tmp_path, subject=SUBJECT):
     """main: spec 007 `building`, then the commit `subject` with tests/test_alerts.py."""
     root = tmp_path / "r"
-    root.mkdir()
+    root.mkdir(parents=True)
     g("init", "-q", "-b", "main", cwd=root)
     make(root, status="building")
     (root / "tests").mkdir()
@@ -80,10 +82,27 @@ def test_the_latest_of_several_commits_is_taken_ac_211_8(tmp_path, monkeypatch, 
     assert out.splitlines()[0] == f"base: {latest[:7]} (acceptance tests for {SPEC_ID})" and latest != first
 
 
-def test_the_options_work_without_a_base_too_ac_211_8(tmp_path, monkeypatch, capsys):  # AC-211.8
-    root, red = world(tmp_path)
-    rc, out, _ = run(root, monkeypatch, capsys, "--by", "t1")
-    assert out.splitlines()[0] == f"base: {red[:7]} (acceptance tests for {SPEC_ID})"
+OPTIONS = {
+    "by": ["--by", "t1"],
+    "task": ["--task", "t1"],
+    "tighten": ["--tighten", "tests/test_alerts.py", "--task", "t1", "--reason", "harness fix"],
+    "approve": ["--approve", "tests/test_alerts.py", "--task", "t1", "--reason", "the person approved it"],
+}
+
+
+@pytest.mark.parametrize("name", sorted(OPTIONS))
+def test_the_options_work_without_a_base_too_ac_211_8(name, tmp_path, monkeypatch, capsys):  # AC-211.8
+    """Each option, with and without the base, on its own copy of the repo (`--approve` and `--tighten` write their record)."""
+    opts = OPTIONS[name]
+    given_root, red = world(tmp_path / "given")
+    weaken(given_root)
+    rc_given, given, _ = run(given_root, monkeypatch, capsys, red, *opts)
+    found_root, red2 = world(tmp_path / "found")
+    weaken(found_root)
+    rc, found, _ = run(found_root, monkeypatch, capsys, *opts)
+    assert found.splitlines()[0] == f"base: {red2[:7]} (acceptance tests for {SPEC_ID})"
+    assert rc == rc_given
+    assert found.split("\n", 1)[1].replace(red2[:7], "BASE") == given.replace(red[:7], "BASE")
 
 
 def test_a_given_base_behaves_as_today_and_prints_no_found_line_ac_211_8(tmp_path, monkeypatch, capsys):  # AC-211.8

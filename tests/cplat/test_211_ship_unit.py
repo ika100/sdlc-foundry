@@ -78,7 +78,7 @@ def test_ship_unit_prints_shape_then_the_run_then_the_unit_then_the_briefing_ac_
     assert lines[unit_at + 1].startswith("next unit: ")
     assert lines[unit_at + 2] == ""
     assert lines[unit_at + 3].startswith("briefing for unit task:t1 (ship)")
-    assert "\n".join(lines[unit_at + 3:]) == briefing.build("task:t1", "ship")
+    assert "\n".join(lines[unit_at + 3:]).rstrip("\n") == briefing.build("task:t1", "ship").rstrip("\n")
 
 
 def test_ship_start_with_a_unit_prints_the_same_parts_in_the_same_order_ac_211_1(repo, capsys):  # AC-211.1
@@ -89,7 +89,7 @@ def test_ship_start_with_a_unit_prints_the_same_parts_in_the_same_order_ac_211_1
     assert "shape" in shape_line(lines[0])
     unit_at = line_index(lines, "unit task:t1: ")
     assert unit_at >= 2 and lines[unit_at + 1].startswith("next unit: ") and lines[unit_at + 2] == ""
-    assert "\n".join(lines[unit_at + 3:]) == briefing.build("task:t1", "ship")
+    assert "\n".join(lines[unit_at + 3:]).rstrip("\n") == briefing.build("task:t1", "ship").rstrip("\n")
 
 
 def test_a_second_call_prints_the_same_and_changes_no_state_ac_211_1(repo, capsys, monkeypatch, store):  # AC-211.1
