@@ -1,0 +1,23 @@
+/** Service configuration, read exclusively from environment variables (docs/env-vars.md). */
+export interface Config {
+  port: number;
+  logLevel: string;
+  serviceName: string;
+}
+
+const LEVELS = new Set(["trace", "debug", "info", "warn", "error", "fatal"]);
+
+/** LOG_LEVEL accepts any case (`INFO`, `debug`); an unknown value falls back to `info`. */
+export function logLevel(value: string | undefined): string {
+  const level = (value ?? "").toLowerCase();
+  return LEVELS.has(level) ? level : "info";
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const port = Number.parseInt(env.PORT ?? "", 10);
+  return {
+    port: Number.isInteger(port) && port > 0 && port < 65536 ? port : {{ port }},
+    logLevel: logLevel(env.LOG_LEVEL),
+    serviceName: env.OTEL_SERVICE_NAME ?? "{{ project_name }}",
+  };
+}

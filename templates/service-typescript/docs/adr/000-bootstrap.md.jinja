@@ -1,0 +1,29 @@
+# ADR-000: Bootstrap
+
+## Status
+
+Accepted on bootstrap.
+
+## Context
+
+`{{ project_name }}` was created from the `service-typescript` Copier template at `ika100/sdlc-foundry`. The template encodes the platform's TypeScript service conventions (platform ADR-124):
+
+- Node {{ node_major }} LTS and pnpm via devbox; ESM, TypeScript strict, compiled with `tsc` to `dist/`
+- Fastify 5, pino JSON logging{% if needs_observability %}, prom-client metrics on `/metrics`, OpenTelemetry tracing (OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT` is set){% endif %}
+{%- if needs_database %}
+- PostgreSQL through Drizzle ORM; SQL migrations in `drizzle/` (drizzle-kit), applied at startup; Testcontainers tests
+{%- endif %}
+- ESLint (typescript-eslint) + `tsc --noEmit` as the quality gate; `pnpm audit` for dependencies
+- Vitest with an 80 % coverage gate; smoke tests named `@smoke` in `tests/smoke/`
+- Distroless Node image, numeric non-root user → `{{ docker_registry }}/{{ project_name }}`
+- No Kubernetes manifests here: the system's gitops-app repo owns them (platform ADR-017); this repo ships a container image
+- GitHub topic `deployable-service` for ArgoCD discovery
+- Claude Code agents from the `sdlc-foundry` marketplace (`svc-ts` + `svc` + `shared`)
+
+## Decision
+
+We adopt the platform conventions verbatim. Any deviation must be justified in a new ADR.
+
+## Consequences
+
+Skeleton updates (CI, devbox recipes, Dockerfile, Node bump, lint and test config) arrive through `copier update`; `src/`, `tests/`, `drizzle/`, `package.json` and `docs/adr/` are project-owned and never overwritten.

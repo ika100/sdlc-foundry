@@ -190,6 +190,39 @@ shapes:
     status: stable
     adr: [10]
 
+  - id: service-typescript
+    plugin: svc-ts
+    template: service-typescript
+    deployable: true
+    test_globs: ["tests/**/*.ts"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    smoke_tag: '@smoke\b'   # regex: a test file naming a (smoke) criterion must match it (spec 091)
+    smoke_globs: ["tests/smoke/**/*.ts"]   # where trace looks for smoke tests (default: test_globs)
+    ci_checks: ["quality (eslint + tsc)", "test (vitest + coverage)", "security (pnpm audit + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: vitest
+      mandatory:
+        api-contract: ["**/openapi*", "**/api/**", "**/routes/**", "**/schemas*"]
+        migrations: ["drizzle/**", "src/db/schema.ts"]
+    library: false
+    detection:
+      copier_src: templates/service-typescript
+      sniff:
+        - "package.json contains \"fastify\" and not \"next\""
+    default_stack:
+      language: typescript
+      runtime: node-lts
+      framework: fastify
+    runtime:
+      port: 8080
+      probes: {liveness: /health, readiness: /ready}
+      metrics: /metrics   # Prometheus endpoint scraped by the observability addon's collector
+      user: 65532
+      volumes: {}
+      env: {LOG_LEVEL: INFO}
+      resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 500m, memory: 512Mi}}
+    status: stable
+    adr: [124]
+
   - id: platform
     plugin: svc
     template: null          # no template: the platform repo is never created, adopted, updated or rolled out from one (ADR-056)

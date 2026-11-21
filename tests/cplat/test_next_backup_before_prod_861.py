@@ -58,7 +58,8 @@ def test_missing_prod_backups_lists_prod_databases_without_backup_861(tmp_path):
 
 
 def test_the_needs_promote_item_carries_the_missing_backups_861():
-    rows = [{"component": "web", "cells": {"staging": {"state": "verified", "version": "sha-1"}, "prod": None}}]
+    # a release in staging: prod takes release tags only (#901)
+    rows = [{"component": "web", "cells": {"staging": {"state": "verified", "version": "v1.0.0", "release": "v1.0.0"}, "prod": None}}]
     [item] = needs._promotions(rows, {}, "manual", MISSING)
     assert item["consequence"]["missing_backups"] == MISSING and item["consequence"]["env"] == "prod"
 

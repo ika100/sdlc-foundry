@@ -295,8 +295,8 @@ def test_dev_url_of_the_smoke_run_follows_system_yaml_ac_114_6(tmp_path, monkeyp
 
 def test_type_lang_pairs_come_from_the_registry_plus_service_unknown_ac_114_58(tmp_path):  # AC-114.58
     model = mod("model")
-    assert set(model.TYPE_LANGS) == {("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"),
-                                     ("library", "python"), ("service", "unknown")}
+    assert set(model.TYPE_LANGS) == {("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"),
+                                     ("website", "typescript"), ("library", "python"), ("service", "unknown")}
 
 
 @pytest.mark.parametrize("shape, pair", [("service-python", ("service", "python")), ("service-java", ("service", "java")),

@@ -1,0 +1,28 @@
+// OpenTelemetry tracing, loaded before the app: `node --import ./dist/telemetry.js dist/server.js` (the Dockerfile and
+// `devbox run start` do this). It exports over OTLP only when OTEL_EXPORTER_OTLP_ENDPOINT is set (the standard OTel
+// variable, set by the system's observability addon); otherwise it starts nothing and tracing is a no-op.
+import { FastifyOtelInstrumentation } from "@fastify/otel";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
+import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
+{%- if needs_database %}
+import { PgInstrumentation } from "@opentelemetry/instrumentation-pg";
+{%- endif %}
+import { NodeSDK } from "@opentelemetry/sdk-node";
+
+if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT && process.env.OTEL_SDK_DISABLED !== "true") {
+  const sdk = new NodeSDK({
+    serviceName: process.env.OTEL_SERVICE_NAME ?? "{{ project_name }}",
+    traceExporter: new OTLPTraceExporter(),
+    instrumentations: [
+      new HttpInstrumentation(),
+      new FastifyOtelInstrumentation({ registerOnInitialization: true }),
+{%- if needs_database %}
+      new PgInstrumentation(),
+{%- endif %}
+    ],
+  });
+  sdk.start();
+  process.once("SIGTERM", () => {
+    void sdk.shutdown();
+  });
+}

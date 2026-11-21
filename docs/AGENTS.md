@@ -1,6 +1,6 @@
 # Claude Code Multi-Agent Setup
 
-This document describes the orchestration model used by the `svc`, `web`, `svc-java`, `svc-go`, `shared` and `system` plugins, and by the noun plugins `component`, `api`, `resource`, `instance`, `issue` and `platform`, whose commands carry no agents. Read this first when adding or modifying agents.
+This document describes the orchestration model used by the `svc`, `web`, `svc-java`, `svc-go`, `svc-ts`, `shared` and `system` plugins, and by the noun plugins `component`, `api`, `resource`, `instance`, `issue` and `platform`, whose commands carry no agents. Read this first when adding or modifying agents.
 
 ---
 
@@ -12,7 +12,7 @@ If a recipe is missing, **add it to `devbox.json` and commit** — never run an 
 
 ### SessionStart hooks
 
-The `svc`, `web`, `svc-java`, `svc-go` and `shared` plugins ship a `hooks/hooks.json` with a `SessionStart` hook that:
+The `svc`, `web`, `svc-java`, `svc-go`, `svc-ts` and `shared` plugins ship a `hooks/hooks.json` with a `SessionStart` hook that:
 
 - **Warns if `devbox` is missing from `PATH`** and prints the install command: `curl -fsSL https://get.jetify.com/devbox/install.sh | bash`. The hook exits 0 — it never blocks the session.
 - **Runs `devbox install` (idempotent)** if a `devbox.json` is present in the working directory, so the dev environment is ready before any agent touches it. The `svc` hook additionally runs `uv sync --all-extras` for Python repos (when `pyproject.toml` exists); `web` runs `devbox run install` when `node_modules/` is missing.
@@ -79,7 +79,7 @@ The flow only works when the architect's plan is machine-readable. `docs/specs/<
 ```yaml
 ---
 spec_id: <NNN>-<slug>
-shape: <shape-id>      # service-python | web-nextjs | service-java | service-go | …
+shape: <shape-id>      # service-python | web-nextjs | service-java | service-go | service-typescript | …
 spec_hash: <from cplat spec hash>   # the plan is invalid once the criteria change
 tasks:
   - id: t1
@@ -221,6 +221,16 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `deployment` | sonnet | distroless/static image, ldflags version |
 | `observability` | sonnet | slog + Prometheus client_golang |
 | `release` | sonnet | CHANGELOG + PR; version is the git tag |
+
+### `svc-ts` plugin (`service-typescript`)
+
+| Agent | Model | Job |
+|---|---|---|
+| `coder` | sonnet | Fastify + strict TypeScript, JSON-schema routes, Drizzle migrations |
+| `tester` | sonnet | Vitest through `app.inject`, Testcontainers PostgreSQL, `@smoke` tests |
+| `deployment` | sonnet | distroless Node image (production dependencies only) |
+| `observability` | sonnet | prom-client, OpenTelemetry Node SDK, pino trace ids |
+| `release` | sonnet | `package.json` version, CHANGELOG, release PR |
 
 ### Noun plugins (`component`, `api`, `resource`, `instance`, `issue`, `platform`)
 

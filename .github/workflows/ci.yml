@@ -27,6 +27,7 @@ jobs:
       gitops: ${{ steps.diff.outputs.gitops }}
       web: ${{ steps.diff.outputs.web }}
       go: ${{ steps.diff.outputs.go }}
+      ts: ${{ steps.diff.outputs.ts }}
       java: ${{ steps.diff.outputs.java }}
       site: ${{ steps.diff.outputs.site }}
       cluster: ${{ steps.diff.outputs.cluster }}
@@ -62,6 +63,7 @@ jobs:
             echo "cluster=$(t '^templates/cluster-gitops/|^templates/gitops-app/scripts/(render\.py|local-cluster\.sh|ports\.sh)$')"
             echo "web=$(t '^templates/web-nextjs/')"
             echo "go=$(t '^templates/service-go/')"
+            echo "ts=$(t '^templates/service-typescript/')"
             echo "java=$(t '^templates/service-java/')"
             echo "site=$(has '^(site/|docs/|plugins/|shapes\.yml$|scripts/cplat/|templates/gitops-app/scripts/(render\.py|local-cluster\.sh)$|[A-Z_]+\.md$|\.github/workflows/(ci|pages)\.yml$)')"
           } | tee -a "$GITHUB_OUTPUT"
@@ -131,7 +133,7 @@ jobs:
       - name: workflows (platform + every generated repo) pass actionlint
         run: |
           uv tool install copier
-          for t in service-python library-python service-java service-go web-nextjs gitops-app cluster-gitops; do
+          for t in service-python library-python service-java service-go service-typescript web-nextjs gitops-app cluster-gitops; do
             copier copy ./templates/$t /tmp/lint-$t --defaults --trust --skip-tasks --data project_name=lint-test
           done
           uv tool run --from actionlint-py actionlint .github/workflows/*.yml scripts/cplat/assets/workflows/*.yml /tmp/lint-*/.github/workflows/*.yml
@@ -605,6 +607,111 @@ jobs:
           SMOKE_BASE_URL=http://localhost:8080 bash scripts/smoke.sh | tee /tmp/smoke.out
           grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
 
+  smoke-test-service-typescript:
+    name: smoke-test service-typescript template (obs=${{ matrix.observability }}, db=${{ matrix.database }})
+    needs: changes
+    if: needs.changes.outputs.ts == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false   # spec 084: independent variants; one flaky job must not cancel the rest
+      matrix:
+        include:
+          - {observability: true, database: false}
+          - {observability: false, database: false}
+          - {observability: true, database: true}     # PostgreSQL support: Drizzle, migrations at startup, Testcontainers
+          - {observability: false, database: true}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24   # = templates/service-typescript/copier.yml node_major
+      - name: Install copier and pnpm
+        run: |
+          uv tool install copier
+          npm install -g pnpm@11.22.0 >/dev/null   # the recipes call pnpm, as devbox provides it in a repo
+      - name: Generate test project
+        run: |
+          copier copy ./templates/service-typescript /tmp/test-ts --defaults --trust --skip-tasks \
+            --data project_name=test-ts --data description="Smoke test" \
+            --data needs_observability=${{ matrix.observability }} --data needs_database=${{ matrix.database }}
+      - name: Confirm key files exist
+        run: |
+          for f in devbox.json package.json Dockerfile tsconfig.json tsconfig.build.json eslint.config.mjs vitest.config.mts \
+                   vitest.smoke.config.mts .claude/settings.json .github/workflows/ci.yml src/app.ts src/server.ts \
+                   src/config.ts src/logger.ts tests/smoke/health.test.ts pnpm-workspace.yaml; do
+            test -f /tmp/test-ts/$f || { echo "missing $f"; exit 1; }
+          done
+          test ! -e /tmp/test-ts/k8s || { echo "service templates must not ship k8s/ (ADR-017)"; exit 1; }
+          if [ "${{ matrix.observability }}" = true ]; then test -f /tmp/test-ts/src/metrics.ts && test -f /tmp/test-ts/src/telemetry.ts
+          else test ! -e /tmp/test-ts/src/metrics.ts && ! grep -q opentelemetry /tmp/test-ts/package.json; fi
+          if [ "${{ matrix.database }}" = true ]; then test -f /tmp/test-ts/src/db/client.ts && test -f /tmp/test-ts/drizzle/meta/_journal.json
+          else test ! -e /tmp/test-ts/src/db && test ! -e /tmp/test-ts/drizzle && ! grep -q drizzle /tmp/test-ts/package.json; fi
+      - name: Shape is detected as service-typescript
+        run: test "$(bash scripts/detect-shape.sh /tmp/test-ts)" = "service-typescript"
+      - name: Install, lint, typecheck, test (coverage gate), audit
+        working-directory: /tmp/test-ts
+        run: |
+          git init -q
+          pnpm install
+          test -f pnpm-lock.yaml
+          python3 "$GITHUB_WORKSPACE/scripts/template-lint.py" service-typescript .   # spec 184: file, line and rule of a violation
+          pnpm typecheck
+          sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"   # spec 130: gate.sh around vitest --coverage
+          pnpm audit --prod --audit-level high
+      # Spec 130: a render without tests fails test-fast with the line, through the real Vitest
+      - name: Recipe fails when no test ran
+        if: ${{ matrix.observability && !matrix.database }}
+        working-directory: /tmp/test-ts
+        run: |
+          cp -r . /tmp/empty-ts
+          cd /tmp/empty-ts
+          rm -rf tests
+          if sh -c "$(jq -r '.shell.scripts["test-fast"]' devbox.json)" 2>/tmp/neg.err; then
+            echo "test-fast: the recipe passed with no tests"; exit 1
+          fi
+          cat /tmp/neg.err
+          grep -Fx "test-fast: checked nothing: 0 tests ran - add at least one test" /tmp/neg.err
+      - name: image builds and starts (non-root, read-only root filesystem)
+        working-directory: /tmp/test-ts
+        run: |
+          docker build -t smoke:ts .
+          db_env=""
+          if [ "${{ matrix.database }}" = true ]; then
+            # readiness includes the database: give the image a real PostgreSQL, wired like the platform's postgres resource
+            docker network create smoke-net
+            docker run -d --name smoke-db --network smoke-net -e POSTGRES_USER=app -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=test_ts postgres:17
+            db_env="--network smoke-net -e PGHOST=smoke-db -e PGPORT=5432 -e PGDATABASE=test_ts -e PGUSER=app -e PGPASSWORD=dev"
+          fi
+          # the image contract: no shell, numeric non-root user, read-only root, the pinned Node major
+          if docker run --rm --entrypoint sh smoke:ts -c true 2>/dev/null; then echo "the image has a shell"; exit 1; fi
+          # shellcheck disable=SC2086
+          docker run -d --name smoke --read-only -p 8080:8080 $db_env smoke:ts
+          for probe in health ready; do
+            up=false
+            for _ in $(seq 1 30); do curl -sf "localhost:8080/$probe" && { up=true; break; }; sleep 2; done
+            $up || { docker logs smoke; exit 1; }
+          done
+          test "$(docker exec smoke /nodejs/bin/node -p 'process.getuid()')" = 65532 || { echo "not running as UID 65532"; exit 1; }
+          node_major=$(sed -n 's|^FROM gcr.io/distroless/nodejs\([0-9]*\)-.*|\1|p' Dockerfile)
+          running=$(docker exec smoke /nodejs/bin/node -p process.versions.node | cut -d. -f1)
+          test -n "$node_major" && test "$running" = "$node_major" || { echo "node major $running, pinned $node_major"; exit 1; }
+          if [ "${{ matrix.observability }}" = true ]; then
+            curl -sf localhost:8080/metrics -o /tmp/prom.txt
+            grep -q '^http_requests_total{method="GET",route="/health",status="200"}' /tmp/prom.txt
+          fi
+          if [ "${{ matrix.database }}" = true ]; then
+            docker stop smoke-db
+            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/ready)
+            test "$code" = 503 || { echo "/ready answered $code without the database"; docker logs smoke; exit 1; }
+            curl -sf localhost:8080/health
+          fi
+          # spec 091: the smoke tests against the running image; the recipe exits 2 without a base URL
+          set +e; bash scripts/smoke.sh 2>/dev/null; rc=$?; set -e
+          test "$rc" = 2 || { echo "smoke.sh without SMOKE_BASE_URL exited $rc"; exit 1; }
+          SMOKE_BASE_URL=http://localhost:8080 bash scripts/smoke.sh | tee /tmp/smoke.out
+          grep -qx "smoke: 1 passed, 0 failed, 0 skipped" /tmp/smoke.out
+
   smoke-test-service-java:
     name: smoke-test service-java template (obs=${{ matrix.observability }}, db=${{ matrix.database }})
     needs: changes
@@ -831,7 +938,7 @@ jobs:
   ci-success:
     name: ci-success
     if: always()
-    needs: [changes, validate-manifests, validate-shapes, release-check, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-java, smoke-test-service-java-update, site, dco, spec-required, pr-title]
+    needs: [changes, validate-manifests, validate-shapes, release-check, platform-tests, platform-tests-cover, smoke-test-templates, smoke-test-gitops-app, smoke-test-cluster-gitops, smoke-test-web-nextjs, smoke-test-service-go, smoke-test-service-typescript, smoke-test-service-java, smoke-test-service-java-update, site, dco, spec-required, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: every needed job passed or was skipped

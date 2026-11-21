@@ -1,0 +1,63 @@
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { buildApp } from "../src/app.js";
+import { connect, migrateDatabase, migrateWithRetry, ping, poolConfig, type Database } from "../src/db/client.js";
+import { createLogger } from "../src/logger.js";
+
+// Integration test against a real PostgreSQL in a container (Testcontainers; needs Docker).
+describe("database", () => {
+  let container: StartedPostgreSqlContainer;
+  let db: Database;
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:17").start();
+    db = connect({
+      host: container.getHost(),
+      port: container.getPort(),
+      database: container.getDatabase(),
+      user: container.getUsername(),
+      password: container.getPassword(),
+    });
+  });
+
+  afterAll(async () => {
+    await db?.pool.end();
+    await container?.stop();
+  });
+
+  it("applies the migrations in drizzle/ and is ready", async () => {
+    await migrateDatabase(db);
+    expect(await ping(db.pool)).toBe(true);
+    const app = buildApp({ ready: () => ping(db.pool) });
+    const res = await app.inject({ method: "GET", url: "/ready" });
+    await app.close();
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("is not ready while the database is unreachable", async () => {
+    const down = connect({ ...poolConfig({}), port: 1, connectionTimeoutMillis: 1_000 });
+    const app = buildApp({ ready: () => ping(down.pool) });
+    const res = await app.inject({ method: "GET", url: "/ready" });
+    await app.close();
+    await down.pool.end();
+    expect(res.statusCode).toBe(503);
+  });
+
+  it("gives up the migration after the last attempt", async () => {
+    const down = connect({ ...poolConfig({}), port: 1, connectionTimeoutMillis: 1_000 });
+    await expect(migrateWithRetry(down, createLogger("silent"), 2, 10)).rejects.toThrow();
+    await down.pool.end();
+  });
+
+  it("reads the PG* variables of the postgres resource", () => {
+    expect(poolConfig({ PGHOST: "db", PGPORT: "6543", PGDATABASE: "d", PGUSER: "u", PGPASSWORD: "p" })).toMatchObject({
+      host: "db",
+      port: 6543,
+      database: "d",
+      user: "u",
+      password: "p",
+    });
+    expect(poolConfig({})).toMatchObject({ host: "localhost", port: 5432, database: "{{ project_name | replace('-', '_') }}", user: "app" });
+  });
+});

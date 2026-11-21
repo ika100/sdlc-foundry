@@ -113,7 +113,7 @@ def steps(template: str, rendered: Path) -> list[Step] | None:
         return [Step(["mvn", "-B", "--no-transfer-progress", "spotless:check", "checkstyle:check"], parse_maven)]
     if template == "service-go":
         return [Step(["golangci-lint", "run", "./..."], parse_golangci)]
-    if template == "web-nextjs":
+    if template in ("web-nextjs", "service-typescript"):
         found = [] if (rendered / "node_modules").exists() else [Step(["npx", "-y", PNPM, "install"], no_lines, True)]
         return found + [Step(["npx", "-y", PNPM, "lint"], parse_eslint)]
     if template in ("gitops-app", "cluster-gitops"):
@@ -192,7 +192,7 @@ def render_data(template: str) -> list[str]:
     if template in ("service-python", "library-python"):
         data["module_name"] = "lint_" + template.replace("-", "_")
         data["description"] = "Smoke test"
-    elif template == "web-nextjs":
+    elif template in ("web-nextjs", "service-typescript"):
         data["description"] = "Smoke test"
     elif template == "gitops-app":
         data.update(app_name="lint", description="Smoke test")
