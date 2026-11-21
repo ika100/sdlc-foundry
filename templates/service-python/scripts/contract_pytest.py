@@ -163,6 +163,17 @@ def _shown(case: Case, value: Any) -> str:
     return str(value)
 
 
+def _names(where: Any, field: str) -> bool:
+    """True when an error's field entry is `field`, or a path ending in its dotted parts.
+
+    FastAPI reports `loc` as a path such as ["body", "title"].
+    """
+    if where == field:
+        return True
+    parts = field.split(".")
+    return isinstance(where, list) and [str(p) for p in where[-len(parts) :]] == parts
+
+
 def _is_rejection(case: Case, status: int, body: Any) -> bool:
     rule, errors = case.rule, case.errors
     fields = errors.get("body") or {}
@@ -179,7 +190,7 @@ def _is_rejection(case: Case, status: int, body: Any) -> bool:
             continue
         message = item.get(fields.get("message"))
         if (
-            item.get(fields.get("field")) == rule["field"]
+            _names(item.get(fields.get("field")), rule["field"])
             and item.get(fields.get("rule")) == rule["id"]
             and isinstance(message, str)
             and message
