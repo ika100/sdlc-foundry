@@ -55,5 +55,7 @@ def test_an_adr_next_to_adr_033_records_the_decision_ac_158_8():  # AC-158.8
 
 
 def test_the_changelog_has_an_entry_for_568_ac_158_8():  # AC-158.8
-    fragments = [p for p in sorted((ROOT / "docs/changelog.d").glob("*.md")) if "(#568)" in p.read_text()]
-    assert fragments, "no changelog fragment names (#568)"
+    # a fragment until the release, then a paragraph of docs/CHANGELOG.md
+    fragments = [p.read_text() for p in sorted((ROOT / "docs/changelog.d").glob("*.md"))]
+    released = (ROOT / "docs/CHANGELOG.md").read_text().split("\n\n")
+    assert [e for e in fragments + released if "(#568)" in e], "no changelog entry names (#568)"
