@@ -37,9 +37,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           Skip to content
         </a>
         <SiteHeader name={NAME} links={NAV} />
-        <main id="main-content" className="container">
-          {children}
-        </main>
+        {/* Each page renders its own <main id="main-content">: a page test then finds the landmark. */}
+        <div className="container content">{children}</div>
         <SiteFooter name={NAME} />
       </body>
     </html>
