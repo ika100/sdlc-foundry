@@ -291,7 +291,7 @@ jobs:
           cp -r . /tmp/publish-lib
           cd /tmp/publish-lib
           git init -q -b main && git add -A && git commit -qm init
-          git tag v1.2.3
+          git update-ref refs/tags/v1.2.3 HEAD   # a lightweight tag: the platform CI creates no tag objects (AC-121.24)
           bash scripts/publish.sh v1.2.3 --dry-run | tee /tmp/publish.out
           grep -F "dist/test_library_python-1.2.3-py3-none-any.whl dist/test_library_python-1.2.3.tar.gz" /tmp/publish.out
           echo next >> README.md && git commit -qam next

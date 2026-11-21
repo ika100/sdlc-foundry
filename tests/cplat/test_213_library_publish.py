@@ -18,6 +18,7 @@ import yaml
 
 import core  # noqa: F401  (puts scripts/ on sys.path)
 import shapes  # noqa: E402
+from waiting import with_prelude
 
 ROOT = Path(__file__).resolve().parents[2]
 LIB = ROOT / "templates" / "library-python"
@@ -176,7 +177,7 @@ def lib_repo(tmp_path):
     bin_dir.mkdir()
     for name, body in (("uv", FAKE_UV), ("gh", FAKE_GH)):
         p = bin_dir / name
-        p.write_text(body)
+        p.write_text(with_prelude(body))
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
     env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "TOOL_LOG": str(tmp_path / "tools.log"),
            "GH_STATE": str(tmp_path / "gh"), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
@@ -307,7 +308,7 @@ def test_the_template_smoke_job_runs_the_publish_dry_run_and_the_mismatch_ac_213
     step = next(s for s in steps if "publish.sh" in str(s.get("run", "")))
     assert "library-python" in str(step.get("if", ""))
     run = step["run"]
-    assert re.search(r"git tag v\d+\.\d+\.\d+", run)
+    assert re.search(r"git update-ref refs/tags/v\d+\.\d+\.\d+ HEAD", run)
     assert re.search(r"bash scripts/publish\.sh (v[\d.]+) --dry-run", run)
     assert "if bash scripts/publish.sh" in run   # the mismatch run is expected to fail
     assert "the built version is" in run
