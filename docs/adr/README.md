@@ -121,3 +121,4 @@ Decisions that shape how the platform works, with the context and the alternativ
 | [120](120-dispatcher-budget-units.md) | The dispatcher budgets in plan percentages (status line sensor) or USD (price table), never in raw tokens |
 | [121](121-red-tests-fail-for-the-missing-behaviour-before-they-freeze.md) | A red acceptance test freezes only when it fails for the missing behaviour; edits that change no assertion pass test-diff without a record |
 | [122](122-milestone-comments-on-linked-issues-need-no-per-comment-ok.md) | cplat posts a milestone comment on an issue a spec tracks or a PR closes without a per-comment OK; it never files issues |
+| [126](126-unit-briefings-are-cut-from-the-build-instructions.md) | A unit session's instructions are cut at print time by heading key from build.md and unit-mode.md through one mapping in code, guarded by tests and the rules check |
