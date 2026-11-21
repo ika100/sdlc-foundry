@@ -164,7 +164,7 @@ def _shown(case: Case, value: Any) -> str:
 
 
 def _names(where: Any, field: str) -> bool:
-    """True when an error's field entry names `field`: equal, or a path whose last parts are its dotted parts.
+    """True when an error's field entry is `field`, or a path ending in its dotted parts.
 
     FastAPI reports `loc` as a path such as ["body", "title"].
     """
