@@ -97,7 +97,7 @@ def actions(item: dict) -> list[dict]:
                 {"what": "tag", "target": "the next version", "undo": None},
                 {"what": "GitHub release", "target": repo, "undo": None}]
     if kind == "promote":
-        return [{"what": "promotion pull request and merge", "target": f"prod of {obj.get('component')}",
+        return [{"what": "promotion pull request and merge", "target": f"{_env(item)} of {obj.get('component')}",
                  "undo": (item.get("way_back") or {}).get("command")}]
     if kind == "review":
         return [{"what": "approve and merge", "target": f"{repo} PR #{obj.get('pr')}", "undo": None}]
@@ -313,7 +313,9 @@ def _release(ctx: _Ctx, item: dict) -> dict:
     opts = [_option(ctx, oid, label, "", steps=[item["command"]], acts=acts, extra_cannot=extra),
             _details(ctx, qid, []), _later(ctx, [item], {"release": "Collect more", "promote": "Not now"}.get(kind, "Later"))]
     text = {"release": f"{item.get('reason') or 'A release is ready'}. Release now?",
-            "promote": f"{item['what']} is verified in staging. Promote it to prod?",
+            "promote": f"{item['what']} is verified in staging. Promote it to prod?" if env == "prod" else
+                       f"{item.get('reason') or item['what'] + ' can go to staging'}. Promote it to staging"
+                       + (f" (run in {app})?" if (app := (item.get("consequence") or {}).get("app")) else "?"),
             "review": f"{item['what']} waits for your review. Approve and merge it?"}[kind]
     missing = (item.get("consequence") or {}).get("missing_backups") or [] if env == "prod" else []
     if missing:     # #861: prod's database has no backup: the backup comes first, the promotion stays the second choice

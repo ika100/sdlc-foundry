@@ -270,7 +270,12 @@ def promote_lines(item: dict, when: str = "") -> list[str]:
     """Part 2 of a promote item: `<component> <version> can go to staging.` / `... to prod.`"""
     obj = item.get("object") or {}
     env = (item.get("consequence") or {}).get("env") or "prod"
-    return [f"{obj.get('component')} {obj.get('version')} can go to {env}.{when}"]
+    out = [f"{obj.get('component')} {obj.get('version')} can go to {env}.{when}"]
+    if (item.get("consequence") or {}).get("first"):     # #920: no staging instance yet, so nothing can be released
+        app = (item.get("consequence") or {}).get("app")
+        out.append(f"Not in staging yet: the first promotion is manual ({item.get('command')}{' in ' + app if app else ''}); "
+                   "the release follows once staging runs it.")
+    return out
 
 
 # ---------------- last screen ----------------
