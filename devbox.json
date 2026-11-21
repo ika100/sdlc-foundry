@@ -28,13 +28,14 @@
       "smoke-web":     "rm -rf /tmp/test-web && uv tool run --from copier copier copy ./templates/web-nextjs /tmp/test-web --defaults --trust --skip-tasks --data project_name=test-web --data description=test && cd /tmp/test-web && npx -y pnpm@11.22.0 install && npx -y pnpm@11.22.0 lint && npx -y pnpm@11.22.0 typecheck && npx -y pnpm@11.22.0 test && npx -y pnpm@11.22.0 build",
       "test-plan":     "bash scripts/test-plan.sh",
       "smoke-go":      "rm -rf /tmp/test-go && uv tool run --from copier copier copy ./templates/service-go /tmp/test-go --defaults --trust --skip-tasks --data project_name=test-go && cd /private/tmp/test-go && git init -q && devbox run quality && devbox run test",
+      "smoke-ts":      "rm -rf /tmp/test-ts && uv tool run --from copier copier copy ./templates/service-typescript /tmp/test-ts --defaults --trust --skip-tasks --data project_name=test-ts && cd /private/tmp/test-ts && git init -q && devbox run -- pnpm install && devbox run quality && devbox run test",
       "smoke-java":    "rm -rf /tmp/test-java && uv tool run --from copier copier copy ./templates/service-java /tmp/test-java --defaults --trust --skip-tasks --data project_name=test-java && cd /private/tmp/test-java && git init -q && devbox run quality && devbox run test",
       "test-fast":     "if [ $# -eq 0 ] || [ \"$*\" = \"--full\" ]; then uv run --with-requirements requirements-test.txt pytest tests/cplat -q -n auto $(python3 scripts/testselect.py args \"$@\"); else bash scripts/test-fast.sh \"$@\"; fi",
       "test":          "devbox run test-fast --full",
       "quality":       "devbox run validate && for p in plugins/*/; do n=$(basename \"$p\"); [ \"$(jq -r .version \"${p}.claude-plugin/plugin.json\")\" = \"$(jq -r \".plugins[] | select(.name == \\\"$n\\\") | .version\" .claude-plugin/marketplace.json)\" ] || { echo \"version mismatch for $n\" >&2; exit 1; }; done && bash scripts/uv-script.sh scripts/shapes.py check && uv run scripts/sync-template-copies.py --check && python3 scripts/pin-actions.py --check && python3 scripts/check-links.py && uv run --with-requirements requirements-test.txt python scripts/check-docs.py && python3 scripts/check-e2e-probes.py && python3 scripts/check-test-sleeps.py && uvx --quiet --from 'reuse[charset-normalizer]' reuse lint | tail -3",
       "lint-fix":      "echo 'lint-fix: no formatter is configured in the platform repo (nothing to do)'",
       "ci":            "bash scripts/ci-local.sh",
-      "smoke":         "devbox run validate && devbox run shapes-check && devbox run test-detect && devbox run test-plan && devbox run smoke-service && devbox run smoke-library && devbox run smoke-gitops && devbox run smoke-web && devbox run smoke-go && devbox run smoke-java"
+      "smoke":         "devbox run validate && devbox run shapes-check && devbox run test-detect && devbox run test-plan && devbox run smoke-service && devbox run smoke-library && devbox run smoke-gitops && devbox run smoke-web && devbox run smoke-go && devbox run smoke-ts && devbox run smoke-java"
     }
   }
 }

@@ -1,0 +1,34 @@
+# Environment variables
+
+Configuration is read exclusively from environment variables (`src/config.ts`). Defaults below are the application defaults. The deployed values are set per environment in the system's gitops-app repo (`system.yaml`: a component's `env`, and `replicas`, `resources` under `instances.<env>`).
+
+## Core
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `{{ port }}` | HTTP port the service listens on. |
+| `LOG_LEVEL` | `INFO` | pino level, any case: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`. Unknown values fall back to `INFO`. |
+{%- if needs_observability %}
+
+## Observability
+
+| Variable | Default | Description |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | OTLP endpoint for traces; unset means tracing is off. |
+| `OTEL_SERVICE_NAME` | `{{ project_name }}` | Service name on traces. |
+| `OTEL_SDK_DISABLED` | unset | `true` turns tracing off even with an endpoint. |
+{%- endif %}
+{%- if needs_database %}
+
+## Database (PostgreSQL)
+
+Set by the platform's `postgres` resource when the service declares `uses: [postgres]`; the defaults match `devbox run db-up`.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PGHOST` | `localhost` | Database host. |
+| `PGPORT` | `5432` | Database port. |
+| `PGDATABASE` | `{{ project_name | replace('-', '_') }}` | Database name. |
+| `PGUSER` | `app` | Database user. |
+| `PGPASSWORD` | unset | Database password (generated and injected from a Secret in the cluster, never committed; `db-up` needs none). |
+{%- endif %}

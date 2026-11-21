@@ -225,7 +225,7 @@ def test_ship_start_refuses_a_linked_repo_without_gitops_token(repo, gh):
 
 def test_templates_warn_when_the_token_is_missing():
     """AC-077.4: the service CI's pin-dev job warns, not a notice nobody sees."""
-    for t in ("service-go", "service-java", "service-python", "web-nextjs"):
+    for t in ("service-go", "service-java", "service-python", "web-nextjs", "service-typescript"):
         text = (core.PLATFORM_ROOT / "templates" / t / ".github" / "workflows" / "ci.yml").read_text()
         assert '::warning::GITOPS_TOKEN is not set' in text, t
 

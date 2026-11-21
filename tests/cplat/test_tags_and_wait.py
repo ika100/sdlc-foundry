@@ -13,7 +13,7 @@ from test_gitops import SHA, composed, gh as gitops_gh, gitops_repo, pin, run_pi
 from test_ship import FakeGh, check
 
 ROOT = core.PLATFORM_ROOT
-SERVICE_TEMPLATES = ("service-go", "service-java", "service-python", "web-nextjs")
+SERVICE_TEMPLATES = ("service-go", "service-java", "service-python", "web-nextjs", "service-typescript")
 
 
 # ---------------- spec 078 ----------------

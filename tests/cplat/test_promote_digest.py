@@ -19,7 +19,7 @@ from test_staging_093_evidence import ev  # noqa: F401  (fixture)
 
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES = ROOT / "templates"
-IMAGE_TEMPLATES = ["service-python", "service-java", "service-go", "web-nextjs"]
+IMAGE_TEMPLATES = ["service-python", "service-java", "service-go", "web-nextjs", "service-typescript"]
 STAGING = "sha-" + SHA
 RELEASE = "1.3.0"
 D1 = "sha256:" + "1" * 64

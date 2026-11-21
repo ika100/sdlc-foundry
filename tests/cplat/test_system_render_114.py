@@ -630,8 +630,8 @@ def test_owner_is_a_required_non_empty_string_ac_114_57(tmp_path, owner):  # AC-
 
 # ---------------- AC-114.58: type and lang ----------------
 
-@pytest.mark.parametrize("type_, lang", [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"),
-                                         ("library", "python"), ("service", "unknown")])
+@pytest.mark.parametrize("type_, lang", [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"),
+                                         ("website", "typescript"), ("library", "python"), ("service", "unknown")])
 def test_the_valid_type_lang_pairs_render_ac_114_58(tmp_path, type_, lang):  # AC-114.58
     doc = tiny()
     c = component(doc, "api")
@@ -642,7 +642,7 @@ def test_the_valid_type_lang_pairs_render_ac_114_58(tmp_path, type_, lang):  # A
     ok(tmp_path, doc)
 
 
-@pytest.mark.parametrize("type_, lang", [("service", "typescript"), ("website", "python"), ("library", "go"), ("worker", "python"),
+@pytest.mark.parametrize("type_, lang", [("website", "java"), ("website", "python"), ("library", "go"), ("worker", "python"),
                                          ("website", "unknown"), ("library", "unknown")])
 def test_another_pair_fails_listing_the_valid_ones_ac_114_58(tmp_path, type_, lang):  # AC-114.58
     doc = tiny()
