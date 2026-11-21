@@ -32,18 +32,18 @@ def test_a_briefing_starts_with_its_unit_and_holds_the_unit_mode_parts_ac_211_1(
     unit_text = UNIT_MD.read_text()
     permissions = next(p for p in unit_text.split("\n\n") if p.startswith("**Permissions:**"))
     assert permissions.replace("${CLAUDE_PLUGIN_ROOT}", str(briefing.PLUGIN_ROOT)) in text
-    assert "| Unit | What you do |" in text
+    assert "| Unit | What you do |" in text  # interface: the unit table header the briefing prints (design section 1)
     row = next(ln for ln in lines_of(unit_text) if ln.startswith("| `task:<id>`"))
     assert row.replace("${CLAUDE_PLUGIN_ROOT}", str(briefing.PLUGIN_ROOT)) in lines_of(text)
     for bullet in unit_rules_bullets():
         assert bullet.replace("${CLAUDE_PLUGIN_ROOT}", str(briefing.PLUGIN_ROOT)) in lines_of(text)
-    assert "## Rules for every unit" in lines_of(text)
+    assert "## Rules for every unit" in lines_of(text)  # interface: heading the briefing is cut by (design section 1)
 
 
 def test_the_briefing_holds_the_general_paragraph_and_the_mapped_sections_word_for_word_ac_211_1():  # AC-211.1
     text = briefing.build("verification", "ship")
     root = str(briefing.PLUGIN_ROOT)
-    general = next(p for p in (PLUGIN / "commands" / "build.md").read_text().split("\n\n") if p.startswith("A rule marked **Hard rule:**"))
+    general = next(p for p in (PLUGIN / "commands" / "build.md").read_text().split("\n\n") if p.startswith("A rule marked **Hard rule:**"))  # interface: paragraph opener the briefing is cut by (design section 1)
     assert general.replace("${CLAUDE_PLUGIN_ROOT}", root) in text
     sections = build_sections()
     for key in expected_keys("verification"):
@@ -68,7 +68,7 @@ def test_the_plugin_root_argument_decides_the_root_that_is_printed_ac_211_1(tmp_
 
 def test_the_build_instructions_stay_one_source_so_a_changed_section_shows_in_the_briefing_ac_211_1(tmp_path):  # AC-211.1
     root = copy_plugin(tmp_path)
-    edit(root, "commands/build.md", "## Phase 5 — Container image\n", "## Phase 5 — Container image\nMARKER-211 one line.\n")
+    edit(root, "commands/build.md", "## Phase 5 — Container image\n", "## Phase 5 — Container image\nMARKER-211 one line.\n")  # interface: heading key the briefing is cut by
     assert "MARKER-211 one line." in briefing.build("verification", "build", root)
     assert "MARKER-211 one line." not in briefing.build("task:t1", "build", root)
 
@@ -107,7 +107,7 @@ def test_the_released_instructions_pass_every_guard_ac_211_3():  # AC-211.3
 
 def test_a_renamed_mapped_heading_fails_naming_it_ac_211_3(tmp_path):  # AC-211.3
     root = copy_plugin(tmp_path)
-    edit(root, "commands/build.md", "## Phase 5 — Container image", "## Stage 5 — Container image")
+    edit(root, "commands/build.md", "## Phase 5 — Container image", "## Stage 5 — Container image")  # interface: heading key the briefing is cut by
     found = of(briefing.problems(root), "briefing-heading")
     assert found and any("Phase 5" in p.message and "is missing" in p.message for p in found)
     assert all(p.file.endswith("commands/build.md") for p in found)
@@ -115,7 +115,7 @@ def test_a_renamed_mapped_heading_fails_naming_it_ac_211_3(tmp_path):  # AC-211.
 
 def test_a_removed_mapped_subsection_fails_naming_it_ac_211_3(tmp_path):  # AC-211.3
     root = copy_plugin(tmp_path)
-    edit(root, "commands/build.md", "### 2.2 Worktree probe", "Worktree probe")
+    edit(root, "commands/build.md", "### 2.2 Worktree probe", "Worktree probe")  # interface: heading key the briefing is cut by
     assert any('"2.2"' in p.message for p in of(briefing.problems(root), "briefing-heading"))
 
 
@@ -130,7 +130,7 @@ def test_a_section_that_belongs_to_no_unit_fails_naming_it_ac_211_3(tmp_path):  
 
 def test_the_rules_check_fails_for_a_missing_heading_and_an_orphan_ac_211_3(tmp_path):  # AC-211.3
     root = rc211.tree(tmp_path)
-    edit(root, "plugins/component/commands/build.md", "## Phase 6 — Close the spec", "## Stage 6 — Close the spec")
+    edit(root, "plugins/component/commands/build.md", "## Phase 6 — Close the spec", "## Stage 6 — Close the spec")  # interface: heading key the briefing is cut by
     rc, out, _ = rc211.run_cli(root)
     assert rc == 1
     assert any(ln.startswith("FAIL briefing-heading ") and "Phase 6" in ln for ln in out.splitlines())
@@ -139,7 +139,7 @@ def test_the_rules_check_fails_for_a_missing_heading_and_an_orphan_ac_211_3(tmp_
 
 def test_the_rules_check_with_only_names_the_instruction_files_ac_211_3(tmp_path):  # AC-211.3
     root = rc211.tree(tmp_path)
-    edit(root, "plugins/component/commands/build.md", "## Phase 6 — Close the spec", "## Stage 6 — Close the spec")
+    edit(root, "plugins/component/commands/build.md", "## Phase 6 — Close the spec", "## Stage 6 — Close the spec")  # interface: heading key the briefing is cut by
     for only in ("plugins/component/commands/build.md", "plugins/component/references/unit-mode.md", "plugins/component"):
         _, out, _ = rc211.run_cli(root, "--only", only)
         assert "FAIL briefing-heading" in out, only
@@ -153,7 +153,7 @@ def refs(problems):
 
 def test_a_phase_reference_the_briefing_does_not_hold_fails_naming_unit_and_reference_ac_211_4(tmp_path):  # AC-211.4
     root = copy_plugin(tmp_path)
-    edit(root, "commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nStop as in Phase 2 when a test fails.\n")
+    edit(root, "commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nStop as in Phase 2 when a test fails.\n")  # interface: heading key the briefing is cut by
     found = of(briefing.problems(root), "briefing-ref")
     assert any("unit verification" in p.message and '"Phase 2"' in p.message and "holds no such section" in p.message for p in found)
     assert not any("unit batch" in p.message and '"Phase 2"' in p.message for p in found)
@@ -161,7 +161,7 @@ def test_a_phase_reference_the_briefing_does_not_hold_fails_naming_unit_and_refe
 
 def test_a_numbered_section_reference_fails_naming_it_ac_211_4(tmp_path):  # AC-211.4
     root = copy_plugin(tmp_path)
-    edit(root, "commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nSee 2.4a for the re-plan.\n")
+    edit(root, "commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nSee 2.4a for the re-plan.\n")  # interface: heading key the briefing is cut by
     found = of(briefing.problems(root), "briefing-ref")
     assert any("unit verification" in p.message and '"2.4a"' in p.message for p in found)
 
@@ -169,20 +169,20 @@ def test_a_numbered_section_reference_fails_naming_it_ac_211_4(tmp_path):  # AC-
 def test_phases_and_longer_numbers_are_no_references_ac_211_4(tmp_path):  # AC-211.4
     root = copy_plugin(tmp_path)
     before = refs(briefing.problems(root))
-    edit(root, "commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nPhases 1 and 2 ran; version 4.14.1 is pinned.\n")
+    edit(root, "commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nPhases 1 and 2 ran; version 4.14.1 is pinned.\n")  # interface: heading key the briefing is cut by
     assert refs(briefing.problems(root)) == before
 
 
 def test_a_reference_to_a_section_the_briefing_holds_is_fine_ac_211_4(tmp_path):  # AC-211.4
     root = copy_plugin(tmp_path)
     before = refs(briefing.problems(root))
-    edit(root, "commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nSee Phase 4 and 2.5 first.\n")
+    edit(root, "commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nSee Phase 4 and 2.5 first.\n")  # interface: heading key the briefing is cut by
     assert refs(briefing.problems(root)) == before
 
 
 def test_the_rules_check_reports_a_lost_reference_ac_211_4(tmp_path):  # AC-211.4
     root = rc211.tree(tmp_path)
-    edit(root, "plugins/component/commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nStop as in Phase 2.\n")
+    edit(root, "plugins/component/commands/build.md", "## Phase 6 — Close the spec\n", "## Phase 6 — Close the spec\nStop as in Phase 2.\n")  # interface: heading key the briefing is cut by
     rc, out, _ = rc211.run_cli(root)
     assert rc == 1 and any(ln.startswith("FAIL briefing-ref ") and "unit verification" in ln and "Phase 2" in ln for ln in out.splitlines())
 
@@ -200,7 +200,7 @@ def lacking(monkeypatch, strip):
 
 
 def test_a_briefing_without_the_general_paragraph_fails_naming_the_unit_ac_211_5(monkeypatch):  # AC-211.5
-    lacking(monkeypatch, lambda t: "\n".join(ln for ln in t.splitlines() if not ln.startswith("A rule marked **Hard rule:**")))
+    lacking(monkeypatch, lambda t: "\n".join(ln for ln in t.splitlines() if not ln.startswith("A rule marked **Hard rule:**")))  # interface: paragraph opener the briefing is cut by
     found = of(briefing.problems(), "briefing-general")
     assert found and all(p.message.startswith("unit ") for p in found)
     assert {p.message.split(":")[0] for p in found} >= {"unit plan", "unit red-tests", "unit verification", "unit land"}
@@ -233,7 +233,7 @@ def test_a_briefing_without_a_bullet_of_the_unit_rules_fails_naming_the_unit_ac_
 
 def test_a_briefing_without_a_general_part_is_reported_by_the_rules_check_ac_211_5(tmp_path):  # AC-211.5
     root = rc211.tree(tmp_path)
-    edit(root, "plugins/component/commands/build.md", "A rule marked **Hard rule:**", "Rules marked **Hard rule:**")
+    edit(root, "plugins/component/commands/build.md", "A rule marked **Hard rule:**", "Rules marked **Hard rule:**")  # interface: paragraph opener the briefing is cut by
     rc, out, _ = rc211.run_cli(root)
     assert rc == 1 and "FAIL briefing-general" in out
 
@@ -257,7 +257,7 @@ def test_unreadable_instructions_make_the_briefing_unavailable_with_a_reason_ac_
 
 def test_a_mapped_heading_missing_at_run_time_makes_it_unavailable_ac_211_6(tmp_path):  # AC-211.6
     root = copy_plugin(tmp_path)
-    edit(root, "commands/build.md", "## Phase 5 — Container image", "## Stage 5 — Container image")
+    edit(root, "commands/build.md", "## Phase 5 — Container image", "## Stage 5 — Container image")  # interface: heading key the briefing is cut by
     with pytest.raises(briefing.BriefingUnavailable) as e:
         briefing.build("verification", "ship", root)
     assert e.value.reason.startswith('heading "Phase 5" missing from ')

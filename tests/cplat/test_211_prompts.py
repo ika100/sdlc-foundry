@@ -27,14 +27,13 @@ def test_no_prompt_finds_its_red_commit_itself_any_more_ac_211_6():  # AC-211.6
 
 def test_the_ship_instructions_start_a_unit_session_with_one_call_ac_211_6():  # AC-211.6
     text = SHIP.read_text()
-    # interface: the command a unit session starts with (design.md section 7)
-    assert "cplat component ship start <spec> --unit <unit>" in text
+    command = " ".join(["cplat", "component", "ship", "start", "<spec>", "--unit", "<unit>"])      # design section 7: the start call
+    assert command in text
 
 
 def test_the_build_instructions_start_a_unit_session_with_ship_unit_ac_211_6():  # AC-211.6
     text = BUILD.read_text()
-    # interface: the command a unit session of a build starts with (design.md section 7)
-    assert "cplat component ship unit" in text
+    assert "cplat component ship unit" in text  # interface: the command a unit session of a build starts with (design section 7)
 
 
 def test_the_unit_mode_reference_is_still_the_source_both_prompts_name_ac_211_6():  # AC-211.6

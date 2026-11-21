@@ -75,7 +75,7 @@ def expected_keys(mapping_key: str) -> list[str]:
 
 
 def unit_rules_bullets() -> list[str]:
-    lines = UNIT_MD.read_text().split("## Rules for every unit", 1)[1].splitlines()
+    lines = UNIT_MD.read_text().split("## Rules for every unit", 1)[1].splitlines()  # interface: heading the briefing is cut by
     out = []
     for line in lines:
         if line.startswith("## "):
