@@ -445,7 +445,7 @@ class ArchiveWatch:
         resources = st.get("resources") or []
         if any((r.get("health") or {}).get("status") == "Degraded" and r.get("kind") != "Cluster" for r in resources):
             return None                      # something else is broken
-        clusters = [r for r in resources if r.get("kind") == "Cluster" and str(r.get("group") or "").startswith("postgresql.cnpg.io")
+        clusters = [r for r in resources if r.get("kind") == "Cluster" and r.get("group") == "postgresql.cnpg.io"
                     and r.get("namespace") and r.get("name")]
         failing = []
         for r in clusters:

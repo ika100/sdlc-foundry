@@ -155,7 +155,7 @@ class Cluster:
         return st
 
     def __call__(self, args, context=None, check=False):
-        if "clusters.postgresql.cnpg.io" in args:
+        if args[2:4] == ["get", "clusters.postgresql.cnpg.io"]:
             cond = {"type": "ContinuousArchiving", "status": "False", "message": self.message,
                     "lastTransitionTime": iso(self.failing_since)}
             return subprocess.CompletedProcess(args, 0, json.dumps({"status": {"conditions": [cond]}}), "")
