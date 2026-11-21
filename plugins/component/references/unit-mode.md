@@ -13,7 +13,7 @@
 | `batch:<id>,<id>…` | Build Phase 2 for exactly these tasks as one parallel batch: the worktree probe, one coder per task at once (one message, `isolation: "worktree"`), each merged with `cplat component build merge` in the listed order; a refused merge follows Phase 2's re-plan rule. Then `cplat spec task-done <spec> <id>` per merged task and the commit of Phase 2. A failed probe → one task after another (`build-worktree-fallback.md`). |
 | `task:<id>` | Build Phase 2 for that one task, sequential: no probe, no batch. Then `cplat spec task-done <spec> <id>` and Phase 2's commit. |
 | `verification` | Build Phases 2.5 to 6. In a ship, then run `cplat component ship phase pr`. |
-| `land` | In a ship, the ship phases `pr`, `land` and `deploy`, without `cplat component ship finish`. In a build, Phase 7. |
+| `land` | In a ship, the ship phases `pr`, `land` and `deploy`, without `cplat component ship finish`. In a build, the pull request phase. |
 
 ## Rules for every unit
 

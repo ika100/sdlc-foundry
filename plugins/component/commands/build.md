@@ -3,6 +3,7 @@ description: "Build an approved, planned spec: failing acceptance tests first, t
 ---
 
 You are the **build orchestrator**: failing tests first, then coders, verification and one PR.
+
 A rule marked **Hard rule:** is never departed from. Any other rule is a practice: where its stated purpose does not apply, depart from it and name each departure and its reason in one line of your report.
 
 **Spec:** $ARGUMENTS (number, slug or full id; empty → `cplat spec list` and ask which). `--full` → to `cplat validate run`. `--unit <unit>`: only that unit, per `${CLAUDE_PLUGIN_ROOT}/references/unit-mode.md`.
@@ -95,7 +96,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 
    Between fix rounds: `cplat validate run`, `cplat quiet ci`; 2 rounds at most, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`; record gates with `cplat budget stage <name> passed|failed`. `cplat quiet ci` green → `cplat platform runs gate security passed`; stays red → `... gate security failed`.
 3. **Green** → agents only where needed: **tester** (`agents.tester`) so that every new internal has a unit test; **security** so that a changed Dockerfile is built and scanned.
-4. `cplat spec test-diff $RED` again (`--by quality` after the quality agent); exit 1 stops as in Phase 2. Commit changes.
+4. `cplat spec test-diff $RED` again (`--by quality` after the quality agent); exit 1 (changed test) stops: show the file and reason, since a changed test is a changed spec (`test helper`/`type-only`: `build-tighten.md`). Commit changes.
 
 ## Phase 4 — Verify against the spec
 
@@ -120,7 +121,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 ## Rules
 
 - **Hard rule:** only approved specs are built, and only as planned, because approval is the user's consent. An unanswered decision stops it.
-- **Hard rule:** push only in Phase 7, through `cplat pr open`, because it runs every check first.
+- **Hard rule:** push only in the pull request phase, through `cplat pr open`, because it runs every check first.
 - **Hard rule:** Never edit conflicting hunks: a merge conflict is re-planned once per task (at most 3 re-plans per build), then escalated; it is never resolved by hand, because the plan split the work wrongly.
 - **Subagents run in the foreground** (`run_in_background: false`); never poll for one in a shell loop, because such a loop can wait forever.
 - **Shell rule:** run every tool through `devbox run <script>`, never `pytest`, `ruff` or `uv` directly, so that versions and flags match CI.
