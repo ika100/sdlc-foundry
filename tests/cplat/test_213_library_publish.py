@@ -1,4 +1,4 @@
-"""Spec 213: a library release publishes its package on the tag (ADR-124).
+"""Spec 213: a library release publishes its package on the tag (ADR-125).
 
 The registry field and the template contract are checked through scripts/shapes.py; the library-python publish script runs
 for real in a git repo with a fake `uv` (builds files named by the tag, like hatch-vcs) and a fake `gh` (keeps release state)."""
@@ -44,7 +44,7 @@ def test_every_known_registry_is_accepted_ac_213_1(registry):  # AC-213.1
 
 @pytest.mark.parametrize("publish, words", [
     (None, "library-python: a library shape needs a publish block"),
-    ({"registry": "pypi"}, "library-python: publish.registry must be one of github-release, github-maven, github-npm, github-nuget"),
+    ({"registry": "pypi"}, "library-python: publish.registry must be one of github-maven, github-npm, github-nuget, github-release"),
     ({}, "library-python: publish.registry must be one of"),
     ("github-release", "library-python: publish must be a map with registry"),
 ])
@@ -110,7 +110,7 @@ def test_the_publish_job_runs_on_the_tag_after_every_gate_with_the_only_write_pe
     (lambda t: t.replace('devbox run publish "$GITHUB_REF_NAME"', "echo publish"), "the `publish` job must run `devbox run publish` with the tag"),
     (lambda t: t.replace("permissions:\n  contents: read\n", "permissions:\n  contents: write\n", 1), "the workflow's default permissions must be `contents: read`"),
     (lambda t: t.replace("  quality:\n", "  quality:\n    permissions:\n      packages: write\n", 1), "only the `publish` job may get a write permission (quality has one)"),
-    (lambda t: re.sub(r"(\n  publish:\n(?:    .*\n|\n)*?    permissions:\n)      contents: write\n", r"\1      contents: read\n", t), "the `publish` job needs `contents: write` for registry github-release"),
+    (lambda t: re.sub(r"(\n  publish:\n(?:    .*\n|\n)*?    permissions:\n)      contents: write[^\n]*\n", r"\1      contents: read\n", t), "the `publish` job needs `contents: write` for registry github-release"),
 ])
 def test_a_template_that_breaks_the_contract_is_named_with_the_missing_piece_ac_213_2(tmp_path, change, missing):  # AC-213.2
     tdir = template_copy(tmp_path)
@@ -329,7 +329,7 @@ def test_the_library_guide_says_how_it_is_released_and_installed_ac_213_7():  # 
 
 
 def test_the_convention_is_recorded_in_an_adr_and_the_registry_docs_ac_213_8():  # AC-213.8
-    adr = next((ROOT / "docs" / "adr").glob("124-*.md"))
+    adr = next((ROOT / "docs" / "adr").glob("125-*.md"))
     text = adr.read_text()
     for word in ("github-release", "github-npm", "github-maven", "github-nuget", "`publish`", "--dry-run",
                  "contents: write", "packages: write", "PACKAGES_READ_TOKEN"):

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **{{ project_name }}** — {{ description }}
 
-Owned by {{ owner_team }}. Python module: `{{ module_name }}`. Distributed as a wheel via internal index (no Docker image, no deployment).
+Owned by {{ owner_team }}. Python module: `{{ module_name }}`. Released as a wheel and a source archive on the GitHub release of each tag (no Docker image, no deployment).
 
 ## Development Environment
 
@@ -31,6 +31,7 @@ Canonical `devbox run` scripts:
 | `security` | audit + secrets-scan + bandit |
 | `secrets-baseline` | refresh `.secrets.baseline.json` with fixed flags (never run `detect-secrets scan` by hand) |
 | `ci` | `quality` + `test` + `security`: the gates CI runs, then `ci-extra` when your repo defines it; run it before every push |
+| `publish` | `publish vX.Y.Z [--dry-run]`: build the wheel and source archive, check their version is the tag's, attach them to the GitHub release (CI runs it on the tag) |
 
 **Rule for every agent: never call `ruff`, `mypy`, `pytest`, `pip`, or `uv add` directly. Always `devbox run <script>`.**
 
@@ -61,6 +62,15 @@ Common workflows:
 ### Spec first
 
 A feature starts with a spec, not code ([ADR-026](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/026-feature-specs.md)): `/component:spec <description>` writes `docs/specs/<NNN>-<slug>/spec.md` with acceptance criteria `AC-<NNN>.<n>` and asks you its open questions; approve it (`/component:spec approve <NNN>`), plan it (`/component:plan <NNN>`), then build it (`/component:build <NNN>`): acceptance tests are written from the criteria first and fail, the code makes them pass, a reviewer checks the result against the spec, and the PR lists every criterion. Tests that name a criterion are the spec in code: never weaken them; change the spec instead (`/component:spec --amend <NNN> <change>`). `/component:spec --all` shows where each spec stands; `devbox run spec-check` validates every spec and traces built ones to their tests (also the warn-only `specs` CI workflow). Small changes and bug fixes (`/component:fix`) need no spec, but stop when they would change a criterion.
+
+## Releasing the package
+
+`/component:release` tags `main`'s head `vX.Y.Z`. The tag's CI run repeats the gates, then its `publish` job runs `devbox run publish vX.Y.Z` ([ADR-125](https://github.com/ika100/sdlc-foundry/blob/main/docs/adr/125-library-releases-publish-to-github-on-the-tag.md)): it builds `dist/{{ project_name | replace('-', '_') }}-X.Y.Z-py3-none-any.whl` and `dist/{{ project_name | replace('-', '_') }}-X.Y.Z.tar.gz`, fails before uploading anything when their version is not the tag's (the version comes from the tag), and attaches both to the GitHub release `vX.Y.Z`, which it creates when missing. A rerun replaces the files. `devbox run publish vX.Y.Z --dry-run` builds and checks locally without touching GitHub.
+
+Another repo installs a released version by adding one of these to `dependencies` in its `pyproject.toml` (then its own `devbox run` recipes sync it):
+
+- public repo: `"{{ project_name }} @ https://github.com/{{ github_org }}/{{ project_name }}/releases/download/vX.Y.Z/{{ project_name | replace('-', '_') }}-X.Y.Z-py3-none-any.whl"`
+- private repo: `"{{ project_name }} @ git+https://github.com/{{ github_org }}/{{ project_name }}@vX.Y.Z"`; git needs a token that can read this repo (locally your `gh auth setup-git` credential, in the consumer's CI a secret with Contents read on this repo, set as git credential before the install).
 
 ## Where your additions go
 

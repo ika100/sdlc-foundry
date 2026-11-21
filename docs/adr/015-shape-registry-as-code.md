@@ -122,6 +122,7 @@ shapes:
 | `template` | Copier template directory under `templates/` |
 | `deployable` | If `true`, `/shared:new-service` tags the repo `deployable-service` for ArgoCD discovery |
 | `library` | If `true`, no Docker, no k8s, publishable artifact |
+| `publish:` | Library shapes only (required unless `planned`): `registry` is `github-release`, `github-npm`, `github-maven` or `github-nuget`; the template's tag-only `publish` job and recipe publish there ([ADR-125](125-library-releases-publish-to-github-on-the-tag.md), spec 213) |
 | `detection.copier_src` | The `_src_path` tail in `.copier-answers.yml` that identifies this shape (primary detection) |
 | `detection.sniff` | Ordered sniffing-fallback markers (per ADR-008 fallback rules) |
 | `default_stack` | Free-form per-shape stack metadata (language, framework, version) — used for documentation and template defaults |

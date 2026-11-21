@@ -29,6 +29,9 @@ CI_EXTRA_STEP = "if grep -qs '\"ci-extra\"[[:space:]]*:' devbox.json; then devbo
 REQUIRED = ["id", "plugin", "template", "deployable", "library", "detection", "status"]
 STATUSES = {"stable", "planned", "deprecated"}
 PRD = ROOT / "docs" / "requirements" / "platform-vision.md"
+# Spec 213 / ADR-125: where a library shape's release tag publishes, and the write permission its `publish` job needs.
+REGISTRIES = {"github-release": "contents", "github-maven": "packages", "github-npm": "packages", "github-nuget": "packages"}
+PUBLISH_NEEDS = ("quality", "test", "security", "ci-extra")
 
 
 DECLARED_IN = ".platform-settings.yml"
@@ -135,9 +138,67 @@ def validate(shapes: list[dict]) -> list[str]:
         if s.get("status") != "planned" and (not isinstance(checks, list) or not checks):
             errs.append(f"{sid}: ci_checks must list the CI job names new repos require on main (spec 054)")
         errs += _validation_errors(sid, s)
+        errs += _publish_field_errors(sid, s)
         if s.get("library") and s.get("deployable"):
             errs.append(f"{sid}: a library cannot be deployable")
     return errs
+
+
+def _publish_field_errors(sid: str, s: dict) -> list[str]:
+    """Spec 213: every library shape that is not planned says where its release tag publishes; no other shape publishes."""
+    pub = s.get("publish")
+    if not s.get("library"):
+        return [] if pub is None else [f"{sid}: only library shapes publish a package (spec 213)"]
+    if pub is None:
+        return [] if s.get("status") == "planned" else [
+            f"{sid}: a library shape needs a publish block with registry (spec 213, ADR-125)"]
+    if not isinstance(pub, dict):
+        return [f"{sid}: publish must be a map with registry (spec 213)"]
+    if pub.get("registry") not in REGISTRIES:
+        return [f"{sid}: publish.registry must be one of {', '.join(sorted(REGISTRIES))} (spec 213)"]
+    return []
+
+
+def workflow(path: Path) -> dict:
+    """A template workflow as YAML, with the Copier escapes of `${{ }}` undone (the file itself is a Jinja source)."""
+    text = path.read_text().replace("${{ '{{' }}", "${{").replace("{{ '}}' }}", "}}")
+    return yaml.safe_load(text) or {}
+
+
+def publish_errors(sid: str, tdir: Path, registry: str | None) -> list[str]:
+    """Spec 213 / ADR-125: the template publishes only from a tag, after every gate, through `devbox run publish`, and its
+    `publish` job is the only one with a write permission."""
+    errs: list[str] = []
+    devbox = _template_file(tdir, "devbox.json")
+    if devbox is None or not re.search(r'"publish"\s*:', devbox.read_text()):
+        errs.append("devbox.json has no `publish` recipe")
+    ci = _template_file(tdir / ".github" / "workflows", "ci.yml")
+    try:
+        wf = workflow(ci) if ci is not None else {}
+    except yaml.YAMLError as e:
+        return [f"{sid}: ci.yml is not valid YAML once rendered: {e} (spec 213)"]
+    jobs = wf.get("jobs") or {}
+    job = jobs.get("publish")
+    if not isinstance(job, dict):
+        errs.append("ci.yml has no `publish` job")
+    else:
+        cond = str(job.get("if", ""))
+        if "github.event_name == 'push'" not in cond or "startsWith(github.ref, 'refs/tags/v')" not in cond:
+            errs.append("the `publish` job must run only on a pushed v* tag")
+        needs = job.get("needs") or []
+        if not set(PUBLISH_NEEDS) <= set([needs] if isinstance(needs, str) else needs):
+            errs.append("the `publish` job must need quality, test, security and ci-extra")
+        if not any(re.search(r"devbox run publish \"?\$\{?GITHUB_REF_NAME", str(st.get("run", ""))) for st in job.get("steps") or []):
+            errs.append("the `publish` job must run `devbox run publish` with the tag")
+        scope = REGISTRIES.get(registry or "")
+        if scope and (job.get("permissions") or {}).get(scope) != "write":
+            errs.append(f"the `publish` job needs `{scope}: write` for registry {registry}")
+    if wf.get("permissions") != {"contents": "read"}:
+        errs.append("the workflow's default permissions must be `contents: read`")
+    for name, j in jobs.items():
+        if name != "publish" and isinstance(j, dict) and "write" in (j.get("permissions") or {}).values():
+            errs.append(f"only the `publish` job may get a write permission ({name} has one)")
+    return [f"{sid}: {e} (spec 213)" for e in errs]
 
 
 def _validation_errors(sid: str, s: dict) -> list[str]:
@@ -278,6 +339,8 @@ def check_contract(shapes: list[dict]) -> list[str]:
                 r"^  pin-dev:\n(?:    .*\n)*?    needs: docker-publish$", ci.read_text(), re.M):
             errs.append(f"{sid}: ci.yml needs a `pin-dev` job after docker-publish (dev follows main, spec 062)")
         errs += _check_ci_extra(sid, tdir, devbox, claude)
+        if s.get("library") and isinstance(s.get("publish"), dict):
+            errs += publish_errors(sid, tdir, s["publish"].get("registry"))
         skip = (yaml.safe_load((tdir / "copier.yml").read_text()) or {}).get("_skip_if_exists") or []
         if "README.md" not in skip:
             errs.append(f"{sid}: copier.yml must list README.md in _skip_if_exists (project-owned after creation, spec 060)")

@@ -75,6 +75,28 @@ jobs:
       - run: devbox run ci-extra
         if: steps.recipe.outputs.defined == 'true'
 
+  publish:
+    name: publish (attach the package to the GitHub release)
+    # Spec 213 / ADR-125: only a v* tag publishes, after every gate of the same run passed; the version check in
+    # scripts/publish.sh fails before any upload when the built version is not the tag's.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [quality, test, security, ci-extra]
+    runs-on: ${{ '{{' }} vars.CI_RUNNER || 'ubuntu-latest' {{ '}}' }}
+    permissions:
+      contents: write   # create the release and upload its assets; the only write permission in this workflow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the version is read from the tag (hatch-vcs, spec 138)
+      - uses: jetify-com/devbox-install-action@8c6a66ed6273138b1915457069de78cb52fe3bd7 # v0.15.0
+        if: runner.environment == 'github-hosted'   # self-hosted runner images ship devbox (docs/self-hosted-runners.md)
+        with:
+          enable-cache: true
+      - name: Build, check the version and upload
+        env:
+          GH_TOKEN: ${{ '{{' }} secrets.GITHUB_TOKEN {{ '}}' }}
+        run: devbox run publish "$GITHUB_REF_NAME"
+
   pr-title:
     name: pr-title (conventional commits)
     runs-on: ${{ '{{' }} vars.CI_RUNNER || 'ubuntu-latest' {{ '}}' }}

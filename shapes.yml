@@ -46,6 +46,8 @@ shapes:
     validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
       selector: pytest
     library: true
+    publish:   # spec 213 / ADR-125: the release tag's `publish` job attaches the wheel and sdist to the GitHub release
+      registry: github-release
     detection:
       copier_src: templates/library-python
       sniff:

@@ -2,7 +2,7 @@
 
 ## Decisions
 
-- **One convention for every library shape** ([ADR-124](../../adr/124-library-releases-publish-to-github-on-the-tag.md)).
+- **One convention for every library shape** ([ADR-125](../../adr/125-library-releases-publish-to-github-on-the-tag.md)).
   A library shape declares `publish: {registry: <r>}` in `shapes.yml`; `r` is `github-release` (Python: the GitHub
   release of the tag holds the wheel and the source archive), `github-npm` (npm.pkg.github.com), `github-maven`
   (maven.pkg.github.com) or `github-nuget` (nuget.pkg.github.com). Everything else is the same for every registry.

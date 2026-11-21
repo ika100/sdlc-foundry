@@ -278,6 +278,28 @@ jobs:
           fi
           # spec 130: the recipe itself (gate.sh around the real runner) passes on a fresh render
           sh -c "$(jq -r '.shell.scripts["test"]' devbox.json)"
+      # Spec 213: the publish recipe builds a package whose version is the tag, and refuses a tag on another commit
+      - name: Publish dry run builds the tagged version
+        if: matrix.template == 'library-python'
+        working-directory: /tmp/test-${{ matrix.template }}
+        env:
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@example.invalid
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@example.invalid
+        run: |
+          cp -r . /tmp/publish-lib
+          cd /tmp/publish-lib
+          git init -q -b main && git add -A && git commit -qm init
+          git tag v1.2.3
+          bash scripts/publish.sh v1.2.3 --dry-run | tee /tmp/publish.out
+          grep -F "dist/test_library_python-1.2.3-py3-none-any.whl dist/test_library_python-1.2.3.tar.gz" /tmp/publish.out
+          echo next >> README.md && git commit -qam next
+          if bash scripts/publish.sh v1.2.3 --dry-run 2>/tmp/publish.err; then
+            echo "publish: a tag on another commit was published"; exit 1
+          fi
+          grep -F "the built version is" /tmp/publish.err
+          grep -F "but the tag is v1.2.3 (1.2.3)" /tmp/publish.err
       # Spec 130: a render without tests fails test-fast with the line, through the real pytest
       - name: Recipe fails when no test ran
         working-directory: /tmp/test-${{ matrix.template }}

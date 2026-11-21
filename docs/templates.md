@@ -6,6 +6,7 @@ Deliver all of it in one PR.
 
 ## 1. Registry entry — `shapes.yml` [checked]
 
+Library shapes need a `publish:` block with `registry` (`github-release`, `github-npm`, `github-maven` or `github-nuget`) and a template that publishes only from its release tag: a `publish` recipe (`publish vX.Y.Z [--dry-run]`) and a `publish` CI job that needs every gate and holds the workflow's only write permission ([ADR-125](adr/125-library-releases-publish-to-github-on-the-tag.md)) **[checked]**.
 Deployable shapes also need a `runtime:` block (port, probes, numeric `user`, `volumes`, `env`, `resources`): `/component:add` copies it into the component's entry in `system.yaml` (ADR-017). 
 Add the shape (see [ADR-015](adr/015-shape-registry-as-code.md) for every field). Start with `status: planned` while the template is incomplete; switch to `stable` in the same PR that makes the check pass. `deployable: true` means `/component:new` adds the `deployable-service` topic. Add a row to the PRD §4 table (the check compares shape id, plugin and template).
 

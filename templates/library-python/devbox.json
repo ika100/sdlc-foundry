@@ -28,6 +28,7 @@
       "security":       "devbox run audit && devbox run secrets-scan && devbox run bandit",
       "deps-findings": "bash scripts/deps.sh findings \"$@\"",
       "deps-bump":    "bash scripts/deps.sh bump \"$@\"",
+      "publish":        "bash scripts/publish.sh \"$@\"",
       "ci":             "devbox run quality && devbox run test && devbox run security && if grep -qs '\"ci-extra\"[[:space:]]*:' devbox.json; then devbox run ci-extra; fi"
     }
   }
