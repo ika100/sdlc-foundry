@@ -49,6 +49,7 @@ class PodArgo:
 def w(tmp_path, monkeypatch, capsys):
     world = World(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(envwait, "wallclock", lambda: 0.0)        # no pod start time counts unless a test sets one
+    monkeypatch.setattr(envwait, "gh", lambda args: subprocess.CompletedProcess(args, 0, "[]", ""))  # #892: no CI run builds it
     return world
 
 

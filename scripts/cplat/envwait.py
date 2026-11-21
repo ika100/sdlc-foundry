@@ -10,7 +10,11 @@ One line each time an app's state changes; exit 0 READY, 1 RED (a sync error, a 
 revision; a ComparisonError with a network cause only when it lasts until the timeout, #506), 2 TIMEOUT (one line per app behind; the command with `--refresh` when Argo CD has not picked up the revision).
 Every wait asks Argo CD for a hard refresh of each app not yet at the revision when it starts and once more after 45 s (#867;
 `--refresh` is kept and only drops the hint). A container of the version waited for that stays in ImagePullBackOff, ErrImagePull,
-InvalidImageName or CrashLoopBackOff longer than 60 s is RED at once, naming pod, reason, image and the last event (#867). A context that is not the system's
+InvalidImageName or CrashLoopBackOff longer than 60 s is RED at once, naming pod, reason, image and the last event (#867), except an
+image tag not in the registry while the component's CI run on main is queued or running (#892: it builds that image; one
+`gh run list`, asked again at most once a minute while it runs, and 5 more minutes for the kubelet's pull back-off after it passed).
+A database Degraded only because WAL archiving to its in-cluster backup bucket fails waits while that bucket is not Ready and for
+5 minutes after the archiving failure began or the bucket became Ready (#902), then it is RED as before. A context that is not the system's
 cluster, a cluster that does not answer, or no Argo CD exits 1 at once.
 In a system on several clusters (spec 201) the context of `--env`'s cluster is used (`kube_contexts` in the settings files), never the
 current one; in a cluster repo with `clusters`, `cluster wait <cluster>` names the cluster whose roots it waits for.
@@ -46,6 +50,15 @@ AUTO_REFRESH_AFTER = 45.0
 # #867: a container of the new version waiting for one of these reasons longer than POD_FAIL_AFTER ends the wait RED at once.
 POD_FAILURES = ("ImagePullBackOff", "ErrImagePull", "InvalidImageName", "CrashLoopBackOff")
 POD_FAIL_AFTER = 60.0
+# #892: a missing image tag while the component's CI run on main builds it is not stuck. The run's state is asked again at most this
+# often while it runs; after it passed, the kubelet's pull back-off (up to 5 minutes) may still hold the pod for this long.
+CI_RECHECK = 60.0
+BUILT_GRACE = 300.0
+BUILDING = ("queued", "in_progress", "waiting", "pending", "requested")
+# #902: a database whose WAL archiving fails while its in-cluster backup bucket starts is pending, not RED, for this long after the
+# failure began or the bucket became Ready (and as long as the bucket is not Ready).
+ARCHIVE_GRACE = 300.0
+ARCHIVE_FAILURE = re.compile(r"barman-cloud|exit status|could not connect|endpoint|connection|timed? ?out", re.I)
 NOT_IN_REGISTRY = re.compile(r"manifest unknown|not found", re.I)
 NO_ARGO = re.compile(r"doesn't have a resource type|the server could not find the requested resource|namespaces? \"?argocd\"? not found",
                      re.I)
@@ -64,6 +77,14 @@ def kubectl(args: list[str], context: str | None = None, check: bool = False) ->
         return subprocess.CompletedProcess(cmd, 1, "", str(e))
 
 
+def gh(args: list[str]) -> subprocess.CompletedProcess:    # tests replace this
+    cmd = ["gh", *args]
+    try:
+        return run(cmd, check=False, timeout=30)
+    except PlatformError as e:
+        return subprocess.CompletedProcess(cmd, 1, "", str(e))
+
+
 def git(repo: Path, *args: str, check: bool = False) -> subprocess.CompletedProcess:
     return run(["git", *args], cwd=repo, check=check)
 
@@ -75,6 +96,9 @@ class Target:
     component: bool = False
     name: str = ""               # the component and environment, to read the pin of a later revision
     env: str = ""
+    repo: str = ""               # the component's GitHub repo (owner/name), whose CI run builds its image (#892)
+    bucket: str = ""             # a database's in-cluster backup bucket: its object prefix `<system>-<bucket>` (#902)
+    bucket_app: str = ""         # and that bucket's Argo CD app in the same environment
 
 
 # ---------------- the wanted revision: one ask of GitHub ----------------
@@ -148,10 +172,18 @@ def env_targets(repo: Path, system: str | None, rev: str, env: str, names: list[
             raise PlatformError(f"no instance of {', '.join(unknown)} in {env}",
                                 hint="components with an instance there: " + (", ".join(i.component for i in insts) or "none"))
         insts = [i for i in insts if i.component in names]
-    out = [Target(i.argo_application, i.tag, True, i.component, env) for i in insts]
+    repos = {c.name: c.repo or "" for c in m.components}
+    out = [Target(i.argo_application, i.tag, True, i.component, env, repos.get(i.component, "")) for i in insts]
     if names:
         return system, out, every
-    out += [Target(r.argo_application) for r in m.resource_instances if r.environment == env and r.argo_application]
+    ris = [r for r in m.resource_instances if r.environment == env]
+    for r in ris:
+        if not r.argo_application:
+            continue
+        to = (r.backup or {}).get("to") if r.type == "database" else None
+        bucket = next((b for b in ris if to and b.resource == to and not b.external and b.argo_application), None)
+        out.append(Target(r.argo_application, env=env, bucket=f"{system}-{to}" if bucket else "",
+                          bucket_app=bucket.argo_application or "" if bucket else ""))
     e = m.environment(env)
     if e and e.observability and e.observability.argo_application and insts:
         out.append(Target(e.observability.argo_application))
@@ -234,9 +266,10 @@ class Pins:
         return self.cache[key] or t.tag
 
 
-def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None) -> tuple[str, str, str]:
+def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None, archive=None) -> tuple[str, str, str]:
     """(kind: reached | behind | retrying | red, the progress line, what it waits for or why it is red). `retrying` is a
-    ComparisonError with a network cause (#506): it waits like `behind` and turns RED at the timeout."""
+    ComparisonError with a network cause (#506): it waits like `behind` and turns RED at the timeout. `archive(t, st)` says why a
+    Degraded database only waits for its backup bucket (#902), else None."""
     if st is None:
         return "behind", f"{t.app}: missing", "missing"
     sync = (st.get("sync") or {}).get("status") or "?"
@@ -261,6 +294,9 @@ def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None) -> t
     if op.get("phase") in ("Failed", "Error") and (not op_rev or at(op_rev)):
         return "red", line, f"sync {op['phase']}: {op.get('message', '')}".strip()
     if hstatus == "Degraded":
+        pending = archive(t, st) if archive and t.bucket else None
+        if pending:
+            return "behind", line, pending
         return "red", line, "health Degraded" + (f": {health['message']}" if health.get("message") else "")
     if t.component and tag and not _matches(images, tag):
         return "behind", line, f"waiting for image {waits.tag_short(tag)}, runs {', '.join(images) or 'nothing'}"
@@ -300,17 +336,19 @@ class PodWatch:
     def __init__(self, get, clock):
         self.get, self.clock, self.first = get, clock, {}
 
-    def __call__(self, status: dict, wanted) -> str | None:
+    def __call__(self, status: dict, wanted, building=None) -> str | None:
+        """`building()` (optional) is the state of the CI run that builds the image: "building", "built" (it passed after it was
+        seen building) or None (no run builds it, or it failed). A missing image tag is not stuck while it builds (#892)."""
         namespaces = sorted({r["namespace"] for r in status.get("resources") or []
                              if r.get("namespace") and r.get("kind") != "Application"})
         for ns in namespaces:
             for pod in _json(self.get(["-n", ns, "get", "pods", "-o", "json"])).get("items") or []:
-                why = self._stuck(ns, pod, wanted)
+                why = self._stuck(ns, pod, wanted, building)
                 if why:
                     return why
         return None
 
-    def _stuck(self, ns: str, pod: dict, wanted) -> str | None:
+    def _stuck(self, ns: str, pod: dict, wanted, building=None) -> str | None:
         spec, st = pod.get("spec") or {}, pod.get("status") or {}
         images = {c.get("name"): c.get("image") or "" for c in (spec.get("initContainers") or []) + (spec.get("containers") or [])}
         if not any(wanted(i) for i in images.values()):
@@ -332,6 +370,8 @@ class PodWatch:
             if event:
                 why += f"; last event: {event}"
             if reason in ("ImagePullBackOff", "ErrImagePull") and NOT_IN_REGISTRY.search(event or ""):
+                if building and building() is not None:
+                    continue                 # #892: the component's CI run builds that tag (or just pushed it)
                 why += " (the image tag does not exist in the registry)"
             return why
         return None
@@ -342,6 +382,97 @@ class PodWatch:
         events.sort(key=lambda e: (e.get("type") == "Warning",
                                    str(e.get("lastTimestamp") or e.get("eventTime") or (e.get("metadata") or {}).get("creationTimestamp") or "")))
         return " ".join(str(events[-1].get("message") or "").split()) if events else ""
+
+
+class CiRuns:
+    """#892: whether the CI run on main of a component's repo builds its image: the newest `ci` run on main, read with one
+    `gh run list` per repo and asked again at most every CI_RECHECK seconds while it is queued or running. "building" while it
+    is; "built" for BUILT_GRACE seconds after a run seen building passed (the kubelet's pull back-off); otherwise None (no run, a
+    finished run never seen building, a failed run, or gh cannot tell): the missing tag fails fast as before."""
+
+    def __init__(self, clock):
+        self.clock, self.cache, self.passed = clock, {}, {}
+
+    def __call__(self, slug: str) -> str | None:
+        if not slug:
+            return None
+        now = self.clock()
+        state, at = self.cache.get(slug, (None, None))
+        if at is None or (state == "building" and now - at >= CI_RECHECK):
+            seen = state == "building"
+            state = self._ask(slug)
+            if seen and state == "success":
+                self.passed[slug] = now
+            self.cache[slug] = (state, now)
+        if state == "building":
+            return "building"
+        if slug in self.passed and now - self.passed[slug] <= BUILT_GRACE:
+            return "built"
+        return None
+
+    @staticmethod
+    def _ask(slug: str) -> str | None:
+        p = gh(["run", "list", "-R", slug, "--workflow", "ci", "--branch", "main", "--limit", "1", "--json", "status,conclusion"])
+        try:
+            runs = json.loads(p.stdout or "[]") if p.returncode == 0 else []
+        except ValueError:
+            runs = []
+        if not runs or not isinstance(runs, list) or not isinstance(runs[0], dict):
+            return None
+        if str(runs[0].get("status") or "") in BUILDING:
+            return "building"
+        return str(runs[0].get("conclusion") or "") or None
+
+
+# ---------------- a database waiting for its backup bucket (#902) ----------------
+
+def _ready(pod: dict) -> tuple[bool, float | None]:
+    """(Ready, when its Ready condition last changed) of a pod."""
+    cond = next((c for c in (pod.get("status") or {}).get("conditions") or [] if c.get("type") == "Ready"), None) or {}
+    return cond.get("status") == "True", _stamp(cond.get("lastTransitionTime"))
+
+
+class ArchiveWatch:
+    """#902: why a Degraded database app only waits for its in-cluster backup bucket, else None. That is so when every Degraded
+    resource of the app is a CloudNativePG Cluster whose ContinuousArchiving is False with a Barman Cloud or connection failure, and
+    the bucket (its Argo CD app and its SeaweedFS pods in the same namespace) is not Ready, or the failure began or the bucket became
+    Ready at most ARCHIVE_GRACE seconds ago. `get` runs kubectl with the wait's context; a kubectl error reads as not pending."""
+
+    def __init__(self, get):
+        self.get, self.items = get, {}      # items: the wait's latest Argo CD applications, set before each poll is judged
+
+    def __call__(self, t: Target, st: dict) -> str | None:
+        resources = st.get("resources") or []
+        if any((r.get("health") or {}).get("status") == "Degraded" and r.get("kind") != "Cluster" for r in resources):
+            return None                      # something else is broken
+        clusters = [r for r in resources if r.get("kind") == "Cluster" and str(r.get("group") or "").startswith("postgresql.cnpg.io")
+                    and r.get("namespace") and r.get("name")]
+        failing = []
+        for r in clusters:
+            doc = _json(self.get(["-n", r["namespace"], "get", "clusters.postgresql.cnpg.io", r["name"], "-o", "json"]))
+            arch = next((c for c in (doc.get("status") or {}).get("conditions") or [] if c.get("type") == "ContinuousArchiving"), None)
+            if arch and arch.get("status") == "False":
+                if not ARCHIVE_FAILURE.search(str(arch.get("message") or "")):
+                    return None
+                failing.append((r["namespace"], arch))
+        if not failing:
+            return None
+        ns, arch = failing[0]
+        message = " ".join(str(arch.get("message") or "").split())
+        bucket = (self.items.get(t.bucket_app) or {}).get("health", {}).get("status") if t.bucket_app else None
+        pods = [p for p in _json(self.get(["-n", ns, "get", "pods", "-o", "json"])).get("items") or []
+                if str((p.get("metadata") or {}).get("name") or "").startswith(t.bucket + "-")
+                and (p.get("status") or {}).get("phase") not in ("Succeeded", "Failed")]
+        states = [(str((p.get("metadata") or {}).get("name")), *_ready(p)) for p in pods]
+        waiting = [name for name, ok, _ in states if not ok]
+        if bucket not in (None, "Healthy") or waiting:
+            what = f"pod {waiting[0]} not Ready" if waiting else f"app {t.bucket_app} {bucket}"
+            return f"archiving waits for backup bucket {t.bucket} ({what}): {message}"
+        since = max([s for s in [_stamp(arch.get("lastTransitionTime")), *(at for _, _, at in states)] if s is not None], default=None)
+        age = wallclock() - since if since is not None else 0.0
+        if age <= ARCHIVE_GRACE:
+            return f"archiving waits for backup bucket {t.bucket} (Ready {int(age)}s, up to {int(ARCHIVE_GRACE)}s): {message}"
+        return None
 
 
 # ---------------- the wait ----------------
@@ -355,14 +486,16 @@ def _errored(st: dict | None) -> bool:
     return any(str(c.get("type", "")) == "ComparisonError" for c in (st or {}).get("conditions") or [])
 
 
-def _stuck_pod(states: list, items: dict[str, dict], at, pins, pods: PodWatch) -> tuple[Target, str] | None:
-    """#867: the first component behind at the wanted revision whose new pods are stuck (PodWatch), with why."""
+def _stuck_pod(states: list, items: dict[str, dict], at, pins, pods: PodWatch, ci=None) -> tuple[Target, str] | None:
+    """#867: the first component behind at the wanted revision whose new pods are stuck (PodWatch), with why; `ci(repo)` says
+    whether the component's CI run builds its image (#892)."""
     for t, kind, _, why in states:
         st = items.get(t.app)
         if kind != "behind" or not t.component or not st or why.startswith("waiting for revision"):
             continue
         tag = pins(t, (st.get("sync") or {}).get("revision") or "")
-        stuck = pods(st, lambda image, tag=tag: _matches([image], tag)) if tag else None
+        building = (lambda repo=t.repo: ci(repo)) if ci and t.repo else None
+        stuck = pods(st, lambda image, tag=tag: _matches([image], tag), building) if tag else None
         if stuck:
             return t, stuck
     return None
@@ -372,18 +505,21 @@ def watch(repo: Path, targets: list[Target], wanted: str, ctx: str, items: dict[
           refresh: bool, timeout: float, interval: float, system: str | None = None) -> tuple[int, list[str]]:
     at, pins = Ancestry(repo, wanted), Pins(repo, wanted, system)
     pods = PodWatch(lambda args: kubectl(args, ctx), waits.now)
+    ci = CiRuns(waits.now)
+    archive = ArchiveWatch(lambda args: kubectl(args, ctx))
     w7 = waits.short(wanted)
     begin = waits.now()
     refreshes = 0                 # #867: one when the wait starts, one more after AUTO_REFRESH_AFTER (spec 148)
     root = f"{system}-root" if system else None
     last: dict[str, str] = {}
     while True:
-        states = [(t, *judge(t, items.get(t.app), wanted, at, ctx, pins)) for t in targets]
+        archive.items = items
+        states = [(t, *judge(t, items.get(t.app), wanted, at, ctx, pins, archive)) for t in targets]
         for t, _, line, _ in states:
             if last.get(t.app) != line:
                 ship.say(line)
                 last[t.app] = line
-        red = next(((t, why) for t, kind, _, why in states if kind == "red"), None) or _stuck_pod(states, items, at, pins, pods)
+        red = next(((t, why) for t, kind, _, why in states if kind == "red"), None) or _stuck_pod(states, items, at, pins, pods, ci)
         if red:
             rev = ((items.get(red[0].app) or {}).get("sync") or {}).get("revision")
             return waits.RED, [f"RED: {red[0].app} at {waits.short(rev)}: {red[1]}"]
