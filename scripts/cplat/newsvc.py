@@ -27,7 +27,8 @@ LANG_DEFAULT_TYPE = {"python": "service", "java": "service", "go": "service", "t
 
 def valid_pairs() -> list[tuple[str, str]]:
     """The (type, lang) pairs `component new` accepts: the registry's, never service/unknown."""
-    order = [("service", "python"), ("service", "java"), ("service", "go"), ("website", "typescript"), ("library", "python")]
+    order = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("website", "typescript"),
+             ("library", "python")]
     pairs = [p for p in model.TYPE_LANGS if p != ("service", "unknown")]
     return sorted(pairs, key=lambda p: order.index(p) if p in order else len(order))
 

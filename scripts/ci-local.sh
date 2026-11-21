@@ -86,7 +86,7 @@ if [ "$render" -eq 1 ]; then
   step "render every template"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  for t in service-python library-python service-java service-go web-nextjs gitops-app; do
+  for t in service-python library-python service-java service-go service-typescript web-nextjs gitops-app; do
     copier copy "./templates/$t" "$tmp/$t" --defaults --trust --skip-tasks --data project_name="check-$t" > /dev/null
     echo "rendered $t"
   done

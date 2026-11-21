@@ -194,7 +194,7 @@ def test_the_platform_test_fast_runs_only_the_given_tests_ac_172_3(tmp_path, arg
     assert got[7:] == targets
 
 
-@pytest.mark.parametrize("template", ["service-python", "library-python", "service-go", "service-java", "web-nextjs"])
+@pytest.mark.parametrize("template", ["service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript"])
 def test_every_template_test_fast_recipe_ends_in_the_arguments_ac_172_3(template):  # AC-172.3
     path = next((ROOT / "templates" / template).glob("devbox.json*"))
     line = next(ln for ln in path.read_text().splitlines() if ln.strip().startswith('"test-fast"'))

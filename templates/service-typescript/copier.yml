@@ -1,0 +1,102 @@
+# Copier template: service-typescript
+# TypeScript HTTP service on Node: Fastify, pino JSON logging, Vitest, ESLint + tsc, pnpm (ADR-003), pinned Node LTS
+# (ADR-005), optional PostgreSQL through Drizzle, distroless Node image (ADR-124), canonical devbox recipes, agentic setup.
+#
+# Usage:
+#   copier copy <platform-checkout>/templates/service-typescript ./<project> --data project_name=<name>
+
+_min_copier_version: "9.0.0"
+
+# Only *.jinja files are rendered: GitHub Actions (${{ }}) shares Jinja's delimiters.
+_templates_suffix: .jinja
+
+_answers_file: .copier-answers.yml
+
+# Project-owned once generated: /platform:update must not overwrite these.
+_skip_if_exists:
+  - .secrets.baseline.json    # repo-owned once created: it records the repo's own false positives (seeded when missing)
+  - .claude/project-notes.md   # repo-owned notes, loaded by CLAUDE.md (spec 086)
+  - README.md                # project-owned after creation (spec 060)
+  - .github/ISSUE_TEMPLATE/**
+  - package.json
+  - pnpm-workspace.yaml
+  - src/**
+  - tests/**
+  - drizzle/**
+  - docs/adr/**
+  - docs/backlog.md
+  - docs/plan/**
+  - docs/specs/**
+  - docs/env-vars.md
+
+_exclude:
+  - "copier.yml"
+  - ".git"
+  - "{% if not needs_observability %}src/metrics.ts{% endif %}"
+  - "{% if not needs_observability %}src/telemetry.ts{% endif %}"
+  - "{% if not needs_observability %}tests/metrics.test.ts{% endif %}"
+  - "{% if not needs_database %}src/db{% endif %}"
+  - "{% if not needs_database %}drizzle{% endif %}"
+  - "{% if not needs_database %}drizzle.config.ts{% endif %}"
+  - "{% if not needs_database %}tests/db.test.ts{% endif %}"
+
+_tasks:
+  - "git init -q -b main"
+  - "devbox install"
+  - "devbox run -- pnpm install"
+  - "git add -A && git -c user.email=bootstrap@ika100 -c user.name=bootstrap commit -q -m 'chore: bootstrap from service-typescript template'"
+  - "echo 'Bootstrap complete. Repo committed at HEAD. Run: cd {{ project_name }} && devbox run quality'"
+
+project_name:
+  type: str
+  help: "Project name (kebab-case, e.g. 'orders-api'). Used in directory, Docker tag labels."
+  validator: >-
+    {%- if not (project_name | regex_search('^[a-z][a-z0-9-]{1,39}$')) -%}
+    project_name must match ^[a-z][a-z0-9-]{1,39}$
+    {%- endif -%}
+
+description:
+  type: str
+  help: "One-line description of the service."
+  default: "A TypeScript service"
+
+github_org:
+  type: str
+  help: "GitHub organization or user that will own the repo."
+  default: "ika100"
+
+owner_team:
+  type: str
+  help: "Owning team or individual (used in CODEOWNERS)."
+  default: "@{{ github_org }}"
+
+
+node_major:
+  type: str
+  help: "Node.js major version (current Active LTS at template release; bumped via /platform:update — ADR-005)."
+  default: "24"
+
+port:
+  type: int
+  help: "HTTP port the service listens on."
+  default: 8080
+
+needs_observability:
+  type: bool
+  help: "Include /metrics (prom-client) with HTTP request metrics and OpenTelemetry tracing (OTLP export when OTEL_EXPORTER_OTLP_ENDPOINT is set)?"
+  default: true
+
+needs_database:
+  type: bool
+  help: "Include PostgreSQL support (Drizzle ORM, drizzle-kit SQL migrations applied at startup, Testcontainers tests) wired to the platform's postgres resource?"
+  default: false
+
+docker_registry:
+  type: str
+  help: "Container registry namespace."
+  default: "ghcr.io/{{ github_org }}"
+
+platform_marketplace_ref:
+  type: str
+  help: "Git ref of ika100/sdlc-foundry to pin the plugin marketplace to (branch, tag, or commit)."
+  default: "main"

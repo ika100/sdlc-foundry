@@ -1,0 +1,121 @@
+---
+spec_id: 214-a-typescript-service-shape
+title: A TypeScript service shape
+status: done
+priority: P1
+shape: platform
+tracks: [716]
+---
+
+# 214 — A TypeScript service shape
+
+## Problem
+
+A team that builds its website with the `web-nextjs` shape usually wants its backend in the same language, but the
+platform offers backend services only in Python, Java and Go (#716). The team has to switch language for the service,
+or build it outside the platform without its specs, gates, image pipeline and promotion. A TypeScript library shape
+(#717) also waits for this one, because it settles the shared Node tooling and the agents.
+
+## Stories
+
+- As a developer, I want `/component:new <name> --type service --lang typescript` to create a backend service on Node,
+  so that my website and my backend share one language.
+- As a developer, I want that service to carry the same guarantees as the other service shapes (recipes, gates, image,
+  health, metrics, traces, logs, smoke tests, hardened CI), so that it can be added to a system and promoted like any
+  other component.
+- As a developer whose service stores data, I want PostgreSQL support with migrations and tests against a real
+  database, so that `--uses postgres` works without wiring it by hand.
+- As the platform owner, I want the agents for the shape in their own plugin, so that the Next.js agents stay focused.
+
+## Acceptance criteria
+
+- **AC-214.1** Given the shape registry, when it is read, then it holds a `service-typescript` entry (plugin `svc-ts`,
+  template `service-typescript`, deployable, language `typescript`, runtime port 8080, probes `/health` and `/ready`,
+  metrics `/metrics`, a numeric non-root user), `scripts/shapes.py check` passes, and the (type, lang) pair
+  `service/typescript` resolves to it while `--lang typescript` alone still means `website/typescript`.
+- **AC-214.2** Given `cplat component new <name> <description> --type service --lang typescript`, when it runs, then it
+  renders `templates/service-typescript` into a repo whose `.copier-answers.yml` names that template, and
+  `scripts/detect-shape.sh` resolves the repo to `service-typescript` both from the answers file and by sniffing a
+  `package.json` that depends on `fastify` and not on `next`; a `next` app is still `web-nextjs`.
+- **AC-214.3** Given a fresh render with the defaults, when `devbox run ci` runs, then quality (ESLint + `tsc`), the
+  tests (Vitest with an 80 % coverage gate) and security (pnpm audit + detect-secrets) pass, and the template's
+  `devbox.json` has the canonical recipes (`lint`, `lint-fix`, `typecheck`, `quality`, `test`, `test-fast`, `security`,
+  `secrets-baseline`, `ci` ending in `ci-extra`, `smoke`, `image-build`, `image-scan`, `deps-findings`, `deps-bump`,
+  `spec-check`), with `test` and `test-fast` going through `scripts/gate.sh` so that a run of 0 tests fails.
+- **AC-214.4** Given the rendered service running, when it is called, then `/health` and `/ready` answer 200 with
+  JSON, `/metrics` answers Prometheus text holding the Node default metrics and an HTTP request counter and duration
+  histogram labelled by method, route and status, every log line is one JSON object on stdout carrying `trace_id` and
+  `span_id` inside an active span, and traces are exported over OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set;
+  with `needs_observability=false` the metrics endpoint and the OpenTelemetry packages are absent.
+- **AC-214.5** Given the rendered Dockerfile, when the image is built and started with a read-only root filesystem,
+  then it is a multi-stage build whose runtime stage is distroless Node of the pinned major (`node_major`, equal in
+  `package.json` engines, `devbox.json` and the Dockerfile), runs as a numeric non-root user, has no shell, holds only
+  the production dependencies, and answers `/health` on port 8080.
+- **AC-214.6** Given the rendered `.github/workflows/ci.yml`, when it is read, then it has the job set of the other
+  service templates (`quality`, `test`, `security`, `ci-extra`, `pr-title`, `branch-name`, `docker`, `release-image`,
+  `docker-publish`, `pin-dev` after `docker-publish`), every action pinned by commit SHA, least-privilege
+  permissions, and the registry's `ci_checks` are job names in it.
+- **AC-214.7** Given `devbox run smoke`, when it runs, then it exits 2 without `SMOKE_BASE_URL`; with it, it runs the
+  Vitest tests whose name carries `@smoke` against the base URL and prints `PASS|FAIL|SKIP  <path>::<name>` lines and
+  `smoke: <p> passed, <f> failed, <s> skipped`; with `SMOKE_READ_ONLY=1` tests that also carry `@writes` are not run;
+  the template ships one read-only smoke test of `/health` that `devbox run test` skips without a base URL, and the
+  registry's `smoke_tag` matches it.
+- **AC-214.8** Given a render with `needs_database=true`, when it is built and tested, then it has Drizzle ORM with the
+  schema in `src/db/schema.ts`, SQL migrations in `drizzle/` generated by `devbox run migrate-new` (drizzle-kit) and
+  applied at startup, connection settings from the platform's postgres contract (`PGHOST`, `PGPORT`, `PGDATABASE`,
+  `PGUSER`, `PGPASSWORD`), a readiness probe that answers 503 while the database is unreachable, a `db-up` recipe, and
+  an integration test against PostgreSQL in Testcontainers that `devbox run test` runs; without it none of these files
+  or packages are present.
+- **AC-214.9** Given the `svc-ts` plugin, when it is installed, then it has the agents `coder`, `tester`,
+  `deployment`, `observability` and `release` with frontmatter (`name`, `description`, `tools`, `model`), a
+  SessionStart devbox hook, a README, matching versions in its `plugin.json` and `marketplace.json`, the template's
+  `.claude/settings.json` enables `svc-ts`, `svc` and `shared`, `cplat shape` in a rendered repo routes `coder` to
+  `svc-ts:coder` and `architect` to `svc:architect`, and `cplat platform rules check` passes.
+- **AC-214.10** Given the platform's shape-wide tooling, when it handles a `service-typescript` repo, then it is covered
+  like `service-go`: the repository CI smoke-tests the template (render, install, lint, typecheck, test, the 0-tests
+  gate, image build and start, the smoke runner, the database and observability variants) and actionlint checks its
+  workflow; `gate.sh` stays a copy of the gitops-app source; dependency findings and bumps (`deps_parse`), failure
+  summaries (Vitest, ESLint, `tsc`), the build-test globs, the template image scan, the template pin bump, the stage
+  list and the system's creation order know the shape.
+- **AC-214.11** Given the platform docs, when a reader looks for the shapes, then `docs/templates.md`, the site's shapes
+  page, the PRD shape table, `CLAUDE.md`'s layout and `docs/AGENTS.md` name `service-typescript` and `svc-ts`, and an
+  ADR records the stack (Fastify, Drizzle, pino, Vitest, pnpm, distroless Node).
+
+## Non-goals
+
+- A TypeScript library shape (#717, spec 215), which reuses this shape's tooling.
+- Serverless or edge runtimes, and other frameworks (NestJS, Hono, Express) as template options.
+- The consumer contract check of spec 110 for this shape (the Go and Java services do not have it either).
+- Changing the `web` plugin or the `web-nextjs` template, apart from shared lists that name every shape.
+- A TypeScript monorepo or workspace layout.
+
+## Assumptions
+
+- **A1** Fastify is the HTTP framework and Drizzle the database layer (decided with the user; affects AC-214.4,
+  AC-214.8).
+- **A2** The agents live in a new `svc-ts` plugin, version 0.1.0 (decided with the user; affects AC-214.9).
+- **A3** Logs go through pino with a mixin that adds `trace_id` and `span_id` (other option: the hand-written logger of
+  `web-nextjs`; affects AC-214.4).
+- **A4** Traces use the OpenTelemetry Node SDK with the HTTP and Fastify instrumentations, loaded with `node --import`
+  before the app (other option: `@vercel/otel`, which targets Next.js; affects AC-214.4).
+- **A5** The runtime user is 65532, the distroless `nonroot` user, as in the Go and Java images (other option: 10001 as
+  in the Python image; affects AC-214.1, AC-214.5).
+- **A6** The service is compiled with `tsc` to `dist/` and run with plain `node`, without a bundler (other option:
+  esbuild or tsx at runtime; affects AC-214.5).
+- **A7** Smoke tests are Vitest tests in `tests/smoke/` whose names carry `@smoke` (and `@writes`), run with their own
+  Vitest config against `SMOKE_BASE_URL` (other option: Playwright as in `web-nextjs`, which needs a browser a backend
+  does not; affects AC-214.7).
+- **A8** Migrations run at startup through Drizzle's migrator, as Flyway does in the Java service (other option: a
+  separate migration Job; affects AC-214.8).
+- **A9** `needs_database` defaults to false, as in the Java service (affects AC-214.8).
+
+## Open questions
+
+none
+
+## Changelog
+
+- 2026-11-21 created
+- 2026-11-21 approved
+- 2026-11-21 building
+- 2026-11-21 done

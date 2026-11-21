@@ -25,6 +25,7 @@ if [ -f "$answers" ]; then
     */templates/cluster-gitops|templates/cluster-gitops) echo cluster-gitops; exit 0 ;;
     */templates/service-java|templates/service-java)     echo service-java; exit 0 ;;
     */templates/service-go|templates/service-go)         echo service-go; exit 0 ;;
+    */templates/service-typescript|templates/service-typescript) echo service-typescript; exit 0 ;;
   esac
 fi
 
@@ -38,6 +39,9 @@ nextcfg=(next.config.*)
 if [ ${#nextcfg[@]} -gt 0 ] || { [ -f package.json ] && grep -Eq '"next"[[:space:]]*:' package.json; }; then
   echo web-nextjs; exit 0
 fi
+
+# a Node backend: package.json depends on fastify (a next app was caught above)
+if [ -f package.json ] && grep -Eq '"fastify"[[:space:]]*:' package.json; then echo service-typescript; exit 0; fi
 
 gradle=(build.gradle*)
 if [ -f pom.xml ] || [ ${#gradle[@]} -gt 0 ]; then echo service-java; exit 0; fi
