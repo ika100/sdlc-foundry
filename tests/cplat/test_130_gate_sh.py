@@ -62,7 +62,7 @@ def test_the_source_has_no_jinja_syntax_so_the_rendered_copy_is_byte_identical_a
         assert token not in text, f"gate.sh must not contain {token!r} (the Python templates render every file with Jinja)"
 
 
-@pytest.mark.parametrize("template", ["service-python", "library-python", "service-go", "service-java", "web-nextjs", "cluster-gitops"])
+@pytest.mark.parametrize("template", ["service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript", "cluster-gitops"])
 def test_every_template_carries_a_byte_identical_copy_ac_130_1(template):  # AC-130.1
     copy = TEMPLATES / template / "scripts" / "gate.sh"
     assert copy.is_file(), f"{template} has no scripts/gate.sh"

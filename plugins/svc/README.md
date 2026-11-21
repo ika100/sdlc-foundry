@@ -1,6 +1,6 @@
 # svc plugin
 
-The shape-agnostic product-manager, architect and reviewer agents, the Python agents (coder, tester, migrations, observability, release, deployment) and the `spec-format` skill. Since 5.0 the commands live in the noun plugins: `/component:*` runs the spec-driven pipeline on this plugin's agents and routes coder/tester/deployment/observability/release to the shape's plugin (`web`, `svc-java`, `svc-go`) by `shapes.yml`. Pair with the `shared` plugin for quality/security and the `service-python` Copier template for the canonical project skeleton.
+The shape-agnostic product-manager, architect and reviewer agents, the Python agents (coder, tester, migrations, observability, release, deployment) and the `spec-format` skill. Since 5.0 the commands live in the noun plugins: `/component:*` runs the spec-driven pipeline on this plugin's agents and routes coder/tester/deployment/observability/release to the shape's plugin (`web`, `svc-java`, `svc-go`, `svc-ts`) by `shapes.yml`. Pair with the `shared` plugin for quality/security and the `service-python` Copier template for the canonical project skeleton.
 
 ## Agents
 
