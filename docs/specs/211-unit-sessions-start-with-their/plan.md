@@ -24,6 +24,7 @@ tasks:
     covers: [AC-211.8]
     parallel_safe: false
     depends_on: []
+    done: true
   - id: t7
     title: ADR, changelog fragment, unattended-delivery guide, measurement plan, component plugin version
     files: [docs/adr/, docs/adr/README.md, docs/changelog.d/211-unit-briefing.changed.md, docs/unattended-delivery.md, docs/specs/211-unit-sessions-start-with-their/measurements.md, plugins/component/.claude-plugin/plugin.json, .claude-plugin/marketplace.json]

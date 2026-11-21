@@ -1596,7 +1596,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--comments", action="store_true")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("test-diff", help="acceptance tests changed only in formatting since BASE? (exit 1 otherwise)")
-    p.add_argument("base", help="the commit with the red acceptance tests (Phase 1)")
+    p.add_argument("base", nargs="?", help="the commit with the red acceptance tests (Phase 1); default: the latest "
+                   "'acceptance tests for <spec id>' commit (spec 211)")
     p.add_argument("files", nargs="*")
     p.add_argument("--by", default="coder", help="the agent that changed the tests (coder or quality), for agent metrics")
     p.add_argument("--task", help="the task being built, for agent metrics")
@@ -1778,6 +1779,15 @@ def main(argv: list[str]) -> int:
     if ns.cmd in ("publish", "land", "review"):
         import spec_pr
         return spec_pr.main(ns, root, find(root, ns.id))
+    if ns.cmd == "test-diff" and ns.base is None:   # spec 211: find the base, then run as with it given
+        import testdiff_base
+        try:
+            sha, sid = testdiff_base.resolve(root)
+        except testdiff_base.NoBase as e:
+            print(f"ERROR: no base: {e.why}; pass it: cplat spec test-diff <base>", file=sys.stderr)
+            return 2
+        print(f"base: {sha[:7]} (acceptance tests for {sid})")
+        ns.base = sha
     given = ns.base if ns.cmd == "test-diff" else None
     if ns.cmd == "test-diff" and core.run(["git", "rev-parse", "--verify", "-q", f"{ns.base}^{{commit}}"], cwd=root,
                                            check=False).returncode != 0:   # #752: a crash on git's exit 128 before
