@@ -8,12 +8,14 @@ Public API:
   `state["unavailable"]` (`{source, error, kinds}`), never raised. Nothing here writes: no
   `gh` writing verb, no state file, no run record, no claim.
 - `groups(state, later) -> (group, shown, also, later_count)`: the group that is shown (`stopped`, `specs`, `issues`,
-  `build`, `release` or None), its items oldest first, the count per kind of every other waiting item not put off (in
+  `build`, `ship`, `release` or None), its items oldest first, the count per kind of every other waiting item not put off (in
   group order), and how many items `later` puts off.
 - Spec 193: `state["build"]` is the `nextbuild.collect` document (queue, running build, flow, deploy step; None when none
   exists); the `build:<repo>` item (kind `build`) waits while a queue is ready and nothing builds; stopped items carry `stop`;
   release items of every component shape carry `consequence.sections`; a deployable repo lists only the item of its
   `deploy.step` (staging promote, release, prod promote).
+- #891: a `ship` item (group `ship`, step Build, `/component:ship <n>`) per approved spec of a component repo that nothing
+  runs, queues or stopped; a first-parent commit that changes only `docs/specs/` is no release change.
 - `plain(text)`: the plain words of the screen (no dispatcher, slot, unit, claim, escalation or held).
 - `what(item)`, `size_of(criteria)`, `assumption_of(text)`: item descriptions the screen and the questions share.
 
@@ -51,15 +53,16 @@ from core import run
 
 SOURCE_SECONDS = 20
 TOTAL_SECONDS = 60
-GROUPS = ("stopped", "specs", "issues", "build", "release")
+GROUPS = ("stopped", "specs", "issues", "build", "ship", "release")
 GROUP_OF = {"escalation": "stopped", "stuck": "stopped", "budget": "stopped", "answer": "specs", "approve": "specs",
-            "triage": "issues", "build": "build", "release": "release", "promote": "release", "review": "release"}
-KINDS = ("escalation", "stuck", "budget", "answer", "approve", "triage", "build", "release", "promote", "review")
+            "triage": "issues", "build": "build", "ship": "ship", "release": "release", "promote": "release", "review": "release"}
+KINDS = ("escalation", "stuck", "budget", "answer", "approve", "triage", "build", "ship", "release", "promote", "review")
 MIN_COMPARABLE = 3
 PROBLEM_LIMIT = 600
 ASSUMPTION_LIMIT = 120
 NOT_RELEASED_HERE = ("gitops-app", "cluster-gitops")   # every other shape is a component with a release step (spec 193, A9)
 CHANNELS = ("desktop", "github", "slack", "email")
+SPEC_DOCS = "docs/specs/"
 _STEP = {"plan": "planning", "build": "building", "red-tests": "testing", "tests": "testing", "review": "review",
          "verify": "review", "pr": "landing", "land": "landing", "landing": "landing", "deploy": "deploying",
          "staging": "in staging"}
@@ -193,6 +196,24 @@ def _estimates(slug: str, rows: list[dict], local: dict[str, specmod.Spec]) -> d
     return {s: (_round5(statistics.median(v)) if len(v) >= MIN_COMPARABLE else None) for s, v in by_size.items()}
 
 
+def _commits(repo_dir: Path, rev: str) -> list[tuple[str, str, list[str]]]:
+    """(commit time, subject, changed files) of each first-parent commit of `rev`, oldest first; a merge lists its files
+    against its first parent."""
+    log = git(repo_dir, "log", "--first-parent", "-m", "--reverse", "--name-only", "--format=%x1e%cI|%s", rev)
+    out = []
+    for block in log.split("\x1e"):
+        head, *files = [ln for ln in block.splitlines() if ln.strip()] or [""]
+        if "|" in head:
+            when, subject = head.split("|", 1)
+            out.append((when, subject, files))
+    return out
+
+
+def _spec_docs_only(files: list[str]) -> bool:
+    """A commit that changes only spec documents (`docs/specs/`): the spec of work not built yet, nothing to release (#891)."""
+    return bool(files) and all(f.startswith(SPEC_DOCS) for f in files)
+
+
 def _release_items(repo_dir: Path, slug: str, shape: str | None) -> list[dict]:
     """A release item when the repo has changes that are not released: fragments (platform) or commits since the last tag."""
     if not shape or shape in NOT_RELEASED_HERE:
@@ -209,8 +230,8 @@ def _release_items(repo_dir: Path, slug: str, shape: str | None) -> list[dict]:
         since = min((t.splitlines()[-1] for t in stamps if t), default="")
         command = "/platform:release"
     else:
-        log = git(repo_dir, "log", "--first-parent", "--reverse", "--format=%cI|%s", f"{tag}..HEAD" if tag else "HEAD")
-        found = [ln.split("|", 1) for ln in log.splitlines() if "|" in ln and not comprelease.FOLLOW_UP.match(ln.split("|", 1)[1])]
+        found = [(when, subject) for when, subject, files in _commits(repo_dir, f"{tag}..HEAD" if tag else "HEAD")
+                 if not comprelease.FOLLOW_UP.match(subject) and not _spec_docs_only(files)]
         changes, since = [s for _, s in found], (found[0][0] if found else "")
         command = "/component:release"
     if not changes:
@@ -404,6 +425,7 @@ def _collect(repo_dir: Path) -> dict:
     running, slots = _running(slug, rows, shape, titles, dispatch_doc)
     build = _within("dispatcher", ["build"], lambda: nextbuild.collect(repo_dir, slug, shape, local, items, src), None, deadline, src, flags)
     items = _with_build(items, build, slug, titles)
+    items += _ship_items(repo_dir, slug, shape, local, items, running, build, titles)
     items.sort(key=lambda i: i.get("since") or "")
     return {"repo": slug, "shape": shape, "system": doc.get("system"), "items": items, "running": running, "slots": slots,
             "parked": parked, "channels": channels, "estimates": estimates, "abandoned": flags["abandoned"], "build": build,
@@ -432,6 +454,38 @@ def _with_build(items: list[dict], build: dict | None, slug: str, titles: dict[s
                 "cwd_repo": slug, "consequence": None, "way_back": None, "group": "build"}
         items.append({**item, "what": what(item, titles)})
     return items
+
+
+def _ship_items(repo_dir: Path, slug: str, shape: str | None, local: dict, items: list[dict], running: list[dict],
+                build: dict | None, titles: dict[str, str]) -> list[dict]:
+    """A `ship` item per approved spec of a component repo that nothing builds yet (#891): not running, not in the run queue,
+    not stopped. Its step is Build, its command `/component:ship <n>` (it plans, builds and lands the spec)."""
+    if not shape or shape in NOT_RELEASED_HERE or shape == "platform":
+        return []
+
+    def number(text: object) -> int | None:
+        m = re.match(r"(?:spec-)?0*(\d+)", str(text or ""))
+        return int(m.group(1)) if m else None
+    taken = {number(r.get("spec")) for r in running}
+    taken |= {number((i.get("object") or {}).get("spec")) for i in items}
+    b = build or {}
+    taken |= {number(e.get("key")) for e in [*(b.get("queue") or []), *(b.get("running") or [])]
+              if str(e.get("key") or "").startswith("spec-")}
+    out = []
+    for sid in sorted(local):
+        s = local[sid]
+        if s.status != "approved" or number(sid) in taken:
+            continue
+        n = str(number(sid))
+        since = _when(git(repo_dir, "log", "-1", "--format=%cI", "--", f"{SPEC_DOCS}{sid}/spec.md"))
+        item = {"id": f"ship:{slug}:{sid}", "kind": "ship", "stage": "Build",
+                "object": needs._obj("spec", slug, spec=sid), "group": "ship",
+                "since": since.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if since else runs._iso(runs.utcnow()),
+                "reason": "approved, not built yet" if s.plan else "approved, not planned or built yet",
+                "command": f"/component:ship {n}", "plan_command": None if s.plan else f"/component:plan {n}",
+                "cwd_repo": slug, "consequence": None, "way_back": None}
+        out.append({**item, "what": _title_of(sid, titles)})
+    return out
 
 
 # ---------------- grouping ----------------

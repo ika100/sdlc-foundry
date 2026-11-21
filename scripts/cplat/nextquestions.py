@@ -14,7 +14,7 @@ Public API:
 An option is `{id, label, recommended, description, steps, then, actions, cannot_undo, undo, record}`: `steps` (commands
 to run) or `then` (argv of the next `cplat next` call) or neither (the option does nothing). The first option is the
 recommended one. Question ids: `approve`, `triage`, `approve-one`, `unavailable`, the item id of a stopped run, a
-release, a promotion or a review, and `<item id>#<n>` for the n-th open question of a draft. Nothing here does any I/O.
+release, a promotion, a review or an approved spec to ship (#891), and `<item id>#<n>` for the n-th open question of a draft. Nothing here does any I/O.
 
 Spec 193 adds the questions `build`, `build-setup`, `watch` (progress) and `raise-budget` (`show="raise-budget:<N>"`), the
 stop questions of `nextbuildquestions` (`show="log:<key>"` keeps the one of that stop without "Show the log"), the
@@ -68,6 +68,11 @@ def actions(item: dict) -> list[dict]:
         level = (re.match(r"/(\w+):", command) or [None, "component"])[1]
         return [{"what": "spec commit and push", "target": f"PR #{pr}" if pr else f"feature/{sid}",
                  "undo": f"/{level}:spec --amend {_number(sid)} <your new answer>"}]
+    if kind == "ship":
+        spec = obj.get("spec") or ""
+        return [{"what": "push and pull request", "target": f"{repo} feature/{spec}",
+                 "undo": f"gh pr close --delete-branch feature/{spec} -R {repo}"},
+                {"what": "merge and deploy to dev", "target": f"{repo} main", "undo": None}]
     if kind in ("escalation", "stuck"):
         if re.match(r"/\w+:ship\b", command):
             spec = obj.get("spec") or command.rsplit(" ", 1)[-1]
@@ -322,6 +327,16 @@ def _release(ctx: _Ctx, item: dict) -> dict:
 
 
 
+def _ship(ctx: _Ctx, item: dict) -> dict:
+    """An approved spec nothing builds yet (#891): ship it (plan, build, land), plan it only, or put it off."""
+    qid, acts, refs = _qid(item), actions(item), [r] if (r := _ref(item)) else []
+    opts = [_option(ctx, "ship", "Ship it", "", steps=[item["command"]], acts=acts, refs=refs)]
+    if item.get("plan_command"):
+        opts.append(_option(ctx, "plan", "Plan only", "", steps=[item["plan_command"]], refs=refs))
+    opts += [_details(ctx, qid, refs), _later(ctx, [item])]
+    return _question(qid, "Ship", f"{item['what']} is approved. Plan, build and land it now?", opts)
+
+
 def _unavailable(ctx: _Ctx, state: dict) -> dict:
     names = ", ".join(nextscreen._SOURCES.get(u["source"], (u["source"],))[0] for u in state["unavailable"])
     return _question("unavailable", "Source", f"Could not read {names}. Try again?", [
@@ -337,6 +352,8 @@ def _all(state: dict, ctx: _Ctx, group: str | None, shown: list[dict], log: bool
         qs += [_bq().build(ctx, i, state.get("build") or {}) for i in shown if i["kind"] == "build"]
     elif group is None and not state.get("unavailable") and (state.get("build") or {}).get("running"):
         qs.append(_bq().watch(ctx, state["build"]))
+    elif group == "ship":
+        qs += [_ship(ctx, i) for i in shown]
     elif group == "specs":
         qs += _answers(ctx, [i for i in shown if i["kind"] == "answer"])
         drafts = [i for i in shown if i["kind"] == "approve"]
