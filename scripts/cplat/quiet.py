@@ -93,7 +93,35 @@ def _parse(args: list[str], scripts: dict) -> tuple[str, int | str | None, list[
     return script, n, targs
 
 
+def _record_ci(cwd: Path, rc: int) -> None:
+    """Spec 211 (AC-211.7): a finished `ci` run records the security gate and the ci stage on the active build run.
+    Red records the stage only. Never raises and never changes the exit code."""
+    try:
+        import budget
+        import runs
+        rid = runs.build_run(cwd)
+        if not rid:
+            return
+        if rc == 0:
+            runs.record_gate(cwd, "security", "passed")
+            budget.record_stage(cwd, "ci", "passed")
+            print(f"recorded for build run {rid}: gate security passed, budget stage ci passed")
+        else:
+            budget.record_stage(cwd, "ci", "failed")
+            print(f"recorded for build run {rid}: budget stage ci failed")
+    except Exception:  # noqa: BLE001  (recording never changes the result)
+        pass
+
+
 def main(argv: list[str]) -> int:
+    rc = _main(argv)
+    args = argv[1:] if argv and argv[0] == "--raw" else argv
+    if args == ["ci"] and rc not in (2, 124):
+        _record_ci(Path.cwd(), rc)
+    return rc
+
+
+def _main(argv: list[str]) -> int:
     cwd = Path.cwd()
     raw = bool(argv) and argv[0] == "--raw"
     args = argv[1:] if raw else argv
