@@ -44,6 +44,7 @@ The platform supports the following shapes. New shapes are added per §4.1.
 | `cluster-gitops` | `cluster` | `cluster-gitops` | Argo CD app-of-apps for one cluster's shared services and systems | stable |
 | `service-java` | `svc-java` | `service-java` | JDK 21 LTS, Maven, Spring Boot 3.x | stable (extensibility case study) |
 | `service-go` | `svc-go` | `service-go` | Go 1.22+, stdlib `net/http` + `chi` router | stable (extensibility case study) |
+| `service-typescript` | `svc-ts` | `service-typescript` | Node LTS, pnpm, Fastify, optional Drizzle on PostgreSQL (ADR-124) | stable |
 
 `gitops-app` is distinct from the single platform-wide GitOps repo we already have. The platform-wide repo discovers all `deployable-service` repos via topic. A `gitops-app` repo is system-scoped — it pins which services, which versions, which environments make up one SaaS system. A user with N SaaS systems has N `gitops-app` repos.
 

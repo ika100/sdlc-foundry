@@ -1,0 +1,24 @@
+rules:
+- id: R1
+  text: never commit to main, never create the git tag (or move it) and never force-push, because GitHub Free has no branch protection to refuse it.
+  class: hard
+  hard: release-never-tags-or-commits-main
+  source: spec 138
+- id: R2
+  text: Never choose the version or the commit, because the release must be the image staging tested.
+  class: practice
+- id: R3
+  text: The command must carry `--no-git-checks`, because pnpm refuses a tree holding the new, uncommitted CHANGELOG.md.
+  class: practice
+  source: spec 197
+- id: R4
+  text: Then run the command through `devbox run --` exactly as shown (never bare `pnpm`, so that versions match CI).
+  class: practice
+- id: R5
+  text: Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
+  class: practice
+  source: '#476'
+- id: R6
+  text: never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+  class: hard
+  hard: issue-filing-needs-consent

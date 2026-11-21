@@ -47,6 +47,19 @@
       ]
     },
     {
+      "name": "svc-ts",
+      "source": "./plugins/svc-ts",
+      "version": "0.1.0",
+      "description": "Agents for TypeScript service repos (Fastify, pino, Vitest, pnpm, distroless Node): coder, tester, deployment, observability, release.",
+      "category": "agents",
+      "tags": [
+        "typescript",
+        "fastify",
+        "devbox",
+        "k8s"
+      ]
+    },
+    {
       "name": "svc-go",
       "source": "./plugins/svc-go",
       "version": "0.8.0",
