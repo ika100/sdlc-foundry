@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /svc:release is /component:release. Runs nothing."
 moved-to: "/component:release"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/svc:release` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

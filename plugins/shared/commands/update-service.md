@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /shared:update-service is /platform:update. Runs nothing."
 moved-to: "/platform:update"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/shared:update-service` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

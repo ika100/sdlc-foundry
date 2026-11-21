@@ -2,6 +2,7 @@
 description: "Moved in 5.0: /shared:status is /system:status. Runs nothing."
 moved-to: "/system:status"
 allowed-tools: Read, Glob
+disable-model-invocation: true
 ---
 
 `/shared:status` was renamed in sdlc-foundry 5.0. Run no script, start no agent, change no file.

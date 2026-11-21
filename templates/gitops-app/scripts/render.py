@@ -487,8 +487,8 @@ HHMM = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 POLICY_API = "policies.kyverno.io/v1"
 POLICY_MODES = {"Audit": "Audit", "Enforce": "Deny"}     # mode -> Kyverno validationActions
 LGTM_ENDPOINT = "http://lgtm.observability.svc:4318"    # the shared all-in-one UI stack `cluster-up` installs for `ui: lgtm`
-ADDON_FILES = {"bucket-wait-job.yaml", "cluster.yaml", "kustomization.yaml", "objectstore.yaml", "scheduledbackup.yaml"}
-DATABASE_FILES = {"bucket-wait-job.yaml", "cluster.yaml", "objectstore.yaml", "scheduledbackup.yaml"}     # bucket-wait-job.yaml: #507
+ADDON_FILES = {"bucket-wait-job.yaml", "cluster.yaml", "kustomization.yaml", "objectstore.yaml", "plugin-wait-job.yaml", "scheduledbackup.yaml"}
+DATABASE_FILES = {"bucket-wait-job.yaml", "cluster.yaml", "objectstore.yaml", "plugin-wait-job.yaml", "scheduledbackup.yaml"}     # bucket-wait-job.yaml: #507, plugin-wait-job.yaml: #864
 DATABASE_GENERATION = re.compile(r"^cluster-g[1-9][0-9]*\.yaml$")
 ESO_API = "external-secrets.io/v1"
 GEN_API = "generators.external-secrets.io/v1alpha1"
@@ -2409,21 +2409,71 @@ def bucket_wait_job(base: str, bucket: str, endpoint: str, secret: str, labels: 
     env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "BUCKET_ENDPOINT", "value": endpoint},
            {"name": "BUCKET_NAME", "value": bucket}, {"name": "BUCKET_WAIT_SECONDS", "value": str(BUCKET_WAIT_SECONDS)},
            *({"name": n, "valueFrom": {"secretKeyRef": {"name": secret, "key": k}}} for n, k in keys)]
+    return wait_job(base, "bucket-wait", BUCKET_WAIT_SCRIPT, env, labels, {"argocd.argoproj.io/hook": "Sync", "argocd.argoproj.io/sync-wave": "1"})
+
+
+PLUGIN_WAIT_SECONDS = 600     # #864: the longest time the plugin wait holds a backed-up database's change back; then it goes on anyway
+PLUGIN_WAIT_SCRIPT = r'''# The plugin wait (#864): exits 0 once the Barman Cloud plugin's Service accepts a connection (it has a ready pod), so the
+# database's WAL archiving through the plugin (the Cluster, in the Sync phase) is applied only then. The plugin is installed by the
+# operators application, which Argo CD syncs on its own: without the wait the first backup PR set archiving before the plugin ran,
+# and the cluster restarted into "wal archive plugin is not available". After PLUGIN_WAIT_SECONDS it exits 0 anyway.
+import os
+import socket
+import sys
+import time
+
+
+def main():
+    env = os.environ
+    host, port = env["PLUGIN_HOST"], int(env["PLUGIN_PORT"])
+    deadline = time.time() + float(env.get("PLUGIN_WAIT_SECONDS", "600"))
+    last = None
+    while True:
+        try:
+            socket.create_connection((host, port), timeout=5).close()
+            print("backup plugin %s:%d answers" % (host, port), flush=True)
+            return 0
+        except OSError as e:
+            why = type(e).__name__
+        if why != last:
+            print("waiting for the backup plugin %s:%d to start: %s" % (host, port, why), flush=True)
+            last = why
+        if time.time() >= deadline:
+            print("backup plugin %s:%d still does not answer (%s); going on without it" % (host, port, why), flush=True)
+            return 0
+        time.sleep(float(env.get("PLUGIN_WAIT_INTERVAL", "5")))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+def plugin_wait_job(base: str, labels: dict) -> dict:
+    """The PreSync hook of a backed-up database (#864): it waits until the Barman Cloud plugin answers (its Service, named after the
+    operator's release, port 9090), so the Cluster that archives through the plugin is applied only once the plugin runs."""
+    op = OPERATORS["plugin-barman-cloud"]
+    env = [{"name": "PYTHONDONTWRITEBYTECODE", "value": "1"}, {"name": "PLUGIN_HOST", "value": f"{op['release']}.{op['namespace']}.svc"},
+           {"name": "PLUGIN_PORT", "value": "9090"}, {"name": "PLUGIN_WAIT_SECONDS", "value": str(PLUGIN_WAIT_SECONDS)}]
+    return wait_job(base, "plugin-wait", PLUGIN_WAIT_SCRIPT, env, labels, {"argocd.argoproj.io/hook": "PreSync"})
+
+
+def wait_job(base: str, what: str, script: str, env: list[dict], labels: dict, hook: dict) -> dict:
+    """A hook Job that runs `script` (stdlib python) with `env`: the bucket wait (#507) and the plugin wait (#864)."""
     kept = {k: v for k, v in labels.items() if k in ("app.kubernetes.io/part-of", "app.kubernetes.io/managed-by")}
     return {
         "apiVersion": "batch/v1", "kind": "Job",
-        "metadata": {"name": f"{base[:50].rstrip('-')}-bucket-wait", "labels": dict(labels),
-                     "annotations": {"argocd.argoproj.io/hook": "Sync", "argocd.argoproj.io/sync-wave": "1",
-                                     "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded"}},
+        "metadata": {"name": f"{base[:50].rstrip('-')}-{what}", "labels": dict(labels),
+                     "annotations": {**hook, "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation,HookSucceeded"}},
         "spec": {"backoffLimit": 1, "activeDeadlineSeconds": 900,
                  # the pod must not match the database's selectors (app.kubernetes.io/name): its own name, part-of and managed-by
-                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": f"{base}-bucket-wait", **kept,
-                                                      "app.kubernetes.io/component": "bucket-wait"}},
+                 "template": {"metadata": {"labels": {"app.kubernetes.io/name": f"{base}-{what}", **kept,
+                                                      "app.kubernetes.io/component": what}},
                               "spec": {"automountServiceAccountToken": False, "restartPolicy": "Never",
                                        "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "runAsGroup": 65534,
                                                            "seccompProfile": {"type": "RuntimeDefault"}},
-                                       "containers": [{"name": "bucket-wait", "image": CREDENTIALS_IMAGE,
-                                                       "command": ["python3", "-c", Literal(BUCKET_WAIT_SCRIPT)], "env": env,
+                                       "containers": [{"name": what, "image": CREDENTIALS_IMAGE,
+                                                       "command": ["python3", "-c", Literal(script)], "env": env,
                                                        "resources": {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "64Mi"}},
                                                        "securityContext": {"runAsNonRoot": True, "runAsUser": 65534, "allowPrivilegeEscalation": False,
                                                                            "readOnlyRootFilesystem": True, "capabilities": {"drop": ["ALL"]}}}]}}}}
@@ -3546,6 +3596,8 @@ def addon_files(app: str, name: str, env: str, cfg: dict, services: list[dict], 
             # Sync hook waits for the bucket in wave 1, and the ScheduledBackup is created in wave 2, after it
             files["bucket-wait-job.yaml"] = bucket_wait_job(base, bucket, endpoint, secret, labels)
             sched_meta["annotations"] = {"argocd.argoproj.io/sync-wave": "2"}
+        if env not in cfg["operators"]:     # #864: this repo installs the plugin, so it knows its Service; the Cluster waits for it
+            files["plugin-wait-job.yaml"] = plugin_wait_job(base, labels)
         files["scheduledbackup.yaml"] = {
             "apiVersion": "postgresql.cnpg.io/v1", "kind": "ScheduledBackup", "metadata": sched_meta,
             "spec": {"schedule": f"0 {backup['schedule']}", "immediate": True, "backupOwnerReference": "none", "cluster": {"name": active},

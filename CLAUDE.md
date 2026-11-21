@@ -72,7 +72,7 @@ devbox run validate     # jq-checks marketplace.json + every plugin.json + every
 devbox run smoke-service  # copier copy → devbox install → devbox run quality
 devbox run smoke-library  # same, for the library template
 devbox run smoke        # all of the above
-devbox run test-fast    # cplat tests; also `quality` (static checks), `ci` (= ci-local.sh), `lint-fix` (no-op) for /component:ship and /component:build
+devbox run test-fast    # the cplat tests the change can affect (ADR-123; --full or `devbox run test`: all); also `quality` (static checks), `ci` (= ci-local.sh), `lint-fix` (no-op) for /component:ship and /component:build
 ```
 
 (`devbox` must be available on the host — everything else is provided by `devbox install`. Host install: `curl -fsSL https://get.jetify.com/devbox/install.sh | bash`.)

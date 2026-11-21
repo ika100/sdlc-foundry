@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--repo-dir", default=".")
     p.add_argument("--context", help="kube context (default: the environment's cluster for a system spread over clusters, else the current one)")
     p.add_argument("--to", metavar="BUCKET", help="set the scheduled backup: the bucket resource that receives it")
-    p.add_argument("--schedule", metavar="CRON", help="set the scheduled backup: five-field cron in UTC (default \"0 3 * * *\")")
+    p.add_argument("--schedule", metavar="CRON", help="set the scheduled backup: five-field cron in UTC, or hourly, daily (\"0 3 * * *\", the default), weekly (Sunday 03:00)")
     p.add_argument("--retention", metavar="N", help="set the scheduled backup: <n>d or <n>w (default 30d)")
     p.add_argument("--off", action="store_true", help="remove the scheduled backup (the backups in the bucket are kept)")
     p.add_argument("--dry-run", action="store_true", help="with a setting option: print the change, write nothing")
@@ -131,6 +131,8 @@ def _archiving_hint(kns: str, cluster: str, context: str | None) -> str:
     arch = next((c for c in conds if c.get("type") == "ContinuousArchiving"), None)
     if not arch or arch.get("status") == "True":
         return ""
+    if backupstate.plugin_starting(arch):   # #864: the first backup PR installs the plugin; it is still starting
+        return " (the backup plugin is still starting: try again in a few minutes)"
     return (f" (WAL archiving to the bucket fails too: {arch.get('message') or 'no message'}; the bucket is likely not ready, "
             f"see kubectl get pods -n {kns})")
 
