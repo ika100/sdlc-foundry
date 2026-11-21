@@ -6,6 +6,41 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.28.0] - 2026-11-21
+
+### Changed
+
+**`journey measure` shows per actor the first-call context, calls and estimated cost, and merged PRs per step (#914).** Journey token totals vary by about 30 % between runs, so a token change needs numbers that barely vary. Per actor (coordinator, its subagents, repo sessions, their subagents) the measure now prints the sessions, the calls, the median context of a session's first call (what every later call reads again) and the estimated cost; each step also shows its merged PRs. The price table now prices Sonnet 5.5 cache reads at $0.10 per million (was $0.20), lists Fable 5.2, and prices one-hour cache writes at twice the input price.
+
+**Unattended sessions load only the tools they use: about 12 k tokens less context on every model call (#918).** `cplat headless` sessions (unit sessions of a ship or build, a system ship's repo sessions, the dispatcher's fixes) loaded Claude Code's whole default tool set, although they and their subagents call only `Bash`, `Read`, `Edit`, `Write`, `Agent` and `SendMessage`. They now pass exactly those as `--tools`; the `plan` unit and a session that runs a whole command also keep `WebSearch` and `WebFetch` for the architect. On the build benchmark a unit session's first call went from 33 k to 21 k tokens of context and the plan session's from 28 k to 17 k; subagents are unchanged. `CPLAT_HEADLESS_LEAN=0` keeps the defaults.
+
+### Fixed
+
+**`cplat next` no longer offers "Release now" for a deployable component that has no staging instance (#920).** A fresh service
+repo whose system promotes staging after the dev smoke was asked "N changes since the start. Release now?", and
+`cplat component release target` then refused because nothing ran in staging; the next `cplat next` asked again. The release item of
+a deployable component now follows the release's own precondition: without a staging instance the next step is the first, manual
+promotion to staging (`/instance:promote <component> --to staging`, run in the gitops repo it names), and a staging commit that is
+already released offers no release. A library still releases from main. The staging promote question no longer asks "Promote it
+to prod?".
+
+**`cplat next` shows the next step of an approved system spec in a gitops repo (#921).** Right after a system spec was approved,
+`cplat next` in the gitops repo said "Nothing is waiting for you", although the spec still needed `/system:plan <n>` and then
+`/system:ship <n>`. An approved system spec now places the bar at Build and recommends `/system:plan <n>` while it has no
+`docs/plan/<id>.md`, and `/system:ship <n>` once it is planned and no system ship runs it, or to resume a stopped one. A running
+system ship or a done spec waits for nothing.
+
+**`cplat system ship land` ends each call within its budget, so no coordinator runs it in the background and waits on it with its own loop (#924).**
+A land that waited longer than Claude Code's 600 s Bash limit was moved to the background, and the coordinator waited with a
+`pgrep -f` loop that matched itself and ran its full 9.5 minutes. One call now stops its waits after `--budget` seconds (default 480)
+and exits 3 with a `WAIT:` line; the next call resumes where it stopped (checks, Argo CD, smokes, staging), and the checks' own
+`--timeout` still counts from the first call. A running land is a cplat wait the Stop hook sees (ADR-093) and detaches under
+`cplat headless`. `/system:ship` runs land in the foreground and calls it again on exit 3.
+
+**The deploy wait names a database pod that cannot pull its image, and cluster-up pre-pulls the Postgres image (#925).** `cplat system wait` watched only component pods, so a CloudNativePG initdb pod in `ErrImagePull`/`ImagePullBackOff` (journey 24: ghcr.io refused connections) left `addon-postgres-dev: Synced/Progressing` silent for 33 minutes. Now a pod of a database or other add-on app (its instance and initdb pods, a bucket's pods) waiting in `ErrImagePull`, `ImagePullBackOff`, `InvalidImageName` or `CrashLoopBackOff` for more than 60 s is named on the app's progress line with reason, image and last event: a pull failing on the network reads `image pull failing: <cause>` on every line and keeps waiting, a missing tag or manifest ends the wait RED as for a component. Each poll lists a namespace's pods once. `devbox run cluster-up` (system and cluster repos) pulls the pinned Postgres image into each node in the background with `crictl pull` when a database is rendered or the CloudNativePG operator is listed (`PREPULL_POSTGRES=0` turns it off); a failed pull is logged and never fails cluster-up. Update the gitops repos (`/platform:update`) to get the pre-pull.
+
+**The first in-cluster bucket no longer races the SeaweedFS operator's webhook (#926).** When a system's first bucket installed the SeaweedFS operator in the same rollout, the bucket's `Seaweed` resource reached the operator's mutating webhook before the chart's certificate job had given it a CA, so the bucket's sync failed with `x509: certificate signed by unknown authority` and Argo CD retried with backoff for up to about 14 minutes. The bucket's credentials Job (PreSync, before the `Seaweed`) now waits until the webhook service answers, and 30 s more when it had to wait, for the CA to be set (at most 200 s; then it goes on). It is rendered only where the system repo installs the operators itself. **Action:** existing systems get it with `/platform:update` and a re-render.
+
 ## [5.27.0] - 2026-11-21
 
 ### Added
