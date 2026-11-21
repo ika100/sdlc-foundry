@@ -1713,6 +1713,9 @@ def main(argv: list[str]) -> int:
     if ns.cmd == "set-status":
         spec = find(root, ns.id)
         set_status(spec, ns.status, ns.reason, unverified=ns.unverified)
+        if ns.status == "done":
+            import runs
+            runs.mark(root, "build:close")
         print(f"{spec.id}: {ns.status}")
         return 0
     if ns.cmd == "task-done":

@@ -265,6 +265,7 @@ def main(argv: list[str]) -> int:
 
     if ns.cmd == "schedule":
         data = schedule(repo, ns.spec)
+        runs.mark(repo, "build:implement")
         print(json.dumps(data, indent=2) if ns.json else schedule_text(data))
         return 0
     if ns.cmd == "merge":
