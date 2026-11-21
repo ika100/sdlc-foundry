@@ -71,7 +71,7 @@ def next_dev(version: str, shape: str, repo: Path) -> dict | None:
         return {"file": "pyproject.toml", "next": f"{base}.dev0"}
     if shape == "service-java":
         return {"file": "pom.xml", "next": f"{base}-SNAPSHOT"}
-    if shape == "web-nextjs":
+    if shape in ("web-nextjs", "service-typescript"):
         return {"file": "package.json", "next": f"{base}-dev.0"}
     return None
 

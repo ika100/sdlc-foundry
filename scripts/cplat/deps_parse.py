@@ -27,10 +27,11 @@ class Finding:
 
 
 TOOLS = {"service-python": "pip-audit", "library-python": "pip-audit", "web-nextjs": "pnpm-audit",
-         "service-go": "govulncheck", "service-java": "trivy"}
+         "service-go": "govulncheck", "service-java": "trivy", "service-typescript": "pnpm-audit"}
 DEP_FILES = {"service-python": ("pyproject.toml", "uv.lock"), "library-python": ("pyproject.toml", "uv.lock"),
              "web-nextjs": ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"),
-             "service-go": ("go.mod", "go.sum"), "service-java": ("pom.xml",)}
+             "service-go": ("go.mod", "go.sum"), "service-java": ("pom.xml",),
+             "service-typescript": ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml")}
 
 SEVERITY_ORDER = ["UNRATED", "LOW", "MODERATE", "HIGH", "CRITICAL"]
 _PRE = {"post", "p", "rev", "r"}   # alphabetic parts that sort after the release; every other one sorts before it
@@ -90,7 +91,7 @@ def declared(shape: str, repo: Path) -> set[str]:
             for lst in data.get("dependency-groups", {}).values():
                 reqs += [r for r in lst if isinstance(r, str)]
             out = {n for n in (_py_name(r) for r in reqs if isinstance(r, str)) if n}
-        elif shape == "web-nextjs":
+        elif shape in ("web-nextjs", "service-typescript"):
             data = json.loads((repo / "package.json").read_text())
             out = set(data.get("dependencies", {})) | set(data.get("devDependencies", {}))
         elif shape == "service-go":

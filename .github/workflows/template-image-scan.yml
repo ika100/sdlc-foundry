@@ -2,7 +2,7 @@ name: template-image-scan
 
 # Spec 189: build the image of each image template's default render and scan it with trivy (CRITICAL and HIGH, fixed and unfixed).
 # An unaccepted CRITICAL, or an accepted-finding entry that is wrong or stale, fails the job (scripts/template-image-scan.py,
-# .github/image-scan-accepted.yml). The decide job picks the templates a pull request changed; the daily run scans all four.
+# .github/image-scan-accepted.yml). The decide job picks the templates a pull request changed; the daily run scans all of them.
 on:
   workflow_dispatch:
   schedule:
@@ -66,7 +66,7 @@ jobs:
         run: |
           case "$TEMPLATE" in
             service-python) (cd /tmp/img && uv lock) ;;
-            web-nextjs) (cd /tmp/img && npx -y pnpm@11.22.0 install --lockfile-only) ;;
+            web-nextjs|service-typescript) (cd /tmp/img && npx -y pnpm@11.22.0 install --lockfile-only) ;;
           esac
       - name: Build the image
         env:
