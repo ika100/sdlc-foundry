@@ -36,12 +36,15 @@ def _lookup(prices: Prices, model: str) -> dict[str, float] | None:
     return prices.models[max(keys, key=len)] if keys else None
 
 
-def model_cost(prices: Prices, model: str, input: int, output: int, cache_read: int, cache_write: int) -> float | None:
+def model_cost(prices: Prices, model: str, input: int, output: int, cache_read: int, cache_write: int,
+               cache_write_1h: int = 0) -> float | None:
+    """`cache_write_1h` is the part of `cache_write` written for an hour, priced at `cache_write_1h` (2x input)."""
     p = _lookup(prices, model)
     if p is None:
         return None
-    return (input * p["input"] + cache_write * p["cache_write"] + cache_read * p["cache_read"]
-            + output * p["output"]) / 1e6
+    hour = min(cache_write_1h, cache_write)
+    return (input * p["input"] + (cache_write - hour) * p["cache_write"] + hour * p.get("cache_write_1h", 2 * p["input"])
+            + cache_read * p["cache_read"] + output * p["output"]) / 1e6
 
 
 def _num(value: float, digits: int = 6) -> int | float:
