@@ -294,7 +294,7 @@ def _deploy(repo_dir: Path, shape: str | None, items: list[dict], tags: list[tup
         if prod is None or str(prod.tag).lstrip("v") != newest.lstrip("v"):
             step, version = "prod", newest
     return {"component": name, "staging": promotion, "step": step, "version": version, "head": head,
-            "missing_backups": needs.missing_prod_backups(model) if step == "prod" else []}
+            "missing_backups": needs.missing_prod_backups(model, [name]) if step == "prod" else []}
 
 
 def promote_item(slug: str, deploy: dict, since: str) -> dict | None:
