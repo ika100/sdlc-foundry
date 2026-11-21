@@ -171,7 +171,7 @@ def _names(where: Any, field: str) -> bool:
     if where == field:
         return True
     parts = field.split(".")
-    return isinstance(where, list) and [str(p) for p in where[-len(parts):]] == parts
+    return isinstance(where, list) and [str(p) for p in where[-len(parts) :]] == parts
 
 
 def _is_rejection(case: Case, status: int, body: Any) -> bool:
