@@ -49,8 +49,8 @@
     {
       "name": "svc-ts",
       "source": "./plugins/svc-ts",
-      "version": "0.1.0",
-      "description": "Agents for TypeScript service repos (Fastify, pino, Vitest, pnpm, distroless Node): coder, tester, deployment, observability, release.",
+      "version": "0.2.0",
+      "description": "Agents for TypeScript service and library repos (Fastify, pino, Vitest, pnpm, distroless Node; ESM npm packages on GitHub Packages): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
         "typescript",
