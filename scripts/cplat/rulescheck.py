@@ -33,7 +33,7 @@ _STATEMENT = re.compile(r"\s+".join(re.escape(w) for w in STATEMENT.split()))
 _NEEDS_STATEMENT = re.compile(r"plugins/[^/]+/(agents|commands)/.+\.md")
 _WORD = re.compile(r"[A-Za-z0-9][A-Za-z0-9'’_-]*")
 _BRIEFING_FILES = ("plugins/component/commands/build.md", "plugins/component/references/unit-mode.md")
-_ABOUT ="see docs/rules/README.md"
+_ABOUT = "see docs/rules/README.md"
 
 
 @dataclass(frozen=True)
@@ -241,7 +241,7 @@ def check(root: Path, only: list[str] | None = None) -> Result:
     for rel in prompts:
         if _in_scope(rel, only):
             counts["rule_sentences"] += _check_prompt(rel, root, reg, fails, counts)
-    if any(_in_scope(rel, only) for rel in _BRIEFING_FILES):
+    if any(_in_scope(rel, only) and (root / rel).is_file() for rel in _BRIEFING_FILES):
         for item in briefing.problems(root / "plugins" / "component"):
             fails.append(Failure(item.kind, item.file, item.line, item.text, item.message))
     if only is None:

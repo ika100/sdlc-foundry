@@ -96,7 +96,7 @@ Run the line `cplat component build tests <id> --load` prints (`cplat quiet test
 
    Between fix rounds: `cplat validate run`, `cplat quiet ci`; 2 rounds at most, then escalate. After a red round follow `${CLAUDE_PLUGIN_ROOT}/references/build-red-rounds.md`; record gates with `cplat budget stage <name> passed|failed`. `cplat quiet ci` green → `cplat platform runs gate security passed`; stays red → `... gate security failed`.
 3. **Green** → agents only where needed: **tester** (`agents.tester`) so that every new internal has a unit test; **security** so that a changed Dockerfile is built and scanned.
-4. `cplat spec test-diff $RED` again (`--by quality` after the quality agent); exit 1 (changed test) stops: show the file and reason, since a changed test is a changed spec (`test helper`/`type-only`: `build-tighten.md`). Commit changes.
+4. `cplat spec test-diff $RED` again (`--by quality` after the quality agent); exit 1 stops: show the file and reason, since a changed test is a changed spec (`test helper`/`type-only`: `build-tighten.md`). Commit changes.
 
 ## Phase 4 — Verify against the spec
 
