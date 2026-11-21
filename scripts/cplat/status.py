@@ -179,7 +179,7 @@ def _release_candidate(c, cell: dict, smoke: dict | None) -> dict | None:
     if not diff.get("commits"):
         return None
     return {"version": releases.next_version(last, diff.get("subjects") or []), "commits": diff["commits"], "specs": diff["specs"],
-            "fixes": diff["fixes"], "digest": (smoke or {}).get("digest")}
+            "fixes": diff["fixes"], "digest": (smoke or {}).get("digest"), "subjects": diff.get("subjects") or []}
 
 
 def load(repo: Path, app: str | None) -> tuple[Path, model.Model]:

@@ -377,21 +377,57 @@ def _commit_time(slug: str | None, ref: str | None) -> str:
         return ""
 
 
-def missing_prod_backups(m: model.Model) -> list[dict]:
+def missing_prod_backups(m: model.Model, components: list[str] | None = None) -> list[dict]:
     """#861: the in-cluster databases of prod without a backup, as {resource, to}: `to` is the bucket another environment of the
-    database backs up to, else `<db>-backups` (`resource backup --to` declares a bucket that does not exist yet, #860)."""
+    database backs up to, else `<db>-backups` (`resource backup --to` declares a bucket that does not exist yet, #860).
+    #900: a database exists in prod only once a consumer runs there; the databases that the promoted `components` use count
+    as prod databases too, unless system.yaml declares prod's instance external or with a backup."""
     out, instances = [], list(getattr(m, "resource_instances", None) or [])
+    resources = {r.name: r for r in getattr(m, "resources", None) or []}
+
+    def to_of(name: str) -> str:
+        declared = (getattr(resources.get(name), "declared", None) or {}).values()
+        other = next((o.backup["to"] for o in instances if o.resource == name and o.backup), None) \
+            or next((d["backup"]["to"] for d in declared if d.get("backup")), None)
+        return other or f"{name}-backups"
     for ri in instances:
         if ri.environment != "prod" or ri.type != "database" or ri.external or ri.backup:
             continue
-        other = next((o.backup["to"] for o in instances if o.resource == ri.resource and o.backup), None)
-        out.append({"resource": ri.resource, "to": other or f"{ri.resource}-backups"})
+        out.append({"resource": ri.resource, "to": to_of(ri.resource)})
+    in_prod = {ri.resource for ri in instances if ri.environment == "prod"}
+    uses = [u for c in getattr(m, "components", None) or [] if c.name in (components or []) for u in c.uses]
+    for name in dict.fromkeys(uses):
+        r = resources.get(name)
+        prod = (getattr(r, "declared", None) or {}).get("prod") or {}
+        if r is None or r.type != "database" or name in in_prod or prod.get("external", r.external) or prod.get("backup"):
+            continue
+        out.append({"resource": name, "to": to_of(name)})
     return out
 
 
+_SHA = re.compile(r"sha-([0-9a-f]{7,40})")
+
+
+def _release_first(name: str, slug: str | None, stg: dict, row: dict, since: str) -> dict:
+    """#901: the staged build has no release tag and prod takes release tags only: the item recommends the release."""
+    last = None
+    if slug:
+        out, _ = releases._call(["release", "view", "-R", slug, "--json", "tagName", "-q", ".tagName"])
+        last = (out or "").strip() or None
+    cand = row.get("release_candidate") or {}
+    return {"id": f"release:{slug}:{last or 'first'}", "kind": "release", "stage": "Release",
+            "object": _obj("release", slug, component=name, version=last), "since": since,
+            "reason": f"{name} {stg['version']} is verified in staging; prod takes release tags only",
+            "command": "/component:release", "cwd_repo": slug,
+            "consequence": {"changes": cand.get("subjects") or [f"the staged build {stg['version']} of {name}"], "since_tag": last, "next_version": cand.get("version"), "env": "prod"},
+            "way_back": None}
+
+
 def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str = "manual",
-                missing_backups: list[dict] | None = None) -> list[dict]:
-    """A promote item exists only where prod waits for a person (`manual`); otherwise the rule promotes by itself."""
+                missing_backups: list[dict] | dict[str, list[dict]] | None = None) -> list[dict]:
+    """A promote item exists only where prod waits for a person (`manual`); otherwise the rule promotes by itself.
+    `missing_backups` is one list for every component or a list per component name (#900).
+    #901: prod takes release tags only: the item names the release tag of the staged build, or recommends the release."""
     if prod_promotion != "manual":
         return []
     items = []
@@ -403,12 +439,22 @@ def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str =
         if prod and prod.get("version") == stg["version"]:
             continue
         name, slug, to = row["component"], repo_of.get(row["component"]), stg["version"]
+        missing = (missing_backups.get(name) or [] if isinstance(missing_backups, dict) else missing_backups) or []
+        verified = _staging_smoke(slug, stg)
+        since = verified.get("at") or _commit_time(slug, stg.get("release") or stg.get("tag")) or runs._iso(runs.utcnow())
+        if not stg.get("release"):
+            sha = _SHA.fullmatch(str(stg.get("tag") or to))
+            tag = releases.tag_of(slug, sha.group(1)) if slug and sha else None
+            if tag is None:
+                items.append(_release_first(name, slug, stg, row, since))
+                continue
+            to = tag
+        if prod and str(prod.get("version") or "").lstrip("v") == to.lstrip("v"):
+            continue
         frm = (prod or {}).get("version") or (releases.previous_release(slug, to) if slug else None)
         between = releases.between(slug, frm, to) if slug and frm else {}
         migrations = between.get("migrations") or []
         digest = stg.get("digest")
-        verified = _staging_smoke(slug, stg)
-        since = verified.get("at") or _commit_time(slug, stg.get("release") or stg.get("tag")) or runs._iso(runs.utcnow())
         verified_digest = verified.get("digest") or digest   # the cell is `verified`: without a readable record, its own digest was
         bad = [Path(m["file"]).name for m in migrations if not m.get("additive")]
         items.append({
@@ -419,7 +465,7 @@ def _promotions(rows: list[dict], repo_of: dict[str, str], prod_promotion: str =
             "consequence": {"from": frm, "to": to, "specs": between.get("specs") or [], "criteria": between.get("criteria"),
                             "commits": between.get("commits"), "migrations": migrations, "digest": digest,
                             "verified_digest": verified_digest, "digest_matches": digest is not None and digest == verified_digest,
-                            "env": "prod", "missing_backups": list(missing_backups or [])},
+                            "env": "prod", "missing_backups": list(missing)},
             "way_back": {"command": f"/instance:promote {name} --to prod --version {frm}" if frm else None,
                          "warning": (f"migration {', '.join(bad)} is not additive" if bad else None)}})
     return items
@@ -606,7 +652,7 @@ def collect(repo_dir: Path, system: str | None = None, since_days: int = 90) -> 
                 src.fail("github", e, ["issues"])
         try:
             _, _, status_rows, _ = status_f.result()
-            items += _promotions(status_rows, components, _prod_promotion(m), missing_prod_backups(m))
+            items += _promotions(status_rows, components, _prod_promotion(m), {c: missing_prod_backups(m, [c]) for c in components})
         except Exception as e:  # noqa: BLE001
             src.fail("cluster", e, ["promote"])
         items += _dispatch_items(repos, src)

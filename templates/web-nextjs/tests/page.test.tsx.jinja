@@ -4,6 +4,11 @@ import { describe, expect, it } from "vitest";
 import HomePage from "@/app/page";
 
 describe("HomePage", () => {
+  it("owns the main landmark the skip link targets", () => {
+    render(<HomePage />);
+    expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
+  });
+
   it("renders the project heading", () => {
     render(<HomePage />);
     expect(screen.getByRole("heading", { level: 1, name: "{{ project_name }}" })).toBeInTheDocument();

@@ -204,7 +204,7 @@ code {
 
 /* ---------- layout ---------- */
 
-main {
+.content {
   flex: 1;
 }
 
