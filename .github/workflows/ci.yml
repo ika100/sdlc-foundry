@@ -736,10 +736,10 @@ jobs:
       - name: Confirm key files exist
         run: |
           for f in devbox.json package.json tsconfig.json tsconfig.build.json eslint.config.mjs vitest.config.mts \
-                   .claude/settings.json .github/workflows/ci.yml src/index.ts tests/index.test.ts scripts/publish.sh \
-                   pnpm-workspace.yaml; do
+                   .claude/settings.json .github/workflows/ci.yml src/index.ts tests/index.test.ts pnpm-workspace.yaml; do
             test -f /tmp/test-tslib/$f || { echo "missing $f"; exit 1; }
           done
+          test -x /tmp/test-tslib/scripts/publish.sh || { echo "the publish script is missing or not executable"; exit 1; }
           test ! -e /tmp/test-tslib/Dockerfile || { echo "a library ships no image"; exit 1; }
           test "$(jq -r .name /tmp/test-tslib/package.json)" = "@ika100/test-tslib"
       - name: Shape is detected as library-typescript
