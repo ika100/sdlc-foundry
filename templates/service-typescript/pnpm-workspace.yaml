@@ -1,0 +1,7 @@
+# pnpm 10+ blocks dependency build scripts unless explicitly allowed.
+# `pnpm install` may append minimumReleaseAgeExclude entries here — commit them.
+allowBuilds:
+  esbuild: true
+  protobufjs: false   # OpenTelemetry's OTLP exporter: its postinstall only prints a version notice
+  ssh2: false          # Testcontainers' docker client: the optional native speed-up is not needed
+  cpu-features: false  # an optional native dependency of ssh2

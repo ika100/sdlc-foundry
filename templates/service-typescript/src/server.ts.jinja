@@ -1,0 +1,43 @@
+import { buildApp } from "./app.js";
+import { loadConfig } from "./config.js";
+{%- if needs_database %}
+import { connect, migrateWithRetry, ping } from "./db/client.js";
+{%- endif %}
+import { createLogger } from "./logger.js";
+
+const config = loadConfig();
+const logger = createLogger(config.logLevel);
+{%- if needs_database %}
+
+// The schema belongs to the migrations in drizzle/. They run once the server listens, so that liveness answers while
+// the database starts; the service is ready only after they are applied and while the database answers.
+const db = connect();
+let migrated = false;
+const app = buildApp({ logger, ready: async () => migrated && (await ping(db.pool)) });
+{%- else %}
+
+const app = buildApp({ logger });
+{%- endif %}
+
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    logger.info({ signal }, "shutting down");
+    void app
+      .close()
+{%- if needs_database %}
+      .then(() => db.pool.end())
+{%- endif %}
+      .then(() => process.exit(0));
+  });
+}
+
+await app.listen({ port: config.port, host: "0.0.0.0" });
+{%- if needs_database %}
+try {
+  await migrateWithRetry(db, logger);
+  migrated = true;
+} catch (error) {
+  logger.fatal({ error: String(error) }, "the database migrations failed");
+  process.exit(1);
+}
+{%- endif %}

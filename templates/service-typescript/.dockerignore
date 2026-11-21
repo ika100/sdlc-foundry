@@ -1,0 +1,15 @@
+.git/
+.github/
+.devbox/
+node_modules/
+dist/
+coverage/
+tests/
+docs/
+.copier-answers.yml
+.secrets.baseline.json
+.gitignore
+.dockerignore
+CLAUDE.md
+CHANGELOG.md
+.claude/

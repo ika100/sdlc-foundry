@@ -1,0 +1,56 @@
+import type { Logger } from "pino";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import pg from "pg";
+
+import * as schema from "./schema.js";
+
+export type Database = NodePgDatabase<typeof schema> & { pool: pg.Pool };
+
+/** Connection settings from the platform's postgres resource (PG*, docs/env-vars.md); the defaults match `devbox run db-up`. */
+export function poolConfig(env: NodeJS.ProcessEnv = process.env): pg.PoolConfig {
+  return {
+    host: env.PGHOST ?? "localhost",
+    port: Number.parseInt(env.PGPORT ?? "5432", 10),
+    database: env.PGDATABASE ?? "{{ project_name | replace('-', '_') }}",
+    user: env.PGUSER ?? "app",
+    password: env.PGPASSWORD,
+    connectionTimeoutMillis: 2_000,
+  };
+}
+
+export function connect(config: pg.PoolConfig = poolConfig()): Database {
+  const pool = new pg.Pool(config);
+  // An idle connection the server closed (restart, failover) emits an error; without a listener it ends the process.
+  pool.on("error", () => undefined);
+  return Object.assign(drizzle(pool, { schema }), { pool });
+}
+
+/** Readiness: the database answers a trivial query. */
+export async function ping(pool: pg.Pool): Promise<boolean> {
+  try {
+    await pool.query("select 1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Applies the pending migrations in drizzle/ (relative to the working directory, /app in the image). */
+export async function migrateDatabase(db: Database, migrationsFolder = "drizzle"): Promise<void> {
+  await migrate(db, { migrationsFolder });
+}
+
+/** Waits up to `attempts` × `delayMs` for the database, as it may still be starting, then migrates. */
+export async function migrateWithRetry(db: Database, logger: Logger, attempts = 30, delayMs = 2_000): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await migrateDatabase(db);
+      return;
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      logger.warn({ attempt, error: String(error) }, "database not reachable yet, retrying the migration");
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}

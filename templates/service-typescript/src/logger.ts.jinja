@@ -1,0 +1,31 @@
+{% if needs_observability -%}
+import { isSpanContextValid, trace } from "@opentelemetry/api";
+{% endif -%}
+import { pino, type DestinationStream, type Logger } from "pino";
+
+/**
+ * One JSON object per line on stdout: `time`, `level` (as a word), `msg` and the fields of the call.
+{%- if needs_observability %}
+ * Inside an active span the line also carries its `trace_id` and `span_id`, so logs and traces join.
+{%- endif %}
+ */
+export function createLogger(level = "info", destination?: DestinationStream): Logger {
+  return pino(
+    {
+      level,
+      messageKey: "msg",
+      base: undefined,
+      timestamp: pino.stdTimeFunctions.isoTime,
+      formatters: { level: (label) => ({ level: label }) },
+{%- if needs_observability %}
+      mixin() {
+        const spanContext = trace.getActiveSpan()?.spanContext();
+        return spanContext && isSpanContextValid(spanContext)
+          ? { trace_id: spanContext.traceId, span_id: spanContext.spanId }
+          : {};
+      },
+{%- endif %}
+    },
+    destination,
+  );
+}

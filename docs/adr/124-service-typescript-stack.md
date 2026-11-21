@@ -15,7 +15,7 @@ database layer and plugin were made with the user; the rest follow the platform'
 | Axis | Choice |
 |---|---|
 | Runtime | Node, the pinned Active LTS major (`node_major`, [ADR-005](005-node-version-policy.md)); ESM, compiled with `tsc` to `dist/`, run with plain `node` |
-| Package manager | pnpm, pinned in `devbox.json` and `packageManager` ([ADR-003](003-package-manager-pnpm.md)) |
+| Package manager | pnpm, pinned in `devbox.json` and `packageManager` ([ADR-003](003-web-package-manager.md)) |
 | HTTP framework | **Fastify 5** |
 | Logging | **pino**, one JSON object per line on stdout, `trace_id` and `span_id` added by a mixin inside an active span |
 | Metrics | **prom-client**: Node default metrics plus `http_requests_total` and `http_request_duration_seconds` (method, route, status) on `/metrics` |
