@@ -1,7 +1,7 @@
 ---
 spec_id: 214-a-typescript-service-shape
 title: A TypeScript service shape
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [716]
@@ -117,3 +117,5 @@ none
 
 - 2026-11-21 created
 - 2026-11-21 approved
+- 2026-11-21 building
+- 2026-11-21 done
