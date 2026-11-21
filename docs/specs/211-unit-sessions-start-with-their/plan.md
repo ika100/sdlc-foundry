@@ -10,12 +10,14 @@ tasks:
     covers: [AC-211.1, AC-211.2, AC-211.3, AC-211.4, AC-211.5, AC-211.6]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t3
     title: Forward-only build markers set by the commands, record_gate, begin continues a unit-mode build run
     files: [scripts/cplat/runs.py, scripts/cplat/buildcmd.py, scripts/cplat/mutation.py, scripts/cplat/spec.py]
     covers: [AC-211.7, AC-211.9]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t4
     title: cplat spec test-diff finds its base when none is given
     files: [scripts/cplat/testdiff_base.py, scripts/cplat/spec.py]
@@ -28,6 +30,7 @@ tasks:
     covers: [AC-211.10]
     parallel_safe: true
     depends_on: []
+    done: true
   - id: t2
     title: ship start --unit and ship unit print shape, where the run stands and the briefing
     files: [scripts/cplat/ship.py, tests/cplat/test_ship_units_131.py]
