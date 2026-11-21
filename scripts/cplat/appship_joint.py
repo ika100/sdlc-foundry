@@ -374,10 +374,48 @@ def _section(res: smoke.SmokeResult, row: str) -> dict:
     return {"outcome": res.outcome, "digest": res.digest, "row": row, "passed": res.passed, "skipped": res.skipped}
 
 
-def _land_pr(gitops: Path, pr: str, who: str, what: str, timeout: float, interval: float) -> tuple[bool, list[str]]:
+WAIT = 3              # #924: the call's budget ran out while a step still runs: run `cplat system ship land` again
+LAND_BUDGET = 480.0   # #924: one call stays under Claude Code's 600 s Bash limit, so no coordinator backgrounds it
+
+
+class _Budget:
+    """#924: one `land` call stops its waits after `seconds` (None: no limit) and exits WAIT; the state keeps where it got."""
+
+    def __init__(self, seconds: float | None) -> None:
+        self.end = None if seconds is None else waits.now() + seconds
+
+    def left(self) -> float:
+        return float("inf") if self.end is None else self.end - waits.now()
+
+    def cap(self, timeout: float) -> tuple[float, bool]:
+        """(the timeout of the next wait, whether the budget and not the wait's own timeout set it)."""
+        left = self.left()
+        return (max(left, 0.0), True) if left < timeout else (timeout, False)
+
+
+def _waiting(lines: list[str], what: str) -> tuple[int, list[str]]:
+    kept = [ln for ln in lines if not ln.startswith("TIMEOUT:")]
+    return WAIT, [*kept, f"WAIT: {what}; run `cplat system ship land` again: it resumes where it stopped"]
+
+
+def _land_pr(gitops: Path, pr: str, who: str, what: str, timeout: float, interval: float,
+             budget: _Budget | None = None) -> tuple[bool | None, list[str]]:
+    """(True merged, False escalated, None the budget ran out with checks still running: WAIT)."""
     import appship
     import appship_merge
-    ok, lines = appship_merge.land(gitops, pr, who, timeout, interval)
+    import ship
+    budget = budget or _Budget(None)
+    since = waits.now()
+    if budget.end is not None:                 # the checks' own timeout counts from the first call, not from each one
+        st = state.update(gitops, lambda s: s.setdefault("land_ci_since", {}).setdefault(pr, since))
+        since = float((st.get("land_ci_since") or {}).get(pr) or since)
+    limit, capped = budget.cap(max(timeout - (waits.now() - since), 0.0))
+    try:
+        ok, lines = appship_merge.land(gitops, pr, who, limit, interval)
+    except ship.ChecksPending:
+        if capped:
+            return None, [f"checks on {pr} still running"]
+        raise
     if not ok:
         reason = appship.red_reason(what, pr, lines)
         state.escalate(gitops, reason, "code")
@@ -386,8 +424,10 @@ def _land_pr(gitops: Path, pr: str, who: str, what: str, timeout: float, interva
     return True, lines
 
 
-def land(gitops: Path, timeout: float, wait_timeout: float, interval: float = 20, wait_interval: float = 10) -> tuple[int, list[str]]:
-    """Decision 8: `cplat system ship land`. Exit 0 landed, 1 escalated, 2 Argo CD timeout (run it again)."""
+def land(gitops: Path, timeout: float, wait_timeout: float, interval: float = 20, wait_interval: float = 10,
+         budget: float | None = None) -> tuple[int, list[str]]:
+    """Decision 8: `cplat system ship land`. Exit 0 landed, 1 escalated, 2 Argo CD timeout (run it again), 3 (#924) the call's
+    `budget` seconds ran out while a step still runs (run it again; it resumes)."""
     import appship
     import appship_sched as sched
     st = state.require_state(gitops)
@@ -414,7 +454,10 @@ def land(gitops: Path, timeout: float, wait_timeout: float, interval: float = 20
         if reason:
             state.escalate(gitops, reason, "code")
             return waits.RED, [*lines, reason]
-        ok, more = _land_pr(gitops, pr, "dev", "dev PR", timeout, interval)
+        b = _Budget(budget)
+        ok, more = _land_pr(gitops, pr, "dev", "dev PR", timeout, interval, b)
+        if ok is None:
+            return _waiting([*lines, *more], f"the checks of the dev PR {pr}")
         if not ok:
             return waits.RED, more
         lines += [f"dev PR merged: {pr}", *more]
@@ -433,24 +476,34 @@ def land(gitops: Path, timeout: float, wait_timeout: float, interval: float = 20
                 s["repos"][entry]["human_steps"] = [*(s["repos"][entry].get("human_steps") or []), *steps]
         st = state.update(gitops, merged)
     else:
+        b = _Budget(budget)
         appship._land_main(gitops)
     pinned = [(r["id"], st["repos"][r["id"]]) for r in plan if (st["repos"].get(r["id"]) or {}).get("pinned")]
     comps = [e["component"] for _, e in pinned]
     if not st.get("dev_landed"):
-        code, more = _argo(gitops, st, "dev", st["dev_merged"], comps, wait_timeout, wait_interval, resources=True)
+        if b.left() <= 0:
+            return _waiting(lines, "Argo CD in dev")
+        limit, capped = b.cap(wait_timeout)
+        code, more = _argo(gitops, st, "dev", st["dev_merged"], comps, limit, wait_interval, resources=True)
         lines += more
+        if code == waits.TIMEOUT and capped:
+            return _waiting(lines, "Argo CD in dev")
         if code == waits.RED:
             reason = f"dev did not run the system spec after {pr}: {more[0].removeprefix('RED: ')}"
             state.escalate(gitops, reason, "environment")
             return waits.RED, [*lines, reason]
         if code == waits.TIMEOUT:
             return waits.TIMEOUT, [*lines, "run `cplat system ship land` again: it resumes after the merge"]
+        if b.left() <= 0:
+            return _waiting(lines, "the dev smokes")
         code, more = _dev_smokes(gitops, st, plan, pinned)
         lines += more
         if code != waits.REACHED:
             return code, lines
         st = state.update(gitops, lambda s: s.__setitem__("dev_landed", True))
-    code, more = _staging(gitops, st, plan, timeout, wait_timeout, interval, wait_interval)
+    if not st.get("staging_done") and b.left() <= 0:
+        return _waiting(lines, "staging")
+    code, more = _staging(gitops, st, plan, timeout, wait_timeout, interval, wait_interval, b)
     return code, [*lines, *more]
 
 
@@ -576,7 +629,8 @@ def _staging_pr(gitops: Path, st: dict, cands: list[tuple[str, str, str, str | N
 
 
 def _staging(gitops: Path, st: dict, plan: list[dict], timeout: float, wait_timeout: float, interval: float,
-             wait_interval: float) -> tuple[int, list[str]]:
+             wait_interval: float, b: _Budget | None = None) -> tuple[int, list[str]]:
+    b = b or _Budget(None)
     if st.get("staging_done"):
         return waits.REACHED, []
     lines: list[str] = []
@@ -602,7 +656,9 @@ def _staging(gitops: Path, st: dict, plan: list[dict], timeout: float, wait_time
     pr = st["staging_pr"]
     cands = [tuple(c) for c in st.get("staging_promoted") or []]
     if not st.get("staging_merged"):
-        ok, more = _land_pr(gitops, pr, "staging", "staging PR", timeout, interval)
+        ok, more = _land_pr(gitops, pr, "staging", "staging PR", timeout, interval, b)
+        if ok is None:
+            return _waiting([*lines, *more], f"the checks of the staging PR {pr}")
         if not ok:
             return waits.RED, [*lines, *more]
         lines += [f"staging PR merged: {pr}", *more]
@@ -614,15 +670,22 @@ def _staging(gitops: Path, st: dict, plan: list[dict], timeout: float, wait_time
     else:
         import appship
         appship._land_main(gitops)
-    code, more = _argo(gitops, st, "staging", st["staging_merged"], [c[1] for c in cands], wait_timeout, wait_interval,
+    if b.left() <= 0:
+        return _waiting(lines, "Argo CD in staging")
+    limit, capped = b.cap(wait_timeout)
+    code, more = _argo(gitops, st, "staging", st["staging_merged"], [c[1] for c in cands], limit, wait_interval,
                        resources=False)
     lines += more
+    if code == waits.TIMEOUT and capped:
+        return _waiting(lines, "Argo CD in staging")
     if code == waits.RED:
         reason = f"staging did not run the system spec after {pr}: {more[0].removeprefix('RED: ')}"
         state.escalate(gitops, reason, "environment")
         return waits.RED, [*lines, reason]
     if code == waits.TIMEOUT:
         return waits.TIMEOUT, [*lines, "run `cplat system ship land` again: it resumes after the merge"]
+    if b.left() <= 0:
+        return _waiting(lines, "the staging smokes")
     m = model.load_dir(_app_dir(gitops))
     org = _org(gitops)
     results: dict[str, dict] = {}
