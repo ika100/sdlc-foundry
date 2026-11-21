@@ -182,5 +182,7 @@ def main(ns: argparse.Namespace, root: Path) -> int:
     text = render(result)
     if ns.write:
         write(root, ns.id, text)
+        import runs
+        runs.mark(root, "build:image")
     print(json.dumps(result, indent=2) if ns.json else text, end="" if not ns.json else "\n")
     return 0
