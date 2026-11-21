@@ -18,4 +18,4 @@ def test_the_allowlist_covers_headless_commits_and_plugin_reads(settings: Path):
 
 
 def test_every_shape_has_an_allowlist():
-    assert len(TEMPLATES) == 8   # the six of 5.0, cluster-gitops (spec 125) and service-typescript (spec 214)
+    assert len(TEMPLATES) == 9   # the six of 5.0, cluster-gitops (spec 125), service-typescript (spec 214) and library-typescript (spec 215)

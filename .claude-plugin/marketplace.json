@@ -49,8 +49,8 @@
     {
       "name": "svc-ts",
       "source": "./plugins/svc-ts",
-      "version": "0.1.0",
-      "description": "Agents for TypeScript service repos (Fastify, pino, Vitest, pnpm, distroless Node): coder, tester, deployment, observability, release.",
+      "version": "0.2.0",
+      "description": "Agents for TypeScript service and library repos (Fastify, pino, Vitest, pnpm, distroless Node; ESM npm packages on GitHub Packages): coder, tester, deployment, observability, release.",
       "category": "agents",
       "tags": [
         "typescript",
@@ -113,7 +113,7 @@
     {
       "name": "system",
       "source": "./plugins/system",
-      "version": "1.24.1",
+      "version": "1.24.2",
       "description": "Spec-driven features across a system's components (gitops-app repo): /system:new creates a system, /system:status shows it, /system:spec writes the system spec, /system:plan assigns its criteria to the component repos (ADR-011/026), /system:ship ships it unattended in plan order (ADR-042). Provides the planner agent.",
       "category": "agents",
       "tags": [
