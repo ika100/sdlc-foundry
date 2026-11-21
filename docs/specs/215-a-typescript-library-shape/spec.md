@@ -1,7 +1,7 @@
 ---
 spec_id: 215-a-typescript-library-shape
 title: A TypeScript library shape
-status: approved
+status: done
 priority: P1
 shape: platform
 tracks: [717]
@@ -110,3 +110,5 @@ none
 
 - 2026-11-21 created
 - 2026-11-21 approved
+- 2026-11-21 building: built
+- 2026-11-21 done: verified, 11/11

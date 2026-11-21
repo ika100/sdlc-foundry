@@ -1,0 +1,20 @@
+# Verification — 215 A TypeScript library shape
+
+**Result:** pass
+**Commit:** 56374e9a · **Base:** 6c43d89c · **Trace:** 11/11 criteria named by tests (`tests/cplat/test_215_library_typescript.py`); the installed toolchain and a publish dry run on a real render are proved by the CI job `smoke-test-library-typescript` and were run locally the same way (`devbox run smoke-ts-lib`)
+
+| Criterion | Verdict | Tests | Implementation | Notes |
+|---|---|---|---|---|
+| AC-215.1 | met | `test_the_registry_holds_the_library_shape_with_its_publish_block_ac_215_1`, `test_library_typescript_is_a_pair_and_a_lone_typescript_stays_a_website_ac_215_1`; `test_type_lang_pairs_come_from_the_registry_plus_service_unknown_ac_114_58` extended | `shapes.yml`, `scripts/cplat/newsvc.py`, PRD row | `scripts/shapes.py check`: OK, 10 shapes, the ADR-125 publish contract included. |
+| AC-215.2 | met | `test_component_new_renders_the_template_ac_215_2`, `test_detection_by_sniffing_a_package_json_ac_215_2` (5 cases), `test_detection_by_answers_and_of_a_fresh_render_ac_215_2`; `scripts/test-detect-shape.sh` | `scripts/detect-shape.sh` | The library sniff comes after the Java, Go and Python manifests. |
+| AC-215.3 | met | `test_the_render_has_the_canonical_recipes_and_no_image_ac_215_3`; the AC-130 gate matrix with the shape added | `templates/library-typescript/devbox.json.jinja`, `vitest.config.mts` | Locally: install, ESLint, `tsc`, Vitest 100 % coverage, `pnpm audit`, detect-secrets, `deps-findings` pass; template-lint passes. |
+| AC-215.4 | met | `test_the_package_is_a_scoped_esm_package_for_github_packages_ac_215_4` | `package.json.jinja`, `tsconfig.build.json` | The packed tarball holds `dist/index.js`, `index.d.ts` and maps only. |
+| AC-215.5 | met | `test_a_tagged_head_publishes_the_tag_version_and_keeps_package_json_ac_215_5`, `test_a_rerun_of_a_published_version_is_a_no_op_ac_215_5`, `test_the_script_is_copied_by_copier_unchanged_ac_215_5` | `scripts/publish.sh` | The real upload to npm.pkg.github.com is not exercised (needs a repo with `packages: write`); the fake `npm` checks the token line of the temporary user config. |
+| AC-215.6 | met | `test_a_commit_that_is_not_the_tagged_one_publishes_nothing_ac_215_6` (3 cases), `test_a_wrong_argument_list_exits_2_with_the_usage_ac_215_6` (5 cases) | `scripts/publish.sh` | Also on a real render: tag on another commit and a dirty tree both exit 1 with the message. |
+| AC-215.7 | met | `test_a_dry_run_packs_and_checks_without_the_registry_ac_215_7`, `test_a_dry_run_of_another_commit_fails_the_same_way_ac_215_7` | `scripts/publish.sh` | Real render: `.pack/ika100-test-tslib-0.1.0.tgz` with version 0.1.0, `package.json` unchanged. |
+| AC-215.8 | met | `test_ci_has_the_library_job_set_and_the_publish_job_ac_215_8` | `.github/workflows/ci.yml` of the template | actionlint clean on the rendered workflow. |
+| AC-215.9 | met | `test_the_guide_says_how_the_package_is_released_and_installed_ac_215_9` | `CLAUDE.md.jinja`, `README.md.jinja` | |
+| AC-215.10 | met | `test_the_platform_tooling_knows_the_shape_ac_215_10`, `test_the_template_enables_the_plugins_ac_215_10`, `test_cplat_shape_routes_the_roles_of_a_rendered_repo_ac_215_10`, `test_the_platform_ci_smoke_tests_the_template_ac_215_10`; `test_deps_parse.py`, `test_ci_scope_407.py`, `test_template_allowlists.py`, `test_system_render_114.py` | `scripts/cplat/{deps_parse,buildtests,newsvc}.py`, `scripts/{bump_template_pins,template-lint,sync-template-copies}.py`, `scripts/ci-local.sh`, gitops-app `render.py`/`plan.py` (+ synced `system_render.py`), platform CI, `devbox.json`, `plugins/svc-ts/agents/release.md` | The release agent skips the version file when it is `none` (prompts 387,096 bytes, baseline 387,135, no rebaseline). |
+| AC-215.11 | met | `test_the_docs_name_the_shape_ac_215_11` | `docs/templates.md`, site shapes page, PRD, `CLAUDE.md`, `plugins/svc-ts/README.md`, `docs/AGENTS.md`, `docs/ADOPTING.md` | `check-docs.py` and `check-links.py` OK. |
+
+Full cplat suite: 12,951 passed, 12 skipped. `devbox run quality`, `cplat platform rules check` and `scripts/test-detect-shape.sh` pass.
