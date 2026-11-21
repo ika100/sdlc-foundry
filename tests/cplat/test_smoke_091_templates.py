@@ -25,13 +25,13 @@ import newsvc
 import update
 
 TEMPLATES = core.PLATFORM_ROOT / "templates"
-SHAPES = ["service-python", "service-java", "service-go", "web-nextjs"]
+SHAPES = ["service-python", "service-java", "service-go", "web-nextjs", "service-typescript"]
 DEVBOX = {"service-python": "devbox.json", "service-java": "devbox.json.jinja", "service-go": "devbox.json.jinja",
-          "web-nextjs": "devbox.json.jinja"}
+          "web-nextjs": "devbox.json.jinja", "service-typescript": "devbox.json.jinja"}
 HELPERS = {"service-python": "smoke_pytest.py", "service-java": "SmokeSummary.java", "service-go": "smoke-summary.go",
-           "web-nextjs": "smoke-summary.mjs"}
+           "web-nextjs": "smoke-summary.mjs", "service-typescript": "smoke-summary.mjs"}
 TAGS = {"service-python": r"pytest\.mark\.smoke\b", "service-java": r'@Tag\(\s*"smoke"\s*\)',
-        "service-go": r"func\s+TestSmoke\w*\s*\(", "web-nextjs": r"@smoke\b"}
+        "service-go": r"func\s+TestSmoke\w*\s*\(", "web-nextjs": r"@smoke\b", "service-typescript": r"@smoke\b"}
 GUARD = ("ERROR: SMOKE_BASE_URL is not set: devbox run smoke runs the smoke tests against a running deployment, "
          "e.g. SMOKE_BASE_URL=https://<host> devbox run smoke")
 
@@ -44,7 +44,8 @@ def recipe(shape: str, name: str) -> str | None:
 
 def example_smoke_test(shape: str) -> Path | None:
     patterns = {"service-python": "tests/test_smoke_health.py", "service-go": "internal/server/smoke_test.go",
-                "web-nextjs": "e2e/smoke.spec.ts*", "service-java": "src/test/java/**/SmokeHealthTest.java*"}
+                "web-nextjs": "e2e/smoke.spec.ts*", "service-java": "src/test/java/**/SmokeHealthTest.java*",
+                "service-typescript": "tests/smoke/health.test.ts"}
     hit = sorted((TEMPLATES / shape).glob(patterns[shape]))
     return hit[0] if hit else None
 
@@ -87,7 +88,8 @@ def test_each_fresh_skeleton_has_one_example_smoke_test_ac_091_4(shape):  # AC-0
     text = f.read_text()
     assert re.search(TAGS[shape], text), f"{shape}: the example carries no smoke tag"
     assert "SMOKE_BASE_URL" in text or "smoke_base_url" in text
-    paths = {"service-python": "/health", "service-java": "/actuator/health/liveness", "service-go": "/health", "web-nextjs": '"/"'}
+    paths = {"service-python": "/health", "service-java": "/actuator/health/liveness", "service-go": "/health", "web-nextjs": '"/"',
+             "service-typescript": '"/health"'}
     assert paths[shape] in text
 
 

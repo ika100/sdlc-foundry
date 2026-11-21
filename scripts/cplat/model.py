@@ -174,6 +174,8 @@ class Resource:
     name: str
     type: str = "unknown"
     external: bool = False  # the resource-level flag is True
+    # #900: per environment as system.yaml declares it, also where no consumer runs yet: {"external": bool, "backup": dict | None}
+    declared: dict = field(default_factory=dict, compare=False, repr=False)
 
 
 @dataclass
@@ -694,7 +696,16 @@ def build(doc: dict | None, system: str, *, pins: Pins | None = None, shapes: li
         b for a in (*c.provides, *c.consumes) for b in [api_broker.get(a)] if b and b not in c.uses))))
         for e, c in components]
 
-    resources = [Resource(k, str(v.get("type") or ("database" if k == "postgres" else "unknown")), v.get("external") is True)
+    def declared(v: dict, ext: bool) -> dict:
+        out = {}
+        for env in ENVIRONMENTS:
+            idoc = _map(_map(v.get("instances")).get(env))
+            e = idoc["external"] is True if "external" in idoc else ext
+            out[env] = {"external": e, "backup": None if e else _backup(idoc.get("backup"))}
+        return out
+
+    resources = [Resource(k, str(v.get("type") or ("database" if k == "postgres" else "unknown")), v.get("external") is True,
+                          declared(v, v.get("external") is True))
                  for k, v in res_docs.items()]
 
     instances = []

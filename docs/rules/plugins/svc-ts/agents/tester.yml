@@ -1,0 +1,56 @@
+rules:
+- id: R1
+  text: '**Test pyramid** — Vitest unit tests for pure functions; route tests through `buildApp()` from `src/app.ts` and `app.inject({ method, url, payload })`, never a listening port, so that tests stay fast and free of port clashes; database behaviour against PostgreSQL in Testcontainers (`tests/db.test.ts` shows the setup) where the repo has `src/db/`.'
+  class: practice
+- id: R2
+  text: '**Do not fix implementation bugs yourself** — report them clearly (file, expected vs actual) so that the coder can fix them.'
+  class: practice
+- id: R3
+  text: Test the public surface the criteria and the contract describe — routes, public functions, CLI output — never internals that do not exist yet, because the coder designs those.
+  class: practice
+- id: R4
+  text: 'Assert on parsed values, never on serialized text, because the order of keys in a JSON object is never part of a contract: decode a JSON body (`res.json()`) and compare its fields and the order of the lists the criterion names.'
+  class: practice
+- id: R5
+  text: Every new test must **fail because the behaviour is missing** (assertion failure, 404, missing module/symbol).
+  class: practice
+- id: R6
+  text: 'Run `cplat quiet lint-fix`, then commit only the test files, so that the frozen set is exactly the tests: `test(<slug>): acceptance tests for AC-<NNN>.1–AC-<NNN>.<n>`.'
+  class: practice
+- id: R7
+  text: Committed tests must already be in the project's lint and format style, because a later `lint-fix` that rewrites them makes `cplat spec test-diff` stop the build.
+  class: practice
+- id: R8
+  text: never edit, skip or weaken them later to make a build pass, because a test bent to fit the code stops proving the spec.
+  class: hard
+  hard: acceptance-tests-fixed
+  source: spec 048, spec 165
+- id: R9
+  text: The test reaches the service only through the base URL (no app import, no `app.inject`, no database), creates its own data with unique names (`smoke-<uuid>`), never changes or deletes data it did not create, and stays repeatable, because the environment is shared.
+  class: practice
+- id: R10
+  text: Smoke runs in dev, staging and prod, with `SMOKE_ENV` naming the environment; outside dev `SMOKE_READ_ONLY=1` leaves out every test marked as writing, so that only dev gets smoke data.
+  class: experience
+  source: '#474'
+- id: R11
+  text: 'For every `(smoke)` criterion also write a read-only check where the behaviour can be observed without writing, so that staging and prod still verify something real: outside dev a run where no smoke test passed is reported as not run.'
+  class: practice
+  source: '#474'
+- id: R12
+  text: Write files with Write and Edit, never through the shell (`cat >`, heredocs, `tee`, `echo >`), because headless runs refuse those commands.
+  class: practice
+- id: R13
+  text: '**Shell rule:** run every tool through `devbox run <script>`, never `vitest`, `pnpm`, `node` or `npx` directly, so that versions and flags match CI; add a missing recipe to `devbox.json` first.'
+  class: practice
+- id: R14
+  text: Read the summary first and open the full log when the summary is not enough, never rerun with full output, because a rerun pays for the failure twice.
+  class: practice
+  source: spec 108
+- id: R15
+  text: Read `cplat`'s output whole, never through `grep`, `head` or `tail`, because its last lines carry the decisions and fixes; use `--json` where offered.
+  class: practice
+  source: '#476'
+- id: R16
+  text: never file an issue without the user's OK, because the platform repository is public; a `platform` escalation is the one issue the platform files itself (ADR-033).
+  class: hard
+  hard: issue-filing-needs-consent

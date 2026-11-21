@@ -27,6 +27,24 @@ from sharding import (  # noqa: F401  (spec 112: --shard / --shard-report)
 )
 
 
+@pytest.fixture(scope="session")
+def _gh_guard_dir(tmp_path_factory):
+    d = tmp_path_factory.mktemp("gh-guard")
+    gh = d / "gh"
+    from waiting import with_prelude
+    gh.write_text(with_prelude('#!/bin/sh\necho "tests never call GitHub: gh $*" >&2\nexit 127\n'))
+    gh.chmod(0o755)
+    return d
+
+
+@pytest.fixture(autouse=True)
+def no_real_github(monkeypatch, _gh_guard_dir):
+    """Issue #905: a test that reached the real `gh` hit the account's rate limit and slept in `core.run`'s retry until the
+    test timeout. The first `gh` on PATH is a guard that fails at once (exit 127, "tests never call GitHub"); tests that
+    need `gh` put their own fake in front of it on PATH or replace the Python seam that calls it."""
+    monkeypatch.setenv("PATH", f"{_gh_guard_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+
 @pytest.fixture(autouse=True)
 def silent_sessions_are_not_pauses(request, monkeypatch):
     """Spec 184: a fake `claude` that ends silent and fast reads as a usage-limit pause and the run sleeps 5+ minutes. Every

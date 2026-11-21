@@ -15,6 +15,7 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | Spec | Priority | Status | Criteria | Tracks |
 |---|---|---|---|---|
 | [107-open-source-tools-are-adopted-on](specs/107-open-source-tools-are-adopted-on/spec.md) — Open-source tools are adopted on measured value | P1 | approved | 11 | #164 |
+| [211-unit-sessions-start-with-their](specs/211-unit-sessions-start-with-their/spec.md) — Unit sessions start with their instructions, less bookkeeping | P1 | approved | 10 | #869 |
 | [001-create-a-repo-of-any-shape-with-one](specs/001-create-a-repo-of-any-shape-with-one/spec.md) — Create a repo of any shape with one command | P0 | done | 9 |  |
 | [002-generated-repos-enable-their-plugins](specs/002-generated-repos-enable-their-plugins/spec.md) — Generated repos enable their plugins automatically | P0 | done | 2 |  |
 | [003-pull-template-updates-into-an-existing](specs/003-pull-template-updates-into-an-existing/spec.md) — Pull template updates into an existing repo safely | P0 | done | 5 |  |
@@ -193,6 +194,8 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [207-preflight-checks-trust-and-subagent](specs/207-preflight-checks-trust-and-subagent/spec.md) — Preflight checks trust and subagent tools before a ship | P1 | done | 8 |  |
 | [208-test-runs-leave-the-developer-s-disk-as](specs/208-test-runs-leave-the-developer-s-disk-as/spec.md) — Test runs leave the developer's disk as they found it | P1 | done | 7 | #810, #811 |
 | [210-the-dispatcher-paces-work-by-the](specs/210-the-dispatcher-paces-work-by-the/spec.md) — The dispatcher budgets by plan limits or by cost | P1 | done | 10 |  |
+| [212-local-tests-run-what-a-change-can-affect](specs/212-local-tests-run-what-a-change-can-affect/spec.md) — Local tests run what a change can affect | P1 | done | 9 |  |
+| [214-a-typescript-service-shape](specs/214-a-typescript-service-shape/spec.md) — A TypeScript service shape | P1 | done | 11 | #716 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |

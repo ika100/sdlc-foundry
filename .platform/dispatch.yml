@@ -1,5 +1,5 @@
 # The dispatcher's policy for this repo (docs/dispatch.md): triaged issues and approved specs, two at a time; specs are approved by a person.
 slots: 2
 budget:
-  tokens_per_day: 60000000
+  tokens_per_day: 500000000
 sources: [issues, specs]

@@ -15,9 +15,10 @@ describe("RootLayout", () => {
     </RootLayout>,
   );
 
-  it("sets the language and puts the page inside the main landmark", () => {
+  it("sets the language and leaves the main landmark to the page", () => {
     expect(html).toContain('<html lang="en">');
-    expect(html).toMatch(/<main id="main-content"[^>]*>\s*<p>child content<\/p>/);
+    expect(html).toMatch(/<div class="container content"><p>child content<\/p><\/div>/);
+    expect(html).not.toContain("<main");
   });
 
   it("starts with a skip link to the main content", () => {
@@ -51,6 +52,7 @@ describe("NotFound", () => {
     render(<NotFound />);
     expect(screen.getByRole("heading", { level: 1, name: "This page could not be found" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to the home page" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
   });
 });
 
@@ -61,6 +63,7 @@ describe("ErrorPage", () => {
     const error = new Error("boom");
     render(<ErrorPage error={error} reset={reset} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong");
+    expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
     expect(log).toHaveBeenCalledWith(error);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(reset).toHaveBeenCalledTimes(1);

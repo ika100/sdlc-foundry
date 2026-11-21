@@ -1,0 +1,15 @@
+# {{ project_name }}
+
+{{ description }}
+
+TypeScript service (Fastify on Node {{ node_major }}) generated from the `service-typescript` template of [`ika100/sdlc-foundry`](https://github.com/ika100/sdlc-foundry).
+
+```bash
+devbox shell
+devbox run dev        # http://localhost:{{ port }}/health
+devbox run quality    # eslint + tsc
+devbox run test       # vitest with coverage
+devbox run image-build
+```
+
+See `CLAUDE.md` for conventions and the full recipe list. Skeleton updates: `/platform:update`.

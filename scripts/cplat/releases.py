@@ -138,6 +138,17 @@ def previous_release(repo_slug: str, current: str) -> str | None:
     return None
 
 
+def tag_of(repo_slug: str, commit: str) -> str | None:
+    """#901: the release tag (`vX.Y.Z`, newest first) on the commit whose sha starts with `commit`, or None."""
+    out, _ = _call(["api", f"repos/{repo_slug}/tags?per_page=100"])
+    try:
+        tags = json.loads(out or "[]")
+        return next((t["name"] for t in tags if SEMVER.fullmatch(str(t.get("name") or ""))
+                     and commit and str((t.get("commit") or {}).get("sha") or "").startswith(commit)), None)
+    except (ValueError, AttributeError, TypeError, KeyError):
+        return None
+
+
 def digest(repo_slug: str, tag: str) -> str | None:
     """The image digest recorded in the body of release `tag`, or None."""
     out, _ = _call(["api", f"repos/{repo_slug}/releases/tags/{tag}"])

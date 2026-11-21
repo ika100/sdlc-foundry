@@ -1,0 +1,104 @@
+{% if needs_observability -%}
+import {
+  type Context,
+  type ContextManager,
+  ROOT_CONTEXT,
+  TraceFlags,
+  context,
+  trace,
+} from "@opentelemetry/api";
+import { beforeAll, describe, expect, it } from "vitest";
+{%- else -%}
+import { describe, expect, it } from "vitest";
+{%- endif %}
+
+import { createLogger } from "../src/logger.js";
+
+/** Collects what the logger writes, one parsed JSON object per line. */
+function sink(): { lines: Record<string, unknown>[]; write: (chunk: string) => void } {
+  const lines: Record<string, unknown>[] = [];
+  return { lines, write: (chunk: string) => lines.push(JSON.parse(chunk) as Record<string, unknown>) };
+}
+{%- if needs_observability %}
+
+/** Minimal synchronous context manager, so the test needs no extra package. */
+class StackContextManager implements ContextManager {
+  private current: Context = ROOT_CONTEXT;
+  active(): Context {
+    return this.current;
+  }
+  with<A extends unknown[], F extends (...args: A) => ReturnType<F>>(
+    ctx: Context,
+    fn: F,
+    thisArg?: ThisParameterType<F>,
+    ...args: A
+  ): ReturnType<F> {
+    const previous = this.current;
+    this.current = ctx;
+    try {
+      return fn.call(thisArg, ...args);
+    } finally {
+      this.current = previous;
+    }
+  }
+  bind<T>(_ctx: Context, target: T): T {
+    return target;
+  }
+  enable(): this {
+    return this;
+  }
+  disable(): this {
+    this.current = ROOT_CONTEXT;
+    return this;
+  }
+}
+
+const TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
+const SPAN_ID = "b7ad6b7169203331";
+
+function inSpan(fn: () => void, traceId = TRACE_ID, spanId = SPAN_ID): void {
+  const span = trace.wrapSpanContext({ traceId, spanId, traceFlags: TraceFlags.SAMPLED });
+  context.with(trace.setSpan(ROOT_CONTEXT, span), fn);
+}
+{%- endif %}
+
+describe("logger", () => {
+{%- if needs_observability %}
+  beforeAll(() => {
+    context.setGlobalContextManager(new StackContextManager());
+  });
+{% endif %}
+  it("writes one JSON object per line with time, level and msg", () => {
+    const out = sink();
+    createLogger("info", out).info({ order: 7 }, "hello");
+    expect(out.lines).toHaveLength(1);
+    expect(out.lines[0]).toMatchObject({ level: "info", msg: "hello", order: 7 });
+    expect(typeof out.lines[0]?.time).toBe("string");
+  });
+
+  it("drops lines below the level", () => {
+    const out = sink();
+    createLogger("warn", out).info("quiet");
+    expect(out.lines).toHaveLength(0);
+  });
+{%- if needs_observability %}
+
+  it("carries the active span's trace_id and span_id", () => {
+    const out = sink();
+    const logger = createLogger("info", out);
+    inSpan(() => logger.info("in span"));
+    expect(out.lines[0]).toMatchObject({ trace_id: TRACE_ID, span_id: SPAN_ID });
+  });
+
+  it("omits both ids outside a span and for an invalid span context", () => {
+    const out = sink();
+    const logger = createLogger("info", out);
+    logger.info("plain");
+    inSpan(() => logger.info("invalid"), "0".repeat(32), "0".repeat(16));
+    for (const line of out.lines) {
+      expect(line).not.toHaveProperty("trace_id");
+      expect(line).not.toHaveProperty("span_id");
+    }
+  });
+{%- endif %}
+});
