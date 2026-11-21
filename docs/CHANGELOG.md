@@ -6,6 +6,37 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.27.0] - 2026-11-21
+
+### Added
+
+**A TypeScript service shape: `/component:new <name> <description> --type service --lang typescript` (#716).** A team whose website is a `web-nextjs` repo had to write its backend in Python, Java or Go. The new `service-typescript` shape creates a Fastify service on the pinned Node LTS with the same guarantees as the other services: the canonical `devbox` recipes and gates (ESLint + `tsc`, Vitest with an 80 % coverage gate, `pnpm audit` + detect-secrets), `/health`, `/ready` and `/metrics` (prom-client, HTTP request metrics by route), pino JSON logs that carry the trace ids, OpenTelemetry tracing when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, Vitest smoke tests named `@smoke` (and `@writes`), a distroless non-root image and the hardened CI with `release-image` and `pin-dev`. `--data needs_database=true` adds PostgreSQL through Drizzle ORM: SQL migrations from `devbox run migrate-new` applied at startup, the `PG*` variables of the postgres resource, readiness that follows the database, Testcontainers tests. Its agents are in the new `svc-ts` plugin; a system's `system.yaml` accepts `type: service, lang: typescript`. `--lang typescript` alone still creates a website. Update the plugins (`/plugin marketplace update`) to get `svc-ts` ([ADR-124](adr/124-service-typescript-stack.md), [spec 214](specs/214-a-typescript-service-shape/spec.md)).
+
+**A library release publishes its package (#889).** A tag of a `library-python` repo used to repeat the gates and publish nothing, and its guide named an internal index that did not exist. Now the tag's CI run has a `publish` job: after every gate it runs `devbox run publish vX.Y.Z`, which builds the wheel and source archive, fails before any upload when their version is not the tag's, and attaches both to the GitHub release of the tag. `devbox run publish vX.Y.Z --dry-run` checks the same locally. Every library shape now declares `publish.registry` in `shapes.yml`, and `scripts/shapes.py check` holds its template to the convention of [ADR-125](adr/125-library-releases-publish-to-github-on-the-tag.md), which the TypeScript, Java and .NET libraries will follow. **Action:** library repos pick it up with `/platform:update`; the repo's `CLAUDE.md` says how other repos install a released version ([spec 213](specs/213-library-releases-publish-their-package/spec.md)).
+
+### Fixed
+
+**`cplat next` puts an approved spec that nothing builds at Build and no longer waits 20 s for the run queue (#891).** Right after
+`cplat spec land` of an approved spec without a plan or build, `cplat next` showed Build and Dev as done, placed "you are here" at
+Staging and recommended releasing the spec documents; it also reported the run queue unreadable after waiting 20 s. Now an approved
+spec of a component repo that is not running, queued or stopped places the bar at Build and recommends `/component:ship <n>` (or
+`/component:plan <n>` when it has no plan), a commit that changes only `docs/specs/` is no release change, and the run queue reads only
+this repo's runs (it built a row for every run of every repo in the run store, each of which may ask GitHub).
+
+**`cplat system wait` no longer ends RED on a missing image tag while the component's CI run builds it (#892).** The fail-fast of #867 stopped the wait after 60 s of `ImagePullBackOff` with "the image tag does not exist in the registry", also for a new component whose first CI run on main was still building and pushing that image. Now a pod whose tag is missing waits while the newest `ci` run on main of the component's repo is queued or running (one `gh run list` per repo, asked again at most once a minute while it runs), and for 5 more minutes after that run passed, for the kubelet's pull back-off. With no run building the image, or a failed run, the wait ends RED after 60 s as before.
+
+**The contract check of a Python service accepts FastAPI's `loc` path (#893).** A system plan whose contract names the error field `loc` could never pass a rejection case: `scripts/contract_pytest.py` compared the whole `loc` with the field name, and FastAPI sends `["body", "title"]`, not `"title"`. An error now names a field when its entry equals the field or is a path whose last parts are the field's dotted parts (`["body", "address", "city"]` names `address.city`). **Action:** existing service-python repos get the fix with `/platform:update`.
+
+**A new web repo's page owns its `<main>` landmark, so a page acceptance test finds it (#897).** The `web-nextjs` layout rendered `<main id="main-content">` around every page, so a test that rendered a page alone and queried role `main` failed, and adding a `<main>` to the page gave two. Now the layout keeps the skip link and a container `<div>`, and the start page, the 404 page and the error page each render `<main id="main-content">`, the skip link's target; the template's layout, page and e2e tests check it. **Action:** `/platform:update` does not change existing web repos here, because `app/` and `tests/` are project-owned: to adopt it, move `<main id="main-content">` from `app/layout.tsx` into your pages and adjust `tests/layout.test.tsx`.
+
+**The first prod promotion asks for the database backup first (#900).** A database has a prod instance in the model only once a component runs in prod, so before the first prod promotion `cplat next` saw no prod database and recommended the promotion without the backup question of #861; prod then went live without a backup. Now the in-cluster databases that the promoted components use count as prod databases without a backup, unless `system.yaml` sets prod's backup or declares prod's instance external.
+
+**`cplat next` recommends the release before a prod promotion, not a `sha-` build (#901).** A build verified in staging was offered for prod as `/instance:promote … --to prod --version sha-…`, although prod takes release tags only, and the offer stayed after prod ran the release. Now the prod item recommends `/component:release` while the staged build has no release tag, names the release tag of the staged build once it exists, and disappears when prod runs that release.
+
+**`cplat system wait` no longer ends RED while a new backup bucket is still starting (#902).** A `resource backup --to` change that declares an in-cluster bucket made the database's app Degraded (`ContinuousArchiving=False`, `barman-cloud-wal-archive: exit status 4`) until the SeaweedFS pods were Ready, and the wait stopped with `health Degraded` although archiving recovered a minute later. Now a database Degraded only because WAL archiving to its in-cluster backup bucket fails is pending while that bucket's app or pods are not Ready and for 5 minutes after the failure began or the bucket became Ready; the progress line names the bucket and the pod it waits for. After that, or when anything else in the app is Degraded, it is RED as before.
+
+**The cplat tests never call the real GitHub (#905).** Some tests reached the real `gh`; when the account's GitHub budget was used up they slept in the rate-limit retry for more than 300 s and failed on the test timeout, so a full local run got minutes slower and turned red for reasons outside the code. Every test now finds a `gh` first on `PATH` that fails at once with "tests never call GitHub"; tests that need `gh` install their own fake in front of it.
+
 ## [5.26.0] - 2026-11-21
 
 ### Added
