@@ -365,6 +365,8 @@ def _your_part(state: dict, group: str | None, shown: list[dict]) -> str:
     if group == "build":
         return bs.your_part("setup" if build.get("setup") is not None else "build")
     if group == "ship":
+        if shown and str(shown[0].get("command") or "").startswith("/system:plan"):
+            return "Your part: plan the spec (split it across the repos), or put it off."
         return "Your part: ship the spec (plan, build and land it), or put it off."
     if group == "stopped":
         return "Your part: decide how the stopped run goes on."

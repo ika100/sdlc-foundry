@@ -68,6 +68,13 @@ def actions(item: dict) -> list[dict]:
         level = (re.match(r"/(\w+):", command) or [None, "component"])[1]
         return [{"what": "spec commit and push", "target": f"PR #{pr}" if pr else f"feature/{sid}",
                  "undo": f"/{level}:spec --amend {_number(sid)} <your new answer>"}]
+    if kind == "ship" and command.startswith("/system:plan"):
+        spec = obj.get("spec") or ""
+        return [{"what": "plan commit and pull request", "target": f"{repo} docs/spec-{spec}",
+                 "undo": f"gh pr close --delete-branch docs/spec-{spec} -R {repo}"}]
+    if kind == "ship" and command.startswith("/system:ship"):
+        return [{"what": "pull requests in the plan's repos", "target": f"the system of {repo}", "undo": None},
+                {"what": "merge and deploy to dev", "target": f"the plan's repos and {repo}", "undo": None}]
     if kind == "ship":
         spec = obj.get("spec") or ""
         return [{"what": "push and pull request", "target": f"{repo} feature/{spec}",
@@ -330,13 +337,24 @@ def _release(ctx: _Ctx, item: dict) -> dict:
 
 
 def _ship(ctx: _Ctx, item: dict) -> dict:
-    """An approved spec nothing builds yet (#891): ship it (plan, build, land), plan it only, or put it off."""
+    """An approved spec nothing builds yet (#891): ship it (plan, build, land), plan it only, or put it off. A system spec
+    (#921) is planned first (`/system:plan`), then shipped or resumed (`/system:ship`)."""
     qid, acts, refs = _qid(item), actions(item), [r] if (r := _ref(item)) else []
-    opts = [_option(ctx, "ship", "Ship it", "", steps=[item["command"]], acts=acts, refs=refs)]
+    command = item["command"]
+    if command.startswith("/system:plan"):
+        oid, label, text = "plan", "Plan it", f"{item['what']} is approved. Split it into a plan per repo now?"
+    elif command.startswith("/system:ship"):
+        resume = bool(item.get("resume"))
+        oid, label = "ship", "Resume it" if resume else "Ship it"
+        text = (f"The system ship of {item['what']} stopped. Resume it?" if resume
+                else f"{item['what']} is approved and planned. Ship it across its repos now?")
+    else:
+        oid, label, text = "ship", "Ship it", f"{item['what']} is approved. Plan, build and land it now?"
+    opts = [_option(ctx, oid, label, "", steps=[command], acts=acts, refs=refs)]
     if item.get("plan_command"):
         opts.append(_option(ctx, "plan", "Plan only", "", steps=[item["plan_command"]], refs=refs))
     opts += [_details(ctx, qid, refs), _later(ctx, [item])]
-    return _question(qid, "Ship", f"{item['what']} is approved. Plan, build and land it now?", opts)
+    return _question(qid, "Ship", text, opts)
 
 
 def _unavailable(ctx: _Ctx, state: dict) -> dict:
