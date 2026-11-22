@@ -25,7 +25,7 @@ Canonical `devbox run` scripts:
 | `lint` | `ruff check` + `ruff format --check` |
 | `lint-fix` | `ruff check --fix` + `ruff format` |
 | `quality` | lint + typecheck |
-| `audit` | pip-audit |
+| `audit` | pip-audit on `uv.lock` |
 | `secrets-scan` | detect-secrets |
 | `bandit` | bandit |
 | `security` | audit + secrets-scan + bandit |

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Platform-owned (spec 095): the recipes behind `devbox run deps-findings` and `devbox run deps-bump`.
-#   deps.sh findings <out-file>      write pip-audit's JSON report to <out-file>
+# Platform-owned (spec 095): the recipes behind `devbox run audit`, `devbox run deps-findings` and `devbox run deps-bump`.
+#   deps.sh audit                    pip-audit what uv.lock pins (#936: not the environment it runs in)
+#   deps.sh findings <out-file>      write pip-audit's JSON report on uv.lock to <out-file>
 #   deps.sh bump <package> <version> move <package> to <version> in uv.lock (and pyproject.toml when needed)
 # Only pyproject.toml and uv.lock ever change.
 set -euo pipefail
@@ -12,6 +13,20 @@ cmd="${1:-}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 helper="$here/deps_pyproject.py"
 
+# pip-audit on an export of uv.lock, so the result depends on the repo, not on the Python that runs it (#936)
+locked_audit() {
+  local req rc=0
+  req="$(mktemp)"
+  if ! uv export --frozen --no-hashes --no-emit-project --all-extras > "$req"; then
+    rm -f "$req"
+    echo "audit: uv export of uv.lock failed" >&2
+    return 1
+  fi
+  uv run pip-audit -r "$req" --no-deps --disable-pip "$@" || rc=$?
+  rm -f "$req"
+  return "$rc"
+}
+
 findings() {
   local out="${1:-}"
   if [ -z "$out" ]; then
@@ -20,7 +35,7 @@ findings() {
   fi
   rm -f "$out"
   # pip-audit exits 1 when it finds vulnerabilities; the report is still written
-  uv run pip-audit -f json -o "$out" >&2 || true
+  locked_audit -f json -o "$out" >&2 || true
   if [ ! -s "$out" ] || ! python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "$out" 2>/dev/null; then
     echo "deps-findings: pip-audit wrote no valid JSON report" >&2
     exit 1
@@ -62,7 +77,8 @@ bump() {
 }
 
 case "$cmd" in
+  audit) locked_audit "$@" ;;
   findings) findings "$@" ;;
   bump) bump "$@" ;;
-  *) echo "usage: deps.sh findings <out-file> | bump <package> <version>" >&2; exit 2 ;;
+  *) echo "usage: deps.sh audit | findings <out-file> | bump <package> <version>" >&2; exit 2 ;;
 esac
