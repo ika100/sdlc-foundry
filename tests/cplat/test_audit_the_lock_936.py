@@ -12,6 +12,7 @@ import subprocess
 import pytest
 
 import core
+from waiting import with_prelude
 
 TEMPLATES = core.PLATFORM_ROOT / "templates"
 PYTHON = ["service-python", "library-python"]
@@ -54,7 +55,7 @@ def run(template, tmp_path, *args):
         shutil.copy(TEMPLATES / template / "scripts" / f, work / "scripts" / f)
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    (bindir / "uv").write_text(UV)
+    (bindir / "uv").write_text(with_prelude(UV))
     (bindir / "uv").chmod((bindir / "uv").stat().st_mode | stat.S_IEXEC)
     log = tmp_path / "uv.log"
     env = {
