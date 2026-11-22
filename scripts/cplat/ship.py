@@ -195,6 +195,7 @@ def describe(st: dict, repo: Path | None = None, next: bool = True) -> str:  # n
     if st.get("answers"):
         lines.append(f"  answer from the {st['answers'][-1].get('from') or 'system ship'}: {st['answers'][-1]['text']}")
     if repo is not None:
+        lines += resume_lines(repo, st)
         lines += units.describe_lines(repo)
     if next:
         lines.append(f"next: {next_step(st)}")
@@ -249,6 +250,7 @@ def start(repo: Path, ref: str, merge: bool | None, take_over: bool = False, pro
         say(f"resuming the escalated run of {sp.id} (phase {st['phase']}) from its archived state")
     if st and st["spec"] == sp.id:
         if st.get("escalated"):                # spec 087: a resumed escalated run is a new run
+            st["resumed_from"] = {"reason": st["escalated"], "cause": st.get("cause")}   # #856: re-check it, never repeat it
             old = st.get("run_id")
             st["run_id"] = runs.start("ship", repo=runs.repo_slug(repo), spec=st["spec"], resumes=old,
                                       parent=link["run_id"] if link else None)
@@ -395,6 +397,8 @@ def set_phase(repo: Path, phase: str) -> dict:
     if phase not in PHASES:
         raise PlatformError(f"unknown phase '{phase}'", hint="one of " + ", ".join(PHASES))
     st = require_state(repo)
+    if st.get("phase") != phase:
+        st.pop("resumed_from", None)           # #856: the run moved on from where the escalation stopped it
     st["phase"] = phase
     save_state(repo, st)
     if phase == "build":
@@ -451,6 +455,13 @@ def escalate(repo: Path, reason: str, cause: str | None = None, *, command: str 
              questions: list[str] | None = None) -> dict:
     st = require_state(repo)
     report = report if report is not None else []
+    if (prev := st.get("resumed_from")) and reason.strip() == str(prev.get("reason") or "").strip() and \
+            (stale := verification_stale(repo, st["spec"])):
+        raise PlatformError(f"the run was resumed after this escalation, and verification.md is {stale} commit(s) older than HEAD: "
+                            "it was not checked again",
+                            hint=f"re-run the reviewer (/component:verify {st['spec']}), commit verification.md, and read the current "
+                                 "checks (cplat pr wait <pr>); escalate again only if they still fail")
+    st.pop("resumed_from", None)
     cause, message = _coerce_cause(cause)
     if message:
         report.append(message)
@@ -501,6 +512,29 @@ def revive_escalated(repo: Path, spec_id: str) -> dict | None:
     if old_units.is_file() and not uf.is_file():
         old_units.rename(uf)
     return st
+
+
+def verification_stale(repo: Path, spec_id: str) -> int:
+    """#856: how many commits HEAD is ahead of the last commit of the spec's verification.md (0: current, or none)."""
+    rel = f"docs/specs/{spec_id}/verification.md"
+    last = run(["git", "log", "-1", "--format=%H", "--", rel], cwd=repo, check=False).stdout.strip()
+    if not last:
+        return 0
+    count = run(["git", "rev-list", "--count", f"{last}..HEAD"], cwd=repo, check=False).stdout.strip()
+    return int(count) if count.isdigit() else 0
+
+
+def resume_lines(repo: Path, st: dict) -> list[str]:
+    """#856: after a resume, the escalation it resolved and what to check again before judging the run (current evidence only)."""
+    prev = st.get("resumed_from")
+    if not prev:
+        return []
+    out = [f"  resumed after: {prev.get('reason')} — the resume resolved it: check again, never repeat it",
+           "  re-check: the current checks" + (f" (cplat pr wait {st['pr']})" if st.get("pr") else "") + ", not the earlier result"]
+    if stale := verification_stale(repo, st["spec"]):
+        out.append(f"  verification.md is {stale} commit(s) older than HEAD: stale; re-run the reviewer (/component:verify) "
+                   "before reading its result")
+    return out
 
 
 def finish(repo: Path) -> Path:
@@ -2265,6 +2299,8 @@ def start_plain(repo: Path, ns: argparse.Namespace) -> int:
     if st["phase"] in ("plan", "build", "pr"):
         say(on_branch(repo, st["branch"]))
     print(describe(st))
+    if again := resume_lines(repo, st):     # #856: right where the resumed session starts
+        print("\n".join(again))
     if line := budget.limits_line(st.get("run_id")):
         print(line)
     if unit := (ns.unit or os.environ.get("CPLAT_UNIT")):
