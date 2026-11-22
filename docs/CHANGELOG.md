@@ -6,6 +6,16 @@ Format: each section lists changes for a tagged release. Plugin and template ver
 
 ## [Unreleased]
 
+## [5.28.1] - 2026-11-22
+
+### Fixed
+
+**The Python audit checks what `uv.lock` pins, not the environment it runs in (#936).** `devbox run audit` and `devbox run deps-findings` in the Python service and library templates ran `uv run pip-audit` with no requirements, which audits the Python that runs it. When the venv lacked the dev extra (devbox's `uv sync` failing quietly on a bad network), devbox's own pip-audit audited its own Python and reported setuptools and urllib3 versions the repo never locks; no pin could clear that, and in journey 25 it held a ship for most of two hours. Both recipes now export the lock (`uv export --frozen --no-hashes --no-emit-project --all-extras`) and run `pip-audit -r <export> --no-deps --disable-pip` on it. **Action:** existing Python repos get it with `/platform:update`.
+
+**The deploy wait no longer reads READY over a pod that cannot start (#937).** A SeaweedFS bucket's `Seaweed` resource has no Argo CD health check, so its app read Synced/Healthy while its pod sat in `ImagePullBackOff`, and `cplat system wait` ended READY with no working backups (journey 25). A database or add-on app that reads Healthy now keeps the wait behind while one of its pods is stuck (pull failure or crash loop), named on its progress line from the first poll; a missing image is RED after 60 s as in #925. An environment with `observability: {ui: lgtm}` also looks at the cluster's shared Grafana app (`operator-lgtm`): a stuck Grafana pod never holds the wait, but READY is followed by `WARNING: operator-lgtm (shared by the cluster) is not ready: …` naming the pod and its pull error. `unexpected EOF` now counts as a network cause of a failing pull.
+
+**A repository's checks no longer see cplat's own Python environment (#941).** `cplat validate run` and `cplat quiet` ran a repo's `devbox run` commands with cplat's `VIRTUAL_ENV` and that environment's `bin` first on `PATH`, both set by `uv run` for cplat itself. Every Python check log began with uv's mismatch warning, and in journey 25 a headless ship's checks imported packages from outside the project venv. `core.repo_env()` now drops them when they are cplat's own environment; another active virtualenv is left alone.
+
 ## [5.28.0] - 2026-11-21
 
 ### Changed
