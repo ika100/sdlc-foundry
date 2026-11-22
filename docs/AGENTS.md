@@ -200,7 +200,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `tester` | sonnet | Vitest + Testing Library, Playwright when enabled |
 | `deployment` | sonnet | Standalone-output Dockerfile and CI (image only) |
 | `observability` | sonnet | `/api/metrics`, OpenTelemetry instrumentation, alerts |
-| `release` | sonnet | `package.json` version, CHANGELOG, release PR |
+| `release` | sonnet | `package.json` version (a library: none, the tag is its version), CHANGELOG, release PR |
 
 ### `svc-java` plugin (`service-java`)
 
@@ -222,7 +222,7 @@ The spec formats (`spec.md`, `design.md`, `plan.md`, `verification.md`, test tag
 | `observability` | sonnet | slog + Prometheus client_golang |
 | `release` | sonnet | CHANGELOG + PR; version is the git tag |
 
-### `svc-ts` plugin (`service-typescript`)
+### `svc-ts` plugin (`service-typescript`, `library-typescript`)
 
 | Agent | Model | Job |
 |---|---|---|

@@ -63,7 +63,7 @@ system.yaml (every value explicit and reviewable; the model is described in docs
   components:
     todo-api:
       type: service                  # service | website | library, required with lang
-      lang: python                   # python | java | go | typescript (service or website) | unknown (migrated 4.x entries)
+      lang: python                   # python | java | go | typescript (service, website or library) | unknown (migrated 4.x entries)
       repo: org/todo-api             # where the image is built
       image: ghcr.io/org/todo-api    # no tag: the tag is pinned in the overlay (dev: latest)
       port: 8080
@@ -177,7 +177,8 @@ TOP_KEYS = ["system", "owner", "environments", "components", "apis", "resources"
 ENV_KEYS = ["host", "url", "policy", "promote", "observability", "operators", "backup", "autonomy", "cluster"]
 # Valid type/lang pairs (the languages of shapes.yml); service/unknown is what the migration writes for a 4.x entry without a known shape.
 VALID_PAIRS = [("service", "python"), ("service", "java"), ("service", "go"), ("service", "typescript"), ("website", "typescript"),
-               ("library", "python"), ("service", "unknown")]
+               ("library", "python"), ("library", "typescript"),
+               ("service", "unknown")]
 PAIR_TEXT = ", ".join(f"{t}/{lang}" for t, lang in VALID_PAIRS if lang != "unknown")
 COMMON_KEYS = ["type", "lang", "repo"]
 SERVICE_KEYS = [*COMMON_KEYS, "image", "port", "probes", "user", "volumes", "env", "secretRefs", "secrets", "replicas", "resources",
