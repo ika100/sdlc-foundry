@@ -28,6 +28,7 @@ TEST_FAST: dict[str, tuple[list[str], str]] = {
     "library-python": (["tests/**/test_*.py", "tests/**/*_test.py"], "paths"),
     "web-nextjs": (["tests/**/*.test.ts", "tests/**/*.test.tsx"], "paths"),
     "service-typescript": (["tests/**/*.test.ts"], "paths"),
+    "library-typescript": (["tests/**/*.test.ts"], "paths"),
     "service-go": (["**/*_test.go"], "go"),
     "service-java": (["src/test/**/*Test.java", "src/test/**/Test*.java", "src/test/**/*Tests.java",
                       "src/test/**/*TestCase.java"], "java"),

@@ -223,6 +223,29 @@ shapes:
     status: stable
     adr: [124]
 
+  - id: library-typescript
+    plugin: svc-ts
+    template: library-typescript
+    deployable: false
+    test_globs: ["tests/**/*.ts"]   # where `cplat spec trace` looks for AC ids (ADR-026)
+    ci_checks: ["quality (eslint + tsc)", "test (vitest + coverage)", "security (pnpm audit + detect-secrets)", "ci-extra"]   # required on main by new-service (spec 054)
+    validation:   # spec 103: what `cplat validate` selects and which changes always run the full tests and security
+      selector: vitest
+      mandatory:
+        public-api: ["src/index.ts", "package.json", "tsconfig*.json"]
+    library: true
+    publish:   # spec 215 / ADR-125: the release tag's `publish` job publishes @<owner>/<repo> to npm.pkg.github.com
+      registry: github-npm
+    detection:
+      copier_src: templates/library-typescript
+      sniff:
+        - "package.json contains neither \"next\" nor \"fastify\""
+    default_stack:
+      language: typescript
+      runtime: node-lts
+    status: stable
+    adr: [124, 125]
+
   - id: platform
     plugin: svc
     template: null          # no template: the platform repo is never created, adopted, updated or rolled out from one (ADR-056)

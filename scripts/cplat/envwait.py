@@ -276,6 +276,15 @@ class Pins:
         return self.cache[key] or t.tag
 
 
+def _retry_note(op: dict) -> str:
+    """Why a sync that Argo CD retries has not landed (#849): the last failure and the retry count, or ''."""
+    retries = op.get("retryCount")
+    retries = retries if isinstance(retries, int) else 0
+    if op.get("phase") != "Running" or not (retries or op.get("message")):
+        return ""
+    return f" (last sync failed: {op.get('message') or 'no message'}; Argo CD retries" + (f", attempt {retries}" if retries else "") + ")"
+
+
 def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None, archive=None) -> tuple[str, str, str]:
     """(kind: reached | behind | retrying | red, the progress line, what it waits for or why it is red). `retrying` is a
     ComparisonError with a network cause (#506): it waits like `behind` and turns RED at the timeout. `archive(t, st)` says why a
@@ -311,9 +320,9 @@ def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None, arch
             return "behind", line, pending
         return "red", line, "health Degraded" + (f": {health['message']}" if health.get("message") else "")
     if t.component and tag and not _matches(images, tag):
-        return "behind", line, f"waiting for image {waits.tag_short(tag)}, runs {', '.join(images) or 'nothing'}"
+        return "behind", line, f"waiting for image {waits.tag_short(tag)}, runs {', '.join(images) or 'nothing'}" + _retry_note(op)
     if (sync, hstatus) != ("Synced", "Healthy"):
-        return "behind", line, f"{sync}/{hstatus}"
+        return "behind", line, f"{sync}/{hstatus}" + _retry_note(op)
     return "reached", line, ""
 
 
