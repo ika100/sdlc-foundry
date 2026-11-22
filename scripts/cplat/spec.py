@@ -15,6 +15,7 @@ import functools
 import hashlib
 import itertools
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -1794,6 +1795,12 @@ def main(argv: list[str]) -> int:
         if not ns.approve:
             print("ERROR: --approve needs the files the user approved", file=sys.stderr)
             return 2
+        if os.environ.get("CPLAT_HEADLESS") == "1" or os.environ.get("CPLAT_UNIT"):
+            # #983: no user reads an unattended session, so an approval there is relayed, never the user's own
+            print("ERROR: an unattended session cannot approve a test change: only the user approves it\n"
+                  "  fix: escalate with cause decision and no suggested answer; the session the user talks to records their "
+                  "approval in the clone", file=sys.stderr)
+            return 1
         for f, digest in approve_test_change(root, ns.base, ns.approve, ns.reason).items():
             print(f"{f}: approved by the user at sha256 {digest[:12]}")
         try:  # the run record's `approved_test_diffs` (spec 133's PR block reads it); never changes the result
