@@ -60,7 +60,7 @@ _EXPLAIN: dict[str, dict] = {
     },
     "Plan": {
         "what": "The architect splits the approved spec into tasks (and repo slices for a system spec), with the files and order of each.",
-        "agents": ["svc:architect"],
+        "agents": ["web:ux-designer (website specs that change what a user sees)", "svc:architect"],
         "commands": ["/component:plan", "/system:plan"],
         "decision": None,
     },

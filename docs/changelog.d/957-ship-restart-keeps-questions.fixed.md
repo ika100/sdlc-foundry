@@ -1,0 +1,1 @@
+- Starting an escalated `/system:ship` run again keeps a repo that escalated with questions escalated, with its questions, so `next` asks `answer` again and `repo resume --answer` takes the user's answer; before, the restart dropped the questions and the repo rebuilt without the answer (#957). System plugin 1.24.3.
