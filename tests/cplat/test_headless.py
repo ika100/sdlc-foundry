@@ -3,7 +3,6 @@ import datetime as dt
 import json
 import stat
 import subprocess
-import time
 
 import pytest
 
@@ -139,8 +138,7 @@ def test_no_session_starts_inside_the_quiet_window(repo, tmp_path, monkeypatch, 
     waited = []
 
     def sleep(s):
-        if s == headless.GUARD_POLL:      # #939: the guard polls while the fake session is still exiting (slow under load)
-            time.sleep(0.05)
+        if s == headless.GUARD_POLL:      # #939: under load the guard polls while the fake session still runs: not a window wait
             return
         waited.append(s)
         t["now"] += dt.timedelta(seconds=s)
