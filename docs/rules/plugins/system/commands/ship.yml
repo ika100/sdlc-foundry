@@ -24,7 +24,7 @@ rules:
     class: practice
     source: spec 141
   - id: R14
-    text: "one repo's decision need not wait for another's build, and only a suggested answer is one the user approved with the spec."
+    text: "one repo's decision need not wait for another's build, and only the user approves answers (suggested ones in the spec)."
     class: experience
     source: "#684"
   - id: R8

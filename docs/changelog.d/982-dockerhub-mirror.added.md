@@ -1,0 +1,1 @@
+- `devbox run cluster-up` takes `DOCKERHUB_MIRROR`, the URL of a Docker Hub pull-through cache. A new local cluster then pulls docker.io images through it, so a flaky network costs one pull instead of one per cluster. Unset, nothing changes.

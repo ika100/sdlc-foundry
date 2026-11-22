@@ -35,7 +35,12 @@ def test_the_text_and_json_pin_counts_agree_ac_180_4(capsys):  # AC-180.4
     assert f"{json.loads(js)['counts']['interface_pins']} interface pins" in text
 
 
-def test_spec_check_stays_green_ac_180_4(capsys):  # AC-180.4
+def test_spec_check_stays_green_ac_180_4(capsys, monkeypatch):  # AC-180.4
+    import refscan
+    # #826: this commit's own rules only; a number another pushed branch or open PR also uses is the author's `spec check`
+    # finding, and depends on which branches happen to exist when the test runs
+    monkeypatch.setattr(refscan, "other_branches", lambda *a, **k: {})
+    monkeypatch.setattr(refscan, "open_pr_paths", lambda *a, **k: {})
     rc, out = run(capsys, "spec", "check")
     assert rc == 0, out
 
