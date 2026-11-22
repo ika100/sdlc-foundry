@@ -27,14 +27,18 @@ Print its output verbatim.
 5. If `plan.md` exists and any task has `done: true`, the spec is partly built: ask before re-planning (task progress is lost).
 6. `SPEC_HASH=$(cplat spec hash <id>)`. Build `<project-map>` (`ls -d */` without dot and dependency directories).
 
-## 2. Architect
+## 2. UX design
 
-**architect** agent (`agents.architect`, or `svc:architect`; in the foreground, `run_in_background: false`), prompt: `SPEC_DIR: docs/specs/<spec_id>/`, `SHAPE`, `SPEC_HASH`, `<project-map>`, and "read the spec and the code, write design.md if warranted and plan.md, follow the spec-format references; create ADRs with `cplat adr add`".
+Routing with `agents.ux-designer` (a website): `cplat spec ux <id> --json`. `needed` → **ux-designer** agent (foreground), prompt: `SPEC_DIR`, `SPEC_HASH`, `<project-map>`; its `BLOCKERS` stop as the architect's do, and `cplat spec check <id>` errors go back to it once. `none` or `done` → go on.
+
+## 3. Architect
+
+**architect** agent (`agents.architect`, or `svc:architect`; in the foreground, `run_in_background: false`), prompt: `SPEC_DIR: docs/specs/<spec_id>/`, `SHAPE`, `SPEC_HASH`, `<project-map>`, `UX: <SPEC_DIR>/ux.md` when it exists, and "read the spec and the code, write design.md if warranted and plan.md, follow the spec-format references; create ADRs with `cplat adr add`".
 
 - `BLOCKERS` other than `none` → stop. Show them and recommend `/component:spec --amend <NNN> <answers>`; the plan is not committed.
 - `cplat spec check <id>`. On errors, send them verbatim to the architect (at most 2 rounds); if they persist, stop and show them.
 
-## 3. Commit and show
+## 4. Commit and show
 
 Commit `docs/specs/<spec_id>/` and `docs/adr/`: `docs(plan): <spec_id> — <n> tasks`.
 

@@ -13,6 +13,7 @@ Every wait asks Argo CD for a hard refresh of each app not yet at the revision w
 InvalidImageName or CrashLoopBackOff longer than 60 s is RED at once, naming pod, reason, image and the last event (#867), except an
 image tag not in the registry while the component's CI run on main is queued or running (#892: it builds that image; one
 `gh run list`, asked again at most once a minute while it runs, and 5 more minutes for the kubelet's pull back-off after it passed).
+The pods of an external Helm entry's child Application (`<svc>-<env>-chart`) are read in that child's destination namespace (#883).
 The pods of a database or other add-on app (pods named after one of its resources: a CloudNativePG cluster's instance and initdb
 pods, a bucket's pods) in one of those states longer than 60 s are named on the app's progress line (#925): a missing tag or
 manifest (or an invalid image name) is RED as for a component; a pull failing on the network reads "image pull failing: <cause>"
@@ -276,6 +277,15 @@ class Pins:
         return self.cache[key] or t.tag
 
 
+def _retry_note(op: dict) -> str:
+    """Why a sync that Argo CD retries has not landed (#849): the last failure and the retry count, or ''."""
+    retries = op.get("retryCount")
+    retries = retries if isinstance(retries, int) else 0
+    if op.get("phase") != "Running" or not (retries or op.get("message")):
+        return ""
+    return f" (last sync failed: {op.get('message') or 'no message'}; Argo CD retries" + (f", attempt {retries}" if retries else "") + ")"
+
+
 def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None, archive=None) -> tuple[str, str, str]:
     """(kind: reached | behind | retrying | red, the progress line, what it waits for or why it is red). `retrying` is a
     ComparisonError with a network cause (#506): it waits like `behind` and turns RED at the timeout. `archive(t, st)` says why a
@@ -311,9 +321,9 @@ def judge(t: Target, st: dict | None, wanted: str, at, ctx: str, pins=None, arch
             return "behind", line, pending
         return "red", line, "health Degraded" + (f": {health['message']}" if health.get("message") else "")
     if t.component and tag and not _matches(images, tag):
-        return "behind", line, f"waiting for image {waits.tag_short(tag)}, runs {', '.join(images) or 'nothing'}"
+        return "behind", line, f"waiting for image {waits.tag_short(tag)}, runs {', '.join(images) or 'nothing'}" + _retry_note(op)
     if (sync, hstatus) != ("Synced", "Healthy"):
-        return "behind", line, f"{sync}/{hstatus}"
+        return "behind", line, f"{sync}/{hstatus}" + _retry_note(op)
     return "reached", line, ""
 
 
@@ -360,7 +370,8 @@ class PollReads:
 class PodWatch:
     """Whether a pod of the version a wait expects is stuck: a container waiting in one of POD_FAILURES for more than
     POD_FAIL_AFTER seconds (seen during this wait, or since the pod started). `get` runs kubectl with the wait's context,
-    `clock` is the wait's clock. Reads nothing when the app names no namespaced workload; a kubectl error reads as no pods."""
+    `clock` is the wait's clock. Reads nothing when the app names no namespaced workload or child Application; a kubectl error
+    reads as no pods."""
 
     def __init__(self, get, clock):
         self.get, self.clock, self.first = get, clock, {}
@@ -368,7 +379,7 @@ class PodWatch:
     def __call__(self, status: dict, wanted, building=None) -> str | None:
         """`building()` (optional) is the state of the CI run that builds the image: "building", "built" (it passed after it was
         seen building) or None (no run builds it, or it failed). A missing image tag is not stuck while it builds (#892)."""
-        for ns in _namespaces(status):
+        for ns in self._spaces(status):
             for pod in self._pods(ns):
                 why = self._stuck(ns, pod, wanted, building)
                 if why:
@@ -401,6 +412,18 @@ class PodWatch:
                         return "waiting", f"image pull failing: {reason} ({where})"
                     return "waiting", where
         return None
+
+    def _spaces(self, status: dict) -> list[str]:
+        """The namespaces of the app's workloads and (#883) the destination namespace of each child Application it manages (an
+        external Helm entry's `<svc>-<env>-chart`, one level): the chart's pods run there."""
+        spaces = set(_namespaces(status))
+        for r in status.get("resources") or []:
+            if r.get("kind") == "Application" and r.get("group") == "argoproj.io" and r.get("name"):
+                child = _json(self.get(["-n", r.get("namespace") or "argocd", "get", "application", str(r["name"]), "-o", "json"]))
+                ns = ((child.get("spec") or {}).get("destination") or {}).get("namespace")
+                if ns:
+                    spaces.add(str(ns))
+        return sorted(spaces)
 
     def _pods(self, ns: str) -> list[dict]:
         return [p for p in _json(self.get(["-n", ns, "get", "pods", "-o", "json"])).get("items") or [] if isinstance(p, dict)]
