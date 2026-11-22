@@ -1,0 +1,1 @@
+**The failure excerpt of a red CI check no longer ends in the runner's cleanup (#887).** The last lines of a failed job were mostly `actions/checkout`'s post-job `git config` cleanup, so the real error was cut off; the excerpt now leaves out the post-job steps and shows the failing step's last lines.

@@ -76,7 +76,10 @@ def check_gh() -> list[dict]:
 def check_docker() -> list[dict]:
     if not shutil.which("docker"):
         return []
-    p = run(["docker", "info", "--format", "{{.ServerVersion}}"], check=False, timeout=15)
+    try:
+        p = run(["docker", "info", "--format", "{{.ServerVersion}}"], check=False, timeout=15)
+    except core.PlatformError:            # #879: a daemon that does not answer is a warning, not a doctor crash
+        return [check(WARN, "docker daemon", "no answer within 15 s", "restart Docker Desktop   (needed for image builds and cluster-up)")]
     if p.returncode == 0:
         return [check(OK, "docker daemon", f"running (server {p.stdout.strip()})")]
     return [check(WARN, "docker daemon", "not running", "open -a Docker   (needed for image builds and cluster-up)")]

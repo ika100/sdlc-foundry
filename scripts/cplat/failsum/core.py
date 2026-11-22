@@ -225,9 +225,14 @@ def build_check(name: str, command: str, exit_code: str, log: str, lines: list[s
                  max(reported) if reported and entries else None, _tail_of(lines), len(raw))
 
 
+def _runner_step(step: str | None) -> bool:
+    """#887: the runner's own steps after the job (checkout's `git config` cleanup, orphan processes) hide the real error."""
+    return bool(step) and (step.startswith("Post ") or step == "Complete job")
+
+
 def ci_check(c: CiCheck, ctx: Context, parsers) -> Check:
     log = str(c.log) if c.log is not None else f"none ({c.no_log or f'not a GitHub Actions run: {c.link}'})"
-    lines, step, code = [], None, "?"
+    lines, step, code, post = [], None, "?", False
     for ln in clean_lines(c.text or ""):
         m = _CI_PREFIX.match(ln)
         if m:
@@ -235,6 +240,9 @@ def ci_check(c: CiCheck, ctx: Context, parsers) -> Check:
             col = m.group("step")
         else:
             col = None
+        post = post or ln.startswith("Post job cleanup.")   # a job's own log has no step column: the cleanup runs to its end
+        if post or _runner_step(col):
+            continue
         if ln.startswith(("##[group]", "##[endgroup]")):
             continue
         if ln.startswith("##[error]"):

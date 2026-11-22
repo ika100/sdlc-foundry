@@ -1,0 +1,1 @@
+- `cplat spec test-diff --approve` refuses in an unattended session (`CPLAT_HEADLESS`, a ship unit). Only the user approves a change to an acceptance test, and no user reads an unattended session, so an answer relayed there can no longer be recorded as the user's approval (#983).
