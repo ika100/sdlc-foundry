@@ -1,7 +1,7 @@
 ---
 spec_id: 213-library-releases-publish-their-package
 title: Library releases publish their package
-status: approved
+status: done
 priority: P1
 shape: platform
 ---
@@ -56,3 +56,5 @@ none
 - 2026-11-21 created
 - 2026-11-21 priority P1 proposed: P1: normal bug or feature
 - 2026-11-21 approved
+- 2026-11-21 building: merged in #889
+- 2026-11-21 done: merged in #889

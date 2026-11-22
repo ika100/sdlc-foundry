@@ -195,7 +195,9 @@ Items specified in the PRD but not built are listed after the table, so the gaps
 | [208-test-runs-leave-the-developer-s-disk-as](specs/208-test-runs-leave-the-developer-s-disk-as/spec.md) — Test runs leave the developer's disk as they found it | P1 | done | 7 | #810, #811 |
 | [210-the-dispatcher-paces-work-by-the](specs/210-the-dispatcher-paces-work-by-the/spec.md) — The dispatcher budgets by plan limits or by cost | P1 | done | 10 |  |
 | [212-local-tests-run-what-a-change-can-affect](specs/212-local-tests-run-what-a-change-can-affect/spec.md) — Local tests run what a change can affect | P1 | done | 9 |  |
+| [213-library-releases-publish-their-package](specs/213-library-releases-publish-their-package/spec.md) — Library releases publish their package | P1 | done | 8 |  |
 | [214-a-typescript-service-shape](specs/214-a-typescript-service-shape/spec.md) — A TypeScript service shape | P1 | done | 11 | #716 |
+| [215-a-typescript-library-shape](specs/215-a-typescript-library-shape/spec.md) — A TypeScript library shape | P1 | done | 11 | #717 |
 | [005-report-a-platform-problem-without](specs/005-report-a-platform-problem-without/spec.md) — Report a platform problem without leaking secrets | P2 | done | 3 |  |
 | [026-guard-rails-before-merge-and-in-the](specs/026-guard-rails-before-merge-and-in-the/spec.md) — Guard rails before merge and in the cluster | P2 | done | 2 |  |
 | [036-plans-are-approved-before-they-are-built](specs/036-plans-are-approved-before-they-are-built/spec.md) — Plans are approved before they are built | P2 | superseded | 4 |  |
