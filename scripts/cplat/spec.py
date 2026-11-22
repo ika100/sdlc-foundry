@@ -295,6 +295,8 @@ def check(spec: Spec, *, require: str | None = None, shape: str | None = None) -
     if "explored" in meta and not isinstance(meta["explored"], bool):
         errs.append("spec.md: explored must be true or false")
     errs += envlimit.field_errors(meta)          # spec 190: the environments the spec's behaviour may run in
+    import spec_ux
+    errs += spec_ux.field_errors(meta) + spec_ux.file_errors(spec)   # spec 219: the ux field and ux.md
     known = {s["id"] for s in core.registry.load_all()}
     if meta.get("shape") and meta["shape"] not in known:
         errs.append(f"spec.md: unknown shape '{meta['shape']}' (valid: {', '.join(sorted(known))})")
@@ -1584,6 +1586,8 @@ def main(argv: list[str]) -> int:
     p.add_argument("--all", action="store_true", help="include done and superseded")
     p.add_argument("--json", action="store_true")
     p.add_argument("--detail", action="store_true", help="with --json: criteria, questions, check, slices (spec 122)")
+    import spec_ux
+    spec_ux.add_parser(sub)
     p = sub.add_parser("publish", help="push the spec's branch and open or update its draft PR; ask the owner to review (spec 122)")
     p.add_argument("id")
     p.add_argument("--json", action="store_true")
@@ -1661,6 +1665,9 @@ def main(argv: list[str]) -> int:
             if w := size_warning(s):
                 print(f"WARNING: {s.id}: {w}")
         return _print_errors(results)
+    if ns.cmd == "ux":
+        import spec_ux
+        return spec_ux.run(root, ns.id, ns.json)
     if ns.cmd == "adr-next":
         import adr
         print(f"{adr.next_number(root, with_prs=not ns.offline):03d}")

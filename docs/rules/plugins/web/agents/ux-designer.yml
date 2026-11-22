@@ -1,0 +1,13 @@
+rules:
+  - id: R1
+    text: "Design only what the active criteria need, because a screen no criterion asks for is scope the user did not approve."
+    class: practice
+    source: spec 219
+  - id: R2
+    text: "Never change `spec.md` or its criteria, since a change needs a new approval; a criterion you cannot design goes to `BLOCKERS`."
+    class: practice
+    source: ADR-026
+  - id: R3
+    text: "Name only active criterion ids, since `cplat spec check` rejects any other id."
+    class: practice
+    source: spec 219

@@ -277,7 +277,7 @@ def test_plan_asks_cplat_and_designs_before_the_architect():  # AC-219.9
     ux_step = next(i for i, h in enumerate(heads) if "UX" in h)
     architect = next(i for i, h in enumerate(heads) if "Architect" in h)
     assert ux_step < architect
-    assert "agents.ux-designer" in (ROOT / PLAN).read_text()   # interface: the routing key the step is gated on
+    assert "agents.ux-designer" in (ROOT / PLAN).read_text()
 
 
 # ---------------- AC-219.10: build and review ----------------
