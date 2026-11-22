@@ -1,0 +1,1 @@
+- When an approved amendment sets a repo spec's `plan.md` aside, the ship units open the plan again, together with the done task and verification units built on it. Before, the next unit was `verification` with no plan (#984).
