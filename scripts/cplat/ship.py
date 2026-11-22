@@ -503,6 +503,16 @@ def revive_escalated(repo: Path, spec_id: str) -> dict | None:
     return st
 
 
+SIDE_ACTION = re.compile(r"/issue:report|\bcplat feedback\b|\b(?:file|open|raise|create|report)\b.{0,30}\b(?:issue|bug)\b",
+                         re.I | re.S)    # #987: a suggestion that only files something
+
+
+def side_action(question: str) -> bool:
+    """#987: the question's suggested answer is only a side action (filing an issue), which decides nothing."""
+    options = specmod._question(question)["options"]
+    return bool(options) and bool(SIDE_ACTION.search(options[0]))
+
+
 def finish(repo: Path) -> Path:
     f = state_path(repo)
     st = require_state(repo)
@@ -2410,6 +2420,11 @@ def main(argv: list[str]) -> int:
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "escalate":
+        if side := next((q for q in ns.question or [] if side_action(q)), None):
+            print(f"ERROR: the suggested answer of '{side}' is a side action, not an answer: it decides nothing, so the same stop "
+                  "comes back after the resume", file=sys.stderr)
+            print("  fix: suggest the decision itself (suggested: <what to do>); file an issue as a separate step", file=sys.stderr)
+            return 2
         evidence = ""
         if ns.evidence_file:
             try:
