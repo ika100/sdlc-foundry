@@ -59,6 +59,9 @@
 #                        image is the rendered one, else the versions table's default major; a failed pull is logged, never fatal (#925).
 #   REGISTRY_PORT        also create a local image registry reachable as localhost:<port> from the host and as
 #                        k3d-<cluster>-registry:<port> from the cluster
+#   DOCKERHUB_MIRROR     URL of a Docker Hub pull-through cache the nodes pull docker.io images through (for example
+#                        http://host.k3d.internal:5050 for `docker run -d -p 5050:5000 -e REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io
+#                        registry:2`); applies when the cluster is created. Unset: the nodes pull from Docker Hub directly.
 # With Argo CD, External Secrets, Kyverno and the LGTM stack come from operators/apps/<name>.yaml (applied from operators/root.yaml) when
 # that file exists; otherwise (or with WITH_ARGO=0) this script installs them itself.
 # Re-running `up` is safe; it re-applies credentials and the root Application.
@@ -351,7 +354,15 @@ case "${1:-up}" in
       if [ "$with_metrics" = 1 ]; then   # WITH_METRICS_SERVER=1: one metrics source, the pinned metrics-server, not k3s' bundled one
         create_args+=(--k3s-arg "--disable=metrics-server@server:*")
       fi
+      mirror_file=""
+      if [ -n "${DOCKERHUB_MIRROR:-}" ]; then   # Docker Hub pulls through a cache: a flaky network costs one pull, not one per cluster
+        mirror_file="$(mktemp)"
+        printf 'mirrors:\n  "docker.io":\n    endpoint:\n      - "%s"\n' "$DOCKERHUB_MIRROR" > "$mirror_file"
+        create_args+=(--registry-config "$mirror_file")
+        echo "Docker Hub images: through $DOCKERHUB_MIRROR"
+      fi
       k3d cluster create "$name" "${create_args[@]}"
+      if [ -n "$mirror_file" ]; then rm -f "$mirror_file"; fi
     fi
     prepull_postgres || true   # #925: off the first database's critical path, never fatal
 
