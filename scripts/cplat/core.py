@@ -144,8 +144,16 @@ def run_renderer(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 def repo_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """os.environ without any CPLAT_* variable, then `extra` (which may set CPLAT_* on purpose, e.g. CPLAT_REPEAT_RUN).
-    A repository's own commands must not see the variables of the run that started them (spec 178)."""
-    return {**{k: v for k, v in os.environ.items() if not k.startswith("CPLAT_")}, **(extra or {})}
+    A repository's own commands must not see the variables of the run that started them (spec 178), nor cplat's own Python
+    environment (#941): its VIRTUAL_ENV and that environment's bin on PATH, which `uv run` set for cplat."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CPLAT_")}
+    venv = env.get("VIRTUAL_ENV")
+    if venv and os.path.realpath(venv) == os.path.realpath(sys.prefix):
+        del env["VIRTUAL_ENV"]
+        env.pop("VIRTUAL_ENV_PROMPT", None)
+        own = os.path.realpath(os.path.join(venv, "bin"))
+        env["PATH"] = os.pathsep.join(d for d in env.get("PATH", "").split(os.pathsep) if os.path.realpath(d) != own)
+    return {**env, **(extra or {})}
 
 
 def run(cmd: list[str], *, cwd: Path | str | None = None, check: bool = True, capture: bool = True,
