@@ -24,7 +24,7 @@ COPIES: list[tuple[Path, Path]] = [
      TEMPLATES / "library-python" / "scripts" / "pytest_limit" / "platform_test_limit.py"),   # spec 197
 ] + [
     (APP / "gate.sh", TEMPLATES / t / "scripts" / "gate.sh")
-    for t in ("cluster-gitops", "service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript")
+    for t in ("cluster-gitops", "service-python", "library-python", "service-go", "service-java", "web-nextjs", "service-typescript", "library-typescript")
 ]
 
 
