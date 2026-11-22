@@ -1,0 +1,1 @@
+**A RED `cplat pr wait` names the run of each red check and the command that reruns it (#880).** A push can start sibling runs of one workflow, so `gh run list --limit 1` could pick the wrong run for a manual rerun; the report now ends with `run <id> (<checks>): gh run rerun <id> -R <owner/repo> --failed`.
