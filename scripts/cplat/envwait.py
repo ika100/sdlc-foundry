@@ -13,6 +13,7 @@ Every wait asks Argo CD for a hard refresh of each app not yet at the revision w
 InvalidImageName or CrashLoopBackOff longer than 60 s is RED at once, naming pod, reason, image and the last event (#867), except an
 image tag not in the registry while the component's CI run on main is queued or running (#892: it builds that image; one
 `gh run list`, asked again at most once a minute while it runs, and 5 more minutes for the kubelet's pull back-off after it passed).
+The pods of an external Helm entry's child Application (`<svc>-<env>-chart`) are read in that child's destination namespace (#883).
 The pods of a database or other add-on app (pods named after one of its resources: a CloudNativePG cluster's instance and initdb
 pods, a bucket's pods) in one of those states longer than 60 s are named on the app's progress line (#925): a missing tag or
 manifest (or an invalid image name) is RED as for a component; a pull failing on the network reads "image pull failing: <cause>"
@@ -218,11 +219,15 @@ def list_apps(ctx: str) -> dict[str, dict]:
         raise PlatformError(f"cannot read the Argo CD applications of context {ctx}: {e}") from None
 
 
-def resolve_context(repo: Path, explicit: str | None, known: set[str], what: str) -> tuple[str, dict[str, dict]]:
-    """(context, its applications). Without --context the configured or current context must hold one of `known`."""
+def resolve_context(repo: Path, explicit: str | None, known: set[str], what: str,
+                    own: tuple[str, str] | None = None) -> tuple[str, dict[str, dict]]:
+    """(context, its applications). Without --context the configured context, else `own` (the context, source of the
+    environment's cluster), else the current context, which must hold one of `known`."""
     ctx, source = explicit, "--context"
     if not ctx:
         ctx, source = settings.kube_context(repo)
+    if not ctx and own:
+        ctx, source = own                         # #987: the environment's cluster, not whatever context is current
     if not ctx:
         p = kubectl(["config", "current-context"])
         ctx, source = (p.stdout.strip() if p.returncode == 0 else ""), "the current context"
@@ -369,7 +374,8 @@ class PollReads:
 class PodWatch:
     """Whether a pod of the version a wait expects is stuck: a container waiting in one of POD_FAILURES for more than
     POD_FAIL_AFTER seconds (seen during this wait, or since the pod started). `get` runs kubectl with the wait's context,
-    `clock` is the wait's clock. Reads nothing when the app names no namespaced workload; a kubectl error reads as no pods."""
+    `clock` is the wait's clock. Reads nothing when the app names no namespaced workload or child Application; a kubectl error
+    reads as no pods."""
 
     def __init__(self, get, clock):
         self.get, self.clock, self.first = get, clock, {}
@@ -377,7 +383,7 @@ class PodWatch:
     def __call__(self, status: dict, wanted, building=None) -> str | None:
         """`building()` (optional) is the state of the CI run that builds the image: "building", "built" (it passed after it was
         seen building) or None (no run builds it, or it failed). A missing image tag is not stuck while it builds (#892)."""
-        for ns in _namespaces(status):
+        for ns in self._spaces(status):
             for pod in self._pods(ns):
                 why = self._stuck(ns, pod, wanted, building)
                 if why:
@@ -410,6 +416,18 @@ class PodWatch:
                         return "waiting", f"image pull failing: {reason} ({where})"
                     return "waiting", where
         return None
+
+    def _spaces(self, status: dict) -> list[str]:
+        """The namespaces of the app's workloads and (#883) the destination namespace of each child Application it manages (an
+        external Helm entry's `<svc>-<env>-chart`, one level): the chart's pods run there."""
+        spaces = set(_namespaces(status))
+        for r in status.get("resources") or []:
+            if r.get("kind") == "Application" and r.get("group") == "argoproj.io" and r.get("name"):
+                child = _json(self.get(["-n", r.get("namespace") or "argocd", "get", "application", str(r["name"]), "-o", "json"]))
+                ns = ((child.get("spec") or {}).get("destination") or {}).get("namespace")
+                if ns:
+                    spaces.add(str(ns))
+        return sorted(spaces)
 
     def _pods(self, ns: str) -> list[dict]:
         return [p for p in _json(self.get(["-n", ns, "get", "pods", "-o", "json"])).get("items") or [] if isinstance(p, dict)]
@@ -668,7 +686,12 @@ def system_wait(repo: Path, ns: argparse.Namespace, command: str) -> tuple[int, 
     wanted = wanted_revision(repo, ns.revision)
     system, targets, every = env_targets(repo, ns.system, wanted, ns.env, ns.components)
     m = model.load_dir(gitops.find_app(repo, ns.system))
-    ctx, items = resolve_context(repo, envcluster.env_context(repo, m, ns.env, ns.context), every, f"system {system}")
+    cluster = envcluster.cluster_of(m, ns.env)
+    mapped = settings.kube_contexts_with_source(repo).get(cluster) if cluster else None
+    own = (mapped[0], f"kube_contexts of cluster {cluster}, {mapped[1]}") if mapped else None
+    # #987: the root app counts as the system's: while it has a ComparisonError its apps are not generated, and the watch refreshes it
+    ctx, items = resolve_context(repo, envcluster.env_context(repo, m, ns.env, ns.context), every | {f"{system}-root"},
+                                 f"system {system}", own)
     return watch(repo, targets, wanted, ctx, items, f"in {ns.env}", command, ns.refresh, ns.timeout, ns.interval, system)
 
 
