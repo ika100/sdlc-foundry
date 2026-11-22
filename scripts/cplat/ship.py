@@ -66,7 +66,7 @@ QUEUED = {"QUEUED", "PENDING", "WAITING", "REQUESTED"}   # `gh pr checks` states
 # spec 079: log lines of a red job that mean the network or a registry failed, not the change; such a job is rerun once
 TRANSIENT = re.compile(r"Failed to read artifact descriptor|Could not resolve (dependencies|host)|Could not transfer artifact|"
                        r"\b50[234] (Bad Gateway|Service Unavailable|Gateway Time-?out)\b|HTTP (status )?50[234]\b|"
-                       r"invalid response status 429|connection reset|Connection reset by peer|TLS handshake timeout|i/o timeout|ETIMEDOUT|ECONNRESET",
+                       r"invalid response status 429|failed to load cache key|connection reset|Connection reset by peer|TLS handshake timeout|i/o timeout|ETIMEDOUT|ECONNRESET",
                        re.I)
 
 
@@ -537,6 +537,16 @@ def resume_lines(repo: Path, st: dict) -> list[str]:
     return out
 
 
+SIDE_ACTION = re.compile(r"/issue:report|\bcplat feedback\b|\b(?:file|open|raise|create|report)\b.{0,30}\b(?:issue|bug)\b",
+                         re.I | re.S)    # #987: a suggestion that only files something
+
+
+def side_action(question: str) -> bool:
+    """#987: the question's suggested answer is only a side action (filing an issue), which decides nothing."""
+    options = specmod._question(question)["options"]
+    return bool(options) and bool(SIDE_ACTION.search(options[0]))
+
+
 def finish(repo: Path) -> Path:
     f = state_path(repo)
     st = require_state(repo)
@@ -835,6 +845,8 @@ class CheckWatch:
         self.run_workflow: dict[str, str | None] = {}                 # run id → its workflow (database id)
         self.head_runs: list[dict] = []                               # this poll's workflow runs of the head commit
         self.lone_cancelled: set[tuple[str, str]] = set()            # cancelled runs no other run of their workflow replaces
+        self.deferred: set[tuple[str, str]] = set()                  # #931: runs with a transient failure, rerun once complete
+        self.waiting = False                                          # #931: this poll found such a failure
         self.refused: str | None = None                               # spec 102: the budget refused a rerun
         self.refused_checks: list[dict] = []
         self.expected: dict[str, bool] = {}                           # spec 178: check name -> required; {} = no expectation
@@ -1044,6 +1056,7 @@ class CheckWatch:
         no other run of its workflow replaces (#510); returns the rest."""
         final: list[dict] = []
         rerun_now: set[tuple[str, str]] = set()
+        self.waiting = False
         for c in failed:
             r = run_of(c)
             if r and r in rerun_now:
@@ -1063,6 +1076,16 @@ class CheckWatch:
                 rerun_now.add(r)
                 continue
             log = gh(["run", "view", r[1], "-R", r[0], "--log-failed"], cwd=self.repo, check=False)
+            if not log.strip() and run_status(r[0], r[1]) != "completed":
+                # #931: no --log-failed and no rerun before the run completes; the finished job's own log tells transient now
+                job = c["_job_log"] = _job_log(self.repo, r[0], c, "")[0]   # the red brief reuses it
+                if hit := TRANSIENT.search("\n".join(job.splitlines()[-80:])):
+                    if r not in self.deferred:
+                        say(f"  wait     run {r[1]}: {c['name']} failed on a transient error ({hit.group(0)}); "
+                            "rerun once the run completes")
+                    self.deferred.add(r)
+                    self.waiting = True
+                    continue
             hit = TRANSIENT.search("\n".join(log.splitlines()[-80:]))
             if not hit:
                 c["_log_failed"] = log   # spec 108: the red brief reuses this fetch instead of asking gh again
@@ -1091,6 +1114,8 @@ class CheckWatch:
         failed = self._transient([c for c in cs if c.get("bucket") in FAILED and c not in own])
         if failed:
             return "red", cs, failed
+        if self.waiting:                      # #931: a transient failure waits for its run to complete
+            return "pending", cs, []
         own = [c for c in cs if self._own_cancel(c)]
         pending = [c for c in cs if c.get("bucket") == "pending" or c in own]
         if cs and not pending:
@@ -1282,7 +1307,7 @@ def _ci_checks(repo: Path, failed: list[dict]) -> list[failsum.CiCheck]:
         own = [ln for ln in rows if ln.split("\t", 1)[0] == c["name"]] or rows
         text, why = "".join(own), errors.get(r, "")
         if not text.strip():
-            text, why = _job_log(repo, r[0], c, why)
+            text, why = (c["_job_log"], why) if c.get("_job_log") else _job_log(repo, r[0], c, why)
         log = None
         if text.strip():
             log = quiet._log_path(repo, "ci-" + (re.sub(r"[^A-Za-z0-9._-]+", "-", c["name"]).strip("-") or "check"))
@@ -1320,12 +1345,21 @@ def red_summary(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> tupl
     title = f"RED: {len(failed)} of {len(cs)} check(s) failed on {pr}: " + ", ".join(c["name"] for c in failed)
     on, reason = failsum.enabled(repo)
     if not on:
-        return [title, f"summaries: off ({reason})", *failure_logs(repo, failed)], None
+        return [title, f"summaries: off ({reason})", *failure_logs(repo, failed), *rerun_lines(failed)], None
     summary = failsum.summarize_ci(title, _ci_checks(repo, failed), root=repo)
     for c in summary.checks:
         if c.log and not c.log.startswith("none"):
             failsum.write_sidecar(Path(c.log), failsum.Summary(title, [c]))
-    return summary.render().splitlines(), summary
+    return [*summary.render().splitlines(), *rerun_lines(failed)], summary
+
+
+def rerun_lines(failed: list[dict]) -> list[str]:
+    """#880: the run of each red check and the command that reruns exactly it (a workflow can have sibling runs per push)."""
+    by_run: dict[tuple[str, str], list[str]] = {}
+    for c in failed:
+        if r := run_of(c):
+            by_run.setdefault(r, []).append(c["name"])
+    return [f"run {rid} ({', '.join(names)}): gh run rerun {rid} -R {slug} --failed" for (slug, rid), names in by_run.items()]
 
 
 def red(repo: Path, pr: str, cs: list[dict], failed: list[dict]) -> list[str]:
@@ -2446,6 +2480,11 @@ def main(argv: list[str]) -> int:
         print("\n".join(lines))
         return 0 if ok else 1
     if ns.cmd == "escalate":
+        if side := next((q for q in ns.question or [] if side_action(q)), None):
+            print(f"ERROR: the suggested answer of '{side}' is a side action, not an answer: it decides nothing, so the same stop "
+                  "comes back after the resume", file=sys.stderr)
+            print("  fix: suggest the decision itself (suggested: <what to do>); file an issue as a separate step", file=sys.stderr)
+            return 2
         evidence = ""
         if ns.evidence_file:
             try:
@@ -2468,6 +2507,13 @@ def main(argv: list[str]) -> int:
             # spec 155: the system ship reads this run (`cplat system ship repo result`) and archives it then
             print(f"ship run of {st['spec']} belongs to the system ship in {st['product'].get('dir')}: it records and archives it")
             return 0
+        if st and st["phase"] != "done" and not st.get("escalated") and (os.environ.get("CPLAT_UNIT") or os.environ.get("CPLAT_HEADLESS")):
+            # #827: an unattended session never ends a run that has not merged its PR; the next unit goes on from this phase
+            print(f"ERROR: ship run of {st['spec']} is in phase {st['phase']}, not done: an unattended session does not finish it",
+                  file=sys.stderr)
+            print("  fix: end the session; the next unit goes on from this phase (or escalate with `cplat component ship escalate`)",
+                  file=sys.stderr)
+            return 1
         print(f"ship run ended; state archived to {finish(repo)}")
         return 0
     return 2
