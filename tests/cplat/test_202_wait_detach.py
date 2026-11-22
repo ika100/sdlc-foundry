@@ -210,7 +210,7 @@ def T(monkeypatch):
     holder = {}
 
     def make(on_sleep=None):
-        t = FakeTime(on_sleep)
+        t = FakeTime(on_sleep, guard_polls=False)    # under load a fake session outlives the guard's first second
         monkeypatch.setattr(headless, "clock", t.clock)
         monkeypatch.setattr(headless, "sleep", t.sleep)
         holder["t"] = t
